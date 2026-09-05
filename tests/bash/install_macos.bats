@@ -49,6 +49,7 @@ setup() {
 	export DOTFILES_DOCKER_APP_PATH="$FAKE_DOCKER_APP"
 	export DOTFILES_LEGACY_DOCKER_APP_PATH="$FAKE_LEGACY_DOCKER_APP"
 	export DOTFILES_LAUNCHCTL_COMMAND="$STUB_BIN/launchctl"
+	export DOTFILES_OPEN_COMMAND="$STUB_BIN/open"
 	export DOTFILES_ACCEPT_DOCKER_LICENSE=1
 	export DOTFILES_DARWIN_MIGRATION="$STUB_BIN/migrate-darwin-provider"
 	export DOTFILES_DOCKER_SETUP_MARKER="$TEST_HOME/.config/dotfiles/docker-desktop-installed"
@@ -1505,6 +1506,38 @@ printf "%s\n" "$DOCKER_APP"
 	[ "$(find "$HOME" -maxdepth 1 -name '.dotfiles.backup.*' | wc -l | tr -d ' ')" -eq 1 ]
 }
 
+@test "Docker runtime launches the cask app before its CLI plugins exist" {
+	write_installed_stubs
+	export DOCKER_GUI_STARTED="$BATS_TEST_TMPDIR/docker-gui-started"
+	write_stub open '
+printf "open %s\n" "$*" >>"$COMMAND_LOG"
+[[ $# -eq 1 && $1 == "$FAKE_DOCKER_APP" ]] || exit 64
+touch "$DOCKER_GUI_STARTED"
+'
+	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf "docker %s\n" "$*" >>"$COMMAND_LOG"
+case " $* " in
+  *" desktop stop --timeout 120 "*) exit 0 ;;
+  *" desktop start "*) exit 97 ;;
+  *" info "*) [[ -f $DOCKER_GUI_STARTED ]] ;;
+  *" compose version "*) [[ -f $DOCKER_GUI_STARTED ]] ;;
+esac
+EOF
+	chmod +x "$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
+
+	run_macos_installer --with-docker
+
+	[ "$status" -eq 0 ]
+	grep -Fqx "open $FAKE_DOCKER_APP" "$COMMAND_LOG"
+	! grep -Fq 'docker desktop start' "$COMMAND_LOG"
+	assert_log_order \
+		"docker info" \
+		"open $FAKE_DOCKER_APP" \
+		"docker compose version"
+}
+
 @test "Docker engine readiness timeout fails after the configured attempt count" {
 	write_installed_stubs
 	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
@@ -1521,6 +1554,6 @@ EOF
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Timed out waiting for Docker Desktop engine after 2 attempts."* ]]
 	[ "$(grep -c '^docker info$' "$COMMAND_LOG")" -eq 3 ]
-	grep -Fq 'docker desktop start' "$COMMAND_LOG"
-	! grep -Fq 'docker desktop start --timeout' "$COMMAND_LOG"
+	grep -Fqx "open $FAKE_DOCKER_APP" "$COMMAND_LOG"
+	! grep -Fq 'docker desktop start' "$COMMAND_LOG"
 }

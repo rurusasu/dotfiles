@@ -24,6 +24,7 @@ DOTFILES_ACCEPT_DOCKER_LICENSE="${DOTFILES_ACCEPT_DOCKER_LICENSE:-0}"
 DOCKER_CASK_TOKEN="${DOTFILES_DOCKER_CASK_TOKEN:-docker-desktop}"
 OLLAMA_COMMAND="${DOTFILES_OLLAMA_COMMAND:-ollama}"
 LAUNCHCTL_COMMAND="${DOTFILES_LAUNCHCTL_COMMAND:-/bin/launchctl}"
+OPEN_COMMAND="${DOTFILES_OPEN_COMMAND:-/usr/bin/open}"
 OLLAMA_API_URL="${DOTFILES_OLLAMA_API_URL:-http://127.0.0.1:11434/api/tags}"
 OLLAMA_WAIT_ATTEMPTS="${DOTFILES_OLLAMA_WAIT_ATTEMPTS:-60}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
@@ -639,7 +640,8 @@ setup_docker_runtime() {
 
   dotfiles_have docker || dotfiles_die "Docker CLI is unavailable after nix-darwin activation."
   if ! docker info >/dev/null 2>&1; then
-    docker desktop start
+    [[ -x $OPEN_COMMAND ]] || dotfiles_die "macOS open command is unavailable: $OPEN_COMMAND"
+    "$OPEN_COMMAND" "$DOCKER_APP"
     dotfiles_wait_for "$DOCKER_WAIT_ATTEMPTS" "Docker Desktop engine" docker info
   fi
   docker compose version >/dev/null
