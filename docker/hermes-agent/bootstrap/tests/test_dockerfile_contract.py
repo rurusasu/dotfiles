@@ -13,6 +13,25 @@ HERMES_LCM_COMMIT = "49e99a272d2d461e5c90732e7ef2bc20e96f0826"
 
 
 class DockerfileContractTests(unittest.TestCase):
+    def test_runtime_tracks_latest_upstream_without_a_digest_pin(self) -> None:
+        dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+
+        self.assertTrue(
+            dockerfile.startswith(
+                "FROM docker.io/nousresearch/hermes-agent:latest "
+                "AS hermes-bootstrap-runtime\n"
+            )
+        )
+        self.assertNotIn("hermes-agent:latest@sha256:", dockerfile)
+        self.assertIn("from hermes_bootstrap.upstream_patch import (", dockerfile)
+        self.assertIn(
+            'replace_pattern_variant_once(\n'
+            '    Path("/opt/hermes/toolsets.py"),\n'
+            "    BROWSER_TOOLSET_VARIANTS,\n"
+            ")",
+            dockerfile,
+        )
+
     def test_runtime_installs_the_gateway_convergence_command(self) -> None:
         dockerfile = DOCKERFILE.read_text(encoding="utf-8")
 
