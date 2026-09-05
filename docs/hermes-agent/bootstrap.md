@@ -78,9 +78,8 @@ my.1password.com --vault openclaw --format json` object. The stdin stream is
 never stored, logged, or placed in a process argument. All ten items are
 mandatory: `Hermes Agent Dashboard`, `GitHubUsedOpenClawPAT`,
 `Master`, `Rick`, `Hoffman`,
-`RisaRisa`, `Nancy`, `Kuroda`, and `Shiraishi` in account `my.1password.com`, vault
-`openclaw`, plus `Google Calendar MCP` in account `my.1password.com`, vault
-`Private`.
+`RisaRisa`, `Nancy`, `Kuroda`, `Shiraishi`, and `Google Calendar MCP` in account
+`my.1password.com`, vault `openclaw`.
 
 Required labels are `username` or `user name` and `password` for the dashboard;
 `credential`, `token`, `PAT`, or `password` for the GitHub item; and

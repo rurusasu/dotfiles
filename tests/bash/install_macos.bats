@@ -217,7 +217,7 @@ EOF
 
 valid_secret_plan() {
 	cat <<'JSON'
-{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]}]}
+{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]}]}
 JSON
 }
 
@@ -461,6 +461,36 @@ run_macos_installer() {
 	! grep -q '^task .*\(hindsight:up\|hermes:bootstrap\)' "$COMMAND_LOG"
 }
 
+@test "macOS installer clears an incomplete inherited Git command config" {
+	write_installed_stubs
+	write_stub nix '
+env | grep -Eq "^GIT_CONFIG_(COUNT|KEY_[0-9]+|VALUE_[0-9]+)=" && exit 43
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+'
+	export GIT_CONFIG_COUNT=2
+	export GIT_CONFIG_VALUE_0=one
+	export GIT_CONFIG_VALUE_1=two
+
+	run_macos_installer
+
+	[ "$status" -eq 0 ]
+}
+
+@test "macOS installer clears an inherited Git command config with an empty key" {
+	write_installed_stubs
+	write_stub nix '
+env | grep -Eq "^GIT_CONFIG_(COUNT|KEY_[0-9]+|VALUE_[0-9]+)=" && exit 43
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+'
+	export GIT_CONFIG_COUNT=1
+	export GIT_CONFIG_KEY_0=''
+	export GIT_CONFIG_VALUE_0=one
+
+	run_macos_installer
+
+	[ "$status" -eq 0 ]
+}
+
 @test "WithOllama starts its API after chezmoi without starting Docker" {
 	write_installed_stubs
 	write_stub launchctl 'printf "launchctl %s\\n" "$*" >>"$COMMAND_LOG"'
@@ -546,6 +576,7 @@ exit 1
 		"migrate-darwin-provider --all --feature WithOllama --feature WithDocker --feature WithHermes" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
+		"task --dir $REPO_ROOT hermes:desktop:install" \
 		"docker info" \
 		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml config --quiet" \
 		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp" \

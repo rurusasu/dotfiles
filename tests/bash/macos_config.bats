@@ -514,6 +514,21 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
+@test "Darwin Home Manager exposes official per-user CLI launchers" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex \
+		nix eval --impure --json --expr "
+			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
+			in config.home-manager.users.codex.home.sessionPath
+		"
+
+	[ "$status" -eq 0 ]
+	run jq -e 'index("$HOME/.local/bin") != null' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
 @test "Darwin provisions GNU timeout for native Ollama" {
 	grep -Fq 'pkgs.coreutils' "$REPO_ROOT/nix/home/common.nix"
 }
@@ -540,6 +555,14 @@ setup() {
 	[ "$status" -eq 0 ]
 	run grep -F '/etc/profiles/per-user/' "$config"
 	[ "$status" -eq 0 ]
+}
+
+@test "WezTerm sends DEL for macOS Backspace while IME remains enabled" {
+	local config="$REPO_ROOT/chezmoi/terminals/wezterm/wezterm.lua"
+	grep -Fq 'config.use_ime = true' "$config"
+	grep -Fq 'if is_macos then' "$config"
+	grep -Fq 'action = act.SendString("\x7f")' "$config"
+	grep -Fq '{ key = "Backspace", mods = "LEADER"' "$config"
 }
 
 @test "Chromium Compose service follows the host platform" {
