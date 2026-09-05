@@ -31,7 +31,8 @@ hermes_desktop_executable() {
 hermes_desktop_install_is_complete() {
   [[ -x $HERMES_CLI_PATH ]] || return 1
   [[ -f $HERMES_ROOT/.hermes-bootstrap-complete ]] || return 1
-  hermes_desktop_executable >/dev/null
+  hermes_desktop_executable >/dev/null || return 1
+  "$HERMES_CLI_PATH" --version >/dev/null 2>&1
 }
 
 launch_official_hermes_setup() {

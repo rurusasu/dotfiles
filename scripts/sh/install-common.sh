@@ -27,7 +27,7 @@ dotfiles_unset_git_command_config_environment() {
 }
 
 dotfiles_sanitize_incomplete_git_config_environment() {
-  local count="${GIT_CONFIG_COUNT:-}" index
+  local count="${GIT_CONFIG_COUNT:-}" index key
   [[ -n $count ]] || return 0
 
   if [[ ! $count =~ ^[0-9]+$ ]]; then
@@ -36,7 +36,8 @@ dotfiles_sanitize_incomplete_git_config_environment() {
   fi
 
   for ((index = 0; index < count; index++)); do
-    if ! /usr/bin/printenv "GIT_CONFIG_KEY_$index" >/dev/null 2>&1 ||
+    if ! key="$(/usr/bin/printenv "GIT_CONFIG_KEY_$index")" ||
+      [[ -z $key ]] ||
       ! /usr/bin/printenv "GIT_CONFIG_VALUE_$index" >/dev/null 2>&1; then
       dotfiles_unset_git_command_config_environment
       return 0

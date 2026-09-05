@@ -79,6 +79,22 @@ chmod +x "$DOTFILES_HERMES_CLI_PATH" "$desktop"
 	[ ! -s "$COMMAND_LOG" ]
 }
 
+@test "a corrupt CLI causes the official setup to repair the install" {
+	write_completed_install
+	printf '#!/usr/bin/env bash\nexit 17\n' >"$DOTFILES_HERMES_CLI_PATH"
+	chmod +x "$DOTFILES_HERMES_CLI_PATH"
+	write_stub open '
+printf "open %s\n" "$*" >>"$COMMAND_LOG"
+printf "#!/usr/bin/env bash\nprintf \\"Hermes 0.21.0\\\\n\\"\n" >"$DOTFILES_HERMES_CLI_PATH"
+chmod +x "$DOTFILES_HERMES_CLI_PATH"
+'
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	grep -Fqx "open -n $DOTFILES_HERMES_APP_PATH" "$COMMAND_LOG"
+}
+
 @test "setup does not succeed without the packaged Desktop artifact" {
 	write_stub open '
 mkdir -p "$(dirname "$DOTFILES_HERMES_CLI_PATH")" "$DOTFILES_HERMES_ROOT"
