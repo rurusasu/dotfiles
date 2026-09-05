@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ ! -d tests/bash ]; then
-  echo "No bats tests found — skipping"
-  exit 0
-fi
+owned_bats_files=(
+  tests/bash/install_linux.bats
+  tests/bash/install_macos.bats
+)
+for bats_file in "${owned_bats_files[@]}"; do
+  if [ ! -f "${bats_file}" ]; then
+    echo "Required devcontainer Bats suite is missing: ${bats_file}" >&2
+    exit 1
+  fi
+done
 
 apt-get install -y -qq --no-install-recommends bats jq
-bats tests/bash/
+bats --print-output-on-failure tests/bash/install_linux.bats tests/bash/install_macos.bats

@@ -12,6 +12,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci-contract.yml"
 WORKFLOWS_DIRECTORY = WORKFLOW_PATH.parent
 PRE_COMMIT_PATH = REPOSITORY_ROOT / ".pre-commit-config.yaml"
+DEVCONTAINER_BATS_PATH = REPOSITORY_ROOT / ".devcontainer" / "ci" / "bats.sh"
 HERMES_TASKFILE_PATH = REPOSITORY_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
 CHEZMOI_WORKFLOW = "ci-chezmoi.yml"
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
@@ -280,6 +281,48 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
     def test_devcontainer_ci_owns_only_the_two_excluded_bats_files(self) -> None:
         workflow = self._named_workflow("ci-devcontainer.yml")
+        contract_workflow = self._workflow()
+        bats_script = DEVCONTAINER_BATS_PATH.read_text(encoding="utf-8")
+
+        devcontainer_paths = {
+            "tests/bash/install_linux.bats",
+            "tests/bash/install_macos.bats",
+        }
+        all_bats_paths = {
+            path.relative_to(REPOSITORY_ROOT).as_posix()
+            for path in (REPOSITORY_ROOT / "tests" / "bash").glob("*.bats")
+        }
+        exclusion_case = re.search(
+            r'(?ms)case "\$\{bats_file\}" in(?P<case>.*?)^\s*esac$',
+            contract_workflow,
+        )
+        self.assertIsNotNone(exclusion_case)
+        case_body = exclusion_case.group("case") if exclusion_case is not None else ""
+        contract_excluded = {
+            f"tests/bash/{name}"
+            for name in re.findall(r"tests/bash/([^|)]+\.bats)", case_body)
+        }
+        contract_owned = all_bats_paths - contract_excluded
+
+        active_bats_lines = [
+            line.strip()
+            for line in bats_script.splitlines()
+            if line.strip().startswith("bats ")
+        ]
+        self.assertEqual(len(active_bats_lines), 1)
+        runtime_paths = set(
+            re.findall(r"tests/bash/[^\s]+\.bats", active_bats_lines[0])
+        )
+        self.assertEqual(runtime_paths, devcontainer_paths)
+        self.assertNotEqual(active_bats_lines[0], "bats tests/bash/")
+        for glob_marker in ("*", "?", "["):
+            self.assertNotIn(glob_marker, active_bats_lines[0])
+
+        self.assertEqual(contract_excluded, devcontainer_paths)
+        self.assertTrue(devcontainer_paths.isdisjoint(contract_owned))
+        self.assertEqual(devcontainer_paths | contract_owned, all_bats_paths)
+        for owned_path in devcontainer_paths:
+            self.assertTrue((REPOSITORY_ROOT / owned_path).is_file(), owned_path)
 
         for event in ("push", "pull_request"):
             paths = self._trigger_paths(workflow, event)
@@ -287,6 +330,16 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn("tests/bash/install_macos.bats", paths)
             self.assertIn("tests/bash/install_linux.bats", paths)
             self.assertNotIn("tests/bash/**", paths)
+
+        contract_push_paths = self._trigger_paths(contract_workflow, "push")
+        for path in (
+            '"bootstrap.sh"',
+            '"install.sh"',
+            '"scripts/sh/install-macos.sh"',
+            '"scripts/sh/dcnvim.sh"',
+            '".devcontainer/**"',
+        ):
+            self.assertIn(path, contract_push_paths)
 
     def test_hermes_ci_routes_xapi_contract_and_platform_adapters(self) -> None:
         workflow = self._named_workflow("ci-hermes-bootstrap.yml")

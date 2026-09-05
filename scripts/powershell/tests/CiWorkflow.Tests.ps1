@@ -217,6 +217,7 @@ Describe 'CI workflow configuration' {
     It 'should assign every Bats file to exactly one CI owner' {
         $contractWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-contract.yml") -Raw
         $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
+        $devcontainerBatsScript = Get-Content -LiteralPath (Join-Path $script:repoRoot ".devcontainer/ci/bats.sh") -Raw
 
         $contractWorkflow | Should -Match '"tests/bash/\*\*"'
         $contractWorkflow | Should -Match 'shopt -s nullglob'
@@ -250,6 +251,16 @@ Describe 'CI workflow configuration' {
         $devcontainerWorkflow | Should -Match '"tests/bash/install_macos\.bats"'
         $devcontainerWorkflow | Should -Match '"tests/bash/install_linux\.bats"'
         $devcontainerWorkflow | Should -Not -Match '"tests/bash/\*\*"'
+
+        $activeBatsInvocations = @(
+            $devcontainerBatsScript -split '\r?\n' |
+                Where-Object { $_ -match '^\s*bats\s+' }
+        )
+        $activeBatsInvocations.Count | Should -Be 1
+        $activeBatsInvocations[0] | Should -Match 'tests/bash/install_linux\.bats'
+        $activeBatsInvocations[0] | Should -Match 'tests/bash/install_macos\.bats'
+        $activeBatsInvocations[0] | Should -Not -Match 'bats\s+tests/bash/?(?:\s|$)'
+        $activeBatsInvocations[0] | Should -Not -Match '[*?]'
     }
 
     It 'should trigger PowerShell CI when Plane GitHub sync config changes' {
