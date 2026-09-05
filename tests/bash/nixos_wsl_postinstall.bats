@@ -5,20 +5,25 @@ setup() {
 	INSTALLER="$REPO_ROOT/scripts/sh/nixos-wsl-postinstall.sh"
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	USER_HOME="$TEST_HOME/alice"
+	SYNC_SOURCE="$BATS_TEST_TMPDIR/sync-source"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	NIXOS_ARGV_CAPTURE="$BATS_TEST_TMPDIR/nixos-rebuild.argv"
 	NIX_EVAL_CAPTURE="$BATS_TEST_TMPDIR/nix-eval.result"
 	REAL_NIX="$(command -v nix || true)"
 
-	mkdir -p "$USER_HOME" "$STUB_BIN"
+	mkdir -p "$USER_HOME" "$SYNC_SOURCE" "$STUB_BIN"
+	git -C "$REPO_ROOT" archive --format=tar HEAD | (
+		cd "$SYNC_SOURCE"
+		tar -xf -
+	)
 	: >"$COMMAND_LOG"
 	: >"$NIXOS_ARGV_CAPTURE"
 	: >"$NIX_EVAL_CAPTURE"
 
 	export HOME="$TEST_HOME"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG NIXOS_ARGV_CAPTURE NIX_EVAL_CAPTURE REAL_NIX REPO_ROOT USER_HOME
+	export COMMAND_LOG NIXOS_ARGV_CAPTURE NIX_EVAL_CAPTURE REAL_NIX REPO_ROOT USER_HOME SYNC_SOURCE
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 
 	write_stub id '
@@ -74,7 +79,7 @@ if [[ -n ${REAL_NIX:-} ]]; then
 	if ((${#nix_eval_args[@]} == 1)); then
 		nix_eval_expr=$(cat <<NIX_EXPR
       let
-        flake = builtins.getFlake ("path:" + builtins.getEnv "REPO_ROOT");
+        flake = builtins.getFlake ("path:" + builtins.getEnv "SYNC_SOURCE");
         config = flake.nixosConfigurations.nixos.config;
         homeManager = builtins.getAttr "home-manager" config;
       in
@@ -114,7 +119,7 @@ EOF
 	run bash "$INSTALLER" \
 		--user alice \
 		--sync-mode link \
-		--sync-source "$REPO_ROOT" \
+		--sync-source "$SYNC_SOURCE" \
 		--repo-dir "$RUN_REPO_DIR" \
 		--sync-back none \
 		--skip-flake-update
@@ -122,7 +127,7 @@ EOF
 	[ "$status" -eq 0 ]
 	grep -Fqx "nixos-rebuild user=alice home=$USER_HOME uid=4242 gid=4343 group=alicegrp" "$COMMAND_LOG"
 
-	expected_args=(switch --flake "path:$REPO_ROOT#nixos" --impure)
+	expected_args=(switch --flake "path:$SYNC_SOURCE#nixos" --impure)
 	mapfile -t actual_args <"$NIXOS_ARGV_CAPTURE"
 	[ "${#actual_args[@]}" -eq "${#expected_args[@]}" ]
 	for index in "${!expected_args[@]}"; do
