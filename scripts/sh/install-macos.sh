@@ -699,12 +699,12 @@ main() {
   repair_homebrew_cask_link_directories
   migrate_unmanaged_wezterm_install
   apply_darwin_system
-  migrate_darwin_providers
-  dotfiles_install_herdr
   ensure_homebrew_cask_link_directories
   if ((DOTFILES_WITH_DOCKER == 1)); then
     repair_and_verify_docker_desktop_cask
   fi
+  migrate_darwin_providers
+  dotfiles_install_herdr
   apply_chezmoi
   if ((DOTFILES_WITH_HERMES == 1)); then
     dotfiles_run_task hermes:desktop:install

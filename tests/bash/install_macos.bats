@@ -1218,6 +1218,46 @@ exit 1
 	[ ! -L "$FAKE_HOMEBREW_BIN_DIR/docker-compose" ]
 }
 
+@test "installed Docker cask repairs links before a later provider migration failure" {
+	write_installed_stubs
+	write_legacy_docker_app
+	export DOCKER_CASK_STATE="$BATS_TEST_TMPDIR/docker-cask-installed"
+	touch "$DOCKER_CASK_STATE"
+	ln -s "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker" "$FAKE_HOMEBREW_BIN_DIR/docker"
+	write_stub brew '
+if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions &&
+	${4:-} == docker-desktop && -f $DOCKER_CASK_STATE ]]; then
+	printf "docker-desktop 4.89.0\n"
+	exit 0
+fi
+if [[ ${1:-} == reinstall && ${2:-} == --cask && ${3:-} == docker-desktop ]]; then
+	printf "brew %s\n" "$*" >>"$COMMAND_LOG"
+	"$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"
+	exit 0
+fi
+exit 1
+'
+	write_stub nix 'printf "nix %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub migrate-darwin-provider '
+printf "migrate-darwin-provider %s\n" "$*" >>"$COMMAND_LOG"
+exit 61
+'
+
+	run_macos_installer --with-docker
+
+	[ "$status" -eq 61 ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-ecr-login")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-ecr-login" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-osxkeychain")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-osxkeychain" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/kubectl.docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/kubectl" ]
+	[ "$(readlink "$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose")" = "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" ]
+	assert_log_order \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
+		"brew reinstall --cask docker-desktop" \
+		"migrate-darwin-provider --all --feature WithOllama --feature WithDocker"
+}
+
 @test "already-managed Docker cask rerun preserves exact official links without reinstall" {
 	write_installed_stubs
 	"$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"
