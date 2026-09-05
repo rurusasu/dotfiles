@@ -206,6 +206,12 @@ tasks:
       - cmd: hermes-desktop-docker
         platforms: [darwin]
 
+  hermes:desktop:install:
+    desc: Complete and verify the official Hermes Desktop installation
+    cmds:
+      - cmd: scripts/sh/hermes-desktop-install.sh
+        platforms: [darwin]
+
   hermes:cli:
     desc: Run the Hermes CLI inside the Docker Agent container
     interactive: true

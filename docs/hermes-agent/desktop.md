@@ -5,19 +5,34 @@
 macOS の `./install.sh --with-hermes` は、次の2つを別々に管理します。
 
 - ホスト: 公式 Homebrew Cask `hermes-desktop` を nix-homebrew で宣言し、
-  `/Applications/Hermes.app` にベンダー配布版を導入する。
+  `/Applications/Hermes.app` に公式セットアップアプリを導入する。セットアップは
+  Hermes の管理runtime、CLI、packaged Desktopをユーザー領域へ導入する。
 - Docker: `docker/hermes-service/compose.yml` の Hermes Agent、gateway、Web
   Dashboard、Browser/MCP サービスを起動する。
 
 Desktop の GUI を Agent コンテナに入れる必要はありません。コンテナは GUI を
 提供するイメージではなく、Agent の実行環境と Dashboard/API を提供します。
 
+## 公式セットアップ
+
+`./install.sh --with-hermes` はcaskの配置だけでは成功扱いにしません。
+`task hermes:desktop:install` が公式セットアップを起動し、次のすべてが揃うまで
+待機します。
+
+- `~/.local/bin/hermes`
+- `~/.hermes/hermes-agent/.hermes-bootstrap-complete`
+- `~/.hermes/hermes-agent/apps/desktop/release/.../Hermes.app/Contents/MacOS/Hermes`
+
+セットアップ起動時は、呼び出し元だけに有効な
+`GIT_CONFIG_COUNT`、`GIT_CONFIG_KEY_*`、`GIT_CONFIG_VALUE_*`を継承しません。
+これにより、欠けたcommand-scope設定でセットアップ内部の`git clone`が毎回失敗する
+状態を防ぎます。完了済みの場合はセットアップを再起動せず、成果物を再検証します。
+
 ## CLI の実行
 
-Hermes Desktop は GUI フロントエンドであり、macOS ホストのシェルで CLI を
-実行する機能はありません。また、この構成では公式の CLI は Docker コンテナ内に
-だけ存在します。そのため `WithHermes` プロファイルでは、ホストの
-`hermes-docker` が既存の `hermes` サービスへコマンドを転送します。
+公式セットアップはmacOSホストに`~/.local/bin/hermes`を導入します。これはDesktop
+自身が使うローカルruntimeを操作します。Docker上の既存Hermes Agentを明示的に
+操作する場合は、`WithHermes`プロファイルの`hermes-docker`を使用します。
 
 リポジトリからは、次のように実行できます。引数はコンテナ内の CLI へそのまま
 渡されます。
