@@ -62,9 +62,10 @@ in
       # CLI tools are managed by Home Manager (nix/home/packages.nix).
       # Only system-level packages that require root or NixOS module
       # integration belong here.
-      environment.systemPackages = with pkgs; [
-        git # needed by system-level operations (nix flake, etc.)
-      ];
+      environment.systemPackages = [
+        pkgs.git # needed by system-level operations (nix flake, etc.)
+      ]
+      ++ sets.hostPackages;
     }
 
     # Docker Desktop WSL integration: /mnt/wsl は noexec でマウントされるため

@@ -1,9 +1,13 @@
 {
   lib,
   inputs,
+  pkgs,
   ...
 }:
 let
+  sets = import ../packages/sets.nix {
+    inherit pkgs lib;
+  };
   user = builtins.getEnv "DOTFILES_USER";
   home = builtins.getEnv "DOTFILES_HOME";
   uidText = builtins.getEnv "DOTFILES_UID";
@@ -40,6 +44,7 @@ in
 
   nix.enable = true;
   services.userborn.enable = true;
+  environment.systemPackages = sets.hostPackages;
 
   # Merge with the host account database and pin the managed identity to the
   # UID/GID discovered by the installer. This prevents account replacement.

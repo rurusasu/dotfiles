@@ -17,6 +17,14 @@ setup() {
   grep -q 'docker-buildx' "$REPO_ROOT/nix/system-manager/docker.nix"
 }
 
+@test "NixOS host installs GitHub CLI at the system layer" {
+	grep -q 'sets.hostPackages' "$REPO_ROOT/nix/modules/host/default.nix"
+}
+
+@test "System Manager host installs GitHub CLI at the system layer" {
+	grep -q 'sets.hostPackages' "$REPO_ROOT/nix/system-manager/default.nix"
+}
+
 @test "System Manager shares the root nixpkgs input" {
   block="$(sed -n '/system-manager = {/,/^[[:space:]]*};/p' "$REPO_ROOT/flake.nix")"
   [[ "$block" == *'url = "github:numtide/system-manager"'* ]]
