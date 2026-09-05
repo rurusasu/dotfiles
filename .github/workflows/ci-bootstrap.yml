@@ -312,7 +312,9 @@ jobs:
     needs: [changes, nix-lint, nix-format]
     if: ${{ needs.changes.outputs.nix == 'true' && needs.nix-lint.result == 'success' && needs.nix-format.result == 'success' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # The full profile now builds the independently packaged Codex CLI. A cold
+    # runner can legitimately need more than an hour for the Rust/V8 build.
+    timeout-minutes: 120
     permissions:
       contents: read
     steps:
