@@ -24,21 +24,29 @@
           config.allowUnfree = true;
         }).extend
           workmuxOverlay;
+      codexPackage = inputs."llm-agents".packages.${pkgs.stdenv.hostPlatform.system}.codex;
       sets = import ../packages/sets.nix {
         pkgs = pkgs.extend workmuxOverlay;
         inherit lib;
+        inherit codexPackage;
       };
       unfreeSets = import ../packages/sets.nix {
         pkgs = unfreePkgs;
         inherit lib;
+        inherit codexPackage;
       };
       packageSupportReport = import ../packages/support-report.nix {
         pkgs = unfreePkgs;
         inherit lib;
+        inherit codexPackage;
       };
     in
     {
       packages = {
+        # Expose the independently updated Codex derivation for version checks
+        # and direct installs in addition to the catalog build environments.
+        codex = codexPackage;
+
         # Main package sets
         default = pkgs.buildEnv {
           name = "dotfiles-default";
@@ -85,7 +93,7 @@
 
         # Windows package export
         winget-export = import ../packages/winget.nix {
-          inherit pkgs lib;
+          inherit pkgs lib codexPackage;
         };
         package-support-report = packageSupportReport;
       }

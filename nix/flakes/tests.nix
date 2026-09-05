@@ -5,6 +5,7 @@
       inherit (inputs)
         flake-parts
         home-manager
+        llm-agents
         nix-darwin
         nix-homebrew
         nix-unit

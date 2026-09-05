@@ -5,8 +5,10 @@
   ...
 }:
 let
+  codexPackage = inputs."llm-agents".packages.${pkgs.stdenv.hostPlatform.system}.codex;
   sets = import ../packages/sets.nix {
     inherit pkgs lib;
+    inherit codexPackage;
   };
   user = builtins.getEnv "DOTFILES_USER";
   home = builtins.getEnv "DOTFILES_HOME";

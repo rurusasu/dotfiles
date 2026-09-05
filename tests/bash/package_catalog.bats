@@ -11,9 +11,17 @@ nix_fixture_errors() {
 	run --separate-stderr nix eval --impure --json --expr "
 		let
 			flake = builtins.getFlake (toString $REPO_ROOT);
-			pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
+			pkgs = import flake.inputs.nixpkgs {
+				system = \"aarch64-darwin\";
+				config.allowUnfree = true;
+				overlays = [ (_: _: { workmux = flake.inputs.workmux.packages.aarch64-darwin.default; }) ];
+			};
 			lib = flake.inputs.nixpkgs.lib;
-			sets = import $SETS { inherit pkgs lib; catalogOverride = $1; };
+			sets = import $SETS {
+				inherit pkgs lib;
+				codexPackage = flake.inputs.llm-agents.packages.aarch64-darwin.codex;
+				catalogOverride = $1;
+			};
 		in sets.providerErrors
 	"
 }
@@ -22,10 +30,15 @@ nix_fixture_darwin_package_split() {
 	run --separate-stderr nix eval --impure --json --expr "
 		let
 			flake = builtins.getFlake (toString $REPO_ROOT);
-			pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
+			pkgs = import flake.inputs.nixpkgs {
+				system = \"aarch64-darwin\";
+				config.allowUnfree = true;
+				overlays = [ (_: _: { workmux = flake.inputs.workmux.packages.aarch64-darwin.default; }) ];
+			};
 			lib = flake.inputs.nixpkgs.lib;
 			sets = import $SETS {
 				inherit pkgs lib;
+				codexPackage = flake.inputs.llm-agents.packages.aarch64-darwin.codex;
 				catalogOverride = {
 					gui = {
 						pkg = pkgs.hello;
@@ -99,7 +112,11 @@ nix_fixture_darwin_package_split() {
 			mkPackages = system:
 				let
 					pkgs = import flake.inputs.nixpkgs { inherit system; config.allowUnfree = true; };
-					sets = import $SETS { inherit pkgs; lib = pkgs.lib; };
+				sets = import $SETS {
+					inherit pkgs;
+					lib = pkgs.lib;
+					codexPackage = flake.inputs.llm-agents.packages.${system}.codex;
+				};
 				in builtins.map (package: package.pname or package.name) sets.hostPackages;
 		in {
 			darwin = mkPackages \"aarch64-darwin\";
@@ -108,6 +125,91 @@ nix_fixture_darwin_package_split() {
 	"
 	[ "$status" -eq 0 ]
 	run jq -e '(.darwin | index("gh") != null) and (.linux | index("gh") != null)' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "catalog accepts an explicitly maintained Codex package" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --json --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+			pkgs = import flake.inputs.nixpkgs {
+				system = \"aarch64-darwin\";
+				config.allowUnfree = true;
+				overlays = [ (_: _: { workmux = flake.inputs.workmux.packages.aarch64-darwin.default; }) ];
+			};
+			sets = import $SETS {
+				inherit pkgs;
+				lib = pkgs.lib;
+				codexPackage = pkgs.hello;
+			};
+		in builtins.map (package: package.pname or package.name) sets.llm
+	"
+	[ "$status" -eq 0 ]
+	run jq -e 'index("hello") != null' <<<"$output"
+	[ "$status" -eq 0 ]
+}
+
+@test "Codex package input is available for supported Nix systems" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --raw --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+		in flake.inputs.llm-agents.packages.aarch64-darwin.codex.version
+	"
+	[ "$status" -eq 0 ]
+	[[ "$output" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
+@test "repository Codex output follows the maintained package input" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --json --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+		in flake.packages.aarch64-darwin.codex.version
+			== flake.inputs.llm-agents.packages.aarch64-darwin.codex.version
+	"
+	[ "$status" -eq 0 ]
+	[ "$output" = "true" ]
+}
+
+@test "Codex support metadata records the external provider" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --json --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+			pkgs = import flake.inputs.nixpkgs {
+				system = \"aarch64-darwin\";
+				config.allowUnfree = true;
+				overlays = [ (_: _: { workmux = flake.inputs.workmux.packages.aarch64-darwin.default; }) ];
+			};
+			sets = import $SETS {
+				inherit pkgs;
+				lib = pkgs.lib;
+				codexPackage = flake.inputs.llm-agents.packages.aarch64-darwin.codex;
+			};
+		in {
+				support = sets.supportReport.codex;
+				providerErrors = sets.providerErrors;
+			}
+	"
+	[ "$status" -eq 0 ]
+	run jq -e '
+		.providerErrors == []
+		and .support.windows == {"provider":"winget","source":"winget","identity":"OpenAI.Codex"}
+		and .support.darwin.provider == "nix"
+		and .support.darwin.source == "llm-agents.nix"
+		and .support.darwin.identity == {"command":"codex","versionArgs":["--version"]}
+		and .support.linux.provider == "nix"
+		and .support.linux.source == "llm-agents.nix"
+		and .support.linux.identity == {"command":"codex","versionArgs":["--version"]}
+	' <<<"$output"
 	[ "$status" -eq 0 ]
 }
 
@@ -123,7 +225,11 @@ nix_fixture_darwin_package_split() {
 				config.allowUnfree = true;
 				overlays = [ (_: _: { workmux = flake.inputs.workmux.packages.aarch64-darwin.default; }) ];
 			};
-			sets = import $SETS { inherit pkgs; lib = pkgs.lib; };
+			sets = import $SETS {
+				inherit pkgs;
+				lib = pkgs.lib;
+				codexPackage = flake.inputs.llm-agents.packages.aarch64-darwin.codex;
+			};
 		in {
 			support = sets.supportReport.hermes-desktop;
 			defaultCasks = sets.darwinCasksForInstallFeatures [ ];
@@ -184,6 +290,7 @@ nix_fixture_darwin_package_split() {
 			sets = import $SETS {
 				inherit pkgs;
 				lib = pkgs.lib;
+				codexPackage = pkgs.hello;
 				catalogOverride = {
 					hermes-desktop = {
 						pkg = pkgs.hello;
@@ -531,7 +638,11 @@ EOF
 		let
 			flake = builtins.getFlake (toString $REPO_ROOT);
 			pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
-			sets = import $SETS { inherit pkgs; lib = pkgs.lib; };
+			sets = import $SETS {
+				inherit pkgs;
+				lib = pkgs.lib;
+				codexPackage = flake.inputs.llm-agents.packages.aarch64-darwin.codex;
+			};
 		in sets.supportReport.discord
 	"
 	[ "$status" -eq 0 ]
@@ -575,7 +686,11 @@ EOF
 		let
 			flake = builtins.getFlake (toString $REPO_ROOT);
 			pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
-			sets = import $SETS { inherit pkgs; lib = pkgs.lib; };
+			sets = import $SETS {
+				inherit pkgs;
+				lib = pkgs.lib;
+				codexPackage = flake.inputs.llm-agents.packages.aarch64-darwin.codex;
+			};
 		in sets.supportReport.google-chrome
 	"
 	[ "$status" -eq 0 ]
@@ -627,7 +742,11 @@ EOF
 		let
 			flake = builtins.getFlake (toString $REPO_ROOT);
 			pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
-			sets = import $SETS { inherit pkgs; lib = pkgs.lib; };
+			sets = import $SETS {
+				inherit pkgs;
+				lib = pkgs.lib;
+				codexPackage = flake.inputs.llm-agents.packages.aarch64-darwin.codex;
+			};
 		in sets.supportReport.raycast
 	"
 	[ "$status" -eq 0 ]
@@ -666,7 +785,11 @@ EOF
 		let
 			flake = builtins.getFlake (toString $REPO_ROOT);
 			pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
-			sets = import $SETS { inherit pkgs; lib = pkgs.lib; };
+			sets = import $SETS {
+				inherit pkgs;
+				lib = pkgs.lib;
+				codexPackage = flake.inputs.llm-agents.packages.aarch64-darwin.codex;
+			};
 		in sets.supportReport.tart
 	"
 	[ "$status" -eq 0 ]
