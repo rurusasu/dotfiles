@@ -46,6 +46,7 @@ HOMEBREW_CLI_PLUGINS_DIR="${DOTFILES_HOMEBREW_CLI_PLUGINS_DIR:-/usr/local/cli-pl
 DOTFILES_WITH_OLLAMA=0
 DOTFILES_WITH_DOCKER=0
 DOTFILES_WITH_HERMES=0
+DOCKER_CASK_REPAIR_REQUIRED=0
 
 usage() {
   cat <<'EOF'
@@ -168,56 +169,184 @@ stop_existing_docker_desktop() {
   done
 }
 
-docker_desktop_link_target_is_expected() {
-  local link_path="$1" link_target="$2" target_suffix
-  case "$link_path" in
-  "$HOMEBREW_BIN_DIR/docker") target_suffix="/bin/docker" ;;
-  "$HOMEBREW_BIN_DIR/docker-compose") target_suffix="/cli-plugins/docker-compose" ;;
-  "$HOMEBREW_BIN_DIR/docker-credential-desktop") target_suffix="/bin/docker-credential-desktop" ;;
-  "$HOMEBREW_BIN_DIR/docker-credential-ecr-login") target_suffix="/bin/docker-credential-ecr-login" ;;
-  "$HOMEBREW_BIN_DIR/docker-credential-osxkeychain") target_suffix="/bin/docker-credential-osxkeychain" ;;
-  "$HOMEBREW_BIN_DIR/kubectl" | "$HOMEBREW_BIN_DIR/kubectl.docker") target_suffix="/bin/kubectl" ;;
-  "$HOMEBREW_CLI_PLUGINS_DIR/docker-compose") target_suffix="/cli-plugins/docker-compose" ;;
-  *) return 1 ;;
-  esac
+docker_desktop_link_state() {
+  local link_path="$1" current_target="$2" legacy_target="$3" link_target
 
-  [[ $link_target == "$DOCKER_APP/Contents/Resources$target_suffix" ||
-    $link_target == "$LEGACY_DOCKER_APP/Contents/Resources$target_suffix" ]]
+  if [[ -L $link_path ]]; then
+    link_target="$(/usr/bin/readlink "$link_path")"
+    if [[ $link_target == "$current_target" ]]; then
+      printf 'current-cask\n'
+    elif [[ $link_target == "$legacy_target" ]]; then
+      printf 'legacy\n'
+    else
+      printf 'conflicting\n'
+    fi
+  elif [[ -e $link_path ]]; then
+    printf 'conflicting\n'
+  else
+    printf 'missing\n'
+  fi
 }
 
-remove_stale_docker_desktop_links() {
-  local cask_is_installed=0 link_path link_target
-  local -a link_paths=(
+prepare_docker_desktop_cask_links() {
+  local cask_state link_path state suffix index links_to_remove_count=0
+  local -a links_to_remove
+  local -a required_paths=(
     "$HOMEBREW_BIN_DIR/docker"
-    "$HOMEBREW_BIN_DIR/docker-compose"
     "$HOMEBREW_BIN_DIR/docker-credential-desktop"
     "$HOMEBREW_BIN_DIR/docker-credential-ecr-login"
     "$HOMEBREW_BIN_DIR/docker-credential-osxkeychain"
-    "$HOMEBREW_BIN_DIR/kubectl"
     "$HOMEBREW_BIN_DIR/kubectl.docker"
     "$HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
   )
+  local -a required_suffixes=(
+    "/bin/docker"
+    "/bin/docker-credential-desktop"
+    "/bin/docker-credential-ecr-login"
+    "/bin/docker-credential-osxkeychain"
+    "/bin/kubectl"
+    "/cli-plugins/docker-compose"
+  )
+  local optional_kubectl="$HOMEBREW_BIN_DIR/kubectl"
+  local obsolete_compose="$HOMEBREW_BIN_DIR/docker-compose"
 
-  if homebrew_cask_is_installed "$DOCKER_CASK_TOKEN"; then
-    cask_is_installed=1
+  cask_state="$(homebrew_cask_install_state "$DOCKER_CASK_TOKEN")" ||
+    dotfiles_die "Unable to inspect Homebrew cask state for $DOCKER_CASK_TOKEN."
+  DOCKER_CASK_REPAIR_REQUIRED=0
+
+  for index in "${!required_paths[@]}"; do
+    link_path="${required_paths[$index]}"
+    suffix="${required_suffixes[$index]}"
+    state="$(docker_desktop_link_state \
+      "$link_path" \
+      "$DOCKER_APP/Contents/Resources$suffix" \
+      "$LEGACY_DOCKER_APP/Contents/Resources$suffix")"
+    case "$state" in
+    current-cask)
+      if [[ $cask_state == absent ]]; then
+        links_to_remove[links_to_remove_count]="$link_path"
+        ((links_to_remove_count += 1))
+      fi
+      ;;
+    legacy)
+      links_to_remove[links_to_remove_count]="$link_path"
+      ((links_to_remove_count += 1))
+      [[ $cask_state == absent ]] || DOCKER_CASK_REPAIR_REQUIRED=1
+      ;;
+    missing)
+      [[ $cask_state == absent ]] || DOCKER_CASK_REPAIR_REQUIRED=1
+      ;;
+    conflicting) dotfiles_die "Refusing to replace Docker Desktop link conflict: $link_path" ;;
+    *) dotfiles_die "Unable to classify Docker Desktop link: $link_path" ;;
+    esac
+  done
+
+  state="$(docker_desktop_link_state \
+    "$optional_kubectl" \
+    "$DOCKER_APP/Contents/Resources/bin/kubectl" \
+    "$LEGACY_DOCKER_APP/Contents/Resources/bin/kubectl")"
+  case "$state" in
+  current-cask)
+    if [[ $cask_state == absent ]]; then
+      links_to_remove[links_to_remove_count]="$optional_kubectl"
+      ((links_to_remove_count += 1))
+    fi
+    ;;
+  legacy)
+    links_to_remove[links_to_remove_count]="$optional_kubectl"
+    ((links_to_remove_count += 1))
+    [[ $cask_state == absent ]] || DOCKER_CASK_REPAIR_REQUIRED=1
+    ;;
+  missing) ;;
+  conflicting) dotfiles_die "Refusing to replace Docker Desktop link conflict: $optional_kubectl" ;;
+  *) dotfiles_die "Unable to classify Docker Desktop link: $optional_kubectl" ;;
+  esac
+
+  state="$(docker_desktop_link_state \
+    "$obsolete_compose" \
+    "$DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" \
+    "$LEGACY_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose")"
+  case "$state" in
+  current-cask | legacy)
+    links_to_remove[links_to_remove_count]="$obsolete_compose"
+    ((links_to_remove_count += 1))
+    ;;
+  missing) ;;
+  conflicting) dotfiles_die "Refusing to replace Docker Desktop link conflict: $obsolete_compose" ;;
+  *) dotfiles_die "Unable to classify Docker Desktop link: $obsolete_compose" ;;
+  esac
+
+  for ((index = 0; index < links_to_remove_count; index++)); do
+    sudo /bin/rm -f -- "${links_to_remove[$index]}"
+  done
+}
+
+verify_docker_desktop_cask_links() {
+  local cask_state link_path state suffix index
+  local -a required_paths=(
+    "$HOMEBREW_BIN_DIR/docker"
+    "$HOMEBREW_BIN_DIR/docker-credential-desktop"
+    "$HOMEBREW_BIN_DIR/docker-credential-ecr-login"
+    "$HOMEBREW_BIN_DIR/docker-credential-osxkeychain"
+    "$HOMEBREW_BIN_DIR/kubectl.docker"
+    "$HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
+  )
+  local -a required_suffixes=(
+    "/bin/docker"
+    "/bin/docker-credential-desktop"
+    "/bin/docker-credential-ecr-login"
+    "/bin/docker-credential-osxkeychain"
+    "/bin/kubectl"
+    "/cli-plugins/docker-compose"
+  )
+
+  cask_state="$(homebrew_cask_install_state "$DOCKER_CASK_TOKEN")" ||
+    dotfiles_die "Unable to inspect Homebrew cask state for $DOCKER_CASK_TOKEN after activation."
+  [[ $cask_state == installed ]] ||
+    dotfiles_die "Homebrew cask was not installed after activation: $DOCKER_CASK_TOKEN"
+
+  for index in "${!required_paths[@]}"; do
+    link_path="${required_paths[$index]}"
+    suffix="${required_suffixes[$index]}"
+    state="$(docker_desktop_link_state \
+      "$link_path" \
+      "$DOCKER_APP/Contents/Resources$suffix" \
+      "$LEGACY_DOCKER_APP/Contents/Resources$suffix")"
+    [[ $state == current-cask ]] ||
+      dotfiles_die "Docker Desktop cask link did not converge: $link_path ($state)"
+  done
+
+  link_path="$HOMEBREW_BIN_DIR/docker-compose"
+  state="$(docker_desktop_link_state \
+    "$link_path" \
+    "$DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" \
+    "$LEGACY_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose")"
+  [[ $state == missing ]] ||
+    dotfiles_die "Obsolete Docker Desktop link remains after activation: $link_path ($state)"
+
+  link_path="$HOMEBREW_BIN_DIR/kubectl"
+  state="$(docker_desktop_link_state \
+    "$link_path" \
+    "$DOCKER_APP/Contents/Resources/bin/kubectl" \
+    "$LEGACY_DOCKER_APP/Contents/Resources/bin/kubectl")"
+  case "$state" in
+  current-cask | missing) ;;
+  legacy | conflicting) dotfiles_die "Docker Desktop optional cask link did not converge: $link_path ($state)" ;;
+  *) dotfiles_die "Unable to classify Docker Desktop link: $link_path" ;;
+  esac
+}
+
+repair_and_verify_docker_desktop_cask() {
+  local brew_command
+
+  if ((DOCKER_CASK_REPAIR_REQUIRED == 1)); then
+    brew_command="$(homebrew_command)" ||
+      dotfiles_die "Homebrew is unavailable for Docker Desktop cask repair."
+    dotfiles_log "Repairing Docker Desktop Homebrew cask artifacts..."
+    "$brew_command" reinstall --cask "$DOCKER_CASK_TOKEN"
   fi
 
-  for link_path in "${link_paths[@]}"; do
-    if [[ -L $link_path ]]; then
-      link_target="$(/usr/bin/readlink "$link_path")"
-      docker_desktop_link_target_is_expected "$link_path" "$link_target" ||
-        dotfiles_die "Refusing to replace Docker Desktop link conflict: $link_path"
-    elif [[ -e $link_path ]]; then
-      dotfiles_die "Refusing to replace Docker Desktop link conflict: $link_path"
-    fi
-  done
-
-  ((cask_is_installed == 0)) || return 0
-
-  for link_path in "${link_paths[@]}"; do
-    [[ -L $link_path ]] || continue
-    sudo /bin/rm -f -- "$link_path"
-  done
+  verify_docker_desktop_cask_links
 }
 
 repair_homebrew_cask_link_directories() {
@@ -374,10 +503,40 @@ homebrew_command() {
   fi
 }
 
-homebrew_cask_is_installed() {
-  local brew_command
-  brew_command="$(homebrew_command)" || return 1
-  "$brew_command" list --cask --versions "$1" >/dev/null 2>&1
+homebrew_cask_install_state() {
+  local token="$1" brew_command output status
+  brew_command="$(homebrew_command)" || {
+    printf 'Homebrew command is unavailable.\n' >&2
+    return 2
+  }
+
+  if output="$("$brew_command" list --cask --versions "$token" 2>&1)"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  case "$status" in
+  0)
+    [[ -n $output ]] || {
+      printf 'Homebrew returned an empty installed-cask result for %s.\n' "$token" >&2
+      return 2
+    }
+    printf 'installed\n'
+    ;;
+  1)
+    [[ -z $output ]] || {
+      printf 'Homebrew cask inspection failed for %s: %s\n' "$token" "$output" >&2
+      return 2
+    }
+    printf 'absent\n'
+    ;;
+  *)
+    printf 'Homebrew cask inspection failed for %s with status %s: %s\n' \
+      "$token" "$status" "$output" >&2
+    return 2
+    ;;
+  esac
 }
 
 remove_unmanaged_wezterm_link() {
@@ -389,7 +548,7 @@ remove_unmanaged_wezterm_link() {
 }
 
 migrate_unmanaged_wezterm_install() {
-  local backup_path link_path link_target
+  local backup_path cask_state link_path link_target
   local has_unmanaged_install=0
   local -a legacy_link_paths=(
     "$WEZTERM_BIN_DIR/wezterm"
@@ -415,7 +574,9 @@ migrate_unmanaged_wezterm_install() {
   fi
 
   ((has_unmanaged_install == 1)) || return 0
-  homebrew_cask_is_installed "$WEZTERM_CASK_TOKEN" && return 0
+  cask_state="$(homebrew_cask_install_state "$WEZTERM_CASK_TOKEN")" ||
+    dotfiles_die "Unable to inspect Homebrew cask state for $WEZTERM_CASK_TOKEN."
+  [[ $cask_state == absent ]] || return 0
 
   if [[ -e $WEZTERM_APP_PATH || -L $WEZTERM_APP_PATH ]]; then
     backup_path="$WEZTERM_MIGRATION_BACKUP_DIR/WezTerm.app.$(date +%Y%m%d%H%M%S)"
@@ -533,7 +694,7 @@ main() {
   preserve_shell_rc_for_nix_darwin
   if ((DOTFILES_WITH_DOCKER == 1)); then
     stop_existing_docker_desktop
-    remove_stale_docker_desktop_links
+    prepare_docker_desktop_cask_links
   fi
   repair_homebrew_cask_link_directories
   migrate_unmanaged_wezterm_install
@@ -541,6 +702,9 @@ main() {
   migrate_darwin_providers
   dotfiles_install_herdr
   ensure_homebrew_cask_link_directories
+  if ((DOTFILES_WITH_DOCKER == 1)); then
+    repair_and_verify_docker_desktop_cask
+  fi
   apply_chezmoi
   if ((DOTFILES_WITH_HERMES == 1)); then
     dotfiles_run_task hermes:desktop:install

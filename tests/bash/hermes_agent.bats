@@ -704,6 +704,13 @@ esac
 	write_fixture_stub sw_vers 'printf "26.5.1\\n"'
 	write_fixture_stub xcode-select 'printf "/Library/Developer/CommandLineTools\\n"'
 	write_fixture_stub pgrep 'exit 1'
+	write_fixture_stub brew '
+if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions && ${4:-} == docker-desktop ]]; then
+  printf "docker-desktop 4.89.0\\n"
+  exit 0
+fi
+exit 1
+'
 	write_fixture_stub systemctl '
 printf "systemctl %s\\n" "$*" >>"$COMMAND_LOG"
 case "${1:-}" in
@@ -833,6 +840,12 @@ EOF
 		rm -f "$marker"
 		export MOCK_UNAME_S=Darwin MOCK_UNAME_M=arm64
 		MOCK_SELECTED_INSTALLER=install-macos.sh
+		ln -s "$MOCK_DOCKER_APP/Contents/Resources/bin/docker" "$homebrew_bin_dir/docker"
+		ln -s "$MOCK_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop" "$homebrew_bin_dir/docker-credential-desktop"
+		ln -s "$MOCK_DOCKER_APP/Contents/Resources/bin/docker-credential-ecr-login" "$homebrew_bin_dir/docker-credential-ecr-login"
+		ln -s "$MOCK_DOCKER_APP/Contents/Resources/bin/docker-credential-osxkeychain" "$homebrew_bin_dir/docker-credential-osxkeychain"
+		ln -s "$MOCK_DOCKER_APP/Contents/Resources/bin/kubectl" "$homebrew_bin_dir/kubectl.docker"
+		ln -s "$MOCK_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" "$homebrew_cli_plugins_dir/docker-compose"
 		;;
 	linux)
 		rm -f "$marker"
@@ -857,6 +870,7 @@ EOF
 		DOTFILES_CHECKOUT_TARGET="$fixture_root/checkout" \
 		DOTFILES_NIX_PROFILE_SCRIPT="$fixture_root/nix-daemon.sh" \
 		DOTFILES_DOCKER_APP_PATH="$MOCK_DOCKER_APP" \
+		DOTFILES_BREW_COMMAND="$MOCK_BIN/brew" \
 		DOTFILES_OLLAMA_APP_PATH="$MOCK_OLLAMA_APP" \
 		DOTFILES_LAUNCHCTL_COMMAND="$MOCK_BIN/launchctl" \
 		DOTFILES_ACCEPT_DOCKER_LICENSE=1 \

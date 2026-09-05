@@ -21,6 +21,7 @@ setup() {
 	TEST_HOMEBREW_LINK_TARGET="$BATS_TEST_TMPDIR/link-target"
 	FAKE_HOMEBREW_BIN_DIR="$TEST_HOMEBREW_CASK_BIN_DIR"
 	FAKE_HOMEBREW_CLI_PLUGINS_DIR="$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR"
+	FAKE_DOCKER_CASK_STATE="$BATS_TEST_TMPDIR/docker-cask-installed"
 	REAL_JQ="$(command -v jq)"
 	mkdir -p "$TEST_HOME" "$STUB_BIN" "$TEST_HOMEBREW_CASK_PARENT_DIR" "$TEST_HOMEBREW_LINK_TARGET"
 	chmod 0755 "$TEST_HOMEBREW_CASK_PARENT_DIR"
@@ -37,6 +38,7 @@ setup() {
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export FAKE_BASHRC FAKE_ZSHRC FAKE_DOCKER_APP FAKE_LEGACY_DOCKER_APP
 	export FAKE_HOMEBREW_BIN_DIR FAKE_HOMEBREW_CLI_PLUGINS_DIR
+	export FAKE_DOCKER_CASK_STATE
 	export TEST_HOMEBREW_CASK_PARENT_DIR TEST_HOMEBREW_CASK_BIN_DIR
 	export TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR TEST_HOMEBREW_LINK_TARGET
 	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
@@ -96,7 +98,14 @@ exit 0
 '
 	write_stub open 'printf "open %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub migrate-darwin-provider 'printf "migrate-darwin-provider %s\n" "$*" >>"$COMMAND_LOG"'
-	write_stub brew 'exit 1'
+	write_stub brew '
+if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions &&
+	${4:-} == docker-desktop && -f $FAKE_DOCKER_CASK_STATE ]]; then
+	printf "docker-desktop 4.89.0\n"
+	exit 0
+fi
+exit 1
+'
 	export DOTFILES_BREW_COMMAND="$STUB_BIN/brew"
 	write_stub ollama 'printf "ollama %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub pgrep '
@@ -105,6 +114,26 @@ exit 0
 '
 	write_stub sleep 'exit 0'
 	write_stub date 'echo 20260717010203'
+	write_stub install-fake-docker-cask-artifacts '
+mkdir -p "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
+for mapping in \
+	"$FAKE_HOMEBREW_BIN_DIR/docker:$FAKE_DOCKER_APP/Contents/Resources/bin/docker" \
+	"$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop:$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop" \
+	"$FAKE_HOMEBREW_BIN_DIR/docker-credential-ecr-login:$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-ecr-login" \
+	"$FAKE_HOMEBREW_BIN_DIR/docker-credential-osxkeychain:$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-osxkeychain" \
+	"$FAKE_HOMEBREW_BIN_DIR/kubectl.docker:$FAKE_DOCKER_APP/Contents/Resources/bin/kubectl" \
+	"$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose:$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"; do
+	link_path="${mapping%%:*}"
+	link_target="${mapping#*:}"
+	rm -f -- "$link_path"
+	ln -s "$link_target" "$link_path"
+done
+if [[ ! -e $FAKE_HOMEBREW_BIN_DIR/kubectl && ! -L $FAKE_HOMEBREW_BIN_DIR/kubectl ]]; then
+	ln -s "$FAKE_DOCKER_APP/Contents/Resources/bin/kubectl" "$FAKE_HOMEBREW_BIN_DIR/kubectl"
+fi
+touch "$FAKE_DOCKER_CASK_STATE"
+'
+	export FAKE_DOCKER_CASK_ARTIFACT_INSTALLER="$STUB_BIN/install-fake-docker-cask-artifacts"
 	write_stub sudo '
 printf "sudo" >>"$COMMAND_LOG"
 printf " <%s>" "$@" >>"$COMMAND_LOG"
@@ -260,7 +289,12 @@ write_installed_stubs() {
 	mkdir -p "$(dirname "$DOTFILES_DOCKER_SETUP_MARKER")"
 	touch "$DOTFILES_DOCKER_SETUP_MARKER"
 
-	write_stub nix 'printf "nix %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub nix '
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [[ ${1:-} == run && ${DOTFILES_WITH_DOCKER:-0} == 1 ]]; then
+	"$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"
+fi
+'
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub launchctl 'printf "launchctl %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub docker '
@@ -322,7 +356,8 @@ LAUNCHCTL
 			"$STUB_BIN/chezmoi" \
 			"$STUB_BIN/ollama" \
 			"$STUB_BIN/launchctl"
-fi
+	"$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"
+	fi
 NIX
 chmod +x "$STUB_BIN/nix"
 SCRIPT
@@ -712,7 +747,7 @@ migrate_unmanaged_wezterm_install
 
 	mkdir -p "$app_path" "$bin_dir"
 	ln -s "$app_path/Contents/MacOS/wezterm" "$bin_dir/wezterm"
-	write_stub brew 'exit 0'
+	write_stub brew 'printf "wezterm@nightly 20260905\n"'
 	export DOTFILES_BREW_COMMAND="$STUB_BIN/brew"
 	export DOTFILES_WEZTERM_APP_PATH="$app_path"
 	export DOTFILES_WEZTERM_BIN_DIR="$bin_dir"
@@ -1092,6 +1127,7 @@ printf "nix %s\n" "$*" >>"$COMMAND_LOG"
 if [ "${1:-}" = "run" ]; then
 	mkdir -p "$(dirname "$FAKE_DOCKER_APP")"
 	cp -R "$FAKE_HOMEBREW_DOCKER_APP" "$FAKE_DOCKER_APP"
+	"$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"
 fi
 '
 
@@ -1103,7 +1139,7 @@ fi
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
 
-@test "known stale Docker Desktop symlinks are removed before Homebrew cask activation" {
+@test "successful Docker migration replaces stale links with exact official cask artifacts" {
 	write_installed_stubs
 	local -a links=(
 		"$FAKE_HOMEBREW_BIN_DIR/docker"
@@ -1133,53 +1169,99 @@ fi
 	run_macos_installer --with-docker
 
 	[ "$status" -eq 0 ]
-	for link in "${links[@]}"; do
-		[ ! -e "$link" ]
-		[ ! -L "$link" ]
-	done
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-ecr-login")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-ecr-login" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-osxkeychain")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-osxkeychain" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/kubectl.docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/kubectl" ]
+	[ "$(readlink "$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose")" = "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" ]
+	[ ! -e "$FAKE_HOMEBREW_BIN_DIR/docker-compose" ]
+	[ ! -L "$FAKE_HOMEBREW_BIN_DIR/docker-compose" ]
 	assert_log_order \
 		"sudo </bin/rm> <-f> <--> <${links[0]}>" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
 
-@test "already-managed Docker cask rerun preserves valid links" {
+@test "installed Docker cask repairs missing and legacy required links" {
 	write_installed_stubs
 	write_legacy_docker_app
 	export DOCKER_CASK_STATE="$BATS_TEST_TMPDIR/docker-cask-installed"
-	export DOCKER_LINK="$FAKE_HOMEBREW_BIN_DIR/docker"
-	export COMPOSE_LINK="$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
-	ln -s "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker" "$DOCKER_LINK"
-	ln -s "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" "$COMPOSE_LINK"
+	touch "$DOCKER_CASK_STATE"
+	ln -s "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker" "$FAKE_HOMEBREW_BIN_DIR/docker"
+	ln -s "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop" "$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop"
+	ln -s "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" "$FAKE_HOMEBREW_BIN_DIR/docker-compose"
 	write_stub brew '
 if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions &&
 	${4:-} == docker-desktop && -f $DOCKER_CASK_STATE ]]; then
+	printf "docker-desktop 4.89.0\n"
+	exit 0
+fi
+if [[ ${1:-} == reinstall && ${2:-} == --cask && ${3:-} == docker-desktop ]]; then
+	printf "brew %s\n" "$*" >>"$COMMAND_LOG"
+	"$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"
 	exit 0
 fi
 exit 1
 '
-	write_stub nix '
-printf "nix %s\n" "$*" >>"$COMMAND_LOG"
-if [[ ${1:-} == run && ! -f $DOCKER_CASK_STATE ]]; then
-	[[ ! -e $DOCKER_LINK && ! -L $DOCKER_LINK ]] || exit 91
-	[[ ! -e $COMPOSE_LINK && ! -L $COMPOSE_LINK ]] || exit 92
-	ln -s "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" "$DOCKER_LINK"
-	ln -s "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" "$COMPOSE_LINK"
-	touch "$DOCKER_CASK_STATE"
+
+	run_macos_installer --with-docker
+
+	[ "$status" -eq 0 ]
+	grep -Fqx 'brew reinstall --cask docker-desktop' "$COMMAND_LOG"
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-ecr-login")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-ecr-login" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-osxkeychain")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-osxkeychain" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/kubectl.docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/kubectl" ]
+	[ "$(readlink "$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose")" = "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" ]
+	[ ! -e "$FAKE_HOMEBREW_BIN_DIR/docker-compose" ]
+	[ ! -L "$FAKE_HOMEBREW_BIN_DIR/docker-compose" ]
+}
+
+@test "already-managed Docker cask rerun preserves exact official links without reinstall" {
+	write_installed_stubs
+	"$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"
+	write_stub brew '
+if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions && ${4:-} == docker-desktop ]]; then
+	printf "docker-desktop 4.89.0\n"
+	exit 0
 fi
+if [[ ${1:-} == reinstall ]]; then
+	printf "brew %s\n" "$*" >>"$COMMAND_LOG"
+	exit 93
+fi
+exit 1
 '
 
 	run_macos_installer --with-docker
+
 	[ "$status" -eq 0 ]
-	[ "$(readlink "$DOCKER_LINK")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
-	[ "$(readlink "$COMPOSE_LINK")" = "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" ]
-	: >"$COMMAND_LOG"
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
+	[ "$(readlink "$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose")" = "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" ]
+	! grep -q '^sudo </bin/rm>' "$COMMAND_LOG"
+	! grep -q '^brew reinstall ' "$COMMAND_LOG"
+}
+
+@test "Docker cask inspection error aborts before any link mutation" {
+	write_installed_stubs
+	local legacy_link="$FAKE_HOMEBREW_BIN_DIR/docker"
+	local legacy_target="$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker"
+	ln -s "$legacy_target" "$legacy_link"
+	write_stub brew '
+if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions && ${4:-} == docker-desktop ]]; then
+	printf "registry unavailable\n" >&2
+	exit 23
+fi
+exit 1
+'
 
 	run_macos_installer --with-docker
 
-	[ "$status" -eq 0 ]
-	[ "$(readlink "$DOCKER_LINK")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
-	[ "$(readlink "$COMPOSE_LINK")" = "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" ]
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Unable to inspect Homebrew cask state for docker-desktop"* ]]
+	[ "$(readlink "$legacy_link")" = "$legacy_target" ]
 	! grep -q '^sudo </bin/rm>' "$COMMAND_LOG"
+	! grep -q 'nix run .#darwin-rebuild -- switch' "$COMMAND_LOG"
 }
 
 @test "installed Docker cask rejects a foreign link without removing valid current links" {
@@ -1191,7 +1273,11 @@ fi
 	ln -s "$valid_target" "$valid_link"
 	ln -s "$conflict_target" "$conflict"
 	write_stub brew '
-[[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions && ${4:-} == docker-desktop ]]
+if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions && ${4:-} == docker-desktop ]]; then
+	printf "docker-desktop 4.89.0\n"
+	exit 0
+fi
+exit 1
 '
 
 	run_macos_installer --with-docker

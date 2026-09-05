@@ -30,6 +30,111 @@ def _with_ownership(info: os.stat_result, uid: int, gid: int) -> SimpleNamespace
 
 
 class HermesStorageOwnershipTests(unittest.TestCase):
+    def test_refreshes_nested_directory_metadata_after_recursive_traversal(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "target"
+            nested = root / "nested"
+            nested.mkdir(parents=True)
+            (nested / "already-owned").write_text("state\n", encoding="utf-8")
+            target_uid = os.getuid()
+            target_gid = os.getgid()
+            stale_uid = _alternate_id(target_uid)
+            nested_inode = nested.stat().st_ino
+            real_fstat = os.fstat
+            real_scandir = os.scandir
+            nested_scans = 0
+            ownership_changes: list[int] = []
+
+            def report_stale_nested_owner(fd: int) -> os.stat_result | SimpleNamespace:
+                info = real_fstat(fd)
+                if info.st_ino == nested_inode:
+                    return _with_ownership(info, stale_uid, target_gid)
+                return info
+
+            def add_setid_during_recursive_traversal(fd: int):
+                nonlocal nested_scans
+                info = real_fstat(fd)
+                if info.st_ino == nested_inode:
+                    nested_scans += 1
+                    if nested_scans == 2:
+                        os.fchmod(fd, 0o2750)
+                return real_scandir(fd)
+
+            with (
+                mock.patch(
+                    "hermes_storage_ownership.os.fstat",
+                    side_effect=report_stale_nested_owner,
+                ),
+                mock.patch(
+                    "hermes_storage_ownership.os.scandir",
+                    side_effect=add_setid_during_recursive_traversal,
+                ),
+                mock.patch(
+                    "hermes_storage_ownership.os.fchown",
+                    side_effect=lambda fd, _uid, _gid: ownership_changes.append(
+                        real_fstat(fd).st_ino
+                    ),
+                ),
+                self.assertRaises(RuntimeError),
+            ):
+                converge_ownership(root, target_uid, target_gid)
+
+            self.assertNotIn(nested_inode, ownership_changes)
+            self.assertEqual(stat.S_IMODE(nested.stat().st_mode), 0o2750)
+
+    def test_refreshes_root_metadata_after_recursive_traversal(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "target"
+            root.mkdir()
+            (root / "already-owned").write_text("state\n", encoding="utf-8")
+            target_uid = os.getuid()
+            target_gid = os.getgid()
+            stale_uid = _alternate_id(target_uid)
+            root_inode = root.stat().st_ino
+            real_fstat = os.fstat
+            real_scandir = os.scandir
+            root_scans = 0
+            ownership_changes: list[int] = []
+
+            def report_stale_root_owner(fd: int) -> os.stat_result | SimpleNamespace:
+                info = real_fstat(fd)
+                if info.st_ino == root_inode:
+                    return _with_ownership(info, stale_uid, target_gid)
+                return info
+
+            def add_setid_during_recursive_traversal(fd: int):
+                nonlocal root_scans
+                info = real_fstat(fd)
+                if info.st_ino == root_inode:
+                    root_scans += 1
+                    if root_scans == 2:
+                        os.fchmod(fd, 0o2750)
+                return real_scandir(fd)
+
+            with (
+                mock.patch(
+                    "hermes_storage_ownership.os.fstat",
+                    side_effect=report_stale_root_owner,
+                ),
+                mock.patch(
+                    "hermes_storage_ownership.os.scandir",
+                    side_effect=add_setid_during_recursive_traversal,
+                ),
+                mock.patch(
+                    "hermes_storage_ownership.os.fchown",
+                    side_effect=lambda fd, _uid, _gid: ownership_changes.append(
+                        real_fstat(fd).st_ino
+                    ),
+                ),
+                self.assertRaises(RuntimeError),
+            ):
+                converge_ownership(root, target_uid, target_gid)
+
+            self.assertNotIn(root_inode, ownership_changes)
+            self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o2750)
+
     @unittest.skipUnless(
         sys.platform.startswith("linux") and os.geteuid() == 0,
         "requires Linux root ownership semantics",

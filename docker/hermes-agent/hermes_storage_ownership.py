@@ -64,6 +64,22 @@ def _set_ownership(
         raise RuntimeError("ownership convergence changed mtime")
 
 
+def _refresh_opened_entry(
+    fd: int,
+    before: os.stat_result,
+    root_device: int,
+    name: str,
+) -> os.stat_result:
+    refreshed = os.fstat(fd)
+    if _identity(refreshed) != _identity(before):
+        raise RuntimeError(f"entry changed during traversal: {name!r}")
+    if refreshed.st_dev != root_device:
+        raise RuntimeError(f"entry crossed the target filesystem: {name!r}")
+    if not (stat.S_ISDIR(refreshed.st_mode) or stat.S_ISREG(refreshed.st_mode)):
+        raise RuntimeError(f"entry type changed during traversal: {name!r}")
+    return refreshed
+
+
 def _preflight_directory(
     directory_fd: int, root_device: int, uid: int, gid: int
 ) -> None:
@@ -119,7 +135,13 @@ def _converge_directory(
                 raise RuntimeError(f"entry changed while opening: {name!r}")
             if stat.S_ISDIR(opened.st_mode):
                 _converge_directory(child_fd, root_device, uid, gid)
-            _set_ownership(child_fd, opened, uid, gid)
+            refreshed = _refresh_opened_entry(
+                child_fd,
+                opened,
+                root_device,
+                name,
+            )
+            _set_ownership(child_fd, refreshed, uid, gid)
         finally:
             os.close(child_fd)
 
@@ -135,7 +157,13 @@ def converge_ownership(target: Path | str, uid: int, gid: int) -> None:
         _preflight_ownership(root, uid, gid)
         _preflight_directory(root_fd, root.st_dev, uid, gid)
         _converge_directory(root_fd, root.st_dev, uid, gid)
-        _set_ownership(root_fd, root, uid, gid)
+        refreshed_root = _refresh_opened_entry(
+            root_fd,
+            root,
+            root.st_dev,
+            os.fspath(target),
+        )
+        _set_ownership(root_fd, refreshed_root, uid, gid)
     finally:
         os.close(root_fd)
 
