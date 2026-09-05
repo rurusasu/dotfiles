@@ -12,6 +12,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci-contract.yml"
 WORKFLOWS_DIRECTORY = WORKFLOW_PATH.parent
 PRE_COMMIT_PATH = REPOSITORY_ROOT / ".pre-commit-config.yaml"
+DEVCONTAINER_BATS_PATH = REPOSITORY_ROOT / ".devcontainer" / "ci" / "bats.sh"
 HERMES_TASKFILE_PATH = REPOSITORY_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
 CHEZMOI_WORKFLOW = "ci-chezmoi.yml"
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
@@ -280,6 +281,237 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
     def test_devcontainer_ci_owns_only_the_two_excluded_bats_files(self) -> None:
         workflow = self._named_workflow("ci-devcontainer.yml")
+        contract_workflow = self._workflow()
+        bats_script = DEVCONTAINER_BATS_PATH.read_text(encoding="utf-8")
+
+        devcontainer_paths = {
+            "tests/bash/install_linux.bats",
+            "tests/bash/install_macos.bats",
+        }
+        all_bats_paths = {
+            path.relative_to(REPOSITORY_ROOT).as_posix()
+            for path in (REPOSITORY_ROOT / "tests" / "bash").glob("*.bats")
+        }
+        exclusion_case = re.search(
+            r'(?ms)case "\\$\\{bats_file\\}" in(?P<case>.*?)^\\s*esac
+    def test_hermes_ci_routes_xapi_contract_and_platform_adapters(self) -> None:
+        workflow = self._named_workflow("ci-hermes-bootstrap.yml")
+        required_paths = (
+            "docker/hermes-agent/**",
+            "docker/hermes-service/**",
+            "docker/hermes-browser/**",
+            "docker/hermes-browser-mcp/**",
+            "docker/hermes-xapi-mcp/**",
+            "docker/hindsight/**",
+            "docker/local-ai-services/**",
+            "scripts/sh/hermes-agent.sh",
+            "scripts/powershell/handlers/Handler.HermesAgent.ps1",
+            "tests/python/test_xapi_image_contract.py",
+            ".github/workflows/ci-hermes-provenance.yml",
+        )
+
+        for event in ("push", "pull_request"):
+            paths = self._trigger_paths(workflow, event)
+            for required_path in required_paths:
+                self.assertIn(required_path, paths)
+        self.assertIn(
+            "python3 -m unittest tests/python/test_xapi_image_contract.py -v",
+            workflow,
+        )
+
+    def test_hermes_hook_and_task_run_xapi_image_contract(self) -> None:
+        pre_commit = PRE_COMMIT_PATH.read_text(encoding="utf-8")
+        taskfile = HERMES_TASKFILE_PATH.read_text(encoding="utf-8")
+
+        hook = pre_commit.split("      - id: hermes-bootstrap-tests\n", maxsplit=1)[1]
+        hook = hook.split("\n      - id:", maxsplit=1)[0]
+        match = re.search(
+            r"^\s+files:\s+'(?P<pattern>.+)'$",
+            hook,
+            flags=re.MULTILINE,
+        )
+        self.assertIsNotNone(match)
+        pattern = match.group("pattern") if match is not None else ""
+        for path in (
+            "docker/hermes-xapi-mcp/Dockerfile",
+            "docker/local-ai-services/compose.yml",
+            "tests/python/test_xapi_image_contract.py",
+        ):
+            self.assertIsNotNone(re.fullmatch(pattern, path))
+
+        task = taskfile.split("  hermes:bootstrap:test:\n", maxsplit=1)[1]
+        task = task.split("\n  hermes:bootstrap:config:\n", maxsplit=1)[0]
+        self.assertIn(
+            "python3 -m unittest tests/python/test_xapi_image_contract.py -v",
+            task,
+        )
+        self.assertIn(
+            "python -m unittest tests/python/test_xapi_image_contract.py -v",
+            task,
+        )
+
+    def test_unified_bootstrap_workflow_routes_all_platforms(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+
+        self.assertIn("name: Bootstrap CI", workflow)
+        self.assertIn("manifest: ci/bootstrap-path-routing.json", workflow)
+        for output in ("linux", "darwin", "wsl", "windows"):
+            self.assertRegex(
+                workflow,
+                rf"(?m)^\s+{output}: \$\{{\{{ steps\.detect\.outputs\.{output} \}}\}}$",
+            )
+
+        for marker in (
+            "Bootstrap / Linux / Build",
+            "Bootstrap / Linux / E2E / Ubuntu",
+            "Bootstrap / Linux / E2E / Debian",
+            "Bootstrap / Linux / E2E / NixOS",
+            "Bootstrap / Darwin",
+            "Bootstrap / WSL",
+            "Bootstrap / Windows",
+            "Bootstrap / Complete",
+        ):
+            self.assertIn(marker, workflow)
+
+        for job_name, output in (
+            ("linux-build", "linux"),
+            ("darwin", "darwin"),
+            ("wsl", "wsl"),
+            ("windows", "windows"),
+        ):
+            job = self._workflow_job(workflow, job_name)
+            self.assertIn("needs: changes", job)
+            self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
+
+        for job_name in ("linux-ubuntu", "linux-debian", "linux-nixos"):
+            job = self._workflow_job(workflow, job_name)
+            self.assertIn("needs: [changes, linux-build]", job)
+            self.assertIn("needs.changes.outputs.linux == 'true'", job)
+
+        complete = self._workflow_job(workflow, "complete")
+        self.assertIn("if: ${{ always() }}", complete)
+        self.assertNotIn("success|skipped", complete)
+
+    def test_unified_bootstrap_workflow_fails_closed_for_selected_platforms(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+
+        for event in ("push", "pull_request"):
+            paths = self._trigger_paths(workflow, event)
+            self.assertIn('      - "Taskfile.yml"', paths)
+            self.assertIn('      - "taskfiles/**"', paths)
+
+        changes = self._workflow_job(workflow, "changes")
+        self.assertIn("platforms:", changes)
+
+        complete = self._workflow_job(workflow, "complete")
+        self.assertIn("PLATFORM_REQUIRED", complete)
+        self.assertIn("LINUX_REQUIRED", complete)
+        self.assertIn("WSL_REQUIRED", complete)
+        self.assertIn("check_platform", complete)
+        self.assertNotIn("success|skipped", complete)
+
+        for job_name in (
+            "linux-build",
+            "linux-ubuntu",
+            "linux-debian",
+            "linux-nixos",
+            "darwin",
+            "wsl",
+            "windows",
+        ):
+            job = self._workflow_job(workflow, job_name)
+            self.assertIn("ref: ${{ env.TESTED_SHA }}", job)
+
+    def test_chezmoi_ci_runs_pester_once_in_lint_and_uploads_its_junit_result(
+        self,
+    ) -> None:
+        """Catch a second Chezmoi Pester job or a JUnit artifact detached from lint."""
+        workflow = self._named_workflow(CHEZMOI_WORKFLOW)
+        lint = self._workflow_job(workflow, "lint")
+        fmt = self._workflow_job(workflow, "fmt")
+        font_install = self._workflow_job(workflow, "font-install")
+        op_guard = self._workflow_job(workflow, "op-guard")
+
+        self.assertIsNone(
+            re.search(r"(?m)^  test:\s*$", workflow),
+            "Chezmoi CI must not define a duplicate top-level test job",
+        )
+        pester_invocation = (
+            r"(?m)^          \.\\tests\\Invoke-Tests\.ps1 -Path "
+            r"\.\\tests\\chezmoi -MinimumCoverage 0 -OutputFile "
+            r"chezmoi-test-results\.xml$"
+        )
+        self._assert_single_chezmoi_path_occurrence(workflow, lint)
+        self.assertRegex(lint, pester_invocation)
+        canonical_invocation = (
+            ".\\tests\\Invoke-Tests.ps1 -Path .\\tests\\chezmoi -MinimumCoverage 0 "
+            "-OutputFile chezmoi-test-results.xml"
+        )
+        for alternate_invocation in (
+            "      - run: >-\n"
+            "          Invoke-Pester -Path .\\tests\\CHEZMOI",
+            "      - run: Invoke-Pester -Path ./tests/chezmoi",
+        ):
+            mutated_workflow = workflow.replace(
+                canonical_invocation,
+                f"{canonical_invocation}\n{alternate_invocation}",
+                1,
+            )
+            mutated_lint = self._workflow_job(mutated_workflow, "lint")
+            with self.assertRaises(AssertionError):
+                self._assert_single_chezmoi_path_occurrence(
+                    mutated_workflow,
+                    mutated_lint,
+                )
+
+        for job, required_name in (
+            (lint, "Lint (Pester chezmoi)"),
+            (fmt, "Format (.tmpl BOM check)"),
+            (op_guard, "Render guard (op unauthenticated)"),
+        ):
+            self.assertRegex(job, rf"(?m)^    name: {re.escape(required_name)}$")
+        self.assertRegex(font_install, r"(?m)^    name: Font install smoke \(Windows\)$")
+
+        self.assertRegex(
+            lint,
+            r"(?ms)^      - name: Upload test results\n"
+            r"        uses: actions/upload-artifact@[0-9a-f]{40}.*?\n"
+            r"        if: always\(\)\n"
+            r"        with:\n"
+            r"          name: chezmoi-test-results\n"
+            r"          path: scripts/powershell/chezmoi-test-results\.xml$",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
+,
+            contract_workflow,
+        )
+        self.assertIsNotNone(exclusion_case)
+        case_body = exclusion_case.group("case") if exclusion_case is not None else ""
+        contract_excluded = {
+            f"tests/bash/{name}"
+            for name in re.findall(r"tests/bash/([^|)]+\\.bats)", case_body)
+        }
+        contract_owned = all_bats_paths - contract_excluded
+
+        active_bats_lines = [
+            line.strip()
+            for line in bats_script.splitlines()
+            if line.strip().startswith("bats ")
+        ]
+        self.assertEqual(len(active_bats_lines), 1)
+        runtime_paths = set(re.findall(r"tests/bash/[^\\s]+\\.bats", active_bats_lines[0]))
+        self.assertEqual(runtime_paths, devcontainer_paths)
+        self.assertNotIn("tests/bash/", active_bats_lines[0])
+        self.assertNotRegex(active_bats_lines[0], r"[*?[]")
+
+        self.assertEqual(contract_excluded, devcontainer_paths)
+        self.assertTrue(devcontainer_paths.isdisjoint(contract_owned))
+        self.assertEqual(devcontainer_paths | contract_owned, all_bats_paths)
+        for owned_path in devcontainer_paths:
+            self.assertTrue((REPOSITORY_ROOT / owned_path).is_file(), owned_path)
 
         for event in ("push", "pull_request"):
             paths = self._trigger_paths(workflow, event)
@@ -287,6 +519,16 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn("tests/bash/install_macos.bats", paths)
             self.assertIn("tests/bash/install_linux.bats", paths)
             self.assertNotIn("tests/bash/**", paths)
+
+        contract_push_paths = self._trigger_paths(contract_workflow, "push")
+        for path in (
+            '"bootstrap.sh"',
+            '"install.sh"',
+            '"scripts/sh/install-macos.sh"',
+            '"scripts/sh/dcnvim.sh"',
+            '".devcontainer/**"',
+        ):
+            self.assertIn(path, contract_push_paths)
 
     def test_hermes_ci_routes_xapi_contract_and_platform_adapters(self) -> None:
         workflow = self._named_workflow("ci-hermes-bootstrap.yml")
