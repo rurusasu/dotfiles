@@ -139,7 +139,7 @@ or transaction writes. Crash-journal recovery is the exception: it runs first
 and may restore or remove previously journaled managed paths before secret or
 credential validation.
 
-The `Private/Google Calendar MCP` item supplies `oauth_credentials_json` and
+The `openclaw/Google Calendar MCP` item supplies `oauth_credentials_json` and
 `tokens_json`. Bootstrap writes one shared credential set under
 `/opt/data/google-calendar-mcp` and installs the same stdio Calendar MCP entry in
 the root and every named profile. Calendar setup therefore has no dependency on

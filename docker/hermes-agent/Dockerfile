@@ -22,27 +22,21 @@ RUN chmod 0755 /usr/local/bin/hermes-gateway-converge
 RUN chmod 0755 /usr/local/bin/hermes-storage-seed
 
 RUN python3 - <<'PY'
-import re
+import sys
 from pathlib import Path
+
+sys.path.insert(0, "/usr/local/lib/hermes-bootstrap")
+
+from hermes_bootstrap.upstream_patch import (
+    BROWSER_TOOLSET_VARIANTS,
+    replace_pattern_variant_once,
+)
 
 def replace_once(path: Path, old: str, new: str) -> None:
     text = path.read_text(encoding="utf-8")
     if text.count(old) != 1:
         raise SystemExit(f"expected exactly one pinned source match in {path}")
     path.write_text(text.replace(old, new), encoding="utf-8")
-
-
-def replace_pattern_variant_once(path: Path, variants: list[tuple[str, str]]) -> None:
-    text = path.read_text(encoding="utf-8")
-    matches = [
-        (pattern, replacement)
-        for pattern, replacement in variants
-        if len(re.findall(pattern, text)) == 1
-    ]
-    if len(matches) != 1:
-        raise SystemExit(f"expected exactly one pinned source variant in {path}")
-    pattern, replacement = matches[0]
-    path.write_text(re.sub(pattern, replacement, text, count=1), encoding="utf-8")
 
 
 def replace_variant_once(path: Path, variants: list[tuple[str, str]]) -> None:
@@ -61,16 +55,7 @@ replace_once(
 )
 replace_pattern_variant_once(
     Path("/opt/hermes/toolsets.py"),
-    [
-        (
-            r'("browser_dialog"(?:,\s*"browser_exec")?),\s*"web_search"',
-            r'\1',
-        ),
-        (
-            r'(\[t for t in _HERMES_CORE_TOOLS if t\.startswith\("browser_"\)\])\s*\+\s*\["web_search"\]',
-            r'\1',
-        ),
-    ],
+    BROWSER_TOOLSET_VARIANTS,
 )
 replace_variant_once(
     Path("/opt/hermes/plugins/platforms/discord/adapter.py"),
