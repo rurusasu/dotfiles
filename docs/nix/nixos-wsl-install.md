@@ -117,15 +117,20 @@ PowerShell から方式を指定できます。
 # repo: リポジトリ全体を WSL の ~/.dotfiles にコピー
 .\install.cmd -SyncMode repo -SyncBack lock
 
-# nix: nix ディレクトリだけを WSL 側へコピー
-.\install.cmd -SyncMode nix -SyncBack lock
+# nix: 既存の完全な WSL 側 checkout に nix ディレクトリだけを同期
+#      （fresh install では link または repo を使用）
+.\install.cmd -SyncMode nix -SyncBack none
 
 # none: 既存の WSL 側 ~/.dotfiles をそのまま使用
 .\install.cmd -SyncMode none -SyncBack none
 ```
 
-`-SyncBack repo` は `repo` または `nix` 方式で WSL 側の変更を Windows 側 checkout に戻す場合に
-明示します。通常の初回 setup では `lock` を使い、生成・更新された `flake.lock` だけを戻します。
+`nix` 方式は既存の完全な WSL 側 checkout に対する差分同期です。`flake.nix`、`flake.lock`、
+`scripts/` などが既に存在する必要があり、fresh install では使用しないでください。
+また、部分同期した `nix` 方式では `-SyncBack repo` を使わないでください。Windows 側 checkout
+全体を上書きする対象ではありません。`-SyncBack repo` は完全な `repo` 方式で WSL 側の変更を
+Windows 側 checkout に戻す場合だけ使用します。通常の初回 setup では `lock` を使い、生成・更新
+された `flake.lock` だけを戻します。
 
 ## 主な installer 引数
 
@@ -186,9 +191,11 @@ nixos-rebuild switch --flake ~/.dotfiles#nixos --impure
 system.stateVersion = "26.05";
 ```
 
-これは既存の stateful data と互換性を保つための基準です。既存の WSL 環境へこの変更を適用する場合は、
-Docker、データベース、各種 `/var/lib` のデータをバックアップし、変更後の generation と runtime を
-確認してください。パッケージや system の実体は引き続き `flake.lock` の `nixpkgs` input で決まります。
+これは新規構成の基準を 26.05 に移行する明示設定です。既存の 25.05 WSL 環境では、単なる
+パッケージ更新ではなく state schema の移行として扱ってください。適用前に VHD、Docker、データベース、
+各種 `/var/lib` のデータをバックアップし、使用中のモジュールの移行可否を確認してください。適用後は
+generation、`/run/current-system`、Docker、データベース、各種 stateful data の runtime を検証します。
+パッケージや system の実体は引き続き `flake.lock` の `nixpkgs` input で決まります。
 このリポジトリの flake は `nixos-unstable` を使用するため、stable の `system.stateVersion` と
 unstable の実体 version が異なることがあります。
 
