@@ -44,11 +44,15 @@ Describe 'coverage smoke' {
 }
 '@ | Set-Content -LiteralPath $smokePath -Encoding UTF8
 
-        $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
-        if ($null -eq $pwsh) {
-            Set-ItResult -Skipped -Because 'PowerShell 7 (pwsh) is not installed on this host'
+        $shell = Get-Command pwsh -ErrorAction SilentlyContinue
+        if ($null -eq $shell) {
+            $shell = Get-Command powershell.exe -ErrorAction SilentlyContinue
+        }
+        if ($null -eq $shell) {
+            Set-ItResult -Skipped -Because 'No compatible PowerShell executable is installed on this host'
             return
         }
+        $shellPath = if ($shell.Source) { $shell.Source } else { $shell.Path }
         $runnerPath = Join-Path $script:repoRoot 'scripts/powershell/tests/Invoke-Tests.ps1'
         $childArguments = @(
             '-NoProfile'
@@ -60,7 +64,7 @@ Describe 'coverage smoke' {
             '-CoverageOutputFile'
             $coveragePath
         )
-        $output = & $pwsh.Source @childArguments 2>&1
+        $output = & $shellPath @childArguments 2>&1
         $exitCode = $LASTEXITCODE
         $outputText = $output | Out-String
         Write-Host $outputText
