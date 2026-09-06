@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
@@ -64,8 +65,9 @@ def load_manifest(path: Path) -> BootstrapManifest:
     """Load and validate a version-one manifest without reading secret values."""
 
     try:
-        with path.open(encoding="utf-8") as handle:
-            raw = yaml.load(handle, Loader=_UniqueKeySafeLoader)
+        content = path.read_bytes()
+        manifest_sha256 = hashlib.sha256(content).hexdigest()
+        raw = yaml.load(content.decode("utf-8"), Loader=_UniqueKeySafeLoader)
     except (OSError, UnicodeError, yaml.YAMLError) as error:
         raise ValidationError(f"cannot load bootstrap manifest: {path}") from error
 
@@ -102,6 +104,15 @@ def load_manifest(path: Path) -> BootstrapManifest:
         _distribution(value, f"manifest.profiles[{index}]", data_root)
         for index, value in enumerate(_sequence(manifest["profiles"], "manifest.profiles"))
     )
+    profile_names = {"default", *(profile.name for profile in profiles)}
+    for item in onepassword_items:
+        if item.profiles is not None:
+            unknown = set(item.profiles) - profile_names
+            if unknown:
+                _invalid(
+                    f"1Password item {item.key!r} names unknown profiles: "
+                    + ", ".join(sorted(unknown))
+                )
     repositories = tuple(
         _repository(value, f"manifest.shared_repositories[{index}]", data_root)
         for index, value in enumerate(
@@ -134,6 +145,7 @@ def load_manifest(path: Path) -> BootstrapManifest:
         root_distribution=root_distribution,
         profiles=profiles,
         shared_repositories=repositories,
+        manifest_sha256=manifest_sha256,
     )
 
 

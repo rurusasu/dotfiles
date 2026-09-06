@@ -56,3 +56,4 @@ class BootstrapManifest:
     root_distribution: DistributionSource
     profiles: tuple[DistributionSource, ...]
     shared_repositories: tuple[SharedRepository, ...]
+    manifest_sha256: str = ""

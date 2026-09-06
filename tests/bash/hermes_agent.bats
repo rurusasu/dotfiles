@@ -16,7 +16,7 @@ setup() {
 	VOLUME_TOKEN_FILE="$BATS_TEST_TMPDIR/hermes-volume-token"
 	VOLUME_READY_FILE="$BATS_TEST_TMPDIR/hermes-volume-ready"
 	LOCK_CREATE_ATTEMPT_FILE="$BATS_TEST_TMPDIR/hermes-lock-create-attempts"
-	COMPOSE_FILE="$BATS_TEST_TMPDIR/compose file.yml"
+	COMPOSE_FILE="$BATS_TEST_TMPDIR/docker/hermes-service/compose file.yml"
 	REAL_JQ="$(command -v jq)"
 	REAL_PYTHON3="$(command -v python3)"
 	SECRET_MARKER="adapter-secret-marker"
@@ -32,7 +32,15 @@ setup() {
 	printf '0\n' >"$OLLAMA_READY_ATTEMPT_FILE"
 	printf '0\n' >"$HINDSIGHT_READY_ATTEMPT_FILE"
 	printf '0\n' >"$XAPI_TOKEN_ATTEMPT_FILE"
+	mkdir -p "$(dirname "$COMPOSE_FILE")" "$BATS_TEST_TMPDIR/docker/hermes-agent"
+	cp "$REPO_ROOT/docker/hermes-agent/bootstrap-manifest.yaml" \
+		"$BATS_TEST_TMPDIR/docker/hermes-agent/bootstrap-manifest.yaml"
 	: >"$COMPOSE_FILE"
+	if command -v sha256sum >/dev/null 2>&1; then
+		PLAN_MANIFEST_SHA256="$(sha256sum "$REPO_ROOT/docker/hermes-agent/bootstrap-manifest.yaml" | awk '{print $1}')"
+	else
+		PLAN_MANIFEST_SHA256="$(shasum -a 256 "$REPO_ROOT/docker/hermes-agent/bootstrap-manifest.yaml" | awk '{print $1}')"
+	fi
 	cat >"$BATS_TEST_TMPDIR/hindsight.env" <<'EOF'
 HINDSIGHT_API_LLM_MODEL=qwen3.6:35b
 HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=qwen3-embedding:0.6b
@@ -43,7 +51,7 @@ EOF
 	unset OP_SERVICE_ACCOUNT_TOKEN
 	unset DOTFILES_HERMES_OLLAMA_EXECUTABLE DOTFILES_HERMES_CURL_EXECUTABLE OLLAMA_HOST
 	export HINDSIGHT_OLLAMA_URL=http://127.0.0.1:11434
-	export COMMAND_LOG EDIT_CAPTURE PAYLOAD_CAPTURE OP_TOKEN_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE XAPI_TOKEN_ATTEMPT_FILE VOLUME_SCHEMA_FILE VOLUME_TOKEN_FILE VOLUME_READY_FILE LOCK_CREATE_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
+	export COMMAND_LOG EDIT_CAPTURE PAYLOAD_CAPTURE OP_TOKEN_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE XAPI_TOKEN_ATTEMPT_FILE VOLUME_SCHEMA_FILE VOLUME_TOKEN_FILE VOLUME_READY_FILE LOCK_CREATE_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER PLAN_MANIFEST_SHA256
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
@@ -573,8 +581,8 @@ EOF
 }
 
 valid_secret_plan() {
-	cat <<'JSON'
-{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]},{"canonical_name":"password","labels":["password"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]}]}
+	cat <<'JSON' | jq --arg manifest_sha256 "$PLAN_MANIFEST_SHA256" '.manifest_sha256 = $manifest_sha256'
+{"schema_version":1,"manifest_sha256":"placeholder","items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]},{"canonical_name":"password","labels":["password"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"xai_grok","account":"my.1password.com","vault":"openclaw","item":"xAI-Grok-Twitter","fields":[{"canonical_name":"api_key","labels":["apikey"],"reference":"console/apikey","environment":["XAI_API_KEY"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]}]}
 JSON
 }
 
@@ -1499,6 +1507,17 @@ esac
 	! grep -q ' up ' "$COMMAND_LOG"
 }
 
+@test "rejects a secret plan from a different bootstrap manifest" {
+	export PLAN_JSON="$(valid_secret_plan | jq -c '.manifest_sha256 = (\"0\" * 64)')"
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"secret plan is invalid"* ]]
+	! grep -q '^op' "$COMMAND_LOG"
+	! grep -q ' apply ' "$COMMAND_LOG"
+}
+
 @test "rejects malformed duplicate and wrong-count secret plans before looking up items" {
 	export PLAN_JSON='{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[]}]}'
 	assert_plan_rejected_before_secret_lookup
@@ -1616,9 +1635,9 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	run_start_stack
 
 	[ "$status" -eq 0 ]
-	assert_log_order '<config> <--quiet>' '<build> <--pull> <hermes> <hermes-bootstrap> <chromium> <xapi-mcp>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<Google Calendar MCP>' '<Master>' '<Rick>' '<Hoffman>' '<RisaRisa>' '<Nancy>' '<Kuroda>' '<Shiraishi>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate> <hermes> <chromium> <browser-mcp> <xapi-mcp>' '<http://127.0.0.1:9119/api/health>' '<image> <prune> <--force>'
+	assert_log_order '<config> <--quiet>' '<build> <--pull> <hermes> <hermes-bootstrap> <chromium> <xapi-mcp>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<Google Calendar MCP>' '<xAI-Grok-Twitter>' '<Master>' '<Rick>' '<Hoffman>' '<RisaRisa>' '<Nancy>' '<Kuroda>' '<Shiraishi>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate> <hermes> <chromium> <browser-mcp> <xapi-mcp>' '<http://127.0.0.1:9119/api/health>' '<image> <prune> <--force>'
 	mapfile -t records < <("$REAL_JQ" -r '.type + ":" + (.key // "")' "$PAYLOAD_CAPTURE")
-	[ "${records[*]}" = 'header: item:dashboard item:github item:google_calendar item:discord_default item:discord_rick item:discord_hoffman item:discord_risarisa item:discord_nancy item:discord_kuroda item:discord_shiraishi end:' ]
+	[ "${records[*]}" = 'header: item:dashboard item:github item:google_calendar item:xai_grok item:discord_default item:discord_rick item:discord_hoffman item:discord_risarisa item:discord_nancy item:discord_kuroda item:discord_shiraishi end:' ]
 	"$REAL_JQ" -e -c 'select(.type == "item") | .item.id == "item-id"' "$PAYLOAD_CAPTURE" >/dev/null
 	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
 	[[ "$output" != *"$SECRET_MARKER"* ]]

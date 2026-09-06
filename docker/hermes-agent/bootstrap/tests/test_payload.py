@@ -158,6 +158,7 @@ class PayloadTests(unittest.TestCase):
             build_secret_plan(self.manifest),
             {
                 "schema_version": 1,
+                "manifest_sha256": self.manifest.manifest_sha256,
                 "items": [
                     {
                         "key": "dashboard",

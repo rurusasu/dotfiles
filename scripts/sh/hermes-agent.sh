@@ -872,7 +872,10 @@ dotfiles_hermes_ensure_xapi_auth() {
 
 dotfiles_hermes_validate_secret_plan() {
   local expected_account="${1:-}"
-  jq -Ssce --arg expected_account "$expected_account" '
+  local expected_manifest_sha256="${2:-}"
+  jq -Ssce \
+    --arg expected_account "$expected_account" \
+    --arg expected_manifest_sha256 "$expected_manifest_sha256" '
     def nonblank_string:
       type == "string" and test("[^[:space:]]") and test("^[^[:cntrl:]]+$");
     def env_name:
@@ -898,8 +901,10 @@ dotfiles_hermes_validate_secret_plan() {
     | if . == false then false
       elif (
         type == "object"
-        and (keys | sort == ["items", "schema_version"])
+        and (keys | sort == ["items", "manifest_sha256", "schema_version"])
         and (.schema_version == 1)
+        and (.manifest_sha256 | type == "string" and test("^[a-f0-9]{64}$"))
+        and ($expected_manifest_sha256 == "" or .manifest_sha256 == $expected_manifest_sha256)
         and (.items | type == "array" and length > 0)
         and (([.items[].key] | unique | length) == (.items | length))
         and all(.items[];
@@ -910,14 +915,36 @@ dotfiles_hermes_validate_secret_plan() {
   '
 }
 
+dotfiles_hermes_bootstrap_manifest_path() {
+  local compose_file="$1" compose_directory
+
+  compose_directory="$(cd -- "$(dirname -- "$compose_file")" && pwd)" || return 1
+  printf '%s\n' "$compose_directory/../hermes-agent/bootstrap-manifest.yaml"
+}
+
+dotfiles_hermes_bootstrap_manifest_sha256() {
+  local manifest_path="$1"
+
+  [[ -f $manifest_path && ! -L $manifest_path ]] || return 1
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$manifest_path" | awk '{print $1}'
+  else
+    shasum -a 256 "$manifest_path" | awk '{print $1}'
+  fi
+}
+
 dotfiles_hermes_secret_plan() {
   local docker_runner="$1"
   local compose_file="$2"
-  local compact_plan
+  local compact_plan manifest_path manifest_sha256
 
   dotfiles_hermes_require_secret_tools
+  manifest_path="$(dotfiles_hermes_bootstrap_manifest_path "$compose_file")" ||
+    dotfiles_die "Hermes bootstrap manifest could not be located."
+  manifest_sha256="$(dotfiles_hermes_bootstrap_manifest_sha256 "$manifest_path")" ||
+    dotfiles_die "Hermes bootstrap manifest could not be hashed."
   set -o pipefail
-  if ! compact_plan="$("$docker_runner" compose -f "$compose_file" run --rm --no-deps -T hermes-bootstrap secret-plan | dotfiles_hermes_validate_secret_plan "$(dotfiles_hermes_service_account_account)")"; then
+  if ! compact_plan="$("$docker_runner" compose -f "$compose_file" run --rm --no-deps -T hermes-bootstrap secret-plan | dotfiles_hermes_validate_secret_plan "$(dotfiles_hermes_service_account_account)" "$manifest_sha256")"; then
     dotfiles_die "Hermes bootstrap secret plan is invalid."
   fi
   printf '%s\n' "$compact_plan"

@@ -200,6 +200,12 @@ class ManifestTests(unittest.TestCase):
 
                 self.assert_validation_error(data)
 
+    def test_onepassword_item_profiles_must_be_registered_profiles(self) -> None:
+        data = manifest_data()
+        data["onepassword_items"][0]["profiles"] = ["future"]
+
+        self.assert_validation_error(data)
+
     def test_shared_targets_must_use_their_repository_namespace(self) -> None:
         for target in (
             "/opt/data/shared/other",

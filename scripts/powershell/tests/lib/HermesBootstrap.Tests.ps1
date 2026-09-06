@@ -50,9 +50,17 @@ Describe "Get-HermesBootstrapSecretPlan" {
     BeforeEach {
         $script:dockerArguments = @()
         $script:dockerExitCode = 0
+        $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../..'))
+        $script:composeFile = Join-Path $TestDrive 'docker/hermes-service/compose.yml'
+        New-Item -ItemType Directory -Path (Split-Path -Parent $script:composeFile) -Force | Out-Null
+        $manifestPath = Join-Path $TestDrive 'docker/hermes-agent/bootstrap-manifest.yaml'
+        New-Item -ItemType Directory -Path (Split-Path -Parent $manifestPath) -Force | Out-Null
+        Copy-Item (Join-Path $repoRoot 'docker/hermes-agent/bootstrap-manifest.yaml') $manifestPath
+        $script:manifestSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $manifestPath).Hash.ToLowerInvariant()
         $script:dockerOutput = @(
             '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
         )
+        $script:dockerOutput = @(Add-HermesBootstrapPlanMetadata -Json $script:dockerOutput[0] -ManifestSha256 $script:manifestSha256)
         function global:Invoke-Docker {
             param([string[]]$Arguments)
 
@@ -63,14 +71,14 @@ Describe "Get-HermesBootstrapSecretPlan" {
     }
 
     It "requests the non-secret plan with the exact Docker Compose argument array" {
-        $plan = Get-HermesBootstrapSecretPlan -ComposeFile "C:\dotfiles\docker\hermes-agent\compose.yml"
+        $plan = Get-HermesBootstrapSecretPlan -ComposeFile $script:composeFile
 
         $script:dockerArguments | Should -Be @(
-            "compose", "-f", "C:\dotfiles\docker\hermes-agent\compose.yml",
+            "compose", "-f", $script:composeFile,
             "run", "--rm", "--no-deps", "-T", "hermes-bootstrap", "secret-plan"
         )
         $plan.schema_version | Should -Be 1
-        @($plan.items).Count | Should -Be 10
+        @($plan.items).Count | Should -Be 11
     }
 
     It "rejects plans outside the configured service-account vault" {
@@ -85,7 +93,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
             $invalidPlan.items[$mutation.Index].($mutation.Property) = $mutation.Value
             $script:dockerOutput = @($invalidPlan | ConvertTo-Json -Compress -Depth 32)
 
-            { Get-HermesBootstrapSecretPlan -ComposeFile "compose.yml" } |
+            { Get-HermesBootstrapSecretPlan -ComposeFile $script:composeFile } |
                 Should -Throw -ExpectedMessage "Hermes bootstrap secret plan is invalid."
         }
     }
@@ -96,7 +104,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
         $invalidPlan.items = @($items[1], $items[0]) + $items[2..7]
         $script:dockerOutput = @($invalidPlan | ConvertTo-Json -Compress -Depth 32)
 
-        { Get-HermesBootstrapSecretPlan -ComposeFile "compose.yml" } |
+        { Get-HermesBootstrapSecretPlan -ComposeFile $script:composeFile } |
             Should -Not -Throw
     }
 
@@ -119,6 +127,10 @@ Describe "Get-HermesBootstrapSecretPlan" {
         $emptyItems = $validPlan.PSObject.Copy()
         $emptyItems.items = @()
         $invalidPlans += $emptyItems
+
+        $manifestMismatch = $validPlan.PSObject.Copy()
+        $manifestMismatch.manifest_sha256 = '0' * 64
+        $invalidPlans += $manifestMismatch
 
         $duplicateKey = $validPlan.PSObject.Copy()
         $duplicateKey.items = @($validPlan.items | ForEach-Object { $_.PSObject.Copy() })
@@ -152,7 +164,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
         foreach ($invalidPlan in $invalidPlans) {
             $script:dockerOutput = @($invalidPlan | ConvertTo-Json -Compress -Depth 32)
 
-            { Get-HermesBootstrapSecretPlan -ComposeFile "compose.yml" } |
+            { Get-HermesBootstrapSecretPlan -ComposeFile $script:composeFile } |
                 Should -Throw -ExpectedMessage "Hermes bootstrap secret plan is invalid."
         }
     }
@@ -162,7 +174,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
         foreach ($suffix in @("`n$validJson", " trailing-garbage")) {
             $script:dockerOutput = @("$validJson$suffix")
 
-            { Get-HermesBootstrapSecretPlan -ComposeFile "compose.yml" } |
+            { Get-HermesBootstrapSecretPlan -ComposeFile $script:composeFile } |
                 Should -Throw -ExpectedMessage "Hermes bootstrap secret plan is invalid."
         }
     }
@@ -328,6 +340,31 @@ function global:Restore-HermesBootstrapTestErrorHistory {
     }
 }
 
+function global:Add-HermesBootstrapPlanMetadata {
+    param(
+        [Parameter(Mandatory)][string]$Json,
+        [Parameter(Mandatory)][string]$ManifestSha256
+    )
+
+    $plan = $Json | ConvertFrom-Json -Depth 32
+    $plan | Add-Member -NotePropertyName manifest_sha256 -NotePropertyValue $ManifestSha256
+    $items = @($plan.items)
+    $xai = [PSCustomObject]@{
+        key     = 'xai_grok'
+        account = 'my.1password.com'
+        vault   = 'openclaw'
+        item    = 'xAI-Grok-Twitter'
+        fields  = @([PSCustomObject]@{
+                canonical_name = 'api_key'
+                labels         = @('apikey')
+                reference      = 'console/apikey'
+                environment    = @('XAI_API_KEY')
+            })
+    }
+    $plan.items = @($items[0..2] + @($xai) + $items[3..($items.Count - 1)])
+    return ($plan | ConvertTo-Json -Compress -Depth 32)
+}
+
 function global:New-HermesBootstrapTestErrorRecord {
     param([Parameter(Mandatory)][string]$Message)
 
@@ -348,9 +385,17 @@ Describe "Invoke-HermesBootstrap" {
     }
 
     BeforeEach {
+        $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../..'))
+        $script:composeFile = Join-Path $TestDrive 'docker/hermes-service/compose.yml'
+        New-Item -ItemType Directory -Path (Split-Path -Parent $script:composeFile) -Force | Out-Null
+        $manifestPath = Join-Path $TestDrive 'docker/hermes-agent/bootstrap-manifest.yaml'
+        New-Item -ItemType Directory -Path (Split-Path -Parent $manifestPath) -Force | Out-Null
+        Copy-Item (Join-Path $repoRoot 'docker/hermes-agent/bootstrap-manifest.yaml') $manifestPath
+        $script:manifestSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $manifestPath).Hash.ToLowerInvariant()
         $script:dockerOutput = @(
             '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
         )
+        $script:dockerOutput = @(Add-HermesBootstrapPlanMetadata -Json $script:dockerOutput[0] -ManifestSha256 $script:manifestSha256)
         function global:Invoke-Docker {
             param([string[]]$Arguments)
 
@@ -410,7 +455,7 @@ Describe "Invoke-HermesBootstrap" {
             return @{ id = "id-$itemName"; fields = @(@{ label = "username"; value = $secret }) } | ConvertTo-Json -Compress
         }
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
+        $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
 
         $result.Success | Should -BeTrue
         $result.Changed | Should -BeTrue
@@ -420,6 +465,7 @@ Describe "Invoke-HermesBootstrap" {
             "item|get|Hermes Agent Dashboard|--account|my.1password.com|--vault|openclaw|--format|json",
             "item|get|GitHubUsedOpenClawPAT|--account|my.1password.com|--vault|openclaw|--format|json",
             "item|get|Google Calendar MCP|--account|my.1password.com|--vault|openclaw|--format|json",
+            "item|get|xAI-Grok-Twitter|--account|my.1password.com|--vault|openclaw|--format|json",
             "item|get|Master|--account|my.1password.com|--vault|openclaw|--format|json",
             "item|get|Rick|--account|my.1password.com|--vault|openclaw|--format|json",
             "item|get|Hoffman|--account|my.1password.com|--vault|openclaw|--format|json",
@@ -431,13 +477,13 @@ Describe "Invoke-HermesBootstrap" {
 
         $records = (Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "\r?\n" |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json -Depth 32 }
-        @($records).Count | Should -Be 12
+        @($records).Count | Should -Be 13
         $records[0].type | Should -Be "header"
         $records[0].schema_version | Should -Be 1
-        @($records[1..10] | ForEach-Object { $_.key }) | Should -Be @(
-            "dashboard", "github", "google_calendar", "discord_default", "discord_rick", "discord_hoffman", "discord_risarisa", "discord_nancy", "discord_kuroda", "discord_shiraishi"
+        @($records[1..11] | ForEach-Object { $_.key }) | Should -Be @(
+            "dashboard", "github", "google_calendar", "xai_grok", "discord_default", "discord_rick", "discord_hoffman", "discord_risarisa", "discord_nancy", "discord_kuroda", "discord_shiraishi"
         )
-        $records[11].type | Should -Be "end"
+        $records[12].type | Should -Be "end"
 
         $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1") -Raw
         $source | Should -Match "ArgumentList\.Add"
@@ -457,14 +503,14 @@ Describe "Invoke-HermesBootstrap" {
             @($arguments -split "`0" | Where-Object { $_.Length -gt 0 })
         }
         $argumentList | Should -Be @(
-            "compose", "-f", "compose.yml",
+            "compose", "-f", $script:composeFile,
             "run", "--rm", "--no-deps", "-T", "hermes-bootstrap", "apply"
         )
         $rawLines = @((Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "\r?\n" |
                 Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
         $rawLines[0] | Should -Be '{"type":"header","schema_version":1}'
-        $rawLines[11] | Should -Be '{"type":"end"}'
-        foreach ($index in 1..10) {
+        $rawLines[12] | Should -Be '{"type":"end"}'
+        foreach ($index in 1..11) {
             $rawLines[$index] | Should -Match '^\{"type":"item","key":"[a-z_]+","item":\{'
             $rawLines[$index] | Should -Not -Match '(?:\{|,)\s+"|,\s*\}'
         }
@@ -481,7 +527,7 @@ Describe "Invoke-HermesBootstrap" {
             throw "must not be called"
         }
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @missingDockerProcessParameters
+        $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @missingDockerProcessParameters
 
         $result.Success | Should -BeFalse
         $result.Changed | Should -BeFalse
@@ -514,7 +560,7 @@ Describe "Invoke-HermesBootstrap" {
             }.GetNewClosure()
             $watch = [System.Diagnostics.Stopwatch]::StartNew()
 
-            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
+            $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
             $watch.Stop()
 
             $result.Success | Should -BeFalse
@@ -550,7 +596,7 @@ Describe "Invoke-HermesBootstrap" {
                 throw $secretMarker
             }
 
-            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
+            $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
 
             $result.Success | Should -BeFalse
             $global:Error.Count | Should -Be 0
@@ -576,7 +622,7 @@ Describe "Invoke-HermesBootstrap" {
                 throw $secretMarker
             }
 
-            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
+            $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
 
             $result.Success | Should -BeFalse
             $actual = @($global:Error)
@@ -604,7 +650,7 @@ Describe "Invoke-HermesBootstrap" {
                 return "{`"value`":`"$secretMarker`""
             }
 
-            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
+            $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
 
             $result.Success | Should -BeFalse
             $global:Error.Count | Should -Be 1
@@ -625,7 +671,7 @@ Describe "Invoke-HermesBootstrap" {
             return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = $secret }) } | ConvertTo-Json -Compress
         }
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
+        $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
 
         $result.Success | Should -BeFalse
         $result.Changed | Should -BeFalse
@@ -645,7 +691,7 @@ Describe "Invoke-HermesBootstrap" {
             return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = "early-exit-secret" }) } | ConvertTo-Json -Compress
         }
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
+        $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
 
         $result.Success | Should -BeFalse
         $result.Changed | Should -BeFalse
@@ -663,7 +709,7 @@ Describe "Invoke-HermesBootstrap" {
             return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = $secret }) } | ConvertTo-Json -Compress
         }
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
+        $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
 
         $result.Message | Should -Match "\[REDACTED\]"
         $result.Message | Should -Not -Match ([regex]::Escape($secret))
@@ -684,7 +730,7 @@ Describe "Invoke-HermesBootstrap" {
         }
 
         $watch = [System.Diagnostics.Stopwatch]::StartNew()
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
+        $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
         $watch.Stop()
 
         $result.Success | Should -BeFalse
@@ -716,7 +762,7 @@ Describe "Invoke-HermesBootstrap" {
         }
         $watch = [System.Diagnostics.Stopwatch]::StartNew()
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
+        $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
         $watch.Stop()
 
         $result.Success | Should -BeFalse
@@ -754,7 +800,7 @@ Describe "Invoke-HermesBootstrap" {
         }
 
         foreach ($iteration in 1..12) {
-            $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
+            $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
             $result.Success | Should -BeTrue
         }
         $after = if ($IsWindows) {
@@ -789,7 +835,7 @@ Describe "Invoke-HermesBootstrap" {
             return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = "safe-value" }) } | ConvertTo-Json -Compress
         }
 
-        $result = Invoke-HermesBootstrap -ComposeFile "compose.yml" -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
+        $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
         $watch.Stop()
 
         $result.Success | Should -BeTrue
