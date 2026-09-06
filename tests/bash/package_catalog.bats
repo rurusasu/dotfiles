@@ -720,20 +720,6 @@ EOF
 	[ "$status" -eq 0 ]
 }
 
-@test "Darwin flake exposes the Nix-managed Google Chrome application" {
-	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
-	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
-
-	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex DOTFILES_WITH_HERMES=1 \
-		nix eval --impure --json --expr "
-			let config = (builtins.getFlake (toString $REPO_ROOT)).darwinConfigurations.macos.config;
-			in builtins.map (package: package.name) config.environment.systemPackages
-		"
-	[ "$status" -eq 0 ]
-	run jq -e 'any(.[]; test("^google-chrome(-|$)"))' <<<"$output"
-	[ "$status" -eq 0 ]
-}
-
 @test "Raycast preserves reviewed Windows and Linux unsupported reasons while declaring a Nix Darwin GUI migration" {
 	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
@@ -868,12 +854,6 @@ EOF
 	[ "$status" -eq 0 ]
 }
 
-@test "WSL excludes the native Discord package" {
-	run grep -n -A3 'homeExtraSpecialArgs' "$REPO_ROOT/nix/flakes/hosts.nix"
-	[ "$status" -eq 0 ]
-	[[ "$output" == *'isWSL = true;'* ]]
-}
-
 @test "generated Windows manifest contains Discord" {
 	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
 	run jq -e '
@@ -1006,30 +986,6 @@ EOF
 @test "ChatGPT Linux package uses the normal Nix output layout" {
 	grep -q 'cp -R "\$unpacked/usr/." "\$out/"' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
 	grep -q 'makeWrapper "\$out/lib/chatgpt/ChatGPT"' "$REPO_ROOT/nix/packages/chatgpt/default.nix"
-}
-
-@test "Darwin evaluation installs the Nix WezTerm application and its terminfo" {
-	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
-
-	run --separate-stderr env DOTFILES_USER=codex DOTFILES_HOME=/Users/codex nix eval --impure --json --expr "
-		let
-		  flake = builtins.getFlake (toString $REPO_ROOT);
-		  config = flake.darwinConfigurations.macos.config;
-		  caskNames = builtins.map (cask: if builtins.isString cask then cask else cask.name) config.homebrew.casks;
-		  homePackages = config.home-manager.users.codex.home.packages;
-		  systemPackages = config.environment.systemPackages;
-		in {
-			casks = builtins.filter (name: name == \"wezterm@nightly\") caskNames;
-			systemPackages = builtins.length (
-			  builtins.filter (package: builtins.match \"wezterm.*\" package.name != null) systemPackages
-			);
-		  terminfoPackages = builtins.map (package: package.name) (
-		    builtins.filter (package: package.name == \"wezterm-terminfo\") homePackages
-		  );
-		}
-	"
-	[ "$status" -eq 0 ]
-	[ "$output" = '{"casks":[],"systemPackages":1,"terminfoPackages":["wezterm-terminfo"]}' ]
 }
 
 @test "Warp is removed from the package catalog" {

@@ -94,13 +94,17 @@ cat result/package-support-report.json
 
 ## 主なファイル
 
-| File                              | Responsibility                           |
-| --------------------------------- | ---------------------------------------- |
-| `nix/packages/sets.nix`           | provider catalog and derived sets        |
-| `nix/packages/support-report.nix` | coverage report derivation               |
-| `nix/packages/winget.nix`         | generated Windows manifests              |
-| `nix/home/common.nix`             | shared Home Manager packages             |
-| `nix/hosts/darwin/default.nix`    | macOS system and casks                   |
-| `nix/system-manager/`             | Ubuntu/Debian system packages and Docker |
-| `nix/hosts/linux/`                | native NixOS system packages and Docker  |
-| `nix/flakes/packages.nix`         | package sets, report, and checks         |
+| File                                 | Responsibility                           |
+| ------------------------------------ | ---------------------------------------- |
+| `nix/packages/sets.nix`              | provider catalog and derived sets        |
+| `nix/packages/support-report.nix`    | coverage report derivation               |
+| `nix/packages/winget.nix`            | generated Windows manifests              |
+| `nix/home/common.nix`                | shared Home Manager packages             |
+| `nix/hosts/darwin/configuration.nix` | macOS system and casks                   |
+| `nix/system-manager/`                | Ubuntu/Debian system packages and Docker |
+| `nix/hosts/linux/`                   | native NixOS system packages and Docker  |
+| `nix/flakes/packages.nix`            | package sets, report, and checks         |
+
+各 host は `nix/hosts/<host>/default.nix` を entrypoint、`configuration.nix` を実体とする分割を
+標準とします。Darwin の system package、cask、activation を変更する場合は
+`nix/hosts/darwin/configuration.nix` を編集し、`default.nix` は import 配線だけに保ちます。

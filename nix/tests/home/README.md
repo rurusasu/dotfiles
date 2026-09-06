@@ -1,6 +1,6 @@
 # Home Manager テスト
 
-`nix/tests/home/` は、Home Manager module と OS 別の構成を Nix-native に検査する権威あるテスト層です。
+`nix/tests/` は、Home Manager module、host layout、OS 別の構成を Nix-native に検査する権威あるテスト層です。
 構造・import 境界だけでなく、固定した入力で `homeManagerConfiguration` を組み合わせた実効 option、
 package、session variable も `nix-unit` で評価します。
 
@@ -18,6 +18,7 @@ package、session variable も `nix-unit` で評価します。
 - 属性名は `test` で始め、各テストは `expr` と `expected` を持つ。
 - テスト内のパスはテストファイルからの相対 Nix path を使う。
 - 新しいテストは `nix/flakes/tests.nix` の `perSystem.nix-unit.tests` に登録する。
+- host の entrypoint/configuration の分割は `nix/tests/hosts/` に記載する。
 
 ## 実行
 

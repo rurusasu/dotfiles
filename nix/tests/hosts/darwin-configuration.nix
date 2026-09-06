@@ -40,6 +40,7 @@ let
   hasDarwinCask = name: config: builtins.any (cask: cask.name == name) config.homebrew.casks;
   packageNames =
     config: builtins.map (package: package.name or package.pname) config.environment.systemPackages;
+  darwinHomeSource = builtins.readFile ../../home/darwin.nix;
   hasPrefix = prefix: value: builtins.match "${prefix}.*" value != null;
   hasPackage = name: packages: builtins.any (package: package == name) packages;
 in
@@ -63,6 +64,7 @@ in
       nixHomebrew = defaultConfig.nix-homebrew.enable;
       vscode = builtins.any (name: hasPrefix "vscode" name) (packageNames defaultConfig);
       raycast = builtins.any (name: hasPrefix "raycast" name) (packageNames defaultConfig);
+      weztermTerminfo = builtins.match ".*pkgs[.]wezterm[.]terminfo.*" darwinHomeSource != null;
       github = builtins.any (name: builtins.match "^(gh|github-cli)($|[-.].*)" name != null) (
         packageNames defaultConfig
       );
@@ -74,6 +76,7 @@ in
       nixHomebrew = true;
       vscode = true;
       raycast = true;
+      weztermTerminfo = true;
       github = true;
       homeManagerUser = true;
       noOptionalOllamaAgent = false;

@@ -36,3 +36,7 @@ flake 評価へ渡す。
   `nix flake check --all-systems --no-write-lock-file` と focused `nix-unit` build を実行する。
 - Bats は Home Manager option の値を検査する用途には使わず、installer、shell、外部プロセス、
   runtime 契約に限る。
+
+ホストの system 設定は `nix/hosts/<host>/configuration.nix`、import の入口は同じディレクトリの
+`default.nix` が所有します。Home Manager の OS 差分は `nix/home/<os>.nix` に置き、host
+configuration と混在させません。

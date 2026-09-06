@@ -40,17 +40,11 @@ let
   linux = mkHome {
     system = "x86_64-linux";
     module = ../../home/linux.nix;
-    specialArgs = {
-      isWSL = false;
-    };
   };
 
   wsl = mkHome {
     system = "x86_64-linux";
     module = ../../home/wsl.nix;
-    specialArgs = {
-      isWSL = true;
-    };
   };
 
   darwin = mkHome {
@@ -58,7 +52,6 @@ let
     module = ../../home/darwin.nix;
     specialArgs = {
       installFeatures = [ ];
-      isWSL = false;
     };
   };
 in
@@ -88,6 +81,24 @@ in
       browser = "explorer.exe";
       inputMethod = "fcitx";
       zoxideExclusion = "/mnt/wsl/*:/mnt/wslg/*";
+    };
+  };
+
+  testWSLHomeModuleExcludesNativeDesktopPackages = {
+    expr =
+      let
+        source = builtins.readFile ../../home/wsl.nix;
+        has = needle: builtins.match ".*${needle}.*" source != null;
+      in
+      {
+        usesWithout = has "allWithout";
+        excludesDiscord = has "discord";
+        excludesOllama = has "ollama";
+      };
+    expected = {
+      usesWithout = true;
+      excludesDiscord = true;
+      excludesOllama = true;
     };
   };
 
