@@ -745,6 +745,26 @@ migrate_unmanaged_wezterm_install
 	grep -Fqx "sudo </bin/mv> <--> <$app_path> <$backup_dir/WezTerm.app.20260717010203>" "$COMMAND_LOG"
 }
 
+@test "migrates unmanaged WezTerm when Homebrew is absent before activation" {
+	local app_path="$BATS_TEST_TMPDIR/Applications/WezTerm.app"
+	local backup_dir="$BATS_TEST_TMPDIR/wezterm-migration"
+
+	mkdir -p "$app_path"
+	export DOTFILES_WEZTERM_APP_PATH="$app_path"
+	export DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR="$backup_dir"
+
+	run bash -c '
+set -euo pipefail
+. "$INSTALLER"
+homebrew_command() { return 1; }
+migrate_unmanaged_wezterm_install
+'
+
+	[ "$status" -eq 0 ]
+	[ ! -e "$app_path" ]
+	[ -d "$backup_dir/WezTerm.app.20260717010203" ]
+}
+
 @test "removes stale unmanaged WezTerm links when the app is absent" {
 	local app_path="$BATS_TEST_TMPDIR/Applications/WezTerm.app"
 	local bin_dir="$BATS_TEST_TMPDIR/homebrew/bin"
@@ -1568,6 +1588,38 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'softwareupdate' "$COMMAND_LOG"
+}
+
+@test "fresh install tolerates Homebrew being absent before nix-darwin activation" {
+	write_fresh_install_stubs
+	rmdir "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
+	rm "$STUB_BIN/brew"
+	unset DOTFILES_BREW_COMMAND
+	write_stub brew '
+if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions && ${4:-} == docker-desktop ]]; then
+	printf "docker-desktop 4.89.0\\n"
+	exit 0
+fi
+exit 1
+'
+
+	run bash -c '
+set -euo pipefail
+. "$INSTALLER"
+homebrew_command() {
+  if grep -Fq "nix run .#darwin-rebuild -- switch --flake .#macos --impure" "$COMMAND_LOG"; then
+    printf "%s\\n" "$STUB_BIN/brew"
+    return 0
+  fi
+  return 1
+}
+main "$@"
+' bash --with-hermes
+
+	[ "$status" -eq 0 ]
+	assert_log_order \
+		"nix-installer --daemon" \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
 
 @test "macOS installer contains no imperative application installer fallback" {

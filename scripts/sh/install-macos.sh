@@ -346,7 +346,7 @@ prepare_docker_desktop_cask_links() {
   local optional_kubectl="$HOMEBREW_BIN_DIR/kubectl"
   local obsolete_compose="$HOMEBREW_BIN_DIR/docker-compose"
 
-  cask_state="$(homebrew_cask_install_state "$DOCKER_CASK_TOKEN")" ||
+  cask_state="$(homebrew_cask_install_state_before_activation "$DOCKER_CASK_TOKEN")" ||
     dotfiles_die "Unable to inspect Homebrew cask state for $DOCKER_CASK_TOKEN."
   DOCKER_CASK_REPAIR_REQUIRED=0
 
@@ -743,6 +743,20 @@ homebrew_cask_install_state() {
   esac
 }
 
+homebrew_cask_install_state_before_activation() {
+  local token="$1"
+
+  # nix-darwin provisions nix-homebrew below, so a fresh host may not have a
+  # Homebrew command yet. Treat that pre-activation state as an absent cask,
+  # while preserving strict inspection errors once Homebrew is available.
+  if ! homebrew_command >/dev/null 2>&1; then
+    printf 'absent\n'
+    return 0
+  fi
+
+  homebrew_cask_install_state "$token"
+}
+
 remove_unmanaged_wezterm_link() {
   local link_path="$1" link_target
   [[ -L $link_path ]] || return 0
@@ -778,7 +792,7 @@ migrate_unmanaged_wezterm_install() {
   fi
 
   ((has_unmanaged_install == 1)) || return 0
-  cask_state="$(homebrew_cask_install_state "$WEZTERM_CASK_TOKEN")" ||
+  cask_state="$(homebrew_cask_install_state_before_activation "$WEZTERM_CASK_TOKEN")" ||
     dotfiles_die "Unable to inspect Homebrew cask state for $WEZTERM_CASK_TOKEN."
   [[ $cask_state == absent ]] || return 0
 
