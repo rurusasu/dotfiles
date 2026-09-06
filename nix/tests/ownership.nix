@@ -14,7 +14,7 @@ let
       line
       != null
     || builtins.match
-      "^[[:space:]]*\"\\$[A-Za-z_][A-Za-z0-9_]*\"[[:space:]]+eval([[:space:]]|$).*"
+      "^[[:space:]]*\"?\\$(\\{[A-Za-z_][A-Za-z0-9_]*\\}|[A-Za-z_][A-Za-z0-9_]*)\"?[[:space:]]+eval([[:space:]]|$).*"
       line
       != null;
   hasNixEvalCommandIn = source:
