@@ -5,6 +5,9 @@
 - `default.nix`
 - `configuration.nix`
 
+`default.nix` が entrypoint であり、`configuration.nix` を import する。WSL 固有の option は
+`configuration.nix` に置く。
+
 ## ルール
 
 - WSL 固有設定のみ置く。

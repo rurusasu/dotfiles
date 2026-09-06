@@ -1,6 +1,23 @@
-{ pkgs, isWSL, ... }:
+{
+  pkgs,
+  lib,
+  inputs,
+  ...
+}:
+let
+  codexPackage = inputs."llm-agents".packages.${pkgs.stdenv.hostPlatform.system}.codex;
+  sets = import ../packages/sets.nix {
+    inherit pkgs lib;
+    inherit codexPackage;
+  };
+in
 {
   imports = [ ./common.nix ];
+
+  home.packages = sets.allWithout [
+    "discord"
+    "ollama"
+  ];
 
   # Exclude WSL mount paths from zoxide's database to avoid indexing
   # temporary runtime files under /mnt/wsl/ and /mnt/wslg/.

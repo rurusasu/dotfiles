@@ -4,7 +4,12 @@ tasks:
   test:
     desc: Run platform-appropriate tests
     cmds:
-      - task: '{{if eq OS "windows"}}test:powershell{{else}}test:bash{{end}}'
+      - task: '{{if eq OS "windows"}}test:powershell{{else}}test:nix{{end}}'
+
+  test:nix:
+    desc: Run Nix-native configuration tests
+    cmds:
+      - nix build .#checks.$(nix eval --raw --impure --expr 'builtins.currentSystem').nix-unit --no-link --no-write-lock-file
 
   test:powershell:
     desc: Run PowerShell tests
@@ -17,6 +22,6 @@ tasks:
       - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -IncludeIntegration -ShowCoverage"
 
   test:bash:
-    desc: Run bats unit tests for shell helpers
+    desc: Run retained Bats contracts for shell and runtime behavior
     cmds:
       - '{{if eq OS "darwin"}}sh -c ''export PATH=/opt/homebrew/bin:/opt/homebrew/sbin:$PATH; cd "$(cd {{.DOTFILES_PATH}} && pwd -P)" && bats tests/bash''{{else}}{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bats tests/bash"{{end}}'

@@ -32,4 +32,11 @@ flake 評価へ渡す。
 ## Home Manager 固有のチェック
 
 - OS 固有設定は対象 OS の Home Manager ファイルに追加し、`common.nix` に OS 条件を増やさない。
-- 対象 OS の評価・テストと `tests/bash/home_layout.bats` を実行する。
+- Nix option、package、session variable のテストは `nix/tests/` に追加し、
+  `nix flake check --all-systems --no-write-lock-file` と focused `nix-unit` build を実行する。
+- Bats は Home Manager option の値を検査する用途には使わず、installer、shell、外部プロセス、
+  runtime 契約に限る。
+
+ホストの system 設定は `nix/hosts/<host>/configuration.nix`、import の入口は同じディレクトリの
+`default.nix` が所有します。Home Manager の OS 差分は `nix/home/<os>.nix` に置き、host
+configuration と混在させません。

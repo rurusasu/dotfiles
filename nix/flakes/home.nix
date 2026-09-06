@@ -24,7 +24,6 @@ let
     };
     extraSpecialArgs = {
       inherit inputs installFeatures;
-      isWSL = false;
     };
   };
   mkDarwinHome =

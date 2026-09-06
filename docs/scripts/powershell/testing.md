@@ -62,7 +62,7 @@ cd scripts/powershell/tests
 | ------------------ | -------------------------- | -------------------------------------------------------------- |
 | `ci-bootstrap.yml` | hosted Linux/macOS/Windows | Linux/Darwin/WSL/Windows の platform-routed contract aggregate |
 
-Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を実行し、外部 process wrapper を mock した状態で entrypoint、handler order、failure propagation、second-run behavior を検証します。実機アプリを要求する `Integration.Tests.ps1` は含めません。macOS hosted contract は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats、nix-darwin build、provider coverageを実行します。
+Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を実行し、外部 process wrapper を mock した状態で entrypoint、handler order、failure propagation、second-run behavior を検証します。実機アプリを要求する `Integration.Tests.ps1` は含めません。Nix option、package、flake output は `nix-unit` で検証し、macOS の installer/runtime 契約は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats で実行します。
 
 Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-bootstrap.yml` のLinux jobsがUbuntu、Debian、NixOSで検証し、Windows/macOS実機固有のruntimeは、Docker profile を選択した installer 末尾の acceptance が失敗を返します。
 
@@ -92,7 +92,7 @@ acceptance は次を検証します。
 .\Invoke-Tests.ps1 -Path .\Test-Environment.Tests.ps1 -MinimumCoverage 0
 ```
 
-`Bootstrap CI` は hosted Windows の全Pester contract、hosted macOSの全Bats contractとnix-darwin build、Linux/WSLのbootstrap checksを集約します。実機変更やEnvironment approvalを要求しないため、fork pull requestを含めrunner待ちなしで完了します。
+`Bootstrap CI` は hosted Windows の全Pester contract、Nix-native `nix-unit` checks、hosted macOS の Bats runtime contract と nix-darwin build、Linux/WSL の bootstrap checks を集約します。実機変更やEnvironment approvalを要求しないため、fork pull requestを含めrunner待ちなしで完了します。
 
 ## pre-commit 統合
 

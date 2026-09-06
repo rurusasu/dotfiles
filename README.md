@@ -137,7 +137,7 @@ DOTFILES_ALLOW_USER_ONLY=1 ./install.sh
 
 ### 成功条件と CI
 
-「コマンドが終了した」だけでは成功扱いにしません。必須 CLI と chezmoi drift を acceptance で確認し、Docker を選択した profile では Docker daemon、Compose、`docker run --rm hello-world` も確認します。CI は GitHub-hosted Actions だけで完結し、Windows は PowerShell/Pester、macOS は Bats と nix-darwin build で installer 契約を検証します。Ubuntu、Debian、NixOS は hosted E2E で installer を 2 回適用し、Docker と Compose の runtime acceptance まで実行します。
+「コマンドが終了した」だけでは成功扱いにしません。必須 CLI と chezmoi drift を acceptance で確認し、Docker を選択した profile では Docker daemon、Compose、`docker run --rm hello-world` も確認します。CI は GitHub-hosted Actions だけで完結し、Nix の option、package、flake output は Nix-native `nix-unit`、Windows は PowerShell/Pester、macOS の installer/runtime 契約は Bats で検証します。Ubuntu、Debian、NixOS は hosted E2E で installer を 2 回適用し、Docker と Compose の runtime acceptance まで実行します。
 
 標準の hosted Windows/macOS runner では Docker Desktop の VM を起動しないため、その実機固有部分は各 OS で one-command installer を実行した際の acceptance が判定します。ローカル acceptance が失敗した場合、installer はセットアップ成功を表示しません。
 
@@ -147,9 +147,9 @@ Nix catalog は各 OS の provider を定義し、OS の宣言レイヤーと Ho
 
 - ユーザー設定: `chezmoi/`
 - Home Manager: `nix/home/common.nix`
-- macOS: `nix/hosts/darwin/`
+- macOS system: `nix/hosts/darwin/default.nix` が entrypoint、`configuration.nix` が system/cask/activation の実体
 - Ubuntu / Debian: `nix/system-manager/`
-- NixOS / WSL: `nix/hosts/`
+- NixOS / WSL: `nix/hosts/<host>/default.nix` が entrypoint、`configuration.nix` が host 固有設定
 - パッケージ provider catalog: `nix/packages/sets.nix`
 
 ## ディレクトリ構造
@@ -169,6 +169,21 @@ dotfiles/
 ├── install.cmd             # Windows launcher for install.ps1
 ├── scripts/powershell/install.ps1 # NixOS WSL installer entrypoint
 └── flake.nix               # Nix flake entry point
+```
+
+ホスト設定は全 OS で同じ分割を標準とします。`default.nix` は import の入口に限定し、system、service、user、cask、activation などのホスト固有設定は `configuration.nix` に置きます。
+
+```
+nix/hosts/
+├── darwin/
+│   ├── default.nix          # nix-darwin entrypoint
+│   └── configuration.nix    # macOS system/cask/activation
+├── linux/
+│   ├── default.nix          # NixOS entrypoint
+│   └── configuration.nix    # native NixOS configuration
+└── wsl/
+    ├── default.nix          # NixOS-WSL entrypoint
+    └── configuration.nix    # WSL configuration
 ```
 
 ## 日常の使い方
