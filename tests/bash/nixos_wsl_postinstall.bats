@@ -13,6 +13,7 @@ setup() {
 	REAL_NIX="$(command -v nix || true)"
 
 	mkdir -p "$USER_HOME" "$SYNC_SOURCE" "$STUB_BIN"
+	SYNC_SOURCE="$(cd "$SYNC_SOURCE" && pwd -P)"
 	git -C "$REPO_ROOT" archive --format=tar HEAD | (
 		cd "$SYNC_SOURCE"
 		tar -xf -

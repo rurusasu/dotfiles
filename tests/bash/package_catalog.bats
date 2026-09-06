@@ -526,7 +526,11 @@ EOF
 				config.allowUnfree = true;
 				overlays = [ (_: _: { workmux = flake.inputs.workmux.packages.aarch64-darwin.default; }) ];
 			};
-			sets = import $SETS { inherit pkgs; lib = pkgs.lib; };
+			sets = import $SETS {
+				inherit pkgs;
+				lib = pkgs.lib;
+				codexPackage = flake.inputs.llm-agents.packages.aarch64-darwin.codex;
+			};
 		in {
 			support = sets.supportReport.docker-desktop;
 			defaultCasks = sets.darwinCasksForInstallFeatures [ ];
