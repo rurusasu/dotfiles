@@ -15,7 +15,7 @@ setup() {
 	write_stub sudo 'exec "$@"'
 	write_stub chezmoi 'echo "chezmoi stub"; exit 0'
 	write_stub npm 'echo "npm stub"; exit 0'
-	write_stub nvim 'if [ "${1:-}" = "--version" ]; then echo "NVIM v0.10.0"; exit 0; fi; exit 0'
+	write_stub nvim 'if [ "${1:-}" = "--version" ]; then echo "NVIM v0.12.5"; exit 0; fi; exit 0'
 }
 
 write_stub() {

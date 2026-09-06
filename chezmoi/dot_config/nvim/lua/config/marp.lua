@@ -30,17 +30,9 @@ local function has_slide_preview_script(root)
 end
 
 local function open_url(url)
-    if vim.ui and vim.ui.open then
-        vim.ui.open(url)
-        return
-    end
-
-    if vim.fn.has("win32") == 1 then
-        vim.fn.jobstart({ "cmd.exe", "/c", "start", "", url }, { detach = true })
-    elseif vim.fn.has("mac") == 1 then
-        vim.fn.jobstart({ "open", url }, { detach = true })
-    else
-        vim.fn.jobstart({ "xdg-open", url }, { detach = true })
+    local _, err = vim.ui.open(url)
+    if err then
+        vim.notify(err, vim.log.levels.ERROR)
     end
 end
 

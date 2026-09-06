@@ -2,7 +2,8 @@
 
 ## 管理対象
 
-- `vscode/`, `cursor/`, `zed/`, `nvim/`
+- `vscode/`, `cursor/`, `zed/`
+- Neovim は `chezmoi/dot_config/nvim/` で直接管理する。
 
 ## 共通ルール
 

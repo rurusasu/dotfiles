@@ -3,6 +3,20 @@
   "description": "pnpm global packages to install on Windows",
   "globalPackages": [
     {
+      "name": "bash-language-server",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "bash-language-server"
+      }
+    },
+    {
+      "name": "yaml-language-server",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "yaml-language-server"
+      }
+    },
+    {
       "name": "@prisma/language-server",
       "verifyCommand": {
         "args": ["--version"],

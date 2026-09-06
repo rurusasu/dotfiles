@@ -103,6 +103,7 @@
 
       checks = {
         package-provider-coverage = packageSupportReport;
+        neovim-native = import ../tests/neovim.nix { inherit pkgs; };
       }
       // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
         bootstrap-nixos-vm = import ../tests/bootstrap-nixos.nix {

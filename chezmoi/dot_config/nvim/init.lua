@@ -1,11 +1,8 @@
 -- Neovim configuration
 -- Managed by chezmoi
 
--- Windows: prepend real Python to PATH so Mason (pip/pypi installs) bypass
--- the App Execution Alias stub in WindowsApps.
-if vim.fn.has("win32") == 1 then
-    local py = vim.fn.expand("$LOCALAPPDATA") .. "\\Programs\\Python\\Python313"
-    vim.env.PATH = py .. "\\Scripts;" .. py .. ";" .. vim.env.PATH
+if vim.fn.has("nvim-0.12") == 0 then
+    error("This configuration requires Neovim 0.12 or newer. Update the package before applying it.")
 end
 
 -- Leader key (before lazy)
@@ -16,5 +13,7 @@ vim.g.maplocalleader = " "
 require("config.options")
 require("config.keymaps")
 require("config.osc7").setup()
+require("config.completion").setup()
 
 require("config.lazy")
+require("config.treesitter").setup()

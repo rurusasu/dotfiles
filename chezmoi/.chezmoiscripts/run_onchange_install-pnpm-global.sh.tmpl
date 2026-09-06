@@ -1,15 +1,15 @@
 {{ if ne .chezmoi.os "windows" -}}
 #!/usr/bin/env bash
 # pnpm グローバルパッケージ インストールスクリプト (Linux/macOS)
-# SSOT: nix/packages/all.nix (pnpmGlobal)
+# SSOT: nix/packages/sets.nix (pnpmGlobal)
 # Generated from: {{ range .pnpm_global_packages }}{{ . }} {{ end }}
 
 set -euo pipefail
 
 if ! command -v pnpm &>/dev/null; then
   echo "[WARN] pnpm が見つかりません。スキップします。"
-  echo "  pnpm は nix/packages/all.nix の dev セットで管理されています。"
-  echo "  nixos-rebuild switch を実行してください。"
+  echo "  pnpm は nix/packages/sets.nix の dev セットで管理されています。"
+  echo "  対象 OS の dotfiles installer または nrs で Nix 設定を反映してください。"
   exit 0
 fi
 

@@ -77,13 +77,16 @@ Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢
   - `Leader` は `Space`
   - `Ctrl+H/J/K/L`: window 移動（tmux 境界越えも同じ）
   - `Ctrl+Z`: undo
-  - `Ctrl+Y`: redo
-  - `Space+e`: エクスプローラ
+  - `Ctrl+Y`: normal/visual は redo、insert は補完候補の確定
+  - `-`: Oil エクスプローラ、`Space+e`: 診断表示
+  - `gc/gcc`: 標準コメント、`grr/grn/gra/gri/grt`: 標準 LSP 操作
+  - `Ctrl+X Ctrl+O`: LSP 補完、`Ctrl+X Ctrl+F`: パス補完、`Ctrl+N/P`: バッファ補完
+  - `Tab/Shift+Tab`: 補完選択／snippet 移動、`Enter`: 選択候補の確定（未選択なら改行）
   - `Space+ff/fg/fb`: ファイル検索/grep/buffers
-  - `Space+aa`: AI チャット toggle (codecompanion)
-  - `Space+ai`: AI インライン補助 (codecompanion)
-  - `Space+ac`: AI アクションメニュー (codecompanion)
-  - `Space+du/dc/dd/dt`: Devcontainer up/connect/down/toggle
+  - `Ctrl+.`: Sidekick focus、`Space+as/ad`: CLI 選択／close
+  - `Space+at/af/av/ap`: Sidekick へ位置／ファイル／選択範囲送信／prompt 選択
+  - `Space+du/dc/dd/dt`: Devcontainer up／コンテナ内 bash／down／toggle
+  - 詳細・terminal prefix と補完の競合は [Neovim](./neovim.md) を参照
 - VS Code / Cursor
   - `Vim` 拡張は利用しない
   - terminal focus の `Shift+Enter`: AI CLI / terminal prompt の複数行入力

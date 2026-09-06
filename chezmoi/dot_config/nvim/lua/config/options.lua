@@ -83,8 +83,7 @@ opt.undolevels = 10000
 opt.updatetime = 250
 opt.timeoutlen = 300
 
--- Completion
-opt.completeopt = "menu,menuone,noselect"
+-- Completion options and snippet navigation live in config.completion.
 
 -- Disable swap/backup
 opt.swapfile = false
@@ -124,11 +123,15 @@ if vim.fn.has("win32") == 1 then
     end
 end
 
--- Restore terminal on exit: explicitly switch off alternate screen so the
--- shell is visible immediately after :q (fixes ghost-screen in WezTerm/WT)
+-- Restore the terminal for the retained WezTerm/Windows Terminal exit workaround.
+-- Route control sequences through the UI, never through headless stdout.
 vim.api.nvim_create_autocmd("VimLeave", {
     callback = function()
-        io.write("\027[?1049l\027[H\027[2J")
-        io.flush()
+        for _, ui in ipairs(vim.api.nvim_list_uis()) do
+            if ui.stdout_tty then
+                vim.api.nvim_ui_send("\027[?1049l\027[H\027[2J")
+                break
+            end
+        end
     end,
 })
