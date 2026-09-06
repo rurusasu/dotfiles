@@ -765,7 +765,7 @@ dotfiles_hermes_sync_xapi_refresh_token_to_onepassword() {
       "$op_command" item get "$item" --account "$account" --vault "$vault" --format json >"$item_file" || status=$?
   fi
   if ((status == 0)); then
-    if python3 - "$item_file" "$cache_path" >"$template_file" <<'PY'; then
+    if python3 - "$item_file" "$cache_path" >"$template_file" <<'PY'
 import json
 import re
 import sys
@@ -791,6 +791,7 @@ if fields[0].get("value") == refresh_token:
 fields[0]["value"] = refresh_token
 sys.stdout.write(json.dumps(item, separators=(",", ":")))
 PY
+    then
       render_status=0
     else
       render_status=$?
