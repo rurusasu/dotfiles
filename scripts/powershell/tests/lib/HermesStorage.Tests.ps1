@@ -72,6 +72,12 @@ Describe 'Hermes Docker storage initialization' {
                     elseif ($script:volumeReady) { 0 }
                     else { 3 }
                 }
+                elseif ($entrypoint -eq '/usr/local/bin/hermes-storage-seed') {
+                    if ($script:seedExitCode -eq 0 -and $script:seedWritesMarker) {
+                        $script:volumeReady = $true
+                    }
+                    $global:LASTEXITCODE = $script:seedExitCode
+                }
                 elseif ($entrypoint -eq '/usr/local/bin/hermes-storage-ownership') {
                     $global:LASTEXITCODE = $script:ownershipExitCode
                 }
@@ -105,11 +111,8 @@ Describe 'Hermes Docker storage initialization' {
                     $global:LASTEXITCODE = 0
                 }
             }
-            elseif ($Arguments[0] -eq 'start' -and $Arguments[1] -eq '-a') {
-                if ($script:seedExitCode -eq 0 -and $script:seedWritesMarker) {
-                    $script:volumeReady = $true
-                }
-                $global:LASTEXITCODE = $script:seedExitCode
+            elseif ($Arguments[0] -eq 'start' -and $Arguments[1] -match '^[0-9a-f]{64}$') {
+                $global:LASTEXITCODE = 0
             }
             elseif ($Arguments[0] -eq 'rm' -and $Arguments[1] -eq '-f') {
                 $global:LASTEXITCODE = $script:lockReleaseExitCode
@@ -142,8 +145,8 @@ Describe 'Hermes Docker storage initialization' {
         $result.Success | Should -BeTrue
         $result.Existing | Should -BeFalse
         $script:dockerCalls[1] | Should -Match 'volume create --label com\.rurusasu\.dotfiles\.hermes-storage\.schema=1 --label com\.rurusasu\.dotfiles\.hermes-storage\.init-token=.+ hermes-data'
-        ($script:dockerCalls -join "`n") | Should -Match 'create --name dotfiles-hermes-storage-[0-9a-f]{20} .*--entrypoint /usr/local/bin/hermes-storage-seed'
-        ($script:dockerCalls -join "`n") | Should -Match 'create .* --ready-token [0-9a-f]{32} --replace-incomplete'
+        ($script:dockerCalls -join "`n") | Should -Match 'create --name dotfiles-hermes-storage-[0-9a-f]{20} .*--entrypoint python'
+        ($script:dockerCalls -join "`n") | Should -Match 'run --rm --entrypoint /usr/local/bin/hermes-storage-seed .* --ready-token [0-9a-f]{32} --replace-incomplete'
         ($script:dockerCalls -join "`n") | Should -Match 'run --rm --entrypoint python .*volume_token='
         $script:dockerCalls[-1] | Should -Be "rm -f $($script:lockId)"
         ($script:dockerCalls -join "`n") | Should -Not -Match 'volume rm'
@@ -182,10 +185,11 @@ Describe 'Hermes Docker storage initialization' {
 
         $result.Success | Should -BeTrue
         $result.Existing | Should -BeTrue
-        ($script:dockerCalls -join "`n") | Should -Match 'create .* /usr/local/bin/hermes-storage-seed .*--replace-incomplete'
-        ($script:dockerCalls -join "`n") | Should -Match "start -a $($script:lockId)"
+        ($script:dockerCalls -join "`n") | Should -Match 'run --rm --entrypoint /usr/local/bin/hermes-storage-seed .*--replace-incomplete'
+        $seedCall = @($script:dockerCalls | Where-Object { $_ -match '/usr/local/bin/hermes-storage-seed' })[0]
+        $seedCall | Should -Match '^run --rm --entrypoint /usr/local/bin/hermes-storage-seed '
         $ownershipCall = @($script:dockerCalls | Where-Object { $_ -match '/usr/local/bin/hermes-storage-ownership' })[0]
-        $script:dockerCalls.IndexOf($ownershipCall) | Should -BeGreaterThan $script:dockerCalls.IndexOf("start -a $($script:lockId)")
+        $script:dockerCalls.IndexOf($ownershipCall) | Should -BeGreaterThan $script:dockerCalls.IndexOf($seedCall)
         $script:dockerCalls.IndexOf("rm -f $($script:lockId)") | Should -BeGreaterThan $script:dockerCalls.IndexOf($ownershipCall)
     }
 
@@ -212,6 +216,20 @@ Describe 'Hermes Docker storage initialization' {
         $ownershipCall | Should -Be 'run --rm --network none --read-only --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --security-opt no-new-privileges:true --user 0:0 --entrypoint /usr/local/bin/hermes-storage-ownership --mount type=volume,source=hermes-data,target=/target local/hermes-agent-gh:latest --target /target --uid 10000 --gid 10000'
         $probeCall = @($script:dockerCalls | Where-Object { $_ -match '--entrypoint python' })[0]
         $script:dockerCalls.IndexOf($ownershipCall) | Should -BeGreaterThan $script:dockerCalls.IndexOf($probeCall)
+        $script:dockerCalls.IndexOf("rm -f $($script:lockId)") | Should -BeGreaterThan $script:dockerCalls.IndexOf($ownershipCall)
+    }
+
+    It 'should start a running lease before ownership convergence can exceed the stale threshold' {
+        $script:volumeSchema = '1'
+        $script:volumeToken = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+        $result = Initialize-HermesStorageVolume -DataDir 'C:\Users\test\.hermes'
+
+        $result.Success | Should -BeTrue
+        $leaseStart = "start $($script:lockId)"
+        $ownershipCall = @($script:dockerCalls | Where-Object { $_ -match '/usr/local/bin/hermes-storage-ownership' })[0]
+        $script:dockerCalls.IndexOf($leaseStart) | Should -BeGreaterThan -1
+        $script:dockerCalls.IndexOf($ownershipCall) | Should -BeGreaterThan $script:dockerCalls.IndexOf($leaseStart)
         $script:dockerCalls.IndexOf("rm -f $($script:lockId)") | Should -BeGreaterThan $script:dockerCalls.IndexOf($ownershipCall)
     }
 
@@ -252,8 +270,8 @@ Describe 'Hermes Docker storage initialization' {
 
         $result.Success | Should -BeFalse
         $result.Message | Should -Match 'already locked'
-        ($script:dockerCalls -join "`n") | Should -Not -Match '--entrypoint python'
-        ($script:dockerCalls -join "`n") | Should -Not -Match 'start -a'
+        ($script:dockerCalls -join "`n") | Should -Not -Match '/usr/local/bin/hermes-storage-seed'
+        ($script:dockerCalls -join "`n") | Should -Not -Match 'volume_token='
     }
 
     It 'reclaims an exited owned lock before retrying atomically' {
@@ -269,7 +287,8 @@ Describe 'Hermes Docker storage initialization' {
         $script:lockCreateAttempts | Should -Be 2
         ($script:dockerCalls -join "`n") | Should -Match 'inspect --format .*State.Status.*dotfiles-hermes-storage-'
         ($script:dockerCalls -join "`n") | Should -Match "rm -f $($script:lockId)"
-        ($script:dockerCalls -join "`n") | Should -Match "start -a $($script:replacementLockId)"
+        ($script:dockerCalls -join "`n") | Should -Match "start $($script:replacementLockId)"
+        ($script:dockerCalls -join "`n") | Should -Match '/usr/local/bin/hermes-storage-seed'
     }
 
     It 'reclaims an aged created lock by immutable container ID' {
@@ -284,7 +303,8 @@ Describe 'Hermes Docker storage initialization' {
         $result.Success | Should -BeTrue
         $script:lockCreateAttempts | Should -Be 2
         ($script:dockerCalls -join "`n") | Should -Match "rm -f $($script:lockId)"
-        ($script:dockerCalls -join "`n") | Should -Match "start -a $($script:replacementLockId)"
+        ($script:dockerCalls -join "`n") | Should -Match "start $($script:replacementLockId)"
+        ($script:dockerCalls -join "`n") | Should -Match '/usr/local/bin/hermes-storage-seed'
         $createCalls = @($script:dockerCalls | Where-Object { $_ -like 'create *' })
         $createCalls[0] | Should -Match 'lock-created-at=100'
         $createCalls[1] | Should -Match 'lock-created-at=300'

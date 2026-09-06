@@ -240,19 +240,46 @@ tasks:
         platforms: [darwin, linux]
 
   hermes:profile:up:
-    desc: Start the gateway for a Hermes profile
+    desc: Start the root multiplex gateway and show one Hermes profile status
     vars:
       PROFILE: '{{.PROFILE | default ""}}'
-    deps:
-      - task: hermes:up
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
       - sh: test -n {{.PROFILE | shellQuote}}
         msg: "Set PROFILE to an installed Hermes profile name."
     cmds:
-      - cmd: docker exec hermes /opt/hermes/.venv/bin/hermes -p {{.PROFILE | shellQuote}} gateway start
-        platforms: [darwin, linux]
+      - task: hermes:up
+      - task: hermes:profile:status
+        vars:
+          PROFILE: "{{.PROFILE}}"
+
+  hermes:profile:down:
+    desc: Stop the root multiplex gateway for all Hermes profiles
+    vars:
+      PROFILE: '{{.PROFILE | default ""}}'
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+      - sh: test -n {{.PROFILE | shellQuote}}
+        msg: "Set PROFILE to an installed Hermes profile name."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} stop hermes
+
+  hermes:profile:restart:
+    desc: Restart the root multiplex gateway and show one Hermes profile status
+    vars:
+      PROFILE: '{{.PROFILE | default ""}}'
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+      - sh: test -n {{.PROFILE | shellQuote}}
+        msg: "Set PROFILE to an installed Hermes profile name."
+    cmds:
+      - task: hermes:restart
+      - task: hermes:profile:status
+        vars:
+          PROFILE: "{{.PROFILE}}"
 
   hermes:down:
     desc: Stop Hermes Agent Docker container
@@ -313,31 +340,25 @@ tasks:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} ps chromium browser-mcp
 
   hermes:rick:up:
-    desc: Start Rick Hermes profile gateway in the Hermes container
-    deps:
-      - task: hermes:up
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Start the root multiplex gateway and show Rick profile status
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d hermes
-      - docker exec hermes /opt/hermes/.venv/bin/hermes -p rick gateway start
+      - task: hermes:profile:up
+        vars:
+          PROFILE: rick
 
   hermes:rick:down:
-    desc: Stop Rick Hermes profile gateway
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Stop the root multiplex gateway for all profiles
     cmds:
-      - docker exec hermes /opt/hermes/.venv/bin/hermes -p rick gateway stop
+      - task: hermes:profile:down
+        vars:
+          PROFILE: rick
 
   hermes:rick:restart:
-    desc: Restart Rick Hermes profile gateway
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Restart the root multiplex gateway and show Rick profile status
     cmds:
-      - docker exec hermes /opt/hermes/.venv/bin/hermes -p rick gateway restart
+      - task: hermes:profile:restart
+        vars:
+          PROFILE: rick
 
   hermes:rick:logs:
     desc: Follow Rick Hermes gateway logs
@@ -349,31 +370,25 @@ tasks:
       - docker exec hermes sh -lc 'tail -F /opt/data/logs/gateways/rick/current'
 
   hermes:hoffman:up:
-    desc: Start Hoffman Hermes profile gateway in the Hermes container
-    deps:
-      - task: hermes:up
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Start the root multiplex gateway and show Hoffman profile status
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d hermes
-      - docker exec hermes /opt/hermes/.venv/bin/hermes -p hoffman gateway start
+      - task: hermes:profile:up
+        vars:
+          PROFILE: hoffman
 
   hermes:hoffman:down:
-    desc: Stop Hoffman Hermes profile gateway
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Stop the root multiplex gateway for all profiles
     cmds:
-      - docker exec hermes /opt/hermes/.venv/bin/hermes -p hoffman gateway stop
+      - task: hermes:profile:down
+        vars:
+          PROFILE: hoffman
 
   hermes:hoffman:restart:
-    desc: Restart Hoffman Hermes profile gateway
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Restart the root multiplex gateway and show Hoffman profile status
     cmds:
-      - docker exec hermes /opt/hermes/.venv/bin/hermes -p hoffman gateway restart
+      - task: hermes:profile:restart
+        vars:
+          PROFILE: hoffman
 
   hermes:hoffman:logs:
     desc: Follow Hoffman Hermes gateway logs
@@ -385,31 +400,25 @@ tasks:
       - docker exec hermes sh -lc 'tail -F /opt/data/logs/gateways/hoffman/current'
 
   hermes:risarisa:up:
-    desc: Start RisaRisa Hermes profile gateway in the Hermes container
-    deps:
-      - task: hermes:up
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Start the root multiplex gateway and show RisaRisa profile status
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d hermes
-      - docker exec hermes /opt/hermes/.venv/bin/hermes -p risarisa gateway start
+      - task: hermes:profile:up
+        vars:
+          PROFILE: risarisa
 
   hermes:risarisa:down:
-    desc: Stop RisaRisa Hermes profile gateway
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Stop the root multiplex gateway for all profiles
     cmds:
-      - docker exec hermes /opt/hermes/.venv/bin/hermes -p risarisa gateway stop
+      - task: hermes:profile:down
+        vars:
+          PROFILE: risarisa
 
   hermes:risarisa:restart:
-    desc: Restart RisaRisa Hermes profile gateway
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Restart the root multiplex gateway and show RisaRisa profile status
     cmds:
-      - docker exec hermes /opt/hermes/.venv/bin/hermes -p risarisa gateway restart
+      - task: hermes:profile:restart
+        vars:
+          PROFILE: risarisa
 
   hermes:risarisa:logs:
     desc: Follow RisaRisa Hermes gateway logs
@@ -421,31 +430,25 @@ tasks:
       - docker exec hermes sh -lc 'tail -F /opt/data/logs/gateways/risarisa/current'
 
   hermes:nancy:up:
-    desc: Start Nancy Hermes profile gateway in the Hermes container
-    deps:
-      - task: hermes:up
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Start the root multiplex gateway and show Nancy profile status
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d hermes
-      - docker exec hermes /opt/hermes/.venv/bin/hermes -p nancy gateway start
+      - task: hermes:profile:up
+        vars:
+          PROFILE: nancy
 
   hermes:nancy:down:
-    desc: Stop Nancy Hermes profile gateway
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Stop the root multiplex gateway for all profiles
     cmds:
-      - docker exec hermes /opt/hermes/.venv/bin/hermes -p nancy gateway stop
+      - task: hermes:profile:down
+        vars:
+          PROFILE: nancy
 
   hermes:nancy:restart:
-    desc: Restart Nancy Hermes profile gateway
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Restart the root multiplex gateway and show Nancy profile status
     cmds:
-      - docker exec hermes /opt/hermes/.venv/bin/hermes -p nancy gateway restart
+      - task: hermes:profile:restart
+        vars:
+          PROFILE: nancy
 
   hermes:nancy:logs:
     desc: Follow Nancy Hermes gateway logs

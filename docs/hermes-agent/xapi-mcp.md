@@ -66,6 +66,17 @@ the waiting terminal. Do not expose the internal MCP port. Unix hosts run the
 bash adapter; Windows hosts run `scripts/powershell/hermes-xapi.ps1` and read
 the same 1Password items through native `op.exe`.
 
+When an interactive agent has desktop/browser control, the agent owns this
+browser handoff: open the generated X authorization URL, use the existing
+1Password-backed browser login when needed, approve the requested access,
+validate that the redirect targets `localhost:8080/callback` and contains the
+expected OAuth `code` and `state`, and return the callback URL or code to the
+waiting terminal without printing it. Ask the user to intervene only for a
+provider-enforced human-presence step such as biometric/passkey confirmation,
+2FA, CAPTCHA, or an account choice that cannot be inferred safely. For a direct
+human-run session without an interactive agent, perform the same browser and
+terminal handoff manually.
+
 For OAuth-only recovery or token rotation, run `task hermes:xapi:auth`; then
 run `task hermes:xapi:sync-token` and `task hermes:xapi:restart` if you are not
 using the combined setup task.
@@ -81,6 +92,13 @@ Existing local caches are preserved so a refresh-token rotation performed by
 xurl is not overwritten by an older 1Password value. To intentionally
 re-materialize the cache, set `DOTFILES_HERMES_XAPI_FORCE_CACHE_SYNC=1` for
 that run.
+
+Normal stack startup validates the cached token with a one-shot `xurl token`
+probe before recreating any long-running service. If validation fails, startup
+atomically replaces the local cache from the 1Password refresh token and probes
+exactly once more. A second failure stops before stack recreation and reports
+`task hermes:xapi:setup` as the recovery command. The TCP healthcheck is only a
+process/liveness signal and is not treated as proof that OAuth is valid.
 
 Start or recreate the stack through the atomic bootstrap task:
 

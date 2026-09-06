@@ -23,6 +23,7 @@ setup() {
 	FAKE_HOMEBREW_CLI_PLUGINS_DIR="$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR"
 	FAKE_DOCKER_CASK_STATE="$BATS_TEST_TMPDIR/docker-cask-installed"
 	REAL_JQ="$(command -v jq)"
+	REAL_TIMEOUT="$(command -v timeout)"
 	mkdir -p "$TEST_HOME" "$STUB_BIN" "$TEST_HOMEBREW_CASK_PARENT_DIR" "$TEST_HOMEBREW_LINK_TARGET"
 	chmod 0755 "$TEST_HOMEBREW_CASK_PARENT_DIR"
 	: >"$COMMAND_LOG"
@@ -34,7 +35,7 @@ setup() {
 	export SUDO_USER="test-user"
 	export DOTFILES_USER="test-user"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ INSTALLER REPO_ROOT
+	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ REAL_TIMEOUT INSTALLER REPO_ROOT
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export FAKE_BASHRC FAKE_ZSHRC FAKE_DOCKER_APP FAKE_LEGACY_DOCKER_APP
 	export FAKE_HOMEBREW_BIN_DIR FAKE_HOMEBREW_CLI_PLUGINS_DIR
@@ -43,7 +44,7 @@ setup() {
 	export TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR TEST_HOMEBREW_LINK_TARGET
 	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
 	export HERMES_ITEM_JSON='{"id":"fixture-item","fields":[]}'
-	export HERMES_XAPI_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"},{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
+	export HERMES_XAPI_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"},{"label":"X_API_REFRESH_TOKEN","section":{"label":"Refresh Token"},"value":"xapi-refresh-token-marker"}]}'
 	export HERMES_XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
 	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_DOCKER_APP_PATH="$FAKE_DOCKER_APP"
@@ -60,6 +61,7 @@ setup() {
 	export DOTFILES_HOMEBREW_BIN_DIR="$FAKE_HOMEBREW_BIN_DIR"
 	export DOTFILES_HOMEBREW_CLI_PLUGINS_DIR="$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 	export DOTFILES_DOCKER_WAIT_ATTEMPTS=2
+	export DOTFILES_DOCKER_PROBE_TIMEOUT_SECONDS=1
 	export DOTFILES_OLLAMA_WAIT_ATTEMPTS=2
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
 	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
@@ -143,6 +145,19 @@ is_allowed_cask_target() {
 	[[ $1 == /usr/local/bin || $1 == /usr/local/cli-plugins ||
 		$1 == "$TEST_HOMEBREW_CASK_BIN_DIR" || $1 == "$TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR" ]]
 }
+is_allowed_docker_cask_link() {
+	case "$1" in
+	"$FAKE_HOMEBREW_BIN_DIR/docker" | \
+		"$FAKE_HOMEBREW_BIN_DIR/docker-compose" | \
+		"$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop" | \
+		"$FAKE_HOMEBREW_BIN_DIR/docker-credential-ecr-login" | \
+		"$FAKE_HOMEBREW_BIN_DIR/docker-credential-osxkeychain" | \
+		"$FAKE_HOMEBREW_BIN_DIR/kubectl" | \
+		"$FAKE_HOMEBREW_BIN_DIR/kubectl.docker" | \
+		"$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose") return 0 ;;
+	*) return 1 ;;
+	esac
+}
 fixture_user="${DOTFILES_USER:-${SUDO_USER:-$USER}}"
 fail_operation() {
 	[[ ${SUDO_FAIL_OPERATION:-} != "$1" ]] || exit "$SUDO_FAILURE_STATUS"
@@ -186,6 +201,18 @@ case "${1:-}" in
 		fi
 		;;
 	mv|/bin/mv)
+		if [[ $# -eq 5 && ${2:-} == -n && ${3:-} == -- ]]; then
+			if is_allowed_docker_cask_link "${4:-}" &&
+				[[ ${5:-} == "${4:-}.dotfiles-cask-migration-backup" ]]; then
+				exec "$@"
+			fi
+			if [[ ${4:-} == *.dotfiles-cask-migration-backup ]]; then
+				original_path="${4%.dotfiles-cask-migration-backup}"
+				if is_allowed_docker_cask_link "$original_path" && [[ ${5:-} == "$original_path" ]]; then
+					exec "$@"
+				fi
+			fi
+		fi
 		if [[ $# -eq 3 &&
 			( ${2:-} == "$FAKE_BASHRC" || ${2:-} == "$FAKE_ZSHRC" ) &&
 			${3:-} == "${2:-}.before-nix-darwin" ]]; then
@@ -635,7 +662,7 @@ exit 1
 		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml up -d --force-recreate" \
 		"docker image prune --force" \
 		"verify-environment compose=$REPO_ROOT/docker/hermes-service/compose.yml args=--runtime"
-	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 12 ]
+	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 15 ]
 	[ "$(grep -c '^op --account my.1password.com read ' "$COMMAND_LOG")" -eq 1 ]
 	! grep -q '^op signin ' "$COMMAND_LOG"
 	[ -s "$PAYLOAD_CAPTURE" ]
@@ -1140,6 +1167,104 @@ fi
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
 
+@test "nix-darwin activation failure restores staged Docker cask links" {
+	write_installed_stubs
+	write_legacy_docker_app
+	local docker_link="$FAKE_HOMEBREW_BIN_DIR/docker"
+	local docker_target="$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker"
+	local compose_link="$FAKE_HOMEBREW_BIN_DIR/docker-compose"
+	local compose_target="$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
+	mkdir -p "$(dirname "$compose_target")"
+	printf '#!/usr/bin/env bash\nexit 0\n' >"$compose_target"
+	chmod +x "$compose_target"
+	ln -s "$docker_target" "$docker_link"
+	ln -s "$compose_target" "$compose_link"
+	write_stub nix '
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [[ ${1:-} == run ]]; then
+	"$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"
+	exit 42
+fi
+'
+
+	run_macos_installer --with-docker
+
+	[ "$status" -eq 42 ]
+	[ "$(/usr/bin/readlink "$docker_link")" = "$docker_target" ]
+	[ "$(/usr/bin/readlink "$compose_link")" = "$compose_target" ]
+	[ -x "$docker_link" ]
+	[ -x "$compose_link" ]
+	[ ! -e "$docker_link.dotfiles-cask-migration-backup" ]
+	[ ! -L "$docker_link.dotfiles-cask-migration-backup" ]
+	[ ! -e "$compose_link.dotfiles-cask-migration-backup" ]
+	[ ! -L "$compose_link.dotfiles-cask-migration-backup" ]
+}
+
+@test "nix-darwin activation failure removes Docker cask links created from an all-missing state" {
+	write_installed_stubs
+	local -a managed_links=(
+		"$FAKE_HOMEBREW_BIN_DIR/docker"
+		"$FAKE_HOMEBREW_BIN_DIR/docker-compose"
+		"$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop"
+		"$FAKE_HOMEBREW_BIN_DIR/docker-credential-ecr-login"
+		"$FAKE_HOMEBREW_BIN_DIR/docker-credential-osxkeychain"
+		"$FAKE_HOMEBREW_BIN_DIR/kubectl"
+		"$FAKE_HOMEBREW_BIN_DIR/kubectl.docker"
+		"$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
+	)
+	local link_path
+	write_stub nix '
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [[ ${1:-} == run ]]; then
+	"$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"
+	exit 42
+fi
+'
+
+	run_macos_installer --with-docker
+
+	[ "$status" -eq 42 ]
+	for link_path in "${managed_links[@]}"; do
+		[ ! -e "$link_path" ]
+		[ ! -L "$link_path" ]
+	done
+}
+
+@test "nix-darwin activation failure restores staged links and removes partially created missing links" {
+	write_installed_stubs
+	write_legacy_docker_app
+	local docker_link="$FAKE_HOMEBREW_BIN_DIR/docker"
+	local docker_target="$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker"
+	local credential_link="$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop"
+	local credential_target="$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop"
+	local compose_link="$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
+	local compose_target="$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
+	ln -s "$docker_target" "$docker_link"
+	write_stub nix '
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [[ ${1:-} == run ]]; then
+	ln -s "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" "$FAKE_HOMEBREW_BIN_DIR/docker"
+	ln -s "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop" \
+		"$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop"
+	ln -s "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" \
+		"$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
+	exit 42
+fi
+'
+
+	run_macos_installer --with-docker
+
+	[ "$status" -eq 42 ]
+	[ "$(/usr/bin/readlink "$docker_link")" = "$docker_target" ]
+	[ -x "$docker_link" ]
+	[ ! -e "$credential_link" ]
+	[ ! -L "$credential_link" ]
+	[ ! -e "$compose_link" ]
+	[ ! -L "$compose_link" ]
+	[ ! -e "$docker_link.dotfiles-cask-migration-backup" ]
+	[ ! -L "$docker_link.dotfiles-cask-migration-backup" ]
+}
+
 @test "successful Docker migration replaces stale links with exact official cask artifacts" {
 	write_installed_stubs
 	local -a links=(
@@ -1179,7 +1304,7 @@ fi
 	[ ! -e "$FAKE_HOMEBREW_BIN_DIR/docker-compose" ]
 	[ ! -L "$FAKE_HOMEBREW_BIN_DIR/docker-compose" ]
 	assert_log_order \
-		"sudo </bin/rm> <-f> <--> <${links[0]}>" \
+		"sudo </bin/mv> <-n> <--> <${links[0]}> <${links[0]}.dotfiles-cask-migration-backup>" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
 
@@ -1556,4 +1681,61 @@ EOF
 	[ "$(grep -c '^docker info$' "$COMMAND_LOG")" -eq 3 ]
 	grep -Fqx "open $FAKE_DOCKER_APP" "$COMMAND_LOG"
 	! grep -Fq 'docker desktop start' "$COMMAND_LOG"
+}
+
+@test "Docker engine probe bounds a hung Docker CLI process" {
+	write_installed_stubs
+	cat >"$STUB_BIN/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf "docker %s\n" "$*" >>"$COMMAND_LOG"
+if [ "${1:-}" = "info" ]; then
+	exec /bin/sleep 30
+fi
+EOF
+	chmod +x "$STUB_BIN/docker"
+
+	run "$REAL_TIMEOUT" 4 bash -c '
+set -euo pipefail
+. "$INSTALLER"
+if docker_engine_is_ready; then
+  exit 9
+fi
+printf "bounded\n"
+'
+
+	[ "$status" -eq 0 ]
+	[ "$output" = "bounded" ]
+	[ "$(grep -c '^docker info$' "$COMMAND_LOG")" -eq 1 ]
+}
+
+@test "Docker Compose version probe bounds a hung Docker CLI process" {
+	write_installed_stubs
+	cat >"$STUB_BIN/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf "docker %s\n" "$*" >>"$COMMAND_LOG"
+if [[ ${1:-} == info ]]; then
+	exit 0
+fi
+if [[ ${1:-} == compose && ${2:-} == version ]]; then
+	exec /bin/sleep 30
+fi
+exit 0
+EOF
+	chmod +x "$STUB_BIN/docker"
+
+	run "$REAL_TIMEOUT" 4 bash -c '
+set -euo pipefail
+. "$INSTALLER"
+ensure_docker_desktop_md5_compatibility() {
+  :
+}
+setup_docker_runtime
+'
+
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"Docker Compose CLI version probe failed."* ]]
+	[ "$(grep -c '^docker info$' "$COMMAND_LOG")" -eq 1 ]
+	[ "$(grep -c '^docker compose version$' "$COMMAND_LOG")" -eq 1 ]
 }

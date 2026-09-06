@@ -72,12 +72,21 @@ def discord_is_configured(home: Path) -> bool:
     return False
 
 
-def discover_targets(manager: GatewayManager, root: Path) -> tuple[GatewayTarget, ...]:
+def discover_targets(
+    manager: GatewayManager,
+    root: Path,
+    *,
+    multiplex_profiles: bool = False,
+) -> tuple[GatewayTarget, ...]:
     profiles = tuple(manager.list_profile_gateways())
     if not profiles:
         raise NoRegisteredGatewaysError("no registered gateways")
     for profile in profiles:
         validate_profile_name(profile)
+    if multiplex_profiles:
+        profiles = tuple(profile for profile in profiles if profile == "default")
+        if not profiles:
+            raise NoRegisteredGatewaysError("multiplex root gateway is not registered")
     return tuple(
         GatewayTarget(
             profile=profile,
@@ -139,6 +148,7 @@ def converge(
     *,
     timeout_seconds: float,
     poll_seconds: float,
+    multiplex_profiles: bool = False,
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> int:
@@ -149,35 +159,48 @@ def converge(
         raise ValueError("poll_seconds must be a finite non-negative number")
 
     try:
-        targets = discover_targets(manager, root)
+        targets = discover_targets(
+            manager,
+            root,
+            multiplex_profiles=multiplex_profiles,
+        )
     except NoRegisteredGatewaysError:
         raise
     except Exception as error:
         raise RuntimeError("gateway discovery failed") from error
+    deadline = monotonic() + timeout_seconds
     lifecycle_failures: dict[str, str] = {}
-    for target in targets:
+    for index, target in enumerate(targets):
         try:
             manager.start(target.service_name)
         except Exception:
             lifecycle_failures[target.profile] = "lifecycle_error"
+            continue
+
+        # Starting every registered profile at once creates a thundering herd:
+        # each gateway imports the model/tool registry and opens its platform
+        # connections concurrently. On Docker Desktop this can starve dockerd
+        # itself, leaving the enclosing docker exec unable to reach the timeout
+        # below. Converge one profile completely before dispatching the next.
+        while True:
+            ready, status = gateway_ready(manager, target)
+            if ready:
+                break
+            pending = {target.profile: status}
+            if status == "discord_needs_attention":
+                _raise_convergence_error("gateway needs attention", pending)
+            now = monotonic()
+            if now >= deadline:
+                for remaining in targets[index + 1 :]:
+                    remaining_ready, remaining_status = gateway_ready(manager, remaining)
+                    if not remaining_ready:
+                        pending[remaining.profile] = remaining_status
+                _raise_convergence_error("gateway convergence timed out", pending)
+            sleep(min(poll_seconds, deadline - now))
+
     if lifecycle_failures:
         _raise_convergence_error("gateway lifecycle failed", lifecycle_failures)
-
-    deadline = monotonic() + timeout_seconds
-    while True:
-        pending: dict[str, str] = {}
-        for target in targets:
-            ready, status = gateway_ready(manager, target)
-            if not ready:
-                pending[target.profile] = status
-        if not pending:
-            return 0
-        if any(status == "discord_needs_attention" for status in pending.values()):
-            _raise_convergence_error("gateway needs attention", pending)
-        now = monotonic()
-        if now >= deadline:
-            _raise_convergence_error("gateway convergence timed out", pending)
-        sleep(min(poll_seconds, deadline - now))
+    return 0
 
 
 def _positive_float(value: str) -> float:
@@ -214,6 +237,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             Path(os.environ.get("HERMES_HOME", "/opt/data")),
             timeout_seconds=arguments.timeout_seconds,
             poll_seconds=arguments.poll_seconds,
+            multiplex_profiles=os.environ.get("GATEWAY_MULTIPLEX_PROFILES", "").lower()
+            in {"1", "true", "yes", "on"},
         )
     except (RuntimeError, ValueError) as error:
         print(str(error), file=sys.stderr)

@@ -20,6 +20,7 @@ DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
 LEGACY_DOCKER_APP="${DOTFILES_LEGACY_DOCKER_APP_PATH:-/Applications/Nix Apps/Docker.app}"
 DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/docker-desktop-installed}"
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
+DOCKER_PROBE_TIMEOUT_SECONDS="${DOTFILES_DOCKER_PROBE_TIMEOUT_SECONDS:-5}"
 DOTFILES_ACCEPT_DOCKER_LICENSE="${DOTFILES_ACCEPT_DOCKER_LICENSE:-0}"
 DOCKER_CASK_TOKEN="${DOTFILES_DOCKER_CASK_TOKEN:-docker-desktop}"
 OLLAMA_COMMAND="${DOTFILES_OLLAMA_COMMAND:-ollama}"
@@ -48,6 +49,15 @@ DOTFILES_WITH_OLLAMA=0
 DOTFILES_WITH_DOCKER=0
 DOTFILES_WITH_HERMES=0
 DOCKER_CASK_REPAIR_REQUIRED=0
+DOCKER_CASK_LINK_TRANSACTION_ACTIVE=0
+DOCKER_CASK_LINK_TRANSACTION_COUNT=0
+readonly DOCKER_CASK_LINK_BACKUP_SUFFIX=.dotfiles-cask-migration-backup
+DOCKER_CASK_LINK_PATHS=()
+DOCKER_CASK_LINK_BACKUP_PATHS=()
+DOCKER_CASK_LINK_ORIGINAL_STATES=()
+DOCKER_CASK_LINK_ORIGINAL_TARGETS=()
+DOCKER_CASK_LINK_CURRENT_TARGETS=()
+DOCKER_CASK_LINK_LEGACY_TARGETS=()
 
 usage() {
   cat <<'EOF'
@@ -189,9 +199,134 @@ docker_desktop_link_state() {
   fi
 }
 
+rollback_docker_desktop_cask_links() {
+  local exit_status="${1:-1}" index link_path backup_path original_state original_target
+  local current_target legacy_target state replacement_target rollback_failed=0
+
+  trap - EXIT
+  ((DOCKER_CASK_LINK_TRANSACTION_ACTIVE == 1)) || exit "$exit_status"
+  set +e
+  dotfiles_log "Restoring Docker Desktop links after failed cask activation..."
+
+  for ((index = DOCKER_CASK_LINK_TRANSACTION_COUNT - 1; index >= 0; index--)); do
+    link_path="${DOCKER_CASK_LINK_PATHS[$index]}"
+    backup_path="${DOCKER_CASK_LINK_BACKUP_PATHS[$index]}"
+    original_state="${DOCKER_CASK_LINK_ORIGINAL_STATES[$index]}"
+    original_target="${DOCKER_CASK_LINK_ORIGINAL_TARGETS[$index]}"
+    current_target="${DOCKER_CASK_LINK_CURRENT_TARGETS[$index]}"
+    legacy_target="${DOCKER_CASK_LINK_LEGACY_TARGETS[$index]}"
+
+    if [[ $original_state == missing ]]; then
+      state="$(docker_desktop_link_state "$link_path" "$current_target" "$legacy_target")"
+      case "$state" in
+      missing) ;;
+      current-cask | legacy)
+        replacement_target="$(/usr/bin/readlink "$link_path" 2>/dev/null)"
+        if [[ $replacement_target != "$current_target" && $replacement_target != "$legacy_target" ]]; then
+          printf 'Refusing to remove unexpected Docker Desktop rollback target: %s\n' "$link_path" >&2
+          rollback_failed=1
+          continue
+        fi
+        if ! sudo /bin/rm -f -- "$link_path"; then
+          rollback_failed=1
+        fi
+        ;;
+      conflicting | *)
+        printf 'Refusing to remove Docker Desktop rollback conflict: %s\n' "$link_path" >&2
+        rollback_failed=1
+        ;;
+      esac
+      continue
+    fi
+
+    if [[ $original_state != staged ]]; then
+      printf 'Unable to determine original Docker Desktop link state: %s\n' "$link_path" >&2
+      rollback_failed=1
+      continue
+    fi
+
+    if [[ ! -L $backup_path ]] ||
+      [[ $(/usr/bin/readlink "$backup_path" 2>/dev/null) != "$original_target" ]]; then
+      printf 'Unable to safely restore Docker Desktop link backup: %s\n' "$backup_path" >&2
+      rollback_failed=1
+      continue
+    fi
+
+    if [[ -L $link_path ]] &&
+      [[ $(/usr/bin/readlink "$link_path" 2>/dev/null) == "$original_target" ]]; then
+      if ! sudo /bin/rm -f -- "$backup_path"; then
+        rollback_failed=1
+      fi
+      continue
+    fi
+
+    state="$(docker_desktop_link_state "$link_path" "$current_target" "$legacy_target")"
+    case "$state" in
+    missing) ;;
+    current-cask | legacy)
+      replacement_target="$(/usr/bin/readlink "$link_path" 2>/dev/null)"
+      if [[ $replacement_target != "$current_target" && $replacement_target != "$legacy_target" ]]; then
+        printf 'Refusing to remove unexpected Docker Desktop rollback target: %s\n' "$link_path" >&2
+        rollback_failed=1
+        continue
+      fi
+      if ! sudo /bin/rm -f -- "$link_path"; then
+        rollback_failed=1
+        continue
+      fi
+      ;;
+    conflicting | *)
+      printf 'Refusing to overwrite Docker Desktop rollback conflict: %s\n' "$link_path" >&2
+      rollback_failed=1
+      continue
+      ;;
+    esac
+
+    if ! sudo /bin/mv -n -- "$backup_path" "$link_path" ||
+      [[ ! -L $link_path ]] ||
+      [[ $(/usr/bin/readlink "$link_path" 2>/dev/null) != "$original_target" ]]; then
+      printf 'Unable to restore Docker Desktop link: %s\n' "$link_path" >&2
+      rollback_failed=1
+    fi
+  done
+
+  DOCKER_CASK_LINK_TRANSACTION_ACTIVE=0
+  if ((rollback_failed == 1)); then
+    dotfiles_log "Docker Desktop link rollback was incomplete; preserved safe backups for recovery."
+  fi
+  exit "$exit_status"
+}
+
+commit_docker_desktop_cask_links() {
+  local index backup_path original_state original_target
+
+  trap - EXIT
+  DOCKER_CASK_LINK_TRANSACTION_ACTIVE=0
+  for ((index = 0; index < DOCKER_CASK_LINK_TRANSACTION_COUNT; index++)); do
+    backup_path="${DOCKER_CASK_LINK_BACKUP_PATHS[$index]}"
+    original_state="${DOCKER_CASK_LINK_ORIGINAL_STATES[$index]}"
+    original_target="${DOCKER_CASK_LINK_ORIGINAL_TARGETS[$index]}"
+    [[ $original_state == missing ]] && continue
+    [[ $original_state == staged ]] ||
+      dotfiles_die "Unable to determine original Docker Desktop link state during commit."
+    [[ -L $backup_path ]] &&
+      [[ $(/usr/bin/readlink "$backup_path") == "$original_target" ]] ||
+      dotfiles_die "Refusing to remove unexpected Docker Desktop link backup: $backup_path"
+    sudo /bin/rm -f -- "$backup_path"
+  done
+  DOCKER_CASK_LINK_TRANSACTION_COUNT=0
+  DOCKER_CASK_LINK_PATHS=()
+  DOCKER_CASK_LINK_BACKUP_PATHS=()
+  DOCKER_CASK_LINK_ORIGINAL_STATES=()
+  DOCKER_CASK_LINK_ORIGINAL_TARGETS=()
+  DOCKER_CASK_LINK_CURRENT_TARGETS=()
+  DOCKER_CASK_LINK_LEGACY_TARGETS=()
+}
+
 prepare_docker_desktop_cask_links() {
-  local cask_state link_path state suffix index links_to_remove_count=0
-  local -a links_to_remove
+  local backup_path cask_state current_target legacy_target link_path original_state original_target
+  local state suffix index links_to_remove_count=0 missing_links_count=0 transaction_count=0
+  local -a links_to_remove missing_links
   local -a required_paths=(
     "$HOMEBREW_BIN_DIR/docker"
     "$HOMEBREW_BIN_DIR/docker-credential-desktop"
@@ -236,6 +371,8 @@ prepare_docker_desktop_cask_links() {
       ;;
     missing)
       [[ $cask_state == absent ]] || DOCKER_CASK_REPAIR_REQUIRED=1
+      missing_links[missing_links_count]="$link_path"
+      ((missing_links_count += 1))
       ;;
     conflicting) dotfiles_die "Refusing to replace Docker Desktop link conflict: $link_path" ;;
     *) dotfiles_die "Unable to classify Docker Desktop link: $link_path" ;;
@@ -258,7 +395,10 @@ prepare_docker_desktop_cask_links() {
     ((links_to_remove_count += 1))
     [[ $cask_state == absent ]] || DOCKER_CASK_REPAIR_REQUIRED=1
     ;;
-  missing) ;;
+  missing)
+    missing_links[missing_links_count]="$optional_kubectl"
+    ((missing_links_count += 1))
+    ;;
   conflicting) dotfiles_die "Refusing to replace Docker Desktop link conflict: $optional_kubectl" ;;
   *) dotfiles_die "Unable to classify Docker Desktop link: $optional_kubectl" ;;
   esac
@@ -272,13 +412,76 @@ prepare_docker_desktop_cask_links() {
     links_to_remove[links_to_remove_count]="$obsolete_compose"
     ((links_to_remove_count += 1))
     ;;
-  missing) ;;
+  missing)
+    missing_links[missing_links_count]="$obsolete_compose"
+    ((missing_links_count += 1))
+    ;;
   conflicting) dotfiles_die "Refusing to replace Docker Desktop link conflict: $obsolete_compose" ;;
   *) dotfiles_die "Unable to classify Docker Desktop link: $obsolete_compose" ;;
   esac
 
   for ((index = 0; index < links_to_remove_count; index++)); do
-    sudo /bin/rm -f -- "${links_to_remove[$index]}"
+    DOCKER_CASK_LINK_PATHS[transaction_count]="${links_to_remove[$index]}"
+    DOCKER_CASK_LINK_ORIGINAL_STATES[transaction_count]=staged
+    ((transaction_count += 1))
+  done
+  for ((index = 0; index < missing_links_count; index++)); do
+    DOCKER_CASK_LINK_PATHS[transaction_count]="${missing_links[$index]}"
+    DOCKER_CASK_LINK_ORIGINAL_STATES[transaction_count]=missing
+    ((transaction_count += 1))
+  done
+
+  DOCKER_CASK_LINK_TRANSACTION_COUNT="$transaction_count"
+  for ((index = 0; index < transaction_count; index++)); do
+    link_path="${DOCKER_CASK_LINK_PATHS[$index]}"
+    original_state="${DOCKER_CASK_LINK_ORIGINAL_STATES[$index]}"
+    backup_path="$link_path$DOCKER_CASK_LINK_BACKUP_SUFFIX"
+    [[ ! -e $backup_path && ! -L $backup_path ]] ||
+      dotfiles_die "Refusing to overwrite Docker Desktop link backup: $backup_path"
+    if [[ $original_state == staged ]]; then
+      original_target="$(/usr/bin/readlink "$link_path")"
+    else
+      original_target=
+    fi
+    suffix="${link_path#"$HOMEBREW_BIN_DIR"}"
+    case "$link_path" in
+    "$HOMEBREW_CLI_PLUGINS_DIR/docker-compose")
+      current_target="$DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
+      legacy_target="$LEGACY_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
+      ;;
+    "$HOMEBREW_BIN_DIR/docker-compose")
+      current_target="$DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
+      legacy_target="$LEGACY_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
+      ;;
+    "$HOMEBREW_BIN_DIR/kubectl" | "$HOMEBREW_BIN_DIR/kubectl.docker")
+      current_target="$DOCKER_APP/Contents/Resources/bin/kubectl"
+      legacy_target="$LEGACY_DOCKER_APP/Contents/Resources/bin/kubectl"
+      ;;
+    *)
+      current_target="$DOCKER_APP/Contents/Resources/bin$suffix"
+      legacy_target="$LEGACY_DOCKER_APP/Contents/Resources/bin$suffix"
+      ;;
+    esac
+    DOCKER_CASK_LINK_PATHS[index]="$link_path"
+    DOCKER_CASK_LINK_BACKUP_PATHS[index]="$backup_path"
+    DOCKER_CASK_LINK_ORIGINAL_STATES[index]="$original_state"
+    DOCKER_CASK_LINK_ORIGINAL_TARGETS[index]="$original_target"
+    DOCKER_CASK_LINK_CURRENT_TARGETS[index]="$current_target"
+    DOCKER_CASK_LINK_LEGACY_TARGETS[index]="$legacy_target"
+  done
+
+  ((transaction_count > 0)) || return 0
+  DOCKER_CASK_LINK_TRANSACTION_ACTIVE=1
+  trap 'rollback_docker_desktop_cask_links "$?"' EXIT
+  for ((index = 0; index < transaction_count; index++)); do
+    [[ ${DOCKER_CASK_LINK_ORIGINAL_STATES[$index]} == staged ]] || continue
+    link_path="${DOCKER_CASK_LINK_PATHS[$index]}"
+    backup_path="${DOCKER_CASK_LINK_BACKUP_PATHS[$index]}"
+    original_target="${DOCKER_CASK_LINK_ORIGINAL_TARGETS[$index]}"
+    sudo /bin/mv -n -- "$link_path" "$backup_path"
+    [[ ! -e $link_path && ! -L $link_path && -L $backup_path ]] &&
+      [[ $(/usr/bin/readlink "$backup_path") == "$original_target" ]] ||
+      dotfiles_die "Unable to safely stage Docker Desktop link: $link_path"
   done
 }
 
@@ -639,12 +842,42 @@ setup_docker_runtime() {
   fi
 
   dotfiles_have docker || dotfiles_die "Docker CLI is unavailable after nix-darwin activation."
-  if ! docker info >/dev/null 2>&1; then
+  dotfiles_have python3 || dotfiles_die "python3 is required for bounded Docker readiness probes."
+  if ! docker_engine_is_ready; then
     [[ -x $OPEN_COMMAND ]] || dotfiles_die "macOS open command is unavailable: $OPEN_COMMAND"
     "$OPEN_COMMAND" "$DOCKER_APP"
-    dotfiles_wait_for "$DOCKER_WAIT_ATTEMPTS" "Docker Desktop engine" docker info
+    dotfiles_wait_for "$DOCKER_WAIT_ATTEMPTS" "Docker Desktop engine" docker_engine_is_ready
   fi
-  docker compose version >/dev/null
+  docker_cli_probe compose version ||
+    dotfiles_die "Docker Compose CLI version probe failed."
+}
+
+docker_engine_is_ready() {
+  docker_cli_probe info
+}
+
+docker_cli_probe() {
+  local timeout_seconds="$DOCKER_PROBE_TIMEOUT_SECONDS"
+  if [[ ! $timeout_seconds =~ ^[1-9][0-9]*$ ]] || ((timeout_seconds > 60)); then
+    timeout_seconds=5
+  fi
+  python3 - "$timeout_seconds" "$(command -v docker)" "$@" <<'PY'
+import subprocess
+import sys
+
+try:
+    result = subprocess.run(
+        sys.argv[2:],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+        timeout=int(sys.argv[1]),
+    )
+except subprocess.TimeoutExpired:
+    raise SystemExit(124)
+raise SystemExit(result.returncode)
+PY
 }
 
 ollama_api_is_ready() {
@@ -704,6 +937,7 @@ main() {
   ensure_homebrew_cask_link_directories
   if ((DOTFILES_WITH_DOCKER == 1)); then
     repair_and_verify_docker_desktop_cask
+    commit_docker_desktop_cask_links
   fi
   migrate_darwin_providers
   dotfiles_install_herdr

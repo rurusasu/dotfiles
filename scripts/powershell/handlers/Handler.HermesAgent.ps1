@@ -93,10 +93,24 @@ class HermesAgentHandler : SetupHandlerBase {
                 $storage = Initialize-HermesStorageVolume -DataDir $dataDir
             }
             catch {
-                return $this.CreateFailureResult('Hermes data volume configuration failed.')
+                $storageFailure = 'Hermes data volume configuration failed.'
+                if ($runtimeExisted) {
+                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
+                    if (-not $recovery.Success) {
+                        return $this.CreateFailureResult("$storageFailure $($recovery.Component) failed: $($recovery.Message)")
+                    }
+                }
+                return $this.CreateFailureResult($storageFailure)
             }
             if (-not $storage.Success) {
-                return $this.CreateFailureResult($storage.Message)
+                $storageFailure = [string]$storage.Message
+                if ($runtimeExisted) {
+                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
+                    if (-not $recovery.Success) {
+                        return $this.CreateFailureResult("$storageFailure $($recovery.Component) failed: $($recovery.Message)")
+                    }
+                }
+                return $this.CreateFailureResult($storageFailure)
             }
 
             try {
@@ -125,18 +139,52 @@ class HermesAgentHandler : SetupHandlerBase {
 
             try {
                 $handler = $this
-                $start = Invoke-HermesXApiCredentialScope -DataDir $dataDir -Action {
+                $start = Invoke-HermesXApiCredentialScope `
+                    -DataDir $dataDir `
+                    -TokenProbe {
+                    $probe = $handler.InvokeCompose($composeFile, @(
+                            'run', '--rm', '--no-deps', '--entrypoint', '/bin/sh', 'xapi-mcp',
+                            '-lc', 'CLIENT_ID="$X_API_CLIENT_ID" CLIENT_SECRET="$X_API_CLIENT_SECRET" node_modules/.bin/xurl token >/dev/null'
+                        ))
+                    return Resolve-HermesXApiTokenProbeResult `
+                        -ExitCode $probe.ExitCode `
+                        -Output @($probe.Message)
+                } `
+                    -Action {
                     $handler.InvokeCompose($composeFile, @('up', '-d', '--force-recreate', '--remove-orphans', 'hermes', 'chromium', 'browser-mcp', 'xapi-mcp'))
                 }
             }
             catch {
-                if ($_.Exception.Message -ne 'Hermes X API credential retrieval failed.') {
-                    throw
+                $xApiFailure = $_.Exception.Message
+                if ($runtimeExisted) {
+                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
+                    if (-not $recovery.Success) {
+                        $safeFailure = if ($xApiFailure -in @(
+                                'Hermes X API credential retrieval failed.',
+                                'Hermes X API token probe failed.',
+                                'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
+                            )) { $xApiFailure } else { 'Hermes Agent setup failed.' }
+                        return $this.CreateFailureResult("$safeFailure $($recovery.Component) failed: $($recovery.Message)")
+                    }
                 }
-                return $this.CreateFailureResult('Hermes X API credential retrieval failed.')
+                if ($xApiFailure -in @(
+                        'Hermes X API credential retrieval failed.',
+                        'Hermes X API token probe failed.',
+                        'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
+                    )) {
+                    return $this.CreateFailureResult($xApiFailure)
+                }
+                throw
             }
             if (-not $start.Success) {
-                return $this.CreateFailureResult("Hermes Agent startup failed: $($start.Message)")
+                $startupFailure = "Hermes Agent startup failed: $($start.Message)"
+                if ($runtimeExisted) {
+                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
+                    if (-not $recovery.Success) {
+                        return $this.CreateFailureResult("$startupFailure $($recovery.Component) failed: $($recovery.Message)")
+                    }
+                }
+                return $this.CreateFailureResult($startupFailure)
             }
 
             if (-not $this.WaitForApi()) {
@@ -147,7 +195,7 @@ class HermesAgentHandler : SetupHandlerBase {
                     $null = $_
                 }
                 $attempts = $this.GetPositiveEnvironmentInteger('HERMES_API_READY_ATTEMPTS', 30)
-                return $this.CreateFailureResult("Hermes API did not become ready after $attempts attempts.")
+                return $this.CreateFailureResult("Hermes Desktop backend did not become ready after $attempts attempts.")
             }
 
             try {
@@ -210,13 +258,13 @@ class HermesAgentHandler : SetupHandlerBase {
     }
 
     hidden [string] GetApiHealthUrl() {
-        $port = if ([string]::IsNullOrWhiteSpace($env:HERMES_API_PORT)) {
-            '8642'
+        $port = if ([string]::IsNullOrWhiteSpace($env:HERMES_DASHBOARD_PORT)) {
+            '9119'
         }
         else {
-            $env:HERMES_API_PORT
+            $env:HERMES_DASHBOARD_PORT
         }
-        return "http://127.0.0.1:$port/health"
+        return "http://127.0.0.1:$port/api/health"
     }
 
     hidden [int] GetPositiveEnvironmentInteger([string]$name, [int]$defaultValue) {
@@ -280,7 +328,7 @@ class HermesAgentHandler : SetupHandlerBase {
         $output = @(Invoke-Docker -Arguments $arguments -TimeoutSeconds $this.DockerComposeTimeoutSeconds)
         $exitCode = $LASTEXITCODE
         if ($exitCode -eq 0) {
-            return [PSCustomObject]@{ Success = $true; Message = '' }
+            return [PSCustomObject]@{ Success = $true; Message = ''; ExitCode = 0 }
         }
 
         $message = (($output -join "`n").Trim())
@@ -290,7 +338,7 @@ class HermesAgentHandler : SetupHandlerBase {
         elseif ($message.Length -gt 4096) {
             $message = "$($message.Substring(0, 4096))..."
         }
-        return [PSCustomObject]@{ Success = $false; Message = $message }
+        return [PSCustomObject]@{ Success = $false; Message = $message; ExitCode = $exitCode }
     }
 
     hidden [pscustomobject] GetRuntimeState([string]$composeFile) {
@@ -321,7 +369,7 @@ class HermesAgentHandler : SetupHandlerBase {
             return [PSCustomObject]@{
                 Success   = $false
                 Component = 'Hermes runtime recovery readiness'
-                Message   = "Hermes API did not become ready after $attempts attempts."
+                Message   = "Hermes Desktop backend did not become ready after $attempts attempts."
             }
         }
 

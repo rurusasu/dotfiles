@@ -86,32 +86,54 @@ try {
         exit 0
     }
 
-    $exitCode = Invoke-HermesXApiCredentialScope -DataDir $(if ($Action -eq 'auth') { '' } else { $dataDir }) -Action {
-        switch ($commandName) {
-            'auth' {
-                Invoke-HermesXApiDocker -Arguments @(
-                    'compose', '-f', $resolvedComposeFile,
-                    'run', '--rm', '--no-deps', '--entrypoint', '/bin/sh', 'xapi-mcp',
-                    '-lc', 'CLIENT_ID="$X_API_CLIENT_ID" CLIENT_SECRET="$X_API_CLIENT_SECRET" node_modules/.bin/xurl auth oauth2 --headless'
-                )
-            }
-            'restart' {
-                Invoke-HermesXApiDocker -Arguments @(
-                    'compose', '-f', $resolvedComposeFile,
-                    'up', '-d', '--force-recreate', 'xapi-mcp'
-                )
-            }
-            'up' {
-                Invoke-HermesXApiDocker -Arguments @(
-                    'compose', '-f', $resolvedComposeFile,
-                    'up', '-d', '--force-recreate'
-                )
+    $credentialScopeArguments = @{
+        DataDir = $(if ($Action -eq 'auth') { '' } else { $dataDir })
+        Action  = {
+            switch ($commandName) {
+                'auth' {
+                    Invoke-HermesXApiDocker -Arguments @(
+                        'compose', '-f', $resolvedComposeFile,
+                        'run', '--rm', '--no-deps', '--entrypoint', '/bin/sh', 'xapi-mcp',
+                        '-lc', 'CLIENT_ID="$X_API_CLIENT_ID" CLIENT_SECRET="$X_API_CLIENT_SECRET" node_modules/.bin/xurl auth oauth2 --headless'
+                    )
+                }
+                'restart' {
+                    Invoke-HermesXApiDocker -Arguments @(
+                        'compose', '-f', $resolvedComposeFile,
+                        'up', '-d', '--force-recreate', 'xapi-mcp'
+                    )
+                }
+                'up' {
+                    Invoke-HermesXApiDocker -Arguments @(
+                        'compose', '-f', $resolvedComposeFile,
+                        'up', '-d', '--force-recreate'
+                    )
+                }
             }
         }
     }
+    if ($Action -ne 'auth') {
+        $credentialScopeArguments.TokenProbe = {
+            $global:LASTEXITCODE = 0
+            $probeOutput = @(Invoke-Docker -Arguments @(
+                    'compose', '-f', $resolvedComposeFile,
+                    'run', '--rm', '--no-deps', '--entrypoint', '/bin/sh', 'xapi-mcp',
+                    '-lc', 'CLIENT_ID="$X_API_CLIENT_ID" CLIENT_SECRET="$X_API_CLIENT_SECRET" node_modules/.bin/xurl token >/dev/null'
+                ) 2>&1)
+            $probeExitCode = $global:LASTEXITCODE
+            return Resolve-HermesXApiTokenProbeResult `
+                -ExitCode $probeExitCode `
+                -Output $probeOutput
+        }
+    }
+    $exitCode = Invoke-HermesXApiCredentialScope @credentialScopeArguments
     exit $exitCode
 }
 catch {
+    if ($_.Exception.Message -eq 'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.') {
+        [Console]::Error.WriteLine($_.Exception.Message)
+        exit 1
+    }
     [Console]::Error.WriteLine('Hermes X API lifecycle command failed.')
     exit 1
 }

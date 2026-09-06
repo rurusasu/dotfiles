@@ -85,3 +85,10 @@ Linux / macOS の native `op` は UNIX-like として cache が使えるため�
 - WSL: [wsl.md](./wsl.md)
 - Linux: [linux.md](./linux.md)
 - macOS: [macos.md](./macos.md)
+
+## Hermes X API OAuth
+
+X API の client ID、client secret、refresh token は 1Password を正本として管理する。
+保存先、OS 共通の取得方法、エージェントによるブラウザ認証、token rotation、復旧手順は
+[Hermes X API MCP](../hermes-agent/xapi-mcp.md) に集約する。OAuth の URL、callback、
+token はログ、チャット、Git に出力しない。

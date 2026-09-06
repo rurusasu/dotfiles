@@ -268,6 +268,66 @@ class HermesStorageOwnershipTests(unittest.TestCase):
                 ["nested directory", "nested directory/state ?#%.db"],
             )
 
+    def test_retry_converges_after_an_interrupted_partial_run(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "target"
+            root.mkdir()
+            (root / "first").write_text("first\n", encoding="utf-8")
+            (root / "second").write_text("second\n", encoding="utf-8")
+            target_uid = _alternate_id(os.getuid())
+            target_gid = _alternate_id(os.getgid())
+            real_fstat = os.fstat
+            ownership = {
+                path.stat().st_ino: (path.stat().st_uid, path.stat().st_gid)
+                for path in (root, root / "first", root / "second")
+            }
+            attempted = 0
+
+            def report_ownership(fd: int) -> os.stat_result | SimpleNamespace:
+                info = real_fstat(fd)
+                uid, gid = ownership[info.st_ino]
+                return _with_ownership(info, uid, gid)
+
+            def interrupt_second_change(fd: int, uid: int, gid: int) -> None:
+                nonlocal attempted
+                attempted += 1
+                if attempted == 2:
+                    raise OSError("simulated interruption")
+                ownership[real_fstat(fd).st_ino] = (uid, gid)
+
+            with (
+                mock.patch(
+                    "hermes_storage_ownership.os.fstat", side_effect=report_ownership
+                ),
+                mock.patch(
+                    "hermes_storage_ownership.os.fchown",
+                    side_effect=interrupt_second_change,
+                ),
+                self.assertRaises(OSError),
+            ):
+                converge_ownership(root, target_uid, target_gid)
+
+            self.assertIn((target_uid, target_gid), ownership.values())
+            self.assertIn((os.getuid(), os.getgid()), ownership.values())
+
+            def finish_change(fd: int, uid: int, gid: int) -> None:
+                ownership[real_fstat(fd).st_ino] = (uid, gid)
+
+            with (
+                mock.patch(
+                    "hermes_storage_ownership.os.fstat", side_effect=report_ownership
+                ),
+                mock.patch(
+                    "hermes_storage_ownership.os.fchown", side_effect=finish_change
+                ),
+            ):
+                converge_ownership(root, target_uid, target_gid)
+
+            self.assertEqual(
+                set(ownership.values()),
+                {(target_uid, target_gid)},
+            )
+
     def test_skips_a_directory_on_another_filesystem(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "target"

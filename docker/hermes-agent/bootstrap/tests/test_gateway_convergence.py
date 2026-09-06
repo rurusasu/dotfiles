@@ -137,6 +137,61 @@ class GatewayConvergenceTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(manager.started, ["gateway-first-start"])
 
+    def test_converge_waits_for_each_profile_before_starting_the_next(self) -> None:
+        events: list[str] = []
+
+        def on_start(service_name: str) -> None:
+            events.append(f"start:{service_name}")
+            if service_name == "gateway-future-profile":
+                self.assertTrue(manager.running["gateway-default"])
+
+        manager = FakeManager(("future-profile", "default"), on_start=on_start)
+        manager.running["gateway-default"] = False
+        write_gateway_state(self.root, "default", {"desired_state": "running"})
+        write_ready_state(self.root, "future-profile", discord=False)
+
+        def make_default_ready() -> None:
+            events.append("ready:gateway-default")
+            manager.running["gateway-default"] = True
+
+        clock = FakeClock(make_default_ready)
+
+        result = gateway_convergence.converge(
+            manager,
+            self.root,
+            timeout_seconds=2.0,
+            poll_seconds=0.5,
+            monotonic=clock.monotonic,
+            sleep=clock.sleep,
+        )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(
+            events,
+            [
+                "start:gateway-default",
+                "ready:gateway-default",
+                "start:gateway-future-profile",
+            ],
+        )
+
+    def test_converge_starts_only_the_root_gateway_when_profiles_are_multiplexed(
+        self,
+    ) -> None:
+        manager = FakeManager(("career-ops", "default", "personal-ops"))
+        write_ready_state(self.root, "default", discord=False)
+
+        result = gateway_convergence.converge(
+            manager,
+            self.root,
+            timeout_seconds=1.0,
+            poll_seconds=0.0,
+            multiplex_profiles=True,
+        )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(manager.started, ["gateway-default"])
+
     def test_converge_rejects_empty_registration_set(self) -> None:
         manager = FakeManager(())
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -87,14 +88,13 @@ class TaskfileContractTests(unittest.TestCase):
     def test_public_hermes_entrypoints_start_the_independent_memory_service(self) -> None:
         self.assertIn("task: hindsight:up", self._task_block("hermes:setup"))
         self.assertIn("task: hindsight:up", self._task_block("hermes:bootstrap"))
-        for task_name in (
-            "hermes:rick:up",
-            "hermes:hoffman:up",
-            "hermes:risarisa:up",
-            "hermes:nancy:up",
-        ):
-            with self.subTest(task_name=task_name):
-                self.assertIn("task: hermes:up", self._task_block(task_name))
+        for profile in ("rick", "hoffman", "risarisa", "nancy"):
+            with self.subTest(profile=profile):
+                plan = self._task_plan(f"hermes:{profile}:up")
+
+                self.assertIn("task: [hindsight:up]", plan)
+                self.assertIn("task: [hermes:bootstrap]", plan)
+                self.assertIn(f"-p {profile} gateway status", plan)
 
     def test_desktop_entrypoint_uses_the_docker_gateway_launcher(self) -> None:
         task = self._task_block("hermes:desktop")
@@ -121,17 +121,32 @@ class TaskfileContractTests(unittest.TestCase):
         self.assertIn("HERMES_COMPOSE_FILE", wrapper)
         self.assertIn("/opt/hermes/bin/hermes", wrapper)
 
-    def test_profile_gateway_entrypoints_are_explicit_and_shell_safe(self) -> None:
-        for task_name, action in (
-            ("hermes:profile:status", "gateway status"),
-            ("hermes:profile:up", "gateway start"),
-        ):
-            with self.subTest(task_name=task_name):
-                task = self._task_block(task_name)
-                self.assertIn("PROFILE", task)
-                self.assertIn("shellQuote", task)
-                self.assertIn(action, task)
-                self.assertIn("docker info", task)
+    def test_profile_lifecycle_uses_the_root_multiplexer_and_profile_status(
+        self,
+    ) -> None:
+        forbidden = r"-p\s+\S+\s+gateway\s+(?:start|run|stop|restart)"
+
+        for action in ("status", "up", "down", "restart"):
+            with self.subTest(action=action):
+                plan = self._task_plan(
+                    f"hermes:profile:{action}",
+                    profile="personal-ops",
+                )
+
+                self.assertNotRegex(plan, forbidden)
+                if action in ("status", "up", "restart"):
+                    self.assertIn("-p personal-ops gateway status", plan)
+                if action in ("up", "restart"):
+                    self.assertIn("task: [hermes:bootstrap]", plan)
+                if action == "down":
+                    self.assertIn(
+                        "docker compose -f docker/hermes-service/compose.yml stop hermes",
+                        plan,
+                    )
+                    self.assertNotIn(
+                        "docker compose -f docker/hermes-service/compose.yml down",
+                        plan,
+                    )
 
     def test_xapi_lifecycle_reads_oauth_credentials_from_1password(self) -> None:
         wrapper = XAPI_WRAPPER.read_text(encoding="utf-8")
@@ -289,6 +304,30 @@ class TaskfileContractTests(unittest.TestCase):
             )
             self.assertGreater(next_position, position)
             position = next_position
+
+    def _task_plan(self, task_name: str, *, profile: str | None = None) -> str:
+        command = [
+            "task",
+            "--dir",
+            str(REPOSITORY_ROOT),
+            "--dry",
+            "--force",
+            task_name,
+        ]
+        if profile is not None:
+            command.append(f"PROFILE={profile}")
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            completed.stdout + completed.stderr,
+        )
+        return completed.stdout + completed.stderr
 
     def _command_text(self, task_name: str) -> str:
         return self._task_block(task_name)

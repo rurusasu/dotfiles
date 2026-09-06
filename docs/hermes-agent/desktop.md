@@ -42,17 +42,35 @@ task hermes:cli -- -p personal-ops config check
 task hermes:cli -- profile list
 ```
 
-Profile gateway の状態確認と起動も、対象Profileを明示して実行できます。
+Compose は `GATEWAY_MULTIPLEX_PROFILES=true` で、root gateway の1プロセスから
+すべてのProfileを提供します。対象Profileの状態確認は次のように実行できます。
 
 ```bash
 PROFILE=personal-ops task hermes:profile:status
 PROFILE=personal-ops task hermes:profile:up
+PROFILE=personal-ops task hermes:profile:restart
+PROFILE=personal-ops task hermes:profile:down
 PROFILE=career-ops task hermes:profile:status
 PROFILE=dev-lab task hermes:profile:status
 ```
 
-`hermes:profile:up` は明示的に指定したProfileだけを起動します。Profile名は
-Taskfile側でshell-safeにargv化されます。CLIの既定Composeファイルは既存の
+`hermes:profile:status` だけが指定Profileの状態を照会します。
+`hermes:profile:up` はroot multiplexerを起動してから指定Profileの状態を表示し、
+`hermes:profile:restart` もroot multiplexer全体を再起動してから状態を表示します。
+`hermes:profile:down` はHermes Compose stackを停止するため、ほかのProfileも同時に
+停止します。multiplexモードでは `-p <profile> gateway start|run|stop|restart` を
+直接実行しません。
+
+既存のProfile名付きtaskも、同じroot lifecycleへのaliasとして利用できます。
+
+```bash
+task hermes:rick:up
+task hermes:rick:restart
+task hermes:rick:down
+```
+
+`hoffman`、`risarisa`、`nancy` にも同じ `up`、`restart`、`down` aliasがあります。
+Profile名はTaskfile側でshell-safeにargv化されます。CLIの既定Composeファイルは既存の
 `docker/hermes-service/compose.yml`に固定され、別ファイルを使う場合だけ
 `HERMES_COMPOSE_FILE`で明示指定します。
 
@@ -99,11 +117,13 @@ store に runtime state を生成したりしないでください。
 ```bash
 task hermes:desktop
 docker compose -f docker/hermes-service/compose.yml ps
-curl -fsS http://127.0.0.1:8642/health
+curl -fsS http://127.0.0.1:9119/api/health
 ```
 
-`9119` は Desktop の Remote Gateway/Dashboard 接続先、`8642` は gateway 内部 API
-の health 確認用です。`hermes-desktop-docker` は Desktop の app-owned
+`9119` は Desktop が接続する `hermes serve` / Dashboard backend であり、起動確認も
+公開エンドポイント `/api/health` に対して行います。`8642` は gateway の
+OpenAI-compatible API で、Desktop backend の起動確認には使用しません。
+`hermes-desktop-docker` は Desktop の app-owned
 `connections.json` に保存された remote 接続を検証します。OAuth 接続の token は
 Desktop の native token store、token 接続の envelope は Desktop/OS Keychain の
 管理境界に残り、launcher はいずれも読み出しません。秘密情報は Git、Nix store、

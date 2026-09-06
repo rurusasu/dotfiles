@@ -125,6 +125,12 @@ class ComposeContractTests(unittest.TestCase):
     def test_gateway_uses_the_canonical_hermes_home(self) -> None:
         self.assertEqual(self.hermes["environment"]["HERMES_HOME"], "/opt/data")
 
+    def test_gateway_multiplexes_profiles_in_one_process(self) -> None:
+        self.assertEqual(
+            self.hermes["environment"]["GATEWAY_MULTIPLEX_PROFILES"],
+            "true",
+        )
+
     def test_gateway_runtime_home_uses_a_docker_managed_named_volume(self) -> None:
         self.assertEqual(self.hermes["volumes"][0], DATA_VOLUME)
         self.assertEqual(self.bootstrap["volumes"][0], DATA_VOLUME)

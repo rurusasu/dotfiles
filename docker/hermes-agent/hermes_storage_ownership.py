@@ -147,7 +147,14 @@ def _converge_directory(
 
 
 def converge_ownership(target: Path | str, uid: int, gid: int) -> None:
-    """Change ownership of regular files/directories without following links."""
+    """Converge regular files/directories without following links.
+
+    The operation is deliberately monotonic and retryable: every mutation moves
+    one inode to the same final owner, and an interrupted run can be resumed
+    safely while the caller keeps the Hermes service stopped and holds its
+    storage lease.  The seed ready marker describes data completeness; it is
+    not an ownership transaction marker.
+    """
 
     root_fd = os.open(os.fspath(target), _BASE_OPEN_FLAGS | os.O_DIRECTORY)
     try:

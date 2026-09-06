@@ -199,6 +199,9 @@ function Sync-HermesXApiRefreshTokenToOnePassword {
     if ($fields.Count -ne 1) {
         throw [System.InvalidOperationException]::new('Refresh Token/X_API_REFRESH_TOKEN field is missing or duplicated.')
     }
+    if ([string]$fields[0].value -eq $refreshToken) {
+        return
+    }
     $fields[0].value = $refreshToken
 
     $templatePath = [System.IO.Path]::GetTempFileName()
@@ -225,7 +228,8 @@ function Write-HermesXApiAuthCache {
         [Parameter(Mandatory)]
         [string]$ClientSecret,
         [Parameter(Mandatory)]
-        [string]$RefreshToken
+        [string]$RefreshToken,
+        [switch]$Force
     )
 
     foreach ($value in @($ClientId, $ClientSecret, $RefreshToken)) {
@@ -241,7 +245,7 @@ function Write-HermesXApiAuthCache {
     if (($directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
         throw [System.InvalidOperationException]::new('Hermes X API OAuth cache directory must not be a reparse point.')
     }
-    if ($env:DOTFILES_HERMES_XAPI_FORCE_CACHE_SYNC -ne '1' -and
+    if (-not $Force -and $env:DOTFILES_HERMES_XAPI_FORCE_CACHE_SYNC -ne '1' -and
         (Test-Path -LiteralPath $cachePath -PathType Leaf)) {
         $existingCache = Get-Content -LiteralPath $cachePath -Raw
         if ($existingCache -match '(?m)^\s*refresh_token:') {
@@ -302,12 +306,65 @@ function Write-HermesXApiAuthCache {
     }
 }
 
+function Resolve-HermesXApiTokenProbeResult {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [int]$ExitCode,
+        [object[]]$Output = @()
+    )
+
+    if ($ExitCode -eq 0) {
+        return [PSCustomObject]@{ Kind = 'Success'; ExitCode = 0 }
+    }
+
+    $diagnostic = @($Output | ForEach-Object { [string]$_ }) -join "`n"
+    $authPattern = 'Auth Error: TokenNotFound|oauth2 token not found|invalid_grant|invalid_client|unauthorized_client'
+    $kind = if ($diagnostic -match $authPattern) { 'AuthFailure' } else { 'InfrastructureFailure' }
+    return [PSCustomObject]@{ Kind = $kind; ExitCode = $ExitCode }
+}
+
+function ConvertTo-HermesXApiTokenProbeResult {
+    [CmdletBinding()]
+    param([AllowNull()][object]$Result)
+
+    if ($Result -is [bool]) {
+        return [PSCustomObject]@{
+            Kind     = $(if ($Result) { 'Success' } else { 'InfrastructureFailure' })
+            ExitCode = $(if ($Result) { 0 } else { 1 })
+        }
+    }
+    if ($null -ne $Result -and $Result.PSObject.Properties.Name -contains 'Kind' -and
+        [string]$Result.Kind -in @('Success', 'AuthFailure', 'InfrastructureFailure')) {
+        $exitCode = if ($Result.PSObject.Properties.Name -contains 'ExitCode') { [int]$Result.ExitCode } else { 1 }
+        return [PSCustomObject]@{ Kind = [string]$Result.Kind; ExitCode = $exitCode }
+    }
+    return [PSCustomObject]@{ Kind = 'InfrastructureFailure'; ExitCode = 1 }
+}
+
+function Restore-HermesXApiAuthCache {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$CachePath,
+        [Parameter(Mandatory)][bool]$Existed,
+        [AllowNull()][byte[]]$Content
+    )
+
+    if ($Existed) {
+        [System.IO.File]::WriteAllBytes($CachePath, $Content)
+    }
+    else {
+        Remove-Item -LiteralPath $CachePath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Invoke-HermesXApiCredentialScope {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
         [scriptblock]$Action,
         [string]$DataDir = '',
+        [scriptblock]$TokenProbe,
         [scriptblock]$InvokeOnePassword = $script:DefaultHermesXApiOnePasswordInvoker
     )
 
@@ -317,6 +374,21 @@ function Invoke-HermesXApiCredentialScope {
     $clientSecretExists = Test-Path -LiteralPath $clientSecretPath
     $clientIdValue = if ($clientIdExists) { (Get-Item -LiteralPath $clientIdPath).Value } else { $null }
     $clientSecretValue = if ($clientSecretExists) { (Get-Item -LiteralPath $clientSecretPath).Value } else { $null }
+    $cachePath = $null
+    $cacheExisted = $false
+    $cacheContent = $null
+    $cacheCommitted = $false
+
+    if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
+        $cachePath = Join-Path ([System.IO.Path]::GetFullPath($DataDir)) '.xurl/auth.yml'
+        $cacheExisted = Test-Path -LiteralPath $cachePath -PathType Leaf
+        if ($cacheExisted) {
+            $cacheContent = [System.IO.File]::ReadAllBytes($cachePath)
+        }
+        elseif (Test-Path -LiteralPath $cachePath) {
+            throw [System.InvalidOperationException]::new('Hermes X API OAuth cache path must be a regular file.')
+        }
+    }
 
     try {
         $credential = Get-HermesXApiCredential -InvokeOnePassword $InvokeOnePassword
@@ -335,8 +407,57 @@ function Invoke-HermesXApiCredentialScope {
                 -ClientId $credential.ClientId `
                 -ClientSecret $credential.ClientSecret `
                 -RefreshToken $refreshToken
+            if ($null -ne $TokenProbe) {
+                $tokenBeforeProbe = Get-HermesXApiRefreshTokenFromCache -DataDir $DataDir
+                try {
+                    $probe = ConvertTo-HermesXApiTokenProbeResult -Result (& $TokenProbe)
+                }
+                catch {
+                    $probe = [PSCustomObject]@{ Kind = 'InfrastructureFailure'; ExitCode = 1 }
+                }
+                if ($probe.Kind -eq 'InfrastructureFailure') {
+                    throw [System.InvalidOperationException]::new('Hermes X API token probe failed.')
+                }
+                if ($probe.Kind -eq 'AuthFailure') {
+                    Write-HermesXApiAuthCache `
+                        -DataDir $DataDir `
+                        -ClientId $credential.ClientId `
+                        -ClientSecret $credential.ClientSecret `
+                        -RefreshToken $refreshToken `
+                        -Force
+                    $tokenBeforeProbe = Get-HermesXApiRefreshTokenFromCache -DataDir $DataDir
+                    try {
+                        $probe = ConvertTo-HermesXApiTokenProbeResult -Result (& $TokenProbe)
+                    }
+                    catch {
+                        $probe = [PSCustomObject]@{ Kind = 'InfrastructureFailure'; ExitCode = 1 }
+                    }
+                    if ($probe.Kind -eq 'AuthFailure') {
+                        throw [System.InvalidOperationException]::new(
+                            'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
+                        )
+                    }
+                    if ($probe.Kind -ne 'Success') {
+                        throw [System.InvalidOperationException]::new('Hermes X API token probe failed.')
+                    }
+                }
+                $cacheCommitted = $true
+                Sync-HermesXApiRefreshTokenToOnePassword `
+                    -DataDir $DataDir `
+                    -InvokeOnePassword $InvokeOnePassword
+            }
+            $cacheCommitted = $true
         }
         return & $Action
+    }
+    catch {
+        if ($null -ne $cachePath -and -not $cacheCommitted) {
+            Restore-HermesXApiAuthCache `
+                -CachePath $cachePath `
+                -Existed $cacheExisted `
+                -Content $cacheContent
+        }
+        throw
     }
     finally {
         $credential = $null
