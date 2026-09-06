@@ -33,6 +33,7 @@ param(
     [switch]$WithMLflow,
     [switch]$WithHindsight,
     [switch]$WithHermes,
+    [switch]$ForcePostInstall,
     [switch]$NoPause
 )
 
@@ -122,6 +123,10 @@ if ($UserPhaseOnly) {
         Read-Host | Out-Null
     }
     exit 0
+}
+
+if ($ForcePostInstall) {
+    $Options["ForcePostInstall"] = $true
 }
 
 # Phase 2a: 管理者不要の Phase 2 ハンドラーを非昇格で実行

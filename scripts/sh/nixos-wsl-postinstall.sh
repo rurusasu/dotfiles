@@ -132,6 +132,17 @@ if [[ -z $SYNC_BACK ]]; then
   fi
 fi
 
+if [[ $SYNC_MODE == "nix" ]]; then
+  if [[ $SYNC_BACK == "repo" ]]; then
+    echo "cannot use --sync-back repo with --sync-mode nix; use --sync-back none or lock." >&2
+    exit 1
+  fi
+  if [[ ! -f "$REPO_DIR/flake.nix" || ! -f "$REPO_DIR/flake.lock" || ! -d "$REPO_DIR/scripts" ]]; then
+    echo "Sync mode nix requires an existing complete WSL checkout with flake.nix, flake.lock, and scripts/." >&2
+    exit 1
+  fi
+fi
+
 # Handle sync mode
 if [[ $SYNC_MODE == "link" ]]; then
   # Create symlink to Windows-side dotfiles
@@ -219,6 +230,12 @@ if [[ $SYNC_MODE == "link" ]]; then
   TARGET_DIR="$SYNC_SOURCE"
 else
   TARGET_DIR="$REPO_DIR"
+fi
+
+REBUILD_HELPER="$TARGET_DIR/scripts/sh/nixos-rebuild-with-user.sh"
+if [[ ! -f $REBUILD_HELPER ]]; then
+  echo "User-aware rebuild helper not found: $REBUILD_HELPER" >&2
+  exit 1
 fi
 
 case "$(uname -m)" in
@@ -330,7 +347,7 @@ NIX_CONFIG="$(printf '%s\n' \
   'experimental-features = nix-command flakes' \
   'extra-substituters = https://cache.numtide.com' \
   'extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=')" \
-  nixos-rebuild switch --flake "path:$TARGET_DIR#$FLAKE_NAME" --impure
+  bash "$REBUILD_HELPER" switch --flake "path:$TARGET_DIR#$FLAKE_NAME" --impure
 
 # Handle sync-back
 if [[ $SYNC_BACK == "repo" && $SYNC_MODE != "link" ]]; then

@@ -129,6 +129,9 @@ Describe 'NixRebuildHandler' {
             Should -Invoke Write-Host -ParameterFilter {
                 $ForegroundColor -eq 'Gray' -and ([string]$Object) -match 'building NixOS'
             } -Times 1
+            Should -Invoke Invoke-Wsl -ParameterFilter {
+                ($Arguments -join " ") -match "nixos-rebuild-with-user"
+            } -Times 1
         }
 
         It 'should fail when nixos-rebuild switch fails' {
@@ -556,8 +559,7 @@ Describe 'NixRebuildHandler' {
 
             $script:wslArgs | Should -Match "-d NixOS"
             $script:wslArgs | Should -Match "-u root"
-            $script:wslArgs | Should -Match "cd /home/nixos/.dotfiles"
-            $script:wslArgs | Should -Match "nixos-rebuild switch --flake"
+            $script:wslArgs | Should -Match "nixos-rebuild-with-user.sh switch --flake . --impure"
         }
 
         It 'should update the flake lock before nixos-rebuild so Nix packages use latest inputs' {

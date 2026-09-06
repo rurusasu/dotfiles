@@ -27,10 +27,16 @@ uid="${DOTFILES_UID:-$(id -u "$user")}"
 gid="${DOTFILES_GID:-$(id -g "$user")}"
 group="${DOTFILES_GROUP:-$(id -gn "$user")}"
 
-exec sudo /usr/bin/env \
-  "DOTFILES_USER=$user" \
-  "DOTFILES_HOME=$home" \
-  "DOTFILES_UID=$uid" \
-  "DOTFILES_GID=$gid" \
-  "DOTFILES_GROUP=$group" \
-  nixos-rebuild "$@"
+rebuild_env=(
+  "DOTFILES_USER=$user"
+  "DOTFILES_HOME=$home"
+  "DOTFILES_UID=$uid"
+  "DOTFILES_GID=$gid"
+  "DOTFILES_GROUP=$group"
+)
+
+if [[ $(id -u) -eq 0 ]]; then
+  exec /usr/bin/env "${rebuild_env[@]}" nixos-rebuild "$@"
+fi
+
+exec sudo /usr/bin/env "${rebuild_env[@]}" nixos-rebuild "$@"

@@ -467,7 +467,12 @@ class NixOSWSLHandler : SetupHandlerBase {
         $syncMode = $ctx.GetOption("SyncMode", "link")
         $syncBack = $ctx.GetOption("SyncBack", "lock")
         $timeoutSeconds = $ctx.GetOption("PostInstallTimeoutSeconds", 1800)
-        $cmd = "bash `"$wslPath`" --force --sync-mode $syncMode --sync-back $syncBack"
+        $forcePostInstall = [bool]$ctx.GetOption("ForcePostInstall", $false)
+        $cmd = "bash `"$wslPath`""
+        if ($forcePostInstall) {
+            $cmd += " --force"
+        }
+        $cmd += " --sync-mode $syncMode --sync-back $syncBack"
         if ($ctx.GetOption("SkipFlakeUpdate", $false)) {
             $cmd += " --skip-flake-update"
         }

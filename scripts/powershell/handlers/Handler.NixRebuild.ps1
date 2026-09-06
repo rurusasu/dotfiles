@@ -369,7 +369,8 @@ class NixRebuildHandler : SetupHandlerBase {
             $this.EnsureDotfilesAvailable($distroName, $ctx.DotfilesPath)
 
             $this.Log("nix flake update を実行しています...")
-            $flakeUpdateOutput = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-lc", "cd /home/nixos/.dotfiles && nix flake update 2>&1")
+            $flakeUpdateCommand = 'user=$(getent passwd 1000 | cut -d: -f1); home=$(getent passwd 1000 | cut -d: -f6); cd $home/.dotfiles && nix flake update 2>&1'
+            $flakeUpdateOutput = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-lc", $flakeUpdateCommand)
             $flakeUpdateExitCode = $LASTEXITCODE
             $flakeUpdateErrors = [System.Collections.Generic.List[string]]::new()
             $flakeUpdateOutput | ForEach-Object {
@@ -399,8 +400,10 @@ class NixRebuildHandler : SetupHandlerBase {
                 "bash", "-lc", "grep -qs 'directory = \*' /root/.gitconfig 2>/dev/null || printf '[safe]\n\tdirectory = *\n' >> /root/.gitconfig"
             ) | Out-Null
 
-            # root で nixos-rebuild switch を実行。2>&1 で stderr も捕捉しエラー詳細をログに残す。
-            $output = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", "cd /home/nixos/.dotfiles && nixos-rebuild switch --flake .#nixos 2>&1")
+            # 実ユーザーの identity を wrapper に渡して nixos-rebuild switch を実行する。
+            # 2>&1 で stderr も捕捉しエラー詳細をログに残す。
+            $rebuildCommand = 'user=$(getent passwd 1000 | cut -d: -f1); home=$(getent passwd 1000 | cut -d: -f6); uid=$(id -u $user); gid=$(id -g $user); group=$(id -gn $user); cd $home/.dotfiles && DOTFILES_USER=$user DOTFILES_HOME=$home DOTFILES_UID=$uid DOTFILES_GID=$gid DOTFILES_GROUP=$group bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure 2>&1'
+            $output = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", $rebuildCommand)
             $nixosExitCode = $LASTEXITCODE
 
             # error: で始まる行は LogError（赤）、それ以外は Gray で表示

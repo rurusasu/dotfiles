@@ -65,6 +65,9 @@ exec "$@"
 	write_stub chown '
 printf "chown %s\n" "$*" >>"$COMMAND_LOG"
 '
+	write_stub sudo '
+exec "$@"
+'
 	write_stub nixos-rebuild '
 printf "%s\n" "$@" >"$NIXOS_ARGV_CAPTURE"
 printf "nixos-rebuild user=%s home=%s uid=%s gid=%s group=%s\n" \
@@ -138,4 +141,35 @@ EOF
 	if [[ -n $REAL_NIX ]]; then
 		[ "$(<"$NIX_EVAL_CAPTURE")" = ok ]
 	fi
+}
+
+@test "nix sync requires an existing complete WSL checkout" {
+	RUN_REPO_DIR="$BATS_TEST_TMPDIR/partial-repo"
+
+	run bash "$INSTALLER" \
+		--user alice \
+		--sync-mode nix \
+		--sync-source "$SYNC_SOURCE" \
+		--repo-dir "$RUN_REPO_DIR" \
+		--sync-back none \
+		--skip-flake-update
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"complete WSL checkout"* ]]
+}
+
+@test "nix sync refuses repository sync-back" {
+	RUN_REPO_DIR="$BATS_TEST_TMPDIR/partial-repo"
+
+	run bash "$INSTALLER" \
+		--user alice \
+		--sync-mode nix \
+		--sync-source "$SYNC_SOURCE" \
+		--repo-dir "$RUN_REPO_DIR" \
+		--sync-back repo \
+		--skip-flake-update
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"cannot use --sync-back repo with --sync-mode nix"* ]]
+	[ -f "$SYNC_SOURCE/flake.nix" ]
 }
