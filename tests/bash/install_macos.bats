@@ -1627,6 +1627,18 @@ exit 1
 	run bash -c '
 set -euo pipefail
 . "$INSTALLER"
+ensure_docker_desktop_md5_compatibility() {
+  :
+}
+homebrew_cask_link_parent_metadata() {
+  printf "%s\n" "$TEST_HOMEBREW_PARENT_METADATA"
+}
+homebrew_cask_link_parent_acl_state() {
+  printf "%s\n" "$TEST_HOMEBREW_PARENT_ACL_STATE"
+}
+homebrew_cask_link_parent_is_immutable_to_caller() {
+  [[ $TEST_HOMEBREW_PARENT_IMMUTABLE_TO_CALLER == 1 ]]
+}
 homebrew_command() {
   if grep -Fq "nix run .#darwin-rebuild -- switch --flake .#macos --impure" "$COMMAND_LOG"; then
     printf "%s\\n" "$STUB_BIN/brew"
