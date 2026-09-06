@@ -122,13 +122,14 @@ class ManifestTests(unittest.TestCase):
                 Path("/opt/data/profiles/shiraishi"),
             ),
         )
-        self.assertEqual(len(manifest.onepassword_items), 10)
+        self.assertEqual(len(manifest.onepassword_items), 11)
         self.assertEqual(
             tuple(item.item for item in manifest.onepassword_items),
             (
                 "Hermes Agent Dashboard",
                 "GitHubUsedOpenClawPAT",
                 "Google Calendar MCP",
+                "xAI-Grok-Twitter",
                 "Master",
                 "Rick",
                 "Hoffman",
@@ -142,6 +143,13 @@ class ManifestTests(unittest.TestCase):
             item for item in manifest.onepassword_items if item.key == "google_calendar"
         )
         self.assertEqual(google_calendar.vault, "openclaw")
+        xai = next(item for item in manifest.onepassword_items if item.key == "xai_grok")
+        self.assertIsNone(xai.profiles)
+        self.assertEqual(xai.fields[0].environment_names, ("XAI_API_KEY",))
+        discord_rick = next(
+            item for item in manifest.onepassword_items if item.key == "discord_rick"
+        )
+        self.assertEqual(discord_rick.profiles, ("rick",))
         self.assertEqual(manifest.shared_repositories[0].sync_owner, "default")
         self.assertEqual(manifest.shared_repositories[0].legacy_target, Path("/opt/data/core/lifelog"))
         with self.assertRaises(FrozenInstanceError):

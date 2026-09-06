@@ -5,13 +5,14 @@ from __future__ import annotations
 import base64
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import BinaryIO, TextIO
 from types import MappingProxyType
 from urllib.parse import quote
 
 from .errors import BootstrapError, CredentialError, InputError, ValidationError
 from .models import BootstrapManifest, OnePasswordItem
+from .onepassword import managed_environment_bindings
 
 
 SCHEMA_VERSION = 1
@@ -54,6 +55,9 @@ class SecretBundle:
     google_calendar: GoogleCalendarSecret
     discord_by_profile: Mapping[str, DiscordSecret]
     redactor: "SecretRedactor"
+    environment_by_profile: Mapping[str, Mapping[str, str]] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
 
     def __repr__(self) -> str:
         return "SecretBundle(<redacted>)"
@@ -121,6 +125,11 @@ def build_secret_plan(manifest: BootstrapManifest) -> dict[str, object]:
                     {
                         "canonical_name": field.canonical_name,
                         "labels": list(field.labels),
+                        **(
+                            {"environment": list(field.environment_names)}
+                            if field.environment_names
+                            else {}
+                        ),
                         **(
                             {"reference": field.reference_name}
                             if field.reference_name is not None
@@ -443,18 +452,31 @@ def _bundle_from_fields(
         raise ValidationError("manifest is missing a required Hermes credential declaration") from error
     validate_google_calendar_secret(google_calendar)
 
+    environment_by_profile: dict[str, Mapping[str, str]] = {}
     discord_by_profile: dict[str, DiscordSecret] = {}
     required_profiles = ("default", *(profile.name for profile in manifest.profiles))
     for profile in required_profiles:
-        key = f"discord_{profile}"
-        try:
-            fields = parsed[key]
+        profile_environment: dict[str, str] = {}
+        for environment_name, item, field in managed_environment_bindings(
+            manifest, profile
+        ):
+            try:
+                profile_environment[environment_name] = parsed[item.key][
+                    field.canonical_name
+                ]
+            except KeyError as error:
+                raise ValidationError(
+                    "manifest is missing a required environment credential declaration"
+                ) from error
+        environment_by_profile[profile] = MappingProxyType(profile_environment)
+        if {
+            "DISCORD_BOT_TOKEN",
+            "DISCORD_ALLOWED_USERS",
+        }.issubset(profile_environment):
             discord_by_profile[profile] = DiscordSecret(
-                bot_token=fields["bot_token"],
-                allowed_users=fields["allowed_users"],
+                bot_token=profile_environment["DISCORD_BOT_TOKEN"],
+                allowed_users=profile_environment["DISCORD_ALLOWED_USERS"],
             )
-        except KeyError as error:
-            raise ValidationError("manifest is missing a required Discord credential declaration") from error
 
     redactor = SecretRedactor(
         discovered_values,
@@ -466,6 +488,7 @@ def _bundle_from_fields(
         google_calendar=google_calendar,
         discord_by_profile=MappingProxyType(discord_by_profile),
         redactor=redactor,
+        environment_by_profile=MappingProxyType(environment_by_profile),
     )
 
 

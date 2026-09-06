@@ -871,19 +871,20 @@ dotfiles_hermes_ensure_xapi_auth() {
 }
 
 dotfiles_hermes_validate_secret_plan() {
-  jq -Ssce '
-    if length == 1 and (.[0] | type == "object") then .[0] else false end
-    |
-    . as $plan | (
+  local expected_account="${1:-}"
+  jq -Ssce --arg expected_account "$expected_account" '
     def nonblank_string:
       type == "string" and test("[^[:space:]]") and test("^[^[:cntrl:]]+$");
+    def env_name:
+      type == "string" and test("^[A-Z_][A-Z0-9_]*$");
     def field:
       type == "object"
-      and ((keys | sort == ["canonical_name", "labels"]) or
-        (keys | sort == ["canonical_name", "labels", "reference"]))
+      and ((keys - ["canonical_name", "labels", "reference", "environment"]) | length == 0)
+      and (has("canonical_name") and has("labels"))
       and (.canonical_name | nonblank_string)
       and (.labels | type == "array" and length > 0 and all(.[]; nonblank_string))
-      and ((has("reference") | not) or (.reference | nonblank_string));
+      and ((has("reference") | not) or (.reference | nonblank_string))
+      and ((.environment // []) | type == "array" and all(.[]; env_name));
     def plan_item:
       type == "object"
       and (keys | sort == ["account", "fields", "item", "key", "vault"])
@@ -893,26 +894,19 @@ dotfiles_hermes_validate_secret_plan() {
       and (.item | nonblank_string)
       and (.fields | type == "array" and length > 0 and all(.[]; field))
       and ((.fields | map(.canonical_name) | unique | length) == (.fields | length));
-    type == "object"
-    and (keys | sort == ["items", "schema_version"])
-    and (.schema_version == 1)
-    and (.items | type == "array" and length == 10)
-    and ([.items[] | {key, account, vault, item}] == [
-      {"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard"},
-      {"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT"},
-      {"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP"},
-      {"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master"},
-      {"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick"},
-      {"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman"},
-      {"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa"},
-      {"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy"},
-      {"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda"},
-      {"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi"}
-    ])
-    and ([.items[].key] | unique | length == 10)
-    and all(.items[]; plan_item)
-    ) as $valid
-    | if $valid then $plan else false end
+    (if length == 1 and (.[0] | type == "object") then .[0] else false end)
+    | if . == false then false
+      elif (
+        type == "object"
+        and (keys | sort == ["items", "schema_version"])
+        and (.schema_version == 1)
+        and (.items | type == "array" and length > 0)
+        and (([.items[].key] | unique | length) == (.items | length))
+        and all(.items[];
+          (($expected_account == "" or .account == $expected_account)
+            and .vault == "openclaw"))
+        and all(.items[]; plan_item)
+      ) then . else false end
   '
 }
 
@@ -923,7 +917,7 @@ dotfiles_hermes_secret_plan() {
 
   dotfiles_hermes_require_secret_tools
   set -o pipefail
-  if ! compact_plan="$("$docker_runner" compose -f "$compose_file" run --rm --no-deps -T hermes-bootstrap secret-plan | dotfiles_hermes_validate_secret_plan)"; then
+  if ! compact_plan="$("$docker_runner" compose -f "$compose_file" run --rm --no-deps -T hermes-bootstrap secret-plan | dotfiles_hermes_validate_secret_plan "$(dotfiles_hermes_service_account_account)")"; then
     dotfiles_die "Hermes bootstrap secret plan is invalid."
   fi
   printf '%s\n' "$compact_plan"

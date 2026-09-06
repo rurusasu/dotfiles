@@ -34,6 +34,7 @@ class OnePasswordConfigTests(unittest.TestCase):
                 ),
                 "GH_TOKEN": "op://openclaw/GitHubUsedOpenClawPAT/credential",
                 "GITHUB_TOKEN": "op://openclaw/GitHubUsedOpenClawPAT/credential",
+                "XAI_API_KEY": "op://openclaw/xAI-Grok-Twitter/console/apikey",
                 "DISCORD_BOT_TOKEN": "op://openclaw/Master/Discord/bot_token",
                 "DISCORD_ALLOWED_USERS": "op://openclaw/Master/Discord/allowed_users",
             },

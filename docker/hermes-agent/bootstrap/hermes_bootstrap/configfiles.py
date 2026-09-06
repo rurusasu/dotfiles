@@ -155,39 +155,39 @@ def reconcile_onepassword_configurations(
             try:
                 metadata = path.lstat()
             except OSError:
-                continue
+                raise ApplyError("managed Hermes configuration is unavailable") from None
             if (
                 stat.S_ISLNK(metadata.st_mode)
                 or not stat.S_ISREG(metadata.st_mode)
                 or metadata.st_nlink != 1
             ):
-                continue
+                raise ApplyError("managed Hermes configuration is unsafe")
             try:
                 original_content = path.read_text(encoding="utf-8")
             except (OSError, UnicodeError):
-                continue
+                raise ApplyError("managed Hermes configuration is unreadable") from None
             try:
                 config = yaml.safe_load(original_content)
             except (OSError, UnicodeError, yaml.YAMLError):
-                continue
+                raise ApplyError("managed Hermes configuration is invalid") from None
             if not isinstance(config, dict):
-                continue
+                raise ApplyError("managed Hermes configuration is invalid")
 
             secrets = config.get("secrets")
             if secrets is None:
                 secrets = {}
             if not isinstance(secrets, dict):
-                continue
+                raise ApplyError("managed Hermes secrets configuration is invalid")
             onepassword = secrets.get("onepassword")
             if onepassword is None:
                 onepassword = {}
             if not isinstance(onepassword, dict):
-                continue
+                raise ApplyError("managed Hermes 1Password configuration is invalid")
             existing_env = onepassword.get("env")
             if existing_env is None:
                 existing_env = {}
             if not isinstance(existing_env, dict):
-                continue
+                raise ApplyError("managed Hermes 1Password environment is invalid")
             retained_env = {
                 key: value
                 for key, value in existing_env.items()
@@ -228,3 +228,42 @@ def reconcile_onepassword_configurations(
             _atomic_write(path, content, stat.S_IMODE(metadata.st_mode))
     except (OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
         raise ApplyError("could not reconcile Hermes 1Password configuration") from None
+
+
+def validate_onepassword_configurations(
+    manifest: BootstrapManifest,
+    targets: Sequence[tuple[str, Path]],
+) -> None:
+    """Verify every managed 1Password reference was installed as declared."""
+
+    if not manifest.onepassword_items:
+        return
+    try:
+        for profile, target in targets:
+            path = target / "config.yaml"
+            metadata = path.lstat()
+            if (
+                stat.S_ISLNK(metadata.st_mode)
+                or not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_nlink != 1
+            ):
+                raise ValueError
+            config = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if not isinstance(config, dict):
+                raise ValueError
+            secrets = config.get("secrets")
+            onepassword = secrets.get("onepassword") if isinstance(secrets, dict) else None
+            if not isinstance(onepassword, dict):
+                raise ValueError
+            expected = build_onepassword_config(manifest, profile)
+            for key in ("enabled", "account", "service_account_token_env", "binary_path"):
+                if onepassword.get(key) != expected[key]:
+                    raise ValueError
+            installed_env = onepassword.get("env")
+            expected_env = expected["env"]
+            if not isinstance(installed_env, dict) or not isinstance(expected_env, dict):
+                raise ValueError
+            if any(installed_env.get(key) != value for key, value in expected_env.items()):
+                raise ValueError
+    except (OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
+        raise ApplyError("installed Hermes 1Password configuration is invalid") from None

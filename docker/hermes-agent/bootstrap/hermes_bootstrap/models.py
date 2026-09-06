@@ -12,6 +12,7 @@ class OnePasswordField:
     canonical_name: str
     labels: tuple[str, ...]
     reference_name: str | None = None
+    environment_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class OnePasswordItem:
     vault: str
     item: str
     fields: tuple[OnePasswordField, ...]
+    profiles: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)

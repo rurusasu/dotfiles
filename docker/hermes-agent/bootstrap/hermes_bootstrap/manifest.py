@@ -23,6 +23,7 @@ _SCHEMA_VERSION = 1
 _HERMES_DATA_ROOT = Path("/opt/data")
 _NAME_PATTERN = re.compile(r"[a-z][a-z0-9-]*\Z")
 _ITEM_KEY_PATTERN = re.compile(r"[a-z][a-z0-9_-]*\Z")
+_ENVIRONMENT_NAME_PATTERN = re.compile(r"[A-Z_][A-Z0-9_]*\Z")
 _GITHUB_SOURCE_PATTERN = re.compile(
     r"https://github\.com/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"
     r"/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?\.git\Z"
@@ -141,7 +142,12 @@ def _onepassword_items(value: object) -> tuple[OnePasswordItem, ...]:
     for index, raw_item in enumerate(_sequence(value, "manifest.onepassword_items")):
         context = f"manifest.onepassword_items[{index}]"
         item = _mapping(raw_item, context)
-        _keys(item, {"key", "account", "vault", "item", "fields"}, context)
+        _keys(
+            item,
+            {"key", "account", "vault", "item", "fields"},
+            context,
+            optional={"profiles"},
+        )
         key = _text(item["key"], f"{context}.key")
         if not _ITEM_KEY_PATTERN.fullmatch(key):
             _invalid(f"{context}.key is invalid")
@@ -150,7 +156,12 @@ def _onepassword_items(value: object) -> tuple[OnePasswordItem, ...]:
         for field_index, raw_field in enumerate(_sequence(item["fields"], f"{context}.fields")):
             field_context = f"{context}.fields[{field_index}]"
             field = _mapping(raw_field, field_context)
-            _keys(field, {"canonical_name", "labels"}, field_context, optional={"reference"})
+            _keys(
+                field,
+                {"canonical_name", "labels"},
+                field_context,
+                optional={"reference", "environment"},
+            )
             canonical_name = _text(field["canonical_name"], f"{field_context}.canonical_name")
             reference_name = (
                 _text(field["reference"], f"{field_context}.reference")
@@ -163,16 +174,39 @@ def _onepassword_items(value: object) -> tuple[OnePasswordItem, ...]:
             )
             if not labels:
                 _invalid(f"{field_context}.labels must not be empty")
+            environment_names = tuple(
+                _text(
+                    environment_name,
+                    f"{field_context}.environment[{environment_index}]",
+                )
+                for environment_index, environment_name in enumerate(
+                    _sequence(
+                        field.get("environment", []),
+                        f"{field_context}.environment",
+                    )
+                )
+            )
+            if any(
+                _ENVIRONMENT_NAME_PATTERN.fullmatch(environment_name) is None
+                for environment_name in environment_names
+            ):
+                _invalid(f"{field_context}.environment contains an invalid name")
+            _unique(
+                environment_names,
+                f"{field_context} environment names",
+            )
             fields.append(
                 OnePasswordField(
                     canonical_name=canonical_name,
                     labels=labels,
                     reference_name=reference_name,
+                    environment_names=environment_names,
                 )
             )
         if not fields:
             _invalid(f"{context}.fields must not be empty")
         _unique((field.canonical_name for field in fields), f"{context} field names")
+        profiles = _profile_scope(item.get("profiles"), f"{context}.profiles")
         items.append(
             OnePasswordItem(
                 key=key,
@@ -180,11 +214,29 @@ def _onepassword_items(value: object) -> tuple[OnePasswordItem, ...]:
                 vault=_text(item["vault"], f"{context}.vault"),
                 item=_text(item["item"], f"{context}.item"),
                 fields=tuple(fields),
+                profiles=profiles,
             )
         )
     if not items:
         _invalid("manifest.onepassword_items must not be empty")
     return tuple(items)
+
+
+def _profile_scope(value: object, context: str) -> tuple[str, ...] | None:
+    """Return explicit profile names, or None for every manifest profile."""
+
+    if value is None:
+        return None
+    if value == "all":
+        return None
+    profiles = tuple(
+        _name(profile, f"{context}[{index}]")
+        for index, profile in enumerate(_sequence(value, context))
+    )
+    if not profiles:
+        _invalid(f"{context} must not be empty")
+    _unique(profiles, f"{context} names")
+    return profiles
 
 
 def _distribution(value: object, context: str, data_root: Path) -> DistributionSource:

@@ -124,18 +124,6 @@ public static class HermesBootstrapErrorHistory
 $script:HermesBootstrapProcessTimeoutMilliseconds = 30 * 60 * 1000
 $script:HermesBootstrapTerminationTimeoutMilliseconds = 5000
 $script:HermesBootstrapDrainTimeoutMilliseconds = 5000
-$script:HermesBootstrapAllowedOnePasswordItems = @(
-    [PSCustomObject]@{ key = "dashboard"; account = "my.1password.com"; vault = "openclaw"; item = "Hermes Agent Dashboard" },
-    [PSCustomObject]@{ key = "github"; account = "my.1password.com"; vault = "openclaw"; item = "GitHubUsedOpenClawPAT" },
-    [PSCustomObject]@{ key = "google_calendar"; account = "my.1password.com"; vault = "openclaw"; item = "Google Calendar MCP" },
-    [PSCustomObject]@{ key = "discord_default"; account = "my.1password.com"; vault = "openclaw"; item = "Master" },
-    [PSCustomObject]@{ key = "discord_rick"; account = "my.1password.com"; vault = "openclaw"; item = "Rick" },
-    [PSCustomObject]@{ key = "discord_hoffman"; account = "my.1password.com"; vault = "openclaw"; item = "Hoffman" },
-    [PSCustomObject]@{ key = "discord_risarisa"; account = "my.1password.com"; vault = "openclaw"; item = "RisaRisa" },
-    [PSCustomObject]@{ key = "discord_nancy"; account = "my.1password.com"; vault = "openclaw"; item = "Nancy" },
-    [PSCustomObject]@{ key = "discord_kuroda"; account = "my.1password.com"; vault = "openclaw"; item = "Kuroda" },
-    [PSCustomObject]@{ key = "discord_shiraishi"; account = "my.1password.com"; vault = "openclaw"; item = "Shiraishi" }
-)
 $script:DefaultHermesBootstrapServiceAccountInvoker = {
     param(
         [Parameter(Mandatory)]
@@ -361,7 +349,8 @@ function Test-HermesBootstrapSecretPlan {
     if ($Plan.schema_version -ne 1) { return $false }
 
     $items = @($Plan.items)
-    if ($items.Count -ne $script:HermesBootstrapAllowedOnePasswordItems.Count) { return $false }
+    if ($items.Count -eq 0) { return $false }
+    $expectedAccount = Get-HermesBootstrapServiceAccountAccount
 
     $keys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     for ($itemIndex = 0; $itemIndex -lt $items.Count; $itemIndex++) {
@@ -374,10 +363,7 @@ function Test-HermesBootstrapSecretPlan {
                 [string]::IsNullOrWhiteSpace($item.$name) -or
                 $item.$name.Trim() -cne $item.$name) { return $false }
         }
-        $allowedItem = $script:HermesBootstrapAllowedOnePasswordItems[$itemIndex]
-        foreach ($name in @("key", "account", "vault", "item")) {
-            if ($item.$name -cne $allowedItem.$name) { return $false }
-        }
+        if ($item.account -cne $expectedAccount -or $item.vault -cne "openclaw") { return $false }
         if (-not $keys.Add($item.key)) { return $false }
 
         if ($item.fields -is [string] -or $item.fields -isnot [System.Collections.IEnumerable]) { return $false }
@@ -388,7 +374,9 @@ function Test-HermesBootstrapSecretPlan {
             $fieldProperties = @($field.PSObject.Properties.Name | Sort-Object)
             $validFieldProperties = @(
                 (Test-HermesBootstrapPropertySet -Value $field -Names @("canonical_name", "labels")),
-                (Test-HermesBootstrapPropertySet -Value $field -Names @("canonical_name", "labels", "reference"))
+                (Test-HermesBootstrapPropertySet -Value $field -Names @("canonical_name", "labels", "reference")),
+                (Test-HermesBootstrapPropertySet -Value $field -Names @("canonical_name", "labels", "environment")),
+                (Test-HermesBootstrapPropertySet -Value $field -Names @("canonical_name", "labels", "reference", "environment"))
             )
             if (-not ($validFieldProperties -contains $true)) { return $false }
             if ($field.canonical_name -isnot [string] -or
@@ -398,6 +386,15 @@ function Test-HermesBootstrapSecretPlan {
                 ($field.reference -isnot [string] -or
                 [string]::IsNullOrWhiteSpace($field.reference) -or
                 $field.reference.Trim() -cne $field.reference)) { return $false }
+            if ($fieldProperties -contains "environment") {
+                if ($field.environment -is [string] -or
+                    $field.environment -isnot [System.Collections.IEnumerable]) { return $false }
+                foreach ($environmentName in @($field.environment)) {
+                    if ($environmentName -isnot [string] -or
+                        [string]::IsNullOrWhiteSpace($environmentName) -or
+                        $environmentName -notmatch '^[A-Z_][A-Z0-9_]*$') { return $false }
+                }
+            }
             if (-not $fieldNames.Add($field.canonical_name)) { return $false }
             if ($field.labels -is [string] -or $field.labels -isnot [System.Collections.IEnumerable]) { return $false }
             $labels = @($field.labels)
