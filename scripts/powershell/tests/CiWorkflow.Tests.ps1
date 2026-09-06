@@ -92,6 +92,7 @@ Describe 'CI workflow configuration' {
         $flake = Get-Content -LiteralPath (Join-Path $script:repoRoot "flake.nix") -Raw
         $postInstall = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
         $hostModule = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/modules/host/default.nix") -Raw
+        $bootstrapWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
 
         $flake | Should -Match 'extra-substituters\s*=\s*\[\s*"https://cache\.numtide\.com"'
         $flake | Should -Match 'extra-trusted-public-keys\s*=\s*\[\s*"niks3\.numtide\.com-1:'
@@ -99,6 +100,8 @@ Describe 'CI workflow configuration' {
         $postInstall | Should -Match 'extra-trusted-public-keys = niks3\.numtide\.com-1:'
         $hostModule | Should -Match 'extra-substituters\s*=\s*\[\s*"https://cache\.numtide\.com"'
         $hostModule | Should -Match 'extra-trusted-public-keys\s*=\s*\[\s*"niks3\.numtide\.com-1:'
+        $bootstrapWorkflow | Should -Match 'Build macOS declarative output[\s\S]*?nix build \.#darwinConfigurations\.macos\.system --impure --no-link[\s\S]*?--option extra-substituters "\$NUMTIDE_CACHE"'
+        $bootstrapWorkflow | Should -Match 'NUMTIDE_CACHE_KEY:\s*niks3\.numtide\.com-1:'
     }
 
     It 'should build the font package set on hosted Nix CI' {
