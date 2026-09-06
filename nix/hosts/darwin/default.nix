@@ -7,8 +7,10 @@
 let
   user = builtins.getEnv "DOTFILES_USER";
   home = builtins.getEnv "DOTFILES_HOME";
+  codexPackage = inputs."llm-agents".packages.${pkgs.stdenv.hostPlatform.system}.codex;
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
+    inherit codexPackage;
   };
   discordPackage = sets.darwinDiscordPackage;
   withHermes = builtins.getEnv "DOTFILES_WITH_HERMES" == "1";
@@ -163,6 +165,10 @@ in
   nix.settings.experimental-features = [
     "nix-command"
     "flakes"
+  ];
+  nix.settings.extra-substituters = [ "https://cache.numtide.com" ];
+  nix.settings.extra-trusted-public-keys = [
+    "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
   ];
 
   # nix-darwin's generated documentation currently passes a removed

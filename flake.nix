@@ -1,4 +1,13 @@
 {
+  # llm-agents.nix publishes pre-built Codex outputs so first-time NixOS and
+  # NixOS-WSL activations do not compile the Rust/V8 package from source.
+  nixConfig = {
+    extra-substituters = [ "https://cache.numtide.com" ];
+    extra-trusted-public-keys = [
+      "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
+    ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts = {
@@ -36,6 +45,10 @@
       url = "github:raine/workmux";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # Codex is updated independently from nixpkgs by the maintained
+    # llm-agents.nix package set. Keep its nixpkgs input independent so the
+    # package uses the nixpkgs revision it is tested against.
+    llm-agents.url = "github:numtide/llm-agents.nix";
   };
 
   outputs =
