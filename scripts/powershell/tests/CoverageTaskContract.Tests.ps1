@@ -44,7 +44,11 @@ Describe 'coverage smoke' {
 }
 '@ | Set-Content -LiteralPath $smokePath -Encoding UTF8
 
-        $pwsh = Get-Command pwsh -ErrorAction Stop
+        $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+        if ($null -eq $pwsh) {
+            Set-ItResult -Skipped -Because 'PowerShell 7 (pwsh) is not installed on this host'
+            return
+        }
         $runnerPath = Join-Path $script:repoRoot 'scripts/powershell/tests/Invoke-Tests.ps1'
         $childArguments = @(
             '-NoProfile'
