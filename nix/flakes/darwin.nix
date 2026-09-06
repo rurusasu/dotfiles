@@ -15,7 +15,7 @@ in
         nixpkgs.config.allowUnfree = true;
         nixpkgs.overlays = [ workmuxOverlay ];
       }
-      ../hosts/darwin/default.nix
+      ../hosts/darwin
     ];
   };
 }

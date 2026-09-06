@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make Nix the authoritative test layer for Nix configuration and Home Manager composition, move Darwin/WSL branches out of `common.nix`, and remove duplicate Nix assertions from Bats.
+**Goal:** Make Nix the authoritative test layer for Nix configuration and Home Manager composition, standardize every host on a `default.nix` plus `configuration.nix` layout, move Darwin/WSL branches out of `common.nix`, and remove duplicate Nix assertions from Bats.
 
-**Architecture:** `nix-unit` will evaluate Home Manager modules directly with fixed test inputs and will retain source-level import-boundary checks. Bats will remain only for shell, installer, external-command, and runtime contracts. `common.nix` will contain shared user configuration while each OS module owns its package and platform options.
+**Architecture:** `nix-unit` will evaluate Home Manager modules and host composition directly with fixed test inputs and will retain source-level layout checks. Every `nix/hosts/<host>/default.nix` will be a small integration entry point importing `configuration.nix`. Bats will remain only for shell, installer, external-command, and runtime contracts. `common.nix` will contain shared user configuration while each OS module owns its package and platform options.
 
 **Tech Stack:** Nix flakes, nix-unit, Home Manager, NixOS/nix-darwin modules, Bats for non-Nix contracts, GitHub Actions.
 
@@ -18,6 +18,7 @@
 - Preserve unrelated dirty files in the primary checkout.
 - Use `origin/main` as the base and merge only after hosted checks and review requirements pass.
 - Keep `nix/home/darwin.nix`, `linux.nix`, and `wsl.nix` importing `./common.nix`.
+- Keep `nix/hosts/<host>/default.nix` as the host integration entry point and `configuration.nix` as the host-specific configuration file.
 
 ---
 
@@ -102,7 +103,64 @@
   git commit -m "refactor(nix): isolate Home Manager OS modules"
   ```
 
-### Task 3: Move Nix configuration assertions from Bats to Nix
+### Task 3: Split the Darwin host entry point from its configuration
+
+**Files:**
+
+- Modify: `nix/hosts/darwin/default.nix`
+- Create: `nix/hosts/darwin/configuration.nix`
+- Modify: `nix/flakes/darwin.nix`
+- Create or modify: `nix/tests/hosts/darwin-layout.nix`
+- Modify: `nix/flakes/tests.nix`
+- Test: `nix build .#checks.x86_64-linux.nix-unit --no-write-lock-file`
+
+**Interfaces:**
+
+- `nix/hosts/darwin/default.nix` imports `./configuration.nix` and contains no Darwin system option implementation.
+- `nix/hosts/darwin/configuration.nix` provides the same nix-darwin module options currently provided by the monolith.
+- `nix/flakes/darwin.nix` consumes `../hosts/darwin` so directory resolution selects `default.nix`.
+
+- [ ] **Step 1: Write the failing host-layout tests**
+
+  Add a Nix test that asserts `configuration.nix` exists, `default.nix` imports `./configuration.nix`, the flake consumes the Darwin host directory, and Darwin system options occur in `configuration.nix` rather than the entry point.
+
+- [ ] **Step 2: Run the host-layout test and verify RED**
+
+  Run:
+
+  ```bash
+  nix build .#checks.x86_64-linux.nix-unit --no-write-lock-file
+  ```
+
+  Expected: the new layout assertions fail against the current monolithic `default.nix`.
+
+- [ ] **Step 3: Move the Darwin module implementation**
+
+  Move the current module body into `configuration.nix` and reduce `default.nix` to:
+
+  ```nix
+  { ... }:
+  {
+    imports = [ ./configuration.nix ];
+  }
+  ```
+
+- [ ] **Step 4: Make the flake consume the directory entry point**
+
+  Change `nix/flakes/darwin.nix` from `../hosts/darwin/default.nix` to `../hosts/darwin` and preserve all nix-darwin, Homebrew, overlay, and Home Manager inputs.
+
+- [ ] **Step 5: Run the host tests and verify GREEN**
+
+  Run the focused Nix-unit build and evaluate the Darwin configuration with fixed `DOTFILES_USER` and `DOTFILES_HOME` values. Confirm that effective Homebrew, launchd, system defaults, and Home Manager options remain available.
+
+- [ ] **Step 6: Commit the Darwin host split**
+
+  ```bash
+  git add nix/hosts/darwin nix/flakes/darwin.nix nix/tests/hosts nix/flakes/tests.nix
+  git commit -m "refactor(nix): split Darwin host entry point"
+  ```
+
+### Task 4: Move Nix configuration assertions from Bats to Nix
 
 **Files:**
 
@@ -141,7 +199,7 @@
   git commit -m "test(nix): make Nix authoritative for Nix configuration"
   ```
 
-### Task 4: Update contributor and CI ownership contracts
+### Task 5: Update contributor and CI ownership contracts
 
 **Files:**
 
@@ -176,7 +234,7 @@
   git commit -m "docs(ci): enforce Nix test ownership"
   ```
 
-### Task 5: Full verification and publication
+### Task 6: Full verification and publication
 
 **Files:**
 

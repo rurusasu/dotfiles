@@ -29,6 +29,7 @@ Bats へテストを追加する誘因になっている。
   使った module 評価
 - OS ownership: Darwin、native Linux、WSL それぞれの実効 option と package set の検査
 - flake output/configuration: NixOS/WSL/Darwin の Nix config が提供する Nix option の検査
+- host layout: `nix/hosts/<host>/default.nix` の入口と `configuration.nix` の責務・import の検査
 
 テストは `nix-unit` の attrset として `nix/flakes/tests.nix` から登録する。環境変数、secret、
 network、activation、外部 command は使用しない。ユーザー名と home はテスト module で固定値を
@@ -57,6 +58,14 @@ Nix option、Home Manager module の package/session variable、flake output の
 - `nix/home/wsl.nix`: WSL package exclusion、WSL variables、fcitx5/keyring services、WSL aliases
 
 `common.nix` は `isWSL` と `pkgs.stdenv.hostPlatform.isDarwin` による OS branch を持たない。
+
+## Host module 責務
+
+`nix/hosts/<host>/default.nix` はホストの integration entry point とし、同じディレクトリの
+`configuration.nix` を import する。Linux、WSL、Darwin は同じファイル配置を既定とする。
+Darwin の system option、activation、launchd、Homebrew、ユーザー、system package は
+`nix/hosts/darwin/configuration.nix` に置き、`default.nix` は入口としての import だけを担当する。
+`nix/flakes/darwin.nix` は Darwin host directory を通じてこの入口を消費する。
 
 ## ドキュメントと CI
 

@@ -16,6 +16,11 @@
 - CLI の実行順序・依存関係・公開コマンドは `Taskfile.yml` と `taskfiles/` に実装する。
 - Bash/PowerShell は Taskfile から呼ばれる platform adapter、secret 処理、複雑な検証に限定し、CLI の処理順序を重複定義しない。
 
+## テスト責務
+
+- Nix expression、Home Manager option、flake output、Nix package 選択のテストは `nix/tests/` に Nix 式で記載し、`nix-unit` / `nix flake check` を authoritative check とする。
+- Bats は shell、installer、外部コマンド、runtime/integration 契約に限定する。Nix option を `nix eval` するだけの Bats テストは追加しない。
+
 ## 実行コマンド
 
 ```bash
