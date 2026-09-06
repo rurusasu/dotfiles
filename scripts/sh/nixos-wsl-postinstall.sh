@@ -330,7 +330,7 @@ NIX_CONFIG="$(printf '%s\n' \
   'experimental-features = nix-command flakes' \
   'extra-substituters = https://cache.numtide.com' \
   'extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=')" \
-  nixos-rebuild switch --flake "path:$TARGET_DIR#$FLAKE_NAME"
+  nixos-rebuild switch --flake "path:$TARGET_DIR#$FLAKE_NAME" --impure
 
 # Handle sync-back
 if [[ $SYNC_BACK == "repo" && $SYNC_MODE != "link" ]]; then
