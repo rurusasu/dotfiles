@@ -19,6 +19,13 @@
         ;
     };
 
-    nix-unit.tests = import ../tests/home/import-boundary.nix;
+    nix-unit.tests =
+      (import ../tests/home/import-boundary.nix)
+      // (import ../tests/home/platform-boundary.nix)
+      // (import ../tests/home/composition.nix { inherit inputs; })
+      // (import ../tests/hosts/darwin-layout.nix)
+      // (import ../tests/hosts/darwin-configuration.nix { inherit inputs; })
+      // (import ../tests/flake-outputs.nix)
+      // (import ../tests/ownership.nix);
   };
 }
