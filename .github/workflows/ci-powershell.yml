@@ -4,33 +4,41 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - "install.cmd"
-      - "docker/hermes-agent/**"
-      - "docker/hermes-service/**"
-      - "docker/local-ai-services/**"
-      - "scripts/powershell/**"
-      - "chezmoi/dot_config/plane-github-sync/**"
-      - ".github/workflows/ci-bootstrap.yml"
-      - ".github/workflows/ci-powershell.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "install.cmd"
-      - "docker/hermes-agent/**"
-      - "docker/hermes-service/**"
-      - "docker/local-ai-services/**"
-      - "scripts/powershell/**"
-      - "chezmoi/dot_config/plane-github-sync/**"
-      - ".github/workflows/ci-bootstrap.yml"
-      - ".github/workflows/ci-powershell.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: ci-powershell / Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      powershell_lint: ${{ steps.detect.outputs.powershell_lint }}
+      powershell_test: ${{ steps.detect.outputs.powershell_test }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect changed job targets
+        id: detect
+        uses: ./.github/actions/detect-ci-changes
+        with:
+          base-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
+          head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          run-all: ${{ github.event_name == 'workflow_dispatch' }}
+          manifest: ci/job-path-routing.json
+
   lint:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.powershell_lint == 'true') }}
     name: Lint (PSScriptAnalyzer)
     runs-on: windows-2025
     timeout-minutes: 10
@@ -38,6 +46,10 @@ jobs:
       contents: read
       security-events: write
     steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -166,13 +178,18 @@ jobs:
           }
 
   test:
+    needs: [changes, lint]
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.powershell_test == 'true') }}
     name: Test (Pester + Codecov)
     runs-on: windows-2025
     timeout-minutes: 20
-    needs: lint
     permissions:
       contents: read
     steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' || (needs.lint.result != 'success' && needs.lint.result != 'skipped') }}
+        shell: bash
+        run: exit 1
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -332,13 +349,18 @@ jobs:
           if-no-files-found: warn
 
   test-windows-powershell:
+    needs: [changes, lint]
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.powershell_test == 'true') }}
     name: Test (Windows PowerShell 5.1 compatibility)
     runs-on: windows-2025
     timeout-minutes: 15
-    needs: lint
     permissions:
       contents: read
     steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' || (needs.lint.result != 'success' && needs.lint.result != 'skipped') }}
+        shell: bash
+        run: exit 1
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

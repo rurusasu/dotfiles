@@ -123,10 +123,10 @@ assert_bootstrap_routing() {
 		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": false, "nix": true, "package_catalog": false, "windows": false, "wsl": false}'
 }
 
-@test "bootstrap Home Manager layout documentation enables every Unix check" {
+@test "bootstrap Home Manager layout documentation skips runtime checks" {
 	assert_bootstrap_routing \
 		"nix/home/README.md" \
-		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": true, "nix": true, "package_catalog": false, "windows": false, "wsl": true}'
+		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": false, "nix": false, "package_catalog": false, "windows": false, "wsl": false}'
 }
 
 @test "bootstrap shared paths enable every platform" {

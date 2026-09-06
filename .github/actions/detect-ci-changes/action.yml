@@ -18,6 +18,30 @@ inputs:
     default: ci/path-routing.json
 
 outputs:
+  python:
+    description: Whether Python contracts are required.
+    value: ${{ steps.detect.outputs.python }}
+  bash:
+    description: Whether Bash contracts are required.
+    value: ${{ steps.detect.outputs.bash }}
+  actionlint:
+    description: Whether workflow lint is required.
+    value: ${{ steps.detect.outputs.actionlint }}
+  powershell_lint:
+    description: Whether PowerShell source lint is required.
+    value: ${{ steps.detect.outputs.powershell_lint }}
+  powershell_test:
+    description: Whether PowerShell contracts are required.
+    value: ${{ steps.detect.outputs.powershell_test }}
+  chezmoi_lint:
+    description: Whether chezmoi contracts are required.
+    value: ${{ steps.detect.outputs.chezmoi_lint }}
+  templates:
+    description: Whether template validation is required.
+    value: ${{ steps.detect.outputs.templates }}
+  fonts:
+    description: Whether font installer validation is required.
+    value: ${{ steps.detect.outputs.fonts }}
   linux:
     description: Whether Linux CI is required.
     value: ${{ steps.detect.outputs.linux }}
@@ -77,6 +101,9 @@ runs:
             --github-output "${GITHUB_OUTPUT}"
         else
           paths_file="${RUNNER_TEMP}/ci-changed-paths.txt"
+          if [[ "${GITHUB_EVENT_NAME:-}" == "pull_request" ]]; then
+            BASE_SHA="$(git merge-base "${BASE_SHA}" "${HEAD_SHA}")"
+          fi
           git diff --name-only --no-renames "${BASE_SHA}" "${HEAD_SHA}" > "${paths_file}"
           python scripts/python/detect_ci_changes.py \
             --manifest "${MANIFEST_PATH}" \

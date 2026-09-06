@@ -8,6 +8,7 @@ on:
     paths:
       - "ci/path-routing.json"
       - "ci/bootstrap-path-routing.json"
+      - "ci/job-path-routing.json"
       - "scripts/python/detect_ci_changes.py"
       - "bootstrap.sh"
       - "install.sh"
@@ -27,6 +28,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci-contract:
     name: CI Contract
@@ -36,22 +41,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
+      - name: Detect changed contract targets
+        id: detect
+        uses: ./.github/actions/detect-ci-changes
+        with:
+          base-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          manifest: ci/job-path-routing.json
+
       - name: Set up Python
+        if: ${{ steps.detect.outputs.python == 'true' }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v6.2.0
         with:
           python-version: "3.14"
 
       - name: Install Nix
+        if: ${{ steps.detect.outputs.python == 'true' || steps.detect.outputs.bash == 'true' }}
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
 
       - name: Install go-task
+        if: ${{ steps.detect.outputs.python == 'true' || steps.detect.outputs.bash == 'true' }}
         run: |
           nix profile install nixpkgs#go-task
           task --version
 
       - name: Install Bats
+        if: ${{ steps.detect.outputs.bash == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -65,12 +83,15 @@ jobs:
           "$bats_prefix/bin/bats" --version
 
       - name: Run Python workflow contracts
+        if: ${{ steps.detect.outputs.python == 'true' }}
         run: python -m unittest discover -s tests/python -v
 
       - name: Run MLflow gateway contracts
+        if: ${{ steps.detect.outputs.python == 'true' }}
         run: python -m unittest docker/mlflow/tests/test_configure.py -v
 
       - name: Run Bash workflow contracts
+        if: ${{ steps.detect.outputs.bash == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -92,4 +113,5 @@ jobs:
           bats --print-output-on-failure "${bats_files[@]}"
 
       - name: Run actionlint
+        if: ${{ steps.detect.outputs.actionlint == 'true' }}
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml

@@ -1,6 +1,12 @@
 BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 
+    function Get-CiJobPatterns {
+        param([string]$Output)
+        $manifest = Get-Content -LiteralPath (Join-Path $script:repoRoot 'ci/job-path-routing.json') -Raw | ConvertFrom-Json
+        $manifest.rules | Where-Object { $Output -in $_.outputs } | ForEach-Object { $_.patterns }
+    }
+
     function Assert-UniqueChezmoiPathOccurrence {
         param(
             [Parameter(Mandatory)]
@@ -220,7 +226,7 @@ Describe 'CI workflow configuration' {
     It 'should verify generated npm package catalog consistency' {
         $consistencyWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-consistency.yml") -Raw
 
-        $consistencyWorkflow | Should -Match '"windows/npm/packages\.json"'
+        (Get-CiJobPatterns -Output 'package_catalog') | Should -Contain 'windows/npm/packages.json'
         $consistencyWorkflow | Should -Match '/tmp/winget-export/npm/packages\.json'
         $consistencyWorkflow | Should -Match 'windows/npm/packages\.json'
     }
@@ -228,14 +234,17 @@ Describe 'CI workflow configuration' {
     It 'should trigger entrypoint tests when install.cmd or bootstrap tests change' {
         $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
 
-        $powershellWorkflow | Should -Match '"install\.cmd"'
-        $powershellWorkflow | Should -Match '"docker/hermes-agent/\*\*"'
+        $powershellWorkflow | Should -Match 'needs.changes.outputs.powershell_test'
+        (Get-CiJobPatterns -Output 'powershell_test') | Should -Contain '**/*.cmd'
+        (Get-CiJobPatterns -Output 'powershell_test') | Should -Contain 'docker/**'
     }
 
     It 'should assign every Bats file to exactly one CI owner' {
         $contractWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-contract.yml") -Raw
         $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
         $devcontainerBatsScript = Get-Content -LiteralPath (Join-Path $script:repoRoot ".devcontainer/ci/bats.sh") -Raw
+        $devcontainerPaths = Get-CiJobPatterns -Output 'devcontainer'
+        $devcontainerWorkflow | Should -Match 'needs.changes.outputs.devcontainer'
 
         $contractWorkflow | Should -Match '"tests/bash/\*\*"'
         $contractWorkflow | Should -Match 'shopt -s nullglob'
@@ -258,7 +267,7 @@ Describe 'CI workflow configuration' {
         }
         foreach ($batsFile in $allBats) {
             if ($batsFile -in $excludedBats) {
-                $devcontainerWorkflow | Should -Match "tests/bash/$([regex]::Escape($batsFile))"
+                $devcontainerPaths | Should -Contain "tests/bash/$batsFile"
             }
             else {
                 $contractWorkflow | Should -Match 'bats_files=\(tests/bash/\*\.bats\)'
@@ -266,9 +275,9 @@ Describe 'CI workflow configuration' {
         }
 
         $excludedBats.Count | Should -Be 2
-        $devcontainerWorkflow | Should -Match '"tests/bash/install_macos\.bats"'
-        $devcontainerWorkflow | Should -Match '"tests/bash/install_linux\.bats"'
-        $devcontainerWorkflow | Should -Not -Match '"tests/bash/\*\*"'
+        $devcontainerPaths | Should -Contain 'tests/bash/install_macos.bats'
+        $devcontainerPaths | Should -Contain 'tests/bash/install_linux.bats'
+        $devcontainerPaths | Should -Not -Contain 'tests/bash/**'
 
         $activeBatsInvocations = @(
             $devcontainerBatsScript -split '\r?\n' |
@@ -284,8 +293,8 @@ Describe 'CI workflow configuration' {
     It 'should trigger PowerShell CI when Plane GitHub sync config changes' {
         $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
 
-        $path = '- "chezmoi/dot_config/plane-github-sync/**"'
-        ([regex]::Matches($powershellWorkflow, [regex]::Escape($path))).Count | Should -Be 2
+        $powershellWorkflow | Should -Match 'needs.changes.outputs.powershell_test'
+        (Get-CiJobPatterns -Output 'powershell_test') | Should -Contain 'chezmoi/**'
     }
 
     It 'should trigger dcnvim platform tests when dcnvim implementations change' {
@@ -293,10 +302,12 @@ Describe 'CI workflow configuration' {
         $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
         $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
 
-        $chezmoiWorkflow | Should -Match '"chezmoi/\*\*"'
+        (Get-CiJobPatterns -Output 'chezmoi_lint') | Should -Contain 'chezmoi/**'
         $chezmoiWorkflow | Should -Match '\.\\tests\\Invoke-Tests\.ps1 -Path \.\\tests\\chezmoi'
-        $powershellWorkflow | Should -Match '"scripts/powershell/\*\*"'
-        $devcontainerWorkflow | Should -Match '"scripts/sh/dcnvim\.sh"'
+        $powershellWorkflow | Should -Match 'needs.changes.outputs.powershell_test'
+        (Get-CiJobPatterns -Output 'powershell_test') | Should -Contain '**/*.ps1'
+        $devcontainerWorkflow | Should -Match 'needs.changes.outputs.devcontainer'
+        (Get-CiJobPatterns -Output 'devcontainer') | Should -Contain 'scripts/sh/dcnvim.sh'
     }
 
     It 'should use a supported Intel macOS runner for devcontainer E2E' {

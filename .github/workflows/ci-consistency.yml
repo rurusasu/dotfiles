@@ -4,44 +4,49 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - "nix/packages/**"
-      - "nix/flakes/**"
-      - "nix/home/**"
-      - "flake.nix"
-      - "flake.lock"
-      - "windows/winget/packages.json"
-      - "windows/npm/packages.json"
-      - "windows/pnpm/packages.json"
-      - ".github/workflows/ci-consistency.yml"
-      - "nix/packages/darwin-provider-candidates.nix"
-      - "scripts/python/update_darwin_packages.py"
   pull_request:
     branches: [main]
-    paths:
-      - "nix/packages/**"
-      - "nix/flakes/**"
-      - "nix/home/**"
-      - "flake.nix"
-      - "flake.lock"
-      - "windows/winget/packages.json"
-      - "windows/npm/packages.json"
-      - "windows/pnpm/packages.json"
-      - ".github/workflows/ci-consistency.yml"
-      - "nix/packages/darwin-provider-candidates.nix"
-      - "scripts/python/update_darwin_packages.py"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: ci-consistency / Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      package_catalog: ${{ steps.detect.outputs.package_catalog }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect changed job targets
+        id: detect
+        uses: ./.github/actions/detect-ci-changes
+        with:
+          base-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
+          head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          run-all: ${{ github.event_name == 'workflow_dispatch' }}
+          manifest: ci/job-path-routing.json
+
   check:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.package_catalog == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
     steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

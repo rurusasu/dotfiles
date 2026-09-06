@@ -11,7 +11,6 @@ from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-
 EXPECTED_OUTPUTS = frozenset(
     {
         "linux",
@@ -27,23 +26,45 @@ EXPECTED_OUTPUTS = frozenset(
     }
 )
 PLATFORM_OUTPUTS = frozenset({"linux", "darwin", "wsl", "windows"})
+JOB_OUTPUTS = frozenset(
+    {
+        "python",
+        "bash",
+        "actionlint",
+        "powershell_lint",
+        "powershell_test",
+        "chezmoi_lint",
+        "templates",
+        "fonts",
+    }
+)
 DEFAULT_MANIFEST_PATH = Path(__file__).resolve().parents[2] / "ci" / "path-routing.json"
 
 
 def route_paths(paths: Iterable[str], manifest_path: Path) -> dict[str, bool]:
     """Return the union of manifest outputs selected by repository-relative paths."""
-    outputs, rules, fallback_outputs = _load_manifest(manifest_path)
+    outputs, rules, fallback_outputs, ignored_patterns, fallback_patterns = (
+        _load_manifest(manifest_path)
+    )
     selected = {output: output == "contract" for output in outputs}
 
     for raw_path in paths:
         path = _validate_path(raw_path)
+        if any(_full_match(path, pattern) for pattern in ignored_patterns):
+            continue
         matched_platform = False
         for rule in rules:
-            if any(_full_match(path, pattern) for pattern in rule["patterns"]):
+            if any(
+                _full_match(path, pattern) for pattern in rule["patterns"]
+            ) and not any(
+                _full_match(path, pattern) for pattern in rule["exclude_patterns"]
+            ):
                 matched_platform |= bool(PLATFORM_OUTPUTS.intersection(rule["outputs"]))
                 for output in rule["outputs"]:
                     selected[output] = True
-        if not matched_platform:
+        if not matched_platform and any(
+            _full_match(path, pattern) for pattern in fallback_patterns
+        ):
             for output in fallback_outputs:
                 selected[output] = True
 
@@ -76,10 +97,14 @@ def _full_match(path: PurePosixPath, pattern: str) -> bool:
 
 def _load_manifest(
     manifest_path: Path,
-) -> tuple[list[str], list[dict[str, list[str]]], list[str]]:
+) -> tuple[list[str], list[dict[str, list[str]]], list[str], list[str], list[str]]:
     manifest: Any = json.loads(manifest_path.read_text(encoding="utf-8"))
     required_keys = {"version", "outputs", "rules"}
-    allowed_keys = required_keys | {"fallback_outputs"}
+    allowed_keys = required_keys | {
+        "fallback_outputs",
+        "ignored_patterns",
+        "fallback_patterns",
+    }
     if (
         not isinstance(manifest, dict)
         or not required_keys.issubset(manifest)
@@ -94,9 +119,10 @@ def _load_manifest(
     outputs = manifest.get("outputs")
     if (
         not isinstance(outputs, list)
-        or len(outputs) != len(EXPECTED_OUTPUTS)
+        or not outputs
         or not all(isinstance(output, str) for output in outputs)
-        or set(outputs) != EXPECTED_OUTPUTS
+        or len(outputs) != len(set(outputs))
+        or not set(outputs).issubset(EXPECTED_OUTPUTS | JOB_OUTPUTS)
     ):
         raise ValueError("routing manifest outputs must be strings")
 
@@ -104,9 +130,23 @@ def _load_manifest(
     if (
         not isinstance(fallback_outputs, list)
         or not all(isinstance(output, str) for output in fallback_outputs)
-        or not set(fallback_outputs).issubset(EXPECTED_OUTPUTS)
+        or not set(fallback_outputs).issubset(outputs)
     ):
         raise ValueError("routing manifest fallback outputs must be known strings")
+
+    ignored_patterns = manifest.get("ignored_patterns", [])
+    if not isinstance(ignored_patterns, list) or not all(
+        isinstance(pattern, str) for pattern in ignored_patterns
+    ):
+        raise ValueError("routing manifest ignored patterns must be strings")
+    ignored_patterns = [_validate_pattern(pattern) for pattern in ignored_patterns]
+
+    fallback_patterns = manifest.get("fallback_patterns", ["**"])
+    if not isinstance(fallback_patterns, list) or not all(
+        isinstance(pattern, str) for pattern in fallback_patterns
+    ):
+        raise ValueError("routing manifest fallback patterns must be strings")
+    fallback_patterns = [_validate_pattern(pattern) for pattern in fallback_patterns]
 
     rules = manifest.get("rules")
     if not isinstance(rules, list):
@@ -114,10 +154,15 @@ def _load_manifest(
 
     validated_rules: list[dict[str, list[str]]] = []
     for rule in rules:
-        if not isinstance(rule, dict) or set(rule) != {"patterns", "outputs"}:
+        if (
+            not isinstance(rule, dict)
+            or not {"patterns", "outputs"}.issubset(rule)
+            or not set(rule).issubset({"patterns", "outputs", "exclude_patterns"})
+        ):
             raise ValueError("routing manifest rule keys are invalid")
         patterns = rule.get("patterns")
         rule_outputs = rule.get("outputs")
+        exclude_patterns = rule.get("exclude_patterns", [])
         if (
             not isinstance(patterns, list)
             or not patterns
@@ -125,17 +170,30 @@ def _load_manifest(
             or not isinstance(rule_outputs, list)
             or not rule_outputs
             or not all(isinstance(output, str) for output in rule_outputs)
-            or not set(rule_outputs).issubset(EXPECTED_OUTPUTS)
+            or not set(rule_outputs).issubset(outputs)
+            or not isinstance(exclude_patterns, list)
+            or not all(isinstance(pattern, str) for pattern in exclude_patterns)
         ):
-            raise ValueError("routing manifest rule contains invalid patterns or outputs")
+            raise ValueError(
+                "routing manifest rule contains invalid patterns or outputs"
+            )
         validated_rules.append(
             {
                 "patterns": [_validate_pattern(pattern) for pattern in patterns],
                 "outputs": rule_outputs,
+                "exclude_patterns": [
+                    _validate_pattern(pattern) for pattern in exclude_patterns
+                ],
             }
         )
 
-    return outputs, validated_rules, fallback_outputs
+    return (
+        outputs,
+        validated_rules,
+        fallback_outputs,
+        ignored_patterns,
+        fallback_patterns,
+    )
 
 
 def _validate_path(raw_path: str) -> PurePosixPath:
@@ -150,11 +208,15 @@ def _validate_path(raw_path: str) -> PurePosixPath:
 
 def _validate_pattern(pattern: str) -> str:
     if not pattern or "\\" in pattern:
-        raise ValueError(f"routing pattern must be a nonempty POSIX-relative path: {pattern}")
+        raise ValueError(
+            f"routing pattern must be a nonempty POSIX-relative path: {pattern}"
+        )
 
     path = PurePosixPath(pattern)
     if path.is_absolute() or ".." in path.parts:
-        raise ValueError(f"routing pattern must be a nonempty POSIX-relative path: {pattern}")
+        raise ValueError(
+            f"routing pattern must be a nonempty POSIX-relative path: {pattern}"
+        )
     return pattern
 
 
@@ -190,7 +252,7 @@ def main(arguments: list[str] | None = None) -> int:
     args = parser.parse_args(arguments)
     try:
         if args.all:
-            outputs, _, _ = _load_manifest(args.manifest)
+            outputs, _, _, _, _ = _load_manifest(args.manifest)
             result = dict.fromkeys(outputs, True)
         else:
             result = route_paths(_read_paths(args.paths_file), args.manifest)

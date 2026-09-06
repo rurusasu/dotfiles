@@ -4,39 +4,50 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - "bootstrap.sh"
-      - "install.sh"
-      - "scripts/sh/install-macos.sh"
-      - "scripts/sh/dcnvim.sh"
-      - "tests/bash/install_macos.bats"
-      - "tests/bash/install_linux.bats"
-      - ".devcontainer/**"
-      - ".github/workflows/ci-devcontainer.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "bootstrap.sh"
-      - "install.sh"
-      - "scripts/sh/install-macos.sh"
-      - "scripts/sh/dcnvim.sh"
-      - "tests/bash/install_macos.bats"
-      - "tests/bash/install_linux.bats"
-      - ".devcontainer/**"
-      - ".github/workflows/ci-devcontainer.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: ci-devcontainer / Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      devcontainer: ${{ steps.detect.outputs.devcontainer }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect changed job targets
+        id: detect
+        uses: ./.github/actions/detect-ci-changes
+        with:
+          base-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
+          head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          run-all: ${{ github.event_name == 'workflow_dispatch' }}
+          manifest: ci/job-path-routing.json
+
   linux-nix:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.devcontainer == 'true') }}
     name: E2E (Linux + Nix CLI)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
     steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -94,12 +105,18 @@ jobs:
             -- bash .devcontainer/ci/e2e.sh
 
   macos:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.devcontainer == 'true') }}
     name: E2E (macOS)
     runs-on: macos-15-intel
     timeout-minutes: 90
     permissions:
       contents: read
     steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -140,6 +157,8 @@ jobs:
             -- bash .devcontainer/ci/e2e.sh
 
   windows:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.devcontainer == 'true') }}
     # Full devcontainer E2E requires Linux containers, which GitHub-hosted
     # Windows runners do not support (no Docker Desktop, no WSL2 Ubuntu
     # pre-installed). This job validates the devcontainer configuration and
@@ -150,6 +169,10 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

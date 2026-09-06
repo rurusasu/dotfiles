@@ -10,7 +10,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPOSITORY_ROOT / "ci" / "path-routing.json"
 BOOTSTRAP_MANIFEST_PATH = REPOSITORY_ROOT / "ci" / "bootstrap-path-routing.json"
@@ -160,7 +159,7 @@ BOOTSTRAP_CASES = {
     "nix/home/linux.nix": {"linux", "contract", "nix"},
     "nix/home/wsl.nix": {"wsl", "contract", "nix"},
     "nix/home/darwin.nix": {"darwin", "contract", "nix"},
-    "nix/home/README.md": {"linux", "darwin", "wsl", "contract", "nix"},
+    "nix/home/README.md": {"contract"},
     "scripts/powershell/handlers/Handler.NixOSWSL.ps1": {"wsl", "contract"},
     "scripts/powershell/lib/SetupHandler.ps1": {"wsl", "windows", "contract"},
     "chezmoi/shells/Microsoft.PowerShell_profile.ps1": {
@@ -201,13 +200,7 @@ BOOTSTRAP_CASES = {
         "windows",
         "contract",
     },
-    "docs/mlflow/local-ai-services.md": {
-        "linux",
-        "darwin",
-        "wsl",
-        "windows",
-        "contract",
-    },
+    "docs/mlflow/local-ai-services.md": {"contract"},
     "tests/python/test_mlflow_contract.py": {
         "linux",
         "darwin",

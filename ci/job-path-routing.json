@@ -1,0 +1,266 @@
+{
+  "version": 1,
+  "outputs": [
+    "python",
+    "bash",
+    "actionlint",
+    "powershell_lint",
+    "powershell_test",
+    "chezmoi_lint",
+    "templates",
+    "fonts",
+    "hermes",
+    "devcontainer",
+    "package_catalog"
+  ],
+  "rules": [
+    {
+      "patterns": [
+        "ci/**",
+        "scripts/python/detect_ci_changes.py",
+        ".github/actions/detect-ci-changes/**",
+        "tests/python/test_detect_ci*.py",
+        "tests/python/test_ci_workflow_routing.py",
+        "tests/python/test_ci_job_routing.py",
+        "tests/bash/ci_routing.bats"
+      ],
+      "outputs": [
+        "python",
+        "bash",
+        "actionlint",
+        "powershell_lint",
+        "powershell_test",
+        "chezmoi_lint",
+        "templates",
+        "fonts",
+        "hermes",
+        "devcontainer",
+        "package_catalog"
+      ]
+    },
+    {
+      "patterns": [
+        "**/*.py",
+        "**/*.nix",
+        "flake.lock",
+        "**/*.sh",
+        "**/*.bats",
+        "**/*.ps1",
+        "**/*.psm1",
+        "**/*.psd1",
+        "**/*.cmd",
+        "**/*.tmpl",
+        "**/*.yml",
+        "**/*.yaml",
+        "**/*.json",
+        "**/*.toml",
+        "**/Dockerfile",
+        ".devcontainer/**",
+        "chezmoi/**",
+        "docs/**",
+        "nix/**/*.md",
+        "windows/**"
+      ],
+      "outputs": ["python"]
+    },
+    {
+      "patterns": [
+        "**/*.sh",
+        "**/*.bats",
+        "**/*.nix",
+        "flake.lock",
+        "scripts/python/**",
+        "**/*.ps1",
+        "**/*.psm1",
+        "**/*.psd1",
+        "install.cmd",
+        "**/*.tmpl",
+        "Taskfile.yml",
+        "taskfiles/**",
+        ".github/**",
+        ".devcontainer/**",
+        "docker/**",
+        "chezmoi/**",
+        "docs/**",
+        "nix/**/*.md",
+        "windows/**",
+        "**/*.yml",
+        "**/*.yaml",
+        "**/*.json",
+        "**/*.toml"
+      ],
+      "outputs": ["bash"]
+    },
+    {
+      "patterns": [
+        ".github/workflows/*.yml",
+        ".github/workflows/*.yaml",
+        ".github/actions/**",
+        ".github/actionlint.yaml"
+      ],
+      "outputs": ["actionlint"]
+    },
+    {
+      "patterns": [
+        "scripts/powershell/**/*.ps1",
+        "scripts/powershell/**/*.psm1",
+        "scripts/powershell/**/*.psd1",
+        ".github/workflows/ci-powershell.yml"
+      ],
+      "outputs": ["powershell_lint"],
+      "exclude_patterns": [
+        "docs/**",
+        "README.md",
+        "nix/**/*.md",
+        "scripts/**/*.md",
+        "windows/**/*.md",
+        "taskfiles/**/*.md",
+        "chezmoi/README.md",
+        "docker/*/README.md",
+        ".devcontainer/README.md"
+      ]
+    },
+    {
+      "patterns": [
+        "**/*.ps1",
+        "**/*.psm1",
+        "**/*.psd1",
+        "**/*.cmd",
+        "**/*.ahk",
+        "chezmoi/**",
+        "nix/**/*.nix",
+        "flake.nix",
+        "flake.lock",
+        "windows/**",
+        "Taskfile.yml",
+        "taskfiles/**",
+        "docker/**",
+        "scripts/sh/**",
+        ".github/workflows/**"
+      ],
+      "outputs": ["powershell_test"],
+      "exclude_patterns": [
+        "docs/**",
+        "README.md",
+        "nix/**/*.md",
+        "scripts/**/*.md",
+        "windows/**/*.md",
+        "taskfiles/**/*.md",
+        "chezmoi/README.md",
+        "docker/*/README.md",
+        ".devcontainer/README.md"
+      ]
+    },
+    {
+      "patterns": [
+        "chezmoi/**",
+        "scripts/powershell/tests/chezmoi/**",
+        "scripts/powershell/tests/Invoke-Tests.ps1",
+        "scripts/powershell/lib/**",
+        "nix/home/common.nix",
+        "nix/packages/**",
+        ".github/workflows/ci-chezmoi.yml"
+      ],
+      "outputs": ["chezmoi_lint"],
+      "exclude_patterns": [
+        "docs/**",
+        "README.md",
+        "nix/**/*.md",
+        "scripts/**/*.md",
+        "windows/**/*.md",
+        "taskfiles/**/*.md",
+        "chezmoi/README.md",
+        "docker/*/README.md",
+        ".devcontainer/README.md"
+      ]
+    },
+    {
+      "patterns": [
+        "chezmoi/**/*.tmpl",
+        "chezmoi/.chezmoi*",
+        "chezmoi/.chezmoidata/**",
+        "chezmoi/.chezmoitemplates/**",
+        ".github/workflows/ci-chezmoi.yml"
+      ],
+      "outputs": ["templates"]
+    },
+    {
+      "patterns": ["chezmoi/.chezmoiscripts/setup/fonts/**", ".github/workflows/ci-chezmoi.yml"],
+      "outputs": ["fonts"]
+    },
+    {
+      "patterns": [
+        "docker/hermes-agent/**",
+        "docker/hermes-service/**",
+        "docker/hermes-browser/**",
+        "docker/hermes-browser-mcp/**",
+        "docker/hermes-xapi-mcp/**",
+        "docker/hindsight/**",
+        "docker/local-ai-services/**",
+        "scripts/sh/hermes-*.sh",
+        "scripts/powershell/hermes-*.ps1",
+        "scripts/powershell/handlers/Handler.HermesAgent.ps1",
+        "scripts/powershell/lib/Hermes*.ps1",
+        "tests/python/test_xapi_image_contract.py",
+        ".github/workflows/ci-hermes-bootstrap.yml",
+        ".github/workflows/ci-hermes-provenance.yml",
+        "taskfiles/hermes/taskfile.yml",
+        ".pre-commit-config.yaml",
+        "Taskfile.yml"
+      ],
+      "outputs": ["hermes"],
+      "exclude_patterns": [
+        "docs/**",
+        "README.md",
+        "nix/**/*.md",
+        "scripts/**/*.md",
+        "windows/**/*.md",
+        "taskfiles/**/*.md",
+        "chezmoi/README.md",
+        "docker/*/README.md",
+        ".devcontainer/README.md"
+      ]
+    },
+    {
+      "patterns": [
+        ".devcontainer/**",
+        "bootstrap.sh",
+        "install.sh",
+        "scripts/sh/dcnvim.sh",
+        "chezmoi/dot_config/devcontainer/**",
+        "tests/bash/install_linux.bats",
+        "tests/bash/install_macos.bats",
+        ".github/workflows/ci-devcontainer.yml",
+        "scripts/sh/install-macos.sh"
+      ],
+      "outputs": ["devcontainer"],
+      "exclude_patterns": [
+        "docs/**",
+        "README.md",
+        "nix/**/*.md",
+        "scripts/**/*.md",
+        "windows/**/*.md",
+        "taskfiles/**/*.md",
+        "chezmoi/README.md",
+        "docker/*/README.md",
+        ".devcontainer/README.md"
+      ]
+    },
+    {
+      "patterns": [
+        "nix/packages/**/*.nix",
+        "nix/flakes/**/*.nix",
+        "nix/lib/**/*.nix",
+        "nix/home/**/*.nix",
+        "flake.nix",
+        "flake.lock",
+        "windows/winget/packages.json",
+        "windows/npm/packages.json",
+        "windows/pnpm/packages.json",
+        "scripts/python/update_darwin_packages.py",
+        ".github/workflows/ci-consistency.yml"
+      ],
+      "outputs": ["package_catalog"]
+    }
+  ]
+}

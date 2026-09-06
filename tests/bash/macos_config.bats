@@ -47,10 +47,12 @@ setup() {
 }
 
 @test "devcontainer CI watches macOS installer files" {
-	run grep -F '"install.sh"' "$REPO_ROOT/.github/workflows/ci-devcontainer.yml"
-	[ "$status" -eq 0 ]
-	run grep -F '"scripts/sh/install-macos.sh"' "$REPO_ROOT/.github/workflows/ci-devcontainer.yml"
-	[ "$status" -eq 0 ]
+	for path in install.sh scripts/sh/install-macos.sh; do
+		run python3 "$REPO_ROOT/scripts/python/detect_ci_changes.py" \
+			--manifest "$REPO_ROOT/ci/job-path-routing.json" --paths-file - <<<"$path"
+		[ "$status" -eq 0 ]
+		[[ "$output" == *'"devcontainer": true'* ]]
+	done
 }
 
 @test "macOS devcontainer CI allows the cold start and full test suite to finish" {

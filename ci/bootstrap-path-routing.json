@@ -13,6 +13,33 @@
     "package_catalog"
   ],
   "fallback_outputs": ["linux", "darwin", "wsl", "windows"],
+  "fallback_patterns": [
+    "nix/**",
+    "scripts/sh/**",
+    "scripts/powershell/**",
+    "windows/**",
+    "chezmoi/**",
+    "docker/**",
+    "taskfiles/**",
+    "Taskfile.yml",
+    "install.sh",
+    "install.cmd",
+    "flake.nix",
+    "flake.lock"
+  ],
+  "ignored_patterns": [
+    "docs/**",
+    "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "nix/**/*.md",
+    "scripts/**/*.md",
+    "windows/**/*.md",
+    "taskfiles/**/*.md",
+    "chezmoi/README.md",
+    "docker/*/README.md",
+    ".devcontainer/README.md"
+  ],
   "rules": [
     {
       "patterns": [
@@ -28,10 +55,12 @@
     {
       "patterns": [
         "ci/bootstrap-path-routing.json",
+        "ci/job-path-routing.json",
         "ci/path-routing.json",
         "scripts/python/detect_ci_changes.py",
         "tests/python/test_detect_ci_changes.py",
         "tests/python/test_ci_workflow_routing.py",
+        "tests/python/test_ci_job_routing.py",
         "tests/bash/ci_routing.bats",
         ".github/actions/detect-ci-changes/**",
         ".github/workflows/ci-contract.yml",

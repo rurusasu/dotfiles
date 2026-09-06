@@ -257,6 +257,10 @@ EOF
 	workflow="$REPO_ROOT/.github/workflows/ci-hermes-bootstrap.yml"
 	pre_commit="$REPO_ROOT/.pre-commit-config.yaml"
 
-	[ "$(grep -c -- '- \"taskfiles/hermes/taskfile.yml\"' "$workflow")" -eq 2 ]
+	grep -Fq 'manifest: ci/job-path-routing.json' "$workflow"
+	run python3 "$REPO_ROOT/scripts/python/detect_ci_changes.py" \
+		--manifest "$REPO_ROOT/ci/job-path-routing.json" --paths-file - <<<"taskfiles/hermes/taskfile.yml"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'"hermes": true'* ]]
 	grep -Eq 'taskfiles/hermes/taskfile\\.yml' "$pre_commit"
 }
