@@ -21,6 +21,8 @@ param(
     [string]$InstallDir = "$env:USERPROFILE\NixOS",
     [string]$ReleaseTag = "",
     [string]$PostInstallScript = "",
+    [ValidatePattern('^\d{2}\.\d{2}$')]
+    [string]$StateVersion = "26.05",
     [hashtable]$Options = @{},
     [ValidateSet("link", "repo", "nix", "none")]
     [string]$SyncMode = "link",
@@ -79,6 +81,7 @@ function Get-PhaseParameters {
         InstallDir        = $InstallDir
         ReleaseTag        = $ReleaseTag
         PostInstallScript = $PostInstallScript
+        StateVersion      = $StateVersion
         Options           = $Options
         SyncMode          = $SyncMode
         SyncBack          = $SyncBack
@@ -200,6 +203,10 @@ if ($adminRequired) {
         if (-not [string]::IsNullOrWhiteSpace($PostInstallScript)) {
             $argList += "-PostInstallScript"
             $argList += $PostInstallScript
+        }
+        if (-not [string]::IsNullOrWhiteSpace($StateVersion)) {
+            $argList += "-StateVersion"
+            $argList += $StateVersion
         }
 
         # 管理者昇格プロセスの出力をログファイルに記録し、終了後に表示

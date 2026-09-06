@@ -10,6 +10,7 @@ setup() {
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	NIXOS_ARGV_CAPTURE="$BATS_TEST_TMPDIR/nixos-rebuild.argv"
 	NIX_EVAL_CAPTURE="$BATS_TEST_TMPDIR/nix-eval.result"
+	DOTFILES_STATE_DIR="$BATS_TEST_TMPDIR/state"
 	REAL_NIX="$(command -v nix || true)"
 
 	mkdir -p "$USER_HOME" "$SYNC_SOURCE" "$STUB_BIN"
@@ -24,7 +25,7 @@ setup() {
 
 	export HOME="$TEST_HOME"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG NIXOS_ARGV_CAPTURE NIX_EVAL_CAPTURE REAL_NIX REPO_ROOT USER_HOME SYNC_SOURCE
+	export COMMAND_LOG NIXOS_ARGV_CAPTURE NIX_EVAL_CAPTURE REAL_NIX REPO_ROOT USER_HOME SYNC_SOURCE DOTFILES_STATE_DIR
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 
 	write_stub id '
@@ -126,6 +127,7 @@ EOF
 		--sync-source "$SYNC_SOURCE" \
 		--repo-dir "$RUN_REPO_DIR" \
 		--sync-back none \
+		--state-version 26.05 \
 		--skip-flake-update
 
 	[ "$status" -eq 0 ]

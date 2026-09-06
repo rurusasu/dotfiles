@@ -12,6 +12,8 @@ param(
     [string]$InstallDir = "$env:USERPROFILE\NixOS",
     [string]$ReleaseTag = "",
     [string]$PostInstallScript = "",
+    [ValidatePattern('^\d{2}\.\d{2}$')]
+    [string]$StateVersion = "26.05",
     [hashtable]$Options = @{},
     [ValidateSet("link", "repo", "nix", "none")]
     [string]$SyncMode = "link",
@@ -53,6 +55,7 @@ foreach ($key in $Options.Keys) {
 $context.Options["WingetMode"] = "import"
 $context.Options["ReleaseTag"] = $ReleaseTag
 $context.Options["PostInstallScript"] = $PostInstallScript
+$context.Options["StateVersion"] = $StateVersion
 $context.Options["SyncMode"] = $SyncMode
 $context.Options["SyncBack"] = $SyncBack
 

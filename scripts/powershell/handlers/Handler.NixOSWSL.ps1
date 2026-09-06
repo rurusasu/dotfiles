@@ -473,6 +473,10 @@ class NixOSWSLHandler : SetupHandlerBase {
             $cmd += " --force"
         }
         $cmd += " --sync-mode $syncMode --sync-back $syncBack"
+        $stateVersion = [string]$ctx.GetOption("StateVersion", "")
+        if (-not [string]::IsNullOrWhiteSpace($stateVersion)) {
+            $cmd += " --state-version $stateVersion"
+        }
         if ($ctx.GetOption("SkipFlakeUpdate", $false)) {
             $cmd += " --skip-flake-update"
         }

@@ -189,32 +189,38 @@ nix flake update --flake ~/.dotfiles
 ~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh switch --flake ~/.dotfiles#nixos --impure
 ```
 
-一方、`nix/hosts/wsl/configuration.nix` の次の値は、パッケージの最新版を選択する値ではありません。
-このリポジトリでは WSL の初期構成・移行先を現行 stable の NixOS 26.05 に合わせています。
+一方、`nix/hosts/wsl/configuration.nix` の `system.stateVersion` は、パッケージの最新版を選択する値では
+ありません。新規 WSL インストールの既定値と、明示的に承認した移行先は現行 stable の NixOS 26.05 です。
+既存環境は、元の state schema を維持するため 25.05 を既定にします。
 
 ```nix
-system.stateVersion = "26.05";
+system.stateVersion = stateVersion;
 ```
 
-これは新規構成の基準を 26.05 に移行する明示設定です。既存の 25.05 WSL 環境では、単なる
-パッケージ更新ではなく state schema の移行として扱ってください。適用前に VHD、Docker、データベース、
-各種 `/var/lib` のデータをバックアップし、使用中のモジュールの移行可否を確認してください。適用後は
-generation、`/run/current-system`、Docker、データベース、各種 stateful data の runtime を検証します。
+新規構成では installer が `DOTFILES_STATE_VERSION=26.05` を渡します。既存の 25.05 WSL 環境では、
+通常の `nrs` や `install.cmd` が stateVersion を勝手に変更しないよう、25.05 を保持します。26.05 へ
+移行する場合は、単なるパッケージ更新ではなく state schema の移行として扱ってください。適用前に VHD、
+Docker、データベース、各種 `/var/lib` のデータをバックアップし、使用中のモジュールの移行可否を確認して
+ください。適用後は generation、`/run/current-system`、Docker、データベース、各種 stateful data の
+runtime を検証します。
 パッケージや system の実体は引き続き `flake.lock` の `nixpkgs` input で決まります。
 このリポジトリの flake は `nixos-unstable` を使用するため、stable の `system.stateVersion` と
 unstable の実体 version が異なることがあります。
 
-既存の 25.05 環境では、`nrs` や `install.cmd` の通常更新を先に実行せず、次の順で移行を承認します。
-`dry-build` が成功しても runtime data の互換性を保証するものではないため、バックアップと rollback
-generation を確認してから `switch` してください。
+既存の 25.05 環境から明示的に移行する場合は、次の順で承認します。`dry-build` が成功しても runtime
+data の互換性を保証するものではないため、バックアップと rollback generation を確認してから `switch`
+してください。
 
 ```bash
 nix flake update --flake ~/.dotfiles
-~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh dry-build --flake ~/.dotfiles#nixos --impure
-~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh switch --flake ~/.dotfiles#nixos --impure
+DOTFILES_STATE_VERSION=26.05 ~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh dry-build --flake ~/.dotfiles#nixos --impure
+DOTFILES_STATE_VERSION=26.05 ~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh switch --flake ~/.dotfiles#nixos --impure
 nixos-rebuild list-generations
 readlink -f /run/current-system
 ```
+
+新規インストール時に値を変更する場合は、Windows 側で `.install.cmd -StateVersion 26.05` を指定できます。
+手動 postinstall では `--state-version 26.05` を指定してください。
 
 - [NixOS Wiki: When do I update stateVersion?](https://wiki.nixos.org/wiki/FAQ/When_do_I_update_stateVersion)
 - [NixOS 26.05 release](https://nixos.org/blog/announcements/2026/nixos-2605/)
