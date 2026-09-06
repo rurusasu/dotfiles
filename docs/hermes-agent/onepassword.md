@@ -11,7 +11,9 @@ Hermes コンテナには公式の 1Password CLI (`op`) を含めています。
 `op://openclaw/3bgd5qtytxuvuauauyqr2p4iki/credential` からSAを取得し、
 HERMESデータディレクトリの0600 `.op.env` に保存します。その後、
 `bootstrap-manifest.yaml` の宣言から、defaultと全named profileの `config.yaml` に
-Dashboard、GitHub、Discord、xAI/Grokの `op://` 参照を冪等に登録します。
+Dashboard、GitHub、Discord、xAI/Grokの設定を冪等に反映します。manifestで宣言した
+環境変数は1Passwordから解決した値を実行用 `.env` に同期し、Hermesのruntime
+`onepassword.env` には同じキーの `op://` 参照を残しません。手動管理の未宣言キーは保持します。
 
 環境変数名とprofile適用範囲もmanifestから生成されるため、profileや1Password項目を
 追加する場合は固定リストではなくmanifestを変更します。profile固有の項目は

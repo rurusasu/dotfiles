@@ -327,7 +327,15 @@ function Get-HermesBootstrapSecretPlan {
 
     try {
         $plan = ConvertFrom-HermesBootstrapJson -Json ($output -join "`n") -Depth 32
-        if (-not (Test-HermesBootstrapSecretPlan -Plan $plan)) {
+        $composeDirectory = [System.IO.Path]::GetFullPath((Split-Path -Parent $ComposeFile))
+        $manifestPath = Join-Path (
+            Split-Path -Parent $composeDirectory
+        ) 'hermes-agent/bootstrap-manifest.yaml'
+        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+            throw [System.InvalidOperationException]::new("Hermes bootstrap manifest is unavailable.")
+        }
+        $manifestSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $manifestPath).Hash.ToLowerInvariant()
+        if (-not (Test-HermesBootstrapSecretPlan -Plan $plan -ExpectedManifestSha256 $manifestSha256)) {
             throw [System.InvalidOperationException]::new("Hermes bootstrap secret plan is invalid.")
         }
         return $plan
@@ -341,12 +349,16 @@ function Test-HermesBootstrapSecretPlan {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [object]$Plan
+        [object]$Plan,
+        [string]$ExpectedManifestSha256 = ''
     )
 
-    if (-not (Test-HermesBootstrapPropertySet -Value $Plan -Names @("schema_version", "items"))) { return $false }
+    if (-not (Test-HermesBootstrapPropertySet -Value $Plan -Names @("schema_version", "manifest_sha256", "items"))) { return $false }
     if ($Plan.schema_version -isnot [long] -and $Plan.schema_version -isnot [int]) { return $false }
     if ($Plan.schema_version -ne 1) { return $false }
+    if ($Plan.manifest_sha256 -isnot [string] -or $Plan.manifest_sha256 -notmatch '^[a-f0-9]{64}$') { return $false }
+    if (-not [string]::IsNullOrEmpty($ExpectedManifestSha256) -and
+        $Plan.manifest_sha256 -cne $ExpectedManifestSha256) { return $false }
 
     $items = @($Plan.items)
     if ($items.Count -eq 0) { return $false }

@@ -115,6 +115,7 @@ def build_secret_plan(manifest: BootstrapManifest) -> dict[str, object]:
 
     return {
         "schema_version": SCHEMA_VERSION,
+        "manifest_sha256": manifest.manifest_sha256,
         "items": [
             {
                 "key": item.key,
