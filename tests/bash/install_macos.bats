@@ -1613,29 +1613,10 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 
 @test "fresh install tolerates Homebrew being absent before nix-darwin activation" {
 	write_fresh_install_stubs
+	export DOTFILES_TEST_HOMEBREW_UNAVAILABLE=1
 	rmdir "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
-	rm "$STUB_BIN/brew"
-	unset DOTFILES_BREW_COMMAND
-	write_stub brew '
-if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions && ${4:-} == docker-desktop ]]; then
-	printf "docker-desktop 4.89.0\\n"
-	exit 0
-fi
-exit 1
-'
 
-	run bash -c '
-set -euo pipefail
-. "$INSTALLER"
-homebrew_command() {
-  if grep -Fq "nix run .#darwin-rebuild -- switch --flake .#macos --impure" "$COMMAND_LOG"; then
-    printf "%s\\n" "$STUB_BIN/brew"
-    return 0
-  fi
-  return 1
-}
-main "$@"
-' bash --with-hermes
+	run_macos_installer --with-hermes
 
 	[ "$status" -eq 0 ]
 	assert_log_order \
