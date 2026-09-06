@@ -104,6 +104,15 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn('python-version: "3.14"', workflow)
         self.assertIn(INSTALL_NIX_ACTION, workflow)
 
+    def test_installs_go_task_before_running_taskfile_contracts(self) -> None:
+        workflow = self._workflow()
+        install_position = workflow.find("nix profile install nixpkgs#go-task")
+        contract_position = workflow.find("python -m unittest discover -s tests/python -v")
+
+        self.assertGreaterEqual(install_position, 0)
+        self.assertGreater(contract_position, install_position)
+        self.assertIn("task --version", workflow[install_position:contract_position])
+
     def test_installs_bats_1_13_0_and_owns_every_safe_bats_file(self) -> None:
         workflow = self._workflow()
         self.assertIn("bats_version='1.13.0'", workflow)

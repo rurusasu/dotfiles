@@ -46,6 +46,11 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
 
+      - name: Install go-task
+        run: |
+          nix profile install nixpkgs#go-task
+          task --version
+
       - name: Install Bats
         shell: bash
         run: |
