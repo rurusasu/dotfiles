@@ -93,6 +93,15 @@ EOF
 	grep -Fq 'DOTFILES_ACCEPTANCE_PRELOADED_STORAGE_SEED_IMAGE' "$RUNNER"
 }
 
+@test "NixOS offline Hermes fixture implements every storage entrypoint" {
+	nixos_test="$REPO_ROOT/nix/tests/bootstrap-nixos.nix"
+
+	grep -Fq 'hermes_storage_seed.py usr/local/bin/hermes-storage-seed' "$nixos_test"
+	grep -Fq 'hermes_storage_ownership.py usr/local/bin/hermes-storage-ownership' "$nixos_test"
+	grep -Fq 'chmod 0755 usr/local/bin/hermes-storage-seed' "$nixos_test"
+	grep -Fq 'chmod 0755 usr/local/bin/hermes-storage-ownership' "$nixos_test"
+}
+
 @test "acceptance secret fixtures are deterministic and reject unapproved lookups" {
 	bootstrap="$FIXTURE_ROOT/hermes-bootstrap-fixture.sh"
 	op="$FIXTURE_ROOT/bin/op"
