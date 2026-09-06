@@ -9,14 +9,16 @@
 {
   pkgs,
   lib,
-  inputs ? null,
+  inputs,
   installFeatures ? [ ],
   isWSL,
   ...
 }:
 let
+  codexPackage = inputs."llm-agents".packages.${pkgs.stdenv.hostPlatform.system}.codex;
   sets = import ../packages/sets.nix {
     inherit pkgs lib;
+    inherit codexPackage;
   };
   bootstrapUser = builtins.getEnv "DOTFILES_USER";
   bootstrapHome = builtins.getEnv "DOTFILES_HOME";

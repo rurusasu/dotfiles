@@ -88,6 +88,24 @@ Describe 'CI workflow configuration' {
         $nixWorkflow | Should -Match 'nix build \.#nixosConfigurations\.nixos\.config\.system\.build\.toplevel --no-link'
     }
 
+    It 'should configure the llm-agents binary cache for Codex system builds' {
+        $flake = Get-Content -LiteralPath (Join-Path $script:repoRoot "flake.nix") -Raw
+        $postInstall = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
+        $hostModule = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/modules/host/default.nix") -Raw
+        $bootstrapWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
+
+        $flake | Should -Match 'extra-substituters\s*=\s*\[\s*"https://cache\.numtide\.com"'
+        $flake | Should -Match 'extra-trusted-public-keys\s*=\s*\[\s*"niks3\.numtide\.com-1:'
+        $postInstall | Should -Match 'extra-substituters = https://cache\.numtide\.com'
+        $postInstall | Should -Match 'extra-trusted-public-keys = niks3\.numtide\.com-1:'
+        $hostModule | Should -Match 'extra-substituters\s*=\s*\[\s*"https://cache\.numtide\.com"'
+        $hostModule | Should -Match 'extra-trusted-public-keys\s*=\s*\[\s*"niks3\.numtide\.com-1:'
+        $bootstrapWorkflow | Should -Match 'Build macOS declarative output[\s\S]*?nix build \.#darwinConfigurations\.macos\.system --impure --no-link[\s\S]*?--option extra-substituters "\$NUMTIDE_CACHE"'
+        $bootstrapWorkflow | Should -Match 'NUMTIDE_CACHE_KEY:\s*niks3\.numtide\.com-1:'
+        $bootstrapWorkflow | Should -Match 'nix-test:[\s\S]*?NIX_CONFIG:\s*\|[\s\S]*?extra-substituters = https://cache\.numtide\.com[\s\S]*?extra-trusted-public-keys = niks3\.numtide\.com-1:'
+        $bootstrapWorkflow | Should -Match 'linux-build:[\s\S]*?NIX_CONFIG:\s*\|[\s\S]*?extra-substituters = https://cache\.numtide\.com[\s\S]*?extra-trusted-public-keys = niks3\.numtide\.com-1:'
+    }
+
     It 'should build the font package set on hosted Nix CI' {
         $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
 
@@ -137,7 +155,7 @@ Describe 'CI workflow configuration' {
         $script | Should -Match '\$repoRoot = \(Resolve-Path -LiteralPath \(Join-Path \$PSScriptRoot "\.\.\\\.\.\\\.\."\)\)\.Path'
         $script | Should -Match 'SyncMode"\] = "repo"'
         $script | Should -Match 'SyncBack"\] = "none"'
-        $script | Should -Not -Match 'SkipFlakeUpdate"\] = \$true'
+        $script | Should -Match 'SkipFlakeUpdate"\] = \$true'
         $script | Should -Match 'Welcome to your new NixOS-WSL system'
         $script | Should -Match 'nixos-rebuild list-generations'
         $workflow | Should -Match 'GITHUB_TOKEN:\s+\$\{\{ secrets\.GITHUB_TOKEN \}\}'
@@ -217,6 +235,7 @@ Describe 'CI workflow configuration' {
     It 'should assign every Bats file to exactly one CI owner' {
         $contractWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-contract.yml") -Raw
         $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
+        $devcontainerBatsScript = Get-Content -LiteralPath (Join-Path $script:repoRoot ".devcontainer/ci/bats.sh") -Raw
 
         $contractWorkflow | Should -Match '"tests/bash/\*\*"'
         $contractWorkflow | Should -Match 'shopt -s nullglob'
@@ -250,6 +269,16 @@ Describe 'CI workflow configuration' {
         $devcontainerWorkflow | Should -Match '"tests/bash/install_macos\.bats"'
         $devcontainerWorkflow | Should -Match '"tests/bash/install_linux\.bats"'
         $devcontainerWorkflow | Should -Not -Match '"tests/bash/\*\*"'
+
+        $activeBatsInvocations = @(
+            $devcontainerBatsScript -split '\r?\n' |
+                Where-Object { $_ -match '^\s*bats\s+' }
+        )
+        $activeBatsInvocations.Count | Should -Be 1
+        $activeBatsInvocations[0] | Should -Match 'tests/bash/install_linux\.bats'
+        $activeBatsInvocations[0] | Should -Match 'tests/bash/install_macos\.bats'
+        $activeBatsInvocations[0] | Should -Not -Match 'bats\s+tests/bash/?(?:\s|$)'
+        $activeBatsInvocations[0] | Should -Not -Match '[*?]'
     }
 
     It 'should trigger PowerShell CI when Plane GitHub sync config changes' {

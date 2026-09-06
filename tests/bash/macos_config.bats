@@ -150,7 +150,11 @@ setup() {
 			let
 				flake = builtins.getFlake (toString $REPO_ROOT);
 				pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; config.allowUnfree = true; };
-				sets = import $REPO_ROOT/nix/packages/sets.nix { inherit pkgs; lib = pkgs.lib; };
+				sets = import $REPO_ROOT/nix/packages/sets.nix {
+					inherit pkgs;
+					lib = pkgs.lib;
+					codexPackage = flake.inputs.llm-agents.packages.aarch64-darwin.codex;
+				};
 			in { vscode = sets.supportReport.vscode; }
 		"
 		[ "$status" -eq 0 ]

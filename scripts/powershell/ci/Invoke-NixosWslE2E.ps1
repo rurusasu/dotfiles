@@ -179,6 +179,9 @@ try {
         $context.Options["PostInstallTimeoutSeconds"] = $PostInstallTimeoutSeconds
         $context.Options["SyncMode"] = "repo"
         $context.Options["SyncBack"] = "none"
+        # The CI checkout is already pinned to TESTED_SHA. Do not let the
+        # post-install flow perform an unrelated network flake update.
+        $context.Options["SkipFlakeUpdate"] = $true
 
         $handler = [NixOSWSLHandler]::new()
         $createdDistro = $true
