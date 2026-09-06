@@ -36,6 +36,14 @@ case "$3" in
 JSON
 	exit 0
 	;;
+"xAI-Grok-Twitter")
+	if [ "$7" != openclaw ]; then
+		printf 'acceptance op fixture rejected vault: %s\n' "$7" >&2
+		exit 2
+	fi
+	printf '{"id":"acceptance-xAI-Grok-Twitter","fields":[{"label":"apikey","value":"acceptance-xai-api-key"}]}\n'
+	exit 0
+	;;
 "Hermes Agent Dashboard" | \
 	"GitHubUsedOpenClawPAT" | \
 "Master" | \

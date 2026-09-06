@@ -42,6 +42,12 @@ setup() {
 	export FAKE_DOCKER_CASK_STATE
 	export TEST_HOMEBREW_CASK_PARENT_DIR TEST_HOMEBREW_CASK_BIN_DIR
 	export TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR TEST_HOMEBREW_LINK_TARGET
+	if command -v sha256sum >/dev/null 2>&1; then
+		PLAN_MANIFEST_SHA256="$(sha256sum "$REPO_ROOT/docker/hermes-agent/bootstrap-manifest.yaml" | awk '{print $1}')"
+	else
+		PLAN_MANIFEST_SHA256="$(shasum -a 256 "$REPO_ROOT/docker/hermes-agent/bootstrap-manifest.yaml" | awk '{print $1}')"
+	fi
+	export PLAN_MANIFEST_SHA256
 	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
 	export HERMES_ITEM_JSON='{"id":"fixture-item","fields":[]}'
 	export HERMES_XAPI_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"},{"label":"X_API_REFRESH_TOKEN","section":{"label":"Refresh Token"},"value":"xapi-refresh-token-marker"}]}'
@@ -277,7 +283,7 @@ EOF
 }
 
 valid_secret_plan() {
-	cat <<'JSON'
+	cat <<'JSON' | "$REAL_JQ" --arg manifest_sha256 "$PLAN_MANIFEST_SHA256" '.manifest_sha256 = $manifest_sha256 | .items = .items[0:3] + [{key:"xai_grok",account:"my.1password.com",vault:"openclaw",item:"xAI-Grok-Twitter",fields:[{canonical_name:"api_key",reference:"console/apikey",labels:["apikey"],environment:["XAI_API_KEY"]}]}] + .items[3:]'
 {"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]}]}
 JSON
 }
@@ -668,7 +674,7 @@ exit 1
 		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml up -d --force-recreate" \
 		"docker image prune --force" \
 		"verify-environment compose=$REPO_ROOT/docker/hermes-service/compose.yml args=--runtime"
-	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 15 ]
+	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 16 ]
 	[ "$(grep -c '^op --account my.1password.com read ' "$COMMAND_LOG")" -eq 1 ]
 	! grep -q '^op signin ' "$COMMAND_LOG"
 	[ -s "$PAYLOAD_CAPTURE" ]
