@@ -245,6 +245,42 @@ function Write-HermesXApiAuthCache {
     if (($directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
         throw [System.InvalidOperationException]::new('Hermes X API OAuth cache directory must not be a reparse point.')
     }
+    $isWindowsPlatform = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($IsWindows -eq $true)
+    $protectCache = {
+        param([Parameter(Mandatory)][string]$Path)
+
+        if ($isWindowsPlatform) {
+            $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+            if ($null -eq $currentSid) {
+                throw [System.InvalidOperationException]::new('Could not resolve the current Windows user.')
+            }
+            $fileSecurity = [System.Security.AccessControl.FileSecurity]::new()
+            $fileSecurity.SetOwner($currentSid)
+            $fileSecurity.SetAccessRuleProtection($true, $false)
+            $modifyRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+                $currentSid,
+                [System.Security.AccessControl.FileSystemRights]::Modify,
+                [System.Security.AccessControl.InheritanceFlags]::None,
+                [System.Security.AccessControl.PropagationFlags]::None,
+                [System.Security.AccessControl.AccessControlType]::Allow
+            )
+            [void]$fileSecurity.AddAccessRule($modifyRule)
+            Set-Acl -LiteralPath $Path -AclObject $fileSecurity
+        }
+        else {
+            & chmod 600 $Path
+            if ($LASTEXITCODE -ne 0) {
+                throw [System.InvalidOperationException]::new('Could not protect Hermes X API OAuth cache.')
+            }
+        }
+    }
+    if (Test-Path -LiteralPath $cachePath -PathType Leaf) {
+        $cacheFile = Get-Item -LiteralPath $cachePath -Force
+        if (($cacheFile.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw [System.InvalidOperationException]::new('Hermes X API OAuth cache must not be a reparse point.')
+        }
+        & $protectCache $cachePath
+    }
     if (-not $Force -and $env:DOTFILES_HERMES_XAPI_FORCE_CACHE_SYNC -ne '1' -and
         (Test-Path -LiteralPath $cachePath -PathType Leaf)) {
         $existingCache = Get-Content -LiteralPath $cachePath -Raw
@@ -272,31 +308,7 @@ function Write-HermesXApiAuthCache {
 
     try {
         Set-Content -LiteralPath $temporary -Value $content -Encoding utf8NoBOM -NoNewline
-        $isWindowsPlatform = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($IsWindows -eq $true)
-        if ($isWindowsPlatform) {
-            $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
-            if ($null -eq $currentSid) {
-                throw [System.InvalidOperationException]::new('Could not resolve the current Windows user.')
-            }
-            $fileSecurity = [System.Security.AccessControl.FileSecurity]::new()
-            $fileSecurity.SetOwner($currentSid)
-            $fileSecurity.SetAccessRuleProtection($true, $false)
-            $readRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
-                $currentSid,
-                [System.Security.AccessControl.FileSystemRights]::Read,
-                [System.Security.AccessControl.InheritanceFlags]::None,
-                [System.Security.AccessControl.PropagationFlags]::None,
-                [System.Security.AccessControl.AccessControlType]::Allow
-            )
-            [void]$fileSecurity.AddAccessRule($readRule)
-            Set-Acl -LiteralPath $temporary -AclObject $fileSecurity
-        }
-        else {
-            & chmod 600 $temporary
-            if ($LASTEXITCODE -ne 0) {
-                throw [System.InvalidOperationException]::new('Could not protect Hermes X API OAuth cache.')
-            }
-        }
+        & $protectCache $temporary
         Move-Item -LiteralPath $temporary -Destination $cachePath -Force
     }
     finally {
@@ -408,7 +420,6 @@ function Invoke-HermesXApiCredentialScope {
                 -ClientSecret $credential.ClientSecret `
                 -RefreshToken $refreshToken
             if ($null -ne $TokenProbe) {
-                $tokenBeforeProbe = Get-HermesXApiRefreshTokenFromCache -DataDir $DataDir
                 try {
                     $probe = ConvertTo-HermesXApiTokenProbeResult -Result (& $TokenProbe)
                 }
@@ -425,7 +436,6 @@ function Invoke-HermesXApiCredentialScope {
                         -ClientSecret $credential.ClientSecret `
                         -RefreshToken $refreshToken `
                         -Force
-                    $tokenBeforeProbe = Get-HermesXApiRefreshTokenFromCache -DataDir $DataDir
                     try {
                         $probe = ConvertTo-HermesXApiTokenProbeResult -Result (& $TokenProbe)
                     }
