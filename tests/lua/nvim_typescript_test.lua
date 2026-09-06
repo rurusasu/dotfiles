@@ -174,11 +174,27 @@ check(buffer({ root = "/virtual/deno/node", deno = "/virtual/deno" }), "tsc", "t
 check(buffer({ root = "/virtual/equal-lock", deno_lock = "/virtual/equal-lock" }), "tsc", "tsc")
 check(buffer({}), "tsc", "tsc") -- upstream loose-file cwd fallback
 
--- Existing buffers have no filetype here, so enabling a newly available static
--- command exercises native activation without starting a language server.
+-- A FileType event is already in flight, so vim.lsp.enable() alone cannot
+-- replay it for the current buffer. Verify the explicit native start path.
+local start = vim.lsp.start
+local started = {}
+vim.lsp.start = function(config, opts)
+    started[#started + 1] = { config = config, opts = opts }
+end
 bins = { ["lua-language-server"] = {} }
+vim.bo.filetype = "lua"
 vim.api.nvim_exec_autocmds("FileType", { buffer = vim.api.nvim_get_current_buf() })
 assert(vim.lsp.is_enabled("lua_ls"), "later PATH availability must be reconsidered")
+assert(
+    vim.wait(1000, function()
+        return #started > 0
+    end),
+    "newly available server must start for the current buffer"
+)
+assert(started[1].config.name == "lua_ls", "current buffer must start the newly available server")
+assert(started[1].opts.bufnr == vim.api.nvim_get_current_buf(), "server must attach to the current buffer")
+vim.lsp.start = start
+vim.bo.filetype = ""
 
 -- Function cmd is not proof of availability. Gate absent YAML servers per
 -- root, then permit a binary that appears in a later project.

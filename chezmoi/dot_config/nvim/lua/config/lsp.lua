@@ -84,6 +84,34 @@ local function on_attach(args)
     end, "Format")
 end
 
+local function start_enabled_for_buffer(name, buf)
+    local cfg = vim.lsp.config[name]
+    local filetype = vim.bo[buf].filetype
+    if not cfg or type(cfg.filetypes) == "table" and not vim.tbl_contains(cfg.filetypes, filetype) then
+        return
+    end
+
+    local config = vim.deepcopy(cfg)
+    local function start(root_dir)
+        config.root_dir = root_dir
+        vim.schedule(function()
+            if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].filetype == filetype then
+                vim.lsp.start(config, {
+                    bufnr = buf,
+                    reuse_client = config.reuse_client,
+                    _root_markers = config.root_markers,
+                })
+            end
+        end)
+    end
+
+    if type(config.root_dir) == "function" then
+        config.root_dir(buf, start)
+    else
+        start(config.root_dir)
+    end
+end
+
 function M.setup()
     require("config.typescript").setup()
     local group = vim.api.nvim_create_augroup("DotfilesLsp", { clear = true })
@@ -102,6 +130,7 @@ function M.setup()
         end,
     })
     local function enable_available()
+        local newly_enabled = {}
         for name, executable in pairs(M.servers) do
             local cfg = vim.lsp.config[name]
             local available = vim.fn.executable(executable) == 1
@@ -118,7 +147,14 @@ function M.setup()
             end
             if cfg and cfg.cmd and available and not vim.lsp.is_enabled(name) then
                 vim.lsp.enable(name)
+                newly_enabled[#newly_enabled + 1] = name
             end
+        end
+        -- vim.lsp.enable() cannot replay the FileType event currently being
+        -- processed. Start newly available servers for this buffer explicitly.
+        local buf = vim.api.nvim_get_current_buf()
+        for _, name in ipairs(newly_enabled) do
+            start_enabled_for_buffer(name, buf)
         end
     end
     enable_available()
