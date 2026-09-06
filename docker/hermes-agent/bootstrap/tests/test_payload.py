@@ -47,6 +47,7 @@ def secret_items() -> dict[str, dict[str, object]]:
     return {
         "dashboard": raw_item("dashboard-id", {"user name": "dash-user", "PASSWORD": "dash-pass"}),
         "github": raw_item("github-id", {"PAT": "github-token"}),
+        "xai_grok": raw_item("xai-id", {"apikey": "xai-token"}),
         "google_calendar": raw_item(
             "google-calendar-id",
             {
@@ -164,7 +165,11 @@ class PayloadTests(unittest.TestCase):
                         "vault": "openclaw",
                         "item": "Hermes Agent Dashboard",
                         "fields": [
-                            {"canonical_name": "username", "labels": ["username", "user name"]},
+                            {
+                                "canonical_name": "username",
+                                "labels": ["username", "user name"],
+                                "environment": ["HERMES_DASHBOARD_BASIC_AUTH_USERNAME"],
+                            },
                             {"canonical_name": "password", "labels": ["password"]},
                         ],
                     },
@@ -174,7 +179,15 @@ class PayloadTests(unittest.TestCase):
                         "vault": "openclaw",
                         "item": "GitHubUsedOpenClawPAT",
                         "fields": [
-                            {"canonical_name": "credential", "labels": ["credential", "token", "PAT", "password"]}
+                            {
+                                "canonical_name": "credential",
+                                "labels": ["credential", "token", "PAT", "password"],
+                                "environment": [
+                                    "GITHUB_PERSONAL_ACCESS_TOKEN",
+                                    "GH_TOKEN",
+                                    "GITHUB_TOKEN",
+                                ],
+                            },
                         ],
                     },
                     {
@@ -196,6 +209,20 @@ class PayloadTests(unittest.TestCase):
                             },
                         ],
                     },
+                    {
+                        "key": "xai_grok",
+                        "account": "my.1password.com",
+                        "vault": "openclaw",
+                        "item": "xAI-Grok-Twitter",
+                        "fields": [
+                            {
+                                "canonical_name": "api_key",
+                                "labels": ["apikey", "api_key", "API key", "credential"],
+                                "reference": "console/apikey",
+                                "environment": ["XAI_API_KEY"],
+                            }
+                        ],
+                    },
                     *[
                         {
                             "key": key,
@@ -207,6 +234,7 @@ class PayloadTests(unittest.TestCase):
                                     "canonical_name": "bot_token",
                                     "labels": ["DISCORD_BOT_TOKEN", "bot_token", "bot token"],
                                     "reference": "Discord/bot_token",
+                                    "environment": ["DISCORD_BOT_TOKEN"],
                                 },
                                 {
                                     "canonical_name": "allowed_users",
@@ -218,6 +246,7 @@ class PayloadTests(unittest.TestCase):
                                         "allow_from",
                                     ],
                                     "reference": "Discord/allowed_users",
+                                    "environment": ["DISCORD_ALLOWED_USERS"],
                                 },
                             ],
                         }
@@ -239,6 +268,10 @@ class PayloadTests(unittest.TestCase):
         secrets = read_secret_payload(payload_stream(secret_items()), self.manifest)
 
         self.assertEqual(secrets.github_token, "github-token")
+        self.assertEqual(
+            secrets.environment_by_profile["nancy"]["XAI_API_KEY"],
+            "xai-token",
+        )
         self.assertEqual(secrets.dashboard, DashboardSecret(username="dash-user", password="dash-pass"))
         self.assertEqual(
             secrets.google_calendar,

@@ -20,6 +20,7 @@ from .configfiles import (
     reconcile_onepassword_cli_permissions,
     reconcile_onepassword_configurations,
     reconcile_xapi_configurations,
+    validate_onepassword_configurations,
     validate_xapi_configurations,
 )
 from .context_engine import (
@@ -78,6 +79,7 @@ from .hindsight import (
 from .github import GitAuth, GitHubClient
 from .manifest import load_manifest
 from .models import BootstrapManifest, DistributionSource, SharedRepository
+from .onepassword import managed_environment_bindings
 from .payload import SecretRedactor, build_secret_plan, read_secret_payload
 from .profile_snapshot import (
     ProfileSnapshotError,
@@ -98,7 +100,9 @@ from .transaction import Transaction
 _ENV_LIMIT = 1024 * 1024
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 _DISCORD_BOT_TOKEN = re.compile(r"[A-Za-z0-9_\-.]{20,}\Z")
-_MANAGED_ENV_KEYS = GITHUB_KEYS | DASHBOARD_KEYS | API_SERVER_KEYS | DISCORD_KEYS
+_MANAGED_ENV_KEYS = (
+    GITHUB_KEYS | DASHBOARD_KEYS | API_SERVER_KEYS | DISCORD_KEYS | {"XAI_API_KEY"}
+)
 _LEGACY_ENV_KEYS = LEGACY_SLACK_KEYS | GMAIL_MCP_KEYS
 _PLAINTEXT_DASHBOARD_PASSWORD = "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD"
 _failpoint: Callable[[str], None] = lambda _name: None
@@ -244,7 +248,11 @@ def _apply_sensitive(
                     expected_missing=True,
                     managed_environment=environment,
                     environment_remove=(
-                        (_MANAGED_ENV_KEYS - set(environment)) | _LEGACY_ENV_KEYS
+                        (
+                            _all_managed_environment_keys(manifest)
+                            - set(environment)
+                        )
+                        | _LEGACY_ENV_KEYS
                     ),
                 )
             else:
@@ -297,7 +305,10 @@ def _apply_sensitive(
             merge_env_file(
                 env_path,
                 environment,
-                (_MANAGED_ENV_KEYS - set(environment)) | _LEGACY_ENV_KEYS,
+                (
+                    _all_managed_environment_keys(manifest) - set(environment)
+                )
+                | _LEGACY_ENV_KEYS,
             )
             _failpoint(f"env-merge:{profile}")
 
@@ -480,6 +491,37 @@ def _environment_targets(manifest: BootstrapManifest) -> tuple[tuple[str, Path],
     return (("default", manifest.data_root), *((profile.name, profile.target) for profile in manifest.profiles))
 
 
+def _managed_environment_keys(manifest: BootstrapManifest, profile: str) -> frozenset[str]:
+    """Return the environment contract declared for one manifest profile."""
+
+    if not manifest.onepassword_items:
+        return frozenset(
+            _MANAGED_ENV_KEYS
+            if profile == "default"
+            else _MANAGED_ENV_KEYS - API_SERVER_KEYS
+        )
+    keys = set(GITHUB_KEYS | DASHBOARD_KEYS)
+    if profile == "default":
+        keys.update(API_SERVER_KEYS)
+    keys.update(
+        environment_name
+        for environment_name, _item, _field in managed_environment_bindings(
+            manifest, profile
+        )
+    )
+    if {"DISCORD_BOT_TOKEN", "DISCORD_ALLOWED_USERS"}.issubset(keys):
+        keys.add("DISCORD_ALLOW_BOTS")
+    return frozenset(keys)
+
+
+def _all_managed_environment_keys(manifest: BootstrapManifest) -> frozenset[str]:
+    return frozenset(
+        key
+        for profile, _target in _environment_targets(manifest)
+        for key in _managed_environment_keys(manifest, profile)
+    )
+
+
 def _runtime_config_targets(manifest: BootstrapManifest) -> list[Path]:
     """Return every managed or locally created runtime profile."""
 
@@ -654,11 +696,12 @@ def _validate_installed_layout(
         validate_context_engine_installation(_environment_targets(manifest))
         for profile, target in _environment_targets(manifest):
             required = (
-                _MANAGED_ENV_KEYS
-                if profile == "default"
-                else _MANAGED_ENV_KEYS - API_SERVER_KEYS
+                _managed_environment_keys(manifest, profile)
             )
             _validate_env_file(target / ".env", required)
+        validate_onepassword_configurations(
+            manifest, _environment_targets(manifest)
+        )
         if not allow_active_transaction:
             _validate_no_transaction(root)
     except ValidationError:
@@ -740,7 +783,7 @@ def _validate_env_file(path: Path, required: frozenset[str]) -> None:
         raise ValidationError("installed environment file is invalid") from None
     try:
         values = read_environment_values(
-            path, _MANAGED_ENV_KEYS | {_PLAINTEXT_DASHBOARD_PASSWORD}
+            path, required | {_PLAINTEXT_DASHBOARD_PASSWORD}
         )
     except BootstrapError:
         raise ValidationError("installed environment file is invalid") from None
@@ -750,7 +793,10 @@ def _validate_env_file(path: Path, required: frozenset[str]) -> None:
         raise ValidationError("installed environment file is invalid")
     if len({values[key] for key in GITHUB_KEYS}) != 1:
         raise ValidationError("installed environment file is invalid")
-    if _DISCORD_BOT_TOKEN.fullmatch(values["DISCORD_BOT_TOKEN"]) is None:
+    if (
+        "DISCORD_BOT_TOKEN" in required
+        and _DISCORD_BOT_TOKEN.fullmatch(values["DISCORD_BOT_TOKEN"]) is None
+    ):
         raise ValidationError("installed environment file is invalid")
     if not _is_reusable_signing_secret(
         values.get("HERMES_DASHBOARD_BASIC_AUTH_SECRET")

@@ -73,13 +73,11 @@ Describe "Get-HermesBootstrapSecretPlan" {
         @($plan.items).Count | Should -Be 10
     }
 
-    It "rejects plans that replace an allowlisted 1Password reference" {
+    It "rejects plans outside the configured service-account vault" {
         $validJson = $script:dockerOutput[0]
         $mutations = @(
             @{ Index = 0; Property = "account"; Value = "attacker.1password.com" },
-            @{ Index = 1; Property = "vault"; Value = "private" },
-            @{ Index = 2; Property = "item"; Value = "Arbitrary Secret" },
-            @{ Index = 3; Property = "key"; Value = "arbitrary" }
+            @{ Index = 1; Property = "vault"; Value = "private" }
         )
 
         foreach ($mutation in $mutations) {
@@ -92,17 +90,17 @@ Describe "Get-HermesBootstrapSecretPlan" {
         }
     }
 
-    It "rejects a reordered allowlisted 1Password plan" {
+    It "accepts a reordered manifest-driven 1Password plan" {
         $invalidPlan = $script:dockerOutput[0] | ConvertFrom-Json -Depth 32
         $items = @($invalidPlan.items)
         $invalidPlan.items = @($items[1], $items[0]) + $items[2..7]
         $script:dockerOutput = @($invalidPlan | ConvertTo-Json -Compress -Depth 32)
 
         { Get-HermesBootstrapSecretPlan -ComposeFile "compose.yml" } |
-            Should -Throw -ExpectedMessage "Hermes bootstrap secret plan is invalid."
+            Should -Not -Throw
     }
 
-    It "rejects plans that do not satisfy the exact ten-item metadata schema" {
+    It "rejects plans that do not satisfy the manifest-driven metadata schema" {
         $validPlan = ($script:dockerOutput -join "`n") | ConvertFrom-Json -Depth 32
         $invalidPlans = @()
 
@@ -118,9 +116,9 @@ Describe "Get-HermesBootstrapSecretPlan" {
         $booleanSchema.schema_version = $true
         $invalidPlans += $booleanSchema
 
-        $wrongCount = $validPlan.PSObject.Copy()
-        $wrongCount.items = @($validPlan.items)[0..4]
-        $invalidPlans += $wrongCount
+        $emptyItems = $validPlan.PSObject.Copy()
+        $emptyItems.items = @()
+        $invalidPlans += $emptyItems
 
         $duplicateKey = $validPlan.PSObject.Copy()
         $duplicateKey.items = @($validPlan.items | ForEach-Object { $_.PSObject.Copy() })

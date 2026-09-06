@@ -263,26 +263,32 @@ def _build_profile_environment(
     profile: str, secrets: SecretBundle, dashboard: Mapping[str, str]
 ) -> Mapping[str, str]:
     try:
-        discord = secrets.discord_by_profile[profile]
-    except (AttributeError, KeyError, TypeError):
-        raise InputError("profile has no declared Discord credentials") from None
-
-    environment = {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": secrets.github_token,
-        "GH_TOKEN": secrets.github_token,
-        "GITHUB_TOKEN": secrets.github_token,
-    }
+        declared = secrets.environment_by_profile.get(profile, {})
+        environment = dict(declared)
+    except (AttributeError, TypeError, ValueError):
+        environment = {}
+    if not environment:
+        environment = {
+            "GITHUB_PERSONAL_ACCESS_TOKEN": secrets.github_token,
+            "GH_TOKEN": secrets.github_token,
+            "GITHUB_TOKEN": secrets.github_token,
+        }
+        try:
+            discord = secrets.discord_by_profile[profile]
+        except (AttributeError, KeyError, TypeError):
+            raise InputError("profile has no declared Discord credentials") from None
+        environment.update(
+            {
+                "DISCORD_BOT_TOKEN": discord.bot_token,
+                "DISCORD_ALLOWED_USERS": discord.allowed_users,
+            }
+        )
     _validate_dashboard_mapping(dashboard)
     environment.update({key: dashboard[key] for key in DASHBOARD_KEYS})
     if profile == "default":
         environment.update({key: dashboard[key] for key in API_SERVER_KEYS})
-    environment.update(
-        {
-            "DISCORD_ALLOW_BOTS": "mentions",
-            "DISCORD_BOT_TOKEN": discord.bot_token,
-            "DISCORD_ALLOWED_USERS": discord.allowed_users,
-        }
-    )
+    if {"DISCORD_BOT_TOKEN", "DISCORD_ALLOWED_USERS"}.issubset(environment):
+        environment["DISCORD_ALLOW_BOTS"] = "mentions"
     _validate_environment_mapping(environment, frozenset())
     return _private_mapping(environment)
 

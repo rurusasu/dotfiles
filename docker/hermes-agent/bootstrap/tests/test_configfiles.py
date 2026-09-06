@@ -86,6 +86,14 @@ class OnePasswordConfigFileTests(unittest.TestCase):
 
         self.assertEqual(path.read_bytes(), expected)
 
+    def test_reconciler_rejects_a_missing_managed_config(self) -> None:
+        transaction = Transaction.begin(self.root)
+        with self.assertRaisesRegex(ApplyError, "managed Hermes configuration"):
+            reconcile_onepassword_configurations(
+                self.manifest, (("default", self.root),), transaction
+            )
+        transaction.rollback()
+
     def test_xapi_reconciler_repairs_an_existing_preserved_profile(self) -> None:
         profile = self.root / "profiles" / "personal-ops"
         profile.mkdir(parents=True)

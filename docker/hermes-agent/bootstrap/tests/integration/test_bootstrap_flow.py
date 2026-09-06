@@ -568,6 +568,7 @@ class BootstrapFlowTests(unittest.TestCase):
         values = {
             "dashboard": {"username": "fixture-user", "password": "fixture-password"},
             "github": {"credential": token},
+            "xai_grok": {"api_key": "fixture-xai-api-key"},
             "google_calendar": {
                 "oauth_credentials_json": json.dumps(
                     {

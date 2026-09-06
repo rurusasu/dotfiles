@@ -8,6 +8,7 @@ onepassword_items:
     fields:
       - canonical_name: username
         labels: [username, user name]
+        environment: [HERMES_DASHBOARD_BASIC_AUTH_USERNAME]
       - canonical_name: password
         labels: [password]
   - key: github
@@ -17,6 +18,10 @@ onepassword_items:
     fields:
       - canonical_name: credential
         labels: [credential, token, PAT, password]
+        environment:
+          - GITHUB_PERSONAL_ACCESS_TOKEN
+          - GH_TOKEN
+          - GITHUB_TOKEN
   - key: google_calendar
     account: my.1password.com
     vault: openclaw
@@ -26,6 +31,15 @@ onepassword_items:
         labels: [oauth_credentials_json, oauth credentials json]
       - canonical_name: tokens_json
         labels: [tokens_json, tokens json]
+  - key: xai_grok
+    account: my.1password.com
+    vault: openclaw
+    item: xAI-Grok-Twitter
+    fields:
+      - canonical_name: api_key
+        reference: console/apikey
+        labels: [apikey, api_key, API key, credential]
+        environment: [XAI_API_KEY]
   - key: discord_default
     account: my.1password.com
     vault: openclaw
@@ -34,39 +48,48 @@ onepassword_items:
       - canonical_name: bot_token
         reference: Discord/bot_token
         labels: [DISCORD_BOT_TOKEN, bot_token, bot token]
+        environment: [DISCORD_BOT_TOKEN]
       - canonical_name: allowed_users
         reference: Discord/allowed_users
         labels: [DISCORD_ALLOWED_USERS, allowed_users, allowed users, allowFrom, allow_from]
+        environment: [DISCORD_ALLOWED_USERS]
+    profiles: [default]
   - key: discord_rick
     account: my.1password.com
     vault: openclaw
     item: Rick
     fields: *discord_fields
+    profiles: [rick]
   - key: discord_hoffman
     account: my.1password.com
     vault: openclaw
     item: Hoffman
     fields: *discord_fields
+    profiles: [hoffman]
   - key: discord_risarisa
     account: my.1password.com
     vault: openclaw
     item: RisaRisa
     fields: *discord_fields
+    profiles: [risarisa]
   - key: discord_nancy
     account: my.1password.com
     vault: openclaw
     item: Nancy
     fields: *discord_fields
+    profiles: [nancy]
   - key: discord_kuroda
     account: my.1password.com
     vault: openclaw
     item: Kuroda
     fields: *discord_fields
+    profiles: [kuroda]
   - key: discord_shiraishi
     account: my.1password.com
     vault: openclaw
     item: Shiraishi
     fields: *discord_fields
+    profiles: [shiraishi]
 root_distribution:
   name: default
   source: https://github.com/rurusasu/hermes-home.git

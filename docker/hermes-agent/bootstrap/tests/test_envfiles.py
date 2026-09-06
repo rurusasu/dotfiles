@@ -771,6 +771,40 @@ class EnvFileTests(unittest.TestCase):
 
         self.assertNotIn("dashboard-password", str(caught.exception))
 
+    def test_profile_environment_uses_manifest_bindings_without_discord(self) -> None:
+        bundle = SecretBundle(
+            github_token="github-secret-value",
+            dashboard=DashboardSecret("dashboard-user", "dashboard-password"),
+            google_calendar=secret_bundle().google_calendar,
+            discord_by_profile=MappingProxyType({}),
+            redactor=SecretRedactor(("xai-secret-value",)),
+            environment_by_profile=MappingProxyType(
+                {
+                    "future": MappingProxyType(
+                        {
+                            "GITHUB_PERSONAL_ACCESS_TOKEN": "github-secret-value",
+                            "GH_TOKEN": "github-secret-value",
+                            "GITHUB_TOKEN": "github-secret-value",
+                            "XAI_API_KEY": "xai-secret-value",
+                        }
+                    )
+                }
+            ),
+        )
+        dashboard = MappingProxyType(
+            {
+                "HERMES_DASHBOARD_BASIC_AUTH_USERNAME": "dashboard-user",
+                "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH": "hash",
+                "HERMES_DASHBOARD_BASIC_AUTH_SECRET": "secret",
+                "API_SERVER_KEY": "hermes-bootstrap-v1_" + API_KEY_BODY,
+            }
+        )
+
+        environment = build_profile_environment("future", bundle, dashboard)
+
+        self.assertEqual(environment["XAI_API_KEY"], "xai-secret-value")
+        self.assertNotIn("DISCORD_BOT_TOKEN", environment)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,21 +3,30 @@
 from __future__ import annotations
 
 from .errors import ValidationError
-from .models import BootstrapManifest, OnePasswordItem
+from .models import BootstrapManifest, OnePasswordField, OnePasswordItem
 
 
 _SERVICE_ACCOUNT_ENV = "OP_SERVICE_ACCOUNT_TOKEN"
 _OP_BINARY = "/usr/bin/op"
-_MANAGED_ENV_FIELDS: tuple[tuple[str, str, str], ...] = (
-    ("HERMES_DASHBOARD_BASIC_AUTH_USERNAME", "dashboard", "username"),
-    ("GITHUB_PERSONAL_ACCESS_TOKEN", "github", "credential"),
-    ("GH_TOKEN", "github", "credential"),
-    ("GITHUB_TOKEN", "github", "credential"),
-)
-_DISCORD_ENV_FIELDS: tuple[tuple[str, str], ...] = (
-    ("DISCORD_BOT_TOKEN", "bot_token"),
-    ("DISCORD_ALLOWED_USERS", "allowed_users"),
-)
+def managed_environment_bindings(
+    manifest: BootstrapManifest, profile: str
+) -> tuple[tuple[str, OnePasswordItem, OnePasswordField], ...]:
+    """Return manifest-declared environment bindings for one profile."""
+
+    bindings: list[tuple[str, OnePasswordItem, OnePasswordField]] = []
+    seen: set[str] = set()
+    for item in manifest.onepassword_items:
+        if item.profiles is not None and profile not in item.profiles:
+            continue
+        for field in item.fields:
+            for environment_name in field.environment_names:
+                if environment_name in seen:
+                    raise ValidationError(
+                        "1Password manifest has duplicate managed environment names"
+                    )
+                seen.add(environment_name)
+                bindings.append((environment_name, item, field))
+    return tuple(bindings)
 
 
 def build_onepassword_config(
@@ -25,25 +34,18 @@ def build_onepassword_config(
 ) -> dict[str, object]:
     """Return the non-secret onepassword block for one Hermes home."""
 
-    items = {item.key: item for item in manifest.onepassword_items}
-    discord_key = "discord_default" if profile == "default" else f"discord_{profile}"
-    required = {key for _env, key, _field in _MANAGED_ENV_FIELDS}
-    required.update({"dashboard", "github", discord_key})
-    missing = sorted(key for key in required if key not in items)
-    if missing:
-        raise ValidationError("1Password manifest is missing managed items")
-
-    managed_items = [items[key] for key in ("dashboard", "github", discord_key)]
-    accounts = {item.account for item in managed_items}
+    bindings = managed_environment_bindings(manifest, profile)
+    accounts = {item.account for item in manifest.onepassword_items}
+    if not accounts:
+        raise ValidationError("1Password manifest has no managed items")
     if len(accounts) != 1:
         raise ValidationError("managed 1Password items use different accounts")
     account = next(iter(accounts))
 
-    environment: dict[str, str] = {}
-    for env_name, item_key, field_name in _MANAGED_ENV_FIELDS:
-        environment[env_name] = _reference(items[item_key], field_name)
-    for env_name, field_name in _DISCORD_ENV_FIELDS:
-        environment[env_name] = _reference(items[discord_key], field_name)
+    environment = {
+        environment_name: _reference(item, field)
+        for environment_name, item, field in bindings
+    }
 
     return {
         "enabled": True,
@@ -56,10 +58,6 @@ def build_onepassword_config(
     }
 
 
-def _reference(item: OnePasswordItem, canonical_name: str) -> str:
-    fields = [field for field in item.fields if field.canonical_name == canonical_name]
-    if len(fields) != 1:
-        raise ValidationError("1Password manifest has an invalid managed field")
-    field = fields[0]
-    reference_name = field.reference_name or canonical_name
+def _reference(item: OnePasswordItem, field: OnePasswordField) -> str:
+    reference_name = field.reference_name or field.canonical_name
     return f"op://{item.vault}/{item.item}/{reference_name}"
