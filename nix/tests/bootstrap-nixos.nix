@@ -49,6 +49,8 @@ let
       ln -s /bin/env usr/bin/env
       cp ${dotfilesSource}/docker/hermes-agent/hermes_storage_seed.py usr/local/bin/hermes-storage-seed
       chmod 0755 usr/local/bin/hermes-storage-seed
+      cp ${dotfilesSource}/docker/hermes-agent/hermes_storage_ownership.py usr/local/bin/hermes-storage-ownership
+      chmod 0755 usr/local/bin/hermes-storage-ownership
     '';
   };
 in

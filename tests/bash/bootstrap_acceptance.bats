@@ -12,6 +12,8 @@ setup() {
 
 	[ "$(grep -c '.github/e2e/run-bootstrap-acceptance.sh' "$workflow")" -ge 3 ]
 	grep -q '.github/e2e/run-bootstrap-acceptance.sh' "$nixos_test"
+	grep -Fq 'hermes_storage_ownership.py usr/local/bin/hermes-storage-ownership' "$nixos_test"
+	grep -Fq 'chmod 0755 usr/local/bin/hermes-storage-ownership' "$nixos_test"
 	! grep -Eq 'DOTFILES_HERMES_(DASHBOARD_AUTH|AGENT_SLACK_1PASSWORD)_ENABLED' \
 		"$workflow" "$nixos_test"
 }
