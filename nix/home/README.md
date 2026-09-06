@@ -21,8 +21,11 @@ caller -> <os>.nix -> common.nix
 - `default.nix` と `users.nix` は作らない。入口と OS 依存方向を曖昧にするため。
 
 ユーザー名とホームディレクトリは `DOTFILES_USER` / `DOTFILES_HOME` から取得する。
-NixOS は `DOTFILES_USER` 未指定時に `nixos` を使う。WSL postinstall は同じユーザーを
-NixOS host と Home Manager に渡し、`wsl.defaultUser` と Home Manager の対象を一致させる。
+NixOS は `DOTFILES_USER` 未指定時に `nixos` を使う。WSL postinstall は `--user` で選択した
+ユーザーの `DOTFILES_USER` / `DOTFILES_HOME` / `DOTFILES_UID` / `DOTFILES_GID` /
+`DOTFILES_GROUP` を export し、`nixos-rebuild` を `--impure` 付きで実行する。これにより
+flake 評価中の `builtins.getEnv` が選択した識別情報を読み取り、NixOS host、Home Manager、
+`wsl.defaultUser` の対象を一致させる。
 `nrs` / `nrt` / `nrb` は `scripts/sh/nixos-rebuild-with-user.sh` 経由で実行し、同じ識別情報を
 flake 評価へ渡す。
 
