@@ -102,6 +102,8 @@ Describe 'CI workflow configuration' {
         $hostModule | Should -Match 'extra-trusted-public-keys\s*=\s*\[\s*"niks3\.numtide\.com-1:'
         $bootstrapWorkflow | Should -Match 'Build macOS declarative output[\s\S]*?nix build \.#darwinConfigurations\.macos\.system --impure --no-link[\s\S]*?--option extra-substituters "\$NUMTIDE_CACHE"'
         $bootstrapWorkflow | Should -Match 'NUMTIDE_CACHE_KEY:\s*niks3\.numtide\.com-1:'
+        $bootstrapWorkflow | Should -Match 'nix-test:[\s\S]*?NIX_CONFIG:\s*\|[\s\S]*?extra-substituters = https://cache\.numtide\.com[\s\S]*?extra-trusted-public-keys = niks3\.numtide\.com-1:'
+        $bootstrapWorkflow | Should -Match 'linux-build:[\s\S]*?NIX_CONFIG:\s*\|[\s\S]*?extra-substituters = https://cache\.numtide\.com[\s\S]*?extra-trusted-public-keys = niks3\.numtide\.com-1:'
     }
 
     It 'should build the font package set on hosted Nix CI' {

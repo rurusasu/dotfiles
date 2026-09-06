@@ -315,6 +315,11 @@ jobs:
     # The full profile now builds the independently packaged Codex CLI. A cold
     # runner can legitimately need more than an hour for the Rust/V8 build.
     timeout-minutes: 120
+    env:
+      NIX_CONFIG: |
+        experimental-features = nix-command flakes
+        extra-substituters = https://cache.numtide.com
+        extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=
     permissions:
       contents: read
     steps:
@@ -446,6 +451,10 @@ jobs:
       DOTFILES_GROUP: runner
       DOTFILES_SYSTEM: x86_64-linux
       DOTFILES_NIXOS_HARDWARE_CONFIG: ${{ github.workspace }}/nix/tests/hardware-configuration.nix
+      NIX_CONFIG: |
+        experimental-features = nix-command flakes
+        extra-substituters = https://cache.numtide.com
+        extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
