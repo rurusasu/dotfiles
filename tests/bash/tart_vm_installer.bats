@@ -6,7 +6,6 @@ setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 	INSTALLER="$REPO_ROOT/scripts/sh/install-tart-vm.sh"
 	SETS="$REPO_ROOT/nix/packages/sets.nix"
-	DARWIN_CONFIG="$REPO_ROOT/nix/hosts/darwin/default.nix"
 	TASKFILE="$REPO_ROOT/taskfiles/install/taskfile.yml"
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	TART_HOME="$TEST_HOME/.tart"
@@ -55,11 +54,6 @@ EOF
 	[[ "$output" == *'legacyDarwin = {'* ]]
 	[[ "$output" == *'name = "openai/tools/tart";'* ]]
 	[[ "$output" != *'formula = "openai/tools/tart";'* ]]
-}
-
-@test "nix-darwin consumes catalog Homebrew formulas" {
-	grep -q 'brews = sets.darwinBrews' "$DARWIN_CONFIG"
-	grep -q 'darwinBrews' "$SETS"
 }
 
 @test "macOS install tasks expose an explicit Tart VM preparation step" {

@@ -109,6 +109,9 @@ sudo bash /mnt/d/my_programing/dotfiles/scripts/nixos-wsl-postinstall.sh --user 
 - `~/.dotfiles/nix/hosts/wsl/configuration.nix`
 - `~/.dotfiles/nix/hosts/wsl/hardware-configuration.nix`
 
+`default.nix` は host entrypoint、`configuration.nix` は WSL 固有の system 設定です。新しい
+option は `configuration.nix` に追加し、`default.nix` には import 以外の設定を置きません。
+
 Home Manager の WSL 固有設定は生成物ではなく、`~/.dotfiles/nix/home/wsl.nix` を編集します。
 
 ## パッケージ追加方法

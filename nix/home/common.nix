@@ -7,49 +7,21 @@
 #   - nix/home/wsl.nix    → WSL Home Manager integration
 #   - nix/flakes/home.nix → standalone homeConfigurations
 {
-  pkgs,
   lib,
-  inputs,
-  installFeatures ? [ ],
-  isWSL,
   ...
 }:
 let
-  codexPackage = inputs."llm-agents".packages.${pkgs.stdenv.hostPlatform.system}.codex;
-  sets = import ../packages/sets.nix {
-    inherit pkgs lib;
-    inherit codexPackage;
-  };
   bootstrapUser = builtins.getEnv "DOTFILES_USER";
   bootstrapHome = builtins.getEnv "DOTFILES_HOME";
   user = if bootstrapUser != "" then bootstrapUser else builtins.getEnv "USER";
   home = if bootstrapHome != "" then bootstrapHome else builtins.getEnv "HOME";
   fdOpts = "--hidden --follow --no-ignore-vcs --max-depth 10";
-  darwinAdditionalPackages = lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
-    pkgs.coreutils
-    pkgs.wezterm.terminfo
-  ];
 in
 {
   home = {
     username = lib.mkDefault (if user != "" then user else "unknown");
     homeDirectory = lib.mkDefault (if home != "" then home else "/home/unknown");
     stateVersion = "25.05";
-    # macOS installs the WezTerm GUI through Homebrew, so add its Nix terminfo
-    # output separately for shells and tools that resolve TERM=wezterm.
-    packages =
-      (
-        if pkgs.stdenv.hostPlatform.isDarwin then
-          sets.darwinHomePackagesForInstallFeatures installFeatures
-        else
-          sets.allWithout (
-            lib.optionals isWSL [
-              "discord"
-              "ollama"
-            ]
-          )
-      )
-      ++ darwinAdditionalPackages;
 
     sessionVariables = {
       # qmd (markdown search engine)
@@ -61,13 +33,6 @@ in
       FZF_DEFAULT_OPTS = "--height=40% --layout=reverse --border --prompt='> '";
       # pnpm global bin directory
       PNPM_HOME = "$HOME/.local/share/pnpm";
-    }
-    // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
-      # Homebrew's default is already 24 hours; keep that interval explicit
-      # for interactive shells and tools launched from the Home Manager session.
-      HOMEBREW_AUTO_UPDATE_SECS = "86400";
-      # Let native op use the unlocked 1Password desktop app integration.
-      OP_BIOMETRIC_UNLOCK_ENABLED = "true";
     };
 
     # PATH: bun and pnpm global binaries
@@ -76,10 +41,6 @@ in
       "$HOME/.bun/bin"
       "$HOME/.local/share/pnpm/bin"
       "$HOME/.local/share/pnpm"
-    ]
-    ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
-      "/opt/homebrew/bin"
-      "/opt/homebrew/sbin"
     ];
   };
 
@@ -89,16 +50,6 @@ in
     # ── Shell: zsh ────────────────────────────────────────────────────────
     zsh = {
       enable = true;
-
-      # A long-lived GUI process can inherit Home Manager's session sentinel
-      # without retaining the variables that were set alongside it. Restore
-      # WezTerm's Darwin terminfo path in .zshenv so interactive shells can
-      # initialize zsh/terminfo even in that state.
-      envExtra = lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
-        if [[ "''${TERM-}" == wezterm && -d "/etc/profiles/per-user/''${USER}/share/terminfo" ]]; then
-          export TERMINFO_DIRS="/etc/profiles/per-user/''${USER}/share/terminfo''${TERMINFO_DIRS:+:$TERMINFO_DIRS}:/usr/share/terminfo"
-        fi
-      '';
 
       shellAliases = {
         find = "fd";

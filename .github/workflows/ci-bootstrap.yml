@@ -356,6 +356,9 @@ jobs:
             exit 1
           fi
 
+      - name: Run Nix-native configuration tests
+        run: nix build .#checks.x86_64-linux.nix-unit --no-link
+
       - name: Build package sets
         run: |
           nix build .#minimal
@@ -715,6 +718,9 @@ jobs:
 
       - name: Build macOS declarative output
         run: |
+          nix build .#checks.aarch64-darwin.nix-unit --no-link \
+            --option extra-substituters "$NUMTIDE_CACHE" \
+            --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY"
           nix build .#darwinConfigurations.macos.system --impure --no-link \
             --option extra-substituters "$NUMTIDE_CACHE" \
             --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY"
