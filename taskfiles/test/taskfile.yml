@@ -14,7 +14,7 @@ tasks:
   test:coverage:
     desc: Run PowerShell tests with coverage
     cmds:
-      - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -IncludeIntegration"
+      - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -IncludeIntegration -ShowCoverage"
 
   test:bash:
     desc: Run bats unit tests for shell helpers
