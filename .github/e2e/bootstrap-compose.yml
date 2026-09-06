@@ -20,6 +20,8 @@ services:
 
   xapi-mcp:
     image: nginx:1.29-alpine
+    volumes:
+      - ./xurl-fixture.sh:/node_modules/.bin/xurl:ro
 
   chromium:
     image: nginx:1.29-alpine

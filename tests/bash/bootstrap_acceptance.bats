@@ -156,6 +156,11 @@ EOF
 	[[ "$output" == *'"label":"X_API_CLIENT_ID"'* ]]
 	[[ "$output" == *'"label":"X_API_CLIENT_SECRET"'* ]]
 	[[ "$output" == *'"label":"X_API_REFRESH_TOKEN"'* ]]
+	printf '%s\n' "$output" | jq -e '
+		.fields
+		| map(select(.label == "X_API_REFRESH_TOKEN"))
+		| length == 1 and .[0].section.label == "Refresh Token"
+	' >/dev/null
 
 	run "$op" item get "Unapproved Item" \
 		--account my.1password.com --vault openclaw --format json
@@ -179,6 +184,14 @@ EOF
 	grep -Fq 'condition: service_started' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/usr/share/nginx/html/health:ro' "$compose"
 	grep -Fq './hermes-bootstrap-fixture.sh:/www/health:ro' "$compose"
+	grep -Fq './xurl-fixture.sh:/node_modules/.bin/xurl:ro' "$compose"
+	grep -Fq 'install -m 0755 "$FIXTURE_ROOT/xurl-fixture.sh"' "$RUNNER"
+	test -x "$FIXTURE_ROOT/xurl-fixture.sh"
+
+	run "$FIXTURE_ROOT/xurl-fixture.sh" token
+	[ "$status" -eq 0 ]
+	run "$FIXTURE_ROOT/xurl-fixture.sh" unsupported
+	[ "$status" -ne 0 ]
 }
 
 @test "offline acceptance exercises Hindsight with deterministic Ollama fixtures" {
