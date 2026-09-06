@@ -477,6 +477,12 @@ run_macos_installer_for_host() {
 	run bash -c '
 set -euo pipefail
 . "$INSTALLER"
+if [[ ${DOTFILES_TEST_HOMEBREW_UNAVAILABLE:-0} == 1 ]]; then
+  homebrew_command() {
+    [[ -f $FAKE_DOCKER_CASK_STATE ]] || return 1
+    printf "%s\n" "$DOTFILES_BREW_COMMAND"
+  }
+fi
 ensure_docker_desktop_md5_compatibility() {
   :
 }
@@ -1568,6 +1574,21 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'softwareupdate' "$COMMAND_LOG"
+}
+
+@test "fresh Docker profile allows nix-darwin to provision Homebrew" {
+	write_fresh_install_stubs
+	export DOTFILES_TEST_HOMEBREW_UNAVAILABLE=1
+	rmdir "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
+
+	run_macos_installer --with-docker
+
+	[ "$status" -eq 0 ]
+	assert_log_order \
+		"nix-installer --daemon" \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
+		"docker-install --accept-license --user=test-user"
+	[[ "$output" != *"Homebrew command is unavailable"* ]]
 }
 
 @test "macOS installer contains no imperative application installer fallback" {

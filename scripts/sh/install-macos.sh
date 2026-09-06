@@ -346,8 +346,14 @@ prepare_docker_desktop_cask_links() {
   local optional_kubectl="$HOMEBREW_BIN_DIR/kubectl"
   local obsolete_compose="$HOMEBREW_BIN_DIR/docker-compose"
 
-  cask_state="$(homebrew_cask_install_state "$DOCKER_CASK_TOKEN")" ||
-    dotfiles_die "Unable to inspect Homebrew cask state for $DOCKER_CASK_TOKEN."
+  if homebrew_command >/dev/null 2>&1; then
+    cask_state="$(homebrew_cask_install_state "$DOCKER_CASK_TOKEN")" ||
+      dotfiles_die "Unable to inspect Homebrew cask state for $DOCKER_CASK_TOKEN."
+  else
+    # nix-darwin owns Homebrew provisioning. A brand-new host legitimately has
+    # no brew executable until the first activation completes.
+    cask_state=absent
+  fi
   DOCKER_CASK_REPAIR_REQUIRED=0
 
   for index in "${!required_paths[@]}"; do
