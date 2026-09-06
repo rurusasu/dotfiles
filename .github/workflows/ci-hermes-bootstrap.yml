@@ -1,55 +1,53 @@
 name: Hermes Bootstrap Tests
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - "docker/hermes-agent/**"
-      - "docker/hermes-service/**"
-      - "docker/hermes-browser/**"
-      - "docker/hermes-browser-mcp/**"
-      - "docker/hermes-xapi-mcp/**"
-      - "docker/hindsight/**"
-      - "docker/local-ai-services/**"
-      - "scripts/sh/hermes-agent.sh"
-      - "scripts/powershell/handlers/Handler.HermesAgent.ps1"
-      - "tests/python/test_xapi_image_contract.py"
-      - "taskfiles/hermes/taskfile.yml"
-      - ".github/workflows/ci-hermes-bootstrap.yml"
-      - ".github/workflows/ci-hermes-provenance.yml"
-      - ".pre-commit-config.yaml"
-      - "Taskfile.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "docker/hermes-agent/**"
-      - "docker/hermes-service/**"
-      - "docker/hermes-browser/**"
-      - "docker/hermes-browser-mcp/**"
-      - "docker/hermes-xapi-mcp/**"
-      - "docker/hindsight/**"
-      - "docker/local-ai-services/**"
-      - "scripts/sh/hermes-agent.sh"
-      - "scripts/powershell/handlers/Handler.HermesAgent.ps1"
-      - "tests/python/test_xapi_image_contract.py"
-      - "taskfiles/hermes/taskfile.yml"
-      - ".github/workflows/ci-hermes-bootstrap.yml"
-      - ".github/workflows/ci-hermes-provenance.yml"
-      - ".pre-commit-config.yaml"
-      - "Taskfile.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: ci-hermes-bootstrap / Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      hermes: ${{ steps.detect.outputs.hermes }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect changed job targets
+        id: detect
+        uses: ./.github/actions/detect-ci-changes
+        with:
+          base-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
+          head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          run-all: ${{ github.event_name == 'workflow_dispatch' }}
+          manifest: ci/job-path-routing.json
+
   hermes-bootstrap-tests:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.hermes == 'true') }}
     name: Hermes Bootstrap Tests
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
     steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

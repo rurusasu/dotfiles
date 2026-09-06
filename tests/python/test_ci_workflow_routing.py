@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 import unittest
 from pathlib import Path
-
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci-contract.yml"
@@ -59,6 +59,11 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
         self.assertIsNotNone(match, f"missing {event} path filter")
         return match.group("paths") if match is not None else ""
+
+    def _job_patterns(self, output: str) -> list[str]:
+        manifest = json.loads((REPOSITORY_ROOT / "ci/job-path-routing.json").read_text())
+        return [pattern for rule in manifest["rules"] if output in rule["outputs"]
+                for pattern in rule["patterns"]]
 
     def test_pull_requests_to_main_always_run_ci_contract(self) -> None:
         workflow = self._workflow()
@@ -179,7 +184,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
     def test_bootstrap_workflow_watches_nix_validation_paths(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
-        for event in ("push", "pull_request"):
+        for event in ("push",):
             paths = self._trigger_paths(workflow, event)
             self.assertIn('"scripts/sh/**"', paths)
             self.assertIn('".github/e2e/**"', paths)
@@ -228,7 +233,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("windows-installer", complete)
         self.assertIn("check_required_job", complete)
 
-        for event in ("push", "pull_request"):
+        for event in ("push",):
             paths = self._trigger_paths(workflow, event)
             self.assertIn('"scripts/powershell/handlers/**"', paths)
 
@@ -289,7 +294,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         return json.loads(result.stdout)
 
     def test_devcontainer_ci_owns_only_the_two_excluded_bats_files(self) -> None:
-        workflow = self._named_workflow("ci-devcontainer.yml")
         contract_workflow = self._workflow()
         bats_script = DEVCONTAINER_BATS_PATH.read_text(encoding="utf-8")
 
@@ -333,12 +337,11 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         for owned_path in devcontainer_paths:
             self.assertTrue((REPOSITORY_ROOT / owned_path).is_file(), owned_path)
 
-        for event in ("push", "pull_request"):
-            paths = self._trigger_paths(workflow, event)
-            self.assertIn("scripts/sh/dcnvim.sh", paths)
-            self.assertIn("tests/bash/install_macos.bats", paths)
-            self.assertIn("tests/bash/install_linux.bats", paths)
-            self.assertNotIn("tests/bash/**", paths)
+        paths = self._job_patterns("devcontainer")
+        self.assertIn("scripts/sh/dcnvim.sh", paths)
+        self.assertIn("tests/bash/install_macos.bats", paths)
+        self.assertIn("tests/bash/install_linux.bats", paths)
+        self.assertNotIn("tests/bash/**", paths)
 
         contract_push_paths = self._trigger_paths(contract_workflow, "push")
         for path in (
@@ -360,16 +363,15 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "docker/hermes-xapi-mcp/**",
             "docker/hindsight/**",
             "docker/local-ai-services/**",
-            "scripts/sh/hermes-agent.sh",
+            "scripts/sh/hermes-*.sh",
             "scripts/powershell/handlers/Handler.HermesAgent.ps1",
             "tests/python/test_xapi_image_contract.py",
             ".github/workflows/ci-hermes-provenance.yml",
         )
 
-        for event in ("push", "pull_request"):
-            paths = self._trigger_paths(workflow, event)
-            for required_path in required_paths:
-                self.assertIn(required_path, paths)
+        paths = self._job_patterns("hermes")
+        for required_path in required_paths:
+            self.assertIn(required_path, paths)
         self.assertIn(
             "python3 -m unittest tests/python/test_xapi_image_contract.py -v",
             workflow,
@@ -451,7 +453,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
     def test_unified_bootstrap_workflow_fails_closed_for_selected_platforms(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
 
-        for event in ("push", "pull_request"):
+        for event in ("push",):
             paths = self._trigger_paths(workflow, event)
             self.assertIn('      - "Taskfile.yml"', paths)
             self.assertIn('      - "taskfiles/**"', paths)

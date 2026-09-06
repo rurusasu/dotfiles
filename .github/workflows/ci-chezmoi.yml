@@ -4,14 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - "chezmoi/**"
-      - ".github/workflows/ci-chezmoi.yml"
   pull_request:
-    # No paths filter: this workflow's checks are required by the main ruleset,
-    # so they must report on every PR (a path-filtered required check stays
-    # "expected" forever and blocks unrelated PRs). Jobs are fast; running them
-    # on every PR is the cost of having them be reliable required checks.
     branches: [main]
 
 concurrency:
@@ -19,13 +12,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: ci-chezmoi / Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      chezmoi_lint: ${{ steps.detect.outputs.chezmoi_lint }}
+      templates: ${{ steps.detect.outputs.templates }}
+      fonts: ${{ steps.detect.outputs.fonts }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect changed job targets
+        id: detect
+        uses: ./.github/actions/detect-ci-changes
+        with:
+          base-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
+          head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          run-all: ${{ github.event_name == 'workflow_dispatch' }}
+          manifest: ci/job-path-routing.json
+
   lint:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.chezmoi_lint == 'true') }}
     name: Lint (Pester chezmoi)
     runs-on: windows-2025
     timeout-minutes: 10
     permissions:
       contents: read
     steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -107,12 +131,18 @@ jobs:
           if-no-files-found: warn
 
   fmt:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.templates == 'true') }}
     name: Format (.tmpl BOM check)
     runs-on: windows-2025
     timeout-minutes: 5
     permissions:
       contents: read
     steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -138,12 +168,18 @@ jobs:
           Write-Host "BOM check passed: $(@($files).Count) .tmpl file(s) checked"
 
   font-install:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.fonts == 'true') }}
     name: Font install smoke (Windows)
     runs-on: windows-2025
     timeout-minutes: 10
     permissions:
       contents: read
     steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -179,6 +215,8 @@ jobs:
           $entries | ForEach-Object { Write-Host "Verified font: $($_.Name) -> $($_.Value)" }
 
   op-guard:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.templates == 'true') }}
     # Behavioral guard for the "op present but unauthenticated" environment
     # (devcontainers, CI, fresh clones). The static Pester lint only checks
     # that onepasswordRead is wrapped in *a* guard; it cannot tell whether the
@@ -193,6 +231,10 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

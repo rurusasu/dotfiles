@@ -324,6 +324,10 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 
 `ci-bootstrap.yml` は変更パスから Linux、Darwin、WSL、Windows の実行対象を個別に選択します。Docker Desktop、WSL2、nix-darwin switch の実機適用は nested virtualization と OS 制約のため CI では実行せず、one-command installer 末尾の local acceptance が判定します。
 
+言語・用途別のジョブは `ci/job-path-routing.json` で選択します。`.ps1` / `.psm1` / `.psd1` は PowerShell 検証、`.tmpl` はテンプレート検証、workflow YAML は actionlint、パッケージ定義は catalog 整合性検証に接続します。契約テストは別言語の設定も読むため、拡張子に加えて Taskfile、Nix、chezmoi、Docker の依存パスも判定します。変更が複数なら対象の和集合を実行し、削除・移動元のパスも検証対象に残します。
+
+各 workflow の既存チェック名を維持し、対象外ジョブは `if` でスキップします。変更検出失敗はチェック失敗として扱い、手動実行は全対象を検証します。`ci/bootstrap-path-routing.json` は説明用 README / docs の変更を OS 結合テストから除外しますが、配布される agent の Markdown 設定や未分類の runtime パスには保守的な判定を残します。GitHub の必須チェック設定を変更する必要はありません。
+
 Ubuntu、Debian、NixOS の hosted Linux job は 1 周目で clean bootstrap、2 周目で idempotency を検証し、各周回の後に runtime acceptance を実行します。pull request では hosted contract、declarative build、Linux runtime E2E の全checkが成功し、approval待ちやqueued jobがないことをmerge条件にします。
 
 ---

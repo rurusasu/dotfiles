@@ -10,7 +10,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 ACTION_PATH = REPOSITORY_ROOT / ".github" / "actions" / "detect-ci-changes" / "action.yml"
 DETECTOR_PATH = REPOSITORY_ROOT / "scripts" / "python" / "detect_ci_changes.py"
@@ -29,6 +28,10 @@ OUTPUTS = {
     "devcontainer",
     "package_catalog",
 }
+JOB_OUTPUTS = {
+    "python", "bash", "actionlint", "powershell_lint", "powershell_test",
+    "chezmoi_lint", "templates", "fonts",
+}
 
 
 class DetectCiActionContractTests(unittest.TestCase):
@@ -38,9 +41,9 @@ class DetectCiActionContractTests(unittest.TestCase):
     def test_action_declares_the_stable_interface(self) -> None:
         self.assertTrue(ACTION_PATH.is_file(), "composite action is missing")
         self.assertEqual(self._top_level_keys("inputs"), INPUTS)
-        self.assertEqual(self._top_level_keys("outputs"), OUTPUTS)
+        self.assertEqual(self._top_level_keys("outputs"), OUTPUTS | JOB_OUTPUTS)
 
-        for output in OUTPUTS:
+        for output in OUTPUTS | JOB_OUTPUTS:
             self.assertIn(
                 f"    value: ${{{{ steps.detect.outputs.{output} }}}}",
                 self._section("outputs"),
@@ -183,6 +186,27 @@ class DetectCiActionContractTests(unittest.TestCase):
                 "scripts/sh/install-linux.sh\n",
             )
 
+    def test_pull_request_ignores_changes_only_on_the_base_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repository = self._make_test_repository(Path(temporary_directory))
+            self._git(repository, "branch", "pull-request")
+            (repository / "scripts/sh").mkdir()
+            (repository / "scripts/sh/install-macos.sh").write_text("#!/bin/sh\n")
+            self._git(repository, "add", ".")
+            self._git(repository, "commit", "-m", "advance base with macOS change")
+            base_sha = self._git(repository, "rev-parse", "HEAD")
+            self._git(repository, "switch", "pull-request")
+            head_sha = self._commit_linux_installer(repository)
+
+            completed, output_path, _ = self._run_action_script(
+                repository, base_sha=base_sha, head_sha=head_sha,
+                run_all=False, event_name="pull_request",
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertTrue(self._read_outputs(output_path)["linux"])
+            self.assertFalse(self._read_outputs(output_path)["darwin"])
+
     def _section(self, name: str) -> str:
         lines = self.action.splitlines()
         try:
@@ -250,6 +274,7 @@ class DetectCiActionContractTests(unittest.TestCase):
         base_sha: str,
         head_sha: str,
         run_all: bool,
+        event_name: str = "push",
     ) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
         temporary_directory = repository.parent
         runner_temp = temporary_directory / "runner-temp"
@@ -262,6 +287,7 @@ class DetectCiActionContractTests(unittest.TestCase):
         environment = os.environ.copy()
         environment.update(
             {
+                "GITHUB_EVENT_NAME": event_name,
                 "BASE_SHA": base_sha,
                 "HEAD_SHA": head_sha,
                 "RUN_ALL": "true" if run_all else "false",

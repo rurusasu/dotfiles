@@ -35,6 +35,8 @@ on:
       - "tests/bash/install_macos.bats"
       - "ci/path-routing.json"
       - "ci/bootstrap-path-routing.json"
+      - "ci/job-path-routing.json"
+      - "tests/python/test_ci_job_routing.py"
       - "Taskfile.yml"
       - "taskfiles/**"
       - "scripts/python/detect_ci_changes.py"
@@ -45,45 +47,6 @@ on:
       - ".github/workflows/ci-bootstrap.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "flake.nix"
-      - "flake.lock"
-      - "install.sh"
-      - "install.cmd"
-      - "nix/**"
-      - "scripts/sh/**"
-      - "scripts/powershell/ci/**"
-      - "scripts/powershell/handlers/**"
-      - "scripts/powershell/handlers/Handler.NixOSWSL.ps1"
-      - "scripts/powershell/handlers/Handler.NixRebuild.ps1"
-      - "scripts/powershell/lib/**"
-      - "scripts/powershell/install.ps1"
-      - "scripts/powershell/install.user.ps1"
-      - "scripts/powershell/tests/**"
-      - "windows/**"
-      - "chezmoi/**"
-      - "docker/hermes-agent/**"
-      - "docker/hermes-service/**"
-      - "docker/hermes-browser/**"
-      - "docker/hermes-browser-mcp/**"
-      - "docker/hermes-xapi-mcp/**"
-      - "docker/hindsight/**"
-      - "docker/local-ai-services/**"
-      - "docker/mlflow/**"
-      - "docs/mlflow/**"
-      - ".github/e2e/**"
-      - "tests/bash/install_linux.bats"
-      - "tests/bash/install_macos.bats"
-      - "ci/path-routing.json"
-      - "ci/bootstrap-path-routing.json"
-      - "Taskfile.yml"
-      - "taskfiles/**"
-      - "scripts/python/detect_ci_changes.py"
-      - "tests/python/test_detect_ci_changes.py"
-      - "tests/python/test_ci_workflow_routing.py"
-      - ".github/actions/detect-ci-changes/**"
-      - ".github/workflows/ci-contract.yml"
-      - ".github/workflows/ci-bootstrap.yml"
 
 concurrency:
   group: bootstrap-${{ github.workflow }}-${{ github.ref }}
@@ -1051,8 +1014,7 @@ jobs:
           fi
 
           if [[ "${PLATFORM_REQUIRED}" != "true" ]]; then
-            echo "Bootstrap CI selected no platform job; refusing a green result."
-            exit 1
+            echo "No bootstrap runtime changes; verifying that platform jobs were skipped."
           fi
 
           check_platform() {
