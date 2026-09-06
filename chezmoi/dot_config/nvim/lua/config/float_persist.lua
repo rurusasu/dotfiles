@@ -9,12 +9,12 @@ local function read()
     if not ok or #lines == 0 then
         return {}
     end
-    local ok2, t = pcall(vim.fn.json_decode, lines[1])
+    local ok2, t = pcall(vim.json.decode, lines[1])
     return (ok2 and type(t) == "table") and t or {}
 end
 
 local function write(t)
-    pcall(vim.fn.writefile, { vim.fn.json_encode(t) }, path)
+    pcall(vim.fn.writefile, { vim.json.encode(t) }, path)
 end
 
 local function win_key(win)

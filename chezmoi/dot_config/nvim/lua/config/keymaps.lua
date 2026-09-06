@@ -30,7 +30,8 @@ map("n", "<Esc>", "<cmd>nohlsearch<cr>", { desc = "Clear search highlight" })
 
 -- Editor-style undo / redo
 map({ "n", "i", "x" }, "<C-z>", "<cmd>undo<cr>", { desc = "Undo" })
-map({ "n", "i", "x" }, "<C-y>", "<cmd>redo<cr>", { desc = "Redo" })
+-- Insert-mode Ctrl+Y accepts native completion candidates.
+map({ "n", "x" }, "<C-y>", "<cmd>redo<cr>", { desc = "Redo" })
 
 -- Better indenting
 map("v", "<", "<gv", { desc = "Indent left" })

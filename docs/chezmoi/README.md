@@ -8,6 +8,8 @@ chezmoi によるユーザー設定管理の詳細ドキュメント。
 - [インストールと適用](./usage.md)
 - [ディレクトリ構造](./structure.md)
 - [キーバインド統一方針](./keybindings.md)
+- [Neovim の設定と検証](./neovim.md)
+- [Neovim 最新化調査・採否](./neovim-modernization-audit.md)
 - [シークレット管理](./secrets.md)
 - [1Password CLI 運用](../1password/README.md)
 
@@ -28,33 +30,31 @@ chezmoi はユーザーレベルの dotfiles（設定ファイル）を管理し
 
 **役割分担:**
 
-| 役割                   | ツール                            |
-| ---------------------- | --------------------------------- |
-| パッケージインストール | Nix (Linux/WSL), winget (Windows) |
-| ユーザー設定           | Chezmoi                           |
-| シェル統合             | zshrc (chezmoi でデプロイ)        |
+| 役割                   | ツール                                             |
+| ---------------------- | -------------------------------------------------- |
+| パッケージインストール | Nix (macOS/Linux/WSL)、catalog の Windows provider |
+| ユーザー設定           | Chezmoi                                            |
+| シェル統合             | zshrc (chezmoi でデプロイ)                         |
 
 ## クイックスタート
 
 ### Windows
 
 ```powershell
-# GitHub から直接取得（リポジトリのクローン不要）
+# クローン済みリポジトリのルートで実行
 winget install -e --id twpayne.chezmoi
-chezmoi init rurusasu/dotfiles --source-path chezmoi
-chezmoi apply
+chezmoi init --source "$PWD/chezmoi"
+chezmoi --source "$PWD/chezmoi" diff
+chezmoi --source "$PWD/chezmoi" apply
 ```
 
-### WSL/Linux
+### macOS / WSL / Linux
 
 ```bash
-# ~/.dotfiles シンボリックリンクがある場合
-chezmoi init --source ~/.dotfiles/chezmoi
-chezmoi apply
-
-# GitHub から直接取得
-chezmoi init rurusasu/dotfiles --source-path chezmoi
-chezmoi apply
+# クローン済みリポジトリのルートで実行
+chezmoi init --source "$PWD/chezmoi"
+chezmoi --source "$PWD/chezmoi" diff
+chezmoi --source "$PWD/chezmoi" apply
 ```
 
-詳細は [usage.md](./usage.md) を参照。
+`--source-path` はサブディレクトリ指定ではなくターゲット解釈を変えるフラグです。詳細・installer 経由の適用は [usage.md](./usage.md) を参照。

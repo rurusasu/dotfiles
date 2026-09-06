@@ -2,13 +2,13 @@
 
 ## 編集対象
 
-- `packages.json` のみを source of truth とする。
+- SSOT は `nix/packages/sets.nix`。`packages.json` は `winget-export` の生成物。
+- 生成・反映方法は `docs/nix/package-management.md` を参照する。
 
 ## 実行コマンド
 
 ```powershell
-winget export -o packages.json
-winget import -i packages.json --accept-package-agreements
+.\install.cmd
 ```
 
 ## 実装上の注意

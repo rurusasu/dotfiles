@@ -4,14 +4,14 @@
 
 `nix/packages/sets.nix` の catalog が全プラットフォームの package provider を一元管理します。Home Manager だけを SSOT とするのではなく、1 つの catalog から OS ごとの実装を導出します。
 
-| Catalog output                  | Consumer                            | Platform                     |
-| ------------------------------- | ----------------------------------- | ---------------------------- |
-| `all` / category sets           | `nix/home/common.nix`               | macOS、NixOS、Ubuntu、Debian |
-| `darwinCasksForInstallFeatures` | nix-homebrew in nix-darwin          | macOS                        |
-| `linuxSystemModules`            | NixOS / System Manager modules      | Linux                        |
-| `wingetMap`, `npmMap`           | `nix/packages/winget.nix`           | Windows                      |
-| `supportReport`                 | `package-support-report` derivation | CI and review                |
-| `providerErrors`                | flake check                         | all platforms                |
+| Catalog output                      | Consumer                            | Platform                     |
+| ----------------------------------- | ----------------------------------- | ---------------------------- |
+| `all` / category sets               | `nix/home/common.nix`               | macOS、NixOS、Ubuntu、Debian |
+| `darwinCasksForInstallFeatures`     | nix-homebrew in nix-darwin          | macOS                        |
+| `linuxSystemModules`                | NixOS / System Manager modules      | Linux                        |
+| `wingetMap`, `npmMap`, `pnpmGlobal` | `nix/packages/winget.nix`           | Windows                      |
+| `supportReport`                     | `package-support-report` derivation | CI and review                |
+| `providerErrors`                    | flake check                         | all platforms                |
 
 Windows だけに存在する GUI や OS component は `windowsOnlySupport` に置き、macOS/Linux で対応しない理由を必ず記録します。クロスプラットフォームのツールを理由なしに Windows-only へ入れることはできません。
 
@@ -24,12 +24,9 @@ macOS caskで`installFeature`を持つpackageは、installerが解決したprofi
 
 ```nix
 mypackage = {
-  package = pkgs.mypackage;
+  pkg = pkgs.mypackage;
   category = "dev";
-  windows = {
-    provider = "winget";
-    id = "Publisher.Package";
-  };
+  winget = "Publisher.Package";
 };
 ```
 
@@ -51,7 +48,7 @@ Ubuntu / Debian:  ./install.sh
 - Ubuntu/Debian は System Manager が Home Manager と system package/service を適用します。
 - NixOS は NixOS generation に Home Manager と system module を統合します。
 
-`nrs` は nix-darwin の Homebrew Bundle を通じて、宣言済みの formula と cask を導入・更新します。cask は `greedyCasks = true` で、最新タグを指す WezTerm nightly もこの経路で管理されます。
+macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Homebrew provider を反映します。通常の CLI と Neovim・WezTerm は Nix 側で管理し、cask/formula は catalog が明示する例外です。Nix パッケージの版は `flake.lock` に従います。
 
 その他 Linux の `DOTFILES_ALLOW_USER_ONLY=1 ./install.sh` は Home Manager のみで、Docker や OS service は管理しません。
 
@@ -81,16 +78,18 @@ cat result/package-support-report.json
 
 ## システム package と Home Manager の境界
 
-| 対象                                             | 管理先                              |
-| ------------------------------------------------ | ----------------------------------- |
-| shell から使う共通 CLI                           | Home Manager `home.packages`        |
-| Docker daemon/socket、ユーザー group、OS service | NixOS / System Manager / nix-darwin |
-| macOS CLI                                        | nix-homebrew formula                |
-| macOS GUI application                            | nix-homebrew cask                   |
-| Windows GUI/OS application                       | winget/msstore handler              |
-| shell、Git、terminal、editor 設定                | chezmoi                             |
+| 対象                                             | 管理先                                    |
+| ------------------------------------------------ | ----------------------------------------- |
+| shell から使う共通 CLI                           | Home Manager `home.packages`              |
+| Docker daemon/socket、ユーザー group、OS service | NixOS / System Manager / nix-darwin       |
+| macOS CLI                                        | 原則 Nix/Home Manager、明示例外は formula |
+| macOS GUI application                            | catalog の Nix / cask provider            |
+| Windows GUI/OS application                       | winget/msstore handler                    |
+| shell、Git、terminal、editor 設定                | chezmoi                                   |
 
 同じ package を Home Manager と system layer の両方へ重複させるのは、system service が絶対 path を必要とする場合に限定します。
+
+Neovim は `nix/packages/neovim/default.nix` でパーサーと対応クエリを同梱します。設定と対象言語は [Neovim の運用](../chezmoi/neovim.md) を参照してください。pnpm 配布の LSP は `pnpmGlobal` と `support.windows` の `provider = "pnpm"` / `source = "npm"` / `identity` を合わせて宣言します。
 
 ## 主なファイル
 

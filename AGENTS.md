@@ -4,13 +4,13 @@
 
 1. 変更対象が `nix/`, `chezmoi/`, `windows/`, `scripts/`, `docker/` のどれかを特定する。
 2. パッケージ追加か設定変更かを切り分ける。
-3. 反映先が WSL/NixOS か Windows かを決める。
+3. 反映先が macOS、Linux/WSL/NixOS、Windows のどれかを決める。
 
 ## 変更先の原則
 
-- NixOS/WSL パッケージ: `nix/core/cli.nix`
-- Windows パッケージ: `windows/winget/packages.json`
-- Windows npm globals: `windows/npm/packages.json`
+- パッケージと OS 別 provider の SSOT: `nix/packages/sets.nix`
+- 共通 Nix パッケージの利用側: `nix/home/common.nix`
+- Windows manifest: `windows/{winget,npm,pnpm}/packages.json`（`winget-export` の生成物）
 - ユーザー設定: `chezmoi/` 以下
 - Windows 実行ロジック: `scripts/powershell/`
 - CLI の実行順序・依存関係・公開コマンドは `Taskfile.yml` と `taskfiles/` に実装する。

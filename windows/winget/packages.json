@@ -178,6 +178,13 @@
           }
         },
         {
+          "PackageIdentifier": "Artempyanykh.Marksman",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "marksman"
+          }
+        },
+        {
           "PackageIdentifier": "Neovim.Neovim",
           "verifyCommand": {
             "args": ["--version"],
@@ -297,6 +304,13 @@
           "verifyCommand": {
             "args": ["--version"],
             "command": "taplo"
+          }
+        },
+        {
+          "PackageIdentifier": "tree-sitter.tree-sitter-cli",
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "tree-sitter"
           }
         },
         {

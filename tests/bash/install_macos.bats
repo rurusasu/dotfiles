@@ -1,6 +1,11 @@
 #!/usr/bin/env bats
 
 setup() {
+	# Do not let the caller's Git command-config environment change the
+	# incomplete-config fixtures below. Each test declares the variables it needs.
+	for git_config_variable in $(env | sed -n 's/^\(GIT_CONFIG_COUNT\|GIT_CONFIG_KEY_[0-9][0-9]*\|GIT_CONFIG_VALUE_[0-9][0-9]*\)=.*/\1/p'); do
+		unset "$git_config_variable"
+	done
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 	INSTALLER="$REPO_ROOT/scripts/sh/install-macos.sh"
 	COMMON_INSTALLER="$REPO_ROOT/scripts/sh/install-common.sh"
@@ -546,10 +551,11 @@ run_macos_installer() {
 @test "macOS installer clears an incomplete inherited Git command config" {
 	write_installed_stubs
 	write_stub nix '
-env | grep -Eq "^GIT_CONFIG_(COUNT|KEY_[0-9]+|VALUE_[0-9]+)=" && exit 43
+	env | grep -Eq "^GIT_CONFIG_(COUNT|KEY_[0-9]+|VALUE_[0-9]+)=" && exit 43
 printf "nix %s\n" "$*" >>"$COMMAND_LOG"
 '
 	export GIT_CONFIG_COUNT=2
+	unset GIT_CONFIG_KEY_0 GIT_CONFIG_KEY_1
 	export GIT_CONFIG_VALUE_0=one
 	export GIT_CONFIG_VALUE_1=two
 

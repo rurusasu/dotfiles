@@ -83,8 +83,8 @@ return {
                         return
                     end
                     if vim.fn.has("win32") == 1 then
-                        -- Windows: snacks.terminal の float が split に化けるため
-                        -- 自前 float_term で開く。NVIM を空にして nvim-remote 起動を抑止。
+                        -- Preserve the Windows float workaround until verified
+                        -- in a real terminal. Empty NVIM prevents remote startup.
                         require("config.float_term").toggle({
                             id = "lazygit",
                             cmd = { "lazygit" },
@@ -144,8 +144,7 @@ return {
             {
                 "<leader>tf",
                 function()
-                    -- snacks.terminal の position = "float" が bottom に化ける問題
-                    -- を避けるため、純粋 nvim API で実装した自前 float terminal を使う。
+                    -- Keep the custom float's persisted geometry and resize handling.
                     require("config.float_term").toggle()
                 end,
                 mode = { "n", "t" },
@@ -157,7 +156,7 @@ return {
             terminal = { enabled = true },
             image = {
                 enabled = true,
-                force = true,
+                force = false, -- Let Snacks detect whether the terminal supports images.
                 convert = { notify = true },
                 -- "pdf" を除外: picker では monkey-patch が pdftoppm で処理するため
                 -- snacks 自身の magick/Ghostscript パイプラインが走らないようにする
@@ -220,13 +219,24 @@ return {
                         if file:match("%.pdf$") then
                             if vim.fn.executable("pdftoppm") == 0 then
                                 vim.notify(
-                                    "PDF preview requires poppler (pdftoppm). Install via: winget install oschwartz10612.Poppler",
+                                    "PDF preview requires poppler (pdftoppm). See nix/packages/sets.nix and docs/chezmoi/neovim.md.",
                                     vim.log.levels.WARN
                                 )
                                 return false
                             end
                             local tmp = vim.fn.tempname()
-                            vim.fn.system({ "pdftoppm", "-png", "-r", "150", "-singlefile", file, tmp })
+                            local result = vim.system(
+                                { "pdftoppm", "-png", "-r", "150", "-singlefile", file, tmp },
+                                { text = true }
+                            ):wait(10000)
+                            if result.code ~= 0 then
+                                vim.fn.delete(tmp .. ".png")
+                                vim.notify(
+                                    "PDF conversion failed: " .. (result.stderr or tostring(result.code)),
+                                    vim.log.levels.WARN
+                                )
+                                return false
+                            end
                             tmp = tmp .. ".png"
                             -- _path をリセットしないと元の PDF パスのキャッシュが残る
                             local patched = vim.tbl_deep_extend("force", ctx, {

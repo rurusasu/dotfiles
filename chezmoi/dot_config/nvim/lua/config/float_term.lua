@@ -1,7 +1,6 @@
 -- Floating terminal toggle + dynamic resize.
--- snacks.terminal の position = "float" が機能しない / vim.fn.termopen() が
--- float window を split に書き換える環境への対策として、純粋 nvim API +
--- termopen 後に nvim_win_set_config で float 構成を再適用する。
+-- nvim_open_win() で作った current buffer に jobstart({ term = true }) で
+-- terminal を起動する。位置とサイズの管理を config.float_persist と共有する。
 -- 寸法は lua/config/window_styles.lua の共通 SSOT を参照し、現セッション中の
 -- ratio 上書きはモジュール local state に保持する (toggle hide でも維持される)。
 -- id ごとに buf/win を分けて持つことで、shell / lazygit など複数の float
@@ -26,14 +25,14 @@ local function load_ratio()
     if not ok or #lines == 0 then
         return
     end
-    local ok2, saved = pcall(vim.fn.json_decode, lines[1])
+    local ok2, saved = pcall(vim.json.decode, lines[1])
     if ok2 and saved and type(saved.ratio) == "number" then
         ratio = saved.ratio
     end
 end
 
 local function save_ratio()
-    pcall(vim.fn.writefile, { vim.fn.json_encode({ ratio = ratio }) }, ratio_path)
+    pcall(vim.fn.writefile, { vim.json.encode({ ratio = ratio }) }, ratio_path)
 end
 
 local function default_shell()
@@ -129,7 +128,7 @@ function M.toggle(opts)
     if not reuse then
         -- float が current の状態で jobstart({term=true}) を直接呼ぶ。
         -- nvim_buf_call を経由すると temporary split が生成され float が壊れる。
-        -- termopen は Windows で float を split に変換するため jobstart({term=true}) を使う。
+        -- jobstart({term=true}) は termopen() に代わる現行 API。
         vim.fn.jobstart(cmd, {
             cwd = cwd,
             env = env,

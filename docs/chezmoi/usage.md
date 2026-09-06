@@ -1,119 +1,43 @@
 # Chezmoi の使い方
 
-## インストール
+## インストールと初回適用
 
-### Windows
+リポジトリをクローンし、そのルートで OS に合う installer を使います。CLI の順序・依存関係は Taskfile と platform adapter が管理します。
+
+```bash
+# macOS / Linux / WSL
+./install.sh
+```
 
 ```powershell
-winget install -e --id twpayne.chezmoi
+# Windows
+.\install.cmd
 ```
 
-### Linux/WSL (NixOS)
+chezmoi のパッケージは `nix/packages/sets.nix` の catalog で管理します。共通 Nix パッケージは `nix/home/common.nix` が利用し、Windows は生成済み winget manifest を使います。
 
-NixOS では `nixos-rebuild switch` で chezmoi が自動インストールされます（`nix/core/cli.nix` で定義）。
+## クローン済み設定の更新
+
+chezmoi のソースがリポジトリ全体ではなく **`chezmoi/`** であることを確認してください。
 
 ```bash
-# install.ps1 実行後は chezmoi が使える状態
-chezmoi --version
-
-# 手動で chezmoi を追加インストールしたい場合
-nix profile install nixpkgs#chezmoi
+# リポジトリのルート。PowerShell でも同じコマンドを使用可能。
+chezmoi init --source "$PWD/chezmoi"
+chezmoi --source "$PWD/chezmoi" diff
+chezmoi --source "$PWD/chezmoi" apply
 ```
 
-## 適用方法
+`init` は設定テンプレートを再生成します。`apply` はファイルだけでなく対象の install/deploy スクリプトも実行するため、差分と対象を確認してから適用します。1Password・暗号化設定は [シークレット管理](./secrets.md) と [1Password](../1password/README.md) を参照してください。
 
-### 方法 1: GitHub から直接取得（クローン不要）
+`dotf chezmoi`（`task chezmoi`）は現在 WSL/Windows の相互呼び出しを含むため、macOS / Windows のない Linux では上記の直接コマンドを使います。
 
-最もシンプルな方法。リポジトリをクローンせずに適用できます。
+`chezmoi init rurusasu/dotfiles --source-path chezmoi` は使用しません。`--source-path` はサブディレクトリを値に取るオプションではありません。また、削除済みの `scripts/powershell/apply-chezmoi.ps1` を直接呼ぶ旧手順も使用しません。
 
-**Windows:**
+## 配置方式
 
-```powershell
-chezmoi init rurusasu/dotfiles --source-path chezmoi
-chezmoi apply
-```
+- `dot_config/nvim/` などの `dot_*` は chezmoi が直接配置します。
+- `terminals/`、`editors/` などのカテゴリ別ファイルは `.chezmoiscripts/deploy/` の adapter が配置します。
+- Windows の Neovim は `.config/nvim` を共有します。PowerShell の `XDG_CONFIG_HOME`、または `%LOCALAPPDATA%/nvim` の junction を通じて参照します。
+- WezTerm の編集元は `chezmoi/terminals/wezterm/wezterm.lua` です。配布先の `~/.config/wezterm/wezterm.lua` と混同しないでください。
 
-**Linux/WSL:**
-
-```bash
-chezmoi init rurusasu/dotfiles --source-path chezmoi
-chezmoi apply
-```
-
-### 方法 2: ローカルコピーから適用
-
-リポジトリをクローン済みの場合。
-
-**Windows:**
-
-```powershell
-chezmoi init --source D:\dotfiles\chezmoi
-chezmoi apply
-```
-
-**WSL (シンボリックリンク経由):**
-
-```bash
-chezmoi init --source ~/.dotfiles/chezmoi
-chezmoi apply
-```
-
-### 方法 3: 同梱スクリプトで一括適用
-
-Windows でリポジトリがある場合:
-
-```powershell
-.\scripts\powershell\apply-chezmoi.ps1 -InstallChezmoi
-```
-
-このスクリプトは:
-
-1. chezmoi がなければ winget でインストール
-2. chezmoi init を実行
-3. chezmoi apply を実行
-
-## 設定の更新
-
-ファイルを編集後:
-
-```bash
-chezmoi apply
-```
-
-差分を確認:
-
-```bash
-chezmoi diff
-```
-
-## ターミナル設定の適用フロー
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Chezmoi (source of truth)                                   │
-│  chezmoi/AppData/Local/.../settings.json                    │
-│  chezmoi/dot_config/wezterm/wezterm.lua                      │
-└──────────────────────────────────────────────────────────────┘
-                            │
-                            │ chezmoi apply (Windows)
-                            ↓
-┌──────────────────────────────────────────────────────────────┐
-│                         Windows                              │
-│  %LOCALAPPDATA%\...\WindowsTerminal\settings.json            │
-│  %USERPROFILE%\.config\wezterm\wezterm.lua                   │
-└──────────────────────────────────────────────────────────────┘
-                            │
-                            │ chezmoi apply (WSL/Linux)
-                            ↓
-┌──────────────────────────────────────────────────────────────┐
-│                         WSL/Linux                            │
-│  ~/.config/wezterm/wezterm.lua                               │
-└──────────────────────────────────────────────────────────────┘
-```
-
-## プラットフォームサポート
-
-- Windows (ネイティブ)
-- Linux
-- WSL (Windows Subsystem for Linux)
-- DevContainer
+詳細は [ディレクトリ構造](./structure.md)、[Neovim](./neovim.md) を参照してください。実機反映後は対象アプリを再起動し、配置済みファイル・実際のキーバインドも確認します。

@@ -79,7 +79,7 @@ if ! have chezmoi && have curl; then
     log "chezmoi install failed; chezmoi apply will be skipped"
 fi
 
-# ── modern Neovim (distro nvim is usually too old for lazy.nvim) ────────
+# ── Neovim >= 0.12 (native LSP/completion and parser installer APIs) ────
 # Read the complete, short --version output instead of quitting sed early.
 # This avoids SIGPIPE under `set -o pipefail` and stays portable to BSD sed.
 need_nvim=1
@@ -90,11 +90,11 @@ if have nvim; then
   else
     major=${ver%.*}
     minor=${ver#*.}
-    if [ "$major" -gt 0 ] || { [ "$major" -eq 0 ] && [ "$minor" -ge 9 ]; }; then
+    if [ "$major" -gt 0 ] || { [ "$major" -eq 0 ] && [ "$minor" -ge 12 ]; }; then
       need_nvim=0
       log "Neovim $ver already present"
     else
-      log "Neovim $ver is too old (need >= 0.9); will reinstall"
+      log "Neovim $ver is too old (need >= 0.12); will reinstall"
     fi
   fi
 fi
@@ -154,6 +154,8 @@ fi
 # the Codex binary installed above.
 for f in "$HOME/.profile" "$HOME/.bashrc"; do
   if ! grep -q '\.local/npm/bin' "$f" 2>/dev/null; then
+    # Preserve variables literally for expansion by the future shell.
+    # shellcheck disable=SC2016
     printf '\n# Fallback added by dotfiles bootstrap\nexport PATH="$HOME/.local/bin:$HOME/.local/npm/bin:$PATH"\n' >>"$f"
   fi
 done

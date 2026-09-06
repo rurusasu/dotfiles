@@ -29,7 +29,7 @@
 #
 # Imported by:
 #   - nix/flakes/packages.nix → perSystem buildEnv outputs
-#   - nix/home/packages.nix   → home.packages
+#   - nix/home/common.nix     → home.packages
 #   - nix/packages/winget.nix → winget/npm/pnpm JSON generation
 {
   pkgs,
@@ -346,7 +346,7 @@ let
 
         # ── editors ───────────────────────────────────────────
         neovim = {
-          pkg = pkgs.neovim;
+          pkg = pkgs.callPackage ./neovim { };
           winget = "Neovim.Neovim";
           category = "editors";
         };
@@ -918,6 +918,11 @@ let
           pkg = pkgs.yaml-language-server;
           winget = null;
           category = "lsp";
+          support.windows = {
+            provider = "pnpm";
+            source = "npm";
+            identity = "yaml-language-server";
+          };
         };
         taplo = {
           pkg = pkgs.taplo;
@@ -928,6 +933,11 @@ let
           pkg = pkgs.bash-language-server;
           winget = null;
           category = "lsp";
+          support.windows = {
+            provider = "pnpm";
+            source = "npm";
+            identity = "bash-language-server";
+          };
         };
         lua-language-server = {
           pkg = pkgs.lua-language-server;
@@ -941,8 +951,13 @@ let
         };
         marksman = {
           pkg = pkgs.marksman;
-          winget = null;
+          winget = "Artempyanykh.Marksman";
           category = "lsp";
+        };
+        tree-sitter = {
+          pkg = pkgs.tree-sitter;
+          winget = "tree-sitter.tree-sitter-cli";
+          category = "dev";
         };
         gopls = {
           pkg = pkgs.gopls;
@@ -973,6 +988,11 @@ let
           pkg = pkgs.typescript-language-server;
           winget = null;
           category = "lsp";
+          support.windows = {
+            provider = "pnpm";
+            source = "npm";
+            identity = "typescript-language-server";
+          };
         };
       };
 
@@ -986,7 +1006,6 @@ let
     windows = lib.genAttrs [
       "argocd"
       "astro-language-server"
-      "bash-language-server"
       "bat"
       "bats"
       "cilium-cli"
@@ -1003,7 +1022,6 @@ let
       "kubernetes-helm"
       "kubeseal"
       "kustomize"
-      "marksman"
       "netcat"
       "neovim-remote"
       "nixd"
@@ -1017,11 +1035,9 @@ let
       "tmux"
       "treefmt"
       "trivy"
-      "typescript-language-server"
       "udev-gothic-nf"
       "unzip"
       "workmux"
-      "yaml-language-server"
     ] (_: "No reviewed Windows package provider is selected");
     darwin = { };
     linux = { };
@@ -1097,6 +1113,7 @@ let
       winget = "winget";
       msstore = "msstore";
       npm = "npm";
+      pnpm = "npm";
       "system-manager" = "nixpkgs";
     }
     .${provider} or null;
@@ -1338,6 +1355,7 @@ let
         "winget"
         "msstore"
         "npm"
+        "pnpm"
       ]
     then
       [
@@ -1504,6 +1522,8 @@ lib.mapAttrs (_: resolve) grouped
 
   # Cross-platform pnpm global packages
   pnpmGlobal = [
+    "bash-language-server"
+    "yaml-language-server"
     "@prisma/language-server"
     "@deepseek-ai/dsh"
     "@playwright/cli@0.1.14"
@@ -1520,6 +1540,14 @@ lib.mapAttrs (_: resolve) grouped
   # Post-install verification commands for pnpm packages.
   # Keys match globalPackages entries. Packages not listed skip verification.
   pnpmVerify = {
+    "bash-language-server" = {
+      command = "bash-language-server";
+      args = [ "--version" ];
+    };
+    "yaml-language-server" = {
+      command = "yaml-language-server";
+      args = [ "--version" ];
+    };
     "@prisma/language-server" = {
       command = "prisma-language-server";
       args = [ "--version" ];
@@ -1693,6 +1721,14 @@ lib.mapAttrs (_: resolve) grouped
     };
     lua-language-server = {
       command = "lua-language-server";
+      args = [ "--version" ];
+    };
+    marksman = {
+      command = "marksman";
+      args = [ "--version" ];
+    };
+    tree-sitter = {
+      command = "tree-sitter";
       args = [ "--version" ];
     };
     stylua = {
