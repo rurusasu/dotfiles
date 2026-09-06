@@ -177,6 +177,7 @@ EOF
 	[ "$(grep -Fc 'exec /bin/httpd -f -p 80 -h /www' "$compose")" -ge 2 ]
 	[ "$(grep -Fc "exec nginx -g 'daemon off;'" "$compose")" -ge 2 ]
 	grep -Fq 'xapi-mcp:' "$compose"
+	grep -Fq '    working_dir: /' "$compose"
 	grep -Fq 'browser-mcp:' "$compose"
 	! grep -Eq '^[[:space:]]{2}hindsight:' "$compose"
 	grep -Fq 'name: local-ai-services' "$compose"

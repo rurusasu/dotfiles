@@ -20,6 +20,7 @@ services:
 
   xapi-mcp:
     image: nginx:1.29-alpine
+    working_dir: /
     volumes:
       - ./xurl-fixture.sh:/node_modules/.bin/xurl:ro
 
