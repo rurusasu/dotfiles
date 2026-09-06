@@ -653,6 +653,20 @@ function Invoke-Pnpm {
         [Parameter(Mandatory)]
         [string[]]$Arguments
     )
+    # Windows の npm/Corepack は extensionless な POSIX shim と
+    # pnpm.cmd を同じディレクトリに配置することがある。PowerShell の
+    # 解決結果が extensionless shim になると、Windows がそれを実行できず
+    # ERROR_BAD_EXE_FORMAT (os error 193) になるため、.cmd を優先する。
+    $pnpmCommand = Get-Command -Name "pnpm.cmd" -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($pnpmCommand) {
+        $pnpmPath = if ($pnpmCommand.Source) { $pnpmCommand.Source } else { $pnpmCommand.Path }
+        if ($pnpmPath) {
+            Invoke-NativeCommand -Command $pnpmPath -Arguments $Arguments
+            return
+        }
+    }
+
     Invoke-NativeCommand -Command "pnpm" -Arguments $Arguments
 }
 
