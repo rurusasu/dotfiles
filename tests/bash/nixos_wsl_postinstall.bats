@@ -10,6 +10,7 @@ setup() {
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	NIXOS_ARGV_CAPTURE="$BATS_TEST_TMPDIR/nixos-rebuild.argv"
 	NIX_EVAL_CAPTURE="$BATS_TEST_TMPDIR/nix-eval.result"
+	DOTFILES_STATE_DIR="$BATS_TEST_TMPDIR/state"
 	REAL_NIX="$(command -v nix || true)"
 
 	mkdir -p "$USER_HOME" "$SYNC_SOURCE" "$STUB_BIN"
@@ -24,7 +25,7 @@ setup() {
 
 	export HOME="$TEST_HOME"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG NIXOS_ARGV_CAPTURE NIX_EVAL_CAPTURE REAL_NIX REPO_ROOT USER_HOME SYNC_SOURCE
+	export COMMAND_LOG NIXOS_ARGV_CAPTURE NIX_EVAL_CAPTURE REAL_NIX REPO_ROOT USER_HOME SYNC_SOURCE DOTFILES_STATE_DIR
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 
 	write_stub id '
@@ -64,6 +65,9 @@ exec "$@"
 '
 	write_stub chown '
 printf "chown %s\n" "$*" >>"$COMMAND_LOG"
+'
+	write_stub sudo '
+exec "$@"
 '
 	write_stub nixos-rebuild '
 printf "%s\n" "$@" >"$NIXOS_ARGV_CAPTURE"
@@ -123,6 +127,7 @@ EOF
 		--sync-source "$SYNC_SOURCE" \
 		--repo-dir "$RUN_REPO_DIR" \
 		--sync-back none \
+		--state-version 26.05 \
 		--skip-flake-update
 
 	[ "$status" -eq 0 ]
@@ -138,4 +143,35 @@ EOF
 	if [[ -n $REAL_NIX ]]; then
 		[ "$(<"$NIX_EVAL_CAPTURE")" = ok ]
 	fi
+}
+
+@test "nix sync requires an existing complete WSL checkout" {
+	RUN_REPO_DIR="$BATS_TEST_TMPDIR/partial-repo"
+
+	run bash "$INSTALLER" \
+		--user alice \
+		--sync-mode nix \
+		--sync-source "$SYNC_SOURCE" \
+		--repo-dir "$RUN_REPO_DIR" \
+		--sync-back none \
+		--skip-flake-update
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"complete WSL checkout"* ]]
+}
+
+@test "nix sync refuses repository sync-back" {
+	RUN_REPO_DIR="$BATS_TEST_TMPDIR/partial-repo"
+
+	run bash "$INSTALLER" \
+		--user alice \
+		--sync-mode nix \
+		--sync-source "$SYNC_SOURCE" \
+		--repo-dir "$RUN_REPO_DIR" \
+		--sync-back repo \
+		--skip-flake-update
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"cannot use --sync-back repo with --sync-mode nix"* ]]
+	[ -f "$SYNC_SOURCE/flake.nix" ]
 }

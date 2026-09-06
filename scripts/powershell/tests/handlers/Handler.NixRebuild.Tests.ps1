@@ -129,6 +129,9 @@ Describe 'NixRebuildHandler' {
             Should -Invoke Write-Host -ParameterFilter {
                 $ForegroundColor -eq 'Gray' -and ([string]$Object) -match 'building NixOS'
             } -Times 1
+            Should -Invoke Invoke-Wsl -ParameterFilter {
+                ($Arguments -join " ") -match "nixos-rebuild-with-user"
+            } -Times 1
         }
 
         It 'should fail when nixos-rebuild switch fails' {
@@ -556,8 +559,7 @@ Describe 'NixRebuildHandler' {
 
             $script:wslArgs | Should -Match "-d NixOS"
             $script:wslArgs | Should -Match "-u root"
-            $script:wslArgs | Should -Match "cd /home/nixos/.dotfiles"
-            $script:wslArgs | Should -Match "nixos-rebuild switch --flake"
+            $script:wslArgs | Should -Match "nixos-rebuild-with-user.sh switch --flake . --impure"
         }
 
         It 'should update the flake lock before nixos-rebuild so Nix packages use latest inputs' {
@@ -1034,6 +1036,33 @@ Describe 'NixRebuildHandler' {
             try { $handler.EnsureDotfilesAvailable("NixOS", "C:\Users\foo\dotfiles") } catch { }
 
             $script:mountPath | Should -Be "/mnt/c/Users/foo/dotfiles"
+        }
+
+        It 'should resolve the configured WSL user and home instead of assuming nixos' {
+            $script:identityArgs = ""
+            $script:userArgs = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "/var/lib/dotfiles/user") {
+                    $script:identityArgs = $argStr
+                    $global:LASTEXITCODE = 0
+                    return "alice`t/home/alice"
+                }
+                if ($argStr -match "-u alice") {
+                    $script:userArgs = $argStr
+                }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $handler.ResolveNixOsIdentity("NixOS")
+            $handler.EnsureDotfilesAvailable("NixOS", "D:\ruru\dotfiles")
+
+            $handler.NixOsUser | Should -Be "alice"
+            $handler.NixOsHome | Should -Be "/home/alice"
+            $script:identityArgs | Should -Match "-u root"
+            $script:userArgs | Should -Match "-u alice"
         }
     }
 }

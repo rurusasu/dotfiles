@@ -10,6 +10,8 @@
 let
   configuredUser = builtins.getEnv "DOTFILES_USER";
   user = if configuredUser == "" then "nixos" else configuredUser;
+  configuredStateVersion = builtins.getEnv "DOTFILES_STATE_VERSION";
+  stateVersion = if configuredStateVersion == "" then "25.05" else configuredStateVersion;
 in
 
 {
@@ -26,5 +28,7 @@ in
   # this value at the release version of the first install of this system.
   # Before changing this value read the documentation for this option
   # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
-  system.stateVersion = "25.05"; # Did you read the comment?
+  # New installs and explicitly approved migrations pass 26.05 through
+  # DOTFILES_STATE_VERSION. Existing systems remain on 25.05 by default.
+  system.stateVersion = stateVersion; # Did you read the comment?
 }

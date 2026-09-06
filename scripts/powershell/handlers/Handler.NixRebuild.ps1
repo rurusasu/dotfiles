@@ -16,6 +16,8 @@ $libPath = Split-Path -Parent $PSScriptRoot
 
 class NixRebuildHandler : SetupHandlerBase {
     hidden [string] $PnpmHomePath = '$HOME/.local/share/pnpm'
+    hidden [string] $NixOsUser = 'nixos'
+    hidden [string] $NixOsHome = '/home/nixos'
 
     hidden [string] GetPnpmShellPrefix() {
         return "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME/bin:`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`""
@@ -26,6 +28,22 @@ class NixRebuildHandler : SetupHandlerBase {
         $this.Description = "nixos-rebuild switch の実行"
         $this.Order = 55
         $this.RequiresAdmin = $false
+    }
+
+    hidden [void] ResolveNixOsIdentity([string]$distroName) {
+        $identityCommand = 'user=$(cat /var/lib/dotfiles/user 2>/dev/null || true); if [ -z "$user" ]; then user=$(awk -F= ''/^\[user\]/{in_user=1; next} /^\[/{in_user=0} in_user && $1=="default" {gsub(/[[:space:]]/,"",$2); print $2; exit}'' /etc/wsl.conf 2>/dev/null || true); fi; if [ -z "$user" ]; then user=$(getent passwd 1000 | cut -d: -f1); fi; if [ -n "$user" ]; then home=$(getent passwd "$user" | cut -d: -f6); printf "%s\t%s" "$user" "$home"; fi'
+        $identityOutput = Invoke-Wsl -Arguments @(
+            "-d", $distroName, "-u", "root", "--", "bash", "-lc", $identityCommand
+        )
+        $identityText = if ($identityOutput) { ([string]($identityOutput | Select-Object -First 1)).Trim() } else { "" }
+        if ($identityText -match '^(?<user>[a-z_][a-z0-9_-]*[$]?)\s+(?<home>/\S+)$') {
+            $this.NixOsUser = $Matches.user
+            $this.NixOsHome = $Matches.home
+        }
+        else {
+            $this.NixOsUser = 'nixos'
+            $this.NixOsHome = '/home/nixos'
+        }
     }
 
     [bool] CanApply([SetupContext]$ctx) {
@@ -68,12 +86,12 @@ class NixRebuildHandler : SetupHandlerBase {
             # core.hooksPath が設定されていると pre-commit install が拒否するため
             # local/global/system すべてのレベルで解除する
             Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", "nixos", "--",
+                "-d", $distroName, "-u", $this.NixOsUser, "--",
                 "bash", "-lc", "cd ~/.dotfiles && git config --unset-all core.hooksPath 2>/dev/null; git config --global --unset-all core.hooksPath 2>/dev/null; true"
             )
 
             $output = Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", "nixos", "--",
+                "-d", $distroName, "-u", $this.NixOsUser, "--",
                 "bash", "-lc", "cd ~/.dotfiles && pre-commit install --install-hooks"
             )
             $preCommitExitCode = $LASTEXITCODE
@@ -100,7 +118,7 @@ class NixRebuildHandler : SetupHandlerBase {
         # WSL interop 経由で Windows 版 pnpm が /mnt/ 配下に見えることがある。
         # Linux ネイティブの pnpm のみを有効とみなすため /mnt/ 配下を除外して確認する。
         Invoke-Wsl -Arguments @(
-            "-d", $distroName, "-u", "nixos", "--",
+            "-d", $distroName, "-u", $this.NixOsUser, "--",
             "bash", "-lc", "$($this.GetPnpmShellPrefix()); command -v pnpm 2>/dev/null | grep -qv '^/mnt/'"
         ) | Out-Null
         if ($LASTEXITCODE -ne 0) {
@@ -108,7 +126,7 @@ class NixRebuildHandler : SetupHandlerBase {
             # NixOS では npm のグローバルプレフィックスが read-only nix store を指すため
             # ~/.npm-global に変更してからインストールする
             Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", "nixos", "--",
+                "-d", $distroName, "-u", $this.NixOsUser, "--",
                 "bash", "-lc", "mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global && npm install -g pnpm && grep -q npm-global ~/.bashrc || echo 'export PATH=~/.npm-global/bin:`$PATH' >> ~/.bashrc"
             )
             if ($LASTEXITCODE -ne 0) {
@@ -119,19 +137,19 @@ class NixRebuildHandler : SetupHandlerBase {
 
         # PNPM_HOME が未設定なら pnpm setup を実行してグローバル bin ディレクトリを作成
         $pnpmHomeCheck = Invoke-Wsl -Arguments @(
-            "-d", $distroName, "-u", "nixos", "--",
+            "-d", $distroName, "-u", $this.NixOsUser, "--",
             "bash", "-lc", "$($this.GetPnpmShellPrefix()); [ -d `"`$PNPM_HOME`" ] && [ -d `"`$PNPM_HOME/bin`" ] && echo exists"
         )
         if (-not $pnpmHomeCheck -or $pnpmHomeCheck -notmatch 'exists') {
             $this.Log("PNPM_HOME を設定しています...")
             Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", "nixos", "--",
+                "-d", $distroName, "-u", $this.NixOsUser, "--",
                 "bash", "-lc", "$($this.GetPnpmShellPrefix()); mkdir -p `"`$PNPM_HOME`" `"`$PNPM_HOME/bin`"; pnpm setup 2>/dev/null || true"
             )
         }
         # .bashrc に PNPM_HOME/bin が無ければ追加
         Invoke-Wsl -Arguments @(
-            "-d", $distroName, "-u", "nixos", "--",
+            "-d", $distroName, "-u", $this.NixOsUser, "--",
             "bash", "-lc", "grep -q 'PNPM_HOME/bin' ~/.bashrc || echo 'export PNPM_HOME=$($this.PnpmHomePath); export PATH=`$PNPM_HOME/bin:`$PNPM_HOME:`$PATH' >> ~/.bashrc"
         )
     }
@@ -155,7 +173,7 @@ class NixRebuildHandler : SetupHandlerBase {
 
             # インストール済みパッケージを取得してフィルタリング
             $installedOutput = Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", "nixos", "--",
+                "-d", $distroName, "-u", $this.NixOsUser, "--",
                 "bash", "-lc", "$($this.GetPnpmShellPrefix()); pnpm ls -g --depth=0 2>/dev/null"
             )
             $toInstall = @()
@@ -221,7 +239,7 @@ class NixRebuildHandler : SetupHandlerBase {
 
             # PNPM_HOME と ~/.npm-global/bin を PATH に追加
             $pnpmExitCode = $this.InvokeWslPnpmInstall(@(
-                    "-d", $distroName, "-u", "nixos", "--",
+                    "-d", $distroName, "-u", $this.NixOsUser, "--",
                     "bash", "-lc", "$($this.GetPnpmShellPrefix()); pnpm add -g --reporter=append-only --yes $quotedInstallArgs $quotedPkgs"
                 ))
 
@@ -302,7 +320,7 @@ class NixRebuildHandler : SetupHandlerBase {
             }
 
             Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", "nixos", "--",
+                "-d", $distroName, "-u", $this.NixOsUser, "--",
                 "bash", "-lc", "$($this.GetPnpmShellPrefix()); timeout ${timeoutSeconds}s $cmdLine"
             ) | ForEach-Object {
                 if ($_ -notmatch '^\s*$') {
@@ -329,9 +347,9 @@ class NixRebuildHandler : SetupHandlerBase {
         $driveLetter = $dotfilesPath.Substring(0, 1).ToLower()
         $wslMountPath = '/mnt/' + $driveLetter + ($dotfilesPath.Substring(2) -replace '\\', '/')
 
-        $dotfilesLinkPath = "/home/nixos/.dotfiles"
+        $dotfilesLinkPath = "$($this.NixOsHome)/.dotfiles"
         $existingTarget = Invoke-Wsl -Arguments @(
-            "-d", $distroName, "-u", "nixos", "--",
+            "-d", $distroName, "-u", $this.NixOsUser, "--",
             "bash", "-lc", "if [ -L $dotfilesLinkPath ]; then readlink -f $dotfilesLinkPath 2>/dev/null; elif [ -e $dotfilesLinkPath ]; then printf '__non_symlink__'; fi"
         )
         $existingTargetText = if ($existingTarget) { ([string]($existingTarget | Select-Object -First 1)).Trim() } else { "" }
@@ -343,10 +361,10 @@ class NixRebuildHandler : SetupHandlerBase {
         }
 
         # Windows dotfiles が WSL からアクセスできるか確認
-        Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-lc", "test -d `"$wslMountPath`"") | Out-Null
+        Invoke-Wsl -Arguments @("-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", "test -d `"$wslMountPath`"") | Out-Null
         if ($LASTEXITCODE -eq 0) {
             $this.Log("dotfiles を WSL マウント経由でリンクします: $wslMountPath")
-            Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-lc", "ln -sfn `"$wslMountPath`" $dotfilesLinkPath")
+            Invoke-Wsl -Arguments @("-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", "ln -sfn `"$wslMountPath`" $dotfilesLinkPath")
             if ($LASTEXITCODE -ne 0) {
                 throw "dotfiles のシンボリックリンク作成に失敗しました"
             }
@@ -364,12 +382,14 @@ class NixRebuildHandler : SetupHandlerBase {
 
         try {
             $distroName = $ctx.DistroName
+            $this.ResolveNixOsIdentity($distroName)
 
             # dotfiles が NixOS 内に存在しなければ Windows マウント経由でリンク
             $this.EnsureDotfilesAvailable($distroName, $ctx.DotfilesPath)
 
             $this.Log("nix flake update を実行しています...")
-            $flakeUpdateOutput = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "nixos", "--", "bash", "-lc", "cd /home/nixos/.dotfiles && nix flake update 2>&1")
+            $flakeUpdateCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && nix flake update 2>&1"
+            $flakeUpdateOutput = Invoke-Wsl -Arguments @("-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", $flakeUpdateCommand)
             $flakeUpdateExitCode = $LASTEXITCODE
             $flakeUpdateErrors = [System.Collections.Generic.List[string]]::new()
             $flakeUpdateOutput | ForEach-Object {
@@ -399,8 +419,10 @@ class NixRebuildHandler : SetupHandlerBase {
                 "bash", "-lc", "grep -qs 'directory = \*' /root/.gitconfig 2>/dev/null || printf '[safe]\n\tdirectory = *\n' >> /root/.gitconfig"
             ) | Out-Null
 
-            # root で nixos-rebuild switch を実行。2>&1 で stderr も捕捉しエラー詳細をログに残す。
-            $output = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", "cd /home/nixos/.dotfiles && nixos-rebuild switch --flake .#nixos 2>&1")
+            # 実ユーザーの identity を wrapper に渡して nixos-rebuild switch を実行する。
+            # 2>&1 で stderr も捕捉しエラー詳細をログに残す。
+            $rebuildCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && DOTFILES_USER=$($this.QuoteShellArg($this.NixOsUser)) DOTFILES_HOME=$($this.QuoteShellArg($this.NixOsHome)) bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure 2>&1"
+            $output = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", $rebuildCommand)
             $nixosExitCode = $LASTEXITCODE
 
             # error: で始まる行は LogError（赤）、それ以外は Gray で表示

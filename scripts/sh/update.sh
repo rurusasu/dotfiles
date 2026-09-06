@@ -32,7 +32,7 @@ if [ ! -f /etc/NIXOS ]; then
   echo ""
   if grep -qi microsoft /proc/version 2>/dev/null; then
     echo "WSL で NixOS をセットアップするには、Windows PowerShell (管理者) から:"
-    echo '  .\scripts\powershell\install-nixos-wsl.ps1'
+    echo '  dotfiles リポジトリのルートで: .\install.cmd'
   fi
   exit 1
 fi
@@ -51,7 +51,7 @@ nix flake update --flake ~/.dotfiles
 info "NixOS 設定をビルドしています..."
 echo ""
 
-if sudo nixos-rebuild switch --flake ~/.dotfiles#nixos --impure; then
+if ~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh switch --flake ~/.dotfiles#nixos --impure; then
   success "NixOS 設定が適用されました"
 else
   error "NixOS rebuild に失敗しました"
@@ -109,5 +109,5 @@ echo ""
 success "Dotfiles が正常にインストールされました"
 echo ""
 echo "次回以降の更新は:"
-echo "  nrs  # または: nix flake update --flake ~/.dotfiles && sudo nixos-rebuild switch --flake ~/.dotfiles#nixos --impure"
+echo "  nrs  # または: nix flake update --flake ~/.dotfiles && ~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh switch --flake ~/.dotfiles#nixos --impure"
 echo ""
