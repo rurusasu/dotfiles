@@ -24,6 +24,10 @@ DATA_VOLUME = {
     "source": "hermes-data",
     "target": "/opt/data",
 }
+BOOTSTRAP_ENVIRONMENT = {
+    "HERMES_HOME": "/opt/data",
+    "HOME": "/opt/data",
+}
 XURL_BIND = {
     "type": "bind",
     "source": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl",
@@ -102,7 +106,12 @@ class ComposeContractTests(unittest.TestCase):
         )
         self.assertEqual(self.bootstrap["image"], self.hermes["image"])
         self.assertEqual(self.bootstrap["volumes"], [DATA_VOLUME])
-        self.assertEqual(self.bootstrap["environment"], {"HERMES_HOME": "/opt/data"})
+        self.assertEqual(self.bootstrap["environment"], BOOTSTRAP_ENVIRONMENT)
+        self.assertEqual(self.bootstrap["user"], "10000:10000")
+        self.assertEqual(self.bootstrap["cap_drop"], ["ALL"])
+        self.assertEqual(
+            self.bootstrap["security_opt"], ["no-new-privileges:true"]
+        )
         self.assertEqual(self.bootstrap["profiles"], ["bootstrap"])
         self.assertEqual(self.bootstrap["entrypoint"], "/usr/local/bin/hermes-bootstrap")
         self.assertEqual(self.bootstrap["command"], "apply")
@@ -115,6 +124,12 @@ class ComposeContractTests(unittest.TestCase):
 
     def test_gateway_uses_the_canonical_hermes_home(self) -> None:
         self.assertEqual(self.hermes["environment"]["HERMES_HOME"], "/opt/data")
+
+    def test_gateway_multiplexes_profiles_in_one_process(self) -> None:
+        self.assertEqual(
+            self.hermes["environment"]["GATEWAY_MULTIPLEX_PROFILES"],
+            "true",
+        )
 
     def test_gateway_runtime_home_uses_a_docker_managed_named_volume(self) -> None:
         self.assertEqual(self.hermes["volumes"][0], DATA_VOLUME)
@@ -410,7 +425,10 @@ class ComposeContractTests(unittest.TestCase):
 
         self.assertEqual(bootstrap["image"], hermes["image"])
         self.assertEqual(_volume_for_target(bootstrap, "/opt/data"), _volume_for_target(hermes, "/opt/data"))
-        self.assertEqual(bootstrap["environment"], {"HERMES_HOME": "/opt/data"})
+        self.assertEqual(bootstrap["environment"], BOOTSTRAP_ENVIRONMENT)
+        self.assertEqual(bootstrap["user"], "10000:10000")
+        self.assertEqual(bootstrap["cap_drop"], ["ALL"])
+        self.assertEqual(bootstrap["security_opt"], ["no-new-privileges:true"])
         self.assertEqual(bootstrap["profiles"], ["bootstrap"])
         self.assertEqual(bootstrap["entrypoint"], ["/usr/local/bin/hermes-bootstrap"])
         self.assertEqual(bootstrap["command"], ["apply"])

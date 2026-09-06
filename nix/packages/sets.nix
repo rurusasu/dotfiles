@@ -73,11 +73,6 @@ let
       })
     else
       null;
-  dockerDesktopPackage =
-    if pkgs.stdenv.hostPlatform.isDarwin then
-      selectDarwinPackage "docker-desktop" (pkgs.callPackage ./docker-desktop { })
-    else
-      null;
   rawCatalog =
     if catalogOverride != null then
       catalogOverride
@@ -699,7 +694,6 @@ let
           };
         };
         docker-desktop = {
-          pkg = dockerDesktopPackage;
           winget = "Docker.DockerDesktop";
           category = "system";
           installFeature = "WithDocker";
@@ -710,17 +704,10 @@ let
               identity = "Docker.DockerDesktop";
             };
             darwin = {
-              provider = "nix";
-              source = (darwinProviderCandidate "docker-desktop").source;
-              identity = {
-                homepage = "https://www.docker.com/products/docker-desktop/";
-                appName = "Docker.app";
-                bundleId = "com.docker.docker";
-                executable = "com.docker.backend";
-              };
-            }
-            // lib.optionalAttrs ((darwinProviderCandidate "docker-desktop").nixAttr != null) {
-              nixAttr = (darwinProviderCandidate "docker-desktop").nixAttr;
+              provider = "homebrew-cask";
+              source = "homebrew";
+              identity = "docker-desktop";
+              cask = "docker-desktop";
             };
             linux = {
               provider = "system-manager";
@@ -729,10 +716,6 @@ let
               nixAttr = "docker";
               systemModule = "docker";
             };
-          };
-          legacyDarwin = {
-            provider = "homebrew-cask";
-            name = "docker-desktop";
           };
         };
         hermes-desktop = {
@@ -789,11 +772,7 @@ let
             if pkgs.stdenv.hostPlatform.isDarwin then
               pkgs.writeShellApplication {
                 name = "hermes-docker";
-                runtimeInputs = [ dockerDesktopPackage ];
-                text = ''
-                  export HERMES_DOCKER_COMPOSE_PLUGIN="${dockerDesktopPackage}/libexec/docker/cli-plugins/docker-compose"
-                  ${builtins.readFile ../../scripts/sh/hermes-docker.sh}
-                '';
+                text = builtins.readFile ../../scripts/sh/hermes-docker.sh;
               }
             else
               null;

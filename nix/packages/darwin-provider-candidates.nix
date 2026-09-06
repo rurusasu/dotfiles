@@ -17,9 +17,4 @@
     nixAttr = null;
     candidates = [ "hammerspoon" ];
   };
-  docker-desktop = {
-    source = "custom";
-    nixAttr = null;
-    candidates = [ "docker-desktop" ];
-  };
 }

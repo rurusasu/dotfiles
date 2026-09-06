@@ -24,7 +24,7 @@ setup() {
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
 	export HERMES_ITEM_JSON='{"id":"fixture-item","fields":[]}'
-	export HERMES_XAPI_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"},{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
+	export HERMES_XAPI_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"},{"label":"X_API_REFRESH_TOKEN","section":{"label":"Refresh Token"},"value":"xapi-refresh-token-marker"}]}'
 	export HERMES_XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
 	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_NIXOS_MARKER="$NIXOS_MARKER"
@@ -163,7 +163,7 @@ line_of() {
 	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml up -d --force-recreate")" -lt "$(line_of 'docker image prune --force')" ]
 	[ "$(line_of 'docker image prune --force')" -lt "$(line_of verify-environment)" ]
 	grep -q '^verify-environment layer=nixos args=--runtime$' "$COMMAND_LOG"
-	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 12 ]
+	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 15 ]
 	[ "$(grep -c '^op --account my.1password.com read ' "$COMMAND_LOG")" -eq 1 ]
 	! grep -q '^op signin ' "$COMMAND_LOG"
 	[ -s "$PAYLOAD_CAPTURE" ]

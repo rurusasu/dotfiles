@@ -27,7 +27,6 @@ DERIVATIONS = {
     "dia-browser": ROOT / "nix" / "packages" / "dia-browser" / "default.nix",
     "orca-editor": ROOT / "nix" / "packages" / "orca-editor" / "default.nix",
     "hammerspoon": ROOT / "nix" / "packages" / "hammerspoon" / "default.nix",
-    "docker-desktop": ROOT / "nix" / "packages" / "docker-desktop" / "default.nix",
 }
 
 
@@ -338,22 +337,6 @@ def _json_release(payload: bytes, *, arm64: bool = True) -> Release | None:
     return _choose_release(tag, urls, arm64=arm64)
 
 
-def _appcast_release(payload: bytes) -> Release | None:
-    data = json.loads(payload.decode("utf-8"))
-    items = data if isinstance(data, list) else data.get("updates", data.get("items", []))
-    if isinstance(items, dict):
-        items = [items]
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        version = str(item.get("version", item.get("shortVersionString", ""))).lstrip("v")
-        url = str(item.get("url", item.get("download_url", "")))
-        chosen = _choose_release(version, [url], arm64=True)
-        if chosen:
-            return chosen
-    return None
-
-
 def _dia_release(payload: bytes) -> Release | None:
     root = ET.fromstring(payload)
     urls = [element.attrib.get("url", "") for element in root.iter()]
@@ -395,12 +378,6 @@ PROFILES = {
         DERIVATIONS["orca-editor"],
         lambda payload: _json_release(payload, arm64=True),
     ),
-    "docker-desktop": PackageProfile(
-        "docker-desktop",
-        "https://desktop.docker.com/mac/main/arm64/appcast.json",
-        DERIVATIONS["docker-desktop"],
-        _appcast_release,
-    ),
 }
 
 IDENTITIES = {
@@ -421,12 +398,6 @@ IDENTITIES = {
         "appName": "Hammerspoon.app",
         "bundleId": "org.hammerspoon.Hammerspoon",
         "executable": "Hammerspoon",
-    },
-    "docker-desktop": {
-        "homepage": "https://www.docker.com/products/docker-desktop/",
-        "appName": "Docker.app",
-        "bundleId": "com.docker.docker",
-        "executable": "com.docker.backend",
     },
 }
 

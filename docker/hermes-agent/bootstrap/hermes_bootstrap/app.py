@@ -16,7 +16,12 @@ from typing import Callable, TextIO
 from dotenv.parser import parse_stream
 
 from . import profile_sync
-from .configfiles import reconcile_onepassword_configurations
+from .configfiles import (
+    reconcile_onepassword_cli_permissions,
+    reconcile_onepassword_configurations,
+    reconcile_xapi_configurations,
+    validate_xapi_configurations,
+)
 from .context_engine import (
     install_context_engine_configurations,
     validate_context_engine_installation,
@@ -221,6 +226,7 @@ def _apply_sensitive(
             scratch.path,
         )
         tx = Transaction.begin(manifest.data_root)
+        reconcile_onepassword_cli_permissions(manifest.data_root, tx)
         apply_root_distribution(root_stage, manifest.data_root, tx)
         _failpoint("root-apply")
         for stage in profile_stages:
@@ -264,6 +270,7 @@ def _apply_sensitive(
         )
         install_hindsight_configurations(_environment_targets(manifest), tx)
         install_context_engine_configurations(_environment_targets(manifest), tx)
+        reconcile_xapi_configurations(_runtime_config_targets(manifest), tx)
         install_google_calendar_credentials(
             manifest.data_root,
             secrets.google_calendar,
@@ -473,6 +480,39 @@ def _environment_targets(manifest: BootstrapManifest) -> tuple[tuple[str, Path],
     return (("default", manifest.data_root), *((profile.name, profile.target) for profile in manifest.profiles))
 
 
+def _runtime_config_targets(manifest: BootstrapManifest) -> list[Path]:
+    """Return every managed or locally created runtime profile."""
+
+    targets = [target for _profile, target in _environment_targets(manifest)]
+    managed = set(targets)
+    directory = manifest.data_root / "profiles"
+    try:
+        entries = sorted(directory.iterdir(), key=lambda entry: entry.name)
+    except FileNotFoundError:
+        return targets
+    except OSError:
+        raise ApplyError("could not inspect Hermes runtime profiles") from None
+    for entry in entries:
+        if entry in managed:
+            continue
+        try:
+            directory_metadata = entry.lstat()
+        except OSError:
+            raise ApplyError("could not inspect Hermes runtime profiles") from None
+        if stat.S_ISLNK(directory_metadata.st_mode):
+            raise ApplyError("could not inspect Hermes runtime profiles")
+        if not stat.S_ISDIR(directory_metadata.st_mode):
+            continue
+        try:
+            (entry / "config.yaml").lstat()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            raise ApplyError("could not inspect Hermes runtime profiles") from None
+        targets.append(entry)
+    return targets
+
+
 def _private_scratch(data_root: Path) -> PrivateDirectory:
     _require_safe_directory(data_root)
     try:
@@ -609,6 +649,7 @@ def _validate_installed_layout(
             manifest.data_root,
             [target for _profile, target in _environment_targets(manifest)],
         )
+        validate_xapi_configurations(_runtime_config_targets(manifest))
         validate_hindsight_installation(_environment_targets(manifest))
         validate_context_engine_installation(_environment_targets(manifest))
         for profile, target in _environment_targets(manifest):

@@ -141,13 +141,13 @@ function Wait-HermesBootstrapApi {
     $timeoutSeconds = Get-HermesBootstrapEnvironmentInteger `
         -Name 'HERMES_API_PROBE_TIMEOUT_SECONDS' `
         -DefaultValue 2
-    $port = if ([string]::IsNullOrWhiteSpace($env:HERMES_API_PORT)) {
-        '8642'
+    $port = if ([string]::IsNullOrWhiteSpace($env:HERMES_DASHBOARD_PORT)) {
+        '9119'
     }
     else {
-        $env:HERMES_API_PORT
+        $env:HERMES_DASHBOARD_PORT
     }
-    $healthUrl = "http://127.0.0.1:$port/health"
+    $healthUrl = "http://127.0.0.1:$port/api/health"
 
     for ($attempt = 1; $attempt -le $attempts; $attempt++) {
         try {
@@ -252,7 +252,7 @@ function Invoke-HermesBootstrapRuntimeRecovery {
             -DefaultValue 30
         return New-HermesBootstrapEntrypointResult `
             -ExitCode 1 `
-            -Message "Hermes runtime recovery readiness failed: Hermes API did not become ready after $attempts attempts."
+            -Message "Hermes runtime recovery readiness failed: Hermes Desktop backend did not become ready after $attempts attempts."
     }
 
     return New-HermesBootstrapEntrypointResult -ExitCode 0 -Message ''
@@ -422,20 +422,39 @@ function Invoke-HermesBootstrapEntrypoint {
             }
 
             try {
-                $startup = Invoke-HermesXApiCredentialScope -Action {
-                    Invoke-HermesBootstrapDockerPhase `
-                        -Arguments @('compose', '-f', $paths.ComposeFile, 'up', '-d', '--force-recreate') `
-                        -FailureMessage 'Hermes Compose startup failed.'
-                }
+                $startup = Invoke-HermesXApiCredentialScope `
+                    -DataDir $paths.DataDir `
+                    -TokenProbe {
+                        $global:LASTEXITCODE = 0
+                        $probeOutput = @(Invoke-Docker `
+                            -Arguments @(
+                                'compose', '-f', $paths.ComposeFile,
+                                'run', '--rm', '--no-deps', '--entrypoint', '/bin/sh', 'xapi-mcp',
+                                '-lc', 'CLIENT_ID="$X_API_CLIENT_ID" CLIENT_SECRET="$X_API_CLIENT_SECRET" node_modules/.bin/xurl token >/dev/null'
+                            ) 2>&1)
+                        $probeExitCode = $global:LASTEXITCODE
+                        return Resolve-HermesXApiTokenProbeResult `
+                            -ExitCode $probeExitCode `
+                            -Output $probeOutput
+                    } `
+                    -Action {
+                        Invoke-HermesBootstrapDockerPhase `
+                            -Arguments @('compose', '-f', $paths.ComposeFile, 'up', '-d', '--force-recreate') `
+                            -FailureMessage 'Hermes Compose startup failed.'
+                    }
             }
             catch {
-                if ($_.Exception.Message -ne 'Hermes X API credential retrieval failed.') {
-                    throw
+                $xApiFailure = $_.Exception.Message
+                if ($xApiFailure -in @(
+                        'Hermes X API credential retrieval failed.',
+                        'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
+                    )) {
+                    return New-HermesBootstrapFailureResult `
+                        -ComposeFile $paths.ComposeFile `
+                        -RuntimeExisted $runtimeExisted `
+                        -FailureMessage $xApiFailure
                 }
-                return New-HermesBootstrapFailureResult `
-                    -ComposeFile $paths.ComposeFile `
-                    -RuntimeExisted $runtimeExisted `
-                    -FailureMessage 'Hermes X API credential retrieval failed.'
+                throw
             }
             if ($startup.ExitCode -ne 0) {
                 return New-HermesBootstrapFailureResult `
@@ -460,7 +479,7 @@ function Invoke-HermesBootstrapEntrypoint {
                 return New-HermesBootstrapFailureResult `
                     -ComposeFile $paths.ComposeFile `
                     -RuntimeExisted $runtimeExisted `
-                    -FailureMessage "Hermes API did not become ready after $attempts attempts."
+                    -FailureMessage "Hermes Desktop backend did not become ready after $attempts attempts."
             }
 
             try {

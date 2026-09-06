@@ -25,6 +25,7 @@ Describe 'HermesAgentHandler' {
         $script:oldHermesBrowserDataDir = $env:HERMES_BROWSER_DATA_DIR
         $script:oldHermesBrowserViewPort = $env:HERMES_BROWSER_VIEW_PORT
         $script:oldHermesApiPort = $env:HERMES_API_PORT
+        $script:oldHermesDashboardPort = $env:HERMES_DASHBOARD_PORT
         $script:oldHermesApiReadyAttempts = $env:HERMES_API_READY_ATTEMPTS
         $script:oldHermesApiReadyDelaySeconds = $env:HERMES_API_READY_DELAY_SECONDS
         $script:oldHermesApiProbeTimeoutSeconds = $env:HERMES_API_PROBE_TIMEOUT_SECONDS
@@ -41,6 +42,7 @@ Describe 'HermesAgentHandler' {
         Remove-Item Env:\HERMES_BROWSER_DATA_DIR -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_BROWSER_VIEW_PORT -ErrorAction SilentlyContinue
         Remove-Item Env:\HERMES_API_PORT -ErrorAction SilentlyContinue
+        Remove-Item Env:\HERMES_DASHBOARD_PORT -ErrorAction SilentlyContinue
         $env:HERMES_API_READY_ATTEMPTS = '3'
         $env:HERMES_API_READY_DELAY_SECONDS = '0'
         $env:HERMES_API_PROBE_TIMEOUT_SECONDS = '1'
@@ -88,6 +90,7 @@ Describe 'HermesAgentHandler' {
                 @{ Name = 'HERMES_BROWSER_DATA_DIR'; Value = $script:oldHermesBrowserDataDir },
                 @{ Name = 'HERMES_BROWSER_VIEW_PORT'; Value = $script:oldHermesBrowserViewPort },
                 @{ Name = 'HERMES_API_PORT'; Value = $script:oldHermesApiPort },
+                @{ Name = 'HERMES_DASHBOARD_PORT'; Value = $script:oldHermesDashboardPort },
                 @{ Name = 'HERMES_API_READY_ATTEMPTS'; Value = $script:oldHermesApiReadyAttempts },
                 @{ Name = 'HERMES_API_READY_DELAY_SECONDS'; Value = $script:oldHermesApiReadyDelaySeconds },
                 @{ Name = 'HERMES_API_PROBE_TIMEOUT_SECONDS'; Value = $script:oldHermesApiProbeTimeoutSeconds }
@@ -184,7 +187,7 @@ Describe 'HermesAgentHandler' {
             )
             $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up', 'health')
             Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
-                $Uri -eq 'http://127.0.0.1:8642/health' -and
+                $Uri -eq 'http://127.0.0.1:9119/api/health' -and
                 $Method -eq 'Get' -and
                 $TimeoutSec -eq 1
             }
@@ -319,7 +322,7 @@ Describe 'HermesAgentHandler' {
             $result.Success | Should -BeFalse
             $result.HandlerName | Should -Be 'HermesAgent'
             $result.Message | Should -Match 'Hermes bootstrap failed: bootstrap failure'
-            $result.Message | Should -Match 'Hermes runtime recovery readiness failed: Hermes API did not become ready after 1 attempts.'
+            $result.Message | Should -Match 'Hermes runtime recovery readiness failed: Hermes Desktop backend did not become ready after 1 attempts.'
             Should -Invoke Invoke-WebRequest -Times 1 -Exactly
         }
 
@@ -354,6 +357,134 @@ Describe 'HermesAgentHandler' {
             $result.Message | Should -Be 'Hermes X API credential retrieval failed.'
             $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials')
             $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate --remove-orphans hermes chromium browser-mcp xapi-mcp"
+        }
+
+        It 'recovers an existing runtime when storage initialization throws after stop' {
+            Mock Invoke-Docker {
+                $script:dockerCalls.Add(($Arguments -join ' '))
+                if ($Arguments -contains 'ps' -and $Arguments -contains '--services') {
+                    $global:LASTEXITCODE = 0
+                    return 'hermes'
+                }
+                $global:LASTEXITCODE = 0
+            }
+            Mock Initialize-HermesStorageVolume { throw 'secret storage exception' }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Be 'Hermes data volume configuration failed.'
+            $result.Message | Should -Not -Match 'secret storage exception'
+            $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
+            Should -Invoke Invoke-WebRequest -Times 1 -Exactly
+            Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
+        }
+
+        It 'recovers an existing runtime when storage initialization returns failure after stop' {
+            Mock Invoke-Docker {
+                $script:dockerCalls.Add(($Arguments -join ' '))
+                if ($Arguments -contains 'ps' -and $Arguments -contains '--services') {
+                    $global:LASTEXITCODE = 0
+                    return 'hermes'
+                }
+                $global:LASTEXITCODE = 0
+            }
+            Mock Initialize-HermesStorageVolume {
+                [PSCustomObject]@{ Success = $false; Message = 'Hermes storage marker validation failed.' }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Be 'Hermes storage marker validation failed.'
+            $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
+            Should -Invoke Invoke-WebRequest -Times 1 -Exactly
+            Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
+        }
+
+        It 'returns actionable OAuth recovery guidance before recreating services' {
+            Mock Invoke-HermesXApiCredentialScope {
+                $script:eventLog.Add('xapi-credentials')
+                throw [System.InvalidOperationException]::new(
+                    'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
+                )
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Be 'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
+            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials')
+            $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate --remove-orphans hermes chromium browser-mcp xapi-mcp"
+        }
+
+        It 'passes the token probe Docker exit code and diagnostics through the classifier' {
+            $script:probeResult = $null
+            Mock Invoke-Docker {
+                $script:dockerCalls.Add(($Arguments -join ' '))
+                if (($Arguments -join ' ') -match 'xurl token') {
+                    $global:LASTEXITCODE = 125
+                    return 'Cannot connect to the Docker daemon.'
+                }
+                $global:LASTEXITCODE = 0
+            }
+            Mock Invoke-HermesXApiCredentialScope {
+                $script:eventLog.Add('xapi-credentials')
+                $script:probeResult = & $TokenProbe
+                return & $Action
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:probeResult.Kind | Should -Be 'InfrastructureFailure'
+            $script:probeResult.ExitCode | Should -Be 125
+            $script:probeResult.PSObject.Properties.Name | Should -Not -Contain 'Output'
+        }
+
+        It 'should recover a previously existing runtime after OAuth validation fails' {
+            Mock Invoke-Docker {
+                $script:dockerCalls.Add(($Arguments -join ' '))
+                if ($Arguments -contains 'ps' -and $Arguments -contains '--services') {
+                    $global:LASTEXITCODE = 0
+                    return 'hermes'
+                }
+                $global:LASTEXITCODE = 0
+            }
+            Mock Invoke-HermesXApiCredentialScope {
+                throw [System.InvalidOperationException]::new(
+                    'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
+                )
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Be 'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
+            $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
+            Should -Invoke Invoke-WebRequest -Times 1 -Exactly
+        }
+
+        It 'should recover a previously existing runtime after Compose startup fails' {
+            Mock Invoke-Docker {
+                $script:dockerCalls.Add(($Arguments -join ' '))
+                if ($Arguments -contains 'ps' -and $Arguments -contains '--services') {
+                    $global:LASTEXITCODE = 0
+                    return 'hermes'
+                }
+                if ($Arguments -contains '--force-recreate') {
+                    $global:LASTEXITCODE = 19
+                    return 'startup failure'
+                }
+                $global:LASTEXITCODE = 0
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Be 'Hermes Agent startup failed: startup failure'
+            $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
+            Should -Invoke Invoke-WebRequest -Times 1 -Exactly
         }
 
         It 'waits through transient API failures before reporting startup success' {
@@ -420,7 +551,7 @@ Describe 'HermesAgentHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeFalse
-            $result.Message | Should -Be 'Hermes API did not become ready after 3 attempts.'
+            $result.Message | Should -Be 'Hermes Desktop backend did not become ready after 3 attempts.'
             $result.Message | Should -Not -Match ([regex]::Escape($secret))
             $script:readinessAttempts | Should -Be 3
             Should -Invoke Invoke-WebRequest -Times 3 -Exactly

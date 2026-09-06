@@ -11,6 +11,7 @@ setup() {
 	READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ready-attempts"
 	OLLAMA_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ollama-ready-attempts"
 	HINDSIGHT_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/hindsight-ready-attempts"
+	XAPI_TOKEN_ATTEMPT_FILE="$BATS_TEST_TMPDIR/xapi-token-attempts"
 	VOLUME_SCHEMA_FILE="$BATS_TEST_TMPDIR/hermes-volume-schema"
 	VOLUME_TOKEN_FILE="$BATS_TEST_TMPDIR/hermes-volume-token"
 	VOLUME_READY_FILE="$BATS_TEST_TMPDIR/hermes-volume-ready"
@@ -30,6 +31,7 @@ setup() {
 	printf '0\n' >"$READY_ATTEMPT_FILE"
 	printf '0\n' >"$OLLAMA_READY_ATTEMPT_FILE"
 	printf '0\n' >"$HINDSIGHT_READY_ATTEMPT_FILE"
+	printf '0\n' >"$XAPI_TOKEN_ATTEMPT_FILE"
 	: >"$COMPOSE_FILE"
 	cat >"$BATS_TEST_TMPDIR/hindsight.env" <<'EOF'
 HINDSIGHT_API_LLM_MODEL=qwen3.6:35b
@@ -41,7 +43,7 @@ EOF
 	unset OP_SERVICE_ACCOUNT_TOKEN
 	unset DOTFILES_HERMES_OLLAMA_EXECUTABLE DOTFILES_HERMES_CURL_EXECUTABLE OLLAMA_HOST
 	export HINDSIGHT_OLLAMA_URL=http://127.0.0.1:11434
-	export COMMAND_LOG EDIT_CAPTURE PAYLOAD_CAPTURE OP_TOKEN_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE VOLUME_SCHEMA_FILE VOLUME_TOKEN_FILE VOLUME_READY_FILE LOCK_CREATE_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
+	export COMMAND_LOG EDIT_CAPTURE PAYLOAD_CAPTURE OP_TOKEN_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE XAPI_TOKEN_ATTEMPT_FILE VOLUME_SCHEMA_FILE VOLUME_TOKEN_FILE VOLUME_READY_FILE LOCK_CREATE_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
@@ -49,6 +51,7 @@ EOF
 	export XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
 	export BOOTSTRAP_STATUS=0
 	export OP_FAIL_ITEM=""
+	export OP_EDIT_STATUS=0
 	export OP_DELAY_SECONDS=0
 	export OP_READ_TOKEN='service-account-token'
 	export OP_READ_DELAY_SECONDS=0
@@ -68,6 +71,7 @@ EOF
 	export HERMES_REPLACEMENT_LOCK_ID=2222222222222222222222222222222222222222222222222222222222222222
 	export HERMES_LOCK_RELEASE_STATUS=0
 	export HERMES_SEED_WRITES_MARKER=1
+	export HERMES_STORAGE_OWNERSHIP_STATUS=0
 	export API_READY_AFTER=1
 	export OLLAMA_READY_AFTER=1
 	export HINDSIGHT_API_DATABASE=connected
@@ -79,6 +83,11 @@ EOF
 	export HERMES_API_PROBE_TIMEOUT_SECONDS=1
 	export IMAGE_PRUNE_STATUS=0
 	export HERMES_GATEWAY_CONVERGENCE_STATUS=0
+	export XAPI_TOKEN_READY_AFTER=1
+	export XAPI_TOKEN_FAILURE_KIND=auth
+	export XAPI_TOKEN_FAILURE_STATUS=1
+	export XAPI_ROTATED_REFRESH_TOKEN=""
+	export DOTFILES_HERMES_STORAGE_HEARTBEAT_INTERVAL_SECONDS=0.01
 	export UP_STATUS=0
 
 	write_stub jq '
@@ -106,7 +115,7 @@ printf "\n" >>"$COMMAND_LOG"
 			else
 				cat >"$EDIT_CAPTURE"
 			fi
-			exit 0
+			exit "$OP_EDIT_STATUS"
 		fi
 		[ "${2:-}" = get ] || exit 2
 		printf "%s\n" "${OP_SERVICE_ACCOUNT_TOKEN:-<unset>}" >>"$OP_TOKEN_CAPTURE"
@@ -188,6 +197,9 @@ if [ "${1:-}" = "run" ]; then
 	    fi
 	    exit "${HERMES_STORAGE_SEED_STATUS:-0}"
 	  fi
+	  if [[ $previous == --entrypoint && $argument == /usr/local/bin/hermes-storage-ownership ]]; then
+	    exit "${HERMES_STORAGE_OWNERSHIP_STATUS:-0}"
+	  fi
 	  previous="$argument"
 	done
   exit 1
@@ -205,11 +217,8 @@ if [ "${1:-}" = "inspect" ]; then
 	if [[ -n ${HERMES_LOCK_STATE:-} ]]; then printf "%s\n" "$HERMES_LOCK_STATE"; exit 0; fi
 	exit 1
 fi
-if [ "${1:-}" = "start" ] && [ "${2:-}" = "-a" ]; then
-	if [[ ${HERMES_STORAGE_SEED_STATUS:-0} == 0 && ${HERMES_SEED_WRITES_MARKER:-1} == 1 ]]; then
-	  printf "1\n" >"$VOLUME_READY_FILE"
-	fi
-	exit "${HERMES_STORAGE_SEED_STATUS:-0}"
+if [ "${1:-}" = "start" ] && [[ "${2:-}" =~ ^[0-9a-f]{64}$ ]]; then
+	exit "${HERMES_LOCK_START_STATUS:-0}"
 fi
 if [ "${1:-}" = "rm" ] && [ "${2:-}" = "-f" ]; then
 	exit "${HERMES_LOCK_RELEASE_STATUS:-0}"
@@ -221,6 +230,25 @@ if [[ ${1:-} == compose && ${2:-} == -f && ${3:-} == "$COMPOSE_FILE" && ${4:-} =
 	exit "$HERMES_GATEWAY_CONVERGENCE_STATUS"
 fi
 case " $* " in
+  *" run --rm --no-deps --entrypoint /bin/sh xapi-mcp "*)
+	attempt="$(cat "$XAPI_TOKEN_ATTEMPT_FILE")"
+	attempt=$((attempt + 1))
+	printf "%s\n" "$attempt" >"$XAPI_TOKEN_ATTEMPT_FILE"
+	if ((attempt < XAPI_TOKEN_READY_AFTER)); then
+		if [[ $XAPI_TOKEN_FAILURE_KIND == auth ]]; then
+			printf "%s\n" "Error: no valid oauth2 token for app default: Auth Error: TokenNotFound (cause: oauth2 token not found)" >&2
+			printf "%s\n" "Run: xurl auth oauth2" >&2
+		else
+			printf "%s\n" "Cannot connect to the Docker daemon." >&2
+		fi
+		exit "$XAPI_TOKEN_FAILURE_STATUS"
+	fi
+	if [[ -n ${XAPI_ROTATED_REFRESH_TOKEN:-} ]]; then
+		sed -i.bak "s/refresh_token:.*/refresh_token: \"$XAPI_ROTATED_REFRESH_TOKEN\"/" "$HOME/.hermes/.xurl/auth.yml"
+		rm -f "$HOME/.hermes/.xurl/auth.yml.bak"
+	fi
+	exit 0
+	;;
   *" up -d --force-recreate "*)
     exit "$UP_STATUS"
     ;;
@@ -314,7 +342,7 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 	run_start_stack
 
 	[ "$status" -eq 0 ]
-	assert_log_order '<stop> <hermes>' '<volume> <inspect>' '<volume> <create>' '<create> <--name>' '<run> <--rm> <--entrypoint> <python>' '<start> <-a>' '<rm> <-f>' '<secret-plan>'
+	assert_log_order '<stop> <hermes>' '<volume> <inspect>' '<volume> <create>' '<create> <--name>' "<start> <$HERMES_LOCK_ID>" '<--entrypoint> </usr/local/bin/hermes-storage-seed>' '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' '<rm> <-f>' '<secret-plan>'
 	grep -Fq '<--label> <com.rurusasu.dotfiles.hermes-storage.schema=1>' "$COMMAND_LOG"
 	grep -Fq '<--label> <com.rurusasu.dotfiles.hermes-storage.init-token=' "$COMMAND_LOG"
 	grep -Fq '<create> <--name> <dotfiles-hermes-storage-' "$COMMAND_LOG"
@@ -332,8 +360,21 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 	[ "$status" -eq 42 ]
 	[[ "$output" == *"will be safely replaced on retry"* ]]
 	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
+	assert_log_order '<stop> <hermes>' '<--entrypoint> </usr/local/bin/hermes-storage-seed>' "<compose> <-f> <$COMPOSE_FILE> <start>" '<http://127.0.0.1:9119/api/health>'
 	! grep -Fq '<volume> <rm>' "$COMMAND_LOG"
 	! grep -q '<secret-plan>' "$COMMAND_LOG"
+}
+
+@test "does not recover a runtime that did not exist before storage failure" {
+	export HERMES_VOLUME_EXISTS=0
+	export HERMES_STORAGE_SEED_STATUS=42
+	export HERMES_RUNTIME_EXISTS=0
+
+	run_start_stack
+
+	[ "$status" -eq 42 ]
+	! grep -Fq "<compose> <-f> <$COMPOSE_FILE> <start>" "$COMMAND_LOG"
+	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 0 ]
 }
 
 @test "does not seed or remove a volume won by a concurrent creator" {
@@ -344,7 +385,7 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"changed before its lock was acquired"* ]]
-	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
+	! grep -Fq '<--entrypoint> </usr/local/bin/hermes-storage-seed>' "$COMMAND_LOG"
 	! grep -Fq '<volume> <rm>' "$COMMAND_LOG"
 	! grep -q '<secret-plan>' "$COMMAND_LOG"
 }
@@ -357,7 +398,7 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 	run_start_stack
 
 	[ "$status" -eq 0 ]
-	assert_log_order '<create> <--name>' '<run> <--rm> <--entrypoint> <python>' '<start> <-a>' '<rm> <-f>' '<secret-plan>'
+	assert_log_order '<create> <--name>' "<start> <$HERMES_LOCK_ID>" '<--entrypoint> </usr/local/bin/hermes-storage-seed>' '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' '<rm> <-f>' '<secret-plan>'
 }
 
 @test "accepts a managed volume with the ready marker" {
@@ -369,8 +410,55 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 
 	[ "$status" -eq 0 ]
 	grep -Fq '<--entrypoint> <python>' "$COMMAND_LOG"
-	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
+	! grep -Fq '<--entrypoint> </usr/local/bin/hermes-storage-seed>' "$COMMAND_LOG"
+	assert_log_order '<--entrypoint> <python>' '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' '<rm> <-f>' '<secret-plan>'
 	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
+}
+
+@test "converges managed volume ownership with a restricted one-shot container" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_VOLUME_READY=1
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	ownership_command="$(grep -F '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' "$COMMAND_LOG")"
+	[[ $ownership_command == *'<run> <--rm> <--network> <none> <--read-only>'* ]]
+	[[ $ownership_command == *'<--cap-drop> <ALL> <--cap-add> <CHOWN> <--cap-add> <DAC_OVERRIDE>'* ]]
+	[[ $ownership_command == *'<--security-opt> <no-new-privileges:true> <--user> <0:0>'* ]]
+	[[ $ownership_command == *'<--mount> <type=volume,src=hermes-data,dst=/target>'* ]]
+	[[ $ownership_command == *'<--target> </target> <--uid> <10000> <--gid> <10000>'* ]]
+	[[ $ownership_command != *'type=bind'* ]]
+	without_first_mount="${ownership_command/<--mount>/}"
+	[[ $without_first_mount != "$ownership_command" ]]
+	[[ $without_first_mount != *'<--mount>'* ]]
+}
+
+@test "starts a running storage lease before ownership convergence can exceed the stale threshold" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_VOLUME_READY=1
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	assert_log_order "<create> <--name>" "<start> <$HERMES_LOCK_ID>" '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' "<rm> <-f> <$HERMES_LOCK_ID>"
+}
+
+@test "stops before bootstrap and recreate when ownership convergence fails" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_VOLUME_READY=1
+	export HERMES_STORAGE_OWNERSHIP_STATUS=42
+
+	run_start_stack
+
+	[ "$status" -eq 42 ]
+	[[ "$output" == *"ownership convergence failed with status 42"* ]]
+	assert_log_order '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' '<rm> <-f>'
+	! grep -q '<secret-plan>' "$COMMAND_LOG"
+	! grep -Fq '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
 }
 
 @test "preserves a ready managed volume when its marker probe cannot run" {
@@ -429,7 +517,7 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 	[ "$status" -eq 0 ]
 	[ "$(cat "$LOCK_CREATE_ATTEMPT_FILE")" -eq 2 ]
 	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
-	grep -Fq "<start> <-a> <$HERMES_REPLACEMENT_LOCK_ID>" "$COMMAND_LOG"
+	grep -Fq "<start> <$HERMES_REPLACEMENT_LOCK_ID>" "$COMMAND_LOG"
 }
 
 @test "does not acquire or touch a replacement lock after losing stale ID removal" {
@@ -664,6 +752,13 @@ esac
 	write_fixture_stub sw_vers 'printf "26.5.1\\n"'
 	write_fixture_stub xcode-select 'printf "/Library/Developer/CommandLineTools\\n"'
 	write_fixture_stub pgrep 'exit 1'
+	write_fixture_stub brew '
+if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions && ${4:-} == docker-desktop ]]; then
+  printf "docker-desktop 4.89.0\\n"
+  exit 0
+fi
+exit 1
+'
 	write_fixture_stub systemctl '
 printf "systemctl %s\\n" "$*" >>"$COMMAND_LOG"
 case "${1:-}" in
@@ -793,6 +888,12 @@ EOF
 		rm -f "$marker"
 		export MOCK_UNAME_S=Darwin MOCK_UNAME_M=arm64
 		MOCK_SELECTED_INSTALLER=install-macos.sh
+		ln -s "$MOCK_DOCKER_APP/Contents/Resources/bin/docker" "$homebrew_bin_dir/docker"
+		ln -s "$MOCK_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop" "$homebrew_bin_dir/docker-credential-desktop"
+		ln -s "$MOCK_DOCKER_APP/Contents/Resources/bin/docker-credential-ecr-login" "$homebrew_bin_dir/docker-credential-ecr-login"
+		ln -s "$MOCK_DOCKER_APP/Contents/Resources/bin/docker-credential-osxkeychain" "$homebrew_bin_dir/docker-credential-osxkeychain"
+		ln -s "$MOCK_DOCKER_APP/Contents/Resources/bin/kubectl" "$homebrew_bin_dir/kubectl.docker"
+		ln -s "$MOCK_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" "$homebrew_cli_plugins_dir/docker-compose"
 		;;
 	linux)
 		rm -f "$marker"
@@ -817,6 +918,7 @@ EOF
 		DOTFILES_CHECKOUT_TARGET="$fixture_root/checkout" \
 		DOTFILES_NIX_PROFILE_SCRIPT="$fixture_root/nix-daemon.sh" \
 		DOTFILES_DOCKER_APP_PATH="$MOCK_DOCKER_APP" \
+		DOTFILES_BREW_COMMAND="$MOCK_BIN/brew" \
 		DOTFILES_OLLAMA_APP_PATH="$MOCK_OLLAMA_APP" \
 		DOTFILES_LAUNCHCTL_COMMAND="$MOCK_BIN/launchctl" \
 		DOTFILES_ACCEPT_DOCKER_LICENSE=1 \
@@ -1030,6 +1132,146 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 	up_line="$(grep -n '<up> <-d> <--force-recreate> <hermes> <chromium> <browser-mcp> <xapi-mcp>' "$COMMAND_LOG" | cut -d: -f1)"
 	[ "$last_xapi_lookup" -lt "$up_line" ]
 	! grep -q 'xapi-refresh-token-marker' "$COMMAND_LOG"
+	! grep -q '<item> <edit>' "$COMMAND_LOG"
+}
+
+@test "validates the X API token before recreating the Hermes stack" {
+	local probe_line up_line
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(cat "$XAPI_TOKEN_ATTEMPT_FILE")" -eq 1 ]
+	probe_line="$(grep -n '<run> <--rm> <--no-deps> <--entrypoint> </bin/sh> <xapi-mcp>' "$COMMAND_LOG" | tail -n 1 | cut -d: -f1)"
+	up_line="$(grep -n '<up> <-d> <--force-recreate> <hermes> <chromium> <browser-mcp> <xapi-mcp>' "$COMMAND_LOG" | cut -d: -f1)"
+	[ -n "$probe_line" ]
+	[ "$probe_line" -lt "$up_line" ]
+}
+
+@test "replaces an invalid local X API token from 1Password and validates it once" {
+	mkdir -p "$HOME/.hermes/.xurl"
+	cat >"$HOME/.hermes/.xurl/auth.yml" <<'EOF'
+apps:
+  default:
+    client_id: "stale-client-id"
+    client_secret: "stale-client-secret"
+    oauth2_tokens:
+      default:
+        type: oauth2
+        oauth2:
+          refresh_token: "stale-refresh-token"
+default_app: default
+EOF
+	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
+	export XAPI_TOKEN_READY_AFTER=2
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(cat "$XAPI_TOKEN_ATTEMPT_FILE")" -eq 2 ]
+	grep -q 'client_id: "xapi-client-id-marker"' "$HOME/.hermes/.xurl/auth.yml"
+	grep -q 'client_secret: "xapi-client-secret-marker"' "$HOME/.hermes/.xurl/auth.yml"
+	grep -q 'refresh_token: "xapi-refresh-token-marker"' "$HOME/.hermes/.xurl/auth.yml"
+	grep -q '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
+	! grep -q 'stale-refresh-token' "$COMMAND_LOG"
+}
+
+@test "stops before stack recreation when local and 1Password X API tokens are invalid" {
+	mkdir -p "$HOME/.hermes/.xurl"
+	cat >"$HOME/.hermes/.xurl/auth.yml" <<'EOF'
+apps:
+  default:
+    oauth2_tokens:
+      default:
+        type: oauth2
+        oauth2:
+          refresh_token: "stale-refresh-token"
+default_app: default
+EOF
+	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
+	export XAPI_TOKEN_READY_AFTER=99
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[ "$(cat "$XAPI_TOKEN_ATTEMPT_FILE")" -eq 2 ]
+	[[ "$output" == *"task hermes:xapi:setup"* ]]
+	grep -q 'refresh_token: "stale-refresh-token"' "$HOME/.hermes/.xurl/auth.yml"
+	! grep -q '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
+	! grep -q 'stale-refresh-token' "$COMMAND_LOG"
+}
+
+@test "does not replace the local X API cache after a Docker probe failure" {
+	mkdir -p "$HOME/.hermes/.xurl"
+	cat >"$HOME/.hermes/.xurl/auth.yml" <<'EOF'
+apps:
+  default:
+    oauth2_tokens:
+      default:
+        type: oauth2
+        oauth2:
+          refresh_token: "local-refresh-token"
+default_app: default
+EOF
+	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
+	export XAPI_TOKEN_READY_AFTER=99
+	export XAPI_TOKEN_FAILURE_KIND=infrastructure
+	export XAPI_TOKEN_FAILURE_STATUS=125
+
+	run_start_stack
+
+	[ "$status" -eq 125 ]
+	[ "$(cat "$XAPI_TOKEN_ATTEMPT_FILE")" -eq 1 ]
+	grep -q 'refresh_token: "local-refresh-token"' "$HOME/.hermes/.xurl/auth.yml"
+	[[ "$output" != *"task hermes:xapi:setup"* ]]
+	! grep -q '<item> <edit>' "$COMMAND_LOG"
+	! grep -q '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
+}
+
+@test "syncs a refresh token rotated by a successful X API probe back to 1Password" {
+	mkdir -p "$HOME/.hermes/.xurl"
+	cat >"$HOME/.hermes/.xurl/auth.yml" <<'EOF'
+apps:
+  default:
+    oauth2_tokens:
+      default:
+        type: oauth2
+        oauth2:
+          refresh_token: "local-refresh-token"
+default_app: default
+EOF
+	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
+	export XAPI_ROTATED_REFRESH_TOKEN=rotated-refresh-token
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	jq -e '.fields[] | select(.label == "X_API_REFRESH_TOKEN") | .value == "rotated-refresh-token"' "$EDIT_CAPTURE" >/dev/null
+	! grep -q 'rotated-refresh-token' "$COMMAND_LOG"
+}
+
+@test "keeps a successfully rotated local X API token when 1Password sync fails" {
+	mkdir -p "$HOME/.hermes/.xurl"
+	cat >"$HOME/.hermes/.xurl/auth.yml" <<'EOF'
+apps:
+  default:
+    oauth2_tokens:
+      default:
+        type: oauth2
+        oauth2:
+          refresh_token: "local-refresh-token"
+default_app: default
+EOF
+	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
+	export XAPI_ROTATED_REFRESH_TOKEN=rotated-refresh-token
+	export OP_EDIT_STATUS=17
+
+	run_start_stack
+
+	[ "$status" -eq 17 ]
+	grep -q 'refresh_token: "rotated-refresh-token"' "$HOME/.hermes/.xurl/auth.yml"
+	! grep -q 'refresh_token: "local-refresh-token"' "$HOME/.hermes/.xurl/auth.yml"
+	! grep -q '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
 }
 
 @test "sync-token writes the local refresh token through the 1Password template" {
@@ -1050,6 +1292,10 @@ EOF
 
 	[ "$status" -eq 0 ]
 	jq -e '.fields[] | select(.label == "X_API_REFRESH_TOKEN") | .value == "local-refresh-token-marker"' "$EDIT_CAPTURE" >/dev/null
+	grep -q '<read>' "$COMMAND_LOG"
+	! grep -q '<signin>' "$COMMAND_LOG"
+	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=service-account-token' ]
+	[ "$(cat "$OP_TOKEN_CAPTURE")" = 'service-account-token' ]
 	! grep -q 'local-refresh-token-marker' "$COMMAND_LOG"
 }
 
@@ -1303,7 +1549,7 @@ trailing-garbage"
 
 	[ "$status" -eq 5 ]
 	grep -q '<apply>' "$COMMAND_LOG"
-	assert_log_order '<ps> <--all> <--services> <hermes>' '<stop> <hermes>' '<apply>' '<start>' '<http://127.0.0.1:8642/health>'
+	assert_log_order '<ps> <--all> <--services> <hermes>' '<stop> <hermes>' '<apply>' '<start>' '<http://127.0.0.1:9119/api/health>'
 	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 1 ]
 	! grep -q '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
 	! grep -q '<Hermes X API MCP>' "$COMMAND_LOG"
@@ -1321,7 +1567,7 @@ trailing-garbage"
 
 	[ "$status" -eq 3 ]
 	grep -q '<apply>' "$COMMAND_LOG"
-	assert_log_order '<ps> <--all> <--services> <hermes>' '<stop> <hermes>' '<apply>' '<start>' '<http://127.0.0.1:8642/health>'
+	assert_log_order '<ps> <--all> <--services> <hermes>' '<stop> <hermes>' '<apply>' '<start>' '<http://127.0.0.1:9119/api/health>'
 	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 1 ]
 	! grep -q '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
 	! grep -q '<Hermes X API MCP>' "$COMMAND_LOG"
@@ -1349,7 +1595,7 @@ trailing-garbage"
 	run_start_stack
 
 	[ "$status" -eq 42 ]
-	assert_log_order '<stop> <hermes>' '<apply>' '<up> <-d> <--force-recreate>' '<start>' '<http://127.0.0.1:8642/health>'
+	assert_log_order '<stop> <hermes>' '<apply>' '<up> <-d> <--force-recreate>' '<start>' '<http://127.0.0.1:9119/api/health>'
 }
 
 @test "does not expose secret payload records when the caller enables xtrace" {
@@ -1370,7 +1616,7 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	run_start_stack
 
 	[ "$status" -eq 0 ]
-	assert_log_order '<config> <--quiet>' '<build> <--pull> <hermes> <hermes-bootstrap> <chromium> <xapi-mcp>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<Google Calendar MCP>' '<Master>' '<Rick>' '<Hoffman>' '<RisaRisa>' '<Nancy>' '<Kuroda>' '<Shiraishi>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate> <hermes> <chromium> <browser-mcp> <xapi-mcp>' '<http://127.0.0.1:8642/health>' '<image> <prune> <--force>'
+	assert_log_order '<config> <--quiet>' '<build> <--pull> <hermes> <hermes-bootstrap> <chromium> <xapi-mcp>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<Google Calendar MCP>' '<Master>' '<Rick>' '<Hoffman>' '<RisaRisa>' '<Nancy>' '<Kuroda>' '<Shiraishi>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate> <hermes> <chromium> <browser-mcp> <xapi-mcp>' '<http://127.0.0.1:9119/api/health>' '<image> <prune> <--force>'
 	mapfile -t records < <("$REAL_JQ" -r '.type + ":" + (.key // "")' "$PAYLOAD_CAPTURE")
 	[ "${records[*]}" = 'header: item:dashboard item:github item:google_calendar item:discord_default item:discord_rick item:discord_hoffman item:discord_risarisa item:discord_nancy item:discord_kuroda item:discord_shiraishi end:' ]
 	"$REAL_JQ" -e -c 'select(.type == "item") | .item.id == "item-id"' "$PAYLOAD_CAPTURE" >/dev/null
@@ -1385,10 +1631,10 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 
 	[ "$status" -eq 0 ]
 	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 3 ]
-	[ "$(grep -c '<http://127.0.0.1:8642/health>' "$COMMAND_LOG")" -eq 3 ]
-	grep -q '<http://127.0.0.1:8642/health>' "$COMMAND_LOG"
+	[ "$(grep -c '<http://127.0.0.1:9119/api/health>' "$COMMAND_LOG")" -eq 3 ]
+	grep -q '<http://127.0.0.1:9119/api/health>' "$COMMAND_LOG"
 	[ "$(grep -c '^sleep <0>$' "$COMMAND_LOG")" -eq 2 ]
-	assert_log_order '<up> <-d> <--force-recreate>' '<http://127.0.0.1:8642/health>' '<image> <prune> <--force>'
+	assert_log_order '<up> <-d> <--force-recreate>' '<http://127.0.0.1:9119/api/health>' '<image> <prune> <--force>'
 	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
 		false
 	fi
@@ -1397,7 +1643,7 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 
 @test "converges Hermes gateways after API readiness before pruning images" {
 	local api_ready convergence image_prune
-	api_ready='curl <--fail> <--silent> <--show-error> <--max-time> <1> <http://127.0.0.1:8642/health>'
+	api_ready='curl <--fail> <--silent> <--show-error> <--max-time> <1> <http://127.0.0.1:9119/api/health>'
 	convergence="docker <compose> <-f> <$COMPOSE_FILE> <exec> <-T> <hermes> </usr/local/bin/hermes-gateway-converge>"
 	image_prune='docker <image> <prune> <--force>'
 
@@ -1442,7 +1688,7 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	[ "$(grep -c '^sleep <0>$' "$COMMAND_LOG")" -eq 2 ]
 	grep -q '<ps> <--all>' "$COMMAND_LOG"
 	! grep -q '<image> <prune> <--force>' "$COMMAND_LOG"
-	[[ "$output" == *"Hermes API did not become ready after 3 attempts."* ]]
+	[[ "$output" == *"Hermes Desktop backend did not become ready after 3 attempts."* ]]
 	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
 		false
 	fi

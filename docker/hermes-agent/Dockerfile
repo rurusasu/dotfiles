@@ -17,9 +17,11 @@ COPY hermes-agent/hermes-bootstrap /usr/local/bin/hermes-bootstrap
 COPY hermes-agent/hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance
 COPY hermes-agent/gateway_convergence.py /usr/local/bin/hermes-gateway-converge
 COPY hermes-agent/hermes_storage_seed.py /usr/local/bin/hermes-storage-seed
+COPY hermes-agent/hermes_storage_ownership.py /usr/local/bin/hermes-storage-ownership
 RUN chmod 0755 /usr/local/bin/hermes-hindsight-acceptance
 RUN chmod 0755 /usr/local/bin/hermes-gateway-converge
 RUN chmod 0755 /usr/local/bin/hermes-storage-seed
+RUN chmod 0755 /usr/local/bin/hermes-storage-ownership
 
 RUN python3 - <<'PY'
 import sys
@@ -213,18 +215,55 @@ COPY hermes-service/compose.yml /workspace/docker/hermes-service/compose.yml
 COPY local-ai-services/compose.yml /workspace/docker/local-ai-services/compose.yml
 COPY hindsight/hindsight.env /workspace/docker/hindsight/hindsight.env
 COPY hermes-agent/bootstrap-manifest.yaml /workspace/docker/hermes-agent/bootstrap-manifest.yaml
+COPY hermes-agent/hermes-bootstrap /workspace/docker/hermes-agent/hermes-bootstrap
 COPY hermes-agent/hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py
 COPY hermes-agent/gateway_convergence.py /workspace/docker/hermes-agent/gateway_convergence.py
 COPY hermes-agent/hermes_storage_seed.py /workspace/docker/hermes-agent/hermes_storage_seed.py
+COPY hermes-agent/hermes_storage_ownership.py /workspace/docker/hermes-agent/hermes_storage_ownership.py
 COPY hermes-agent/tests /workspace/docker/hermes-agent/tests
 COPY hermes-agent/bootstrap/tests /workspace/docker/hermes-agent/bootstrap/tests
 
-RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python -m unittest discover \
-  -s /workspace/docker/hermes-agent/bootstrap/tests \
-  -p 'test_[!t]*.py'
+RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python - <<'PY'
+import unittest
+
+
+def flatten(tests):
+    for test in tests:
+        if isinstance(test, unittest.TestSuite):
+            yield from flatten(test)
+        else:
+            yield test
+
+
+excluded_id = (
+    "integration.test_hermes_home_wrapper_contract."
+    "HermesHomeWrapperContractTests."
+    "test_exact_wrapper_routes_to_the_built_sync_profiles_cli"
+)
+discovered = unittest.defaultTestLoader.discover(
+    "/workspace/docker/hermes-agent/bootstrap/tests",
+    pattern="test_[!t]*.py",
+)
+tests = list(flatten(discovered))
+excluded = [test for test in tests if test.id() == excluded_id]
+if len(excluded) != 1:
+    raise SystemExit(f"expected exactly one uid-scoped wrapper contract, found {len(excluded)}")
+selected = unittest.TestSuite(test for test in tests if test.id() != excluded_id)
+result = unittest.TextTestRunner().run(selected)
+raise SystemExit(0 if result.wasSuccessful() else 1)
+PY
+
+USER 10000:10000
+
+RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap:/workspace/docker/hermes-agent/bootstrap/tests \
+  /opt/hermes/.venv/bin/python -m unittest \
+  integration.test_hermes_home_wrapper_contract.HermesHomeWrapperContractTests.test_exact_wrapper_routes_to_the_built_sync_profiles_cli
+
+USER root
 
 RUN PYTHONPATH=/workspace/docker/hermes-agent /opt/hermes/.venv/bin/python -m unittest \
-  /workspace/docker/hermes-agent/tests/test_hermes_storage_seed.py
+  /workspace/docker/hermes-agent/tests/test_hermes_storage_seed.py \
+  /workspace/docker/hermes-agent/tests/test_hermes_storage_ownership.py
 
 RUN PYTHONPATH=/usr/local/lib/hermes-bootstrap /opt/hermes/.venv/bin/python -m unittest discover \
   -s /workspace/docker/hermes-agent/bootstrap/tests \

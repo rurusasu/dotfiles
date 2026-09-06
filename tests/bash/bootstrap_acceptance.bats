@@ -93,6 +93,15 @@ EOF
 	grep -Fq 'DOTFILES_ACCEPTANCE_PRELOADED_STORAGE_SEED_IMAGE' "$RUNNER"
 }
 
+@test "NixOS offline Hermes fixture implements every storage entrypoint" {
+	nixos_test="$REPO_ROOT/nix/tests/bootstrap-nixos.nix"
+
+	grep -Fq 'hermes_storage_seed.py usr/local/bin/hermes-storage-seed' "$nixos_test"
+	grep -Fq 'hermes_storage_ownership.py usr/local/bin/hermes-storage-ownership' "$nixos_test"
+	grep -Fq 'chmod 0755 usr/local/bin/hermes-storage-seed' "$nixos_test"
+	grep -Fq 'chmod 0755 usr/local/bin/hermes-storage-ownership' "$nixos_test"
+}
+
 @test "acceptance secret fixtures are deterministic and reject unapproved lookups" {
 	bootstrap="$FIXTURE_ROOT/hermes-bootstrap-fixture.sh"
 	op="$FIXTURE_ROOT/bin/op"
@@ -147,6 +156,11 @@ EOF
 	[[ "$output" == *'"label":"X_API_CLIENT_ID"'* ]]
 	[[ "$output" == *'"label":"X_API_CLIENT_SECRET"'* ]]
 	[[ "$output" == *'"label":"X_API_REFRESH_TOKEN"'* ]]
+	printf '%s\n' "$output" | jq -e '
+		.fields
+		| map(select(.label == "X_API_REFRESH_TOKEN"))
+		| length == 1 and .[0].section.label == "Refresh Token"
+	' >/dev/null
 
 	run "$op" item get "Unapproved Item" \
 		--account my.1password.com --vault openclaw --format json
@@ -163,13 +177,25 @@ EOF
 	[ "$(grep -Fc 'exec /bin/httpd -f -p 80 -h /www' "$compose")" -ge 2 ]
 	[ "$(grep -Fc "exec nginx -g 'daemon off;'" "$compose")" -ge 2 ]
 	grep -Fq 'xapi-mcp:' "$compose"
+	grep -Fq '    working_dir: /' "$compose"
 	grep -Fq 'browser-mcp:' "$compose"
 	! grep -Eq '^[[:space:]]{2}hindsight:' "$compose"
 	grep -Fq 'name: local-ai-services' "$compose"
 	grep -Fq 'external: true' "$compose"
 	grep -Fq 'condition: service_started' "$compose"
-	grep -Fq './hermes-bootstrap-fixture.sh:/usr/share/nginx/html/health:ro' "$compose"
-	grep -Fq './hermes-bootstrap-fixture.sh:/www/health:ro' "$compose"
+	grep -Fq './hermes-bootstrap-fixture.sh:/fixture/health:ro' "$compose"
+	grep -Fq 'cp /fixture/health /www/health' "$compose"
+	grep -Fq 'cp /fixture/health /www/api/health' "$compose"
+	grep -Fq 'cp /fixture/health /usr/share/nginx/html/health' "$compose"
+	grep -Fq 'cp /fixture/health /usr/share/nginx/html/api/health' "$compose"
+	grep -Fq './xurl-fixture.sh:/node_modules/.bin/xurl:ro' "$compose"
+	grep -Fq 'install -m 0755 "$FIXTURE_ROOT/xurl-fixture.sh"' "$RUNNER"
+	test -x "$FIXTURE_ROOT/xurl-fixture.sh"
+
+	run "$FIXTURE_ROOT/xurl-fixture.sh" token
+	[ "$status" -eq 0 ]
+	run "$FIXTURE_ROOT/xurl-fixture.sh" unsupported
+	[ "$status" -ne 0 ]
 }
 
 @test "offline acceptance exercises Hindsight with deterministic Ollama fixtures" {

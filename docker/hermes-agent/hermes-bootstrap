@@ -1,3 +1,12 @@
 #!/bin/sh
 set -eu
+
+if [ "$(id -u)" = 10000 ] && [ "$(id -g)" = 10000 ]; then
+  :
+else
+  printf '%s\n' 'Hermes bootstrap must run as uid/gid 10000:10000.' >&2
+  exit 1
+fi
+
+umask 077
 PYTHONPATH=/usr/local/lib/hermes-bootstrap exec /opt/hermes/.venv/bin/python -m hermes_bootstrap "$@"

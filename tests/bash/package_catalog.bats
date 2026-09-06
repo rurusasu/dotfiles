@@ -272,8 +272,8 @@ nix_fixture_darwin_package_split() {
 	' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'writeShellApplication'* ]]
-	[[ "$output" == *'dockerDesktopPackage'* ]]
-	[[ "$output" == *'HERMES_DOCKER_COMPOSE_PLUGIN'* ]]
+	[[ "$output" != *'dockerDesktopPackage'* ]]
+	[[ "$output" != *'HERMES_DOCKER_COMPOSE_PLUGIN'* ]]
 	[[ "$output" == *'installFeature = "WithHermes";'* ]]
 	[[ "$output" == *'source = "dotfiles";'* ]]
 	[[ "$output" == *'command = "hermes-docker";'* ]]
@@ -514,19 +514,45 @@ EOF
 	done
 }
 
-@test "Docker declares a Darwin Nix app and Linux system providers" {
-	run awk '
-		/docker-desktop = \{/ { in_entry=1 }
-		in_entry { print }
-		in_entry && /^        };/ { exit }
-	' "$SETS"
+@test "Docker declares Homebrew cask Darwin and Linux system providers" {
+	command -v nix >/dev/null 2>&1 || skip "nix is not available in this test environment"
+	command -v jq >/dev/null 2>&1 || skip "jq is not available in this test environment"
+
+	run --separate-stderr nix eval --impure --json --expr "
+		let
+			flake = builtins.getFlake (toString $REPO_ROOT);
+			pkgs = import flake.inputs.nixpkgs {
+				system = \"aarch64-darwin\";
+				config.allowUnfree = true;
+				overlays = [ (_: _: { workmux = flake.inputs.workmux.packages.aarch64-darwin.default; }) ];
+			};
+			sets = import $SETS {
+				inherit pkgs;
+				lib = pkgs.lib;
+				codexPackage = flake.inputs.llm-agents.packages.aarch64-darwin.codex;
+			};
+		in {
+			support = sets.supportReport.docker-desktop;
+			defaultCasks = sets.darwinCasksForInstallFeatures [ ];
+			dockerCasks = sets.darwinCasksForInstallFeatures [ \"WithOllama\" \"WithDocker\" ];
+		}
+	"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'winget = "Docker.DockerDesktop"'* ]]
-	[[ "$output" == *'provider = "nix"'* ]]
-	[[ "$output" == *'source = (darwinProviderCandidate "docker-desktop").source;'* ]]
-	[[ "$output" == *'appName = "Docker.app"'* ]]
-	[[ "$output" == *'name = "docker-desktop"'* ]]
-	[[ "$output" == *'systemModule = "docker"'* ]]
+	run jq -e '
+		.support.installFeature == "WithDocker"
+		and .support.windows.identity == "Docker.DockerDesktop"
+		and .support.darwin == {
+			"provider": "homebrew-cask",
+			"source": "homebrew",
+			"identity": "docker-desktop",
+			"cask": "docker-desktop"
+		}
+		and .support.linux.systemModule == "docker"
+		and .support.legacyDarwin == null
+		and (.defaultCasks | index("docker-desktop")) == null
+		and (.dockerCasks | index("docker-desktop")) != null
+	' <<<"$output"
+	[ "$status" -eq 0 ]
 }
 
 @test "true Windows-only packages carry unsupported reasons" {
@@ -923,27 +949,26 @@ EOF
 		[ "$status" -eq 0 ]
 		[[ "$output" == *'selectDarwinPackage "'$id'"'* ]]
 		done
-	grep -q 'dockerDesktopPackage =' "$SETS"
-	grep -q 'selectDarwinPackage "docker-desktop"' "$SETS"
 	grep -q 'source = "custom"' "$REPO_ROOT/nix/packages/darwin-provider-candidates.nix"
 	grep -q 'callPackage ./hammerspoon' "$SETS"
 	grep -q 'callPackage ./dia-browser' "$SETS"
 	grep -q 'callPackage ./orca-editor' "$SETS"
-	grep -q 'callPackage ./docker-desktop' "$SETS"
 	! grep -q 'pkgs.dia' "$SETS"
 	! grep -q 'pkgs.orca' "$SETS"
 }
 
 @test "custom Darwin package derivations preserve vendor bundles" {
-	for package in hammerspoon dia-browser orca-editor docker-desktop; do
+	for package in hammerspoon dia-browser orca-editor; do
 		[ -f "$REPO_ROOT/nix/packages/$package/default.nix" ]
 		grep -q 'dontFixup = true' "$REPO_ROOT/nix/packages/$package/default.nix"
-		grep -q 'github.com\|diabrowser.com\|desktop.docker.com' "$REPO_ROOT/nix/packages/$package/default.nix"
+		grep -q 'github.com\|diabrowser.com' "$REPO_ROOT/nix/packages/$package/default.nix"
 	done
 }
 
-@test "Nix Docker Desktop exposes its bundled CLI plugin" {
-	grep -q 'cli-plugins/docker-desktop' "$REPO_ROOT/nix/packages/docker-desktop/default.nix"
+@test "Docker Desktop has no custom Darwin package or provider candidate" {
+	[ ! -e "$REPO_ROOT/nix/packages/docker-desktop/default.nix" ]
+	! grep -q 'dockerDesktopPackage\|selectDarwinPackage "docker-desktop"\|callPackage ./docker-desktop' "$SETS"
+	! grep -q 'docker-desktop' "$REPO_ROOT/nix/packages/darwin-provider-candidates.nix"
 }
 
 @test "ChatGPT uses the nixpkgs Darwin application with legacy cask migration metadata" {

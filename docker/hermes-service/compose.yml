@@ -34,6 +34,10 @@ services:
       HERMES_HOME: /opt/data
       HERMES_DASHBOARD: "1"
       HERMES_DASHBOARD_HOST: "0.0.0.0"
+      # One root gateway serves every profile with profile-scoped credentials,
+      # sessions, adapters, and routes. Starting one process per profile can
+      # overwhelm Docker Desktop during simultaneous cold starts.
+      GATEWAY_MULTIPLEX_PROFILES: "true"
       # Rebuild a Discord Gateway on the first failed WebSocket liveness
       # sample. This prevents a closed secondary profile socket from staying
       # live while silently dropping inbound mentions.
@@ -54,6 +58,11 @@ services:
       - bootstrap
     entrypoint: /usr/local/bin/hermes-bootstrap
     command: apply
+    user: "10000:10000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     env_file:
       - path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.op.env
         required: false
@@ -63,6 +72,7 @@ services:
         target: /opt/data
     environment:
       HERMES_HOME: /opt/data
+      HOME: /opt/data
 
   chromium:
     build:

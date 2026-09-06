@@ -161,6 +161,13 @@ class AppTests(unittest.TestCase):
         )
         self.install_google_gmail_configurations = gmail_config_patcher.start()
         self.addCleanup(gmail_config_patcher.stop)
+        xapi_config_patcher = mock.patch.object(
+            app,
+            "reconcile_xapi_configurations",
+            create=True,
+        )
+        self.reconcile_xapi_configurations = xapi_config_patcher.start()
+        self.addCleanup(xapi_config_patcher.stop)
         gmail_credentials_patcher = mock.patch.object(
             app,
             "install_google_gmail_credentials",
@@ -278,6 +285,9 @@ class AppTests(unittest.TestCase):
             "        - draft_email\n"
             "      resources: false\n"
             "      prompts: false\n"
+            "  xapi:\n"
+            "    url: http://xapi-mcp:8080/mcp\n"
+            "    connect_timeout: 300\n"
         )
         for config in (self.root / "config.yaml", target / "config.yaml"):
             config.write_text(calendar_config, encoding="utf-8")
@@ -2314,6 +2324,83 @@ class AppTests(unittest.TestCase):
             + tuple((profile.name, profile.target) for profile in configured.profiles),
         )
 
+    def test_runtime_config_targets_include_existing_unmanaged_profiles(self) -> None:
+        from hermes_bootstrap import app
+
+        managed = self.root / "profiles" / "rick"
+        managed.mkdir(parents=True)
+        (managed / "config.yaml").write_text("model: managed\n", encoding="utf-8")
+        personal = self.root / "profiles" / "personal-ops"
+        personal.mkdir()
+        (personal / "config.yaml").write_text("model: personal\n", encoding="utf-8")
+        notes = self.root / "profiles" / "notes"
+        notes.mkdir()
+        (notes / "README.md").write_text("keep me\n", encoding="utf-8")
+        (self.root / "profiles" / ".DS_Store").write_bytes(b"finder metadata")
+
+        self.assertEqual(
+            app._runtime_config_targets(self.manifest),
+            [self.root, managed, personal],
+        )
+
+    def test_runtime_config_targets_do_not_omit_unsafe_config_entries(self) -> None:
+        from hermes_bootstrap import app
+
+        for scenario in ("symlink", "directory", "fifo", "hardlink"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve() / "data"
+                profile = root / "profiles" / "personal-ops"
+                profile.mkdir(parents=True)
+                config = profile / "config.yaml"
+                outside = root / "outside.yaml"
+                outside.write_text("model: outside\n", encoding="utf-8")
+                if scenario == "symlink":
+                    config.symlink_to(outside)
+                elif scenario == "directory":
+                    config.mkdir()
+                elif scenario == "fifo":
+                    os.mkfifo(config)
+                else:
+                    os.link(outside, config)
+
+                self.assertEqual(
+                    app._runtime_config_targets(manifest(root, ())),
+                    [root, profile],
+                )
+
+    def test_runtime_config_targets_reject_unsafe_profile_entries(self) -> None:
+        from hermes_bootstrap import app
+
+        profiles = self.root / "profiles"
+        profiles.mkdir()
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "config.yaml").write_text("model: outside\n", encoding="utf-8")
+        (profiles / "linked").symlink_to(outside, target_is_directory=True)
+
+        with self.assertRaisesRegex(ApplyError, "runtime profiles"):
+            app._runtime_config_targets(manifest(self.root, ()))
+
+    def test_runtime_config_targets_reject_config_inspection_errors(self) -> None:
+        from hermes_bootstrap import app
+
+        profile = self.root / "profiles" / "personal-ops"
+        profile.mkdir(parents=True)
+        config = profile / "config.yaml"
+        config.write_text("model: local\n", encoding="utf-8")
+        original_lstat = Path.lstat
+
+        def lstat(path: Path) -> os.stat_result:
+            if path == config:
+                raise PermissionError("denied")
+            return original_lstat(path)
+
+        with (
+            mock.patch.object(Path, "lstat", autospec=True, side_effect=lstat),
+            self.assertRaisesRegex(ApplyError, "runtime profiles"),
+        ):
+            app._runtime_config_targets(manifest(self.root, ()))
+
     def test_installed_layout_validates_hindsight_before_environment_files(self) -> None:
         from hermes_bootstrap import app
 
@@ -2326,6 +2413,17 @@ class AppTests(unittest.TestCase):
             mock.patch.object(app, "_validate_repositories"),
             mock.patch.object(app, "validate_google_calendar_installation"),
             mock.patch.object(app, "validate_google_gmail_installation"),
+            mock.patch.object(
+                app,
+                "validate_xapi_configurations",
+                side_effect=lambda targets: events.append(
+                    "xapi:"
+                    + ",".join(
+                        target.name if target != self.root else "default"
+                        for target in targets
+                    )
+                ),
+            ) as validate_xapi,
             mock.patch.object(
                 app,
                 "validate_hindsight_installation",
@@ -2359,9 +2457,16 @@ class AppTests(unittest.TestCase):
         validate_context_engine.assert_called_once_with(
             app._environment_targets(self.manifest)
         )
+        validate_xapi.assert_called_once_with(
+            [
+                target
+                for _profile, target in app._environment_targets(self.manifest)
+            ]
+        )
         self.assertEqual(
             events,
             [
+                "xapi:default,rick",
                 "hindsight:default,rick",
                 "context-engine:default,rick",
                 "env:data",

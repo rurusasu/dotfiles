@@ -63,10 +63,36 @@ raise SystemExit(0 if actual == expected else 3)' \
     "$volume_token"
 }
 
-dotfiles_hermes_release_storage_lock() {
-  local docker_runner="$1" lock_id="$2"
+dotfiles_hermes_converge_storage_ownership() {
+  local docker_runner="$1" volume_name="$2"
 
-  "$docker_runner" rm -f "$lock_id" >/dev/null 2>&1
+  "$docker_runner" run --rm \
+    --network none \
+    --read-only \
+    --cap-drop ALL \
+    --cap-add CHOWN \
+    --cap-add DAC_OVERRIDE \
+    --security-opt no-new-privileges:true \
+    --user 0:0 \
+    --entrypoint /usr/local/bin/hermes-storage-ownership \
+    --mount "type=volume,src=$volume_name,dst=/target" \
+    local/hermes-agent-gh:latest \
+    --target /target --uid 10000 --gid 10000
+}
+
+dotfiles_hermes_release_storage_lock() {
+  local docker_runner="$1" lock_id="$2" heartbeat_pid="${3:-}" heartbeat_path="${4:-}"
+  local release_status=0
+
+  if [[ $heartbeat_pid =~ ^[1-9][0-9]*$ ]]; then
+    kill "$heartbeat_pid" >/dev/null 2>&1 || true
+    wait "$heartbeat_pid" 2>/dev/null || true
+  fi
+  "$docker_runner" rm -f "$lock_id" >/dev/null 2>&1 || release_status=$?
+  if [[ -n $heartbeat_path ]]; then
+    rm -f -- "$heartbeat_path"
+  fi
+  return "$release_status"
 }
 
 dotfiles_hermes_storage_lock_state() {
@@ -79,13 +105,53 @@ dotfiles_hermes_storage_lock_state() {
 
 dotfiles_hermes_create_storage_lock() {
   local docker_runner="$1" lock_name="$2" lock_label="$3" token_label="$4" created_label="$5"
-  local volume_token="$6" created_at="$7" data_dir="$8" volume_name="$9"
+  local volume_token="$6" created_at="$7" heartbeat_path="$8"
 
   "$docker_runner" create \
     --name "$lock_name" \
     --label "$lock_label=1" \
     --label "$token_label=$volume_token" \
     --label "$created_label=$created_at" \
+    --network none \
+    --read-only \
+    --cap-drop ALL \
+    --security-opt no-new-privileges:true \
+    --entrypoint python \
+    --mount "type=bind,src=$heartbeat_path,dst=/lease,readonly" \
+    local/hermes-agent-gh:latest \
+    -c 'import os, sys, time
+path, timeout = sys.argv[1], float(sys.argv[2])
+while True:
+ try:
+  age = time.time() - os.stat(path).st_mtime
+ except OSError:
+  raise SystemExit(1)
+ if age > timeout:
+  raise SystemExit(0)
+ time.sleep(1)' \
+    /lease 30
+}
+
+dotfiles_hermes_start_storage_lock_lease() {
+  local docker_runner="$1" lock_id="$2" heartbeat_path="$3" result_variable="$4"
+  local owner_pid="${BASHPID:-$$}"
+  local interval="${DOTFILES_HERMES_STORAGE_HEARTBEAT_INTERVAL_SECONDS:-5}"
+
+  [[ $interval =~ ^[0-9]+([.][0-9]+)?$ ]] || interval=5
+  "$docker_runner" start "$lock_id" >/dev/null || return $?
+  (
+    while kill -0 "$owner_pid" >/dev/null 2>&1; do
+      touch -m -- "$heartbeat_path" || exit 1
+      /bin/sleep "$interval" || exit 1
+    done
+  ) >/dev/null 2>&1 &
+  printf -v "$result_variable" '%s' "$!"
+}
+
+dotfiles_hermes_seed_storage_volume() {
+  local docker_runner="$1" data_dir="$2" volume_name="$3" volume_token="$4"
+
+  "$docker_runner" run --rm \
     --entrypoint /usr/local/bin/hermes-storage-seed \
     --mount "type=bind,src=$data_dir,dst=/source,readonly" \
     --mount "type=volume,src=$volume_name,dst=/target" \
@@ -97,13 +163,13 @@ dotfiles_hermes_create_storage_lock() {
 dotfiles_hermes_initialize_storage_volume() {
   local docker_runner="$1"
   local volume_name data_dir volume_schema volume_token actual_schema actual_token lock_name lock_id
-  local volume_status probe_status seed_status release_status
+  local volume_status probe_status seed_status ownership_status release_status
   local schema_label="com.rurusasu.dotfiles.hermes-storage.schema"
   local token_label="com.rurusasu.dotfiles.hermes-storage.init-token"
   local lock_label="com.rurusasu.dotfiles.hermes-storage.lock"
   local lock_created_label="com.rurusasu.dotfiles.hermes-storage.lock-created-at"
   local lock_state stale_lock_id stale_lock_marker stale_lock_token stale_lock_created stale_lock_status
-  local lock_created_at now reclaim_stale=0
+  local lock_created_at now reclaim_stale=0 heartbeat_token heartbeat_path heartbeat_pid=""
 
   volume_name="$(dotfiles_hermes_storage_volume_name)" ||
     dotfiles_die "HERMES_DATA_VOLUME contains an invalid Docker volume name."
@@ -130,10 +196,17 @@ dotfiles_hermes_initialize_storage_volume() {
     return 1
   }
   lock_name="$(dotfiles_hermes_storage_lock_name "$volume_name")" || return $?
-  lock_created_at="$(python3 -c 'import time; print(int(time.time()))')" || return $?
+  heartbeat_token="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')" || return $?
+  heartbeat_path="$data_dir/.dotfiles-hermes-storage-lease-$heartbeat_token"
+  (umask 077 && : >"$heartbeat_path") || return $?
+  lock_created_at="$(python3 -c 'import time; print(int(time.time()))')" || {
+    seed_status=$?
+    rm -f -- "$heartbeat_path"
+    return "$seed_status"
+  }
   if ! lock_id="$(dotfiles_hermes_create_storage_lock \
     "$docker_runner" "$lock_name" "$lock_label" "$token_label" "$lock_created_label" \
-    "$volume_token" "$lock_created_at" "$data_dir" "$volume_name" 2>/dev/null)"; then
+    "$volume_token" "$lock_created_at" "$heartbeat_path" 2>/dev/null)"; then
     lock_state="$(dotfiles_hermes_storage_lock_state \
       "$docker_runner" "$lock_name" "$lock_label" "$token_label" "$lock_created_label" 2>/dev/null)" || lock_state=""
     IFS='|' read -r stale_lock_id stale_lock_marker stale_lock_token stale_lock_created stale_lock_status <<<"$lock_state"
@@ -141,7 +214,11 @@ dotfiles_hermes_initialize_storage_volume() {
       case "$stale_lock_status" in
       exited | dead) reclaim_stale=1 ;;
       created)
-        now="$(python3 -c 'import time; print(int(time.time()))')" || return $?
+        now="$(python3 -c 'import time; print(int(time.time()))')" || {
+          seed_status=$?
+          rm -f -- "$heartbeat_path"
+          return "$seed_status"
+        }
         if [[ $stale_lock_created =~ ^[0-9]{1,12}$ ]] && ((now - stale_lock_created >= 30)); then
           reclaim_stale=1
         fi
@@ -149,42 +226,83 @@ dotfiles_hermes_initialize_storage_volume() {
       esac
     fi
     if ((reclaim_stale == 0)); then
+      rm -f -- "$heartbeat_path"
       printf 'Hermes Docker data volume initialization is already locked: %s\n' "$volume_name" >&2
       return 1
     fi
-    dotfiles_hermes_release_storage_lock "$docker_runner" "$stale_lock_id" || return $?
-    lock_created_at="$(python3 -c 'import time; print(int(time.time()))')" || return $?
-    lock_id="$(dotfiles_hermes_create_storage_lock \
+    if dotfiles_hermes_release_storage_lock "$docker_runner" "$stale_lock_id"; then
+      :
+    else
+      release_status=$?
+      rm -f -- "$heartbeat_path"
+      return "$release_status"
+    fi
+    lock_created_at="$(python3 -c 'import time; print(int(time.time()))')" || {
+      seed_status=$?
+      rm -f -- "$heartbeat_path"
+      return "$seed_status"
+    }
+    if lock_id="$(dotfiles_hermes_create_storage_lock \
       "$docker_runner" "$lock_name" "$lock_label" "$token_label" "$lock_created_label" \
-      "$volume_token" "$lock_created_at" "$data_dir" "$volume_name")" || return $?
+      "$volume_token" "$lock_created_at" "$heartbeat_path")"; then
+      :
+    else
+      seed_status=$?
+      rm -f -- "$heartbeat_path"
+      return "$seed_status"
+    fi
   fi
-  [[ $lock_id =~ ^[0-9a-f]{12,64}$ ]] || return 1
+  [[ $lock_id =~ ^[0-9a-f]{12,64}$ ]] || {
+    rm -f -- "$heartbeat_path"
+    return 1
+  }
+  if dotfiles_hermes_start_storage_lock_lease \
+    "$docker_runner" "$lock_id" "$heartbeat_path" heartbeat_pid; then
+    :
+  else
+    seed_status=$?
+    dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" "" "$heartbeat_path" || true
+    return "$seed_status"
+  fi
 
   actual_schema="$(dotfiles_hermes_storage_volume_label "$docker_runner" "$volume_name" "$schema_label" 2>/dev/null)" || {
-    dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" || true
+    dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" "$heartbeat_pid" "$heartbeat_path" || true
     printf 'Hermes Docker data volume identity could not be verified while locked: %s\n' "$volume_name" >&2
     return 1
   }
   actual_token="$(dotfiles_hermes_storage_volume_label "$docker_runner" "$volume_name" "$token_label" 2>/dev/null)" || {
-    dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" || true
+    dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" "$heartbeat_pid" "$heartbeat_path" || true
     printf 'Hermes Docker data volume identity could not be verified while locked: %s\n' "$volume_name" >&2
     return 1
   }
   if [[ $actual_schema != 1 || $actual_token != "$volume_token" ]]; then
-    dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" || true
+    dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" "$heartbeat_pid" "$heartbeat_path" || true
     printf 'Hermes Docker data volume changed before its lock was acquired; refusing to access it: %s\n' "$volume_name" >&2
     return 1
   fi
 
   if dotfiles_hermes_storage_volume_ready "$docker_runner" "$volume_name" "$volume_token"; then
-    dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" || return $?
-    printf 'Hermes Docker data volume is ready: %s\n' "$volume_name" >&2
-    return 0
+    if dotfiles_hermes_converge_storage_ownership "$docker_runner" "$volume_name"; then
+      dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" "$heartbeat_pid" "$heartbeat_path" || return $?
+      printf 'Hermes Docker data volume is ready: %s\n' "$volume_name" >&2
+      return 0
+    else
+      ownership_status=$?
+    fi
+    if dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" "$heartbeat_pid" "$heartbeat_path"; then
+      printf 'Hermes Docker data volume ownership convergence failed with status %s: %s\n' \
+        "$ownership_status" "$volume_name" >&2
+      return "$ownership_status"
+    fi
+    release_status=$?
+    printf 'Hermes Docker data volume ownership convergence failed with status %s and its lock could not be released: %s\n' \
+      "$ownership_status" "$volume_name" >&2
+    return "$release_status"
   else
     probe_status=$?
   fi
   if ((probe_status != 3)); then
-    if dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id"; then
+    if dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" "$heartbeat_pid" "$heartbeat_path"; then
       printf 'Hermes Docker data volume ready marker probe failed with status %s; preserving it unchanged: %s\n' \
         "$probe_status" "$volume_name" >&2
       return "$probe_status"
@@ -196,11 +314,24 @@ dotfiles_hermes_initialize_storage_volume() {
     fi
   fi
 
-  if "$docker_runner" start -a "$lock_id"; then
+  if dotfiles_hermes_seed_storage_volume "$docker_runner" "$data_dir" "$volume_name" "$volume_token"; then
     if dotfiles_hermes_storage_volume_ready "$docker_runner" "$volume_name" "$volume_token"; then
-      dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" || return $?
-      printf 'Hermes Docker data volume initialized: %s\n' "$volume_name" >&2
-      return 0
+      if dotfiles_hermes_converge_storage_ownership "$docker_runner" "$volume_name"; then
+        dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" "$heartbeat_pid" "$heartbeat_path" || return $?
+        printf 'Hermes Docker data volume initialized: %s\n' "$volume_name" >&2
+        return 0
+      else
+        ownership_status=$?
+      fi
+      if dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" "$heartbeat_pid" "$heartbeat_path"; then
+        printf 'Hermes Docker data volume ownership convergence failed with status %s: %s\n' \
+          "$ownership_status" "$volume_name" >&2
+        return "$ownership_status"
+      fi
+      release_status=$?
+      printf 'Hermes Docker data volume ownership convergence failed with status %s and its lock could not be released: %s\n' \
+        "$ownership_status" "$volume_name" >&2
+      return "$release_status"
     else
       probe_status=$?
     fi
@@ -216,7 +347,7 @@ dotfiles_hermes_initialize_storage_volume() {
     seed_status=$?
   fi
 
-  if dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id"; then
+  if dotfiles_hermes_release_storage_lock "$docker_runner" "$lock_id" "$heartbeat_pid" "$heartbeat_path"; then
     printf 'Hermes Docker data volume remains incomplete and will be safely replaced on retry: %s\n' "$volume_name" >&2
     return "$seed_status"
   else
@@ -583,6 +714,161 @@ dotfiles_hermes_with_xapi_credentials_and_cache() {
   return "$status"
 }
 
+dotfiles_hermes_probe_xapi_token() {
+  local docker_runner="$1"
+  local compose_file="$2"
+  local probe_output probe_status
+
+  if probe_output="$("$docker_runner" compose -f "$compose_file" run --rm --no-deps \
+    --entrypoint /bin/sh xapi-mcp \
+    -lc 'CLIENT_ID="$X_API_CLIENT_ID" CLIENT_SECRET="$X_API_CLIENT_SECRET" node_modules/.bin/xurl token >/dev/null' 2>&1)"; then
+    return 0
+  else
+    probe_status=$?
+  fi
+  if printf '%s\n' "$probe_output" | grep -Eqi \
+    'Auth Error: TokenNotFound|oauth2 token not found|invalid_grant|invalid_client|unauthorized_client'; then
+    return 79
+  fi
+  return "$probe_status"
+}
+
+dotfiles_hermes_restore_xapi_auth_cache() {
+  local auth_path="$1" snapshot_path="$2" cache_existed="$3"
+
+  if ((cache_existed)); then
+    chmod 600 "$snapshot_path" && mv -f -- "$snapshot_path" "$auth_path"
+  else
+    rm -f -- "$auth_path" "$snapshot_path"
+  fi
+}
+
+dotfiles_hermes_sync_xapi_refresh_token_to_onepassword() {
+  local data_dir cache_path item_file template_file account vault item op_command status=0 render_status=0
+
+  data_dir="$(dotfiles_hermes_data_dir)"
+  cache_path="$data_dir/.xurl/auth.yml"
+  [[ -f $cache_path && ! -L $cache_path ]] || return 1
+  [[ $(stat -c '%a' "$cache_path" 2>/dev/null || stat -f '%Lp' "$cache_path") == 600 ]] || return 1
+  op_command="$(dotfiles_hermes_op_command)" || return 1
+  account="$(dotfiles_hermes_xapi_secret_account)"
+  vault="$(dotfiles_hermes_xapi_secret_vault)"
+  item="$(dotfiles_hermes_xapi_oauth_item)"
+  item_file="$(mktemp "$data_dir/.xapi-item.XXXXXX")" || return 1
+  template_file="$(mktemp "$data_dir/.xapi-template.XXXXXX")" || {
+    rm -f -- "$item_file"
+    return 1
+  }
+  chmod 600 "$item_file" "$template_file" || status=1
+  if ((status == 0)); then
+    dotfiles_hermes_run_with_service_account_cache \
+      "$op_command" item get "$item" --account "$account" --vault "$vault" --format json >"$item_file" || status=$?
+  fi
+  if ((status == 0)); then
+    if python3 - "$item_file" "$cache_path" >"$template_file" <<'PY'; then
+import json
+import re
+import sys
+
+item_path, cache_path = sys.argv[1:]
+with open(item_path, encoding="utf-8") as item_file:
+    item = json.load(item_file)
+with open(cache_path, encoding="utf-8") as cache_file:
+    cache = cache_file.read()
+match = re.search(r'(?m)^\s+refresh_token:\s*(?:"([^"]+)"|\x27([^\x27]+)\x27|([^\s#]+))\s*$', cache)
+if match is None:
+    raise SystemExit(1)
+refresh_token = next(value for value in match.groups() if value is not None)
+fields = [
+    field for field in item.get("fields", [])
+    if field.get("label") == "X_API_REFRESH_TOKEN"
+    and (field.get("section") or {}).get("label") == "Refresh Token"
+]
+if len(fields) != 1:
+    raise SystemExit(1)
+if fields[0].get("value") == refresh_token:
+    raise SystemExit(3)
+fields[0]["value"] = refresh_token
+sys.stdout.write(json.dumps(item, separators=(",", ":")))
+PY
+      render_status=0
+    else
+      render_status=$?
+    fi
+    if ((render_status == 3)); then
+      status=0
+    else
+      status=$render_status
+    fi
+  fi
+  if ((status == 0 && render_status == 0)); then
+    dotfiles_hermes_run_with_service_account_cache \
+      "$op_command" item edit "$item" --account "$account" --vault "$vault" --template "$template_file" >/dev/null || status=$?
+  fi
+  rm -f -- "$item_file" "$template_file"
+  return "$status"
+}
+
+dotfiles_hermes_ensure_xapi_auth() {
+  local docker_runner="$1"
+  local compose_file="$2"
+  local data_dir xurl_dir auth_path snapshot_path cache_existed=0 probe_status sync_status
+
+  data_dir="$(dotfiles_hermes_data_dir)"
+  xurl_dir="$data_dir/.xurl"
+  auth_path="$xurl_dir/auth.yml"
+  [[ -d $xurl_dir && ! -L $xurl_dir ]] || return 1
+  snapshot_path="$(mktemp "$xurl_dir/auth.yml.rollback.XXXXXX")" || return 1
+  if [[ -e $auth_path || -L $auth_path ]]; then
+    if [[ ! -f $auth_path || -L $auth_path ]] || ! cp -p -- "$auth_path" "$snapshot_path"; then
+      rm -f -- "$snapshot_path"
+      return 1
+    fi
+    cache_existed=1
+  fi
+
+  if dotfiles_hermes_with_xapi_credentials_and_cache \
+    dotfiles_hermes_probe_xapi_token "$docker_runner" "$compose_file"; then
+    if dotfiles_hermes_sync_xapi_refresh_token_to_onepassword; then
+      rm -f -- "$snapshot_path"
+      return 0
+    else
+      sync_status=$?
+    fi
+    rm -f -- "$snapshot_path"
+    return "$sync_status"
+  else
+    probe_status=$?
+  fi
+  if ((probe_status != 79)); then
+    dotfiles_hermes_restore_xapi_auth_cache "$auth_path" "$snapshot_path" "$cache_existed" || true
+    return "$probe_status"
+  fi
+
+  if DOTFILES_HERMES_XAPI_FORCE_CACHE_SYNC=1 \
+    dotfiles_hermes_with_xapi_credentials_and_cache \
+    dotfiles_hermes_probe_xapi_token "$docker_runner" "$compose_file"; then
+    if dotfiles_hermes_sync_xapi_refresh_token_to_onepassword; then
+      rm -f -- "$snapshot_path"
+      return 0
+    else
+      sync_status=$?
+    fi
+    rm -f -- "$snapshot_path"
+    return "$sync_status"
+  else
+    probe_status=$?
+  fi
+  dotfiles_hermes_restore_xapi_auth_cache "$auth_path" "$snapshot_path" "$cache_existed" || true
+  if ((probe_status != 79)); then
+    return "$probe_status"
+  fi
+
+  printf '%s\n' \
+    'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.' >&2
+  return 1
+}
+
 dotfiles_hermes_validate_secret_plan() {
   jq -Ssce '
     if length == 1 and (.[0] | type == "object") then .[0] else false end
@@ -716,12 +1002,16 @@ dotfiles_hermes_wait_for_api() {
   attempts="${HERMES_API_READY_ATTEMPTS:-30}"
   delay_seconds="${HERMES_API_READY_DELAY_SECONDS:-2}"
   timeout_seconds="${HERMES_API_PROBE_TIMEOUT_SECONDS:-2}"
-  port="${HERMES_API_PORT:-8642}"
+  port="${HERMES_DASHBOARD_PORT:-9119}"
 
   [[ $attempts =~ ^[1-9][0-9]*$ ]] || attempts=30
   [[ $delay_seconds =~ ^[0-9]+$ ]] || delay_seconds=2
   [[ $timeout_seconds =~ ^[1-9][0-9]*$ ]] || timeout_seconds=2
-  url="http://127.0.0.1:${port}/health"
+  # Desktop connects to the authenticated serve/dashboard backend, not the
+  # gateway's OpenAI-compatible api_server adapter. The latter may be healthy
+  # inside the Compose network while Docker Desktop's host-port forwarding is
+  # still unavailable, so it is not a valid readiness signal for Desktop.
+  url="http://127.0.0.1:${port}/api/health"
 
   for ((attempt = 1; attempt <= attempts; attempt++)); do
     if curl --fail --silent --show-error --max-time "$timeout_seconds" "$url" >/dev/null 2>&1; then
@@ -732,7 +1022,7 @@ dotfiles_hermes_wait_for_api() {
     fi
   done
 
-  printf 'Hermes API did not become ready after %s attempts.\n' "$attempts" >&2
+  printf 'Hermes Desktop backend did not become ready after %s attempts.\n' "$attempts" >&2
   return 1
 }
 
@@ -832,10 +1122,25 @@ dotfiles_hermes_start_stack() {
     :
   else
     status=$?
-    dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
+    if ((runtime_existed)) && dotfiles_hermes_recover_stack_after_failure "$docker_runner" "$compose_file"; then
+      :
+    else
+      dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
+    fi
     return "$status"
   fi
   if dotfiles_hermes_run_bootstrap "$docker_runner" "$compose_file"; then
+    :
+  else
+    status=$?
+    if ((runtime_existed)) && dotfiles_hermes_recover_stack_after_failure "$docker_runner" "$compose_file"; then
+      :
+    else
+      dotfiles_hermes_show_compose_diagnostics "$docker_runner" "$compose_file"
+    fi
+    return "$status"
+  fi
+  if dotfiles_hermes_ensure_xapi_auth "$docker_runner" "$compose_file"; then
     :
   else
     status=$?

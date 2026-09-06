@@ -518,7 +518,16 @@ not reversed.
 
 The gateway API binds to `0.0.0.0:8642` inside the container, while Compose
 publishes it only on host loopback. Hermes refuses to start that API without the
-managed strong `API_SERVER_KEY`.
+managed strong `API_SERVER_KEY`. This OpenAI-compatible endpoint is separate
+from the Desktop backend. Installer readiness is checked through the public
+`http://127.0.0.1:9119/api/health` endpoint because Desktop connects to the
+authenticated serve/dashboard backend on port `9119`.
+
+The Docker service enables `GATEWAY_MULTIPLEX_PROFILES=true`. Hermes therefore
+keeps the registered per-profile s6 slots stopped and serves all profiles from
+the root gateway with profile-scoped credentials, adapters, routes, and
+sessions. This avoids simultaneous cold starts exhausting Docker Desktop while
+preserving each profile's runtime boundary.
 
 ## Repository Locks And Diagnostics
 

@@ -47,7 +47,8 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         $script:originalBrowserEnvironment = Get-HermesTestEnvironmentVariableState -Name 'HERMES_BROWSER_DATA_DIR'
         $script:readinessEnvironment = @{}
         foreach ($name in @(
-                'HERMES_API_PORT',
+            'HERMES_API_PORT',
+                'HERMES_DASHBOARD_PORT',
                 'HERMES_API_READY_ATTEMPTS',
                 'HERMES_API_READY_DELAY_SECONDS',
                 'HERMES_API_PROBE_TIMEOUT_SECONDS'
@@ -176,11 +177,137 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         }
         Should -Invoke Invoke-HermesXApiCredentialScope -Times 1 -Exactly
         Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
-            $Uri -eq 'http://127.0.0.1:8642/health' -and
+            $Uri -eq 'http://127.0.0.1:9119/api/health' -and
             $Method -eq 'Get' -and
             $TimeoutSec -eq 2
         }
         Should -Invoke Start-Sleep -Times 0 -Exactly
+    }
+
+    It 'should stop before bootstrap and recreate when storage ownership convergence fails' {
+        Mock Invoke-Docker {
+            $script:dockerCalls.Add(($Arguments -join ' '))
+            if ($Arguments.Count -gt 3 -and $Arguments[0] -eq 'compose' -and $Arguments[1] -eq '-f') {
+                $script:eventLog.Add([string]$Arguments[3])
+            }
+            if ($Arguments[0] -eq 'volume' -and $Arguments[1] -eq 'inspect') {
+                $format = $Arguments[$Arguments.IndexOf('--format') + 1]
+                $global:LASTEXITCODE = 0
+                if ($format -match 'hermes-storage\.schema') { return '1' }
+                if ($format -match 'hermes-storage\.init-token') {
+                    return 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+                }
+            }
+            elseif ($Arguments[0] -eq 'create') {
+                $global:LASTEXITCODE = 0
+                return '1111111111111111111111111111111111111111111111111111111111111111'
+            }
+            elseif ($Arguments[0] -eq 'run') {
+                $entrypoint = $Arguments[$Arguments.IndexOf('--entrypoint') + 1]
+                $global:LASTEXITCODE = if ($entrypoint -eq '/usr/local/bin/hermes-storage-ownership') {
+                    42
+                }
+                else {
+                    0
+                }
+                return @()
+            }
+            $global:LASTEXITCODE = 0
+            return @()
+        }
+
+        $result = Invoke-HermesBootstrapEntrypoint `
+            -ComposeFile $script:composeFile `
+            -DataDir $script:dataDir `
+            -BrowserDataDir $script:browserDir
+
+        $result.ExitCode | Should -Be 1
+        $result.Message | Should -Be 'Hermes data volume ownership convergence failed with status 42.'
+        $ownershipCall = @($script:dockerCalls | Where-Object { $_ -match '/usr/local/bin/hermes-storage-ownership' })[0]
+        $releaseCall = 'rm -f 1111111111111111111111111111111111111111111111111111111111111111'
+        $script:dockerCalls.IndexOf($releaseCall) | Should -BeGreaterThan $script:dockerCalls.IndexOf($ownershipCall)
+        Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
+        Should -Invoke Invoke-HermesXApiCredentialScope -Times 0 -Exactly
+        ($script:dockerCalls -join "`n") | Should -Not -Match 'up -d --force-recreate'
+    }
+
+    It 'should recover an existing runtime when storage initialization throws after stop' {
+        Mock Invoke-Docker {
+            $script:dockerCalls.Add(($Arguments -join ' '))
+            if ($Arguments -contains '--services') {
+                $global:LASTEXITCODE = 0
+                return 'hermes'
+            }
+            $global:LASTEXITCODE = 0
+            return @()
+        }
+        Mock Initialize-HermesStorageVolume { throw 'secret storage exception' }
+
+        $result = Invoke-HermesBootstrapEntrypoint `
+            -ComposeFile $script:composeFile `
+            -DataDir $script:dataDir `
+            -BrowserDataDir $script:browserDir
+
+        $result.ExitCode | Should -Be 1
+        $result.Message | Should -Be 'Hermes data volume configuration failed.'
+        $result.Message | Should -Not -Match 'secret storage exception'
+        $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
+        Should -Invoke Invoke-WebRequest -Times 1 -Exactly
+        Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
+    }
+
+    It 'should recover an existing runtime when storage initialization returns failure after stop' {
+        Mock Invoke-Docker {
+            $script:dockerCalls.Add(($Arguments -join ' '))
+            if ($Arguments -contains '--services') {
+                $global:LASTEXITCODE = 0
+                return 'hermes'
+            }
+            $global:LASTEXITCODE = 0
+            return @()
+        }
+        Mock Initialize-HermesStorageVolume {
+            [PSCustomObject]@{ Success = $false; Message = 'Hermes storage marker validation failed.' }
+        }
+
+        $result = Invoke-HermesBootstrapEntrypoint `
+            -ComposeFile $script:composeFile `
+            -DataDir $script:dataDir `
+            -BrowserDataDir $script:browserDir
+
+        $result.ExitCode | Should -Be 1
+        $result.Message | Should -Be 'Hermes storage marker validation failed.'
+        $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
+        Should -Invoke Invoke-WebRequest -Times 1 -Exactly
+        Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
+    }
+
+    It 'should pass preserved Docker diagnostics through the X API token classifier' {
+        $script:probeResult = $null
+        Mock Invoke-Docker {
+            $script:dockerCalls.Add(($Arguments -join ' '))
+            if (($Arguments -join ' ') -match 'xurl token') {
+                $global:LASTEXITCODE = 125
+                return 'Cannot connect to the Docker daemon.'
+            }
+            $global:LASTEXITCODE = 0
+            return @()
+        }
+        Mock Invoke-HermesXApiCredentialScope {
+            $script:eventLog.Add('xapi-credentials')
+            $script:probeResult = & $TokenProbe
+            return [PSCustomObject]@{ ExitCode = 0; Message = '' }
+        }
+
+        $result = Invoke-HermesBootstrapEntrypoint `
+            -ComposeFile $script:composeFile `
+            -DataDir $script:dataDir `
+            -BrowserDataDir $script:browserDir
+
+        $result.ExitCode | Should -Be 0
+        $script:probeResult.Kind | Should -Be 'InfrastructureFailure'
+        $script:probeResult.ExitCode | Should -Be 125
+        $script:probeResult.PSObject.Properties.Name | Should -Not -Contain 'Output'
     }
 
     It 'should recover an existing Hermes runtime after bootstrap failure' {
@@ -213,7 +340,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
     }
 
     It 'should retry readiness until the API returns a successful status' {
-        $env:HERMES_API_PORT = '9864'
+        $env:HERMES_DASHBOARD_PORT = '9864'
         $env:HERMES_API_READY_ATTEMPTS = '3'
         $env:HERMES_API_READY_DELAY_SECONDS = '0'
         $env:HERMES_API_PROBE_TIMEOUT_SECONDS = '1'
@@ -233,7 +360,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
 
         $result.ExitCode | Should -Be 0
         Should -Invoke Invoke-WebRequest -Times 3 -Exactly -ParameterFilter {
-            $Uri -eq 'http://127.0.0.1:9864/health' -and
+            $Uri -eq 'http://127.0.0.1:9864/api/health' -and
             $Method -eq 'Get' -and
             $TimeoutSec -eq 1
         }
@@ -298,7 +425,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             -BrowserDataDir $script:browserDir
 
         $result.ExitCode | Should -Be 1
-        $result.Message | Should -Be 'Hermes API did not become ready after 2 attempts.'
+        $result.Message | Should -Be 'Hermes Desktop backend did not become ready after 2 attempts.'
         Should -Invoke Invoke-WebRequest -Times 2 -Exactly
         Should -Invoke Start-Sleep -Times 1 -Exactly -ParameterFilter { $Seconds -eq 0 }
         $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile ps --all"
@@ -323,7 +450,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
             -BrowserDataDir $script:browserDir
 
         $result.ExitCode | Should -Be 1
-        $result.Message | Should -Match 'Hermes API did not become ready after 1 attempts.'
+        $result.Message | Should -Match 'Hermes Desktop backend did not become ready after 1 attempts.'
         $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
         Should -Invoke Invoke-WebRequest -Times 2 -Exactly
     }
@@ -559,6 +686,25 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
 
         $result.ExitCode | Should -Be 1
         $result.Message | Should -Be 'Hermes X API credential retrieval failed.'
+        $script:eventLog | Should -Be @('config', 'build', 'ps', 'stop', 'bootstrap', 'xapi-credentials')
+        ($script:dockerCalls -join "`n") | Should -Not -Match 'force-recreate'
+    }
+
+    It 'should return actionable OAuth recovery guidance before recreating services' {
+        Mock Invoke-HermesXApiCredentialScope {
+            $script:eventLog.Add('xapi-credentials')
+            throw [System.InvalidOperationException]::new(
+                'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
+            )
+        }
+
+        $result = Invoke-HermesBootstrapEntrypoint `
+            -ComposeFile $script:composeFile `
+            -DataDir $script:dataDir `
+            -BrowserDataDir $script:browserDir
+
+        $result.ExitCode | Should -Be 1
+        $result.Message | Should -Be 'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
         $script:eventLog | Should -Be @('config', 'build', 'ps', 'stop', 'bootstrap', 'xapi-credentials')
         ($script:dockerCalls -join "`n") | Should -Not -Match 'force-recreate'
     }

@@ -32,6 +32,7 @@ let
     };
 
   defaultConfig = (mkDarwin { }).config;
+  dockerConfig = (mkDarwin { withDocker = true; }).config;
   hermesConfig = (mkDarwin { withHermes = true; }).config;
   ollamaConfig = (mkDarwin { withOllama = true; }).config;
   defaultHome = defaultConfig.home-manager.users.test-user;
@@ -118,6 +119,7 @@ in
   testDarwinHermesProfileUsesExpectedProviders = {
     expr = {
       hermesCask = hasDarwinCask "hermes-desktop" hermesConfig;
+      dockerCask = hasDarwinCask "docker-desktop" hermesConfig;
       chromeSystemPackage = builtins.any (name: hasPrefix "google-chrome" name) (
         packageNames hermesConfig
       );
@@ -126,9 +128,25 @@ in
     };
     expected = {
       hermesCask = true;
+      dockerCask = true;
       chromeSystemPackage = true;
       discordSystemPackage = true;
       discordAgent = true;
+    };
+  };
+
+  testDarwinDockerProfileUsesHomebrewCask = {
+    expr = {
+      dockerCask = hasDarwinCask "docker-desktop" dockerConfig;
+      ollamaCask = hasDarwinCask "ollama-app" dockerConfig;
+      chromeCask = hasDarwinCask "google-chrome" dockerConfig;
+      discordCask = hasDarwinCask "discord" dockerConfig;
+    };
+    expected = {
+      dockerCask = true;
+      ollamaCask = false;
+      chromeCask = false;
+      discordCask = false;
     };
   };
 

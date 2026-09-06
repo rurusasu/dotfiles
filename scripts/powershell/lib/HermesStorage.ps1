@@ -3,6 +3,38 @@
     Initializes the Docker-managed Hermes runtime data volume.
 #>
 
+if ($null -eq ('DotfilesHermesStorageLeaseHeartbeat' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Threading;
+
+public sealed class DotfilesHermesStorageLeaseHeartbeat : IDisposable
+{
+    private readonly string path;
+    private readonly Timer timer;
+
+    public DotfilesHermesStorageLeaseHeartbeat(string path, int intervalMilliseconds)
+    {
+        this.path = path;
+        Touch(null);
+        this.timer = new Timer(Touch, null, intervalMilliseconds, intervalMilliseconds);
+    }
+
+    private void Touch(object state)
+    {
+        try { File.SetLastWriteTimeUtc(this.path, DateTime.UtcNow); }
+        catch { }
+    }
+
+    public void Dispose()
+    {
+        this.timer.Dispose();
+    }
+}
+'@
+}
+
 function Get-HermesStorageVolumeName {
     [CmdletBinding()]
     param()
@@ -71,6 +103,33 @@ raise SystemExit(0 if actual == expected else 3)',
     return [PSCustomObject]@{ Status = $status; Ready = $status -eq 0 }
 }
 
+function Invoke-HermesStorageOwnership {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$VolumeName
+    )
+
+    $arguments = @(
+        'run', '--rm',
+        '--network', 'none',
+        '--read-only',
+        '--cap-drop', 'ALL',
+        '--cap-add', 'CHOWN',
+        '--cap-add', 'DAC_OVERRIDE',
+        '--security-opt', 'no-new-privileges:true',
+        '--user', '0:0',
+        '--entrypoint', '/usr/local/bin/hermes-storage-ownership',
+        '--mount', "type=volume,source=$VolumeName,target=/target",
+        'local/hermes-agent-gh:latest',
+        '--target', '/target',
+        '--uid', '10000',
+        '--gid', '10000'
+    )
+    $null = @(Invoke-Docker -Arguments $arguments 2>$null)
+    return $LASTEXITCODE
+}
+
 function Get-HermesStorageLockName {
     [CmdletBinding()]
     param(
@@ -125,6 +184,7 @@ function Initialize-HermesStorageVolume {
     $lockLabel = 'com.rurusasu.dotfiles.hermes-storage.lock'
     $lockCreatedLabel = 'com.rurusasu.dotfiles.hermes-storage.lock-created-at'
     $existing = $true
+    $result = $null
     $schema = Get-HermesStorageVolumeLabel -VolumeName $volumeName -Label $schemaLabel
     if ($schema.Status -eq 0) {
         if ($schema.Value -ne '1') {
@@ -159,24 +219,38 @@ function Initialize-HermesStorageVolume {
     }
 
     $lockName = Get-HermesStorageLockName -VolumeName $volumeName
+    $heartbeatPath = [System.IO.Path]::GetTempFileName()
+    $heartbeat = $null
     $lockCreatedAt = Get-HermesStorageUnixTime
-    $seedArguments = @(
+    $leaseArguments = @(
         'create',
         '--name', $lockName,
         '--label', "$lockLabel=1",
         '--label', "$tokenLabel=$volumeToken",
         '--label', "$lockCreatedLabel=$lockCreatedAt",
-        '--entrypoint', '/usr/local/bin/hermes-storage-seed',
-        '--mount', "type=bind,source=$DataDir,target=/source,readonly",
-        '--mount', "type=volume,source=$volumeName,target=/target",
+        '--network', 'none',
+        '--read-only',
+        '--cap-drop', 'ALL',
+        '--security-opt', 'no-new-privileges:true',
+        '--entrypoint', 'python',
+        '--mount', "type=bind,source=$heartbeatPath,target=/lease,readonly",
         'local/hermes-agent-gh:latest',
-        '--source', '/source',
-        '--destination', '/target',
-        '--ready-token', $volumeToken,
-        '--replace-incomplete'
+        '-c', @'
+import os, sys, time
+path, timeout = sys.argv[1], float(sys.argv[2])
+while True:
+    try:
+        age = time.time() - os.stat(path).st_mtime
+    except OSError:
+        raise SystemExit(1)
+    if age > timeout:
+        raise SystemExit(0)
+    time.sleep(1)
+'@,
+        '/lease', '30'
     )
     $lockCreatedArgument = "$lockCreatedLabel=$lockCreatedAt"
-    $lockOutput = @(Invoke-Docker -Arguments $seedArguments 2>$null)
+    $lockOutput = @(Invoke-Docker -Arguments $leaseArguments 2>$null)
     $lockCreateStatus = $LASTEXITCODE
     $lockId = ($lockOutput -join "`n").Trim()
     if ($lockCreateStatus -ne 0) {
@@ -198,29 +272,42 @@ function Initialize-HermesStorageVolume {
             $staleLockId = $parts[0]
             $null = @(Invoke-Docker -Arguments @('rm', '-f', $staleLockId) 2>$null)
             if ($LASTEXITCODE -ne 0) {
+                Remove-Item -LiteralPath $heartbeatPath -Force -ErrorAction SilentlyContinue
                 return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume stale lock could not be reclaimed.' }
             }
-            $lockCreatedArgumentIndex = $seedArguments.IndexOf($lockCreatedArgument)
+            $lockCreatedArgumentIndex = $leaseArguments.IndexOf($lockCreatedArgument)
             if ($lockCreatedArgumentIndex -lt 0) {
+                Remove-Item -LiteralPath $heartbeatPath -Force -ErrorAction SilentlyContinue
                 return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume lock timestamp could not be refreshed.' }
             }
             $lockCreatedAt = Get-HermesStorageUnixTime
             $lockCreatedArgument = "$lockCreatedLabel=$lockCreatedAt"
-            $seedArguments[$lockCreatedArgumentIndex] = $lockCreatedArgument
-            $lockOutput = @(Invoke-Docker -Arguments $seedArguments 2>$null)
+            $leaseArguments[$lockCreatedArgumentIndex] = $lockCreatedArgument
+            $lockOutput = @(Invoke-Docker -Arguments $leaseArguments 2>$null)
             $lockCreateStatus = $LASTEXITCODE
             $lockId = ($lockOutput -join "`n").Trim()
             if ($lockCreateStatus -ne 0) {
+                Remove-Item -LiteralPath $heartbeatPath -Force -ErrorAction SilentlyContinue
                 return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume lock could not be acquired after stale-lock cleanup.' }
             }
         }
         else {
+            Remove-Item -LiteralPath $heartbeatPath -Force -ErrorAction SilentlyContinue
             return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume initialization is already locked.' }
         }
     }
     if ($lockId -notmatch '^[0-9a-f]{12,64}$') {
+        Remove-Item -LiteralPath $heartbeatPath -Force -ErrorAction SilentlyContinue
         return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume lock returned an invalid container ID.' }
     }
+
+    $null = @(Invoke-Docker -Arguments @('start', $lockId) 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        $null = @(Invoke-Docker -Arguments @('rm', '-f', $lockId) 2>$null)
+        Remove-Item -LiteralPath $heartbeatPath -Force -ErrorAction SilentlyContinue
+        return [PSCustomObject]@{ Success = $false; Existing = $existing; Message = 'Hermes data volume lock lease could not be started.' }
+    }
+    $heartbeat = [DotfilesHermesStorageLeaseHeartbeat]::new($heartbeatPath, 5000)
 
     $lockedSchema = Get-HermesStorageVolumeLabel -VolumeName $volumeName -Label $schemaLabel
     $lockedOwner = Get-HermesStorageVolumeLabel -VolumeName $volumeName -Label $tokenLabel
@@ -239,7 +326,17 @@ function Initialize-HermesStorageVolume {
         # The locked volume identity check already produced the result.
     }
     elseif ($probe.Status -eq 0) {
-        $result = [PSCustomObject]@{ Success = $true; Existing = $true; Message = '' }
+        $ownershipStatus = Invoke-HermesStorageOwnership -VolumeName $volumeName
+        if ($ownershipStatus -eq 0) {
+            $result = [PSCustomObject]@{ Success = $true; Existing = $true; Message = '' }
+        }
+        else {
+            $result = [PSCustomObject]@{
+                Success  = $false
+                Existing = $existing
+                Message  = "Hermes data volume ownership convergence failed with status $ownershipStatus."
+            }
+        }
     }
     elseif ($probe.Status -ne 3) {
         $result = [PSCustomObject]@{
@@ -249,12 +346,33 @@ function Initialize-HermesStorageVolume {
         }
     }
     else {
-        $null = @(Invoke-Docker -Arguments @('start', '-a', $lockId) 2>$null)
+        $seedArguments = @(
+            'run', '--rm',
+            '--entrypoint', '/usr/local/bin/hermes-storage-seed',
+            '--mount', "type=bind,source=$DataDir,target=/source,readonly",
+            '--mount', "type=volume,source=$volumeName,target=/target",
+            'local/hermes-agent-gh:latest',
+            '--source', '/source',
+            '--destination', '/target',
+            '--ready-token', $volumeToken,
+            '--replace-incomplete'
+        )
+        $null = @(Invoke-Docker -Arguments $seedArguments 2>$null)
         $seedStatus = $LASTEXITCODE
         if ($seedStatus -eq 0) {
             $postSeedProbe = Test-HermesStorageVolumeReady -VolumeName $volumeName -VolumeToken $volumeToken
             if ($postSeedProbe.Status -eq 0) {
-                $result = [PSCustomObject]@{ Success = $true; Existing = $existing; Message = '' }
+                $ownershipStatus = Invoke-HermesStorageOwnership -VolumeName $volumeName
+                if ($ownershipStatus -eq 0) {
+                    $result = [PSCustomObject]@{ Success = $true; Existing = $existing; Message = '' }
+                }
+                else {
+                    $result = [PSCustomObject]@{
+                        Success  = $false
+                        Existing = $existing
+                        Message  = "Hermes data volume ownership convergence failed with status $ownershipStatus."
+                    }
+                }
             }
             elseif ($postSeedProbe.Status -eq 3) {
                 $result = [PSCustomObject]@{
@@ -280,8 +398,12 @@ function Initialize-HermesStorageVolume {
         }
     }
 
+    if ($null -ne $heartbeat) {
+        $heartbeat.Dispose()
+    }
     $null = @(Invoke-Docker -Arguments @('rm', '-f', $lockId) 2>$null)
     $releaseStatus = $LASTEXITCODE
+    Remove-Item -LiteralPath $heartbeatPath -Force -ErrorAction SilentlyContinue
     if ($releaseStatus -ne 0) {
         return [PSCustomObject]@{
             Success  = $false
