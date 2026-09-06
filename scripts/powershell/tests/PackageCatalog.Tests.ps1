@@ -9,6 +9,97 @@ BeforeAll {
 }
 
 Describe 'Package catalog consistency' {
+    Context 'Provider-aware catalog resolution' {
+        It 'should expose explicit feature-aware resolver and provider metadata contracts' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match 'resolveForInstallFeatures'
+            $sets | Should -Match 'provider requires source'
+            $sets | Should -Match 'provider requires identity'
+            $sets | Should -Match 'provider cannot include'
+            $sets | Should -Match 'nix provider derivation does not support'
+            $sets | Should -Match 'catalog ID appears in both Nix and Homebrew resolution'
+            $sets | Should -Match 'mkWindowsOnlySupport\s*=\s*provider:\s*identity:\s*reason:'
+        }
+
+        It 'should evaluate invalid provider metadata fixtures when Nix is available' {
+            $nix = Get-Command nix -ErrorAction SilentlyContinue
+            if ($null -eq $nix) {
+                Set-ItResult -Skipped -Because 'Nix is not available on this host'
+                return
+            }
+
+            $repoRootJson = $script:repoRoot | ConvertTo-Json -Compress
+            $setsPathJson = $script:setsPath | ConvertTo-Json -Compress
+            $expression = @"
+let
+  flake = builtins.getFlake (builtins.toPath $repoRootJson);
+  pkgs = import flake.inputs.nixpkgs { system = "aarch64-darwin"; config.allowUnfree = true; };
+  lib = flake.inputs.nixpkgs.lib;
+  sets = import (builtins.toPath $setsPathJson) {
+    inherit pkgs lib;
+    catalogOverride = {
+      extra = {
+        pkg = pkgs.hello;
+        category = "test";
+        support = {
+          windows = { unsupported = "fixture"; };
+          darwin = { provider = "nix"; source = "nixpkgs"; identity = "extra"; nixAttr = "hello"; cask = "wrong"; };
+          linux = { unsupported = "fixture"; };
+        };
+      };
+      orphan = {
+        category = "test";
+        support = {
+          windows = { unsupported = "fixture"; };
+          darwin = { unsupported = "fixture"; cask = "stale"; };
+          linux = { unsupported = "fixture"; };
+        };
+      };
+      active-invalid = {
+        pkg = "not-a-derivation";
+        category = "test";
+        support = {
+          windows = { unsupported = "fixture"; };
+          darwin = { provider = "nix"; source = "nixpkgs"; identity = "active-invalid"; nixAttr = "hello"; };
+          linux = { unsupported = "fixture"; };
+        };
+      };
+      active-unsupported = {
+        pkg = pkgs.hello.overrideAttrs (_: { meta.platforms = [ "x86_64-linux" ]; });
+        category = "test";
+        support = {
+          windows = { unsupported = "fixture"; };
+          darwin = { provider = "nix"; source = "nixpkgs"; identity = "active-unsupported"; nixAttr = "hello"; };
+          linux = { unsupported = "fixture"; };
+        };
+      };
+      host-conditional = {
+        pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.hello.overrideAttrs (_: { meta.platforms = [ "aarch64-darwin" ]; }) else pkgs.hello;
+        category = "test";
+        support = {
+          windows = { unsupported = "fixture"; };
+          darwin = { provider = "nix"; source = "nixpkgs"; identity = "host-conditional"; nixAttr = "hello"; };
+          linux = { provider = "nix"; source = "nixpkgs"; identity = "host-conditional"; nixAttr = "hello"; };
+        };
+      };
+    };
+  };
+in sets.providerErrors
+"@
+
+            $errors = @(& $nix.Source eval --impure --json --expr $expression | ConvertFrom-Json)
+
+            $LASTEXITCODE | Should -Be 0
+            $errors | Should -Contain 'extra: darwin: nix provider cannot include cask'
+            $errors | Should -Contain 'extra: darwin: catalog ID appears in both Nix and Homebrew resolution'
+            $errors | Should -Contain 'orphan: darwin: providerless metadata cannot include cask'
+            $errors | Should -Contain 'active-invalid: darwin: nix provider requires a derivation'
+            $errors | Should -Contain 'active-unsupported: darwin: nix provider derivation does not support darwin'
+            @($errors | Where-Object { $_ -match 'host-conditional' }).Count | Should -Be 0
+        }
+    }
+
     It 'keeps Herdr out of the Winget manifest because Windows uses the official preview installer' {
         $sets = Get-Content -LiteralPath $script:setsPath -Raw
         $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
@@ -81,13 +172,24 @@ Describe 'Package catalog consistency' {
             $warp | Should -BeNullOrEmpty
         }
 
-        It 'should manage Raycast and Dia as macOS-only Homebrew casks' {
+        It 'should manage Raycast as a Nix Darwin app and Dia as a macOS-only Homebrew cask' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $raycast = [regex]::Match($sets, '(?ms)raycast\s*=\s*\{(?<body>.*?)(?=^\s*# ── system capabilities)')
 
-            $sets | Should -Match '(?s)raycast\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?cask\s*=\s*"raycast"'
-            $sets | Should -Match '(?s)dia-browser\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?cask\s*=\s*"thebrowsercompany-dia"'
+            $raycast.Success | Should -BeTrue
+            $raycast.Groups['body'].Value | Should -Match 'pkg\s*=\s*pkgs\.raycast;'
+            $raycast.Groups['body'].Value | Should -Match 'provider\s*=\s*"nix";'
+            $raycast.Groups['body'].Value | Should -Match 'source\s*=\s*"nixpkgs";'
+            $raycast.Groups['body'].Value | Should -Match 'nixAttr\s*=\s*"raycast";'
+            $raycast.Groups['body'].Value | Should -Match 'appName\s*=\s*"Raycast\.app";'
+            $raycast.Groups['body'].Value | Should -Match 'bundleId\s*=\s*"com\.raycast\.macos";'
+            $raycast.Groups['body'].Value | Should -Match 'executable\s*=\s*"Raycast";'
+            $raycast.Groups['body'].Value | Should -Match 'legacyDarwin\s*=\s*\{\s*provider\s*=\s*"homebrew-cask";\s*name\s*=\s*"raycast";'
+            $raycast.Groups['body'].Value | Should -Not -Match 'cask\s*='
+            $sets | Should -Match '(?s)dia-browser\s*=\s*\{.*?provider\s*=\s*"nix";.*?source\s*=\s*\(darwinProviderCandidate\s+"dia-browser"\)'
+            $sets | Should -Match '(?s)dia-browser\s*=\s*\{.*?legacyDarwin\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?name\s*=\s*"thebrowsercompany-dia"'
             @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Raycast.Raycast' }).Count | Should -Be 0
             @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'TheBrowserCompany.Dia' }).Count | Should -Be 0
         }
@@ -196,9 +298,9 @@ Describe 'Package catalog consistency' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $packages = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' } | ForEach-Object Packages)
 
-            (@($packages | Where-Object PackageIdentifier -eq 'Docker.DockerDesktop'))[0].installFeature | Should -Be 'WithDocker'
-            (@($packages | Where-Object PackageIdentifier -eq 'Google.Chrome'))[0].installFeature | Should -Be 'WithHermes'
-            (@($packages | Where-Object PackageIdentifier -eq 'Discord.Discord'))[0].installFeature | Should -Be 'WithHermes'
+            (@($packages | Where-Object PackageIdentifier -EQ 'Docker.DockerDesktop'))[0].installFeature | Should -Be 'WithDocker'
+            (@($packages | Where-Object PackageIdentifier -EQ 'Google.Chrome'))[0].installFeature | Should -Be 'WithHermes'
+            (@($packages | Where-Object PackageIdentifier -EQ 'Discord.Discord'))[0].installFeature | Should -Be 'WithHermes'
         }
 
         It 'marks Playwright browser packages as Hermes-only' {
@@ -359,7 +461,8 @@ Describe 'Package catalog consistency' {
         It 'should manage Orca as a desktop catalog package with macOS cask and avoid native Python winget installs in the SSOT' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
-            $sets | Should -Match '(?s)orca-editor\s*=\s*\{.*?winget\s*=\s*"StablyAI\.Orca".*?cask\s*=\s*"stablyai/orca/orca"'
+            $sets | Should -Match '(?s)orca-editor\s*=\s*\{.*?winget\s*=\s*"StablyAI\.Orca".*?provider\s*=\s*"nix";.*?source\s*=\s*\(darwinProviderCandidate\s+"orca-editor"\)'
+            $sets | Should -Match '(?s)orca-editor\s*=\s*\{.*?legacyDarwin\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?name\s*=\s*"stablyai/orca/orca"'
             $sets | Should -Not -Match '(?s)windowsOnly\s*=\s*\{.*?winget\s*=\s*\[.*?"StablyAI\.Orca".*?\]'
             $sets | Should -Match '(?s)wingetCiSkipInstall\s*=\s*\{.*?"StablyAI\.Orca"\s*=\s*true;'
             $sets | Should -Match '(?s)python3\s*=\s*\{.*?pkg\s*=\s*pkgs\.python3;.*?winget\s*=\s*null;'
@@ -477,14 +580,14 @@ Describe 'Package catalog consistency' {
         It 'should map Docker to Winget Homebrew cask and Linux system module providers' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
-            $sets | Should -Match '(?s)docker-desktop\s*=\s*\{.*?winget\s*=\s*"Docker\.DockerDesktop".*?darwin\s*=\s*\{.*?cask\s*=\s*"docker-desktop".*?linux\s*=\s*\{.*?systemModule\s*=\s*"docker"'
+            $sets | Should -Match '(?s)docker-desktop\s*=\s*\{.*?winget\s*=\s*"Docker\.DockerDesktop".*?darwin\s*=\s*\{.*?provider\s*=\s*"nix";.*?source\s*=\s*\(darwinProviderCandidate\s+"docker-desktop"\).*?linux\s*=\s*\{.*?systemModule\s*=\s*"docker"'
         }
 
         It 'should keep true Windows-only components with explicit unsupported reasons' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
-            $sets | Should -Match '(?s)mkWindowsOnlySupport\s*=\s*provider:\s*reason:\s*\{.*?darwin\s*=\s*\{\s*unsupported\s*=\s*reason;\s*\};.*?linux\s*=\s*\{\s*unsupported\s*=\s*reason;\s*\};'
-            $sets | Should -Match '"Microsoft\.PowerToys"\s*=\s*mkWindowsOnlySupport\s*"winget"\s*"Windows system utility";'
+            $sets | Should -Match '(?s)mkWindowsOnlySupport\s*=\s*provider:\s*identity:\s*reason:\s*\{.*?inherit\s+provider\s+identity;.*?darwin\s*=\s*\{\s*unsupported\s*=\s*reason;\s*\};.*?linux\s*=\s*\{\s*unsupported\s*=\s*reason;\s*\};'
+            $sets | Should -Match '"Microsoft\.PowerToys"\s*=\s*mkWindowsOnlySupport\s*"winget"\s*"Microsoft\.PowerToys"\s*"Windows system utility";'
         }
     }
 }

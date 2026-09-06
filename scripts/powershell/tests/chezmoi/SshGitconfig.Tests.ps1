@@ -20,7 +20,7 @@ BeforeAll {
     $script:sshDeployPs1 = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_always_deploy.ps1.tmpl"
     $script:sshDeploySh = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_always_deploy.sh.tmpl"
     $script:chezmoiToml = Join-Path $script:chezmoiRoot ".chezmoi.toml.tmpl"
-    $script:renderData = '{"chezmoi":{"os":"windows"},"op_account_personal":"test-account","op_account_work":"test-account"}'
+    $script:renderData = '{"chezmoi":{"os":"windows"},"op_account_personal":"test-account"}'
 }
 
 Describe 'SSH config テンプレート' {
@@ -44,8 +44,8 @@ Describe 'SSH config テンプレート' {
         $script:sshContent | Should -Match 'IdentityFile.*signing_key\.pub'
     }
 
-    It 'github-work ホストが github_work.pub を IdentityFile に指定していること' {
-        $script:sshContent | Should -Match 'IdentityFile.*github_work\.pub' -Because "work account 用に分離した公開鍵を参照する"
+    It 'work 側の SSH ホスト定義を含まないこと' {
+        $script:sshContent | Should -Not -Match 'github-work|github_work\.pub' -Because "work 側の SSH 設定と公開鍵を削除する"
     }
 
     It 'IdentitiesOnly yes が設定されていること' {
@@ -56,7 +56,7 @@ Describe 'SSH config テンプレート' {
         $identityFiles = [regex]::Matches($script:sshContent, 'IdentityFile\s+(.+)') |
             ForEach-Object { $_.Groups[1].Value.Trim() }
 
-        $deployedKeys = @('~/.ssh/signing_key.pub', '~/.ssh/github_work.pub')
+        $deployedKeys = @('~/.ssh/signing_key.pub')
         foreach ($keyPath in $identityFiles) {
             $keyPath | Should -BeIn $deployedKeys -Because "参照される公開鍵はすべて deploy スクリプトでデプロイされる必要がある"
         }
@@ -120,10 +120,8 @@ Describe 'gitconfig テンプレート' {
         )
     }
 
-    It 'includeIf hasconfig フックが work identity を切替えるよう設定されていること' {
-        $script:gitconfigContent | Should -Match 'includeIf\s+"hasconfig:remote\.\*\.url:git@github-work:' -Because (
-            "ssh/config.tmpl の Host github-work alias と組み合わせて work identity を自動適用する"
-        )
+    It 'SSH alias に依存する work identity include を含まないこと' {
+        $script:gitconfigContent | Should -Not -Match 'github-work|hasconfig:remote' -Because "work 側の SSH 設定を削除する"
     }
 }
 
@@ -136,8 +134,8 @@ Describe 'gitconfig-work テンプレート' {
         $script:gitconfigWorkContent | Should -Match '\[user\]'
     }
 
-    It 'work signingkey が github_work.pub を指していること' {
-        $script:gitconfigWorkContent | Should -Match 'github_work\.pub'
+    It 'work identity が SSH 公開鍵を参照しないこと' {
+        $script:gitconfigWorkContent | Should -Not -Match 'signingkey|github_work\.pub|github-work'
     }
 
     It 'git.work データから値を引いていること' {
@@ -180,6 +178,7 @@ Describe 'SSH deploy スクリプト' {
             $script:ps1Content | Should -Match 'ArgumentList\.Add\("read"\)' -Because "op read should happen at script runtime"
             $script:ps1Content | Should -Match 'ArgumentList\.Add\(\$Reference\)' -Because "op read should happen at script runtime"
             $script:ps1Content | Should -Match 'skipping \$Label|no SSH public keys deployed' -Because "runtime 1Password failures should be non-fatal"
+            $script:ps1Content | Should -Not -Match 'WorkPubkey|WorkAccount|work SSH public key|github_work\.pub' -Because "work SSH key deployment was removed"
         }
 
         It '1Password 実行時読み込みに timeout があること' {
@@ -234,6 +233,7 @@ Describe 'SSH deploy スクリプト' {
             $script:shContent | Should -Match 'op_cache_args=\(--cache=false\)' -Because "WSL op.exe reads should disable 1Password cache"
             $script:shContent | Should -Match 'read "\$reference"' -Because "op read should happen at script runtime"
             $script:shContent | Should -Match 'skipping \$label' -Because "runtime 1Password failures should be non-fatal"
+            $script:shContent | Should -Not -Match 'WORK_PUBKEY|WORK_ACCOUNT|work SSH public key|github_work\.pub' -Because "work SSH key deployment was removed"
         }
 
         It '1Password 実行時読み込みに timeout があること' {
@@ -296,8 +296,8 @@ Describe 'personal.yaml の git データ' {
         $script:personalYaml | Should -Match 'signing_key\.pub'
     }
 
-    It 'work signingkey が github_work.pub を指していること' {
-        $script:personalYaml | Should -Match 'github_work\.pub'
+    It 'work identity が SSH 公開鍵を参照しないこと' {
+        $script:personalYaml | Should -Not -Match 'github_work\.pub'
     }
 
     It 'telegramUserId が含まれていないこと' {

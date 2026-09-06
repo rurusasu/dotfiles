@@ -55,8 +55,21 @@ class GitStagingTests(unittest.TestCase):
         git("branch", "-M", "main", cwd=self.checkout)
         git("push", "-u", "origin", "main", cwd=self.checkout)
 
-    def source(self, *, ref: str = "main", manifest: str = "distribution.yaml") -> DistributionSource:
-        return DistributionSource("rick", str(self.remote), ref, Path("/opt/data/profiles/rick"), manifest)
+    def source(
+        self,
+        *,
+        ref: str = "main",
+        manifest: str = "distribution.yaml",
+        source_commit: str | None = None,
+    ) -> DistributionSource:
+        return DistributionSource(
+            "rick",
+            str(self.remote),
+            ref,
+            Path("/opt/data/profiles/rick"),
+            manifest,
+            source_commit,
+        )
 
     def assert_hidden(self, error: BaseException, *markers: str) -> None:
         pending: list[object] = [error]
@@ -222,6 +235,20 @@ class GitStagingTests(unittest.TestCase):
                     stage_distribution(source, self.workdir, auth())
                 self.assertEqual(list(self.workdir.glob("stage-*")), [])
                 self.assertEqual(list(self.workdir.glob("askpass-*")), [])
+
+    def test_pinned_source_commit_must_match_fetched_ref(self) -> None:
+        expected = git("rev-parse", "HEAD", cwd=self.checkout)
+        wrong = "0" * 40
+
+        with self.assertRaises(RepositoryError):
+            stage_distribution(
+                self.source(source_commit=wrong), self.workdir, auth()
+            )
+
+        staged = stage_distribution(
+            self.source(source_commit=expected.upper()), self.workdir, auth()
+        )
+        self.assertEqual(staged.commit, expected)
 
     def test_observed_remote_identity_mismatch_is_rejected_after_successful_clone(self) -> None:
         real_run = git_module._run_git

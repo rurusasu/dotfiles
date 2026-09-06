@@ -30,6 +30,8 @@ class DistributionSource:
     ref: str
     target: Path
     manifest_name: str
+    source_commit: str | None = None
+    max_deleted_paths: int = 10
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,7 @@ class SharedRepository:
     mode: Literal["read-only", "read-write"]
     sync_owner: str | None
     legacy_target: Path | None
+    source_commit: str | None = None
 
 
 @dataclass(frozen=True)

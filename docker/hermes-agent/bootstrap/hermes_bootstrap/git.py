@@ -104,6 +104,11 @@ def _stage_distribution_boundary(
         if commit is None or _OBJECT_ID.fullmatch(commit) is None:
             return _StageFailure("the declared Git ref does not resolve to a commit")
         commit = commit.lower()
+        if (
+            source.source_commit is not None
+            and commit != source.source_commit.lower()
+        ):
+            return _StageFailure("the staged Git source does not match its pinned commit")
         if _run_git(("checkout", "--detach", commit), stage, environment) is None:
             return _StageFailure("could not check out the declared Git commit")
         head = _run_git(("rev-parse", "HEAD"), stage, environment)

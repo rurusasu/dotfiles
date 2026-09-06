@@ -9,13 +9,16 @@
 {
   pkgs,
   lib,
-  inputs ? null,
+  inputs,
+  installFeatures ? [ ],
   isWSL,
   ...
 }:
 let
+  codexPackage = inputs."llm-agents".packages.${pkgs.stdenv.hostPlatform.system}.codex;
   sets = import ../packages/sets.nix {
     inherit pkgs lib;
+    inherit codexPackage;
   };
   bootstrapUser = builtins.getEnv "DOTFILES_USER";
   bootstrapHome = builtins.getEnv "DOTFILES_HOME";
@@ -35,11 +38,16 @@ in
     # macOS installs the WezTerm GUI through Homebrew, so add its Nix terminfo
     # output separately for shells and tools that resolve TERM=wezterm.
     packages =
-      sets.allWithout (
-        lib.optionals isWSL [
-          "discord"
-          "ollama"
-        ]
+      (
+        if pkgs.stdenv.hostPlatform.isDarwin then
+          sets.darwinHomePackagesForInstallFeatures installFeatures
+        else
+          sets.allWithout (
+            lib.optionals isWSL [
+              "discord"
+              "ollama"
+            ]
+          )
       )
       ++ darwinAdditionalPackages;
 
@@ -58,10 +66,13 @@ in
       # Homebrew's default is already 24 hours; keep that interval explicit
       # for interactive shells and tools launched from the Home Manager session.
       HOMEBREW_AUTO_UPDATE_SECS = "86400";
+      # Let native op use the unlocked 1Password desktop app integration.
+      OP_BIOMETRIC_UNLOCK_ENABLED = "true";
     };
 
     # PATH: bun and pnpm global binaries
     sessionPath = [
+      "$HOME/.local/bin"
       "$HOME/.bun/bin"
       "$HOME/.local/share/pnpm/bin"
       "$HOME/.local/share/pnpm"
@@ -69,7 +80,6 @@ in
     ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
       "/opt/homebrew/bin"
       "/opt/homebrew/sbin"
-      "/Applications/Docker.app/Contents/Resources/bin"
     ];
   };
 
@@ -93,6 +103,7 @@ in
       shellAliases = {
         find = "fd";
         grep = "rg";
+        lg = "lazygit";
         l = "eza -lhaT --level=2 --icons=auto --hyperlink -F --group-directories-first --color=auto";
         la = "eza -lhaT --level=2 --icons=auto --hyperlink -F --group-directories-first --color=auto";
         ll = "eza -lhaT --level=2 --icons=auto --hyperlink -F --group-directories-first --color=auto";

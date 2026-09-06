@@ -141,7 +141,7 @@ Expected: formatter, pre-commit, and PowerShell tests pass and a commit is creat
 
 **Files:**
 
-- Modify: docker/hermes-agent/compose.yml
+- Modify: docker/hermes-service/compose.yml
 - Modify: scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1
 - Modify: Taskfile.yml
 
@@ -160,7 +160,7 @@ Run the Hermes Agent Pester file. Expected: the new service/task assertions fail
 
 - [ ] Step 3: Add the services and lifecycle tasks
 
-Update docker/hermes-agent/compose.yml so hermes depends on browser-mcp health, browser-mcp depends on chromium health, all three services join hermes-browser, and only the existing Hermes API/dashboard ports remain published. Chromium uses the dedicated bind mount and shm_size: 2g. Use healthchecks for Chromium /json/version and Browser MCP TCP port 8080.
+Update docker/hermes-service/compose.yml so hermes depends on browser-mcp health, browser-mcp depends on chromium health, all three services join hermes-browser, and only the existing Hermes API/dashboard ports remain published. Chromium uses the dedicated bind mount and shm_size: 2g. Use healthchecks for Chromium /json/version and Browser MCP TCP port 8080.
 
 Do not mark the network internal because Chromium must browse public URLs. Keep both CDP and MCP ports unpublished and attach only the three services to the named bridge network. Update hermes:pull to build hermes, chromium, and browser-mcp, and add focused browser pull/restart/logs/status tasks.
 
@@ -169,7 +169,7 @@ Do not mark the network internal because Chromium must browse public URLs. Keep 
 Run:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml config
+docker compose -f docker/hermes-service/compose.yml config
 pwsh -NoProfile -Command "Import-Module Pester -MinimumVersion 5.0.0; Invoke-Pester -Path './scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1' -Output Detailed"
 ```
 
@@ -266,9 +266,9 @@ Expected: no matches for the removed tool name, no diff errors, and all selected
 Run:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml build chromium browser-mcp
-docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml build chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml up -d chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml ps
 ```
 
 Expected: Chromium and Browser MCP are healthy; no host port is allocated for 9222 or 8080.
@@ -278,24 +278,24 @@ Expected: Chromium and Browser MCP are healthy; no host port is allocated for 92
 Run:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version
-docker compose -f docker/hermes-agent/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+docker compose -f docker/hermes-service/compose.yml exec -T chromium curl -fsS http://127.0.0.1:9222/json/version
+docker compose -f docker/hermes-service/compose.yml exec -T browser-mcp node -e "fetch('http://chromium:9222/json/version').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 ```
 
 Expected: both commands exit successfully; the service URL reaches the forwarder on 9222, which proxies to Chromium on 127.0.0.1:9223 inside the container. A host request to 127.0.0.1:9222 is not required and is not a prerequisite.
 
 - [ ] Step 4: Verify the MCP HTTP endpoint and Hermes startup
 
-Start Hermes with docker compose -f docker/hermes-agent/compose.yml up -d hermes, inspect the Hermes logs, and run the configured MCP test path. Verify that the root and any existing managed profile config contains the internal browser URL, and that the MCP server reports a tools list containing browser navigation tools.
+Start Hermes with docker compose -f docker/hermes-service/compose.yml up -d hermes, inspect the Hermes logs, and run the configured MCP test path. Verify that the root and any existing managed profile config contains the internal browser URL, and that the MCP server reports a tools list containing browser navigation tools.
 
 - [ ] Step 5: Stop services and verify profile persistence
 
 Run:
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml down
-docker compose -f docker/hermes-agent/compose.yml up -d chromium browser-mcp
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml down
+docker compose -f docker/hermes-service/compose.yml up -d chromium browser-mcp
+docker compose -f docker/hermes-service/compose.yml ps
 ```
 
 Expected: the browser profile mount remains present and Chromium/Browser MCP become healthy again without host browser state.

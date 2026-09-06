@@ -23,7 +23,7 @@ MLflow Gateway :5000  <---- local-ai-services ----> Hindsight / future services
         +-- Artifacts: ~/.local/share/mlflow/artifacts/
 ```
 
-MLflow runs as an independent Compose project in `docker/mlflow/compose.yml`.
+MLflow runs as an independent Compose project in `docker/local-ai-services/compose.yml`.
 The host publishes it only on `127.0.0.1:5000`; container clients use
 `http://mlflow:5000` over the external `local-ai-services` bridge network.
 Only MLflow contacts host Ollama directly. The MLflow container has the

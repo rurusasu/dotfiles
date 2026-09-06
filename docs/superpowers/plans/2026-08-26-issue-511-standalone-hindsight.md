@@ -28,7 +28,7 @@
 
 - [ ] Add Bats/static Compose tests for independent service name, loopback ports, data root, healthcheck, and external shared network.
 - [ ] Confirm tests fail before adding the new project.
-- [ ] Create `docker/hindsight/compose.yml` and environment/config assets; remove the service and data ownership from Hermes Compose.
+- [ ] Create `docker/local-ai-services/compose.yml` and environment/config assets; remove the service and data ownership from Hermes Compose.
 - [ ] Connect Hermes services to the external memory network without adding lifecycle dependencies.
 - [ ] Run `docker compose config --quiet` for both projects and focused tests.
 

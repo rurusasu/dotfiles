@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 import unittest
 from pathlib import Path
 
@@ -11,6 +12,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci-contract.yml"
 WORKFLOWS_DIRECTORY = WORKFLOW_PATH.parent
 PRE_COMMIT_PATH = REPOSITORY_ROOT / ".pre-commit-config.yaml"
+DEVCONTAINER_BATS_PATH = REPOSITORY_ROOT / ".devcontainer" / "ci" / "bats.sh"
 HERMES_TASKFILE_PATH = REPOSITORY_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
 CHEZMOI_WORKFLOW = "ci-chezmoi.yml"
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
@@ -155,7 +157,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
         devcontainer = self._named_workflow("ci-devcontainer.yml")
         self.assertIn(
-            "uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4",
+            "uses: docker/setup-docker-action@77e84dbf09b47d1e29270283c22f16145aa85ca1",
             devcontainer,
         )
         self.assertEqual(
@@ -173,6 +175,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn('"scripts/sh/**"', paths)
             self.assertIn('".github/e2e/**"', paths)
             self.assertIn('"docker/hindsight/**"', paths)
+            self.assertIn('"docker/local-ai-services/**"', paths)
             self.assertIn('"docker/mlflow/**"', paths)
             self.assertIn('"docs/mlflow/**"', paths)
 
@@ -181,6 +184,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         push_paths = self._trigger_paths(workflow, "push")
 
         self.assertIn('"docker/mlflow/**"', push_paths)
+        self.assertIn('"docker/local-ai-services/**"', push_paths)
         self.assertIn(
             "python -m unittest docker/mlflow/tests/test_configure.py -v",
             workflow,
@@ -223,8 +227,102 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         for name in ("ci-nix.yml", "ci-winget.yml"):
             self.assertFalse((WORKFLOWS_DIRECTORY / name).exists(), name)
 
+    def test_darwin_provider_update_workflow_is_pinned_and_safe(self) -> None:
+        workflow = self._named_workflow("update-darwin-packages.yml")
+
+        self.assertIn("name: Darwin package updates", workflow)
+        self.assertIn("runs-on: macos-26", workflow)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn("schedule:", workflow)
+        self.assertNotIn("pull_request_target", workflow)
+        self.assertIn("persist-credentials: false", workflow)
+        self.assertIn("task darwin:update:check", workflow)
+        self.assertIn("task darwin:update:promote", workflow)
+        self.assertIn("nix build", workflow)
+        self.assertIn("gh pr create", workflow)
+        self.assertIn("matrix", workflow)
+
+        for action in re.findall(r"uses:\s+([^\s]+)", workflow):
+            self.assertRegex(action, r"@[0-9a-f]{40}$", action)
+
+        complete = self._workflow_job(workflow, "complete")
+        self.assertIn("if: ${{ always() }}", complete)
+        self.assertIn("needs:", complete)
+
+    def test_darwin_update_paths_route_to_darwin_nix_contract_and_catalog(self) -> None:
+        for path in (
+            "nix/packages/darwin-provider-candidates.nix",
+            "scripts/python/update_darwin_packages.py",
+            "tests/python/test_update_darwin_packages.py",
+            ".github/workflows/update-darwin-packages.yml",
+        ):
+            with self.subTest(path=path):
+                routed = self._route(path)
+                for output in ("darwin", "nix", "contract", "package_catalog"):
+                    self.assertTrue(routed[output], f"{path} did not route {output}")
+
+    def _route(self, path: str) -> dict[str, bool]:
+        import json
+        import subprocess
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(REPOSITORY_ROOT / "scripts/python/detect_ci_changes.py"),
+                "--paths-file",
+                "-",
+            ],
+            input=path + "\n",
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        return json.loads(result.stdout)
+
     def test_devcontainer_ci_owns_only_the_two_excluded_bats_files(self) -> None:
         workflow = self._named_workflow("ci-devcontainer.yml")
+        contract_workflow = self._workflow()
+        bats_script = DEVCONTAINER_BATS_PATH.read_text(encoding="utf-8")
+
+        devcontainer_paths = {
+            "tests/bash/install_linux.bats",
+            "tests/bash/install_macos.bats",
+        }
+        all_bats_paths = {
+            path.relative_to(REPOSITORY_ROOT).as_posix()
+            for path in (REPOSITORY_ROOT / "tests" / "bash").glob("*.bats")
+        }
+        exclusion_case = re.search(
+            r'(?ms)case "\$\{bats_file\}" in(?P<case>.*?)^\s*esac$',
+            contract_workflow,
+        )
+        self.assertIsNotNone(exclusion_case)
+        case_body = exclusion_case.group("case") if exclusion_case is not None else ""
+        contract_excluded = {
+            f"tests/bash/{name}"
+            for name in re.findall(r"tests/bash/([^|)]+\.bats)", case_body)
+        }
+        contract_owned = all_bats_paths - contract_excluded
+
+        active_bats_lines = [
+            line.strip()
+            for line in bats_script.splitlines()
+            if line.strip().startswith("bats ")
+        ]
+        self.assertEqual(len(active_bats_lines), 1)
+        runtime_paths = set(
+            re.findall(r"tests/bash/[^\s]+\.bats", active_bats_lines[0])
+        )
+        self.assertEqual(runtime_paths, devcontainer_paths)
+        self.assertNotEqual(active_bats_lines[0], "bats tests/bash/")
+        for glob_marker in ("*", "?", "["):
+            self.assertNotIn(glob_marker, active_bats_lines[0])
+
+        self.assertEqual(contract_excluded, devcontainer_paths)
+        self.assertTrue(devcontainer_paths.isdisjoint(contract_owned))
+        self.assertEqual(devcontainer_paths | contract_owned, all_bats_paths)
+        for owned_path in devcontainer_paths:
+            self.assertTrue((REPOSITORY_ROOT / owned_path).is_file(), owned_path)
 
         for event in ("push", "pull_request"):
             paths = self._trigger_paths(workflow, event)
@@ -233,14 +331,26 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn("tests/bash/install_linux.bats", paths)
             self.assertNotIn("tests/bash/**", paths)
 
+        contract_push_paths = self._trigger_paths(contract_workflow, "push")
+        for path in (
+            '"bootstrap.sh"',
+            '"install.sh"',
+            '"scripts/sh/install-macos.sh"',
+            '"scripts/sh/dcnvim.sh"',
+            '".devcontainer/**"',
+        ):
+            self.assertIn(path, contract_push_paths)
+
     def test_hermes_ci_routes_xapi_contract_and_platform_adapters(self) -> None:
         workflow = self._named_workflow("ci-hermes-bootstrap.yml")
         required_paths = (
             "docker/hermes-agent/**",
+            "docker/hermes-service/**",
             "docker/hermes-browser/**",
             "docker/hermes-browser-mcp/**",
             "docker/hermes-xapi-mcp/**",
             "docker/hindsight/**",
+            "docker/local-ai-services/**",
             "scripts/sh/hermes-agent.sh",
             "scripts/powershell/handlers/Handler.HermesAgent.ps1",
             "tests/python/test_xapi_image_contract.py",
@@ -271,7 +381,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         pattern = match.group("pattern") if match is not None else ""
         for path in (
             "docker/hermes-xapi-mcp/Dockerfile",
-            "docker/hindsight/compose.yml",
+            "docker/local-ai-services/compose.yml",
             "tests/python/test_xapi_image_contract.py",
         ):
             self.assertIsNotNone(re.fullmatch(pattern, path))

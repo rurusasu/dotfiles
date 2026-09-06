@@ -39,7 +39,7 @@ function Get-HermesHindsightVerifyPath {
         [System.IO.Path]::GetFullPath($env:HERMES_COMPOSE_FILE)
     }
     else {
-        [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'docker/hermes-agent/compose.yml'))
+        [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'docker/hermes-service/compose.yml'))
     }
     $resolvedHindsightComposeFile = if (-not [string]::IsNullOrWhiteSpace($HindsightComposeFile)) {
         [System.IO.Path]::GetFullPath($HindsightComposeFile)
@@ -48,7 +48,7 @@ function Get-HermesHindsightVerifyPath {
         [System.IO.Path]::GetFullPath($env:HINDSIGHT_COMPOSE_FILE)
     }
     else {
-        [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'docker/hindsight/compose.yml'))
+        [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'docker/local-ai-services/compose.yml'))
     }
 
     $resolvedDataDir = if (-not [string]::IsNullOrWhiteSpace($DataDir)) {

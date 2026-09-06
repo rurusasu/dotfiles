@@ -4,7 +4,7 @@
 
 Hindsight は Hermes から独立したホスト共通の永続メモリサービスです。Compose の
 `hindsight` サービスが埋め込み PostgreSQL、ローカル reranker、メモリ API を提供し、
-`dotfiles-memory` ネットワークを所有します。Hermes は external network として接続して
+`local-ai-services` ネットワークを所有します。Hermes は external network として接続して
 `http://hindsight:8888` を使います。推論・埋め込みは MLflow Gateway の論理 endpoint
 `ollama-chat-default` と `ollama-embedding-default` を `local-ai-services` 経由で使い、
 MLflow だけが設定済み provider として native host Ollama に接続します。
@@ -90,6 +90,18 @@ Hindsight の chat 推論は `local-ai-services` 上の MLflow Gateway
 ```text
 task hindsight:up
 ```
+
+Hermes gateway を memory 接続済みの状態で起動・再作成する場合は、次の
+transactional task を使います。
+
+```text
+task hermes:up
+```
+
+この task は独立した `hindsight:up` を準備した後、全 managed profile の
+Hindsight 設定を atomic bootstrap で reconcile し、その成功後に Hermes stack を
+起動します。`docker compose -f docker/hermes-service/compose.yml up` だけでは
+profile 設定の bootstrap は実行されません。
 
 起動の成否はポートの listen だけで判断せず、`/health` の `status` が
 `healthy` かつ `database` が `connected` であることを確認します。

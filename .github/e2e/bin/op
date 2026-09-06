@@ -27,7 +27,7 @@ fi
 
 case "$3" in
 "Google Calendar MCP")
-	if [ "$7" != Private ]; then
+	if [ "$7" != openclaw ]; then
 		printf 'acceptance op fixture rejected vault: %s\n' "$7" >&2
 		exit 2
 	fi

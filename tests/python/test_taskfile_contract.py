@@ -12,6 +12,8 @@ HERMES_AGENT = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-agent.sh"
 XAPI_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-xapi.sh"
 XAPI_WINDOWS_WRAPPER = REPOSITORY_ROOT / "scripts" / "powershell" / "hermes-xapi.ps1"
 HINDSIGHT_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-hindsight-verify.sh"
+HERMES_DESKTOP_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-desktop-docker.sh"
+HERMES_DOCKER_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-docker.sh"
 HINDSIGHT_WINDOWS_WRAPPER = (
     REPOSITORY_ROOT / "scripts" / "powershell" / "hermes-hindsight-verify.ps1"
 )
@@ -54,11 +56,9 @@ class TaskfileContractTests(unittest.TestCase):
             "scripts/powershell/hermes-xapi.ps1 -Action restart",
             self._command_text("hermes:xapi:restart"),
         )
-        self.assertIn(
-            "scripts/sh/hermes-xapi.sh up",
-            self._command_text("hermes:up"),
-        )
-        self.assertIn(
+        self.assertIn("task: hermes:bootstrap", self._task_block("hermes:up"))
+        self.assertNotIn("scripts/sh/hermes-xapi.sh up", self._command_text("hermes:up"))
+        self.assertNotIn(
             "scripts/powershell/hermes-xapi.ps1 -Action up",
             self._command_text("hermes:up"),
         )
@@ -85,17 +85,53 @@ class TaskfileContractTests(unittest.TestCase):
         )
 
     def test_public_hermes_entrypoints_start_the_independent_memory_service(self) -> None:
+        self.assertIn("task: hindsight:up", self._task_block("hermes:setup"))
+        self.assertIn("task: hindsight:up", self._task_block("hermes:bootstrap"))
         for task_name in (
-            "hermes:setup",
-            "hermes:bootstrap",
-            "hermes:up",
             "hermes:rick:up",
             "hermes:hoffman:up",
             "hermes:risarisa:up",
             "hermes:nancy:up",
         ):
             with self.subTest(task_name=task_name):
-                self.assertIn("task: hindsight:up", self._task_block(task_name))
+                self.assertIn("task: hermes:up", self._task_block(task_name))
+
+    def test_desktop_entrypoint_uses_the_docker_gateway_launcher(self) -> None:
+        task = self._task_block("hermes:desktop")
+
+        self.assertIn("hermes-desktop-docker", task)
+        self.assertIn("platforms: [darwin]", task)
+        wrapper = HERMES_DESKTOP_WRAPPER.read_text(encoding="utf-8")
+        self.assertIn("connections.json", wrapper)
+        self.assertIn("127.0.0.1:9119", wrapper)
+        self.assertNotIn("API_SERVER_KEY", wrapper)
+        self.assertIn("unset HERMES_DESKTOP_REMOTE_URL HERMES_DESKTOP_REMOTE_TOKEN", wrapper)
+
+    def test_cli_entrypoint_uses_the_docker_cli_adapter(self) -> None:
+        task = self._task_block("hermes:cli")
+
+        self.assertIn("interactive: true", task)
+        self.assertIn("docker info", task)
+        self.assertIn("test -f {{.HERMES_COMPOSE_FILE}}", task)
+        self.assertIn("hermes-docker", task)
+        self.assertIn("CLI_ARGS_LIST", task)
+        self.assertIn("shellQuote", task)
+        self.assertIn("platforms: [darwin]", task)
+        wrapper = HERMES_DOCKER_WRAPPER.read_text(encoding="utf-8")
+        self.assertIn("HERMES_COMPOSE_FILE", wrapper)
+        self.assertIn("/opt/hermes/bin/hermes", wrapper)
+
+    def test_profile_gateway_entrypoints_are_explicit_and_shell_safe(self) -> None:
+        for task_name, action in (
+            ("hermes:profile:status", "gateway status"),
+            ("hermes:profile:up", "gateway start"),
+        ):
+            with self.subTest(task_name=task_name):
+                task = self._task_block(task_name)
+                self.assertIn("PROFILE", task)
+                self.assertIn("shellQuote", task)
+                self.assertIn(action, task)
+                self.assertIn("docker info", task)
 
     def test_xapi_lifecycle_reads_oauth_credentials_from_1password(self) -> None:
         wrapper = XAPI_WRAPPER.read_text(encoding="utf-8")
@@ -116,7 +152,9 @@ class TaskfileContractTests(unittest.TestCase):
         self.assertIn("Hermes X API MCP", adapter)
         self.assertIn("X_API_CLIENT_ID", adapter)
         self.assertIn("X_API_CLIENT_SECRET", adapter)
-        self.assertIn('signin --account "$account"', adapter)
+        self.assertIn("dotfiles_hermes_run_with_service_account_cache", adapter)
+        self.assertIn('OP_SERVICE_ACCOUNT_TOKEN="$token" "$@"', adapter)
+        self.assertNotIn('signin --account "$account"', adapter)
         self.assertIn('item get "$item"', adapter)
         self.assertIn("jq -e -c", adapter)
         self.assertNotIn("jq -erce", adapter)

@@ -3,8 +3,17 @@
 #   home-manager switch --flake .#aarch64-darwin
 #   home-manager switch --flake .#x86_64-linux
 #   home-manager switch --flake .#aarch64-linux
+# Hermes Desktop is a Homebrew Cask and therefore requires the nix-darwin
+# installer instead of this standalone Home Manager output.
 { inputs, ... }:
 let
+  withHermes = builtins.getEnv "DOTFILES_WITH_HERMES" == "1";
+  withDocker = withHermes || builtins.getEnv "DOTFILES_WITH_DOCKER" == "1";
+  withOllama = withDocker || builtins.getEnv "DOTFILES_WITH_OLLAMA" == "1";
+  installFeatures =
+    inputs.nixpkgs.lib.optionals withOllama [ "WithOllama" ]
+    ++ inputs.nixpkgs.lib.optionals withDocker [ "WithDocker" ]
+    ++ inputs.nixpkgs.lib.optionals withHermes [ "WithHermes" ];
   Workmux = import ./lib/workmux.nix { inherit inputs; };
   workmuxOverlay = Workmux.mkOverlay (system: inputs.workmux.packages.${system}.default);
   mkHome = system: {
@@ -14,16 +23,19 @@ let
       overlays = [ workmuxOverlay ];
     };
     extraSpecialArgs = {
-      inherit inputs;
+      inherit inputs installFeatures;
       isWSL = false;
     };
   };
   mkDarwinHome =
     system:
-    inputs.home-manager.lib.homeManagerConfiguration {
-      inherit (mkHome system) pkgs extraSpecialArgs;
-      modules = [ ../home/darwin.nix ];
-    };
+    if withHermes then
+      throw "Hermes Desktop requires the nix-darwin installer; run ./install.sh --with-hermes"
+    else
+      inputs.home-manager.lib.homeManagerConfiguration {
+        inherit (mkHome system) pkgs extraSpecialArgs;
+        modules = [ ../home/darwin.nix ];
+      };
   mkLinuxHome =
     system:
     inputs.home-manager.lib.homeManagerConfiguration {

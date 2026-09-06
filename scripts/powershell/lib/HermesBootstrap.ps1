@@ -127,7 +127,7 @@ $script:HermesBootstrapDrainTimeoutMilliseconds = 5000
 $script:HermesBootstrapAllowedOnePasswordItems = @(
     [PSCustomObject]@{ key = "dashboard"; account = "my.1password.com"; vault = "openclaw"; item = "Hermes Agent Dashboard" },
     [PSCustomObject]@{ key = "github"; account = "my.1password.com"; vault = "openclaw"; item = "GitHubUsedOpenClawPAT" },
-    [PSCustomObject]@{ key = "google_calendar"; account = "my.1password.com"; vault = "Private"; item = "Google Calendar MCP" },
+    [PSCustomObject]@{ key = "google_calendar"; account = "my.1password.com"; vault = "openclaw"; item = "Google Calendar MCP" },
     [PSCustomObject]@{ key = "discord_default"; account = "my.1password.com"; vault = "openclaw"; item = "Master" },
     [PSCustomObject]@{ key = "discord_rick"; account = "my.1password.com"; vault = "openclaw"; item = "Rick" },
     [PSCustomObject]@{ key = "discord_hoffman"; account = "my.1password.com"; vault = "openclaw"; item = "Hoffman" },

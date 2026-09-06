@@ -1,9 +1,9 @@
-name: hindsight-acceptance
+name: local-ai-services-acceptance
 
 services:
   hindsight:
     image: nginx:1.29-alpine
-    container_name: hindsight
+    container_name: local-ai-services-hindsight
     command:
       - /bin/sh
       - -c
@@ -18,9 +18,9 @@ services:
       - ./hindsight-health.json:/usr/share/nginx/html/health:ro
       - ./hindsight-health.json:/www/health:ro
     networks:
-      - memory
+      - local-ai-services
 
 networks:
-  memory:
-    name: dotfiles-memory
+  local-ai-services:
+    name: local-ai-services
     driver: bridge

@@ -25,12 +25,11 @@ sourceDir = {{ .chezmoi.sourceDir | quote }}
     command = "op"
 {{- end }}
 
-# Account UUIDs exposed as template data for runtime deploy scripts. Always
-# pass the account explicitly to `op read --account ...` in multi-account
-# setups instead of relying on chezmoi's [onepassword] account default.
+# Account UUID exposed as template data for the personal runtime deploy script.
+# Always pass it explicitly to `op read --account ...` instead of relying on
+# chezmoi's [onepassword] account default.
 [data]
     op_account_personal = "EJLA3HRAVZBCXIQ7SRSFGQBTNU"
-    op_account_work = "FXVKKR2KWFCMHGMEA7HQYK6XRE"
     [data.github]
         # GitHub username — used by dot_config/devcontainer/devcontainer.json.tmpl
         # to build dotfiles repository URL. Hardcoded; chezmoi data does not have

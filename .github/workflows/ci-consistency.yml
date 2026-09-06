@@ -14,6 +14,8 @@ on:
       - "windows/npm/packages.json"
       - "windows/pnpm/packages.json"
       - ".github/workflows/ci-consistency.yml"
+      - "nix/packages/darwin-provider-candidates.nix"
+      - "scripts/python/update_darwin_packages.py"
   pull_request:
     branches: [main]
     paths:
@@ -26,6 +28,8 @@ on:
       - "windows/npm/packages.json"
       - "windows/pnpm/packages.json"
       - ".github/workflows/ci-consistency.yml"
+      - "nix/packages/darwin-provider-candidates.nix"
+      - "scripts/python/update_darwin_packages.py"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -45,6 +49,15 @@ jobs:
 
       - name: Install Nix
         uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+
+      - name: Build Codex package
+        env:
+          NUMTIDE_CACHE: https://cache.numtide.com
+          NUMTIDE_CACHE_KEY: niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=
+        run: |
+          nix build .#codex --no-link \
+            --option extra-substituters "$NUMTIDE_CACHE" \
+            --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY"
 
       - name: Verify package provider coverage
         run: |

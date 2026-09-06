@@ -1,8 +1,41 @@
-name: local-ai-mlflow
+name: local-ai-services
 
 services:
+  hindsight:
+    image: ghcr.io/vectorize-io/hindsight:0.9.1@sha256:a0e937366261b8a8f20ebcaf13758c689c381dcbbf01684e4375c2787c8c666d
+    container_name: local-ai-services-hindsight
+    restart: unless-stopped
+    env_file:
+      - path: ../hindsight/hindsight.env
+        required: true
+    ports:
+      - "127.0.0.1:${HINDSIGHT_API_PORT:-8888}:8888"
+      - "127.0.0.1:${HINDSIGHT_UI_PORT:-9999}:9999"
+    volumes:
+      - type: bind
+        source: ${HINDSIGHT_DATA_DIR:-${USERPROFILE:-${HOME}}/.local/share/hindsight}/pg0
+        target: /home/hindsight/.pg0
+      - type: bind
+        source: ${HINDSIGHT_DATA_DIR:-${USERPROFILE:-${HOME}}/.local/share/hindsight}/cache
+        target: /home/hindsight/.cache
+    shm_size: 1g
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          python -c "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8888/health', timeout=5)); raise SystemExit(0 if d.get('status') == 'healthy' and d.get('database') == 'connected' else 1)"
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+    networks:
+      local-ai-services:
+        aliases:
+          - hindsight
+
   mlflow:
     image: ghcr.io/mlflow/mlflow:v3.12.0-full@sha256:364cdfa503f1a54a000e7f86f3910f9a838ea939d225b6394710010e4444f8a2
+    container_name: local-ai-services-mlflow
     restart: unless-stopped
     command:
       - mlflow
@@ -26,15 +59,15 @@ services:
         source: ${MLFLOW_DATA_DIR:-${USERPROFILE:-${HOME}}/.local/share/mlflow}
         target: /mlflow
       - type: bind
-        source: ./configure.py
+        source: ../mlflow/configure.py
         target: /opt/mlflow/configure.py
         read_only: true
       - type: bind
-        source: ./verify.py
+        source: ../mlflow/verify.py
         target: /opt/mlflow/verify.py
         read_only: true
       - type: bind
-        source: ./endpoints.yml
+        source: ../mlflow/endpoints.yml
         target: /opt/mlflow/endpoints.yml
         read_only: true
     healthcheck:

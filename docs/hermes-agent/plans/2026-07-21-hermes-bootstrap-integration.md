@@ -78,14 +78,14 @@ bats tests/bash/hermes_agent.bats
 
 - [ ] Remove the duplicated `start_hermes_stack` functions from macOS, Linux, and NixOS.
 
-- [ ] After the existing OS setup and chezmoi phase, call the shared adapter with the platform's Docker runner and `docker/hermes-agent/compose.yml`.
+- [ ] After the existing OS setup and chezmoi phase, call the shared adapter with the platform's Docker runner and `docker/hermes-service/compose.yml`.
 
 ```bash
 # macOS
-dotfiles_hermes_start_stack docker "$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
+dotfiles_hermes_start_stack docker "$DOTFILES_ROOT/docker/hermes-service/compose.yml"
 
 # Linux and NixOS
-dotfiles_hermes_start_stack docker_command "$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
+dotfiles_hermes_start_stack docker_command "$DOTFILES_ROOT/docker/hermes-service/compose.yml"
 ```
 
 - [ ] Keep current Docker daemon setup and runner behavior. Ensure the `op` and `jq` checks occur in host preflight with an error naming the missing command.
@@ -240,7 +240,7 @@ task hermes:bootstrap:test
 bats tests/bash/hermes_agent.bats
 pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1 -MinimumCoverage 0
 pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/lib/HermesBootstrap.Tests.ps1 -MinimumCoverage 0
-docker compose -f docker/hermes-agent/compose.yml config --quiet
+docker compose -f docker/hermes-service/compose.yml config --quiet
 ```
 
 ## Task 7: Perform live acceptance with the confirmed 1Password items
@@ -292,7 +292,7 @@ docker exec hermes sh -c 'for f in /opt/data/.env /opt/data/profiles/rick/.env /
 - [ ] Verify root API/dashboard/browser and all profile gateways.
 
 ```bash
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml ps
 curl --fail --silent http://127.0.0.1:8642/health >/dev/null
 curl --fail --silent http://127.0.0.1:6080/ >/dev/null
 docker exec hermes /opt/hermes/.venv/bin/hermes -p rick gateway status

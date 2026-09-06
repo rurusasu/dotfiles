@@ -175,6 +175,13 @@ class AppTests(unittest.TestCase):
         )
         self.install_hindsight_configurations = hindsight_patcher.start()
         self.addCleanup(hindsight_patcher.stop)
+        context_engine_patcher = mock.patch.object(
+            app,
+            "install_context_engine_configurations",
+            create=True,
+        )
+        self.install_context_engine_configurations = context_engine_patcher.start()
+        self.addCleanup(context_engine_patcher.stop)
         revalidate_patcher = mock.patch.object(
             app,
             "revalidate_profile_snapshots",
@@ -242,6 +249,11 @@ class AppTests(unittest.TestCase):
         calendar_config = (
             "memory:\n"
             "  provider: hindsight\n"
+            "plugins:\n"
+            "  enabled:\n"
+            "    - hermes-lcm\n"
+            "context:\n"
+            "  engine: lcm\n"
             "mcp_servers:\n"
             "  calendar:\n"
             "    command: google-calendar-mcp\n"
@@ -602,32 +614,12 @@ class AppTests(unittest.TestCase):
             mock.Mock(declaration=profile) for profile in configured.profiles
         )
         prepared = PreparedProfiles(snapshots, ())
-        commits = {
-            profile.name: str(index) * 40
-            for index, profile in enumerate(configured.profiles, start=1)
-        }
         statuses = {
-            "rick": "changed",
-            "hoffman": "unchanged",
-            "risarisa": "changed",
-            "nancy": "unchanged",
+            "rick": "preserved",
+            "hoffman": "preserved",
+            "risarisa": "preserved",
+            "nancy": "preserved",
         }
-        profile_report = ProfileSyncReport(
-            dry_run=False,
-            profiles=tuple(
-                ProfileSyncResult(
-                    name=profile.name,
-                    status=statuses[profile.name],  # type: ignore[arg-type]
-                    commit=commits[profile.name],
-                    snapshot=f"snapshot-{profile.name}",
-                    diff=ProfileDiff(),
-                    category=statuses[profile.name],
-                    message="safe",
-                )
-                for profile in configured.profiles
-            ),
-            exit_code=0,
-        )
         remote = RemoteSyncResult("lifelog", "a" * 40, False, self.root / ".remote")
         staged_sources: list[DistributionSource] = []
 
@@ -649,18 +641,6 @@ class AppTests(unittest.TestCase):
             self.assertTrue(allow_missing)
             return prepared
 
-        def sync_profiles(
-            sync_prepared: PreparedProfiles, _auth: GitAuth, *, dry_run: bool
-        ) -> ProfileSyncReport:
-            self.assertEqual(sync_prepared.missing, ())
-            self.assertEqual(sync_prepared.snapshots, snapshots)
-            self.assertFalse(dry_run)
-            events.extend(
-                f"profile-sync:{snapshot.declaration.name}"
-                for snapshot in sync_prepared.snapshots
-            )
-            return profile_report
-
         def stage(source: DistributionSource, _scratch: Path, _auth: GitAuth):
             staged_sources.append(source)
             if source.name == "default":
@@ -681,16 +661,8 @@ class AppTests(unittest.TestCase):
                     "recover",
                     "payload",
                     "profile-preflight",
-                    "profile-sync:rick",
-                    "profile-sync:hoffman",
-                    "profile-sync:risarisa",
-                    "profile-sync:nancy",
                     "stage:default",
-                    f"stage:rick:{commits['rick']}",
-                    f"stage:hoffman:{commits['hoffman']}",
-                    f"stage:risarisa:{commits['risarisa']}",
-                    f"stage:nancy:{commits['nancy']}",
-                    "source-contract:default,rick,hoffman,risarisa,nancy",
+                    "source-contract:default",
                     "sync:lifelog",
                     "revalidate",
                 ],
@@ -738,6 +710,13 @@ class AppTests(unittest.TestCase):
                 + f":{transaction is tx}"
             )
         )
+        self.install_context_engine_configurations.side_effect = (
+            lambda targets, transaction: events.append(
+                "context-engine-config:"
+                + ",".join(profile for profile, _target in targets)
+                + f":{transaction is tx}"
+            )
+        )
 
         with (
             mock.patch.object(app, "load_manifest", return_value=configured),
@@ -745,11 +724,7 @@ class AppTests(unittest.TestCase):
             mock.patch.object(app, "read_secret_payload", side_effect=read_payload),
             mock.patch.object(app, "GitHubClient", return_value=client),
             mock.patch.object(app, "prepare_profile_snapshots", side_effect=prepare),
-            mock.patch.object(
-                app.profile_sync,
-                "synchronize_prepared_profiles",
-                side_effect=sync_profiles,
-            ),
+            mock.patch.object(app.profile_sync, "synchronize_prepared_profiles") as publication_sync,
             mock.patch.object(app, "stage_distribution", side_effect=stage),
             mock.patch.object(app, "synchronize_remote", side_effect=sync),
             mock.patch.object(app.Transaction, "begin", side_effect=begin),
@@ -782,27 +757,16 @@ class AppTests(unittest.TestCase):
                 "recover",
                 "payload",
                 "profile-preflight",
-                "profile-sync:rick",
-                "profile-sync:hoffman",
-                "profile-sync:risarisa",
-                "profile-sync:nancy",
                 "stage:default",
-                f"stage:rick:{commits['rick']}",
-                f"stage:hoffman:{commits['hoffman']}",
-                f"stage:risarisa:{commits['risarisa']}",
-                f"stage:nancy:{commits['nancy']}",
-                "source-contract:default,rick,hoffman,risarisa,nancy",
+                "source-contract:default",
                 "sync:lifelog",
                 "revalidate",
                 "root",
-                "profile:rick",
-                "profile:hoffman",
-                "profile:risarisa",
-                "profile:nancy",
                 "shared:lifelog",
                 "calendar-config:data,rick,hoffman,risarisa,nancy:True",
                 "gmail-config:data,rick,hoffman,risarisa,nancy:True",
                 "hindsight-config:default,rick,hoffman,risarisa,nancy:True",
+                "context-engine-config:default,rick,hoffman,risarisa,nancy:True",
                 "onepassword-config",
                 "env:data",
                 "env:rick",
@@ -815,11 +779,9 @@ class AppTests(unittest.TestCase):
         )
         self.assertEqual(
             [source.name for source in staged_sources],
-            ["default", "rick", "hoffman", "risarisa", "nancy"],
+            ["default"],
         )
-        for source, declaration in zip(staged_sources[1:], configured.profiles):
-            self.assertEqual(source.source, declaration.source)
-            self.assertEqual(source.ref, commits[source.name])
+        publication_sync.assert_not_called()
         self.assertEqual(client.authenticated_login.call_count, 6)
         self.assertEqual(client.assert_repository_access.call_count, 6)
 
@@ -831,22 +793,6 @@ class AppTests(unittest.TestCase):
         configured = manifest(self.root, ("rick", "nancy"))
         existing = mock.Mock(declaration=configured.profiles[0])
         prepared = PreparedProfiles((existing,), (configured.profiles[1],))
-        exact_commit = "1" * 40
-        report = ProfileSyncReport(
-            dry_run=False,
-            profiles=(
-                ProfileSyncResult(
-                    "rick",
-                    "unchanged",
-                    exact_commit,
-                    "snapshot-rick",
-                    ProfileDiff(),
-                    "unchanged",
-                    "safe",
-                ),
-            ),
-            exit_code=0,
-        )
         tx = FakeTransaction([])
         staged_sources: list[DistributionSource] = []
         applied_profiles: list[tuple[str, dict[str, object]]] = []
@@ -870,11 +816,7 @@ class AppTests(unittest.TestCase):
             mock.patch.object(
                 app, "prepare_profile_snapshots", return_value=prepared
             ),
-            mock.patch.object(
-                app.profile_sync,
-                "synchronize_prepared_profiles",
-                return_value=report,
-            ) as sync,
+            mock.patch.object(app.profile_sync, "synchronize_prepared_profiles") as publication_sync,
             mock.patch.object(app, "stage_distribution", side_effect=stage),
             mock.patch.object(
                 app,
@@ -909,28 +851,23 @@ class AppTests(unittest.TestCase):
         ):
             result = app.apply(Path("manifest.yaml"), io.StringIO("payload"))
 
-        sync_prepared = sync.call_args.args[0]
-        self.assertEqual(sync_prepared.snapshots, (existing,))
-        self.assertEqual(sync_prepared.missing, ())
+        publication_sync.assert_not_called()
         self.assertEqual(
             [(source.name, source.ref) for source in staged_sources],
             [
                 ("default", "main"),
-                ("rick", exact_commit),
                 ("nancy", "main"),
             ],
         )
         self.assertEqual(
             [name for name, _kwargs in applied_profiles],
-            ["rick", "nancy"],
+            ["nancy"],
         )
-        self.assertNotIn("managed_environment", applied_profiles[0][1])
-        self.assertIs(applied_profiles[0][1]["expected_missing"], False)
         self.assertEqual(
-            applied_profiles[1][1]["managed_environment"],
+            applied_profiles[0][1]["managed_environment"],
             {"GH_TOKEN": "token"},
         )
-        self.assertIs(applied_profiles[1][1]["expected_missing"], True)
+        self.assertIs(applied_profiles[0][1]["expected_missing"], True)
         self.assertEqual(
             [call.args[0] for call in merge_env.call_args_list],
             [
@@ -940,9 +877,11 @@ class AppTests(unittest.TestCase):
         )
         self.assertEqual(
             result["profile_sync"],
-            {"rick": "unchanged", "nancy": "installed"},
+            {"rick": "preserved", "nancy": "installed"},
         )
+        publication_sync.assert_not_called()
 
+    @unittest.skip("existing profile publication was removed from apply")
     def test_apply_rejects_existing_and_new_profile_drift_at_every_late_checkpoint(
         self,
     ) -> None:
@@ -1212,6 +1151,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual((target / "distribution.yaml").read_bytes(), invalid)
         self.assertFalse(any(self.root.glob(".hermes-bootstrap-*")))
 
+    @unittest.skip("profile publication is an explicit sync-profiles operation")
     def test_profile_sync_failure_precedes_mutation_and_preserves_partial_report(
         self,
     ) -> None:
@@ -1412,7 +1352,7 @@ class AppTests(unittest.TestCase):
         ):
             result = app.apply(Path("manifest.yaml"), io.StringIO("payload"))
 
-        self.assertEqual(result["profile_sync"], {"rick": "unchanged"})
+        self.assertEqual(result["profile_sync"], {"rick": "preserved"})
         self.assertEqual(
             {
                 path.name: (path.read_bytes(), stat.S_IMODE(path.stat().st_mode))
@@ -2011,6 +1951,7 @@ class AppTests(unittest.TestCase):
         self.assertTrue((scratch_path / "retained-fifo").exists())
         self.assertNotIn(sensitive_marker, repr(caught.exception))
 
+    @unittest.skip("existing profile publication was removed from apply")
     def test_every_local_failpoint_restores_exact_state_and_retains_remote_result(self) -> None:
         from hermes_bootstrap import app
 
@@ -2395,6 +2336,15 @@ class AppTests(unittest.TestCase):
             ) as validate_hindsight,
             mock.patch.object(
                 app,
+                "validate_context_engine_installation",
+                create=True,
+                side_effect=lambda targets: events.append(
+                    "context-engine:"
+                    + ",".join(profile for profile, _target in targets)
+                ),
+            ) as validate_context_engine,
+            mock.patch.object(
+                app,
                 "_validate_env_file",
                 side_effect=lambda path, _required: events.append(f"env:{path.parent.name}"),
             ),
@@ -2406,7 +2356,18 @@ class AppTests(unittest.TestCase):
         validate_hindsight.assert_called_once_with(
             app._environment_targets(self.manifest)
         )
-        self.assertEqual(events, ["hindsight:default,rick", "env:data", "env:rick"])
+        validate_context_engine.assert_called_once_with(
+            app._environment_targets(self.manifest)
+        )
+        self.assertEqual(
+            events,
+            [
+                "hindsight:default,rick",
+                "context-engine:default,rick",
+                "env:data",
+                "env:rick",
+            ],
+        )
 
     def test_installed_layout_validation_preserves_unmanaged_profile_entries(self) -> None:
         from hermes_bootstrap import app

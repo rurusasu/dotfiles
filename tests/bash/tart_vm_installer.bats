@@ -37,16 +37,24 @@ EOF
 	chmod +x "$STUB_BIN/df"
 }
 
-@test "catalog declares Tart as a macOS Homebrew formula" {
+@test "catalog declares Tart as a Nix command with legacy formula migration metadata" {
 	run awk '
-		/^    tart = \{/ { in_entry=1 }
+		/^[[:space:]]*tart = \{/ { in_entry=1 }
 		in_entry { print }
-		in_entry && /^    };/ { exit }
+		in_entry && /^        };$/ { exit }
 	' "$SETS"
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'provider = "homebrew-formula"'* ]]
-	[[ "$output" == *'formula = "openai/tools/tart"'* ]]
+	[[ "$output" == *'pkg = pkgs.tart;'* ]]
+	[[ "$output" == *'provider = "nix";'* ]]
+	[[ "$output" == *'source = "nixpkgs";'* ]]
+	[[ "$output" == *'nixAttr = "tart";'* ]]
+	[[ "$output" == *'homepage = "https://tart.run/";'* ]]
+	[[ "$output" == *'command = "tart";'* ]]
+	[[ "$output" == *'versionArgs = [ "--version" ];'* ]]
+	[[ "$output" == *'legacyDarwin = {'* ]]
+	[[ "$output" == *'name = "openai/tools/tart";'* ]]
+	[[ "$output" != *'formula = "openai/tools/tart";'* ]]
 }
 
 @test "nix-darwin consumes catalog Homebrew formulas" {

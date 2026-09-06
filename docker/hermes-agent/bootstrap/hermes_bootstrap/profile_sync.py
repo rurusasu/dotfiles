@@ -6,6 +6,7 @@ import hashlib
 import os
 import re
 import stat
+import tempfile
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -117,6 +118,10 @@ class _PushRaceExhausted(Exception):
     pass
 
 
+class _DeletionLimitExceeded(Exception):
+    pass
+
+
 def failed_profile_report(
     profiles: tuple[DistributionSource, ...],
     *,
@@ -184,8 +189,12 @@ def synchronize_profiles(
     report: ProfileSyncReport
     try:
         _validate_manifest_profiles(manifest)
+        # Keep the read-only publication snapshot off the bind-mounted Hermes
+        # home. Docker Desktop can remap ownership on that mount while a
+        # profile gateway is active, which makes the descriptor-backed
+        # snapshot fail its ownership attestation.
         scratch = create_private_directory(
-            manifest.data_root,
+            _profile_snapshot_scratch_parent(manifest.data_root),
             prefix=".hermes-profile-snapshots-",
         )
         prepared = prepare_profile_snapshots(
@@ -238,6 +247,21 @@ def _validate_manifest_profiles(manifest: BootstrapManifest) -> None:
         raise ValueError("invalid profile manifest")
 
 
+def _profile_snapshot_scratch_parent(data_root: Path) -> Path:
+    """Return a real temporary parent that is outside the Hermes data root."""
+
+    try:
+        scratch_parent = Path(tempfile.gettempdir()).resolve(strict=True)
+        resolved_data_root = data_root.resolve(strict=True)
+    except OSError as error:
+        raise ValueError("invalid profile snapshot scratch parent") from error
+    if scratch_parent == resolved_data_root or scratch_parent.is_relative_to(
+        resolved_data_root
+    ):
+        raise ValueError("profile snapshot scratch parent is inside Hermes data root")
+    return scratch_parent
+
+
 def _profile_preflight_failure(
     profiles: tuple[DistributionSource, ...],
     invalid_name: str,
@@ -281,11 +305,11 @@ def _synchronize_one_boundary(
         with _RepositoryLock(lock_path, data_root) as repository_lock:
             repository_lock.require_held()
             repository = create_private_directory(
-                data_root,
+                Path(tempfile.gettempdir()),
                 prefix=".hermes-profile-sync-",
             )
             repository_path = repository.path
-            askpass = _create_askpass(data_root)
+            askpass = _create_askpass(Path(tempfile.gettempdir()))
             environment = _git_environment(auth, askpass)
             attempt = _exact_tree_attempt(
                 snapshot,
@@ -338,6 +362,8 @@ def _synchronize_one_boundary(
                     category = "dry_run"
                     message = "profile snapshot changes detected"
                 else:
+                    if len(diff.deleted) > declaration.max_deleted_paths:
+                        raise _DeletionLimitExceeded
                     commit, final_parent = _commit_and_push(
                         snapshot,
                         attempt,
@@ -375,6 +401,13 @@ def _synchronize_one_boundary(
             snapshot,
             "push_race_exhausted",
             "profile publication changed repeatedly",
+        )
+    except _DeletionLimitExceeded as error:
+        error = _scrub_exception_graph(error)
+        outcome = _failed(
+            snapshot,
+            "deletion_limit_exceeded",
+            "profile publication exceeded the configured deletion limit",
         )
     except Exception as error:
         error = _scrub_exception_graph(error)
@@ -547,6 +580,11 @@ def _commit_and_push(
             )
             if rebuilt_tree != attempt.tree:
                 raise ValueError("profile snapshot tree changed during retry")
+        if (
+            _staged_deleted_path_count(parent, repository, environment)
+            > declaration.max_deleted_paths
+        ):
+            raise _DeletionLimitExceeded
         commit = _create_commit(
             snapshot, attempt.tree, parent, repository, environment
         )
@@ -570,6 +608,32 @@ def _commit_and_push(
             raise _PushRaceExhausted
         parent = remote_commit
     raise _PushRaceExhausted
+
+
+def _staged_deleted_path_count(
+    base_commit: str,
+    repository: Path,
+    environment: dict[str, str],
+) -> int:
+    raw = _git_bytes(
+        (
+            "diff",
+            "--cached",
+            "--name-status",
+            "-z",
+            "--no-renames",
+            base_commit,
+        ),
+        repository,
+        environment,
+        max_output_bytes=_INDEX_OUTPUT_MAX_BYTES,
+    )
+    records = _nul_records(raw)
+    if len(records) % 2:
+        raise ValueError("invalid staged profile diff")
+    return sum(
+        records[index] == b"D" for index in range(0, len(records), 2)
+    )
 
 
 def _rebuild_snapshot_tree(

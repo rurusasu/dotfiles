@@ -29,7 +29,7 @@ function Get-HermesXApiComposeFile {
     }
 
     $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-    return [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'docker/hermes-agent/compose.yml'))
+    return [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'docker/hermes-service/compose.yml'))
 }
 
 function Get-HermesXApiDataDir {

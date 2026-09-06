@@ -12,7 +12,7 @@
 
 - Support Apple Silicon and macOS 26 or later only.
 - Keep `install.cmd` as the Windows entry point.
-- Use Docker Desktop and the existing `docker/hermes-agent/compose.yml`; do not add Apple `container`, Colima, Podman, or OrbStack fallback.
+- Use Docker Desktop and the existing `docker/hermes-service/compose.yml`; do not add Apple `container`, Colima, Podman, or OrbStack fallback.
 - Use `--impure` for Home Manager evaluation because `nix/home/common.nix` reads `USER` and `HOME` with `builtins.getEnv`.
 - Never delete an existing `~/.dotfiles`; move conflicts to `~/.dotfiles.backup.<timestamp>`.
 - Do not run `brew update`, `docker system prune`, delete Docker volumes, or perform registry login.
@@ -29,7 +29,7 @@
 - Create `tests/bash/install_macos.bats`: end-to-end stubbed provisioning behavior.
 - Create `tests/bash/macos_config.bats`: static Home Manager, Compose, README, and CI wiring guards.
 - Modify `nix/home/common.nix`: persistent Homebrew PATH entries.
-- Modify `docker/hermes-agent/compose.yml`: explicit amd64 Chromium platform on Apple Silicon.
+- Modify `docker/hermes-service/compose.yml`: explicit amd64 Chromium platform on Apple Silicon.
 - Modify `README.md`: OS-specific quick start and Docker Desktop notice.
 - Modify `.github/workflows/ci-devcontainer.yml`: run shell tests when installer files change.
 
@@ -327,9 +327,9 @@ assert_log_order() {
 		"activate" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml config" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml build --pull" \
-		"docker compose -f $REPO_ROOT/docker/hermes-agent/compose.yml up -d --force-recreate --wait"
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml config" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml build --pull" \
+		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml up -d --force-recreate --wait"
 	! grep -q 'brew install' "$COMMAND_LOG"
 	! grep -q 'softwareupdate' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
@@ -355,7 +355,7 @@ The script starts with:
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-COMPOSE_FILE="$ROOT/docker/hermes-agent/compose.yml"
+COMPOSE_FILE="$ROOT/docker/hermes-service/compose.yml"
 BREW_BIN="${DOTFILES_BREW_BIN:-/opt/homebrew/bin/brew}"
 DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
 DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/docker-desktop-installed}"
@@ -742,7 +742,7 @@ git commit -m "feat: provision macOS development environment"
 
 - Create: `tests/bash/macos_config.bats`
 - Modify: `nix/home/common.nix`
-- Modify: `docker/hermes-agent/compose.yml`
+- Modify: `docker/hermes-service/compose.yml`
 
 **Interfaces:**
 
@@ -775,7 +775,7 @@ setup() {
 		in_chromium && /^  [A-Za-z0-9_-]+:/ { exit }
 		in_chromium && /platform: linux\/amd64/ { found=1 }
 		END { exit(found ? 0 : 1) }
-	' "$REPO_ROOT/docker/hermes-agent/compose.yml"
+	' "$REPO_ROOT/docker/hermes-service/compose.yml"
 	[ "$status" -eq 0 ]
 }
 ```
@@ -808,7 +808,7 @@ In `nix/home/common.nix`, extend `home.sessionPath`:
 
 - [ ] **Step 4: Pin Chromium to amd64**
 
-In `docker/hermes-agent/compose.yml`:
+In `docker/hermes-service/compose.yml`:
 
 ```yaml
 chromium:
@@ -824,7 +824,7 @@ Run:
 
 ```bash
 bats tests/bash/macos_config.bats
-docker compose -f docker/hermes-agent/compose.yml config
+docker compose -f docker/hermes-service/compose.yml config
 ```
 
 Expected: tests pass and Compose config exits 0.
@@ -832,7 +832,7 @@ Expected: tests pass and Compose config exits 0.
 - [ ] **Step 6: Commit platform wiring**
 
 ```bash
-git add nix/home/common.nix docker/hermes-agent/compose.yml tests/bash/macos_config.bats
+git add nix/home/common.nix docker/hermes-service/compose.yml tests/bash/macos_config.bats
 git commit -m "feat: configure macOS package and container paths"
 ```
 
@@ -962,7 +962,7 @@ Run:
 
 ```bash
 nix flake check --no-build
-docker compose -f docker/hermes-agent/compose.yml config
+docker compose -f docker/hermes-service/compose.yml config
 ```
 
 Expected: both exit 0 with no evaluation warning.
@@ -974,7 +974,7 @@ Run:
 ```bash
 git status --short --branch
 git diff origin/main...HEAD --stat
-git diff origin/main...HEAD -- install.sh scripts/sh/install-macos.sh nix/home/common.nix docker/hermes-agent/compose.yml README.md .github/workflows/ci-devcontainer.yml tests/bash
+git diff origin/main...HEAD -- install.sh scripts/sh/install-macos.sh nix/home/common.nix docker/hermes-service/compose.yml README.md .github/workflows/ci-devcontainer.yml tests/bash
 ```
 
 Expected: only planned files and the already-approved design/plan documents differ.
@@ -1021,7 +1021,7 @@ Expected: every command exits 0.
 Run:
 
 ```bash
-docker compose -f docker/hermes-agent/compose.yml ps
+docker compose -f docker/hermes-service/compose.yml ps
 docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' hermes
 docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' hermes-chromium
 docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' hermes-browser-mcp
@@ -1050,7 +1050,7 @@ Run:
 bash -n install.sh scripts/sh/install-macos.sh
 bats tests/bash
 nix flake check --no-build
-docker compose -f docker/hermes-agent/compose.yml config
+docker compose -f docker/hermes-service/compose.yml config
 git diff --check
 git status --short --branch
 ```

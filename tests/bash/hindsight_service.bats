@@ -2,18 +2,18 @@
 
 setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
-	HINDSIGHT_COMPOSE="$REPO_ROOT/docker/hindsight/compose.yml"
-	HERMES_COMPOSE="$REPO_ROOT/docker/hermes-agent/compose.yml"
+	HINDSIGHT_COMPOSE="$REPO_ROOT/docker/local-ai-services/compose.yml"
+	HERMES_COMPOSE="$REPO_ROOT/docker/hermes-service/compose.yml"
 }
 
 @test "Hindsight has an independent loopback-only Compose project" {
 	[ -f "$HINDSIGHT_COMPOSE" ]
-	grep -q '^name: hindsight$' "$HINDSIGHT_COMPOSE"
+	grep -q '^name: local-ai-services$' "$HINDSIGHT_COMPOSE"
 	grep -q '^  hindsight:$' "$HINDSIGHT_COMPOSE"
 	grep -q '127.0.0.1:${HINDSIGHT_API_PORT:-8888}:8888' "$HINDSIGHT_COMPOSE"
 	grep -q '127.0.0.1:${HINDSIGHT_UI_PORT:-9999}:9999' "$HINDSIGHT_COMPOSE"
 	grep -q 'HINDSIGHT_DATA_DIR' "$HINDSIGHT_COMPOSE"
-	grep -q 'name: dotfiles-memory' "$HINDSIGHT_COMPOSE"
+	! grep -q 'dotfiles-memory' "$HINDSIGHT_COMPOSE"
 	grep -q '^      - local-ai-services$' "$HINDSIGHT_COMPOSE"
 	grep -q '^  local-ai-services:$' "$HINDSIGHT_COMPOSE"
 	grep -q 'name: local-ai-services' "$HINDSIGHT_COMPOSE"
@@ -22,7 +22,7 @@ setup() {
 
 @test "Hermes joins the shared memory network without owning Hindsight" {
 	! grep -q '^  hindsight:$' "$HERMES_COMPOSE"
-	grep -q 'name: dotfiles-memory' "$HERMES_COMPOSE"
+	grep -q 'name: local-ai-services' "$HERMES_COMPOSE"
 	grep -q 'external: true' "$HERMES_COMPOSE"
 	! grep -q 'HERMES_DATA_DIR.*hindsight' "$HERMES_COMPOSE"
 }

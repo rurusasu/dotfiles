@@ -563,7 +563,10 @@ class ProfileSyncProvenanceVerifierTests(unittest.TestCase):
             stderr=subprocess.PIPE,
             text=True,
             check=False,
-            timeout=10,
+            # The container build runs this subprocess while the full suite
+            # is under load; retain a bound without making valid negative
+            # cases flaky on shared CI runners.
+            timeout=30,
         )
 
     def _replace_provenance(self, **replacements: object) -> None:

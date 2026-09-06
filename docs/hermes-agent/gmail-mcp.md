@@ -11,7 +11,7 @@ MCP (`gmail-mcp`) を使い、root/default と全 named profile が
    (`gmail.googleapis.com`) を有効にします。
 2. OAuth consent screen に個人 Google アカウントをテストユーザーとして追加します。
 3. Gmail 用の `gmail.readonly` と `gmail.compose` を許可します。
-4. bootstrap が `Private/Google Calendar MCP` の desktop OAuth client JSONを
+4. bootstrap が `openclaw/Google Calendar MCP` の desktop OAuth client JSONを
    Gmailの共有ディレクトリへ再利用します。
 
 Gmailトークンはホストの

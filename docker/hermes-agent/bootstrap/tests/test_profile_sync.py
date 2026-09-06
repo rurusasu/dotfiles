@@ -689,6 +689,41 @@ class ProfileSyncTests(unittest.TestCase):
             [".gitignore", "SOUL.md", "distribution.yaml"],
         )
 
+    def test_real_publication_rejects_bulk_deletion_above_manifest_limit(self) -> None:
+        remote = self.root / "profile-a.git"
+        base = self.profile("profile-a", remote)
+        declaration = DistributionSource(
+            base.name,
+            base.source,
+            base.ref,
+            base.target,
+            base.manifest_name,
+            base.source_commit,
+            1,
+        )
+        snapshot = self.snapshot(declaration, {"SOUL.md": b"safe local profile\n"})
+        self.seed_remote_files(
+            remote,
+            declaration.name,
+            {"old-a.md": b"old\n", "old-b.md": b"old\n"},
+        )
+
+        dry_run = synchronize_prepared_profiles(
+            PreparedProfiles((snapshot,), ()), self.auth, dry_run=True
+        )
+        self.assertEqual(dry_run.exit_code, 0)
+        self.assertEqual(len(dry_run.profiles[0].diff.deleted), 2)
+
+        report = synchronize_prepared_profiles(
+            PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
+        )
+        self.assertEqual(report.exit_code, 4)
+        self.assertEqual(report.profiles[0].category, "deletion_limit_exceeded")
+        self.assertEqual(
+            self.git(remote, "ls-tree", "-r", "--name-only", "main").splitlines(),
+            ["old-a.md", "old-b.md"],
+        )
+
     def test_unsafe_raw_paths_use_non_reversible_digest_identifiers(self) -> None:
         remote = self.root / "profile-a.git"
         declaration = self.profile("profile-a", remote)
@@ -1042,6 +1077,56 @@ class ProfileSyncTests(unittest.TestCase):
         )
         self.assertGreaterEqual(len(fetched_refs), 3)
         self.assertEqual(set(fetched_refs), {"refs/heads/main"})
+
+    def test_push_race_rechecks_the_deletion_limit_against_new_head(self) -> None:
+        remote = self.root / "profile-a.git"
+        base = self.profile("profile-a", remote)
+        declaration = DistributionSource(
+            base.name,
+            base.source,
+            base.ref,
+            base.target,
+            base.manifest_name,
+            base.source_commit,
+            1,
+        )
+        snapshot = self.snapshot(declaration, {"SOUL.md": b"local\n"})
+        self.seed_remote_files(remote, declaration.name, {"README.md": b"old\n"})
+        original_run = profile_sync._run_git_bytes
+        push_calls = 0
+
+        def race_after_push(arguments, cwd, environment, *, max_output_bytes):
+            nonlocal push_calls
+            output = original_run(
+                arguments, cwd, environment, max_output_bytes=max_output_bytes
+            )
+            if arguments and arguments[0] == "push" and output is not None:
+                push_calls += 1
+                if push_calls == 1:
+                    self.advance_remote(remote)
+                    self.advance_remote(remote)
+            return output
+
+        with mock.patch.object(
+            profile_sync, "_run_git_bytes", side_effect=race_after_push
+        ):
+            report = synchronize_prepared_profiles(
+                PreparedProfiles((snapshot,), ()), self.auth, dry_run=False
+            )
+
+        self.assertEqual(push_calls, 1)
+        self.assertEqual(report.exit_code, 4)
+        self.assertEqual(report.profiles[0].category, "deletion_limit_exceeded")
+        self.assertEqual(
+            self.git(remote, "ls-tree", "-r", "--name-only", "main").splitlines(),
+            [
+                ".gitignore",
+                "SOUL.md",
+                "distribution.yaml",
+                "race-1.txt",
+                "race-2.txt",
+            ],
+        )
 
     def test_different_tree_after_successful_retry_exhausts_the_race(self) -> None:
         remote = self.root / "profile-a.git"
@@ -1671,18 +1756,40 @@ class ProfileSyncTests(unittest.TestCase):
         self.seed_remote(remote_b, snapshot_b)
         manifest = self.manifest(profile_a, profile_b)
         observed_scratch: list[Path] = []
+        observed_private_parents: list[Path] = []
+
+        original_create_private_directory = profile_sync.create_private_directory
+
+        def create_private_directory(parent, *, prefix):
+            observed_private_parents.append(parent)
+            return original_create_private_directory(parent, prefix=prefix)
 
         def prepared(_manifest, scratch, *, allow_missing):
             self.assertIs(_manifest, manifest)
             self.assertFalse(allow_missing)
             self.assertEqual(stat.S_IMODE(scratch.stat().st_mode), 0o700)
+            self.assertEqual(scratch.parent, Path(tempfile.gettempdir()).resolve())
             observed_scratch.append(scratch)
             return PreparedProfiles((snapshot_a, snapshot_b), ())
 
-        with mock.patch.object(profile_sync, "prepare_profile_snapshots", side_effect=prepared):
+        with (
+            mock.patch.object(profile_sync, "prepare_profile_snapshots", side_effect=prepared),
+            mock.patch.object(
+                profile_sync,
+                "create_private_directory",
+                side_effect=create_private_directory,
+            ),
+        ):
             report = synchronize_profiles(manifest, self.auth, dry_run=False)
         self.assertEqual([item.status for item in report.profiles], ["unchanged", "unchanged"])
         self.assertTrue(observed_scratch)
+        self.assertTrue(observed_private_parents)
+        self.assertTrue(
+            all(
+                parent == Path(tempfile.gettempdir()).resolve()
+                for parent in observed_private_parents
+            )
+        )
         self.assertFalse(observed_scratch[0].exists())
 
         with mock.patch.object(
@@ -1704,6 +1811,27 @@ class ProfileSyncTests(unittest.TestCase):
         ):
             cleanup = synchronize_profiles(manifest, self.auth, dry_run=False)
         self.assertTrue(all(item.category == "cleanup_failed" for item in cleanup.profiles))
+
+    def test_scratch_inside_data_root_is_rejected_before_creation(self) -> None:
+        profile = self.profile("profile-a", self.root / "profile-a.git")
+        manifest = self.manifest(profile)
+
+        with (
+            mock.patch.object(
+                profile_sync.tempfile,
+                "gettempdir",
+                return_value=str(self.data_root),
+            ),
+            mock.patch.object(profile_sync, "create_private_directory") as create_private,
+            mock.patch.object(profile_sync, "prepare_profile_snapshots") as prepare,
+        ):
+            report = synchronize_profiles(manifest, self.auth, dry_run=False)
+
+        self.assertEqual(report.exit_code, 4)
+        self.assertEqual(report.profiles[0].category, "aggregate_preflight_blocked")
+        create_private.assert_not_called()
+        prepare.assert_not_called()
+        self.assertEqual(list(self.data_root.glob(".hermes-profile-snapshots-*")), [])
 
 
 if __name__ == "__main__":

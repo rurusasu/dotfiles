@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-COMPOSE_FILE="${DOTFILES_COMPOSE_FILE:-$ROOT/docker/hermes-agent/compose.yml}"
+COMPOSE_FILE="${DOTFILES_COMPOSE_FILE:-$ROOT/docker/hermes-service/compose.yml}"
 runtime=0
 
 fail() {

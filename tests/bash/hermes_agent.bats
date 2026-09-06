@@ -7,9 +7,14 @@ setup() {
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	EDIT_CAPTURE="$BATS_TEST_TMPDIR/item-edit.json"
 	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
+	OP_TOKEN_CAPTURE="$BATS_TEST_TMPDIR/op-token.log"
 	READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ready-attempts"
 	OLLAMA_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ollama-ready-attempts"
 	HINDSIGHT_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/hindsight-ready-attempts"
+	VOLUME_SCHEMA_FILE="$BATS_TEST_TMPDIR/hermes-volume-schema"
+	VOLUME_TOKEN_FILE="$BATS_TEST_TMPDIR/hermes-volume-token"
+	VOLUME_READY_FILE="$BATS_TEST_TMPDIR/hermes-volume-ready"
+	LOCK_CREATE_ATTEMPT_FILE="$BATS_TEST_TMPDIR/hermes-lock-create-attempts"
 	COMPOSE_FILE="$BATS_TEST_TMPDIR/compose file.yml"
 	REAL_JQ="$(command -v jq)"
 	REAL_PYTHON3="$(command -v python3)"
@@ -17,6 +22,11 @@ setup() {
 	mkdir -p "$TEST_HOME/.hermes" "$STUB_BIN"
 	: >"$COMMAND_LOG"
 	: >"$PAYLOAD_CAPTURE"
+	: >"$OP_TOKEN_CAPTURE"
+	: >"$VOLUME_SCHEMA_FILE"
+	: >"$VOLUME_TOKEN_FILE"
+	: >"$VOLUME_READY_FILE"
+	printf '0\n' >"$LOCK_CREATE_ATTEMPT_FILE"
 	printf '0\n' >"$READY_ATTEMPT_FILE"
 	printf '0\n' >"$OLLAMA_READY_ATTEMPT_FILE"
 	printf '0\n' >"$HINDSIGHT_READY_ATTEMPT_FILE"
@@ -28,9 +38,10 @@ EOF
 
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
 	unset DOTFILES_USER SUDO_USER
+	unset OP_SERVICE_ACCOUNT_TOKEN
 	unset DOTFILES_HERMES_OLLAMA_EXECUTABLE DOTFILES_HERMES_CURL_EXECUTABLE OLLAMA_HOST
 	export HINDSIGHT_OLLAMA_URL=http://127.0.0.1:11434
-	export COMMAND_LOG EDIT_CAPTURE PAYLOAD_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
+	export COMMAND_LOG EDIT_CAPTURE PAYLOAD_CAPTURE OP_TOKEN_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE VOLUME_SCHEMA_FILE VOLUME_TOKEN_FILE VOLUME_READY_FILE LOCK_CREATE_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
@@ -44,6 +55,19 @@ EOF
 	export OP_READ_COMPLETION_FILE=""
 	export BOOTSTRAP_EXIT_EARLY=0
 	export HERMES_RUNTIME_EXISTS=1
+	export HERMES_VOLUME_EXISTS=1
+	export HERMES_VOLUME_SCHEMA_LABEL=""
+	export HERMES_VOLUME_TOKEN_LABEL=""
+	export HERMES_VOLUME_READY=1
+	export HERMES_VOLUME_PROBE_STATUS=""
+	export HERMES_CREATE_RACE_TOKEN=""
+	export HERMES_LOCK_CREATE_STATUS=0
+	export HERMES_LOCK_CREATE_FAIL_ONCE=0
+	export HERMES_LOCK_STATE=""
+	export HERMES_LOCK_ID=1111111111111111111111111111111111111111111111111111111111111111
+	export HERMES_REPLACEMENT_LOCK_ID=2222222222222222222222222222222222222222222222222222222222222222
+	export HERMES_LOCK_RELEASE_STATUS=0
+	export HERMES_SEED_WRITES_MARKER=1
 	export API_READY_AFTER=1
 	export OLLAMA_READY_AFTER=1
 	export HINDSIGHT_API_DATABASE=connected
@@ -85,6 +109,7 @@ printf "\n" >>"$COMMAND_LOG"
 			exit 0
 		fi
 		[ "${2:-}" = get ] || exit 2
+		printf "%s\n" "${OP_SERVICE_ACCOUNT_TOKEN:-<unset>}" >>"$OP_TOKEN_CAPTURE"
 		if [ "${3:-}" = "$OP_FAIL_ITEM" ]; then
 			exit 17
 		fi
@@ -107,6 +132,87 @@ printf " <%s>" "$@" >>"$COMMAND_LOG"
 printf "\n" >>"$COMMAND_LOG"
 if [ "${1:-}" = "image" ] && [ "${2:-}" = "prune" ]; then
 	exit "$IMAGE_PRUNE_STATUS"
+fi
+if [ "${1:-}" = "volume" ]; then
+  case "${2:-}" in
+    inspect)
+	  if [[ ${HERMES_VOLUME_EXISTS:-1} != 1 && ! -s $VOLUME_SCHEMA_FILE && ! -s $VOLUME_TOKEN_FILE ]]; then
+	    exit 1
+	  fi
+	  case " $* " in
+	    *"com.rurusasu.dotfiles.hermes-storage.schema"*)
+	      if [[ -s $VOLUME_SCHEMA_FILE ]]; then cat "$VOLUME_SCHEMA_FILE"; else printf "%s\n" "${HERMES_VOLUME_SCHEMA_LABEL:-}"; fi
+	      ;;
+	    *"com.rurusasu.dotfiles.hermes-storage.init-token"*)
+	      if [[ -s $VOLUME_TOKEN_FILE ]]; then cat "$VOLUME_TOKEN_FILE"; else printf "%s\n" "${HERMES_VOLUME_TOKEN_LABEL:-}"; fi
+	      ;;
+	    *) printf "[{}]\n" ;;
+	  esac
+      ;;
+    create)
+	  token=""
+	  for argument in "$@"; do
+	    case "$argument" in
+	      com.rurusasu.dotfiles.hermes-storage.schema=*) printf "%s\n" "${argument#*=}" >"$VOLUME_SCHEMA_FILE" ;;
+	      com.rurusasu.dotfiles.hermes-storage.init-token=*) token="${argument#*=}" ;;
+	    esac
+	  done
+	  if [[ -n ${HERMES_CREATE_RACE_TOKEN:-} ]]; then token="$HERMES_CREATE_RACE_TOKEN"; fi
+	  if [[ -n $token ]]; then printf "%s\n" "$token" >"$VOLUME_TOKEN_FILE"; fi
+	  printf "0\n" >"$VOLUME_READY_FILE"
+      printf "hermes-data\n"
+      ;;
+    *)
+      exit 1
+      ;;
+  esac
+  exit 0
+fi
+if [ "${1:-}" = "run" ]; then
+	previous=""
+	for argument in "$@"; do
+	  if [[ $previous == --entrypoint && $argument == python ]]; then
+	    if [[ -n ${HERMES_VOLUME_PROBE_STATUS:-} ]]; then
+	      exit "$HERMES_VOLUME_PROBE_STATUS"
+	    fi
+	    if [[ -s $VOLUME_READY_FILE ]]; then
+	      ready="$(cat "$VOLUME_READY_FILE")"
+	    else
+	      ready="$HERMES_VOLUME_READY"
+	    fi
+	    exit "$((ready == 1 ? 0 : 3))"
+	  fi
+	  if [[ $previous == --entrypoint && $argument == /usr/local/bin/hermes-storage-seed ]]; then
+	    if [[ ${HERMES_STORAGE_SEED_STATUS:-0} == 0 && ${HERMES_SEED_WRITES_MARKER:-1} == 1 ]]; then
+	      printf "1\n" >"$VOLUME_READY_FILE"
+	    fi
+	    exit "${HERMES_STORAGE_SEED_STATUS:-0}"
+	  fi
+	  previous="$argument"
+	done
+  exit 1
+fi
+if [ "${1:-}" = "create" ]; then
+	attempt="$(cat "$LOCK_CREATE_ATTEMPT_FILE")"
+	attempt=$((attempt + 1))
+	printf "%s\n" "$attempt" >"$LOCK_CREATE_ATTEMPT_FILE"
+	if [[ ${HERMES_LOCK_CREATE_FAIL_ONCE:-0} == 1 && $attempt == 1 ]]; then exit 125; fi
+	if [[ ${HERMES_LOCK_CREATE_STATUS:-0} != 0 ]]; then exit "$HERMES_LOCK_CREATE_STATUS"; fi
+	if ((attempt > 1)); then printf "%s\n" "$HERMES_REPLACEMENT_LOCK_ID"; else printf "%s\n" "$HERMES_LOCK_ID"; fi
+	exit 0
+fi
+if [ "${1:-}" = "inspect" ]; then
+	if [[ -n ${HERMES_LOCK_STATE:-} ]]; then printf "%s\n" "$HERMES_LOCK_STATE"; exit 0; fi
+	exit 1
+fi
+if [ "${1:-}" = "start" ] && [ "${2:-}" = "-a" ]; then
+	if [[ ${HERMES_STORAGE_SEED_STATUS:-0} == 0 && ${HERMES_SEED_WRITES_MARKER:-1} == 1 ]]; then
+	  printf "1\n" >"$VOLUME_READY_FILE"
+	fi
+	exit "${HERMES_STORAGE_SEED_STATUS:-0}"
+fi
+if [ "${1:-}" = "rm" ] && [ "${2:-}" = "-f" ]; then
+	exit "${HERMES_LOCK_RELEASE_STATUS:-0}"
 fi
 if [ "${1:-}" != "compose" ]; then
 	exit 1
@@ -202,6 +308,171 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 '
 }
 
+@test "initializes a missing Hermes Docker data volume before bootstrap" {
+	export HERMES_VOLUME_EXISTS=0
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	assert_log_order '<stop> <hermes>' '<volume> <inspect>' '<volume> <create>' '<create> <--name>' '<run> <--rm> <--entrypoint> <python>' '<start> <-a>' '<rm> <-f>' '<secret-plan>'
+	grep -Fq '<--label> <com.rurusasu.dotfiles.hermes-storage.schema=1>' "$COMMAND_LOG"
+	grep -Fq '<--label> <com.rurusasu.dotfiles.hermes-storage.init-token=' "$COMMAND_LOG"
+	grep -Fq '<create> <--name> <dotfiles-hermes-storage-' "$COMMAND_LOG"
+	grep -Fq '<--entrypoint> </usr/local/bin/hermes-storage-seed>' "$COMMAND_LOG"
+	grep -Fq '<--ready-token>' "$COMMAND_LOG"
+	grep -Fq '<--replace-incomplete>' "$COMMAND_LOG"
+}
+
+@test "keeps a failed managed volume incomplete for a safe retry" {
+	export HERMES_VOLUME_EXISTS=0
+	export HERMES_STORAGE_SEED_STATUS=42
+
+	run_start_stack
+
+	[ "$status" -eq 42 ]
+	[[ "$output" == *"will be safely replaced on retry"* ]]
+	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
+	! grep -Fq '<volume> <rm>' "$COMMAND_LOG"
+	! grep -q '<secret-plan>' "$COMMAND_LOG"
+}
+
+@test "does not seed or remove a volume won by a concurrent creator" {
+	export HERMES_VOLUME_EXISTS=0
+	export HERMES_CREATE_RACE_TOKEN=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"changed before its lock was acquired"* ]]
+	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
+	! grep -Fq '<volume> <rm>' "$COMMAND_LOG"
+	! grep -q '<secret-plan>' "$COMMAND_LOG"
+}
+
+@test "safely replaces a managed incomplete volume while holding its lock" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_VOLUME_READY=0
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	assert_log_order '<create> <--name>' '<run> <--rm> <--entrypoint> <python>' '<start> <-a>' '<rm> <-f>' '<secret-plan>'
+}
+
+@test "accepts a managed volume with the ready marker" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_VOLUME_READY=1
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	grep -Fq '<--entrypoint> <python>' "$COMMAND_LOG"
+	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
+	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
+}
+
+@test "preserves a ready managed volume when its marker probe cannot run" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_VOLUME_READY=1
+	export HERMES_VOLUME_PROBE_STATUS=125
+
+	run_start_stack
+
+	[ "$status" -eq 125 ]
+	[[ "$output" == *"ready marker probe failed with status 125"* ]]
+	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
+	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
+}
+
+@test "rejects a concurrent storage lock before marker or seed access" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_LOCK_CREATE_STATUS=125
+	export HERMES_LOCK_STATE="$HERMES_LOCK_ID|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|running"
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"already locked"* ]]
+	! grep -Fq '<--entrypoint> <python>' "$COMMAND_LOG"
+	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
+	! grep -q '<secret-plan>' "$COMMAND_LOG"
+}
+
+@test "reclaims an exited owned storage lock and retries atomically" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_LOCK_CREATE_FAIL_ONCE=1
+	export HERMES_LOCK_STATE="$HERMES_LOCK_ID|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|exited"
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(cat "$LOCK_CREATE_ATTEMPT_FILE")" -eq 2 ]
+	grep -Fq '<inspect> <--format>' "$COMMAND_LOG"
+	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
+	grep -Fq '<run> <--rm> <--entrypoint> <python>' "$COMMAND_LOG"
+}
+
+@test "reclaims an aged created lock by immutable ID" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_LOCK_CREATE_FAIL_ONCE=1
+	export HERMES_LOCK_STATE="$HERMES_LOCK_ID|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|created"
+	export HERMES_VOLUME_READY=0
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	[ "$(cat "$LOCK_CREATE_ATTEMPT_FILE")" -eq 2 ]
+	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
+	grep -Fq "<start> <-a> <$HERMES_REPLACEMENT_LOCK_ID>" "$COMMAND_LOG"
+}
+
+@test "does not acquire or touch a replacement lock after losing stale ID removal" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+	export HERMES_LOCK_CREATE_FAIL_ONCE=1
+	export HERMES_LOCK_STATE="$HERMES_LOCK_ID|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|exited"
+	export HERMES_LOCK_RELEASE_STATUS=17
+
+	run_start_stack
+
+	[ "$status" -eq 17 ]
+	[ "$(cat "$LOCK_CREATE_ATTEMPT_FILE")" -eq 1 ]
+	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
+	! grep -Fq "<$HERMES_REPLACEMENT_LOCK_ID>" "$COMMAND_LOG"
+	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
+}
+
+@test "surfaces a lock release failure after seed failure without deleting the volume" {
+	export HERMES_VOLUME_EXISTS=0
+	export HERMES_STORAGE_SEED_STATUS=42
+	export HERMES_LOCK_RELEASE_STATUS=17
+
+	run_start_stack
+
+	[ "$status" -eq 17 ]
+	[[ "$output" == *"lock could not be released"* ]]
+	! grep -Fq '<volume> <rm>' "$COMMAND_LOG"
+	! grep -q '<secret-plan>' "$COMMAND_LOG"
+}
+
+@test "rejects a managed volume with a malformed initialization token before locking" {
+	export HERMES_VOLUME_SCHEMA_LABEL=1
+	export HERMES_VOLUME_TOKEN_LABEL=malformed
+
+	run_start_stack
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"invalid initialization token"* ]]
+	! grep -Fq '<create> <--name>' "$COMMAND_LOG"
+	! grep -q '<secret-plan>' "$COMMAND_LOG"
+}
+
 write_stub() {
 	local name="$1"
 	local body="$2"
@@ -215,8 +486,21 @@ EOF
 
 valid_secret_plan() {
 	cat <<'JSON'
-{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]},{"canonical_name":"password","labels":["password"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"Private","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]}]}
+{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]},{"canonical_name":"password","labels":["password"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]}]}
 JSON
+}
+
+@test "accepts the Google Calendar item from the service-account vault" {
+	local plan
+	plan="$(valid_secret_plan | jq -c '(.items[] | select(.key == "google_calendar") | .vault) = "openclaw"')"
+
+	run env PLAN_JSON="$plan" bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+printf "%s\n" "$PLAN_JSON" | dotfiles_hermes_validate_secret_plan >/dev/null
+'
+
+	[ "$status" -eq 0 ]
 }
 
 run_start_stack() {
@@ -314,12 +598,18 @@ create_mocked_installer_fixture() {
 	MOCK_DOCKER_APP="$fixture_root/Docker.app"
 	MOCK_OLLAMA_APP="$fixture_root/Ollama.app"
 	mkdir -p "$MOCK_REPO/scripts/sh" "$MOCK_REPO/chezmoi" \
-		"$MOCK_REPO/docker/hermes-agent" "$MOCK_REPO/docker/hindsight" \
+		"$MOCK_REPO/docker/hermes-agent" "$MOCK_REPO/docker/hermes-service" \
+		"$MOCK_REPO/docker/hindsight" "$MOCK_REPO/docker/local-ai-services" \
 		"$MOCK_BIN" "$MOCK_OLLAMA_APP" "$MOCK_DOCKER_APP/Contents/MacOS" \
 		"$MOCK_DOCKER_APP/Contents/Resources/bin"
 	MOCK_REPO="$(cd "$MOCK_REPO" && pwd -P)"
 	cp "$REPO_ROOT/install.sh" "$MOCK_REPO/install.sh"
 	cp "$REPO_ROOT/scripts/sh/install-common.sh" "$MOCK_REPO/scripts/sh/install-common.sh"
+	cat >"$MOCK_REPO/scripts/sh/migrate-darwin-provider.sh" <<'EOF'
+#!/usr/bin/env bash
+printf 'migrate-darwin-provider %s\n' "$*" >>"$COMMAND_LOG"
+EOF
+	chmod +x "$MOCK_REPO/scripts/sh/migrate-darwin-provider.sh"
 	for installer in install-macos.sh install-linux.sh install-nixos.sh; do
 		cp "$REPO_ROOT/scripts/sh/$installer" "$MOCK_REPO/scripts/sh/$installer"
 	done
@@ -346,8 +636,8 @@ homebrew_cask_link_parent_is_immutable_to_caller() {
 main "$@"
 EOF
 	touch "$MOCK_REPO/flake.nix" \
-		"$MOCK_REPO/docker/hermes-agent/compose.yml" \
-		"$MOCK_REPO/docker/hindsight/compose.yml"
+		"$MOCK_REPO/docker/hermes-service/compose.yml" \
+		"$MOCK_REPO/docker/local-ai-services/compose.yml"
 
 	cat >"$MOCK_REPO/scripts/sh/hermes-agent.sh" <<'EOF'
 printf 'selected-installer=%s\n' "${DOTFILES_TEST_SELECTED_INSTALLER:-${BASH_SOURCE[1]}}" >>"$COMMAND_LOG"
@@ -450,6 +740,8 @@ exit 97
 '
 	write_fixture_stub chezmoi 'printf "chezmoi %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub curl 'printf "curl %s\\n" "$*" >>"$COMMAND_LOG"'
+	write_fixture_stub ollama 'printf "ollama %s\\n" "$*" >>"$COMMAND_LOG"'
+	write_fixture_stub launchctl 'printf "launchctl %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub open 'printf "open %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub docker 'printf "docker %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub task 'printf "task %s\\n" "$*" >>"$COMMAND_LOG"'
@@ -526,6 +818,8 @@ EOF
 		DOTFILES_NIX_PROFILE_SCRIPT="$fixture_root/nix-daemon.sh" \
 		DOTFILES_DOCKER_APP_PATH="$MOCK_DOCKER_APP" \
 		DOTFILES_OLLAMA_APP_PATH="$MOCK_OLLAMA_APP" \
+		DOTFILES_LAUNCHCTL_COMMAND="$MOCK_BIN/launchctl" \
+		DOTFILES_ACCEPT_DOCKER_LICENSE=1 \
 		DOTFILES_OPEN_COMMAND="$MOCK_BIN/open" \
 		DOTFILES_TASK_COMMAND="$MOCK_BIN/task" \
 		DOTFILES_DOCKER_SETUP_MARKER="$fixture_root/docker-setup" \
@@ -670,6 +964,8 @@ dotfiles_hermes_browser_data_dir
 
 @test "injects X API OAuth credentials from 1Password for explicit wrapper commands" {
 	export XAPI_OP_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"}]}'
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
 
 	run bash -c '
 set -euo pipefail
@@ -682,6 +978,41 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 	[ "$output" = "xapi-client-id-marker:xapi-client-secret-marker" ]
 	grep -q '^op <item> <get> <Hermes X API MCP> <--account> <my.1password.com> <--vault> <openclaw> <--format> <json>$' "$COMMAND_LOG"
 	! grep -q 'xapi-client-secret-marker' "$COMMAND_LOG"
+}
+
+@test "initializes the service account cache for a standalone X API command" {
+	run bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIENT_ID" "$X_API_CLIENT_SECRET"'"'"'
+'
+
+	[ "$status" -eq 0 ]
+	[ "$output" = "xapi-client-id-marker:xapi-client-secret-marker" ]
+	grep -q '<read>' "$COMMAND_LOG"
+	! grep -q '<signin>' "$COMMAND_LOG"
+	grep -q '^op <item> <get> <Hermes X API MCP> ' "$COMMAND_LOG"
+	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=service-account-token' ]
+	[ "$(service_account_cache_mode)" = 600 ]
+}
+
+@test "uses a valid service account cache without a trailing newline" {
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+
+	run bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIENT_ID" "$X_API_CLIENT_SECRET"'"'"'
+'
+
+	[ "$status" -eq 0 ]
+	[ "$output" = "xapi-client-id-marker:xapi-client-secret-marker" ]
+	run grep -q '<read>' "$COMMAND_LOG"
+	[ "$status" -eq 1 ]
+	[ "$(cat "$OP_TOKEN_CAPTURE")" = cached-token ]
 }
 
 @test "syncs the X API refresh token into the local xurl cache before startup" {
@@ -714,7 +1045,7 @@ default_app: default
 EOF
 	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
 
-	run env HERMES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-agent/compose.yml" \
+	run env HERMES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-service/compose.yml" \
 		bash "$REPO_ROOT/scripts/sh/hermes-xapi.sh" sync-token
 
 	[ "$status" -eq 0 ]
@@ -737,7 +1068,7 @@ default_app: default
 EOF
 	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
 
-	run env HERMES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-agent/compose.yml" \
+	run env HERMES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-service/compose.yml" \
 		bash "$REPO_ROOT/scripts/sh/hermes-xapi.sh" sync-token
 
 	[ "$status" -eq 0 ]
@@ -746,20 +1077,42 @@ EOF
 	jq -e '.fields[] | select(.label == "X_API_REFRESH_TOKEN") | .value == "configured-item-refresh-token-marker"' "$EDIT_CAPTURE" >/dev/null
 }
 
-@test "uses a mode-0600 cached service account after an op read timeout" {
+@test "uses a mode-0600 cached service account without starting an op read" {
 	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
 	chmod 600 "$HOME/.hermes/.op.env"
 	export OP_READ_COMPLETION_FILE="$BATS_TEST_TMPDIR/op-read-completed"
 	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
 	run_start_stack
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"using existing Hermes service-account environment"* ]]
+	[[ "$output" != *"using existing Hermes service-account environment"* ]]
+	run grep -q '<read>' "$COMMAND_LOG"
+	[ "$status" -eq 1 ]
 	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=cached-token' ]
 	[ "$(service_account_cache_mode)" = 600 ]
 	/bin/sleep 2
 	[ ! -e "$OP_READ_COMPLETION_FILE" ]
 	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=cached-token' ]
 	[ "$(service_account_cache_mode)" = 600 ]
+}
+
+@test "uses a valid cached service account for every host item read without desktop authorization" {
+	local bootstrap_output
+	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
+	chmod 600 "$HOME/.hermes/.op.env"
+	export OP_READ_TOKEN='unexpected-refresh-token'
+
+	run_start_stack
+
+	[ "$status" -eq 0 ]
+	bootstrap_output="$output"
+	run grep -q '<read>' "$COMMAND_LOG"
+	[ "$status" -eq 1 ]
+	run grep -q '<signin>' "$COMMAND_LOG"
+	[ "$status" -eq 1 ]
+	[ -s "$OP_TOKEN_CAPTURE" ]
+	run grep -vx 'cached-token' "$OP_TOKEN_CAPTURE"
+	[ "$status" -eq 1 ]
+	[[ "$bootstrap_output" != *'cached-token'* ]]
 }
 
 @test "rejects a writable cached service account after an op read timeout" {
@@ -834,6 +1187,7 @@ dotfiles_hermes_service_account_read_timeout_seconds
 	chmod 600 "$HOME/.hermes/.op.env"
 	ln "$HOME/.hermes/.op.env" "$HOME/.hermes/.op.env.previous"
 	export OP_READ_TOKEN='fresh-token'
+	export DOTFILES_HERMES_REFRESH_SERVICE_ACCOUNT=1
 	run_start_stack
 	[ "$status" -eq 0 ]
 	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=fresh-token' ]
@@ -875,6 +1229,14 @@ esac
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"jq is required"* ]]
+	[ ! -s "$COMMAND_LOG" ]
+}
+
+@test "fails preflight before Compose when python3 is unavailable" {
+	run_start_stack python3
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"python3 is required"* ]]
 	[ ! -s "$COMMAND_LOG" ]
 }
 
@@ -1001,6 +1363,7 @@ dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
 	[ "$status" -eq 0 ]
 	grep -q "$SECRET_MARKER" "$PAYLOAD_CAPTURE"
 	[[ "$output" != *"$SECRET_MARKER"* ]]
+	[[ "$output" != *'service-account-token'* ]]
 }
 
 @test "streams an ordered versioned payload and recreates services after success" {

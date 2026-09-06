@@ -96,7 +96,7 @@ jobs:
   macos:
     name: E2E (macOS)
     runs-on: macos-15-intel
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
@@ -106,7 +106,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Docker
-        uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4 # v4
+        uses: docker/setup-docker-action@77e84dbf09b47d1e29270283c22f16145aa85ca1 # v5.4.0
 
       - name: Install devcontainer CLI
         run: npm install --global --no-audit --no-fund @devcontainers/cli@0.88.0

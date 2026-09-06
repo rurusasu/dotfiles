@@ -17,6 +17,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/HermesBootstrap.ps1')
 . (Join-Path $PSScriptRoot 'lib/HermesXApi.ps1')
 . (Join-Path $PSScriptRoot 'lib/HermesGateway.ps1')
+. (Join-Path $PSScriptRoot 'lib/HermesStorage.ps1')
 
 function New-HermesBootstrapEntrypointResult {
     [CmdletBinding()]
@@ -43,11 +44,20 @@ function Get-HermesBootstrapEntrypointPath {
     )
 
     $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-    $resolvedComposeFile = if ([string]::IsNullOrWhiteSpace($ComposeFile)) {
-        Join-Path $repositoryRoot 'docker/hermes-agent/compose.yml'
+    $composeOverride = if (-not [string]::IsNullOrWhiteSpace($ComposeFile)) {
+        $ComposeFile
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($env:HERMES_COMPOSE_FILE)) {
+        $env:HERMES_COMPOSE_FILE
     }
     else {
-        [System.IO.Path]::GetFullPath($ComposeFile)
+        ''
+    }
+    $resolvedComposeFile = if ([string]::IsNullOrWhiteSpace($composeOverride)) {
+        Join-Path $repositoryRoot 'docker/hermes-service/compose.yml'
+    }
+    else {
+        [System.IO.Path]::GetFullPath($composeOverride)
     }
 
     $profileRoot = if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
@@ -165,6 +175,41 @@ function Wait-HermesBootstrapApi {
     return $false
 }
 
+function Get-HermesBootstrapRuntimeState {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ComposeFile
+    )
+
+    try {
+        $global:LASTEXITCODE = 0
+        $output = @(Invoke-Docker `
+                -Arguments @('compose', '-f', $ComposeFile, 'ps', '--all', '--services', 'hermes') `
+                2>$null)
+        if ($global:LASTEXITCODE -ne 0) {
+            return [PSCustomObject]@{
+                Success = $false
+                Exists  = $false
+                Message = 'Hermes runtime inspection failed.'
+            }
+        }
+
+        return [PSCustomObject]@{
+            Success = $true
+            Exists  = @($output | Where-Object { ([string]$_).Trim() -eq 'hermes' }).Count -eq 1
+            Message = ''
+        }
+    }
+    catch {
+        return [PSCustomObject]@{
+            Success = $false
+            Exists  = $false
+            Message = 'Hermes runtime inspection failed.'
+        }
+    }
+}
+
 function Invoke-HermesBootstrapDockerPhase {
     [CmdletBinding()]
     param(
@@ -187,6 +232,59 @@ function Invoke-HermesBootstrapDockerPhase {
     }
 }
 
+function Invoke-HermesBootstrapRuntimeRecovery {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ComposeFile
+    )
+
+    $start = Invoke-HermesBootstrapDockerPhase `
+        -Arguments @('compose', '-f', $ComposeFile, 'start', 'hermes', 'chromium', 'browser-mcp', 'xapi-mcp') `
+        -FailureMessage 'Hermes runtime recovery start failed.'
+    if ($start.ExitCode -ne 0) {
+        return $start
+    }
+
+    if (-not (Wait-HermesBootstrapApi)) {
+        $attempts = Get-HermesBootstrapEnvironmentInteger `
+            -Name 'HERMES_API_READY_ATTEMPTS' `
+            -DefaultValue 30
+        return New-HermesBootstrapEntrypointResult `
+            -ExitCode 1 `
+            -Message "Hermes runtime recovery readiness failed: Hermes API did not become ready after $attempts attempts."
+    }
+
+    return New-HermesBootstrapEntrypointResult -ExitCode 0 -Message ''
+}
+
+function New-HermesBootstrapFailureResult {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ComposeFile,
+        [Parameter(Mandatory)]
+        [bool]$RuntimeExisted,
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$FailureMessage,
+        [int]$ExitCode = 1
+    )
+
+    if (-not $RuntimeExisted) {
+        return New-HermesBootstrapEntrypointResult -ExitCode $ExitCode -Message $FailureMessage
+    }
+
+    $recovery = Invoke-HermesBootstrapRuntimeRecovery -ComposeFile $ComposeFile
+    if ($recovery.ExitCode -ne 0) {
+        return New-HermesBootstrapEntrypointResult `
+            -ExitCode $ExitCode `
+            -Message "$FailureMessage $($recovery.Message)"
+    }
+
+    return New-HermesBootstrapEntrypointResult -ExitCode $ExitCode -Message $FailureMessage
+}
+
 function Invoke-HermesBootstrapEntrypoint {
     [CmdletBinding()]
     param(
@@ -194,6 +292,9 @@ function Invoke-HermesBootstrapEntrypoint {
         [string]$DataDir = '',
         [string]$BrowserDataDir = ''
     )
+
+    $runtimeExisted = $false
+    $runtimeStopped = $false
 
     try {
         $paths = Get-HermesBootstrapEntrypointPath `
@@ -267,17 +368,43 @@ function Invoke-HermesBootstrapEntrypoint {
                 -FailureMessage 'Hermes image build failed.'
             if ($build.ExitCode -ne 0) { return $build }
 
+            $runtime = Get-HermesBootstrapRuntimeState -ComposeFile $paths.ComposeFile
+            if (-not $runtime.Success) {
+                return New-HermesBootstrapEntrypointResult -ExitCode 1 -Message $runtime.Message
+            }
+            $runtimeExisted = $runtime.Exists
+
             $stop = Invoke-HermesBootstrapDockerPhase `
                 -Arguments @('compose', '-f', $paths.ComposeFile, 'stop', 'hermes') `
                 -FailureMessage 'Hermes gateway stop failed.'
             if ($stop.ExitCode -ne 0) { return $stop }
+            $runtimeStopped = $true
+
+            try {
+                $storage = Initialize-HermesStorageVolume -DataDir $paths.DataDir
+            }
+            catch {
+                return New-HermesBootstrapFailureResult `
+                    -ComposeFile $paths.ComposeFile `
+                    -RuntimeExisted $runtimeExisted `
+                    -FailureMessage 'Hermes data volume configuration failed.'
+            }
+            if (-not $storage.Success) {
+                return New-HermesBootstrapFailureResult `
+                    -ComposeFile $paths.ComposeFile `
+                    -RuntimeExisted $runtimeExisted `
+                    -FailureMessage $storage.Message
+            }
 
             try {
                 $global:LASTEXITCODE = 0
                 $bootstrap = Invoke-HermesBootstrap -ComposeFile $paths.ComposeFile -DataDir $paths.DataDir
             }
             catch {
-                return New-HermesBootstrapEntrypointResult -ExitCode 1 -Message 'Hermes bootstrap failed.'
+                return New-HermesBootstrapFailureResult `
+                    -ComposeFile $paths.ComposeFile `
+                    -RuntimeExisted $runtimeExisted `
+                    -FailureMessage 'Hermes bootstrap failed.'
             }
             if (-not $bootstrap.Success) {
                 $message = if ([string]::IsNullOrWhiteSpace([string]$bootstrap.Message)) {
@@ -286,9 +413,12 @@ function Invoke-HermesBootstrapEntrypoint {
                 else {
                     [string]$bootstrap.Message
                 }
-                return New-HermesBootstrapEntrypointResult `
-                    -ExitCode (Get-HermesBootstrapEntrypointExitCode) `
-                    -Message $message
+                $failure = New-HermesBootstrapFailureResult `
+                    -ComposeFile $paths.ComposeFile `
+                    -RuntimeExisted $runtimeExisted `
+                    -FailureMessage $message
+                $failure.ExitCode = Get-HermesBootstrapEntrypointExitCode
+                return $failure
             }
 
             try {
@@ -302,11 +432,18 @@ function Invoke-HermesBootstrapEntrypoint {
                 if ($_.Exception.Message -ne 'Hermes X API credential retrieval failed.') {
                     throw
                 }
-                return New-HermesBootstrapEntrypointResult `
-                    -ExitCode 1 `
-                    -Message 'Hermes X API credential retrieval failed.'
+                return New-HermesBootstrapFailureResult `
+                    -ComposeFile $paths.ComposeFile `
+                    -RuntimeExisted $runtimeExisted `
+                    -FailureMessage 'Hermes X API credential retrieval failed.'
             }
-            if ($startup.ExitCode -ne 0) { return $startup }
+            if ($startup.ExitCode -ne 0) {
+                return New-HermesBootstrapFailureResult `
+                    -ComposeFile $paths.ComposeFile `
+                    -RuntimeExisted $runtimeExisted `
+                    -FailureMessage $startup.Message `
+                    -ExitCode $startup.ExitCode
+            }
 
             if (-not (Wait-HermesBootstrapApi)) {
                 try {
@@ -320,18 +457,20 @@ function Invoke-HermesBootstrapEntrypoint {
                 $attempts = Get-HermesBootstrapEnvironmentInteger `
                     -Name 'HERMES_API_READY_ATTEMPTS' `
                     -DefaultValue 30
-                return New-HermesBootstrapEntrypointResult `
-                    -ExitCode 1 `
-                    -Message "Hermes API did not become ready after $attempts attempts."
+                return New-HermesBootstrapFailureResult `
+                    -ComposeFile $paths.ComposeFile `
+                    -RuntimeExisted $runtimeExisted `
+                    -FailureMessage "Hermes API did not become ready after $attempts attempts."
             }
 
             try {
                 Invoke-HermesGatewayConvergence -ComposeFile $paths.ComposeFile
             }
             catch [System.InvalidOperationException] {
-                return New-HermesBootstrapEntrypointResult `
-                    -ExitCode 1 `
-                    -Message $_.Exception.Message
+                return New-HermesBootstrapFailureResult `
+                    -ComposeFile $paths.ComposeFile `
+                    -RuntimeExisted $runtimeExisted `
+                    -FailureMessage $_.Exception.Message
             }
 
             return New-HermesBootstrapEntrypointResult -ExitCode 0 -Message 'Hermes bootstrap completed.'
@@ -356,6 +495,14 @@ function Invoke-HermesBootstrapEntrypoint {
         }
     }
     catch {
+        if ($runtimeStopped -and $runtimeExisted) {
+            $recovery = Invoke-HermesBootstrapRuntimeRecovery -ComposeFile $paths.ComposeFile
+            if ($recovery.ExitCode -ne 0) {
+                return New-HermesBootstrapEntrypointResult `
+                    -ExitCode 1 `
+                    -Message "Hermes bootstrap entrypoint failed. $($recovery.Message)"
+            }
+        }
         return New-HermesBootstrapEntrypointResult -ExitCode 1 -Message 'Hermes bootstrap entrypoint failed.'
     }
 }

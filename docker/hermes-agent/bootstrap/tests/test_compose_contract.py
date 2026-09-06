@@ -12,16 +12,16 @@ import yaml
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
-COMPOSE_FILE = REPOSITORY_ROOT / "docker/hermes-agent/compose.yml"
-HINDSIGHT_COMPOSE_FILE = REPOSITORY_ROOT / "docker/hindsight/compose.yml"
+COMPOSE_FILE = REPOSITORY_ROOT / "docker/hermes-service/compose.yml"
+HINDSIGHT_COMPOSE_FILE = REPOSITORY_ROOT / "docker/local-ai-services/compose.yml"
 HINDSIGHT_ENV_FILE = REPOSITORY_ROOT / "docker/hindsight/hindsight.env"
 HINDSIGHT_SHELL_SCRIPT = REPOSITORY_ROOT / "scripts/sh/hindsight.sh"
 HINDSIGHT_POWERSHELL_SCRIPT = REPOSITORY_ROOT / "scripts/powershell/hindsight.ps1"
 DOCKERFILE = REPOSITORY_ROOT / "docker/hermes-agent/Dockerfile"
 RESOLVED_CONFIG_ENV = "HERMES_BOOTSTRAP_COMPOSE_CONFIG_JSON"
-DATA_BIND = {
-    "type": "bind",
-    "source": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}",
+DATA_VOLUME = {
+    "type": "volume",
+    "source": "hermes-data",
     "target": "/opt/data",
 }
 XURL_BIND = {
@@ -101,7 +101,7 @@ class ComposeContractTests(unittest.TestCase):
             {"context": "..", "dockerfile": "hermes-agent/Dockerfile"},
         )
         self.assertEqual(self.bootstrap["image"], self.hermes["image"])
-        self.assertEqual(self.bootstrap["volumes"], [DATA_BIND])
+        self.assertEqual(self.bootstrap["volumes"], [DATA_VOLUME])
         self.assertEqual(self.bootstrap["environment"], {"HERMES_HOME": "/opt/data"})
         self.assertEqual(self.bootstrap["profiles"], ["bootstrap"])
         self.assertEqual(self.bootstrap["entrypoint"], "/usr/local/bin/hermes-bootstrap")
@@ -112,6 +112,24 @@ class ComposeContractTests(unittest.TestCase):
 
     def test_gateway_uses_the_canonical_shared_lifelog_path(self) -> None:
         self.assertEqual(self.hermes["environment"]["LIFELOG_ROOT"], "/opt/data/shared/lifelog")
+
+    def test_gateway_uses_the_canonical_hermes_home(self) -> None:
+        self.assertEqual(self.hermes["environment"]["HERMES_HOME"], "/opt/data")
+
+    def test_gateway_runtime_home_uses_a_docker_managed_named_volume(self) -> None:
+        self.assertEqual(self.hermes["volumes"][0], DATA_VOLUME)
+        self.assertEqual(self.bootstrap["volumes"][0], DATA_VOLUME)
+        self.assertEqual(
+            self.compose["volumes"]["hermes-data"],
+            {"name": "${HERMES_DATA_VOLUME:-hermes-data}"},
+        )
+        self.assertFalse(
+            any(
+                mount.get("target") == "/opt/data" and mount.get("type") == "bind"
+                for service in self.services.values()
+                for mount in service.get("volumes", [])
+            )
+        )
 
     def test_gateway_reconnects_on_the_first_failed_discord_liveness_sample(self) -> None:
         self.assertEqual(
@@ -127,10 +145,10 @@ class ComposeContractTests(unittest.TestCase):
 
         self.assertEqual(hindsight["image"], HINDSIGHT_IMAGE)
         self.assertNotIn("platform", hindsight)
-        self.assertEqual(hindsight["container_name"], "hindsight")
+        self.assertEqual(hindsight["container_name"], "local-ai-services-hindsight")
         self.assertEqual(hindsight["restart"], "unless-stopped")
         self.assertEqual(
-            hindsight["env_file"], [{"path": "./hindsight.env", "required": True}],
+            hindsight["env_file"], [{"path": "../hindsight/hindsight.env", "required": True}],
         )
         self.assertNotIn("extra_hosts", hindsight)
         self.assertEqual(
@@ -145,7 +163,16 @@ class ComposeContractTests(unittest.TestCase):
             hindsight["volumes"], [HINDSIGHT_PG_BIND, HINDSIGHT_CACHE_BIND],
         )
         self.assertEqual(hindsight["shm_size"], "1g")
-        self.assertEqual(hindsight["networks"], ["memory", "local-ai-services"])
+        self.assertEqual(
+            hindsight["networks"],
+            {"local-ai-services": {"aliases": ["hindsight"]}},
+        )
+
+        mlflow = self.hindsight_services.get("mlflow")
+        self.assertIsNotNone(mlflow)
+        assert mlflow is not None
+        self.assertEqual(mlflow["container_name"], "local-ai-services-mlflow")
+        self.assertEqual(mlflow["networks"], ["local-ai-services"])
 
     def test_hindsight_readiness_requires_a_healthy_connected_database(self) -> None:
         hindsight = self.hindsight_services.get("hindsight")
@@ -164,23 +191,17 @@ class ComposeContractTests(unittest.TestCase):
         )
 
     def test_hermes_can_reach_memory_without_waiting_for_its_runtime(self) -> None:
-        self.assertEqual(self.hermes["networks"], ["hermes-browser", "hermes-memory"])
+        self.assertEqual(self.hermes["networks"], ["hermes-browser", "local-ai-services"])
         self.assertEqual(
             self.hermes["extra_hosts"], ["host.docker.internal:host-gateway"]
         )
         self.assertNotIn("hindsight", self.hermes["depends_on"])
         self.assertEqual(
-            self.compose["networks"]["hermes-memory"],
-            {"name": "dotfiles-memory", "external": True},
-        )
-        self.assertEqual(
-            self.hindsight_compose["networks"]["memory"],
-            {"name": "dotfiles-memory", "driver": "bridge"},
-        )
-        self.assertEqual(
             self.hindsight_compose["networks"]["local-ai-services"],
             {"name": "local-ai-services", "external": True},
         )
+        self.assertNotIn("dotfiles-memory", str(self.compose))
+        self.assertNotIn("dotfiles-memory", str(self.hindsight_compose))
 
     def test_hindsight_environment_is_the_exact_non_secret_model_runtime_contract(self) -> None:
         environment = {}
@@ -355,6 +376,11 @@ class ComposeContractTests(unittest.TestCase):
         )
         self.assertIn("chmod 0755 /usr/local/bin/hermes-bootstrap", dockerfile)
         self.assertIn("FROM hermes-bootstrap-runtime AS hermes-bootstrap-test", dockerfile)
+        self.assertIn(
+            "COPY hermes-agent/hermes_storage_seed.py /usr/local/bin/hermes-storage-seed",
+            dockerfile,
+        )
+        self.assertIn("chmod 0755 /usr/local/bin/hermes-storage-seed", dockerfile)
         self.assertIn("COPY hermes-agent/bootstrap/tests /workspace/docker/hermes-agent/bootstrap/tests", dockerfile)
         self.assertIn("python -m unittest discover", dockerfile)
         self.assertTrue(dockerfile.rstrip().endswith("FROM hermes-bootstrap-runtime\n\nWORKDIR /"))

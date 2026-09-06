@@ -17,6 +17,14 @@ setup() {
   grep -q 'docker-buildx' "$REPO_ROOT/nix/system-manager/docker.nix"
 }
 
+@test "NixOS host installs GitHub CLI at the system layer" {
+	grep -q 'sets.hostPackages' "$REPO_ROOT/nix/modules/host/default.nix"
+}
+
+@test "System Manager host installs GitHub CLI at the system layer" {
+	grep -q 'sets.hostPackages' "$REPO_ROOT/nix/system-manager/default.nix"
+}
+
 @test "System Manager shares the root nixpkgs input" {
   block="$(sed -n '/system-manager = {/,/^[[:space:]]*};/p' "$REPO_ROOT/flake.nix")"
   [[ "$block" == *'url = "github:numtide/system-manager"'* ]]
@@ -48,7 +56,7 @@ setup() {
   grep -q 'ip -4 -o addr show dev docker0' "$REPO_ROOT/nix/system-manager/ollama.nix"
   grep -q 'OLLAMA_HOST="$docker_gateway:11434"' "$REPO_ROOT/nix/system-manager/ollama.nix"
   ! grep -q '0.0.0.0:11434' "$REPO_ROOT/nix/system-manager/ollama.nix"
-  grep -q 'host.docker.internal:host-gateway' "$REPO_ROOT/docker/hermes-agent/compose.yml"
+  grep -q 'host.docker.internal:host-gateway' "$REPO_ROOT/docker/hermes-service/compose.yml"
 }
 
 @test "native NixOS rebuild alias keeps the hardware-safe installer path" {

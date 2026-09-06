@@ -25,16 +25,16 @@
 
 ## File Map
 
-- Create `docker/mlflow/compose.yml`: isolated MLflow tracking/Gateway runtime, persistent bind mounts, healthcheck, loopback port, and shared network attachment.
+- Create `docker/local-ai-services/compose.yml`: isolated MLflow tracking/Gateway runtime, persistent bind mounts, healthcheck, loopback port, and shared network attachment.
 - Create `docker/mlflow/endpoints.yml`: secret-free source of truth for stable chat and embedding endpoint definitions.
 - Create `docker/mlflow/configure.py`: typed, idempotent Gateway REST reconciler with redacted errors.
 - Create `docker/mlflow/verify.py`: container-side chat, embedding, and trace acceptance probe.
-- Modify `docker/mlflow/compose.yml`: mount the Gateway control scripts and manifest read-only at their stable container paths.
+- Modify `docker/local-ai-services/compose.yml`: mount the Gateway control scripts and manifest read-only at their stable container paths.
 - Create `docker/mlflow/tests/test_configure.py`: offline fake-server tests for reconciliation, idempotency, and failure handling.
 - Create `taskfiles/mlflow/taskfile.yml`: public `mlflow:*` operator tasks and their preconditions/dependencies.
 - Modify `Taskfile.yml`: shared MLflow Compose variable and included taskfile.
 - Modify `taskfiles/hindsight/taskfile.yml`: make `hindsight:up` start/configure MLflow first.
-- Modify `docker/hindsight/compose.yml`: attach Hindsight to the external `local-ai-services` network while retaining `memory`.
+- Modify `docker/local-ai-services/compose.yml`: attach Hindsight to the external `local-ai-services` network while retaining `memory`.
 - Modify `docker/hindsight/hindsight.env`: use Gateway URLs and logical endpoint names; add separate native model names for direct pull preparation.
 - Modify `scripts/sh/hindsight.sh`: pull the native model variables, not Gateway endpoint names.
 - Modify `scripts/powershell/hindsight.ps1`: apply the same model-management split on Windows.
@@ -53,7 +53,7 @@
 
 **Files:**
 
-- Create: `docker/mlflow/compose.yml`
+- Create: `docker/local-ai-services/compose.yml`
 - Create: `docker/mlflow/endpoints.yml`
 - Create: `tests/python/test_mlflow_contract.py`
 
@@ -93,7 +93,7 @@
   docker buildx imagetools inspect ghcr.io/mlflow/mlflow:v3.12.0-full
   ```
 
-  Use the registry digest returned for the multi-platform manifest in `docker/mlflow/compose.yml`; do not copy a platform-specific child digest and do not use `latest`.
+  Use the registry digest returned for the multi-platform manifest in `docker/local-ai-services/compose.yml`; do not copy a platform-specific child digest and do not use `latest`.
 
 - [ ] **Step 4: Implement the Compose service.**
 
@@ -143,7 +143,7 @@
 
   ```bash
   python3 -m unittest tests/python/test_mlflow_contract.py -v
-  docker compose -f docker/mlflow/compose.yml config --quiet
+  docker compose -f docker/local-ai-services/compose.yml config --quiet
   ```
 
   Expected: all focused tests pass and Compose exits with status 0.
@@ -151,7 +151,7 @@
 - [ ] **Step 7: Commit the runtime foundation.**
 
   ```bash
-  git add docker/mlflow/compose.yml docker/mlflow/endpoints.yml tests/python/test_mlflow_contract.py
+  git add docker/local-ai-services/compose.yml docker/mlflow/endpoints.yml tests/python/test_mlflow_contract.py
   git commit -m "feat: add local MLflow gateway runtime"
   ```
 
@@ -162,7 +162,7 @@
 - Create: `docker/mlflow/configure.py`
 - Create: `docker/mlflow/verify.py`
 - Create: `docker/mlflow/tests/test_configure.py`
-- Modify: `docker/mlflow/compose.yml`
+- Modify: `docker/local-ai-services/compose.yml`
 
 **Interfaces:**
 
@@ -204,8 +204,8 @@
 
   ```bash
   python3 -m unittest docker/mlflow/tests/test_configure.py -v
-  docker compose -f docker/mlflow/compose.yml run --rm --no-deps mlflow python /opt/mlflow/configure.py --help
-  docker compose -f docker/mlflow/compose.yml run --rm --no-deps mlflow python /opt/mlflow/verify.py --help
+  docker compose -f docker/local-ai-services/compose.yml run --rm --no-deps mlflow python /opt/mlflow/configure.py --help
+  docker compose -f docker/local-ai-services/compose.yml run --rm --no-deps mlflow python /opt/mlflow/verify.py --help
   ```
 
   Expected: all fake-server tests pass and both scripts start in the actual image with the required YAML/runtime dependencies.
@@ -247,7 +247,7 @@
 
 - [ ] **Step 3: Implement the MLflow taskfile.**
 
-  Define `MLFLOW_COMPOSE_FILE: docker/mlflow/compose.yml` in the taskfile's local vars. Before starting Compose, create the external network when absent with `docker network inspect local-ai-services >/dev/null 2>&1 || docker network create local-ai-services`. Then use `docker compose ... up -d --wait mlflow` for the startup wait, call `docker compose ... exec -T mlflow python /opt/mlflow/configure.py --base-url http://127.0.0.1:5000 --manifest /opt/mlflow/endpoints.yml`, and use the read-only mounts established by Task 2. `mlflow:configure` must require a running healthy container, `mlflow:down` must stop only `mlflow`, `status` must show Compose status plus endpoint names, `logs` must remain interactive, and `verify` must invoke `/opt/mlflow/verify.py`.
+  Define `MLFLOW_COMPOSE_FILE: docker/local-ai-services/compose.yml` in the taskfile's local vars. Before starting Compose, create the external network when absent with `docker network inspect local-ai-services >/dev/null 2>&1 || docker network create local-ai-services`. Then use `docker compose ... up -d --wait mlflow` for the startup wait, call `docker compose ... exec -T mlflow python /opt/mlflow/configure.py --base-url http://127.0.0.1:5000 --manifest /opt/mlflow/endpoints.yml`, and use the read-only mounts established by Task 2. `mlflow:configure` must require a running healthy container, `mlflow:down` must stop only `mlflow`, `status` must show Compose status plus endpoint names, `logs` must remain interactive, and `verify` must invoke `/opt/mlflow/verify.py`.
 
 - [ ] **Step 4: Include the taskfile and wire Hindsight startup.**
 
@@ -275,7 +275,7 @@
 **Files:**
 
 - Modify: `docker/hindsight/hindsight.env`
-- Modify: `docker/hindsight/compose.yml`
+- Modify: `docker/local-ai-services/compose.yml`
 - Modify: `scripts/sh/hindsight.sh`
 - Modify: `scripts/powershell/hindsight.ps1`
 - Modify: `docker/hermes-agent/bootstrap/tests/test_compose_contract.py`
@@ -322,8 +322,8 @@
   ```bash
   python3 -m unittest docker/hermes-agent/bootstrap/tests/test_compose_contract.py -v
   bats tests/bash/hindsight_runtime.bats tests/bash/hindsight_service.bats
-  docker compose -f docker/mlflow/compose.yml config --quiet
-  docker compose -f docker/hindsight/compose.yml config --quiet
+  docker compose -f docker/local-ai-services/compose.yml config --quiet
+  docker compose -f docker/local-ai-services/compose.yml config --quiet
   ```
 
   Expected: all tests pass and both Compose projects resolve with the external shared network declaration.
@@ -331,7 +331,7 @@
 - [ ] **Step 6: Commit the Hindsight migration.**
 
   ```bash
-  git add docker/hindsight/hindsight.env docker/hindsight/compose.yml scripts/sh/hindsight.sh scripts/powershell/hindsight.ps1 docker/hermes-agent/bootstrap/tests/test_compose_contract.py tests/bash/hindsight_runtime.bats tests/bash/hindsight_service.bats
+  git add docker/hindsight/hindsight.env docker/local-ai-services/compose.yml scripts/sh/hindsight.sh scripts/powershell/hindsight.ps1 docker/hermes-agent/bootstrap/tests/test_compose_contract.py tests/bash/hindsight_runtime.bats tests/bash/hindsight_service.bats
   git commit -m "feat: route Hindsight inference through MLflow"
   ```
 
@@ -407,7 +407,7 @@
 
 - [ ] **Step 1: Add failing routing assertions.**
 
-  Extend the routing tests with representative paths `docker/mlflow/compose.yml`, `docker/mlflow/configure.py`, `taskfiles/mlflow/taskfile.yml`, `docs/mlflow/local-ai-services.md`, `scripts/sh/hindsight.sh`, `scripts/powershell/hindsight.ps1`, and `scripts/powershell/lib/HermesHindsight.ps1`, asserting that each maps to contract checks and that runtime/Hindsight changes retain platform and Hermes coverage. Extend workflow tests to assert that `ci-bootstrap.yml` includes `docker/mlflow/**` and `docs/mlflow/**`, and that `ci-contract.yml` includes `docker/mlflow/**` and invokes the dedicated Gateway test file.
+  Extend the routing tests with representative paths `docker/local-ai-services/compose.yml`, `docker/mlflow/configure.py`, `taskfiles/mlflow/taskfile.yml`, `docs/mlflow/local-ai-services.md`, `scripts/sh/hindsight.sh`, `scripts/powershell/hindsight.ps1`, and `scripts/powershell/lib/HermesHindsight.ps1`, asserting that each maps to contract checks and that runtime/Hindsight changes retain platform and Hermes coverage. Extend workflow tests to assert that `ci-bootstrap.yml` includes `docker/mlflow/**` and `docs/mlflow/**`, and that `ci-contract.yml` includes `docker/mlflow/**` and invokes the dedicated Gateway test file.
 
 - [ ] **Step 2: Run the routing tests.**
 

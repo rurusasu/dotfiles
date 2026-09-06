@@ -7,7 +7,7 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
 . "$SCRIPT_DIR/install-common.sh"
 . "$SCRIPT_DIR/hermes-agent.sh"
 
-compose_file="${HERMES_COMPOSE_FILE:-$REPO_ROOT/docker/hermes-agent/compose.yml}"
+compose_file="${HERMES_COMPOSE_FILE:-$REPO_ROOT/docker/hermes-service/compose.yml}"
 command_name="${1:-}"
 
 dotfiles_hermes_sync_xapi_token_to_1password() {

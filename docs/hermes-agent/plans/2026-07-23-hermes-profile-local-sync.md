@@ -768,10 +768,10 @@ State that existing local named profiles are authoritative, profile homes remain
 Add:
 
 ```text
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T \
+docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T \
   hermes-bootstrap sync-profiles --dry-run
 
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T \
+docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T \
   hermes-bootstrap sync-profiles
 ```
 
@@ -1077,8 +1077,8 @@ Do not merge `hermes-home` until dotfiles main contains `sync-profiles`. Use the
 From a clean checkout of merged dotfiles main:
 
 ```bash
-docker compose -f docker/hermes-agent/compose.yml build hermes hermes-bootstrap
-docker compose -f docker/hermes-agent/compose.yml config --quiet
+docker compose -f docker/hermes-service/compose.yml build hermes hermes-bootstrap
+docker compose -f docker/hermes-service/compose.yml config --quiet
 ```
 
 Expected: build and Compose validation pass. Do not run `task hermes:bootstrap` yet because apply performs a real profile sync.
@@ -1101,7 +1101,7 @@ explicitly because unattended exact-mirror push cannot bypass it.
 - [ ] **Step 3: Run and inspect the production dry run**
 
 ```bash
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T \
+docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T \
   hermes-bootstrap sync-profiles --dry-run
 ```
 
@@ -1112,9 +1112,9 @@ Expected: one JSON report covering Rick, Hoffman, RisaRisa, and Nancy; snapshot 
 After reviewing every planned deletion:
 
 ```bash
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T \
+docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T \
   hermes-bootstrap sync-profiles
-docker compose -f docker/hermes-agent/compose.yml run --rm --no-deps -T \
+docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T \
   hermes-bootstrap sync-profiles --dry-run
 ```
 
@@ -1135,7 +1135,7 @@ Compare each path list to its dry-run allowlist. Confirm `.github`, validators, 
 
 ```bash
 task hermes:bootstrap
-docker compose -f docker/hermes-agent/compose.yml exec -T hermes hermes cron list
+docker compose -f docker/hermes-service/compose.yml exec -T hermes hermes cron list
 ```
 
 Expected: bootstrap reports profile sync `unchanged`, the stack restarts only after success, and `profile-local-sync` is active at `30 */2 * * *` with delivery `slack:C0BK3UYEP6V`.
@@ -1143,11 +1143,11 @@ Expected: bootstrap reports profile sync `unchanged`, the stack restarts only af
 - [ ] **Step 7: Trigger one manual cron execution**
 
 ```bash
-docker compose -f docker/hermes-agent/compose.yml exec -T hermes \
+docker compose -f docker/hermes-service/compose.yml exec -T hermes \
   hermes cron run --accept-hooks profile-local-sync
-docker compose -f docker/hermes-agent/compose.yml exec -T hermes \
+docker compose -f docker/hermes-service/compose.yml exec -T hermes \
   hermes cron tick --accept-hooks
-docker compose -f docker/hermes-agent/compose.yml exec -T hermes \
+docker compose -f docker/hermes-service/compose.yml exec -T hermes \
   hermes cron runs --limit 5 profile-local-sync
 ```
 

@@ -55,7 +55,7 @@ class HindsightHandler : SetupHandlerBase {
     }
 
     hidden [string] GetComposeFilePath([SetupContext]$ctx) {
-        return Join-Path $ctx.DotfilesPath 'docker\hindsight\compose.yml'
+        return Join-Path $ctx.DotfilesPath 'docker\local-ai-services\compose.yml'
     }
 
     hidden [bool] IsTruthy([object]$value) {

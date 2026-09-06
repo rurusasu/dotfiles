@@ -1,0 +1,131 @@
+name: Darwin package updates
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - "nix/packages/**"
+      - "scripts/python/update_darwin_packages.py"
+      - "tests/python/test_update_darwin_packages.py"
+      - ".github/workflows/update-darwin-packages.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "nix/packages/**"
+      - "scripts/python/update_darwin_packages.py"
+      - "tests/python/test_update_darwin_packages.py"
+      - ".github/workflows/update-darwin-packages.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Darwin updater
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+
+      - name: Install go-task
+        run: nix profile install nixpkgs#go-task
+
+      - name: Run updater contracts
+        run: python3 -m unittest tests.python.test_update_darwin_packages tests.python.test_ci_workflow_routing -v
+
+      - name: Check Darwin package updates
+        run: task darwin:update:check
+
+  promote:
+    name: Propose Darwin provider updates
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      packages: ${{ steps.matrix.outputs.packages }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+
+      - name: Install go-task
+        run: nix profile install nixpkgs#go-task
+
+      - name: Update flake inputs
+        run: nix flake update
+
+      - name: Update and verify Darwin providers
+        run: task darwin:update:promote
+
+      - name: Build changed Darwin packages
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages="$(jq -c '[.updates[] | select(.status == "update-available") | .package]' darwin-package-update.json)"
+          printf 'packages=%s\n' "$packages" >>"$GITHUB_OUTPUT"
+          if [[ "$packages" == "[]" ]]; then
+            exit 0
+          fi
+          while IFS= read -r package; do
+            nix build ".#darwin-$package" --no-link
+          done < <(jq -r '.[]' <<<"$packages")
+
+      - name: Create proposal branch and pull request
+        id: proposal
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No Darwin package or provider changes found.'
+            exit 0
+          fi
+          branch="automation/darwin-packages-${GITHUB_RUN_ID}"
+          git switch --create "$branch"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          task commit -- "chore(macos): update Darwin package providers"
+          auth_header="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          git -c "http.extraheader=Authorization: Basic ${auth_header}" \
+            push --set-upstream origin "$branch"
+          unset auth_header
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "chore(macos): update Darwin package providers" \
+            --body "Automated Darwin package update and provider promotion proposal."
+          echo 'created=true' >>"$GITHUB_OUTPUT"
+
+  complete:
+    name: Darwin updater complete
+    if: ${{ always() }}
+    needs: [validate, promote]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Report workflow result
+        run: |
+          echo "validate=${{ needs.validate.result }}"
+          echo "promote=${{ needs.promote.result }}"

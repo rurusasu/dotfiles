@@ -8,7 +8,7 @@
 
 #### Files changed
 
-- `docker/hermes-agent/compose.yml`
+- `docker/hermes-service/compose.yml`
   - Adds `chromium` and `browser-mcp` services.
   - Connects `hermes`, `chromium`, and `browser-mcp` to the named `hermes-browser` bridge network.
   - Keeps only the existing Hermes API/dashboard host port mappings.
@@ -46,7 +46,7 @@ Result:
 - Tests skipped: 0
 
 ```powershell
-docker compose -f docker/hermes-agent/compose.yml config
+docker compose -f docker/hermes-service/compose.yml config
 ```
 
 Result:

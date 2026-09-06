@@ -16,7 +16,7 @@ Describe 'HermesAgentHandler' {
         $script:handler = [HermesAgentHandler]::new()
         $script:ctx = [SetupContext]::new($TestDrive)
         $script:ctx.Options['WithHermes'] = $true
-        $script:composeDir = Join-Path $TestDrive 'docker/hermes-agent'
+        $script:composeDir = Join-Path $TestDrive 'docker/hermes-service'
         $script:composeFile = Join-Path $script:composeDir 'compose.yml'
         $script:userProfile = Join-Path $TestDrive 'user'
         $script:oldUserProfile = $env:USERPROFILE
@@ -57,7 +57,9 @@ Describe 'HermesAgentHandler' {
                 $global:LASTEXITCODE = 0
                 return
             }
-            $script:eventLog.Add([string]$Arguments[3])
+            if ($Arguments.Count -gt 3 -and $Arguments[0] -eq 'compose' -and $Arguments[1] -eq '-f') {
+                $script:eventLog.Add([string]$Arguments[3])
+            }
             $global:LASTEXITCODE = 0
         }
         Mock Invoke-HermesBootstrap {
@@ -100,6 +102,10 @@ Describe 'HermesAgentHandler' {
     }
 
     Context 'constructor and prerequisites' {
+        It 'resolves the current Hermes service Compose path' {
+            $handler.CanApply($ctx) | Should -BeTrue
+        }
+
         It 'is disabled by default without WithHermes' {
             $ctx.Options.Remove('WithHermes')
 
@@ -173,6 +179,7 @@ Describe 'HermesAgentHandler' {
                 "compose -f $script:composeFile build --pull hermes hermes-bootstrap chromium browser-mcp xapi-mcp",
                 "compose -f $script:composeFile ps --all --services hermes",
                 "compose -f $script:composeFile stop hermes",
+                "volume inspect --format {{ index .Labels `"com.rurusasu.dotfiles.hermes-storage.schema`" }} hermes-data",
                 "compose -f $script:composeFile up -d --force-recreate --remove-orphans hermes chromium browser-mcp xapi-mcp"
             )
             $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up', 'health')
@@ -469,8 +476,9 @@ Describe 'HermesAgentHandler' {
 
         It 'returns failure after a compose startup exception with no later phase' {
             Mock Invoke-Docker {
-                $phase = [string]$Arguments[3]
-                $script:eventLog.Add($phase)
+                if ($Arguments.Count -gt 3 -and $Arguments[0] -eq 'compose' -and $Arguments[1] -eq '-f') {
+                    $script:eventLog.Add([string]$Arguments[3])
+                }
                 if ($Arguments -contains '--force-recreate') { throw 'startup exception' }
                 $global:LASTEXITCODE = 0
             }

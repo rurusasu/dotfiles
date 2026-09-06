@@ -1,6 +1,34 @@
 version: "3"
 
 tasks:
+  darwin:verify:
+    cmds:
+      - "bash scripts/sh/verify-darwin-package.sh {{.CLI_ARGS}}"
+
+  darwin:migrate:
+    cmds:
+      - "bash scripts/sh/migrate-darwin-provider.sh {{.CLI_ARGS}}"
+
+  darwin:update:check:
+    desc: Check official feeds for Darwin package updates
+    cmds:
+      - "python3 scripts/python/update_darwin_packages.py --check --output darwin-package-update.json"
+
+  darwin:update:
+    desc: Apply safe Darwin package version, URL, and hash updates
+    cmds:
+      - "python3 scripts/python/update_darwin_packages.py --write --output darwin-package-update.json"
+
+  darwin:promote:
+    desc: Verify and promote explicit nixpkgs Darwin candidates
+    cmds:
+      - "python3 scripts/python/update_darwin_packages.py --write --promote --output darwin-package-update.json"
+
+  darwin:update:promote:
+    desc: Update custom Darwin packages and verify provider promotions in one report
+    cmds:
+      - "python3 scripts/python/update_darwin_packages.py --write --promote --output darwin-package-update.json"
+
   nrs:
     desc: Update inputs, activate NixOS, upgrade the profile, and bootstrap Hermes
     cmds:

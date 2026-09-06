@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-COMPOSE_FILE = REPOSITORY_ROOT / "docker/mlflow/compose.yml"
+COMPOSE_FILE = REPOSITORY_ROOT / "docker/local-ai-services/compose.yml"
 ENDPOINTS_FILE = REPOSITORY_ROOT / "docker/mlflow/endpoints.yml"
 ROOT_TASKFILE = REPOSITORY_ROOT / "Taskfile.yml"
 MLFLOW_TASKFILE = REPOSITORY_ROOT / "taskfiles/mlflow/taskfile.yml"
@@ -25,19 +25,19 @@ MLFLOW_BIND = {
 CONTROL_PLANE_BINDS = [
     {
         "type": "bind",
-        "source": "./configure.py",
+        "source": "../mlflow/configure.py",
         "target": "/opt/mlflow/configure.py",
         "read_only": True,
     },
     {
         "type": "bind",
-        "source": "./verify.py",
+        "source": "../mlflow/verify.py",
         "target": "/opt/mlflow/verify.py",
         "read_only": True,
     },
     {
         "type": "bind",
-        "source": "./endpoints.yml",
+        "source": "../mlflow/endpoints.yml",
         "target": "/opt/mlflow/endpoints.yml",
         "read_only": True,
     },
@@ -164,7 +164,7 @@ class MlflowContractTests(unittest.TestCase):
 
         self.assertEqual(
             root_taskfile["vars"]["MLFLOW_COMPOSE_FILE"],
-            "docker/mlflow/compose.yml",
+            "docker/local-ai-services/compose.yml",
         )
         self.assertEqual(
             root_taskfile["includes"]["mlflow"],
@@ -187,7 +187,7 @@ class MlflowContractTests(unittest.TestCase):
                 "mlflow:verify",
             },
         )
-        self.assertEqual(taskfile["vars"]["MLFLOW_COMPOSE_FILE"], "docker/mlflow/compose.yml")
+        self.assertEqual(taskfile["vars"]["MLFLOW_COMPOSE_FILE"], "docker/local-ai-services/compose.yml")
 
         up = tasks["mlflow:up"]
         self.assertTrue(

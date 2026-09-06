@@ -33,7 +33,7 @@ its build so gateway startup never depends on a runtime package download.
 
 ## Chosen architecture
 
-Hermes and Hindsight run in the existing `docker/hermes-agent/compose.yml`
+Hermes and Hindsight run in the existing `docker/hermes-service/compose.yml`
 stack. Hindsight uses the PostgreSQL runtime bundled in its official container
 instead of adding a separately managed PostgreSQL service. Its database and
 model cache are persisted below `${HERMES_DATA_DIR}`. The Hindsight image is

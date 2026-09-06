@@ -580,7 +580,7 @@ Add this variable below `HERMES_COMPOSE_FILE` in `Taskfile.yml`:
 vars:
   DISTRO: NixOS
   DOTFILES_PATH: ~/.dotfiles
-  HERMES_COMPOSE_FILE: docker/hermes-agent/compose.yml
+  HERMES_COMPOSE_FILE: docker/hermes-service/compose.yml
   COMFYUI_MCP_COMPOSE_FILE: docker/comfyui-mcp/compose.yml
 ```
 

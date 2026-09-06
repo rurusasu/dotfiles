@@ -4,7 +4,7 @@ tasks:
   commit:
     desc: Sync skills, format, lint, and commit
     vars:
-      MSG: '{{.CLI_ARGS | default "update"}}'
+      MSG: '{{.CLI_ARGS | trimAll "\u0027" | default "update"}}'
     env:
       GIT_COMMIT_MSG: "{{.MSG}}"
       WSLENV: "GIT_COMMIT_MSG"

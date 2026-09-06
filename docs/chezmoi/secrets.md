@@ -69,11 +69,11 @@ GitHub Actions では mock Pester で双方向同期、競合時の GitHub 優�
 
 ## Hermes Agent
 
-Hermes bootstrap requires nine declared 1Password items from account
+Hermes bootstrap requires ten declared 1Password items from account
 `my.1password.com`, vault `openclaw`: `Hermes Agent Dashboard`,
 `GitHubUsedOpenClawPAT`, `Master`, `Rick`,
-`Hoffman`, `RisaRisa`, `Nancy`, `Kuroda`, and `Shiraishi`, plus
-`Google Calendar MCP` from vault `Private`. It does not create dashboard,
+`Hoffman`, `RisaRisa`, `Nancy`, `Kuroda`, `Shiraishi`, and
+`Google Calendar MCP`. It does not create dashboard,
 Discord, or GitHub fallback credentials. See
 [Hermes Bootstrap Operations](../hermes-agent/bootstrap.md) for the item and
 field-label contract.

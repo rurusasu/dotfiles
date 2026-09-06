@@ -14,6 +14,50 @@ setup() {
 	[[ "$output" != *"Invoke-Tests.ps1"* ]]
 }
 
+@test "quality and commit tasks target the active root on Unix" {
+	command -v task >/dev/null 2>&1 || skip "task is not available"
+	run task --dir "$REPO_ROOT" --dry commit -- "test commit"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"cd $REPO_ROOT && nix fmt"* ]]
+	[[ "$output" == *"cd $REPO_ROOT && pre-commit run --all-files"* ]]
+	[[ "$output" == *"cd $REPO_ROOT && git add -A"* ]]
+	[[ "$output" != *'cd ~/.dotfiles'* ]]
+}
+
+@test "commit task removes shell quoting from the commit subject" {
+	command -v task >/dev/null 2>&1 || skip "task is not available"
+
+	fixture="$(mktemp -d)"
+	cat > "$fixture/Taskfile.yml" <<EOF
+version: "3"
+vars:
+  DOTFILES_PATH: "$fixture"
+  WSL: ""
+includes:
+  git:
+    taskfile: "$REPO_ROOT/taskfiles/git/taskfile.yml"
+    flatten: true
+tasks:
+  skills:sync:
+    cmds: ["true"]
+  fmt:
+    cmds: ["true"]
+  lint:
+    cmds: ["true"]
+EOF
+	git -C "$fixture" init -q
+	git -C "$fixture" config user.name "Bats Test"
+	git -C "$fixture" config user.email "bats@example.invalid"
+	touch "$fixture/fixture"
+	git -C "$fixture" add fixture
+	git -C "$fixture" commit -qm "initial"
+
+	run task --dir "$fixture" --taskfile "$fixture/Taskfile.yml" commit -- "chore(nix): update flake inputs for Darwin packages"
+	[ "$status" -eq 0 ]
+	run git -C "$fixture" log -1 --format=%s
+	[ "$output" = "chore(nix): update flake inputs for Darwin packages" ]
+}
+
 @test "root Taskfile composes feature taskfiles without renaming public tasks" {
 	command -v task >/dev/null 2>&1 || skip "task is not available in this test environment"
 
@@ -58,6 +102,16 @@ setup() {
 	[ "$sync_line" -lt "$restart_line" ]
 }
 
+@test "Hermes up applies the transactional bootstrap before starting the gateway" {
+	command -v task >/dev/null || skip "go-task is unavailable"
+
+	run task --dir "$REPO_ROOT" --dry --force hermes:up
+
+	[ "$status" -eq 0 ]
+	bootstrap_line="$(grep -n 'task: \[hermes:bootstrap\]' <<<"$output" | cut -d: -f1)"
+	[ -n "$bootstrap_line" ]
+}
+
 @test "nrs orders rebuild, profile activation, and Hermes bootstrap" {
 	command -v task >/dev/null || skip "go-task is unavailable"
 
@@ -80,12 +134,12 @@ setup() {
 	grep -Fq 'nrb = "~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh boot' "$REPO_ROOT/nix/home/wsl.nix"
 }
 
-@test "Hermes restart reuses the xapi-aware up task" {
+@test "Hermes restart reuses the transactional bootstrap up task" {
 	command -v task >/dev/null || skip "go-task is unavailable"
 
 	run task --dir "$REPO_ROOT" --dry --force hermes:restart
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"task: [hermes:up]"* ]]
-	[[ "$output" == *"scripts/sh/hermes-xapi.sh up"* ]]
+	[[ "$output" == *"task: [hermes:bootstrap]"* ]]
+	[[ "$output" != *"scripts/sh/hermes-xapi.sh up"* ]]
 }

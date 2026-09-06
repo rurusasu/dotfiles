@@ -7,7 +7,7 @@ export DOTFILES_LOG_PREFIX="nixos-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
 
-COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-agent/compose.yml"
+COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
 NIXOS_MARKER="${DOTFILES_NIXOS_MARKER:-/etc/NIXOS}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 NIXOS_HARDWARE_CONFIG="${DOTFILES_NIXOS_HARDWARE_CONFIG:-/etc/nixos/hardware-configuration.nix}"

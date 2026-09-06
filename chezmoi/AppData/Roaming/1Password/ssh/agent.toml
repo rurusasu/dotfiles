@@ -16,9 +16,3 @@
 item = "xnoq6xbcdktkph76e2bg37ou6y"
 vault = "Private"
 account = "my.1password.com"
-
-# Work GitHub SSH key (account: kohei-miki-im8 / aimatecoltd.1password.com)
-[[ssh-keys]]
-item = "jj25m5a2xkp4ckswmyvp2dwlxe"
-vault = "Employee"
-account = "aimatecoltd.1password.com"

@@ -10,7 +10,7 @@ BeforeAll {
 Describe 'HindsightHandler' {
     BeforeEach {
         $root = Join-Path $TestDrive 'dotfiles'
-        $composeDir = Join-Path $root 'docker/hindsight'
+        $composeDir = Join-Path $root 'docker/local-ai-services'
         $scriptDir = Join-Path $root 'scripts/powershell'
         New-Item -ItemType Directory -Path $composeDir, $scriptDir -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $composeDir 'compose.yml') -Value 'services: {}'
@@ -23,6 +23,11 @@ Describe 'HindsightHandler' {
 
     It 'is disabled by default' {
         $script:handler.CanApply($script:ctx) | Should -BeFalse
+    }
+
+    It 'resolves the current local-ai-services Compose path' {
+        $script:ctx.Options['WithHindsight'] = $true
+        $script:handler.CanApply($script:ctx) | Should -BeTrue
     }
 
     It 'is enabled only by the resolved Hindsight option' {

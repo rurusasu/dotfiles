@@ -517,6 +517,7 @@ def _initialize_checkout(repo: SharedRepository, checkout: Path, environment: di
     _require_git_success(("remote", "add", "origin", "--", repo.source), checkout, environment)
     _verify_checkout_identity(repo, checkout, environment)
     remote_commit = _fetch_declared_commit(repo, checkout, environment)
+    _validate_pinned_commit(repo, remote_commit)
     _validate_commit_tree(checkout, _local_git_environment(environment), remote_commit)
     _require_safe_checkout_location(repo, checkout)
     _require_git_success(("checkout", "--detach", remote_commit), checkout, environment)
@@ -557,6 +558,7 @@ def _synchronize_checkout(repo: SharedRepository, checkout: Path, environment: d
         ) != b"":
             raise ValueError("read-only checkout is dirty")
         remote_commit = _fetch_declared_commit(repo, checkout, environment)
+        _validate_pinned_commit(repo, remote_commit)
         _validate_commit_tree(checkout, local_environment, remote_commit)
         head = _head_commit(checkout, local_environment)
         if not _is_ancestor(head, remote_commit, checkout, local_environment):
@@ -688,6 +690,11 @@ def _fetch_head_commit(checkout: Path, environment: dict[str, str]) -> str:
     if commit is None or _OBJECT_ID.fullmatch(commit.lower()) is None:
         raise ValueError("declared ref is not a commit")
     return commit.lower()
+
+
+def _validate_pinned_commit(repo: SharedRepository, commit: str) -> None:
+    if repo.source_commit is not None and commit != repo.source_commit:
+        raise ValueError("declared repository commit does not match its pinned commit")
 
 
 def _head_commit(checkout: Path, environment: dict[str, str]) -> str:

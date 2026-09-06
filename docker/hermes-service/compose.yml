@@ -1,4 +1,4 @@
-name: hermes-agent
+name: hermes-service
 
 services:
   hermes:
@@ -23,14 +23,15 @@ services:
       - "127.0.0.1:${HERMES_DASHBOARD_PORT:-9119}:9119"
       - "127.0.0.1:3500-3505:3500-3505"
     volumes:
-      - type: bind
-        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}
+      - type: volume
+        source: hermes-data
         target: /opt/data
       - type: bind
         source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl
         target: /root/.xurl
     environment:
       API_SERVER_HOST: "0.0.0.0"
+      HERMES_HOME: /opt/data
       HERMES_DASHBOARD: "1"
       HERMES_DASHBOARD_HOST: "0.0.0.0"
       # Rebuild a Discord Gateway on the first failed WebSocket liveness
@@ -42,7 +43,7 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - hermes-browser
-      - hermes-memory
+      - local-ai-services
 
   hermes-bootstrap:
     build:
@@ -57,8 +58,8 @@ services:
       - path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.op.env
         required: false
     volumes:
-      - type: bind
-        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}
+      - type: volume
+        source: hermes-data
         target: /opt/data
     environment:
       HERMES_HOME: /opt/data
@@ -165,6 +166,10 @@ networks:
   hermes-browser:
     name: hermes-browser
     driver: bridge
-  hermes-memory:
-    name: dotfiles-memory
+  local-ai-services:
+    name: local-ai-services
     external: true
+
+volumes:
+  hermes-data:
+    name: ${HERMES_DATA_VOLUME:-hermes-data}

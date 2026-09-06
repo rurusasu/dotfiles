@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "does not expose a separate Google Calendar MCP HTTP service" {
-	compose_file="$REPO_ROOT/docker/hermes-agent/compose.yml"
+	compose_file="$REPO_ROOT/docker/hermes-service/compose.yml"
 
 	run grep -F "calendar-mcp:" "$compose_file"
 	[ "$status" -eq 1 ]

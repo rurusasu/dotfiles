@@ -106,7 +106,7 @@ The `chrome` server is a handler-managed entry, alongside the existing X API ent
 
 With Docker available:
 
-1. `docker compose -f docker/hermes-agent/compose.yml config` succeeds.
+1. `docker compose -f docker/hermes-service/compose.yml config` succeeds.
 2. The Chromium healthcheck becomes healthy.
 3. Browser MCP can reach `http://chromium:9222/json/version` through the internal CDP forwarder.
 4. Hermes can complete an MCP initialize/list-tools exchange against `http://browser-mcp:8080/mcp`.

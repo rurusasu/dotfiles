@@ -22,6 +22,14 @@ timeout を付ける。
 macOS の標準環境に GNU `timeout` が無い場合は、`gtimeout` など環境に合わせた
 timeout 実装を使う。
 
+## Desktop app integration
+
+この環境では Home Manager と macOS installer が
+`OP_BIOMETRIC_UNLOCK_ENABLED=true` を設定し、native `op` が1Password desktop app
+の既存アカウントを利用できるようにする。初回だけ、1Passwordを開いてロック解除し、
+Settings > Developer > Integrate with 1Password CLI を有効にする。複数accountを使う場合は、
+引き続き各コマンドで `--account` を明示する。
+
 ## Chezmoi
 
 `onepasswordRead` は使えるが、secret manager の応答に `chezmoi apply` 全体を

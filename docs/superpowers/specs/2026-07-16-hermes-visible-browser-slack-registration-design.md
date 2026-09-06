@@ -63,7 +63,7 @@ The entrypoint must treat Chromium as the primary process. If Chromium exits, th
 
 ### Compose Wiring
 
-`docker/hermes-agent/compose.yml` keeps the existing three-service shape:
+`docker/hermes-service/compose.yml` keeps the existing three-service shape:
 
 - `hermes`
 - `chromium`
@@ -166,7 +166,7 @@ Update:
 
 With Docker available:
 
-1. `docker compose -f docker/hermes-agent/compose.yml config` succeeds.
+1. `docker compose -f docker/hermes-service/compose.yml config` succeeds.
 2. `task hermes:browser:pull` succeeds.
 3. `task hermes:browser:restart` starts healthy `chromium` and `browser-mcp`.
 4. `http://127.0.0.1:${HERMES_BROWSER_VIEW_PORT:-6080}` loads noVNC from the host.

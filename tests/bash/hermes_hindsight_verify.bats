@@ -5,8 +5,8 @@ setup() {
   export TEST_ROOT="$BATS_TEST_TMPDIR/runtime"
   export TEST_LOG="$TEST_ROOT/calls.log"
   export HERMES_DATA_DIR="$TEST_ROOT/hermes-data"
-  export HERMES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-agent/compose.yml"
-  export HINDSIGHT_COMPOSE_FILE="$REPO_ROOT/docker/hindsight/compose.yml"
+  export HERMES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-service/compose.yml"
+  export HINDSIGHT_COMPOSE_FILE="$REPO_ROOT/docker/local-ai-services/compose.yml"
   export HINDSIGHT_OLLAMA_READY_ATTEMPTS=1
   export HINDSIGHT_OLLAMA_READY_DELAY_SECONDS=0
   export HINDSIGHT_OLLAMA_PROBE_TIMEOUT_SECONDS=2

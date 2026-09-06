@@ -2,7 +2,7 @@
   lib,
   pkgs,
   config,
-  inputs ? null,
+  inputs,
   ...
 }:
 let
@@ -14,8 +14,10 @@ let
     ;
   configuredUser = builtins.getEnv "DOTFILES_USER";
   user = if configuredUser == "" then "nixos" else configuredUser;
+  codexPackage = inputs."llm-agents".packages.${pkgs.stdenv.hostPlatform.system}.codex;
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
+    inherit codexPackage;
   };
 in
 {
@@ -32,6 +34,10 @@ in
           experimental-features = [
             "nix-command"
             "flakes"
+          ];
+          extra-substituters = [ "https://cache.numtide.com" ];
+          extra-trusted-public-keys = [
+            "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
           ];
           auto-optimise-store = true;
         };
@@ -62,9 +68,10 @@ in
       # CLI tools are managed by Home Manager (nix/home/packages.nix).
       # Only system-level packages that require root or NixOS module
       # integration belong here.
-      environment.systemPackages = with pkgs; [
-        git # needed by system-level operations (nix flake, etc.)
-      ];
+      environment.systemPackages = [
+        pkgs.git # needed by system-level operations (nix flake, etc.)
+      ]
+      ++ sets.hostPackages;
     }
 
     # Docker Desktop WSL integration: /mnt/wsl は noexec でマウントされるため

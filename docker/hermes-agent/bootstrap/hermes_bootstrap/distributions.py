@@ -836,6 +836,32 @@ def without_bootstrap_managed_config(
     """Compare distribution content without bootstrap-owned config additions."""
 
     result = _without_bootstrap_onepassword(config)
+    context = result.get("context")
+    if isinstance(context, dict):
+        retained_context = dict(context)
+        retained_context.pop("engine", None)
+        if retained_context:
+            result["context"] = retained_context
+        else:
+            result.pop("context", None)
+
+    plugins = result.get("plugins")
+    if isinstance(plugins, dict):
+        retained_plugins = dict(plugins)
+        for key in ("enabled", "disabled"):
+            values = retained_plugins.get(key)
+            if not isinstance(values, list):
+                continue
+            retained_values = [item for item in values if item != "hermes-lcm"]
+            if retained_values:
+                retained_plugins[key] = retained_values
+            else:
+                retained_plugins.pop(key, None)
+        if retained_plugins:
+            result["plugins"] = retained_plugins
+        else:
+            result.pop("plugins", None)
+
     mcp_servers = result.get("mcp_servers")
     if isinstance(mcp_servers, dict):
         gmail = mcp_servers.get("gmail")
