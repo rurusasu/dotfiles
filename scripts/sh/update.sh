@@ -32,7 +32,7 @@ if [ ! -f /etc/NIXOS ]; then
   echo ""
   if grep -qi microsoft /proc/version 2>/dev/null; then
     echo "WSL で NixOS をセットアップするには、Windows PowerShell (管理者) から:"
-    echo '  .\scripts\powershell\install-nixos-wsl.ps1'
+    echo '  dotfiles リポジトリのルートで: .\install.cmd'
   fi
   exit 1
 fi
