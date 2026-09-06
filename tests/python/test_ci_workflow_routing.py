@@ -16,7 +16,7 @@ DEVCONTAINER_BATS_PATH = REPOSITORY_ROOT / ".devcontainer" / "ci" / "bats.sh"
 HERMES_TASKFILE_PATH = REPOSITORY_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
 CHEZMOI_WORKFLOW = "ci-chezmoi.yml"
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
-SETUP_PYTHON_ACTION = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
+SETUP_PYTHON_ACTION = "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
 INSTALL_NIX_ACTION = "cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24"
 
 
