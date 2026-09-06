@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import stat
 from collections.abc import Sequence
 from pathlib import Path
@@ -13,7 +14,7 @@ from .distributions import _atomic_write
 from .envfiles import LEGACY_SLACK_KEYS
 from .errors import ApplyError
 from .models import BootstrapManifest
-from .onepassword import build_onepassword_config
+from .onepassword import build_onepassword_config, managed_environment_bindings
 from .transaction import Transaction
 
 
@@ -21,6 +22,19 @@ _XAPI_MCP = {
     "url": "http://xapi-mcp:8080/mcp",
     "connect_timeout": 300,
 }
+_MANAGED_ENVIRONMENT_STATE = Path(".bootstrap/onepassword-managed-environment-state.json")
+_LEGACY_MANAGED_ENVIRONMENT_NAMES = frozenset(
+    {
+        "HERMES_DASHBOARD_BASIC_AUTH_USERNAME",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "DISCORD_BOT_TOKEN",
+        "DISCORD_ALLOWED_USERS",
+        "DISCORD_ALLOW_BOTS",
+        "XAI_API_KEY",
+    }
+)
 
 
 def reconcile_xapi_configurations(
@@ -149,58 +163,76 @@ def reconcile_onepassword_configurations(
     if not manifest.onepassword_items:
         return
 
+    data_root = targets[0][1] if targets else None
     try:
+        if data_root is None:
+            raise ApplyError("managed Hermes configuration targets are empty")
+        previous_managed_names = _read_managed_environment_state(data_root)
+        current_managed_names = {
+            environment_name
+            for profile, _target in targets
+            for environment_name, _item, _field in managed_environment_bindings(
+                manifest, profile
+            )
+        }
+        managed_names = (
+            previous_managed_names
+            | _LEGACY_MANAGED_ENVIRONMENT_NAMES
+            | current_managed_names
+        )
         for profile, target in targets:
             path = target / "config.yaml"
             try:
                 metadata = path.lstat()
             except OSError:
-                continue
+                raise ApplyError("managed Hermes configuration is unavailable") from None
             if (
                 stat.S_ISLNK(metadata.st_mode)
                 or not stat.S_ISREG(metadata.st_mode)
                 or metadata.st_nlink != 1
             ):
-                continue
+                raise ApplyError("managed Hermes configuration is unsafe")
             try:
                 original_content = path.read_text(encoding="utf-8")
             except (OSError, UnicodeError):
-                continue
+                raise ApplyError("managed Hermes configuration is unreadable") from None
             try:
                 config = yaml.safe_load(original_content)
             except (OSError, UnicodeError, yaml.YAMLError):
-                continue
+                raise ApplyError("managed Hermes configuration is invalid") from None
             if not isinstance(config, dict):
-                continue
+                raise ApplyError("managed Hermes configuration is invalid")
 
             secrets = config.get("secrets")
             if secrets is None:
                 secrets = {}
             if not isinstance(secrets, dict):
-                continue
+                raise ApplyError("managed Hermes secrets configuration is invalid")
             onepassword = secrets.get("onepassword")
             if onepassword is None:
                 onepassword = {}
             if not isinstance(onepassword, dict):
-                continue
+                raise ApplyError("managed Hermes 1Password configuration is invalid")
             existing_env = onepassword.get("env")
             if existing_env is None:
                 existing_env = {}
             if not isinstance(existing_env, dict):
-                continue
+                raise ApplyError("managed Hermes 1Password environment is invalid")
             retained_env = {
                 key: value
                 for key, value in existing_env.items()
-                if key not in LEGACY_SLACK_KEYS
+                if key not in LEGACY_SLACK_KEYS and key not in managed_names
             }
 
             managed = build_onepassword_config(manifest, profile)
+            managed_config = dict(managed)
+            managed_config["env"] = {}
             if "secrets" not in config:
                 content = (
                     original_content.rstrip("\n")
                     + "\n"
                     + yaml.safe_dump(
-                        {"secrets": {"onepassword": managed}},
+                        {"secrets": {"onepassword": managed_config}},
                         sort_keys=False,
                     )
                 ).encode("utf-8")
@@ -209,13 +241,12 @@ def reconcile_onepassword_configurations(
                 transaction.snapshot(path)
                 _atomic_write(path, content, stat.S_IMODE(metadata.st_mode))
                 continue
-            if onepassword == managed and existing_env == managed["env"]:
+            if onepassword == managed_config and not existing_env:
                 continue
             merged_onepassword = dict(onepassword)
-            merged_onepassword.update(managed)
+            merged_onepassword.update(managed_config)
             merged_onepassword["env"] = {
                 **retained_env,
-                **managed["env"],
             }
             merged_secrets = dict(secrets)
             merged_secrets["onepassword"] = merged_onepassword
@@ -226,5 +257,105 @@ def reconcile_onepassword_configurations(
                 continue
             transaction.snapshot(path)
             _atomic_write(path, content, stat.S_IMODE(metadata.st_mode))
+        state_path = data_root / _MANAGED_ENVIRONMENT_STATE
+        state_content = (
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "environment_names": sorted(current_managed_names),
+                },
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode("utf-8")
+        if not state_path.exists() or state_path.read_bytes() != state_content:
+            transaction.snapshot(state_path)
+            state_path.parent.mkdir(mode=0o700, exist_ok=True)
+            _atomic_write(state_path, state_content, 0o600)
     except (OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
         raise ApplyError("could not reconcile Hermes 1Password configuration") from None
+
+
+def validate_onepassword_configurations(
+    manifest: BootstrapManifest,
+    targets: Sequence[tuple[str, Path]],
+) -> None:
+    """Verify every managed 1Password reference was installed as declared."""
+
+    if not manifest.onepassword_items:
+        return
+    data_root = targets[0][1] if targets else None
+    try:
+        if data_root is None:
+            raise ValueError
+        state_names = _read_managed_environment_state(data_root)
+        expected_state_names = {
+            environment_name
+            for profile, _target in targets
+            for environment_name, _item, _field in managed_environment_bindings(
+                manifest, profile
+            )
+        }
+        if state_names != expected_state_names:
+            raise ValueError
+        for profile, target in targets:
+            path = target / "config.yaml"
+            metadata = path.lstat()
+            if (
+                stat.S_ISLNK(metadata.st_mode)
+                or not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_nlink != 1
+            ):
+                raise ValueError
+            config = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if not isinstance(config, dict):
+                raise ValueError
+            secrets = config.get("secrets")
+            onepassword = secrets.get("onepassword") if isinstance(secrets, dict) else None
+            if not isinstance(onepassword, dict):
+                raise ValueError
+            expected = build_onepassword_config(manifest, profile)
+            for key in ("enabled", "account", "service_account_token_env", "binary_path"):
+                if onepassword.get(key) != expected[key]:
+                    raise ValueError
+            installed_env = onepassword.get("env")
+            expected_env = expected["env"]
+            if not isinstance(installed_env, dict) or not isinstance(expected_env, dict):
+                raise ValueError
+            if any(key in installed_env for key in expected_env):
+                raise ValueError
+    except (OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
+        raise ApplyError("installed Hermes 1Password configuration is invalid") from None
+
+
+def _read_managed_environment_state(data_root: Path) -> set[str]:
+    """Read the previous manifest-owned environment names, failing closed."""
+
+    path = data_root / _MANAGED_ENVIRONMENT_STATE
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return set()
+    except OSError:
+        raise ApplyError("managed Hermes environment state is unavailable") from None
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISREG(metadata.st_mode)
+        or stat.S_IMODE(metadata.st_mode) != 0o600
+    ):
+        raise ApplyError("managed Hermes environment state is unsafe")
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        raise ApplyError("managed Hermes environment state is invalid") from None
+    if not isinstance(state, dict) or set(state) != {"schema_version", "environment_names"}:
+        raise ApplyError("managed Hermes environment state is invalid")
+    names = state["environment_names"]
+    if (
+        state["schema_version"] != 1
+        or not isinstance(names, list)
+        or any(not isinstance(name, str) or not name for name in names)
+        or len(set(names)) != len(names)
+    ):
+        raise ApplyError("managed Hermes environment state is invalid")
+    return set(names)

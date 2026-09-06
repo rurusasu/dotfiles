@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,7 +31,7 @@ class OnePasswordConfigFileTests(unittest.TestCase):
         self.root.mkdir(mode=0o700)
         self.manifest = load_manifest(MANIFEST)
 
-    def test_reconciler_preserves_unmanaged_config_and_adds_managed_refs(self) -> None:
+    def test_reconciler_preserves_unmanaged_config_and_removes_managed_refs(self) -> None:
         path = self.root / "config.yaml"
         path.write_text(
             "model:\n  name: test\n"
@@ -59,13 +60,50 @@ class OnePasswordConfigFileTests(unittest.TestCase):
             onepassword["env"]["OPENAI_API_KEY"],
             "op://Private/OpenAI/credential",
         )
-        self.assertEqual(
-            onepassword["env"]["DISCORD_BOT_TOKEN"],
-            "op://openclaw/Master/Discord/bot_token",
-        )
+        self.assertNotIn("DISCORD_BOT_TOKEN", onepassword["env"])
         self.assertNotIn("SLACK_BOT_TOKEN", onepassword["env"])
         self.assertNotIn("SLACK_APP_TOKEN", onepassword["env"])
         self.assertNotIn("SLACK_ALLOWED_USERS", onepassword["env"])
+        state = json.loads(
+            (self.root / ".bootstrap/onepassword-managed-environment-state.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertIn("XAI_API_KEY", state["environment_names"])
+
+    def test_reconciler_removes_managed_names_from_the_previous_manifest(self) -> None:
+        path = self.root / "config.yaml"
+        path.write_text(
+            "secrets:\n"
+            "  onepassword:\n"
+            "    env:\n"
+            "      OLD_MANAGED_TOKEN: op://openclaw/old/credential\n"
+            "      OPENAI_API_KEY: op://Private/OpenAI/credential\n",
+            encoding="utf-8",
+        )
+        state_path = self.root / ".bootstrap/onepassword-managed-environment-state.json"
+        state_path.parent.mkdir(mode=0o700)
+        state_path.write_text(
+            json.dumps(
+                {"schema_version": 1, "environment_names": ["OLD_MANAGED_TOKEN"]}
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        state_path.chmod(0o600)
+
+        transaction = Transaction.begin(self.root)
+        reconcile_onepassword_configurations(
+            self.manifest, (("default", self.root),), transaction
+        )
+        transaction.commit()
+
+        installed = yaml.safe_load(path.read_text(encoding="utf-8"))
+        self.assertNotIn("OLD_MANAGED_TOKEN", installed["secrets"]["onepassword"]["env"])
+        self.assertEqual(
+            installed["secrets"]["onepassword"]["env"]["OPENAI_API_KEY"],
+            "op://Private/OpenAI/credential",
+        )
 
     def test_reconciler_is_idempotent(self) -> None:
         path = self.root / "config.yaml"
@@ -85,6 +123,14 @@ class OnePasswordConfigFileTests(unittest.TestCase):
         second.commit()
 
         self.assertEqual(path.read_bytes(), expected)
+
+    def test_reconciler_rejects_a_missing_managed_config(self) -> None:
+        transaction = Transaction.begin(self.root)
+        with self.assertRaisesRegex(ApplyError, "managed Hermes configuration"):
+            reconcile_onepassword_configurations(
+                self.manifest, (("default", self.root),), transaction
+            )
+        transaction.rollback()
 
     def test_xapi_reconciler_repairs_an_existing_preserved_profile(self) -> None:
         profile = self.root / "profiles" / "personal-ops"

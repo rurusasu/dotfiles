@@ -149,6 +149,7 @@ def managed_source_config(
     config["context"] = {"engine": "lcm"}
     config["plugins"] = {"enabled": ["hermes-lcm"]}
     managed = build_onepassword_config(manifest, profile)
+    managed["env"] = {}
     return (
         yaml.safe_dump(config, sort_keys=False)
         + yaml.safe_dump({"secrets": {"onepassword": managed}}, sort_keys=False)
@@ -568,6 +569,7 @@ class BootstrapFlowTests(unittest.TestCase):
         values = {
             "dashboard": {"username": "fixture-user", "password": "fixture-password"},
             "github": {"credential": token},
+            "xai_grok": {"api_key": "fixture-xai-api-key"},
             "google_calendar": {
                 "oauth_credentials_json": json.dumps(
                     {
