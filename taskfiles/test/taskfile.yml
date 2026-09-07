@@ -23,6 +23,6 @@ tasks:
       - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -IncludeIntegration -ShowCoverage"
 
   test:bash:
-    desc: Run retained Bats contracts for shell and runtime behavior
+    desc: Run classified Bats contracts (runtime/artifact plus documented package-catalog exception)
     cmds:
       - '{{if eq OS "darwin"}}sh -c ''export PATH=/opt/homebrew/bin:/opt/homebrew/sbin:$PATH; cd "$(cd {{.DOTFILES_PATH}} && pwd -P)" && bats tests/bash''{{else}}{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bats tests/bash"{{end}}'

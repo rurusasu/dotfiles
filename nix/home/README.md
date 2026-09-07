@@ -35,7 +35,10 @@ flake 評価へ渡す。
 - Nix option、package、session variable のテストは `nix/tests/` に追加し、
   `nix flake check --all-systems --no-write-lock-file` と focused `nix-unit` build を実行する。
 - Bats は Home Manager option の値を検査する用途には使わず、installer、shell、外部プロセス、
-  runtime 契約に限る。
+  runtime 契約に限る。ただし既存の `tests/bash/package_catalog.bats` は、
+  `nix/tests/home/README.md` に完全分類した一時的な catalog/Nix/source-shape 例外であり、
+  `nixos_wsl_postinstall.bats` の `nix eval` は、stubbed `nixos-rebuild` 境界内で選択 user と
+  `--impure` 伝播を実 Nix eval で確認する runtime/integration assertion に限る。新しい例外は追加しない。
 
 ホストの system 設定は `nix/hosts/<host>/configuration.nix`、import の入口は同じディレクトリの
 `default.nix` が所有します。Home Manager の OS 差分は `nix/home/<os>.nix` に置き、host

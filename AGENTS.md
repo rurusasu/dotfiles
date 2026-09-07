@@ -19,7 +19,7 @@
 ## テスト責務
 
 - Nix expression、Home Manager option、flake output、Nix package 選択のテストは `nix/tests/` に Nix 式で記載し、`nix-unit` / `nix flake check` を authoritative check とする。
-- Bats は shell、installer、外部コマンド、runtime/integration 契約に限定する。Nix option を `nix eval` するだけの Bats テストは追加しない。
+- Bats は shell、installer、外部コマンド、runtime/integration 契約に限定する。Nix option を `nix eval` するだけの Bats テストは追加しない。ただし既存の `tests/bash/package_catalog.bats` は、`nix/tests/home/README.md` に完全分類した一時的な catalog/Nix/source-shape 例外であり、`tests/bash/nixos_wsl_postinstall.bats` の `nix eval` は、stubbed `nixos-rebuild` 境界内で選択 user と `--impure` 伝播を実 Nix eval で確認する runtime/integration assertion に限る。新しい例外は追加しない。
 
 ## 実行コマンド
 
