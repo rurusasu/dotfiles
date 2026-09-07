@@ -92,9 +92,9 @@ onepassword_items:
     profiles: [shiraishi]
 root_distribution:
   name: default
-  source: https://github.com/rurusasu/hermes-home.git
+  source: https://github.com/rurusasu/hermes-profile-alfred.git
   ref: main
-  commit: 6821e5dfa23a098ef4a5332780ca8c5cb832e2d4
+  commit: 69e82efb506b36c2d9a811c935b62de8250a37b2
   target: /opt/data
   manifest: root-distribution.yaml
 profiles:

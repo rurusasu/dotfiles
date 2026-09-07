@@ -21,8 +21,8 @@ FIXTURE_PATH = Path(
     "docker/hermes-agent/bootstrap/tests/fixtures/hermes-home/profile_sync.sh"
 )
 PROVENANCE_PATH = FIXTURE_PATH.with_name("profile_sync.provenance.json")
-SOURCE_REPOSITORY = "rurusasu/hermes-home"
-SOURCE_URL = "https://github.com/rurusasu/hermes-home.git"
+SOURCE_REPOSITORY = "rurusasu/hermes-profile-alfred"
+SOURCE_URL = "https://github.com/rurusasu/hermes-profile-alfred.git"
 PROVENANCE_KEYS = frozenset(
     {
         "source_repository",

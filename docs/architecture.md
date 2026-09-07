@@ -89,7 +89,7 @@ sessions, logs, and browser state remain local runtime data.
 | Owner                  | Source                                                                                    | Responsibility                                                                              |
 | ---------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Dotfiles               | [rurusasu/dotfiles](https://github.com/rurusasu/dotfiles)                                 | Compose wiring, manifest, host adapters, operator Taskfile and documentation                |
-| Root distribution      | [rurusasu/hermes-home](https://github.com/rurusasu/hermes-home)                           | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks |
+| Root distribution      | [rurusasu/hermes-profile-alfred](https://github.com/rurusasu/hermes-profile-alfred)       | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks |
 | Rick distribution      | [rurusasu/hermes-profile-rick](https://github.com/rurusasu/hermes-profile-rick)           | Official `distribution.yaml` and Rick declarative content                                   |
 | Hoffman distribution   | [rurusasu/hermes-profile-hoffman](https://github.com/rurusasu/hermes-profile-hoffman)     | Official `distribution.yaml` and Hoffman declarative content                                |
 | Risarisa distribution  | [rurusasu/hermes-profile-risarisa](https://github.com/rurusasu/hermes-profile-risarisa)   | Official `distribution.yaml` and Risarisa declarative content                               |

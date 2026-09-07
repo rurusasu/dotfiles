@@ -65,7 +65,7 @@ class HermesHomeWrapperContractTests(unittest.TestCase):
         self.assertEqual(
             provenance,
             {
-                "source_repository": "rurusasu/hermes-home",
+                "source_repository": "rurusasu/hermes-profile-alfred",
                 "source_commit": (
                     "a2b82933e415444e04f845f3afb5a0369d52ed4f"
                 ),

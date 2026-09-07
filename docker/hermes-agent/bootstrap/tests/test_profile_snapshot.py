@@ -48,7 +48,7 @@ class ProfileSnapshotTests(unittest.TestCase):
 
     def manifest(self, *profiles: DistributionSource) -> BootstrapManifest:
         root = DistributionSource(
-            "default", "https://github.com/rurusasu/hermes-home.git", "main", self.data_root, "root-distribution.yaml"
+            "default", "https://github.com/rurusasu/hermes-profile-alfred.git", "main", self.data_root, "root-distribution.yaml"
         )
         return BootstrapManifest(1, self.data_root, (), root, profiles, ())
 

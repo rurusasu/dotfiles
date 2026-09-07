@@ -606,7 +606,7 @@ Changes under `docker/hermes-agent/`, or to `Taskfile.yml`,
 pre-commit hook. Pull requests run the same pinned Docker stage and the `gh`
 wrapper security suite in the `Hermes Bootstrap Tests` workflow. Both paths
 also run the same host-side profile-sync provenance verifier. The verifier
-fetches the validated `rurusasu/hermes-home` commit into a temporary bare Git
+fetches the validated `rurusasu/hermes-profile-alfred` commit into a temporary bare Git
 repository with blob filtering, then reads only the recorded source blob. It
 does not create a source worktree. GitHub Actions supplies the private
 repository's `HERMES_HOME_READ_TOKEN` secret with read-only Contents access;

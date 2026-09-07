@@ -102,6 +102,11 @@ EOF
 	grep -Fq 'chmod 0755 usr/local/bin/hermes-storage-ownership' "$nixos_test"
 }
 
+@test "acceptance secret plan matches the current bootstrap manifest digest" {
+	run bash -c 'set -o pipefail; . "$1/scripts/sh/hermes-agent.sh"; digest="$(dotfiles_hermes_bootstrap_manifest_sha256 "$1/docker/hermes-agent/bootstrap-manifest.yaml")" || exit 1; "$1/.github/e2e/hermes-bootstrap-fixture.sh" secret-plan | dotfiles_hermes_validate_secret_plan my.1password.com "$digest" >/dev/null' _ "$REPO_ROOT"
+	[ "$status" -eq 0 ]
+}
+
 @test "acceptance secret fixtures are deterministic and reject unapproved lookups" {
 	bootstrap="$FIXTURE_ROOT/hermes-bootstrap-fixture.sh"
 	op="$FIXTURE_ROOT/bin/op"

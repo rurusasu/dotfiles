@@ -38,7 +38,7 @@ Desktop の GUI を Agent コンテナに入れる必要はありません。コ
 渡されます。
 
 ```bash
-task hermes:cli -- -p personal-ops config check
+task hermes:cli -- -p sophia config check
 task hermes:cli -- profile list
 ```
 
@@ -46,12 +46,12 @@ Compose は `GATEWAY_MULTIPLEX_PROFILES=true` で、root gateway の1プロセ�
 すべてのProfileを提供します。対象Profileの状態確認は次のように実行できます。
 
 ```bash
-PROFILE=personal-ops task hermes:profile:status
-PROFILE=personal-ops task hermes:profile:up
-PROFILE=personal-ops task hermes:profile:restart
-PROFILE=personal-ops task hermes:profile:down
-PROFILE=career-ops task hermes:profile:status
-PROFILE=dev-lab task hermes:profile:status
+PROFILE=sophia task hermes:profile:status
+PROFILE=sophia task hermes:profile:up
+PROFILE=sophia task hermes:profile:restart
+PROFILE=sophia task hermes:profile:down
+PROFILE=clara task hermes:profile:status
+PROFILE=ada task hermes:profile:status
 ```
 
 `hermes:profile:status` だけが指定Profileの状態を照会します。
@@ -78,7 +78,7 @@ Profile名はTaskfile側でshell-safeにargv化されます。CLIの既定Compos
 
 ```bash
 HERMES_COMPOSE_FILE="$HOME/.dotfiles/docker/hermes-service/compose.yml" \
-  hermes-docker -p personal-ops chat
+  hermes-docker -p sophia chat
 ```
 
 このアダプターはサービスを自動起動・停止しません。先に `task hermes:up` を

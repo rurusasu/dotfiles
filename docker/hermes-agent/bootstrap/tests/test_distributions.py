@@ -85,7 +85,7 @@ class DistributionTests(unittest.TestCase):
     def source(self, name: str, *, root: bool = False) -> StagedSource:
         declaration = DistributionSource(
             name,
-            f"https://github.com/rurusasu/hermes-{'home' if root else f'profile-{name}'}.git",
+            f"https://github.com/rurusasu/hermes-profile-{'alfred' if root else name}.git",
             "main",
             self.data_root if root else self.data_root / "profiles" / name,
             "root-distribution.yaml" if root else "distribution.yaml",
@@ -316,7 +316,7 @@ class DistributionTests(unittest.TestCase):
         state.write_text(
             json.dumps(
                 {
-                    "source": "https://github.com/rurusasu/hermes-home.git",
+                    "source": "https://github.com/rurusasu/hermes-profile-alfred.git",
                     "ref": "main",
                     "commit": "b" * 40,
                     "version": "0.0.9",
@@ -335,7 +335,7 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual((self.data_root / "memories" / "keep").read_text(encoding="utf-8"), "runtime\n")
         self.assertEqual(
             state.read_text(encoding="utf-8"),
-            '{"commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","distribution_owned":["config.yaml","scripts"],"ref":"main","source":"https://github.com/rurusasu/hermes-home.git","version":"0.1.0"}\n',
+            '{"commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","distribution_owned":["config.yaml","scripts"],"ref":"main","source":"https://github.com/rurusasu/hermes-profile-alfred.git","version":"0.1.0"}\n',
         )
         self.assertEqual(
             changed,
@@ -504,8 +504,8 @@ class DistributionTests(unittest.TestCase):
         state.parent.mkdir()
         valid = json.loads(self.root_state(["obsolete.txt"]))
         invalid = (
-            {**valid, "source": "https://token@github.com/rurusasu/hermes-home.git"},
-            {**valid, "source": "https://example.com/rurusasu/hermes-home.git"},
+            {**valid, "source": "https://token@github.com/rurusasu/hermes-profile-alfred.git"},
+            {**valid, "source": "https://example.com/rurusasu/hermes-profile-alfred.git"},
             {**valid, "ref": "refs//heads/main"},
             {**valid, "commit": "A" * 40},
             {**valid, "version": " 0.1.0"},
@@ -1364,7 +1364,7 @@ class DistributionTests(unittest.TestCase):
     def root_state(self, owned: list[str]) -> str:
         return json.dumps(
             {
-                "source": "https://github.com/rurusasu/hermes-home.git",
+                "source": "https://github.com/rurusasu/hermes-profile-alfred.git",
                 "ref": "main",
                 "commit": "b" * 40,
                 "version": "0.0.9",

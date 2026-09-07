@@ -46,7 +46,7 @@ tasks:
   hermes:bootstrap:test:
     desc: Run the Hermes bootstrap container, gh wrapper, and provenance suites
     vars:
-      PROVENANCE_URL: '{{.HERMES_HOME_PROVENANCE_URL | default "https://github.com/rurusasu/hermes-home.git"}}'
+      PROVENANCE_URL: '{{.HERMES_HOME_PROVENANCE_URL | default "https://github.com/rurusasu/hermes-profile-alfred.git"}}'
     cmds:
       - cmd: python -m unittest tests/python/test_xapi_image_contract.py -v
         platforms: [windows]
