@@ -18,7 +18,7 @@ FIXTURE_PATH = Path(
 )
 PROVENANCE_PATH = FIXTURE_PATH.with_name("profile_sync.provenance.json")
 SOURCE_PATH = Path("scripts/profile_sync.sh")
-SOURCE_REPOSITORY = "rurusasu/hermes-home"
+SOURCE_REPOSITORY = "rurusasu/hermes-profile-alfred"
 
 VERIFIER_SPEC = importlib.util.spec_from_file_location(
     "profile_sync_provenance_verifier_under_test",
@@ -207,7 +207,7 @@ class ProfileSyncProvenanceVerifierTests(unittest.TestCase):
             "duplicate-key": (
                 """\
 {
-  "source_repository": "rurusasu/hermes-home",
+  "source_repository": "rurusasu/hermes-profile-alfred",
   "source_repository": "secret-marker",
   "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "source_path": "scripts/profile_sync.sh",

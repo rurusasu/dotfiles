@@ -73,7 +73,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         self.assertLess(contract_index, verifier_index)
         self.assertIn(
             "{{.HERMES_HOME_PROVENANCE_URL "
-            '| default "https://github.com/rurusasu/hermes-home.git"}}',
+            '| default "https://github.com/rurusasu/hermes-profile-alfred.git"}}',
             section,
         )
         self.assertIn(
@@ -146,7 +146,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
             workflow,
         )
         self.assertIn(
-            '--source-url "https://github.com/rurusasu/hermes-home.git"',
+            '--source-url "https://github.com/rurusasu/hermes-profile-alfred.git"',
             workflow,
         )
         self.assertIn('"Taskfile.yml"', workflow)

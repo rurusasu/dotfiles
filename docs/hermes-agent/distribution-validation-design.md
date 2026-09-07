@@ -3,7 +3,7 @@
 ## Status And Scope
 
 Approved design for repository-local validation, GitHub Actions fallback, and
-agent-driven remediation for the remote-authoritative `rurusasu/hermes-home`
+agent-driven remediation for the remote-authoritative `rurusasu/hermes-profile-alfred`
 root repository. The same contract can apply to another source repository only
 when that repository explicitly opts in and retains the complete validation
 tooling bundle defined below.
@@ -59,9 +59,9 @@ specific failure and the controller can independently verify the repair.
 
 The current repository contract contains:
 
-| Repository             | Distribution manifest    | Runtime boundary |
-| ---------------------- | ------------------------ | ---------------- |
-| `rurusasu/hermes-home` | `root-distribution.yaml` | `/opt/data` root |
+| Repository                       | Distribution manifest    | Runtime boundary |
+| -------------------------------- | ------------------------ | ---------------- |
+| `rurusasu/hermes-profile-alfred` | `root-distribution.yaml` | `/opt/data` root |
 
 No named-profile repository is part of this table. A new source repository is
 in scope only after an explicit contract change names it, defines its
@@ -146,7 +146,7 @@ an atomic rename under a caller-selected ignored path.
 {
   "schema_version": 1,
   "validator_version": "1.0.0",
-  "repository": "hermes-home",
+  "repository": "hermes-profile-alfred",
   "head_sha": "0123456789abcdef",
   "level": "full",
   "status": "pass",

@@ -47,7 +47,7 @@ def manifest_data() -> dict[str, object]:
         ],
         "root_distribution": {
             "name": "default",
-            "source": "https://github.com/rurusasu/hermes-home.git",
+            "source": "https://github.com/rurusasu/hermes-profile-alfred.git",
             "ref": "main",
             "target": "/opt/data",
             "manifest": "root-distribution.yaml",
@@ -105,7 +105,7 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(manifest.root_distribution.target, Path("/opt/data"))
         self.assertEqual(
             manifest.root_distribution.source_commit,
-            "6821e5dfa23a098ef4a5332780ca8c5cb832e2d4",
+            "69e82efb506b36c2d9a811c935b62de8250a37b2",
         )
         self.assertEqual(
             tuple(profile.name for profile in manifest.profiles),

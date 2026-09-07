@@ -14,7 +14,7 @@ The three managed content classes deliberately use different authority models:
 | Content        | Authoritative location                                     | Synchronization model                                                           |
 | -------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | Named profile  | Existing `/opt/data/profiles/<name>` declarative allowlist | immutable local snapshot to configured remote, then exact commit through Hermes |
-| Root/default   | `rurusasu/hermes-home`                                     | remote distribution to local runtime                                            |
+| Root/default   | `rurusasu/hermes-profile-alfred`                           | remote distribution to local runtime                                            |
 | Shared lifelog | `/opt/data/shared/lifelog`                                 | normal locked read-write Git repository                                         |
 
 `docker/hermes-agent/bootstrap-manifest.yaml` currently declares six named

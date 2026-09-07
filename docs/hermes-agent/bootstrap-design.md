@@ -75,7 +75,7 @@ content class:
 
 | Target                                                                         | Configured source                                | Authority and update mechanism                                                       |
 | ------------------------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| Root/default                                                                   | `rurusasu/hermes-home`                           | remote-authoritative root distribution apply                                         |
+| Root/default                                                                   | `rurusasu/hermes-profile-alfred`                 | remote-authoritative root distribution apply                                         |
 | Named profiles (`rick`, `hoffman`, `risarisa`, `nancy`, `kuroda`, `shiraishi`) | matching `rurusasu/hermes-profile-<name>` remote | existing local allowlist snapshot to exact remote commit, then official Hermes apply |
 | Shared lifelog                                                                 | `rurusasu/lifelog`                               | locked read-write Git synchronization                                                |
 

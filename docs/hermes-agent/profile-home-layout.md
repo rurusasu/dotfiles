@@ -29,8 +29,21 @@ host ~/.hermes/                    container /opt/data/
 
 ## Ownership
 
+The root profile is displayed as **Alfred**; Hermes reserves its internal ID
+`default` and keeps its home at `/opt/data`. The former `career-ops`, `dev-lab`,
+and `personal-ops` profiles are now `clara`, `ada`, and `sophia` respectively.
+Their repositories are `hermes-profile-clara`, `hermes-profile-ada`, and
+`hermes-profile-sophia`. Existing sessions stay in the renamed profile homes.
+These three profiles have dedicated Discord bots in the Hermes Agents server.
+Their bot tokens are stored in the `openclaw` 1Password vault under `Clara`,
+`Ada`, and `Sophia`, using the `Discord/bot_token` field. Each existing runtime
+home has a native `secrets.onepassword` mapping and a mode-`0600` `.env`;
+the allowed-user reference is shared from `Master/Discord/allowed_users`.
+These runtime mappings do not add the three profiles to the bootstrap manifest.
+The root Discord bot was renamed from Master to Alfred without changing its ID.
+
 - Root declarative content remains remote-authoritative from
-  `rurusasu/hermes-home` at `main`; `root-distribution.yaml` declares the only
+  `rurusasu/hermes-profile-alfred` at `main`; `root-distribution.yaml` declares the only
   root paths bootstrap may replace.
 - The bootstrap manifest currently declares six named distribution targets:
   `rick`, `hoffman`, `risarisa`, `nancy`, `kuroda`, and `shiraishi`, each with a matching
