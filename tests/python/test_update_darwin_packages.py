@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -96,6 +100,66 @@ class UpdateDarwinPackagesTests(unittest.TestCase):
             path.write_text(before, encoding="utf-8")
             self.updater.write_report(path, {"updates": [], "promotions": []})
             self.assertEqual(path.read_bytes(), before.encode())
+
+    def test_orca_uses_arm64_dmg_even_when_zip_is_first(self) -> None:
+        payload = json.dumps({"tag_name": "v1.4.198", "assets": [
+            {"browser_download_url": "https://github.com/stablyai/orca/releases/download/v1.4.198/Orca-1.4.198-arm64-mac.zip"},
+            {"browser_download_url": "https://github.com/stablyai/orca/releases/download/v1.4.198/orca-macos-x64.dmg"},
+            {"browser_download_url": "https://github.com/stablyai/orca/releases/download/v1.4.198/orca-macos-arm64.dmg"},
+        ]}).encode()
+        release = self.updater.PROFILES["orca-editor"].parse_release(payload)
+        self.assertEqual(release.version, "1.4.198")
+        self.assertEqual(release.url, "https://github.com/stablyai/orca/releases/download/v1.4.198/orca-macos-arm64.dmg")
+
+    def test_orca_missing_dmg_is_an_update_error_not_an_x64_fallback(self) -> None:
+        payload = json.dumps({"tag_name": "v9.0", "assets": [
+            {"browser_download_url": "https://github.com/stablyai/orca/releases/download/v9.0/orca-macos-x64.dmg"},
+        ]}).encode()
+        with patch.object(self.updater, "prefetch_hash", return_value="sha256-test"):
+            updates = self.updater.collect_updates(["orca-editor"], fetcher=lambda _: payload)
+        self.assertEqual(updates[0]["status"], "error")
+
+    def test_release_fetch_authenticates_only_github_api(self) -> None:
+        requests = []
+        def open_request(request, **kwargs):
+            requests.append(request)
+            return io.BytesIO(b"{}")
+        with patch.dict(os.environ, {"GH_TOKEN": "test-token", "GITHUB_TOKEN": "other-token"}), patch.object(self.updater.urllib.request.OpenerDirector, "open", side_effect=open_request):
+            self.updater.fetch("https://api.github.com/repos/stablyai/orca/releases/latest")
+            self.updater.fetch("https://releases.diabrowser.com/BoostBrowser-updates.xml")
+        self.assertEqual(requests[0].get_header("Authorization"), "Bearer test-token")
+        self.assertIsNone(requests[1].get_header("Authorization"))
+
+    def test_partial_update_error_fails_without_changing_derivations(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "default.nix"
+            original = 'version = "1";\nurl = "https://example.invalid/1.zip";\nhash = "sha256-old";\n'
+            target.write_text(original)
+            report = Path(directory) / "report.json"
+            updates = [
+                {"package": "dia-browser", "status": "update-available", "version": "2", "url": "https://example.invalid/2.zip", "hash": "sha256-new"},
+                {"package": "orca-editor", "status": "error", "reason": "HTTP 403"},
+            ]
+            with patch.object(self.updater, "collect_updates", return_value=updates), patch.dict(self.updater.DERIVATIONS, {"dia-browser": target}), contextlib.redirect_stdout(io.StringIO()):
+                status = self.updater.main(["--write", "--output", str(report)])
+            self.assertNotEqual(status, 0)
+            self.assertEqual(target.read_text(), original)
+            self.assertEqual(json.loads(report.read_text())["updates"][1]["status"], "error")
+
+    def test_fetch_does_not_forward_authentication_across_redirect_origins(self) -> None:
+        handler = self.updater.ReleaseRedirectHandler()
+        request = self.updater.urllib.request.Request(
+            "https://api.github.com/repos/old/repo/releases/latest",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        for url, expected in (
+            ("https://api.github.com/repos/new/repo/releases/latest", "Bearer test-token"),
+            ("https://example.invalid/feed", None),
+            ("http://api.github.com/feed", None),
+        ):
+            with self.subTest(url=url):
+                redirected = handler.redirect_request(request, None, 302, "Found", {}, url)
+                self.assertEqual(redirected.get_header("Authorization"), expected)
 
 
 if __name__ == "__main__":

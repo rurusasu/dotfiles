@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -348,6 +350,24 @@ def _dia_release(payload: bytes) -> Release | None:
     return None
 
 
+def _orca_release(payload: bytes) -> Release | None:
+    """Match the DMG unpacker and architecture of our custom derivation."""
+    data = json.loads(payload.decode("utf-8"))
+    version = str(data.get("tag_name", "")).lstrip("v")
+    if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", version):
+        return None
+    expected = (
+        f"https://github.com/stablyai/orca/releases/download/v{version}/"
+        "orca-macos-arm64.dmg"
+    )
+    if any(
+        asset.get("browser_download_url") == expected
+        for asset in data.get("assets", [])
+    ):
+        return Release(version, expected)
+    return None
+
+
 def _choose_release(version: str, urls: list[str], *, arm64: bool) -> Release | None:
     if not version:
         return None
@@ -376,7 +396,7 @@ PROFILES = {
         "orca-editor",
         "https://api.github.com/repos/stablyai/orca/releases/latest",
         DERIVATIONS["orca-editor"],
-        lambda payload: _json_release(payload, arm64=True),
+        _orca_release,
     ),
 }
 
@@ -402,9 +422,36 @@ IDENTITIES = {
 }
 
 
+class ReleaseRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Never forward GitHub credentials to another origin or plaintext HTTP."""
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        target = urllib.parse.urlsplit(newurl)
+        if redirected is not None and (target.scheme, target.netloc) != (
+            "https", "api.github.com"
+        ):
+            redirected.remove_header("Authorization")
+        return redirected
+
+
 def fetch(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "dotfiles-darwin-updater"})
-    with urllib.request.urlopen(request, timeout=30) as response:
+    headers = {"User-Agent": "dotfiles-darwin-updater"}
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    target = urllib.parse.urlsplit(url)
+    if (target.scheme, target.netloc) == ("https", "api.github.com") and token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
+    opener = urllib.request.build_opener(ReleaseRedirectHandler())
+    with opener.open(request, timeout=30) as response:
         return response.read()
 
 
@@ -446,7 +493,14 @@ def collect_updates(
         except (OSError, ET.ParseError, json.JSONDecodeError) as error:
             updates.append({"package": package_id, "status": "error", "reason": str(error)})
             continue
-        if release is None or release.version == version:
+        if release is None:
+            updates.append({
+                "package": package_id,
+                "status": "error",
+                "reason": "No compatible release asset found",
+            })
+            continue
+        if release.version == version:
             continue
         try:
             hash_value = prefetch_hash(release.url)
@@ -502,7 +556,14 @@ def main(argv: list[str] | None = None) -> int:
 
     package_ids = args.packages or list(PROFILES)
     registry = load_candidate_registry()
+    if set(registry) != set(PROFILES):
+        raise ValueError("candidate registry and updater profiles differ")
     updates = collect_updates(package_ids)
+    if any(update.get("status") == "error" for update in updates):
+        report = {"updates": updates, "promotions": []}
+        write_report(args.output, report)
+        print(json.dumps(report, indent=2))
+        return 1
     promotion_results = (
         promote_candidates(
             registry,
@@ -540,10 +601,6 @@ def main(argv: list[str] | None = None) -> int:
             REGISTRY_PATH.write_text(registry_text, encoding="utf-8")
     write_report(args.output, report)
     print(json.dumps(report, indent=2))
-    # Loading the registry here makes an invalid or accidentally expanded
-    # registry fail before a scheduled job can create a pull request.
-    if set(registry) != set(PROFILES):
-        raise ValueError("candidate registry and updater profiles differ")
     return 0
 
 

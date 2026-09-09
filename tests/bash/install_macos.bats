@@ -543,6 +543,7 @@ run_macos_installer() {
 	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
+		"nix --extra-experimental-features nix-command flakes shell --inputs-from $REPO_ROOT nixpkgs#python3 nixpkgs#go-task --command task --dir $REPO_ROOT darwin:update" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
 		"migrate-darwin-provider --all" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
@@ -552,6 +553,28 @@ run_macos_installer() {
 	! grep -q '/api/tags' "$COMMAND_LOG"
 	! grep -q '^docker ' "$COMMAND_LOG"
 	! grep -q '^task .*\(hindsight:up\|hermes:bootstrap\)' "$COMMAND_LOG"
+}
+
+@test "package update failure prevents macOS activation" {
+	write_installed_stubs
+	write_stub nix '
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+case " $* " in
+  *" darwin:update "*) exit 42 ;;
+esac
+'
+	run_macos_installer
+	[ "$status" -eq 42 ]
+	! grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG"
+}
+
+@test "pinned installer mode skips both flake and custom package updates" {
+	write_installed_stubs
+	export DOTFILES_SKIP_FLAKE_UPDATE=1
+	run_macos_installer
+	[ "$status" -eq 0 ]
+	! grep -q 'nix flake update\|darwin:update' "$COMMAND_LOG"
+	grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG"
 }
 
 @test "macOS installer clears an incomplete inherited Git command config" {

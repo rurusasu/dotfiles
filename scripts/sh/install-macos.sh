@@ -932,6 +932,20 @@ migrate_darwin_providers() {
   "$DARWIN_MIGRATION" "${migration_args[@]}"
 }
 
+update_darwin_packages() {
+  # The pinned/offline installer mode must not advance custom sources either.
+  if [[ ${DOTFILES_SKIP_FLAKE_UPDATE:-0} == 1 ]]; then
+    dotfiles_log "Skipping custom Darwin package updates (pinned install)."
+    return 0
+  fi
+  dotfiles_log "Updating custom Darwin packages before activation..."
+  # Bootstrap dependencies before Home Manager has installed Python and go-task.
+  # Reuse the checkout's locked nixpkgs and the public update task.
+  nix --extra-experimental-features 'nix-command flakes' shell \
+    --inputs-from "$ROOT" nixpkgs#python3 nixpkgs#go-task \
+    --command task --dir "$ROOT" darwin:update
+}
+
 main() {
   dotfiles_sanitize_incomplete_git_config_environment
   resolve_install_profile "$@"
@@ -940,6 +954,7 @@ main() {
   ensure_nix
   dotfiles_link_checkout "$ROOT"
   dotfiles_update_flake "$ROOT"
+  update_darwin_packages
   preserve_shell_rc_for_nix_darwin
   if ((DOTFILES_WITH_DOCKER == 1)); then
     stop_existing_docker_desktop
