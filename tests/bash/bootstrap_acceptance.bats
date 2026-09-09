@@ -20,7 +20,8 @@ EOF
 	cd "$REPO_ROOT"
 	run env PATH="$stub_bin:$PATH" bash .devcontainer/ci/bats.sh
 	[ "$status" -eq 0 ]
-	grep -Fxq 'nix --extra-experimental-features nix-command flakes shell --inputs-from . nixpkgs#go-task --command bats --print-output-on-failure tests/bash/install_linux.bats tests/bash/install_macos.bats' "$CONTRACT_COMMAND_LOG"
+	grep -Fxq 'apt-get install -y -qq --no-install-recommends bats jq python3 git' "$CONTRACT_COMMAND_LOG"
+	grep -Fxq 'nix --extra-experimental-features nix-command flakes shell --inputs-from path:. nixpkgs#go-task --command bats --print-output-on-failure tests/bash/install_linux.bats tests/bash/install_macos.bats' "$CONTRACT_COMMAND_LOG"
 	! grep -q '^bats ' "$CONTRACT_COMMAND_LOG"
 }
 

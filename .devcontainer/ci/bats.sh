@@ -12,8 +12,8 @@ for bats_file in "${owned_bats_files[@]}"; do
   fi
 done
 
-apt-get install -y -qq --no-install-recommends bats jq
+apt-get install -y -qq --no-install-recommends bats jq python3 git
 # Installer contracts exercise the real Taskfile, even before Home Manager is applied.
 nix --extra-experimental-features 'nix-command flakes' shell \
-  --inputs-from . nixpkgs#go-task \
+  --inputs-from path:. nixpkgs#go-task \
   --command bats --print-output-on-failure "${owned_bats_files[@]}"
