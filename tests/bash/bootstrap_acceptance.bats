@@ -6,6 +6,24 @@ setup() {
 	RUNNER="$FIXTURE_ROOT/run-bootstrap-acceptance.sh"
 }
 
+@test "devcontainer installer contracts provision go-task before running Bats" {
+	local stub_bin="$BATS_TEST_TMPDIR/bin"
+	export CONTRACT_COMMAND_LOG="$BATS_TEST_TMPDIR/commands"
+	mkdir -p "$stub_bin"
+	for command in apt-get nix bats; do
+		cat >"$stub_bin/$command" <<'EOF'
+#!/usr/bin/env bash
+printf '%s %s\n' "${0##*/}" "$*" >>"$CONTRACT_COMMAND_LOG"
+EOF
+		chmod +x "$stub_bin/$command"
+	done
+	cd "$REPO_ROOT"
+	run env PATH="$stub_bin:$PATH" bash .devcontainer/ci/bats.sh
+	[ "$status" -eq 0 ]
+	grep -Fxq 'nix --extra-experimental-features nix-command flakes shell --inputs-from . nixpkgs#go-task --command bats --print-output-on-failure tests/bash/install_linux.bats tests/bash/install_macos.bats' "$CONTRACT_COMMAND_LOG"
+	! grep -q '^bats ' "$CONTRACT_COMMAND_LOG"
+}
+
 @test "destructive Linux E2E routes installers through the acceptance fixture" {
 	workflow="$REPO_ROOT/.github/workflows/ci-bootstrap.yml"
 	nixos_test="$REPO_ROOT/nix/tests/bootstrap-nixos.nix"

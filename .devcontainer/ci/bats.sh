@@ -13,4 +13,7 @@ for bats_file in "${owned_bats_files[@]}"; do
 done
 
 apt-get install -y -qq --no-install-recommends bats jq
-bats --print-output-on-failure tests/bash/install_linux.bats tests/bash/install_macos.bats
+# Installer contracts exercise the real Taskfile, even before Home Manager is applied.
+nix --extra-experimental-features 'nix-command flakes' shell \
+  --inputs-from . nixpkgs#go-task \
+  --command bats --print-output-on-failure "${owned_bats_files[@]}"
