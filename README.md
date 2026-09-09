@@ -29,6 +29,24 @@ Home Manager、chezmoi と明示的に選択した optional profile を適用し
 Docker profile では最後に runtime acceptance も実行します。途中で失敗した場合も
 同じコマンドを再実行できます。
 
+更新も同じ入口を使います。macOS / Linux は `./install.sh`、Windows は
+`.\install.cmd` を再実行してください。既存の optional profile を更新する場合も、
+初回と同じ profile 引数を指定します。リポジトリ自体の pull / merge は自動では行いません。
+
+- macOS: flake inputs と Orca・Dia・Hammerspoon の独自 Nix 定義を更新してから、
+  nix-darwin / Home Manager と選択済み Homebrew パッケージを反映します。
+- Linux / NixOS: flake inputs を更新し、その OS の構成と Home Manager を反映します。
+- Windows: catalog 対象を既存の WinGet 等のハンドラーで install / upgrade します。
+  手動管理・非対応のアプリは追加しません。
+
+macOS の独自パッケージ更新は `version` / URL / hash をチェックアウト内で更新します。
+差分は `git diff` で確認できます。取得エラーがある場合は独自定義を書き換えず、
+システム反映前に停止します（先行する `flake.lock` の更新は残ります）。
+GitHub API の認証には、設定されていれば `GH_TOKEN`、次に `GITHUB_TOKEN` を使用します。
+レート制限時は認証設定を確認して再実行してください。固定版 / オフライン検証向けの
+`DOTFILES_SKIP_FLAKE_UPDATE=1` は、Unix の flake 更新と macOS の独自パッケージ更新を
+スキップします。必要な依存パッケージは事前にキャッシュされている必要があります。
+
 ### Windows
 
 PowerShell または Command Prompt で実行します。管理者処理は installer が必要に応じて分離します。

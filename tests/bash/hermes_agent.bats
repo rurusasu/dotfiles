@@ -19,6 +19,7 @@ setup() {
 	COMPOSE_FILE="$BATS_TEST_TMPDIR/docker/hermes-service/compose file.yml"
 	REAL_JQ="$(command -v jq)"
 	REAL_PYTHON3="$(command -v python3)"
+	export REAL_INSTALL_TASK="$(command -v task)"
 	SECRET_MARKER="adapter-secret-marker"
 	mkdir -p "$TEST_HOME/.hermes" "$STUB_BIN"
 	: >"$COMMAND_LOG"
@@ -700,6 +701,8 @@ create_mocked_installer_fixture() {
 		"$MOCK_DOCKER_APP/Contents/Resources/bin"
 	MOCK_REPO="$(cd "$MOCK_REPO" && pwd -P)"
 	cp "$REPO_ROOT/install.sh" "$MOCK_REPO/install.sh"
+	cp "$REPO_ROOT/Taskfile.yml" "$MOCK_REPO/Taskfile.yml"
+	cp -R "$REPO_ROOT/taskfiles" "$MOCK_REPO/taskfiles"
 	cp "$REPO_ROOT/scripts/sh/install-common.sh" "$MOCK_REPO/scripts/sh/install-common.sh"
 	cat >"$MOCK_REPO/scripts/sh/migrate-darwin-provider.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -716,7 +719,7 @@ EOF
 set -euo pipefail
 
 export DOTFILES_TEST_SELECTED_INSTALLER="$0"
-. "$(dirname "$0")/install-macos-under-test.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/install-macos-under-test.sh"
 ensure_docker_desktop_md5_compatibility() {
   :
 }
@@ -729,7 +732,9 @@ homebrew_cask_link_parent_acl_state() {
 homebrew_cask_link_parent_is_immutable_to_caller() {
   return 0
 }
-main "$@"
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  main "$@"
+fi
 EOF
 	touch "$MOCK_REPO/flake.nix" \
 		"$MOCK_REPO/docker/hermes-service/compose.yml" \
@@ -783,6 +788,11 @@ esac
 '
 	write_fixture_stub nix '
 printf "nix %s\\n" "$*" >>"$COMMAND_LOG"
+if [[ ${1:-} == --extra-experimental-features ]]; then
+  while [[ ${1:-} != --command ]]; do shift; done
+  shift
+  exec "$@"
+fi
 if [[ $* == *"builtins.currentSystem"* ]]; then
   printf "x86_64-linux"
 fi
@@ -847,7 +857,19 @@ exit 97
 	write_fixture_stub launchctl 'printf "launchctl %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub open 'printf "open %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub docker 'printf "docker %s\\n" "$*" >>"$COMMAND_LOG"'
-	write_fixture_stub task 'printf "task %s\\n" "$*" >>"$COMMAND_LOG"'
+	write_fixture_stub task '
+printf "task %s\\n" "$*" >>"$COMMAND_LOG"
+case " $* " in
+  *" darwin:install "*) exec "$REAL_INSTALL_TASK" "$@" ;;
+esac
+'
+	write_fixture_stub python3 '
+if [[ ${1:-} == scripts/python/update_darwin_packages.py ]]; then
+  printf "python3 %s\\n" "$*" >>"$COMMAND_LOG"
+  exit 0
+fi
+exec "$REAL_PYTHON3" "$@"
+'
 
 	cat >"$MOCK_DOCKER_APP/Contents/MacOS/install" <<'EOF'
 #!/usr/bin/env bash

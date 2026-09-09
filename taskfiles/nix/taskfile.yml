@@ -1,6 +1,23 @@
 version: "3"
 
 tasks:
+  darwin:install:
+    desc: Update custom packages then run the macOS activation adapter
+    interactive: true
+    preconditions:
+      - sh: test -n "${DOTFILES_ROOT:-}" && test -n "${DOTFILES_WITH_OLLAMA:-}" && test -n "${DOTFILES_WITH_DOCKER:-}" && test -n "${DOTFILES_WITH_HERMES:-}"
+        msg: Run ./install.sh to initialize the macOS install profile
+    cmds:
+      - task: darwin:install:update
+      - bash -c 'source scripts/sh/install-macos.sh; finish_macos_install'
+
+  darwin:install:update:
+    internal: true
+    status:
+      - test "${DOTFILES_SKIP_FLAKE_UPDATE:-0}" = 1
+    cmds:
+      - task: darwin:update
+
   darwin:verify:
     cmds:
       - "bash scripts/sh/verify-darwin-package.sh {{.CLI_ARGS}}"

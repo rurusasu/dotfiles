@@ -45,9 +45,9 @@ ZSHRC_PATH="${DOTFILES_ZSHRC_PATH:-/etc/zshrc}"
 USER_PROFILE_ROOT="${DOTFILES_USER_PROFILE_ROOT:-/etc/profiles/per-user}"
 HOMEBREW_BIN_DIR="${DOTFILES_HOMEBREW_BIN_DIR:-/usr/local/bin}"
 HOMEBREW_CLI_PLUGINS_DIR="${DOTFILES_HOMEBREW_CLI_PLUGINS_DIR:-/usr/local/cli-plugins}"
-DOTFILES_WITH_OLLAMA=0
-DOTFILES_WITH_DOCKER=0
-DOTFILES_WITH_HERMES=0
+DOTFILES_WITH_OLLAMA="${DOTFILES_WITH_OLLAMA:-0}"
+DOTFILES_WITH_DOCKER="${DOTFILES_WITH_DOCKER:-0}"
+DOTFILES_WITH_HERMES="${DOTFILES_WITH_HERMES:-0}"
 DOCKER_CASK_REPAIR_REQUIRED=0
 DOCKER_CASK_LINK_TRANSACTION_ACTIVE=0
 DOCKER_CASK_LINK_TRANSACTION_COUNT=0
@@ -71,6 +71,11 @@ EOF
 }
 
 resolve_install_profile() {
+  # The public entrypoint selects profiles only through explicit CLI flags.
+  # A sourced activation adapter retains the already-resolved environment.
+  DOTFILES_WITH_OLLAMA=0
+  DOTFILES_WITH_DOCKER=0
+  DOTFILES_WITH_HERMES=0
   while (($# > 0)); do
     case "$1" in
     --with-ollama) DOTFILES_WITH_OLLAMA=1 ;;
@@ -932,6 +937,14 @@ migrate_darwin_providers() {
   "$DARWIN_MIGRATION" "${migration_args[@]}"
 }
 
+run_darwin_install_workflow() {
+  # Bootstrap dependencies before Home Manager has installed Python and go-task.
+  # Reuse the checkout's locked nixpkgs and the public update task.
+  nix --extra-experimental-features 'nix-command flakes' shell \
+    --inputs-from "$ROOT" nixpkgs#python3 nixpkgs#go-task \
+    --command task --exit-code --dir "$ROOT" darwin:install
+}
+
 main() {
   dotfiles_sanitize_incomplete_git_config_environment
   resolve_install_profile "$@"
@@ -940,6 +953,11 @@ main() {
   ensure_nix
   dotfiles_link_checkout "$ROOT"
   dotfiles_update_flake "$ROOT"
+  run_darwin_install_workflow
+}
+
+# Platform adapter invoked only after the Taskfile's update step succeeds.
+finish_macos_install() {
   preserve_shell_rc_for_nix_darwin
   if ((DOTFILES_WITH_DOCKER == 1)); then
     stop_existing_docker_desktop

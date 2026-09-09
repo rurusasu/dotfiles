@@ -29,6 +29,9 @@ setup() {
 	FAKE_DOCKER_CASK_STATE="$BATS_TEST_TMPDIR/docker-cask-installed"
 	REAL_JQ="$(command -v jq)"
 	REAL_TIMEOUT="$(command -v timeout)"
+	REAL_TASK="$(command -v task)"
+	REAL_PYTHON="$(command -v python3)"
+	REAL_BASH="$(command -v bash)"
 	mkdir -p "$TEST_HOME" "$STUB_BIN" "$TEST_HOMEBREW_CASK_PARENT_DIR" "$TEST_HOMEBREW_LINK_TARGET"
 	chmod 0755 "$TEST_HOMEBREW_CASK_PARENT_DIR"
 	: >"$COMMAND_LOG"
@@ -41,6 +44,8 @@ setup() {
 	export DOTFILES_USER="test-user"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
 	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ REAL_TIMEOUT INSTALLER REPO_ROOT
+	export REAL_TASK REAL_PYTHON REAL_BASH
+	export MACOS_TEST_BOUNDARY="$REPO_ROOT/tests/bash/helpers/macos_install_boundary.sh"
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export FAKE_BASHRC FAKE_ZSHRC FAKE_DOCKER_APP FAKE_LEGACY_DOCKER_APP
 	export FAKE_HOMEBREW_BIN_DIR FAKE_HOMEBREW_CLI_PLUGINS_DIR
@@ -256,6 +261,7 @@ exit 97
 	write_stub task '
 printf "task %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
+  *" darwin:install "*) exec "$REAL_TASK" "$@" ;;
   *" hermes:bootstrap "*)
     source "$REPO_ROOT/scripts/sh/install-common.sh"
     source "$REPO_ROOT/scripts/sh/hermes-agent.sh"
@@ -264,6 +270,19 @@ case " $* " in
 esac
 '
 	export DOTFILES_TASK_COMMAND="$STUB_BIN/task"
+	write_stub bash '
+if [[ ${1:-} == -c && ${2:-} == "source scripts/sh/install-macos.sh; finish_macos_install" ]]; then
+  exec "$REAL_BASH" -c '\''source scripts/sh/install-macos.sh; source "$MACOS_TEST_BOUNDARY"; finish_macos_install'\''
+fi
+exec "$REAL_BASH" "$@"
+'
+	write_stub python3 '
+if [[ ${1:-} == scripts/python/update_darwin_packages.py ]]; then
+  printf "python3 %s\n" "$*" >>"$COMMAND_LOG"
+  exit "${DARWIN_UPDATE_STATUS:-0}"
+fi
+exec "$REAL_PYTHON" "$@"
+'
 	write_stub op '
 printf "op %s\n" "$*" >>"$COMMAND_LOG"
 if [ "${3:-}" = "Hermes X API MCP" ]; then
@@ -279,8 +298,18 @@ fi
 write_stub() {
 	local name="$1"
 	local body="$2"
+	if [[ $name == nix ]]; then
+		body='
+if [[ ${1:-} == --extra-experimental-features ]]; then
+  printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+  while [[ ${1:-} != --command ]]; do shift; done
+  shift
+  exec "$@"
+fi
+'"$body"
+	fi
 	cat >"$STUB_BIN/$name" <<EOF
-#!/usr/bin/env bash
+#!$REAL_BASH
 set -euo pipefail
 $body
 EOF
@@ -363,6 +392,11 @@ cat >"$STUB_BIN/nix" <<'"'"'NIX'"'"'
 #!/usr/bin/env bash
 set -euo pipefail
 printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [[ ${1:-} == --extra-experimental-features ]]; then
+  while [[ ${1:-} != --command ]]; do shift; done
+  shift
+  exec "$@"
+fi
 if [ "${1:-}" = "run" ]; then
 	mkdir -p "$DOTFILES_DOCKER_APP_PATH/Contents/MacOS" "$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin"
 		cat >"$DOTFILES_DOCKER_APP_PATH/Contents/MacOS/install" <<'"'"'DOCKER_INSTALL'"'"'
@@ -488,24 +522,7 @@ run_macos_installer_for_host() {
 	run bash -c '
 set -euo pipefail
 . "$INSTALLER"
-if [[ ${DOTFILES_TEST_HOMEBREW_UNAVAILABLE:-0} == 1 ]]; then
-  homebrew_command() {
-    [[ -f $FAKE_DOCKER_CASK_STATE ]] || return 1
-    printf "%s\n" "$DOTFILES_BREW_COMMAND"
-  }
-fi
-ensure_docker_desktop_md5_compatibility() {
-  :
-}
-homebrew_cask_link_parent_metadata() {
-  printf "%s\n" "$TEST_HOMEBREW_PARENT_METADATA"
-}
-homebrew_cask_link_parent_acl_state() {
-  printf "%s\n" "$TEST_HOMEBREW_PARENT_ACL_STATE"
-}
-homebrew_cask_link_parent_is_immutable_to_caller() {
-  [[ $TEST_HOMEBREW_PARENT_IMMUTABLE_TO_CALLER == 1 ]]
-}
+. "$MACOS_TEST_BOUNDARY"
 main "$@"
 ' bash "$@"
 }
@@ -543,6 +560,7 @@ run_macos_installer() {
 	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
+		"python3 scripts/python/update_darwin_packages.py --write --output darwin-package-update.json" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
 		"migrate-darwin-provider --all" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
@@ -552,6 +570,33 @@ run_macos_installer() {
 	! grep -q '/api/tags' "$COMMAND_LOG"
 	! grep -q '^docker ' "$COMMAND_LOG"
 	! grep -q '^task .*\(hindsight:up\|hermes:bootstrap\)' "$COMMAND_LOG"
+}
+
+@test "package update failure prevents macOS activation" {
+	write_installed_stubs
+	export DARWIN_UPDATE_STATUS=42
+	run_macos_installer
+	[ "$status" -eq 42 ]
+	grep -q 'python3 scripts/python/update_darwin_packages.py' "$COMMAND_LOG"
+	! grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG"
+}
+
+@test "public install ignores inherited optional profiles" {
+	write_installed_stubs
+	export DOTFILES_WITH_OLLAMA=1 DOTFILES_WITH_DOCKER=1 DOTFILES_WITH_HERMES=1
+	run_macos_installer
+	[ "$status" -eq 0 ]
+	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
+	! grep -q '^docker ' "$COMMAND_LOG"
+}
+
+@test "pinned installer mode skips both flake and custom package updates" {
+	write_installed_stubs
+	export DOTFILES_SKIP_FLAKE_UPDATE=1
+	run_macos_installer
+	[ "$status" -eq 0 ]
+	! grep -q 'nix flake update\|darwin:update' "$COMMAND_LOG"
+	grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG"
 }
 
 @test "macOS installer clears an incomplete inherited Git command config" {
@@ -1669,6 +1714,8 @@ printf "%s\n" "$DOCKER_APP"
 	cp "$INSTALLER" "$HOME/.dotfiles/scripts/sh/install-macos.sh"
 	cp "$COMMON_INSTALLER" "$HOME/.dotfiles/scripts/sh/install-common.sh"
 	cp "$HERMES_INSTALLER" "$HOME/.dotfiles/scripts/sh/hermes-agent.sh"
+	cp "$REPO_ROOT/Taskfile.yml" "$HOME/.dotfiles/Taskfile.yml"
+	cp -R "$REPO_ROOT/taskfiles" "$HOME/.dotfiles/taskfiles"
 	touch \
 		"$HOME/.dotfiles/flake.nix" \
 		"$HOME/.dotfiles/docker/hermes-service/compose.yml"
