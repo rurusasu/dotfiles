@@ -320,16 +320,18 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         active_bats_lines = [
             line.strip()
             for line in bats_script.splitlines()
-            if line.strip().startswith("bats ")
+            if line.strip().startswith("--command bats ")
         ]
         self.assertEqual(len(active_bats_lines), 1)
-        runtime_paths = set(
-            re.findall(r"tests/bash/[^\s]+\.bats", active_bats_lines[0])
+        self.assertEqual(
+            active_bats_lines[0],
+            '--command bats --print-output-on-failure "${owned_bats_files[@]}"',
         )
-        self.assertEqual(runtime_paths, devcontainer_paths)
-        self.assertNotEqual(active_bats_lines[0], "bats tests/bash/")
-        for glob_marker in ("*", "?", "["):
-            self.assertNotIn(glob_marker, active_bats_lines[0])
+        owned_array = re.search(r"(?ms)^owned_bats_files=\((.*?)^\)", bats_script)
+        self.assertIsNotNone(owned_array)
+        declared_paths = owned_array.group(1).split() if owned_array is not None else []
+        self.assertEqual(set(declared_paths), devcontainer_paths)
+        self.assertEqual(len(declared_paths), len(devcontainer_paths))
 
         self.assertEqual(contract_excluded, devcontainer_paths)
         self.assertTrue(devcontainer_paths.isdisjoint(contract_owned))
