@@ -281,13 +281,16 @@ Describe 'CI workflow configuration' {
 
         $activeBatsInvocations = @(
             $devcontainerBatsScript -split '\r?\n' |
-                Where-Object { $_ -match '^\s*bats\s+' }
+                Where-Object { $_ -match '^\s*--command bats\s+' }
         )
         $activeBatsInvocations.Count | Should -Be 1
-        $activeBatsInvocations[0] | Should -Match 'tests/bash/install_linux\.bats'
-        $activeBatsInvocations[0] | Should -Match 'tests/bash/install_macos\.bats'
-        $activeBatsInvocations[0] | Should -Not -Match 'bats\s+tests/bash/?(?:\s|$)'
-        $activeBatsInvocations[0] | Should -Not -Match '[*?]'
+        $activeBatsInvocations[0].Trim() | Should -Be '--command bats --print-output-on-failure "${owned_bats_files[@]}"'
+        $ownedArray = [regex]::Match($devcontainerBatsScript, '(?ms)^owned_bats_files=\((.*?)^\)')
+        $ownedArray.Success | Should -BeTrue
+        $declaredPaths = @($ownedArray.Groups[1].Value.Trim() -split '\s+')
+        $declaredPaths.Count | Should -Be 2
+        $declaredPaths | Should -Contain 'tests/bash/install_linux.bats'
+        $declaredPaths | Should -Contain 'tests/bash/install_macos.bats'
     }
 
     It 'should trigger PowerShell CI when Plane GitHub sync config changes' {
