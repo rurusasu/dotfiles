@@ -53,7 +53,7 @@ map("n", "-", "<cmd>Oil<cr>", { desc = "Open parent directory" })
 
 -- Marp preview
 require("config.marp").setup()
-map("n", "<leader>mp", "<cmd>MarpToggle<cr>", { desc = "Toggle Marp preview" })
+map("n", "<leader>marp", "<cmd>MarpToggle<cr>", { desc = "Toggle Marp preview" })
 
 -- Terminal mode
 map("t", "jk", "<C-\\><C-n>", { desc = "Exit terminal mode" })

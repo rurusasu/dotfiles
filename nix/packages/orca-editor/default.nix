@@ -7,11 +7,11 @@
 
 stdenvNoCC.mkDerivation {
   pname = "orca-editor";
-  version = "1.4.188";
+  version = "1.4.200";
 
   src = fetchurl {
-    url = "https://github.com/stablyai/orca/releases/download/v1.4.188/orca-macos-arm64.dmg";
-    hash = "sha256-rC7OdVj2/YkxNcUC6EshYfHGJD2KYuL7lL7G62s7JX4=";
+    url = "https://github.com/stablyai/orca/releases/download/v1.4.200/orca-macos-arm64.dmg";
+    hash = "sha256-Riwk46kMzsauTyQxrdsBqYrleaF36xiU7bRlbRJf2HI=";
   };
 
   nativeBuildInputs = [ undmg ];
