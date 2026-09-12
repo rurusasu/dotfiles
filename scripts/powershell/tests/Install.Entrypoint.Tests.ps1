@@ -208,6 +208,7 @@ param(
     [string]$InstallDir = "",
     [string]$ReleaseTag = "",
     [string]$PostInstallScript = "",
+    [string]$StateVersion = "26.05",
     [hashtable]$Options = @{},
     [string]$SyncMode = "link",
     [string]$SyncBack = "lock"
@@ -222,6 +223,7 @@ param(
     [string]$InstallDir = "",
     [string]$ReleaseTag = "",
     [string]$PostInstallScript = "",
+    [string]$StateVersion = "26.05",
     [hashtable]$Options = @{},
     [string]$OptionsJson = "",
     [string]$SyncMode = "link",

@@ -17,6 +17,7 @@ Options:
   --sync-mode <mode>   Sync mode: link|repo|nix|none (default: link)
   --sync-source <path> Source dir for sync (default: script repo root)
   --sync-back <mode>   Sync back: lock|none (default: lock when sync-mode=link)
+  --state-version <v>  State version for new or explicitly migrated systems (default: preserve)
   --skip-flake-update  Do not update flake inputs before nixos-rebuild
   --force              Allow non-empty repo dir (no deletion)
   -h, --help           Show help
@@ -37,6 +38,8 @@ SYNC_MODE="link"
 SYNC_SOURCE=""
 SYNC_BACK=""
 SKIP_FLAKE_UPDATE=0
+STATE_VERSION=""
+DOTFILES_STATE_DIR="${DOTFILES_STATE_DIR:-/var/lib/dotfiles}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -68,6 +71,10 @@ while [[ $# -gt 0 ]]; do
     SYNC_BACK="${2:-}"
     shift 2
     ;;
+  --state-version)
+    STATE_VERSION="${2:-}"
+    shift 2
+    ;;
   --skip-flake-update)
     SKIP_FLAKE_UPDATE=1
     shift
@@ -87,6 +94,11 @@ while [[ $# -gt 0 ]]; do
     ;;
   esac
 done
+
+if [[ -n $STATE_VERSION && ! $STATE_VERSION =~ ^[0-9]{2}\.[0-9]{2}$ ]]; then
+  echo "Invalid --state-version: $STATE_VERSION (expected YY.MM)." >&2
+  exit 1
+fi
 
 if [[ -z $USER_NAME ]]; then
   USER_NAME="$(getent passwd 1000 | cut -d: -f1 || true)"
@@ -112,10 +124,18 @@ export DOTFILES_HOME="$USER_HOME"
 export DOTFILES_UID="$(id -u "$USER_NAME")"
 export DOTFILES_GID="$(id -g "$USER_NAME")"
 export DOTFILES_GROUP="$(id -gn "$USER_NAME")"
+export DOTFILES_STATE_DIR
+if [[ -n $STATE_VERSION ]]; then
+  export DOTFILES_STATE_VERSION="$STATE_VERSION"
+fi
 
 if [[ -z $REPO_DIR ]]; then
   REPO_DIR="/home/$USER_NAME/.dotfiles"
 fi
+
+install -d -m 0755 "$DOTFILES_STATE_DIR"
+printf '%s\n' "$USER_NAME" >"$DOTFILES_STATE_DIR/user"
+chmod 0644 "$DOTFILES_STATE_DIR/user"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -129,6 +149,17 @@ if [[ -z $SYNC_BACK ]]; then
     SYNC_BACK="repo"
   else
     SYNC_BACK="none"
+  fi
+fi
+
+if [[ $SYNC_MODE == "nix" ]]; then
+  if [[ $SYNC_BACK == "repo" ]]; then
+    echo "cannot use --sync-back repo with --sync-mode nix; use --sync-back none or lock." >&2
+    exit 1
+  fi
+  if [[ ! -f "$REPO_DIR/flake.nix" || ! -f "$REPO_DIR/flake.lock" || ! -d "$REPO_DIR/scripts" ]]; then
+    echo "Sync mode nix requires an existing complete WSL checkout with flake.nix, flake.lock, and scripts/." >&2
+    exit 1
   fi
 fi
 
@@ -219,6 +250,12 @@ if [[ $SYNC_MODE == "link" ]]; then
   TARGET_DIR="$SYNC_SOURCE"
 else
   TARGET_DIR="$REPO_DIR"
+fi
+
+REBUILD_HELPER="$TARGET_DIR/scripts/sh/nixos-rebuild-with-user.sh"
+if [[ ! -f $REBUILD_HELPER ]]; then
+  echo "User-aware rebuild helper not found: $REBUILD_HELPER" >&2
+  exit 1
 fi
 
 case "$(uname -m)" in
@@ -330,7 +367,7 @@ NIX_CONFIG="$(printf '%s\n' \
   'experimental-features = nix-command flakes' \
   'extra-substituters = https://cache.numtide.com' \
   'extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=')" \
-  nixos-rebuild switch --flake "path:$TARGET_DIR#$FLAKE_NAME" --impure
+  bash "$REBUILD_HELPER" switch --flake "path:$TARGET_DIR#$FLAKE_NAME" --impure
 
 # Handle sync-back
 if [[ $SYNC_BACK == "repo" && $SYNC_MODE != "link" ]]; then

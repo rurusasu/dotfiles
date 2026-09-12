@@ -649,6 +649,49 @@ Describe 'NixOSWSLHandler' {
             $script:timeoutSeconds | Should -Be 123
         }
 
+        It 'should not force removal of an existing repo by default' {
+            $scriptFile = Join-Path $TestDrive "postinstall.sh"
+            New-Item $scriptFile -ItemType File -Force | Out-Null
+            $ctx.Options["PostInstallScript"] = $scriptFile
+            $script:execCmd = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                if ($Arguments -contains "wslpath") {
+                    $global:LASTEXITCODE = 0
+                    return "/mnt/c/test/postinstall.sh"
+                }
+                $script:execCmd = $Arguments[-1]
+                $global:LASTEXITCODE = 0
+            }
+            Mock Write-Host { }
+
+            $handler.ExecutePostInstall($ctx)
+
+            $script:execCmd | Should -Not -Match '--force'
+        }
+
+        It 'should pass force only when explicitly requested' {
+            $scriptFile = Join-Path $TestDrive "postinstall.sh"
+            New-Item $scriptFile -ItemType File -Force | Out-Null
+            $ctx.Options["PostInstallScript"] = $scriptFile
+            $ctx.Options["ForcePostInstall"] = $true
+            $script:execCmd = ""
+            Mock Invoke-Wsl {
+                param($Arguments)
+                if ($Arguments -contains "wslpath") {
+                    $global:LASTEXITCODE = 0
+                    return "/mnt/c/test/postinstall.sh"
+                }
+                $script:execCmd = $Arguments[-1]
+                $global:LASTEXITCODE = 0
+            }
+            Mock Write-Host { }
+
+            $handler.ExecutePostInstall($ctx)
+
+            $script:execCmd | Should -Match '--force'
+        }
+
         It 'should pass skip-flake-update when requested' {
             $scriptFile = Join-Path $TestDrive "postinstall.sh"
             New-Item $scriptFile -ItemType File -Force | Out-Null
