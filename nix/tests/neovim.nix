@@ -10,6 +10,7 @@ pkgs.runCommand "neovim-native-check" { nativeBuildInputs = [ neovim ]; } ''
   export XDG_CACHE_HOME="$TMPDIR/cache"
   cd ${../..}
   nvim --headless -u NONE -i NONE -l tests/lua/nvim_modern_test.lua
+  nvim --headless -u NONE -i NONE -l tests/lua/nvim_markdown_test.lua
   nvim --headless -u NONE -i NONE -l tests/lua/nvim_treesitter_test.lua
   nvim --headless -u NONE -i NONE -l tests/lua/nvim_treesitter_installer_test.lua
   DOTFILES_NVIM_LSPCONFIG=${pkgs.vimPlugins.nvim-lspconfig} \

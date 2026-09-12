@@ -86,6 +86,8 @@ Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢
   - `Ctrl+.`: Sidekick focus、`Space+as/ad`: CLI 選択／close
   - `Space+at/af/av/ap`: Sidekick へ位置／ファイル／選択範囲送信／prompt 選択
   - `Space+du/dc/dd/dt`: Devcontainer up／コンテナ内 bash／down／toggle
+  - Markdown のインライン表示切り替え: `Space+mp`（`render-markdown.nvim`）
+  - Marp のブラウザプレビュー切り替え: `Space+marp`
   - 詳細・terminal prefix と補完の競合は [Neovim](./neovim.md) を参照
 - VS Code / Cursor
   - `Vim` 拡張は利用しない
