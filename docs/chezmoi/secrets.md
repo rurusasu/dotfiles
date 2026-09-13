@@ -38,9 +38,93 @@ SSH Agent / `op-ssh-sign` のパスは [1Password CLI 運用](../1password/READM
 - `chezmoi/dot_local/bin/executable_stop-stale-codex-login.ps1`
   - Codex OAuth callback port `127.0.0.1:1457` を以前の `codex.exe login` が掴んだまま残った場合だけ、その stale process を停止する。`-AdoptRuntimeCodexAuth` 付きでは runtime home の認証を Orca managed account に登録し、Orca 子プロセスの `codex login` では `-InitializeManagedCodexHomeFromRuntimeAuth` で managed `CODEX_HOME` に `auth.json` を同期して成功扱いにする。`-CleanFailedOrcaHomes` は手動復旧用で、通常の Orca launcher からは呼ばない。
 - `chezmoi/.chezmoidata/mcp_servers.yaml`
-  - MCP の `op_env` 参照を置く。client template は失敗しても env fallback を使う。
+  - 直接起動する MCP の `op_env` 参照と、Docker MCP Toolkit の profile metadata を置く。Toolkit 管理サーバーの実値は置かない。
 - `chezmoi/.chezmoiscripts/**`
   - どうしてもファイル配置が必要なものだけ、runtime `op read --account ...` で取得する。
+
+## Docker MCP Toolkit
+
+共通 MCP の実行入口は Docker MCP Toolkit の `dotfiles` profile である。通常の
+`chezmoi apply` は Docker Desktop を起動せず、各クライアントには
+`docker mcp gateway run --profile dotfiles` だけを配置する。
+
+profile の既定の共有先は private GHCR の
+`ghcr.io/rurusasu/dotfiles/mcp-profile:latest` である。公開元のPCでは、まず
+GitHub Packages の `write:packages` を持つ PAT classic でログインしてから、次を実行する。
+
+```bash
+printf '%s\n' "$GHCR_WRITE_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
+task mcp:toolkit:push
+```
+
+別のPCでは、GitHub Packages の `read:packages` を持つ PAT classic でログインし、profileを取得する。
+
+```bash
+printf '%s\n' "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
+task mcp:toolkit:pull
+```
+
+別のタグやOCI registryを使う場合は `MCP_TOOLKIT_PROFILE_REF` で上書きできる。
+
+```bash
+MCP_TOOLKIT_PROFILE_REF=ghcr.io/rurusasu/dotfiles/mcp-profile:2026-09-14 \
+  task mcp:toolkit:push
+```
+
+profileにはMCP serverの構成だけが含まれ、Docker MCP ToolkitのsecretやPATは含まれない。
+したがって、各PCで `task mcp:toolkit:pull` の後に、`task mcp:toolkit:secrets` を実行する。
+このタスクは `my.1password.com` の `openclaw` vault から参照を実行時に読み取り、値を標準入力で
+Docker Desktopのsecret storeへ渡す。GitHub Freeではprivate GitHub Packagesにストレージ500 MB、転送1 GB/月
+の枠があるため、profile artifactの共有用途ではその範囲を確認して利用する。
+
+Docker MCP Toolkit が直接登録できる client は、profile取得後に次で登録する。
+
+```bash
+task mcp:toolkit:clients
+```
+
+これは Codex、Cursor、Gemini、VS Code、Zed の system-wide 設定へ `dotfiles` profile の gatewayを
+登録する。Windsurf は Docker MCP Toolkit CLI の client 登録対象外のため、chezmoi が生成する
+既存の gateway 設定を利用する。
+
+Toolkit 管理サーバーの API key は生成された Codex/Cursor/Gemini/VS Code/Windsurf/Zed
+設定や Git に書かず、Docker Desktop の secret store に登録する。現在の secret 名は次のとおり。
+
+| Server          | Docker MCP Toolkit secret      |
+| --------------- | ------------------------------ |
+| Context7        | `context7.api_key`             |
+| Exa             | `exa.api_key`                  |
+| Firecrawl       | `firecrawl.api_key`            |
+| GitHub Official | `github.personal_access_token` |
+| Obsidian        | `obsidian.api_key`             |
+| Tavily          | `tavily.api_token`             |
+
+`task mcp:toolkit:secrets` が現在登録する openclaw vault の参照は次のとおり。
+
+| Docker MCP Toolkit secret      | 1Password reference                                 |
+| ------------------------------ | --------------------------------------------------- |
+| `exa.api_key`                  | `op://openclaw/ExaUsedOpenclawPAT/credential`       |
+| `firecrawl.api_key`            | `op://openclaw/FirecrawlUsedOpenclawPAT/credential` |
+| `github.personal_access_token` | `op://openclaw/GitHubUsedOpenClawPAT/credential`    |
+| `tavily.api_token`             | `op://openclaw/TavilyUsedOpenclawPAT/credential`    |
+
+Context7 (`context7.api_key`) と Obsidian (`obsidian.api_key`) は、現在 `openclaw` vault に対応する
+アイテムが存在しないため自動注入対象にしていない。対応するアイテムを `openclaw` vault に追加した後、
+SSOTの参照を追加する。値をコマンドライン引数、Taskのログ、profile artifactへ出力しない。
+
+Docker Desktop の MCP Toolkit 画面で手動登録する場合も、値は標準入力から渡す。
+
+```bash
+op read --no-newline --account my.1password.com \
+  op://openclaw/TavilyUsedOpenclawPAT/credential \
+  | docker mcp secret set tavily.api_token
+```
+
+値をコマンドライン引数に渡したり、Taskのログへ出力したりしない。Obsidian は Local REST API
+community plugin を有効化し、API key を `obsidian.api_key` として登録する。Hindsight は
+secret 不要の host-local MCP である。Docker MCP Gateway は local HTTP remote を受け付けないため
+Toolkit profile には入れず、`mcp_servers.yaml` と `.mcp.json` の直接 URL として全クライアントへ
+配布する。利用前に既存の `task hindsight:up` でサービスを起動する。
 
 Plane MCP の API token は共有された 1Password item を参照する:
 

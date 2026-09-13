@@ -1,0 +1,56 @@
+{{- if ne .chezmoi.os "windows" }}
+#!/usr/bin/env bash
+# chezmoi:template:hash={{ include ".chezmoidata/mcp_servers.yaml" | sha256sum }}
+
+set -euo pipefail
+
+python3 - <<'PY'
+import json
+import re
+from pathlib import Path
+
+servers = {
+    "{{ .mcp_toolkit.server_name }}": {
+        "source": "custom",
+        "command": "docker",
+        "args": ["mcp", "gateway", "run", "--profile", "{{ .mcp_toolkit.profile }}"],
+    },
+{{- range .mcp_servers }}
+{{- if has "zed" .supports }}
+    "{{ .name }}": {
+        "source": "custom",
+{{- if and (hasKey . "url") (not (hasKey . "command")) }}
+        "command": "npx",
+        "args": ["-y", "mcp-remote", "{{ .url }}"],
+{{- else }}
+        "command": "{{ .command }}",
+        "args": [{{ range $i, $arg := .args }}{{ if $i }}, {{ end }}"{{ $arg }}"{{ end }}],
+{{- if hasKey . "env" }}
+        "env": {
+{{- range $key, $value := .env }}
+            "{{ $key }}": "{{ $value }}",
+{{- end }}
+        },
+{{- end }}
+{{- end }}
+    },
+{{- end }}
+{{- end }}
+}
+
+zed_dir = Path.home() / ".config" / "zed"
+settings_path = zed_dir / "settings.json"
+if not settings_path.is_file():
+    raise SystemExit(0)
+
+raw = settings_path.read_text(encoding="utf-8")
+stripped = re.sub(r"(?m)^\s*//.*$", "", raw)
+stripped = re.sub(r"(?<=\S)\s*//.*$", "", stripped, flags=re.MULTILINE)
+stripped = re.sub(r",\s*([}\]])", r"\1", stripped)
+settings = json.loads(stripped)
+context_servers = settings.setdefault("context_servers", {})
+context_servers.update(servers)
+settings_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(f"[zed-mcp] updated {settings_path}")
+PY
+{{- end }}

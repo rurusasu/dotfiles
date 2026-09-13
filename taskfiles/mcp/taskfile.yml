@@ -1,0 +1,68 @@
+version: "3"
+
+tasks:
+  toolkit:sync:
+    desc: Converge the shared Docker MCP Toolkit profile
+    preconditions:
+      - sh: command -v docker
+        msg: Docker CLI is required
+    cmds:
+      - cmd: bash ./scripts/sh/mcp-toolkit.sh sync
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Sync
+        platforms: [windows]
+
+  toolkit:push:
+    desc: Converge and push the shared Docker MCP Toolkit profile to its OCI registry
+    preconditions:
+      - sh: command -v docker
+        msg: Docker CLI is required
+    cmds:
+      - cmd: bash ./scripts/sh/mcp-toolkit.sh push
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Push
+        platforms: [windows]
+
+  toolkit:pull:
+    desc: Pull the shared Docker MCP Toolkit profile from its OCI registry
+    preconditions:
+      - sh: command -v docker
+        msg: Docker CLI is required
+    cmds:
+      - cmd: bash ./scripts/sh/mcp-toolkit.sh pull
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Pull
+        platforms: [windows]
+
+  toolkit:secrets:
+    desc: Inject Docker MCP Toolkit secrets from the openclaw 1Password vault
+    preconditions:
+      - sh: command -v docker
+        msg: Docker CLI is required
+    cmds:
+      - cmd: bash ./scripts/sh/mcp-toolkit.sh secrets
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Secrets
+        platforms: [windows]
+
+  toolkit:clients:
+    desc: Register Docker MCP Toolkit with supported agent clients
+    preconditions:
+      - sh: command -v docker
+        msg: Docker CLI is required
+    cmds:
+      - cmd: bash ./scripts/sh/mcp-toolkit.sh clients
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Clients
+        platforms: [windows]
+
+  toolkit:status:
+    desc: Show the shared Docker MCP Toolkit profile
+    preconditions:
+      - sh: command -v docker
+        msg: Docker CLI is required
+    cmds:
+      - cmd: bash ./scripts/sh/mcp-toolkit.sh status
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Status
+        platforms: [windows]

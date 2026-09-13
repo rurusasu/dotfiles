@@ -45,6 +45,9 @@ includes:
   mlflow:
     taskfile: ./taskfiles/mlflow/taskfile.yml
     flatten: true
+  mcp:
+    taskfile: ./taskfiles/mcp/taskfile.yml
+    dir: .
   hooks:
     taskfile: ./taskfiles/hooks/taskfile.yml
     flatten: true

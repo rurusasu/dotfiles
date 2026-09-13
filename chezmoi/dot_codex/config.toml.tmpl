@@ -173,6 +173,17 @@ config_file = "{{ .chezmoi.homeDir | replace "\\" "/" }}/.codex/agents/python_co
 {{- $opReadFailed := false }}
 {{- $opReadTimeoutSeconds := 5 }}
 [mcp_servers]
+{{- if and (hasKey . "mcp_toolkit") (has "codex" .mcp_toolkit.supports) }}
+[mcp_servers.{{ .mcp_toolkit.server_name }}]
+{{- if eq .chezmoi.os "windows" }}
+command = "pwsh"
+args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "{{ .chezmoi.homeDir | replace "\\" "/" }}/.local/bin/codex-docker-mcp.ps1", "mcp", "gateway", "run", "--profile", "{{ .mcp_toolkit.profile }}"]
+{{- else }}
+command = "docker"
+args = ["mcp", "gateway", "run", "--profile", "{{ .mcp_toolkit.profile }}"]
+{{- end }}
+startup_timeout_sec = 30
+{{- end }}
 {{- if hasKey . "mcp_servers" }}
 {{- range .mcp_servers }}
 {{- if has "codex" .supports }}

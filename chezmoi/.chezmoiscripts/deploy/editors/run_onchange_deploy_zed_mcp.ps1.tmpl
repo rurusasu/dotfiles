@@ -26,6 +26,14 @@ try {
 # Build context_servers
 $servers = [ordered]@{}
 
+{{- if and (hasKey . "mcp_toolkit") (has "zed" .mcp_toolkit.supports) }}
+$servers["{{ .mcp_toolkit.server_name }}"] = [ordered]@{
+    source = "custom"
+    command = "docker"
+    args = @("mcp", "gateway", "run", "--profile", "{{ .mcp_toolkit.profile }}")
+}
+{{- end }}
+
 {{ range .mcp_servers }}
 {{- if has "zed" .supports }}
 {{- if and (hasKey . "url") (not (hasKey . "command")) }}
