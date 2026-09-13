@@ -3,6 +3,7 @@
 set -euo pipefail
 
 profile_id="dotfiles"
+profile_ref="${MCP_TOOLKIT_PROFILE_REF:-ghcr.io/rurusasu/dotfiles/mcp-profile:latest}"
 
 catalog_refs=(
   "catalog://mcp/docker-mcp-catalog/context7"
@@ -66,6 +67,19 @@ sync_profile() {
   docker mcp profile show "$profile_id"
 }
 
+push_profile() {
+  sync_profile
+  printf '%s\n' "[mcp-toolkit] pushing $profile_id to $profile_ref"
+  docker mcp profile push "$profile_id" "$profile_ref"
+}
+
+pull_profile() {
+  printf '%s\n' "[mcp-toolkit] pulling profile from $profile_ref"
+  docker mcp profile pull "$profile_ref"
+  printf '%s\n' "[mcp-toolkit] profile $profile_id"
+  docker mcp profile show "$profile_id"
+}
+
 show_status() {
   docker mcp profile show "$profile_id"
 }
@@ -78,11 +92,17 @@ main() {
   sync)
     sync_profile
     ;;
+  push)
+    push_profile
+    ;;
+  pull)
+    pull_profile
+    ;;
   status)
     show_status
     ;;
   *)
-    printf 'Usage: %s {sync|status}\n' "$(basename "$0")" >&2
+    printf 'Usage: %s {sync|push|pull|status}\n' "$(basename "$0")" >&2
     exit 64
     ;;
   esac

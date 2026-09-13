@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move Docker MCP Toolkit-compatible servers into the shared `dotfiles` profile and connect every managed agent to its gateway while retaining unsupported MCPs through the existing SSOT.
+**Goal:** Move Docker MCP Toolkit-compatible servers into the shared `dotfiles` profile, publish that profile through GHCR for cross-device reuse, and connect every managed agent to its gateway while retaining unsupported MCPs through the existing SSOT.
 
-**Architecture:** `.chezmoidata/mcp_servers.yaml` will distinguish the Toolkit profile from direct servers. Cross-platform scripts will converge the Toolkit profile, while all client templates will emit one stdio gateway entry plus direct exceptions. Hindsight remains direct because Docker MCP Gateway rejects local HTTP remotes. Toolkit secrets stay in Docker Desktop's secret store.
+**Architecture:** `.chezmoidata/mcp_servers.yaml` will distinguish the Toolkit profile from direct servers. Cross-platform scripts will converge the Toolkit profile locally and push/pull it as an OCI artifact using a configurable GHCR reference. All client templates will emit one stdio gateway entry plus direct exceptions. Hindsight remains direct because Docker MCP Gateway rejects local HTTP remotes. Toolkit secrets stay in Docker Desktop's secret store and are never included in the pushed profile.
 
 **Tech Stack:** Docker MCP Toolkit CLI, Docker MCP Catalog, chezmoi Go templates, Go Task, Bash, PowerShell, Pester/static repository tests.
 
@@ -13,11 +13,14 @@
 ## Global Constraints
 
 - The Toolkit profile ID is `dotfiles`.
+- The default shared profile reference is `ghcr.io/rurusasu/dotfiles/mcp-profile:latest`; `MCP_TOOLKIT_PROFILE_REF` overrides it.
 - Toolkit servers are `context7`, `deepwiki`, `exa`, `firecrawl`, `github-official`, `obsidian`, `playwright`, and `tavily`.
 - Hindsight uses `http://127.0.0.1:8888/mcp/codex-shared/`, is emitted directly for every client, and is not started by the Toolkit task.
 - `linear`, `sentry`, `cloud-run`, `superlocalmemory`, and `qmd` must be removed.
 - `plane`, `drawio`, and `kaggle` remain direct MCP entries.
 - Secret values must not be committed or emitted into generated client files.
+- `task mcp:toolkit:push` must converge the local profile before publishing it.
+- `task mcp:toolkit:pull` must pull the configured OCI reference without printing or importing credentials.
 - Existing unrelated `flake.lock` changes in the main worktree must remain untouched.
 
 ---
@@ -75,7 +78,7 @@ Change `.mcp.json` to expose `MCP_DOCKER` through the `dotfiles` profile and ret
 
 Document the Docker Desktop secret-store names and the `task mcp:toolkit:sync` prerequisite without exposing any secret or 1Password value.
 
-### Task 3: Implement cross-platform Toolkit profile convergence
+### Task 3: Implement cross-platform Toolkit profile convergence and registry sync
 
 **Files:**
 
@@ -84,21 +87,29 @@ Document the Docker Desktop secret-store names and the `task mcp:toolkit:sync` p
 - Create: `taskfiles/mcp/taskfile.yml`
 - Modify: `Taskfile.yml`
 
-- [ ] **Step 1: Implement Unix sync behavior**
+- [ ] **Step 1: Write failing push/pull contract assertions**
+
+Assert both adapters use the default GHCR reference with `MCP_TOOLKIT_PROFILE_REF` override, invoke `docker mcp profile push` and `docker mcp profile pull` with the documented argument order, and expose `toolkit:push` and `toolkit:pull` tasks.
+
+- [ ] **Step 2: Implement Unix sync behavior**
 
 Add `sync` and `status` actions. The sync action must ensure the profile exists, add all declared catalog refs, remove obsolete names including any stale Hindsight entry, and show the profile. Log only names and statuses.
 
-- [ ] **Step 2: Implement Windows sync behavior**
+- [ ] **Step 3: Implement Unix push and pull behavior**
+
+`push` must call local convergence first and then execute `docker mcp profile push "$profile_id" "$profile_ref"`. `pull` must execute `docker mcp profile pull "$profile_ref"` and show the resulting local profile. The reference must come from `MCP_TOOLKIT_PROFILE_REF` or the default GHCR reference.
+
+- [ ] **Step 4: Implement Windows sync, push, and pull behavior**
 
 Implement the same operations with PowerShell path handling and `Join-Path`, using `docker mcp` commands and the same profile/server list. Keep secret values out of command output.
 
-- [ ] **Step 3: Add public Taskfile commands**
+- [ ] **Step 5: Add public Taskfile commands**
 
-Include `taskfiles/mcp/taskfile.yml` from the root Taskfile. Add public `mcp:toolkit:sync` and `mcp:toolkit:status` tasks with Docker preconditions and Unix/Windows adapters.
+Include `taskfiles/mcp/taskfile.yml` from the root Taskfile. Add public `mcp:toolkit:sync`, `mcp:toolkit:push`, `mcp:toolkit:pull`, and `mcp:toolkit:status` tasks with Docker preconditions and Unix/Windows adapters.
 
-- [ ] **Step 4: Run adapter syntax tests**
+- [ ] **Step 6: Run adapter syntax tests**
 
-Run `bash -n scripts/sh/mcp-toolkit.sh`, PowerShell parser validation, and the Taskfile dry-run commands. Verify the new tests still fail only on gateway/template assertions.
+Run `bash -n scripts/sh/mcp-toolkit.sh`, PowerShell parser validation, and the Taskfile dry-run commands. Verify the focused Toolkit contract tests pass after the push/pull implementation.
 
 ### Task 4: Generate the shared gateway connection in every client
 
@@ -130,7 +141,7 @@ Build `MCP_DOCKER` with `type=stdio` for VS Code and `source=custom`, `command=d
 
 Run the existing chezmoi template checks and parse rendered JSON/TOML. Verify each client has exactly one `MCP_DOCKER` entry and no migrated server duplicate.
 
-### Task 5: Verify and document the complete migration
+### Task 5: Document and verify the complete migration
 
 **Files:**
 
@@ -138,19 +149,23 @@ Run the existing chezmoi template checks and parse rendered JSON/TOML. Verify ea
 - Modify: `docs/chezmoi/secrets.md`
 - Modify: `docs/architecture.md` if the MCP ownership table needs a link
 
-- [ ] **Step 1: Run focused tests**
+- [ ] **Step 1: Document GHCR profile sharing**
+
+Document `docker login ghcr.io`, the publisher/consumer PAT scopes, the default reference override, and the fact that Docker MCP credentials must be configured separately on every machine because OCI profile push/pull excludes them.
+
+- [ ] **Step 2: Run focused tests**
 
 Run the Pester chezmoi tests, shell syntax checks, Taskfile dry runs, and `docker mcp gateway run --profile dotfiles --dry-run` after syncing the local profile where Docker is available. Confirm the eight Toolkit servers initialize; Hindsight remains outside this dry run by design.
 
-- [ ] **Step 2: Run repository quality checks**
+- [ ] **Step 3: Run repository quality checks**
 
 Run `nix fmt -- --fail-on-change` independently of flake checks, then the repository-authoritative tests relevant to changed files.
 
-- [ ] **Step 3: Review the diff against Issue #612**
+- [ ] **Step 4: Review the diff against Issue #612**
 
 Confirm no user `flake.lock` change was copied into the feature worktree, no secret value is present, removed names are absent, and Hermes internal MCP boundaries remain unchanged.
 
-- [ ] **Step 4: Commit with the repository task**
+- [ ] **Step 5: Commit with the repository task**
 
 Use the repository convention:
 

@@ -113,4 +113,31 @@ Describe 'MCP Toolkit convergence adapters' {
             $content | Should -Not -Match '(?i)(api[_-]?key|token)\s*=\s*[A-Za-z0-9_./+:-]{12,}'
         }
     }
+
+    It 'supports configurable GHCR profile push and pull on both platforms' {
+        $unixPath = Join-Path $script:repoRoot "scripts/sh/mcp-toolkit.sh"
+        $windowsPath = Join-Path $script:repoRoot "scripts/powershell/mcp-toolkit.ps1"
+        $unix = Get-Content -LiteralPath $unixPath -Raw
+        $windows = Get-Content -LiteralPath $windowsPath -Raw
+
+        foreach ($content in @($unix, $windows)) {
+            $content | Should -Match 'MCP_TOOLKIT_PROFILE_REF'
+            $content | Should -Match 'ghcr\.io/rurusasu/dotfiles/mcp-profile:latest'
+        }
+
+        $unix | Should -Match 'docker mcp profile push "\$profile_id" "\$profile_ref"'
+        $unix | Should -Match 'docker mcp profile pull "\$profile_ref"'
+        $windows | Should -Match 'profile", "push", \$ProfileId, \$ProfileRef'
+        $windows | Should -Match 'profile", "pull", \$ProfileRef'
+    }
+
+    It 'exposes push and pull tasks' {
+        $taskfile = Get-Content -LiteralPath (Join-Path $script:repoRoot "taskfiles/mcp/taskfile.yml") -Raw
+        $taskfile | Should -Match '(?m)^  toolkit:push:\s*$'
+        $taskfile | Should -Match '(?m)^  toolkit:pull:\s*$'
+        $taskfile | Should -Match 'mcp-toolkit\.sh push'
+        $taskfile | Should -Match 'mcp-toolkit\.sh pull'
+        $taskfile | Should -Match 'mcp-toolkit\.ps1 -Action Push'
+        $taskfile | Should -Match 'mcp-toolkit\.ps1 -Action Pull'
+    }
 }

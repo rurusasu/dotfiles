@@ -12,6 +12,28 @@ tasks:
       - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Sync
         platforms: [windows]
 
+  toolkit:push:
+    desc: Converge and push the shared Docker MCP Toolkit profile to its OCI registry
+    preconditions:
+      - sh: command -v docker
+        msg: Docker CLI is required
+    cmds:
+      - cmd: bash ./scripts/sh/mcp-toolkit.sh push
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Push
+        platforms: [windows]
+
+  toolkit:pull:
+    desc: Pull the shared Docker MCP Toolkit profile from its OCI registry
+    preconditions:
+      - sh: command -v docker
+        msg: Docker CLI is required
+    cmds:
+      - cmd: bash ./scripts/sh/mcp-toolkit.sh pull
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Pull
+        platforms: [windows]
+
   toolkit:status:
     desc: Show the shared Docker MCP Toolkit profile
     preconditions:

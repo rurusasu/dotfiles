@@ -44,9 +44,37 @@ SSH Agent / `op-ssh-sign` のパスは [1Password CLI 運用](../1password/READM
 
 ## Docker MCP Toolkit
 
-共通 MCP の実行入口は `task mcp:toolkit:sync` で Docker MCP Toolkit の
-`dotfiles` profile に収束させる。通常の `chezmoi apply` は Docker Desktop を起動せず、
-各クライアントには `docker mcp gateway run --profile dotfiles` だけを配置する。
+共通 MCP の実行入口は Docker MCP Toolkit の `dotfiles` profile である。通常の
+`chezmoi apply` は Docker Desktop を起動せず、各クライアントには
+`docker mcp gateway run --profile dotfiles` だけを配置する。
+
+profile の既定の共有先は private GHCR の
+`ghcr.io/rurusasu/dotfiles/mcp-profile:latest` である。公開元のPCでは、まず
+GitHub Packages の `write:packages` を持つ PAT classic でログインしてから、次を実行する。
+
+```bash
+printf '%s\n' "$GHCR_WRITE_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
+task mcp:toolkit:push
+```
+
+別のPCでは、GitHub Packages の `read:packages` を持つ PAT classic でログインし、profileを取得する。
+
+```bash
+printf '%s\n' "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
+task mcp:toolkit:pull
+```
+
+別のタグやOCI registryを使う場合は `MCP_TOOLKIT_PROFILE_REF` で上書きできる。
+
+```bash
+MCP_TOOLKIT_PROFILE_REF=ghcr.io/rurusasu/dotfiles/mcp-profile:2026-09-14 \
+  task mcp:toolkit:push
+```
+
+profileにはMCP serverの構成だけが含まれ、Docker MCP ToolkitのsecretやPATは含まれない。
+したがって、各PCで `task mcp:toolkit:pull` の後に、下記のsecretをDocker Desktopのsecret
+storeへ個別に登録する。GitHub Freeではprivate GitHub Packagesにストレージ500 MB、転送1 GB/月
+の枠があるため、profile artifactの共有用途ではその範囲を確認して利用する。
 
 Toolkit 管理サーバーの API key は生成された Codex/Cursor/Gemini/VS Code/Windsurf/Zed
 設定や Git に書かず、Docker Desktop の secret store に登録する。現在の secret 名は次のとおり。

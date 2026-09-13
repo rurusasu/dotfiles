@@ -1,11 +1,17 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("Sync", "Status")]
+    [ValidateSet("Sync", "Push", "Pull", "Status")]
     [string]$Action = "Sync"
 )
 
 $ErrorActionPreference = "Stop"
 $ProfileId = "dotfiles"
+$ProfileRef = if ([string]::IsNullOrWhiteSpace($env:MCP_TOOLKIT_PROFILE_REF)) {
+    "ghcr.io/rurusasu/dotfiles/mcp-profile:latest"
+}
+else {
+    $env:MCP_TOOLKIT_PROFILE_REF
+}
 
 $CatalogRefs = @(
     "catalog://mcp/docker-mcp-catalog/context7",
@@ -46,27 +52,44 @@ if ($LASTEXITCODE -ne 0) {
     throw "Docker MCP Toolkit CLI is required"
 }
 
-if ($Action -eq "Status") {
+function Sync-Profile {
+    & docker mcp profile show $ProfileId *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[mcp-toolkit] creating profile $ProfileId"
+        Invoke-Docker -Arguments @("mcp", "profile", "create", "--id", $ProfileId, "--name", $ProfileId)
+    }
+
+    $ServerArguments = @( "mcp", "profile", "server", "add", $ProfileId )
+    foreach ($Ref in $CatalogRefs) {
+        $ServerArguments += @("--server", $Ref)
+    }
+    Write-Host "[mcp-toolkit] converging catalog servers"
+    Invoke-Docker -Arguments $ServerArguments
+
+    foreach ($Stale in $StaleServers) {
+        & docker mcp profile server remove $ProfileId --name $Stale *> $null
+    }
+
+    Write-Host "[mcp-toolkit] profile $ProfileId"
     Invoke-Docker -Arguments @("mcp", "profile", "show", $ProfileId)
-    exit 0
 }
 
-& docker mcp profile show $ProfileId *> $null
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "[mcp-toolkit] creating profile $ProfileId"
-    Invoke-Docker -Arguments @("mcp", "profile", "create", "--id", $ProfileId, "--name", $ProfileId)
+function Push-Profile {
+    Sync-Profile
+    Write-Host "[mcp-toolkit] pushing $ProfileId to $ProfileRef"
+    Invoke-Docker -Arguments @("mcp", "profile", "push", $ProfileId, $ProfileRef)
 }
 
-$ServerArguments = @("mcp", "profile", "server", "add", $ProfileId)
-foreach ($Ref in $CatalogRefs) {
-    $ServerArguments += @("--server", $Ref)
-}
-Write-Host "[mcp-toolkit] converging catalog servers"
-Invoke-Docker -Arguments $ServerArguments
-
-foreach ($Stale in $StaleServers) {
-    & docker mcp profile server remove $ProfileId --name $Stale *> $null
+function Pull-Profile {
+    Write-Host "[mcp-toolkit] pulling profile from $ProfileRef"
+    Invoke-Docker -Arguments @("mcp", "profile", "pull", $ProfileRef)
+    Write-Host "[mcp-toolkit] profile $ProfileId"
+    Invoke-Docker -Arguments @("mcp", "profile", "show", $ProfileId)
 }
 
-Write-Host "[mcp-toolkit] profile $ProfileId"
-Invoke-Docker -Arguments @("mcp", "profile", "show", $ProfileId)
+switch ($Action) {
+    "Sync" { Sync-Profile }
+    "Push" { Push-Profile }
+    "Pull" { Pull-Profile }
+    "Status" { Invoke-Docker -Arguments @("mcp", "profile", "show", $ProfileId) }
+}

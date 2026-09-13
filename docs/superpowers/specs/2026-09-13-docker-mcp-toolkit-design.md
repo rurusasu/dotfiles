@@ -8,7 +8,7 @@ Issue #612 の MCP 変更として、Docker MCP Toolkit を共通 MCP の実行�
 
 ### Toolkit profile
 
-The managed profile ID is `dotfiles`. The profile is converged by the public task `task mcp:toolkit:sync` and is not silently created during ordinary chezmoi rendering. This keeps a core-only installation usable when Docker Desktop is not installed or not running.
+The managed profile ID is `dotfiles`. The profile is converged locally by the public task `task mcp:toolkit:sync`, published to the default private GHCR OCI reference `ghcr.io/rurusasu/dotfiles/mcp-profile:latest` by `task mcp:toolkit:push`, and retrieved on another machine by `task mcp:toolkit:pull`. `MCP_TOOLKIT_PROFILE_REF` overrides the reference for versioned tags or another OCI registry. The profile is not silently created during ordinary chezmoi rendering. This keeps a core-only installation usable when Docker Desktop is not installed or not running.
 
 The profile contains these Docker MCP Catalog entries:
 
@@ -42,7 +42,7 @@ The Docker Toolkit client-connect command is used as the compatibility reference
 
 ### Secrets
 
-Toolkit-managed secrets are stored in Docker Desktop's secret store, not in `mcp_servers.yaml`, generated client files, or Git. Documentation identifies the expected secret names:
+Toolkit-managed secrets are stored in Docker Desktop's secret store, not in `mcp_servers.yaml`, generated client files, the OCI profile artifact, or Git. Documentation identifies the expected secret names:
 
 ```text
 context7.api_key
@@ -83,6 +83,8 @@ Hermes's Browser MCP, X API MCP, Gmail MCP, and Calendar MCP remain Hermes-conta
 
 It must not delete unrelated Docker MCP profiles, change Docker Desktop authentication, or start Hindsight/Hermes. The gateway remains on stdio by default and does not publish a host TCP port.
 
+`task mcp:toolkit:push` runs local convergence first and then pushes only the profile artifact. The registry credential is supplied through Docker's registry login and is never written to the profile. `task mcp:toolkit:pull` retrieves the configured OCI reference; consumers configure Toolkit secrets locally after the pull.
+
 ## Acceptance criteria
 
 - The five requested removals are absent from direct data, generated client templates, project MCP configuration, and Toolkit sync commands.
@@ -90,4 +92,5 @@ It must not delete unrelated Docker MCP profiles, change Docker Desktop authenti
 - All six managed client templates produce the gateway entry.
 - Direct `plane`, `drawio`, and `kaggle` entries remain available through the existing common data path.
 - Windows and Unix Toolkit sync tasks use the same profile ID and server set.
+- The push task converges before publishing and the pull task uses the same configurable OCI reference on both platforms.
 - Tests validate profile refs, removed names, gateway emission, Hindsight endpoint, secret-name documentation, and Docker stdio argument shape.
