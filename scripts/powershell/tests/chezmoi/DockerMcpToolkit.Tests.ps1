@@ -140,4 +140,48 @@ Describe 'MCP Toolkit convergence adapters' {
         $taskfile | Should -Match 'mcp-toolkit\.ps1 -Action Push'
         $taskfile | Should -Match 'mcp-toolkit\.ps1 -Action Pull'
     }
+
+    It 'declares openclaw 1Password references for available Toolkit secrets' {
+        $expectedRefs = @{
+            'exa.api_key' = 'op://openclaw/ExaUsedOpenclawPAT/credential'
+            'firecrawl.api_key' = 'op://openclaw/FirecrawlUsedOpenclawPAT/credential'
+            'github.personal_access_token' = 'op://openclaw/GitHubUsedOpenClawPAT/credential'
+            'tavily.api_token' = 'op://openclaw/TavilyUsedOpenclawPAT/credential'
+        }
+
+        $script:mcpData | Should -Match '(?m)^  secrets:\s*$'
+        $script:mcpData | Should -Match 'account:\s*"my\.1password\.com"'
+        $script:mcpData | Should -Match 'vault:\s*"openclaw"'
+        $script:mcpData | Should -Match 'context7\.api_key'
+        $script:mcpData | Should -Match 'obsidian\.api_key'
+        foreach ($entry in $expectedRefs.GetEnumerator()) {
+            $expectedLine = '{0}: "{1}"' -f $entry.Key, $entry.Value
+            $script:mcpData | Should -Match ([regex]::Escape($expectedLine))
+        }
+        $script:mcpData | Should -Not -Match 'op://Private/'
+    }
+
+    It 'injects Toolkit secrets from 1Password without exposing values' {
+        $unixPath = Join-Path $script:repoRoot "scripts/sh/mcp-toolkit.sh"
+        $windowsPath = Join-Path $script:repoRoot "scripts/powershell/mcp-toolkit.ps1"
+        $taskfilePath = Join-Path $script:repoRoot "taskfiles/mcp/taskfile.yml"
+        $docsPath = Join-Path $script:repoRoot "docs/chezmoi/secrets.md"
+
+        foreach ($path in @($unixPath, $windowsPath)) {
+            $content = Get-Content -LiteralPath $path -Raw
+            $content | Should -Match 'docker mcp secret set'
+            $content | Should -Match 'op.*read'
+            $content | Should -Match 'MCP_TOOLKIT_OP_ACCOUNT'
+            $content | Should -Not -Match '(?i)printf.*(api[_-]?key|token).*op://'
+        }
+
+        $taskfile = Get-Content -LiteralPath $taskfilePath -Raw
+        $taskfile | Should -Match '(?m)^  toolkit:secrets:\s*$'
+        $taskfile | Should -Match 'mcp-toolkit\.sh secrets'
+        $taskfile | Should -Match 'mcp-toolkit\.ps1 -Action Secrets'
+
+        $docs = Get-Content -LiteralPath $docsPath -Raw
+        $docs | Should -Match 'task mcp:toolkit:secrets'
+        $docs | Should -Match '1Password'
+    }
 }

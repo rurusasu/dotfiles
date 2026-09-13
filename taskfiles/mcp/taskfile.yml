@@ -34,6 +34,17 @@ tasks:
       - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Pull
         platforms: [windows]
 
+  toolkit:secrets:
+    desc: Inject Docker MCP Toolkit secrets from the openclaw 1Password vault
+    preconditions:
+      - sh: command -v docker
+        msg: Docker CLI is required
+    cmds:
+      - cmd: bash ./scripts/sh/mcp-toolkit.sh secrets
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Secrets
+        platforms: [windows]
+
   toolkit:status:
     desc: Show the shared Docker MCP Toolkit profile
     preconditions:

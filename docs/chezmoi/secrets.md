@@ -72,8 +72,9 @@ MCP_TOOLKIT_PROFILE_REF=ghcr.io/rurusasu/dotfiles/mcp-profile:2026-09-14 \
 ```
 
 profileにはMCP serverの構成だけが含まれ、Docker MCP ToolkitのsecretやPATは含まれない。
-したがって、各PCで `task mcp:toolkit:pull` の後に、下記のsecretをDocker Desktopのsecret
-storeへ個別に登録する。GitHub Freeではprivate GitHub Packagesにストレージ500 MB、転送1 GB/月
+したがって、各PCで `task mcp:toolkit:pull` の後に、`task mcp:toolkit:secrets` を実行する。
+このタスクは `my.1password.com` の `openclaw` vault から参照を実行時に読み取り、値を標準入力で
+Docker Desktopのsecret storeへ渡す。GitHub Freeではprivate GitHub Packagesにストレージ500 MB、転送1 GB/月
 の枠があるため、profile artifactの共有用途ではその範囲を確認して利用する。
 
 Toolkit 管理サーバーの API key は生成された Codex/Cursor/Gemini/VS Code/Windsurf/Zed
@@ -88,14 +89,28 @@ Toolkit 管理サーバーの API key は生成された Codex/Cursor/Gemini/VS 
 | Obsidian        | `obsidian.api_key`             |
 | Tavily          | `tavily.api_token`             |
 
-Docker Desktop の MCP Toolkit 画面、または `docker mcp secret set` の標準入力経由で登録する。
-例:
+`task mcp:toolkit:secrets` が現在登録する openclaw vault の参照は次のとおり。
+
+| Docker MCP Toolkit secret      | 1Password reference                                 |
+| ------------------------------ | --------------------------------------------------- |
+| `exa.api_key`                  | `op://openclaw/ExaUsedOpenclawPAT/credential`       |
+| `firecrawl.api_key`            | `op://openclaw/FirecrawlUsedOpenclawPAT/credential` |
+| `github.personal_access_token` | `op://openclaw/GitHubUsedOpenClawPAT/credential`    |
+| `tavily.api_token`             | `op://openclaw/TavilyUsedOpenclawPAT/credential`    |
+
+Context7 (`context7.api_key`) と Obsidian (`obsidian.api_key`) は、現在 `openclaw` vault に対応する
+アイテムが存在しないため自動注入対象にしていない。対応するアイテムを `openclaw` vault に追加した後、
+SSOTの参照を追加する。値をコマンドライン引数、Taskのログ、profile artifactへ出力しない。
+
+Docker Desktop の MCP Toolkit 画面で手動登録する場合も、値は標準入力から渡す。
 
 ```bash
-printf '%s\n' "$TAVILY_API_KEY" | docker mcp secret set tavily.api_token
+op read --no-newline --account my.1password.com \
+  op://openclaw/TavilyUsedOpenclawPAT/credential \
+  | docker mcp secret set tavily.api_token
 ```
 
-値をコマンドライン引数に渡したり、Task のログへ出力したりしない。Obsidian は Local REST API
+値をコマンドライン引数に渡したり、Taskのログへ出力したりしない。Obsidian は Local REST API
 community plugin を有効化し、API key を `obsidian.api_key` として登録する。Hindsight は
 secret 不要の host-local MCP である。Docker MCP Gateway は local HTTP remote を受け付けないため
 Toolkit profile には入れず、`mcp_servers.yaml` と `.mcp.json` の直接 URL として全クライアントへ

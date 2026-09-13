@@ -4,7 +4,7 @@
 
 **Goal:** Move Docker MCP Toolkit-compatible servers into the shared `dotfiles` profile, publish that profile through GHCR for cross-device reuse, and connect every managed agent to its gateway while retaining unsupported MCPs through the existing SSOT.
 
-**Architecture:** `.chezmoidata/mcp_servers.yaml` will distinguish the Toolkit profile from direct servers. Cross-platform scripts will converge the Toolkit profile locally and push/pull it as an OCI artifact using a configurable GHCR reference. All client templates will emit one stdio gateway entry plus direct exceptions. Hindsight remains direct because Docker MCP Gateway rejects local HTTP remotes. Toolkit secrets stay in Docker Desktop's secret store and are never included in the pushed profile.
+**Architecture:** `.chezmoidata/mcp_servers.yaml` will distinguish the Toolkit profile from direct servers. Cross-platform scripts will converge the Toolkit profile locally and push/pull it as an OCI artifact using a configurable GHCR reference. All client templates will emit one stdio gateway entry plus direct exceptions. Hindsight remains direct because Docker MCP Gateway rejects local HTTP remotes. Toolkit secrets stay in Docker Desktop's secret store, are injected at runtime from the `openclaw` 1Password vault, and are never included in the pushed profile.
 
 **Tech Stack:** Docker MCP Toolkit CLI, Docker MCP Catalog, chezmoi Go templates, Go Task, Bash, PowerShell, Pester/static repository tests.
 
@@ -76,7 +76,9 @@ Change `.mcp.json` to expose `MCP_DOCKER` through the `dotfiles` profile and ret
 
 - [ ] **Step 4: Document Toolkit secret setup**
 
-Document the Docker Desktop secret-store names and the `task mcp:toolkit:sync` prerequisite without exposing any secret or 1Password value.
+Document the Docker Desktop secret-store names, the `openclaw` 1Password references, and the
+`task mcp:toolkit:secrets` command without exposing any secret value. Explicitly record missing
+Context7 and Obsidian items instead of substituting unrelated vault entries.
 
 ### Task 3: Implement cross-platform Toolkit profile convergence and registry sync
 
@@ -105,7 +107,7 @@ Implement the same operations with PowerShell path handling and `Join-Path`, usi
 
 - [ ] **Step 5: Add public Taskfile commands**
 
-Include `taskfiles/mcp/taskfile.yml` from the root Taskfile. Add public `mcp:toolkit:sync`, `mcp:toolkit:push`, `mcp:toolkit:pull`, and `mcp:toolkit:status` tasks with Docker preconditions and Unix/Windows adapters.
+Include `taskfiles/mcp/taskfile.yml` from the root Taskfile. Add public `mcp:toolkit:sync`, `mcp:toolkit:push`, `mcp:toolkit:pull`, `mcp:toolkit:secrets`, and `mcp:toolkit:status` tasks with Docker preconditions and Unix/Windows adapters.
 
 - [ ] **Step 6: Run adapter syntax tests**
 

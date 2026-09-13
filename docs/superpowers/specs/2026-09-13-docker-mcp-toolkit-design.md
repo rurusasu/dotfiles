@@ -42,7 +42,7 @@ The Docker Toolkit client-connect command is used as the compatibility reference
 
 ### Secrets
 
-Toolkit-managed secrets are stored in Docker Desktop's secret store, not in `mcp_servers.yaml`, generated client files, the OCI profile artifact, or Git. Documentation identifies the expected secret names:
+Toolkit-managed secrets are stored in Docker Desktop's secret store, not in generated client files, the OCI profile artifact, or Git. `mcp_servers.yaml` stores only the non-secret 1Password references for the currently available `openclaw` vault items. `task mcp:toolkit:secrets` reads those references at runtime and pipes each value to Docker MCP Toolkit over standard input. The expected secret names are:
 
 ```text
 context7.api_key
@@ -53,7 +53,7 @@ obsidian.api_key
 tavily.api_token
 ```
 
-The existing 1Password references remain documentation/runtime inputs for clients that stay direct; no template-time secret materialization is introduced for Toolkit.
+The configured references use account `my.1password.com` and vault `openclaw`. Context7 and Obsidian remain documented as unavailable until matching items are created in that vault; no unrelated `Private` item is substituted. No template-time secret materialization is introduced for Toolkit.
 
 ### Obsidian
 
@@ -80,6 +80,9 @@ Hermes's Browser MCP, X API MCP, Gmail MCP, and Calendar MCP remain Hermes-conta
 3. Add the declared catalog entries idempotently.
 4. Remove obsolete Toolkit server names, including any stale Hindsight entry from the earlier probe implementation.
 5. Print the resulting profile summary without printing secret values.
+
+The explicit secret-sync operation requires `op` and Docker MCP Toolkit, reads each configured
+`openclaw` reference with a timeout, and sends the value only through stdin to `docker mcp secret set`.
 
 It must not delete unrelated Docker MCP profiles, change Docker Desktop authentication, or start Hindsight/Hermes. The gateway remains on stdio by default and does not publish a host TCP port.
 

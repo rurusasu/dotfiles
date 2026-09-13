@@ -14,6 +14,17 @@ mcp_toolkit:
     - vscode
     - windsurf
     - zed
+  secrets:
+    account: "my.1password.com"
+    vault: "openclaw"
+    refs:
+      exa.api_key: "op://openclaw/ExaUsedOpenclawPAT/credential"
+      firecrawl.api_key: "op://openclaw/FirecrawlUsedOpenclawPAT/credential"
+      github.personal_access_token: "op://openclaw/GitHubUsedOpenClawPAT/credential"
+      tavily.api_token: "op://openclaw/TavilyUsedOpenclawPAT/credential"
+    unavailable:
+      - context7.api_key
+      - obsidian.api_key
   servers:
     - name: context7
       ref: "catalog://mcp/docker-mcp-catalog/context7"

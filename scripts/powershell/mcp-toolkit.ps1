@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("Sync", "Push", "Pull", "Status")]
+    [ValidateSet("Sync", "Push", "Pull", "Secrets", "Status")]
     [string]$Action = "Sync"
 )
 
@@ -11,6 +11,25 @@ $ProfileRef = if ([string]::IsNullOrWhiteSpace($env:MCP_TOOLKIT_PROFILE_REF)) {
 }
 else {
     $env:MCP_TOOLKIT_PROFILE_REF
+}
+$SecretAccount = if ([string]::IsNullOrWhiteSpace($env:MCP_TOOLKIT_OP_ACCOUNT)) {
+    "my.1password.com"
+}
+else {
+    $env:MCP_TOOLKIT_OP_ACCOUNT
+}
+$SecretTimeoutSeconds = if ([string]::IsNullOrWhiteSpace($env:MCP_TOOLKIT_OP_TIMEOUT_SECONDS)) {
+    15
+}
+else {
+    [int]$env:MCP_TOOLKIT_OP_TIMEOUT_SECONDS
+}
+
+$SecretRefs = [ordered]@{
+    "exa.api_key"                  = "op://openclaw/ExaUsedOpenclawPAT/credential"
+    "firecrawl.api_key"            = "op://openclaw/FirecrawlUsedOpenclawPAT/credential"
+    "github.personal_access_token" = "op://openclaw/GitHubUsedOpenClawPAT/credential"
+    "tavily.api_token"             = "op://openclaw/TavilyUsedOpenclawPAT/credential"
 }
 
 $CatalogRefs = @(
@@ -87,9 +106,62 @@ function Pull-Profile {
     Invoke-Docker -Arguments @("mcp", "profile", "show", $ProfileId)
 }
 
+function Get-OnePasswordSecret {
+    param([Parameter(Mandatory)][string]$Reference)
+
+    $opCommand = Get-Command op.exe -ErrorAction SilentlyContinue
+    if (-not $opCommand) {
+        $opCommand = Get-Command op -ErrorAction SilentlyContinue
+    }
+    if (-not $opCommand) {
+        throw "1Password CLI (op) is required"
+    }
+
+    $stdoutPath = [System.IO.Path]::GetTempFileName()
+    $stderrPath = [System.IO.Path]::GetTempFileName()
+    try {
+        $opArguments = @("read", "--no-newline", "--account", $SecretAccount, $Reference)
+        if ($opCommand.Name -eq "op.exe") {
+            $opArguments = @("--cache=false") + $opArguments
+        }
+
+        $process = Start-Process -FilePath $opCommand.Source -ArgumentList $opArguments `
+            -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -NoNewWindow -PassThru
+        if (-not $process.WaitForExit($SecretTimeoutSeconds * 1000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw "1Password read timed out for $Reference"
+        }
+        if ($process.ExitCode -ne 0) {
+            throw "1Password read failed for $Reference"
+        }
+
+        return [System.IO.File]::ReadAllText($stdoutPath)
+    }
+    finally {
+        Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Sync-Secrets {
+    foreach ($Entry in $SecretRefs.GetEnumerator()) {
+        Write-Host "[mcp-toolkit] injecting $($Entry.Key) from 1Password"
+        $secret = Get-OnePasswordSecret -Reference $Entry.Value
+        try {
+            $secret | & docker mcp secret set $Entry.Key *> $null
+            if ($LASTEXITCODE -ne 0) {
+                throw "Docker MCP secret injection failed for $($Entry.Key)"
+            }
+        }
+        finally {
+            $secret = $null
+        }
+    }
+}
+
 switch ($Action) {
     "Sync" { Sync-Profile }
     "Push" { Push-Profile }
     "Pull" { Pull-Profile }
+    "Secrets" { Sync-Secrets }
     "Status" { Invoke-Docker -Arguments @("mcp", "profile", "show", $ProfileId) }
 }
