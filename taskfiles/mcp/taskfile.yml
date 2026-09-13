@@ -1,0 +1,24 @@
+version: "3"
+
+tasks:
+  toolkit:sync:
+    desc: Converge the shared Docker MCP Toolkit profile
+    preconditions:
+      - sh: command -v docker
+        msg: Docker CLI is required
+    cmds:
+      - cmd: bash ./scripts/sh/mcp-toolkit.sh sync
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Sync
+        platforms: [windows]
+
+  toolkit:status:
+    desc: Show the shared Docker MCP Toolkit profile
+    preconditions:
+      - sh: command -v docker
+        msg: Docker CLI is required
+    cmds:
+      - cmd: bash ./scripts/sh/mcp-toolkit.sh status
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Status
+        platforms: [windows]

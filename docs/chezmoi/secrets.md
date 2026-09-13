@@ -38,9 +38,40 @@ SSH Agent / `op-ssh-sign` のパスは [1Password CLI 運用](../1password/READM
 - `chezmoi/dot_local/bin/executable_stop-stale-codex-login.ps1`
   - Codex OAuth callback port `127.0.0.1:1457` を以前の `codex.exe login` が掴んだまま残った場合だけ、その stale process を停止する。`-AdoptRuntimeCodexAuth` 付きでは runtime home の認証を Orca managed account に登録し、Orca 子プロセスの `codex login` では `-InitializeManagedCodexHomeFromRuntimeAuth` で managed `CODEX_HOME` に `auth.json` を同期して成功扱いにする。`-CleanFailedOrcaHomes` は手動復旧用で、通常の Orca launcher からは呼ばない。
 - `chezmoi/.chezmoidata/mcp_servers.yaml`
-  - MCP の `op_env` 参照を置く。client template は失敗しても env fallback を使う。
+  - 直接起動する MCP の `op_env` 参照と、Docker MCP Toolkit の profile metadata を置く。Toolkit 管理サーバーの実値は置かない。
 - `chezmoi/.chezmoiscripts/**`
   - どうしてもファイル配置が必要なものだけ、runtime `op read --account ...` で取得する。
+
+## Docker MCP Toolkit
+
+共通 MCP の実行入口は `task mcp:toolkit:sync` で Docker MCP Toolkit の
+`dotfiles` profile に収束させる。通常の `chezmoi apply` は Docker Desktop を起動せず、
+各クライアントには `docker mcp gateway run --profile dotfiles` だけを配置する。
+
+Toolkit 管理サーバーの API key は生成された Codex/Cursor/Gemini/VS Code/Windsurf/Zed
+設定や Git に書かず、Docker Desktop の secret store に登録する。現在の secret 名は次のとおり。
+
+| Server          | Docker MCP Toolkit secret      |
+| --------------- | ------------------------------ |
+| Context7        | `context7.api_key`             |
+| Exa             | `exa.api_key`                  |
+| Firecrawl       | `firecrawl.api_key`            |
+| GitHub Official | `github.personal_access_token` |
+| Obsidian        | `obsidian.api_key`             |
+| Tavily          | `tavily.api_token`             |
+
+Docker Desktop の MCP Toolkit 画面、または `docker mcp secret set` の標準入力経由で登録する。
+例:
+
+```bash
+printf '%s\n' "$TAVILY_API_KEY" | docker mcp secret set tavily.api_token
+```
+
+値をコマンドライン引数に渡したり、Task のログへ出力したりしない。Obsidian は Local REST API
+community plugin を有効化し、API key を `obsidian.api_key` として登録する。Hindsight は
+secret 不要の host-local MCP である。Docker MCP Gateway は local HTTP remote を受け付けないため
+Toolkit profile には入れず、`mcp_servers.yaml` と `.mcp.json` の直接 URL として全クライアントへ
+配布する。利用前に既存の `task hindsight:up` でサービスを起動する。
 
 Plane MCP の API token は共有された 1Password item を参照する:
 

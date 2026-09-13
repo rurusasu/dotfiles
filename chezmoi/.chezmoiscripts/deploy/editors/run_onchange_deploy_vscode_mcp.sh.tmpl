@@ -1,0 +1,52 @@
+{{- if ne .chezmoi.os "windows" }}
+#!/usr/bin/env bash
+# chezmoi:template:hash={{ include ".chezmoidata/mcp_servers.yaml" | sha256sum }}
+
+set -euo pipefail
+
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+servers = {
+    "{{ .mcp_toolkit.server_name }}": {
+        "type": "stdio",
+        "command": "docker",
+        "args": ["mcp", "gateway", "run", "--profile", "{{ .mcp_toolkit.profile }}"],
+    },
+{{- range .mcp_servers }}
+{{- if has "vscode" .supports }}
+    "{{ .name }}": {
+{{- if hasKey . "url" }}
+        "type": "http",
+        "url": "{{ .url }}",
+{{- else }}
+        "type": "stdio",
+        "command": "{{ .command }}",
+        "args": [{{ range $i, $arg := .args }}{{ if $i }}, {{ end }}"{{ $arg }}"{{ end }}],
+{{- if hasKey . "env" }}
+        "env": {
+{{- range $key, $value := .env }}
+            "{{ $key }}": "{{ $value }}",
+{{- end }}
+        },
+{{- end }}
+{{- end }}
+    },
+{{- end }}
+{{- end }}
+}
+
+payload = {"servers": servers, "inputs": []}
+encoded = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+
+for user_dir in (
+    Path.home() / ".config" / "Code" / "User",
+    Path.home() / ".config" / "Code - Insiders" / "User",
+):
+    if not user_dir.is_dir():
+        continue
+    (user_dir / "mcp.json").write_text(encoded, encoding="utf-8")
+    print(f"[vscode-mcp] wrote {user_dir / 'mcp.json'}")
+PY
+{{- end }}
