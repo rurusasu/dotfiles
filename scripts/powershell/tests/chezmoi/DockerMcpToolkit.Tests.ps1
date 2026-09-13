@@ -17,6 +17,14 @@ BeforeAll {
         "tavily"
     )
 
+    $script:toolkitClients = @(
+        "codex",
+        "cursor",
+        "gemini",
+        "vscode",
+        "zed"
+    )
+
     $script:removedServers = @(
         "linear",
         "sentry",
@@ -139,6 +147,29 @@ Describe 'MCP Toolkit convergence adapters' {
         $taskfile | Should -Match 'mcp-toolkit\.sh pull'
         $taskfile | Should -Match 'mcp-toolkit\.ps1 -Action Push'
         $taskfile | Should -Match 'mcp-toolkit\.ps1 -Action Pull'
+    }
+
+    It 'registers Docker MCP Toolkit clients on both platforms' {
+        $unixPath = Join-Path $script:repoRoot "scripts/sh/mcp-toolkit.sh"
+        $windowsPath = Join-Path $script:repoRoot "scripts/powershell/mcp-toolkit.ps1"
+        $taskfilePath = Join-Path $script:repoRoot "taskfiles/mcp/taskfile.yml"
+        $docsPath = Join-Path $script:repoRoot "docs/chezmoi/secrets.md"
+        $unix = Get-Content -LiteralPath $unixPath -Raw
+        $windows = Get-Content -LiteralPath $windowsPath -Raw
+        $taskfile = Get-Content -LiteralPath $taskfilePath -Raw
+        $docs = Get-Content -LiteralPath $docsPath -Raw
+
+        foreach ($client in $script:toolkitClients) {
+            $unix | Should -Match ([regex]::Escape($client))
+            $windows | Should -Match ([regex]::Escape($client))
+        }
+        $unix | Should -Match 'docker mcp client connect --global --profile "\$profile_id" --quiet'
+        $windows | Should -Match 'client", "connect", "--global", "--profile", \$ProfileId, "--quiet"'
+        $taskfile | Should -Match '(?m)^  toolkit:clients:\s*$'
+        $taskfile | Should -Match 'mcp-toolkit\.sh clients'
+        $taskfile | Should -Match 'mcp-toolkit\.ps1 -Action Clients'
+        $docs | Should -Match 'task mcp:toolkit:clients'
+        $docs | Should -Match 'Windsurf'
     }
 
     It 'declares openclaw 1Password references for available Toolkit secrets' {

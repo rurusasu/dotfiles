@@ -55,6 +55,11 @@ tavily.api_token
 
 The configured references use account `my.1password.com` and vault `openclaw`. Context7 and Obsidian remain documented as unavailable until matching items are created in that vault; no unrelated `Private` item is substituted. No template-time secret materialization is introduced for Toolkit.
 
+The public `task mcp:toolkit:clients` operation registers the `dotfiles` profile with the Docker-supported
+Codex, Cursor, Gemini, VS Code, and Zed clients using their system-wide configuration. Windsurf is not
+supported by the Docker client-registration command and continues to use its chezmoi-generated gateway
+configuration.
+
 ### Obsidian
 
 The Docker catalog `mcp/obsidian` is used. It requires the Obsidian Local REST API community plugin and API key, and the container connects to the host plugin endpoint. This intentionally differs from the article's direct filesystem `obsidian-mcp` process: the Toolkit profile is the source of lifecycle and credential management.

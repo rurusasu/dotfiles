@@ -14,6 +14,14 @@ secret_specs=(
   "tavily.api_token|op://openclaw/TavilyUsedOpenclawPAT/credential"
 )
 
+toolkit_clients=(
+  "codex"
+  "cursor"
+  "gemini"
+  "vscode"
+  "zed"
+)
+
 catalog_refs=(
   "catalog://mcp/docker-mcp-catalog/context7"
   "catalog://mcp/docker-mcp-catalog/deepwiki"
@@ -91,6 +99,14 @@ sync_secrets() {
   done
 }
 
+connect_clients() {
+  local client
+  for client in "${toolkit_clients[@]}"; do
+    printf '%s\n' "[mcp-toolkit] connecting $client to profile $profile_id"
+    docker mcp client connect --global --profile "$profile_id" --quiet "$client"
+  done
+}
+
 ensure_profile() {
   if docker mcp profile show "$profile_id" >/dev/null 2>&1; then
     return
@@ -154,11 +170,14 @@ main() {
   secrets)
     sync_secrets
     ;;
+  clients)
+    connect_clients
+    ;;
   status)
     show_status
     ;;
   *)
-    printf 'Usage: %s {sync|push|pull|secrets|status}\n' "$(basename "$0")" >&2
+    printf 'Usage: %s {sync|push|pull|secrets|clients|status}\n' "$(basename "$0")" >&2
     exit 64
     ;;
   esac

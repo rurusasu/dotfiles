@@ -45,6 +45,17 @@ tasks:
       - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Secrets
         platforms: [windows]
 
+  toolkit:clients:
+    desc: Register Docker MCP Toolkit with supported agent clients
+    preconditions:
+      - sh: command -v docker
+        msg: Docker CLI is required
+    cmds:
+      - cmd: bash ./scripts/sh/mcp-toolkit.sh clients
+        platforms: [linux, darwin]
+      - cmd: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/powershell/mcp-toolkit.ps1 -Action Clients
+        platforms: [windows]
+
   toolkit:status:
     desc: Show the shared Docker MCP Toolkit profile
     preconditions:

@@ -107,7 +107,7 @@ Implement the same operations with PowerShell path handling and `Join-Path`, usi
 
 - [ ] **Step 5: Add public Taskfile commands**
 
-Include `taskfiles/mcp/taskfile.yml` from the root Taskfile. Add public `mcp:toolkit:sync`, `mcp:toolkit:push`, `mcp:toolkit:pull`, `mcp:toolkit:secrets`, and `mcp:toolkit:status` tasks with Docker preconditions and Unix/Windows adapters.
+Include `taskfiles/mcp/taskfile.yml` from the root Taskfile. Add public `mcp:toolkit:sync`, `mcp:toolkit:push`, `mcp:toolkit:pull`, `mcp:toolkit:secrets`, `mcp:toolkit:clients`, and `mcp:toolkit:status` tasks with Docker preconditions and Unix/Windows adapters. The clients task registers Docker-supported clients and leaves Windsurf on its existing generated configuration because Docker has no Windsurf client connector.
 
 - [ ] **Step 6: Run adapter syntax tests**
 

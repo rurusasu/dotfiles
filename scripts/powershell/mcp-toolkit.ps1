@@ -31,6 +31,13 @@ $SecretRefs = [ordered]@{
     "github.personal_access_token" = "op://openclaw/GitHubUsedOpenClawPAT/credential"
     "tavily.api_token"             = "op://openclaw/TavilyUsedOpenclawPAT/credential"
 }
+$ToolkitClients = @(
+    "codex",
+    "cursor",
+    "gemini",
+    "vscode",
+    "zed"
+)
 
 $CatalogRefs = @(
     "catalog://mcp/docker-mcp-catalog/context7",
@@ -158,10 +165,18 @@ function Sync-Secrets {
     }
 }
 
+function Connect-Clients {
+    foreach ($Client in $ToolkitClients) {
+        Write-Host "[mcp-toolkit] connecting $Client to profile $ProfileId"
+        Invoke-Docker -Arguments @("mcp", "client", "connect", "--global", "--profile", $ProfileId, "--quiet", $Client)
+    }
+}
+
 switch ($Action) {
     "Sync" { Sync-Profile }
     "Push" { Push-Profile }
     "Pull" { Pull-Profile }
     "Secrets" { Sync-Secrets }
+    "Clients" { Connect-Clients }
     "Status" { Invoke-Docker -Arguments @("mcp", "profile", "show", $ProfileId) }
 }

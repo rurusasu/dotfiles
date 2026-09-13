@@ -77,6 +77,16 @@ profileにはMCP serverの構成だけが含まれ、Docker MCP Toolkitのsecret
 Docker Desktopのsecret storeへ渡す。GitHub Freeではprivate GitHub Packagesにストレージ500 MB、転送1 GB/月
 の枠があるため、profile artifactの共有用途ではその範囲を確認して利用する。
 
+Docker MCP Toolkit が直接登録できる client は、profile取得後に次で登録する。
+
+```bash
+task mcp:toolkit:clients
+```
+
+これは Codex、Cursor、Gemini、VS Code、Zed の system-wide 設定へ `dotfiles` profile の gatewayを
+登録する。Windsurf は Docker MCP Toolkit CLI の client 登録対象外のため、chezmoi が生成する
+既存の gateway 設定を利用する。
+
 Toolkit 管理サーバーの API key は生成された Codex/Cursor/Gemini/VS Code/Windsurf/Zed
 設定や Git に書かず、Docker Desktop の secret store に登録する。現在の secret 名は次のとおり。
 
