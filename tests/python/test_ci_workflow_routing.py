@@ -564,6 +564,10 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "この workflow には ARM64 Linux runner の native build がありません。",
             normalized_readme,
         )
+        self.assertNotIn(
+            "nix build .#checks.aarch64-linux.nix-unit",
+            workflow,
+        )
 
         for command in (
             "nix flake check --no-build",
