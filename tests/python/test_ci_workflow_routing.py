@@ -543,5 +543,35 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
 
 
+    def test_home_readme_distinguishes_supported_systems_from_ci_build_routes(
+        self,
+    ) -> None:
+        readme = (
+            REPOSITORY_ROOT / "nix" / "tests" / "home" / "README.md"
+        ).read_text(encoding="utf-8")
+        workflow = self._named_workflow("ci-bootstrap.yml")
+
+        self.assertNotIn(
+            "`x86_64-linux` / `aarch64-linux` の CI runner で実行します。",
+            readme,
+        )
+        for system in ("x86_64-linux", "aarch64-linux", "aarch64-darwin"):
+            self.assertIn(f"`{system}`", readme)
+
+        self.assertIn(
+            "`aarch64-linux` は flake の support/output には含まれますが、"
+            "この workflow には ARM64 Linux runner の native build がありません。",
+            readme,
+        )
+
+        for command in (
+            "nix flake check --no-build",
+            "nix build .#checks.x86_64-linux.nix-unit --no-link",
+            "nix build .#checks.aarch64-darwin.nix-unit --no-link",
+        ):
+            self.assertIn(command, readme)
+            self.assertIn(command, workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
