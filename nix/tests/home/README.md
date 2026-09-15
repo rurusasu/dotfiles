@@ -34,9 +34,24 @@ nix build .#checks.$(nix eval --raw --impure --expr 'builtins.currentSystem').ni
   --no-link --no-write-lock-file
 ```
 
-`--no-build` は flake graph の評価だけで、nix-unit assertion の実行結果を保証しません。
-変更時は focused build と `nix flake check` の両方を実行してください。Linux 専用 check を
-Darwin から直接 build せず、`x86_64-linux` / `aarch64-linux` の CI runner で実行します。
+`--no-build` は flake graph の評価だけで、nix-unit assertion の実行結果や
+derivation の build 成功を保証しません。変更時のローカル必須検証では上記の
+`nix flake check --all-systems --no-write-lock-file` と、対象環境での focused build を
+両方実行してください。対象 system ごとの focused build は次のとおりです。
+
+```bash
+nix build .#checks.x86_64-linux.nix-unit --no-link --no-write-lock-file
+nix build .#checks.aarch64-linux.nix-unit --no-link --no-write-lock-file
+nix build .#checks.aarch64-darwin.nix-unit --no-link --no-write-lock-file
+```
+
+CI の必須経路は、`x86_64-linux`（`ubuntu-24.04`）での
+`nix flake check --no-build` と
+`nix build .#checks.x86_64-linux.nix-unit --no-link`、`aarch64-darwin`
+（`macos-15`）での `nix build .#checks.aarch64-darwin.nix-unit --no-link` です。
+`aarch64-linux` は flake の support/output には含まれますが、この workflow には ARM64 Linux runner の native build がありません。
+`aarch64-linux` を focused build する場合は対応する実行環境または builder を使ってください。
+`aarch64-darwin` の結果は `aarch64-linux` の coverage を代替しません。
 
 ## Bats の一時例外と完全分類
 
