@@ -89,6 +89,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             ".github/workflows/**",
             "tests/bash/**",
             "tests/python/**",
+            "nix/**/*.md",
             "docs/mlflow/**",
             "taskfiles/mlflow/**",
         ):
@@ -550,6 +551,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             REPOSITORY_ROOT / "nix" / "tests" / "home" / "README.md"
         ).read_text(encoding="utf-8")
         workflow = self._named_workflow("ci-bootstrap.yml")
+        nix_test = self._workflow_job(workflow, "nix-test")
+        darwin = self._workflow_job(workflow, "darwin")
         normalized_readme = " ".join(readme.split())
 
         self.assertNotIn(
@@ -569,13 +572,20 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             workflow,
         )
 
-        for command in (
-            "nix flake check --no-build",
-            "nix build .#checks.x86_64-linux.nix-unit --no-link",
-            "nix build .#checks.aarch64-darwin.nix-unit --no-link",
+        for runner, job in (
+            ("ubuntu-24.04", nix_test),
+            ("macos-15", darwin),
+        ):
+            self.assertIn(f"`{runner}`", readme)
+            self.assertIn(f"runs-on: {runner}", job)
+
+        for command, job in (
+            ("nix flake check --no-build", nix_test),
+            ("nix build .#checks.x86_64-linux.nix-unit --no-link", nix_test),
+            ("nix build .#checks.aarch64-darwin.nix-unit --no-link", darwin),
         ):
             self.assertIn(command, readme)
-            self.assertIn(command, workflow)
+            self.assertIn(command, job)
 
 
 if __name__ == "__main__":
