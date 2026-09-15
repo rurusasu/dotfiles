@@ -49,8 +49,9 @@ CI の必須経路は、`x86_64-linux`（`ubuntu-24.04`）での
 `nix flake check --no-build` と
 `nix build .#checks.x86_64-linux.nix-unit --no-link`、`aarch64-darwin`
 （`macos-15`）での `nix build .#checks.aarch64-darwin.nix-unit --no-link` です。
-`aarch64-linux` は flake の support/output には含まれますが、この workflow には ARM64 Linux runner の native build がありません。
-`aarch64-linux` を focused build する場合は対応する実行環境または builder を使ってください。
+`aarch64-linux` は flake の support/output には含まれますが、この workflow には
+ARM64 Linux runner の native build がありません。`aarch64-linux` を focused build する場合は
+対応する実行環境または builder を使ってください。
 `aarch64-darwin` の結果は `aarch64-linux` の coverage を代替しません。
 
 ## Bats の一時例外と完全分類
