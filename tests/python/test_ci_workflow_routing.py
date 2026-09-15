@@ -550,10 +550,11 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             REPOSITORY_ROOT / "nix" / "tests" / "home" / "README.md"
         ).read_text(encoding="utf-8")
         workflow = self._named_workflow("ci-bootstrap.yml")
+        normalized_readme = " ".join(readme.split())
 
         self.assertNotIn(
             "`x86_64-linux` / `aarch64-linux` の CI runner で実行します。",
-            readme,
+            normalized_readme,
         )
         for system in ("x86_64-linux", "aarch64-linux", "aarch64-darwin"):
             self.assertIn(f"`{system}`", readme)
@@ -561,7 +562,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn(
             "`aarch64-linux` は flake の support/output には含まれますが、"
             "この workflow には ARM64 Linux runner の native build がありません。",
-            readme,
+            normalized_readme,
         )
 
         for command in (
