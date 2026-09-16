@@ -257,6 +257,9 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("gh pr create", workflow)
         self.assertIn("matrix", workflow)
 
+        validate = self._workflow_job(workflow, "validate")
+        self.assertIn("GH_TOKEN: ${{ github.token }}", validate)
+
         for action in re.findall(r"uses:\s+([^\s]+)", workflow):
             self.assertRegex(action, r"@[0-9a-f]{40}$", action)
 

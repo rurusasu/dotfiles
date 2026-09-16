@@ -99,6 +99,11 @@ in
     };
   };
 
+  testDarwinConfigurationIncludesSteamCask = {
+    expr = hasDarwinCask "steam" defaultConfig;
+    expected = true;
+  };
+
   testDarwinHomeManagerOwnsPlatformEnvironment = {
     expr = {
       autoUpdate = defaultHome.home.sessionVariables.HOMEBREW_AUTO_UPDATE_SECS;
