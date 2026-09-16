@@ -503,6 +503,23 @@ let
         };
 
         # ── desktop applications ──────────────────────────────
+        steam = {
+          category = "desktop";
+          support = {
+            darwin = {
+              provider = "homebrew-cask";
+              source = "homebrew";
+              identity = "steam";
+              cask = "steam";
+            };
+            linux = {
+              unsupported = "Steam is managed through the native platform package manager";
+            };
+            windows = {
+              unsupported = "Steam is managed through the Windows package manifest";
+            };
+          };
+        };
         discord = {
           pkg = if pkgs.stdenv.hostPlatform.isDarwin then darwinDiscordPackage else pkgs.discord;
           winget = "Discord.Discord";
