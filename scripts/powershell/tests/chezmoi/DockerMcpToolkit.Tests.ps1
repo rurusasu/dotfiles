@@ -86,6 +86,16 @@ Describe 'MCP Docker gateway client templates' {
         }
     }
 
+    It 'keeps Unix MCP script shebangs at the first rendered byte' {
+        foreach ($name in @(
+                '.chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.sh.tmpl',
+                '.chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.sh.tmpl'
+            )) {
+            $content = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot $name) -Raw
+            $content | Should -Match '^\{\{- if ne \.chezmoi\.os "windows" -\}\}\r?\n#!/usr/bin/env bash'
+        }
+    }
+
     It 'keeps direct Zed servers alongside the Docker gateway' {
         $zedUnixPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.sh.tmpl"
         $zedUnix = Get-Content -LiteralPath $zedUnixPath -Raw
@@ -174,10 +184,10 @@ Describe 'MCP Toolkit convergence adapters' {
 
     It 'declares openclaw 1Password references for available Toolkit secrets' {
         $expectedRefs = @{
-            'exa.api_key' = 'op://openclaw/ExaUsedOpenclawPAT/credential'
-            'firecrawl.api_key' = 'op://openclaw/FirecrawlUsedOpenclawPAT/credential'
+            'exa.api_key'                  = 'op://openclaw/ExaUsedOpenclawPAT/credential'
+            'firecrawl.api_key'            = 'op://openclaw/FirecrawlUsedOpenclawPAT/credential'
             'github.personal_access_token' = 'op://openclaw/GitHubUsedOpenClawPAT/credential'
-            'tavily.api_token' = 'op://openclaw/TavilyUsedOpenclawPAT/credential'
+            'tavily.api_token'             = 'op://openclaw/TavilyUsedOpenclawPAT/credential'
         }
 
         $script:mcpData | Should -Match '(?m)^  secrets:\s*$'
