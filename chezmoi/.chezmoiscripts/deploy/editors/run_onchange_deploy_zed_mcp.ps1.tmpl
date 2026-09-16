@@ -9,10 +9,74 @@ if (-not (Test-Path $settingsPath)) {
 
 Write-Host "[zed-mcp] Updating context_servers in Zed settings..."
 
-# Zed uses JSONC - strip comments before parsing
+function Remove-JsonComments {
+    param([Parameter(Mandatory)][string]$Text)
+
+    $builder = [System.Text.StringBuilder]::new()
+    $inString = $false
+    $escaped = $false
+    $inLineComment = $false
+    $inBlockComment = $false
+
+    for ($index = 0; $index -lt $Text.Length; $index++) {
+        $char = $Text[$index]
+
+        if ($inLineComment) {
+            if ($char -eq "`r" -or $char -eq "`n") {
+                $inLineComment = $false
+                [void]$builder.Append($char)
+            }
+            continue
+        }
+
+        if ($inBlockComment) {
+            if ($char -eq "*" -and $index + 1 -lt $Text.Length -and $Text[$index + 1] -eq "/") {
+                $inBlockComment = $false
+                $index++
+            }
+            elseif ($char -eq "`r" -or $char -eq "`n") {
+                [void]$builder.Append($char)
+            }
+            continue
+        }
+
+        if ($inString) {
+            [void]$builder.Append($char)
+            if ($escaped) {
+                $escaped = $false
+            }
+            elseif ($char -eq "\") {
+                $escaped = $true
+            }
+            elseif ($char -eq '"') {
+                $inString = $false
+            }
+            continue
+        }
+
+        if ($char -eq '"') {
+            $inString = $true
+            [void]$builder.Append($char)
+        }
+        elseif ($char -eq "/" -and $index + 1 -lt $Text.Length -and $Text[$index + 1] -eq "/") {
+            $inLineComment = $true
+            $index++
+        }
+        elseif ($char -eq "/" -and $index + 1 -lt $Text.Length -and $Text[$index + 1] -eq "*") {
+            $inBlockComment = $true
+            $index++
+        }
+        else {
+            [void]$builder.Append($char)
+        }
+    }
+
+    $builder.ToString()
+}
+
+# Zed uses JSONC - strip comments before parsing, without changing URL strings.
 $raw = Get-Content $settingsPath -Raw -Encoding UTF8
-# Strip // line comments (not inside strings - simple heuristic)
-$stripped = $raw -replace '(?m)^\s*//.*$', '' -replace '(?<=\S)\s*//.*$', ''
+$stripped = Remove-JsonComments -Text $raw
 # Strip trailing commas before } or ]
 $stripped = $stripped -replace ',\s*([}\]])', '$1'
 
@@ -25,6 +89,17 @@ try {
 
 # Build context_servers
 $servers = [ordered]@{}
+$legacyManagedServerNames = @(
+    "context7",
+    "plane",
+    "github",
+    "tavily",
+    "exa",
+    "firecrawl",
+    "drawio",
+    "cloud-run",
+    "kaggle"
+)
 
 {{- if and (hasKey . "mcp_toolkit") (has "zed" .mcp_toolkit.supports) }}
 $servers["{{ .mcp_toolkit.server_name }}"] = [ordered]@{
@@ -62,6 +137,14 @@ $servers["{{ .name }}"]["env"] = @{
 # Merge context_servers into settings
 if (-not ($settings.PSObject.Properties.Name -contains "context_servers")) {
     $settings | Add-Member -NotePropertyName "context_servers" -NotePropertyValue ([PSCustomObject]@{})
+}
+
+# Remove entries previously managed by this template before rebuilding the
+# current managed set. This drops servers moved to Docker MCP Toolkit.
+foreach ($name in $legacyManagedServerNames) {
+    if ($settings.context_servers.PSObject.Properties.Name -contains $name) {
+        $settings.context_servers.PSObject.Properties.Remove($name)
+    }
 }
 
 foreach ($name in $servers.Keys) {

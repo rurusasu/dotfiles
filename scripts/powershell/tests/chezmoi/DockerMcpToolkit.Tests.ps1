@@ -96,6 +96,26 @@ Describe 'MCP Docker gateway client templates' {
         }
     }
 
+    It 'preserves Zed URL strings while removing legacy managed servers' {
+        $zedUnixPath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.sh.tmpl'
+        $zedWindowsPath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.ps1.tmpl'
+        $zedUnix = Get-Content -LiteralPath $zedUnixPath -Raw
+        $zedWindows = Get-Content -LiteralPath $zedWindowsPath -Raw
+
+        $zedUnix | Should -Match 'legacy_managed_servers'
+        $zedUnix | Should -Match 'context_servers\.pop'
+        $zedWindows | Should -Match 'Remove-JsonComments'
+        $zedWindows | Should -Match 'legacyManagedServerNames'
+        $zedWindows | Should -Match 'context_servers\.PSObject\.Properties\.Remove'
+    }
+
+    It 'writes VS Code MCP settings to the macOS support directories' {
+        $vscodeUnixPath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.sh.tmpl'
+        $vscodeUnix = Get-Content -LiteralPath $vscodeUnixPath -Raw
+
+        $vscodeUnix | Should -Match 'Library.*Application Support.*Code'
+    }
+
     It 'keeps direct Zed servers alongside the Docker gateway' {
         $zedUnixPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.sh.tmpl"
         $zedUnix = Get-Content -LiteralPath $zedUnixPath -Raw
@@ -105,6 +125,18 @@ Describe 'MCP Docker gateway client templates' {
 }
 
 Describe 'MCP Toolkit convergence adapters' {
+    It 'uses approved singular PowerShell function names' {
+        $windowsPath = Join-Path $script:repoRoot 'scripts/powershell/mcp-toolkit.ps1'
+        $windows = Get-Content -LiteralPath $windowsPath -Raw
+
+        $windows | Should -Match 'function Get-Profile'
+        $windows | Should -Match 'function Sync-Secret'
+        $windows | Should -Match 'function Connect-Client'
+        $windows | Should -Not -Match 'function Pull-Profile'
+        $windows | Should -Not -Match 'function Sync-Secrets'
+        $windows | Should -Not -Match 'function Connect-Clients'
+    }
+
     It 'keeps direct Hindsight in the project MCP config' {
         $projectConfig = Get-Content -LiteralPath (Join-Path $script:repoRoot ".mcp.json") -Raw
         $projectConfig | Should -Match '"hindsight"'

@@ -106,7 +106,7 @@ function Push-Profile {
     Invoke-Docker -Arguments @("mcp", "profile", "push", $ProfileId, $ProfileRef)
 }
 
-function Pull-Profile {
+function Get-Profile {
     Write-Host "[mcp-toolkit] pulling profile from $ProfileRef"
     Invoke-Docker -Arguments @("mcp", "profile", "pull", $ProfileRef)
     Write-Host "[mcp-toolkit] profile $ProfileId"
@@ -149,7 +149,7 @@ function Get-OnePasswordSecret {
     }
 }
 
-function Sync-Secrets {
+function Sync-Secret {
     foreach ($Entry in $SecretRefs.GetEnumerator()) {
         Write-Host "[mcp-toolkit] injecting $($Entry.Key) from 1Password"
         $secret = Get-OnePasswordSecret -Reference $Entry.Value
@@ -165,7 +165,7 @@ function Sync-Secrets {
     }
 }
 
-function Connect-Clients {
+function Connect-Client {
     foreach ($Client in $ToolkitClients) {
         Write-Host "[mcp-toolkit] connecting $Client to profile $ProfileId"
         Invoke-Docker -Arguments @("mcp", "client", "connect", "--global", "--profile", $ProfileId, "--quiet", $Client)
@@ -175,8 +175,8 @@ function Connect-Clients {
 switch ($Action) {
     "Sync" { Sync-Profile }
     "Push" { Push-Profile }
-    "Pull" { Pull-Profile }
-    "Secrets" { Sync-Secrets }
-    "Clients" { Connect-Clients }
+    "Pull" { Get-Profile }
+    "Secrets" { Sync-Secret }
+    "Clients" { Connect-Client }
     "Status" { Invoke-Docker -Arguments @("mcp", "profile", "show", $ProfileId) }
 }
