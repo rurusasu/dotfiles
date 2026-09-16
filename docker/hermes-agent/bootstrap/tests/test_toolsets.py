@@ -19,6 +19,11 @@ BROWSER_AUTOMATION_TOOLS = {
     "browser_console",
     "browser_cdp",
     "browser_dialog",
+    "browser_vault_list",
+    "browser_vault_unlock",
+    "browser_vault_fill",
+    "browser_vault_save_login",
+    "browser_vault_enter_code",
     "browser_exec",
 }
 

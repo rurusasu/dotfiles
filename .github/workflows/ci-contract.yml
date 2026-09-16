@@ -19,6 +19,7 @@ on:
       - ".github/workflows/**"
       - "tests/bash/**"
       - "tests/python/**"
+      - "nix/**/*.md"
       - "docker/mlflow/**"
       - "docker/local-ai-services/**"
       - "docker/hermes-service/**"
