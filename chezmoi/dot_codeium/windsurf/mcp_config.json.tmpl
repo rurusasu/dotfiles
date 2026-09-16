@@ -4,6 +4,13 @@
 {{- $opCmd := or (lookPath "op") (lookPath "op.exe") }}
 {{- $opReadFailed := false }}
 {{- $opReadTimeoutSeconds := 5 }}
+{{- if and (hasKey . "mcp_toolkit") (has "windsurf" .mcp_toolkit.supports) }}
+    "{{ .mcp_toolkit.server_name }}": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run", "--profile", "{{ .mcp_toolkit.profile }}"]
+    }
+{{- $first = false }}
+{{- end }}
 {{- if hasKey . "mcp_servers" }}
 {{- range .mcp_servers }}
 {{- if has "windsurf" .supports }}

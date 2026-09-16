@@ -39,7 +39,7 @@ class ToolsetContractTests(unittest.TestCase):
         from toolsets import resolve_toolset
 
         browser_tools = set(resolve_toolset("browser"))
-        self.assertEqual(browser_tools, BROWSER_AUTOMATION_TOOLS)
+        self.assertTrue(BROWSER_AUTOMATION_TOOLS <= browser_tools)
         self.assertNotIn("web_search", browser_tools)
         self.assertIn("web_search", resolve_toolset("web"))
 

@@ -1,39 +1,60 @@
-# Unified MCP Server Configuration
-# Used by: Codex CLI, Cursor, Gemini CLI
+# Shared MCP configuration
 #
-# Each tool has different config formats, so templates convert this data accordingly.
+# Docker MCP Toolkit owns catalog-managed servers. Client templates emit one
+# MCP_DOCKER gateway entry for this profile. Servers without a current Toolkit
+# catalog entry remain below as direct client entries.
+
+mcp_toolkit:
+  profile: dotfiles
+  server_name: MCP_DOCKER
+  supports:
+    - codex
+    - cursor
+    - gemini
+    - vscode
+    - windsurf
+    - zed
+  secrets:
+    account: "my.1password.com"
+    vault: "openclaw"
+    refs:
+      exa.api_key: "op://openclaw/ExaUsedOpenclawPAT/credential"
+      firecrawl.api_key: "op://openclaw/FirecrawlUsedOpenclawPAT/credential"
+      github.personal_access_token: "op://openclaw/GitHubUsedOpenClawPAT/credential"
+      tavily.api_token: "op://openclaw/TavilyUsedOpenclawPAT/credential"
+    unavailable:
+      - context7.api_key
+      - obsidian.api_key
+  servers:
+    - name: context7
+      ref: "catalog://mcp/docker-mcp-catalog/context7"
+    - name: deepwiki
+      ref: "catalog://mcp/docker-mcp-catalog/deepwiki"
+    - name: exa
+      ref: "catalog://mcp/docker-mcp-catalog/exa"
+    - name: firecrawl
+      ref: "catalog://mcp/docker-mcp-catalog/firecrawl"
+    - name: github-official
+      ref: "catalog://mcp/docker-mcp-catalog/github-official"
+    - name: obsidian
+      ref: "catalog://mcp/docker-mcp-catalog/obsidian"
+    - name: playwright
+      ref: "catalog://mcp/docker-mcp-catalog/playwright"
+    - name: tavily
+      ref: "catalog://mcp/docker-mcp-catalog/tavily"
 
 mcp_servers:
-  # Context7 - Contextual documentation search
-  - name: context7
-    command: pnpm
-    args:
-      - "dlx"
-      - "@upstash/context7-mcp@2.2.3"
-    startup_timeout_sec: 30
-    # pnpm/npm exec currently fails to resolve the Windows bin shim for this
-    # package in Codex startup, so keep it out of Codex auto-start.
+  # Hindsight is a local HTTP MCP service. Docker MCP Gateway rejects local
+  # HTTP remotes, so keep this direct entry shared across every client.
+  - name: hindsight
+    url: "http://127.0.0.1:8888/mcp/codex-shared/"
     supports:
-      - vscode
-      - windsurf
-      - zed
-
-  # Linear - Project management
-  - name: linear
-    # URL-based MCP (remote)
-    url: "https://mcp.linear.app/mcp"
-    # For tools that need command-based config
-    command: pnpm
-    args:
-      - "dlx"
-      - "mcp-remote@0.1.38"
-      - "https://mcp.linear.app/mcp"
-    # Codex starts configured MCP servers at session startup. Keep OAuth-based
-    # remote servers out of Codex by default to avoid login warnings.
-    supports:
+      - codex
       - cursor
       - gemini
       - vscode
+      - windsurf
+      - zed
 
   # Plane - Local self-hosted project management
   - name: plane
@@ -55,103 +76,6 @@ mcp_servers:
       - windsurf
       - zed
 
-  # GitHub - GitHub API integration
-  - name: github
-    command: pnpm
-    args:
-      - "dlx"
-      - "@modelcontextprotocol/server-github@2025.4.8"
-    env:
-      GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_PAT_TOKEN}"
-    supports:
-      - cursor
-      - gemini
-      - vscode
-      - windsurf
-      - zed
-
-  # DeepWiki - Wiki and docs search
-  - name: deepwiki
-    # URL-based MCP (remote) - Codex uses native Streamable HTTP
-    url: "https://mcp.deepwiki.com/mcp"
-    # For tools that need command-based config (stdio bridge)
-    command: pnpm
-    args:
-      - "dlx"
-      - "mcp-remote@0.1.38"
-      - "https://mcp.deepwiki.com/mcp"
-    startup_timeout_sec: 30
-    supports:
-      - codex
-      - cursor
-      - gemini
-
-  # Tavily - AI-powered web search and extraction (Docker MCP SDK)
-  - name: tavily
-    command: docker
-    args:
-      - "run"
-      - "-i"
-      - "--rm"
-      - "-e"
-      - "TAVILY_API_KEY"
-      - "mcp/tavily"
-    startup_timeout_sec: 300
-    env:
-      TAVILY_API_KEY: "${TAVILY_API_KEY}"
-    # API-key Docker MCP servers fail Codex startup when the local env vars are
-    # absent, so keep them available to clients that can launch them on demand.
-    supports:
-      - vscode
-      - windsurf
-      - zed
-      - cursor
-      - gemini
-
-  # Exa - AI-powered web search and crawling (Docker MCP SDK)
-  - name: exa
-    command: docker
-    args:
-      - "run"
-      - "-i"
-      - "--rm"
-      - "-e"
-      - "EXA_API_KEY"
-      - "mcp/exa"
-    startup_timeout_sec: 300
-    env:
-      EXA_API_KEY: "${EXA_API_KEY}"
-    # API-key Docker MCP servers fail Codex startup when the local env vars are
-    # absent, so keep them available to clients that can launch them on demand.
-    supports:
-      - vscode
-      - windsurf
-      - zed
-      - cursor
-      - gemini
-
-  # Firecrawl - Web scraping and content extraction (Docker MCP SDK)
-  - name: firecrawl
-    command: docker
-    args:
-      - "run"
-      - "-i"
-      - "--rm"
-      - "-e"
-      - "FIRECRAWL_API_KEY"
-      - "mcp/firecrawl"
-    startup_timeout_sec: 300
-    env:
-      FIRECRAWL_API_KEY: "${FIRECRAWL_API_KEY}"
-    # API-key Docker MCP servers fail Codex startup when the local env vars are
-    # absent, so keep them available to clients that can launch them on demand.
-    supports:
-      - vscode
-      - windsurf
-      - zed
-      - cursor
-      - gemini
-
   # Draw.io Official - Open diagrams in draw.io editor (browser)
   - name: drawio
     command: pnpm
@@ -168,82 +92,20 @@ mcp_servers:
       - cursor
       - gemini
 
-  # Sentry - Error monitoring and debugging (OAuth via remote URL)
-  - name: sentry
-    # URL-based MCP (remote) - Codex uses native Streamable HTTP
-    url: "https://mcp.sentry.dev/mcp"
-    # For tools that need command-based config (stdio bridge)
-    command: pnpm
-    args:
-      - "dlx"
-      - "mcp-remote@0.1.38"
-      - "https://mcp.sentry.dev/mcp"
-    startup_timeout_sec: 30
-    # Codex starts configured MCP servers at session startup. Keep OAuth-based
-    # remote servers out of Codex by default to avoid login warnings.
-    supports:
-      - cursor
-      - gemini
-      - vscode
-
-  # Cloud Run - Google Cloud Run integration
-  - name: cloud-run
-    command: pnpm
-    args:
-      - "dlx"
-      - "@google-cloud/cloud-run-mcp@1.10.0"
-    startup_timeout_sec: 120
-    # Cloud Run MCP depends on local Google Cloud auth and currently exits
-    # before the MCP handshake in Codex startup.
-    supports:
-      - vscode
-      - windsurf
-      - zed
-      - cursor
-      - gemini
-
   # Kaggle - Official remote MCP (competitions, datasets, notebooks, models, benchmarks)
   # Docs: https://www.kaggle.com/docs/mcp
   - name: kaggle
-    # URL-based MCP (remote). Codex uses native Streamable HTTP; stdio-only
-    # clients use the mcp-remote bridge below.
     url: "https://www.kaggle.com/mcp"
-    # stdio bridge for tools that don't speak HTTP MCP natively
     command: pnpm
     args:
       - "dlx"
       - "mcp-remote@0.1.38"
       - "https://www.kaggle.com/mcp"
     startup_timeout_sec: 30
+    # Keep OAuth/API-key remote startup out of Codex by default.
     supports:
       - cursor
       - gemini
       - vscode
       - windsurf
       - zed
-
-  # Playwright - Browser automation MCP (VS Code)
-  # --isolated: セッションごとに独立したブラウザを起動し、複数セッション間の競合を防ぐ
-  - name: playwright
-    command: pnpm
-    args:
-      - "dlx"
-      - "@playwright/mcp@0.0.75"
-      - "--isolated"
-    startup_timeout_sec: 60
-    # pnpm/npm exec currently fails to resolve the Windows bin shim for this
-    # package in Codex startup, so keep it out of Codex auto-start.
-    supports:
-      - vscode
-
-  # SuperLocalMemory - Local-only memory service (HTTP, machine-local)
-  - name: superlocalmemory
-    url: "http://localhost:3000/mcp"
-    supports:
-      - vscode
-
-  # QMD - Local-only quick memory drawer (HTTP, machine-local)
-  - name: qmd
-    url: "http://localhost:3001/mcp"
-    supports:
-      - vscode

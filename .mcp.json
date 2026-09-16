@@ -1,12 +1,11 @@
 {
   "mcpServers": {
-    "context7": {
-      "command": "pnpm",
-      "args": ["dlx", "@upstash/context7-mcp@2.2.3"]
+    "MCP_DOCKER": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run", "--profile", "dotfiles"]
     },
-    "deepwiki": {
-      "command": "pnpm",
-      "args": ["dlx", "mcp-remote@0.1.38", "https://mcp.deepwiki.com/mcp"]
+    "hindsight": {
+      "url": "http://127.0.0.1:8888/mcp/codex-shared/"
     },
     "drawio": {
       "command": "pnpm",
