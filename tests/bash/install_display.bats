@@ -4,6 +4,21 @@ setup() {
 	export DISPLAY_HELPER="$BATS_TEST_DIRNAME/../../scripts/sh/install-display.sh"
 }
 
+@test "live display replaces status and preserves PTY input, logs, and exit codes" {
+	run python3 -m unittest discover -s "$BATS_TEST_DIRNAME/../python" -p test_install_display.py -v
+	[ "$status" -eq 0 ]
+}
+
+@test "display launcher leaves redirected commands in the original shell" {
+	run bash -euc '
+    source "$DISPLAY_HELPER"
+    dotfiles_display_exec false
+    printf "caller continues\n"
+  '
+	[ "$status" -eq 0 ]
+	[ "$output" = 'caller continues' ]
+}
+
 @test "plain display preserves stdin and shell function state" {
 	run bash -euc '
     source "$DISPLAY_HELPER"

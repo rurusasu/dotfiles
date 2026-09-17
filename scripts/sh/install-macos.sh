@@ -1031,5 +1031,6 @@ finish_macos_install() {
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  dotfiles_display_exec "$BASH" "$0" "$@"
   main "$@"
 fi

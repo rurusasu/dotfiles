@@ -4,7 +4,6 @@ import sys
 import unittest
 from pathlib import Path
 
-
 HERMES_ROOT = Path("/opt/hermes")
 BROWSER_AUTOMATION_TOOLS = {
     "browser_navigate",
@@ -19,11 +18,6 @@ BROWSER_AUTOMATION_TOOLS = {
     "browser_console",
     "browser_cdp",
     "browser_dialog",
-    "browser_vault_list",
-    "browser_vault_unlock",
-    "browser_vault_fill",
-    "browser_vault_save_login",
-    "browser_vault_enter_code",
     "browser_exec",
 }
 
@@ -36,12 +30,20 @@ class ToolsetContractTests(unittest.TestCase):
             self.skipTest("Hermes runtime source is only available in the image")
 
         sys.path.insert(0, str(HERMES_ROOT))
-        from toolsets import resolve_toolset
+        import toolsets
 
-        browser_tools = set(resolve_toolset("browser"))
+        browser_tools = set(toolsets.resolve_toolset("browser"))
         self.assertTrue(BROWSER_AUTOMATION_TOOLS <= browser_tools)
+        # Upstream may add or retire optional tools (for example browser_vault_*).
+        # Our web_search patch must preserve every browser tool it provides.
+        upstream_browser_tools = {
+            name
+            for name in toolsets._HERMES_CORE_TOOLS
+            if name.startswith("browser_")
+        }
+        self.assertTrue(upstream_browser_tools <= browser_tools)
         self.assertNotIn("web_search", browser_tools)
-        self.assertIn("web_search", resolve_toolset("web"))
+        self.assertIn("web_search", toolsets.resolve_toolset("web"))
 
 
 if __name__ == "__main__":

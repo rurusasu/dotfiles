@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import json
 import os
 import shutil
@@ -751,6 +752,51 @@ class TransactionTests(unittest.TestCase):
         with self.assertRaises(ApplyError):
             Transaction.recover_if_needed(self.root)
         self.assertTrue(nonempty.exists())
+
+    def test_failed_begin_finalizer_does_not_close_reused_file_descriptors(self) -> None:
+        for failure_type in (OSError, ApplyError):
+            with self.subTest(failure_type=failure_type):
+                failed_transactions: list[Transaction] = []
+
+                def fail_initial_journal(tx: Transaction) -> None:
+                    failed_transactions.append(tx)
+                    raise failure_type("injected journal failure")
+
+                with mock.patch.object(Transaction, "_write_journal", fail_initial_journal):
+                    with self.assertRaises(ApplyError):
+                        Transaction.begin(self.root)
+
+                # The failed begin has released the two lowest available FDs.
+                # Reuse them before collecting the failed transaction, as can
+                # happen during an unrelated TemporaryDirectory cleanup.
+                descriptors = [os.open(os.devnull, os.O_RDONLY) for _ in range(2)]
+                try:
+                    failed_transactions.clear()
+                    gc.collect()
+                    for descriptor in descriptors:
+                        self.assertTrue(stat.S_ISCHR(os.fstat(descriptor).st_mode))
+                finally:
+                    for descriptor in descriptors:
+                        try:
+                            os.close(descriptor)
+                        except OSError:
+                            pass
+
+    def test_interrupted_begin_preserves_interrupt_and_releases_lock(self) -> None:
+        for interruption in (KeyboardInterrupt, SystemExit):
+            with self.subTest(interruption=interruption):
+                def interrupt_initial_journal(tx: Transaction) -> None:
+                    raise interruption()
+
+                with mock.patch.object(Transaction, "_write_journal", interrupt_initial_journal):
+                    with self.assertRaises(interruption):
+                        Transaction.begin(self.root)
+                gc.collect()
+                # Acquiring a new transaction proves both advisory locks were
+                # released; no journal was published by the interrupted write.
+                Transaction.recover_if_needed(self.root)
+                tx = Transaction.begin(self.root)
+                tx.rollback()
 
     def test_initial_journal_temporary_is_rejected_and_retained(self) -> None:
         def fail_with_temporary(path: Path, _payload: dict[str, object]) -> None:

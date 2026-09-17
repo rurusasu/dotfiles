@@ -85,6 +85,8 @@ class Transaction:
         store = _open_store(root)
         lock = _acquire_lock(store)
         directory: Path | None = None
+        tx: Transaction | None = None
+        initialized = False
         try:
             if _journal_directories(store):
                 raise ApplyError("a previous bootstrap transaction requires recovery")
@@ -95,15 +97,21 @@ class Transaction:
             journal: dict[str, Any] = {"version": _VERSION, "status": "active", "entries": []}
             tx = cls(root, store, directory, lock, journal)
             tx._write_journal()
+            initialized = True
             return tx
         except ApplyError:
-            _safe_remove_empty_initial_transaction(directory, store)
-            _release_lock(lock)
             raise
         except Exception:
-            _safe_remove_empty_initial_transaction(directory, store)
-            _release_lock(lock)
             raise ApplyError("could not begin bootstrap transaction") from None
+        finally:
+            if not initialized:
+                try:
+                    _safe_remove_empty_initial_transaction(directory, store)
+                finally:
+                    if tx is None:
+                        _release_lock(lock)
+                    else:
+                        tx._abandon()
 
     @staticmethod
     def recover_if_needed(data_root: Path) -> None:
