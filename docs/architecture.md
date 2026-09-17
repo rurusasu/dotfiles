@@ -66,6 +66,13 @@ dotfiles/
 
 Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → chezmoi → Compose → runtime acceptance` です。macOS の `Compose → runtime acceptance` は `--with-docker` または `--with-hermes` を指定した場合だけ実行します。失敗時はその phase で停止し、同じ入口を再実行します。
 
+macOS の `./install.sh` は英語の `[RUNNING]` 見出しと説明、完了時の
+`[DONE]`、失敗時の `[FAILED]` と終了コードを表示します。毎回の flake 更新は
+維持し、ソース取得・アプリ更新・設定反映・サービス起動を区別して案内します。
+対話端末では見出しを太字、説明と続くログを dim 表示にします（外部コマンド独自の
+色指定は優先されます）。ログは加工せず、Nix の進捗と認証入力をそのまま通します。
+リダイレクト時、`TERM=dumb`、`NO_COLOR` 指定時は installer の装飾を無効にします。
+
 ## 役割分担
 
 | 役割                    | ツール                  | 説明                                                           |

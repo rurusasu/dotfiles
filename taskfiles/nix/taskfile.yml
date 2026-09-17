@@ -34,7 +34,12 @@ tasks:
   darwin:update:
     desc: Apply safe Darwin package version, URL, and hash updates
     cmds:
-      - "python3 scripts/python/update_darwin_packages.py --write --output darwin-package-update.json"
+      - >-
+        bash -euc 'source scripts/sh/install-display.sh;
+        dotfiles_display_init;
+        dotfiles_step "Checking custom macOS package updates"
+        "Check release feeds and download changed packages to verify their hashes. Large application downloads can take time."
+        python3 scripts/python/update_darwin_packages.py --write --output darwin-package-update.json'
 
   darwin:promote:
     desc: Verify and promote explicit nixpkgs Darwin candidates

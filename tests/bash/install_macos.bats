@@ -577,8 +577,25 @@ run_macos_installer() {
 	export DARWIN_UPDATE_STATUS=42
 	run_macos_installer
 	[ "$status" -eq 42 ]
+	[[ "$output" == *"[FAILED] Checking custom macOS package updates (exit 42)"* ]]
 	grep -q 'python3 scripts/python/update_darwin_packages.py' "$COMMAND_LOG"
 	! grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG"
+}
+
+@test "flake download failure names the phase and stops the workflow" {
+	write_installed_stubs
+	write_stub nix '
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+printf "error: Truncated tar archive\n" >&2
+exit 37
+'
+	run_macos_installer
+	[ "$status" -eq 37 ]
+	[[ "$output" == *"Large source downloads can take time"* ]]
+	[[ "$output" == *"Truncated tar archive"* ]]
+	[[ "$output" == *"[FAILED] Updating flake inputs (exit 37)"* ]]
+	[[ "$output" != *"[DONE] Updating flake inputs"* ]]
+	! grep -q 'nix shell\|darwin-rebuild' "$COMMAND_LOG"
 }
 
 @test "public install ignores inherited optional profiles" {
@@ -595,6 +612,8 @@ run_macos_installer() {
 	export DOTFILES_SKIP_FLAKE_UPDATE=1
 	run_macos_installer
 	[ "$status" -eq 0 ]
+	[[ "$output" == *"[SKIPPED] Updating flake inputs"* ]]
+	[[ "$output" != *"[DONE] Updating flake inputs"* ]]
 	! grep -q 'nix flake update\|darwin:update' "$COMMAND_LOG"
 	grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG"
 }
@@ -1713,6 +1732,7 @@ printf "%s\n" "$DOCKER_APP"
 		"$HOME/.dotfiles/docker/hermes-service"
 	cp "$INSTALLER" "$HOME/.dotfiles/scripts/sh/install-macos.sh"
 	cp "$COMMON_INSTALLER" "$HOME/.dotfiles/scripts/sh/install-common.sh"
+	cp "$REPO_ROOT/scripts/sh/install-display.sh" "$HOME/.dotfiles/scripts/sh/install-display.sh"
 	cp "$HERMES_INSTALLER" "$HOME/.dotfiles/scripts/sh/hermes-agent.sh"
 	cp "$REPO_ROOT/Taskfile.yml" "$HOME/.dotfiles/Taskfile.yml"
 	cp -R "$REPO_ROOT/taskfiles" "$HOME/.dotfiles/taskfiles"
