@@ -612,6 +612,8 @@ exit 37
 	export DOTFILES_SKIP_FLAKE_UPDATE=1
 	run_macos_installer
 	[ "$status" -eq 0 ]
+	[[ "$output" == *"[SKIPPED] Updating flake inputs"* ]]
+	[[ "$output" != *"[DONE] Updating flake inputs"* ]]
 	! grep -q 'nix flake update\|darwin:update' "$COMMAND_LOG"
 	grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG"
 }
