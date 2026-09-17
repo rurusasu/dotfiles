@@ -216,8 +216,13 @@ def run(command):
     last_paint = 0.0
     pending = bytearray()
     input_queue = bytearray()
+    suspended = False
+    suspended_termination = 0
 
     def forward(signum, _frame):
+        nonlocal suspended_termination
+        if suspended:
+            suspended_termination = signum
         try:
             os.killpg(os.tcgetpgrp(master), signum)
         except ProcessLookupError:
@@ -229,10 +234,46 @@ def run(command):
         )
         display.redraw()
 
+    def suspend(_signum, _frame):
+        nonlocal suspended
+        if suspended:
+            return
+        # The nested PTY owns an orphaned session, so its terminal-generated
+        # SIGTSTP can be discarded. Stop it explicitly before returning control
+        # to the invoking shell, with the real terminal restored.
+        groups = {pid, os.tcgetpgrp(master)}
+        suspended = True
+        try:
+            for group in groups:
+                try:
+                    os.killpg(group, signal.SIGSTOP)
+                except ProcessLookupError:
+                    pass
+            termios.tcsetattr(0, termios.TCSADRAIN, saved)
+            sys.stderr.write("\x1b[0m\r\n")
+            sys.stderr.flush()
+            os.kill(os.getpid(), signal.SIGSTOP)
+            # A background resume must not steal input or redraw the shell's UI.
+            while not suspended_termination and os.tcgetpgrp(0) != os.getpgrp():
+                os.kill(os.getpid(), signal.SIGSTOP)
+            if suspended_termination:
+                raise SystemExit(128 + suspended_termination)
+            tty.setraw(0)
+            display.height = 0
+            resize(None, None)
+        finally:
+            suspended = False
+            for group in groups:
+                try:
+                    os.killpg(group, signal.SIGCONT)
+                except ProcessLookupError:
+                    pass
+
     try:
         for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT):
             old_handlers[signum] = signal.signal(signum, forward)
         old_handlers[signal.SIGWINCH] = signal.signal(signal.SIGWINCH, resize)
+        old_handlers[signal.SIGTSTP] = signal.signal(signal.SIGTSTP, suspend)
         os.set_blocking(master, False)
         tty.setraw(0)
         with os.fdopen(log_fd, "wb", buffering=0) as log:
@@ -259,6 +300,16 @@ def run(command):
                 if 0 in ready:
                     data = os.read(0, 4096)
                     if data:
+                        attributes = termios.tcgetattr(master)
+                        suspend_char = attributes[6][termios.VSUSP]
+                        disabled = bytes([os.fpathconf(master, "PC_VDISABLE")])
+                        if (
+                            attributes[3] & termios.ISIG
+                            and suspend_char != disabled
+                            and suspend_char in data
+                        ):
+                            data = data.replace(suspend_char, b"")
+                            suspend(None, None)
                         # Never log input; the child's terminal controls echo.
                         input_queue.extend(data)
                 if master in writable:
@@ -293,7 +344,8 @@ def run(command):
             sys.stderr.flush()
             return code
     finally:
-        termios.tcsetattr(0, termios.TCSADRAIN, saved)
+        if not suspended_termination:
+            termios.tcsetattr(0, termios.TCSADRAIN, saved)
         for signum, handler in old_handlers.items():
             signal.signal(signum, handler)
         os.close(master)

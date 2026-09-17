@@ -171,6 +171,8 @@ class RelayTests(unittest.TestCase):
         extra_env=None,
         launcher=False,
         resize_to=None,
+        job_control=False,
+        terminate_suspended=0,
     ):
         with tempfile.TemporaryDirectory() as directory:
             pid, fd = pty.fork()
@@ -181,6 +183,8 @@ class RelayTests(unittest.TestCase):
                 os.environ.pop("NO_COLOR", None)
                 os.environ.pop("DOTFILES_LIVE_DISPLAY", None)
                 os.environ.update(extra_env or {})
+                os.environ["DOTFILES_TEST_JOB_CONTROL"] = str(int(job_control))
+                os.environ["DOTFILES_TEST_TERMINATE"] = str(terminate_suspended)
                 arguments = [sys.executable, str(SCRIPT), "--", "bash", "-euc", command]
                 if launcher:
                     arguments = [
@@ -194,9 +198,45 @@ class RelayTests(unittest.TestCase):
                     sys.executable,
                     sys.executable,
                     "-c",
-                    """import subprocess, sys, termios
+                    """import os, signal, subprocess, sys, termios, time
 before = termios.tcgetattr(0)
-status = subprocess.call(sys.argv[1:])
+if os.environ["DOTFILES_TEST_JOB_CONTROL"] == "1":
+    signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+    def foreground():
+        os.setpgrp()
+        os.tcsetpgrp(0, os.getpgrp())
+    child = subprocess.Popen(sys.argv[1:], preexec_fn=foreground)
+    try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            waited, state = os.waitpid(child.pid, os.WNOHANG | os.WUNTRACED)
+            if waited:
+                break
+            time.sleep(0.01)
+        else:
+            raise AssertionError("relay did not suspend")
+        assert os.WIFSTOPPED(state), state
+        os.tcsetpgrp(0, os.getpgrp())
+        suspended = termios.tcgetattr(0)
+        expected = list(before)
+        suspended[3] &= ~getattr(termios, "PENDIN", 0)
+        expected[3] &= ~getattr(termios, "PENDIN", 0)
+        assert suspended == expected, (suspended, expected)
+        print("TERMINAL_SUSPENDED", flush=True)
+        terminate = int(os.environ["DOTFILES_TEST_TERMINATE"])
+        if terminate:
+            os.killpg(child.pid, terminate)
+        else:
+            os.tcsetpgrp(0, child.pid)
+        os.killpg(child.pid, signal.SIGCONT)
+        status = child.wait(timeout=5)
+    finally:
+        if child.poll() is None:
+            os.killpg(child.pid, signal.SIGKILL)
+            child.wait()
+        os.tcsetpgrp(0, os.getpgrp())
+else:
+    status = subprocess.call(sys.argv[1:])
 after = termios.tcgetattr(0)
 # Darwin sets this transient kernel flag when leaving raw mode, even for
 # a bare tty.setraw()/tcsetattr() pair. Compare all actual terminal settings.
@@ -311,6 +351,53 @@ test "$changed" = yes
         self.assertEqual(status, 0, output)
         self.assertEqual(output.count(b"Full log:"), 1)
         self.assertIn(b"argument with spaces", log)
+
+    def test_suspend_restores_terminal_and_resumes_input(self):
+        for setup, suspend_byte in [("", b"\x1a"), ("stty susp '^Y';", b"\x19")]:
+            with self.subTest(suspend_byte=suspend_byte):
+                status, output, log = self.run_terminal(
+                    setup + "echo READY; read -r answer; test \"$answer\" = continue; echo RESUMED",
+                    b"READY",
+                    suspend_byte + b"continue\n",
+                    job_control=True,
+                )
+                self.assertEqual(status, 0, output)
+                self.assertIn(b"TERMINAL_SUSPENDED", output)
+                self.assertIn(b"RESUMED", log)
+
+    def test_raw_child_receives_literal_suspend_character(self):
+        child = "import os, tty; tty.setraw(0); print('READY', flush=True); assert os.read(0, 1) == b'\\x1a'"
+        status, output, _ = self.run_terminal(
+            f"{shlex.quote(sys.executable)} -c {shlex.quote(child)}",
+            b"READY",
+            b"\x1a",
+        )
+        self.assertEqual(status, 0, output)
+
+    def test_external_suspend_signal_restores_terminal(self):
+        status, output, log = self.run_terminal(
+            'kill -TSTP "$PPID"; sleep 0.1; echo RESUMED',
+            job_control=True,
+        )
+        self.assertEqual(status, 0, output)
+        self.assertIn(b"TERMINAL_SUSPENDED", output)
+        self.assertIn(b"RESUMED", log)
+
+    def test_terminating_suspended_job_reaps_child_without_foregrounding(self):
+        for signum in (signal.SIGTERM, signal.SIGHUP):
+            with self.subTest(signum=signum):
+                status, output, log = self.run_terminal(
+                    'echo CHILD:$$; echo READY; sleep 30',
+                    b"READY",
+                    b"\x1a",
+                    job_control=True,
+                    terminate_suspended=signum,
+                )
+                self.assertEqual(status, 128 + signum, output)
+                self.assertIn(b"TERMINAL_SUSPENDED", output)
+                child_pid = int(re.search(rb"CHILD:(\d+)", log).group(1))
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(child_pid, 0)
 
     def test_completion_after_output_without_newline(self):
         command = f'source "{HELPER}"; dotfiles_display_init; dotfiles_step Example Work printf partial'
