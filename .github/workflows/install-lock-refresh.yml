@@ -31,7 +31,7 @@ jobs:
           SKIP: hermes-bootstrap-tests
         run: |
           export PATH="$HOME/.nix-profile/bin:$PATH"
-          mkdir -p "$HOME/.local/share"
+          mkdir -p "$HOME/.local/share" "$HOME/.agents"
           ln -s "$GITHUB_WORKSPACE/chezmoi" "$HOME/.local/share/chezmoi"
           chezmoi apply --exclude scripts "$HOME/.agents/skills"
           git config user.name 'github-actions[bot]'
