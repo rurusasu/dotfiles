@@ -173,6 +173,7 @@ class RelayTests(unittest.TestCase):
         resize_to=None,
         job_control=False,
         terminate_suspended=0,
+        delay_exit=False,
     ):
         with tempfile.TemporaryDirectory() as directory:
             pid, fd = pty.fork()
@@ -185,6 +186,7 @@ class RelayTests(unittest.TestCase):
                 os.environ.update(extra_env or {})
                 os.environ["DOTFILES_TEST_JOB_CONTROL"] = str(int(job_control))
                 os.environ["DOTFILES_TEST_TERMINATE"] = str(terminate_suspended)
+                os.environ["DOTFILES_TEST_DELAY_EXIT"] = str(int(delay_exit))
                 arguments = [sys.executable, str(SCRIPT), "--", "bash", "-euc", command]
                 if launcher:
                     arguments = [
@@ -244,6 +246,11 @@ before[3] &= ~getattr(termios, "PENDIN", 0)
 after[3] &= ~getattr(termios, "PENDIN", 0)
 assert before == after, (before, after)
 print("TERMINAL_RESTORED", flush=True)
+if os.environ["DOTFILES_TEST_DELAY_EXIT"] == "1":
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    for fd in (0, 1, 2):
+        os.close(fd)
+    time.sleep(0.2)
 sys.exit(status)
 """,
                     *arguments,
@@ -289,11 +296,26 @@ sys.exit(status)
                 else:
                     self.fail("terminal relay hung: " + repr(output[-1000:]))
             finally:
-                os.close(fd)
-                waited, status = os.waitpid(pid, os.WNOHANG)
+                # PTY EOF can precede process exit. Give interpreter cleanup a
+                # bounded grace period instead of racing killpg against exit.
+                exit_deadline = time.monotonic() + 2
+                while True:
+                    waited, status = os.waitpid(pid, os.WNOHANG)
+                    if waited or time.monotonic() >= exit_deadline:
+                        break
+                    time.sleep(0.01)
                 if not waited:
-                    os.killpg(pid, signal.SIGKILL)
+                    try:
+                        os.killpg(pid, signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError):
+                        # Darwin may report EPERM for a disappearing group.
+                        # The unreaped direct child PID cannot have been reused.
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
                     _, status = os.waitpid(pid, 0)
+                os.close(fd)
             logs = list(Path(directory).glob("*.log"))
             contents = b"".join(path.read_bytes() for path in logs)
             for path in logs:
@@ -330,6 +352,10 @@ test "$changed" = yes
         screen.feed(output.decode())
         self.assertNotIn("[RUNNING]", screen.text)
         self.assertEqual(screen.text.count("[DONE] Interactive operation"), 1)
+
+    def test_terminal_eof_does_not_kill_a_normally_exiting_child(self):
+        status, output, _ = self.run_terminal("echo FINISHED", delay_exit=True)
+        self.assertEqual(status, 0, output)
 
     def test_command_failure_and_interrupt_preserve_exit_status(self):
         for action, input_when, input_bytes, expected in [
