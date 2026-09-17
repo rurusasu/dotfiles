@@ -5,11 +5,19 @@ DOTFILES_NIX_PROFILE_SCRIPT="${DOTFILES_NIX_PROFILE_SCRIPT:-/nix/var/nix/profile
 DOTFILES_WAIT_SLEEP_SECONDS="${DOTFILES_WAIT_SLEEP_SECONDS:-2}"
 
 dotfiles_log() {
-  printf '\033[1;34m[%s]\033[0m %s\n' "$DOTFILES_LOG_PREFIX" "$*"
+  if [[ -t 1 && -t 2 && ${TERM:-dumb} != dumb && ! ${NO_COLOR+x} ]]; then
+    printf '\033[1;34m[%s]\033[0m%s %s\n' "$DOTFILES_LOG_PREFIX" "${DOTFILES_DISPLAY_DIM:-}" "$*"
+  else
+    printf '[%s] %s\n' "$DOTFILES_LOG_PREFIX" "$*"
+  fi
 }
 
 dotfiles_die() {
-  printf '\033[1;31m[%s]\033[0m %s\n' "$DOTFILES_LOG_PREFIX" "$*" >&2
+  if [[ -t 1 && -t 2 && ${TERM:-dumb} != dumb && ! ${NO_COLOR+x} ]]; then
+    printf '\033[0;1;31m[%s]\033[0m %s\n' "$DOTFILES_LOG_PREFIX" "$*" >&2
+  else
+    printf '[%s] %s\n' "$DOTFILES_LOG_PREFIX" "$*" >&2
+  fi
   exit 1
 }
 

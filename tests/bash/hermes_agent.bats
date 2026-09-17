@@ -704,6 +704,7 @@ create_mocked_installer_fixture() {
 	cp "$REPO_ROOT/Taskfile.yml" "$MOCK_REPO/Taskfile.yml"
 	cp -R "$REPO_ROOT/taskfiles" "$MOCK_REPO/taskfiles"
 	cp "$REPO_ROOT/scripts/sh/install-common.sh" "$MOCK_REPO/scripts/sh/install-common.sh"
+	cp "$REPO_ROOT/scripts/sh/install-display.sh" "$MOCK_REPO/scripts/sh/install-display.sh"
 	cat >"$MOCK_REPO/scripts/sh/migrate-darwin-provider.sh" <<'EOF'
 #!/usr/bin/env bash
 printf 'migrate-darwin-provider %s\n' "$*" >>"$COMMAND_LOG"

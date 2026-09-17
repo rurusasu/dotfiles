@@ -13,6 +13,8 @@ fi
 export OP_BIOMETRIC_UNLOCK_ENABLED
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
+# shellcheck source=/dev/null
+. "$ROOT/scripts/sh/install-display.sh"
 
 COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
 HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/local-ai-services/compose.yml"
@@ -208,6 +210,7 @@ rollback_docker_desktop_cask_links() {
   local exit_status="${1:-1}" index link_path backup_path original_state original_target
   local current_target legacy_target state replacement_target rollback_failed=0
 
+  dotfiles_display_exit "$exit_status"
   trap - EXIT
   ((DOCKER_CASK_LINK_TRANSACTION_ACTIVE == 1)) || exit "$exit_status"
   set +e
@@ -305,7 +308,7 @@ rollback_docker_desktop_cask_links() {
 commit_docker_desktop_cask_links() {
   local index backup_path original_state original_target
 
-  trap - EXIT
+  trap 'dotfiles_display_exit "$?"' EXIT
   DOCKER_CASK_LINK_TRANSACTION_ACTIVE=0
   for ((index = 0; index < DOCKER_CASK_LINK_TRANSACTION_COUNT; index++)); do
     backup_path="${DOCKER_CASK_LINK_BACKUP_PATHS[$index]}"
@@ -946,51 +949,83 @@ run_darwin_install_workflow() {
 }
 
 main() {
+  dotfiles_display_init
   dotfiles_sanitize_incomplete_git_config_environment
   resolve_install_profile "$@"
-  preflight
-  ensure_command_line_tools
-  ensure_nix
-  dotfiles_link_checkout "$ROOT"
-  dotfiles_update_flake "$ROOT"
-  run_darwin_install_workflow
+  dotfiles_step 'Checking installation prerequisites' \
+    'Validate this Mac and the selected installation profile.' preflight
+  dotfiles_step 'Preparing Apple command line tools' \
+    'Check the developer tools required to install packages.' ensure_command_line_tools
+  dotfiles_step 'Preparing Nix' \
+    'Install Nix if needed and enable flakes.' ensure_nix
+  dotfiles_step 'Connecting the dotfiles checkout' \
+    'Make this checkout available at the standard dotfiles path.' dotfiles_link_checkout "$ROOT"
+  if [[ ${DOTFILES_SKIP_FLAKE_UPDATE:-0} == 1 ]]; then
+    printf '\n[SKIPPED] Updating flake inputs (DOTFILES_SKIP_FLAKE_UPDATE=1).\n' >&2
+  else
+    dotfiles_step 'Updating flake inputs' \
+      'Fetch current sources, including nixpkgs, and update flake.lock. Large source downloads can take time; package installation follows later.' dotfiles_update_flake "$ROOT"
+  fi
+  dotfiles_step 'Running the macOS installation workflow' \
+    'Prepare Python and Task, check custom package updates, then apply packages and settings.' run_darwin_install_workflow
 }
 
 # Platform adapter invoked only after the Taskfile's update step succeeds.
 finish_macos_install() {
-  preserve_shell_rc_for_nix_darwin
+  dotfiles_display_init
+  dotfiles_step 'Preparing shell configuration' \
+    'Preserve existing shell startup files before activation.' preserve_shell_rc_for_nix_darwin
   if ((DOTFILES_WITH_DOCKER == 1)); then
-    stop_existing_docker_desktop
-    prepare_docker_desktop_cask_links
+    dotfiles_step 'Stopping Docker Desktop' \
+      'Stop Docker Desktop before updating its installation.' stop_existing_docker_desktop
+    dotfiles_step 'Preparing Docker Desktop links' \
+      'Preserve existing CLI links for recovery if activation fails.' prepare_docker_desktop_cask_links
   fi
-  repair_homebrew_cask_link_directories
-  migrate_unmanaged_wezterm_install
-  apply_darwin_system
-  ensure_homebrew_cask_link_directories
+  dotfiles_step 'Preparing Homebrew directories' \
+    'Check and repair permissions for application CLI links.' repair_homebrew_cask_link_directories
+  dotfiles_step 'Preparing WezTerm migration' \
+    'Preserve an unmanaged WezTerm installation if one exists.' migrate_unmanaged_wezterm_install
+  dotfiles_step 'Applying macOS packages and settings' \
+    'Download or build packages, then activate nix-darwin, Homebrew, and Home Manager. sudo may request your password.' apply_darwin_system
+  dotfiles_step 'Checking Homebrew directories' \
+    'Verify application CLI link directories after activation.' ensure_homebrew_cask_link_directories
   if ((DOTFILES_WITH_DOCKER == 1)); then
-    repair_and_verify_docker_desktop_cask
-    commit_docker_desktop_cask_links
+    dotfiles_step 'Verifying Docker Desktop installation' \
+      'Repair application artifacts if needed and verify the installed cask.' repair_and_verify_docker_desktop_cask
+    dotfiles_step 'Finalizing Docker Desktop links' \
+      'Finish the verified CLI link migration.' commit_docker_desktop_cask_links
   fi
-  migrate_darwin_providers
-  dotfiles_install_herdr
-  apply_chezmoi
+  dotfiles_step 'Migrating package providers' \
+    'Verify installed providers and finish package migrations.' migrate_darwin_providers
+  dotfiles_step 'Installing Herdr' \
+    'Install or update Herdr unless explicitly skipped.' dotfiles_install_herdr
+  dotfiles_step 'Applying user configuration' \
+    'Apply chezmoi-managed dotfiles; authentication may be requested.' apply_chezmoi
   if ((DOTFILES_WITH_HERMES == 1)); then
-    dotfiles_run_task hermes:desktop:install
+    dotfiles_step 'Installing Hermes Desktop' \
+      'Install or update the native desktop application.' dotfiles_run_task hermes:desktop:install
   fi
   if ((DOTFILES_WITH_OLLAMA == 1)); then
-    setup_ollama_runtime
+    dotfiles_step 'Starting Ollama' \
+      'Start the local model service and wait for readiness.' setup_ollama_runtime
   fi
   if ((DOTFILES_WITH_DOCKER == 1)); then
-    setup_docker_runtime
+    dotfiles_step 'Starting Docker' \
+      'Start Docker Desktop and wait for its engine.' setup_docker_runtime
     if ((DOTFILES_WITH_HERMES == 1)); then
-      dotfiles_run_task hermes:bootstrap
-      DOTFILES_COMPOSE_FILE="$COMPOSE_FILE" "$VERIFY_ENVIRONMENT" --runtime
+      dotfiles_step 'Preparing Hermes services' \
+        'Prepare storage, images, and local services through the Hermes bootstrap task.' dotfiles_run_task hermes:bootstrap
+      DOTFILES_COMPOSE_FILE="$COMPOSE_FILE" dotfiles_step 'Verifying the installed environment' \
+        'Check the Hermes runtime and required tools.' "$VERIFY_ENVIRONMENT" --runtime
     else
-      dotfiles_run_task hindsight:up
-      DOTFILES_COMPOSE_FILE="$HINDSIGHT_COMPOSE_FILE" "$VERIFY_ENVIRONMENT" --runtime
+      dotfiles_step 'Starting Hindsight services' \
+        'Prepare and start the independent local memory services.' dotfiles_run_task hindsight:up
+      DOTFILES_COMPOSE_FILE="$HINDSIGHT_COMPOSE_FILE" dotfiles_step 'Verifying the installed environment' \
+        'Check the local services and required tools.' "$VERIFY_ENVIRONMENT" --runtime
     fi
   else
-    "$VERIFY_ENVIRONMENT"
+    dotfiles_step 'Verifying the installed environment' \
+      'Check required tools and installed configuration.' "$VERIFY_ENVIRONMENT"
   fi
   dotfiles_log "macOS setup complete."
 }
