@@ -7,6 +7,8 @@ import contextlib
 import io
 import json
 import os
+import select
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -33,6 +35,65 @@ class UpdateDarwinPackagesTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.updater = load_module()
+
+    def test_package_context_is_visible_before_network_operations(self) -> None:
+        output = io.StringIO()
+        url = "https://example.invalid/demo.zip"
+        def fetcher(feed):
+            self.assertIn("orca-editor", output.getvalue())
+            self.assertIn(feed, output.getvalue())
+            return b"fixture"
+        def prefetch(target):
+            self.assertEqual(target, url)
+            self.assertIn("9.0", output.getvalue())
+            self.assertIn(url, output.getvalue())
+            return "sha256-test"
+        profile = self.updater.PackageProfile(
+            "orca-editor", "https://example.invalid/feed",
+            self.updater.DERIVATIONS["orca-editor"],
+            lambda _: self.updater.Release("9.0", url),
+        )
+        with contextlib.redirect_stderr(output), patch.dict(self.updater.PROFILES, {"orca-editor": profile}), patch.object(self.updater, "prefetch_hash", side_effect=prefetch):
+            updates = self.updater.collect_updates(["orca-editor"], fetcher=fetcher)
+        self.assertEqual(updates[0]["hash"], "sha256-test")
+        self.assertIn("Hash acquired", output.getvalue())
+
+    def test_unchanged_and_failed_checks_are_reported(self) -> None:
+        version = self.updater.current_literals(self.updater.DERIVATIONS["orca-editor"])[0]
+        for release, failure, expected in (
+            (self.updater.Release(version, "https://example.invalid/a.zip"), None, "Up to date"),
+            (None, None, "No compatible release asset"),
+            (None, OSError("feed unavailable"), "feed unavailable"),
+            (self.updater.Release("9.0", "https://example.invalid/a.zip"), None, "download failed"),
+        ):
+            with self.subTest(expected=expected):
+                output = io.StringIO()
+                profile = self.updater.PackageProfile("orca-editor", "https://example.invalid/feed", self.updater.DERIVATIONS["orca-editor"], lambda _, release=release: release)
+                def fetcher(_, failure=failure):
+                    if failure:
+                        raise failure
+                    return b"fixture"
+                with contextlib.redirect_stderr(output), patch.dict(self.updater.PROFILES, {"orca-editor": profile}), patch.object(self.updater, "prefetch_hash", side_effect=OSError("download failed")):
+                    updates = self.updater.collect_updates(["orca-editor"], fetcher=fetcher)
+                self.assertIn(expected, output.getvalue())
+                self.assertEqual(bool(updates), expected != "Up to date")
+
+    def test_nix_progress_arrives_before_download_exits_and_stdout_stays_json(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            nix = Path(directory) / "nix"
+            nix.write_text(f"#!{sys.executable}\nimport sys\nprint('downloading demo.zip', file=sys.stderr, flush=True)\nsys.stdin.readline()\nprint('{{\"hash\": \"sha256-test\"}}')\n")
+            nix.chmod(0o755)
+            code = f"import runpy; m = runpy.run_path({str(SCRIPT)!r}); print(m['prefetch_hash']('https://example.invalid/demo.zip'))"
+            with subprocess.Popen([sys.executable, "-c", code], env={**os.environ, "PATH": directory + os.pathsep + os.environ["PATH"]}, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
+                try:
+                    ready, _, _ = select.select([process.stderr], [], [], 5)
+                    self.assertTrue(ready, "Nix progress was hidden while the download was running")
+                    self.assertIn(b"downloading demo.zip", os.read(process.stderr.fileno(), 4096))
+                    self.assertIsNone(process.poll())
+                finally:
+                    stdout, stderr = process.communicate(b"continue\n", timeout=5)
+                self.assertEqual(process.returncode, 0, stderr)
+                self.assertEqual(stdout, b"sha256-test\n")
 
     def test_registry_has_only_explicit_reviewed_candidates(self) -> None:
         registry = self.updater.load_candidate_registry(REGISTRY)
