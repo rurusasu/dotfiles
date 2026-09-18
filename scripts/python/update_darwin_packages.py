@@ -459,7 +459,7 @@ def prefetch_hash(url: str) -> str:
     result = subprocess.run(
         ["nix", "store", "prefetch-file", "--json", url],
         check=True,
-        capture_output=True,
+        stdout=subprocess.PIPE,
         text=True,
         timeout=300,
     )
@@ -488,12 +488,15 @@ def collect_updates(
     for package_id in package_ids:
         profile = PROFILES[package_id]
         version, old_url, old_hash = current_literals(profile.derivation)
+        print(f"Checking {package_id} (current definition: {version}): {profile.feed_url}", file=sys.stderr, flush=True)
         try:
             release = profile.parse_release(fetcher(profile.feed_url))
         except (OSError, ET.ParseError, json.JSONDecodeError) as error:
+            print(f"Failed to check {package_id}: {error}", file=sys.stderr, flush=True)
             updates.append({"package": package_id, "status": "error", "reason": str(error)})
             continue
         if release is None:
+            print(f"Failed to check {package_id}: No compatible release asset found", file=sys.stderr, flush=True)
             updates.append({
                 "package": package_id,
                 "status": "error",
@@ -501,7 +504,9 @@ def collect_updates(
             })
             continue
         if release.version == version:
+            print(f"Up to date: {package_id} {version}", file=sys.stderr, flush=True)
             continue
+        print(f"Downloading {package_id} {release.version} to acquire its hash: {release.url}", file=sys.stderr, flush=True)
         try:
             hash_value = prefetch_hash(release.url)
         except (
@@ -511,8 +516,10 @@ def collect_updates(
             json.JSONDecodeError,
             ValueError,
         ) as error:
+            print(f"Failed to download {package_id} {release.version}: {error}", file=sys.stderr, flush=True)
             updates.append({"package": package_id, "status": "error", "reason": str(error)})
             continue
+        print(f"Hash acquired: {package_id} {release.version}", file=sys.stderr, flush=True)
         updates.append(
             {
                 "package": package_id,
