@@ -11,6 +11,7 @@ tasks:
     cmds:
       - nix build .#checks.$(nix eval --raw --impure --expr 'builtins.currentSystem').nix-unit --no-link --no-write-lock-file
       - nix build .#checks.$(nix eval --raw --impure --expr 'builtins.currentSystem').neovim-native --no-link --no-write-lock-file
+      - nix build .#checks.$(nix eval --raw --impure --expr 'builtins.currentSystem').ghostty-config --no-link --no-write-lock-file
 
   test:powershell:
     desc: Run PowerShell tests

@@ -320,7 +320,7 @@ jobs:
           fi
 
       - name: Run Nix-native configuration tests
-        run: nix build .#checks.x86_64-linux.nix-unit --no-link
+        run: nix build .#checks.x86_64-linux.nix-unit .#checks.x86_64-linux.ghostty-config --no-link
 
       - name: Run Neovim native configuration tests
         run: nix build .#checks.x86_64-linux.neovim-native --no-link
@@ -684,7 +684,7 @@ jobs:
 
       - name: Build macOS declarative output
         run: |
-          nix build .#checks.aarch64-darwin.nix-unit --no-link \
+          nix build .#checks.aarch64-darwin.nix-unit .#checks.aarch64-darwin.ghostty-config --no-link \
             --option extra-substituters "$NUMTIDE_CACHE" \
             --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY"
           nix build .#checks.aarch64-darwin.neovim-native --no-link \
