@@ -485,6 +485,15 @@ test "$changed" = yes
                             os.kill(child, 0)
                         except ProcessLookupError:
                             break
+                        # A container's PID 1 may not reap orphaned children.
+                        # Zombies have exited; only a live downloader violates
+                        # this cancellation contract.
+                        state = subprocess.run(
+                            ["ps", "-o", "stat=", "-p", str(child)],
+                            capture_output=True, text=True, timeout=2,
+                        )
+                        if state.returncode == 0 and state.stdout.strip().startswith("Z"):
+                            break
                         if time.monotonic() >= deadline:
                             self.fail(f"downloader {child} survived cancellation")
                         time.sleep(0.01)
