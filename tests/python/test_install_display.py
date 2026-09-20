@@ -174,6 +174,7 @@ class RelayTests(unittest.TestCase):
         job_control=False,
         terminate_suspended=0,
         delay_exit=False,
+        resume_permission_error=None,
     ):
         with tempfile.TemporaryDirectory() as directory:
             pid, fd = pty.fork()
@@ -188,6 +189,42 @@ class RelayTests(unittest.TestCase):
                 os.environ["DOTFILES_TEST_TERMINATE"] = str(terminate_suspended)
                 os.environ["DOTFILES_TEST_DELAY_EXIT"] = str(int(delay_exit))
                 arguments = [sys.executable, str(SCRIPT), "--", "bash", "-euc", command]
+                if resume_permission_error:
+                    os.environ["DOTFILES_TEST_RESUME_ERROR"] = resume_permission_error
+                    arguments = [sys.executable, "-c", """import errno, os, runpy, signal, subprocess, sys, time
+original_killpg = os.killpg
+def killpg(group, signum):
+    mode = os.environ["DOTFILES_TEST_RESUME_ERROR"]
+    if signum == 0 and mode == "exited-group-present":
+        return
+    if signum == 0 and mode == "exited-group-denied":
+        raise PermissionError(errno.EPERM, "injected group probe denial")
+    if signum != signal.SIGCONT:
+        return original_killpg(group, signum)
+    try:
+        original_killpg(group, signum)
+    except PermissionError:
+        # Darwin may already see only a zombie in this group.
+        if not mode.startswith("exited"):
+            raise
+    if mode.startswith("exited"):
+        # Leave the real child unreaped; only make the kernel error portable
+        # and deterministic once the child has actually finished exiting.
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            state = subprocess.check_output(
+                ["ps", "-o", "stat=", "-p", str(group)], text=True
+            ).strip()
+            if state.startswith("Z"):
+                break
+            time.sleep(0.01)
+        else:
+            raise AssertionError("child did not become a zombie")
+    raise PermissionError(errno.EPERM, "injected resume permission error")
+os.killpg = killpg
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name="__main__")
+""", *arguments[1:]]
                 if launcher:
                     arguments = [
                         "bash",
@@ -421,6 +458,55 @@ test "$changed" = yes
                 )
                 self.assertEqual(status, 128 + signum, output)
                 self.assertIn(b"TERMINAL_SUSPENDED", output)
+                child_pid = int(re.search(rb"CHILD:(\d+)", log).group(1))
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(child_pid, 0)
+
+    def test_resume_permission_error_for_exited_child_preserves_termination(self):
+        for signum, expected in [(signal.SIGTERM, 143), (signal.SIGHUP, 129)]:
+            with self.subTest(signum=signum):
+                status, output, log = self.run_terminal(
+                    'echo CHILD:$$; echo READY; exec sleep 30',
+                    b"READY",
+                    b"\x1a",
+                    job_control=True,
+                    terminate_suspended=signum,
+                    resume_permission_error="exited",
+                )
+                self.assertEqual(status, expected, output)
+                self.assertNotIn(b"Traceback", output)
+                child_pid = int(re.search(rb"CHILD:(\d+)", log).group(1))
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(child_pid, 0)
+
+    def test_resume_permission_error_for_live_child_is_not_suppressed(self):
+        for terminate in (0, signal.SIGTERM):
+            with self.subTest(terminate=terminate):
+                status, output, _ = self.run_terminal(
+                    "trap '' TERM; echo READY; read -r answer",
+                    b"READY",
+                    b"\x1a",
+                    job_control=True,
+                    terminate_suspended=terminate,
+                    resume_permission_error="live",
+                )
+                self.assertEqual(status, 1, output)
+                self.assertIn(b"PermissionError", output)
+
+    def test_exited_leader_does_not_hide_permission_error_for_remaining_group(self):
+        for mode in ("exited-group-present", "exited-group-denied"):
+            with self.subTest(mode=mode):
+                status, output, log = self.run_terminal(
+                    'echo CHILD:$$; echo READY; exec sleep 30',
+                    b"READY",
+                    b"\x1a",
+                    job_control=True,
+                    terminate_suspended=signal.SIGTERM,
+                    resume_permission_error=mode,
+                )
+                self.assertEqual(status, 1, output)
+                self.assertIn(b"PermissionError", output)
+                self.assertNotIn(b"ChildProcessError", output)
                 child_pid = int(re.search(rb"CHILD:(\d+)", log).group(1))
                 with self.assertRaises(ProcessLookupError):
                     os.kill(child_pid, 0)

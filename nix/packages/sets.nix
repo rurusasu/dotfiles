@@ -254,6 +254,30 @@ let
         };
 
         # ── terminal ──────────────────────────────────────────
+        ghostty = {
+          pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.ghostty-bin else pkgs.ghostty;
+          category = "terminal";
+          support = {
+            windows.unsupported = "Ghostty is configured only for macOS and Linux";
+            darwin = {
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "ghostty-bin";
+              identity = {
+                homepage = "https://ghostty.org/";
+                appName = "Ghostty.app";
+                bundleId = "com.mitchellh.ghostty";
+                executable = "ghostty";
+              };
+            };
+            linux = {
+              provider = "nix";
+              source = "nixpkgs";
+              nixAttr = "ghostty";
+              identity = "ghostty";
+            };
+          };
+        };
         wezterm = {
           pkg = pkgs.wezterm;
           winget = "wez.wezterm.nightly";
