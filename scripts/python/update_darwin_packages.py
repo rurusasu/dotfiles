@@ -456,12 +456,13 @@ def fetch(url: str) -> bytes:
 
 
 def prefetch_hash(url: str) -> str:
+    # Nix applies its configured connection/idle-transfer timeouts and retries.
+    # A total deadline here would kill large downloads that are still advancing.
     result = subprocess.run(
         ["nix", "store", "prefetch-file", "--json", url],
         check=True,
         stdout=subprocess.PIPE,
         text=True,
-        timeout=300,
     )
     data = json.loads(result.stdout)
     hash_value = str(data.get("hash", ""))
@@ -569,7 +570,11 @@ def main(argv: list[str] | None = None) -> int:
     if any(update.get("status") == "error" for update in updates):
         report = {"updates": updates, "promotions": []}
         write_report(args.output, report)
-        print(json.dumps(report, indent=2))
+        print(json.dumps(report, indent=2), flush=True)
+        for update in updates:
+            if update.get("status") == "error":
+                reason = " ".join(update["reason"].splitlines())
+                print(f"[ERROR] {update['package']}: {reason}", file=sys.stderr, flush=True)
         return 1
     promotion_results = (
         promote_candidates(

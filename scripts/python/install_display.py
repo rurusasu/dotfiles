@@ -46,6 +46,7 @@ class Display:
         self.height = 0
         self.phases = []
         self.logs = deque(maxlen=5)
+        self.errors = deque(maxlen=20)
         self.line = []
         self.column = 0
         self.escape = ""
@@ -86,12 +87,15 @@ class Display:
         if match:
             state, title = match.groups()
             if state == "RUNNING":
+                if not self.phases:
+                    self.errors.clear()
                 self.phases.append({"title": title, "state": state, "description": ""})
                 self.logs.clear()
             elif state == "DONE":
                 self.render([line])
                 self.height = 0  # Completed heading now belongs to scrollback.
                 self.logs.clear()
+                self.errors.clear()
                 for index in range(len(self.phases) - 1, -1, -1):
                     if self.phases[index]["title"] == title:
                         del self.phases[index:]
@@ -120,6 +124,10 @@ class Display:
                         {"title": title, "state": state, "description": ""}
                     )
             return
+        if line.startswith("[ERROR] ") and line not in self.errors:
+            # Explicit updater summaries must outlive JSON output and nested
+            # failure traps; arbitrary child output stays in the bounded tail.
+            self.errors.append(line)
         if not self.phases:
             self.render([line])
             self.height = 0
@@ -177,6 +185,15 @@ class Display:
             self.phases[-1]["title"] += f" (exit {status})"
         self.redraw()
         self.height = 0
+        if status and self.errors:
+            # Final diagnostics belong to scrollback, not the live panel. Wrap
+            # them without truncation; never change live prompt/input handling.
+            columns, _ = self.size()
+            for message in ["Installation errors:", *self.errors]:
+                while message:
+                    part = clipped(message, max(1, columns - 1)) or message[0]
+                    self.output.write(part + "\r\n")
+                    message = message[len(part) :]
         self.output.write("\x1b[0m")
         self.output.flush()
 
@@ -273,17 +290,25 @@ def run(command):
                     # exited, unreaped child. Do not hide a live group's denial.
                     if not suspended_termination or group != pid or status is not None:
                         raise
-                    waited, child_status = os.waitpid(pid, os.WNOHANG)
-                    if not waited:
+                    # Exit/reaping and group removal can settle separately.
+                    # Bound the wait, but accept only positive evidence: our
+                    # child was reaped AND its group no longer exists.
+                    deadline = time.monotonic() + 0.5
+                    while time.monotonic() < deadline:
+                        if status is None:
+                            waited, child_status = os.waitpid(pid, os.WNOHANG)
+                            if waited:
+                                status = child_status
+                        if status is not None:
+                            try:
+                                os.killpg(group, 0)
+                            except ProcessLookupError:
+                                break
+                            except PermissionError:
+                                pass  # A denial is not evidence of exit.
+                        time.sleep(0.01)
+                    else:
                         raise
-                    status = child_status
-                    # A leader can exit before its descendants. Only a vanished
-                    # group confirms this was the harmless exit race.
-                    try:
-                        os.killpg(group, 0)
-                    except ProcessLookupError:
-                        continue
-                    raise
 
     try:
         for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT):
