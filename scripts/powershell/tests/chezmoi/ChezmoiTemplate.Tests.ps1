@@ -40,7 +40,8 @@ Describe 'chezmoi テンプレート バリデーション' {
                 & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"darwin"}}' execute-template
             $LASTEXITCODE | Should -Be 0
             $darwinContent = ($darwinRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
-            $darwinContent | Should -Match '(?m)^# hash: [0-9a-f]{128}$'
+            $ghosttyHash = (Get-FileHash -LiteralPath (Join-Path $script:chezmoiRoot 'terminals/ghostty/config') -Algorithm SHA256).Hash.ToLowerInvariant()
+            $darwinContent | Should -Match "(?m)^# hash: [0-9a-f]{64}${ghosttyHash}[0-9a-f]{64}$"
             $darwinContent |
                 Should -Match 'deploy_file "\$CHEZMOI_SOURCE/terminals/hammerspoon/init\.lua" "\$HOME_DIR/\.hammerspoon/init\.lua"'
 
@@ -48,7 +49,7 @@ Describe 'chezmoi テンプレート バリデーション' {
                 & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"linux"}}' execute-template
             $LASTEXITCODE | Should -Be 0
             $linuxContent = ($linuxRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
-            $linuxContent | Should -Match '(?m)^# hash: [0-9a-f]{64}$'
+            $linuxContent | Should -Match "(?m)^# hash: [0-9a-f]{64}${ghosttyHash}$"
             $linuxContent | Should -Not -Match '\.hammerspoon/init\.lua'
         }
 
