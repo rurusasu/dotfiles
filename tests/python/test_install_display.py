@@ -154,6 +154,34 @@ class DisplayTests(unittest.TestCase):
         for line in screen.splitlines():
             self.assertLessEqual(sum(2 if c == "界" else 1 for c in line), 19)
 
+    def test_final_errors_survive_json_nested_failure_and_narrow_resize(self):
+        output = io.StringIO()
+        dimensions = [80, 24]
+        display = self.module.Display(output, lambda: tuple(dimensions))
+        display.feed(b"[RUNNING] Workflow\n  Outer.\n[RUNNING] Updates\n  Download.\n")
+        errors = [
+            "[ERROR] dia-browser: connection stalled while fetching " + "x" * 60,
+            "[ERROR] orca-editor: 配信サーバーへの接続失敗",
+        ]
+        for error in errors:
+            display.feed((error + "\n").encode())
+        display.feed(b'{\n  "updates": [\n' + b'    {},\n' * 20 + b'  ],\n  "promotions": []\n}\n')
+        display.feed(b"[FAILED] Updates (exit 1)\nSee output above.\n[FAILED] Workflow (exit 1)\nSee output above.\n")
+        dimensions[:] = [24, 8]
+        display.finish(1)
+        final = self.screen(output).split("Installation errors:")[-1]
+        for error in errors:
+            self.assertIn(error, "".join(final.splitlines()))
+        for line in final.splitlines():
+            self.assertLessEqual(sum(2 if c == "界" or "\u3000" <= c <= "\u9fff" else 1 for c in line), 23)
+
+    def test_successful_operation_does_not_leave_stale_error_summary(self):
+        display, output = self.make_display()
+        display.feed(b"[RUNNING] Retry\n  Work.\n[ERROR] recovered failure\n[DONE] Retry\n")
+        display.feed(b"[RUNNING] Next\n  Work.\n[FAILED] Next (exit 2)\n")
+        display.finish(2)
+        self.assertNotIn("Installation errors:", self.screen(output))
+
     def test_output_outside_phases_is_not_folded(self):
         display, output = self.make_display()
         display.feed(b"Usage: installer\n" + b"help option\n" * 12)
@@ -175,6 +203,7 @@ class RelayTests(unittest.TestCase):
         terminate_suspended=0,
         delay_exit=False,
         resume_permission_error=None,
+        initial_size=(24, 80),
     ):
         with tempfile.TemporaryDirectory() as directory:
             pid, fd = pty.fork()
@@ -193,8 +222,26 @@ class RelayTests(unittest.TestCase):
                     os.environ["DOTFILES_TEST_RESUME_ERROR"] = resume_permission_error
                     arguments = [sys.executable, "-c", """import errno, os, runpy, signal, subprocess, sys, time
 original_killpg = os.killpg
+original_waitpid = os.waitpid
+resume_denied = False
+delayed_wait = False
+group_probes = 0
+def waitpid(pid, options):
+    global delayed_wait
+    if (os.environ["DOTFILES_TEST_RESUME_ERROR"] == "exited-delayed-wait"
+            and resume_denied and options == os.WNOHANG and not delayed_wait):
+        delayed_wait = True
+        return 0, 0
+    return original_waitpid(pid, options)
 def killpg(group, signum):
+    global resume_denied, group_probes
     mode = os.environ["DOTFILES_TEST_RESUME_ERROR"]
+    if signum == 0 and mode == "exited-group-settling":
+        group_probes += 1
+        if group_probes == 1:
+            return
+        if group_probes == 2:
+            raise PermissionError(errno.EPERM, "injected transient group probe denial")
     if signum == 0 and mode == "exited-group-present":
         return
     if signum == 0 and mode == "exited-group-denied":
@@ -220,8 +267,10 @@ def killpg(group, signum):
             time.sleep(0.01)
         else:
             raise AssertionError("child did not become a zombie")
+    resume_denied = True
     raise PermissionError(errno.EPERM, "injected resume permission error")
 os.killpg = killpg
+os.waitpid = waitpid
 sys.argv = sys.argv[1:]
 runpy.run_path(sys.argv[0], run_name="__main__")
 """, *arguments[1:]]
@@ -292,7 +341,7 @@ sys.exit(status)
 """,
                     *arguments,
                 )
-            fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+            fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", *initial_size, 0, 0))
             os.set_blocking(fd, False)
             output = bytearray()
             queued_input = b""
@@ -394,6 +443,52 @@ test "$changed" = yes
         status, output, _ = self.run_terminal("echo FINISHED", delay_exit=True)
         self.assertEqual(status, 0, output)
 
+    def test_final_package_errors_and_log_path_are_readable_in_narrow_terminal(self):
+        child = 'echo "[ERROR] dia-browser: connection stalled"; echo "[ERROR] orca-editor: HTTP 403"; printf "{\\n  \\\"promotions\\\": []\\n}\\n"; exit 1'
+        command = f'source "{HELPER}"; dotfiles_display_init; dotfiles_step Updates Download bash -c {shlex.quote(child)}'
+        status, output, log = self.run_terminal(command, initial_size=(10, 32))
+        self.assertEqual(status, 1, output)
+        screen = Screen()
+        screen.feed(output.decode())
+        final = screen.text.split("Installation errors:")[-1]
+        self.assertIn("[ERROR] dia-browser: connection stalled", "".join(final.splitlines()))
+        self.assertIn("[ERROR] orca-editor: HTTP 403", "".join(final.splitlines()))
+        self.assertIn("Full log:", final)
+        self.assertIn(b"connection stalled", log)
+
+    def test_prefetch_cancellation_does_not_leave_downloader_running(self):
+        updater = ROOT / "scripts/python/update_darwin_packages.py"
+        with tempfile.TemporaryDirectory() as directory:
+            nix = Path(directory) / "nix"
+            nix.write_text(f"#!{sys.executable}\nimport os, signal, sys\nprint('DOWNLOADER:' + str(os.getpid()), file=sys.stderr, flush=True)\nprint('READY', file=sys.stderr, flush=True)\nsignal.pause()\n")
+            nix.chmod(0o755)
+            # prefetch captures stdout as JSON; progress and fixture readiness
+            # must go to the inherited stderr instead.
+            sentinel = Path(directory) / "continued-after-cancellation"
+            code = f"import runpy\nfrom pathlib import Path\nm = runpy.run_path({str(updater)!r})\nm['prefetch_hash']('https://example.invalid/test')\nPath({str(sentinel)!r}).touch()"
+            command = f"{shlex.quote(sys.executable)} -c {shlex.quote(code)}"
+            for signum, expected in [(signal.SIGINT, 130), (signal.SIGTERM, 143), (signal.SIGHUP, 129)]:
+                with self.subTest(signum=signum):
+                    suspended = signum != signal.SIGINT
+                    status, output, log = self.run_terminal(
+                        command, b"READY", b"\x1a" if suspended else b"\x03",
+                        extra_env={"PATH": directory + os.pathsep + os.environ["PATH"]},
+                        job_control=suspended,
+                        terminate_suspended=signum if suspended else 0,
+                    )
+                    self.assertEqual(status, expected, output)
+                    self.assertFalse(sentinel.exists(), "updater continued after cancellation")
+                    child = int(re.search(rb"DOWNLOADER:(\d+)", log).group(1))
+                    deadline = time.monotonic() + 2
+                    while True:
+                        try:
+                            os.kill(child, 0)
+                        except ProcessLookupError:
+                            break
+                        if time.monotonic() >= deadline:
+                            self.fail(f"downloader {child} survived cancellation")
+                        time.sleep(0.01)
+
     def test_command_failure_and_interrupt_preserve_exit_status(self):
         for action, input_when, input_bytes, expected in [
             ("bash -c 'exit 37'", None, b"", 37),
@@ -478,6 +573,24 @@ test "$changed" = yes
                 child_pid = int(re.search(rb"CHILD:(\d+)", log).group(1))
                 with self.assertRaises(ProcessLookupError):
                     os.kill(child_pid, 0)
+
+    def test_resume_permission_error_waits_for_exit_settlement(self):
+        for mode in ("exited-delayed-wait", "exited-group-settling"):
+            for signum in (signal.SIGTERM, signal.SIGHUP):
+                with self.subTest(mode=mode, signum=signum):
+                    status, output, log = self.run_terminal(
+                        'echo CHILD:$$; echo READY; exec sleep 30',
+                        b"READY",
+                        b"\x1a",
+                        job_control=True,
+                        terminate_suspended=signum,
+                        resume_permission_error=mode,
+                    )
+                    self.assertEqual(status, 128 + signum, output)
+                    self.assertNotIn(b"Traceback", output)
+                    child_pid = int(re.search(rb"CHILD:(\d+)", log).group(1))
+                    with self.assertRaises(ProcessLookupError):
+                        os.kill(child_pid, 0)
 
     def test_resume_permission_error_for_live_child_is_not_suppressed(self):
         for terminate in (0, signal.SIGTERM):

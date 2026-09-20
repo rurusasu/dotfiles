@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import importlib.util
+import base64
 import contextlib
+import hashlib
+import http.server
 import io
 import json
 import os
 import select
+import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -94,6 +100,100 @@ class UpdateDarwinPackagesTests(unittest.TestCase):
                     stdout, stderr = process.communicate(b"continue\n", timeout=5)
                 self.assertEqual(process.returncode, 0, stderr)
                 self.assertEqual(stdout, b"sha256-test\n")
+
+    def test_progressing_prefetch_has_no_python_total_deadline(self) -> None:
+        # Scale any aggregate deadline down so the regression takes milliseconds,
+        # not five minutes. The real child continues producing download progress.
+        original_run = subprocess.run
+        def scaled_run(command, **kwargs):
+            if kwargs.get("timeout") is not None:
+                kwargs["timeout"] = 0.01
+            return original_run(command, **kwargs)
+        with tempfile.TemporaryDirectory() as directory:
+            nix = Path(directory) / "nix"
+            nix.write_text(
+                f"#!{sys.executable}\nimport sys, time\n"
+                "for i in range(5):\n print('receiving data', file=sys.stderr, flush=True); time.sleep(0.02)\n"
+                "print('{\"hash\": \"sha256-complete\"}')\n"
+            )
+            nix.chmod(0o755)
+            with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"]}), patch.object(self.updater.subprocess, "run", side_effect=scaled_run):
+                try:
+                    result = self.updater.prefetch_hash("https://example.invalid/large.zip")
+                except subprocess.TimeoutExpired:
+                    self.fail("Progressing prefetch was killed by an aggregate Python deadline")
+            self.assertEqual(result, "sha256-complete")
+
+    def test_failed_report_keeps_json_stdout_and_emits_final_error_summaries(self) -> None:
+        updates = [
+            {"package": "dia-browser", "status": "error", "reason": "connection stalled"},
+            {"package": "orca-editor", "status": "error", "reason": "HTTP 403"},
+        ]
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "report.json"
+            with patch.object(self.updater, "collect_updates", return_value=updates), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                status = self.updater.main(["--write", "--output", str(report)])
+            self.assertEqual(status, 1)
+            self.assertEqual(json.loads(stdout.getvalue()), json.loads(report.read_text()))
+            self.assertIn("[ERROR] dia-browser: connection stalled", stderr.getvalue())
+            self.assertIn("[ERROR] orca-editor: HTTP 403", stderr.getvalue())
+
+    @unittest.skipUnless(shutil.which("nix"), "requires Nix for native transfer contracts")
+    def test_native_timeouts_allow_progress_and_reject_stalls(self) -> None:
+        payload = b"download-fixture" * 512
+        expected = "sha256-" + base64.b64encode(hashlib.sha256(payload).digest()).decode()
+        for mode, stall_timeout, succeeds in [("steady", 1, True), ("stalled", 1, False), ("paused", 0, True)]:
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                stop = threading.Event()
+                class Handler(http.server.BaseHTTPRequestHandler):
+                    def log_message(self, *_):
+                        pass
+                    def do_GET(self):
+                        self.send_response(200)
+                        self.send_header("Content-Length", str(len(payload)))
+                        self.end_headers()
+                        try:
+                            self.wfile.write(payload[:1024])
+                            self.wfile.flush()
+                            if mode == "stalled":
+                                stop.wait(12)
+                                return
+                            if mode == "paused":
+                                stop.wait(2)
+                            for offset in range(1024, len(payload), 1024):
+                                if mode == "steady":
+                                    stop.wait(0.25)
+                                self.wfile.write(payload[offset:offset + 1024])
+                                self.wfile.flush()
+                        except (BrokenPipeError, ConnectionResetError):
+                            pass
+                server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                url = f"http://127.0.0.1:{server.server_port}/fixture"
+                environment = {
+                    **os.environ,
+                    "NIX_REMOTE": f"local?root={Path(directory).resolve()}/store-root",
+                    "NIX_CONFIG": f"experimental-features = nix-command\nstalled-download-timeout = {stall_timeout}\ndownload-attempts = 1\nconnect-timeout = 2\n",
+                }
+                try:
+                    started = time.monotonic()
+                    # Run Nix directly so the fixture watchdog kills and waits
+                    # for the downloader itself, not just a Python wrapper.
+                    result = subprocess.run(["nix", "store", "prefetch-file", "--json", url], env=environment, capture_output=True, text=True, timeout=15)
+                    if succeeds:
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertEqual(json.loads(result.stdout)["hash"], expected)
+                        self.assertGreater(time.monotonic() - started, 1)
+                    else:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn("Timeout", result.stderr)
+                finally:
+                    stop.set()
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=2)
 
     def test_registry_has_only_explicit_reviewed_candidates(self) -> None:
         registry = self.updater.load_candidate_registry(REGISTRY)
