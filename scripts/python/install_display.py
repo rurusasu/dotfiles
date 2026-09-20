@@ -235,7 +235,7 @@ def run(command):
         display.redraw()
 
     def suspend(_signum, _frame):
-        nonlocal suspended
+        nonlocal suspended, status
         if suspended:
             return
         # The nested PTY owns an orphaned session, so its terminal-generated
@@ -268,6 +268,22 @@ def run(command):
                     os.killpg(group, signal.SIGCONT)
                 except ProcessLookupError:
                     pass
+                except PermissionError:
+                    # Darwin can report EPERM for a group containing only an
+                    # exited, unreaped child. Do not hide a live group's denial.
+                    if not suspended_termination or group != pid or status is not None:
+                        raise
+                    waited, child_status = os.waitpid(pid, os.WNOHANG)
+                    if not waited:
+                        raise
+                    status = child_status
+                    # A leader can exit before its descendants. Only a vanished
+                    # group confirms this was the harmless exit race.
+                    try:
+                        os.killpg(group, 0)
+                    except ProcessLookupError:
+                        continue
+                    raise
 
     try:
         for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT):
