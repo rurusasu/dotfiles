@@ -221,7 +221,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
 
         self.assertIn("Bootstrap / Nix / Lint", workflow)
-        self.assertIn("Bootstrap / Nix / Format", workflow)
+        self.assertIn("Bootstrap / Format / Style", workflow)
         self.assertIn("Bootstrap / Nix / Test", workflow)
         self.assertIn("Bootstrap / Windows / Installer", workflow)
 

@@ -12,7 +12,19 @@ BeforeAll {
 
     function Get-JsonContent {
         param([string]$Path)
-        Get-Content -LiteralPath (Join-Path $script:repoRoot $Path) -Raw | ConvertFrom-Json
+        $fullPath = Join-Path $script:repoRoot $Path
+        $raw = Get-Content -LiteralPath $fullPath -Raw
+        if ($raw -notmatch '\{\{') {
+            return $raw | ConvertFrom-Json
+        }
+
+        $rendered = $raw |
+            & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"windows"}}' execute-template
+        if ($LASTEXITCODE -ne 0) {
+            throw "chezmoi execute-template failed for $Path with exit code $LASTEXITCODE"
+        }
+
+        ($rendered -join [Environment]::NewLine) | ConvertFrom-Json
     }
 
     function Assert-KeyCommand {
