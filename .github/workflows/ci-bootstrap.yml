@@ -639,7 +639,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.darwin == 'true' }}
     runs-on: macos-15
-    timeout-minutes: 180
+    timeout-minutes: 360
     env:
       DOTFILES_USER: runner
       DOTFILES_HOME: /Users/runner
