@@ -120,27 +120,40 @@ Describe 'Invoke-Pnpm' {
 
 Describe 'Invoke-Winget' {
     BeforeEach {
+        $script:originalInstallTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
         $script:originalWingetTimeout = $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS
     }
 
     AfterEach {
-        $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = $script:originalWingetTimeout
+        if ($null -eq $script:originalInstallTimeout) {
+            Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $script:originalInstallTimeout
+        }
+        if ($null -eq $script:originalWingetTimeout) {
+            Remove-Item Env:\DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = $script:originalWingetTimeout
+        }
     }
 
-    It 'should run winget through a timeout wrapper by default' {
+    It 'should run winget through the shared 900-second timeout wrapper by default' {
+        Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
         Remove-Item Env:\DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
         Mock Invoke-ExternalCommandWithTimeout {
             $global:LASTEXITCODE = 0
             return "winget ok"
         }
 
-        $result = Invoke-Winget -Arguments @("--version")
+        $result = Invoke-Winget -Arguments @("install", "--id", "example.package")
 
         $result | Should -Contain "winget ok"
         Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
             $Command -eq "winget" -and
-            $Arguments -contains "--version" -and
-            $TimeoutSeconds -eq 300
+            $Arguments -contains "example.package" -and
+            $TimeoutSeconds -eq 900
         }
     }
 
@@ -162,6 +175,7 @@ Describe 'Invoke-Winget' {
     }
 
     It 'should prefer an explicit timeout over the default environment timeout' {
+        Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
         $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = "180"
         Mock Invoke-ExternalCommandWithTimeout {
             $global:LASTEXITCODE = 0

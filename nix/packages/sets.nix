@@ -16,7 +16,8 @@
 #   - msstoreVerifyById  → Microsoft Store Product ID → { command, args } for post-install verification
 #   - wingetInstallArgs  → catalog attr name → extra winget install arguments
 #   - wingetRequiresAdmin → catalog attr name or winget ID → administrator-only install
-#   - wingetInstallTimeoutSeconds → catalog attr name or winget ID → winget install timeout
+#   - packageInstallTimeoutSeconds → shared install timeout for package adapters
+#   - wingetInstallTimeoutSeconds → optional catalog attr name or winget ID overrides
 #   - wingetDirectInstallers → catalog attr name or winget ID → direct installer metadata
 #   - wingetSkipInstall → catalog attr name or winget/msstore ID → skip normal automated install
 #   - wingetCiSkipInstall → catalog attr name or winget/msstore ID → skip CI winget install smoke test
@@ -1591,8 +1592,8 @@ lib.mapAttrs (_: resolve) grouped
     "yaml-language-server"
     "@prisma/language-server"
     "@deepseek-ai/dsh"
-    "@playwright/cli@0.1.14"
-    "playwright@1.61.0"
+    "@playwright/cli@0.1.21"
+    "playwright@1.63.0"
     "typescript-language-server"
     "typescript"
   ];
@@ -1904,17 +1905,12 @@ lib.mapAttrs (_: resolve) grouped
     "Microsoft.VisualStudio.2022.BuildTools" = true;
   };
 
-  wingetInstallTimeoutSeconds = {
-    bun = 120;
-    chezmoi = 120;
-    codex = 120;
-    direnv = 120;
-    dprint = 120;
-    eza = 120;
-    fd = 120;
-    google-cloud-sdk = 900;
-    "Microsoft.VisualStudio.2022.BuildTools" = 1800;
-  };
+  # One install timeout shared by every package adapter. Per-package entries
+  # remain supported for exceptional cases; only intentional WinGet entries
+  # are emitted into the generated catalog so runtime environment overrides
+  # remain effective for the generic case.
+  packageInstallTimeoutSeconds = 900;
+  wingetInstallTimeoutSeconds = { };
 
   wingetDirectInstallers = {
     bun = {
@@ -1937,8 +1933,8 @@ lib.mapAttrs (_: resolve) grouped
     };
     codex = {
       type = "archive";
-      url = "https://github.com/openai/codex/releases/download/rust-v0.152.0/codex-x86_64-pc-windows-msvc.exe.zip";
-      sha256 = "9e050454d1dfce8133e127ff9427c0304f6b12a7fbff2163257af2122355efce";
+      url = "https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-x86_64-pc-windows-msvc.exe.zip";
+      sha256 = "ce2269bdb7dfc06bb85c014c9c4e6b1601ffa0d646a2ae5b9b8cc8a427ef61fb";
       destination = "%LOCALAPPDATA%\\Programs\\Codex";
       executable = "codex-x86_64-pc-windows-msvc.exe";
       timeoutSeconds = 900;
@@ -2100,7 +2096,7 @@ lib.mapAttrs (_: resolve) grouped
       "9PLM9XGG6VKS"
     ];
     npm = [
-      "agent-browser@0.29.1"
+      "agent-browser@0.38.1"
     ];
     pnpm = [
       "@google/gemini-cli"

@@ -4,6 +4,13 @@ DOTFILES_LOG_PREFIX="${DOTFILES_LOG_PREFIX:-dotfiles-install}"
 DOTFILES_NIX_PROFILE_SCRIPT="${DOTFILES_NIX_PROFILE_SCRIPT:-/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh}"
 DOTFILES_WAIT_SLEEP_SECONDS="${DOTFILES_WAIT_SLEEP_SECONDS:-2}"
 
+dotfiles_install_timeout_seconds() {
+  # The shared install override defaults to 900; zero explicitly disables it.
+  local timeout_seconds="${DOTFILES_INSTALL_TIMEOUT_SECONDS:-900}"
+  [[ $timeout_seconds =~ ^[0-9]+$ ]] || timeout_seconds=900
+  printf '%s\n' "$timeout_seconds"
+}
+
 dotfiles_log() {
   if [[ -t 1 && -t 2 && ${TERM:-dumb} != dumb && ! ${NO_COLOR+x} ]]; then
     printf '\033[1;34m[%s]\033[0m%s %s\n' "$DOTFILES_LOG_PREFIX" "${DOTFILES_DISPLAY_DIM:-}" "$*"

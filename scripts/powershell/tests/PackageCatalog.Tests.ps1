@@ -312,27 +312,35 @@ in sets.providerErrors
     }
 
     Context 'Google Cloud SDK package' {
-        It 'should define a longer winget install timeout and gcloud PATH entry in the SSOT' {
+        It 'should define the shared 900-second install timeout and gcloud PATH entry in the SSOT' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
-            $sets | Should -Match '(?s)wingetInstallTimeoutSeconds\s*=\s*\{.*?google-cloud-sdk\s*=\s*900'
+            $sets | Should -Match 'packageInstallTimeoutSeconds\s*=\s*900'
+            $sets | Should -Match 'wingetInstallTimeoutSeconds\s*=\s*\{\s*\}'
             $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?google-cloud-sdk\s*=\s*\[.*?%ProgramFiles%\\\\Google\\\\Cloud SDK\\\\google-cloud-sdk\\\\bin'
             $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?google-cloud-sdk\s*=\s*\[.*?%ProgramFiles\(x86\)%\\\\Google\\\\Cloud SDK\\\\google-cloud-sdk\\\\bin'
             $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?google-cloud-sdk\s*=\s*\[.*?%LOCALAPPDATA%\\\\Google\\\\Cloud SDK\\\\google-cloud-sdk\\\\bin'
         }
 
-        It 'should generate Google.CloudSDK install timeout and gcloud PATH entry' {
+        It 'should generate Google.CloudSDK gcloud PATH and verification metadata' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Google.CloudSDK' }) | Select-Object -First 1
 
             $package | Should -Not -BeNullOrEmpty
-            $package.installTimeoutSeconds | Should -Be 900
             @($package.pathEntries) | Should -Contain '%ProgramFiles%\Google\Cloud SDK\google-cloud-sdk\bin'
             @($package.pathEntries) | Should -Contain '%ProgramFiles(x86)%\Google\Cloud SDK\google-cloud-sdk\bin'
             @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Google\Cloud SDK\google-cloud-sdk\bin'
             $package.verifyCommand.command | Should -Be 'gcloud'
             @($package.verifyCommand.args) | Should -Contain 'version'
+        }
+
+        It 'should assign the shared install timeout to every winget source package' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $packages = @($json.Sources | ForEach-Object { @($_.Packages) })
+
+            $packages.Count | Should -BeGreaterThan 0
+            @($packages | Where-Object { $_.installTimeoutSeconds -ne 900 }).Count | Should -Be 0
         }
     }
 
@@ -501,13 +509,13 @@ in sets.providerErrors
         It 'should manage agent-browser as a Windows npm global package with verification' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
-            $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?npm\s*=\s*\[.*?"agent-browser@0\.29\.1".*?\]'
+            $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?npm\s*=\s*\[.*?"agent-browser@0\.38\.1".*?\]'
             $sets | Should -Match '(?s)npmVerify\s*=\s*\{.*?"agent-browser"\s*=\s*\{.*?command\s*=\s*"agent-browser".*?args\s*=\s*\[\s*"--version"\s*\]'
         }
 
         It 'should generate agent-browser into the Windows npm package catalog with verification' {
             $json = Get-Content -LiteralPath $script:npmJsonPath -Raw | ConvertFrom-Json
-            $package = @($json.globalPackages | Where-Object { $_.name -eq 'agent-browser@0.29.1' }) | Select-Object -First 1
+            $package = @($json.globalPackages | Where-Object { $_.name -eq 'agent-browser@0.38.1' }) | Select-Object -First 1
 
             $package | Should -Not -BeNullOrEmpty
             $package.verifyCommand.command | Should -Be 'agent-browser'
@@ -519,7 +527,6 @@ in sets.providerErrors
 
             $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?winget\s*=\s*\[.*?"Microsoft\.VisualStudio\.2022\.BuildTools".*?\]'
             $sets | Should -Match '(?s)wingetInstallArgs\s*=\s*\{.*?"Microsoft\.VisualStudio\.2022\.BuildTools"\s*=\s*\[.*?"--override".*?"--add Microsoft\.VisualStudio\.Workload\.VCTools --includeRecommended --passive --wait --norestart"'
-            $sets | Should -Match '(?s)wingetInstallTimeoutSeconds\s*=\s*\{.*?"Microsoft\.VisualStudio\.2022\.BuildTools"\s*=\s*1800'
         }
 
         It 'should generate Visual Studio Build Tools with C++ workload install metadata' {
@@ -530,7 +537,6 @@ in sets.providerErrors
             $package | Should -Not -BeNullOrEmpty
             @($package.installArgs) | Should -Contain '--override'
             @($package.installArgs) | Should -Contain '--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart'
-            $package.installTimeoutSeconds | Should -Be 1800
         }
     }
 
@@ -557,7 +563,6 @@ in sets.providerErrors
             @($package[0].pathEntries) | Should -Contain '%LOCALAPPDATA%\Programs\Bun\bun-windows-x64'
             @($package[0].installArgs) | Should -Contain '--scope'
             @($package[0].installArgs) | Should -Contain 'user'
-            $package[0].installTimeoutSeconds | Should -Be 120
             $package[0].directInstaller.type | Should -Be 'archive'
             $package[0].directInstaller.sha256 | Should -Match '^[0-9a-f]{64}$'
         }

@@ -59,7 +59,11 @@ let
   attachInstallTimeout =
     installTimeoutMap: key: pkg:
     let
-      installTimeoutSeconds = installTimeoutMap.${key} or null;
+      # Only intentional per-package overrides belong in the manifest. The
+      # generic install timeout is resolved by the runtime adapter so the
+      # shared environment variable can override its default. Metadata is
+      # attached in ID-then-catalog-key order, making the catalog key win.
+      installTimeoutSeconds = installTimeoutMap.${key} or sets.packageInstallTimeoutSeconds;
     in
     if installTimeoutSeconds == null then pkg else pkg // { inherit installTimeoutSeconds; };
 
@@ -217,9 +221,11 @@ let
     name: id:
     attachSkipInstall sets.wingetSkipInstall name (
       attachCiSkipInstall sets.wingetCiSkipInstall name (
-        attachSkipInstall sets.wingetSkipInstall id (
-          attachCiSkipInstall sets.wingetCiSkipInstall id (
-            attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+      attachSkipInstall sets.wingetSkipInstall id (
+        attachCiSkipInstall sets.wingetCiSkipInstall id (
+            attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
+              attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+            )
           )
         )
       )
@@ -230,7 +236,9 @@ let
     id:
     attachSkipInstall sets.wingetSkipInstall id (
       attachCiSkipInstall sets.wingetCiSkipInstall id (
-        attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+        attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
+          attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+        )
       )
     )
   ) sets.windowsOnly.msstore;

@@ -50,4 +50,67 @@ Describe 'WingetAdminHandler' {
             $Arguments -contains "--source" -and $Arguments -contains "winget"
         }
     }
+
+    Context 'Apply - install result classification' {
+        BeforeEach {
+            $handler = [WingetAdminHandler]::new()
+            $ctx = [SetupContext]::new((Join-Path $TestDrive "dotfiles"))
+            $ctx.Options["WingetMode"] = "import"
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "Admin.Tool"
+                                    requiresAdmin = $true
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+        }
+
+        It 'should report a timeout as a failure without treating it as a no-op' {
+            Mock Invoke-Winget {
+                $global:LASTEXITCODE = 124
+                return "winget install timed out"
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match "1 個失敗"
+            $result.Message | Should -Not -Match "変更なし"
+        }
+
+        It 'should report a generic nonzero install result as a failure' {
+            Mock Invoke-Winget {
+                $global:LASTEXITCODE = 1
+                return "fatal installer error"
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match "1 個失敗"
+            $result.Message | Should -Not -Match "変更なし"
+        }
+
+        It 'should classify explicit already-installed output as unchanged' {
+            Mock Invoke-Winget {
+                $global:LASTEXITCODE = 1
+                return "No applicable update found"
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $result.Message | Should -Match "1 個変更なし"
+        }
+    }
 }

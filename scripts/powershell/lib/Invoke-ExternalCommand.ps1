@@ -158,7 +158,12 @@ function Invoke-Winget {
     )
 
     if ($TimeoutSeconds -lt 0) {
-        $TimeoutSeconds = Get-WingetCommandTimeoutSecond
+        $TimeoutSeconds = if ($Arguments.Count -gt 0 -and $Arguments[0] -in @("install", "upgrade")) {
+            Get-PackageInstallTimeoutSecond -LegacyEnvironmentVariable "DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS"
+        }
+        else {
+            0
+        }
     }
     if ($TimeoutSeconds -gt 0) {
         return Invoke-ExternalCommandWithTimeout -Command "winget" -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
@@ -167,23 +172,41 @@ function Invoke-Winget {
     Invoke-NativeCommand -Command "winget" -Arguments $Arguments
 }
 
-function Get-WingetCommandTimeoutSecond {
+function Get-PackageInstallTimeoutSecond {
     [CmdletBinding()]
     [OutputType([int])]
-    param()
+    param(
+        [Parameter()]
+        [string]$LegacyEnvironmentVariable
+    )
 
-    $timeoutSeconds = 300
-    $rawTimeout = $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS
+    # Shared install override > adapter-specific legacy override > default.
+    # A valid zero explicitly disables the timeout.
+    $rawTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
     if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
         $parsed = 0
         if ([int]::TryParse($rawTimeout, [ref]$parsed)) {
             if ($parsed -le 0) {
                 return 0
             }
-            $timeoutSeconds = $parsed
+            return $parsed
         }
     }
-    return $timeoutSeconds
+
+    if (-not [string]::IsNullOrWhiteSpace($LegacyEnvironmentVariable)) {
+        $rawTimeout = [System.Environment]::GetEnvironmentVariable($LegacyEnvironmentVariable)
+        if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
+            $parsed = 0
+            if ([int]::TryParse($rawTimeout, [ref]$parsed)) {
+                if ($parsed -le 0) {
+                    return 0
+                }
+                return $parsed
+            }
+        }
+    }
+
+    return 900
 }
 
 <#
@@ -1014,18 +1037,7 @@ function Get-WslInstallTimeoutSecond {
     [OutputType([int])]
     param()
 
-    $timeoutSeconds = 300
-    $rawTimeout = $env:DOTFILES_WSL_INSTALL_TIMEOUT_SECONDS
-    if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
-        $parsed = 0
-        if ([int]::TryParse($rawTimeout, [ref]$parsed)) {
-            if ($parsed -le 0) {
-                return 0
-            }
-            $timeoutSeconds = $parsed
-        }
-    }
-    return $timeoutSeconds
+    return Get-PackageInstallTimeoutSecond -LegacyEnvironmentVariable "DOTFILES_WSL_INSTALL_TIMEOUT_SECONDS"
 }
 
 function Get-WindowsNativeOutputEncoding {
