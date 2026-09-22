@@ -37,7 +37,7 @@ class WingetChecker {
 }
 
 $checker = [WingetChecker]::new()
-$testIds = @("AgileBits.1Password", "Anysphere.Cursor", "OpenAI.Codex", "ZedIndustries.Zed", "Task.Task")
+$testIds = @("AgileBits.1Password", "Anysphere.Cursor", "OpenAI.Codex", "Task.Task")
 
 foreach ($packageId in $testIds) {
     $results += "=== $packageId ==="

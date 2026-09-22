@@ -65,7 +65,6 @@ in
     expr = {
       homebrew = defaultConfig.homebrew.enable;
       nixHomebrew = defaultConfig.nix-homebrew.enable;
-      vscode = builtins.any (name: hasPrefix "vscode" name) (packageNames defaultConfig);
       raycast = builtins.any (name: hasPrefix "raycast" name) (packageNames defaultConfig);
       weztermTerminfo = builtins.match ".*pkgs[.]wezterm[.]terminfo.*" darwinHomeSource != null;
       github = builtins.any (name: builtins.match "^(gh|github-cli)($|[-.].*)" name != null) (
@@ -77,7 +76,6 @@ in
     expected = {
       homebrew = true;
       nixHomebrew = true;
-      vscode = true;
       raycast = true;
       weztermTerminfo = true;
       github = true;

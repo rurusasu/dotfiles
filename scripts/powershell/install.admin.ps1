@@ -199,7 +199,7 @@ foreach ($handler in $handlers) {
         }
     }
     catch {
-        Write-Warning "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
+        throw "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
     }
     $handler._bufferLogs = $false
     $handler.ClearLogBuffer()

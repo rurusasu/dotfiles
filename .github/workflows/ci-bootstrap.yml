@@ -66,7 +66,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -98,13 +98,13 @@ jobs:
       security-events: write
     steps:
       - name: Checkout exact tested SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -207,7 +207,7 @@ jobs:
           PYEOF
 
       - name: Upload SARIF to Security tab
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd
         if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           sarif_file: statix.sarif
@@ -229,7 +229,7 @@ jobs:
           fi
 
   nix-format:
-    name: Bootstrap / Nix / Format
+    name: Bootstrap / Format / Style
     needs: [changes, nix-lint]
     if: ${{ needs.changes.outputs.nix == 'true' && needs.nix-lint.result == 'success' }}
     runs-on: ubuntu-24.04
@@ -238,18 +238,18 @@ jobs:
       contents: read
     steps:
       - name: Checkout exact tested SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache PSScriptAnalyzer
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: ~/.local/share/powershell/Modules/PSScriptAnalyzer
           key: ${{ runner.os }}-pssa-nix-format-1.22.0
@@ -267,13 +267,15 @@ jobs:
             Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -Repository PSGallery
           }
 
-      - name: Check formatting
+      - name: Check source formatting (style only)
         run: nix fmt -- --fail-on-change
 
   nix-test:
-    name: Bootstrap / Nix / Test
-    needs: [changes, nix-lint, nix-format]
-    if: ${{ needs.changes.outputs.nix == 'true' && needs.nix-lint.result == 'success' && needs.nix-format.result == 'success' }}
+    name: Bootstrap / Test / Nix outputs
+    # Formatting is an independent style gate. Semantic tests must still run
+    # when formatting fails so the two failure classes remain distinguishable.
+    needs: [changes, nix-lint]
+    if: ${{ needs.changes.outputs.nix == 'true' && needs.nix-lint.result == 'success' }}
     runs-on: ubuntu-24.04
     # The full profile now builds the independently packaged Codex CLI. A cold
     # runner can legitimately need more than an hour for the Rust/V8 build.
@@ -287,13 +289,13 @@ jobs:
       contents: read
     steps:
       - name: Checkout exact tested SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -429,13 +431,13 @@ jobs:
         extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -458,13 +460,13 @@ jobs:
       DOTFILES_CHECKOUT_TARGET: ${{ github.workspace }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -497,7 +499,7 @@ jobs:
           } > ubuntu-attestation.txt
 
       - name: Upload Ubuntu attestation
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: bootstrap-linux-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
@@ -511,7 +513,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
@@ -594,7 +596,7 @@ jobs:
           } >debian-attestation.txt
 
       - name: Upload Debian logs and attestation
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: bootstrap-linux-debian-${{ github.run_id }}-${{ github.run_attempt }}
@@ -610,13 +612,13 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -628,7 +630,7 @@ jobs:
         run: printf 'sha=%s\ncheck=bootstrap-nixos-vm\n' "$TESTED_SHA" > nixos-attestation.txt
 
       - name: Upload NixOS attestation
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: bootstrap-linux-nixos-${{ github.run_id }}-${{ github.run_attempt }}
@@ -649,13 +651,13 @@ jobs:
       NUMTIDE_CACHE_KEY: niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=
     steps:
       - name: Checkout exact tested SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -714,7 +716,7 @@ jobs:
           } > darwin-contract-attestation.txt
 
       - name: Upload Darwin contract results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: bootstrap-darwin-${{ github.run_id }}-${{ github.run_attempt }}
@@ -728,7 +730,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
@@ -794,7 +796,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout exact tested SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
@@ -867,7 +869,7 @@ jobs:
           ) | Set-Content -LiteralPath windows-contract-attestation.txt -Encoding utf8
 
       - name: Upload Windows contract results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: bootstrap-windows-${{ github.run_id }}-${{ github.run_attempt }}
@@ -886,7 +888,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout exact tested SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false

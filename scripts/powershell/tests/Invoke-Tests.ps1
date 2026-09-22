@@ -116,14 +116,9 @@ Write-Host ""
 $sourceFiles = @()
 if ($coverageRequested) {
     $sourceFiles = @(
-        "$projectRoot\lib\SetupHandler.ps1",
-        "$projectRoot\lib\Invoke-ExternalCommand.ps1",
-        "$projectRoot\handlers\Handler.WslConfig.ps1",
-        "$projectRoot\handlers\Handler.Docker.ps1",
-        "$projectRoot\handlers\Handler.VscodeServer.ps1",
-        "$projectRoot\handlers\Handler.Chezmoi.ps1",
-        "$projectRoot\handlers\Handler.Winget.ps1"
-    ) | Where-Object { Test-Path $_ }
+        Get-ChildItem -LiteralPath (Join-Path $projectRoot 'lib') -Filter '*.ps1' -File -ErrorAction SilentlyContinue
+        Get-ChildItem -LiteralPath (Join-Path $projectRoot 'handlers') -Filter 'Handler.*.ps1' -File -ErrorAction SilentlyContinue
+    ) | Select-Object -ExpandProperty FullName
 
     if ($sourceFiles.Count -eq 0) {
         Write-Warning "カバレッジ対象ファイルが見つかりません。パス: $projectRoot"

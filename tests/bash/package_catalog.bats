@@ -506,7 +506,6 @@ EOF
 		dprint.dprint \
 		hadolint.hadolint \
 		Google.Chrome \
-		Microsoft.VisualStudioCode \
 		OpenAI.Codex \
 		Oven-sh.Bun \
 		zig.zig; do
@@ -600,27 +599,18 @@ EOF
 	grep -q 'name = "stablyai/orca/orca"' "$SETS"
 }
 
-@test "Visual Studio Code uses the unmodified nixpkgs application with migration metadata" {
-	run awk '
-		/^[[:space:]]*vscode = \{/ { in_entry=1 }
-		in_entry { print }
-		in_entry && /^        };$/ { exit }
-	' "$SETS"
-	[ "$status" -eq 0 ]
-	[[ "$output" == *'pkg = pkgs.vscode;'* ]]
-	[[ "$output" == *'provider = "nix";'* ]]
-	[[ "$output" == *'source = "nixpkgs";'* ]]
-	[[ "$output" == *'nixAttr = "vscode";'* ]]
-	[[ "$output" == *'homepage = "https://code.visualstudio.com/";'* ]]
-	[[ "$output" == *'appName = "Visual Studio Code.app";'* ]]
-	[[ "$output" == *'bundleId = "com.microsoft.VSCode";'* ]]
-	[[ "$output" == *'executable = "Code";'* ]]
-	[[ "$output" == *'legacyDarwin = {'* ]]
-	[[ "$output" == *'provider = "homebrew-cask";'* ]]
-	[[ "$output" == *'name = "visual-studio-code";'* ]]
-	[[ "$output" != *'useVSCodeRipgrep'* ]]
-	[[ "$output" != *'postPatch'* ]]
-	[[ "$output" != *'cask = "visual-studio-code"'* ]]
+@test "retired package IDs are absent from the SSOT and generated manifests" {
+	for package_id in \
+		GitHub.Copilot \
+		Microsoft.VisualStudioCode \
+		ZedIndustries.Zed \
+		SlackTechnologies.Slack \
+		SST.opencode; do
+		! grep -Fq "$package_id" "$SETS"
+		! grep -Fq "$package_id" "$REPO_ROOT/windows/winget/packages.json"
+		! grep -Fq "$package_id" "$REPO_ROOT/windows/npm/packages.json"
+		! grep -Fq "$package_id" "$REPO_ROOT/windows/pnpm/packages.json"
+	done
 }
 
 @test "Darwin routes Nix GUI apps to system packages and keeps commands in Home Manager" {

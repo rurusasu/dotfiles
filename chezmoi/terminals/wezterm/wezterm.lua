@@ -61,7 +61,7 @@ config.color_scheme = "{{ .appearance.theme }}"
 
 -- Font settings
 config.font = wezterm.font("{{ .appearance.font_family }}")
-config.font_size = {{ .appearance.font_size }}.0
+config.font_size = tonumber("{{ .appearance.font_size }}")
 config.line_height = 1.0
 config.cell_width = 1.0
 

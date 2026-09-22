@@ -103,6 +103,15 @@ Describe 'CI workflow configuration' {
         $nixWorkflow | Should -Match 'nix build \.#fonts'
     }
 
+    It 'keeps formatting and semantic Nix tests as independent gates' {
+        $bootstrapWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
+
+        $bootstrapWorkflow | Should -Match 'nix-format:[\s\S]*?Check source formatting \(style only\)[\s\S]*?nix fmt -- --fail-on-change'
+        $bootstrapWorkflow | Should -Match 'nix-test:[\s\S]*?needs: \[changes, nix-lint\]'
+        $bootstrapWorkflow | Should -Not -Match 'nix-test:[\s\S]*?needs: \[changes, nix-lint, nix-format\]'
+        $bootstrapWorkflow | Should -Match 'Formatting is an independent style gate'
+    }
+
     It 'should free hosted runner disk space before Nix package builds' {
         $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
 

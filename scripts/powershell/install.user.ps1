@@ -79,7 +79,7 @@ if ($CheckOnly) {
             }
         }
         catch {
-            Write-Warning "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
+            throw "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
         }
     }
     return $canApply

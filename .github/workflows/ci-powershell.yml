@@ -23,7 +23,7 @@ jobs:
       powershell_test: ${{ steps.detect.outputs.powershell_test }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -51,12 +51,12 @@ jobs:
         shell: bash
         run: exit 1
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
       - name: Cache PSScriptAnalyzer
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: ~\Documents\PowerShell\Modules\PSScriptAnalyzer
           key: ${{ runner.os }}-pssa-lint-1.22.0
@@ -160,7 +160,7 @@ jobs:
           Set-Content pssa_errors.txt $errors
 
       - name: Upload SARIF to Security tab
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd
         if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           sarif_file: pssa.sarif
@@ -194,7 +194,7 @@ jobs:
         shell: bash
         run: exit 1
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -238,7 +238,7 @@ jobs:
           }
 
       - name: Cache PowerShell modules
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: ~\Documents\PowerShell\Modules
           key: ${{ runner.os }}-psmodules-pester-5.6.1-pssa-1.22.0
@@ -341,7 +341,7 @@ jobs:
           if ($result.FailedCount -gt 0) { exit 1 }
 
       - name: Upload test results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: test-results
@@ -365,12 +365,12 @@ jobs:
         shell: bash
         run: exit 1
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
       - name: Cache Windows PowerShell modules
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: ~\Documents\WindowsPowerShell\Modules
           key: ${{ runner.os }}-windows-powershell-pester-5.6.1

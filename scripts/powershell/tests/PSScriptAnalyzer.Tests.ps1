@@ -36,7 +36,7 @@ BeforeAll {
     ) | Select-Object -ExpandProperty FullName
 
     if ($sourceFiles.Count -eq 0) {
-        Write-Warning "ソースファイルが見つかりません (lib/ または handlers/ が存在しない可能性があります)。'全体的なコード品質' テストはスキップされます。"
+        throw "ソースファイルが見つかりません (lib/ または handlers/ が存在しない可能性があります)。静的解析対象がゼロの状態は成功扱いできません。"
     }
 }
 
@@ -64,7 +64,7 @@ Describe 'PSScriptAnalyzer - 静的解析' {
     }
 
     Context '全体的なコード品質' {
-        It 'should have no Critical issues in all source files' -Skip:($sourceFiles.Count -eq 0) {
+        It 'should have no Critical issues in all source files' {
             $allResults = @()
             foreach ($file in $sourceFiles) {
                 $results = Invoke-ScriptAnalyzer -Path $file -Settings $settingsPath -Severity Error
@@ -84,7 +84,7 @@ Describe 'PSScriptAnalyzer - 静的解析' {
             $allResults | Should -BeNullOrEmpty
         }
 
-        It 'should have 0 Error/Warning issues in the entire project' -Skip:($sourceFiles.Count -eq 0) {
+        It 'should have 0 Error/Warning issues in the entire project' {
             $allResults = @()
             foreach ($file in $sourceFiles) {
                 $results = Invoke-ScriptAnalyzer -Path $file -Settings $settingsPath -Severity Error, Warning

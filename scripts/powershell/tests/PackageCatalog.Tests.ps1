@@ -542,6 +542,26 @@ in sets.providerErrors
 
     Context 'Cross-platform package providers' {
 
+        It 'should remove retired package IDs from the SSOT and generated manifests' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+            $manifests = @(
+                Get-Content -LiteralPath $script:wingetJsonPath -Raw
+                Get-Content -LiteralPath $script:npmJsonPath -Raw
+                Get-Content -LiteralPath $script:pnpmJsonPath -Raw
+            ) -join "`n"
+
+            @(
+                'GitHub.Copilot'
+                'Microsoft.VisualStudioCode'
+                'ZedIndustries.Zed'
+                'SlackTechnologies.Slack'
+                'SST.opencode'
+            ) | ForEach-Object {
+                $sets | Should -Not -Match ([regex]::Escape($_))
+                $manifests | Should -Not -Match ([regex]::Escape($_))
+            }
+        }
+
         It 'should not depend on pwsh to verify the portable rust-analyzer package' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
@@ -624,7 +644,6 @@ in sets.providerErrors
                 'dprint.dprint'
                 'hadolint.hadolint'
                 'Google.Chrome'
-                'Microsoft.VisualStudioCode'
                 'OpenAI.Codex'
                 '9NT1R1C2HH7J'
                 'Oven-sh.Bun'

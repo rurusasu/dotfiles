@@ -35,7 +35,7 @@ elif [[ -r $state_version_file ]]; then
   state_version="$(cat "$state_version_file")"
 elif [[ -e /run/current-system ]]; then
   # Existing systems keep their original state schema unless migration is
-  # explicitly requested. Fresh installers pass 26.05 explicitly.
+  # explicitly requested. Fresh installers pass an explicit state version.
   state_version="25.05"
 else
   state_version="26.05"

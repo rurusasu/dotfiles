@@ -78,7 +78,7 @@ class WingetHandler : SetupHandlerBase {
     hidden [bool] TestWingetExecutable() {
         try {
             $output = Invoke-Winget -Arguments @("--version")
-            # exit code 0 かつ出力に v があるか確認（例: v1.6.3133）
+            # exit code 0 かつ出力に version 形式があるか確認
             if ($LASTEXITCODE -eq 0 -and $output -match 'v?\d+\.\d+') {
                 return $true
             }

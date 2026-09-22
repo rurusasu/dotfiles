@@ -2073,6 +2073,39 @@ Describe 'WingetHandler' {
             $result.Message | Should -Not -Match "1 個インストール"
         }
 
+        It 'should restore the existing archive destination when replacement copy fails' {
+            $oldExecutable = Join-Path $script:directDestination "bun.exe"
+            New-Item -ItemType Directory -Path $script:directDestination -Force | Out-Null
+            Set-Content -LiteralPath $oldExecutable -Value "old archive"
+            Set-Content -LiteralPath (Join-Path $script:directDestination ".dotfiles-direct-installer.sha256") -Value "old-marker"
+            Mock Copy-Item { throw "copy failed" }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            Test-Path -LiteralPath $oldExecutable -PathType Leaf | Should -BeTrue
+            Get-Content -LiteralPath $oldExecutable -Raw | Should -Be "old archive`r`n"
+            Get-Content -LiteralPath (Join-Path $script:directDestination ".dotfiles-direct-installer.sha256") -Raw |
+                Should -Be "old-marker`r`n"
+        }
+
+        It 'should replace the existing archive destination and preserve the new marker' {
+            $oldExecutable = Join-Path $script:directDestination "bun.exe"
+            New-Item -ItemType Directory -Path $script:directDestination -Force | Out-Null
+            Set-Content -LiteralPath $oldExecutable -Value "old archive"
+            Set-Content -LiteralPath (Join-Path $script:directDestination ".dotfiles-direct-installer.sha256") -Value "old-marker"
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            Test-Path -LiteralPath $oldExecutable -PathType Leaf | Should -BeTrue
+            Get-Content -LiteralPath $oldExecutable -Raw | Should -Not -Be "old archive`r`n"
+            Get-Content -LiteralPath (Join-Path $script:directDestination ".dotfiles-direct-installer.sha256") -Raw |
+                Should -Be (("ab" * 32).ToUpperInvariant() + [Environment]::NewLine)
+        }
+
         It 'should support a direct file fallback for portable binaries without an archive' {
             $fileDestination = Join-Path $TestDrive "direnv"
             Mock Get-JsonContent {

@@ -635,7 +635,7 @@ function Get-SetupHandler {
             Write-Verbose "Loaded handler: $($instance.Name) (Order: $($instance.Order))"
         }
         catch {
-            Write-Warning "Failed to load handler: $($file.Name) - $($_.Exception.Message)"
+            throw "Failed to load handler: $($file.Name) - $($_.Exception.Message)"
         }
     }
 
@@ -732,9 +732,13 @@ function Invoke-SetupHandler {
             $canApply = $handler.CanApply($Context)
         }
         catch {
+            $exception = $_.Exception
             $handler._bufferLogs = $false
             $handler.ClearLogBuffer()
-            Write-Warning "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
+            $result = [SetupResult]::CreateFailure($handler.Name, "CanApply() check failed", $exception)
+            $results += $result
+            $resultsByHandler[$handler.Name] = $result
+            Write-Host "[$($handler.Name)] FAIL CanApply(): $($exception.Message)" -ForegroundColor Red
             continue
         }
         $handler._bufferLogs = $false

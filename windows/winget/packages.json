@@ -315,14 +315,6 @@
           }
         },
         {
-          "PackageIdentifier": "SST.opencode",
-          "installTimeoutSeconds": 900,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "opencode"
-          }
-        },
-        {
           "PackageIdentifier": "StablyAI.Orca",
           "ciSkipInstall": true,
           "installTimeoutSeconds": 900
@@ -400,10 +392,6 @@
           }
         },
         {
-          "PackageIdentifier": "SlackTechnologies.Slack",
-          "installTimeoutSeconds": 900
-        },
-        {
           "PackageIdentifier": "Starship.Starship",
           "installTimeoutSeconds": 900,
           "verifyCommand": {
@@ -452,10 +440,6 @@
           }
         },
         {
-          "PackageIdentifier": "Microsoft.VisualStudioCode",
-          "installTimeoutSeconds": 900
-        },
-        {
           "PackageIdentifier": "wez.wezterm.nightly",
           "ciSkipInstall": true,
           "installTimeoutSeconds": 900,
@@ -480,10 +464,6 @@
             "args": ["--version"],
             "command": "zoxide"
           }
-        },
-        {
-          "PackageIdentifier": "GitHub.Copilot",
-          "installTimeoutSeconds": 900
         },
         {
           "PackageIdentifier": "Microsoft.PowerToys",

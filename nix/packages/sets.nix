@@ -408,29 +408,6 @@ let
             };
           };
         };
-        vscode = {
-          pkg = pkgs.vscode;
-          winget = "Microsoft.VisualStudioCode";
-          category = "editors";
-          support = {
-            darwin = {
-              provider = "nix";
-              source = "nixpkgs";
-              nixAttr = "vscode";
-              identity = {
-                homepage = "https://code.visualstudio.com/";
-                appName = "Visual Studio Code.app";
-                bundleId = "com.microsoft.VSCode";
-                executable = "Code";
-              };
-            };
-          };
-          legacyDarwin = {
-            provider = "homebrew-cask";
-            name = "visual-studio-code";
-          };
-        };
-
         # ── fonts ─────────────────────────────────────────────
         udev-gothic-nf = {
           pkg = pkgs.udev-gothic-nf;
@@ -522,13 +499,6 @@ let
           pkg = pkgs.workmux;
           winget = null;
           category = "llm";
-        };
-
-        # ── communication ─────────────────────────────────────
-        slack = {
-          pkg = pkgs.slack;
-          winget = "SlackTechnologies.Slack";
-          category = "communication";
         };
 
         # ── desktop applications ──────────────────────────────
@@ -952,11 +922,6 @@ let
           winget = "AgileBits.1Password.CLI";
           category = "infra";
         };
-        opencode = {
-          pkg = pkgs.opencode;
-          winget = "SST.opencode";
-          category = "infra";
-        };
         google-cloud-sdk = {
           pkg = pkgs.google-cloud-sdk;
           winget = "Google.CloudSDK";
@@ -1205,7 +1170,6 @@ let
   };
 
   windowsOnlySupport = {
-    "GitHub.Copilot" = mkWindowsOnlySupport "winget" "GitHub.Copilot" "Windows application package";
     "Microsoft.PowerToys" =
       mkWindowsOnlySupport "winget" "Microsoft.PowerToys"
         "Windows system utility";
@@ -1811,10 +1775,6 @@ lib.mapAttrs (_: resolve) grouped
         "& (Join-Path $env:LOCALAPPDATA 'Microsoft/WinGet/Links/rust-analyzer.exe') --version"
       ];
     };
-    opencode = {
-      command = "opencode";
-      args = [ "--version" ];
-    };
     ollama = {
       command = "ollama";
       args = [ "--version" ];
@@ -2085,7 +2045,6 @@ lib.mapAttrs (_: resolve) grouped
   # Windows-only packages (no nix equivalent)
   windowsOnly = {
     winget = [
-      "GitHub.Copilot"
       "Microsoft.PowerToys"
       "Microsoft.VCRedist.2015+.x64"
       "Microsoft.VisualStudio.2022.BuildTools"

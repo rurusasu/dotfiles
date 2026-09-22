@@ -87,15 +87,11 @@ class TestHandler : SetupHandlerBase {
         $result.Name | Should -Not -Contain "NotAHandler"
     }
 
-    It 'should warn and skip invalid handler files' {
+    It 'should fail when a handler file cannot be loaded' {
         $invalidHandler = "invalid powershell syntax {{{"
         Set-Content -Path (Join-Path $testHandlersPath "Handler.Invalid.ps1") -Value $invalidHandler
-        Mock Write-Warning { }
 
-        $result = Get-SetupHandler -HandlersPath $testHandlersPath
-
-        # Invalid はロードされない
-        $result.Name | Should -Not -Contain "Invalid"
+        { Get-SetupHandler -HandlersPath $testHandlersPath } | Should -Throw '*Failed to load handler: Handler.Invalid.ps1*'
     }
 
     It 'should return empty array for non-existent directory' {
@@ -177,6 +173,18 @@ Describe 'Invoke-SetupHandler - 実際のハンドラーを使用' {
         Should -Invoke Write-Warning -ParameterFilter {
             $Message -match 'Hindsight.*MLflow'
         }
+    }
+
+    It 'should report a CanApply exception as a handler failure' {
+        $handler = New-DependencyTestHandler 'BrokenProbe' 10 @() $true
+        $handler | Add-Member ScriptMethod CanApply { throw 'probe failed' } -Force
+
+        $results = @(Invoke-SetupHandler -Handlers @($handler) -Context $ctx)
+
+        $results | Should -HaveCount 1
+        $results[0].Success | Should -BeFalse
+        $results[0].HandlerName | Should -Be 'BrokenProbe'
+        $results[0].Message | Should -Be 'CanApply() check failed'
     }
 }
 

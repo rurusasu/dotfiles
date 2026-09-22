@@ -70,7 +70,7 @@ assert(#items > 0, "TypeScript LSP must return actual completion items")
 for _, client in ipairs(vim.lsp.get_clients()) do
     client:stop()
 end
--- tsc 7.0.2 currently reports exit 1 even with upstream-only configuration.
+-- The TypeScript server currently reports exit 1 even with upstream-only configuration.
 -- Do not hide that warning: this test proves requests and termination, not a
 -- zero server exit code. See docs/chezmoi/neovim.md for the isolated probe.
 assert(
