@@ -176,6 +176,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install chezmoi
+        uses: ./.github/actions/install-chezmoi
+
       - name: Run UDEV Gothic NF installer
         shell: pwsh
         run: |
@@ -185,9 +188,13 @@ jobs:
           $templatePath = Join-Path $env:GITHUB_WORKSPACE 'chezmoi/.chezmoiscripts/setup/fonts/run_onchange_before_00-install-udev-gothic.ps1.tmpl'
           $scriptPath = Join-Path $env:RUNNER_TEMP 'install-udev-gothic.ps1'
           $template = Get-Content -LiteralPath $templatePath -Raw
-          $script = $template `
-            -replace '^\{\{ if eq \.chezmoi\.os "windows" -\}\}\r?\n', '' `
-            -replace '\r?\n\{\{ end -\}\}\s*$', ''
+          $script = ($template |
+            & chezmoi --source (Join-Path $env:GITHUB_WORKSPACE 'chezmoi') `
+              --override-data '{"chezmoi":{"os":"windows"}}' execute-template)
+          if ($LASTEXITCODE -ne 0) {
+            throw "chezmoi failed to render the font installer (exit $LASTEXITCODE)"
+          }
+          $script = $script -join [Environment]::NewLine
           [System.IO.File]::WriteAllText($scriptPath, $script, [System.Text.UTF8Encoding]::new($false))
 
           & pwsh -NoProfile -File $scriptPath
