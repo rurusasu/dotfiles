@@ -10,7 +10,7 @@ setup() {
 	run task --dir "$REPO_ROOT" --dry test DOTFILES_PATH="$REPO_ROOT"
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"nix build .#checks."* ]]
+	[[ "$output" == *"nix build .#checks."* || "$output" == *'nix build ".#checks.'* ]]
 	[[ "$output" != *"Invoke-Tests.ps1"* ]]
 }
 
@@ -37,12 +37,14 @@ includes:
   git:
     taskfile: "$REPO_ROOT/taskfiles/git/taskfile.yml"
     flatten: true
-tasks:
+	tasks:
   skills:sync:
     cmds: ["true"]
   fmt:
     cmds: ["true"]
   lint:
+    cmds: ["true"]
+  lint:no-format:
     cmds: ["true"]
 EOF
 	git -C "$fixture" init -q
