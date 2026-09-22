@@ -131,6 +131,29 @@ Describe 'NpmHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match "2 個インストール"
         }
+
+        It 'should pass a bounded timeout to every npm verify command' {
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{ name = "tool-with-check"; verifyCommand = @{ command = "tool-with-check"; args = @("--version") } }
+                    )
+                }
+            }
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $global:LASTEXITCODE = 0
+                return "1.0.0"
+            }
+
+            $ctx.Options["NpmMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            Should -Invoke Invoke-VerifyCommand -Times 1 -ParameterFilter {
+                $Command -eq "tool-with-check" -and $TimeoutSeconds -eq 30
+            }
+        }
     }
 
     Context 'Apply - import mode with already installed packages' {

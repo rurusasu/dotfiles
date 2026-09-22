@@ -200,7 +200,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          winget install --id twpayne.chezmoi --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          winget install --id twpayne.chezmoi --exact --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
           if ($LASTEXITCODE -ne 0) {
             throw "winget failed to install chezmoi (exit $LASTEXITCODE)"
           }
@@ -212,7 +212,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          winget install --id AutoHotkey.AutoHotkey --exact --scope machine --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          winget install --id AutoHotkey.AutoHotkey --exact --source winget --scope machine --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
           if ($LASTEXITCODE -ne 0) {
             throw "winget failed to install AutoHotkey v2 (exit $LASTEXITCODE)"
           }

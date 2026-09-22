@@ -1216,10 +1216,17 @@ function Invoke-ExternalCommandWithTimeout {
         $filePath = $Command
         $argumentList = @($Arguments)
         $resolvedCommand = Get-Command $Command -ErrorAction SilentlyContinue
+        if (-not $resolvedCommand) {
+            $global:LASTEXITCODE = 127
+            return "コマンドが見つかりません: $Command"
+        }
         if ($resolvedCommand -and $resolvedCommand.Source -like "*.ps1") {
             $psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell.exe" }
             $filePath = $psExe
             $argumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $resolvedCommand.Source) + @($Arguments)
+        }
+        elseif ($resolvedCommand.Source) {
+            $filePath = $resolvedCommand.Source
         }
 
         $processStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -1261,7 +1268,8 @@ function Invoke-ExternalCommandWithTimeout {
                 Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             }
             $global:LASTEXITCODE = 124
-            return "検証コマンドがタイムアウトしました (${TimeoutSeconds}s): $Command $($Arguments -join ' ')"
+            $timeoutLabel = if ($Command -eq "winget") { "winget コマンド" } else { "検証コマンド" }
+            return "$timeoutLabel がタイムアウトしました (${TimeoutSeconds}s): $Command $($Arguments -join ' ')"
         }
         $process.WaitForExit()
 

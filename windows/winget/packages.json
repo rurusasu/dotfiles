@@ -5,6 +5,7 @@
       "Packages": [
         {
           "PackageIdentifier": "AgileBits.1Password.CLI",
+          "installArgs": ["--scope", "user"],
           "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"],
           "verifyCommand": {
             "args": ["--version"],
@@ -19,10 +20,25 @@
         },
         {
           "PackageIdentifier": "AutoHotkey.AutoHotkey",
-          "installArgs": ["--scope", "machine"]
+          "installArgs": ["--scope", "machine"],
+          "requiresAdmin": true
         },
         {
           "PackageIdentifier": "Oven-sh.Bun",
+          "directInstaller": {
+            "type": "archive",
+            "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-windows-x64.zip",
+            "sha256": "ce4c17497b2f29712a99d3d53f028de28cd42e3bacb8589599e7f000e49b6405",
+            "destination": "%LOCALAPPDATA%\\Programs\\Bun",
+            "executable": "bun-windows-x64\\bun.exe",
+            "timeoutSeconds": 900
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 120,
+          "pathEntries": [
+            "%LOCALAPPDATA%\\Programs\\Bun\\bun-windows-x64",
+            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Oven-sh.Bun*\\bun-windows-x64"
+          ],
           "verifyCommand": {
             "args": ["--version"],
             "command": "bun"
@@ -30,6 +46,17 @@
         },
         {
           "PackageIdentifier": "twpayne.chezmoi",
+          "directInstaller": {
+            "type": "archive",
+            "url": "https://github.com/twpayne/chezmoi/releases/download/v2.72.2/chezmoi_2.72.2_windows_amd64.zip",
+            "sha256": "5c2038736c485d4e3eaad4ac06ea1fe3c4b63d4d51e470547bf12737c02f37f6",
+            "destination": "%LOCALAPPDATA%\\Programs\\chezmoi",
+            "executable": "chezmoi.exe",
+            "timeoutSeconds": 900
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 120,
+          "pathEntries": ["%LOCALAPPDATA%\\Programs\\chezmoi"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "chezmoi"
@@ -37,10 +64,21 @@
         },
         {
           "PackageIdentifier": "OpenAI.Codex",
+          "directInstaller": {
+            "type": "archive",
+            "url": "https://github.com/openai/codex/releases/download/rust-v0.152.0/codex-x86_64-pc-windows-msvc.exe.zip",
+            "sha256": "9e050454d1dfce8133e127ff9427c0304f6b12a7fbff2163257af2122355efce",
+            "destination": "%LOCALAPPDATA%\\Programs\\Codex",
+            "executable": "codex-x86_64-pc-windows-msvc.exe",
+            "timeoutSeconds": 900
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 120,
           "portableLink": {
             "linkName": "codex.exe",
             "targetPattern": "codex-x86_64-pc-windows-msvc.exe"
           },
+          "pathEntries": ["%LOCALAPPDATA%\\Programs\\Codex"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "codex"
@@ -48,6 +86,17 @@
         },
         {
           "PackageIdentifier": "direnv.direnv",
+          "directInstaller": {
+            "type": "file",
+            "url": "https://github.com/direnv/direnv/releases/download/v2.37.1/direnv.windows-amd64",
+            "sha256": "d96fc8b7cf020c2d4c1dbbc2ccec5fd1cab05b51c491f02c8527a7fa6c50a1cd",
+            "destination": "%LOCALAPPDATA%\\Programs\\direnv",
+            "executable": "direnv.exe",
+            "timeoutSeconds": 900
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 120,
+          "pathEntries": ["%LOCALAPPDATA%\\Programs\\direnv"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "direnv"
@@ -63,6 +112,17 @@
         },
         {
           "PackageIdentifier": "dprint.dprint",
+          "directInstaller": {
+            "type": "archive",
+            "url": "https://github.com/dprint/dprint/releases/download/0.57.4/dprint-x86_64-pc-windows-msvc.zip",
+            "sha256": "1038af32fade7a79f9c3a690d9546bb17be13dd7b4568a3684692fdcb0a52a1d",
+            "destination": "%LOCALAPPDATA%\\Programs\\dprint",
+            "executable": "dprint.exe",
+            "timeoutSeconds": 900
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 120,
+          "pathEntries": ["%LOCALAPPDATA%\\Programs\\dprint"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "dprint"
@@ -70,6 +130,17 @@
         },
         {
           "PackageIdentifier": "eza-community.eza",
+          "directInstaller": {
+            "type": "archive",
+            "url": "https://github.com/eza-community/eza/releases/download/v0.23.5/eza.exe_x86_64-pc-windows-gnu.zip",
+            "sha256": "c830638c844a5b89d39ba662b5549903a71fa539018e813880f5b8afa77bac2e",
+            "destination": "%LOCALAPPDATA%\\Programs\\eza",
+            "executable": "eza.exe",
+            "timeoutSeconds": 900
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 120,
+          "pathEntries": ["%LOCALAPPDATA%\\Programs\\eza"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "eza"
@@ -77,6 +148,17 @@
         },
         {
           "PackageIdentifier": "sharkdp.fd",
+          "directInstaller": {
+            "type": "archive",
+            "url": "https://github.com/sharkdp/fd/releases/download/v10.5.0/fd-v10.5.0-x86_64-pc-windows-msvc.zip",
+            "sha256": "a227701b8551c35a9931d9f6da75503cf86d88e182d71fb849a70864c5d57cd7",
+            "destination": "%LOCALAPPDATA%\\Programs\\fd",
+            "executable": "fd-v10.5.0-x86_64-pc-windows-msvc\\fd.exe",
+            "timeoutSeconds": 900
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 120,
+          "pathEntries": ["%LOCALAPPDATA%\\Programs\\fd\\fd-v10.5.0-x86_64-pc-windows-msvc"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "fd"
@@ -222,6 +304,7 @@
         },
         {
           "PackageIdentifier": "oxc-project.oxlint",
+          "installArgs": ["--scope", "user"],
           "portableLink": {
             "linkName": "oxlint.exe",
             "targetPattern": "oxlint-*.exe"
@@ -265,13 +348,15 @@
         },
         {
           "PackageIdentifier": "Rustlang.rust-analyzer",
+          "installArgs": ["--scope", "user"],
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
           "verifyCommand": {
             "args": [
               "-NoProfile",
               "-Command",
               "& (Join-Path $env:LOCALAPPDATA Microsoft/WinGet/Links/rust-analyzer.exe) --version"
             ],
-            "command": "pwsh"
+            "command": "powershell"
           }
         },
         {
@@ -368,7 +453,8 @@
             "--override",
             "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart"
           ],
-          "installTimeoutSeconds": 1800
+          "installTimeoutSeconds": 1800,
+          "requiresAdmin": true
         },
         {
           "PackageIdentifier": "Microsoft.WindowsTerminal"

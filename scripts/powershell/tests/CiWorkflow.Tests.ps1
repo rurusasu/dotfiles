@@ -401,7 +401,7 @@ Describe 'CI workflow configuration' {
             ).Value
 
             $job | Should -Not -BeNullOrEmpty
-            $job | Should -Match 'winget install --id twpayne\.chezmoi --exact'
+            $job | Should -Match 'winget install --id twpayne\.chezmoi --exact --source winget'
             $job | Should -Match 'Get-Command chezmoi -ErrorAction Stop'
             $job | Should -Match 'Add-Content -LiteralPath \$env:GITHUB_PATH -Value \$chezmoiDirectory -Encoding utf8'
             $job.IndexOf('winget install --id twpayne.chezmoi --exact') |

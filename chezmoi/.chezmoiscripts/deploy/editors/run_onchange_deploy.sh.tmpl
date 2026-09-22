@@ -19,21 +19,38 @@ deploy_file() {
   fi
 }
 
+deploy_content() {
+  local content="$1"
+  local dst="$2"
+  mkdir -p "$(dirname "$dst")"
+  printf '%s\n' "$content" > "$dst"
+  echo "Deployed: $dst"
+}
+
 echo "Deploying editor configurations..."
 
 # VS Code
 VSCODE_CONFIG="$HOME_DIR/.config/Code/User"
-deploy_file "$CHEZMOI_SOURCE/editors/vscode/settings.json" "$VSCODE_CONFIG/settings.json"
+deploy_content "$(cat <<'EOF'
+{{ includeTemplate "editors/vscode/settings.json" . }}
+EOF
+)" "$VSCODE_CONFIG/settings.json"
 deploy_file "$CHEZMOI_SOURCE/editors/vscode/keybindings.json" "$VSCODE_CONFIG/keybindings.json"
 
 # Cursor
 CURSOR_CONFIG="$HOME_DIR/.config/Cursor/User"
-deploy_file "$CHEZMOI_SOURCE/editors/cursor/settings.json" "$CURSOR_CONFIG/settings.json"
+deploy_content "$(cat <<'EOF'
+{{ includeTemplate "editors/cursor/settings.json" . }}
+EOF
+)" "$CURSOR_CONFIG/settings.json"
 deploy_file "$CHEZMOI_SOURCE/editors/cursor/keybindings.json" "$CURSOR_CONFIG/keybindings.json"
 
 # Zed
 ZED_CONFIG="$HOME_DIR/.config/zed"
-deploy_file "$CHEZMOI_SOURCE/editors/zed/settings.json" "$ZED_CONFIG/settings.json"
+deploy_content "$(cat <<'EOF'
+{{ includeTemplate "editors/zed/settings.json" . }}
+EOF
+)" "$ZED_CONFIG/settings.json"
 deploy_file "$CHEZMOI_SOURCE/editors/zed/keymap.json" "$ZED_CONFIG/keymap.json"
 
 # Neovim is deployed directly from dot_config/nvim by chezmoi.

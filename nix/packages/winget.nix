@@ -45,6 +45,10 @@ let
     in
     if installArgs == null then pkg else pkg // { inherit installArgs; };
 
+  attachRequiresAdmin =
+    requiresAdminMap: key: pkg:
+    if requiresAdminMap.${key} or false then pkg // { requiresAdmin = true; } else pkg;
+
   attachInstallFeature =
     featureMap: key: pkg:
     let
@@ -141,7 +145,8 @@ let
 
   attachWingetMetadata =
     key: pkg:
-    attachSkipInstall sets.wingetSkipInstall key (
+    attachRequiresAdmin sets.wingetRequiresAdmin key (
+      attachSkipInstall sets.wingetSkipInstall key (
       attachCiSkipInstall sets.wingetCiSkipInstall key (
         attachPathEntries sets.wingetPathEntries key (
           attachPortableLink sets.wingetPortableLinksById key (
@@ -153,14 +158,16 @@ let
           )
         )
       )
-    );
+    )
+  );
 
   # Catalog migrations change metadata lookup from PackageIdentifier to the
   # catalog attr name. Apply the ID-keyed metadata as a fallback so generated
   # Windows verification and installer behavior remain compatible.
   attachWingetIdMetadata =
     id: pkg:
-    attachSkipInstall sets.wingetSkipInstall id (
+    attachRequiresAdmin sets.wingetRequiresAdmin id (
+      attachSkipInstall sets.wingetSkipInstall id (
       attachCiSkipInstall sets.wingetCiSkipInstall id (
         attachPathEntries sets.wingetPathEntries id (
           attachPortableLink sets.wingetPortableLinksById id (
@@ -172,7 +179,8 @@ let
           )
         )
       )
-    );
+    )
+  );
 
   # --- winget ---
   wingetFromMap = lib.mapAttrsToList (
@@ -184,7 +192,8 @@ let
 
   wingetFromWindowsOnly = map (
     id:
-    attachSkipInstall sets.wingetSkipInstall id (
+    attachRequiresAdmin sets.wingetRequiresAdmin id (
+      attachSkipInstall sets.wingetSkipInstall id (
       attachCiSkipInstall sets.wingetCiSkipInstall id (
         attachPathEntries sets.wingetPathEntries id (
           attachPortableLink sets.wingetPortableLinksById id (
@@ -197,6 +206,7 @@ let
             )
           )
         )
+      )
       )
     )
   ) sets.windowsOnly.winget;

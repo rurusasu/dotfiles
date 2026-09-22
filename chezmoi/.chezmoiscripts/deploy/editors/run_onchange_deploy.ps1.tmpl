@@ -23,26 +23,49 @@ function Deploy-File {
   }
 }
 
+function Deploy-Content {
+  param(
+    [string]$Content,
+    [string]$Destination
+  )
+
+  $destDir = Split-Path -Parent $Destination
+  if (-not (Test-Path -LiteralPath $destDir)) {
+    New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+  }
+  Set-Content -LiteralPath $Destination -Value $Content -Encoding UTF8 -NoNewline
+  Write-Host "Deployed: $Destination"
+}
+
 Write-Host "Deploying editor configurations..."
 
 # VS Code
 $VSCodeConfig = "$env:APPDATA\Code\User"
-Deploy-File "$ChezmoiSource\editors\vscode\settings.json" "$VSCodeConfig\settings.json"
+$VSCodeSettings = @'
+{{ includeTemplate "editors/vscode/settings.json" . }}
+'@
+Deploy-Content $VSCodeSettings "$VSCodeConfig\settings.json"
 Deploy-File "$ChezmoiSource\editors\vscode\keybindings.json" "$VSCodeConfig\keybindings.json"
 
 # VS Code Insiders
 $VSCodeInsidersConfig = "$env:APPDATA\Code - Insiders\User"
-Deploy-File "$ChezmoiSource\editors\vscode\settings.json" "$VSCodeInsidersConfig\settings.json"
+Deploy-Content $VSCodeSettings "$VSCodeInsidersConfig\settings.json"
 Deploy-File "$ChezmoiSource\editors\vscode\keybindings.json" "$VSCodeInsidersConfig\keybindings.json"
 
 # Cursor
 $CursorConfig = "$env:APPDATA\Cursor\User"
-Deploy-File "$ChezmoiSource\editors\cursor\settings.json" "$CursorConfig\settings.json"
+$CursorSettings = @'
+{{ includeTemplate "editors/cursor/settings.json" . }}
+'@
+Deploy-Content $CursorSettings "$CursorConfig\settings.json"
 Deploy-File "$ChezmoiSource\editors\cursor\keybindings.json" "$CursorConfig\keybindings.json"
 
 # Zed
 $ZedConfig = "$env:APPDATA\Zed"
-Deploy-File "$ChezmoiSource\editors\zed\settings.json" "$ZedConfig\settings.json"
+$ZedSettings = @'
+{{ includeTemplate "editors/zed/settings.json" . }}
+'@
+Deploy-Content $ZedSettings "$ZedConfig\settings.json"
 Deploy-File "$ChezmoiSource\editors\zed\keymap.json" "$ZedConfig\keymap.json"
 
 Write-Host "Editor configurations deployed."

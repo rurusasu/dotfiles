@@ -28,13 +28,13 @@
   },
   "theme": {
     "mode": "dark",
-    "dark": "Catppuccin Mocha",
-    "light": "Catppuccin Mocha"
+    "dark": "{{ .appearance.theme }}",
+    "light": "{{ .appearance.theme }}"
   },
-  "ui_font_family": "UDEV Gothic NF",
-  "ui_font_size": 10,
-  "buffer_font_size": 10,
-  "buffer_font_family": "UDEV Gothic NF",
+  "ui_font_family": "{{ .appearance.font_family }}",
+  "ui_font_size": {{ .appearance.font_size }},
+  "buffer_font_size": {{ .appearance.font_size }},
+  "buffer_font_family": "{{ .appearance.font_family }}",
   // Vim mode
   "vim_mode": false,
   // Editor settings
@@ -72,8 +72,8 @@
     "shell": {
       "program": "pwsh"
     },
-    "font_family": "UDEV Gothic NF",
-    "font_size": 10,
+    "font_family": "{{ .appearance.font_family }}",
+    "font_size": {{ .appearance.font_size }},
     "line_height": "comfortable",
     "copy_on_select": false,
     "vim_mode": false

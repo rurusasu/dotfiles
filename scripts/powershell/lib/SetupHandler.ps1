@@ -298,6 +298,33 @@ class SetupHandlerBase {
 
     <#
     .SYNOPSIS
+        portable package のコピー shim が現行 exe と同一内容か判定する
+    .DESCRIPTION
+        Windows PowerShell の非昇格ユーザーセッションではシンボリックリンクを
+        作成できないことがあるため、portable exe のコピーを代替 shim として使う。
+        サイズだけでは同一バージョンを保証できないので SHA-256 を比較する。
+    #>
+    [bool] IsPortableCopyCurrent([string]$linkPath, [string]$targetExe) {
+        if (-not (Test-Path -LiteralPath $linkPath -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $targetExe -PathType Leaf)) {
+            return $false
+        }
+
+        try {
+            $link = Get-Item -LiteralPath $linkPath -Force
+            if ($link.LinkType -eq "SymbolicLink") { return $false }
+
+            $linkHash = (Get-FileHash -LiteralPath $linkPath -Algorithm SHA256).Hash
+            $targetHash = (Get-FileHash -LiteralPath $targetExe -Algorithm SHA256).Hash
+            return $linkHash -eq $targetHash
+        }
+        catch {
+            return $false
+        }
+    }
+
+    <#
+    .SYNOPSIS
         WinGet\Links 配下にシンボリックリンク shim を作成する
     .DESCRIPTION
         既存 shim は一時シンボリックリンクの作成成功後に置き換える。

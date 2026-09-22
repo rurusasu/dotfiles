@@ -170,6 +170,10 @@ class WingetHandler : SetupHandlerBase {
                                 if ($pkg.PSObject.Properties.Name -contains "installFeature") {
                                     $installFeature = [string]$pkg.installFeature
                                 }
+                                $requiresAdmin = $false
+                                if ($pkg.PSObject.Properties.Name -contains "requiresAdmin") {
+                                    $requiresAdmin = [bool]$pkg.requiresAdmin
+                                }
                                 $packages += [PSCustomObject]@{
                                     Id                    = $pkg.PackageIdentifier
                                     Version               = $version
@@ -184,6 +188,7 @@ class WingetHandler : SetupHandlerBase {
                                     SkipInstall           = $skipInstall
                                     SkipReason            = $skipReason
                                     InstallFeature        = $installFeature
+                                    RequiresAdmin         = $requiresAdmin
                                 }
                             }
                         }
@@ -202,6 +207,22 @@ class WingetHandler : SetupHandlerBase {
                     [string]::IsNullOrWhiteSpace($_.InstallFeature) -or
                     [bool]$ctx.GetOption($_.InstallFeature, $false)
                 })
+
+            $adminPhase = [bool]$ctx.GetOption("WingetAdminPhase", $false)
+            $deferredAdminPackages = @($packages | Where-Object { $_.RequiresAdmin })
+            if ($adminPhase) {
+                $packages = @($packages | Where-Object { $_.RequiresAdmin })
+            }
+            else {
+                $packages = @($packages | Where-Object { -not $_.RequiresAdmin })
+                foreach ($pkg in $deferredAdminPackages) {
+                    $this.Log("管理者フェーズに委譲: $($pkg.Id)", "Yellow")
+                }
+            }
+
+            if ($packages.Count -eq 0 -and $deferredAdminPackages.Count -gt 0 -and -not $adminPhase) {
+                return $this.CreateSuccessResult("$($deferredAdminPackages.Count) 個を管理者フェーズに委譲")
+            }
 
             if ($packages.Count -eq 0) {
                 $this.Log("インストールするパッケージがありません", "Gray")
@@ -224,7 +245,10 @@ class WingetHandler : SetupHandlerBase {
                 $verificationPassed = $false
                 if ($pkg.VerifyCommand) {
                     Update-ProcessEnvironmentPath
-                    $this.EnsurePortableLink($pkg)
+                    # Existing portable packages need their command shim before
+                    # verification. Missing package directories are expected
+                    # before the first install, so keep this lookup quiet.
+                    $this.EnsurePortableLinkQuiet($pkg)
                     if ($verifyCommandOnly) {
                         $this.EnsurePathEntries($pkg)
                     }
@@ -251,6 +275,12 @@ class WingetHandler : SetupHandlerBase {
                     }
                 }
 
+                if ($pkg.DirectInstaller -and $this.TestDirectInstallerCurrent($pkg) -and $verificationPassed) {
+                    $verified++
+                    $this.Log("スキップ (直接インストーラーで検証済み): $($pkg.Id)", "Gray")
+                    continue
+                }
+
                 if ($pkg.SkipInstall) {
                     if ($verificationPassed) {
                         $this.Log("スキップ (検証済み/手動対象): $($pkg.Id)", "Gray")
@@ -262,7 +292,7 @@ class WingetHandler : SetupHandlerBase {
                     continue
                 }
 
-                if ($pkg.Id -in $installedIds -or $this.IsPackageInstalled($pkg.Id)) {
+                if ($pkg.Id -in $installedIds -or $this.IsPackageInstalled($pkg.Id, $pkg.SourceName)) {
                     if ($pkg.VerifyCommand -and $verificationPassed) {
                         $toInstall += [PSCustomObject]@{
                             Id                    = $pkg.Id
@@ -377,8 +407,10 @@ class WingetHandler : SetupHandlerBase {
 
                 if ($LASTEXITCODE -ne 0) {
                     Update-ProcessEnvironmentPath
-                    $this.EnsurePortableLink($pkg)
-                    $this.EnsurePathEntries($pkg)
+                    # A failed install is expected to have no package directory;
+                    # do not turn that secondary condition into a warning.
+                    $this.EnsurePortableLinkQuiet($pkg)
+                    $this.EnsurePathEntriesQuiet($pkg)
 
                     if ($pkg.VerifyCommand -and $this.TestPackageVerification($pkg.VerifyCommand)) {
                         $verified++
@@ -510,6 +542,14 @@ class WingetHandler : SetupHandlerBase {
             $installArgs += "--source"
             $installArgs += "msstore"
         }
+        elseif ($pkg.SourceName -eq "winget") {
+            # Avoid winget probing the Microsoft Store for every package. The
+            # fallback source lookup can hang on unavailable Store endpoints
+            # and makes a successful package install look like a verification
+            # failure after the command timeout.
+            $installArgs += "--source"
+            $installArgs += "winget"
+        }
         if ($pkg.InstallArgs) {
             $installArgs += @($pkg.InstallArgs)
         }
@@ -521,7 +561,19 @@ class WingetHandler : SetupHandlerBase {
 
     hidden [object[]] InvokePackageInstall([object]$pkg, [object[]]$installArgs) {
         if ($pkg.DirectInstaller) {
-            return $this.InvokeDirectInstaller($pkg)
+            $wingetOutput = @($this.InvokeWingetInstall($pkg, $installArgs))
+            if ($LASTEXITCODE -eq 0) {
+                return $wingetOutput
+            }
+
+            $this.Log("winget が $($pkg.Id) を完了できなかったため、公式 archive fallback を実行します", "Gray")
+            $directOutput = @($this.InvokeDirectInstaller($pkg))
+            if ($LASTEXITCODE -eq 0) {
+                # Do not replay a transient WinGet timeout after the fallback
+                # succeeded. The user should see the effective result only.
+                return $directOutput
+            }
+            return @($wingetOutput + $directOutput)
         }
 
         return $this.InvokeWingetInstall($pkg, $installArgs)
@@ -537,12 +589,104 @@ class WingetHandler : SetupHandlerBase {
 
     hidden [object[]] InvokeDirectInstaller([object]$pkg) {
         $type = $this.GetDirectInstallerType($pkg.DirectInstaller)
-        throw "Unsupported directInstaller type for $($pkg.Id): $type"
+        if ($type -ne "archive" -and $type -ne "file") {
+            $global:LASTEXITCODE = 1
+            return @("Unsupported directInstaller type for $($pkg.Id): $type")
+        }
+
+        $url = $this.GetDirectInstallerString($pkg.DirectInstaller, "url")
+        $sha256 = $this.GetDirectInstallerString($pkg.DirectInstaller, "sha256")
+        $destination = $this.ResolveDirectInstallerPath(
+            $this.GetDirectInstallerString($pkg.DirectInstaller, "destination")
+        )
+        $executable = $this.GetDirectInstallerString($pkg.DirectInstaller, "executable")
+        $timeoutSeconds = $this.GetDirectInstallerTimeoutSeconds($pkg.DirectInstaller)
+
+        if ([string]::IsNullOrWhiteSpace($url) -or
+            [string]::IsNullOrWhiteSpace($sha256) -or
+            [string]::IsNullOrWhiteSpace($destination) -or
+            [string]::IsNullOrWhiteSpace($executable)) {
+            $global:LASTEXITCODE = 1
+            return @("directInstaller metadata is incomplete for $($pkg.Id)")
+        }
+
+        $archivePath = Join-Path $env:TEMP ("dotfiles-$([guid]::NewGuid().ToString('N')).zip")
+        $stagingPath = Join-Path $env:TEMP ("dotfiles-$([guid]::NewGuid().ToString('N'))")
+        try {
+            $this.Log("公式 archive をダウンロードしています: $($pkg.Id)", "Gray")
+            Invoke-WebRequest -Uri $url -OutFile $archivePath -UseBasicParsing -TimeoutSec $timeoutSeconds
+            $actualHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
+            if ($actualHash -ne $sha256.ToUpperInvariant()) {
+                $global:LASTEXITCODE = 1
+                return @("directInstaller hash mismatch for $($pkg.Id): expected $sha256, got $actualHash")
+            }
+
+            if ($type -eq "file") {
+                New-Item -ItemType Directory -Path $destination -Force | Out-Null
+                $targetPath = Join-Path $destination $executable
+                $targetParent = Split-Path -Parent $targetPath
+                if ($targetParent) {
+                    New-Item -ItemType Directory -Path $targetParent -Force | Out-Null
+                }
+                Copy-Item -LiteralPath $archivePath -Destination $targetPath -Force
+                $markerPath = Join-Path $destination ".dotfiles-direct-installer.sha256"
+                Set-Content -LiteralPath $markerPath -Value $sha256.ToUpperInvariant() -Encoding ASCII
+                $global:LASTEXITCODE = 0
+                return @("公式 file を配置しました: $targetPath")
+            }
+
+            New-Item -ItemType Directory -Path $stagingPath -Force | Out-Null
+            Expand-Archive -LiteralPath $archivePath -DestinationPath $stagingPath -Force
+            if (Test-Path -LiteralPath $destination) {
+                Remove-Item -LiteralPath $destination -Recurse -Force
+            }
+            New-Item -ItemType Directory -Path $destination -Force | Out-Null
+            Copy-Item -Path (Join-Path $stagingPath "*") -Destination $destination -Recurse -Force
+            $markerPath = Join-Path $destination ".dotfiles-direct-installer.sha256"
+            Set-Content -LiteralPath $markerPath -Value $sha256.ToUpperInvariant() -Encoding ASCII
+            $global:LASTEXITCODE = 0
+            return @("公式 archive を展開しました: $destination")
+        }
+        catch {
+            $global:LASTEXITCODE = 1
+            return @($_.Exception.Message)
+        }
+        finally {
+            Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $stagingPath -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 
     hidden [bool] TestDirectInstallerCurrent([object]$pkg) {
-        $null = $pkg
-        return $false
+        if ($null -eq $pkg -or $null -eq $pkg.DirectInstaller) {
+            return $false
+        }
+        $destination = $this.ResolveDirectInstallerPath(
+            $this.GetDirectInstallerString($pkg.DirectInstaller, "destination")
+        )
+        $executable = $this.GetDirectInstallerString($pkg.DirectInstaller, "executable")
+        if ([string]::IsNullOrWhiteSpace($destination) -or [string]::IsNullOrWhiteSpace($executable)) {
+            return $false
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $destination $executable) -PathType Leaf)) {
+            return $false
+        }
+
+        $expectedHash = $this.GetDirectInstallerString($pkg.DirectInstaller, "sha256")
+        if ([string]::IsNullOrWhiteSpace($expectedHash)) {
+            return $false
+        }
+        $markerPath = Join-Path $destination ".dotfiles-direct-installer.sha256"
+        if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf)) {
+            return $false
+        }
+        try {
+            $actualMarker = (Get-Content -LiteralPath $markerPath -Raw -ErrorAction Stop).Trim()
+            return $actualMarker -eq $expectedHash.ToUpperInvariant()
+        }
+        catch {
+            return $false
+        }
     }
 
     hidden [string] GetWingetInstalledPackageVersion([string]$packageId) {
@@ -576,6 +720,23 @@ class WingetHandler : SetupHandlerBase {
             return [string]$directInstaller.type
         }
         return ""
+    }
+
+    hidden [string] GetDirectInstallerString([object]$directInstaller, [string]$name) {
+        if ($directInstaller -is [hashtable] -and $directInstaller.ContainsKey($name)) {
+            return [string]$directInstaller[$name]
+        }
+        if ($directInstaller -and ($directInstaller.PSObject.Properties.Name -contains $name)) {
+            return [string]$directInstaller.$name
+        }
+        return ""
+    }
+
+    hidden [string] ResolveDirectInstallerPath([string]$path) {
+        if ([string]::IsNullOrWhiteSpace($path)) {
+            return ""
+        }
+        return [Environment]::ExpandEnvironmentVariables($path)
     }
 
     hidden [object[]] GetDirectInstallerArguments([object]$directInstaller) {
@@ -739,7 +900,10 @@ class WingetHandler : SetupHandlerBase {
     #>
     hidden [string[]] GetInstalledPackageIds() {
         try {
-            $output = Invoke-Winget -Arguments @("list", "--disable-interactivity")
+            # Restrict the bulk query to the community source. Without an
+            # explicit source winget may probe Microsoft Store and block on a
+            # network timeout before the package loop even starts.
+            $output = Invoke-Winget -Arguments @("list", "--source", "winget", "--disable-interactivity")
             if ($LASTEXITCODE -ne 0) { return @() }
             # winget list の固定幅カラムは CJK 文字や省略記号で列位置がずれるため、
             # パッケージ ID のフォーマット (Publisher.Package) を正規表現で直接抽出する。
@@ -773,8 +937,16 @@ class WingetHandler : SetupHandlerBase {
         個別チェック用。一括チェックには GetInstalledPackageIds を使用。
     #>
     hidden [bool] IsPackageInstalled([string]$packageId) {
+        return $this.IsPackageInstalled($packageId, $null)
+    }
+
+    hidden [bool] IsPackageInstalled([string]$packageId, [string]$sourceName) {
         try {
-            Invoke-Winget -Arguments @("list", "--id", $packageId, "--exact", "--disable-interactivity") | Out-Null
+            $arguments = @("list", "--id", $packageId, "--exact", "--disable-interactivity")
+            if ($sourceName -eq "msstore" -or $sourceName -eq "winget") {
+                $arguments += @("--source", $sourceName)
+            }
+            Invoke-Winget -Arguments $arguments | Out-Null
             return $LASTEXITCODE -eq 0
         }
         catch {
@@ -941,6 +1113,14 @@ class WingetHandler : SetupHandlerBase {
     }
 
     hidden [void] EnsurePortableLink([object]$pkg) {
+        $this.EnsurePortableLinkInternal($pkg, $false)
+    }
+
+    hidden [void] EnsurePortableLinkQuiet([object]$pkg) {
+        $this.EnsurePortableLinkInternal($pkg, $true)
+    }
+
+    hidden [void] EnsurePortableLinkInternal([object]$pkg, [bool]$quiet) {
         if (-not $pkg.PortableLink) { return }
 
         $linkName = $null
@@ -959,15 +1139,35 @@ class WingetHandler : SetupHandlerBase {
         $packagesBase = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
         $packageDir = Get-ChildItem -Path $packagesBase -Directory -Filter "$($pkg.Id)_*" -ErrorAction SilentlyContinue |
             Select-Object -First 1
-        if (-not $packageDir) {
-            $this.LogWarning("portableLink のパッケージディレクトリが見つかりません: $($pkg.Id)")
+        $target = $null
+        if ($packageDir) {
+            $target = Get-ChildItem -Path $packageDir.FullName -File -Filter $targetPattern -Recurse -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+        }
+        elseif ($pkg.DirectInstaller) {
+            $directDestination = $this.ResolveDirectInstallerPath(
+                $this.GetDirectInstallerString($pkg.DirectInstaller, "destination")
+            )
+            $directExecutable = $this.GetDirectInstallerString($pkg.DirectInstaller, "executable")
+            if ($directDestination -and $directExecutable) {
+                $directTargetPath = Join-Path $directDestination $directExecutable
+                if (Test-Path -LiteralPath $directTargetPath -PathType Leaf) {
+                    $target = Get-Item -LiteralPath $directTargetPath
+                }
+            }
+        }
+
+        if (-not $target) {
+            if (-not $quiet) {
+                $this.LogWarning("portableLink の対象パッケージが見つかりません: $($pkg.Id)")
+            }
             return
         }
 
-        $target = Get-ChildItem -Path $packageDir.FullName -File -Filter $targetPattern -Recurse -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-        if (-not $target) {
-            $this.LogWarning("portableLink の対象 exe が見つかりません: $($pkg.Id) ($targetPattern)")
+        if (-not $packageDir -and $target.Name -notlike $targetPattern) {
+            if (-not $quiet) {
+                $this.LogWarning("portableLink の対象 exe が見つかりません: $($pkg.Id) ($targetPattern)")
+            }
             return
         }
 
@@ -977,8 +1177,24 @@ class WingetHandler : SetupHandlerBase {
         }
 
         $linkPath = Join-Path $linksPath $linkName
-        if (-not $this.IsPortableLinkCurrent($linkPath, $target.FullName)) {
-            $this.CreatePortableLink($linkPath, $target.FullName)
+        $linkIsCurrent = $this.IsPortableLinkCurrent($linkPath, $target.FullName)
+        $copyIsCurrent = $this.IsPortableCopyCurrent($linkPath, $target.FullName)
+        if (-not $linkIsCurrent -and -not $copyIsCurrent) {
+            try {
+                $this.CreatePortableLink($linkPath, $target.FullName)
+            }
+            catch {
+                # Windows PowerShell user sessions cannot create symlinks unless
+                # Developer Mode or elevation is enabled. A copied portable exe
+                # still gives the user-scoped package a working command; the
+                # next Apply refreshes it after a winget upgrade.
+                $this.LogWarning("シンボリックリンクを作成できないため portableLink をコピーで作成します: $linkName")
+                if (Test-Path -LiteralPath $linkPath) {
+                    Remove-Item -LiteralPath $linkPath -Force -ErrorAction Stop
+                }
+                Copy-Item -LiteralPath $target.FullName -Destination $linkPath -Force -ErrorAction Stop
+                $this.Log("portableLink をコピーで作成しました", "Green")
+            }
         }
 
         $userPath = Get-UserEnvironmentPath

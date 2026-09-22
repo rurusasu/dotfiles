@@ -231,6 +231,15 @@ exit 0
             Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
+
+    It 'should report a missing timed verification command without throwing a ProcessStart exception' {
+        $missingCommand = Join-Path $TestDrive 'does-not-exist.exe'
+
+        $result = Invoke-VerifyCommand -Command $missingCommand -Arguments @('--version') -TimeoutSeconds 1
+
+        $result | Should -Match 'コマンドが見つかりません'
+        $global:LASTEXITCODE | Should -Be 127
+    }
 }
 
 Describe 'Invoke-OpCommand' {

@@ -351,6 +351,8 @@ in sets.providerErrors
 
             $package | Should -Not -BeNullOrEmpty
             @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Packages\AgileBits.1Password.CLI*'
+            @($package.installArgs) | Should -Contain '--scope'
+            @($package.installArgs) | Should -Contain 'user'
             $package.PSObject.Properties.Name | Should -Not -Contain 'portableLink'
             $package.verifyCommand.command | Should -Be 'op'
             @($package.verifyCommand.args) | Should -Contain '--version'
@@ -534,6 +536,55 @@ in sets.providerErrors
 
     Context 'Cross-platform package providers' {
 
+        It 'should not depend on pwsh to verify the portable rust-analyzer package' {
+            $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'Rustlang.rust-analyzer') | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            $package.verifyCommand.command | Should -Be 'powershell'
+            @($package.verifyCommand.args) | Should -Contain '-Command'
+            @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Links'
+        }
+
+        It 'should add the portable Bun executable directory before verification' {
+            $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'Oven-sh.Bun')
+
+            $package.Count | Should -Be 1
+            @($package[0].pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Oven-sh.Bun*\bun-windows-x64'
+            @($package[0].pathEntries) | Should -Contain '%LOCALAPPDATA%\Programs\Bun\bun-windows-x64'
+            @($package[0].installArgs) | Should -Contain '--scope'
+            @($package[0].installArgs) | Should -Contain 'user'
+            $package[0].installTimeoutSeconds | Should -Be 120
+            $package[0].directInstaller.type | Should -Be 'archive'
+            $package[0].directInstaller.sha256 | Should -Match '^[0-9a-f]{64}$'
+        }
+
+        It 'should provide direct fallbacks for portable packages affected by WinGet registration hangs' {
+            $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $fallbackIds = @(
+                'Oven-sh.Bun'
+                'twpayne.chezmoi'
+                'OpenAI.Codex'
+                'direnv.direnv'
+                'dprint.dprint'
+                'sharkdp.fd'
+                'eza-community.eza'
+            )
+
+            foreach ($id in $fallbackIds) {
+                $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ $id) | Select-Object -First 1
+                $package | Should -Not -BeNullOrEmpty -Because "$id must remain in the generated catalog"
+                $package.directInstaller.type | Should -BeIn @('archive', 'file')
+                $package.directInstaller.url | Should -Match '^https://'
+                $package.directInstaller.sha256 | Should -Match '^[0-9a-f]{64}$'
+                @($package.pathEntries).Count | Should -BeGreaterThan 0
+            }
+        }
+
         It 'should generate AutoHotkey for the Windows terminal keybinding adapter' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
@@ -541,6 +592,7 @@ in sets.providerErrors
             $package.Count | Should -Be 1
             @($package[0].installArgs) | Should -Contain '--scope'
             @($package[0].installArgs) | Should -Contain 'machine'
+            $package[0].requiresAdmin | Should -BeTrue
         }
 
         It 'should keep Hammerspoon out of the Windows manifest' {

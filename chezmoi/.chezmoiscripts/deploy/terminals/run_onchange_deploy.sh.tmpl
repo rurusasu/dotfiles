@@ -19,9 +19,20 @@ deploy_file() {
   fi
 }
 
+deploy_content() {
+  local content="$1"
+  local dst="$2"
+  mkdir -p "$(dirname "$dst")"
+  printf '%s\n' "$content" > "$dst"
+  echo "Deployed: $dst"
+}
+
 echo "Deploying terminal configurations..."
 
-deploy_file "$CHEZMOI_SOURCE/terminals/wezterm/wezterm.lua" "$HOME_DIR/.config/wezterm/wezterm.lua"
+deploy_content "$(cat <<'EOF'
+{{ includeTemplate "terminals/wezterm/wezterm.lua" . }}
+EOF
+)" "$HOME_DIR/.config/wezterm/wezterm.lua"
 deploy_file "$CHEZMOI_SOURCE/terminals/ghostty/config" "${XDG_CONFIG_HOME:-$HOME_DIR/.config}/ghostty/config"
 {{ if eq .chezmoi.os "darwin" -}}
 deploy_file "$CHEZMOI_SOURCE/terminals/hammerspoon/init.lua" "$HOME_DIR/.hammerspoon/init.lua"

@@ -275,7 +275,7 @@ Describe '標準キーバインド方針' {
                 "(?ms)^  $($case.Job)`:\s*.*?(?=^  [a-zA-Z0-9_-]+`:\s*$|\z)"
             ).Value
             $job | Should -Not -BeNullOrEmpty
-            $job | Should -Match 'winget install --id AutoHotkey\.AutoHotkey --exact --scope machine'
+            $job | Should -Match 'winget install --id AutoHotkey\.AutoHotkey --exact --source winget --scope machine'
             $job | Should -Match 'AutoHotkey\\v2\\AutoHotkey64_UIA\.exe'
             $job | Should -Match ([regex]::Escape("& `$uiAccess '/ErrorStdOut' `$scriptPath '--check'"))
             $job | Should -Match ([regex]::Escape("& `$uiAccess '/ErrorStdOut' `$scriptPath '--self-test'"))

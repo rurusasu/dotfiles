@@ -1,5 +1,5 @@
 {{ if eq .chezmoi.os "windows" -}}
-# Install UDEV Gothic NF font for Windows
+# Install the shared dotfiles font for Windows
 # hash: UDEVGothic_NF v2.2.0
 
 $ErrorActionPreference = "Stop"
@@ -24,6 +24,7 @@ public class FontHelper {
 "@
 
 $FontVersion  = "v2.2.0"
+$FontFamily   = "{{ .appearance.font_family }}"
 $FontName     = "UDEVGothic_NF"
 $DownloadUrl  = "https://github.com/yuru7/udev-gothic/releases/download/$FontVersion/${FontName}_${FontVersion}.zip"
 $TempDir      = Join-Path $env:TEMP "chezmoi-fonts\$FontName"

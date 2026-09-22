@@ -202,13 +202,33 @@ class NpmHandler : SetupHandlerBase {
         try {
             $command = $verifyCmd.command
             $arguments = @($verifyCmd.args)
-            $null = Invoke-VerifyCommand -Command $command -Arguments $arguments
+            $timeoutSeconds = $this.GetVerifyTimeoutSeconds($verifyCmd)
+            $null = Invoke-VerifyCommand -Command $command -Arguments $arguments -TimeoutSeconds $timeoutSeconds
+            if ($LASTEXITCODE -eq 124) {
+                $this.LogWarning("検証コマンドがタイムアウトしました (${timeoutSeconds}s): $command $($arguments -join ' ')")
+            }
             return $LASTEXITCODE -eq 0
         }
         catch {
             $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
             return $false
         }
+    }
+
+    hidden [int] GetVerifyTimeoutSeconds([object]$verifyCmd) {
+        if ($verifyCmd -is [hashtable] -and $verifyCmd.ContainsKey("timeoutSeconds")) {
+            $timeoutSeconds = [int]$verifyCmd["timeoutSeconds"]
+            if ($timeoutSeconds -gt 0) {
+                return $timeoutSeconds
+            }
+        }
+        if ($verifyCmd -and ($verifyCmd.PSObject.Properties.Name -contains "timeoutSeconds")) {
+            $timeoutSeconds = [int]$verifyCmd.timeoutSeconds
+            if ($timeoutSeconds -gt 0) {
+                return $timeoutSeconds
+            }
+        }
+        return 30
     }
 
     <#

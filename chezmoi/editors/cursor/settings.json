@@ -1,6 +1,6 @@
 {
-  "editor.fontSize": 10,
-  "editor.fontFamily": "UDEV Gothic NF",
+  "editor.fontSize": {{ .appearance.font_size }},
+  "editor.fontFamily": "{{ .appearance.font_family }}",
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "ibecker.treefmt-vscode",
   "editor.minimap.enabled": true,
@@ -65,8 +65,8 @@
   "editor.gotoLocation.multipleDefinitions": "gotoAndPeek",
   "editor.gotoLocation.multipleDeclarations": "gotoAndPeek",
   "editor.gotoLocation.multipleTypeDefinitions": "gotoAndPeek",
-  "workbench.colorTheme": "Catppuccin Mocha",
-  "workbench.iconTheme": "material-icon-theme",
+  "workbench.colorTheme": "{{ .appearance.theme }}",
+  "workbench.iconTheme": "{{ .appearance.icon_theme }}",
   "workbench.startupEditor": "newUntitledFile",
   "breadcrumbs.enabled": true,
   "breadcrumbs.filePath": "last",
@@ -128,8 +128,8 @@
   "notebook.cellToolbarLocation": {
     "default": "left"
   },
-  "terminal.integrated.fontFamily": "UDEV Gothic NF",
-  "terminal.integrated.fontSize": 10,
+  "terminal.integrated.fontFamily": "{{ .appearance.font_family }}",
+  "terminal.integrated.fontSize": {{ .appearance.font_size }},
   "terminal.integrated.defaultProfile.linux": "bash",
   "terminal.integrated.tabs.enabled": true,
   "terminal.integrated.shellIntegration.enabled": true,

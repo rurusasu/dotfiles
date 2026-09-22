@@ -180,6 +180,26 @@ Describe 'WingetHandler' {
             $script:installIds | Should -Contain "twpayne.chezmoi"
         }
 
+        It 'should constrain winget packages to the winget source' {
+            $script:capturedInstallArgs = $null
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 1
+                }
+                elseif ($Arguments -contains "install") {
+                    $script:capturedInstallArgs = $Arguments
+                    $global:LASTEXITCODE = 0
+                }
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $handler.Apply($ctx)
+
+            $script:capturedInstallArgs | Should -Contain "--source"
+            $script:capturedInstallArgs | Should -Contain "winget"
+        }
+
         It 'should refresh process PATH after successful installs before verification' {
             $ctx.Options["WingetMode"] = "import"
 
@@ -1218,18 +1238,19 @@ Describe 'WingetHandler' {
             Should -Invoke Set-UserEnvironmentPath -Times 1
         }
 
-        It 'should fail instead of falling back to hardlink or copy when symlink creation fails' {
+        It 'should use a user-scope copy fallback when symlink creation fails' {
             Mock New-Item { throw "Developer Mode is required" } -ParameterFilter { $ItemType -eq "SymbolicLink" }
-            Mock New-Item { throw "hardlink fallback must not be used" } -ParameterFilter { $ItemType -eq "HardLink" }
-            Mock Copy-Item { throw "copy fallback must not be used" }
+            Mock Copy-Item { }
 
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
 
-            $result.Success | Should -Be $false
+            $result.Success | Should -Be $true
             Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
-            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "HardLink" }
-            Should -Invoke Copy-Item -Times 0
+            Should -Invoke Copy-Item -Times 1 -ParameterFilter {
+                $LiteralPath -like "*oxlint-x86_64-pc-windows-msvc.exe" -and
+                $Destination -like "*Links\oxlint.exe"
+            }
         }
     }
 
@@ -1919,6 +1940,171 @@ Describe 'WingetHandler' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             Should -Invoke Invoke-VerifyCommand -Times 1
+        }
+    }
+
+    Context 'Apply - import mode: administrator packages' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "AutoHotkey.AutoHotkey"
+                                    requiresAdmin     = $true
+                                    installArgs       = @("--scope", "machine")
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                throw "user phase must not invoke administrator package install"
+            }
+        }
+
+        It 'should defer administrator packages without invoking winget in user phase' {
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "管理者フェーズ"
+            Should -Invoke Invoke-Winget -Times 0
+        }
+    }
+
+    Context 'Apply - import mode: direct archive fallback' {
+        BeforeEach {
+            $script:directDestination = Join-Path $TestDrive "Bun"
+            $script:verifyAttempts = 0
+            Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "Oven-sh.Bun"
+                                    directInstaller   = [PSCustomObject]@{
+                                        type          = "archive"
+                                        url           = "https://example.invalid/bun.zip"
+                                        sha256        = ("ab" * 32)
+                                        destination   = $script:directDestination
+                                        executable    = "bun.exe"
+                                        timeoutSeconds = 30
+                                    }
+                                    pathEntries      = @($script:directDestination)
+                                    verifyCommand   = [PSCustomObject]@{ command = "bun"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 0
+                    return @("Name Id Version Source", "-------------------")
+                }
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 124
+                    return "winget timed out after downloading the archive"
+                }
+                $global:LASTEXITCODE = 0
+            }
+            Mock Invoke-VerifyCommand {
+                $script:verifyAttempts++
+                if ($script:verifyAttempts -eq 1) {
+                    $global:LASTEXITCODE = 1
+                    throw "bun not found"
+                }
+                $global:LASTEXITCODE = 0
+                return "1.4.2"
+            }
+            Mock Invoke-WebRequest {
+                param($OutFile)
+                New-Item -ItemType File -Path $OutFile -Force | Out-Null
+            }
+            Mock Get-FileHash {
+                [PSCustomObject]@{ Hash = ("ab" * 32).ToUpperInvariant() }
+            }
+            Mock Expand-Archive {
+                param($DestinationPath)
+                New-Item -ItemType Directory -Path $DestinationPath -Force | Out-Null
+                New-Item -ItemType File -Path (Join-Path $DestinationPath "bun.exe") -Force | Out-Null
+            }
+        }
+
+        It 'should use the direct archive after WinGet fails and verify the result' {
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個インストール"
+            Should -Invoke Invoke-WebRequest -Times 1
+            Test-Path -LiteralPath (Join-Path $script:directDestination "bun.exe") -PathType Leaf | Should -Be $true
+            Get-Content -LiteralPath (Join-Path $script:directDestination ".dotfiles-direct-installer.sha256") -Raw |
+                Should -Be (("ab" * 32).ToUpperInvariant() + [Environment]::NewLine)
+        }
+
+        It 'should support a direct file fallback for portable binaries without an archive' {
+            $fileDestination = Join-Path $TestDrive "direnv"
+            $script:verifyAttempts = 0
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "direnv.direnv"
+                                    directInstaller   = [PSCustomObject]@{
+                                        type           = "file"
+                                        url            = "https://example.invalid/direnv"
+                                        sha256         = ("cd" * 32)
+                                        destination    = $fileDestination
+                                        executable     = "direnv.exe"
+                                        timeoutSeconds = 30
+                                    }
+                                    pathEntries      = @($fileDestination)
+                                    verifyCommand   = [PSCustomObject]@{ command = "direnv"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-WebRequest {
+                param($OutFile)
+                New-Item -ItemType File -Path $OutFile -Force | Out-Null
+            }
+            Mock Get-FileHash {
+                [PSCustomObject]@{ Hash = ("cd" * 32).ToUpperInvariant() }
+            }
+            Mock Invoke-VerifyCommand {
+                $script:verifyAttempts++
+                if ($script:verifyAttempts -eq 1) {
+                    $global:LASTEXITCODE = 1
+                    throw "direnv not found"
+                }
+                $global:LASTEXITCODE = 0
+                return "2.37.1"
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Test-Path -LiteralPath (Join-Path $fileDestination "direnv.exe") -PathType Leaf | Should -Be $true
+            Should -Invoke Expand-Archive -Times 0
         }
     }
 

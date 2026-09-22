@@ -15,6 +15,7 @@
 #   - wingetVerify       → catalog attr name → { command, args } for post-install verification
 #   - msstoreVerifyById  → Microsoft Store Product ID → { command, args } for post-install verification
 #   - wingetInstallArgs  → catalog attr name → extra winget install arguments
+#   - wingetRequiresAdmin → catalog attr name or winget ID → administrator-only install
 #   - wingetInstallTimeoutSeconds → catalog attr name or winget ID → winget install timeout
 #   - wingetDirectInstallers → catalog attr name or winget ID → direct installer metadata
 #   - wingetSkipInstall → catalog attr name or winget/msstore ID → skip normal automated install
@@ -38,6 +39,9 @@
   catalogOverride ? null,
 }:
 let
+  # The same appearance data is consumed by chezmoi templates and exposed to
+  # Nix consumers so font/theme values do not drift by platform.
+  appearance = (builtins.fromJSON (builtins.readFile ../../chezmoi/.chezmoidata/appearance.json)).appearance;
   darwinProviderCandidates = import ./darwin-provider-candidates.nix;
   darwinProviderCandidate = name: darwinProviderCandidates.${name};
   selectDarwinPackage =
@@ -1552,6 +1556,7 @@ lib.mapAttrs (_: resolve) grouped
     ;
 
   inherit
+    appearance
     resolveForInstallFeatures
     supportReport
     darwinDiscordPackage
@@ -1796,7 +1801,9 @@ lib.mapAttrs (_: resolve) grouped
       args = [ "--version" ];
     };
     rust-analyzer = {
-      command = "pwsh";
+      # Windows PowerShell 5.1 is the install.cmd fallback, so verification
+      # must not require the optional pwsh executable.
+      command = "powershell";
       args = [
         "-NoProfile"
         "-Command"
@@ -1823,6 +1830,34 @@ lib.mapAttrs (_: resolve) grouped
 
   # Extra winget install arguments for packages that need a specific installer.
   wingetInstallArgs = {
+    _1password-cli = [
+      "--scope"
+      "user"
+    ];
+    bun = [
+      "--scope"
+      "user"
+    ];
+    chezmoi = [
+      "--scope"
+      "user"
+    ];
+    codex = [
+      "--scope"
+      "user"
+    ];
+    direnv = [
+      "--scope"
+      "user"
+    ];
+    dprint = [
+      "--scope"
+      "user"
+    ];
+    eza = [
+      "--scope"
+      "user"
+    ];
     autohotkey = [
       "--scope"
       "machine"
@@ -1831,18 +1866,116 @@ lib.mapAttrs (_: resolve) grouped
       "--override"
       "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart"
     ];
+    oxlint = [
+      "--scope"
+      "user"
+    ];
+    "oxc-project.oxlint" = [
+      "--scope"
+      "user"
+    ];
     powershell = [
       "--installer-type"
       "wix"
     ];
+    rust-analyzer = [
+      "--scope"
+      "user"
+    ];
+    "Rustlang.rust-analyzer" = [
+      "--scope"
+      "user"
+    ];
+    fd = [
+      "--scope"
+      "user"
+    ];
+    "sharkdp.fd" = [
+      "--scope"
+      "user"
+    ];
+  };
+
+  # Packages that must be installed from the elevated Windows phase. Keeping
+  # this metadata in the catalog prevents the non-elevated user phase from
+  # accidentally passing machine-scope installers to winget.
+  wingetRequiresAdmin = {
+    autohotkey = true;
+    "Microsoft.VisualStudio.2022.BuildTools" = true;
   };
 
   wingetInstallTimeoutSeconds = {
+    bun = 120;
+    chezmoi = 120;
+    codex = 120;
+    direnv = 120;
+    dprint = 120;
+    eza = 120;
+    fd = 120;
     google-cloud-sdk = 900;
     "Microsoft.VisualStudio.2022.BuildTools" = 1800;
   };
 
-  wingetDirectInstallers = { };
+  wingetDirectInstallers = {
+    bun = {
+      # Keep this in sync with the current Winget Bun archive. This is only a
+      # fallback for WinGet/Delivery Optimization registration failures.
+      type = "archive";
+      url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-windows-x64.zip";
+      sha256 = "ce4c17497b2f29712a99d3d53f028de28cd42e3bacb8589599e7f000e49b6405";
+      destination = "%LOCALAPPDATA%\\Programs\\Bun";
+      executable = "bun-windows-x64\\bun.exe";
+      timeoutSeconds = 900;
+    };
+    chezmoi = {
+      type = "archive";
+      url = "https://github.com/twpayne/chezmoi/releases/download/v2.72.2/chezmoi_2.72.2_windows_amd64.zip";
+      sha256 = "5c2038736c485d4e3eaad4ac06ea1fe3c4b63d4d51e470547bf12737c02f37f6";
+      destination = "%LOCALAPPDATA%\\Programs\\chezmoi";
+      executable = "chezmoi.exe";
+      timeoutSeconds = 900;
+    };
+    codex = {
+      type = "archive";
+      url = "https://github.com/openai/codex/releases/download/rust-v0.152.0/codex-x86_64-pc-windows-msvc.exe.zip";
+      sha256 = "9e050454d1dfce8133e127ff9427c0304f6b12a7fbff2163257af2122355efce";
+      destination = "%LOCALAPPDATA%\\Programs\\Codex";
+      executable = "codex-x86_64-pc-windows-msvc.exe";
+      timeoutSeconds = 900;
+    };
+    direnv = {
+      type = "file";
+      url = "https://github.com/direnv/direnv/releases/download/v2.37.1/direnv.windows-amd64";
+      sha256 = "d96fc8b7cf020c2d4c1dbbc2ccec5fd1cab05b51c491f02c8527a7fa6c50a1cd";
+      destination = "%LOCALAPPDATA%\\Programs\\direnv";
+      executable = "direnv.exe";
+      timeoutSeconds = 900;
+    };
+    dprint = {
+      type = "archive";
+      url = "https://github.com/dprint/dprint/releases/download/0.57.4/dprint-x86_64-pc-windows-msvc.zip";
+      sha256 = "1038af32fade7a79f9c3a690d9546bb17be13dd7b4568a3684692fdcb0a52a1d";
+      destination = "%LOCALAPPDATA%\\Programs\\dprint";
+      executable = "dprint.exe";
+      timeoutSeconds = 900;
+    };
+    fd = {
+      type = "archive";
+      url = "https://github.com/sharkdp/fd/releases/download/v10.5.0/fd-v10.5.0-x86_64-pc-windows-msvc.zip";
+      sha256 = "a227701b8551c35a9931d9f6da75503cf86d88e182d71fb849a70864c5d57cd7";
+      destination = "%LOCALAPPDATA%\\Programs\\fd";
+      executable = "fd-v10.5.0-x86_64-pc-windows-msvc\\fd.exe";
+      timeoutSeconds = 900;
+    };
+    eza = {
+      type = "archive";
+      url = "https://github.com/eza-community/eza/releases/download/v0.23.5/eza.exe_x86_64-pc-windows-gnu.zip";
+      sha256 = "c830638c844a5b89d39ba662b5549903a71fa539018e813880f5b8afa77bac2e";
+      destination = "%LOCALAPPDATA%\\Programs\\eza";
+      executable = "eza.exe";
+      timeoutSeconds = 900;
+    };
+  };
 
   # Packages kept in the catalog but skipped by the normal Windows installer.
   wingetSkipInstall = { };
@@ -1868,6 +2001,27 @@ lib.mapAttrs (_: resolve) grouped
       "%ProgramFiles(x86)%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
       "%LOCALAPPDATA%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
     ];
+    bun = [
+      "%LOCALAPPDATA%\\Programs\\Bun\\bun-windows-x64"
+      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Oven-sh.Bun*\\bun-windows-x64"
+    ];
+    "Oven-sh.Bun" = [
+      "%LOCALAPPDATA%\\Programs\\Bun\\bun-windows-x64"
+      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Oven-sh.Bun*\\bun-windows-x64"
+    ];
+    chezmoi = [ "%LOCALAPPDATA%\\Programs\\chezmoi" ];
+    codex = [ "%LOCALAPPDATA%\\Programs\\Codex" ];
+    "OpenAI.Codex" = [ "%LOCALAPPDATA%\\Programs\\Codex" ];
+    direnv = [ "%LOCALAPPDATA%\\Programs\\direnv" ];
+    "direnv.direnv" = [ "%LOCALAPPDATA%\\Programs\\direnv" ];
+    dprint = [ "%LOCALAPPDATA%\\Programs\\dprint" ];
+    "dprint.dprint" = [ "%LOCALAPPDATA%\\Programs\\dprint" ];
+    fd = [ "%LOCALAPPDATA%\\Programs\\fd\\fd-v10.5.0-x86_64-pc-windows-msvc" ];
+    "sharkdp.fd" = [ "%LOCALAPPDATA%\\Programs\\fd\\fd-v10.5.0-x86_64-pc-windows-msvc" ];
+    eza = [ "%LOCALAPPDATA%\\Programs\\eza" ];
+    "eza-community.eza" = [ "%LOCALAPPDATA%\\Programs\\eza" ];
+    rust-analyzer = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
+    "Rustlang.rust-analyzer" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
     poppler-utils = [
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"
     ];

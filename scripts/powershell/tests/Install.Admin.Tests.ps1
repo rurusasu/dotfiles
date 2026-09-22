@@ -74,7 +74,10 @@ Describe 'install.admin.ps1' {
 
         $exitCode | Should -Be 0 -Because $outputText
         $outputText | Should -Not -Match "Cannot process argument transformation on parameter 'AdminOnly'"
-        $outputLines[-1] | Should -Be "False" -Because $outputText
+        # The generated catalog now contains administrator-only WinGet
+        # packages (AutoHotkey/Build Tools), so the admin phase is applicable
+        # even when WSL and VHD setup are explicitly skipped.
+        $outputLines[-1] | Should -Be "True" -Because $outputText
     }
 
     It 'should encode elevated options so Start-Process cannot strip JSON quotes' {

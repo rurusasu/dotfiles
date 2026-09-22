@@ -78,11 +78,27 @@ class CodexHandler : SetupHandlerBase {
 
             # リンクが陳腐化している（旧バージョンを指すコピー等）場合のみ貼り直す。
             # 既存リンクは、現行 exe への symlink 作成に成功してから置き換える。
-            if (-not $this.IsPortableLinkCurrent($linkPath, $codexExe)) {
-                $this.CreatePortableLink($linkPath, $codexExe)
+            $linkIsCurrent = $this.IsPortableLinkCurrent($linkPath, $codexExe)
+            $copyIsCurrent = $this.IsPortableCopyCurrent($linkPath, $codexExe)
+            if (-not $linkIsCurrent -and -not $copyIsCurrent) {
+                try {
+                    $this.CreatePortableLink($linkPath, $codexExe)
+                }
+                catch {
+                    # Windows PowerShell without Developer Mode cannot create
+                    # symlinks from a user phase. A content-checked copy keeps
+                    # Codex usable without requiring elevation.
+                    $this.LogWarning("シンボリックリンクを作成できないため codex.exe をコピーで作成します")
+                    if (Test-Path -LiteralPath $linkPath) {
+                        Remove-Item -LiteralPath $linkPath -Force -ErrorAction Stop
+                    }
+                    Copy-Item -LiteralPath $codexExe -Destination $linkPath -Force -ErrorAction Stop
+                    $this.Log("codex.exe shim をコピーで作成しました", "Green")
+                }
             }
             else {
-                $this.Log("codex.exe shim は最新です", "Gray")
+                $shimType = if ($linkIsCurrent) { "シンボリックリンク" } else { "コピー" }
+                $this.Log("codex.exe shim は最新です ($shimType)", "Gray")
             }
 
             # PATH は常に冪等チェック。リンクが既存でも PATH 未設定なら追加する。
