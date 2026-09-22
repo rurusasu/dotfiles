@@ -446,7 +446,7 @@ class NixRebuildHandler : SetupHandlerBase {
 
             $this.Log("nixos-rebuild switch 完了", "Green")
 
-            # pnpm グローバルパッケージをインストール（SSOT: all.nix → windows/pnpm/packages.json）
+            # pnpm グローバルパッケージをインストール（SSOT: nix/packages/sets.nix → windows/pnpm/packages.json）
             $packagesJsonPath = Join-Path $ctx.DotfilesPath "windows\pnpm\packages.json"
             if (-not $this.InstallPnpmGlobalPackages($distroName, $packagesJsonPath)) {
                 throw "pnpm グローバルパッケージのインストールまたは検証に失敗しました"

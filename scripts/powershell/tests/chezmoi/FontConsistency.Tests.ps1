@@ -55,6 +55,8 @@ Describe 'フォント設定の一貫性' {
             Test-Path -LiteralPath $full -PathType Leaf | Should -BeTrue
             $appearance = Get-Content -LiteralPath $full -Raw | ConvertFrom-Json
             $appearance.appearance.font_family | Should -Be $script:expectedFont
+            $appearance.appearance.font_release.archive_name | Should -Be 'UDEVGothic_NF'
+            $appearance.appearance.font_release.version | Should -Match '^v\d+\.\d+\.\d+$'
             $appearance.appearance.theme | Should -Be 'Catppuccin Mocha'
         }
 
@@ -151,8 +153,17 @@ Describe 'フォント設定の一貫性' {
             $content | Should -Match 'yuru7/udev-gothic/releases/download' -Because (
                 "installer の DownloadUrl が yuru7/udev-gothic を指していない"
             )
-            $content | Should -Match 'UDEVGothic_NF' -Because (
-                "installer の FontName / URL に UDEVGothic_NF が含まれていない"
+            $content | Should -Match '\{\{\s*\.appearance\.font_release\.archive_name\s*\}\}' -Because (
+                "installer の archive name は appearance data を参照する必要がある"
+            )
+            $content | Should -Match '\{\{\s*\.appearance\.font_release\.version\s*\}\}' -Because (
+                "installer の version は appearance data を参照する必要がある"
+            )
+            $content | Should -Not -Match '\$FontVersion\s*=\s*"v\d+\.\d+\.\d+"' -Because (
+                "installer に font version をハードコードすると chezmoi data と不一致になる"
+            )
+            $content | Should -Not -Match '\$FontName\s*=\s*"UDEVGothic_NF"' -Because (
+                "installer に archive name をハードコードすると chezmoi data と不一致になる"
             )
         }
 

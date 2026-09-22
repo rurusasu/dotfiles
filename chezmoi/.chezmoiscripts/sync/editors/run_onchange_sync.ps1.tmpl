@@ -1,7 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Sync editor extensions for Windows (install missing, remove unlisted)
 # hash: {{ include "editors/vscode/extensions.json" | sha256sum }}{{ include "editors/cursor/extensions.json" | sha256sum }}
-# script-version: 4
 
 $ErrorActionPreference = "Continue"
 

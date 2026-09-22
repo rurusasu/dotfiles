@@ -2,7 +2,6 @@
 #!/usr/bin/env bash
 # pnpm グローバルパッケージ インストールスクリプト (Linux/macOS)
 # SSOT: nix/packages/sets.nix (pnpmGlobal)
-# Generated from: {{ range .pnpm_global_packages }}{{ . }} {{ end }}
 
 set -euo pipefail
 
@@ -23,7 +22,6 @@ SKIPPED=0
 PNPM_BUILD_ARGS=()
 
 {{ range .pnpm_global_packages -}}
-# {{ . }}
 PKG_NAME="{{ . }}"
 if [ "$PKG_NAME" = "@deepseek-ai/dsh" ]; then
   PNPM_BUILD_ARGS=(
