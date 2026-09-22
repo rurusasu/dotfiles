@@ -2,14 +2,16 @@
 
 ## source of truth
 
-- `.treefmt.toml`
-- `nix/flake/treefmt.nix`
+- `.treefmt.toml` (standalone treefmt)
+- `nix/flakes/treefmt.nix` (`nix fmt` / treefmt-nix)
 
 ## 変更手順
 
 1. `.treefmt.toml` に対象言語の formatter 設定を追加・修正する。
-2. `nix/flake/treefmt.nix` で formatter バイナリ提供設定を更新する。
+2. `nix/flakes/treefmt.nix` で同じ formatter の対象・除外とバイナリ提供設定を更新する。
 3. 必要ならこの `docs/formatter/` の各言語ドキュメントを更新する。
+
+両方の設定があるのは、`treefmt` と `nix fmt` が別の設定生成経路を持つためである。片方だけを変更すると、ローカルとCIで対象ファイルがずれる。
 
 ## 実行コマンド
 

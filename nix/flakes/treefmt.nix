@@ -74,6 +74,17 @@
 
         # Custom formatters not in treefmt-nix programs
         settings.formatter = {
+          # Keep raw chezmoi JSON templates out of oxfmt. They become valid
+          # JSON only after chezmoi expansion and are validated by Chezmoi CI.
+          oxfmt = {
+            excludes = [
+              "chezmoi/editors/cursor/settings.json"
+              "chezmoi/editors/vscode/settings.json"
+              "chezmoi/editors/zed/settings.json"
+              "chezmoi/terminals/windows-terminal/settings.json"
+            ];
+          };
+
           # PowerShell (no built-in support)
           powershell = {
             command = "${pkgs.powershell}/bin/pwsh";
