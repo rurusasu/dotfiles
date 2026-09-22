@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 BeforeAll {
     . $PSScriptRoot/../../lib/SetupHandler.ps1
@@ -42,7 +42,7 @@ Describe 'PlaneGithubSyncHandler' {
         Mock New-PlaneGithubSyncScheduledTaskTrigger {
             param([datetime]$At, [timespan]$RepetitionInterval, [timespan]$RepetitionDuration)
             return [pscustomobject]@{
-                At = $At
+                At                 = $At
                 RepetitionInterval = $RepetitionInterval
                 RepetitionDuration = $RepetitionDuration
             }
@@ -64,13 +64,13 @@ Describe 'PlaneGithubSyncHandler' {
                 [string]$Description
             )
             $script:registeredTask = [pscustomobject]@{
-                TaskName = $TaskName
-                Action = $Action
-                Trigger = $Trigger
-                Settings = $Settings
-                Principal = $Principal
+                TaskName    = $TaskName
+                Action      = $Action
+                Trigger     = $Trigger
+                Settings    = $Settings
+                Principal   = $Principal
                 Description = $Description
-                Force = $true
+                Force       = $true
             }
             return $script:registeredTask
         }

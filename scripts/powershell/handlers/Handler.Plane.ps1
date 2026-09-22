@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Plane Docker Compose self-host setup handler.
 

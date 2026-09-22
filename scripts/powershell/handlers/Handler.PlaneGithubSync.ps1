@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Plane and GitHub Issues sync scheduled task handler.
 

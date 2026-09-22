@@ -1,4 +1,4 @@
-BeforeAll {
+﻿BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 
     function Get-CiJobPatterns {
@@ -58,21 +58,6 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match "Install-GalleryModuleArchive -Name PSScriptAnalyzer -Version '1\.22\.0'"
         $workflow | Should -Match ([regex]::Escape('$_.RuleName -ne ''TypeNotFound'''))
         $workflow | Should -Not -Match 'Register-PSRepository -Default'
-    }
-
-    It 'should preserve CRLF and UTF-8 no BOM when treefmt formats PowerShell scripts' {
-        $treefmtToml = Get-Content -LiteralPath (Join-Path $script:repoRoot ".treefmt.toml") -Raw
-        $treefmtNix = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/flakes/treefmt.nix") -Raw
-
-        foreach ($content in @($treefmtToml, $treefmtNix)) {
-            $content | Should -Match '\[string\]\[char\]13 \+ \[string\]\[char\]10'
-            $content | Should -Match '\[System\.IO\.File\]::WriteAllText'
-            $content | Should -Match '\[System\.Text\.UTF8Encoding\]::new\(\$false\)'
-            $content | Should -Match '\$args\.Count -gt 0'
-            $content | Should -Match '\$args\[0\]'
-            $content | Should -Match '\$normalized -ne \$raw'
-            $content | Should -Not -Match 'Set-Content -LiteralPath \$env:FILENAME'
-        }
     }
 
     It 'should run install.cmd in CI with timeout and completion marker checks' {

@@ -136,6 +136,9 @@
         "taskfiles/**",
         "docker/**",
         "scripts/sh/**",
+        ".treefmt.toml",
+        ".gitattributes",
+        ".pre-commit-config.yaml",
         ".github/workflows/**"
       ],
       "outputs": ["powershell_test"],

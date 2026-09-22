@@ -80,9 +80,13 @@
             options = [
               "-NoProfile"
               "-Command"
-              "& { $ErrorActionPreference = 'Stop'; if (-not (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -eq '1.22.0')) { Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -Repository PSGallery | Out-Null }; Import-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Force; $target = if (-not [string]::IsNullOrWhiteSpace($env:FILENAME)) { $env:FILENAME } elseif ($args.Count -gt 0) { $args[0] } else { throw 'treefmt did not pass a filename' }; $raw = Get-Content -Raw -LiteralPath $target; $crlf = [string][char]13 + [string][char]10; $lf = [string][char]10; $content = $raw.Replace($crlf, $lf).Replace($lf, $crlf); $formatted = Invoke-Formatter -ScriptDefinition $content; $normalized = $formatted.Replace($crlf, $lf).Replace($lf, $crlf); if ($normalized -ne $raw) { [System.IO.File]::WriteAllText($target, $normalized, [System.Text.UTF8Encoding]::new($false)) } }"
+              "& { $ErrorActionPreference = 'Stop'; if (-not (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -eq '1.22.0')) { Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -Repository PSGallery | Out-Null }; Import-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Force; $target = if (-not [string]::IsNullOrWhiteSpace($env:FILENAME)) { $env:FILENAME } elseif ($args.Count -gt 0) { $args[0] } else { throw 'treefmt did not pass a filename' }; $raw = Get-Content -Raw -LiteralPath $target -Encoding UTF8; $bytes = [System.IO.File]::ReadAllBytes($target); $hasBom = $bytes.Length -ge 3 -and $bytes[0] -eq 239 -and $bytes[1] -eq 187 -and $bytes[2] -eq 191; $sourcePath = [System.IO.Path]::GetFullPath($target).Replace([char]92, [char]47); $needsBom = $hasBom -or ($sourcePath -match '/scripts/powershell/' -and $raw -match '[^\\x00-\\x7F]'); $crlf = [string][char]13 + [string][char]10; $lf = [string][char]10; $content = $raw.Replace($crlf, $lf).Replace($lf, $crlf); $formatted = Invoke-Formatter -ScriptDefinition $content; $normalized = $formatted.Replace($crlf, $lf).Replace($lf, $crlf); if ($normalized -cne $raw -or $needsBom -ne $hasBom) { [System.IO.File]::WriteAllText($target, $normalized, [System.Text.UTF8Encoding]::new($needsBom)) } }"
             ];
-            includes = [ "*.ps1" ];
+            includes = [
+              "*.ps1"
+              "*.psm1"
+              "*.psd1"
+            ];
           };
         };
       };
