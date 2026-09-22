@@ -68,6 +68,11 @@ class CiJobRoutingTests(unittest.TestCase):
                     {"python", "bash", "powershell_lint", "powershell_test"},
                 )
 
+    def test_encoding_configuration_selects_powershell_tests(self) -> None:
+        for path in (".treefmt.toml", ".gitattributes", ".pre-commit-config.yaml"):
+            with self.subTest(path=path):
+                self.assertIn("powershell_test", self.selected(path))
+
     def test_lua_does_not_select_template_or_font_jobs(self) -> None:
         self.assertEqual(
             self.selected("chezmoi/editors/nvim/init.lua"),

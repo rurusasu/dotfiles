@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 <#
 .SYNOPSIS
@@ -25,12 +25,12 @@ BeforeAll {
         )
 
         $handler = [PSCustomObject]@{
-            Name = $Name
-            Order = $Order
-            DependsOn = $DependsOn
+            Name          = $Name
+            Order         = $Order
+            DependsOn     = $DependsOn
             ShouldSucceed = $ShouldSucceed
-            _bufferLogs = $false
-            _logBuffer = [System.Collections.ArrayList]::new()
+            _bufferLogs   = $false
+            _logBuffer    = [System.Collections.ArrayList]::new()
         }
         $handler | Add-Member ScriptMethod CanApply { return $true }
         $handler | Add-Member ScriptMethod ClearLogBuffer { }

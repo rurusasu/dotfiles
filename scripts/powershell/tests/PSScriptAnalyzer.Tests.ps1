@@ -1,4 +1,4 @@
-BeforeDiscovery {
+﻿BeforeDiscovery {
     # Discovery フェーズで $sourceFiles を確定させる（-Skip: 評価に必要）
     $projectRoot = Split-Path -Parent $PSScriptRoot
     $sourceFiles = @(

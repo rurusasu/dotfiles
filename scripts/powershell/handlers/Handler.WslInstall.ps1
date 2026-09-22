@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     WSL コンポーネントのインストールを管理するハンドラー
 
@@ -116,8 +116,8 @@ class WslInstallHandler : SetupHandlerBase {
 
     hidden [bool] IsSuccessfulDismExitCode([int]$exitCode) {
         return $exitCode -eq 0 -or
-            $exitCode -eq 3010 -or
-            $exitCode -eq 1641
+        $exitCode -eq 3010 -or
+        $exitCode -eq 1641
     }
 
     hidden [void] LogNativeOutput([object[]]$output) {
@@ -131,8 +131,8 @@ class WslInstallHandler : SetupHandlerBase {
 
     hidden [bool] IsGarbledNativeOutput([string]$line) {
         return $line -match "`0" -or
-            $line -match '�' -or
-            $line -match '[\x00-\x08\x0B\x0C\x0E-\x1F]'
+        $line -match '�' -or
+        $line -match '[\x00-\x08\x0B\x0C\x0E-\x1F]'
     }
 
     hidden [SetupResult] CreateRebootRequiredResult() {

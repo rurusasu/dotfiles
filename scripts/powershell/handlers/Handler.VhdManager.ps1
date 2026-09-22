@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     WSL VHD サイズ管理ハンドラー
 
