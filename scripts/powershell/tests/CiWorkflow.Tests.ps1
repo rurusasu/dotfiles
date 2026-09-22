@@ -412,12 +412,18 @@ Describe 'CI workflow configuration' {
             ).Value
 
             $job | Should -Not -BeNullOrEmpty
-            $job | Should -Match 'winget install --id twpayne\.chezmoi --exact --source winget'
-            $job | Should -Match 'Get-Command chezmoi -ErrorAction Stop'
-            $job | Should -Match 'Add-Content -LiteralPath \$env:GITHUB_PATH -Value \$chezmoiDirectory -Encoding utf8'
-            $job.IndexOf('winget install --id twpayne.chezmoi --exact') |
+            $job | Should -Match 'uses: \.\/\.github\/actions\/install-chezmoi'
+            $job.IndexOf('uses: ./.github/actions/install-chezmoi') |
                 Should -BeLessThan $job.IndexOf($case.TestMarker)
         }
+    }
+
+    It 'should keep the shared chezmoi installer independent of WinGet' {
+        $action = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/actions/install-chezmoi/action.yml') -Raw
+
+        $action | Should -Match 'https://get\.chezmoi\.io/ps1'
+        $action | Should -Match '-BinDir \$binDir -Tag latest'
+        $action | Should -Not -Match 'winget install.*chezmoi'
     }
 
     It 'should run Chezmoi Pester once in required lint and upload lint JUnit output' {

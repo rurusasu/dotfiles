@@ -8,6 +8,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 TASKFILE = REPOSITORY_ROOT / "Taskfile.yml"
+GIT_TASKFILE = REPOSITORY_ROOT / "taskfiles" / "git" / "taskfile.yml"
 HERMES_TASKFILE = REPOSITORY_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
 HERMES_AGENT = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-agent.sh"
 XAPI_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-xapi.sh"
@@ -36,7 +37,7 @@ class TaskfileContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.taskfile = "\n".join(
             path.read_text(encoding="utf-8")
-            for path in (TASKFILE, HERMES_TASKFILE)
+            for path in (TASKFILE, GIT_TASKFILE, HERMES_TASKFILE)
         )
 
     def test_xapi_tasks_are_present_in_the_hermes_lifecycle(self) -> None:

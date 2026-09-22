@@ -1,0 +1,21 @@
+name: Install chezmoi
+description: Install the latest chezmoi release without depending on the WinGet source
+runs:
+  using: composite
+  steps:
+    - name: Install latest chezmoi release
+      shell: pwsh
+      run: |
+        Set-StrictMode -Version Latest
+        $ErrorActionPreference = 'Stop'
+        $binDir = Join-Path $env:RUNNER_TEMP 'chezmoi-bin'
+        $installer = [Text.Encoding]::UTF8.GetString(
+          (Invoke-WebRequest -UseBasicParsing https://get.chezmoi.io/ps1).Content
+        )
+        & ([scriptblock]::Create($installer)) -BinDir $binDir -Tag latest
+        $chezmoi = Join-Path $binDir 'chezmoi.exe'
+        if (-not (Test-Path -LiteralPath $chezmoi -PathType Leaf)) {
+          throw "chezmoi was not installed by the official installer: $chezmoi"
+        }
+        Add-Content -LiteralPath $env:GITHUB_PATH -Value $binDir -Encoding utf8
+        & $chezmoi --version
