@@ -85,6 +85,31 @@ class TaskfileContractTests(unittest.TestCase):
             self._command_text("hermes:bootstrap"),
         )
 
+    def test_hermes_bootstrap_tests_use_one_bake_invocation(self) -> None:
+        task = self._task_block("hermes:bootstrap:test:container")
+
+        self.assertIn(
+            "docker buildx bake -f docker/hermes-agent/docker-bake.hcl", task
+        )
+        self.assertNotIn("docker build --target hermes-bootstrap-test", task)
+        self.assertNotIn("docker build --target hermes-bootstrap-runtime", task)
+
+    def test_commit_runs_precommit_without_repeating_treefmt(self) -> None:
+        commit = self._task_block("commit")
+
+        self.assertIn("task: fmt", commit)
+        self.assertIn("task: lint:no-format", commit)
+        self.assertNotIn("task: lint\n", commit)
+
+    def test_nix_tests_evaluate_current_system_once(self) -> None:
+        taskfile = (
+            REPOSITORY_ROOT / "taskfiles" / "test" / "taskfile.yml"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(
+            taskfile.count("nix eval --raw --impure --expr 'builtins.currentSystem'"),
+            1,
+        )
+
     def test_public_hermes_entrypoints_start_the_independent_memory_service(self) -> None:
         self.assertIn("task: hindsight:up", self._task_block("hermes:setup"))
         self.assertIn("task: hindsight:up", self._task_block("hermes:bootstrap"))

@@ -11,7 +11,7 @@ tasks:
     cmds:
       - task: skills:sync
       - task: fmt
-      - task: lint
+      - task: lint:no-format
       - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && git add -A && printf ''%s\n'' \"$GIT_COMMIT_MSG\" | git commit -F -"'
 
   push:

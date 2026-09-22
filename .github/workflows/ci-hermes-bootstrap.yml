@@ -59,11 +59,8 @@ jobs:
       - name: Run X API image contract
         run: python3 -m unittest tests/python/test_xapi_image_contract.py -v
 
-      - name: Run the pinned container suite
-        run: docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test -f docker/hermes-agent/Dockerfile docker
-
-      - name: Build the Hermes storage integration image
-        run: docker build --target hermes-bootstrap-runtime -t local/hermes-agent-gh:latest -f docker/hermes-agent/Dockerfile docker
+      - name: Build the pinned container suite and storage integration image
+        run: docker buildx bake -f docker/hermes-agent/docker-bake.hcl
 
       - name: Run the Hermes storage volume integration
         run: docker/hermes-agent/tests/test_storage_volume_integration.sh

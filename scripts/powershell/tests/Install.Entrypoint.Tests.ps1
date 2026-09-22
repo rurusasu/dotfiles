@@ -136,22 +136,22 @@ exit 0
         New-Item -ItemType Directory -Path $scriptDir -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $script:repoRoot "install.cmd") -Destination (Join-Path $workDir "install.cmd")
 
-        $stubInstall = @'
+        Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\install.ps1") -Destination (Join-Path $scriptDir "install.ps1")
+        Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\Test-Environment.ps1") -Destination (Join-Path $scriptDir "Test-Environment.ps1")
+        foreach ($library in "WindowsEnvironment.ps1", "InstallProfiles.ps1") {
+            Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\lib\$library") -Destination (Join-Path $scriptDir "lib\$library")
+        }
+        Set-Content -LiteralPath (Join-Path $scriptDir "install.user.ps1") -Value @'
 [CmdletBinding()]
-param(
-    [switch]$NoPause,
-    [switch]$UserPhaseOnly
-)
-
-Write-Host "STUB_INSTALL_COMPLETE NoPause=$NoPause UserPhaseOnly=$UserPhaseOnly"
-Write-Host "User Phase Complete!"
+param([hashtable]$Options = @{})
+Write-Host 'STUB_USER_PHASE_COMPLETE'
 exit 0
-'@
-        [System.IO.File]::WriteAllText(
-            (Join-Path $scriptDir "install.ps1"),
-            $stubInstall,
-            [System.Text.UTF8Encoding]::new($false)
-        )
+'@ -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $scriptDir "install.admin.ps1") -Value @'
+[CmdletBinding()]
+param()
+exit 0
+'@ -Encoding UTF8
 
         $oldDotfilesPs7Dir = $env:DOTFILES_PS7_DIR
         $oldPath = $env:PATH
@@ -181,7 +181,7 @@ exit 0
         $outputText = @($result.Stdout, $result.Stderr) -join [Environment]::NewLine
         $result.ExitCode | Should -Be 0
         $outputText | Should -Match "Falling back to Windows PowerShell"
-        $outputText | Should -Match "STUB_INSTALL_COMPLETE"
+        $outputText | Should -Match "STUB_USER_PHASE_COMPLETE"
         $outputText | Should -Match "User Phase Complete!"
     }
 

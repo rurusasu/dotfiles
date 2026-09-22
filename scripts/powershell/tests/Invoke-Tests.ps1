@@ -143,9 +143,11 @@ if ($excludeIntegration) {
 $pesterConfig.Run.Exit = $false
 $pesterConfig.Run.PassThru = $true
 
-# 出力設定
-$pesterConfig.Output.Verbosity = "Detailed"
-$pesterConfig.Output.CIFormat = "Auto"
+# 出力設定。JUnit XML を生成する CI 実行では ANSI 制御文字を出力しない。
+# Pester 5.9 は CIFormat=Auto と JUnitXml を併用すると、色付きのログを XML
+# 属性へそのまま書き込み、結果ファイル自体を壊すことがある。
+$pesterConfig.Output.Verbosity = if ($OutputFile) { "Normal" } else { "Detailed" }
+$pesterConfig.Output.CIFormat = if ($OutputFile) { "None" } else { "Auto" }
 
 # カバレッジ設定
 if ($coverageRequested) {
@@ -268,6 +270,11 @@ if ($result.CodeCoverage -and $result.CodeCoverage.CoveragePercent) {
 }
 
 # 失敗チェック
+if ($totalCount -le 0) {
+    Write-Host "FAIL: No tests were discovered" -ForegroundColor Red
+    exit 1
+}
+
 if ($failedCount -gt 0) {
     Write-Host "FAIL: $failedCount test(s) failed" -ForegroundColor Red
     exit 1

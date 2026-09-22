@@ -25,6 +25,7 @@ param(
     [ValidateSet("repo", "lock", "none")]
     [string]$SyncBack = "lock",
     [switch]$CheckOnly,
+    [switch]$NoPause,
     [string]$LogFile = "",
     [object]$AdminOnly = $null
 )
@@ -180,36 +181,31 @@ if ($null -ne $adminOnlyFilter) {
 # （通常は install.user.ps1 で実行済みだが、admin 単独実行時に未設定のサービスを検出）
 Invoke-ConsentPrompt -Handlers $handlers
 
-$applicableCount = 0
-foreach ($handler in $handlers) {
-    # AdminOnly フィルタ未使用時（後方互換）: 管理者必須のみカウント
-    if ($null -eq $adminOnlyFilter -and -not $handler.RequiresAdmin) {
-        continue
-    }
-
-    if (-not $CheckOnly) {
-        Write-Host "[$($handler.Name)] 適用可否を確認しています..." -ForegroundColor Gray
-    }
-
-    # プリフライトチェック: ログをバッファリングして表示しない
-    $handler._bufferLogs = $true
-    try {
-        if ($handler.CanApply($context)) {
-            $applicableCount++
-        }
-    }
-    catch {
-        throw "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
-    }
-    $handler._bufferLogs = $false
-    $handler.ClearLogBuffer()
-}
-
 if ($CheckOnly) {
+    $applicableCount = 0
+    foreach ($handler in $handlers) {
+        # AdminOnly フィルタ未使用時（後方互換）: 管理者必須のみカウント
+        if ($null -eq $adminOnlyFilter -and -not $handler.RequiresAdmin) {
+            continue
+        }
+
+        $handler._bufferLogs = $true
+        try {
+            if ($handler.CanApply($context)) {
+                $applicableCount++
+            }
+        }
+        catch {
+            throw "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
+        }
+        $handler._bufferLogs = $false
+        $handler.ClearLogBuffer()
+    }
     return ($applicableCount -gt 0)
 }
 
 $results = Invoke-SetupHandler -Handlers $handlers -Context $context
+$applicableCount = @($results | Where-Object { $_.Success }).Count
 $wslInstallRequiresRestart = @(
     $results | Where-Object {
         $_.HandlerName -eq "WslInstall" -and
@@ -250,7 +246,7 @@ Show-SetupSummary -Results $results
 $failedCount = @($results | Where-Object { -not $_.Success }).Count
 
 # Transcript を確実に閉じる（throw 前に）
-if ($LogFile) {
+if ($LogFile -and -not $NoPause) {
     try { Stop-Transcript | Out-Null } catch { }
 }
 

@@ -15,3 +15,9 @@ tasks:
     desc: Run pre-commit on all files
     cmds:
       - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && pre-commit run --all-files"'
+
+  lint:no-format:
+    internal: true
+    desc: Run pre-commit checks after formatting has already completed
+    cmds:
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && SKIP=treefmt pre-commit run --all-files"'

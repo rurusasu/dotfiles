@@ -37,21 +37,27 @@ Describe 'PnpmHandler' {
         }
     }
 
-    Context 'CanApply - pnpm not found, bootstrap fails' {
+    Context 'CanApply - pnpm not found, npm is available' {
         BeforeEach {
-            Mock Get-ExternalCommand { return $null }
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq "npm") { return @{ Source = "C:\npm.cmd" } }
+                return $null
+            }
             Mock Invoke-Corepack { $global:LASTEXITCODE = 1 }
             Mock Invoke-Npm { $global:LASTEXITCODE = 1 }
             Mock Write-Host { }
         }
 
-        It 'should return false' {
+        It 'should return true without bootstrapping' {
             $result = $handler.CanApply($ctx)
-            $result | Should -Be $false
+            $result | Should -Be $true
+            Should -Invoke Invoke-Corepack -Times 0
+            Should -Invoke Invoke-Npm -Times 0
         }
     }
 
-    Context 'CanApply - pnpm not found, corepack bootstrap succeeds' {
+    Context 'CanApply - pnpm not found, corepack is available' {
         BeforeEach {
             $script:callCount = 0
             Mock Get-ExternalCommand {
@@ -74,13 +80,14 @@ Describe 'PnpmHandler' {
             Mock Write-Host { }
         }
 
-        It 'should return true' {
+        It 'should return true without bootstrapping' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $true
+            Should -Invoke Invoke-Corepack -Times 0
         }
     }
 
-    Context 'CanApply - pnpm not found, npm bootstrap succeeds' {
+    Context 'CanApply - pnpm not found, npm is available' {
         BeforeEach {
             Mock Get-ExternalCommand {
                 param($Name)
@@ -98,13 +105,14 @@ Describe 'PnpmHandler' {
             Mock Write-Host { }
         }
 
-        It 'should return true' {
+        It 'should return true without invoking installers' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $true
+            Should -Invoke Invoke-Npm -Times 0
         }
     }
 
-    Context 'CanApply - npm bootstrap is preferred when both installers exist' {
+    Context 'CanApply - npm and corepack are available' {
         BeforeEach {
             Mock Get-ExternalCommand {
                 param($Name)
@@ -123,10 +131,10 @@ Describe 'PnpmHandler' {
             Mock Write-Host { }
         }
 
-        It 'should return true without invoking corepack' {
+        It 'should return true without invoking installers' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $true
-            Should -Invoke Invoke-Npm -Times 1 -ParameterFilter { $Arguments -contains "pnpm@latest" }
+            Should -Invoke Invoke-Npm -Times 0
             Should -Invoke Invoke-Corepack -Times 0
         }
     }

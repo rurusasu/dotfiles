@@ -197,6 +197,8 @@ Describe 'CI workflow configuration' {
         $powershellWorkflow | Should -Match 'System32\\WindowsPowerShell\\v1\.0'
         $powershellWorkflow | Should -Match '& cmd\.exe /d /c install\.cmd -NoPause -UserPhaseOnly'
         $powershellWorkflow | Should -Match 'Falling back to Windows PowerShell'
+        $powershellWorkflow | Should -Match 'Copy-Item -LiteralPath \.\\scripts\\powershell\\install\.ps1'
+        $powershellWorkflow | Should -Not -Match 'STUB_INSTALL_COMPLETE'
         $powershellWorkflow | Should -Match 'User Phase Complete!'
     }
 
@@ -398,7 +400,7 @@ Describe 'CI workflow configuration' {
     It 'should install chezmoi before every Windows job that runs chezmoi template tests' {
         $workflowCases = @(
             @{ Path = '.github/workflows/ci-chezmoi.yml'; Job = 'lint'; TestMarker = '.\tests\Invoke-Tests.ps1' },
-            @{ Path = '.github/workflows/ci-powershell.yml'; Job = 'test'; TestMarker = 'Invoke-Pester -Configuration' },
+            @{ Path = '.github/workflows/ci-powershell.yml'; Job = 'test'; TestMarker = 'Invoke-Tests.ps1' },
             @{ Path = '.github/workflows/ci-bootstrap.yml'; Job = 'windows'; TestMarker = 'Invoke-Tests.ps1' }
         )
 

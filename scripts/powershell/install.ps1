@@ -193,7 +193,8 @@ if ($adminRequired) {
             $SyncMode,
             "-SyncBack",
             $SyncBack,
-            "-AdminOnly:$true"
+            "-AdminOnly:$true",
+            "-NoPause:$NoPause"
         )
 
         if (-not [string]::IsNullOrWhiteSpace($ReleaseTag)) {

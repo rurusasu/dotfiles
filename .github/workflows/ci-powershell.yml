@@ -296,49 +296,10 @@ jobs:
         shell: pwsh
         working-directory: scripts/powershell
         run: |
-          $pesterConfig = New-PesterConfiguration
-          $pesterConfig.Run.Path = "./tests"
-          $pesterConfig.Run.ExcludePath = @("**/Integration.Tests.ps1")
-          $pesterConfig.Run.PassThru = $true
-          $pesterConfig.Output.Verbosity = "Detailed"
-
-          # Code coverage — dynamic discovery
-          $sourceFiles = @(
-            Get-ChildItem ./lib      -Filter "*.ps1"         -ErrorAction SilentlyContinue
-            Get-ChildItem ./handlers -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
-          ) | Select-Object -ExpandProperty FullName
-
-          if ($sourceFiles.Count -eq 0) {
-            Write-Warning "Coverage disabled: no source files found under ./lib or ./handlers (PWD: $PWD)"
-          }
-
-          if ($sourceFiles.Count -gt 0) {
-            $pesterConfig.CodeCoverage.Enabled = $true
-            $pesterConfig.CodeCoverage.Path = $sourceFiles
-            $pesterConfig.CodeCoverage.OutputPath = "coverage.xml"
-            $pesterConfig.CodeCoverage.OutputFormat = "CoverageGutters"
-          }
-
-          # JUnit output for GitHub
-          $pesterConfig.TestResult.Enabled = $true
-          $pesterConfig.TestResult.OutputPath = "test-results.xml"
-          $pesterConfig.TestResult.OutputFormat = "JUnitXml"
-
-          $result = Invoke-Pester -Configuration $pesterConfig
-
-          Write-Host ""
-          Write-Host "=== Test Summary ===" -ForegroundColor Cyan
-          Write-Host "Passed: $($result.PassedCount)" -ForegroundColor Green
-          Write-Host "Failed: $($result.FailedCount)" -ForegroundColor $(if ($result.FailedCount -gt 0) { "Red" } else { "Gray" })
-          Write-Host "Skipped: $($result.SkippedCount)" -ForegroundColor Yellow
-
-          if ($result.CodeCoverage) {
-            Write-Host ""
-            Write-Host "=== Coverage ===" -ForegroundColor Cyan
-            Write-Host "Coverage: $([math]::Round($result.CodeCoverage.CoveragePercent, 2))%"
-          }
-
-          if ($result.FailedCount -gt 0) { exit 1 }
+          .\tests\Invoke-Tests.ps1 `
+            -MinimumCoverage 0 `
+            -OutputFile test-results.xml `
+            -CoverageOutputFile coverage.xml
 
       - name: Upload test results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -480,22 +441,22 @@ jobs:
           New-Item -ItemType Directory -Force -Path $scriptDir | Out-Null
           Copy-Item -LiteralPath install.cmd -Destination (Join-Path $workDir 'install.cmd')
 
-          $stubInstall = @(
-            '[CmdletBinding()]'
-            'param('
-            '  [switch]$NoPause,'
-            '  [switch]$UserPhaseOnly'
-            ')'
-            ''
-            'Write-Host "STUB_INSTALL_COMPLETE NoPause=$NoPause UserPhaseOnly=$UserPhaseOnly"'
-            'Write-Host "User Phase Complete!"'
-            'exit 0'
-          ) -join [Environment]::NewLine
-          [System.IO.File]::WriteAllText(
-            (Join-Path $scriptDir 'install.ps1'),
-            $stubInstall,
-            [System.Text.UTF8Encoding]::new($false)
-          )
+          Copy-Item -LiteralPath .\scripts\powershell\install.ps1 -Destination (Join-Path $scriptDir 'install.ps1')
+          Copy-Item -LiteralPath .\scripts\powershell\Test-Environment.ps1 -Destination (Join-Path $scriptDir 'Test-Environment.ps1')
+          foreach ($library in 'WindowsEnvironment.ps1', 'InstallProfiles.ps1') {
+            Copy-Item -LiteralPath (Join-Path .\scripts\powershell\lib $library) -Destination (Join-Path $scriptDir "lib\$library")
+          }
+          Set-Content -LiteralPath (Join-Path $scriptDir 'install.user.ps1') -Value @'
+[CmdletBinding()]
+param([hashtable]$Options = @{})
+Write-Host 'STUB_USER_PHASE_COMPLETE'
+exit 0
+'@ -Encoding UTF8
+          Set-Content -LiteralPath (Join-Path $scriptDir 'install.admin.ps1') -Value @'
+[CmdletBinding()]
+param()
+exit 0
+'@ -Encoding UTF8
 
           $oldDotfilesPs7Dir = $env:DOTFILES_PS7_DIR
           $oldPath = $env:PATH
@@ -540,8 +501,8 @@ jobs:
           if ($out -notmatch 'Falling back to Windows PowerShell') {
             throw 'install.cmd did not exercise the Windows PowerShell fallback path'
           }
-          if ($out -notmatch 'STUB_INSTALL_COMPLETE') {
-            throw 'install.cmd fallback did not execute the stub install script'
+          if ($out -notmatch 'STUB_USER_PHASE_COMPLETE') {
+            throw 'install.cmd fallback did not execute the real install orchestrator'
           }
           if ($out -notmatch 'User Phase Complete!') {
             throw 'install.cmd fallback did not reach the user phase completion marker'

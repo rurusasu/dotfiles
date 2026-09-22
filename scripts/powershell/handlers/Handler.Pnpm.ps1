@@ -25,11 +25,17 @@ class PnpmHandler : SetupHandlerBase {
 
     [bool] CanApply([SetupContext]$ctx) {
         $pnpmCmd = Get-ExternalCommand -Name "pnpm"
-        if (-not $pnpmCmd -or -not $this.TestPnpmExecutable()) {
-            # pnpm がなければ自動セットアップを試行
-            if (-not $this.TryBootstrapPnpm()) {
+        if (-not $pnpmCmd) {
+            # CanApply は副作用を持たせず、Apply 側で bootstrap 可能かだけ判定する
+            $npmCmd = Get-ExternalCommand -Name "npm"
+            $corepackCmd = Get-ExternalCommand -Name "corepack"
+            if (-not $npmCmd -and -not $corepackCmd) {
+                $this.LogWarning("pnpm をセットアップできる npm/corepack が見つかりません")
                 return $false
             }
+        }
+        elseif (-not $this.TestPnpmExecutable()) {
+            $this.LogWarning("pnpm が正常に動作しません。Apply で再セットアップを試みます")
         }
 
         $packagesPath = $this.GetPackagesPath($ctx)
@@ -106,6 +112,12 @@ class PnpmHandler : SetupHandlerBase {
 
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
+            $pnpmCmd = Get-ExternalCommand -Name "pnpm"
+            if (-not $pnpmCmd) {
+                if (-not $this.TryBootstrapPnpm()) {
+                    return $this.CreateFailureResult("pnpm のセットアップに失敗しました")
+                }
+            }
             $pnpmBinPath = $this.EnsurePnpmSetup()
             $this.AddPnpmBinToPath($pnpmBinPath)
 

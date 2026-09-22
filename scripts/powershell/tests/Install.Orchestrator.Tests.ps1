@@ -47,6 +47,11 @@ Describe 'install.ps1 (orchestrator)' {
         $content | Should -Match '\[switch\]\$NoPause'
     }
 
+    It 'should forward NoPause to the elevated admin phase' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match '(?s)\$argList = @\(.*"-AdminOnly:\$true".*"-NoPause:\$NoPause"'
+    }
+
     It 'should expose one explicit switch for each local AI service' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '\[switch\]\$WithOllama'
