@@ -1,4 +1,4 @@
-Describe "Hermes bootstrap type loading" {
+﻿Describe "Hermes bootstrap type loading" {
     It "uses stream APIs available in Windows PowerShell 5.1" {
         $sourcePath = Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1"
         $source = Get-Content -LiteralPath $sourcePath -Raw
@@ -194,11 +194,11 @@ Describe "Initialize-HermesBootstrapServiceAccountEnvironment" {
         $result = Initialize-HermesBootstrapServiceAccountEnvironment `
             -DataDir $script:serviceAccountDirectory `
             -InvokeOnePassword {
-                param($Account, $Reference)
-                $Account | Should -Be 'my.1password.com'
-                $Reference | Should -Be 'op://openclaw/3bgd5qtytxuvuauauyqr2p4iki/credential'
-                return 'test-service-account-token'
-            }
+            param($Account, $Reference)
+            $Account | Should -Be 'my.1password.com'
+            $Reference | Should -Be 'op://openclaw/3bgd5qtytxuvuauauyqr2p4iki/credential'
+            return 'test-service-account-token'
+        }
 
         $result | Should -BeTrue
         $envPath = Join-Path $script:serviceAccountDirectory '.op.env'

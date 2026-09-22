@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Herdr Windows preview installer handler.
 

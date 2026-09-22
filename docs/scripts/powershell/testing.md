@@ -417,8 +417,6 @@ cd scripts/powershell/tests
     ExcludeRules = @(
         # dot-source で読み込む型は静的解析で認識できないため除外
         'PSUseOutputTypeCorrectly',
-        # BOM エンコーディングは UTF-8 (without BOM) でも問題ないため除外
-        'PSUseBOMForUnicodeEncodedFile',
         # 外部コマンドラッパー関数では ShouldProcess は不要なため除外
         'PSUseShouldProcessForStateChangingFunctions'
     )
@@ -481,3 +479,22 @@ includes = ["*.ps1"]
 - `Invoke-Formatter` はフォーマット(スタイル)
 - `Invoke-ScriptAnalyzer` はリント(コード品質)
 - 両者は別の目的を持つツールです
+
+## Windows PowerShell 5.1 の文字コード回帰テスト
+
+`install.cmd` は PowerShell 7 がなければ Windows PowerShell 5.1 にフォールバックします。
+その経路を保証するため、`scripts/powershell/` 配下の非 ASCII ソースは UTF-8 BOM 付きで保存します。
+詳細は [formatter の文字コード方針](../../formatter/powershell.md) を参照してください。
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/WindowsPowerShell.Encoding.Tests.ps1 -MinimumCoverage 0
+pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/WindowsPowerShell.Encoding.Tests.ps1 -MinimumCoverage 0
+```
+
+- 5.1 では実 entrypoint を `Parser.ParseFile` で解析し、実ライブラリと全 handler を読み込みます。
+  `Apply()` は呼ばず、パッケージ導入・昇格・サービス変更は行いません。
+- 読み込み時の警告も失敗として扱い、`Get-SetupHandler` が失敗した handler をスキップする挙動を見逃しません。
+- CP932 をフォールバックにした BOM 自動検出付き reader で全 PowerShell ソースの文字列保持を確認します。
+  CI runner の ANSI コードページが日本語以外でも、BOM 欠落を検出します。
+- formatter は本番と同じ PowerShell 7 でのみテストし、本文が変わらない場合の BOM 補完と冪等性を確認します。
+- launcher のスタブ試験はコマンド選択・引数伝播の検査です。実ファイル読み込み試験の代わりにはなりません。

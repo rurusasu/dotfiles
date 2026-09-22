@@ -2,7 +2,7 @@
 * text=auto
 .gitattributes text eol=lf
 
-# PowerShellスクリプトはCRLFを使用、UTF-8 BOMなし
+# PowerShell は CRLF。scripts/powershell/ の非 ASCII ソースは UTF-8 BOM 付き。
 *.ps1 text eol=crlf working-tree-encoding=UTF-8
 *.psm1 text eol=crlf working-tree-encoding=UTF-8
 *.psd1 text eol=crlf working-tree-encoding=UTF-8

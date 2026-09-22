@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 BeforeAll {
     $script:repoRoot = Resolve-Path (Join-Path $PSScriptRoot "../../../..")

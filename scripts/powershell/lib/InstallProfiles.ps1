@@ -1,4 +1,4 @@
-function ConvertTo-DotfilesFeatureBoolean {
+﻿function ConvertTo-DotfilesFeatureBoolean {
     [CmdletBinding()]
     [OutputType([bool])]
     param([AllowNull()][object]$Value)

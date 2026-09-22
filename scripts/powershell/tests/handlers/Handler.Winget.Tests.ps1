@@ -1,4 +1,4 @@
-BeforeAll {
+﻿BeforeAll {
     Set-StrictMode -Version Latest
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
@@ -31,7 +31,7 @@ Describe 'WingetHandler' {
                 "Container" { return [System.IO.Directory]::Exists($candidatePath) }
                 default {
                     return [System.IO.File]::Exists($candidatePath) -or
-                        [System.IO.Directory]::Exists($candidatePath)
+                    [System.IO.Directory]::Exists($candidatePath)
                 }
             }
         }

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     WSL 設定ファイル (.wslconfig) を管理するハンドラー
 

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Hermes 全プロフィールで共有する Gmail MCP OAuth と接続確認を実行する。
 #>

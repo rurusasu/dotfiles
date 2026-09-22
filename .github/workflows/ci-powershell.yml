@@ -453,6 +453,15 @@ jobs:
             throw 'Hermes bootstrap JSON compatibility helper is invalid'
           }
 
+      - name: Verify real bootstrap encoding on Windows PowerShell
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "ANSI codepage: $([Text.Encoding]::Default.CodePage)"
+          & .\scripts\powershell\tests\Invoke-Tests.ps1 `
+            -Path .\scripts\powershell\tests\WindowsPowerShell.Encoding.Tests.ps1 `
+            -MinimumCoverage 0
+
       - name: Run install.cmd fallback without pwsh
         shell: powershell
         timeout-minutes: 5

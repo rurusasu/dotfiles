@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     1Password CLI の host-side PATH 設定ハンドラー
 
