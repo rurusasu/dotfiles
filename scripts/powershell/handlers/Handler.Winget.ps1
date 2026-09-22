@@ -22,6 +22,7 @@ $libPath = Split-Path -Parent $PSScriptRoot
 class WingetHandler : SetupHandlerBase {
     hidden [bool]$LastInstallTimedOut
     hidden [bool]$LastInstallSucceeded
+    hidden [int]$LastInstallExitCode
 
     WingetHandler() {
         $this.Name = "Winget"
@@ -383,7 +384,7 @@ class WingetHandler : SetupHandlerBase {
                     continue
                 }
 
-                if ($LASTEXITCODE -ne 0) {
+                if ($this.LastInstallExitCode -ne 0) {
                     if ($alreadyInstalledInstallFailure) {
                         if (-not $pkg.VerifyCommand) {
                             $unchanged++
@@ -548,18 +549,23 @@ class WingetHandler : SetupHandlerBase {
     hidden [object[]] InvokePackageInstall([object]$pkg, [object[]]$installArgs) {
         $this.LastInstallTimedOut = $false
         $this.LastInstallSucceeded = $false
+        $this.LastInstallExitCode = 1
 
         if ($pkg.DirectInstaller) {
             $wingetOutput = @($this.InvokeWingetInstall($pkg, $installArgs))
+            $wingetExitCode = $this.LastInstallExitCode
             $this.LastInstallTimedOut = $this.TestInstallTimedOut($wingetOutput)
-            if ($LASTEXITCODE -eq 0) {
+            if ($wingetExitCode -eq 0) {
                 $this.LastInstallSucceeded = $true
+                $this.LastInstallExitCode = 0
                 return $wingetOutput
             }
 
             $this.Log("winget が $($pkg.Id) を完了できなかったため、公式 archive fallback を実行します", "Gray")
             $directOutput = @($this.InvokeDirectInstaller($pkg))
-            if ($LASTEXITCODE -eq 0) {
+            $directExitCode = $LASTEXITCODE
+            $this.LastInstallExitCode = $directExitCode
+            if ($directExitCode -eq 0) {
                 $this.LastInstallSucceeded = $true
                 # Do not replay a transient WinGet timeout after the fallback
                 # succeeded. The user should see the effective result only.
@@ -570,16 +576,20 @@ class WingetHandler : SetupHandlerBase {
 
         $output = @($this.InvokeWingetInstall($pkg, $installArgs))
         $this.LastInstallTimedOut = $this.TestInstallTimedOut($output)
-        $this.LastInstallSucceeded = $LASTEXITCODE -eq 0
+        $this.LastInstallSucceeded = $this.LastInstallExitCode -eq 0
         return $output
     }
 
     hidden [object[]] InvokeWingetInstall([object]$pkg, [object[]]$installArgs) {
         $installTimeoutSeconds = $this.GetInstallTimeoutSeconds($pkg)
         if ($installTimeoutSeconds -gt 0) {
-            return @(Invoke-Winget -Arguments $installArgs -TimeoutSeconds $installTimeoutSeconds)
+            $output = @(Invoke-Winget -Arguments $installArgs -TimeoutSeconds $installTimeoutSeconds)
+            $this.LastInstallExitCode = [int]$LASTEXITCODE
+            return $output
         }
-        return @(Invoke-Winget -Arguments $installArgs)
+        $output = @(Invoke-Winget -Arguments $installArgs)
+        $this.LastInstallExitCode = [int]$LASTEXITCODE
+        return $output
     }
 
     hidden [object[]] InvokeDirectInstaller([object]$pkg) {

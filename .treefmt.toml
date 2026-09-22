@@ -29,6 +29,7 @@ includes = [ "*.toml" ]
 [formatter.stylua]
 command = "stylua"
 includes = [ "*.lua" ]
+excludes = [ "chezmoi/terminals/wezterm/wezterm.lua" ]
 
 # [formatter.dprint]
 # command = "dprint"

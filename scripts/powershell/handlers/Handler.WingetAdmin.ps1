@@ -44,6 +44,7 @@ class WingetAdminHandler : SetupHandlerBase {
             }
 
             $installed = 0
+            $unchanged = 0
             $failed = 0
             foreach ($pkg in $packages) {
                 $installArguments = @(
@@ -71,12 +72,18 @@ class WingetAdminHandler : SetupHandlerBase {
                 else {
                     $output = @(Invoke-Winget -Arguments $installArguments)
                 }
+                $exitCode = [int]$LASTEXITCODE
                 foreach ($line in $output) {
                     if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
                         $this.Log("  $line", "Gray")
                     }
                 }
-                if ($LASTEXITCODE -eq 0 -or ($output -join "`n") -match "already installed|既にインストールされています|No applicable update found") {
+                $installText = [string]::Join("`n", @($output))
+                $isAlreadyInstalledNoOp = $installText -match "already installed|既にインストールされています|No applicable update found|No available upgrade found|No newer package versions are available|利用可能なアップグレードが見つかりませんでした|新しいパッケージ バージョンはありません"
+                if ($isAlreadyInstalledNoOp) {
+                    $unchanged++
+                }
+                elseif ($exitCode -eq 0) {
                     $installed++
                 }
                 else {
@@ -85,7 +92,10 @@ class WingetAdminHandler : SetupHandlerBase {
                 }
             }
 
-            $message = "$installed 個インストール"
+            $messageParts = @()
+            if ($installed -gt 0) { $messageParts += "$installed 個インストール" }
+            if ($unchanged -gt 0) { $messageParts += "$unchanged 個変更なし" }
+            $message = $messageParts -join ", "
             if ($failed -gt 0) {
                 $message += ", $failed 個失敗"
                 return $this.CreateFailureResult($message)
