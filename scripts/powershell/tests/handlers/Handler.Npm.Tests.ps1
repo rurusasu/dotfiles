@@ -142,6 +142,9 @@ Describe 'NpmHandler' {
             }
             Mock Invoke-VerifyCommand {
                 param($Command, $Arguments, $TimeoutSeconds)
+                $null = $Command
+                $null = $Arguments
+                $null = $TimeoutSeconds
                 $global:LASTEXITCODE = 0
                 return "1.0.0"
             }

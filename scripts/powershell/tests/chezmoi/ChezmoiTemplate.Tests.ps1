@@ -35,6 +35,8 @@ Describe 'chezmoi テンプレート バリデーション' {
             $template = Get-Content -LiteralPath $templatePath -Raw
 
             $template | Should -Match 'include "terminals/hammerspoon/init\.lua" \| sha256sum'
+            $template | Should -Match 'includeTemplate "terminals/ghostty/config" \.?'
+            $template | Should -Not -Match 'deploy_file "\$CHEZMOI_SOURCE/terminals/ghostty/config"'
 
             $darwinRender = $template |
                 & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"darwin"}}' execute-template

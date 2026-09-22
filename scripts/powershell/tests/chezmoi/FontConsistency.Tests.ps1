@@ -72,6 +72,9 @@ Describe 'フォント設定の一貫性' {
                 $content | Should -Match '\{\{\s*\.appearance\.font_family\s*\}\}' -Because $relativePath
                 $content | Should -Match '\{\{\s*\.appearance\.theme\s*\}\}' -Because $relativePath
             }
+
+            $windowsTerminal = Get-Content -LiteralPath (Join-Path $script:repoRoot 'chezmoi/terminals/windows-terminal/settings.json') -Raw
+            $windowsTerminal | Should -Match '"size"\s*:\s*\{\{\s*\.appearance\.font_size\s*\}\}'
         }
     }
 

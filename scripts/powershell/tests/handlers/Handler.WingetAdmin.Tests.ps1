@@ -38,6 +38,7 @@ Describe 'WingetAdminHandler' {
         Mock Test-PathExist { return $true }
         Mock Invoke-Winget {
             param($Arguments)
+            $null = $Arguments
             $global:LASTEXITCODE = 0
             return "installed"
         }

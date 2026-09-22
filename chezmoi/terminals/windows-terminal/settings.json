@@ -167,7 +167,7 @@
       "cursorShape": "bar",
       "font": {
         "face": "{{ .appearance.font_family }}",
-        "size": 14
+        "size": {{ .appearance.font_size }}
       },
       "opacity": 75,
       "padding": "8, 8, 8, 8",

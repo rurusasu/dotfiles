@@ -278,6 +278,23 @@ Describe 'CodexHandler' {
         }
     }
 
+    Context 'CanApply - direct archive fallback' {
+        BeforeEach {
+            Mock Get-ChildItem { return $null } -ParameterFilter {
+                $Path -like "*WinGet\Packages" -and $Filter -like "OpenAI.Codex_*"
+            }
+            Mock Test-Path {
+                return $Path -like "*Programs\Codex\codex-x86_64-pc-windows-msvc.exe"
+            }
+            Mock Get-UserEnvironmentPath { return "" }
+            Mock Write-Host { }
+        }
+
+        It 'should discover the archive fallback installation outside WinGet' {
+            $handler.CanApply($ctx) | Should -BeTrue
+        }
+    }
+
     Context 'Apply - symlink creation fails' {
         BeforeEach {
             Set-CodexPackageInstalled

@@ -123,17 +123,19 @@ class CodexHandler : SetupHandlerBase {
         $packagesBase = Join-Path $this.GetLocalAppDataPath() "Microsoft\WinGet\Packages"
         $codexPattern = "OpenAI.Codex_*"
 
-        $codexDir = Get-ChildItem -Path $packagesBase -Directory -Filter $codexPattern -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (-not $codexDir) {
-            return $null
-        }
+        $codexDirs = @(
+            Get-ChildItem -Path $packagesBase -Directory -Filter $codexPattern -ErrorAction SilentlyContinue
+            [IO.DirectoryInfo](Join-Path $this.GetLocalAppDataPath() "Programs\Codex")
+        ) | Where-Object { $null -ne $_ }
 
         # codex-x86_64-pc-windows-msvc.exe または codex.exe を探す
         $exePatterns = @("codex-x86_64-pc-windows-msvc.exe", "codex.exe")
-        foreach ($pattern in $exePatterns) {
-            $exePath = Join-Path $codexDir.FullName $pattern
-            if (Test-Path $exePath) {
-                return $exePath
+        foreach ($codexDir in $codexDirs) {
+            foreach ($pattern in $exePatterns) {
+                $exePath = Join-Path $codexDir.FullName $pattern
+                if (Test-Path $exePath) {
+                    return $exePath
+                }
             }
         }
 

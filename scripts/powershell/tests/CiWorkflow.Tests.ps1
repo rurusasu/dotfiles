@@ -1,7 +1,7 @@
 ﻿BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 
-    function Get-CiJobPatterns {
+    function Get-CiJobPattern {
         param([string]$Output)
         $manifest = Get-Content -LiteralPath (Join-Path $script:repoRoot 'ci/job-path-routing.json') -Raw | ConvertFrom-Json
         $manifest.rules | Where-Object { $Output -in $_.outputs } | ForEach-Object { $_.patterns }
@@ -220,7 +220,7 @@ Describe 'CI workflow configuration' {
     It 'should verify generated npm package catalog consistency' {
         $consistencyWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-consistency.yml") -Raw
 
-        (Get-CiJobPatterns -Output 'package_catalog') | Should -Contain 'windows/npm/packages.json'
+        (Get-CiJobPattern -Output 'package_catalog') | Should -Contain 'windows/npm/packages.json'
         $consistencyWorkflow | Should -Match '/tmp/winget-export/npm/packages\.json'
         $consistencyWorkflow | Should -Match 'windows/npm/packages\.json'
     }
@@ -229,15 +229,15 @@ Describe 'CI workflow configuration' {
         $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
 
         $powershellWorkflow | Should -Match 'needs.changes.outputs.powershell_test'
-        (Get-CiJobPatterns -Output 'powershell_test') | Should -Contain '**/*.cmd'
-        (Get-CiJobPatterns -Output 'powershell_test') | Should -Contain 'docker/**'
+        (Get-CiJobPattern -Output 'powershell_test') | Should -Contain '**/*.cmd'
+        (Get-CiJobPattern -Output 'powershell_test') | Should -Contain 'docker/**'
     }
 
     It 'should assign every Bats file to exactly one CI owner' {
         $contractWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-contract.yml") -Raw
         $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
         $devcontainerBatsScript = Get-Content -LiteralPath (Join-Path $script:repoRoot ".devcontainer/ci/bats.sh") -Raw
-        $devcontainerPaths = Get-CiJobPatterns -Output 'devcontainer'
+        $devcontainerPaths = Get-CiJobPattern -Output 'devcontainer'
         $devcontainerWorkflow | Should -Match 'needs.changes.outputs.devcontainer'
 
         $contractWorkflow | Should -Match '"tests/bash/\*\*"'
@@ -291,7 +291,7 @@ Describe 'CI workflow configuration' {
         $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
 
         $powershellWorkflow | Should -Match 'needs.changes.outputs.powershell_test'
-        (Get-CiJobPatterns -Output 'powershell_test') | Should -Contain 'chezmoi/**'
+        (Get-CiJobPattern -Output 'powershell_test') | Should -Contain 'chezmoi/**'
     }
 
     It 'should trigger dcnvim platform tests when dcnvim implementations change' {
@@ -299,12 +299,12 @@ Describe 'CI workflow configuration' {
         $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
         $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
 
-        (Get-CiJobPatterns -Output 'chezmoi_lint') | Should -Contain 'chezmoi/**'
+        (Get-CiJobPattern -Output 'chezmoi_lint') | Should -Contain 'chezmoi/**'
         $chezmoiWorkflow | Should -Match '\.\\tests\\Invoke-Tests\.ps1 -Path \.\\tests\\chezmoi'
         $powershellWorkflow | Should -Match 'needs.changes.outputs.powershell_test'
-        (Get-CiJobPatterns -Output 'powershell_test') | Should -Contain '**/*.ps1'
+        (Get-CiJobPattern -Output 'powershell_test') | Should -Contain '**/*.ps1'
         $devcontainerWorkflow | Should -Match 'needs.changes.outputs.devcontainer'
-        (Get-CiJobPatterns -Output 'devcontainer') | Should -Contain 'scripts/sh/dcnvim.sh'
+        (Get-CiJobPattern -Output 'devcontainer') | Should -Contain 'scripts/sh/dcnvim.sh'
     }
 
     It 'should use a supported Intel macOS runner for devcontainer E2E' {

@@ -300,7 +300,7 @@ Describe 'Invoke-Wsl' {
     It 'should pass arguments to WSL' {
         Mock wsl { return "test output" }
 
-        $result = Invoke-Wsl --list --quiet
+        Invoke-Wsl --list --quiet
 
         Should -Invoke wsl -Times 1
     }
@@ -314,7 +314,7 @@ Describe 'Invoke-Wsl' {
     }
 
     It 'should pass multiple arguments' {
-        Mock wsl { param($args) return "OK" }
+        Mock wsl { return "OK" }
 
         Invoke-Wsl -d NixOS -u root -- sh -lc "whoami"
 
@@ -344,7 +344,7 @@ Describe 'Invoke-Dism' {
     It 'should pass arguments to dism.exe' {
         Mock dism.exe { return "test output" }
 
-        $result = Invoke-Dism /online /get-features
+        Invoke-Dism /online /get-features
 
         Should -Invoke dism.exe -Times 1
     }
