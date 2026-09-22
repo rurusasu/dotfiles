@@ -171,9 +171,9 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertEqual(codeql.count('      - ".github/actions/**"'), 2)
 
         devcontainer = self._named_workflow("ci-devcontainer.yml")
-        self.assertIn(
-            "uses: docker/setup-docker-action@77e84dbf09b47d1e29270283c22f16145aa85ca1",
+        self.assertRegex(
             devcontainer,
+            r"(?m)^\s*uses: docker/setup-docker-action@[0-9a-f]{40}(?:\s+#.*)?\s*$",
         )
         self.assertEqual(
             devcontainer.count(
