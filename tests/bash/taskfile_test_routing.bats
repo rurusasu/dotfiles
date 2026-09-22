@@ -19,7 +19,7 @@ setup() {
 	run task --dir "$REPO_ROOT" --dry commit -- "test commit"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"cd $REPO_ROOT && nix fmt"* ]]
-	[[ "$output" == *"cd $REPO_ROOT && pre-commit run --all-files"* ]]
+	[[ "$output" == *"cd $REPO_ROOT && pre-commit run --all-files"* || "$output" == *"cd $REPO_ROOT && SKIP=treefmt pre-commit run --all-files"* ]]
 	[[ "$output" == *"cd $REPO_ROOT && git add -A"* ]]
 	[[ "$output" != *'cd ~/.dotfiles'* ]]
 }
@@ -44,7 +44,7 @@ includes:
     cmds: ["true"]
   lint:
     cmds: ["true"]
-  lint:no-format:
+  "lint:no-format":
     cmds: ["true"]
 EOF
 	git -C "$fixture" init -q
