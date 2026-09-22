@@ -572,7 +572,10 @@ EOF
 	[ "$status" -eq 0 ]
 	[ -d "$output" ]
 
-	cmp "$output/winget/packages.json" "$REPO_ROOT/windows/winget/packages.json"
+	if ! cmp "$output/winget/packages.json" "$REPO_ROOT/windows/winget/packages.json"; then
+		diff -u "$REPO_ROOT/windows/winget/packages.json" "$output/winget/packages.json"
+		false
+	fi
 	cmp "$output/npm/packages.json" "$REPO_ROOT/windows/npm/packages.json"
 	cmp "$output/pnpm/packages.json" "$REPO_ROOT/windows/pnpm/packages.json"
 }
