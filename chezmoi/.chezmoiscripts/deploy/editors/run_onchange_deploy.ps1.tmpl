@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy editor configurations for Windows
-# hash: {{ include "editors/vscode/settings.json" | sha256sum }}{{ include "editors/vscode/keybindings.json" | sha256sum }}{{ include "editors/cursor/settings.json" | sha256sum }}{{ include "editors/cursor/keybindings.json" | sha256sum }}{{ include "editors/zed/settings.json" | sha256sum }}{{ include "editors/zed/keymap.json" | sha256sum }}
+# hash: {{ include "editors/cursor/settings.json" | sha256sum }}{{ include "editors/cursor/keybindings.json" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
@@ -39,19 +39,6 @@ function Deploy-Content {
 
 Write-Host "Deploying editor configurations..."
 
-# VS Code
-$VSCodeConfig = "$env:APPDATA\Code\User"
-$VSCodeSettings = @'
-{{ includeTemplate "editors/vscode/settings.json" . }}
-'@
-Deploy-Content $VSCodeSettings "$VSCodeConfig\settings.json"
-Deploy-File "$ChezmoiSource\editors\vscode\keybindings.json" "$VSCodeConfig\keybindings.json"
-
-# VS Code Insiders
-$VSCodeInsidersConfig = "$env:APPDATA\Code - Insiders\User"
-Deploy-Content $VSCodeSettings "$VSCodeInsidersConfig\settings.json"
-Deploy-File "$ChezmoiSource\editors\vscode\keybindings.json" "$VSCodeInsidersConfig\keybindings.json"
-
 # Cursor
 $CursorConfig = "$env:APPDATA\Cursor\User"
 $CursorSettings = @'
@@ -59,14 +46,6 @@ $CursorSettings = @'
 '@
 Deploy-Content $CursorSettings "$CursorConfig\settings.json"
 Deploy-File "$ChezmoiSource\editors\cursor\keybindings.json" "$CursorConfig\keybindings.json"
-
-# Zed
-$ZedConfig = "$env:APPDATA\Zed"
-$ZedSettings = @'
-{{ includeTemplate "editors/zed/settings.json" . }}
-'@
-Deploy-Content $ZedSettings "$ZedConfig\settings.json"
-Deploy-File "$ChezmoiSource\editors\zed\keymap.json" "$ZedConfig\keymap.json"
 
 Write-Host "Editor configurations deployed."
 {{ end -}}

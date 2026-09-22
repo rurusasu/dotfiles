@@ -33,9 +33,7 @@ BeforeAll {
     $script:fontConsumers = @(
         "chezmoi/terminals/wezterm/wezterm.lua",
         "chezmoi/terminals/windows-terminal/settings.json",
-        "chezmoi/editors/zed/settings.json",
-        "chezmoi/editors/cursor/settings.json",
-        "chezmoi/editors/vscode/settings.json"
+        "chezmoi/editors/cursor/settings.json"
     )
 
     # nix package 参照箇所
@@ -65,9 +63,7 @@ Describe 'フォント設定の一貫性' {
                 "chezmoi/terminals/wezterm/wezterm.lua",
                 "chezmoi/terminals/windows-terminal/settings.json",
                 "chezmoi/terminals/ghostty/config",
-                "chezmoi/editors/zed/settings.json",
-                "chezmoi/editors/cursor/settings.json",
-                "chezmoi/editors/vscode/settings.json"
+                "chezmoi/editors/cursor/settings.json"
             )
             foreach ($relativePath in $consumers) {
                 $content = Get-Content -LiteralPath (Join-Path $script:repoRoot $relativePath) -Raw
@@ -107,9 +103,7 @@ Describe 'フォント設定の一貫性' {
         It 'editor/terminal 設定すべてが共通 appearance の family を参照すること' -ForEach @(
             @{ Path = "chezmoi/terminals/wezterm/wezterm.lua" }
             @{ Path = "chezmoi/terminals/windows-terminal/settings.json" }
-            @{ Path = "chezmoi/editors/zed/settings.json" }
             @{ Path = "chezmoi/editors/cursor/settings.json" }
-            @{ Path = "chezmoi/editors/vscode/settings.json" }
         ) {
             param($Path)
             $full = Join-Path $script:repoRoot $Path

@@ -13,7 +13,7 @@
 | `shells/`                                                 | bash / zsh / PowerShell / profile。deploy adapter が配置 |
 | `cli/`                                                    | fd、ripgrep、starship、ghq、zoxide など                  |
 | `terminals/`                                              | WezTerm、Windows Terminal など                           |
-| `editors/`                                                | VS Code、Cursor、Zed。Neovim は含まない                  |
+| `editors/`                                                | Cursor。Neovim は含まない                                |
 | `github/`                                                 | GitHub テンプレートなど                                  |
 | `ssh/`                                                    | SSH 設定テンプレート                                     |
 | `.chezmoiscripts/deploy/`                                 | カテゴリ別、OS 別の配置処理                              |

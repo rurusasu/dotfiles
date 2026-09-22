@@ -1,7 +1,7 @@
 {{ if ne .chezmoi.os "windows" -}}
 #!/usr/bin/env bash
 # Deploy editor configurations for Linux/macOS
-# hash: {{ include "editors/vscode/settings.json" | sha256sum }}{{ include "editors/vscode/keybindings.json" | sha256sum }}{{ include "editors/cursor/settings.json" | sha256sum }}{{ include "editors/cursor/keybindings.json" | sha256sum }}{{ include "editors/zed/settings.json" | sha256sum }}{{ include "editors/zed/keymap.json" | sha256sum }}
+# hash: {{ include "editors/cursor/settings.json" | sha256sum }}{{ include "editors/cursor/keybindings.json" | sha256sum }}
 
 set -euo pipefail
 
@@ -29,14 +29,6 @@ deploy_content() {
 
 echo "Deploying editor configurations..."
 
-# VS Code
-VSCODE_CONFIG="$HOME_DIR/.config/Code/User"
-deploy_content "$(cat <<'EOF'
-{{ includeTemplate "editors/vscode/settings.json" . }}
-EOF
-)" "$VSCODE_CONFIG/settings.json"
-deploy_file "$CHEZMOI_SOURCE/editors/vscode/keybindings.json" "$VSCODE_CONFIG/keybindings.json"
-
 # Cursor
 CURSOR_CONFIG="$HOME_DIR/.config/Cursor/User"
 deploy_content "$(cat <<'EOF'
@@ -44,14 +36,6 @@ deploy_content "$(cat <<'EOF'
 EOF
 )" "$CURSOR_CONFIG/settings.json"
 deploy_file "$CHEZMOI_SOURCE/editors/cursor/keybindings.json" "$CURSOR_CONFIG/keybindings.json"
-
-# Zed
-ZED_CONFIG="$HOME_DIR/.config/zed"
-deploy_content "$(cat <<'EOF'
-{{ includeTemplate "editors/zed/settings.json" . }}
-EOF
-)" "$ZED_CONFIG/settings.json"
-deploy_file "$CHEZMOI_SOURCE/editors/zed/keymap.json" "$ZED_CONFIG/keymap.json"
 
 # Neovim is deployed directly from dot_config/nvim by chezmoi.
 

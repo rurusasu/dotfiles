@@ -11,9 +11,7 @@ mcp_toolkit:
     - codex
     - cursor
     - gemini
-    - vscode
     - windsurf
-    - zed
   secrets:
     account: "my.1password.com"
     vault: "openclaw"
@@ -52,9 +50,7 @@ mcp_servers:
       - codex
       - cursor
       - gemini
-      - vscode
       - windsurf
-      - zed
 
   # Plane - Local self-hosted project management
   - name: plane
@@ -72,9 +68,7 @@ mcp_servers:
     supports:
       - cursor
       - gemini
-      - vscode
       - windsurf
-      - zed
 
   # Draw.io Official - Open diagrams in draw.io editor (browser)
   - name: drawio
@@ -86,9 +80,7 @@ mcp_servers:
     # pnpm/npm exec currently fails to resolve the Windows bin shim for this
     # package in Codex startup, so keep it out of Codex auto-start.
     supports:
-      - vscode
       - windsurf
-      - zed
       - cursor
       - gemini
 
@@ -106,6 +98,4 @@ mcp_servers:
     supports:
       - cursor
       - gemini
-      - vscode
       - windsurf
-      - zed

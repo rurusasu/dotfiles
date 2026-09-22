@@ -313,22 +313,6 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
-    Context 'Windows MCP deploy scripts の env fallback' {
-        It 'PowerShell 展開時に ${VAR} fallback を空文字にしないこと' {
-            $templates = @(
-                ".chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.ps1.tmpl",
-                ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.ps1.tmpl"
-            ) | ForEach-Object { Join-Path $script:chezmoiRoot $_ }
-
-            foreach ($path in $templates) {
-                $content = Get-Content -LiteralPath $path -Raw
-
-                $content | Should -Match '"\{\{ \$key \}\}" = ''\{\{ \$value \}\}''' -Because "$path should write mcp_servers.yaml env fallback values literally"
-                $content | Should -Not -Match '"\{\{ \$key \}\}" = "\{\{ \$value \}\}"' -Because "$path must not let PowerShell expand `${VAR} fallback values"
-            }
-        }
-    }
-
     Context 'Plane MCP server configuration' {
         BeforeAll {
             $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"
@@ -901,10 +885,27 @@ Describe 'chezmoi テンプレート バリデーション' {
             Test-Path -LiteralPath $linuxScript | Should -BeFalse
         }
 
-        It 'should not enable Warp plugins in opencode settings' {
-            $opencodeSettings = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/opencode/opencode.json") -Raw
+        It 'should remove retired editor and AI configuration' {
+            foreach ($relativePath in @(
+                    "editors/vscode/AGENTS.md",
+                    "editors/vscode/extensions.json",
+                    "editors/vscode/keybindings.json",
+                    "editors/vscode/settings.json",
+                    "editors/zed/AGENTS.md",
+                    "editors/zed/keymap.json",
+                    "editors/zed/settings.json",
+                    "github/copilot-instructions.md",
+                    "dot_config/opencode/opencode.json",
+                    ".chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.sh.tmpl",
+                    ".chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.ps1.tmpl",
+                    ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.sh.tmpl",
+                    ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.ps1.tmpl"
+                )) {
+                Test-Path -LiteralPath (Join-Path $script:chezmoiRoot $relativePath) | Should -BeFalse -Because "$relativePath is retired"
+            }
 
-            $opencodeSettings | Should -Not -Match 'warp-dot-dev|opencode-warp'
+            $cursorExtensions = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "editors/cursor/extensions.json") -Raw
+            $cursorExtensions | Should -Not -Match '(?i)github\.copilot'
         }
     }
 }

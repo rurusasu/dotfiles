@@ -50,7 +50,6 @@ Describe 'Integration Verification - Windows Environment' {
 
         It "should have <_> installed in NixOS" -ForEach @(
             'nvim'
-            'zed'
             'task'
             'op'
             'obsidian'

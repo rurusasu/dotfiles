@@ -9,7 +9,6 @@ echo "========================================"
 COMMANDS=(
   "nvim"
   "wezterm"
-  "zed"
   "task"
   "op"
   "gh"

@@ -41,13 +41,6 @@ BeforeAll {
         $binding | Should -Not -BeNullOrEmpty -Because "$Key should run $Command"
     }
 
-    function Get-ZedWorkspaceBinding {
-        $zed = Get-JsonContent "chezmoi/editors/zed/keymap.json"
-        $workspace = @($zed | Where-Object { $_.context -eq "Workspace" }) | Select-Object -First 1
-        $workspace | Should -Not -BeNullOrEmpty
-        return $workspace.bindings
-    }
-
 }
 
 Describe '標準キーバインド方針' {
@@ -379,36 +372,18 @@ Describe '標準キーバインド方針' {
         Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "terminals/warp/keybindings.yaml") | Should -BeFalse
     }
 
-    It 'VS Code と Cursor は Alt focus, Alt+Shift move に揃えること' {
-        foreach ($path in @(
-                "chezmoi/editors/vscode/keybindings.json",
-                "chezmoi/editors/cursor/keybindings.json"
-            )) {
-            $bindings = Get-JsonContent $path
+    It 'Cursor は Alt focus, Alt+Shift move に揃えること' {
+        $bindings = Get-JsonContent "chezmoi/editors/cursor/keybindings.json"
 
-            Assert-KeyCommand $bindings "alt+h" "workbench.action.focusLeftGroup"
-            Assert-KeyCommand $bindings "alt+j" "workbench.action.focusBelowGroup"
-            Assert-KeyCommand $bindings "alt+k" "workbench.action.focusAboveGroup"
-            Assert-KeyCommand $bindings "alt+l" "workbench.action.focusRightGroup"
+        Assert-KeyCommand $bindings "alt+h" "workbench.action.focusLeftGroup"
+        Assert-KeyCommand $bindings "alt+j" "workbench.action.focusBelowGroup"
+        Assert-KeyCommand $bindings "alt+k" "workbench.action.focusAboveGroup"
+        Assert-KeyCommand $bindings "alt+l" "workbench.action.focusRightGroup"
 
-            Assert-KeyCommand $bindings "alt+shift+h" "workbench.action.moveActiveEditorGroupLeft"
-            Assert-KeyCommand $bindings "alt+shift+j" "workbench.action.moveActiveEditorGroupDown"
-            Assert-KeyCommand $bindings "alt+shift+k" "workbench.action.moveActiveEditorGroupUp"
-            Assert-KeyCommand $bindings "alt+shift+l" "workbench.action.moveActiveEditorGroupRight"
-        }
-    }
-
-    It 'Zed は Alt focus に揃えること' {
-        $bindings = Get-ZedWorkspaceBinding
-
-        $bindings.PSObject.Properties["alt-h"].Value[0] | Should -Be "workspace::ActivatePaneInDirection"
-        $bindings.PSObject.Properties["alt-h"].Value[1] | Should -Be "Left"
-        $bindings.PSObject.Properties["alt-j"].Value[0] | Should -Be "workspace::ActivatePaneInDirection"
-        $bindings.PSObject.Properties["alt-j"].Value[1] | Should -Be "Down"
-        $bindings.PSObject.Properties["alt-k"].Value[0] | Should -Be "workspace::ActivatePaneInDirection"
-        $bindings.PSObject.Properties["alt-k"].Value[1] | Should -Be "Up"
-        $bindings.PSObject.Properties["alt-l"].Value[0] | Should -Be "workspace::ActivatePaneInDirection"
-        $bindings.PSObject.Properties["alt-l"].Value[1] | Should -Be "Right"
+        Assert-KeyCommand $bindings "alt+shift+h" "workbench.action.moveActiveEditorGroupLeft"
+        Assert-KeyCommand $bindings "alt+shift+j" "workbench.action.moveActiveEditorGroupDown"
+        Assert-KeyCommand $bindings "alt+shift+k" "workbench.action.moveActiveEditorGroupUp"
+        Assert-KeyCommand $bindings "alt+shift+l" "workbench.action.moveActiveEditorGroupRight"
     }
 
     It 'Unix/Linux/WSL の tmux と Neovim は Ctrl+H/J/K/L focus を維持すること' {

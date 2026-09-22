@@ -79,8 +79,6 @@
           oxfmt = {
             excludes = [
               "chezmoi/editors/cursor/settings.json"
-              "chezmoi/editors/vscode/settings.json"
-              "chezmoi/editors/zed/settings.json"
               "chezmoi/terminals/windows-terminal/settings.json"
             ];
           };
