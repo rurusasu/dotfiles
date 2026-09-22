@@ -41,6 +41,12 @@ includes = ["*.nix"]
 command = "oxfmt"
 options = ["--write"]
 includes = ["*.json", "*.yaml", "*.yml"]
+excludes = [
+  "chezmoi/editors/cursor/settings.json",
+  "chezmoi/editors/vscode/settings.json",
+  "chezmoi/editors/zed/settings.json",
+  "chezmoi/terminals/windows-terminal/settings.json",
+]
 
 [formatter.shfmt]
 command = "shfmt"
@@ -125,7 +131,7 @@ _: {
 | taplo      | `*.toml`                | [programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)   | [formatter-taplo.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-taplo.toml)   |
 | stylua     | `*.lua`                 | [programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix) | [formatter-stylua.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-stylua.toml) |
 | dprint     | `*.md` など             | [programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix) | [formatter-dprint.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-dprint.toml) |
-| oxfmt      | `*.json`, `*.yaml` など | [programs/oxfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)   | [formatter-oxfmt.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-oxfmt.toml)   |
+| oxfmt      | `*.json`, `*.yaml` など（chezmoi 未展開テンプレートJSONは除外） | [programs/oxfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxfmt.nix)   | [formatter-oxfmt.toml](https://github.com/numtide/treefmt-nix/blob/main/examples/formatter-oxfmt.toml)   |
 
 ### Nix flake でのフォーマット実行
 

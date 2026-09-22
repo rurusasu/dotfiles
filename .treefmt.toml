@@ -6,6 +6,12 @@ includes = [ "*.nix" ]
 command = "oxfmt"
 options = [ "--write" ]
 includes = [ "*.json", "*.yaml", "*.yml" ]
+excludes = [
+  "chezmoi/editors/cursor/settings.json",
+  "chezmoi/editors/vscode/settings.json",
+  "chezmoi/editors/zed/settings.json",
+  "chezmoi/terminals/windows-terminal/settings.json",
+]
 
 [formatter.shfmt]
 command = "shfmt"
@@ -29,7 +35,6 @@ includes = [ "*.toml" ]
 [formatter.stylua]
 command = "stylua"
 includes = [ "*.lua" ]
-excludes = [ "chezmoi/terminals/wezterm/wezterm.lua" ]
 
 # [formatter.dprint]
 # command = "dprint"
