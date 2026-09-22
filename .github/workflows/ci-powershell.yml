@@ -130,7 +130,10 @@ jobs:
                 locations = @(@{
                   physicalLocation = @{
                     artifactLocation = @{ uri = $uri; uriBaseId = '%SRCROOT%' }
-                    region           = @{ startLine = [int]$_.Line; startColumn = [int]$_.Column }
+                    region           = @{
+                      startLine   = [Math]::Max(1, [int]$_.Line)
+                      startColumn = [Math]::Max(1, [int]$_.Column)
+                    }
                   }
                 })
               }
