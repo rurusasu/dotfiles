@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 BeforeAll {
     $script:handlerPath = Join-Path $PSScriptRoot "../../handlers/Handler.WingetAdmin.ps1"
