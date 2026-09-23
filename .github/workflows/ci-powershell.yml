@@ -440,7 +440,16 @@ jobs:
           }
           Set-Content -LiteralPath (Join-Path $scriptDir 'install.user.ps1') -Value @'
           [CmdletBinding()]
-          param([hashtable]$Options = @{})
+          param(
+            [string]$DistroName,
+            [string]$InstallDir,
+            [string]$ReleaseTag,
+            [string]$PostInstallScript,
+            [string]$StateVersion,
+            [hashtable]$Options = @{},
+            [string]$SyncMode,
+            [string]$SyncBack
+          )
           Write-Host 'STUB_USER_PHASE_COMPLETE'
           exit 0
           '@ -Encoding UTF8
