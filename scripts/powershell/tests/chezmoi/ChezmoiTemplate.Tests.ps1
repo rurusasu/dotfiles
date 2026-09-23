@@ -14,6 +14,82 @@ BeforeAll {
     $script:repoRoot = Join-Path $PSScriptRoot "../../../.."
     $script:chezmoiRoot = Join-Path $PSScriptRoot "../../../../chezmoi"
     $script:templateFiles = Get-ChildItem -Path $script:chezmoiRoot -Filter "*.tmpl" -Recurse
+    function script:ConvertTo-ChezmoiWindowsArgument {
+        param([Parameter(Mandatory)][string]$Argument)
+
+        $builder = New-Object System.Text.StringBuilder
+        [void]$builder.Append('"')
+        $backslashCount = 0
+        foreach ($character in $Argument.ToCharArray()) {
+            if ($character -eq [char]92) {
+                $backslashCount++
+                continue
+            }
+
+            if ($character -eq [char]34) {
+                [void]$builder.Append(('\' * (($backslashCount * 2) + 1)))
+                [void]$builder.Append('"')
+            }
+            else {
+                [void]$builder.Append(('\' * $backslashCount))
+                [void]$builder.Append($character)
+            }
+            $backslashCount = 0
+        }
+
+        [void]$builder.Append(('\' * ($backslashCount * 2)))
+        [void]$builder.Append('"')
+        return $builder.ToString()
+    }
+
+    function script:Invoke-ChezmoiTemplateForTest {
+        param(
+            [Parameter(Mandatory)][string]$Template,
+            [Parameter(Mandatory)][string]$OverrideData
+        )
+
+        $chezmoiCommand = Get-Command chezmoi -ErrorAction Stop
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = $chezmoiCommand.Source
+        $nativeArguments = @(
+            '--source'
+            $script:chezmoiRoot
+            "--override-data=$OverrideData"
+            'execute-template'
+        ) | ForEach-Object { ConvertTo-ChezmoiWindowsArgument -Argument ([string]$_) }
+        $startInfo.Arguments = $nativeArguments -join ' '
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardInput = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $startInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+        $startInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $startInfo
+        try {
+            if (-not $process.Start()) {
+                throw 'Failed to start chezmoi.'
+            }
+
+            $standardOutput = $process.StandardOutput.ReadToEndAsync()
+            $standardError = $process.StandardError.ReadToEndAsync()
+            $inputBytes = ([System.Text.UTF8Encoding]::new($false)).GetBytes($Template)
+            $process.StandardInput.BaseStream.Write($inputBytes, 0, $inputBytes.Length)
+            $process.StandardInput.BaseStream.Close()
+            $process.WaitForExit()
+
+            return [PSCustomObject]@{
+                ExitCode       = $process.ExitCode
+                StandardOutput = $standardOutput.Result
+                StandardError  = $standardError.Result
+            }
+        }
+        finally {
+            $process.Dispose()
+        }
+    }
 }
 
 Describe 'chezmoi テンプレート バリデーション' {
@@ -38,19 +114,17 @@ Describe 'chezmoi テンプレート バリデーション' {
             $template | Should -Match 'includeTemplate "terminals/ghostty/config" \.?'
             $template | Should -Not -Match 'deploy_file "\$CHEZMOI_SOURCE/terminals/ghostty/config"'
 
-            $darwinRender = $template |
-                & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"darwin"}}' execute-template
-            $LASTEXITCODE | Should -Be 0
-            $darwinContent = ($darwinRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
+            $darwinRender = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"darwin"}}'
+            $darwinRender.ExitCode | Should -Be 0 -Because $darwinRender.StandardError
+            $darwinContent = $darwinRender.StandardOutput -replace "\r\n?", "`n"
             $ghosttyHash = (Get-FileHash -LiteralPath (Join-Path $script:chezmoiRoot 'terminals/ghostty/config') -Algorithm SHA256).Hash.ToLowerInvariant()
             $darwinContent | Should -Match "(?m)^# hash: [0-9a-f]{64}${ghosttyHash}[0-9a-f]{64}$"
             $darwinContent |
                 Should -Match 'deploy_file "\$CHEZMOI_SOURCE/terminals/hammerspoon/init\.lua" "\$HOME_DIR/\.hammerspoon/init\.lua"'
 
-            $linuxRender = $template |
-                & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"linux"}}' execute-template
-            $LASTEXITCODE | Should -Be 0
-            $linuxContent = ($linuxRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
+            $linuxRender = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"linux"}}'
+            $linuxRender.ExitCode | Should -Be 0 -Because $linuxRender.StandardError
+            $linuxContent = $linuxRender.StandardOutput -replace "\r\n?", "`n"
             $linuxContent | Should -Match "(?m)^# hash: [0-9a-f]{64}${ghosttyHash}$"
             $linuxContent | Should -Not -Match '\.hammerspoon/init\.lua'
         }
@@ -60,10 +134,9 @@ Describe 'chezmoi テンプレート バリデーション' {
             $template = Get-Content -LiteralPath $templatePath -Raw
 
             $template | Should -Match 'include "terminals/windows-terminal/terminal-keybindings\.ahk" \| sha256sum'
-            $windowsRender = $template |
-                & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"windows"}}' execute-template
-            $LASTEXITCODE | Should -Be 0
-            $windowsContent = ($windowsRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
+            $windowsRender = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"windows"}}'
+            $windowsRender.ExitCode | Should -Be 0 -Because $windowsRender.StandardError
+            $windowsContent = $windowsRender.StandardOutput -replace "\r\n?", "`n"
             $windowsContent | Should -Match '(?m)^# hash: [0-9a-f]{192}$'
             $windowsContent |
                 Should -Match 'Deploy-File "\$ChezmoiSource\\terminals\\windows-terminal\\terminal-keybindings\.ahk" "\$env:APPDATA\\dotfiles\\terminal-keybindings\.ahk"'
@@ -81,10 +154,9 @@ Describe 'chezmoi テンプレート バリデーション' {
                 $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/run_onchange_start-terminal-keybindings_windows.ps1.tmpl'
                 Test-Path -LiteralPath $templatePath -PathType Leaf | Should -BeTrue
                 $script:startupTemplate = Get-Content -LiteralPath $templatePath -Raw
-                $render = $script:startupTemplate |
-                    & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"windows"}}' execute-template
-                $LASTEXITCODE | Should -Be 0
-                $script:startupContent = $render -join [Environment]::NewLine
+                $render = Invoke-ChezmoiTemplateForTest -Template $script:startupTemplate -OverrideData '{"chezmoi":{"os":"windows"}}'
+                $render.ExitCode | Should -Be 0 -Because $render.StandardError
+                $script:startupContent = $render.StandardOutput
                 $script:startupScriptBlock = [scriptblock]::Create($script:startupContent)
 
                 $managedDirectory = Join-Path $env:APPDATA 'dotfiles'

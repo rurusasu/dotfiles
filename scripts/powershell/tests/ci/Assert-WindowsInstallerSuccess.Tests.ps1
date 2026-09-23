@@ -27,6 +27,24 @@ User Phase Complete!
             Should -Throw '*fatal or incomplete marker*'
     }
 
+    It 'does not let successful summaries and package markers hide a fatal install error' {
+        $successMarker = '[Npm] ' + [string][char]0x2713 + ' agent-browser@0.38.1'
+        $output = @"
+Total: 2 | Success: 2 | Failure: 0
+[Winget] FAIL a package install failed
+$successMarker
+User Phase Complete!
+"@
+
+        {
+            Assert-WindowsInstallerSuccess `
+                -Output $output `
+                -ExitCode 0 `
+                -CompletionMarker 'User Phase Complete!' `
+                -RequiredOutputMarkers @($successMarker)
+        } | Should -Throw '*fatal or incomplete marker*'
+    }
+
     It 'rejects an incomplete setup summary even when no fatal marker is printed' {
         $output = @'
 Total: 6 | Success: 2 | Failure: 4

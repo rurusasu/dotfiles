@@ -8,6 +8,7 @@ let
     inherit pkgs;
     extraSpecialArgs = {
       inherit inputs;
+      installFeatures = [ ];
     };
     modules = [
       {

@@ -184,7 +184,14 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         Should -Invoke Start-Sleep -Times 0 -Exactly
     }
 
-    It 'should stop before bootstrap and recreate when storage ownership convergence fails' {
+    It 'should forward a storage ownership failure and stop before bootstrap' {
+        Mock Initialize-HermesStorageVolume {
+            [PSCustomObject]@{
+                Success = $false
+                Message = 'Hermes data volume ownership convergence failed with status 42.'
+            }
+        }
+
         Mock Invoke-Docker {
             $script:dockerCalls.Add(($Arguments -join ' '))
             if ($Arguments.Count -gt 3 -and $Arguments[0] -eq 'compose' -and $Arguments[1] -eq '-f') {
@@ -223,9 +230,10 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
 
         $result.ExitCode | Should -Be 1
         $result.Message | Should -Be 'Hermes data volume ownership convergence failed with status 42.'
-        $ownershipCall = @($script:dockerCalls | Where-Object { $_ -match '/usr/local/bin/hermes-storage-ownership' })[0]
-        $releaseCall = 'rm -f 1111111111111111111111111111111111111111111111111111111111111111'
-        $script:dockerCalls.IndexOf($releaseCall) | Should -BeGreaterThan $script:dockerCalls.IndexOf($ownershipCall)
+        Should -Invoke Initialize-HermesStorageVolume -Times 1 -Exactly -ParameterFilter {
+            $DataDir -eq $script:dataDir
+        }
+        $script:eventLog | Should -Be @('config', 'build', 'ps', 'stop')
         Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
         Should -Invoke Invoke-HermesXApiCredentialScope -Times 0 -Exactly
         ($script:dockerCalls -join "`n") | Should -Not -Match 'up -d --force-recreate'

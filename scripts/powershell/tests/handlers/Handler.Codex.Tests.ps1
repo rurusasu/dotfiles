@@ -46,6 +46,39 @@ Describe 'CodexHandler' {
         $script:ctx = [SetupContext]::new($script:projectRoot)
     }
 
+    Context 'installer handler loader scope' {
+        It 'resolves Codex through Get-SetupHandler in a clean PowerShell process' {
+            $fixtureRoot = Join-Path $TestDrive 'codex-loader-scope'
+            $localAppDataPath = Join-Path $fixtureRoot 'local-app-data'
+            $codexBinPath = Join-Path $localAppDataPath 'Microsoft\WinGet\Packages\OpenAI.Codex_fixture\bin'
+            $runnerPath = Join-Path $fixtureRoot 'run-handler-loader.ps1'
+            New-Item -ItemType Directory -Path $codexBinPath -Force | Out-Null
+            New-Item -ItemType File -Path (Join-Path $codexBinPath 'codex.exe') -Force | Out-Null
+            New-Item -ItemType File -Path (Join-Path $codexBinPath 'codex-code-mode-host.exe') -Force | Out-Null
+
+            @'
+param([string]$RepositoryRoot, [string]$LocalAppDataPath)
+$ErrorActionPreference = 'Stop'
+$env:LOCALAPPDATA = $LocalAppDataPath
+. (Join-Path $RepositoryRoot 'scripts\powershell\lib\SetupHandler.ps1')
+. (Join-Path $RepositoryRoot 'scripts\powershell\lib\Invoke-ExternalCommand.ps1')
+$handlers = Get-SetupHandler -HandlersPath (Join-Path $RepositoryRoot 'scripts\powershell\handlers')
+$handler = $handlers | Where-Object Name -EQ 'Codex' | Select-Object -First 1
+if (-not $handler -or -not $handler.CanApply([SetupContext]::new($RepositoryRoot))) {
+    throw 'Get-SetupHandler did not resolve the installed Codex package.'
+}
+Write-Output 'Codex loader scope passed.'
+'@ | Set-Content -LiteralPath $runnerPath -Encoding UTF8
+
+            $enginePath = (Get-Process -Id $PID).Path
+            $output = @(& $enginePath -NoLogo -NoProfile -NonInteractive -File $runnerPath $script:projectRoot $localAppDataPath 2>&1)
+            $exitCode = $LASTEXITCODE
+
+            $exitCode | Should -Be 0 -Because ($output -join [Environment]::NewLine)
+            ($output -join [Environment]::NewLine) | Should -Match 'Codex loader scope passed\.'
+        }
+    }
+
     Context 'Constructor' {
         It 'should set <property> correctly' -ForEach @(
             @{ property = "Name"; expected = "Codex"; checkType = "Be" }

@@ -69,12 +69,12 @@ Describe 'Hermes Hindsight PowerShell acceptance entrypoint' {
             $line = "docker $($Arguments -join ' ')"
             $script:calls.Add($line)
             if (-not [string]::IsNullOrWhiteSpace($script:dockerFailureMatch) -and
-                $line.Contains($script:dockerFailureMatch, [System.StringComparison]::Ordinal)) {
+                $line.IndexOf($script:dockerFailureMatch, [System.StringComparison]::Ordinal) -ge 0) {
                 $global:LASTEXITCODE = 42
                 return @()
             }
             $global:LASTEXITCODE = 0
-            if ($line.Contains('exec -T hermes hermes chat --quiet -q', [System.StringComparison]::Ordinal)) {
+            if ($line.IndexOf('exec -T hermes hermes chat --quiet -q', [System.StringComparison]::Ordinal) -ge 0) {
                 return $script:aliveResponse
             }
             return @()

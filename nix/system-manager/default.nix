@@ -75,6 +75,7 @@ in
     extraSpecialArgs = {
       inherit inputs;
       isWSL = false;
+      installFeatures = [ ];
     };
   };
 }

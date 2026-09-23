@@ -9,7 +9,8 @@ let
     "hermes-docker"
     "hermes-desktop-docker"
   ];
-  check = system:
+  check =
+    system:
     let
       pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs system;
       sets = import ../packages/sets.nix {
@@ -24,6 +25,10 @@ in
 {
   testNativeHermesProfileDoesNotInstallDockerGatewayAdapters = {
     expr = builtins.map check systems;
-    expected = [ [ ] [ ] [ ] ];
+    expected = [
+      [ ]
+      [ ]
+      [ ]
+    ];
   };
 }

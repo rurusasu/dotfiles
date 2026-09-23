@@ -23,49 +23,7 @@ function Resolve-CodexPackageExecutablePath {
         [string]$LocalAppData = $env:LOCALAPPDATA
     )
 
-    if ([string]::IsNullOrWhiteSpace($LocalAppData)) {
-        $profilePath = if ($env:USERPROFILE) { $env:USERPROFILE } else { [Environment]::GetFolderPath("UserProfile") }
-        $LocalAppData = Join-Path $profilePath "AppData\Local"
-    }
-
-    $packagesPath = Join-Path $LocalAppData "Microsoft\WinGet\Packages"
-    $codexDirectories = @(
-        Get-ChildItem -Path $packagesPath -Directory -Filter "OpenAI.Codex_*" -ErrorAction SilentlyContinue
-    )
-    $programsCodexPath = Join-Path $LocalAppData "Programs\Codex"
-    if (Test-Path -LiteralPath $programsCodexPath -PathType Container) {
-        $codexDirectories += [System.IO.DirectoryInfo]$programsCodexPath
-    }
-
-    $relativeExecutablePaths = @(
-        "bin\codex.exe"
-        "codex-x86_64-pc-windows-msvc.exe"
-        "codex.exe"
-    )
-    $firstExecutablePath = $null
-    foreach ($codexDirectory in $codexDirectories) {
-        if (-not $codexDirectory) {
-            continue
-        }
-        foreach ($relativePath in $relativeExecutablePaths) {
-            $executablePath = Join-Path $codexDirectory.FullName $relativePath
-            if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
-                continue
-            }
-
-            if (-not $firstExecutablePath) {
-                $firstExecutablePath = $executablePath
-            }
-            $hostPath = Join-Path (Split-Path -Parent $executablePath) "codex-code-mode-host.exe"
-            if (Test-Path -LiteralPath $hostPath -PathType Leaf) {
-                return $executablePath
-            }
-        }
-    }
-
-    # Return a CLI-only path as a last resort so Apply can report the missing
-    # adjacent host explicitly instead of treating Codex as not installed.
-    return $firstExecutablePath
+    return [CodexHandler]::ResolveCodexPackageExecutablePath($LocalAppData)
 }
 
 class CodexHandler : SetupHandlerBase {
@@ -192,8 +150,53 @@ class CodexHandler : SetupHandlerBase {
     .SYNOPSIS
         Codex パッケージの実行ファイルパスを取得する
     #>
+    static [string] ResolveCodexPackageExecutablePath([string]$localAppData) {
+        if ([string]::IsNullOrWhiteSpace($localAppData)) {
+            $profilePath = if ($env:USERPROFILE) { $env:USERPROFILE } else { [Environment]::GetFolderPath("UserProfile") }
+            $localAppData = Join-Path $profilePath "AppData\Local"
+        }
+
+        $packagesPath = Join-Path $localAppData "Microsoft\WinGet\Packages"
+        $codexDirectories = @(
+            Get-ChildItem -Path $packagesPath -Directory -Filter "OpenAI.Codex_*" -ErrorAction SilentlyContinue
+        )
+        $programsCodexPath = Join-Path $localAppData "Programs\Codex"
+        if (Test-Path -LiteralPath $programsCodexPath -PathType Container) {
+            $codexDirectories += [System.IO.DirectoryInfo]$programsCodexPath
+        }
+
+        $relativeExecutablePaths = @(
+            "bin\codex.exe"
+            "codex-x86_64-pc-windows-msvc.exe"
+            "codex.exe"
+        )
+        $firstExecutablePath = $null
+        foreach ($codexDirectory in $codexDirectories) {
+            if (-not $codexDirectory) {
+                continue
+            }
+            foreach ($relativePath in $relativeExecutablePaths) {
+                $executablePath = Join-Path $codexDirectory.FullName $relativePath
+                if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
+                    continue
+                }
+
+                if (-not $firstExecutablePath) {
+                    $firstExecutablePath = $executablePath
+                }
+                $hostPath = Join-Path (Split-Path -Parent $executablePath) "codex-code-mode-host.exe"
+                if (Test-Path -LiteralPath $hostPath -PathType Leaf) {
+                    return $executablePath
+                }
+            }
+        }
+
+        # Keep CLI-only candidates visible so Apply reports a missing adjacent host.
+        return $firstExecutablePath
+    }
+
     hidden [string] GetCodexExecutablePath() {
-        return Resolve-CodexPackageExecutablePath -LocalAppData $this.GetLocalAppDataPath()
+        return [CodexHandler]::ResolveCodexPackageExecutablePath($this.GetLocalAppDataPath())
     }
 
     hidden [string] GetCodexHostExecutablePath([string]$codexExe) {

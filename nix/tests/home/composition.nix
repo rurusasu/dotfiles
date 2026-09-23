@@ -20,6 +20,7 @@ let
       pkgs = mkPkgs system;
       extraSpecialArgs = {
         inherit inputs;
+        installFeatures = [ ];
       }
       // specialArgs;
       modules = [

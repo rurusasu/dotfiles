@@ -274,27 +274,6 @@ jobs:
             exit 1
           fi
 
-      - name: Generate canonical formatter patch for local review
-        if: always()
-        run: |
-          set +e
-          nix fmt
-          formatter_status=$?
-          set -e
-          git add -N --all
-          git diff --binary > "$RUNNER_TEMP/treefmt.patch"
-          printf '%s\n' "$formatter_status" > "$RUNNER_TEMP/treefmt-status.txt"
-
-      - name: Upload canonical formatter output for local review
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: treefmt-output-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/treefmt.patch
-            ${{ runner.temp }}/treefmt-status.txt
-          if-no-files-found: error
-
   nix-test:
     name: Bootstrap / Test / Nix outputs
     # Formatting is an independent style gate. Semantic tests must still run
@@ -932,13 +911,17 @@ jobs:
             throw "AutoHotkey v2 UIAccess executable was not installed by the admin phase: $uiAccess"
           }
           $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'chezmoi\terminals\windows-terminal\terminal-keybindings.ahk'
+          $LASTEXITCODE = 0
           & $uiAccess '/ErrorStdOut' $scriptPath '--check'
-          if ($LASTEXITCODE -ne 0) {
-            throw "AutoHotkey v2 UIAccess syntax validation failed (exit $LASTEXITCODE)"
+          $syntaxExitCode = $LASTEXITCODE
+          if ($syntaxExitCode -ne 0) {
+            throw "AutoHotkey v2 UIAccess syntax validation failed (exit $syntaxExitCode)"
           }
+          $LASTEXITCODE = 0
           & $uiAccess '/ErrorStdOut' $scriptPath '--self-test'
-          if ($LASTEXITCODE -ne 0) {
-            throw "AutoHotkey v2 UIAccess behavioral self-tests failed (exit $LASTEXITCODE)"
+          $selfTestExitCode = $LASTEXITCODE
+          if ($selfTestExitCode -ne 0) {
+            throw "AutoHotkey v2 UIAccess behavioral self-tests failed (exit $selfTestExitCode)"
           }
 
       - name: Install pinned Pester
@@ -1000,9 +983,9 @@ jobs:
       matrix:
         include:
           - runtime: Windows PowerShell 5.1
-            version: '5.1'
+            version: "5.1"
           - runtime: PowerShell 7
-            version: '7'
+            version: "7"
     permissions:
       contents: read
     steps:
@@ -1155,7 +1138,7 @@ jobs:
             }
 
             $ErrorActionPreference = 'Continue'
-            $output = & cmd.exe /d /c install.cmd -NoPause -UserPhaseOnly -WingetVerifyCommandOnly 2>&1 |
+            $output = & cmd.exe /d /c install.cmd -NoPause -UserPhaseOnly 2>&1 |
               ForEach-Object {
                 $line = [string]$_
                 Write-Host $line
@@ -1197,7 +1180,8 @@ jobs:
             $requiredPackageManagerMarkers += "[Npm] ✓ $($package.name)"
           }
           foreach ($package in $pnpmManifest.globalPackages) {
-            if ([string]::IsNullOrWhiteSpace([string]$package.installFeature)) {
+            $installFeature = $package.PSObject.Properties['installFeature']
+            if ($null -eq $installFeature -or [string]::IsNullOrWhiteSpace([string]$installFeature.Value)) {
               $requiredPackageManagerMarkers += "[Pnpm] ✓ $($package.name)"
             }
           }

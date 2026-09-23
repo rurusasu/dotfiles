@@ -148,6 +148,7 @@ $pesterConfig.Run.PassThru = $true
 # 属性へそのまま書き込み、結果ファイル自体を壊すことがある。
 $pesterConfig.Output.Verbosity = if ($OutputFile) { "Normal" } else { "Detailed" }
 $pesterConfig.Output.CIFormat = if ($OutputFile) { "None" } else { "Auto" }
+$pesterConfig.Output.RenderMode = if ($OutputFile) { "Plaintext" } else { "Auto" }
 
 # カバレッジ設定
 if ($coverageRequested) {

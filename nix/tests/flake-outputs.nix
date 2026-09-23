@@ -211,6 +211,11 @@ in
     };
   };
 
+  testNixosVscodeServerUsesRootFlakeParts = {
+    expr = lock.nodes.${rootInputs."nixos-vscode-server"}.inputs."flake-parts";
+    expected = rootInputs."flake-parts";
+  };
+
   testRunnerAppsEvaluateForTheirSupportedPlatforms = {
     expr = {
       darwin = darwinApps.apps.darwin-rebuild.program;

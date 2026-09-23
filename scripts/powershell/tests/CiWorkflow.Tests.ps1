@@ -94,14 +94,14 @@ Describe 'CI workflow configuration' {
 
         $installerJob | Should -Match 'fail-fast:\s*false'
         $installerJob | Should -Match 'max-parallel:\s*2'
-        $installerJob | Should -Match 'runtime: Windows PowerShell 5\.1[\s\S]*?version: ''5\.1'''
-        $installerJob | Should -Match 'runtime: PowerShell 7[\s\S]*?version: ''7'''
+        $installerJob | Should -Match 'runtime: Windows PowerShell 5\.1[\s\S]*?version: "5\.1"'
+        $installerJob | Should -Match 'runtime: PowerShell 7[\s\S]*?version: "7"'
         $installerJob | Should -Not -Match 'shell:\s+\$\{\{\s*matrix\.'
         $installerJob | Should -Match 'shell:\s+pwsh'
         $installerJob | Should -Match 'DOTFILES_E2E_POWERSHELL_VERSION:\s+\$\{\{\s*matrix\.version\s*\}\}'
         $installerJob | Should -Match 'E2E orchestrator must run under PowerShell 7'
         $installerJob | Should -Match 'Falling back to Windows PowerShell'
-        $installerJob | Should -Match 'install\.cmd -NoPause -UserPhaseOnly -WingetVerifyCommandOnly'
+        $installerJob | Should -Match 'install\.cmd -NoPause -UserPhaseOnly(?!\s+-WingetVerifyCommandOnly)'
         $installerJob | Should -Match 'RequiredOutputMarkers\s+\$requiredPackageManagerMarkers'
         $installerJob | Should -Match "\[Pnpm\] npm で pnpm をインストールしました"
         $installerJob | Should -Match '\[Npm\] ✓ \$\(\$package\.name\)'
@@ -188,6 +188,10 @@ Describe 'CI workflow configuration' {
         $windowsJob | Should -Match 'CI_ADMIN_PACKAGE_SUCCESS: id=Microsoft\.VisualStudio\.2022\.BuildTools'
         $windowsJob.Contains('VC\Tools\MSVC') | Should -BeTrue
         $windowsJob.Contains('bin\Hostx64\x64\cl.exe') | Should -BeTrue
+        $windowsJob | Should -Match '\$LASTEXITCODE = 0\s+& \$uiAccess .+--check'
+        $windowsJob | Should -Match '\$syntaxExitCode = \$LASTEXITCODE'
+        $windowsJob | Should -Match '\$LASTEXITCODE = 0\s+& \$uiAccess .+--self-test'
+        $windowsJob | Should -Match '\$selfTestExitCode = \$LASTEXITCODE'
     }
 
     It 'should run npm pnpm and 1Password executables after the Windows installer' {

@@ -331,7 +331,7 @@ function Write-HermesXApiAuthCache {
     ) -join "`n"
 
     try {
-        Set-Content -LiteralPath $temporary -Value $content -Encoding utf8NoBOM -NoNewline
+        [System.IO.File]::WriteAllText($temporary, $content, [System.Text.UTF8Encoding]::new($false))
         & $protectCache $temporary
         Move-Item -LiteralPath $temporary -Destination $cachePath -Force
     }

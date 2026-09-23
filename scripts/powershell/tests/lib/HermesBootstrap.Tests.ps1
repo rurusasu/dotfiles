@@ -351,7 +351,7 @@ function global:Add-HermesBootstrapPlanMetadata {
         [Parameter(Mandatory)][string]$ManifestSha256
     )
 
-    $plan = $Json | ConvertFrom-Json -Depth 32
+    $plan = $Json | ConvertFrom-Json
     $plan | Add-Member -NotePropertyName manifest_sha256 -NotePropertyValue $ManifestSha256
     $items = @($plan.items)
     $xai = [PSCustomObject]@{
@@ -481,7 +481,7 @@ Describe "Invoke-HermesBootstrap" {
         )
 
         $records = (Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "\r?\n" |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json -Depth 32 }
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json }
         @($records).Count | Should -Be 13
         $records[0].type | Should -Be "header"
         $records[0].schema_version | Should -Be 1

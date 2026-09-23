@@ -93,7 +93,11 @@ in
       home = "/Users/test-user/.hermes";
       featureFlag = "1";
       enabled = true;
-      arguments = [ "${package "aarch64-darwin"}/bin/hermes" "gateway" "run" ];
+      arguments = [
+        "${package "aarch64-darwin"}/bin/hermes"
+        "gateway"
+        "run"
+      ];
       homeVariable = "/Users/test-user/.hermes";
       runAtLoad = true;
       keepAlive = true;

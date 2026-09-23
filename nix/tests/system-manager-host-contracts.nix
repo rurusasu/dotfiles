@@ -1,7 +1,8 @@
 { inputs }:
 let
   system = "x86_64-linux";
-  systemManagerModule = import ../flakes/system-manager.nix {
+  systemManagerModule = import ../flakes/system-manager.nix { inherit inputs; };
+  systemConfigs = import ../flakes/lib/system-manager-configs.nix {
     inherit inputs;
     dotfilesUser = "test-user";
     dotfilesHome = "/srv/dotfiles/test-user";
@@ -9,7 +10,7 @@ let
     dotfilesGid = "4243";
     dotfilesGroup = "test-primary";
   };
-  systemConfigs = systemManagerModule.flake.systemConfigs;
+  moduleSystemConfigs = systemManagerModule.flake.systemConfigs;
   workmux = import ../flakes/lib/workmux.nix { inherit inputs; };
   workmuxOverlay = workmux.mkOverlay (target: inputs.workmux.packages.${target}.default);
   nixos = inputs.nixpkgs.lib.nixosSystem {
@@ -51,7 +52,9 @@ let
 in
 {
   testSystemManagerExposesUbuntuAndDebianConfigs = {
-    expr = builtins.hasAttr "ubuntu" systemConfigs && builtins.hasAttr "debian" systemConfigs;
+    expr =
+      builtins.hasAttr "ubuntu" moduleSystemConfigs
+      && builtins.hasAttr "debian" moduleSystemConfigs;
     expected = true;
   };
 
@@ -82,9 +85,9 @@ in
   };
 
   testSystemManagerDoesNotUseDeprecatedExtraSpecialArgs = {
-    expr = builtins.any
-      (warning: inputs.nixpkgs.lib.hasInfix "extraSpecialArgs is deprecated" warning)
-      systemConfigs.ubuntu.config.warnings;
+    expr = builtins.any (
+      warning: inputs.nixpkgs.lib.hasInfix "extraSpecialArgs is deprecated" warning
+    ) systemConfigs.ubuntu.config.warnings;
     expected = false;
   };
 
