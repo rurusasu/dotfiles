@@ -263,8 +263,8 @@
         },
         {
           "PackageIdentifier": "Task.Task",
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Task.Task*"],
           "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Task.Task*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "task"
@@ -304,8 +304,8 @@
         },
         {
           "PackageIdentifier": "hadolint.hadolint",
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\hadolint.hadolint*"],
           "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\hadolint.hadolint*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "hadolint"
@@ -345,8 +345,8 @@
         },
         {
           "PackageIdentifier": "Artempyanykh.Marksman",
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Artempyanykh.Marksman*"],
           "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Artempyanykh.Marksman*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "marksman"
@@ -409,11 +409,9 @@
         },
         {
           "PackageIdentifier": "oxc-project.oxlint",
-          "pathEntries": [
-            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"
-          ],
           "installArgs": ["--scope", "user"],
           "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
           "portableLink": {
             "linkName": "oxlint.exe",
             "targetPattern": "oxlint-*.exe"
@@ -453,8 +451,8 @@
         },
         {
           "PackageIdentifier": "astral-sh.ruff",
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ruff*"],
           "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ruff*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "ruff"
@@ -494,8 +492,8 @@
         },
         {
           "PackageIdentifier": "JohnnyMorganz.StyLua",
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\JohnnyMorganz.StyLua*"],
           "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\JohnnyMorganz.StyLua*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "stylua"
@@ -503,8 +501,8 @@
         },
         {
           "PackageIdentifier": "tamasfe.taplo",
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tamasfe.taplo*"],
           "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tamasfe.taplo*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "taplo"
@@ -512,8 +510,10 @@
         },
         {
           "PackageIdentifier": "tree-sitter.tree-sitter-cli",
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"],
           "installTimeoutSeconds": 900,
+          "pathEntries": [
+            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"
+          ],
           "verifyCommand": {
             "args": ["--version"],
             "command": "tree-sitter"
@@ -521,8 +521,8 @@
         },
         {
           "PackageIdentifier": "astral-sh.ty",
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ty*"],
           "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ty*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "ty"
@@ -530,8 +530,8 @@
         },
         {
           "PackageIdentifier": "astral-sh.uv",
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.uv*"],
           "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.uv*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "uv"
@@ -570,7 +570,7 @@
             "command": "Microsoft PowerToys",
             "type": "windowsInstalledProduct",
             "uninstallEntry": {
-              "displayName": "Microsoft PowerToys",
+              "displayName": "PowerToys",
               "executablePaths": [
                 "%ProgramFiles%\\PowerToys\\PowerToys.exe",
                 "%LOCALAPPDATA%\\PowerToys\\PowerToys.exe"
@@ -603,8 +603,8 @@
           "verifyCommand": {
             "command": "Microsoft.VisualStudio.Product.BuildTools",
             "compilerRelativePath": "VC\\Tools\\MSVC\\*\\bin\\Hostx64\\x64\\cl.exe",
-            "productId": "Microsoft.VisualStudio.Product.BuildTools",
             "minimumVersion": "17.0",
+            "productId": "Microsoft.VisualStudio.Product.BuildTools",
             "requiredComponent": "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
             "type": "visualStudioInstanceVersion"
           }

@@ -92,6 +92,19 @@ in
     expected = "eza -lhaT --level=2 --icons=auto --hyperlink -F --group-directories-first --color=auto";
   };
 
+  testNRShellAliasUsesPlatformInstallCommand = {
+    expr = {
+      wsl = wsl.config.programs.zsh.shellAliases.nrs;
+      linux = linux.config.programs.zsh.shellAliases.nrs;
+      darwin = darwin.config.programs.zsh.shellAliases.nrs;
+    };
+    expected = {
+      wsl = "task --dir ~/.dotfiles nrs";
+      linux = "~/.dotfiles/install.sh";
+      darwin = "~/.dotfiles/install.sh";
+    };
+  };
+
   testLinuxHomeModuleDoesNotReceiveDarwinSessionVariables = {
     expr = builtins.hasAttr "HOMEBREW_AUTO_UPDATE_SECS" linux.config.home.sessionVariables;
     expected = false;
@@ -110,21 +123,30 @@ in
     };
   };
 
-  testWSLHomeModuleExcludesNativeDesktopPackages = {
-    expr =
-      let
-        source = builtins.readFile ../../home/wsl.nix;
-        has = needle: builtins.match ".*${needle}.*" source != null;
-      in
-      {
-        usesWithout = has "allWithout";
-        excludesDiscord = has "discord";
-        excludesOllama = has "ollama";
+  testWSLHomeModuleExcludesNativeDesktopPackages =
+    let
+      pkgs = mkPkgs "x86_64-linux";
+      sets = import ../../packages/sets.nix {
+        inherit pkgs;
+        lib = pkgs.lib;
+        codexPackage = inputs."llm-agents".packages.${pkgs.stdenv.hostPlatform.system}.codex;
       };
-    expected = {
-      usesWithout = true;
-      excludesDiscord = true;
-      excludesOllama = true;
+      packageDrvPaths = packages:
+        builtins.sort builtins.lessThan (builtins.map (package: package.drvPath) packages);
+      containsDrvPath = needle: packages:
+        builtins.any (package: package.drvPath == needle.drvPath) packages;
+    in
+    {
+      expr = {
+        packageComposition = packageDrvPaths wsl.config.home.packages;
+        excludesDiscord = !(containsDrvPath pkgs.discord wsl.config.home.packages);
+        excludesOllama = !(containsDrvPath pkgs.ollama wsl.config.home.packages);
+      };
+      expected = {
+        packageComposition = packageDrvPaths (sets.allWithout [ "discord" "ollama" ]);
+        excludesDiscord = true;
+        excludesOllama = true;
+      };
     };
   };
 
@@ -189,4 +211,59 @@ in
       home = false;
     };
   };
+
+  testTerminalKeybindingHelpersHavePlatformScopedProviders =
+    let
+      report = darwinPackageSets.sets.supportReport;
+    in
+    {
+      expr = {
+        hammerspoon = {
+          inTerminal = builtins.any (
+            package: (package.pname or null) == "hammerspoon"
+          ) darwinPackageSets.sets.terminal;
+          darwin = {
+            provider = report.hammerspoon.darwin.provider;
+            source = report.hammerspoon.darwin.source;
+            appName = report.hammerspoon.darwin.identity.appName;
+            legacyName = report.hammerspoon.legacyDarwin.name;
+          };
+          linuxUnsupported = report.hammerspoon.linux.unsupported;
+          windowsUnsupported = report.hammerspoon.windows.unsupported;
+        };
+        autohotkey = {
+          wingetId = darwinPackageSets.sets.wingetMap.autohotkey;
+          windows = {
+            provider = report.autohotkey.windows.provider;
+            source = report.autohotkey.windows.source;
+            identity = report.autohotkey.windows.identity;
+          };
+          darwinUnsupported = report.autohotkey.darwin.unsupported;
+          linuxUnsupported = report.autohotkey.linux.unsupported;
+        };
+      };
+      expected = {
+        hammerspoon = {
+          inTerminal = true;
+          darwin = {
+            provider = "nix";
+            source = "custom";
+            appName = "Hammerspoon.app";
+            legacyName = "hammerspoon";
+          };
+          linuxUnsupported = "Hammerspoon is only available on macOS";
+          windowsUnsupported = "Hammerspoon is only available on macOS";
+        };
+        autohotkey = {
+          wingetId = "AutoHotkey.AutoHotkey";
+          windows = {
+            provider = "winget";
+            source = "winget";
+            identity = "AutoHotkey.AutoHotkey";
+          };
+          darwinUnsupported = "AutoHotkey is only available on Windows";
+          linuxUnsupported = "AutoHotkey is only available on Windows";
+        };
+      };
+    };
 }

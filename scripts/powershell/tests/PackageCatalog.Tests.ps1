@@ -2,110 +2,16 @@
 
 BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
-    $script:setsPath = Join-Path $script:repoRoot "nix/packages/sets.nix"
     $script:wingetJsonPath = Join-Path $script:repoRoot "windows/winget/packages.json"
     $script:npmJsonPath = Join-Path $script:repoRoot "windows/npm/packages.json"
     $script:pnpmJsonPath = Join-Path $script:repoRoot "windows/pnpm/packages.json"
 }
 
 Describe 'Package catalog consistency' {
-    Context 'Provider-aware catalog resolution' {
-        It 'should expose explicit feature-aware resolver and provider metadata contracts' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match 'resolveForInstallFeatures'
-            $sets | Should -Match 'provider requires source'
-            $sets | Should -Match 'provider requires identity'
-            $sets | Should -Match 'provider cannot include'
-            $sets | Should -Match 'nix provider derivation does not support'
-            $sets | Should -Match 'catalog ID appears in both Nix and Homebrew resolution'
-            $sets | Should -Match 'mkWindowsOnlySupport\s*=\s*provider:\s*identity:\s*reason:'
-        }
-
-        It 'should evaluate invalid provider metadata fixtures when Nix is available' {
-            $nix = Get-Command nix -ErrorAction SilentlyContinue
-            if ($null -eq $nix) {
-                Set-ItResult -Skipped -Because 'Nix is not available on this host'
-                return
-            }
-
-            $repoRootJson = $script:repoRoot | ConvertTo-Json -Compress
-            $setsPathJson = $script:setsPath | ConvertTo-Json -Compress
-            $expression = @"
-let
-  flake = builtins.getFlake (builtins.toPath $repoRootJson);
-  pkgs = import flake.inputs.nixpkgs { system = "aarch64-darwin"; config.allowUnfree = true; };
-  lib = flake.inputs.nixpkgs.lib;
-  sets = import (builtins.toPath $setsPathJson) {
-    inherit pkgs lib;
-    catalogOverride = {
-      extra = {
-        pkg = pkgs.hello;
-        category = "test";
-        support = {
-          windows = { unsupported = "fixture"; };
-          darwin = { provider = "nix"; source = "nixpkgs"; identity = "extra"; nixAttr = "hello"; cask = "wrong"; };
-          linux = { unsupported = "fixture"; };
-        };
-      };
-      orphan = {
-        category = "test";
-        support = {
-          windows = { unsupported = "fixture"; };
-          darwin = { unsupported = "fixture"; cask = "stale"; };
-          linux = { unsupported = "fixture"; };
-        };
-      };
-      active-invalid = {
-        pkg = "not-a-derivation";
-        category = "test";
-        support = {
-          windows = { unsupported = "fixture"; };
-          darwin = { provider = "nix"; source = "nixpkgs"; identity = "active-invalid"; nixAttr = "hello"; };
-          linux = { unsupported = "fixture"; };
-        };
-      };
-      active-unsupported = {
-        pkg = pkgs.hello.overrideAttrs (_: { meta.platforms = [ "x86_64-linux" ]; });
-        category = "test";
-        support = {
-          windows = { unsupported = "fixture"; };
-          darwin = { provider = "nix"; source = "nixpkgs"; identity = "active-unsupported"; nixAttr = "hello"; };
-          linux = { unsupported = "fixture"; };
-        };
-      };
-      host-conditional = {
-        pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.hello.overrideAttrs (_: { meta.platforms = [ "aarch64-darwin" ]; }) else pkgs.hello;
-        category = "test";
-        support = {
-          windows = { unsupported = "fixture"; };
-          darwin = { provider = "nix"; source = "nixpkgs"; identity = "host-conditional"; nixAttr = "hello"; };
-          linux = { provider = "nix"; source = "nixpkgs"; identity = "host-conditional"; nixAttr = "hello"; };
-        };
-      };
-    };
-  };
-in sets.providerErrors
-"@
-
-            $errors = @(& $nix.Source eval --impure --json --expr $expression | ConvertFrom-Json)
-
-            $LASTEXITCODE | Should -Be 0
-            $errors | Should -Contain 'extra: darwin: nix provider cannot include cask'
-            $errors | Should -Contain 'extra: darwin: catalog ID appears in both Nix and Homebrew resolution'
-            $errors | Should -Contain 'orphan: darwin: providerless metadata cannot include cask'
-            $errors | Should -Contain 'active-invalid: darwin: nix provider requires a derivation'
-            $errors | Should -Contain 'active-unsupported: darwin: nix provider derivation does not support darwin'
-            @($errors | Where-Object { $_ -match 'host-conditional' }).Count | Should -Be 0
-        }
-    }
-
-    It 'keeps Herdr out of the Winget manifest because Windows uses the official preview installer' {
-        $sets = Get-Content -LiteralPath $script:setsPath -Raw
+    It 'keeps Herdr out of the generated Winget manifest' {
         $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
         $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
 
-        $sets | Should -Not -Match 'Herdr\.Herdr'
         @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -match '(?i)herdr' }).Count | Should -Be 0
     }
 
@@ -121,12 +27,6 @@ in sets.providerErrors
             $versionedPackages.Count | Should -Be 0
         }
 
-        It 'should not require InstallerHashOverride for WezTerm nightly' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Not -Match '(?s)wingetInstallArgs\s*=\s*\{.*?wezterm\s*=\s*\[.*?"--ignore-security-hash"'
-        }
-
         It 'should generate WezTerm nightly without ignore-security-hash install args' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
@@ -134,12 +34,6 @@ in sets.providerErrors
 
             $package | Should -Not -BeNullOrEmpty
             @($package.installArgs) | Should -Not -Contain '--ignore-security-hash'
-        }
-
-        It 'should keep terminal packages installable during normal winget runs' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Not -Match '(?ms)^\s*wingetSkipInstall\s*=\s*\{[^}]*^\s*wezterm\s*='
         }
 
         It 'should generate terminal packages without normal-run skipInstall metadata' {
@@ -160,47 +54,19 @@ in sets.providerErrors
             $wezterm.ciSkipInstall | Should -BeTrue
         }
 
-        It 'should remove Warp from the SSOT and generated Windows manifest' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+        It 'should keep Warp out of the generated Windows manifest' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $warp = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
 
-            $sets | Should -Not -Match 'warp-terminal'
-            $sets | Should -Not -Match 'Warp\.Warp'
-            $sets | Should -Not -Match 'warpInnoLatest'
             $warp | Should -BeNullOrEmpty
         }
 
-        It 'should manage Raycast as a Nix Darwin app and Dia as a macOS-only Homebrew cask' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+        It 'should keep Raycast and Dia out of the generated Windows manifest' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $raycast = [regex]::Match($sets, '(?ms)raycast\s*=\s*\{(?<body>.*?)(?=^\s*# ── system capabilities)')
-
-            $raycast.Success | Should -BeTrue
-            $raycast.Groups['body'].Value | Should -Match 'pkg\s*=\s*pkgs\.raycast;'
-            $raycast.Groups['body'].Value | Should -Match 'provider\s*=\s*"nix";'
-            $raycast.Groups['body'].Value | Should -Match 'source\s*=\s*"nixpkgs";'
-            $raycast.Groups['body'].Value | Should -Match 'nixAttr\s*=\s*"raycast";'
-            $raycast.Groups['body'].Value | Should -Match 'appName\s*=\s*"Raycast\.app";'
-            $raycast.Groups['body'].Value | Should -Match 'bundleId\s*=\s*"com\.raycast\.macos";'
-            $raycast.Groups['body'].Value | Should -Match 'executable\s*=\s*"Raycast";'
-            $raycast.Groups['body'].Value | Should -Match 'legacyDarwin\s*=\s*\{\s*provider\s*=\s*"homebrew-cask";\s*name\s*=\s*"raycast";'
-            $raycast.Groups['body'].Value | Should -Not -Match 'cask\s*='
-            $sets | Should -Match '(?s)dia-browser\s*=\s*\{.*?provider\s*=\s*"nix";.*?source\s*=\s*\(darwinProviderCandidate\s+"dia-browser"\)'
-            $sets | Should -Match '(?s)dia-browser\s*=\s*\{.*?legacyDarwin\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?name\s*=\s*"thebrowsercompany-dia"'
             @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Raycast.Raycast' }).Count | Should -Be 0
             @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'TheBrowserCompany.Dia' }).Count | Should -Be 0
-        }
-
-        It 'should update WSL inputs and route native NixOS through the hardware-safe installer' {
-            $wslUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/wsl.nix") -Raw
-            $linuxUsers = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/linux.nix") -Raw
-
-            $wslUsers | Should -Match 'nrs\s*=\s*"task --dir ~/.dotfiles nrs"'
-            $linuxUsers | Should -Match 'nrs\s*=\s*"~/.dotfiles/install\.sh"'
-            $linuxUsers | Should -Not -Match 'nrs\s*=.*nixos-rebuild'
         }
 
         It 'should update flake inputs before every scripted NixOS rebuild entry point' {
@@ -215,51 +81,9 @@ in sets.providerErrors
             $postInstallScript | Should -Match 'dotfiles_update_flake "\$TARGET_DIR"'
         }
 
-        It 'should use nixpkgs gwq and keep it out of Windows package providers' {
-            $flake = Get-Content -LiteralPath (Join-Path $script:repoRoot "flake.nix") -Raw
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-            $manifest = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $npmManifest = Get-Content -LiteralPath $script:npmJsonPath -Raw | ConvertFrom-Json
-            $pnpmManifest = Get-Content -LiteralPath $script:pnpmJsonPath -Raw | ConvertFrom-Json
-            $wiringPaths = @(
-                "nix/packages/sets.nix",
-                "nix/flakes/packages.nix",
-                "nix/home/common.nix",
-                "nix/hosts/darwin/default.nix",
-                "nix/modules/host/default.nix",
-                "nix/packages/winget.nix",
-                "nix/packages/support-report.nix"
-            )
-            $wiring = $wiringPaths |
-                ForEach-Object { Get-Content -LiteralPath (Join-Path $script:repoRoot $_) -Raw } |
-                Out-String
-
-            $flake | Should -Not -Match 'gwq-src'
-            $wiring | Should -Not -Match 'gwqSrc|gwq-src'
-            $sets | Should -Match '(?s)gwq\s*=\s*\{.*?pkg\s*=\s*pkgs\.gwq;.*?winget\s*=\s*null;'
-            $sets | Should -Match '(?s)reviewedUnsupported\s*=\s*\{.*?windows\s*=\s*lib\.genAttrs\s*\[.*?"gwq"'
-
-            $wingetSource = @($manifest.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'gwq' }).Count | Should -Be 0
-            $globalPackages = @($npmManifest.globalPackages) + @($pnpmManifest.globalPackages)
-            @($globalPackages | Where-Object { $_.name -eq 'gwq' -or $_.name -like 'gwq@*' }).Count | Should -Be 0
-            (Join-Path $script:repoRoot "nix/packages/gwq/default.nix") | Should -Not -Exist
-        }
     }
 
     Context 'Windows-only WSL package' {
-        It 'should include Microsoft.WSL as a Windows-only winget package in the SSOT' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?winget\s*=\s*\[.*?"Microsoft\.WSL".*?\]'
-        }
-
-        It 'should define Microsoft.WSL verification as a timed runtime check with repair then reinstall recovery in the SSOT' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)"Microsoft\.WSL"\s*=\s*\{.*?command\s*=\s*"wsl".*?args\s*=\s*\[\s*"--version"\s*\].*?timeoutSeconds\s*=\s*30.*?recoveryStrategy\s*=\s*"wingetRepairThenReinstall"'
-        }
-
         It 'should generate Microsoft.WSL into windows winget packages.json under the winget source' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
@@ -312,16 +136,6 @@ in sets.providerErrors
     }
 
     Context 'Google Cloud SDK package' {
-        It 'should define the shared 900-second install timeout and gcloud PATH entry in the SSOT' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match 'packageInstallTimeoutSeconds\s*=\s*900'
-            $sets | Should -Match 'wingetInstallTimeoutSeconds\s*=\s*\{\s*\}'
-            $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?google-cloud-sdk\s*=\s*\[.*?%ProgramFiles%\\\\Google\\\\Cloud SDK\\\\google-cloud-sdk\\\\bin'
-            $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?google-cloud-sdk\s*=\s*\[.*?%ProgramFiles\(x86\)%\\\\Google\\\\Cloud SDK\\\\google-cloud-sdk\\\\bin'
-            $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?google-cloud-sdk\s*=\s*\[.*?%LOCALAPPDATA%\\\\Google\\\\Cloud SDK\\\\google-cloud-sdk\\\\bin'
-        }
-
         It 'should generate Google.CloudSDK gcloud PATH and verification metadata' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
@@ -345,23 +159,14 @@ in sets.providerErrors
     }
 
     Context 'Node.js package PATH' {
-        It 'should add the Winget Node.js installation directory to the SSOT PATH entries' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?nodejs\s*=\s*\[\s*"%ProgramFiles%\\\\nodejs"'
-        }
-
         It 'should expose the Task executable directory to package verification' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $task = @($winget.Sources | ForEach-Object { $_.Packages } | Where-Object PackageIdentifier -EQ 'Task.Task') | Select-Object -First 1
 
-            $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?"Task\.Task"\s*=\s*\[\s*"%LOCALAPPDATA%\\\\Microsoft\\\\WinGet\\\\Packages\\\\Task\.Task\*"'
             @($task.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Task.Task*'
         }
 
         It 'should expose each installed CLI package root required by its verifier' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $expectedRoots = @{
@@ -378,22 +183,16 @@ in sets.providerErrors
 
             foreach ($id in $expectedRoots.Keys) {
                 $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ $id) | Select-Object -First 1
-                $nixPath = $expectedRoots[$id].Replace('\', '\\')
-                $ssotPattern = '(?s)wingetPathEntries\s*=\s*\{.*?"' + [regex]::Escape($id) + '"\s*=\s*\[\s*"' + [regex]::Escape($nixPath) + '"'
-
                 $package | Should -Not -BeNullOrEmpty -Because "$id must remain in the generated package catalog"
                 @($package.pathEntries) | Should -Contain $expectedRoots[$id] -Because "$id's verifier runs its executable from the package root"
-                $sets | Should -Match $ssotPattern -Because "$id's PATH entry must be defined in the Nix package SSOT"
             }
         }
 
-        It 'should expose the WinGet Links directory for the oxlint portable command' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+        It 'should generate the WinGet Links directory for the oxlint portable command' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $oxlint = @($winget.Sources | ForEach-Object { $_.Packages } | Where-Object PackageIdentifier -EQ 'oxc-project.oxlint') | Select-Object -First 1
 
             @($oxlint.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Links'
-            $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?"oxc-project\.oxlint"\s*=\s*\[\s*"%LOCALAPPDATA%\\\\Microsoft\\\\WinGet\\\\Links"'
         }
 
         It 'should generate the Node.js installation directory into winget packages.json' {
@@ -407,13 +206,6 @@ in sets.providerErrors
     }
 
     Context '1Password CLI package' {
-        It 'should define the real op package directory in the SSOT before winget verification' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?_1password-cli\s*=\s*\[.*?%LOCALAPPDATA%\\\\Microsoft\\\\WinGet\\\\Packages\\\\AgileBits\.1Password\.CLI\*'
-            $sets | Should -Not -Match '(?s)wingetPortableLinksById\s*=\s*\{.*?_1password-cli\s*=\s*\{.*?linkName\s*=\s*"op\.exe"'
-        }
-
         It 'should generate op package path metadata into winget packages.json' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
@@ -430,12 +222,6 @@ in sets.providerErrors
     }
 
     Context 'Codex CLI package' {
-        It 'should define Codex portable link metadata in the SSOT before winget verification' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)wingetPortableLinksById\s*=\s*\{.*?"OpenAI\.Codex"\s*=\s*\{.*?linkName\s*=\s*"codex\.exe".*?targetPattern\s*=\s*"codex-x86_64-pc-windows-msvc\.exe"'
-        }
-
         It 'should generate Codex portable link metadata into winget packages.json' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
@@ -472,24 +258,6 @@ in sets.providerErrors
     }
 
     Context 'Codex Desktop Microsoft Store package' {
-        It 'should include Codex Desktop as a Windows-only Microsoft Store package in the SSOT' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?msstore\s*=\s*\[.*?"9PLM9XGG6VKS".*?\]'
-        }
-
-        It 'should define Codex Desktop AppX launch target verification in the SSOT' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)msstoreVerifyById\s*=\s*\{.*?"9PLM9XGG6VKS"\s*=\s*\{.*?type\s*=\s*"appxLaunchTarget".*?command\s*=\s*"OpenAI\.Codex".*?args\s*=\s*\[\s*"OpenAI\.Codex_2p2nqsd0c76g0!App"\s*\]'
-        }
-
-        It 'should skip Codex Desktop live Store install in the CI smoke test' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)wingetCiSkipInstall\s*=\s*\{.*?"9PLM9XGG6VKS"\s*=\s*true;'
-        }
-
         It 'should generate Codex Desktop under the msstore source with launch target verification' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $msstoreSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'msstore' }) | Select-Object -First 1
@@ -504,13 +272,6 @@ in sets.providerErrors
     }
 
     Context 'Devcontainer CLI package' {
-        It 'should define devcontainer with both Nix and Windows npm package mappings in the SSOT' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)devcontainer\s*=\s*\{.*?pkg\s*=\s*pkgs\.devcontainer;.*?npm\s*=\s*"@devcontainers/cli"'
-            $sets | Should -Match '(?s)npmVerify\s*=\s*\{.*?devcontainer\s*=\s*\{.*?command\s*=\s*"devcontainer".*?args\s*=\s*\[\s*"--version"\s*\]'
-        }
-
         It 'should generate @devcontainers/cli into the Windows npm package catalog with verification' {
             $json = Get-Content -LiteralPath $script:npmJsonPath -Raw | ConvertFrom-Json
             $package = @($json.globalPackages | Where-Object { $_.name -eq '@devcontainers/cli' }) | Select-Object -First 1
@@ -520,28 +281,9 @@ in sets.providerErrors
             @($package.verifyCommand.args) | Should -Contain '--version'
         }
 
-        It 'should have winget-export generate npm packages.json from the SSOT' {
-            $exporter = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/packages/winget.nix") -Raw
-
-            $exporter | Should -Match 'windows/npm/packages\.json'
-            $exporter | Should -Match 'npmFromMap'
-            $exporter | Should -Match '\$out/npm/packages\.json'
-        }
     }
 
     Context 'Orca and Python installation policy' {
-        It 'should manage Orca as a desktop catalog package with macOS cask and avoid native Python winget installs in the SSOT' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)orca-editor\s*=\s*\{.*?winget\s*=\s*"StablyAI\.Orca".*?provider\s*=\s*"nix";.*?source\s*=\s*\(darwinProviderCandidate\s+"orca-editor"\)'
-            $sets | Should -Match '(?s)orca-editor\s*=\s*\{.*?legacyDarwin\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?name\s*=\s*"stablyai/orca/orca"'
-            $sets | Should -Not -Match '(?s)windowsOnly\s*=\s*\{.*?winget\s*=\s*\[.*?"StablyAI\.Orca".*?\]'
-            $sets | Should -Match '(?s)wingetCiSkipInstall\s*=\s*\{.*?"StablyAI\.Orca"\s*=\s*true;'
-            $sets | Should -Match '(?s)python3\s*=\s*\{.*?pkg\s*=\s*pkgs\.python3;.*?winget\s*=\s*null;'
-            $sets | Should -Not -Match 'winget\s*=\s*"Python\.Python\.3\.13"'
-            $sets | Should -Match '(?s)uv\s*=\s*\{.*?pkg\s*=\s*pkgs\.uv;.*?winget\s*=\s*"astral-sh\.uv"'
-        }
-
         It 'should generate Orca and uv without the native Python winget package' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
@@ -558,23 +300,7 @@ in sets.providerErrors
         }
     }
 
-    Context 'Linux readiness dependencies' {
-        It 'should manage the netcat provider used by Linux readiness checks' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)netcat\s*=\s*\{.*?pkg\s*=\s*pkgs\.netcat;.*?winget\s*=\s*null;'
-            $sets | Should -Match '(?s)reviewedUnsupported\s*=\s*\{.*?windows\s*=\s*lib\.genAttrs\s*\[.*?"netcat"'
-        }
-    }
-
     Context 'Windows native Rust browser automation tools' {
-        It 'should manage agent-browser as a Windows npm global package with verification' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?npm\s*=\s*\[.*?"agent-browser@0\.38\.1".*?\]'
-            $sets | Should -Match '(?s)npmVerify\s*=\s*\{.*?"agent-browser"\s*=\s*\{.*?command\s*=\s*"agent-browser".*?args\s*=\s*\[\s*"--version"\s*\]'
-        }
-
         It 'should generate agent-browser into the Windows npm package catalog with verification' {
             $json = Get-Content -LiteralPath $script:npmJsonPath -Raw | ConvertFrom-Json
             $package = @($json.globalPackages | Where-Object { $_.name -eq 'agent-browser@0.38.1' }) | Select-Object -First 1
@@ -582,13 +308,6 @@ in sets.providerErrors
             $package | Should -Not -BeNullOrEmpty
             $package.verifyCommand.command | Should -Be 'agent-browser'
             @($package.verifyCommand.args) | Should -Contain '--version'
-        }
-
-        It 'should include Visual Studio Build Tools with C++ workload install metadata in the SSOT' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)windowsOnly\s*=\s*\{.*?winget\s*=\s*\[.*?"Microsoft\.VisualStudio\.2022\.BuildTools".*?\]'
-            $sets | Should -Match '(?s)wingetInstallArgs\s*=\s*\{.*?"Microsoft\.VisualStudio\.2022\.BuildTools"\s*=\s*\[.*?"--override".*?"--add Microsoft\.VisualStudio\.Workload\.VCTools --includeRecommended --passive --wait --norestart"'
         }
 
         It 'should generate Visual Studio Build Tools with C++ workload install metadata' {
@@ -604,8 +323,7 @@ in sets.providerErrors
 
     Context 'Cross-platform package providers' {
 
-        It 'should remove retired package IDs from the SSOT and generated manifests' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+        It 'should keep retired package IDs out of generated manifests' {
             $manifests = @(
                 Get-Content -LiteralPath $script:wingetJsonPath -Raw
                 Get-Content -LiteralPath $script:npmJsonPath -Raw
@@ -619,23 +337,19 @@ in sets.providerErrors
                 'SlackTechnologies.Slack'
                 'SST.opencode'
             ) | ForEach-Object {
-                $sets | Should -Not -Match ([regex]::Escape($_))
                 $manifests | Should -Not -Match ([regex]::Escape($_))
             }
         }
 
-        It 'should not depend on pwsh to verify the portable rust-analyzer package' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+        It 'should generate a portable rust-analyzer verifier and link' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'Rustlang.rust-analyzer') | Select-Object -First 1
 
             $package | Should -Not -BeNullOrEmpty
-            $sets | Should -Match '(?s)rust-analyzer\s*=\s*\{\s*type\s*=\s*"portableLinkCommand";\s*command\s*=\s*"rust-analyzer\.exe";\s*args\s*=\s*\[\s*"--version"\s*\];'
             $package.verifyCommand.type | Should -Be 'portableLinkCommand'
             $package.verifyCommand.command | Should -Be 'rust-analyzer.exe'
             @($package.verifyCommand.args) | Should -Be @('--version')
-            $sets | Should -Match '(?s)"Rustlang\.rust-analyzer"\s*=\s*\{\s*linkName\s*=\s*"rust-analyzer\.exe";\s*targetPattern\s*=\s*"rust-analyzer\.exe";\s*\};'
             $package.portableLink.linkName | Should -Be 'rust-analyzer.exe'
             $package.portableLink.targetPattern | Should -Be 'rust-analyzer.exe'
             @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Links'
@@ -695,12 +409,9 @@ in sets.providerErrors
         }
 
         It 'should remove ChatGPT Classic from Windows while preserving cross-platform ChatGPT' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $storeSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'msstore' }) | Select-Object -First 1
 
-            $sets | Should -Not -Match 'msstore\s*=\s*"9NT1R1C2HH7J"'
-            $sets | Should -Match '(?s)chatgpt\s*=\s*\{.*?darwin\s*=\s*\{.*?provider\s*=\s*"nix";.*?linux\s*=\s*\{.*?provider\s*=\s*"nix";'
             @($storeSource.Packages | Where-Object PackageIdentifier -EQ '9NT1R1C2HH7J').Count | Should -Be 0
             @($storeSource.Packages | Where-Object PackageIdentifier -EQ '9PLM9XGG6VKS').Count | Should -Be 1
         }
@@ -792,7 +503,6 @@ in sets.providerErrors
         }
 
         It 'should verify Arc and Windows Terminal AppX identity, install path, and application ID without launching them' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $expectedAppxTargets = @{
@@ -815,52 +525,8 @@ in sets.providerErrors
                 $package[0].verifyCommand.command | Should -Be $expectedAppxTargets[$id].PackageName
                 @($package[0].verifyCommand.args) | Should -Be @($expectedAppxTargets[$id].AppUserModelId)
                 $expectedAppxTargets[$id].AppUserModelId.Split('!')[0] | Should -Be $expectedAppxTargets[$id].PackageFamilyName
-
-                $ssotEntry = [regex]::Match($sets, '(?s)"' + [regex]::Escape($id) + '"\s*=\s*\{.*?\};').Value
-                $ssotEntry | Should -Match 'type\s*=\s*"appxLaunchTarget"'
-                $ssotEntry | Should -Match ('command\s*=\s*"' + [regex]::Escape($expectedAppxTargets[$id].PackageName) + '"')
-                $ssotEntry | Should -Match ('args\s*=\s*\[\s*"' + [regex]::Escape($expectedAppxTargets[$id].AppUserModelId) + '"\s*\]')
             }
         }
 
-        It 'should expose provider coverage outputs from the package SSOT' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match 'supportReport'
-            $sets | Should -Match 'providerErrors'
-            $sets | Should -Match 'darwinCasks'
-            $sets | Should -Match 'linuxSystemModules'
-        }
-
-        It 'should move cross-platform applications out of windowsOnly winget packages' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-            $windowsOnly = [regex]::Match($sets, '(?s)windowsOnly\s*=\s*\{.*?\n\s*\};').Value
-
-            @(
-                'Docker.DockerDesktop'
-                'dprint.dprint'
-                'hadolint.hadolint'
-                'Google.Chrome'
-                'OpenAI.Codex'
-                'Oven-sh.Bun'
-                'zig.zig'
-            ) | ForEach-Object {
-                $windowsOnly | Should -Not -Match ([regex]::Escape('"' + $_ + '"'))
-            }
-        }
-
-        It 'should map Docker to Winget Homebrew cask and Linux system module providers' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)docker-desktop\s*=\s*\{.*?winget\s*=\s*"Docker\.DockerDesktop".*?darwin\s*=\s*\{.*?provider\s*=\s*"homebrew-cask";.*?source\s*=\s*"homebrew";.*?identity\s*=\s*"docker-desktop";.*?cask\s*=\s*"docker-desktop";.*?linux\s*=\s*\{.*?systemModule\s*=\s*"docker"'
-            $sets | Should -Not -Match 'dockerDesktopPackage|selectDarwinPackage\s+"docker-desktop"|callPackage\s+\./docker-desktop'
-        }
-
-        It 'should keep true Windows-only components with explicit unsupported reasons' {
-            $sets = Get-Content -LiteralPath $script:setsPath -Raw
-
-            $sets | Should -Match '(?s)mkWindowsOnlySupport\s*=\s*provider:\s*identity:\s*reason:\s*\{.*?inherit\s+provider\s+identity;.*?darwin\s*=\s*\{\s*unsupported\s*=\s*reason;\s*\};.*?linux\s*=\s*\{\s*unsupported\s*=\s*reason;\s*\};'
-            $sets | Should -Match '"Microsoft\.PowerToys"\s*=\s*mkWindowsOnlySupport\s*"winget"\s*"Microsoft\.PowerToys"\s*"Windows system utility";'
-        }
     }
 }

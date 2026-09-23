@@ -451,7 +451,7 @@ jobs:
           nix build .#systemConfigs.debian --impure --no-link
           nix build .#nixosConfigurations.linux.config.system.build.toplevel --impure --no-link
           nix build .#homeConfigurations.x86_64-linux.activationPackage --impure --no-link
-          nix build .#package-support-report --no-link
+          nix build .#package-support-report --no-link --print-build-logs
 
   linux-ubuntu:
     name: Bootstrap / Linux / E2E / Ubuntu
@@ -498,7 +498,7 @@ jobs:
             echo "sha=$TESTED_SHA"
             echo "system_manager=$(readlink -f /run/system-manager/system 2>/dev/null || true)"
             echo "docker=$(dotfiles_run_in_group docker docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
-            echo "support_report=$(nix build .#package-support-report --no-link --print-out-paths 2>/dev/null | sha256sum | cut -d' ' -f1 || true)"
+            echo "support_report=$(nix build .#package-support-report --no-link --print-out-paths --print-build-logs | sha256sum | cut -d' ' -f1 || true)"
           } > ubuntu-attestation.txt
 
       - name: Upload Ubuntu attestation
@@ -706,7 +706,7 @@ jobs:
             --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY"
 
       - name: Verify provider coverage
-        run: nix build .#package-support-report --no-link
+        run: nix build .#package-support-report --no-link --print-build-logs
 
       - name: Write macOS contract attestation
         if: always()

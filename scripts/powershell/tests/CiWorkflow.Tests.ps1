@@ -215,6 +215,16 @@ Describe 'CI workflow configuration' {
         $wingetWorkflow | Should -Match 'throw "winget source update did not complete after \$Attempts attempts"'
     }
 
+    It 'should expose package provider report build logs in CI' {
+        $bootstrapWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
+        $consistencyWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-consistency.yml") -Raw
+
+        $bootstrapWorkflow | Should -Match 'nix build \.#package-support-report --no-link --print-build-logs'
+        $bootstrapWorkflow | Should -Match 'nix build \.#package-support-report --no-link --print-out-paths --print-build-logs'
+        $consistencyWorkflow | Should -Match 'nix build \.#package-support-report --print-build-logs'
+        $consistencyWorkflow | Should -Not -Match 'nix build \.#package-support-report[^\r\n]*2>/dev/null'
+    }
+
     It 'should pin the WinGet fallback module and avoid an AllUsers repair' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
 

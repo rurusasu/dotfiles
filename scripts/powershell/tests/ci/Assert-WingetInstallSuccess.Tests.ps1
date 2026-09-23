@@ -55,6 +55,25 @@ Total: 1 | Success: 0 | Failure: 1
         { Assert-WingetInstallSuccess -Output $output } | Should -Throw "*installer-cache-contention*cached installer file is locked*"
     }
 
+    It "parses the verification inventory from CRLF installer output" {
+        $installerOutput = @(
+            "[Winget] CI_VERIFICATION_INVENTORY: Test.Tool"
+            "[Winget] ✓ Test.Tool"
+            "Total: 1 | Success: 1 | Failure: 0"
+        ) -join "`r`n"
+
+        { Assert-WingetInstallSuccess -Output $installerOutput } | Should -Not -Throw
+    }
+
+    It "includes timeout diagnostics from CRLF installer output" {
+        $installerOutput = @(
+            "[Winget] TIMEOUT_DIAGNOSTIC: package=Test.Tool class=installer-cache-contention confidence=high evidence=cached installer file is locked"
+            "Total: 1 | Success: 0 | Failure: 1"
+        ) -join "`r`n"
+
+        { Assert-WingetInstallSuccess -Output $installerOutput } | Should -Throw "*installer-cache-contention*cached installer file is locked*"
+    }
+
         It "rejects a successful summary when CI never reported its verification inventory" {
             $output = "Total: 1 | Success: 1 | Failure: 0"
 

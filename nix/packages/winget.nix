@@ -23,10 +23,7 @@ let
     let
       verify = verifyMap.${key} or null;
     in
-    if verify == null then
-      pkg
-    else
-      pkg // { verifyCommand = verify; };
+    if verify == null then pkg else pkg // { verifyCommand = verify; };
 
   attachInstallArgs =
     installArgsMap: key: pkg:

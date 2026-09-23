@@ -1234,7 +1234,7 @@ class WingetHandler : SetupHandlerBase {
                 $uninstallString = if ($entry.PSObject.Properties.Name -contains "UninstallString") { [string]$entry.UninstallString } else { "" }
                 $productCodeMatch = $productCodes.Count -gt 0 -and (
                     $productCodes -contains $keyName.Trim().Trim("{}") -or
-                    (($productCodes | Where-Object { $uninstallString -match [regex]::Escape($_) }).Count -gt 0)
+                    (@($productCodes | Where-Object { $uninstallString -match [regex]::Escape($_) }).Count -gt 0)
                 )
                 $entryDisplayName = if ($entry.PSObject.Properties.Name -contains "DisplayName") { [string]$entry.DisplayName } else { "" }
                 $entryPublisher = if ($entry.PSObject.Properties.Name -contains "Publisher") { [string]$entry.Publisher } else { "" }
@@ -1255,16 +1255,14 @@ class WingetHandler : SetupHandlerBase {
                 if (-not $identityMatch -or -not $displayNameMatch -or -not $publisherMatch) { continue }
                 $matchingRegistrationFound = $true
 
-                $executablePaths = if ($uninstall.PSObject.Properties.Name -contains "executablePaths") {
-                    @($uninstall.executablePaths)
-                }
-                else {
-                    @()
+                [string[]]$executablePaths = @()
+                if ($uninstall.PSObject.Properties.Name -contains "executablePaths") {
+                    $executablePaths = [string[]]@($uninstall.executablePaths)
                 }
                 $displayIconValue = if ($entry.PSObject.Properties.Name -contains "DisplayIcon") { [string]$entry.DisplayIcon } else { "" }
                 if (-not [string]::IsNullOrWhiteSpace($displayIconValue)) {
                     $displayIcon = [regex]::Match($displayIconValue, '^\s*"?([^",]+\.exe)').Groups[1].Value
-                    if ($displayIcon) { $executablePaths += $displayIcon }
+                    if ($displayIcon) { $executablePaths = [string[]]@($executablePaths) + [string[]]@($displayIcon) }
                 }
                 if ($this.TestInstalledExecutableVersion($executablePaths)) {
                     return $true

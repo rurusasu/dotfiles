@@ -13,7 +13,7 @@
         throw 'install.cmd did not report a parseable setup summary'
     }
 
-    $timeoutDiagnostics = @([regex]::Matches($Output, '(?m)^\[Winget\][ \t]+TIMEOUT_DIAGNOSTIC:[ \t]*(?<diagnostic>[^\r\n]+)$') |
+    $timeoutDiagnostics = @([regex]::Matches($Output, '(?m)^\[Winget\][ \t]+TIMEOUT_DIAGNOSTIC:[ \t]*(?<diagnostic>[^\r\n]+)\r?$') |
         ForEach-Object { $_.Groups['diagnostic'].Value })
     $failureCount = [int]$summaryMatch.Groups['failureCount'].Value
     if ($failureCount -ne 0) {
@@ -24,7 +24,7 @@
         throw 'WinGet reported one or more package installation or verification failures'
     }
 
-    $inventoryMatch = [regex]::Match($Output, '(?m)^\[Winget\][ \t]+CI_VERIFICATION_INVENTORY:[ \t]*(?<ids>[^\r\n]*)$')
+    $inventoryMatch = [regex]::Match($Output, '(?m)^\[Winget\][ \t]+CI_VERIFICATION_INVENTORY:[ \t]*(?<ids>[^\r\n]*)\r?$')
     if (-not $inventoryMatch.Success) {
         throw 'install.cmd did not report the WinGet CI verification inventory'
     }

@@ -1949,7 +1949,9 @@ lib.mapAttrs (_: resolve) grouped
     "astral-sh.ruff" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ruff*" ];
     "JohnnyMorganz.StyLua" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\JohnnyMorganz.StyLua*" ];
     "tamasfe.taplo" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tamasfe.taplo*" ];
-    "tree-sitter.tree-sitter-cli" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*" ];
+    "tree-sitter.tree-sitter-cli" = [
+      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"
+    ];
     "astral-sh.ty" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ty*" ];
     "astral-sh.uv" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.uv*" ];
     _1password-cli = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*" ];
@@ -2117,7 +2119,7 @@ lib.mapAttrs (_: resolve) grouped
       type = "windowsInstalledProduct";
       command = "Microsoft PowerToys";
       uninstallEntry = {
-        displayName = "Microsoft PowerToys";
+        displayName = "PowerToys";
         publisher = "Microsoft Corporation";
         executablePaths = [
           "%ProgramFiles%\\PowerToys\\PowerToys.exe"

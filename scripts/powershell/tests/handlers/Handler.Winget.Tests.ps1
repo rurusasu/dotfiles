@@ -153,6 +153,43 @@ Describe 'WingetHandler' {
             Should -Invoke Get-ItemProperty -Times 1
         }
 
+        It 'should verify a product code found in a single matching uninstall string' {
+            $registryKey = [PSCustomObject]@{
+                Name = 'DiscordSetup'
+                PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\DiscordSetup'
+            }
+            Mock Get-AppxPackage { return $null }
+            Mock Get-ChildItem { return @($registryKey) } -ParameterFilter {
+                $LiteralPath -like '*\Uninstall'
+            }
+            Mock Get-ItemProperty {
+                return [PSCustomObject]@{
+                    DisplayVersion = '1.0.0'
+                    DisplayName = 'Discord'
+                    Publisher = 'Discord Inc.'
+                    UninstallString = 'C:\Apps\Discord\Update.exe --uninstall'
+                }
+            } -ParameterFilter {
+                $LiteralPath -eq $registryKey.PSPath
+            }
+            Mock Get-ChildItem {
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '1.0.0' } }
+            } -ParameterFilter { $Path -eq 'C:\Apps\Discord.exe' }
+
+            $verified = $handler.TestPackageVerification([PSCustomObject]@{
+                    command = 'Discord'
+                    type = 'windowsInstalledProduct'
+                    uninstallEntry = [PSCustomObject]@{
+                        productCodes = @('Discord')
+                        displayName = 'Discord'
+                        publisher = 'Discord Inc.'
+                        executablePaths = @('C:\Apps\Discord.exe')
+                    }
+                })
+
+            $verified | Should -BeTrue
+        }
+
         It 'should verify Orca from its actual per-user uninstall name and DisplayIcon executable' {
             $orcaExecutable = Join-Path $env:LOCALAPPDATA 'Programs\orca\Orca.exe'
             $registryKey = [PSCustomObject]@{
@@ -185,6 +222,44 @@ Describe 'WingetHandler' {
                 })
 
             $verified | Should -BeTrue
+        }
+
+        It 'should check a single manifest executable path and DisplayIcon as separate candidates' {
+            $manifestExecutable = 'C:\Apps\VC_redist.x64.exe'
+            $displayIconExecutable = 'C:\Windows\System32\vcruntime140.exe'
+            $registryKey = [PSCustomObject]@{
+                Name = 'VC_redist.x64'
+                PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\VC_redist.x64'
+            }
+            Mock Get-AppxPackage { return $null }
+            Mock Get-ChildItem { return @($registryKey) } -ParameterFilter {
+                $LiteralPath -like '*\Uninstall'
+            }
+            Mock Get-ItemProperty {
+                return [PSCustomObject]@{
+                    DisplayName = 'Microsoft Visual C++ 2015-2022 Redistributable (x64)'
+                    Publisher = 'Microsoft Corporation'
+                    DisplayIcon = "$displayIconExecutable,0"
+                }
+            } -ParameterFilter { $LiteralPath -eq $registryKey.PSPath }
+            Mock Get-ChildItem { }
+            Mock Get-ChildItem {
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '14.40.33810.0' } }
+            } -ParameterFilter { $Path -eq $displayIconExecutable }
+
+            $verified = $handler.TestPackageVerification([PSCustomObject]@{
+                    command = 'Microsoft.VCRedist.2015+.x64'
+                    type = 'windowsInstalledProduct'
+                    uninstallEntry = [PSCustomObject]@{
+                        displayName = 'Microsoft Visual C++ 2015-2022 Redistributable (x64)'
+                        publisher = 'Microsoft Corporation'
+                        executablePaths = @($manifestExecutable)
+                    }
+                })
+
+            $verified | Should -BeTrue
+            Should -Invoke Get-ChildItem -Times 1 -ParameterFilter { $Path -eq $manifestExecutable }
+            Should -Invoke Get-ChildItem -Times 1 -ParameterFilter { $Path -eq $displayIconExecutable }
         }
 
         It 'should reject an uninstall registration with no valid installed version' {

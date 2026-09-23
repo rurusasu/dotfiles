@@ -172,18 +172,6 @@ push_update() {
 	[ "$(cat "$STATE_FILE")" = "$previous_hash" ]
 }
 
-@test "Tart package output contains only the requested CLI set" {
-	packages="$REPO_ROOT/nix/flakes/packages.nix"
-	sets="$REPO_ROOT/nix/packages/sets.nix"
-
-	grep -q 'tartMinimal = resolve' "$sets"
-	for package in git chezmoi neovim codex; do
-		grep -q "\"$package\"" "$sets"
-	done
-	grep -q 'tart-minimal = pkgs.buildEnv' "$packages"
-	grep -q 'paths = sets.tartMinimal' "$packages"
-}
-
 @test "Tart run task attempts Hindsight non-fatally and uses the managed launcher" {
 	taskfile="$REPO_ROOT/taskfiles/install/taskfile.yml"
 

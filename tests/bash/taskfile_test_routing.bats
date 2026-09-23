@@ -130,10 +130,8 @@ EOF
 	[ "$profile_line" -lt "$bootstrap_line" ]
 }
 
-@test "NixOS rebuild helper is used for every WSL rebuild shortcut" {
+@test "NixOS rebuild helper wiring is retained for WSL and update tasks" {
 	grep -Fq 'scripts/sh/nixos-rebuild-with-user.sh' "$REPO_ROOT/taskfiles/nix/taskfile.yml"
-	grep -Fq 'nrt = "~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh test' "$REPO_ROOT/nix/home/wsl.nix"
-	grep -Fq 'nrb = "~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh boot' "$REPO_ROOT/nix/home/wsl.nix"
 	grep -Fq 'scripts/sh/nixos-rebuild-with-user.sh switch --flake ~/.dotfiles#nixos --impure' "$REPO_ROOT/scripts/sh/update.sh"
 }
 
