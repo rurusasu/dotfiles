@@ -248,17 +248,6 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve missing Hermes input lock for migration validation
-        run: |
-          set -euo pipefail
-          nix flake lock --update-input hermes-agent
-          jq -e '
-            .nodes as $nodes |
-            ($nodes.root.inputs["hermes-agent"] as $input |
-              (if ($input | type) == "string" then $nodes[$input].locked.rev else $input.rev end)
-              == "d337b736aa1e8ebecfab043842d13e4a2d2f48a3")
-          ' flake.lock
-
       - name: Cache PSScriptAnalyzer
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
@@ -334,24 +323,6 @@ jobs:
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Resolve missing Hermes input lock for migration validation
-        run: |
-          set -euo pipefail
-          nix flake lock --update-input hermes-agent
-          jq -e '
-            .nodes as $nodes |
-            ($nodes.root.inputs["hermes-agent"] as $input |
-              (if ($input | type) == "string" then $nodes[$input].locked.rev else $input.rev end)
-              == "d337b736aa1e8ebecfab043842d13e4a2d2f48a3")
-          ' flake.lock
-
-      - name: Upload generated Hermes lock graph
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: hermes-flake-lock-${{ github.run_id }}
-          path: flake.lock
-          if-no-files-found: error
 
       - name: Free runner disk space
         run: |
@@ -778,7 +749,7 @@ jobs:
   wsl:
     name: Bootstrap / WSL
     needs: changes
-    if: ${{ needs.changes.outputs.wsl == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ needs.changes.outputs.wsl == 'true' }}
     runs-on: windows-2025
     timeout-minutes: 120
     steps:
@@ -842,11 +813,20 @@ jobs:
             -InstallDir $installDir
 
   windows:
-    name: Bootstrap / Windows
+    name: Bootstrap / Windows (${{ matrix.runtime }})
     needs: changes
     if: ${{ needs.changes.outputs.windows == 'true' }}
     runs-on: windows-2025
-    timeout-minutes: 30
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - runtime: Windows PowerShell 5.1
+            shell: powershell
+          - runtime: PowerShell 7
+            shell: pwsh
     steps:
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -857,22 +837,97 @@ jobs:
       - name: Install chezmoi
         uses: ./.github/actions/install-chezmoi
 
-      - name: Install and validate AutoHotkey v2
-        shell: pwsh
+      - name: Install and verify admin-required Visual Studio Build Tools through the installer
+        shell: ${{ matrix.shell }}
+        timeout-minutes: 60
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          winget install --id AutoHotkey.AutoHotkey --exact --source winget --scope machine --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-          if ($LASTEXITCODE -ne 0) {
-            throw "winget failed to install AutoHotkey v2 (exit $LASTEXITCODE)"
+
+          $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+          $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+          if (-not $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
+            throw 'Hosted Windows runner is not elevated; refusing to skip admin-required WinGet package coverage'
           }
+
+          $options = @{
+            SkipSetDefaultDistro = $true
+            SkipVhdExpand = $true
+            SkipWslInstall = $true
+          }
+          $optionsBase64 = [Convert]::ToBase64String(
+            [Text.Encoding]::UTF8.GetBytes(($options | ConvertTo-Json -Compress))
+          )
+          $adminScript = Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/install.admin.ps1'
+          $shellExecutable = if ($PSVersionTable.PSVersion.Major -ge 7) { 'pwsh.exe' } else { 'powershell.exe' }
+          $installerOutput = @(
+            & (Join-Path $PSHOME $shellExecutable) `
+              -NoLogo -NoProfile -ExecutionPolicy Bypass `
+              -File $adminScript `
+              '-AdminOnly:$true' `
+              -OptionsBase64 $optionsBase64 `
+              -NoPause 2>&1
+          )
+          $installerExitCode = $LASTEXITCODE
+          $installerOutput | ForEach-Object { Write-Host ([string]$_) }
+          if ($installerExitCode -ne 0) {
+            throw "Admin-only installer phase failed (exit=$installerExitCode)"
+          }
+
+          $installerText = $installerOutput -join [Environment]::NewLine
+          if ($installerText -notmatch '(?m)^\[WingetAdmin\]\s+インストール/更新中: AutoHotkey\.AutoHotkey\s*$') {
+            throw 'Admin-only installer did not attempt AutoHotkey.AutoHotkey'
+          }
+          if ($installerText -match '(?m)^\[WingetAdmin\].*✗.*AutoHotkey\.AutoHotkey') {
+            throw 'Admin-only installer reported an AutoHotkey package failure'
+          }
+          if ($installerText -notmatch '(?m)^\[WingetAdmin\]\s+インストール/更新中: Microsoft\.VisualStudio\.2022\.BuildTools\s*$') {
+            throw 'Admin-only installer did not attempt Microsoft.VisualStudio.2022.BuildTools'
+          }
+          if ($installerText -match '(?m)^\[WingetAdmin\].*✗.*Microsoft\.VisualStudio\.2022\.BuildTools') {
+            throw 'Admin-only installer reported a Visual Studio Build Tools package failure'
+          }
+          if ($installerText -notmatch '(?m)^Total:\s*\d+\s*\|\s*Success:\s*\d+\s*\|\s*Failure:\s*0\s*$') {
+            throw 'Admin-only installer did not report a zero-failure setup summary'
+          }
+
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path -LiteralPath $vswhere -PathType Leaf)) {
+            throw "Visual Studio instance locator is missing: $vswhere"
+          }
+          $buildToolsPath = @(
+            & $vswhere -products Microsoft.VisualStudio.Product.BuildTools `
+              -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+              -property installationPath
+          ) | Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace([string]$buildToolsPath)) {
+            throw 'No Visual Studio Build Tools instance with the required x86/x64 C++ component was found'
+          }
+          $compiler = @(
+            Get-ChildItem -LiteralPath (Join-Path $buildToolsPath 'VC\Tools\MSVC') -Directory -ErrorAction Stop |
+              ForEach-Object {
+                Join-Path $_.FullName 'bin\Hostx64\x64\cl.exe'
+              } |
+              Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+              Select-Object -First 1
+          ) | Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace([string]$compiler)) {
+            throw "Visual Studio Build Tools compiler executable was not found under $buildToolsPath"
+          }
+          Write-Output "CI_ADMIN_PACKAGE_SUCCESS: id=Microsoft.VisualStudio.2022.BuildTools executable=$compiler"
+
+      - name: Verify admin-installed AutoHotkey v2
+        shell: ${{ matrix.shell }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
           $autoHotkey = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe"
           if (-not (Test-Path -LiteralPath $autoHotkey -PathType Leaf)) {
-            throw "AutoHotkey v2 executable was not found after installation: $autoHotkey"
+            throw "AutoHotkey v2 executable was not installed by the admin phase: $autoHotkey"
           }
           $uiAccess = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64_UIA.exe"
           if (-not (Test-Path -LiteralPath $uiAccess -PathType Leaf)) {
-            throw "AutoHotkey v2 UIAccess executable was not found after machine installation: $uiAccess"
+            throw "AutoHotkey v2 UIAccess executable was not installed by the admin phase: $uiAccess"
           }
           $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'chezmoi\terminals\windows-terminal\terminal-keybindings.ahk'
           & $uiAccess '/ErrorStdOut' $scriptPath '--check'
@@ -885,14 +940,14 @@ jobs:
           }
 
       - name: Install pinned Pester
-        shell: pwsh
+        shell: ${{ matrix.shell }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           Install-Module -Name Pester -RequiredVersion '5.6.1' -Scope CurrentUser -Force -SkipPublisherCheck
 
       - name: Run Windows bootstrap contracts
-        shell: pwsh
+        shell: ${{ matrix.shell }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -903,13 +958,13 @@ jobs:
 
       - name: Write Windows contract attestation
         if: always()
-        shell: pwsh
+        shell: ${{ matrix.shell }}
         run: |
           @(
             "sha=$env:TESTED_SHA"
             "runner_image=$env:ImageOS-$env:ImageVersion"
             "layer=windows-bootstrap"
-            "runtime=not-applicable-on-github-hosted-runner"
+            "runtime=${{ matrix.runtime }}"
           ) | Set-Content -LiteralPath windows-contract-attestation.txt -Encoding utf8
 
       - name: Upload Windows contract results
@@ -1019,13 +1074,17 @@ jobs:
             # installer while forcing install.cmd through its 5.1 fallback.
             $ps7ExecutableDirectories = @(
               Get-Command -Name 'pwsh.exe' -CommandType Application -All -ErrorAction SilentlyContinue |
-                ForEach-Object { Split-Path -Parent $_.Source } |
+                ForEach-Object { [System.IO.Path]::GetFullPath((Split-Path -Parent $_.Source)).TrimEnd('\') } |
                 Sort-Object -Unique
             )
             $env:DOTFILES_PS7_DIR = Join-Path $env:RUNNER_TEMP 'NoPowerShell7Dir'
             $env:PATH = @(
               $originalPath -split ';' |
-                Where-Object { $_ -and $_ -notin $ps7ExecutableDirectories }
+                Where-Object {
+                  if ([string]::IsNullOrWhiteSpace($_)) { return $false }
+                  $pathEntry = [System.IO.Path]::GetFullPath($_.Trim().Trim('"')).TrimEnd('\')
+                  $pathEntry -notin $ps7ExecutableDirectories
+                }
             ) -join ';'
           }
           else {
@@ -1120,7 +1179,22 @@ jobs:
           }
 
           . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WindowsInstallerSuccess.ps1')
-          Assert-WindowsInstallerSuccess -Output $out -ExitCode $exitCode -CompletionMarker 'User Phase Complete!'
+          $npmManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/npm/packages.json') -Raw | ConvertFrom-Json
+          $pnpmManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/pnpm/packages.json') -Raw | ConvertFrom-Json
+          $requiredPackageManagerMarkers = @('[Pnpm] npm で pnpm をインストールしました')
+          foreach ($package in $npmManifest.globalPackages) {
+            $requiredPackageManagerMarkers += "[Npm] ✓ $($package.name)"
+          }
+          foreach ($package in $pnpmManifest.globalPackages) {
+            if ([string]::IsNullOrWhiteSpace([string]$package.installFeature)) {
+              $requiredPackageManagerMarkers += "[Pnpm] ✓ $($package.name)"
+            }
+          }
+          Assert-WindowsInstallerSuccess `
+            -Output $out `
+            -ExitCode $exitCode `
+            -CompletionMarker 'User Phase Complete!' `
+            -RequiredOutputMarkers $requiredPackageManagerMarkers
           if ($isWindowsPowerShell -and $out -notmatch 'Falling back to Windows PowerShell') {
             throw 'The full Windows installer E2E did not exercise the Windows PowerShell 5.1 fallback'
           }
@@ -1205,34 +1279,19 @@ jobs:
             throw "Codex CLI shim is not the command exposed on PATH: expected=$codexShimPath actual=$($codexPathCommand.Source)"
           }
 
+          . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/lib/SetupHandler.ps1')
+          . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/handlers/Handler.Codex.ps1')
+          $codexPackageExecutablePath = Resolve-CodexPackageExecutablePath -LocalAppData $env:LOCALAPPDATA
+          if (-not $codexPackageExecutablePath) {
+            throw 'Codex executable with an adjacent code-mode host cannot be located in WinGet or Programs\Codex'
+          }
+
           $codexShim = Get-Item -LiteralPath $codexShimPath
           $codexHostDirectory = $codexLinksPath
-          $linkType = $codexShim.PSObject.Properties['LinkType']
-          $targetProperty = $codexShim.PSObject.Properties['Target']
-          if ($linkType -and $linkType.Value -eq 'SymbolicLink' -and $targetProperty -and $targetProperty.Value) {
-            $codexTarget = [string]@($targetProperty.Value)[0]
-            if (-not [System.IO.Path]::IsPathRooted($codexTarget)) {
-              $codexTarget = Join-Path $codexLinksPath $codexTarget
-            }
-            $codexHostDirectory = Split-Path -Parent $codexTarget
-          }
-          elseif (($codexShim.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-            # Windows PowerShell 5.1 does not expose LinkType/Target on FileInfo.
-            # Use the package executable's directory to verify the true adjacent
-            # host for a WinGet symlink instead of misclassifying it as a copy.
-            $codexPackageRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
-            $codexPackageExecutable = Get-ChildItem -Path (Join-Path $codexPackageRoot 'OpenAI.Codex_*') `
-              -File -Filter 'codex-x86_64-pc-windows-msvc.exe' -ErrorAction SilentlyContinue |
-              Select-Object -First 1
-            if (-not $codexPackageExecutable) {
-              $codexPackageExecutable = Get-ChildItem -Path (Join-Path $codexPackageRoot 'OpenAI.Codex_*') `
-                -File -Filter 'codex.exe' -ErrorAction SilentlyContinue |
-                Select-Object -First 1
-            }
-            if (-not $codexPackageExecutable) {
-              throw 'Codex shim is a reparse point but its adjacent package executable cannot be located'
-            }
-            $codexHostDirectory = Split-Path -Parent $codexPackageExecutable.FullName
+          if (($codexShim.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            # Resolve the package from known install roots. This works in Windows
+            # PowerShell 5.1, where FileInfo does not expose LinkType or Target.
+            $codexHostDirectory = Split-Path -Parent $codexPackageExecutablePath
           }
 
           $codexHostPath = Join-Path $codexHostDirectory 'codex-code-mode-host.exe'
@@ -1275,6 +1334,16 @@ jobs:
               throw "Windows installer command '$($requiredCommand.Name)' failed (exit=$commandExitCode): $($commandOutput -join ' ')"
             }
           }
+          $nodeVersionOutput = @(node --version 2>&1)
+          $nodeVersionExitCode = $LASTEXITCODE
+          if ($nodeVersionExitCode -ne 0 -or $nodeVersionOutput.Count -eq 0) {
+            throw "Cannot determine the active Node.js version required by agent-browser@0.38.1 (exit=$nodeVersionExitCode): $($nodeVersionOutput -join ' ')"
+          }
+          $nodeVersionText = ([string]($nodeVersionOutput | Select-Object -Last 1)).Trim() -replace '^v', ''
+          $nodeVersion = $null
+          if (-not [version]::TryParse($nodeVersionText, [ref]$nodeVersion) -or $nodeVersion -lt [version]'24.0.0') {
+            throw "agent-browser@0.38.1 requires Node.js >=24.0.0; active Node.js version is '$nodeVersionText'"
+          }
           if ($out -notmatch 'pnpm が見つかりません。npm 経由でインストールします') {
             throw 'Windows installer E2E did not exercise the pnpm bootstrap path'
           }
@@ -1304,7 +1373,7 @@ jobs:
       PLATFORM_REQUIRED: ${{ needs.changes.outputs.platforms }}
       LINUX_REQUIRED: ${{ needs.changes.outputs.linux }}
       DARWIN_REQUIRED: ${{ needs.changes.outputs.darwin }}
-      WSL_REQUIRED: ${{ needs.changes.outputs.wsl == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+      WSL_REQUIRED: ${{ needs.changes.outputs.wsl }}
       WINDOWS_REQUIRED: ${{ needs.changes.outputs.windows }}
       NIX_REQUIRED: ${{ needs.changes.outputs.nix }}
       LINUX_BUILD_RESULT: ${{ needs.linux-build.result }}

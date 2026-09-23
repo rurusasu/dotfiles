@@ -30,6 +30,7 @@
 ### Task 1: Home Manager Hermes service contract
 
 **Files:**
+
 - Create: `nix/tests/hermes-agent.nix`
 - Modify: `nix/flakes/tests.nix`
 - Modify: `nix/test-fixtures.nix` and Nix-unit contract assertions
@@ -41,6 +42,7 @@
 ### Task 2: Native user-level Agent management
 
 **Files:**
+
 - Create: `nix/home/hermes-agent.nix`
 - Modify: `nix/home/darwin.nix`
 - Modify: `nix/home/linux.nix`
@@ -55,6 +57,7 @@
 ### Task 3: Document management and migration boundaries
 
 **Files:**
+
 - Modify: `docs/hermes-agent/bootstrap.md`
 - Modify: `docs/architecture.md`
 

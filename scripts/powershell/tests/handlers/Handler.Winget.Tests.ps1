@@ -20,6 +20,9 @@ Describe 'WingetHandler' {
         $env:USERPROFILE = Join-Path $TestDrive "UserProfile"
         $script:handler = [WingetHandler]::new()
         $script:ctx = [SetupContext]::new((Join-Path $TestDrive "dotfiles"))
+        $retiredManifestDirectory = Join-Path $ctx.DotfilesPath 'windows\winget'
+        New-Item -ItemType Directory -Path $retiredManifestDirectory -Force | Out-Null
+        '{"packages":[]}' | Set-Content -LiteralPath (Join-Path $retiredManifestDirectory 'retired-packages.json') -Encoding UTF8
         Mock Test-Path {
             param($Path, $LiteralPath, $PathType)
 
@@ -45,6 +48,10 @@ Describe 'WingetHandler' {
     }
 
     Context 'RemoveRetiredPackages' {
+        It 'should fail instead of silently skipping cleanup when the retired manifest is missing' {
+            { $handler.RemoveRetiredPackages($TestDrive) } | Should -Throw '*retired package manifest is missing*'
+        }
+
         It 'should uninstall only the exact retired package from its declared source' {
             $retiredManifest = Join-Path $TestDrive 'retired-packages.json'
             @{
@@ -72,6 +79,35 @@ Describe 'WingetHandler' {
             $script:retiredPackageArgs | Should -Contain '--source'
             $script:retiredPackageArgs | Should -Contain 'msstore'
             $script:retiredPackageArgs | Should -Contain '--silent'
+        }
+
+        It 'should apply the retired package manifest from the configured dotfiles root' {
+            $manifestDirectory = Join-Path $ctx.DotfilesPath 'windows\winget'
+            New-Item -ItemType Directory -Path $manifestDirectory -Force | Out-Null
+            @{ Sources = @() } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $manifestDirectory 'packages.json') -Encoding UTF8
+            @{
+                packages = @(
+                    @{
+                        id     = '9NT1R1C2HH7J'
+                        name   = 'ChatGPT Classic'
+                        source = 'msstore'
+                    }
+                )
+            } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $manifestDirectory 'retired-packages.json') -Encoding UTF8
+
+            Mock Invoke-Winget {
+                param([string[]]$Arguments)
+                $script:retiredPackageArgs = $Arguments
+                $global:LASTEXITCODE = 0
+                return 'Successfully uninstalled'
+            }
+
+            $ctx.Options['WingetMode'] = 'import'
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:retiredPackageArgs | Should -Contain 'uninstall'
+            $script:retiredPackageArgs | Should -Contain '9NT1R1C2HH7J'
         }
     }
 
@@ -812,6 +848,33 @@ Describe 'WingetHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match "1 個変更なし"
         }
+
+        It 'should not classify a no-op phrase as unchanged when pre-install inventory did not find the package' {
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains 'list' -and $Arguments -notcontains '--id') {
+                    $global:LASTEXITCODE = 0
+                    return @('Name Id Version Source', '-------------------')
+                }
+                if ($Arguments -contains 'list' -and $Arguments -contains '--id') {
+                    $global:LASTEXITCODE = 1
+                    return @('No package found')
+                }
+                if ($Arguments -contains 'install') {
+                    $global:LASTEXITCODE = 1
+                    return @('No applicable update found', 'Installer failed with exit code: 1603')
+                }
+                $global:LASTEXITCODE = 0
+                return @()
+            }
+
+            $ctx.Options['WingetMode'] = 'import'
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match '1 個失敗'
+            $result.Message | Should -Not -Match '変更なし'
+        }
     }
 
     Context 'Apply - import mode: installed package verification fails' {
@@ -958,7 +1021,7 @@ Describe 'WingetHandler' {
                         [PSCustomObject]@{
                             SourceDetails = [PSCustomObject]@{ Name = "msstore" }
                             Packages      = @(
-                                [PSCustomObject]@{ PackageIdentifier = "9NT1R1C2HH7J" }
+                                [PSCustomObject]@{ PackageIdentifier = "Contoso.StoreApp" }
                             )
                         }
                     )
@@ -1090,7 +1153,7 @@ Describe 'WingetHandler' {
                         [PSCustomObject]@{
                             SourceDetails = [PSCustomObject]@{ Name = "msstore" }
                             Packages      = @(
-                                [PSCustomObject]@{ PackageIdentifier = "9NT1R1C2HH7J" }
+                                [PSCustomObject]@{ PackageIdentifier = "Contoso.StoreApp" }
                             )
                         }
                     )
@@ -1103,7 +1166,7 @@ Describe 'WingetHandler' {
                     return @(
                         "Name              Id            Version  Source",
                         "-------------------------------------------------",
-                        "Windows Terminal  9NT1R1C2HH7J  1.19.0   msstore"
+                        "Contoso Store App  Contoso.StoreApp  1.19.0   msstore"
                     )
                 }
                 $global:LASTEXITCODE = 0
@@ -1123,7 +1186,7 @@ Describe 'WingetHandler' {
                     return @(
                         "Name              Id            Version  Source",
                         "-------------------------------------------------",
-                        "Windows Terminal  9NT1R1C2HH7J  1.19.0   msstore"
+                        "Contoso Store App  Contoso.StoreApp  1.19.0   msstore"
                     )
                 }
                 $global:LASTEXITCODE = 0
@@ -2378,6 +2441,49 @@ Describe 'WingetHandler' {
         }
     }
 
+    Context 'EnsurePathEntries - installed WinGet command verification' {
+        It 'should resolve the nine reported portable package commands from their package directories' {
+            $originalPath = $env:PATH
+            $originalLocalAppData = $env:LOCALAPPDATA
+            $env:LOCALAPPDATA = Join-Path $TestDrive 'WinGetLocalAppData'
+            $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+            $packageCommands = @(
+                @{ Id = 'Task.Task'; Command = 'task' },
+                @{ Id = 'hadolint.hadolint'; Command = 'hadolint' },
+                @{ Id = 'Artempyanykh.Marksman'; Command = 'marksman' },
+                @{ Id = 'astral-sh.ruff'; Command = 'ruff' },
+                @{ Id = 'JohnnyMorganz.StyLua'; Command = 'stylua' },
+                @{ Id = 'tamasfe.taplo'; Command = 'taplo' },
+                @{ Id = 'tree-sitter.tree-sitter-cli'; Command = 'tree-sitter' },
+                @{ Id = 'astral-sh.ty'; Command = 'ty' },
+                @{ Id = 'astral-sh.uv'; Command = 'uv' }
+            )
+            Mock Set-UserEnvironmentPath { }
+
+            try {
+                foreach ($packageCommand in $packageCommands) {
+                    $env:PATH = $originalPath
+                    $packageDirectory = Join-Path $packagesRoot "$($packageCommand.Id)_Microsoft.Winget.Source_8wekyb3d8bbwe"
+                    New-Item -ItemType Directory -Path $packageDirectory -Force | Out-Null
+                    Set-Content -LiteralPath (Join-Path $packageDirectory "$($packageCommand.Command).cmd") -Value '@exit /b 0' -Encoding ASCII
+
+                    $handler.EnsurePathEntriesQuiet([PSCustomObject]@{
+                            PathEntries = @("%LOCALAPPDATA%\Microsoft\WinGet\Packages\$($packageCommand.Id)*")
+                        })
+
+                    $resolved = Get-Command -Name $packageCommand.Command -CommandType Application -ErrorAction SilentlyContinue |
+                        Select-Object -First 1
+                    $resolved | Should -Not -BeNullOrEmpty -Because "$($packageCommand.Id) must expose $($packageCommand.Command) after PATH setup"
+                    $resolved.Source | Should -Be (Join-Path $packageDirectory "$($packageCommand.Command).cmd")
+                }
+            }
+            finally {
+                $env:PATH = $originalPath
+                $env:LOCALAPPDATA = $originalLocalAppData
+            }
+        }
+    }
+
     Context 'Apply - import mode: skipInstall package' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
@@ -2631,11 +2737,259 @@ Describe 'WingetHandler' {
             ($script:loggedMessages -join "`n") | Should -Match "winget timed out after downloading the archive"
         }
 
+        It 'should repair an installed Codex CLI with no adjacent host from the direct archive' {
+            $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppData'
+            New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
+            $script:codexDestination = Join-Path $TestDrive 'CodexRepair'
+            $script:directInstallerCalls = 0
+            $script:verifyCalls = 0
+            $script:loggedMessages = @()
+            Mock Get-JsonContent {
+                [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = 'winget' }
+                            Packages = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = 'OpenAI.Codex'
+                                    directInstaller = [PSCustomObject]@{
+                                        type = 'archive'
+                                        url = 'https://example.invalid/codex.zip'
+                                        sha256 = ('cd' * 32)
+                                        destination = $script:codexDestination
+                                        executable = 'bin\codex.exe'
+                                        timeoutSeconds = 30
+                                    }
+                                    verifyCommand = [PSCustomObject]@{ command = 'codex'; args = @('--version') }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains 'list' -and $Arguments -notcontains '--id') {
+                    $global:LASTEXITCODE = 0
+                    return @('Name Id Version Source', '-------------------', 'Codex OpenAI.Codex 1.0 winget')
+                }
+                if ($Arguments -contains 'install') {
+                    $global:LASTEXITCODE = 1
+                    return 'No applicable update found'
+                }
+                $global:LASTEXITCODE = 1
+                return @()
+            }
+            Mock Invoke-VerifyCommand {
+                $script:verifyCalls++
+                $global:LASTEXITCODE = 0
+                return 'codex 1.0.0'
+            }
+            Mock Invoke-WebRequest {
+                param($OutFile)
+                Set-Content -LiteralPath $OutFile -Value 'Codex archive fixture' -NoNewline
+            }
+            Mock Get-FileHash { [PSCustomObject]@{ Hash = ('cd' * 32).ToUpperInvariant() } }
+            Mock Expand-Archive {
+                param($DestinationPath)
+                $binPath = Join-Path $DestinationPath 'bin'
+                New-Item -ItemType Directory -Path $binPath -Force | Out-Null
+                [System.IO.File]::WriteAllText((Join-Path $binPath 'codex.exe'), 'repaired CLI')
+                [System.IO.File]::WriteAllText((Join-Path $binPath 'codex-code-mode-host.exe'), 'repaired host')
+            }
+            Mock Write-Host {
+                param($Object)
+                $script:loggedMessages += [string]$Object
+            }
+
+            $ctx.Options['WingetMode'] = 'import'
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue -Because "$($result.Message): $($script:loggedMessages -join '; ')"
+            Should -Invoke Invoke-WebRequest -Times 1
+            (Join-Path $script:codexDestination 'bin\codex.exe') | Should -Exist
+            (Join-Path $script:codexDestination 'bin\codex-code-mode-host.exe') | Should -Exist
+            $script:verifyCalls | Should -BeGreaterThan 0
+            ($script:loggedMessages -join "`n") | Should -Match 'Codex.*host'
+        }
+
+        It 'should preserve both Codex executables when installing the complete tar.gz package' {
+            $fixtureRoot = Join-Path $TestDrive "CodexTarFixture"
+            $fixtureBin = Join-Path $fixtureRoot "bin"
+            $script:codexDestination = Join-Path $TestDrive "CodexTarInstall"
+            $script:codexArchive = Join-Path $TestDrive "codex-package.tar.gz"
+            $script:codexArchiveHash = ("ef" * 32).ToUpperInvariant()
+            $script:codexVerificationAttempts = 0
+            $codexExecutable = "bin\codex.exe"
+            $codeModeHost = "codex-code-mode-host.exe"
+            New-Item -ItemType Directory -Path $fixtureBin -Force | Out-Null
+            [System.IO.File]::WriteAllBytes(
+                (Join-Path $fixtureBin "codex.exe"),
+                [System.Text.Encoding]::ASCII.GetBytes("codex cli fixture payload")
+            )
+            [System.IO.File]::WriteAllBytes(
+                (Join-Path $fixtureBin $codeModeHost),
+                [System.Text.Encoding]::ASCII.GetBytes("codex code mode host fixture payload")
+            )
+            $tar = Get-Command tar.exe -ErrorAction Stop
+            & $tar.Source -czf $script:codexArchive -C $fixtureRoot bin 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                throw "Could not create Codex tar.gz test fixture (exit code $LASTEXITCODE)"
+            }
+
+            # Keep real tar extraction in this test, but avoid ProcessStartInfo
+            # stream/encoding behavior (which differs between Windows PowerShell
+            # 5.1 and PowerShell 7). The native invocation explicitly captures
+            # both output streams, as the production wrapper does.
+            Mock Invoke-ExternalCommandWithTimeout {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $output = @(& $Command @Arguments 2>&1 | ForEach-Object { [string]$_ })
+                $tarExitCode = $LASTEXITCODE
+                $global:LASTEXITCODE = $tarExitCode
+                return $output
+            } -ParameterFilter { $Command -eq 'tar.exe' }
+
+            Mock Get-JsonContent {
+                [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "OpenAI.Codex"
+                                    directInstaller   = [PSCustomObject]@{
+                                        type           = "archive"
+                                        url            = "https://example.invalid/codex-package-x86_64-pc-windows-msvc.tar.gz"
+                                        sha256         = $script:codexArchiveHash
+                                        destination    = $script:codexDestination
+                                        executable     = $codexExecutable
+                                        timeoutSeconds = 30
+                                    }
+                                    pathEntries       = @($script:codexDestination)
+                                    verifyCommand     = [PSCustomObject]@{ command = "codex"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 0
+                    return @("Name Id Version Source", "-------------------")
+                }
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 1
+                    return "winget source unavailable while installing Codex"
+                }
+                $global:LASTEXITCODE = 0
+                return @()
+            }
+            Mock Invoke-VerifyCommand {
+                $script:codexVerificationAttempts++
+                if ($script:codexVerificationAttempts -eq 1) {
+                    $global:LASTEXITCODE = 1
+                    throw "codex not found before installation"
+                }
+                $global:LASTEXITCODE = 0
+                return "codex 0.156.1"
+            }
+            Mock Invoke-WebRequest {
+                param($OutFile)
+                Copy-Item -LiteralPath $script:codexArchive -Destination $OutFile -Force
+            }
+            Mock Get-FileHash {
+                [PSCustomObject]@{ Hash = $script:codexArchiveHash }
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            (Join-Path $script:codexDestination $codexExecutable) | Should -Exist
+            (Join-Path $script:codexDestination "bin\$codeModeHost") | Should -Exist
+            [System.IO.File]::ReadAllText((Join-Path $script:codexDestination $codexExecutable)) |
+                Should -Be "codex cli fixture payload"
+            [System.IO.File]::ReadAllText((Join-Path $script:codexDestination "bin\$codeModeHost")) |
+                Should -Be "codex code mode host fixture payload"
+            $script:codexVerificationAttempts | Should -Be 2
+        }
+
+        It 'should repair an installed Codex CLI missing its adjacent host through the direct archive' {
+            $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppData'
+            $script:codexDestination = Join-Path $TestDrive 'CodexMissingHost'
+            $script:codexHash = ('cd' * 32).ToUpperInvariant()
+            $script:archiveDownloads = 0
+            $codexBin = Join-Path $script:codexDestination 'bin'
+            New-Item -ItemType Directory -Path $codexBin -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $codexBin 'codex.exe') -Value 'existing CLI' -Encoding ASCII
+            Set-Content -LiteralPath (Join-Path $script:codexDestination '.dotfiles-direct-installer.sha256') -Value $script:codexHash -Encoding ASCII
+
+            Mock Get-JsonContent {
+                [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = 'winget' }
+                            Packages = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = 'OpenAI.Codex'
+                                    directInstaller = [PSCustomObject]@{
+                                        type = 'archive'
+                                        url = 'https://example.invalid/codex-package.zip'
+                                        sha256 = $script:codexHash
+                                        destination = $script:codexDestination
+                                        executable = 'bin\codex.exe'
+                                        timeoutSeconds = 30
+                                    }
+                                    verifyCommand = [PSCustomObject]@{ command = 'codex'; args = @('--version') }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains 'list' -and $Arguments -notcontains '--id') {
+                    $global:LASTEXITCODE = 0
+                    return @('Name Id Version Source', '-------------------', 'Codex OpenAI.Codex 1.0 winget')
+                }
+                if ($Arguments -contains 'install') {
+                    $global:LASTEXITCODE = 0
+                    return 'Successfully installed'
+                }
+                $global:LASTEXITCODE = 0
+                return @()
+            }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return 'codex 1.0.0' }
+            Mock Invoke-WebRequest { $script:archiveDownloads++; Set-Content -LiteralPath $OutFile -Value 'archive' -Encoding ASCII }
+            Mock Get-FileHash { [PSCustomObject]@{ Hash = $script:codexHash } }
+            Mock Expand-Archive {
+                param($DestinationPath)
+                $bin = Join-Path $DestinationPath 'bin'
+                New-Item -ItemType Directory -Path $bin -Force | Out-Null
+                Set-Content -LiteralPath (Join-Path $bin 'codex.exe') -Value 'repaired CLI' -Encoding ASCII
+                Set-Content -LiteralPath (Join-Path $bin 'codex-code-mode-host.exe') -Value 'repaired host' -Encoding ASCII
+            }
+
+            $ctx.Options['WingetMode'] = 'import'
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:archiveDownloads | Should -Be 1
+            (Join-Path $script:codexDestination 'bin\codex.exe') | Should -Exist
+            (Join-Path $script:codexDestination 'bin\codex-code-mode-host.exe') | Should -Exist
+            [System.IO.File]::ReadAllText((Join-Path $script:codexDestination 'bin\codex.exe')).Trim() | Should -Be 'repaired CLI'
+            [System.IO.File]::ReadAllText((Join-Path $script:codexDestination 'bin\codex-code-mode-host.exe')).Trim() | Should -Be 'repaired host'
+        }
+
         It 'should run the WinGet latest-version check but not fallback for verified installed Codex' {
             $script:codexDestination = Join-Path $TestDrive "Codex"
             $script:codexHash = ("cd" * 32).ToUpperInvariant()
             New-Item -ItemType Directory -Path $script:codexDestination -Force | Out-Null
             New-Item -ItemType File -Path (Join-Path $script:codexDestination "codex.exe") -Force | Out-Null
+            New-Item -ItemType File -Path (Join-Path $script:codexDestination "codex-code-mode-host.exe") -Force | Out-Null
             Set-Content -LiteralPath (Join-Path $script:codexDestination ".dotfiles-direct-installer.sha256") -Value $script:codexHash -Encoding ASCII
             $script:installCalls = 0
             $script:webRequestCalls = 0
@@ -2690,6 +3044,9 @@ Describe 'WingetHandler' {
 
         It 'should keep installed Codex network failures visible without direct fallback' {
             $script:codexDestination = Join-Path $TestDrive "CodexNetwork"
+            New-Item -ItemType Directory -Path $script:codexDestination -Force | Out-Null
+            New-Item -ItemType File -Path (Join-Path $script:codexDestination "codex.exe") -Force | Out-Null
+            New-Item -ItemType File -Path (Join-Path $script:codexDestination "codex-code-mode-host.exe") -Force | Out-Null
             $script:installCalls = 0
             $script:webRequestCalls = 0
             $script:loggedMessages = @()

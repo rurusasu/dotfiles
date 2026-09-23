@@ -16,6 +16,58 @@
 $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath "lib\Invoke-ExternalCommand.ps1")
 
+function Resolve-CodexPackageExecutablePath {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [string]$LocalAppData = $env:LOCALAPPDATA
+    )
+
+    if ([string]::IsNullOrWhiteSpace($LocalAppData)) {
+        $profilePath = if ($env:USERPROFILE) { $env:USERPROFILE } else { [Environment]::GetFolderPath("UserProfile") }
+        $LocalAppData = Join-Path $profilePath "AppData\Local"
+    }
+
+    $packagesPath = Join-Path $LocalAppData "Microsoft\WinGet\Packages"
+    $codexDirectories = @(
+        Get-ChildItem -Path $packagesPath -Directory -Filter "OpenAI.Codex_*" -ErrorAction SilentlyContinue
+    )
+    $programsCodexPath = Join-Path $LocalAppData "Programs\Codex"
+    if (Test-Path -LiteralPath $programsCodexPath -PathType Container) {
+        $codexDirectories += [System.IO.DirectoryInfo]$programsCodexPath
+    }
+
+    $relativeExecutablePaths = @(
+        "bin\codex.exe"
+        "codex-x86_64-pc-windows-msvc.exe"
+        "codex.exe"
+    )
+    $firstExecutablePath = $null
+    foreach ($codexDirectory in $codexDirectories) {
+        if (-not $codexDirectory) {
+            continue
+        }
+        foreach ($relativePath in $relativeExecutablePaths) {
+            $executablePath = Join-Path $codexDirectory.FullName $relativePath
+            if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
+                continue
+            }
+
+            if (-not $firstExecutablePath) {
+                $firstExecutablePath = $executablePath
+            }
+            $hostPath = Join-Path (Split-Path -Parent $executablePath) "codex-code-mode-host.exe"
+            if (Test-Path -LiteralPath $hostPath -PathType Leaf) {
+                return $executablePath
+            }
+        }
+    }
+
+    # Return a CLI-only path as a last resort so Apply can report the missing
+    # adjacent host explicitly instead of treating Codex as not installed.
+    return $firstExecutablePath
+}
+
 class CodexHandler : SetupHandlerBase {
     CodexHandler() {
         $this.Name = "Codex"
@@ -141,26 +193,7 @@ class CodexHandler : SetupHandlerBase {
         Codex パッケージの実行ファイルパスを取得する
     #>
     hidden [string] GetCodexExecutablePath() {
-        $packagesBase = Join-Path $this.GetLocalAppDataPath() "Microsoft\WinGet\Packages"
-        $codexPattern = "OpenAI.Codex_*"
-
-        $codexDirs = @(
-            Get-ChildItem -Path $packagesBase -Directory -Filter $codexPattern -ErrorAction SilentlyContinue
-            [IO.DirectoryInfo](Join-Path $this.GetLocalAppDataPath() "Programs\Codex")
-        ) | Where-Object { $null -ne $_ }
-
-        # codex-x86_64-pc-windows-msvc.exe または codex.exe を探す
-        $exePatterns = @("codex-x86_64-pc-windows-msvc.exe", "codex.exe")
-        foreach ($codexDir in $codexDirs) {
-            foreach ($pattern in $exePatterns) {
-                $exePath = Join-Path $codexDir.FullName $pattern
-                if (Test-Path $exePath) {
-                    return $exePath
-                }
-            }
-        }
-
-        return $null
+        return Resolve-CodexPackageExecutablePath -LocalAppData $this.GetLocalAppDataPath()
     }
 
     hidden [string] GetCodexHostExecutablePath([string]$codexExe) {

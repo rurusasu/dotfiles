@@ -254,9 +254,28 @@ function Write-HermesXApiAuthCache {
             if ($null -eq $currentSid) {
                 throw [System.InvalidOperationException]::new('Could not resolve the current Windows user.')
             }
-            $fileSecurity = [System.Security.AccessControl.FileSecurity]::new()
-            $fileSecurity.SetOwner($currentSid)
+
+            $accessSection = [System.Security.AccessControl.AccessControlSections]::Access
+            $fileInfo = [System.IO.FileInfo]::new($Path)
+            if ($PSVersionTable.PSEdition -eq 'Core') {
+                $fileSecurity = [System.IO.FileSystemAclExtensions]::GetAccessControl(
+                    $fileInfo,
+                    $accessSection
+                )
+            }
+            else {
+                $fileSecurity = [System.IO.File]::GetAccessControl($Path, $accessSection)
+            }
+
             $fileSecurity.SetAccessRuleProtection($true, $false)
+            foreach ($existingRule in $fileSecurity.GetAccessRules(
+                    $true,
+                    $false,
+                    [System.Security.Principal.SecurityIdentifier]
+                )) {
+                $fileSecurity.RemoveAccessRuleSpecific($existingRule)
+            }
+
             $modifyRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
                 $currentSid,
                 [System.Security.AccessControl.FileSystemRights]::Modify,
@@ -265,7 +284,12 @@ function Write-HermesXApiAuthCache {
                 [System.Security.AccessControl.AccessControlType]::Allow
             )
             [void]$fileSecurity.AddAccessRule($modifyRule)
-            Set-Acl -LiteralPath $Path -AclObject $fileSecurity
+            if ($PSVersionTable.PSEdition -eq 'Core') {
+                [System.IO.FileSystemAclExtensions]::SetAccessControl($fileInfo, $fileSecurity)
+            }
+            else {
+                [System.IO.File]::SetAccessControl($Path, $fileSecurity)
+            }
         }
         else {
             & chmod 600 $Path

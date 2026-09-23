@@ -184,9 +184,27 @@ function Protect-HermesBootstrapServiceAccountFile {
         throw [System.InvalidOperationException]::new('Could not resolve the current Windows user.')
     }
 
-    $fileSecurity = [System.Security.AccessControl.FileSecurity]::new()
-    $fileSecurity.SetOwner($currentSid)
+    $accessSection = [System.Security.AccessControl.AccessControlSections]::Access
+    $fileInfo = [System.IO.FileInfo]::new($Path)
+    if ($PSVersionTable.PSEdition -eq 'Core') {
+        $fileSecurity = [System.IO.FileSystemAclExtensions]::GetAccessControl(
+            $fileInfo,
+            $accessSection
+        )
+    }
+    else {
+        $fileSecurity = [System.IO.File]::GetAccessControl($Path, $accessSection)
+    }
+
     $fileSecurity.SetAccessRuleProtection($true, $false)
+    foreach ($existingRule in $fileSecurity.GetAccessRules(
+            $true,
+            $false,
+            [System.Security.Principal.SecurityIdentifier]
+        )) {
+        $fileSecurity.RemoveAccessRuleSpecific($existingRule)
+    }
+
     $readRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
         $currentSid,
         [System.Security.AccessControl.FileSystemRights]::Read,
@@ -195,7 +213,13 @@ function Protect-HermesBootstrapServiceAccountFile {
         [System.Security.AccessControl.AccessControlType]::Allow
     )
     [void]$fileSecurity.AddAccessRule($readRule)
-    Set-Acl -LiteralPath $Path -AclObject $fileSecurity
+
+    if ($PSVersionTable.PSEdition -eq 'Core') {
+        [System.IO.FileSystemAclExtensions]::SetAccessControl($fileInfo, $fileSecurity)
+    }
+    else {
+        [System.IO.File]::SetAccessControl($Path, $fileSecurity)
+    }
 }
 
 function Initialize-HermesBootstrapServiceAccountEnvironment {

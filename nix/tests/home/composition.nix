@@ -1,8 +1,7 @@
 { inputs }:
 let
   fixtures = import ../../test-fixtures.nix { inherit inputs; };
-  mkPkgs =
-    system: fixtures.mkPkgs system;
+  mkPkgs = system: fixtures.mkPkgs system;
 
   baseModule =
     { ... }:

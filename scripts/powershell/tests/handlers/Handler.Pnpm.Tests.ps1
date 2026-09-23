@@ -1022,9 +1022,9 @@ Describe 'PnpmHandler' {
             $script:origProfile = $env:USERPROFILE
             $env:USERPROFILE = $TestDrive
             $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
-            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\dist"
+            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\bundle"
             New-Item $entryDir -ItemType Directory -Force | Out-Null
-            Set-Content -Path (Join-Path $entryDir "index.js") -Value "console.log('ok')" -NoNewline
+            Set-Content -Path (Join-Path $entryDir "gemini.js") -Value "console.log('ok')" -NoNewline
             Mock Invoke-Pnpm {
                 param($Arguments)
                 if ($Arguments -contains "root") {
@@ -1058,9 +1058,9 @@ Describe 'PnpmHandler' {
             $script:origProfile = $env:USERPROFILE
             $env:USERPROFILE = $TestDrive
             $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
-            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\dist"
+            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\bundle"
             New-Item $entryDir -ItemType Directory -Force | Out-Null
-            Set-Content -Path (Join-Path $entryDir "index.js") -Value "console.log('ok')" -NoNewline
+            Set-Content -Path (Join-Path $entryDir "gemini.js") -Value "console.log('ok')" -NoNewline
             Mock Invoke-Pnpm {
                 param($Arguments)
                 if ($Arguments -contains "root") {
@@ -1089,6 +1089,7 @@ Describe 'PnpmHandler' {
             $content = Get-Content $shimPath -Raw
             $content | Should -Match 'GEMINI_JS'
             $content | Should -Match 'pnpm root -g'
+            $content | Should -Match '@google\\gemini-cli\\bundle\\gemini.js'
             $content | Should -Match 'node "%GEMINI_JS%" %\*'
             Should -Invoke Set-UserEnvironmentPath -Times 1
         }
@@ -1099,9 +1100,9 @@ Describe 'PnpmHandler' {
             $script:origProfile = $env:USERPROFILE
             $env:USERPROFILE = $TestDrive
             $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
-            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\dist"
+            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\bundle"
             New-Item $entryDir -ItemType Directory -Force | Out-Null
-            Set-Content -Path (Join-Path $entryDir "index.js") -Value "console.log('ok')" -NoNewline
+            Set-Content -Path (Join-Path $entryDir "gemini.js") -Value "console.log('ok')" -NoNewline
             Mock Invoke-Pnpm { $global:LASTEXITCODE = 0; return "" }
             Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "broken" }
             Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
@@ -1559,6 +1560,8 @@ Describe 'PnpmHandler' {
                                 command    = 'gemini'
                                 type       = 'nodeModule'
                                 moduleName = '@lydell/node-pty'
+                                moduleFromPackage = '@google/gemini-cli'
+                                moduleSmokeTest = 'pty'
                             }
                         }
                     )
@@ -1592,6 +1595,9 @@ Describe 'PnpmHandler' {
                 $script:pnpmVerifyCalls | Should -HaveCount 4
                 $script:pnpmVerifyCalls[0].Command | Should -Be 'node'
                 $script:pnpmVerifyCalls[0].Arguments | Should -Contain '-e'
+                ($script:pnpmVerifyCalls[0].Arguments -join ' ') | Should -Match 'createRequire'
+                ($script:pnpmVerifyCalls[0].Arguments -join ' ') | Should -Match 'require.resolve'
+                ($script:pnpmVerifyCalls[0].Arguments -join ' ') | Should -Match 'cmd.exe'
                 $script:pnpmVerifyCalls[0].NodePath | Should -Match ([regex]::Escape($script:pnpmRoot))
                 $script:pnpmVerifyCalls[1].Command | Should -Be 'gemini'
                 $script:pnpmVerifyCalls[2].Command | Should -Be 'node'
@@ -1707,6 +1713,8 @@ Describe 'PnpmHandler' {
             $geminiEntry = $manifest.globalPackages | Where-Object name -EQ "@google/gemini-cli"
             $geminiEntry.verifyCommand.type | Should -Be "nodeModule"
             $geminiEntry.verifyCommand.moduleName | Should -Be "@lydell/node-pty"
+            $geminiEntry.verifyCommand.moduleFromPackage | Should -Be "@google/gemini-cli"
+            $geminiEntry.verifyCommand.moduleSmokeTest | Should -Be "pty"
         }
 
         It 'should detect every installed manifest package and still refresh each declared spec' {
@@ -1787,6 +1795,8 @@ Describe 'PnpmHandler' {
                                 command    = 'gemini'
                                 type       = 'nodeModule'
                                 moduleName = '@lydell/node-pty'
+                                moduleFromPackage = '@google/gemini-cli'
+                                moduleSmokeTest = 'pty'
                             }
                         }
                     )

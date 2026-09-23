@@ -214,14 +214,19 @@ Describe "Initialize-HermesBootstrapServiceAccountEnvironment" {
 
         $envPath = Join-Path $script:serviceAccountDirectory '.op.env'
         $acl = Get-Acl -LiteralPath $envPath
-        $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
         $accessSid = $acl.Access[0].IdentityReference.Translate(
             [System.Security.Principal.SecurityIdentifier]
         ).Value
 
         @($acl.Access).Count | Should -Be 1
-        $accessSid | Should -Be $currentSid
+        $accessSid | Should -Be $currentSid.Value
+        $expectedRights = [System.Security.AccessControl.FileSystemRights]::Read -bor
+            [System.Security.AccessControl.FileSystemRights]::Synchronize
+        $acl.Access[0].FileSystemRights | Should -Be $expectedRights
+        $acl.Access[0].AccessControlType | Should -Be ([System.Security.AccessControl.AccessControlType]::Allow)
         $acl.Access[0].IsInherited | Should -BeFalse
+        $acl.AreAccessRulesProtected | Should -BeTrue
     }
 }
 
@@ -239,11 +244,11 @@ set input=%HERMES_BOOTSTRAP_TEST_DIR%\stdin.txt
   for %%A in (%*) do echo %%~A
 )
 if "%HERMES_BOOTSTRAP_TEST_EXIT_EARLY%"=="1" exit /b %HERMES_BOOTSTRAP_TEST_EXIT%
-more > "%input%"
-if "%HERMES_BOOTSTRAP_TEST_HANG%"=="1" ping 127.0.0.1 -n 3 >nul
-if "%HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT%"=="1" pwsh -NoLogo -NoProfile -NonInteractive -Command "$text = '0123456789abcdef' * 131072; [Console]::Out.Write($text); [Console]::Error.Write($text)"
-if not "%HERMES_BOOTSTRAP_TEST_STDOUT%"=="" pwsh -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Out.Write($env:HERMES_BOOTSTRAP_TEST_STDOUT)"
-if not "%HERMES_BOOTSTRAP_TEST_STDERR%"=="" pwsh -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Error.Write($env:HERMES_BOOTSTRAP_TEST_STDERR)"
+"%SystemRoot%\System32\more.com" > "%input%"
+if "%HERMES_BOOTSTRAP_TEST_HANG%"=="1" "%SystemRoot%\System32\ping.exe" 127.0.0.1 -n 3 >nul
+if "%HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT%"=="1" "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "$text = '0123456789abcdef' * 131072; [Console]::Out.Write($text); [Console]::Error.Write($text)"
+if not "%HERMES_BOOTSTRAP_TEST_STDOUT%"=="" "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Out.Write($env:HERMES_BOOTSTRAP_TEST_STDOUT)"
+if not "%HERMES_BOOTSTRAP_TEST_STDERR%"=="" "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Error.Write($env:HERMES_BOOTSTRAP_TEST_STDERR)"
 exit /b %HERMES_BOOTSTRAP_TEST_EXIT%
 '@ | Set-Content -LiteralPath $path -NoNewline
         return $path

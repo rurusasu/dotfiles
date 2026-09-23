@@ -19,9 +19,10 @@ COPY hermes-agent/hindsight_acceptance.py /usr/local/bin/hindsight_acceptance.py
 COPY hermes-agent/gateway_convergence.py /usr/local/bin/hermes-gateway-converge
 COPY hermes-agent/hermes_storage_seed.py /usr/local/bin/hermes-storage-seed
 COPY hermes-agent/hermes_storage_ownership.py /usr/local/bin/hermes-storage-ownership
-RUN chmod 0755 /usr/local/bin/hindsight_acceptance.py \
-  && ln -s /usr/local/bin/hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance
-RUN /usr/local/bin/hermes-hindsight-acceptance --help >/dev/null
+RUN sed -i 's/\r$//' /usr/local/bin/hindsight_acceptance.py \
+  && chmod 0755 /usr/local/bin/hindsight_acceptance.py \
+  && ln -s /usr/local/bin/hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance \
+  && /usr/local/bin/hermes-hindsight-acceptance --help >/dev/null
 RUN chmod 0755 /usr/local/bin/hermes-gateway-converge
 RUN chmod 0755 /usr/local/bin/hermes-storage-seed
 RUN chmod 0755 /usr/local/bin/hermes-storage-ownership

@@ -86,7 +86,7 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should run the real Windows installer concurrently in Windows PowerShell 5.1 and PowerShell 7' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw -Encoding UTF8
         $installerJob = [regex]::Match(
             $workflow,
             '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
@@ -102,6 +102,9 @@ Describe 'CI workflow configuration' {
         $installerJob | Should -Match 'E2E orchestrator must run under PowerShell 7'
         $installerJob | Should -Match 'Falling back to Windows PowerShell'
         $installerJob | Should -Match 'install\.cmd -NoPause -UserPhaseOnly -WingetVerifyCommandOnly'
+        $installerJob | Should -Match 'RequiredOutputMarkers\s+\$requiredPackageManagerMarkers'
+        $installerJob | Should -Match "\[Pnpm\] npm で pnpm をインストールしました"
+        $installerJob | Should -Match '\[Npm\] ✓ \$\(\$package\.name\)'
         $installerJob | Should -Match 'Falling back to Windows PowerShell'
         $installerJob | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 fallback'
         $installerJob | Should -Match 'Get-Command -Name ''pnpm'' -CommandType Application -All'
@@ -128,6 +131,22 @@ Describe 'CI workflow configuration' {
         $installerJob | Should -Match 'Codex CLI --help failed'
     }
 
+    It 'should resolve Codex package paths in the PS5.1 CI fallback without LinkType or Target metadata' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw -Encoding UTF8
+        $codexHandler = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/handlers/Handler.Codex.ps1') -Raw
+        $installerJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
+        ).Groups['job'].Value
+
+        $installerJob | Should -Match 'Resolve-CodexPackageExecutablePath'
+        $installerJob | Should -Match 'handlers/Handler\.Codex\.ps1'
+        $installerJob | Should -Match 'FileAttributes\]::ReparsePoint'
+        $codexHandler | Should -Match 'Programs\\Codex'
+        $codexHandler | Should -Match 'bin\\codex\.exe'
+        $installerJob | Should -Not -Match "PSObject\.Properties\['(LinkType|Target)'\]"
+    }
+
     It 'should verify ChatGPT Classic is removed by the real Windows installer E2E' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
         $installerJob = [regex]::Match(
@@ -141,6 +160,35 @@ Describe 'CI workflow configuration' {
         $installerJob | Should -Match 'ChatGPT Classic is still installed after cleanup'
     }
 
+    It 'should run the admin-required Visual Studio package through an elevated installer and verify its compiler' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $windowsJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  windows:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+
+        $windowsJob | Should -Not -BeNullOrEmpty
+        $windowsJob | Should -Match 'WindowsIdentity\]::GetCurrent\(\)'
+        $windowsJob | Should -Match 'WindowsPrincipal'
+        $windowsJob | Should -Match 'WindowsBuiltinRole\]::Administrator'
+        $windowsJob | Should -Match 'runner is not elevated'
+        $windowsJob | Should -Match 'name: Bootstrap / Windows \(\$\{\{ matrix\.runtime \}\}\)'
+        $windowsJob | Should -Match 'shell: \$\{\{ matrix\.shell \}\}'
+        $windowsJob | Should -Match 'runtime: Windows PowerShell 5\.1\s+shell: powershell'
+        $windowsJob | Should -Match 'runtime: PowerShell 7\s+shell: pwsh'
+        $windowsJob | Should -Match 'runtime=\$\{\{ matrix\.runtime \}\}'
+        $windowsJob | Should -Match 'scripts/powershell/install\.admin\.ps1'
+        $windowsJob | Should -Match '-AdminOnly:\$true'
+        $windowsJob | Should -Match 'AutoHotkey\.AutoHotkey'
+        $windowsJob | Should -Match 'SkipWslInstall'
+        $windowsJob | Should -Match 'SkipVhdExpand'
+        $windowsJob | Should -Match 'Microsoft\.VisualStudio\.2022\.BuildTools'
+        $windowsJob.Contains('Failure:\s*0') | Should -BeTrue
+        $windowsJob | Should -Match 'CI_ADMIN_PACKAGE_SUCCESS: id=Microsoft\.VisualStudio\.2022\.BuildTools'
+        $windowsJob.Contains('VC\Tools\MSVC') | Should -BeTrue
+        $windowsJob.Contains('bin\Hostx64\x64\cl.exe') | Should -BeTrue
+    }
+
     It 'should run npm pnpm and 1Password executables after the Windows installer' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
         $installerJob = [regex]::Match(
@@ -150,6 +198,8 @@ Describe 'CI workflow configuration' {
 
         $installerJob | Should -Match "'agent-browser'"
         $installerJob | Should -Match "Name = 'npm'"
+        $installerJob | Should -Match 'agent-browser@0\.38\.1 requires Node\.js >=24\.0\.0'
+        $installerJob | Should -Match '\[version\]''24\.0\.0'''
         $installerJob | Should -Match "Name = 'herdr'"
         $installerJob | Should -Match "'pnpm'"
         $installerJob | Should -Match "'gemini'"
@@ -276,9 +326,31 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'OPENROUTER_API_KEY=ci'
         $script | Should -Match 'API_SERVER_ENABLED=true'
         $script | Should -Match 'API_SERVER_PORT=18642'
-        $script | Should -Match 'http://127\.0\.0\.1:18642/health'
-        $script | Should -Match 'nix shell --inputs-from /home/nixos/\.dotfiles nixpkgs#curl --command bash -lc'
-        $script | Should -Match 'grep -Eq .*status.*ok'
+        $script | Should -Match 'http://127\.0\.0\.1:18642/health/detailed'
+        $script | Should -Match 'nix shell --inputs-from /home/nixos/\.dotfiles nixpkgs#curl nixpkgs#jq --command bash -s <<''DOTFILES_HERMES_READINESS'''
+        $script | Should -Match 'Authorization: Bearer dotfiles-ci-health-probe'
+        $script | Should -Match 'Authorization: Bearer invalid-dotfiles-ci-health-probe'
+        $script | Should -Match 'expect_unauthorized ''missing bearer token'''
+        $script | Should -Match 'expect_unauthorized ''invalid bearer token'''
+        $script | Should -Match 'set -euo pipefail'
+        $script | Should -Match 'status_code != 401'
+        $script.IndexOf('expect_unauthorized ''missing bearer token''') |
+            Should -BeLessThan $script.IndexOf('for attempt in {1..__READINESS_ATTEMPTS__}')
+        $script.IndexOf('expect_unauthorized ''invalid bearer token''') |
+            Should -BeLessThan $script.IndexOf('for attempt in {1..__READINESS_ATTEMPTS__}')
+        $script | Should -Match 'jq -e'
+        $script | Should -Match '\.status == "ok"'
+        $script | Should -Match '\.readiness\.status == "ok"'
+        $script | Should -Match '\.readiness\.checks \| type == "object" and length > 0 and all\(\.\[\]; \.status == "ok"\)'
+        $script | Should -Match '\$readinessAttempts\s*=\s*30'
+        $script | Should -Match '\$readinessCurlTimeoutSeconds\s*=\s*2'
+        $script | Should -Match '\$readinessRetryDelaySeconds\s*=\s*1'
+        $script | Should -Match '\$readinessTimeoutMarginSeconds\s*=\s*30'
+        $script | Should -Match '\$readinessTimeoutSeconds\s*=\s*\(\$readinessAttempts \* \(\$readinessCurlTimeoutSeconds \+ \$readinessRetryDelaySeconds\)\) \+ \$readinessTimeoutMarginSeconds'
+        $script | Should -Match '\.Replace\(''__READINESS_ATTEMPTS__'', \[string\]\$readinessAttempts\)'
+        $script | Should -Match '\.Replace\(''__READINESS_CURL_TIMEOUT_SECONDS__'', \[string\]\$readinessCurlTimeoutSeconds\)'
+        $script | Should -Match '\.Replace\(''__READINESS_RETRY_DELAY_SECONDS__'', \[string\]\$readinessRetryDelaySeconds\)'
+        $script | Should -Match '-TimeoutSeconds \$readinessTimeoutSeconds'
         $script | Should -Match 'chmod 600 /home/nixos/\.hermes/\.env'
         $script | Should -Match 'preserve-existing-hermes-state'
         $script | Should -Match 'stat -c .*\.hermes/\.env'
@@ -333,6 +405,7 @@ Describe 'CI workflow configuration' {
         $testJob | Should -Not -Match 'shell:\s+\$\{\{\s*matrix\.'
         $testJob | Should -Match 'PS_TEST_EXECUTABLE: \$\{\{ matrix\.executable \}\}'
         $testJob | Should -Match '& \$env:PS_TEST_EXECUTABLE -NoProfile -File'
+        $testJob | Should -Match 'Documents\\\$env:PS_MODULE_DIRECTORY\\Modules'
         $testJob | Should -Match 'WindowsPowerShell\\Modules'
     }
 
@@ -498,7 +571,7 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'actions/upload-artifact@[0-9a-f]{40}'
     }
 
-    It 'should preserve WSL fork protection and NixOS E2E coverage in the unified workflow' {
+    It 'should run WSL E2E for fork pull requests and require it in the unified workflow' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
         $test = Get-Content -LiteralPath (Join-Path $script:repoRoot 'nix/tests/bootstrap-nixos.nix') -Raw
 
@@ -506,7 +579,9 @@ Describe 'CI workflow configuration' {
             $workflow,
             '(?ms)^  wsl:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
         ).Value
-        $wslJob | Should -Match "(?m)^\s+if:\s+\$\{\{ needs\.changes\.outputs\.wsl == 'true' && \(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) \}\}$"
+        $wslJob | Should -Match "(?m)^\s+if:\s+\$\{\{ needs\.changes\.outputs\.wsl == 'true' \}\}$"
+        $wslJob | Should -Match 'persist-credentials:\s+false'
+        $wslJob | Should -Not -Match 'pull_request\.head\.repo\.full_name'
         $wslJob | Should -Match 'HEAD_REF:\s+\$\{\{ github\.head_ref \}\}'
         $wslJob | Should -Match 'REF_NAME:\s+\$\{\{ github\.ref_name \}\}'
         $wslJob | Should -Match 'Invoke-NixosWslE2E\.ps1'
@@ -515,7 +590,7 @@ Describe 'CI workflow configuration' {
             $workflow,
             '(?ms)^  complete:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
         ).Value
-        $completeJob | Should -Match "(?m)^\s+WSL_REQUIRED:\s+\$\{\{ needs\.changes\.outputs\.wsl == 'true' && \(github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\) \}\}$"
+        $completeJob | Should -Match "(?m)^\s+WSL_REQUIRED:\s+\$\{\{ needs\.changes\.outputs\.wsl \}\}$"
         $test | Should -Match 'DOTFILES_NIXOS_PREBUILT_SYSTEM=\$\{nodes\.machine\.system\.build\.toplevel\}'
         $test | Should -Match 'system\.switch\.enable\s*=\s*true'
         $test | Should -Match 'docker/hermes-service/compose\.yml'

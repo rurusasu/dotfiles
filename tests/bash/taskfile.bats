@@ -19,7 +19,7 @@ assert_no_profile_gateway_lifecycle() {
 		assert_no_profile_gateway_lifecycle "$output"
 		case "$action" in
 		up)
-			[[ "$output" == *"task: [hermes:docker:up]"* ]]
+			[[ "$output" == *"task: [hermes:docker:bootstrap]"* ]]
 			[[ "$output" == *"-p personal-ops gateway status"* ]]
 			;;
 		restart)
@@ -43,7 +43,7 @@ assert_no_profile_gateway_lifecycle() {
 			assert_no_profile_gateway_lifecycle "$output"
 			case "$action" in
 			up)
-				[[ "$output" == *"task: [hermes:docker:up]"* ]]
+				[[ "$output" == *"task: [hermes:docker:bootstrap]"* ]]
 				[[ "$output" == *"-p $profile gateway status"* ]]
 				;;
 			restart)

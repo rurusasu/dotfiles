@@ -228,8 +228,14 @@ Describe 'Package catalog consistency' {
             $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'OpenAI.Codex' }) | Select-Object -First 1
 
             $package | Should -Not -BeNullOrEmpty
+            $package.directInstaller.type | Should -Be 'archive'
+            $package.directInstaller.url | Should -Be 'https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-package-x86_64-pc-windows-msvc.tar.gz'
+            $package.directInstaller.sha256 | Should -Be 'f45c273b7835c192aaa9cef5b93aa9528966ac7301444632de80a565a9bf14e8'
+            $package.directInstaller.executable | Should -Be 'bin\codex.exe'
+            @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Programs\Codex\bin'
+            @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Links'
             $package.portableLink.linkName | Should -Be 'codex.exe'
-            $package.portableLink.targetPattern | Should -Be 'codex-x86_64-pc-windows-msvc.exe'
+            $package.portableLink.targetPattern | Should -Be 'codex.exe'
             $package.verifyCommand.command | Should -Be 'codex'
             @($package.verifyCommand.args) | Should -Contain '--version'
         }

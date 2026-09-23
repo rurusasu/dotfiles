@@ -1,9 +1,6 @@
 { inputs }:
 let
   selectHomeManagerUser = configuredUser: if configuredUser == "" then "nixos" else configuredUser;
-  homeInstallFeatures = inputs.nixpkgs.lib.optionals (builtins.getEnv "DOTFILES_WITH_HERMES" == "1") [
-    "WithHermes"
-  ];
 in
 {
   inherit selectHomeManagerUser;
@@ -40,6 +37,7 @@ in
       hostPath,
       siteLib,
       configuredUser ? builtins.getEnv "DOTFILES_USER",
+      withHermes ? builtins.getEnv "DOTFILES_WITH_HERMES" == "1",
       homeModulePath ? null,
       extraModules ? [ ],
       overlays ? [ ],
@@ -47,9 +45,13 @@ in
     }:
     let
       user = selectHomeManagerUser configuredUser;
+      installFeatures = inputs.nixpkgs.lib.optionals withHermes [ "WithHermes" ];
     in
     inputs.nixpkgs.lib.nixosSystem {
-      specialArgs = { inherit inputs siteLib system; };
+      specialArgs = {
+        inherit inputs siteLib system;
+        dotfilesWithHermes = withHermes;
+      };
       modules = [
         { nixpkgs.hostPlatform = system; }
         hostPath
@@ -66,7 +68,7 @@ in
                 useUserPackages = true;
                 extraSpecialArgs = {
                   inherit inputs;
-                  installFeatures = homeInstallFeatures;
+                  inherit installFeatures;
                 }
                 // homeExtraSpecialArgs;
                 users.${user} = {

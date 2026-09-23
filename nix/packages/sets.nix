@@ -1530,6 +1530,10 @@ lib.mapAttrs (_: resolve) grouped
     "@google/gemini-cli" = {
       command = "gemini";
       args = [ "--version" ];
+      type = "nodeModule";
+      moduleName = "@lydell/node-pty";
+      moduleFromPackage = "@google/gemini-cli";
+      moduleSmokeTest = "pty";
     };
     "typescript-language-server" = {
       command = "typescript-language-server";
@@ -1579,7 +1583,6 @@ lib.mapAttrs (_: resolve) grouped
     ];
     "@google/gemini-cli" = [
       "--allow-build=@github/keytar"
-      "--allow-build=node-pty"
     ];
   };
 
@@ -1833,10 +1836,10 @@ lib.mapAttrs (_: resolve) grouped
     };
     codex = {
       type = "archive";
-      url = "https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-x86_64-pc-windows-msvc.exe.zip";
-      sha256 = "ce2269bdb7dfc06bb85c014c9c4e6b1601ffa0d646a2ae5b9b8cc8a427ef61fb";
+      url = "https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-package-x86_64-pc-windows-msvc.tar.gz";
+      sha256 = "f45c273b7835c192aaa9cef5b93aa9528966ac7301444632de80a565a9bf14e8";
       destination = "%LOCALAPPDATA%\\Programs\\Codex";
-      executable = "codex-x86_64-pc-windows-msvc.exe";
+      executable = "bin\\codex.exe";
       timeoutSeconds = 900;
     };
     direnv = {
@@ -1920,8 +1923,14 @@ lib.mapAttrs (_: resolve) grouped
     oxlint = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
     "oxc-project.oxlint" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
     chezmoi = [ "%LOCALAPPDATA%\\Programs\\chezmoi" ];
-    codex = [ "%LOCALAPPDATA%\\Programs\\Codex" ];
-    "OpenAI.Codex" = [ "%LOCALAPPDATA%\\Programs\\Codex" ];
+    codex = [
+      "%LOCALAPPDATA%\\Programs\\Codex\\bin"
+      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"
+    ];
+    "OpenAI.Codex" = [
+      "%LOCALAPPDATA%\\Programs\\Codex\\bin"
+      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"
+    ];
     direnv = [ "%LOCALAPPDATA%\\Programs\\direnv" ];
     "direnv.direnv" = [ "%LOCALAPPDATA%\\Programs\\direnv" ];
     dprint = [ "%LOCALAPPDATA%\\Programs\\dprint" ];
@@ -1943,7 +1952,7 @@ lib.mapAttrs (_: resolve) grouped
   wingetPortableLinksById = {
     "OpenAI.Codex" = {
       linkName = "codex.exe";
-      targetPattern = "codex-x86_64-pc-windows-msvc.exe";
+      targetPattern = "codex.exe";
     };
     "Rustlang.rust-analyzer" = {
       linkName = "rust-analyzer.exe";

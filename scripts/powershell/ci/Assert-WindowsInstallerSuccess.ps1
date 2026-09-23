@@ -8,7 +8,9 @@ function Assert-WindowsInstallerSuccess {
         [int]$ExitCode,
 
         [Parameter(Mandatory)]
-        [string]$CompletionMarker
+        [string]$CompletionMarker,
+
+        [string[]]$RequiredOutputMarkers = @()
     )
 
     if ($ExitCode -ne 0) {
@@ -31,5 +33,16 @@ function Assert-WindowsInstallerSuccess {
 
     if ($Output.IndexOf($CompletionMarker, [StringComparison]::Ordinal) -lt 0) {
         throw "Windows installer did not reach completion marker '$CompletionMarker'"
+    }
+
+    $requiredMarkers = @($RequiredOutputMarkers | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($requiredMarkers.Count -eq 0) {
+        throw 'Windows installer success requires at least one required package-manager success marker'
+    }
+
+    foreach ($marker in $requiredMarkers) {
+        if ($Output.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) {
+            throw "Windows installer output is missing required package-manager success marker: $marker"
+        }
     }
 }

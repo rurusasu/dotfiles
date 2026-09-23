@@ -5,10 +5,7 @@ let
     x86_64-linux = "x86_64-linux";
     aarch64-linux = "aarch64-linux";
   };
-  pkgsBySystem = builtins.mapAttrs (
-    _: system:
-    fixtures.mkPkgs system
-  ) systems;
+  pkgsBySystem = builtins.mapAttrs (_: system: fixtures.mkPkgs system) systems;
   darwinSystem = "aarch64-darwin";
   selectionPkgsBySystem = pkgsBySystem // {
     ${darwinSystem} = fixtures.mkPkgs darwinSystem;

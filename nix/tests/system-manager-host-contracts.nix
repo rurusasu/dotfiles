@@ -66,6 +66,28 @@ in
     };
   };
 
+  testSystemManagerForwardsUserIdentityThroughSpecialArgs = {
+    expr = {
+      uid = systemConfigs.ubuntu.config.users.users.test-user.uid;
+      home = systemConfigs.ubuntu.config.users.users.test-user.home;
+      primaryGroup = systemConfigs.ubuntu.config.users.users.test-user.group;
+      primaryGroupGid = systemConfigs.ubuntu.config.users.groups.test-primary.gid;
+    };
+    expected = {
+      uid = 4242;
+      home = "/srv/dotfiles/test-user";
+      primaryGroup = "test-primary";
+      primaryGroupGid = 4243;
+    };
+  };
+
+  testSystemManagerDoesNotUseDeprecatedExtraSpecialArgs = {
+    expr = builtins.any
+      (warning: inputs.nixpkgs.lib.hasInfix "extraSpecialArgs is deprecated" warning)
+      systemConfigs.ubuntu.config.warnings;
+    expected = false;
+  };
+
   testSystemManagerInputFollowsRootNixpkgsLockNode = {
     expr =
       let
@@ -75,6 +97,16 @@ in
       && builtins.hasAttr "system-manager" nodes
       && (nodes."system-manager".inputs.nixpkgs or null) == [ "nixpkgs" ];
     expected = true;
+  };
+
+  testHermesAgentInputIsPinnedToReviewedRevision = {
+    expr =
+      let
+        lock = builtins.fromJSON (builtins.readFile ../../flake.lock);
+        hermesInput = lock.nodes.${lock.nodes.${lock.root}.inputs."hermes-agent"};
+      in
+      hermesInput.locked.rev;
+    expected = "d337b736aa1e8ebecfab043842d13e4a2d2f48a3";
   };
 
   testSystemManagerInstallsGitHubCliAtSystemLevel = {

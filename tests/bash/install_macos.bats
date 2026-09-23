@@ -262,6 +262,7 @@ exit 97
 printf "task %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
   *" darwin:install "*) exec "$REAL_TASK" "$@" ;;
+  *" hermes:desktop:install "*) exit "${HERMES_DESKTOP_INSTALL_STATUS:-0}" ;;
   *" hermes:bootstrap "*)
     source "$REPO_ROOT/scripts/sh/install-common.sh"
     source "$REPO_ROOT/scripts/sh/hermes-agent.sh"
@@ -794,7 +795,7 @@ exit 1
 	[[ "$output" == *"--with-ollama"* ]]
 	[[ "$output" == *"--with-docker"* ]]
 	[[ "$output" == *"--with-hermes"* ]]
-	[[ "$output" == *"Hermes Desktop"* ]]
+	[[ "$output" == *"native Hermes Agent/Desktop"* ]]
 	[[ "$output" == *"Home Manager"* ]]
 }
 
@@ -1223,17 +1224,16 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	! grep -Fq 'sudo </bin/chmod>' "$COMMAND_LOG"
 }
 
-@test "Hermes bootstrap failure recovers macOS runtime before returning failure" {
+@test "native Hermes Desktop install failure stops later verification" {
 	write_installed_stubs
-	export HERMES_BOOTSTRAP_STATUS=45
+	export HERMES_DESKTOP_INSTALL_STATUS=45
 
 	run_macos_installer --with-hermes
 
 	[ "$status" -eq 45 ]
-	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
-	! grep -q ' up -d --force-recreate' "$COMMAND_LOG"
-	grep -q ' start' "$COMMAND_LOG"
-	! grep -q ' up ' "$COMMAND_LOG"
+	grep -Fq "task --dir $REPO_ROOT hermes:desktop:install" "$COMMAND_LOG"
+	! grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
+	! grep -q '^docker compose .*hermes' "$COMMAND_LOG"
 	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 
@@ -1685,7 +1685,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	! grep -q '^docker compose ' "$COMMAND_LOG"
 }
 
-@test "fresh install provisions Nix then delegates apps and Rosetta to nix-darwin" {
+@test "fresh Hermes install provisions Nix then delegates apps to nix-darwin and the native desktop installer" {
 	write_fresh_install_stubs
 	rmdir "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 
@@ -1698,11 +1698,11 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 		"nix-installer --daemon" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
-		"docker-install --accept-license --user=test-user"
+		"task --dir $REPO_ROOT hermes:desktop:install"
 	[ "$(grep -c 'nix-installer --daemon' "$COMMAND_LOG")" -eq 1 ]
 	! grep -q 'raw.githubusercontent.com/Homebrew/install' "$COMMAND_LOG"
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
-	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
+	! grep -q '^docker-install ' "$COMMAND_LOG"
 	! grep -q 'softwareupdate' "$COMMAND_LOG"
 }
 

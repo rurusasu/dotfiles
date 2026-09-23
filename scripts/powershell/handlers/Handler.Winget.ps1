@@ -283,10 +283,10 @@ class WingetHandler : SetupHandlerBase {
                         $this.EnsurePathEntriesQuiet($pkg)
                     }
                     $verificationPassed = if ($verifyCommandOnly) {
-                        $this.TestPackageVerification($pkg.VerifyCommand)
+                        $this.TestPackageVerificationForPackage($pkg, $false)
                     }
                     else {
-                        $this.TestPackageVerificationQuiet($pkg.VerifyCommand)
+                        $this.TestPackageVerificationForPackage($pkg, $true)
                     }
                     if ($verificationPassed) {
                         if ($verifyCommandOnly) {
@@ -367,7 +367,14 @@ class WingetHandler : SetupHandlerBase {
                 $installArgs = $this.NewWingetInstallArguments($pkg, [bool]$pkg.Force)
 
                 $installOutput = $this.InvokePackageInstall($pkg, $installArgs)
+                # A no-op phrase alone cannot prove an unverifiable package is
+                # installed. With a verifier, only its successful execution can
+                # establish usability; explicit package-conflict responses such
+                # as 0x80073cfb are still handled by the verifier/recovery path.
                 $alreadyInstalledInstallFailure = $this.IsAlreadyInstalledInstallFailure($installOutput)
+                if ($alreadyInstalledInstallFailure -and -not $pkg.WasInstalled -and -not $pkg.VerifyCommand) {
+                    $alreadyInstalledInstallFailure = $false
+                }
                 foreach ($line in $installOutput) {
                     if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
                         $this.Log("  $line", "Gray")
@@ -400,7 +407,7 @@ class WingetHandler : SetupHandlerBase {
                         Update-ProcessEnvironmentPath
                         $this.EnsurePortableLinkQuiet($pkg)
                         $this.EnsurePathEntriesQuiet($pkg)
-                        if ($this.TestPackageVerification($pkg.VerifyCommand)) {
+                        if ($this.TestPackageVerificationForPackage($pkg, $false)) {
                             $verified++
                             $this.Log("検証済み: $($pkg.Id) (winget install は no-op でした)", "Green")
                             continue
@@ -426,7 +433,7 @@ class WingetHandler : SetupHandlerBase {
                 $this.EnsurePortableLink($pkg)
                 $this.EnsurePathEntries($pkg)
 
-                if ($pkg.VerifyCommand -and $this.TestPackageVerification($pkg.VerifyCommand)) {
+                if ($pkg.VerifyCommand -and $this.TestPackageVerificationForPackage($pkg, $false)) {
                     $succeeded++
                     $this.Log("✓ $($pkg.Id)", "Green")
                 }
@@ -562,10 +569,15 @@ class WingetHandler : SetupHandlerBase {
             $wingetOutput = @($this.InvokeWingetInstall($pkg, $installArgs))
             $wingetExitCode = $this.LastInstallExitCode
             $this.LastInstallTimedOut = $this.TestInstallTimedOut($wingetOutput)
-            if ($wingetExitCode -eq 0) {
+            $artifactContractSatisfied = $this.TestPackageArtifactContract($pkg)
+            if ($wingetExitCode -eq 0 -and $artifactContractSatisfied) {
                 $this.LastInstallSucceeded = $true
                 $this.LastInstallExitCode = 0
                 return $wingetOutput
+            }
+
+            if ($wingetExitCode -eq 0) {
+                $this.LogWarning("WinGet は $($pkg.Id) のコマンドを導入しましたが、必要な隣接ファイルがありません。公式 archive で修復します")
             }
 
             if ($pkg.WasVerified -and ($pkg.WasInstalled -or $this.IsAlreadyInstalledInstallFailure($wingetOutput))) {
@@ -706,7 +718,8 @@ class WingetHandler : SetupHandlerBase {
             return @("directInstaller metadata is incomplete for $($pkg.Id)")
         }
 
-        $archivePath = Join-Path $env:TEMP ("dotfiles-$([guid]::NewGuid().ToString('N')).zip")
+        $archiveExtension = if ($url -match '(?i)\.tar\.gz(?:[?#]|$)') { ".tar.gz" } else { ".zip" }
+        $archivePath = Join-Path $env:TEMP ("dotfiles-$([guid]::NewGuid().ToString('N'))$archiveExtension")
         $stagingPath = Join-Path $env:TEMP ("dotfiles-$([guid]::NewGuid().ToString('N'))")
         $destinationExisted = Test-Path -LiteralPath $destination
         $destinationBackedUp = $false
@@ -735,7 +748,21 @@ class WingetHandler : SetupHandlerBase {
             }
 
             New-Item -ItemType Directory -Path $stagingPath -Force | Out-Null
-            Expand-Archive -LiteralPath $archivePath -DestinationPath $stagingPath -Force
+            if ($archiveExtension -eq ".tar.gz") {
+                $extractOutput = @(
+                    Invoke-ExternalCommandWithTimeout `
+                        -Command "tar.exe" `
+                        -Arguments @("-xzf", $archivePath, "-C", $stagingPath) `
+                        -TimeoutSeconds $timeoutSeconds
+                )
+                if ($LASTEXITCODE -ne 0) {
+                    $extractDetails = ($extractOutput | ForEach-Object { [string]$_ }) -join "`n"
+                    throw "directInstaller tar.gz extraction failed for $($pkg.Id): $extractDetails"
+                }
+            }
+            else {
+                Expand-Archive -LiteralPath $archivePath -DestinationPath $stagingPath -Force
+            }
             $stagedExecutablePath = Join-Path $stagingPath $executable
             if (-not (Test-Path -LiteralPath $stagedExecutablePath -PathType Leaf)) {
                 throw "directInstaller archive does not contain the expected executable for $($pkg.Id): $executable"
@@ -965,7 +992,7 @@ class WingetHandler : SetupHandlerBase {
         }
 
         Update-ProcessEnvironmentPath
-        if ($this.TestPackageVerification($pkg.VerifyCommand)) {
+        if ($this.TestPackageVerificationForPackage($pkg, $false)) {
             $this.Log("✓ $($pkg.Id) (repair 後に検証済み)", "Green")
             return $true
         }
@@ -1011,7 +1038,7 @@ class WingetHandler : SetupHandlerBase {
         }
 
         Update-ProcessEnvironmentPath
-        if ($this.TestPackageVerification($pkg.VerifyCommand)) {
+        if ($this.TestPackageVerificationForPackage($pkg, $false)) {
             $this.Log("✓ $($pkg.Id) (reinstall 後に検証済み)", "Green")
             return $true
         }
@@ -1069,10 +1096,11 @@ class WingetHandler : SetupHandlerBase {
     hidden [int] RemoveRetiredPackages([string]$manifestDirectory) {
         $retiredManifestPath = Join-Path $manifestDirectory "retired-packages.json"
         if (-not [System.IO.File]::Exists($retiredManifestPath)) {
-            return 0
+            throw "retired package manifest is missing: $retiredManifestPath"
         }
 
-        $retiredManifest = Get-JsonContent -Path $retiredManifestPath
+        $retiredManifest = Get-Content -LiteralPath $retiredManifestPath -Raw -ErrorAction Stop |
+            ConvertFrom-Json -ErrorAction Stop
         $removedCount = 0
         foreach ($package in @($retiredManifest.packages)) {
             $packageId = [string]$package.id
@@ -1140,6 +1168,66 @@ class WingetHandler : SetupHandlerBase {
 
     hidden [bool] TestPackageVerification([object]$verifyCmd) {
         return $this.TestPackageVerificationInternal($verifyCmd, $false)
+    }
+
+    hidden [bool] TestPackageVerificationForPackage([object]$pkg, [bool]$quiet) {
+        $verified = if ($quiet) {
+            $this.TestPackageVerificationQuiet($pkg.VerifyCommand)
+        }
+        else {
+            $this.TestPackageVerification($pkg.VerifyCommand)
+        }
+        if (-not $verified) {
+            return $false
+        }
+
+        return $this.TestPackageArtifactContract($pkg)
+    }
+
+    hidden [bool] TestPackageArtifactContract([object]$pkg) {
+        if ([string]$pkg.Id -ne "OpenAI.Codex") {
+            return $true
+        }
+
+        $cliRelativePath = $this.GetDirectInstallerString($pkg.DirectInstaller, "executable")
+        $directDestination = $this.ResolveDirectInstallerPath(
+            $this.GetDirectInstallerString($pkg.DirectInstaller, "destination")
+        )
+        if (-not [string]::IsNullOrWhiteSpace($cliRelativePath) -and
+            -not [string]::IsNullOrWhiteSpace($directDestination)) {
+            $directCliPath = Join-Path $directDestination $cliRelativePath
+            $directHostPath = Join-Path (Split-Path -Parent $directCliPath) "codex-code-mode-host.exe"
+            if ([System.IO.File]::Exists($directCliPath) -and [System.IO.File]::Exists($directHostPath)) {
+                return $true
+            }
+        }
+
+        $localAppData = if ($env:LOCALAPPDATA) {
+            $env:LOCALAPPDATA
+        }
+        elseif ($env:USERPROFILE) {
+            Join-Path $env:USERPROFILE "AppData\Local"
+        }
+        else {
+            [Environment]::GetFolderPath("LocalApplicationData")
+        }
+        $wingetPackagesPath = Join-Path $localAppData "Microsoft\WinGet\Packages"
+        if ([System.IO.Directory]::Exists($wingetPackagesPath)) {
+            foreach ($packageDirectory in [System.IO.Directory]::GetDirectories($wingetPackagesPath, "OpenAI.Codex_*")) {
+                foreach ($cliName in @("codex.exe", "codex-x86_64-pc-windows-msvc.exe")) {
+                    $cliPaths = [System.IO.Directory]::GetFiles($packageDirectory, $cliName, [System.IO.SearchOption]::AllDirectories)
+                    foreach ($cliPath in $cliPaths) {
+                        $hostPath = Join-Path (Split-Path -Parent $cliPath) "codex-code-mode-host.exe"
+                        if ([System.IO.File]::Exists($hostPath)) {
+                            return $true
+                        }
+                    }
+                }
+            }
+        }
+
+        $this.LogWarning("OpenAI.Codex の隣接実体が不足しています: codex.exe と codex-code-mode-host.exe の両方が必要です")
+        return $false
     }
 
     hidden [bool] TestPackageVerificationQuiet([object]$verifyCmd) {

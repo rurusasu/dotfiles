@@ -129,6 +129,7 @@ let
     configuredUser = "nixos";
   };
   nixosArguments = hostLib.mkNixos wslNixosArguments;
+  hermesNixosArguments = hostLib.mkNixos (wslNixosArguments // { withHermes = true; });
   customUserNixosArguments = hostLib.mkNixos (wslNixosArguments // { configuredUser = "alice"; });
   findHomeManagerModule =
     arguments:
@@ -136,6 +137,7 @@ let
       builtins.filter (module: builtins.isAttrs module && module ? "home-manager") arguments.modules
     );
   homeManagerModule = findHomeManagerModule nixosArguments;
+  hermesHomeManagerModule = findHomeManagerModule hermesNixosArguments;
   customUserHomeManagerModule = findHomeManagerModule customUserNixosArguments;
   defaultHomeManagerUser = homeManagerModule."home-manager".users.nixos;
   customHomeManagerUser = customUserHomeManagerModule."home-manager".users.alice;
@@ -292,6 +294,17 @@ in
       selectedUser = [ "nixos" ];
       usesGlobalPackages = true;
       usesUserPackages = true;
+    };
+  };
+
+  testNixOSHermesFeaturePropagatesToHostAndHomeManager = {
+    expr = {
+      hostArgument = hermesNixosArguments.specialArgs.dotfilesWithHermes;
+      homeManagerFeature = hermesHomeManagerModule."home-manager".extraSpecialArgs.installFeatures;
+    };
+    expected = {
+      hostArgument = true;
+      homeManagerFeature = [ "WithHermes" ];
     };
   };
 

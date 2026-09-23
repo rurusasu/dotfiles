@@ -29,4 +29,24 @@ in
       };
     };
   };
+
+  testGeminiCliPnpmCatalog = {
+    expr = {
+      isGlobalPackage = builtins.elem "@google/gemini-cli" sets.windowsOnly.pnpm;
+      installArgs = sets.pnpmInstallArgs."@google/gemini-cli";
+      verifyCommand = sets.pnpmVerify."@google/gemini-cli";
+    };
+    expected = {
+      isGlobalPackage = true;
+      installArgs = [ "--allow-build=@github/keytar" ];
+      verifyCommand = {
+        command = "gemini";
+        args = [ "--version" ];
+        type = "nodeModule";
+        moduleName = "@lydell/node-pty";
+        moduleFromPackage = "@google/gemini-cli";
+        moduleSmokeTest = "pty";
+      };
+    };
+  };
 }

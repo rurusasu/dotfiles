@@ -275,11 +275,66 @@ try {
                 "bash", "-lc", "systemctl --user is-enabled hermes-agent.service && systemctl --user is-active hermes-agent.service"
             ) -TimeoutSeconds 300 | Out-Null
 
+            $readinessAttempts = 30
+            $readinessCurlTimeoutSeconds = 2
+            $readinessRetryDelaySeconds = 1
+            $readinessTimeoutMarginSeconds = 30
+            $readinessTimeoutSeconds = ($readinessAttempts * ($readinessCurlTimeoutSeconds + $readinessRetryDelaySeconds)) + $readinessTimeoutMarginSeconds
+            $readinessCommand = @'
+nix shell --inputs-from /home/nixos/.dotfiles nixpkgs#curl nixpkgs#jq --command bash -s <<'DOTFILES_HERMES_READINESS'
+set -euo pipefail
+health_url='http://127.0.0.1:18642/health/detailed'
+
+expect_unauthorized() {
+  local description="$1"
+  shift
+  local status_code
+
+  if ! status_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time __READINESS_CURL_TIMEOUT_SECONDS__ "$@" "$health_url"); then
+    echo "Hermes $description probe failed before receiving an HTTP response" >&2
+    return 1
+  fi
+  if [[ $status_code != 401 ]]; then
+    echo "Hermes $description probe expected HTTP 401 but received $status_code" >&2
+    return 1
+  fi
+}
+
+expect_unauthorized 'missing bearer token'
+expect_unauthorized 'invalid bearer token' -H 'Authorization: Bearer invalid-dotfiles-ci-health-probe'
+
+for attempt in {1..__READINESS_ATTEMPTS__}; do
+  response=$(curl --fail --silent --show-error --max-time __READINESS_CURL_TIMEOUT_SECONDS__ \
+    -H 'Authorization: Bearer dotfiles-ci-health-probe' "$health_url" 2>&1) || true
+  if printf '%s' "$response" | jq -e '
+    .status == "ok" and
+    .readiness.status == "ok" and
+    (.readiness.checks | type == "object" and length > 0 and all(.[]; .status == "ok")) and
+    (.readiness.checks as $checks | all(
+      ["state_db", "session_store", "config", "model", "disk", "gateway", "background_queues"][];
+      . as $required | ($checks[$required] | type == "object" and .status == "ok")
+    ))
+  ' >/dev/null 2>&1; then
+    printf '%s\n' "$response"
+    exit 0
+  fi
+  sleep __READINESS_RETRY_DELAY_SECONDS__
+done
+
+echo "Hermes readiness did not report all required checks healthy: state_db, session_store, config, model, disk, gateway, background_queues" >&2
+printf '%s\n' "$response" >&2
+exit 1
+DOTFILES_HERMES_READINESS
+'@
+            $readinessCommand = $readinessCommand.Replace('__READINESS_ATTEMPTS__', [string]$readinessAttempts)
+            $readinessCommand = $readinessCommand.Replace('__READINESS_CURL_TIMEOUT_SECONDS__', [string]$readinessCurlTimeoutSeconds)
+            $readinessCommand = $readinessCommand.Replace('__READINESS_RETRY_DELAY_SECONDS__', [string]$readinessRetryDelaySeconds)
+
             Invoke-WslChecked -Arguments @(
                 "-d", $DistroName, "-u", "nixos", "--",
                 "bash", "-lc",
-                'nix shell --inputs-from /home/nixos/.dotfiles nixpkgs#curl --command bash -lc ''for attempt in {1..30}; do response=$(curl --fail --silent --show-error --max-time 2 http://127.0.0.1:18642/health 2>/dev/null) && printf "%s" "$response" | grep -Eq "status[[:space:]]*:[[:space:]]*\\\"ok\\\"" && { printf "%s\\n" "$response"; exit 0; }; sleep 1; done; echo "Hermes gateway health endpoint did not return status=ok" >&2; exit 1'''
-            ) -TimeoutSeconds 60 | Out-Null
+                $readinessCommand
+            ) -TimeoutSeconds $readinessTimeoutSeconds | Out-Null
         }
         catch {
             Invoke-WslChecked -Arguments @(

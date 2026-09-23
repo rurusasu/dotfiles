@@ -72,7 +72,7 @@ CIのexport checkはWinget/npm/pnpm JSON全体を生成してcommitted filesとJ
 |    4 | `DeepSeek Harness is reinstalled when the native build approval changes`    | installer decision/runtime behavior                                                                        |
 |    5 | `pnpm v11 global installs skip packages present in the global manifest`     | pnpm runtime skip behavior                                                                                 |
 |    6 | `CI consistency workflow gates on package provider coverage`                | distinct consistency-workflow gate wiring; named output/derivation linkage is evaluated by `ownership.nix` |
-|    7 | `winget export matches committed Windows manifest data`                     | complete generated Winget/npm/pnpm artifact data, independent of JSON formatting                          |
+|    7 | `winget export matches committed Windows manifest data`                     | complete generated Winget/npm/pnpm artifact data, independent of JSON formatting                           |
 |    8 | `Darwin Raycast artifact has the declared identity and trusted signature`   | built app identity, codesign, Gatekeeper                                                                   |
 |    9 | `Darwin Discord keeps staged modules outside its signed application bundle` | built layout, launcher path, app identity and signatures                                                   |
 

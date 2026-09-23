@@ -982,8 +982,34 @@ EOF
 			continue
 		fi
 		! grep -Fq 'hermes:bootstrap' "$contents"
-		! grep -Fq 'docker/hermes-service/compose.yml' "$contents"
+		! grep -Fq 'hermes:docker:bootstrap' "$contents"
+		! grep -Fq 'dotfiles_hermes_start_stack' "$contents"
 	done
+}
+
+@test "hermes:bootstrap activates the Nix-managed Hermes profile" {
+	local bootstrap_task
+	bootstrap_task="$(awk '
+		/^  hermes:bootstrap:$/ { in_task = 1 }
+		in_task && /^  [^ ]/ && $0 !~ /^  hermes:bootstrap:/ { exit }
+		in_task { print }
+	' "$REPO_ROOT/taskfiles/hermes/taskfile.yml")"
+
+	[[ "$bootstrap_task" == *'DOTFILES_WITH_HERMES=1'* ]]
+	[[ "$bootstrap_task" == *'nixos-rebuild-with-user.sh switch --flake . --impure'* ]]
+	[[ "$bootstrap_task" == *'task darwin:install'* ]]
+	[[ "$bootstrap_task" != *'hermes:docker:bootstrap'* ]]
+	[[ "$bootstrap_task" != *'docker compose'* ]]
+}
+
+@test "NixOS-WSL Hermes readiness requires every critical check" {
+	local readiness_script required_checks
+	readiness_script="$(<"$REPO_ROOT/scripts/powershell/ci/Invoke-NixosWslE2E.ps1")"
+	required_checks='["state_db", "session_store", "config", "model", "disk", "gateway", "background_queues"]'
+
+	[[ "$readiness_script" == *"$required_checks"* ]]
+	[[ "$readiness_script" == *'type == "object" and .status == "ok"'* ]]
+	[[ "$readiness_script" == *'all(.[]; .status == "ok")'* ]]
 }
 
 @test "install.sh routes each Unix installer through the Taskfile after chezmoi" {

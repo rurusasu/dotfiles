@@ -43,9 +43,41 @@ User Phase Complete!
             Should -Throw '*did not reach completion marker*'
     }
 
-    It 'accepts a clean completed user phase' {
+    It 'requires package-manager success markers so preinstalled commands cannot mask skipped installs' {
+        $output = @'
+Total: 2 | Success: 2 | Failure: 0
+[Npm] CHECKMARK agent-browser@0.38.1
+PNPM_SUCCESS
+User Phase Complete!
+'@
+        $output = $output.Replace('CHECKMARK', [string][char]0x2713)
+        $pnpmBootstrapMarker = '[Pnpm] ' + (ConvertFrom-Json '"npm \u3067 pnpm \u3092\u30a4\u30f3\u30b9\u30c8\u30fc\u30eb\u3057\u307e\u3057\u305f"')
+        $output = $output.Replace('PNPM_SUCCESS', $pnpmBootstrapMarker)
+
+        {
+            Assert-WindowsInstallerSuccess -Output $output -ExitCode 0 -CompletionMarker 'User Phase Complete!' -RequiredOutputMarkers @(
+                ('[Npm] ' + [string][char]0x2713 + ' agent-browser@0.38.1')
+                $pnpmBootstrapMarker
+            )
+        } | Should -Not -Throw
+
+        {
+            Assert-WindowsInstallerSuccess -Output "Total: 2 | Success: 2 | Failure: 0`nUser Phase Complete!" -ExitCode 0 -CompletionMarker 'User Phase Complete!' -RequiredOutputMarkers @(
+                ('[Npm] ' + [string][char]0x2713 + ' agent-browser@0.38.1')
+            )
+        } | Should -Throw '*required package-manager success marker*'
+    }
+
+    It 'rejects a successful phase when the caller supplies no package evidence' {
         $output = 'Total: 1 | Success: 1 | Failure: 0' + [Environment]::NewLine + 'User Phase Complete!'
         { Assert-WindowsInstallerSuccess -Output $output -ExitCode 0 -CompletionMarker 'User Phase Complete!' } |
+            Should -Throw '*at least one required package-manager success marker*'
+    }
+
+    It 'accepts a clean completed user phase' {
+        $wingetSuccessMarker = '[Winget] ' + [string][char]0x2713 + ' package'
+        $output = 'Total: 1 | Success: 1 | Failure: 0' + [Environment]::NewLine + $wingetSuccessMarker + [Environment]::NewLine + 'User Phase Complete!'
+        { Assert-WindowsInstallerSuccess -Output $output -ExitCode 0 -CompletionMarker 'User Phase Complete!' -RequiredOutputMarkers @($wingetSuccessMarker) } |
             Should -Not -Throw
     }
 }

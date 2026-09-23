@@ -166,8 +166,10 @@ class TaskfileContractTests(unittest.TestCase):
                 self.assertNotRegex(plan, forbidden)
                 if action in ("status", "up", "restart"):
                     self.assertIn("-p personal-ops gateway status", plan)
-                if action in ("up", "restart"):
+                if action == "up":
                     self.assertIn("task: [hermes:docker:bootstrap]", plan)
+                if action == "restart":
+                    self.assertIn("task: [hermes:docker:restart]", plan)
                 if action == "down":
                     self.assertIn(
                         "docker compose -f docker/hermes-service/compose.yml stop hermes",

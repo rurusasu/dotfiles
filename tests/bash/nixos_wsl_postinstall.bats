@@ -75,7 +75,7 @@ printf "%s\n" "$@" >"$NIXOS_ARGV_CAPTURE"
 printf "nixos-rebuild user=%s home=%s uid=%s gid=%s group=%s\n" \
   "${DOTFILES_USER:-}" "${DOTFILES_HOME:-}" "${DOTFILES_UID:-}" \
   "${DOTFILES_GID:-}" "${DOTFILES_GROUP:-}" >>"$COMMAND_LOG"
-printf 'nixos-rebuild hermes=%s\n' "${DOTFILES_WITH_HERMES:-}" >>"$COMMAND_LOG"
+printf "nixos-rebuild hermes=%s\n" "${DOTFILES_WITH_HERMES:-}" >>"$COMMAND_LOG"
 
 if [[ -n ${REAL_NIX:-} ]]; then
   nix_eval_args=()
@@ -83,10 +83,26 @@ if [[ -n ${REAL_NIX:-} ]]; then
     [[ $arg == --impure ]] && nix_eval_args+=("$arg")
   done
 
+	flake_ref=""
+	while (($# > 0)); do
+		if [[ $1 == --flake && $# -gt 1 ]]; then
+			flake_ref="${2%%#*}"
+			break
+		fi
+		shift
+	done
+	case $flake_ref in
+		path:*) flake_ref="${flake_ref#path:}" ;;
+	esac
+	if [[ -n $flake_ref && $flake_ref != /* ]]; then
+		flake_ref="$(cd "$flake_ref" && pwd -P)"
+	fi
+	flake_ref="path:$flake_ref"
+
 	if ((${#nix_eval_args[@]} == 1)); then
 		nix_eval_expr=$(cat <<NIX_EXPR
       let
-        flake = builtins.getFlake ("path:" + builtins.getEnv "SYNC_SOURCE");
+        flake = builtins.getFlake flakeUri;
         config = flake.nixosConfigurations.nixos.config;
         homeManager = builtins.getAttr "home-manager" config;
       in
@@ -101,7 +117,7 @@ if [[ -n ${REAL_NIX:-} ]]; then
 
 NIX_EXPR
 		)
-		"$REAL_NIX" eval "${nix_eval_args[@]}" --raw --no-write-lock-file --expr "$nix_eval_expr" >"$NIX_EVAL_CAPTURE"
+		"$REAL_NIX" eval "${nix_eval_args[@]}" --argstr flakeUri "$flake_ref" --raw --no-write-lock-file --expr "$nix_eval_expr" >"$NIX_EVAL_CAPTURE"
   else
     printf "nix eval skipped: nixos-rebuild argv has no --impure\n" >>"$COMMAND_LOG"
   fi
@@ -188,6 +204,7 @@ EOF
 		DOTFILES_GROUP=alicegrp \
 		DOTFILES_WITH_HERMES=1 \
 		DOTFILES_STATE_DIR="$DOTFILES_STATE_DIR" \
+		REAL_NIX= \
 		bash "$REBUILD_WRAPPER" switch --flake . --impure
 
 	[ "$status" -eq 0 ]
@@ -203,6 +220,7 @@ EOF
 		DOTFILES_GID=4343 \
 		DOTFILES_GROUP=alicegrp \
 		DOTFILES_STATE_DIR="$DOTFILES_STATE_DIR" \
+		REAL_NIX= \
 		bash "$REBUILD_WRAPPER" switch --flake . --impure
 
 	[ "$status" -eq 0 ]

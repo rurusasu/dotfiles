@@ -67,11 +67,26 @@ function Set-HermesGmailPrivateAcl {
         throw "Gmail credential $($PathType.ToLowerInvariant()) is invalid."
     }
 
-    $acl = Get-Acl -LiteralPath $Path
-    $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])
+    $existingAcl = Get-Acl -LiteralPath $Path
+    $owner = $existingAcl.GetOwner([System.Security.Principal.SecurityIdentifier])
     if ($null -eq $owner) { throw 'Gmail credential owner is unavailable.' }
     $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
     if ($null -eq $currentUser) { throw 'Current Windows identity is unavailable.' }
+
+    $accessSection = [System.Security.AccessControl.AccessControlSections]::Access
+    if ($PSVersionTable.PSEdition -eq 'Core') {
+        $acl = [System.IO.FileSystemAclExtensions]::GetAccessControl(
+            $item,
+            $accessSection
+        )
+    }
+    elseif ($PathType -eq 'Directory') {
+        $acl = [System.IO.Directory]::GetAccessControl($Path, $accessSection)
+    }
+    else {
+        $acl = [System.IO.File]::GetAccessControl($Path, $accessSection)
+    }
+
     $acl.SetAccessRuleProtection($true, $false)
     foreach ($access in @($acl.Access)) {
         $null = $acl.RemoveAccessRuleSpecific($access)
@@ -100,7 +115,15 @@ function Set-HermesGmailPrivateAcl {
         )
         $acl.AddAccessRule($rule)
     }
-    Set-Acl -LiteralPath $Path -AclObject $acl
+    if ($PSVersionTable.PSEdition -eq 'Core') {
+        [System.IO.FileSystemAclExtensions]::SetAccessControl($item, $acl)
+    }
+    elseif ($PathType -eq 'Directory') {
+        [System.IO.Directory]::SetAccessControl($Path, $acl)
+    }
+    else {
+        [System.IO.File]::SetAccessControl($Path, $acl)
+    }
 }
 
 function Test-HermesGmailPrivateFile {

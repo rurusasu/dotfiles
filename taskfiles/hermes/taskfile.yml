@@ -33,9 +33,12 @@ tasks:
         platforms: [windows]
 
   hermes:bootstrap:
-    desc: Compatibility entrypoint for the explicit legacy Docker bootstrap
+    desc: Apply the Nix-managed Hermes Agent profile and gateway service
     cmds:
-      - task: hermes:docker:bootstrap
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && DOTFILES_WITH_HERMES=1 scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure"'
+        platforms: [windows, linux]
+      - cmd: DOTFILES_WITH_OLLAMA=0 DOTFILES_WITH_DOCKER=0 DOTFILES_WITH_HERMES=1 DOTFILES_ROOT="{{.ROOT_DIR}}" task darwin:install
+        platforms: [darwin]
 
   hermes:storage:inspect:
     desc: Inspect the Docker-managed Hermes runtime data volume

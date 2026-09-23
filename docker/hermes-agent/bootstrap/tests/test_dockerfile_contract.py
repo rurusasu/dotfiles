@@ -84,13 +84,21 @@ class DockerfileContractTests(unittest.TestCase):
             "COPY hermes-agent/hindsight_acceptance.py /usr/local/bin/hindsight_acceptance.py",
             dockerfile,
         )
-        self.assertIn(
-            "ln -s /usr/local/bin/hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance",
-            dockerfile,
+        normalize_command = "sed -i 's/\\r$//' /usr/local/bin/hindsight_acceptance.py"
+        symlink_command = (
+            "ln -s /usr/local/bin/hindsight_acceptance.py "
+            "/usr/local/bin/hermes-hindsight-acceptance"
         )
-        self.assertIn(
-            "RUN /usr/local/bin/hermes-hindsight-acceptance --help >/dev/null",
-            dockerfile,
+        help_command = "/usr/local/bin/hermes-hindsight-acceptance --help >/dev/null"
+        self.assertIn(normalize_command, dockerfile)
+        self.assertIn("chmod 0755 /usr/local/bin/hindsight_acceptance.py", dockerfile)
+        self.assertIn(symlink_command, dockerfile)
+        self.assertIn(help_command, dockerfile)
+        self.assertLess(
+            dockerfile.index(normalize_command), dockerfile.index(symlink_command)
+        )
+        self.assertLess(
+            dockerfile.index(symlink_command), dockerfile.index(help_command)
         )
         self.assertIn(
             f"ARG HINDSIGHT_PLUGIN_COMMIT={HINDSIGHT_PLUGIN_COMMIT}", dockerfile

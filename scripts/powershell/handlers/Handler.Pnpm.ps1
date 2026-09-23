@@ -351,16 +351,30 @@ class PnpmHandler : SetupHandlerBase {
 
             if ($verifyType -eq "nodeModule") {
                 $moduleName = [string]$this.GetPackageProperty($verifyCmd, "moduleName")
+                $moduleFromPackage = [string]$this.GetPackageProperty($verifyCmd, "moduleFromPackage")
+                $moduleSmokeTest = [string]$this.GetPackageProperty($verifyCmd, "moduleSmokeTest")
+                if ($moduleSmokeTest -and ($moduleSmokeTest -ne "pty" -or -not $moduleFromPackage)) {
+                    $this.LogWarning("Node モジュール検証の smoke test 設定が不正です: $moduleSmokeTest")
+                    return $false
+                }
                 if (-not $globalRoot -or -not $moduleName) {
                     $this.LogWarning("Node モジュール検証に global root または moduleName がありません: $moduleName")
                     return $false
                 }
 
-                # pnpm global dependencies live below `pnpm root -g`, which Node's
-                # normal resolver does not search from the dotfiles working directory.
-                # Add that root only for the load probe; do not alter persistent user state.
+                # pnpm isolates transitive dependencies below each package's node_modules.
+                # Resolve them from the owning package instead of from the global root.
                 $moduleNameLiteral = ConvertTo-Json -InputObject $moduleName -Compress
-                $nodeProbe = "const pty = require($moduleNameLiteral); if (typeof pty.spawn !== 'function') throw new Error('module does not export spawn')"
+                if ($moduleFromPackage) {
+                    $moduleFromPackageLiteral = ConvertTo-Json -InputObject $moduleFromPackage -Compress
+                    $nodeProbe = "const {createRequire}=require('node:module'); const owner=require.resolve($moduleFromPackageLiteral+'/package.json'); const load=createRequire(owner); const pty=load($moduleNameLiteral); if(typeof pty.spawn!=='function') throw new Error('module does not export spawn');"
+                }
+                else {
+                    $nodeProbe = "const pty = require($moduleNameLiteral); if (typeof pty.spawn !== 'function') throw new Error('module does not export spawn');"
+                }
+                if ($moduleSmokeTest -eq "pty") {
+                    $nodeProbe += " const shell=process.env.ComSpec||'cmd.exe'; const child=pty.spawn(shell,['/d','/s','/c','exit 0'],{name:'xterm-color',cols:80,rows:24,cwd:process.cwd(),env:process.env}); const timer=setTimeout(()=>{try{child.kill()}catch{}; console.error('PTY smoke test timed out'); process.exit(1)},20000); child.onExit(({exitCode,signal})=>{clearTimeout(timer); if(exitCode!==0||signal){console.error('PTY smoke test failed',exitCode,signal); process.exitCode=1}});"
+                }
                 $previousNodePath = $env:NODE_PATH
                 $nodePathEntries = @($globalRoot)
                 [string[]]$moduleOutput = @()
@@ -555,7 +569,7 @@ class PnpmHandler : SetupHandlerBase {
     hidden [void] EnsureGeminiCommandShim([string]$globalRoot) {
         if (-not $globalRoot) { return }
 
-        $entrypoint = Join-Path $globalRoot "@google\gemini-cli\dist\index.js"
+        $entrypoint = Join-Path $globalRoot "@google\gemini-cli\bundle\gemini.js"
         if (-not (Test-Path -LiteralPath $entrypoint -PathType Leaf)) {
             $this.Log("Gemini CLI のエントリポイントが見つからないため shim 作成をスキップします", "Gray")
             return
@@ -574,7 +588,7 @@ class PnpmHandler : SetupHandlerBase {
             "@echo off"
             "setlocal"
             "for /f ""delims="" %%i in ('pnpm root -g') do set ""PNPM_GLOBAL=%%i"""
-            "set ""GEMINI_JS=%PNPM_GLOBAL%\@google\gemini-cli\dist\index.js"""
+            "set ""GEMINI_JS=%PNPM_GLOBAL%\@google\gemini-cli\bundle\gemini.js"""
             "if not exist ""%GEMINI_JS%"" ("
             "  echo [ERROR] Gemini CLI entrypoint not found: %GEMINI_JS%"
             "  exit /b 1"

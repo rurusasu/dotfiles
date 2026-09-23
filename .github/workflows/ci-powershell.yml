@@ -264,7 +264,7 @@ jobs:
             }
           }
 
-          $moduleRoot = Join-Path $HOME "Documents\$env:PS_MODULE_DIRECTORY"
+          $moduleRoot = Join-Path $HOME "Documents\$env:PS_MODULE_DIRECTORY\Modules"
           if ($env:PSModulePath -notlike "*$moduleRoot*") {
             $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
           }
