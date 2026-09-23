@@ -824,9 +824,12 @@ jobs:
       matrix:
         include:
           - runtime: Windows PowerShell 5.1
-            shell: powershell
+            executable: powershell.exe
           - runtime: PowerShell 7
-            shell: pwsh
+            executable: pwsh.exe
+    env:
+      WINDOWS_E2E_RUNTIME: ${{ matrix.runtime }}
+      WINDOWS_E2E_EXECUTABLE: ${{ matrix.executable }}
     steps:
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -838,7 +841,7 @@ jobs:
         uses: ./.github/actions/install-chezmoi
 
       - name: Install and verify admin-required Visual Studio Build Tools through the installer
-        shell: ${{ matrix.shell }}
+        shell: pwsh
         timeout-minutes: 60
         run: |
           Set-StrictMode -Version Latest
@@ -859,9 +862,8 @@ jobs:
             [Text.Encoding]::UTF8.GetBytes(($options | ConvertTo-Json -Compress))
           )
           $adminScript = Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/install.admin.ps1'
-          $shellExecutable = if ($PSVersionTable.PSVersion.Major -ge 7) { 'pwsh.exe' } else { 'powershell.exe' }
           $installerOutput = @(
-            & (Join-Path $PSHOME $shellExecutable) `
+            & $env:WINDOWS_E2E_EXECUTABLE `
               -NoLogo -NoProfile -ExecutionPolicy Bypass `
               -File $adminScript `
               '-AdminOnly:$true' `
@@ -917,7 +919,7 @@ jobs:
           Write-Output "CI_ADMIN_PACKAGE_SUCCESS: id=Microsoft.VisualStudio.2022.BuildTools executable=$compiler"
 
       - name: Verify admin-installed AutoHotkey v2
-        shell: ${{ matrix.shell }}
+        shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -940,25 +942,34 @@ jobs:
           }
 
       - name: Install pinned Pester
-        shell: ${{ matrix.shell }}
+        shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          Install-Module -Name Pester -RequiredVersion '5.6.1' -Scope CurrentUser -Force -SkipPublisherCheck
+          & $env:WINDOWS_E2E_EXECUTABLE `
+            -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass `
+            -Command "Install-Module -Name Pester -RequiredVersion '5.6.1' -Scope CurrentUser -Force -SkipPublisherCheck -ErrorAction Stop"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not install pinned Pester under $env:WINDOWS_E2E_RUNTIME (exit $LASTEXITCODE)"
+          }
 
       - name: Run Windows bootstrap contracts
-        shell: ${{ matrix.shell }}
+        shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          & .\scripts\powershell\tests\Invoke-Tests.ps1 -MinimumCoverage 0 -OutputFile windows-contract-junit.xml
+          & $env:WINDOWS_E2E_EXECUTABLE `
+            -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass `
+            -File .\scripts\powershell\tests\Invoke-Tests.ps1 `
+            -MinimumCoverage 0 `
+            -OutputFile windows-contract-junit.xml
           if ($LASTEXITCODE -ne 0) {
-            throw "Windows bootstrap contracts failed: $LASTEXITCODE"
+            throw "Windows bootstrap contracts failed under $env:WINDOWS_E2E_RUNTIME (exit $LASTEXITCODE)"
           }
 
       - name: Write Windows contract attestation
         if: always()
-        shell: ${{ matrix.shell }}
+        shell: pwsh
         run: |
           @(
             "sha=$env:TESTED_SHA"
