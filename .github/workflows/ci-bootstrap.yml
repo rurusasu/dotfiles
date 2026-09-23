@@ -387,7 +387,6 @@ jobs:
           check starship --version
           check wezterm --version
           check op --version
-          check opencode --version
           check codex --version
           check gcloud version
           check kind version
