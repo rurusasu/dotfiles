@@ -430,6 +430,7 @@ jobs:
             Remove-Item -LiteralPath $workDir -Recurse -Force
           }
           New-Item -ItemType Directory -Force -Path $scriptDir | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $scriptDir 'lib') | Out-Null
           Copy-Item -LiteralPath install.cmd -Destination (Join-Path $workDir 'install.cmd')
 
           Copy-Item -LiteralPath .\scripts\powershell\install.ps1 -Destination (Join-Path $scriptDir 'install.ps1')
