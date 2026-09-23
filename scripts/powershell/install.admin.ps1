@@ -92,7 +92,7 @@ function ConvertTo-AdminOnlyFilter {
     throw "AdminOnly must be true, false, 1, 0, or omitted. Received: $Value"
 }
 
-function Merge-Options {
+function Merge-OptionSet {
     [CmdletBinding()]
     [OutputType([hashtable])]
     param(
@@ -134,7 +134,7 @@ function Merge-Options {
     return $merged
 }
 
-$effectiveOptions = Merge-Options `
+$effectiveOptions = Merge-OptionSet `
     -BaseOptions $Options `
     -JsonOptions $OptionsJson `
     -Base64Options $OptionsBase64
@@ -247,7 +247,9 @@ $failedCount = @($results | Where-Object { -not $_.Success }).Count
 
 # Transcript を確実に閉じる（throw 前に）
 if ($LogFile -and -not $NoPause) {
-    try { Stop-Transcript | Out-Null } catch { }
+    try { Stop-Transcript | Out-Null } catch {
+        Write-Verbose "Failed to stop transcript: $($_.Exception.Message)"
+    }
 }
 
 # 管理者昇格ウィンドウが即座に閉じないよう pause
