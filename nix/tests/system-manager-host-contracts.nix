@@ -53,8 +53,7 @@ in
 {
   testSystemManagerExposesUbuntuAndDebianConfigs = {
     expr =
-      builtins.hasAttr "ubuntu" moduleSystemConfigs
-      && builtins.hasAttr "debian" moduleSystemConfigs;
+      builtins.hasAttr "ubuntu" moduleSystemConfigs && builtins.hasAttr "debian" moduleSystemConfigs;
     expected = true;
   };
 
