@@ -8,12 +8,12 @@
 { inputs, ... }:
 let
   withHermes = builtins.getEnv "DOTFILES_WITH_HERMES" == "1";
-  withDocker = withHermes || builtins.getEnv "DOTFILES_WITH_DOCKER" == "1";
-  withOllama = withDocker || builtins.getEnv "DOTFILES_WITH_OLLAMA" == "1";
-  installFeatures =
-    inputs.nixpkgs.lib.optionals withOllama [ "WithOllama" ]
-    ++ inputs.nixpkgs.lib.optionals withDocker [ "WithDocker" ]
-    ++ inputs.nixpkgs.lib.optionals withHermes [ "WithHermes" ];
+  withDocker = builtins.getEnv "DOTFILES_WITH_DOCKER" == "1";
+  installFeatures = import ./lib/install-features.nix {
+    inherit withDocker withHermes;
+    inherit (inputs.nixpkgs) lib;
+    withOllama = builtins.getEnv "DOTFILES_WITH_OLLAMA" == "1";
+  };
   Workmux = import ./lib/workmux.nix { inherit inputs; };
   workmuxOverlay = Workmux.mkOverlay (system: inputs.workmux.packages.${system}.default);
   mkHome = system: {

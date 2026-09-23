@@ -46,12 +46,8 @@ in
 
   testSystemManagerOllamaBindsToDockerBridgeGateway = {
     expr = {
-      resolvesDockerBridgeAddress = inputs.nixpkgs.lib.hasInfix
-        "ip -4 -o addr show dev docker0"
-        ollamaExecStart;
-      bindsToResolvedGateway = inputs.nixpkgs.lib.hasInfix
-        ''export OLLAMA_HOST="$docker_gateway:11434"''
-        ollamaExecStart;
+      resolvesDockerBridgeAddress = inputs.nixpkgs.lib.hasInfix "ip -4 -o addr show dev docker0" ollamaExecStart;
+      bindsToResolvedGateway = inputs.nixpkgs.lib.hasInfix ''export OLLAMA_HOST="$docker_gateway:11434"'' ollamaExecStart;
       avoidsWildcardBind = !(inputs.nixpkgs.lib.hasInfix "0.0.0.0:11434" ollamaExecStart);
     };
     expected = {

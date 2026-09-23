@@ -98,24 +98,34 @@ Python がない初期環境では従来の逐次表示を使用します。リ�
 | ユーザー設定            | chezmoi                 | shell、Git、terminal、editor の OS 差分をテンプレート化        |
 | 受入検証                | platform verifier       | runtime acceptance と drift を検出                             |
 
-## Hermes Bootstrap Ownership
+## Hermes Runtime and Bootstrap Ownership
 
-Hermes uses one containerized bootstrap across supported operating systems. The
-runtime mount is `/opt/data`, not a Git checkout. The root and named profile
-homes are applied from source repositories, while live secrets, memories,
-sessions, logs, and browser state remain local runtime data.
+On macOS and Linux/WSL, the pinned `hermes-agent` flake input and Home Manager
+module manage the Hermes CLI and gateway as a native user service: systemd on
+Linux/WSL and launchd on macOS. Native state remains at `~/.hermes`.
 
-| Owner                  | Source                                                                                    | Responsibility                                                                              |
-| ---------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Dotfiles               | [rurusasu/dotfiles](https://github.com/rurusasu/dotfiles)                                 | Compose wiring, manifest, host adapters, operator Taskfile and documentation                |
-| Root distribution      | [rurusasu/hermes-profile-alfred](https://github.com/rurusasu/hermes-profile-alfred)       | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks |
-| Rick distribution      | [rurusasu/hermes-profile-rick](https://github.com/rurusasu/hermes-profile-rick)           | Official `distribution.yaml` and Rick declarative content                                   |
-| Hoffman distribution   | [rurusasu/hermes-profile-hoffman](https://github.com/rurusasu/hermes-profile-hoffman)     | Official `distribution.yaml` and Hoffman declarative content                                |
-| Risarisa distribution  | [rurusasu/hermes-profile-risarisa](https://github.com/rurusasu/hermes-profile-risarisa)   | Official `distribution.yaml` and Risarisa declarative content                               |
-| Nancy distribution     | [rurusasu/hermes-profile-nancy](https://github.com/rurusasu/hermes-profile-nancy)         | Official `distribution.yaml` and Nancy declarative content                                  |
-| Kuroda distribution    | [rurusasu/hermes-profile-kuroda](https://github.com/rurusasu/hermes-profile-kuroda)       | Official `distribution.yaml` and Kuroda declarative content                                 |
-| Shiraishi distribution | [rurusasu/hermes-profile-shiraishi](https://github.com/rurusasu/hermes-profile-shiraishi) | Official `distribution.yaml` and Shiraishi declarative content                              |
-| Shared data            | [rurusasu/lifelog](https://github.com/rurusasu/lifelog)                                   | The one locked read-write checkout at `/opt/data/shared/lifelog`                            |
+The existing Docker Compose stack has separate ownership. Its sidecars and
+container bootstrap continue to use the Docker named volume `hermes-data` (or
+the name selected by `HERMES_DATA_VOLUME`) mounted at `/opt/data`, not a Git
+checkout. Root and named-profile homes are applied from source repositories,
+while live secrets, memories, sessions, logs, and browser state remain local
+runtime data. Enabling the native service does not migrate, modify, or remove
+the existing Docker volume or its state. Any operator-led migration requires a
+verified backup and an explicit policy for resolving conflicting paths before
+data is copied; no automatic merge or precedence is defined.
+
+| Owner                  | Source                                                                                    | Responsibility                                                                                 |
+| ---------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Dotfiles               | [rurusasu/dotfiles](https://github.com/rurusasu/dotfiles)                                 | Compose wiring, Docker bootstrap, manifest, host adapters, operator Taskfile and documentation |
+| Nix + Home Manager     | `flake.nix`, `nix/home/hermes-agent.nix`                                                  | Pinned CLI package and native gateway user service on macOS and Linux/WSL                      |
+| Root distribution      | [rurusasu/hermes-profile-alfred](https://github.com/rurusasu/hermes-profile-alfred)       | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks    |
+| Rick distribution      | [rurusasu/hermes-profile-rick](https://github.com/rurusasu/hermes-profile-rick)           | Official `distribution.yaml` and Rick declarative content                                      |
+| Hoffman distribution   | [rurusasu/hermes-profile-hoffman](https://github.com/rurusasu/hermes-profile-hoffman)     | Official `distribution.yaml` and Hoffman declarative content                                   |
+| Risarisa distribution  | [rurusasu/hermes-profile-risarisa](https://github.com/rurusasu/hermes-profile-risarisa)   | Official `distribution.yaml` and Risarisa declarative content                                  |
+| Nancy distribution     | [rurusasu/hermes-profile-nancy](https://github.com/rurusasu/hermes-profile-nancy)         | Official `distribution.yaml` and Nancy declarative content                                     |
+| Kuroda distribution    | [rurusasu/hermes-profile-kuroda](https://github.com/rurusasu/hermes-profile-kuroda)       | Official `distribution.yaml` and Kuroda declarative content                                    |
+| Shiraishi distribution | [rurusasu/hermes-profile-shiraishi](https://github.com/rurusasu/hermes-profile-shiraishi) | Official `distribution.yaml` and Shiraishi declarative content                                 |
+| Shared data            | [rurusasu/lifelog](https://github.com/rurusasu/lifelog)                                   | The one locked read-write checkout at `/opt/data/shared/lifelog`                               |
 
 `/opt/data/core/lifelog` is migration-only and is absent after bootstrap;
 profile homes are never Git repositories. The default profile owns
@@ -140,8 +150,7 @@ unavailable, memory recall/retain may be unavailable while the Hermes gateway
 continues running.
 
 The onboarding fields, approved connection modes, MLflow operator tasks, and
-runtime-data policy are defined in [Local AI services onboarding and
-operations](./mlflow/local-ai-services.md).
+runtime-data policy are defined in [Local AI services onboarding and operations](./mlflow/local-ai-services.md).
 
 | 所有者                                               | 永続化対象                           | Git との境界                                                          |
 | ---------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------- |
@@ -341,7 +350,7 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 | `ci-powershell.yml`  | hosted Windows             | handlers、entrypoint、Windows acceptance の Pester                                                                                  |
 | `ci-bootstrap.yml`   | hosted Linux/macOS/Windows | Statix、treefmt、flake/package smoke、Linux/Darwin/WSL/Windows の platform-routed build、Windows installer、E2E、contract aggregate |
 
-`ci-bootstrap.yml` は変更パスから Linux、Darwin、WSL、Windows の実行対象を個別に選択します。Docker Desktop、WSL2、nix-darwin switch の実機適用は nested virtualization と OS 制約のため CI では実行せず、one-command installer 末尾の local acceptance が判定します。
+`ci-bootstrap.yml` は変更パスから Linux、Darwin、WSL、Windows の実行対象を個別に選択します。WSL job は一時 NixOS-WSL 環境で Hermes の native Nix/Home Manager switch を適用し、既存 `~/.hermes` state の保持、CLI 起動、user service の再起動と active 状態を smoke test します。Docker Desktop の実機適用と nix-darwin switch は runner の OS 制約により CI では実行せず、one-command installer 末尾の local acceptance が判定します。詳細は [WSL Hermes E2E](../scripts/powershell/ci/Invoke-NixosWslE2E.ps1) を参照してください。
 
 言語・用途別のジョブは `ci/job-path-routing.json` で選択します。`.ps1` / `.psm1` / `.psd1` は PowerShell 検証、`.tmpl` はテンプレート検証、workflow YAML は actionlint、パッケージ定義は catalog 整合性検証に接続します。契約テストは別言語の設定も読むため、拡張子に加えて Taskfile、Nix、chezmoi、Docker の依存パスも判定します。変更が複数なら対象の和集合を実行し、削除・移動元のパスも検証対象に残します。
 

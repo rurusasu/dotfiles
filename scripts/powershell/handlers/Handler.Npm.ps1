@@ -159,10 +159,17 @@ class NpmHandler : SetupHandlerBase {
 
             foreach ($pkg in $toInstall) {
                 $this.Log("インストール/更新中: $($pkg.Spec)")
-                Invoke-Npm -Arguments @("install", "-g", $pkg.Spec) | Out-Null
+                $installOutput = @(Invoke-Npm -Arguments @("install", "-g", $pkg.Spec))
+                $installExitCode = [int]$LASTEXITCODE
 
-                if ($LASTEXITCODE -ne 0) {
+                if ($installExitCode -ne 0) {
                     $failed += $pkg.Spec
+                    foreach ($line in $installOutput) {
+                        if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                            $this.Log("npm: $line", "Yellow")
+                        }
+                    }
+                    $this.LogWarning("npm install exited with code $installExitCode for $($pkg.Spec)")
                     $this.LogWarning("✗ $($pkg.Spec) のインストールに失敗しました")
                     continue
                 }

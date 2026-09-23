@@ -62,10 +62,30 @@ class PnpmHandler : SetupHandlerBase {
         if ($npmCmd) {
             $this.Log("pnpm が見つかりません。npm 経由でインストールします...")
             try {
-                Invoke-Npm -Arguments @("install", "-g", "pnpm@latest")
-                if ($LASTEXITCODE -eq 0 -and $this.TestPnpmExecutable()) {
-                    $this.Log("npm で pnpm をインストールしました", "Green")
-                    return $true
+                $npmOutput = @(Invoke-Npm -Arguments @("install", "-g", "pnpm@latest"))
+                $npmExitCode = [int]$LASTEXITCODE
+                if ($npmExitCode -eq 0) {
+                    $prefixOutput = @(Invoke-Npm -Arguments @("prefix", "-g"))
+                    $prefixExitCode = [int]$LASTEXITCODE
+                    $npmGlobalPrefix = ($prefixOutput | Select-Object -Last 1)
+                    if ($prefixExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace([string]$npmGlobalPrefix)) {
+                        $this.PrependUserPath(([string]$npmGlobalPrefix).Trim())
+                        if ($this.TestPnpmExecutable()) {
+                            $this.Log("npm で pnpm をインストールしました", "Green")
+                            return $true
+                        }
+                    }
+
+                    $this.LogWarning("npm install は成功しましたが、npm global prefix に pnpm コマンドが見つかりません")
+                }
+
+                if ($npmExitCode -ne 0) {
+                    foreach ($line in $npmOutput) {
+                        if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                            $this.Log("npm: $line", "Yellow")
+                        }
+                    }
+                    $this.LogWarning("npm install -g pnpm@latest exited with code $npmExitCode")
                 }
             }
             catch {
@@ -78,13 +98,29 @@ class PnpmHandler : SetupHandlerBase {
         if ($corepackCmd) {
             $this.Log("pnpm が見つかりません。corepack で有効化を試みます...")
             try {
-                Invoke-Corepack -Arguments @("enable")
-                if ($LASTEXITCODE -eq 0 -and $this.TestPnpmExecutable()) {
-                    Invoke-Corepack -Arguments @("prepare", "pnpm@latest", "--activate")
-                    if ($LASTEXITCODE -eq 0 -and $this.TestPnpmExecutable()) {
+                $enableOutput = @(Invoke-Corepack -Arguments @("enable"))
+                $enableExitCode = [int]$LASTEXITCODE
+                if ($enableExitCode -eq 0 -and $this.TestPnpmExecutable()) {
+                    $prepareOutput = @(Invoke-Corepack -Arguments @("prepare", "pnpm@latest", "--activate"))
+                    $prepareExitCode = [int]$LASTEXITCODE
+                    if ($prepareExitCode -eq 0 -and $this.TestPnpmExecutable()) {
                         $this.Log("corepack で pnpm を有効化しました", "Green")
                         return $true
                     }
+                    foreach ($line in $prepareOutput) {
+                        if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                            $this.Log("corepack prepare: $line", "Yellow")
+                        }
+                    }
+                    $this.LogWarning("corepack prepare pnpm@latest exited with code $prepareExitCode")
+                }
+                else {
+                    foreach ($line in $enableOutput) {
+                        if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                            $this.Log("corepack enable: $line", "Yellow")
+                        }
+                    }
+                    $this.LogWarning("corepack enable exited with code $enableExitCode")
                 }
             }
             catch {
@@ -162,7 +198,7 @@ class PnpmHandler : SetupHandlerBase {
 
                 if ($this.IsPackageInstalled($pkgName, $globalRootForCheck)) {
                     if ($verifyCmd) {
-                        if ($this.TestPackageVerification($verifyCmd)) {
+                        if ($this.TestPackageVerification($verifyCmd, $globalRootForCheck)) {
                             $this.Log("検証済み。latest を確認します: $pkgName", "Gray")
                             $verified++
                         }
@@ -190,7 +226,7 @@ class PnpmHandler : SetupHandlerBase {
                     continue
                 }
 
-                if ($verifyCmd -and $this.TestPackageVerification($verifyCmd)) {
+                if ($verifyCmd -and $this.TestPackageVerification($verifyCmd, $globalRootForCheck)) {
                     $succeeded += $pkgSpec
                     $this.Log("✓ $pkgSpec", "Green")
                 }
@@ -297,7 +333,7 @@ class PnpmHandler : SetupHandlerBase {
         }
     }
 
-    hidden [bool] TestPackageVerification([object]$verifyCmd) {
+    hidden [bool] TestPackageVerification([object]$verifyCmd, [string]$globalRoot = "") {
         try {
             $command = $verifyCmd.command
             $arguments = @($verifyCmd.args)
@@ -311,6 +347,51 @@ class PnpmHandler : SetupHandlerBase {
                 }
                 $this.Log("検証コマンドが見つかりません: $command", "Yellow")
                 return $false
+            }
+
+            if ($verifyType -eq "nodeModule") {
+                $moduleName = [string]$this.GetPackageProperty($verifyCmd, "moduleName")
+                if (-not $globalRoot -or -not $moduleName) {
+                    $this.LogWarning("Node モジュール検証に global root または moduleName がありません: $moduleName")
+                    return $false
+                }
+
+                # pnpm global dependencies live below `pnpm root -g`, which Node's
+                # normal resolver does not search from the dotfiles working directory.
+                # Add that root only for the load probe; do not alter persistent user state.
+                $moduleNameLiteral = ConvertTo-Json -InputObject $moduleName -Compress
+                $nodeProbe = "const pty = require($moduleNameLiteral); if (typeof pty.spawn !== 'function') throw new Error('module does not export spawn')"
+                $previousNodePath = $env:NODE_PATH
+                $nodePathEntries = @($globalRoot)
+                [string[]]$moduleOutput = @()
+                [int]$moduleExitCode = 1
+                if ($previousNodePath) {
+                    $nodePathEntries += @($previousNodePath -split [regex]::Escape([string][System.IO.Path]::PathSeparator) | Where-Object { $_ })
+                }
+                $env:NODE_PATH = $nodePathEntries -join [System.IO.Path]::PathSeparator
+                try {
+                    $this.Log("検証中: node require($moduleName)", "Gray")
+                    $moduleOutput = Invoke-VerifyCommand -Command "node" -Arguments @("-e", $nodeProbe) -TimeoutSeconds ($this.GetVerifyTimeoutSeconds($verifyCmd))
+                    $moduleExitCode = [int]$LASTEXITCODE
+                }
+                finally {
+                    if ($null -eq $previousNodePath) {
+                        Remove-Item Env:\NODE_PATH -ErrorAction SilentlyContinue
+                    }
+                    else {
+                        $env:NODE_PATH = $previousNodePath
+                    }
+                }
+
+                $moduleOutput | ForEach-Object {
+                    if ($_ -notmatch '^\s*$') {
+                        $this.Log("  $_", "Gray")
+                    }
+                }
+                if ($moduleExitCode -ne 0) {
+                    $this.LogWarning("Node モジュールを読み込めませんでした (exit code: $moduleExitCode): $moduleName")
+                    return $false
+                }
             }
 
             $timeoutSeconds = $this.GetVerifyTimeoutSeconds($verifyCmd)

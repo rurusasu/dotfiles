@@ -1,9 +1,6 @@
 { inputs }:
 let
-  pkgs = import inputs.nixpkgs {
-    system = "aarch64-darwin";
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs "aarch64-darwin";
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
@@ -29,6 +26,12 @@ in
           bundleId = "com.google.Chrome";
           executable = "Google Chrome";
         };
+        nixAttr = "google-chrome";
+      };
+      linux = {
+        provider = "nix";
+        source = "nixpkgs";
+        identity = "google-chrome";
         nixAttr = "google-chrome";
       };
       legacyDarwin = {

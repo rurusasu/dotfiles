@@ -248,6 +248,17 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve missing Hermes input lock for migration validation
+        run: |
+          set -euo pipefail
+          nix flake lock --update-input hermes-agent
+          jq -e '
+            .nodes as $nodes |
+            ($nodes.root.inputs["hermes-agent"] as $input |
+              (if ($input | type) == "string" then $nodes[$input].locked.rev else $input.rev end)
+              == "d337b736aa1e8ebecfab043842d13e4a2d2f48a3")
+          ' flake.lock
+
       - name: Cache PSScriptAnalyzer
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
@@ -273,6 +284,27 @@ jobs:
             git diff -- .
             exit 1
           fi
+
+      - name: Generate canonical formatter patch for local review
+        if: always()
+        run: |
+          set +e
+          nix fmt
+          formatter_status=$?
+          set -e
+          git add -N --all
+          git diff --binary > "$RUNNER_TEMP/treefmt.patch"
+          printf '%s\n' "$formatter_status" > "$RUNNER_TEMP/treefmt-status.txt"
+
+      - name: Upload canonical formatter output for local review
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: treefmt-output-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/treefmt.patch
+            ${{ runner.temp }}/treefmt-status.txt
+          if-no-files-found: error
 
   nix-test:
     name: Bootstrap / Test / Nix outputs
@@ -302,6 +334,24 @@ jobs:
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve missing Hermes input lock for migration validation
+        run: |
+          set -euo pipefail
+          nix flake lock --update-input hermes-agent
+          jq -e '
+            .nodes as $nodes |
+            ($nodes.root.inputs["hermes-agent"] as $input |
+              (if ($input | type) == "string" then $nodes[$input].locked.rev else $input.rev end)
+              == "d337b736aa1e8ebecfab043842d13e4a2d2f48a3")
+          ' flake.lock
+
+      - name: Upload generated Hermes lock graph
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hermes-flake-lock-${{ github.run_id }}
+          path: flake.lock
+          if-no-files-found: error
 
       - name: Free runner disk space
         run: |
@@ -873,11 +923,22 @@ jobs:
           if-no-files-found: warn
 
   windows-installer:
-    name: Bootstrap / Windows / Installer
+    name: Bootstrap / Windows / Installer (${{ matrix.runtime }})
     needs: changes
     if: ${{ needs.changes.outputs.windows == 'true' }}
     runs-on: windows-2025
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - runtime: Windows PowerShell 5.1
+            shell: powershell
+            version: '5.1'
+          - runtime: PowerShell 7
+            shell: pwsh
+            version: '7'
     permissions:
       contents: read
     steps:
@@ -888,7 +949,7 @@ jobs:
           persist-credentials: false
 
       - name: Bootstrap winget
-        shell: pwsh
+        shell: ${{ matrix.shell }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -939,16 +1000,99 @@ jobs:
           winget source list
 
       - name: Run install.cmd strict user phase
-        shell: pwsh
+        shell: ${{ matrix.shell }}
         timeout-minutes: 70
         env:
           DOTFILES_INSTALL_TIMEOUT_SECONDS: "900"
+          DOTFILES_E2E_POWERSHELL_VERSION: ${{ matrix.version }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+          $expectedVersion = $env:DOTFILES_E2E_POWERSHELL_VERSION
+          $actualVersion = $PSVersionTable.PSVersion
+          $versionMatches = if ($expectedVersion -eq '5.1') {
+            $actualVersion.Major -eq 5 -and $actualVersion.Minor -eq 1
+          }
+          else {
+            $actualVersion.Major -eq 7
+          }
+          if (-not $versionMatches) {
+            throw "Windows installer E2E shell mismatch: expected PowerShell $expectedVersion, got $($PSVersionTable.PSVersion)"
+          }
+
+          $originalPath = $env:PATH
+          $originalPs7Dir = $env:DOTFILES_PS7_DIR
+          $isWindowsPowerShell = $expectedVersion -eq '5.1'
+          if ($isWindowsPowerShell) {
+            # Keep all runner tools except PowerShell 7 available to the real
+            # installer while forcing install.cmd through its 5.1 fallback.
+            $ps7ExecutableDirectories = @(
+              Get-Command -Name 'pwsh.exe' -CommandType Application -All -ErrorAction SilentlyContinue |
+                ForEach-Object { Split-Path -Parent $_.Source } |
+                Sort-Object -Unique
+            )
+            $env:DOTFILES_PS7_DIR = Join-Path $env:RUNNER_TEMP 'NoPowerShell7Dir'
+            $env:PATH = @(
+              $originalPath -split ';' |
+                Where-Object { $_ -and $_ -notin $ps7ExecutableDirectories }
+            ) -join ';'
+          }
+          else {
+            $pwshExecutable = (Get-Command -Name 'pwsh.exe' -CommandType Application -ErrorAction Stop).Source
+            $env:DOTFILES_PS7_DIR = Split-Path -Parent $pwshExecutable
+          }
+
+          # The hosted image can contain pnpm already. Hide only its executable
+          # directory for the installer process so both shell jobs exercise the
+          # actual npm/corepack bootstrap path reported as failing by users.
+          $pnpmExecutableDirectories = @(
+            Get-Command -Name 'pnpm' -CommandType Application -All -ErrorAction SilentlyContinue |
+              ForEach-Object { Split-Path -Parent $_.Source } |
+              Sort-Object -Unique
+          )
 
           Push-Location $env:GITHUB_WORKSPACE
           try {
+            if ($pnpmExecutableDirectories.Count -gt 0) {
+              $env:PATH = @(
+                $env:PATH -split ';' |
+                  Where-Object { $_ -and $_ -notin $pnpmExecutableDirectories }
+              ) -join ';'
+            }
+            if (Get-Command -Name 'pnpm' -CommandType Application -ErrorAction SilentlyContinue) {
+              throw 'Could not isolate the preinstalled pnpm executable for the bootstrap E2E'
+            }
+            if (-not (Get-Command -Name 'npm' -CommandType Application -ErrorAction SilentlyContinue)) {
+              throw 'Cannot exercise the pnpm bootstrap E2E because npm is unavailable after pnpm isolation'
+            }
+
+            $classicBefore = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --disable-interactivity 2>&1)
+            $classicBeforeText = $classicBefore -join [Environment]::NewLine
+            if ($classicBeforeText -notmatch '(?im)^\s*.*\b9NT1R1C2HH7J\b') {
+              $classicInstallOutput = @(winget install --id 9NT1R1C2HH7J --exact --source msstore --silent --accept-package-agreements --accept-source-agreements --disable-interactivity 2>&1)
+              $classicInstallExitCode = $LASTEXITCODE
+              if ($classicInstallExitCode -ne 0) {
+                throw "Could not seed the ChatGPT Classic uninstall E2E (winget exit=$classicInstallExitCode): $($classicInstallOutput -join ' ')"
+              }
+              $classicInstalled = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --disable-interactivity 2>&1)
+              $classicInstalledText = $classicInstalled -join [Environment]::NewLine
+              if ($classicInstalledText -notmatch '(?im)^\s*.*\b9NT1R1C2HH7J\b') {
+                throw "ChatGPT Classic E2E seed install did not become visible in WinGet: $classicInstalledText"
+              }
+            }
+
+            if ($isWindowsPowerShell) {
+              $null = & cmd.exe /d /c where.exe pwsh.exe 2>$null
+              if ($LASTEXITCODE -eq 0 -or (Test-Path -LiteralPath (Join-Path $env:DOTFILES_PS7_DIR 'pwsh.exe'))) {
+                throw 'PowerShell 7 remains discoverable after preparing the Windows PowerShell 5.1 E2E'
+              }
+            }
+            else {
+              if (-not (Test-Path -LiteralPath (Join-Path $env:DOTFILES_PS7_DIR 'pwsh.exe'))) {
+                throw 'PowerShell 7 executable is missing from DOTFILES_PS7_DIR'
+              }
+            }
+
             $ErrorActionPreference = 'Continue'
             $output = & cmd.exe /d /c install.cmd -NoPause -UserPhaseOnly -WingetVerifyCommandOnly 2>&1 |
               ForEach-Object {
@@ -960,16 +1104,37 @@ jobs:
             $ErrorActionPreference = 'Stop'
           }
           finally {
+            $env:PATH = $originalPath
+            if ($null -eq $originalPs7Dir) {
+              Remove-Item Env:\DOTFILES_PS7_DIR -ErrorAction SilentlyContinue
+            }
+            else {
+              $env:DOTFILES_PS7_DIR = $originalPs7Dir
+            }
             Pop-Location
           }
 
           $out = $output -join [Environment]::NewLine
 
-          if ($exitCode -ne 0) {
-            throw "install.cmd strict user phase failed with exit code $exitCode"
+          # install.cmd persists PATH and PNPM_HOME to the user environment in
+          # its child process. Re-read those values so post-install probes use
+          # the shims the installer just published, not only the runner PATH.
+          $persistedUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+          $userPathEntries = @($persistedUserPath -split ';' | Where-Object { $_ -and $_ -notin $pnpmExecutableDirectories })
+          $runnerPathEntries = @($originalPath -split ';' | Where-Object { $_ -and $_ -notin $pnpmExecutableDirectories })
+          $env:PATH = @($userPathEntries + $runnerPathEntries) -join ';'
+          $persistedPnpmHome = [Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
+          if (-not [string]::IsNullOrWhiteSpace($persistedPnpmHome)) {
+            $env:PNPM_HOME = $persistedPnpmHome
           }
-          if ($out -notmatch 'User Phase Complete!') {
-            throw 'install.cmd did not reach the user phase completion marker'
+
+          . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WindowsInstallerSuccess.ps1')
+          Assert-WindowsInstallerSuccess -Output $out -ExitCode $exitCode -CompletionMarker 'User Phase Complete!'
+          if ($isWindowsPowerShell -and $out -notmatch 'Falling back to Windows PowerShell') {
+            throw 'The full Windows installer E2E did not exercise the Windows PowerShell 5.1 fallback'
+          }
+          if (-not $isWindowsPowerShell -and $out -match 'Falling back to Windows PowerShell') {
+            throw 'The PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5.1 fallback'
           }
 
           . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WingetInstallSuccess.ps1')
@@ -984,7 +1149,17 @@ jobs:
           # execution boundaries and are intentionally excluded from this run.
           $expectedWindowsPackageIds = @(
             $wingetSource.Packages |
-              Where-Object { -not $_.ciSkipInstall -and -not $_.requiresAdmin -and -not $_.installFeature } |
+              Where-Object {
+                $properties = $_.PSObject.Properties
+                $ciSkipInstall = $properties['ciSkipInstall']
+                $requiresAdmin = $properties['requiresAdmin']
+                $installFeature = $properties['installFeature']
+                $skipInstall = $properties['skipInstall']
+                ($null -eq $ciSkipInstall -or -not [bool]$ciSkipInstall.Value) -and
+                ($null -eq $requiresAdmin -or -not [bool]$requiresAdmin.Value) -and
+                ($null -eq $installFeature -or [string]::IsNullOrWhiteSpace([string]$installFeature.Value)) -and
+                ($null -eq $skipInstall -or -not [bool]$skipInstall.Value)
+              } |
               ForEach-Object { [string]$_.PackageIdentifier } |
               Sort-Object -Unique
           )
@@ -992,6 +1167,126 @@ jobs:
             throw 'Windows E2E manifest has no eligible packages to install and verify'
           }
           Assert-WingetInstallSuccess -Output $out -ExpectedPackageIds $expectedWindowsPackageIds
+
+          $npmPrefixOutput = @(npm prefix --global 2>&1)
+          $npmPrefixExitCode = $LASTEXITCODE
+          $npmGlobalPrefix = if ($npmPrefixExitCode -eq 0) { [string]($npmPrefixOutput | Select-Object -Last 1) } else { '' }
+          $pnpmCommand = Get-Command -Name 'pnpm' -CommandType Application -ErrorAction SilentlyContinue
+          if (-not $pnpmCommand -or [string]::IsNullOrWhiteSpace($npmGlobalPrefix)) {
+            throw "Unable to resolve the npm-installed pnpm bootstrap (npm prefix exit=$npmPrefixExitCode): $($npmPrefixOutput -join ' ')"
+          }
+          $actualPnpmDirectory = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($pnpmCommand.Source))
+          if (-not $actualPnpmDirectory.Equals(
+              [System.IO.Path]::GetFullPath($npmGlobalPrefix.Trim()),
+              [System.StringComparison]::OrdinalIgnoreCase
+            )) {
+            throw "pnpm resolved outside the npm global prefix; a preinstalled runner copy may have masked failed bootstrap: expected=$npmGlobalPrefix actual=$($pnpmCommand.Source)"
+          }
+
+          if ($out -notmatch '(?m)RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=(removed|absent)') {
+            throw 'ChatGPT Classic retired-package cleanup did not complete successfully'
+          }
+
+          $classicListOutput = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --disable-interactivity 2>&1)
+          $classicListExitCode = $LASTEXITCODE
+          $classicListText = $classicListOutput -join [Environment]::NewLine
+          if ($classicListText -match '(?im)^\s*.*\b9NT1R1C2HH7J\b') {
+            throw 'ChatGPT Classic is still installed after cleanup'
+          }
+          if ($classicListExitCode -ne 0) {
+            $classicListExitCodeUnsigned = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$classicListExitCode), 0)
+            if ($classicListExitCodeUnsigned.ToString('X8') -ne '8A150014') {
+              throw "Unable to verify ChatGPT Classic removal (winget list exit=$($classicListExitCodeUnsigned.ToString('X8'))): $classicListText"
+            }
+          }
+
+          $codexLinksPath = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
+          $codexShimPath = Join-Path $codexLinksPath 'codex.exe'
+          if (-not (Test-Path -LiteralPath $codexShimPath -PathType Leaf)) {
+            throw "Codex CLI shim is missing after installation: $codexShimPath"
+          }
+          $codexPathCommand = Get-Command -Name 'codex.exe' -CommandType Application -ErrorAction SilentlyContinue
+          if (-not $codexPathCommand -or
+            -not ([System.IO.Path]::GetFullPath($codexPathCommand.Source)).Equals(
+              [System.IO.Path]::GetFullPath($codexShimPath),
+              [System.StringComparison]::OrdinalIgnoreCase
+            )) {
+            throw "Codex CLI shim is not the command exposed on PATH: expected=$codexShimPath actual=$($codexPathCommand.Source)"
+          }
+
+          $codexShim = Get-Item -LiteralPath $codexShimPath
+          $codexHostDirectory = $codexLinksPath
+          $linkType = $codexShim.PSObject.Properties['LinkType']
+          $targetProperty = $codexShim.PSObject.Properties['Target']
+          if ($linkType -and $linkType.Value -eq 'SymbolicLink' -and $targetProperty -and $targetProperty.Value) {
+            $codexTarget = [string]@($targetProperty.Value)[0]
+            if (-not [System.IO.Path]::IsPathRooted($codexTarget)) {
+              $codexTarget = Join-Path $codexLinksPath $codexTarget
+            }
+            $codexHostDirectory = Split-Path -Parent $codexTarget
+          }
+          elseif (($codexShim.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            # Windows PowerShell 5.1 does not expose LinkType/Target on FileInfo.
+            # Use the package executable's directory to verify the true adjacent
+            # host for a WinGet symlink instead of misclassifying it as a copy.
+            $codexPackageRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+            $codexPackageExecutable = Get-ChildItem -Path (Join-Path $codexPackageRoot 'OpenAI.Codex_*') `
+              -File -Filter 'codex-x86_64-pc-windows-msvc.exe' -ErrorAction SilentlyContinue |
+              Select-Object -First 1
+            if (-not $codexPackageExecutable) {
+              $codexPackageExecutable = Get-ChildItem -Path (Join-Path $codexPackageRoot 'OpenAI.Codex_*') `
+                -File -Filter 'codex.exe' -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            }
+            if (-not $codexPackageExecutable) {
+              throw 'Codex shim is a reparse point but its adjacent package executable cannot be located'
+            }
+            $codexHostDirectory = Split-Path -Parent $codexPackageExecutable.FullName
+          }
+
+          $codexHostPath = Join-Path $codexHostDirectory 'codex-code-mode-host.exe'
+          if (-not (Test-Path -LiteralPath $codexHostPath -PathType Leaf)) {
+            throw "Codex code-mode host is missing beside the selected Codex executable: $codexHostPath"
+          }
+          $codexHostOutput = @(& $codexHostPath --help 2>&1)
+          $codexHostExitCode = $LASTEXITCODE
+          if ($codexHostExitCode -ne 0) {
+            throw "Codex code-mode host --help failed (exit=$codexHostExitCode): $($codexHostOutput -join ' ')"
+          }
+
+          $codexCliOutput = @(& $codexShimPath --help 2>&1)
+          $codexCliExitCode = $LASTEXITCODE
+          if ($codexCliExitCode -ne 0) {
+            throw "Codex CLI --help failed (exit=$codexCliExitCode): $($codexCliOutput -join ' ')"
+          }
+
+          # A handler that cannot run its setup predicate is skipped, not failed.
+          # Require the key npm/pnpm/1Password tools themselves so a green phase
+          # cannot hide missing prerequisites or an unconfigured PATH.
+          $requiredCommands = @(
+            @{ Name = 'npm'; Arguments = @('--version') }
+            @{ Name = 'agent-browser'; Arguments = @('--version') }
+            @{ Name = 'herdr'; Arguments = @('--version') }
+            @{ Name = 'pnpm'; Arguments = @('--version') }
+            @{ Name = 'gemini'; Arguments = @('--version') }
+            @{ Name = 'op.exe'; Arguments = @('--version') }
+          )
+          foreach ($requiredCommand in $requiredCommands) {
+            $resolvedCommand = Get-Command -Name $requiredCommand.Name -CommandType Application -ErrorAction SilentlyContinue
+            if (-not $resolvedCommand) {
+              throw "Windows installer did not expose required command '$($requiredCommand.Name)'"
+            }
+
+            $commandArguments = @($requiredCommand.Arguments)
+            $commandOutput = @(& $resolvedCommand.Source @commandArguments 2>&1)
+            $commandExitCode = $LASTEXITCODE
+            if ($commandExitCode -ne 0) {
+              throw "Windows installer command '$($requiredCommand.Name)' failed (exit=$commandExitCode): $($commandOutput -join ' ')"
+            }
+          }
+          if ($out -notmatch 'pnpm が見つかりません。npm 経由でインストールします') {
+            throw 'Windows installer E2E did not exercise the pnpm bootstrap path'
+          }
 
   complete:
     name: Bootstrap / Complete

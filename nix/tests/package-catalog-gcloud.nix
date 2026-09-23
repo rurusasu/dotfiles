@@ -1,9 +1,6 @@
 { inputs }:
 let
-  pkgs = import inputs.nixpkgs {
-    system = "x86_64-linux";
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs "x86_64-linux";
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;

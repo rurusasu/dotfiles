@@ -14,7 +14,10 @@ let
   };
 in
 {
-  imports = [ ./common.nix ];
+  imports = [
+    ./common.nix
+    ./hermes-agent.nix
+  ];
 
   # macOS installs the WezTerm GUI through Homebrew, so add its Nix terminfo
   # output separately for shells and tools that resolve TERM=wezterm.

@@ -15,7 +15,7 @@
     }
 
     $timeoutDiagnostics = @([regex]::Matches($Output, '(?m)^\[Winget\][ \t]+TIMEOUT_DIAGNOSTIC:[ \t]*(?<diagnostic>[^\r\n]+)\r?$') |
-        ForEach-Object { $_.Groups['diagnostic'].Value })
+            ForEach-Object { $_.Groups['diagnostic'].Value })
     $failureCount = [int]$summaryMatch.Groups['failureCount'].Value
     if ($failureCount -ne 0) {
         $diagnosticSummary = if ($timeoutDiagnostics.Count -gt 0) { "; WinGet timeout diagnostics: $($timeoutDiagnostics -join ' | ')" } else { "" }

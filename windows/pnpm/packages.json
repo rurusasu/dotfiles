@@ -73,11 +73,13 @@
       }
     },
     {
-      "installArgs": ["--allow-build=@github/keytar", "--allow-build=node-pty"],
+      "installArgs": ["--allow-build=@github/keytar"],
       "name": "@google/gemini-cli",
       "verifyCommand": {
         "args": ["--version"],
-        "command": "gemini"
+        "command": "gemini",
+        "moduleName": "@lydell/node-pty",
+        "type": "nodeModule"
       }
     }
   ]

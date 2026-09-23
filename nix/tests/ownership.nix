@@ -33,12 +33,13 @@ let
     builtins.map (
       line:
       let
-        match = builtins.match "^[[:space:]]*//[[:space:]]*[(]import[[:space:]]+[.][.]/tests/([^ )]+).*" line;
+        match = builtins.match "^[[:space:]]*(nix-unit[.]tests[[:space:]]*=[[:space:]]*)?(//[[:space:]]*)?[(]import[[:space:]]+[.][.]/tests/([^ )]+).*" line;
       in
-      if match == null then null else builtins.head match
+      if match == null then null else builtins.elemAt match 2
     ) (linesOf nixUnitRegistry)
   );
-  nixFilesUnder = directory: prefix:
+  nixFilesUnder =
+    directory: prefix:
     let
       entries = builtins.readDir directory;
     in
@@ -89,17 +90,19 @@ let
     "system-manager-integrations.nix"
     "system-manager-user-identity.nix"
   ];
-  moduleRegisteredExactlyOnce = name:
+  moduleRegisteredExactlyOnce =
+    name:
     builtins.pathExists (./. + "/${name}")
     && builtins.length (builtins.filter (registered: registered == name) registryImports) == 1;
   packageCatalogTests = builtins.filter (
     line: builtins.match "^[[:space:]]*@test[[:space:]].*" line != null
   ) (linesOf packageCatalog);
-  batsTestCount = name:
+  batsTestCount =
+    name:
     builtins.length (
-      builtins.filter (
-        line: builtins.match "^[[:space:]]*@test[[:space:]].*" line != null
-      ) (linesOf (builtins.readFile (bashTests + "/${name}")))
+      builtins.filter (line: builtins.match "^[[:space:]]*@test[[:space:]].*" line != null) (
+        linesOf (builtins.readFile (bashTests + "/${name}"))
+      )
     );
   packageCatalogTestNames = builtins.map (
     line:
@@ -113,30 +116,29 @@ let
   packageSupportOutputs = inputs.self.packages.x86_64-linux;
   packageSupportChecks = inputs.self.checks.x86_64-linux;
   bootstrapNixos = builtins.readFile ./bootstrap-nixos.nix;
-  sourceHasLine = source: pattern:
-    builtins.any (line: builtins.match pattern line != null) (linesOf source);
+  sourceHasLine =
+    source: pattern: builtins.any (line: builtins.match pattern line != null) (linesOf source);
   homeReadme = builtins.readFile ./home/README.md;
   classifiedTests = builtins.filter (test: test != null) (
     builtins.map (
       line:
       let
-        match = builtins.match
-          "^[[:space:]]*[|][[:space:]]*([0-9]+)[[:space:]]*[|][[:space:]]*`([^`]+)`[[:space:]]*[|][[:space:]]*$"
-          line;
+        match = builtins.match "^[[:space:]]*[|][[:space:]]*([0-9]+)[[:space:]]*[|][[:space:]]*`([^`]+)`[[:space:]]*[|].*$" line;
       in
-      if match == null then null else {
-        index = builtins.fromJSON (builtins.elemAt match 0);
-        name = builtins.elemAt match 1;
-      }
+      if match == null then
+        null
+      else
+        {
+          index = builtins.fromJSON (builtins.elemAt match 0);
+          name = builtins.elemAt match 1;
+        }
     ) (linesOf homeReadme)
   );
   orderedClassifiedTests = builtins.sort (a: b: a.index < b.index) classifiedTests;
-  indexedPackageCatalogTests = builtins.genList (
-    index: {
-      index = index + 1;
-      name = builtins.elemAt packageCatalogTestNames index;
-    }
-  ) (builtins.length packageCatalogTestNames);
+  indexedPackageCatalogTests = builtins.genList (index: {
+    index = index + 1;
+    name = builtins.elemAt packageCatalogTestNames index;
+  }) (builtins.length packageCatalogTestNames);
   macosConfig = builtins.readFile (bashTests + "/macos_config.bats");
 in
 {
@@ -152,14 +154,14 @@ in
 
   testPackageCatalogPesterHasExpectedItCount = {
     expr = builtins.length packageCatalogPesterTests;
-    expected = 37;
+    expected = 38;
   };
 
   testTartVmInstallerKeepsOnlyRuntimeAndTaskfileContracts = {
     expr = {
       count = builtins.length tartVmInstallerTests;
-      catalogMetadataAssertionRemoved = !sourceHasLine tartVmInstaller
-        ".*catalog declares Tart as a Nix command with legacy formula migration metadata.*";
+      catalogMetadataAssertionRemoved =
+        !sourceHasLine tartVmInstaller ".*catalog declares Tart as a Nix command with legacy formula migration metadata.*";
     };
     expected = {
       count = 8;
@@ -197,7 +199,8 @@ in
   };
 
   testEveryPackageCatalogModuleIsRegisteredExactlyOnce = {
-    expr = packageCatalogModules != [ ] && builtins.all moduleRegisteredExactlyOnce packageCatalogModules;
+    expr =
+      packageCatalogModules != [ ] && builtins.all moduleRegisteredExactlyOnce packageCatalogModules;
     expected = true;
   };
 
@@ -207,7 +210,9 @@ in
   };
 
   testNixTestAttributeNamesAreUnique = {
-    expr = builtins.length nixTestAttributeNames == builtins.length (inputs.nixpkgs.lib.unique nixTestAttributeNames);
+    expr =
+      builtins.length nixTestAttributeNames
+      == builtins.length (inputs.nixpkgs.lib.unique nixTestAttributeNames);
     expected = true;
   };
 
@@ -216,7 +221,9 @@ in
       neovimNativeBuild = sourceHasLine packageChecks ".*neovim-native = import \\.\\./tests/neovim[.]nix.*";
       bootstrapNixosVmBuild = sourceHasLine packageChecks ".*bootstrap-nixos-vm = import \\.\\./tests/bootstrap-nixos[.]nix.*";
       hardwareFixtureConsumedByVm = sourceHasLine bootstrapNixos ".*\\./hardware-configuration[.]nix.*";
-      allDedicatedFilesExist = builtins.all (name: builtins.pathExists (./. + "/${name}")) dedicatedBuildAndFixtureModules;
+      allDedicatedFilesExist = builtins.all (
+        name: builtins.pathExists (./. + "/${name}")
+      ) dedicatedBuildAndFixtureModules;
     };
     expected = {
       neovimNativeBuild = true;

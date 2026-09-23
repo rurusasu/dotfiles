@@ -64,6 +64,11 @@ class RealDiscoveredProviderGateTests(unittest.TestCase):
                     self.assertTrue(
                         hermes_home.name.startswith("hermes-hindsight-")
                     )
+                    hermes_config_path = hermes_home / "config.yaml"
+                    self.assertEqual(
+                        hermes_config_path.read_text(encoding="utf-8"),
+                        "memory:\n  provider: hindsight\n",
+                    )
                     config_path = hermes_home / "hindsight" / "config.json"
                     self.assertEqual(stat.S_IMODE(config_path.stat().st_mode), 0o600)
 

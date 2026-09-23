@@ -1,11 +1,8 @@
 { inputs }:
 let
+  fixtures = import ../../test-fixtures.nix { inherit inputs; };
   mkPkgs =
-    system:
-    import inputs.nixpkgs {
-      inherit system;
-      config.allowUnfree = true;
-    };
+    system: fixtures.mkPkgs system;
 
   baseModule =
     { ... }:
@@ -131,10 +128,10 @@ in
         lib = pkgs.lib;
         codexPackage = inputs."llm-agents".packages.${pkgs.stdenv.hostPlatform.system}.codex;
       };
-      packageDrvPaths = packages:
-        builtins.sort builtins.lessThan (builtins.map (package: package.drvPath) packages);
-      containsDrvPath = needle: packages:
-        builtins.any (package: package.drvPath == needle.drvPath) packages;
+      packageDrvPaths =
+        packages: builtins.sort builtins.lessThan (builtins.map (package: package.drvPath) packages);
+      containsDrvPath =
+        needle: packages: builtins.any (package: package.drvPath == needle.drvPath) packages;
     in
     {
       expr = {
@@ -143,7 +140,12 @@ in
         excludesOllama = !(containsDrvPath pkgs.ollama wsl.config.home.packages);
       };
       expected = {
-        packageComposition = packageDrvPaths (sets.allWithout [ "discord" "ollama" ]);
+        packageComposition = packageDrvPaths (
+          sets.allWithout [
+            "discord"
+            "ollama"
+          ]
+        );
         excludesDiscord = true;
         excludesOllama = true;
       };

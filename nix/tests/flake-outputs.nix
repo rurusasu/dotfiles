@@ -20,7 +20,8 @@ let
     }
   ];
 
-  inspectLockedInput = spec:
+  inspectLockedInput =
+    spec:
     let
       node = lock.nodes.${rootInputs.${spec.name}};
     in
@@ -43,17 +44,18 @@ let
         nix-darwin.packages.${system}.darwin-rebuild.executable = "darwin-rebuild";
         system-manager.packages.${system}.default.executable = "system-manager";
       };
-    }).perSystem {
-      inherit system;
-      pkgs.stdenv.hostPlatform = {
-        inherit isDarwin isLinux;
+    }).perSystem
+      {
+        inherit system;
+        pkgs.stdenv.hostPlatform = {
+          inherit isDarwin isLinux;
+        };
+        lib = {
+          getExe = package: package.executable;
+          getExe' = package: binary: "${package.executable}/${binary}";
+          optionalAttrs = condition: attrs: if condition then attrs else { };
+        };
       };
-      lib = {
-        getExe = package: package.executable;
-        getExe' = package: binary: "${package.executable}/${binary}";
-        optionalAttrs = condition: attrs: if condition then attrs else { };
-      };
-    };
 
   darwinApps = mkApps {
     system = "aarch64-darwin";
@@ -82,14 +84,12 @@ let
       outPath = nixpkgsFixture;
       lib.optionals = condition: values: if condition then values else [ ];
     };
-    workmux.packages = { };
+    workmux.packages.aarch64-darwin.default = "workmux";
+    workmux.packages.aarch64-linux.default = "workmux";
+    workmux.packages.x86_64-linux.default = "workmux";
     home-manager.lib.homeManagerConfiguration = args: args;
   };
   homeOutputs = (import ../flakes/home.nix { inputs = homeInputs; }).flake.homeConfigurations;
-  processUser = builtins.getEnv "DOTFILES_USER";
-  expectedProcessUser = if processUser == "" then "nixos" else processUser;
-  processHardwareConfig = builtins.getEnv "DOTFILES_NIXOS_HARDWARE_CONFIG";
-  processRequestedSystem = builtins.getEnv "DOTFILES_SYSTEM";
 
   treefmtModule = (import ../flakes/treefmt.nix { config = { }; }).perSystem {
     config.treefmt.build = {
@@ -107,9 +107,11 @@ let
     };
   };
   treefmtCheck = treefmtModule.treefmt.build.check "/source";
-  hasScriptLine = pattern: script: builtins.any (
-    line: builtins.match pattern line != null
-  ) (builtins.filter builtins.isString (builtins.split "\n" script));
+  hasScriptLine =
+    pattern: script:
+    builtins.any (line: builtins.match pattern line != null) (
+      builtins.filter builtins.isString (builtins.split "\n" script)
+    );
 
   # Capture constructor arguments to assert generated wiring without claiming
   # evaluation of the complete NixOS module graph.
@@ -124,26 +126,20 @@ let
     hostPath = ../hosts/wsl;
     siteLib = { };
     homeModulePath = ../home/wsl.nix;
+    configuredUser = "nixos";
   };
   nixosArguments = hostLib.mkNixos wslNixosArguments;
-  customUserNixosArguments = hostLib.mkNixos (
-    wslNixosArguments // { configuredUser = "alice"; }
-  );
-  findHomeManagerModule = arguments: builtins.head (
-    builtins.filter (
-      module: builtins.isAttrs module && module ? "home-manager"
-    ) arguments.modules
-  );
+  customUserNixosArguments = hostLib.mkNixos (wslNixosArguments // { configuredUser = "alice"; });
+  findHomeManagerModule =
+    arguments:
+    builtins.head (
+      builtins.filter (module: builtins.isAttrs module && module ? "home-manager") arguments.modules
+    );
   homeManagerModule = findHomeManagerModule nixosArguments;
   customUserHomeManagerModule = findHomeManagerModule customUserNixosArguments;
-  defaultHomeManagerUser = homeManagerModule."home-manager".users.${expectedProcessUser};
+  defaultHomeManagerUser = homeManagerModule."home-manager".users.nixos;
   customHomeManagerUser = customUserHomeManagerModule."home-manager".users.alice;
 
-  hostSpecsFromEnvironment = hostLib.mkNixosHostSpecs { };
-  hostSpecsWithEnvironmentValues = hostLib.mkNixosHostSpecs {
-    hardwareConfig = processHardwareConfig;
-    requestedSystem = processRequestedSystem;
-  };
   hostSpecsWithoutHardware = hostLib.mkNixosHostSpecs {
     hardwareConfig = "";
     requestedSystem = "";
@@ -157,14 +153,15 @@ let
     requestedSystem = "aarch64-linux";
   };
 
-  supportedSystems = (import ../flakes/systems.nix {
-    inputs.systems = [
+  systemsFixture = builtins.toFile "supported-systems-fixture.nix" ''
+    [
       "aarch64-darwin"
       "x86_64-darwin"
       "x86_64-linux"
       "aarch64-linux"
-    ];
-  }).systems;
+    ]
+  '';
+  supportedSystems = (import ../flakes/systems.nix { inputs.systems = systemsFixture; }).systems;
 
 in
 {
@@ -244,24 +241,8 @@ in
     };
   };
 
-  testNixOSHostSpecsMatchEnvironmentAndExplicitOverrides = {
+  testNixOSHostSpecsHonorExplicitHardwareAndSystemOverrides = {
     expr = {
-      defaultArgumentsMatchProcessEnvironment =
-        hostSpecsFromEnvironment == hostSpecsWithEnvironmentValues;
-      nativeLinuxPresenceMatchesHardwareEnvironment =
-        (hostSpecsFromEnvironment ? linux) == (processHardwareConfig != "");
-      nativeLinuxSystemFromEnvironment =
-        if processHardwareConfig == "" then
-          null
-        else if processRequestedSystem == "" then
-          "x86_64-linux"
-        else
-          processRequestedSystem;
-      nativeLinuxHardwareConfigFromEnvironment =
-        if hostSpecsFromEnvironment ? linux then
-          hostSpecsFromEnvironment.linux.hardwareConfig
-        else
-          null;
       wsl = hostSpecsWithoutHardware.nixos;
       nativeLinuxOmittedWithoutHardware = !(hostSpecsWithoutHardware ? linux);
       nativeLinux = hostSpecsWithHardware.linux;
@@ -269,17 +250,6 @@ in
       requestedNativeLinuxSystem = hostSpecsWithRequestedSystem.linux.system;
     };
     expected = {
-      defaultArgumentsMatchProcessEnvironment = true;
-      nativeLinuxPresenceMatchesHardwareEnvironment = processHardwareConfig != "";
-      nativeLinuxSystemFromEnvironment =
-        if processHardwareConfig == "" then
-          null
-        else if processRequestedSystem == "" then
-          "x86_64-linux"
-        else
-          processRequestedSystem;
-      nativeLinuxHardwareConfigFromEnvironment =
-        if processHardwareConfig == "" then null else processHardwareConfig;
       wsl = {
         system = "x86_64-linux";
         hostPath = ../hosts/wsl;
@@ -310,7 +280,7 @@ in
     };
   };
 
-  testNixOSHomeManagerGeneratedWiringUsesEnvironmentUser = {
+  testNixOSHomeManagerGeneratedWiringUsesNixosDefaultUser = {
     expr = {
       user = defaultHomeManagerUser.imports;
       selectedUser = builtins.attrNames homeManagerModule."home-manager".users;
@@ -319,7 +289,7 @@ in
     };
     expected = {
       user = [ ../home/wsl.nix ];
-      selectedUser = [ expectedProcessUser ];
+      selectedUser = [ "nixos" ];
       usesGlobalPackages = true;
       usesUserPackages = true;
     };

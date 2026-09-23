@@ -42,12 +42,20 @@ class CodexHandler : SetupHandlerBase {
 
         $linksPath = $this.GetLinksPath()
         $linkPath = Join-Path $linksPath "codex.exe"
+        $shimHostPath = Join-Path $linksPath "codex-code-mode-host.exe"
         $localBin = $this.GetLocalBinPath()
+        $codexHostPath = $this.GetCodexHostExecutablePath($codexExe)
+        $codexHostAvailable = Test-Path -LiteralPath $codexHostPath -PathType Leaf
+        $shimUsesCopy = $this.IsPortableCopyCurrent($linkPath, $codexExe)
+        $adjacentShimHostAvailable = -not $shimUsesCopy -or
+            (Test-Path -LiteralPath $shimHostPath -PathType Leaf)
 
         # リンクが最新でも PATH 設定が欠けていれば適用する。
-        # (winget upgrade 後の陳腐化, copy フォールバック後, 過去の部分実行を想定。)
+        # WinGet upgrade 後の陳腐化、copy fallback、host欠落などの部分実行を想定。
         if (
             $this.IsPortableLinkCurrent($linkPath, $codexExe) -and
+            $codexHostAvailable -and
+            $adjacentShimHostAvailable -and
             $this.IsPathInUserPath($linksPath) -and
             $this.IsPathInUserPath($localBin)
         ) {
@@ -67,6 +75,11 @@ class CodexHandler : SetupHandlerBase {
             $codexExe = $this.GetCodexExecutablePath()
             if (-not $codexExe) {
                 return $this.CreateFailureResult("Codex 実行ファイルが見つかりません")
+            }
+
+            $codexHostPath = $this.GetCodexHostExecutablePath($codexExe)
+            if (-not (Test-Path -LiteralPath $codexHostPath -PathType Leaf)) {
+                throw "Codex CLI package is missing its adjacent code-mode host executable: $codexHostPath"
             }
 
             $linksPath = $this.GetLinksPath()
@@ -157,7 +170,7 @@ class CodexHandler : SetupHandlerBase {
     hidden [void] SyncCodexHostExecutable([string]$linksPath, [string]$codexExe) {
         $sourcePath = $this.GetCodexHostExecutablePath($codexExe)
         if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
-            return
+            throw "Codex CLI package is missing its adjacent code-mode host executable: $sourcePath"
         }
 
         $shimPath = Join-Path $linksPath "codex-code-mode-host.exe"

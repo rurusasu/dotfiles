@@ -511,7 +511,9 @@
         {
           "PackageIdentifier": "tree-sitter.tree-sitter-cli",
           "installTimeoutSeconds": 900,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"],
+          "pathEntries": [
+            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"
+          ],
           "verifyCommand": {
             "args": ["--version"],
             "command": "tree-sitter"

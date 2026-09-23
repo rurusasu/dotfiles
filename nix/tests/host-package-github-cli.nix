@@ -1,11 +1,10 @@
 { inputs }:
 let
-  hostPackageNames = system:
+  fixtures = import ../test-fixtures.nix { inherit inputs; };
+  hostPackageNames =
+    system:
     let
-      pkgs = import inputs.nixpkgs {
-        inherit system;
-        config.allowUnfree = true;
-      };
+      pkgs = fixtures.mkPkgs system;
       sets = import ../packages/sets.nix {
         inherit pkgs;
         inherit (pkgs) lib;

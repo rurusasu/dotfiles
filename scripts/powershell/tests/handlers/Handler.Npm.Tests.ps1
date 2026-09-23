@@ -321,6 +321,27 @@ Describe 'NpmHandler' {
             $result.Message | Should -Match "1 個インストール"
             $result.Message | Should -Match "1 個失敗"
         }
+
+        It 'should retain npm diagnostics and exit code for failed package installs' {
+            $script:loggedOutput = @()
+            Mock Write-Host { $script:loggedOutput += [string]$Object }
+            Mock Invoke-Npm {
+                param($Arguments)
+                if ($Arguments -contains 'list') {
+                    $global:LASTEXITCODE = 0
+                    return '{"dependencies":{}}'
+                }
+                $global:LASTEXITCODE = 1
+                return 'npm ERR! E403 package access denied'
+            }
+
+            $ctx.Options['NpmMode'] = 'import'
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            ($script:loggedOutput -join "`n") | Should -Match 'npm ERR! E403 package access denied'
+            ($script:loggedOutput -join "`n") | Should -Match 'npm install exited with code 1'
+        }
     }
 
     Context 'Apply - list mode success' {
@@ -400,10 +421,10 @@ Describe 'NpmHandler' {
             Mock Invoke-VerifyCommand {
                 param($Command, $Arguments, $TimeoutSeconds)
                 $script:npmVerifyCalls += , ([PSCustomObject]@{
-                    Command        = $Command
-                    Arguments      = @($Arguments)
-                    TimeoutSeconds = $TimeoutSeconds
-                })
+                        Command        = $Command
+                        Arguments      = @($Arguments)
+                        TimeoutSeconds = $TimeoutSeconds
+                    })
                 $global:LASTEXITCODE = 0
                 return "1.0.0"
             }
@@ -436,10 +457,10 @@ Describe 'NpmHandler' {
             Mock Invoke-VerifyCommand {
                 param($Command, $Arguments, $TimeoutSeconds)
                 $script:npmVerifyCalls += , ([PSCustomObject]@{
-                    Command        = $Command
-                    Arguments      = @($Arguments)
-                    TimeoutSeconds = $TimeoutSeconds
-                })
+                        Command        = $Command
+                        Arguments      = @($Arguments)
+                        TimeoutSeconds = $TimeoutSeconds
+                    })
                 $global:LASTEXITCODE = 124
                 return "verification timed out"
             }
@@ -451,6 +472,36 @@ Describe 'NpmHandler' {
             $result.Message | Should -Match "2 個検証失敗"
             $script:npmInstallCalls.Count | Should -Be 2
             $script:npmVerifyCalls | Where-Object { $_.TimeoutSeconds -ne 30 } | Should -BeNullOrEmpty
+        }
+
+        It 'should retain diagnostics when the pinned agent-browser install fails' {
+            $script:loggedOutput = @()
+            Mock Write-Host { $script:loggedOutput += [string]$Object }
+            Mock Invoke-Npm {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 0
+                    return '{"dependencies":{}}'
+                }
+
+                $script:npmInstallCalls += , @($Arguments)
+                if ($Arguments -contains "agent-browser@0.38.1") {
+                    $global:LASTEXITCODE = 1
+                    return 'npm ERR! agent-browser@0.38.1 pinned package install failed'
+                }
+
+                $global:LASTEXITCODE = 0
+                return "installed"
+            }
+
+            $ctx.Options["NpmMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $script:npmInstallCalls | Where-Object { $_ -contains "agent-browser@0.38.1" } | Should -HaveCount 1
+            ($script:loggedOutput -join "`n") | Should -Match 'npm ERR! agent-browser@0\.38\.1 pinned package install failed'
+            ($script:loggedOutput -join "`n") | Should -Match 'npm install exited with code 1 for agent-browser@0\.38\.1'
+            $script:npmVerifyCalls | Where-Object { $_.Command -eq "agent-browser" } | Should -BeNullOrEmpty
         }
     }
 }

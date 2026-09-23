@@ -48,6 +48,7 @@ class OnePasswordCliHandler : SetupHandlerBase {
         foreach ($shim in $compatibilityShims) {
             if (
                 $this.NeedsCompatibilityShim($shim.Directory, $shim.LinkPath) -and
+                $this.IsManagedCompatibilityShim($shim.LinkPath) -and
                 -not $this.IsCompatibilityShimCurrent($shim.LinkPath, $opExe)
             ) {
                 return $true
@@ -93,6 +94,13 @@ class OnePasswordCliHandler : SetupHandlerBase {
             return
         }
 
+        if (Test-Path -LiteralPath $linkPath) {
+            if (-not $this.IsManagedCompatibilityShim($linkPath)) {
+                $this.LogWarning("既存の $label op.exe は所有元を確認できないため変更しません: $linkPath")
+                return
+            }
+        }
+
         try {
             $this.CreatePortableLink($linkPath, $targetExe)
             $this.Log("$label の op.exe shim を現行 exe への symlink に更新しました", "Green")
@@ -109,6 +117,25 @@ class OnePasswordCliHandler : SetupHandlerBase {
             $this.IsPortableLinkCurrent($linkPath, $targetExe) -or
             $this.IsPortableCopyCurrent($linkPath, $targetExe)
         )
+    }
+
+    hidden [bool] IsManagedCompatibilityShim([string]$linkPath) {
+        if (-not (Test-Path -LiteralPath $linkPath)) {
+            return $false
+        }
+
+        try {
+            $link = Get-Item -LiteralPath $linkPath -Force -ErrorAction Stop
+            if ($link.LinkType -ne "SymbolicLink") {
+                return $false
+            }
+
+            $target = [string]@($link.Target)[0]
+            return $target -match '(?i)\\Microsoft\\WinGet\\Packages\\AgileBits\.1Password\.CLI_[^\\]+\\op\.exe$'
+        }
+        catch {
+            return $false
+        }
     }
 
     hidden [void] CreateCompatibilityCopy([string]$linkPath, [string]$targetExe) {

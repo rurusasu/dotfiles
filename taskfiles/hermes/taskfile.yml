@@ -2,7 +2,7 @@ version: "3"
 
 tasks:
   hermes:setup:
-    desc: Run Hermes Agent setup wizard in Docker
+    desc: Run the legacy Docker Hermes setup wizard (explicit opt-in)
     interactive: true
     deps:
       - task: hindsight:up
@@ -16,8 +16,8 @@ tasks:
     cmds:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} run --rm hermes setup
 
-  hermes:bootstrap:
-    desc: Initialize the Docker data volume and bootstrap Hermes through the supported host adapter
+  hermes:docker:bootstrap:
+    desc: Initialize and start the legacy Docker Hermes runtime (explicit opt-in)
     interactive: true
     deps:
       - task: hindsight:up
@@ -31,6 +31,11 @@ tasks:
         platforms: [linux, darwin]
       - cmd: pwsh -NoProfile -File scripts/powershell/hermes-bootstrap.ps1 -ComposeFile "{{.HERMES_COMPOSE_FILE}}"
         platforms: [windows]
+
+  hermes:bootstrap:
+    desc: Compatibility entrypoint for the explicit legacy Docker bootstrap
+    cmds:
+      - task: hermes:docker:bootstrap
 
   hermes:storage:inspect:
     desc: Inspect the Docker-managed Hermes runtime data volume
@@ -189,44 +194,32 @@ tasks:
         platforms: [windows]
 
   hermes:up:
-    desc: Bootstrap Hermes memory configuration and start the gateway in Docker
-    deps:
-      - task: hermes:bootstrap
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Start the Nix-managed native Hermes Gateway service
+    cmds:
+      - cmd: hermes gateway start
+        platforms: [linux, darwin]
 
   hermes:desktop:
-    desc: Launch Hermes Desktop connected to the Docker gateway
-    preconditions:
-      - sh: command -v hermes-desktop-docker
-        msg: "Hermes Desktop Docker launcher is not installed. Apply the WithHermes profile."
+    desc: Launch the native Hermes Desktop application
     cmds:
-      - cmd: hermes-desktop-docker
+      - cmd: open -a /Applications/Hermes.app
         platforms: [darwin]
 
   hermes:desktop:install:
-    desc: Complete and verify the official Hermes Desktop installation
+    desc: Verify the Nix-managed Hermes CLI and nix-darwin Desktop cask
     cmds:
       - cmd: scripts/sh/hermes-desktop-install.sh
         platforms: [darwin]
 
   hermes:cli:
-    desc: Run the Hermes CLI inside the Docker Agent container
+    desc: Run the Nix-managed native Hermes CLI
     interactive: true
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-      - sh: test -f {{.HERMES_COMPOSE_FILE}}
-        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
-      - sh: command -v hermes-docker
-        msg: "Hermes Docker CLI adapter is not installed. Apply the WithHermes profile."
     cmds:
-      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE | shellQuote}} hermes-docker {{range .CLI_ARGS_LIST}}{{. | shellQuote}} {{end}}
-        platforms: [darwin]
+      - cmd: hermes {{range .CLI_ARGS_LIST}}{{. | shellQuote}} {{end}}
+        platforms: [darwin, linux]
 
   hermes:profile:status:
-    desc: Show the gateway status for a Hermes profile
+    desc: Show a Hermes profile status in the legacy Docker gateway
     vars:
       PROFILE: '{{.PROFILE | default ""}}'
     preconditions:
@@ -239,7 +232,7 @@ tasks:
         platforms: [darwin, linux]
 
   hermes:profile:up:
-    desc: Start the root multiplex gateway and show one Hermes profile status
+    desc: Start the legacy Docker gateway and show one Hermes profile status
     vars:
       PROFILE: '{{.PROFILE | default ""}}'
     preconditions:
@@ -248,13 +241,13 @@ tasks:
       - sh: test -n {{.PROFILE | shellQuote}}
         msg: "Set PROFILE to an installed Hermes profile name."
     cmds:
-      - task: hermes:up
+      - task: hermes:docker:up
       - task: hermes:profile:status
         vars:
           PROFILE: "{{.PROFILE}}"
 
   hermes:profile:down:
-    desc: Stop the root multiplex gateway for all Hermes profiles
+    desc: Stop the legacy Docker gateway for all Hermes profiles
     vars:
       PROFILE: '{{.PROFILE | default ""}}'
     preconditions:
@@ -263,10 +256,10 @@ tasks:
       - sh: test -n {{.PROFILE | shellQuote}}
         msg: "Set PROFILE to an installed Hermes profile name."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} stop hermes
+      - task: hermes:docker:down
 
   hermes:profile:restart:
-    desc: Restart the root multiplex gateway and show one Hermes profile status
+    desc: Restart the legacy Docker gateway and show one Hermes profile status
     vars:
       PROFILE: '{{.PROFILE | default ""}}'
     preconditions:
@@ -275,29 +268,56 @@ tasks:
       - sh: test -n {{.PROFILE | shellQuote}}
         msg: "Set PROFILE to an installed Hermes profile name."
     cmds:
-      - task: hermes:restart
+      - task: hermes:docker:restart
       - task: hermes:profile:status
         vars:
           PROFILE: "{{.PROFILE}}"
 
   hermes:down:
-    desc: Stop Hermes Agent Docker container
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Stop the Nix-managed native Hermes Gateway service
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} down
+      - cmd: hermes gateway stop
+        platforms: [linux, darwin]
 
   hermes:restart:
-    desc: Recreate Hermes Agent Docker container with xapi credentials
+    desc: Restart the Nix-managed native Hermes Gateway service
+    cmds:
+      - cmd: hermes gateway restart
+        platforms: [linux, darwin]
+
+  hermes:logs:
+    desc: Follow native Hermes Gateway logs
+    interactive: true
+    cmds:
+      - cmd: hermes logs -f
+        platforms: [darwin, linux]
+
+  hermes:docker:up:
+    desc: Start the legacy Docker Hermes gateway (explicit opt-in)
+    deps:
+      - task: hermes:docker:bootstrap
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+
+  hermes:docker:down:
+    desc: Stop the legacy Docker gateway (explicit opt-in) without removing its data volume
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - task: hermes:up
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} stop hermes
 
-  hermes:logs:
-    desc: Follow Hermes Agent Docker logs
+  hermes:docker:restart:
+    desc: Restart the legacy Docker Hermes gateway (explicit opt-in)
+    preconditions:
+      - sh: docker info
+        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    cmds:
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} restart hermes
+
+  hermes:docker:logs:
+    desc: Follow legacy Docker Hermes gateway logs
     interactive: true
     preconditions:
       - sh: docker info
@@ -467,10 +487,10 @@ tasks:
       - docker compose -f {{.HERMES_COMPOSE_FILE}} ps
 
   hermes:upgrade:
-    desc: Rebuild and recreate Hermes Agent Docker container
+    desc: Rebuild and recreate the legacy Docker Hermes Agent runtime
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
       - task: hermes:pull
-      - task: hermes:up
+      - task: hermes:docker:up

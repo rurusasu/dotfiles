@@ -71,13 +71,116 @@ Describe 'CI workflow configuration' {
         $wingetWorkflow | Should -Not -Match 'RedirectStandardOutput'
         $wingetWorkflow | Should -Match 'DOTFILES_INSTALL_TIMEOUT_SECONDS:\s*"900"'
         $wingetWorkflow | Should -Match 'User Phase Complete!'
+        $wingetWorkflow | Should -Match 'Get-Command -Name ''pwsh\.exe'' -CommandType Application -All'
+        $wingetWorkflow | Should -Match 'NoPowerShell7Dir'
+        $wingetWorkflow | Should -Match 'where\.exe pwsh\.exe'
+        $wingetWorkflow | Should -Match 'The full Windows installer E2E did not exercise the Windows PowerShell 5\.1 fallback'
         $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess -Output \$out'
         $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess\.ps1'
         $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
         $wingetWorkflow | Should -Match '\$wingetManifest = Get-Content.*windows/winget/packages\.json'
-        $wingetWorkflow | Should -Match 'Where-Object \{ -not \$_.ciSkipInstall -and -not \$_.requiresAdmin -and -not \$_.installFeature \}'
+        $wingetWorkflow | Should -Match '\$properties = \$_.PSObject.Properties'
+        $wingetWorkflow | Should -Match '\$null -eq \$skipInstall -or -not \[bool\]\$skipInstall\.Value'
         $wingetWorkflow | Should -Match 'Sort-Object -Unique'
         $wingetAssertion | Should -Match 'did not report the WinGet CI verification inventory'
+    }
+
+    It 'should run the real Windows installer concurrently in Windows PowerShell 5.1 and PowerShell 7' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $installerJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
+        ).Groups['job'].Value
+
+        $installerJob | Should -Match 'fail-fast:\s*false'
+        $installerJob | Should -Match 'max-parallel:\s*2'
+        $installerJob | Should -Match 'runtime: Windows PowerShell 5\.1[\s\S]*?shell: powershell[\s\S]*?version: ''5\.1'''
+        $installerJob | Should -Match 'runtime: PowerShell 7[\s\S]*?shell: pwsh[\s\S]*?version: ''7'''
+        $installerJob | Should -Match 'shell:\s+\$\{\{\s*matrix\.shell\s*\}\}'
+        $installerJob | Should -Match 'DOTFILES_E2E_POWERSHELL_VERSION:\s+\$\{\{\s*matrix\.version\s*\}\}'
+        $installerJob | Should -Match '\$actualVersion\.Major -eq 5 -and \$actualVersion\.Minor -eq 1'
+        $installerJob | Should -Match '\$actualVersion\.Major -eq 7'
+        $installerJob | Should -Match 'install\.cmd -NoPause -UserPhaseOnly -WingetVerifyCommandOnly'
+        $installerJob | Should -Match 'Falling back to Windows PowerShell'
+        $installerJob | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 fallback'
+        $installerJob | Should -Match 'Get-Command -Name ''pnpm'' -CommandType Application -All'
+        $installerJob | Should -Match 'Could not isolate the preinstalled pnpm executable for the bootstrap E2E'
+        $installerJob | Should -Match 'did not exercise the pnpm bootstrap path'
+        $installerJob | Should -Match 'pnpm resolved outside the npm global prefix'
+        $installerJob | Should -Match 'Could not seed the ChatGPT Classic uninstall E2E'
+    }
+
+    It 'should verify the installed Codex code-mode host exists beside its shim and launches' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $installerJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
+        ).Groups['job'].Value
+
+        $installerJob | Should -Match 'codex-code-mode-host\.exe'
+        $installerJob | Should -Match 'Get-Command -Name ''codex\.exe'' -CommandType Application'
+        $installerJob | Should -Match 'Codex CLI shim is not the command exposed on PATH'
+        $installerJob | Should -Match 'code-mode host is missing beside the selected Codex executable'
+        $installerJob | Should -Match '\$codexHostPath.*--help'
+        $installerJob | Should -Match 'Codex code-mode host --help failed'
+        $installerJob | Should -Match '\$codexShimPath.*--help'
+        $installerJob | Should -Match 'Codex CLI --help failed'
+    }
+
+    It 'should verify ChatGPT Classic is removed by the real Windows installer E2E' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $installerJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
+        ).Groups['job'].Value
+
+        $installerJob | Should -Match '9NT1R1C2HH7J'
+        $installerJob.Contains("RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=(removed|absent)") | Should -BeTrue
+        $installerJob | Should -Match 'winget list --id 9NT1R1C2HH7J --exact --source msstore'
+        $installerJob | Should -Match 'ChatGPT Classic is still installed after cleanup'
+    }
+
+    It 'should run npm pnpm and 1Password executables after the Windows installer' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $installerJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
+        ).Groups['job'].Value
+
+        $installerJob | Should -Match "'agent-browser'"
+        $installerJob | Should -Match "Name = 'npm'"
+        $installerJob | Should -Match "Name = 'herdr'"
+        $installerJob | Should -Match "'pnpm'"
+        $installerJob | Should -Match "'gemini'"
+        $installerJob | Should -Match "'op\.exe'"
+        $installerJob | Should -Match "GetEnvironmentVariable\('Path',\s*'User'\)"
+        $installerJob | Should -Match "GetEnvironmentVariable\('PNPM_HOME',\s*'User'\)"
+        $installerJob | Should -Match 'Get-Command -Name \$requiredCommand\.Name -CommandType Application'
+        $installerJob | Should -Match 'Windows installer did not expose required command'
+        $installerJob | Should -Match 'Windows installer command.*failed'
+    }
+
+    It 'should derive the Windows E2E inventory when optional package metadata is omitted' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $predicateMatch = [regex]::Match(
+            $workflow,
+            '(?ms)\$expectedWindowsPackageIds\s*=\s*@\(\s*\$wingetSource\.Packages\s*\|\s*Where-Object\s*\{(.*?)\}\s*\|'
+        )
+        $predicateMatch.Success | Should -BeTrue
+
+        Set-StrictMode -Version Latest
+        $predicate = [scriptblock]::Create($predicateMatch.Groups[1].Value)
+        $packages = @(
+            [pscustomobject]@{ PackageIdentifier = 'Ordinary.Package' }
+            [pscustomobject]@{ PackageIdentifier = 'CiSkipped.Package'; ciSkipInstall = $true }
+            [pscustomobject]@{ PackageIdentifier = 'Admin.Package'; requiresAdmin = $true }
+            [pscustomobject]@{ PackageIdentifier = 'Feature.Package'; installFeature = 'optional-feature' }
+            [pscustomobject]@{ PackageIdentifier = 'ManualSkip.Package'; skipInstall = $true }
+            [pscustomobject]@{ PackageIdentifier = 'EmptyFeature.Package'; installFeature = '' }
+        )
+        $actualIds = @($packages | Where-Object $predicate | ForEach-Object { [string]$_.PackageIdentifier } | Sort-Object -Unique)
+
+        $actualIds | Should -Be @('EmptyFeature.Package', 'Ordinary.Package')
     }
 
     It 'should build the NixOS WSL system on hosted Nix CI' {
@@ -166,6 +269,24 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'SkipFlakeUpdate"\] = \$true'
         $script | Should -Match 'Welcome to your new NixOS-WSL system'
         $script | Should -Match 'nixos-rebuild list-generations'
+        $script | Should -Match 'DOTFILES_USER=nixos DOTFILES_HOME=/home/nixos DOTFILES_WITH_HERMES=1 bash scripts/sh/nixos-rebuild-with-user\.sh switch --flake \. --impure'
+        $script | Should -Match '"zsh", "-lc"[\s\S]*?test "\$DOTFILES_WITH_HERMES" = 1 && bash scripts/sh/nixos-rebuild-with-user\.sh switch --flake \. --impure'
+        $script | Should -Match 'command -v hermes && hermes --version'
+        $script | Should -Match 'OPENROUTER_API_KEY=ci'
+        $script | Should -Match 'API_SERVER_ENABLED=true'
+        $script | Should -Match 'API_SERVER_PORT=18642'
+        $script | Should -Match 'http://127\.0\.0\.1:18642/health'
+        $script | Should -Match 'nix shell --inputs-from /home/nixos/\.dotfiles nixpkgs#curl --command bash -lc'
+        $script | Should -Match 'grep -Eq .*status.*ok'
+        $script | Should -Match 'chmod 600 /home/nixos/\.hermes/\.env'
+        $script | Should -Match 'preserve-existing-hermes-state'
+        $script | Should -Match 'stat -c .*\.hermes/\.env'
+        $script | Should -Not -Match 'systemctl --user set-environment OPENROUTER_API_KEY=ci'
+        $script | Should -Not -Match 'systemctl --user restart hermes-agent\.service'
+        $script | Should -Match 'systemctl --user is-active hermes-agent\.service'
+        $script | Should -Match 'systemctl --user is-enabled hermes-agent\.service'
+        $script | Should -Match 'loginctl show-user nixos -p Linger --value \| grep -qx yes'
+        $script | Should -Not -Match 'systemctl --user restart hermes-agent\.service'
         $workflow | Should -Match 'GITHUB_TOKEN:\s+\$\{\{ secrets\.GITHUB_TOKEN \}\}'
         $workflow | Should -Match 'WSLENV:\s+GITHUB_TOKEN/u'
         $script | Should -Match ([regex]::Escape('GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey"'))
@@ -193,6 +314,23 @@ Describe 'CI workflow configuration' {
         $windowsPowerShellInstall | Should -Match 'Import-Module Pester -RequiredVersion \$pesterVersion -Force'
         $windowsPowerShellInstall | Should -Not -Match 'Register-PSRepository'
         $windowsPowerShellInstall | Should -Not -Match 'Register-PSRepository -Default'
+    }
+
+    It 'should run the complete PowerShell test suite in parallel on Windows PowerShell 5.1 and PowerShell 7' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-powershell.yml') -Raw
+        $testJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  test:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
+        ).Groups['job'].Value
+
+        $testJob | Should -Match 'fail-fast:\s*false'
+        $testJob | Should -Match 'max-parallel:\s*2'
+        $testJob | Should -Match 'runtime: Windows PowerShell 5\.1\s+shell: powershell'
+        $testJob | Should -Match 'runtime: PowerShell 7\s+shell: pwsh'
+        $testJob | Should -Match 'name: Test \(Pester \+ Codecov / \$\{\{ matrix\.runtime \}\}\)'
+        $testJob | Should -Match 'name: test-results-\$\{\{ matrix\.runtime \}\}'
+        $testJob | Should -Match 'shell: \$\{\{ matrix\.shell \}\}'
+        $testJob | Should -Match 'WindowsPowerShell\\Modules'
     }
 
     It 'should smoke test install.cmd when pwsh is absent from PATH' {

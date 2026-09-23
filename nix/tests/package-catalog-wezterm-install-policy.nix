@@ -1,9 +1,6 @@
 { inputs }:
 let
-  pkgs = import inputs.nixpkgs {
-    system = "aarch64-darwin";
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs "aarch64-darwin";
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
@@ -15,7 +12,8 @@ let
     wezterm = "wez.wezterm.nightly";
   };
   terminalWingetMap = builtins.intersectAttrs terminalWingetPackages sets.wingetMap;
-  terminalSkipKeys = builtins.attrNames terminalWingetPackages ++ builtins.attrValues terminalWingetMap;
+  terminalSkipKeys =
+    builtins.attrNames terminalWingetPackages ++ builtins.attrValues terminalWingetMap;
 in
 {
   testWeztermNightlyDoesNotRequireInstallerHashOverride = {
@@ -26,9 +24,9 @@ in
   testTerminalWingetPackagesRemainInstallableDuringNormalRuns = {
     expr = {
       wingetMap = terminalWingetMap;
-      skippedPackages = builtins.filter (
-        key: builtins.elem key terminalSkipKeys
-      ) (builtins.attrNames sets.wingetSkipInstall);
+      skippedPackages = builtins.filter (key: builtins.elem key terminalSkipKeys) (
+        builtins.attrNames sets.wingetSkipInstall
+      );
     };
     expected = {
       wingetMap = terminalWingetPackages;

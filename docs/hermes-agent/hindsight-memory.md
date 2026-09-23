@@ -91,11 +91,12 @@ Hindsight の chat 推論は `local-ai-services` 上の MLflow Gateway
 task hindsight:up
 ```
 
-Hermes gateway を memory 接続済みの状態で起動・再作成する場合は、次の
-transactional task を使います。
+旧 Docker Hermes gateway を Hindsight 接続済みで起動・再作成する場合は、
+明示的な legacy task を使います。通常の `task hermes:up` は Nix/Home Manager の
+native service を操作し、Docker や Hindsight は起動しません。
 
 ```text
-task hermes:up
+task hermes:docker:up
 ```
 
 この task は独立した `hindsight:up` を準備した後、全 managed profile の
@@ -142,7 +143,8 @@ Hindsight の直近ログを追跡するには次を使います。
 task hindsight:logs
 ```
 
-Hermes gateway 側の状態も同時に確認する場合は、`task hermes:logs` を使います。
+Hermes Docker gateway 側の状態も同時に確認する場合は、
+`task hermes:docker:logs` を使います。
 ログや API 応答に会話内容が含まれ得るため、共有時は内容を確認してください。
 
 ## Profile bank mapping

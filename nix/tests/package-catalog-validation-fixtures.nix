@@ -1,9 +1,6 @@
 { inputs }:
 let
-  pkgs = import inputs.nixpkgs {
-    system = "aarch64-darwin";
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs "aarch64-darwin";
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
@@ -13,48 +10,62 @@ let
         pkg = pkgs.hello;
         category = "test";
         support = {
-          windows = { unsupported = "fixture"; };
+          windows = {
+            unsupported = "fixture";
+          };
           darwin = {
             provider = "nix";
             source = "";
             identity = "missing-source";
             nixAttr = "hello";
           };
-          linux = { unsupported = "fixture"; };
+          linux = {
+            unsupported = "fixture";
+          };
         };
       };
       missing = {
         pkg = pkgs.hello;
         category = "test";
         support = {
-          windows = { unsupported = "fixture"; };
+          windows = {
+            unsupported = "fixture";
+          };
           darwin = {
             provider = "nix";
             source = "nixpkgs";
             identity = "";
             nixAttr = "";
           };
-          linux = { unsupported = "fixture"; };
+          linux = {
+            unsupported = "fixture";
+          };
         };
       };
       missing-cask = {
         category = "test";
         support = {
-          windows = { unsupported = "fixture"; };
+          windows = {
+            unsupported = "fixture";
+          };
           darwin = {
             provider = "homebrew-cask";
             source = "homebrew";
             identity = "";
             cask = "";
           };
-          linux = { unsupported = "fixture"; };
+          linux = {
+            unsupported = "fixture";
+          };
         };
       };
       extra = {
         pkg = pkgs.hello;
         category = "test";
         support = {
-          windows = { unsupported = "fixture"; };
+          windows = {
+            unsupported = "fixture";
+          };
           darwin = {
             provider = "nix";
             source = "nixpkgs";
@@ -62,32 +73,42 @@ let
             nixAttr = "hello";
             cask = "wrong";
           };
-          linux = { unsupported = "fixture"; };
+          linux = {
+            unsupported = "fixture";
+          };
         };
       };
       orphan = {
         category = "test";
         support = {
-          windows = { unsupported = "fixture"; };
+          windows = {
+            unsupported = "fixture";
+          };
           darwin = {
             unsupported = "fixture";
             cask = "stale";
           };
-          linux = { unsupported = "fixture"; };
+          linux = {
+            unsupported = "fixture";
+          };
         };
       };
       active-invalid = {
         pkg = "not-a-derivation";
         category = "test";
         support = {
-          windows = { unsupported = "fixture"; };
+          windows = {
+            unsupported = "fixture";
+          };
           darwin = {
             provider = "nix";
             source = "nixpkgs";
             identity = "active-invalid";
             nixAttr = "hello";
           };
-          linux = { unsupported = "fixture"; };
+          linux = {
+            unsupported = "fixture";
+          };
         };
       };
       active-unsupported = {
@@ -96,14 +117,18 @@ let
         });
         category = "test";
         support = {
-          windows = { unsupported = "fixture"; };
+          windows = {
+            unsupported = "fixture";
+          };
           darwin = {
             provider = "nix";
             source = "nixpkgs";
             identity = "active-unsupported";
             nixAttr = "hello";
           };
-          linux = { unsupported = "fixture"; };
+          linux = {
+            unsupported = "fixture";
+          };
         };
       };
       host-conditional = {
@@ -116,7 +141,9 @@ let
             pkgs.hello;
         category = "test";
         support = {
-          windows = { unsupported = "fixture"; };
+          windows = {
+            unsupported = "fixture";
+          };
           darwin = {
             provider = "nix";
             source = "nixpkgs";
@@ -143,21 +170,13 @@ in
       missingNixAttr = builtins.elem "missing: darwin: source = nixpkgs requires nixAttr" errors;
       missingCask = builtins.elem "missing-cask: darwin: homebrew-cask provider requires cask" errors;
       nixProviderCannotIncludeCask = builtins.elem "extra: darwin: nix provider cannot include cask" errors;
-      duplicateNixAndHomebrewResolution = builtins.elem
-        "extra: darwin: catalog ID appears in both Nix and Homebrew resolution"
-        errors;
-      providerlessMetadataCannotIncludeCask = builtins.elem
-        "orphan: darwin: providerless metadata cannot include cask"
-        errors;
-      activePackageMustBeDerivation = builtins.elem
-        "active-invalid: darwin: nix provider requires a derivation"
-        errors;
-      activeDerivationMustSupportHost = builtins.elem
-        "active-unsupported: darwin: nix provider derivation does not support darwin"
-        errors;
-      inactiveHostDoesNotValidateDerivation = builtins.filter
-        (error: builtins.match ".*host-conditional.*" error != null)
-        errors;
+      duplicateNixAndHomebrewResolution = builtins.elem "extra: darwin: catalog ID appears in both Nix and Homebrew resolution" errors;
+      providerlessMetadataCannotIncludeCask = builtins.elem "orphan: darwin: providerless metadata cannot include cask" errors;
+      activePackageMustBeDerivation = builtins.elem "active-invalid: darwin: nix provider requires a derivation" errors;
+      activeDerivationMustSupportHost = builtins.elem "active-unsupported: darwin: nix provider derivation does not support darwin" errors;
+      inactiveHostDoesNotValidateDerivation = builtins.filter (
+        error: builtins.match ".*host-conditional.*" error != null
+      ) errors;
     };
     expected = {
       missingSource = true;

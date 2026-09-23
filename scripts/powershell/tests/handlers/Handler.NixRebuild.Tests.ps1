@@ -560,6 +560,27 @@ Describe 'NixRebuildHandler' {
             $script:wslArgs | Should -Match "-d NixOS"
             $script:wslArgs | Should -Match "-u root"
             $script:wslArgs | Should -Match "nixos-rebuild-with-user.sh switch --flake . --impure"
+            $script:wslArgs | Should -Match "DOTFILES_WITH_HERMES=0"
+        }
+
+        It 'should pass the Hermes feature to the NixOS rebuild wrapper' {
+            $ctx.Options['WithHermes'] = $true
+            $script:wslArgs = ''
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join ' '
+                if ($argStr -match 'nixos-rebuild') { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return '' }
+                if ($argStr -match 'command -v pnpm') { $global:LASTEXITCODE = 0; return '/nix/store/bin/pnpm' }
+                if ($argStr -match 'pnpm ls -g') { $global:LASTEXITCODE = 0; return '' }
+                if ($argStr -match 'pnpm add') { $global:LASTEXITCODE = 0; return '' }
+                if ($argStr -match 'core\.hooksPath|pre-commit install|echo exists|pnpm setup|grep.*PNPM_HOME|test -e') { $global:LASTEXITCODE = 0; return '' }
+                $global:LASTEXITCODE = 0
+                return ''
+            }
+
+            $handler.Apply($ctx)
+
+            $script:wslArgs | Should -Match 'DOTFILES_WITH_HERMES=1'
         }
 
         It 'should update the flake lock before nixos-rebuild so Nix packages use latest inputs' {

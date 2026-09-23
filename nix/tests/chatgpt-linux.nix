@@ -1,22 +1,17 @@
 { inputs }:
 let
+  fixtures = import ../test-fixtures.nix { inherit inputs; };
   systems = {
     x86_64-linux = "x86_64-linux";
     aarch64-linux = "aarch64-linux";
   };
   pkgsBySystem = builtins.mapAttrs (
     _: system:
-    import inputs.nixpkgs {
-      inherit system;
-      config.allowUnfree = true;
-    }
+    fixtures.mkPkgs system
   ) systems;
   darwinSystem = "aarch64-darwin";
   selectionPkgsBySystem = pkgsBySystem // {
-    ${darwinSystem} = import inputs.nixpkgs {
-      system = darwinSystem;
-      config.allowUnfree = true;
-    };
+    ${darwinSystem} = fixtures.mkPkgs darwinSystem;
   };
   setsBySystem = builtins.mapAttrs (
     _: pkgs:
@@ -29,7 +24,8 @@ let
   chatgptBySystem = builtins.mapAttrs (
     name: _: pkgsBySystem.${name}.callPackage ../packages/chatgpt { }
   ) systems;
-  packageContract = system:
+  packageContract =
+    system:
     let
       pkgs = pkgsBySystem.${system};
       chatgpt = chatgptBySystem.${system};
@@ -86,9 +82,10 @@ in
       _: system:
       let
         installPhase = chatgptBySystem.${system}.installPhase;
+        pkgs = pkgsBySystem.${system};
       in
-      builtins.hasInfix ''cp -R "$unpacked/usr/." "$out/"'' installPhase
-      && builtins.hasInfix ''makeWrapper "$out/lib/chatgpt/ChatGPT" "$out/bin/chatgpt"'' installPhase
+      pkgs.lib.hasInfix ''cp -R "$unpacked/usr/." "$out/"'' installPhase
+      && pkgs.lib.hasInfix ''makeWrapper "$out/lib/chatgpt/ChatGPT" "$out/bin/chatgpt"'' installPhase
     ) systems;
     expected = {
       x86_64-linux = true;

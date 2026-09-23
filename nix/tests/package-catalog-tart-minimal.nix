@@ -1,10 +1,7 @@
 { inputs }:
 let
   system = "aarch64-darwin";
-  pkgs = import inputs.nixpkgs {
-    inherit system;
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs system;
   Workmux = import ../flakes/lib/workmux.nix { inherit inputs; };
   workmuxOverlay = Workmux.mkOverlay (_: inputs.workmux.packages.${system}.default);
   catalogPkgs = pkgs.extend workmuxOverlay;
@@ -22,7 +19,12 @@ in
 {
   testTartMinimalContainsOnlyRequestedCliPackages = {
     expr = map pkgs.lib.getName sets.tartMinimal;
-    expected = [ "git" "chezmoi" "neovim" "codex" ];
+    expected = [
+      "git"
+      "chezmoi"
+      "neovim"
+      "codex"
+    ];
   };
 
   testTartMinimalOutputIsBuiltFromResolvedPackageSet = {

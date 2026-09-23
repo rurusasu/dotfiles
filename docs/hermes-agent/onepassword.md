@@ -6,7 +6,7 @@ Hermes コンテナには公式の 1Password CLI (`op`) を含めています。
 
 ## 自動設定
 
-`task hermes:bootstrap` が、既存のSA参照
+`task hermes:docker:bootstrap` が、既存のSA参照
 個人アカウント `my.1password.com` の
 `op://openclaw/3bgd5qtytxuvuauauyqr2p4iki/credential` からSAを取得し、
 HERMESデータディレクトリの0600 `.op.env` に保存します。その後、
@@ -26,7 +26,7 @@ GrokのX Searchを利用するには、Service Accountが
 対象itemへの権限を別途付与してください。
 
 ```bash
-task hermes:bootstrap
+task hermes:docker:bootstrap
 ```
 
 SAの読み取りに失敗した場合は、ホストの1Password CLIで対象アカウントへサインインし、

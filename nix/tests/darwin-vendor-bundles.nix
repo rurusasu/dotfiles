@@ -12,13 +12,11 @@ let
 in
 {
   testCustomDarwinPackagesPreserveVendorBundleDerivationAttributes = {
-    expr = builtins.mapAttrs (
-      _: package: {
-        dontFixup = package.dontFixup or false;
-        sourceUrl = package.src.url;
-        platforms = package.meta.platforms;
-      }
-    ) packages;
+    expr = builtins.mapAttrs (_: package: {
+      dontFixup = package.dontFixup or false;
+      sourceUrl = package.src.url;
+      platforms = package.meta.platforms;
+    }) packages;
     expected = {
       hammerspoon = {
         dontFixup = true;

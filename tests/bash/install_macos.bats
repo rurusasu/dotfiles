@@ -365,9 +365,11 @@ fi
 '
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub launchctl 'printf "launchctl %s\n" "$*" >>"$COMMAND_LOG"'
-	write_stub docker '
+write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
+  *" info "*) [[ ${DOCKER_ENGINE_RUNNING:-0} == 1 ]] || exit 1 ;;
+  *" compose -f "*" stop hermes "*) exit 0 ;;
   *" ps --all --services hermes "*) printf "hermes\n" ;;
   *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
   *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
@@ -598,13 +600,12 @@ exit 37
 	! grep -q 'nix shell\|darwin-rebuild' "$COMMAND_LOG"
 }
 
-@test "public install ignores inherited optional profiles" {
+@test "public install preserves the inherited Hermes feature for subsequent rebuilds" {
 	write_installed_stubs
-	export DOTFILES_WITH_OLLAMA=1 DOTFILES_WITH_DOCKER=1 DOTFILES_WITH_HERMES=1
+	export DOTFILES_WITH_HERMES=1
 	run_macos_installer
 	[ "$status" -eq 0 ]
-	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
-	! grep -q '^docker ' "$COMMAND_LOG"
+	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=1>' "$COMMAND_LOG"
 }
 
 @test "pinned installer mode skips both flake and custom package updates" {
@@ -721,39 +722,72 @@ exit 1
 	! grep -q 'task .*hindsight:up' "$COMMAND_LOG"
 }
 
-@test "WithHermes runs nix-darwin chezmoi and Compose in order" {
+@test "WithHermes activates the native Nix gateway without starting Docker" {
 	write_installed_stubs
 
 	run_macos_installer --with-hermes
 
 	[ "$status" -eq 0 ]
-	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=1>' "$COMMAND_LOG"
+	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=1>' "$COMMAND_LOG"
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"migrate-darwin-provider --all --feature WithOllama --feature WithDocker --feature WithHermes" \
+		"migrate-darwin-provider --all --feature WithHermes" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"task --dir $REPO_ROOT hermes:desktop:install" \
-		"docker info" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml config --quiet" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap apply" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml up -d --force-recreate" \
-		"docker image prune --force" \
-		"verify-environment compose=$REPO_ROOT/docker/hermes-service/compose.yml args=--runtime"
-	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 16 ]
-	[ "$(grep -c '^op --account my.1password.com read ' "$COMMAND_LOG")" -eq 1 ]
-	! grep -q '^op signin ' "$COMMAND_LOG"
-	[ -s "$PAYLOAD_CAPTURE" ]
+		"verify-environment compose= args="
+	! grep -q '^docker compose' "$COMMAND_LOG"
+	! grep -q '^task .*hermes:docker:' "$COMMAND_LOG"
+	! grep -q '^op ' "$COMMAND_LOG"
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
 }
 
-@test "WithHermes help documents the native Desktop and container dashboard" {
+@test "WithHermes stops only a running legacy gateway before Nix activation" {
+	write_installed_stubs
+	export DOCKER_ENGINE_RUNNING=1
+
+	run_macos_installer --with-hermes
+
+	[ "$status" -eq 0 ]
+	stop_line="$(grep -nF "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes" "$COMMAND_LOG" | cut -d: -f1)"
+	activation_line="$(grep -nF 'nix run .#darwin-rebuild -- switch --flake .#macos --impure' "$COMMAND_LOG" | cut -d: -f1)"
+	[ -n "$stop_line" ]
+	[ -n "$activation_line" ]
+	[ "$stop_line" -lt "$activation_line" ]
+	[ "$(grep -cF "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes" "$COMMAND_LOG")" -eq 1 ]
+	! grep -qE '^docker compose .* (stop|restart|rm|down) (chromium|browser-mcp|xapi-mcp)' "$COMMAND_LOG"
+	! grep -qE '^docker (volume rm|image prune)' "$COMMAND_LOG"
+}
+
+@test "WithHermes safely skips legacy gateway stop when Docker CLI is unavailable" {
+	write_installed_stubs
+	rm "$STUB_BIN/docker"
+
+	run_macos_installer --with-hermes
+
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"Docker CLI is unavailable; skipping legacy Hermes gateway stop"* ]]
+	! grep -q '^docker ' "$COMMAND_LOG"
+	grep -Fq 'nix run .#darwin-rebuild -- switch --flake .#macos --impure' "$COMMAND_LOG"
+}
+
+@test "WithHermes safely skips legacy gateway stop when Docker daemon is unavailable" {
+	write_installed_stubs
+	export DOCKER_ENGINE_RUNNING=0
+
+	run_macos_installer --with-hermes
+
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"Docker engine is unavailable; skipping legacy Hermes gateway stop"* ]]
+	grep -Fq 'docker info' "$COMMAND_LOG"
+	! grep -q '^docker compose' "$COMMAND_LOG"
+	grep -Fq 'nix run .#darwin-rebuild -- switch --flake .#macos --impure' "$COMMAND_LOG"
+}
+
+@test "WithHermes help documents the native Home Manager gateway" {
 	run "$INSTALLER" --help
 
 	[ "$status" -eq 0 ]
@@ -761,7 +795,7 @@ exit 1
 	[[ "$output" == *"--with-docker"* ]]
 	[[ "$output" == *"--with-hermes"* ]]
 	[[ "$output" == *"Hermes Desktop"* ]]
-	[[ "$output" == *"127.0.0.1:9119"* ]]
+	[[ "$output" == *"Home Manager"* ]]
 }
 
 @test "unknown install profile stops before mutation" {

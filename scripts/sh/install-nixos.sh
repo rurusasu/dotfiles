@@ -7,8 +7,9 @@ export DOTFILES_LOG_PREFIX="nixos-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
 
-COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
 NIXOS_MARKER="${DOTFILES_NIXOS_MARKER:-/etc/NIXOS}"
+COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
+DOTFILES_WITH_HERMES="${DOTFILES_WITH_HERMES:-0}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 NIXOS_HARDWARE_CONFIG="${DOTFILES_NIXOS_HARDWARE_CONFIG:-/etc/nixos/hardware-configuration.nix}"
 NIXOS_PREBUILT_SYSTEM="${DOTFILES_NIXOS_PREBUILT_SYSTEM:-}"
@@ -33,7 +34,6 @@ preflight() {
   for required in \
     "$ROOT/flake.nix" \
     "$ROOT/chezmoi" \
-    "$COMPOSE_FILE" \
     "$VERIFY_ENVIRONMENT"; do
     [[ -e $required ]] || dotfiles_die "Required repository path is missing: $required"
   done
@@ -80,6 +80,7 @@ apply_nixos_system() {
     "DOTFILES_GID=$DOTFILES_GID" \
     "DOTFILES_GROUP=$DOTFILES_GROUP" \
     "DOTFILES_SYSTEM=$DOTFILES_SYSTEM" \
+    "DOTFILES_WITH_HERMES=${DOTFILES_WITH_HERMES:-0}" \
     "DOTFILES_NIXOS_HARDWARE_CONFIG=$NIXOS_HARDWARE_CONFIG" \
     "$rebuild_bin" switch --flake "$ROOT#linux" --impure
 
@@ -93,8 +94,13 @@ apply_chezmoi() {
   chezmoi apply --force
 }
 
-docker_command() {
-  dotfiles_run_in_group docker docker "$@"
+stop_legacy_hermes_gateway() {
+  [[ $DOTFILES_WITH_HERMES == 1 ]] || return 0
+  [[ -f $COMPOSE_FILE ]] || return 0
+  dotfiles_have docker || return 0
+  docker info >/dev/null 2>&1 || return 0
+  dotfiles_log "Stopping only the legacy Hermes gateway before native Nix activation."
+  docker compose -f "$COMPOSE_FILE" stop hermes
 }
 
 main() {
@@ -103,11 +109,11 @@ main() {
   dotfiles_install_herdr
   dotfiles_update_flake "$ROOT"
   capture_host_identity
+  stop_legacy_hermes_gateway
   apply_nixos_system
   apply_chezmoi
-  dotfiles_run_task_in_group docker hermes:bootstrap
   export DOTFILES_VERIFY_SYSTEM_LAYER=nixos
-  dotfiles_run_in_group docker "$VERIFY_ENVIRONMENT" --runtime
+  "$VERIFY_ENVIRONMENT" --nix-only
   dotfiles_log "NixOS setup complete."
 }
 

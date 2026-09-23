@@ -124,7 +124,8 @@ function Invoke-WslChecked {
     }
 
     if (-not $AllowFailure -and $exitCode -ne 0) {
-        throw "wsl $($Arguments -join ' ') failed with exit code $exitCode"
+        $detail = ($output | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join [Environment]::NewLine
+        throw "wsl $($Arguments -join ' ') failed with exit code $exitCode`n$detail"
     }
 
     return [PSCustomObject]@{
@@ -230,6 +231,70 @@ try {
             "bash", "-lc",
             'GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey" | rg "\"\^\[q\" __zoxide_zi_widget"'
         ) -TimeoutSeconds 300 | Out-Null
+
+        Write-CiSection "Enable Hermes Agent through Nix"
+        try {
+            # Seed the disposable distro with pre-existing Hermes state before
+            # Home Manager activation. This proves activation preserves user
+            # data and that the gateway can read a private provider env file.
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "nixos", "--",
+                "bash", "-lc",
+                "install -d -m 700 /home/nixos/.hermes/memories && printf '%s\\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' > /home/nixos/.hermes/.env && chmod 600 /home/nixos/.hermes/.env && printf '%s\\n' 'preserve-existing-hermes-state' > /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt && chmod 600 /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
+            ) -TimeoutSeconds 60 | Out-Null
+
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "root", "--",
+                "bash", "-lc",
+                'cd /home/nixos/.dotfiles && DOTFILES_USER=nixos DOTFILES_HOME=/home/nixos DOTFILES_WITH_HERMES=1 bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure'
+            ) -TimeoutSeconds 5400 | Out-Null
+
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "nixos", "--",
+                "zsh", "-lc",
+                'cd /home/nixos/.dotfiles && test "$DOTFILES_WITH_HERMES" = 1 && bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure'
+            ) -TimeoutSeconds 5400 | Out-Null
+
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "nixos", "--",
+                "bash", "-lc", "command -v hermes && hermes --version"
+            ) -TimeoutSeconds 300 | Out-Null
+
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "nixos", "--",
+                "bash", "-lc",
+                "test `$(stat -c '%a' /home/nixos/.hermes/.env) = 600 && grep -qx 'OPENROUTER_API_KEY=ci' /home/nixos/.hermes/.env && grep -qx 'API_SERVER_ENABLED=true' /home/nixos/.hermes/.env && grep -qx 'API_SERVER_PORT=18642' /home/nixos/.hermes/.env && grep -qx 'preserve-existing-hermes-state' /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
+            ) -TimeoutSeconds 60 | Out-Null
+
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "root", "--",
+                "bash", "-lc", "loginctl show-user nixos -p Linger --value | grep -qx yes"
+            ) -TimeoutSeconds 300 | Out-Null
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "nixos", "--",
+                "bash", "-lc", "systemctl --user is-enabled hermes-agent.service && systemctl --user is-active hermes-agent.service"
+            ) -TimeoutSeconds 300 | Out-Null
+
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "nixos", "--",
+                "bash", "-lc",
+                'nix shell --inputs-from /home/nixos/.dotfiles nixpkgs#curl --command bash -lc ''for attempt in {1..30}; do response=$(curl --fail --silent --show-error --max-time 2 http://127.0.0.1:18642/health 2>/dev/null) && printf "%s" "$response" | grep -Eq "status[[:space:]]*:[[:space:]]*\\\"ok\\\"" && { printf "%s\\n" "$response"; exit 0; }; sleep 1; done; echo "Hermes gateway health endpoint did not return status=ok" >&2; exit 1'''
+            ) -TimeoutSeconds 60 | Out-Null
+        }
+        catch {
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "nixos", "--",
+                "bash", "-lc", "systemctl --user status --no-pager hermes-agent.service"
+            ) -TimeoutSeconds 60 -AllowFailure | Out-Null
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "nixos", "--",
+                "bash", "-lc", "journalctl --user -u hermes-agent.service -n 100 --no-pager"
+            ) -TimeoutSeconds 60 -AllowFailure | Out-Null
+            throw
+        }
+        finally {
+            Complete-CiSection
+        }
     }
     finally {
         Complete-CiSection

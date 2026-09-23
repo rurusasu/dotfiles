@@ -9,6 +9,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 DOCKERFILE = REPOSITORY_ROOT / "docker/hermes-agent/Dockerfile"
 BOOTSTRAP_WRAPPER = REPOSITORY_ROOT / "docker/hermes-agent/hermes-bootstrap"
 HINDSIGHT_CLIENT_VERSION = "0.6.1"
+HINDSIGHT_PLUGIN_COMMIT = "dc75038866a3966b5bf5c82ff57c7a758bb4070a"
 HERMES_LCM_VERSION = "v0.20.0"
 HERMES_LCM_COMMIT = "49e99a272d2d461e5c90732e7ef2bc20e96f0826"
 
@@ -73,6 +74,58 @@ class DockerfileContractTests(unittest.TestCase):
             "  && /opt/hermes/.venv/bin/python -c \\\n"
             '      "from importlib.metadata import version; assert '
             "version('hindsight-client') == '${HINDSIGHT_CLIENT_VERSION}'\"",
+            dockerfile,
+        )
+
+    def test_runtime_installs_the_pinned_catalog_hindsight_provider_and_loads_it_for_real(self) -> None:
+        dockerfile = DOCKERFILE.read_text(encoding="utf-8").replace("\\\n", " ")
+
+        self.assertIn(
+            "COPY hermes-agent/hindsight_acceptance.py /usr/local/bin/hindsight_acceptance.py",
+            dockerfile,
+        )
+        self.assertIn(
+            "ln -s /usr/local/bin/hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance",
+            dockerfile,
+        )
+        self.assertIn(
+            "RUN /usr/local/bin/hermes-hindsight-acceptance --help >/dev/null",
+            dockerfile,
+        )
+        self.assertIn(
+            f"ARG HINDSIGHT_PLUGIN_COMMIT={HINDSIGHT_PLUGIN_COMMIT}", dockerfile
+        )
+        self.assertIn("https://github.com/vectorize-io/hindsight", dockerfile)
+        self.assertIn(
+            'git -C /tmp/hindsight-provider fetch --quiet --depth 1 origin "${HINDSIGHT_PLUGIN_COMMIT}"',
+            dockerfile,
+        )
+        self.assertIn(
+            'test "$(git -C /tmp/hindsight-provider rev-parse FETCH_HEAD)" = "${HINDSIGHT_PLUGIN_COMMIT}"',
+            dockerfile,
+        )
+        self.assertIn(
+            "git -C /tmp/hindsight-provider archive FETCH_HEAD hindsight-integrations/hermes",
+            dockerfile,
+        )
+        self.assertIn(
+            "tar -x --strip-components=2 -C /opt/hermes/plugins/memory/hindsight",
+            dockerfile,
+        )
+        self.assertIn(
+            'from hindsight_acceptance import _resolved_provider', dockerfile
+        )
+        self.assertIn(
+            'provider_factory=None,',
+            dockerfile,
+            "the image build must exercise the production factory, not a fake provider",
+        )
+        self.assertIn(
+            'provider.name == "hindsight"',
+            dockerfile,
+        )
+        self.assertIn(
+            'provider.__class__.__module__ == "plugins.memory.hindsight"',
             dockerfile,
         )
 

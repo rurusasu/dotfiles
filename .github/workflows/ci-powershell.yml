@@ -183,9 +183,20 @@ jobs:
   test:
     needs: [changes, lint]
     if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.powershell_test == 'true') }}
-    name: Test (Pester + Codecov)
+    name: Test (Pester + Codecov / ${{ matrix.runtime }})
     runs-on: windows-2025
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - runtime: Windows PowerShell 5.1
+            shell: powershell
+            module_path: ~\Documents\WindowsPowerShell\Modules
+          - runtime: PowerShell 7
+            shell: pwsh
+            module_path: ~\Documents\PowerShell\Modules
     permissions:
       contents: read
     steps:
@@ -231,11 +242,11 @@ jobs:
       - name: Cache PowerShell modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
-          path: ~\Documents\PowerShell\Modules
-          key: ${{ runner.os }}-psmodules-pester-5.6.1-pssa-1.22.0
+          path: ${{ matrix.module_path }}
+          key: ${{ runner.os }}-${{ matrix.runtime }}-psmodules-pester-5.6.1-pssa-1.22.0
 
       - name: Install PowerShell modules
-        shell: pwsh
+        shell: ${{ matrix.shell }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -251,7 +262,13 @@ jobs:
             }
           }
 
-          $moduleRoot = Join-Path $HOME 'Documents\PowerShell\Modules'
+          $moduleDirectory = if ($PSVersionTable.PSVersion.Major -eq 5) {
+            'Documents\WindowsPowerShell\Modules'
+          }
+          else {
+            'Documents\PowerShell\Modules'
+          }
+          $moduleRoot = Join-Path $HOME $moduleDirectory
           if ($env:PSModulePath -notlike "*$moduleRoot*") {
             $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
           }
@@ -284,7 +301,7 @@ jobs:
           Install-GalleryModuleArchive -Name PSScriptAnalyzer -Version '1.22.0'
 
       - name: Run tests
-        shell: pwsh
+        shell: ${{ matrix.shell }}
         working-directory: scripts/powershell
         run: |
           .\tests\Invoke-Tests.ps1 `
@@ -296,7 +313,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: test-results
+          name: test-results-${{ matrix.runtime }}
           path: |
             scripts/powershell/test-results.xml
             scripts/powershell/coverage.xml

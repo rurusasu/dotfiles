@@ -26,6 +26,11 @@ fi
 uid="${DOTFILES_UID:-$(id -u "$user")}"
 gid="${DOTFILES_GID:-$(id -g "$user")}"
 group="${DOTFILES_GROUP:-$(id -gn "$user")}"
+with_hermes="${DOTFILES_WITH_HERMES:-0}"
+[[ $with_hermes == 0 || $with_hermes == 1 ]] || {
+  echo "Invalid DOTFILES_WITH_HERMES: $with_hermes (expected 0 or 1)." >&2
+  exit 1
+}
 
 state_dir="${DOTFILES_STATE_DIR:-/var/lib/dotfiles}"
 state_version_file="$state_dir/system-state-version"
@@ -51,6 +56,7 @@ rebuild_env=(
   "DOTFILES_UID=$uid"
   "DOTFILES_GID=$gid"
   "DOTFILES_GROUP=$group"
+  "DOTFILES_WITH_HERMES=$with_hermes"
   "DOTFILES_STATE_VERSION=$state_version"
 )
 

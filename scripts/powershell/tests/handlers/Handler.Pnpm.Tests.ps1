@@ -72,6 +72,74 @@ Describe 'PnpmHandler' {
         }
     }
 
+    Context 'Apply - pnpm bootstrap diagnostics' {
+        BeforeEach {
+            $script:loggedOutput = @()
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq 'npm') { return @{ Source = 'C:\npm.cmd' } }
+                return $null
+            }
+            Mock Invoke-Npm {
+                $global:LASTEXITCODE = 1
+                return 'npm ERR! ECONNRESET registry connection closed'
+            }
+            Mock Write-Host { $script:loggedOutput += [string]$Object }
+        }
+
+        It 'should include npm bootstrap output and exit code when pnpm setup fails' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            ($script:loggedOutput -join "`n") | Should -Match 'npm ERR! ECONNRESET registry connection closed'
+            ($script:loggedOutput -join "`n") | Should -Match 'npm install -g pnpm@latest exited with code 1'
+        }
+    }
+
+    Context 'TryBootstrapPnpm - npm global prefix' {
+        It 'should add npm global prefix to PATH before checking the installed pnpm shim' {
+            $script:originalProcessPath = $env:PATH
+            $script:originalPnpmHome = $env:PNPM_HOME
+            $script:npmGlobalPrefix = Join-Path $TestDrive 'npm-global'
+            $env:PNPM_HOME = $null
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq 'npm') { return @{ Source = 'C:\npm.cmd' } }
+                return $null
+            }
+            Mock Invoke-Npm {
+                param($Arguments)
+                if ($Arguments -contains 'prefix') {
+                    $global:LASTEXITCODE = 0
+                    return $script:npmGlobalPrefix
+                }
+                $global:LASTEXITCODE = 0
+                return 'added pnpm'
+            }
+            Mock Invoke-Pnpm {
+                if (($env:PATH -split ';') -contains $script:npmGlobalPrefix) {
+                    $global:LASTEXITCODE = 0
+                    return '10.0.0'
+                }
+                $global:LASTEXITCODE = 127
+                return 'pnpm not found'
+            }
+            Mock Get-UserEnvironmentPath { return '' }
+            Mock Set-UserEnvironmentPath { }
+
+            try {
+                $result = $handler.TryBootstrapPnpm()
+
+                $result | Should -BeTrue
+                ($env:PATH -split ';') | Should -Contain $script:npmGlobalPrefix
+            }
+            finally {
+                $env:PATH = $script:originalProcessPath
+                $env:PNPM_HOME = $script:originalPnpmHome
+            }
+        }
+    }
+
     BeforeEach {
         $script:handler = [PnpmHandler]::new()
         $script:ctx = [SetupContext]::new($script:projectRoot)
@@ -780,7 +848,7 @@ Describe 'PnpmHandler' {
                         @{ name = "typescript-language-server" },
                         @{
                             name        = "@google/gemini-cli"
-                            installArgs = @("--allow-build=@github/keytar", "--allow-build=node-pty")
+                            installArgs = @("--allow-build=@github/keytar")
                         }
                     )
                 }
@@ -819,7 +887,7 @@ Describe 'PnpmHandler' {
             }
             $geminiCall = $script:addCalls | Where-Object { $_ -contains "@google/gemini-cli" } | Select-Object -First 1
             $geminiCall | Should -Contain "--allow-build=@github/keytar"
-            $geminiCall | Should -Contain "--allow-build=node-pty"
+            $geminiCall | Should -Not -Contain "--allow-build=node-pty"
         }
     }
 
@@ -1476,6 +1544,66 @@ Describe 'PnpmHandler' {
     }
 
     Context 'Apply - Windows pnpm manifest contracts' {
+        It 'should load a required Node module through the installed global package root' {
+            $script:pnpmRoot = Join-Path $TestDrive 'pnpm-module-root'
+            New-Item -Path (Join-Path $script:pnpmRoot '@google\gemini-cli') -ItemType Directory -Force | Out-Null
+            $script:originalNodePath = $env:NODE_PATH
+            $env:NODE_PATH = 'prior-node-modules'
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{
+                            name          = '@google/gemini-cli'
+                            verifyCommand = @{
+                                args       = @('--version')
+                                command    = 'gemini'
+                                type       = 'nodeModule'
+                                moduleName = '@lydell/node-pty'
+                            }
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains 'root') {
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmRoot
+                }
+                $global:LASTEXITCODE = 0
+                return 'installed'
+            }
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $script:pnpmVerifyCalls += , ([PSCustomObject]@{
+                        Command   = $Command
+                        Arguments = @($Arguments)
+                        NodePath  = $env:NODE_PATH
+                    })
+                $global:LASTEXITCODE = 0
+                return 'module loaded'
+            }
+
+            try {
+                $result = $handler.Apply($ctx)
+
+                $result.Success | Should -BeTrue
+                $result.Message | Should -Match '1 個インストール'
+                $script:pnpmVerifyCalls | Should -HaveCount 4
+                $script:pnpmVerifyCalls[0].Command | Should -Be 'node'
+                $script:pnpmVerifyCalls[0].Arguments | Should -Contain '-e'
+                $script:pnpmVerifyCalls[0].NodePath | Should -Match ([regex]::Escape($script:pnpmRoot))
+                $script:pnpmVerifyCalls[1].Command | Should -Be 'gemini'
+                $script:pnpmVerifyCalls[2].Command | Should -Be 'node'
+                $script:pnpmVerifyCalls[2].NodePath | Should -Match ([regex]::Escape($script:pnpmRoot))
+                $script:pnpmVerifyCalls[3].Command | Should -Be 'gemini'
+                $env:NODE_PATH | Should -Be 'prior-node-modules'
+            }
+            finally {
+                $env:NODE_PATH = $script:originalNodePath
+            }
+        }
+
         BeforeEach {
             $script:originalProcessPath = $env:PATH
             $script:originalPnpmHome = $env:PNPM_HOME
@@ -1508,10 +1636,10 @@ Describe 'PnpmHandler' {
                 param($Command, $Arguments, $TimeoutSeconds)
                 $key = (@($Command) + @($Arguments)) -join " "
                 $script:pnpmVerifyCalls += , ([PSCustomObject]@{
-                    Command        = $Command
-                    Arguments      = @($Arguments)
-                    TimeoutSeconds = $TimeoutSeconds
-                })
+                        Command        = $Command
+                        Arguments      = @($Arguments)
+                        TimeoutSeconds = $TimeoutSeconds
+                    })
                 if ($script:verifyExitCodeByCommand.ContainsKey($key)) {
                     $global:LASTEXITCODE = $script:verifyExitCodeByCommand[$key]
                 }
@@ -1575,7 +1703,10 @@ Describe 'PnpmHandler' {
             $dshCall | Should -Contain "--allow-build=protobufjs"
             $geminiCall = $script:pnpmAddCalls | Where-Object { $_ -contains "@google/gemini-cli" } | Select-Object -First 1
             $geminiCall | Should -Contain "--allow-build=@github/keytar"
-            $geminiCall | Should -Contain "--allow-build=node-pty"
+            $geminiCall | Should -Not -Contain "--allow-build=node-pty"
+            $geminiEntry = $manifest.globalPackages | Where-Object name -EQ "@google/gemini-cli"
+            $geminiEntry.verifyCommand.type | Should -Be "nodeModule"
+            $geminiEntry.verifyCommand.moduleName | Should -Be "@lydell/node-pty"
         }
 
         It 'should detect every installed manifest package and still refresh each declared spec' {
@@ -1600,9 +1731,9 @@ Describe 'PnpmHandler' {
             $result.Success | Should -BeTrue
             $script:pnpmAddCalls.Count | Should -Be 9
             foreach ($command in @(
-                "bash-language-server", "yaml-language-server", "prisma-language-server",
-                "dsh", "playwright-cli", "playwright", "typescript-language-server", "tsc", "gemini"
-            )) {
+                    "bash-language-server", "yaml-language-server", "prisma-language-server",
+                    "dsh", "playwright-cli", "playwright", "typescript-language-server", "tsc", "gemini"
+                )) {
                 $script:pnpmVerifyCalls | Where-Object {
                     $_.Command -eq $command -and ($_.Arguments -join "|") -eq "--version"
                 } | Should -HaveCount 2
@@ -1640,6 +1771,62 @@ Describe 'PnpmHandler' {
             $script:pnpmVerifyCalls | Where-Object {
                 $_.Command -eq "playwright" -and $_.Arguments -contains "--version"
             } | Should -BeNullOrEmpty
+        }
+
+        It 'should fail Gemini CLI verification when the installed node-pty runtime cannot load' {
+            New-Item -Path (Join-Path $script:pnpmRoot '@google\gemini-cli') -ItemType Directory -Force | Out-Null
+            $script:originalNodePath = $env:NODE_PATH
+            $env:NODE_PATH = 'prior-node-modules'
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{
+                            name          = '@google/gemini-cli'
+                            verifyCommand = @{
+                                args       = @('--version')
+                                command    = 'gemini'
+                                type       = 'nodeModule'
+                                moduleName = '@lydell/node-pty'
+                            }
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains 'root') {
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmRoot
+                }
+                $global:LASTEXITCODE = 0
+                return 'installed'
+            }
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $script:pnpmVerifyCalls += , ([PSCustomObject]@{
+                        Command   = $Command
+                        Arguments = @($Arguments)
+                        NodePath  = $env:NODE_PATH
+                    })
+                $global:LASTEXITCODE = 1
+                return 'Cannot find module @lydell/node-pty-win32-x64'
+            }
+
+            try {
+                $result = $handler.Apply($ctx)
+
+                $result.Success | Should -BeFalse
+                $result.Message | Should -Match '1 個検証失敗'
+                $script:pnpmVerifyCalls | Should -HaveCount 2
+                foreach ($call in $script:pnpmVerifyCalls) {
+                    $call.Command | Should -Be 'node'
+                    $call.Arguments | Should -Contain '-e'
+                    $call.NodePath | Should -Match ([regex]::Escape($script:pnpmRoot))
+                }
+            }
+            finally {
+                $env:NODE_PATH = $script:originalNodePath
+            }
         }
     }
 }

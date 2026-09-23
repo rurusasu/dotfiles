@@ -1,10 +1,7 @@
 { inputs }:
 let
   system = "aarch64-darwin";
-  pkgs = import inputs.nixpkgs {
-    inherit system;
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs system;
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
@@ -22,10 +19,9 @@ let
 in
 {
   testCrossPlatformWingetPackagesAreNotWindowsOnly = {
-    expr =
-      builtins.filter
-        (packageId: builtins.elem packageId sets.windowsOnly.winget)
-        crossPlatformWingetIds;
+    expr = builtins.filter (
+      packageId: builtins.elem packageId sets.windowsOnly.winget
+    ) crossPlatformWingetIds;
     expected = [ ];
   };
 }

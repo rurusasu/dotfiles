@@ -3,6 +3,7 @@
 setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 	INSTALLER="$REPO_ROOT/scripts/sh/nixos-wsl-postinstall.sh"
+	REBUILD_WRAPPER="$REPO_ROOT/scripts/sh/nixos-rebuild-with-user.sh"
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	USER_HOME="$TEST_HOME/alice"
 	SYNC_SOURCE="$BATS_TEST_TMPDIR/sync-source"
@@ -74,6 +75,7 @@ printf "%s\n" "$@" >"$NIXOS_ARGV_CAPTURE"
 printf "nixos-rebuild user=%s home=%s uid=%s gid=%s group=%s\n" \
   "${DOTFILES_USER:-}" "${DOTFILES_HOME:-}" "${DOTFILES_UID:-}" \
   "${DOTFILES_GID:-}" "${DOTFILES_GROUP:-}" >>"$COMMAND_LOG"
+printf 'nixos-rebuild hermes=%s\n' "${DOTFILES_WITH_HERMES:-}" >>"$COMMAND_LOG"
 
 if [[ -n ${REAL_NIX:-} ]]; then
   nix_eval_args=()
@@ -174,4 +176,49 @@ EOF
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"cannot use --sync-back repo with --sync-mode nix"* ]]
 	[ -f "$SYNC_SOURCE/flake.nix" ]
+}
+
+@test "NixOS rebuild wrapper preserves the Hermes feature through its environment boundary" {
+	run env \
+		PATH="$STUB_BIN:/usr/bin:/bin" \
+		DOTFILES_USER=alice \
+		DOTFILES_HOME="$USER_HOME" \
+		DOTFILES_UID=4242 \
+		DOTFILES_GID=4343 \
+		DOTFILES_GROUP=alicegrp \
+		DOTFILES_WITH_HERMES=1 \
+		DOTFILES_STATE_DIR="$DOTFILES_STATE_DIR" \
+		bash "$REBUILD_WRAPPER" switch --flake . --impure
+
+	[ "$status" -eq 0 ]
+	grep -Fqx 'nixos-rebuild hermes=1' "$COMMAND_LOG"
+}
+
+@test "NixOS rebuild wrapper defaults Hermes to disabled" {
+	run env \
+		PATH="$STUB_BIN:/usr/bin:/bin" \
+		DOTFILES_USER=alice \
+		DOTFILES_HOME="$USER_HOME" \
+		DOTFILES_UID=4242 \
+		DOTFILES_GID=4343 \
+		DOTFILES_GROUP=alicegrp \
+		DOTFILES_STATE_DIR="$DOTFILES_STATE_DIR" \
+		bash "$REBUILD_WRAPPER" switch --flake . --impure
+
+	[ "$status" -eq 0 ]
+	grep -Fqx 'nixos-rebuild hermes=0' "$COMMAND_LOG"
+}
+
+@test "NixOS rebuild wrapper rejects an invalid Hermes feature value" {
+	run env \
+		PATH="$STUB_BIN:/usr/bin:/bin" \
+		DOTFILES_USER=alice \
+		DOTFILES_HOME="$USER_HOME" \
+		DOTFILES_WITH_HERMES='1; touch /tmp/unsafe' \
+		DOTFILES_STATE_DIR="$DOTFILES_STATE_DIR" \
+		bash "$REBUILD_WRAPPER" switch --flake . --impure
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *'Invalid DOTFILES_WITH_HERMES'* ]]
+	! grep -q '^nixos-rebuild ' "$COMMAND_LOG"
 }

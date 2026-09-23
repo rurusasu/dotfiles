@@ -67,17 +67,17 @@ Usage: ./install.sh [--with-ollama | --with-docker | --with-hermes]
 
   --with-ollama  Install and update Ollama.
   --with-docker  Include Ollama, Docker Desktop, and independent Hindsight.
-  --with-hermes  Include native Hermes Desktop, the Docker Agent/Dashboard,
-                  Chrome, and Discord (Dashboard: http://127.0.0.1:9119).
+  --with-hermes  Include native Hermes Agent/Desktop and its Home Manager
+                  gateway service.
 EOF
 }
 
 resolve_install_profile() {
   # The public entrypoint selects profiles only through explicit CLI flags.
   # A sourced activation adapter retains the already-resolved environment.
-  DOTFILES_WITH_OLLAMA=0
-  DOTFILES_WITH_DOCKER=0
-  DOTFILES_WITH_HERMES=0
+  DOTFILES_WITH_OLLAMA="${DOTFILES_WITH_OLLAMA:-0}"
+  DOTFILES_WITH_DOCKER="${DOTFILES_WITH_DOCKER:-0}"
+  DOTFILES_WITH_HERMES="${DOTFILES_WITH_HERMES:-0}"
   while (($# > 0)); do
     case "$1" in
     --with-ollama) DOTFILES_WITH_OLLAMA=1 ;;
@@ -92,9 +92,6 @@ resolve_install_profile() {
     shift
   done
 
-  if ((DOTFILES_WITH_HERMES == 1)); then
-    DOTFILES_WITH_DOCKER=1
-  fi
   if ((DOTFILES_WITH_DOCKER == 1)); then
     DOTFILES_WITH_OLLAMA=1
   fi
@@ -122,10 +119,6 @@ preflight() {
   if ((DOTFILES_WITH_DOCKER == 1)); then
     required_paths+=("$HINDSIGHT_COMPOSE_FILE")
   fi
-  if ((DOTFILES_WITH_HERMES == 1)); then
-    required_paths+=("$COMPOSE_FILE")
-  fi
-
   for required in "${required_paths[@]}"; do
     [[ -e $required ]] || dotfiles_die "Required repository path is missing: $required"
   done
@@ -878,6 +871,27 @@ docker_engine_is_ready() {
   docker_cli_probe info
 }
 
+stop_legacy_hermes_gateway() {
+  ((DOTFILES_WITH_HERMES == 1)) || return 0
+
+  if [[ ! -f $COMPOSE_FILE ]]; then
+    dotfiles_log "Compose file is unavailable; skipping legacy Hermes gateway stop: $COMPOSE_FILE"
+    return 0
+  fi
+  if ! dotfiles_have docker; then
+    dotfiles_log "Docker CLI is unavailable; skipping legacy Hermes gateway stop."
+    return 0
+  fi
+  if ! docker_cli_probe info; then
+    dotfiles_log "Docker engine is unavailable; skipping legacy Hermes gateway stop."
+    return 0
+  fi
+
+  dotfiles_step 'Stopping legacy Hermes Docker gateway' \
+    'Stop only the legacy Hermes service before Nix activates the native gateway; preserve its volume and sidecars.' \
+    docker compose -f "$COMPOSE_FILE" stop hermes
+}
+
 docker_cli_probe() {
   local timeout_seconds="$DOCKER_PROBE_TIMEOUT_SECONDS"
   if [[ ! $timeout_seconds =~ ^[1-9][0-9]*$ ]] || ((timeout_seconds > 60)); then
@@ -975,6 +989,7 @@ finish_macos_install() {
   dotfiles_display_init
   dotfiles_step 'Preparing shell configuration' \
     'Preserve existing shell startup files before activation.' preserve_shell_rc_for_nix_darwin
+  stop_legacy_hermes_gateway
   if ((DOTFILES_WITH_DOCKER == 1)); then
     dotfiles_step 'Stopping Docker Desktop' \
       'Stop Docker Desktop before updating its installation.' stop_existing_docker_desktop
@@ -1012,17 +1027,10 @@ finish_macos_install() {
   if ((DOTFILES_WITH_DOCKER == 1)); then
     dotfiles_step 'Starting Docker' \
       'Start Docker Desktop and wait for its engine.' setup_docker_runtime
-    if ((DOTFILES_WITH_HERMES == 1)); then
-      dotfiles_step 'Preparing Hermes services' \
-        'Prepare storage, images, and local services through the Hermes bootstrap task.' dotfiles_run_task hermes:bootstrap
-      DOTFILES_COMPOSE_FILE="$COMPOSE_FILE" dotfiles_step 'Verifying the installed environment' \
-        'Check the Hermes runtime and required tools.' "$VERIFY_ENVIRONMENT" --runtime
-    else
-      dotfiles_step 'Starting Hindsight services' \
-        'Prepare and start the independent local memory services.' dotfiles_run_task hindsight:up
-      DOTFILES_COMPOSE_FILE="$HINDSIGHT_COMPOSE_FILE" dotfiles_step 'Verifying the installed environment' \
-        'Check the local services and required tools.' "$VERIFY_ENVIRONMENT" --runtime
-    fi
+    dotfiles_step 'Starting Hindsight services' \
+      'Prepare and start the independent local memory services.' dotfiles_run_task hindsight:up
+    DOTFILES_COMPOSE_FILE="$HINDSIGHT_COMPOSE_FILE" dotfiles_step 'Verifying the installed environment' \
+      'Check the local services and required tools.' "$VERIFY_ENVIRONMENT" --runtime
   else
     dotfiles_step 'Verifying the installed environment' \
       'Check required tools and installed configuration.' "$VERIFY_ENVIRONMENT"

@@ -1,9 +1,6 @@
 { inputs }:
 let
-  pkgs = import inputs.nixpkgs {
-    system = "aarch64-darwin";
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs "aarch64-darwin";
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
@@ -18,15 +15,11 @@ let
   ];
   supportReportJson = builtins.toJSON sets.supportReport;
   absentFromMappings = id: {
-    supportReport =
-      builtins.replaceStrings [ id ] [ "" ] supportReportJson == supportReportJson;
+    supportReport = builtins.replaceStrings [ id ] [ "" ] supportReportJson == supportReportJson;
     wingetMap = !(builtins.elem id (builtins.attrValues sets.wingetMap));
-    msstoreMap = !(builtins.elem id (
-      builtins.attrNames sets.msstoreMap ++ builtins.attrValues sets.msstoreMap
-    ));
-    npmMap = !(builtins.elem id (
-      builtins.attrNames sets.npmMap ++ builtins.attrValues sets.npmMap
-    ));
+    msstoreMap =
+      !(builtins.elem id (builtins.attrNames sets.msstoreMap ++ builtins.attrValues sets.msstoreMap));
+    npmMap = !(builtins.elem id (builtins.attrNames sets.npmMap ++ builtins.attrValues sets.npmMap));
     pnpmGlobal = !(builtins.elem id sets.pnpmGlobal);
     windowsOnly = {
       winget = !(builtins.elem id sets.windowsOnly.winget);

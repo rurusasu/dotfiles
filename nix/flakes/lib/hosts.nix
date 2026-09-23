@@ -1,7 +1,9 @@
 { inputs }:
 let
-  selectHomeManagerUser =
-    configuredUser: if configuredUser == "" then "nixos" else configuredUser;
+  selectHomeManagerUser = configuredUser: if configuredUser == "" then "nixos" else configuredUser;
+  homeInstallFeatures = inputs.nixpkgs.lib.optionals (builtins.getEnv "DOTFILES_WITH_HERMES" == "1") [
+    "WithHermes"
+  ];
 in
 {
   inherit selectHomeManagerUser;
@@ -18,14 +20,19 @@ in
         homeModulePath = ../../home/wsl.nix;
       };
     }
-    // (if hardwareConfig == "" then { } else {
-      linux = {
-        system = if requestedSystem == "" then "x86_64-linux" else requestedSystem;
-        hostPath = ../../hosts/linux;
-        homeModulePath = ../../home/linux.nix;
-        inherit hardwareConfig;
-      };
-    });
+    // (
+      if hardwareConfig == "" then
+        { }
+      else
+        {
+          linux = {
+            system = if requestedSystem == "" then "x86_64-linux" else requestedSystem;
+            hostPath = ../../hosts/linux;
+            homeModulePath = ../../home/linux.nix;
+            inherit hardwareConfig;
+          };
+        }
+    );
 
   mkNixos =
     {
@@ -59,6 +66,7 @@ in
                 useUserPackages = true;
                 extraSpecialArgs = {
                   inherit inputs;
+                  installFeatures = homeInstallFeatures;
                 }
                 // homeExtraSpecialArgs;
                 users.${user} = {

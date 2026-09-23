@@ -44,6 +44,37 @@ Describe 'WingetHandler' {
         $env:LOCALAPPDATA = $script:origLocalAppDataForWingetTests
     }
 
+    Context 'RemoveRetiredPackages' {
+        It 'should uninstall only the exact retired package from its declared source' {
+            $retiredManifest = Join-Path $TestDrive 'retired-packages.json'
+            @{
+                packages = @(
+                    @{
+                        id     = '9NT1R1C2HH7J'
+                        name   = 'ChatGPT Classic'
+                        source = 'msstore'
+                    }
+                )
+            } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $retiredManifest -Encoding UTF8
+
+            Mock Invoke-Winget {
+                param([string[]]$Arguments)
+                $script:retiredPackageArgs = $Arguments
+                $global:LASTEXITCODE = 0
+                return 'Successfully uninstalled'
+            }
+
+            $removedCount = $handler.RemoveRetiredPackages($TestDrive)
+
+            $removedCount | Should -Be 1
+            $script:retiredPackageArgs | Should -Contain '--exact'
+            $script:retiredPackageArgs | Should -Contain '9NT1R1C2HH7J'
+            $script:retiredPackageArgs | Should -Contain '--source'
+            $script:retiredPackageArgs | Should -Contain 'msstore'
+            $script:retiredPackageArgs | Should -Contain '--silent'
+        }
+    }
+
     Context 'TestPackageVerification - package-specific installed artifact probes' {
         It 'should execute a portable WinGet link directly instead of resolving a same-named rustup shim' {
             $script:origLocalAppDataForWingetTests = $env:LOCALAPPDATA
@@ -96,8 +127,8 @@ Describe 'WingetHandler' {
                 if ($Name -eq 'AgileBits.1Password') {
                     return [PSCustomObject]@{
                         PackageFamilyName = 'Agilebits.1Password_amwd9z03whsfe'
-                        Version = [version]'8.12.36.40'
-                        InstallLocation = 'C:\Apps\1Password'
+                        Version           = [version]'8.12.36.40'
+                        InstallLocation   = 'C:\Apps\1Password'
                     }
                 }
                 return $null
@@ -107,12 +138,12 @@ Describe 'WingetHandler' {
             } -ParameterFilter { $Path -eq 'C:\Apps\1Password\1Password.exe' }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
-                    command = 'AgileBits.1Password'
-                    type = 'windowsInstalledProduct'
+                    command     = 'AgileBits.1Password'
+                    type        = 'windowsInstalledProduct'
                     appxPackage = [PSCustomObject]@{
-                        name = 'AgileBits.1Password'
+                        name              = 'AgileBits.1Password'
                         packageFamilyName = 'Agilebits.1Password_amwd9z03whsfe'
-                        executable = '1Password.exe'
+                        executable        = '1Password.exe'
                     }
                 })
 
@@ -122,7 +153,7 @@ Describe 'WingetHandler' {
 
         It 'should verify an MSI application from an exact uninstall product code and installed version' {
             $registryKey = [PSCustomObject]@{
-                Name = '{BD400747-F0C1-5638-A859-982036102EDF}'
+                Name   = '{BD400747-F0C1-5638-A859-982036102EDF}'
                 PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\{BD400747-F0C1-5638-A859-982036102EDF}'
             }
             Mock Get-AppxPackage { return $null }
@@ -139,12 +170,12 @@ Describe 'WingetHandler' {
             } -ParameterFilter { $Path -eq 'C:\Apps\Obsidian.exe' }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
-                    command = 'Obsidian'
-                    type = 'windowsInstalledProduct'
+                    command        = 'Obsidian'
+                    type           = 'windowsInstalledProduct'
                     uninstallEntry = [PSCustomObject]@{
-                        productCodes = @('{bd400747-f0c1-5638-a859-982036102edf}')
-                        displayName = 'Obsidian'
-                        publisher = 'Dynalist Inc.'
+                        productCodes    = @('{bd400747-f0c1-5638-a859-982036102edf}')
+                        displayName     = 'Obsidian'
+                        publisher       = 'Dynalist Inc.'
                         executablePaths = @('C:\Apps\Obsidian.exe')
                     }
                 })
@@ -163,7 +194,7 @@ Describe 'WingetHandler' {
             $verifyCommand.uninstallEntry.displayNamePattern | Should -Be '^PowerToys(?: \(Preview\))?$'
             'Microsoft PowerToys Preview' | Should -Not -Match $verifyCommand.uninstallEntry.displayNamePattern
             $registryKey = [PSCustomObject]@{
-                Name = 'PowerToys'
+                Name   = 'PowerToys'
                 PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\PowerToys'
             }
             Mock Get-AppxPackage { return $null }
@@ -173,7 +204,7 @@ Describe 'WingetHandler' {
             Mock Get-ItemProperty {
                 return [PSCustomObject]@{
                     DisplayName = 'PowerToys (Preview)'
-                    Publisher = 'Microsoft Corporation'
+                    Publisher   = 'Microsoft Corporation'
                 }
             } -ParameterFilter { $LiteralPath -eq $registryKey.PSPath }
             Mock Get-ChildItem {
@@ -190,7 +221,7 @@ Describe 'WingetHandler' {
 
         It 'should verify a product code found in a single matching uninstall string' {
             $registryKey = [PSCustomObject]@{
-                Name = 'DiscordSetup'
+                Name   = 'DiscordSetup'
                 PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\DiscordSetup'
             }
             Mock Get-AppxPackage { return $null }
@@ -199,9 +230,9 @@ Describe 'WingetHandler' {
             }
             Mock Get-ItemProperty {
                 return [PSCustomObject]@{
-                    DisplayVersion = '1.0.0'
-                    DisplayName = 'Discord'
-                    Publisher = 'Discord Inc.'
+                    DisplayVersion  = '1.0.0'
+                    DisplayName     = 'Discord'
+                    Publisher       = 'Discord Inc.'
                     UninstallString = 'C:\Apps\Discord\Update.exe --uninstall'
                 }
             } -ParameterFilter {
@@ -212,12 +243,12 @@ Describe 'WingetHandler' {
             } -ParameterFilter { $Path -eq 'C:\Apps\Discord.exe' }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
-                    command = 'Discord'
-                    type = 'windowsInstalledProduct'
+                    command        = 'Discord'
+                    type           = 'windowsInstalledProduct'
                     uninstallEntry = [PSCustomObject]@{
-                        productCodes = @('Discord')
-                        displayName = 'Discord'
-                        publisher = 'Discord Inc.'
+                        productCodes    = @('Discord')
+                        displayName     = 'Discord'
+                        publisher       = 'Discord Inc.'
                         executablePaths = @('C:\Apps\Discord.exe')
                     }
                 })
@@ -228,7 +259,7 @@ Describe 'WingetHandler' {
         It 'should verify Orca from its actual per-user uninstall name and DisplayIcon executable' {
             $orcaExecutable = Join-Path $env:LOCALAPPDATA 'Programs\orca\Orca.exe'
             $registryKey = [PSCustomObject]@{
-                Name = '{2B325EC9-0ED1-575F-AD70-E08307AEE879}'
+                Name   = '{2B325EC9-0ED1-575F-AD70-E08307AEE879}'
                 PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\{2B325EC9-0ED1-575F-AD70-E08307AEE879}'
             }
             Mock Get-AppxPackage { return $null }
@@ -238,9 +269,9 @@ Describe 'WingetHandler' {
             Mock Get-ItemProperty {
                 return [PSCustomObject]@{
                     DisplayVersion = '1.4.205'
-                    DisplayName = 'Orca'
-                    Publisher = 'Stably AI'
-                    DisplayIcon = "$orcaExecutable,0"
+                    DisplayName    = 'Orca'
+                    Publisher      = 'Stably AI'
+                    DisplayIcon    = "$orcaExecutable,0"
                 }
             } -ParameterFilter { $LiteralPath -eq $registryKey.PSPath }
             Mock Get-ChildItem {
@@ -248,11 +279,11 @@ Describe 'WingetHandler' {
             } -ParameterFilter { $Path -eq $orcaExecutable }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
-                    command = 'OrcaSlicer'
-                    type = 'windowsInstalledProduct'
+                    command        = 'OrcaSlicer'
+                    type           = 'windowsInstalledProduct'
                     uninstallEntry = [PSCustomObject]@{
                         productCodes = @('2b325ec9-0ed1-575f-ad70-e08307aee879')
-                        displayName = 'Orca'
+                        displayName  = 'Orca'
                     }
                 })
 
@@ -263,7 +294,7 @@ Describe 'WingetHandler' {
             $manifestExecutable = 'C:\Apps\VC_redist.x64.exe'
             $displayIconExecutable = 'C:\Windows\System32\vcruntime140.exe'
             $registryKey = [PSCustomObject]@{
-                Name = 'VC_redist.x64'
+                Name   = 'VC_redist.x64'
                 PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\VC_redist.x64'
             }
             Mock Get-AppxPackage { return $null }
@@ -273,7 +304,7 @@ Describe 'WingetHandler' {
             Mock Get-ItemProperty {
                 return [PSCustomObject]@{
                     DisplayName = 'Microsoft Visual C++ 2015-2022 Redistributable (x64)'
-                    Publisher = 'Microsoft Corporation'
+                    Publisher   = 'Microsoft Corporation'
                     DisplayIcon = "$displayIconExecutable,0"
                 }
             } -ParameterFilter { $LiteralPath -eq $registryKey.PSPath }
@@ -283,11 +314,11 @@ Describe 'WingetHandler' {
             } -ParameterFilter { $Path -eq $displayIconExecutable }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
-                    command = 'Microsoft.VCRedist.2015+.x64'
-                    type = 'windowsInstalledProduct'
+                    command        = 'Microsoft.VCRedist.2015+.x64'
+                    type           = 'windowsInstalledProduct'
                     uninstallEntry = [PSCustomObject]@{
-                        displayName = 'Microsoft Visual C++ 2015-2022 Redistributable (x64)'
-                        publisher = 'Microsoft Corporation'
+                        displayName     = 'Microsoft Visual C++ 2015-2022 Redistributable (x64)'
+                        publisher       = 'Microsoft Corporation'
                         executablePaths = @($manifestExecutable)
                     }
                 })
@@ -299,7 +330,7 @@ Describe 'WingetHandler' {
 
         It 'should reject an uninstall registration with no valid installed version' {
             $registryKey = [PSCustomObject]@{
-                Name = 'Discord'
+                Name   = 'Discord'
                 PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\Discord'
             }
             Mock Get-AppxPackage { return $null }
@@ -313,12 +344,12 @@ Describe 'WingetHandler' {
             }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
-                    command = 'Discord'
-                    type = 'windowsInstalledProduct'
+                    command        = 'Discord'
+                    type           = 'windowsInstalledProduct'
                     uninstallEntry = [PSCustomObject]@{
-                        productCodes = @('Discord')
-                        displayName = 'Discord'
-                        publisher = 'Discord Inc.'
+                        productCodes    = @('Discord')
+                        displayName     = 'Discord'
+                        publisher       = 'Discord Inc.'
                         executablePaths = @('C:\Apps\Discord.exe')
                     }
                 })
@@ -346,11 +377,11 @@ Describe 'WingetHandler' {
             }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
-                    command = 'Microsoft.VisualStudio.Product.BuildTools'
-                    type = 'visualStudioInstanceVersion'
-                    productId = 'Microsoft.VisualStudio.Product.BuildTools'
-                    minimumVersion = '17.0'
-                    requiredComponent = 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
+                    command              = 'Microsoft.VisualStudio.Product.BuildTools'
+                    type                 = 'visualStudioInstanceVersion'
+                    productId            = 'Microsoft.VisualStudio.Product.BuildTools'
+                    minimumVersion       = '17.0'
+                    requiredComponent    = 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
                     compilerRelativePath = 'VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe'
                 })
 
@@ -373,11 +404,11 @@ Describe 'WingetHandler' {
             } -ParameterFilter { $Command -like '*vswhere.exe' }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
-                    command = 'Microsoft.VisualStudio.Product.BuildTools'
-                    type = 'visualStudioInstanceVersion'
-                    productId = 'Microsoft.VisualStudio.Product.BuildTools'
-                    minimumVersion = '17.0'
-                    requiredComponent = 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
+                    command              = 'Microsoft.VisualStudio.Product.BuildTools'
+                    type                 = 'visualStudioInstanceVersion'
+                    productId            = 'Microsoft.VisualStudio.Product.BuildTools'
+                    minimumVersion       = '17.0'
+                    requiredComponent    = 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
                     compilerRelativePath = 'VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe'
                 })
 
@@ -641,6 +672,46 @@ Describe 'WingetHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match "1 個インストール"
             $script:installCalled | Should -Be $true
+        }
+
+        It 'should match the manifest ID when a dotted package version appears before it in winget output' {
+            $script:individualListCalls = 0
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = 'winget' }
+                            Packages      = @(
+                                [PSCustomObject]@{ PackageIdentifier = 'Contoso.Tool' }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains 'list' -and $Arguments -notcontains '--id') {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        'Name            Id             Version  Source',
+                        '------------------------------------------------',
+                        'Product.Name    Contoso.Tool   2.43.0   winget'
+                    )
+                }
+                if ($Arguments -contains 'list' -and $Arguments -contains '--id') {
+                    $script:individualListCalls++
+                    $global:LASTEXITCODE = 1
+                    return @('No package found')
+                }
+                $global:LASTEXITCODE = 1
+                return @('No applicable update found')
+            }
+
+            $ctx.Options['WingetMode'] = 'import'
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:individualListCalls | Should -Be 0
         }
 
         It 'should count a package once when pre-install verification passes before an update' {
@@ -1382,6 +1453,11 @@ Describe 'WingetHandler' {
                                     PackageIdentifier = "Volatile.Nightly"
                                     ciSkipInstall     = $true
                                     verifyCommand     = [PSCustomObject]@{ command = "volatile"; args = @("--version") }
+                                },
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "Manual.Skip"
+                                    skipInstall       = $true
+                                    verifyCommand     = [PSCustomObject]@{ command = "manual-skip"; args = @("--version") }
                                 }
                             )
                         }
@@ -1422,6 +1498,7 @@ Describe 'WingetHandler' {
             $script:installIds | Should -Contain "CLI.Tool"
             $script:installIds | Should -Not -Contain "GUI.App"
             $script:installIds | Should -Not -Contain "Volatile.Nightly"
+            $script:installIds | Should -Not -Contain "Manual.Skip"
             @($handler._logBuffer | ForEach-Object { $_.Message } | Where-Object { $_ -like 'CI_VERIFICATION_INVENTORY:*' }) |
                 Should -Be @('CI_VERIFICATION_INVENTORY: CLI.Tool')
         }
@@ -2202,6 +2279,103 @@ Describe 'WingetHandler' {
             $result.Message | Should -Match "1 個検証済み"
             $script:verifyCalls | Should -Be 1
         }
+
+        It 'should verify installed Task and hadolint applications when PowerShell aliases shadow their names' {
+            $originalPath = $env:PATH
+            $commands = @('task', 'hadolint')
+            $previousAliases = @{}
+            $shimDirectory = Join-Path $TestDrive 'command-shims'
+            $script:verificationCommandPaths = @()
+            $script:wingetInstallCalls = 0
+            New-Item -ItemType Directory -Path $shimDirectory -Force | Out-Null
+
+            foreach ($command in $commands) {
+                $existingAlias = Get-Alias -Name $command -ErrorAction SilentlyContinue
+                if ($existingAlias) { $previousAliases[$command] = $existingAlias.Definition }
+                Set-Alias -Name $command -Value Get-Date -Scope Global -Force
+                Set-Content -LiteralPath (Join-Path $shimDirectory "$command.cmd") -Value '@exit /b 0' -Encoding ASCII
+            }
+            $env:PATH = "$shimDirectory$([IO.Path]::PathSeparator)$originalPath"
+            Get-Command -Name task -CommandType Application -ErrorAction SilentlyContinue |
+                Should -Not -BeNullOrEmpty
+
+            try {
+                Mock Get-JsonContent {
+                    return [PSCustomObject]@{
+                        Sources = @(
+                            [PSCustomObject]@{
+                                SourceDetails = [PSCustomObject]@{ Name = 'winget' }
+                                Packages      = @(
+                                    [PSCustomObject]@{
+                                        PackageIdentifier = 'Task.Task'
+                                        verifyCommand     = [PSCustomObject]@{ command = 'task'; args = @('--version') }
+                                    },
+                                    [PSCustomObject]@{
+                                        PackageIdentifier = 'hadolint.hadolint'
+                                        verifyCommand     = [PSCustomObject]@{ command = 'hadolint'; args = @('--version') }
+                                    }
+                                )
+                            }
+                        )
+                    }
+                }
+                Mock Invoke-Winget {
+                    param($Arguments)
+                    if ($Arguments -contains 'list') {
+                        $global:LASTEXITCODE = 0
+                        return @(
+                            'Name Id Version Source',
+                            '-------------------',
+                            'Task Task.Task 3.44.1 winget',
+                            'hadolint hadolint.hadolint 2.14.0 winget'
+                        )
+                    }
+                    $script:wingetInstallCalls++
+                    $global:LASTEXITCODE = 1
+                    return 'No applicable update found'
+                }
+                Mock Invoke-VerifyCommand {
+                    param($Command)
+                    $script:verificationCommandPaths += [string]$Command
+                    if ($Command -in @(
+                            (Join-Path $shimDirectory 'task.cmd'),
+                            (Join-Path $shimDirectory 'hadolint.cmd')
+                        )) {
+                        $global:LASTEXITCODE = 0
+                        return 'version'
+                    }
+                    $global:LASTEXITCODE = 127
+                    return 'PowerShell alias shadowed the application'
+                }
+
+                $ctx.Options['WingetMode'] = 'import'
+                $result = $handler.Apply($ctx)
+
+                $script:verificationCommandPaths | Should -Contain (Join-Path $shimDirectory 'task.cmd')
+                $script:verificationCommandPaths | Should -Contain (Join-Path $shimDirectory 'hadolint.cmd')
+                $result.Message | Should -Match '2 個検証済み'
+                $result.Success | Should -BeTrue
+                $script:wingetInstallCalls | Should -Be 2
+                Should -Invoke Invoke-Winget -Times 2 -ParameterFilter { $Arguments -contains 'install' }
+
+                Remove-Item -LiteralPath (Join-Path $shimDirectory 'task.cmd'), (Join-Path $shimDirectory 'hadolint.cmd') -Force
+                $script:verificationCommandPaths = @()
+                $result = $handler.Apply($ctx)
+
+                $result.Success | Should -BeFalse
+                $result.Message | Should -Match '2 個検証失敗'
+                $script:verificationCommandPaths | Should -BeNullOrEmpty
+            }
+            finally {
+                $env:PATH = $originalPath
+                foreach ($command in $commands) {
+                    Remove-Item -LiteralPath "Alias:\$command" -Force -ErrorAction SilentlyContinue
+                    if ($previousAliases.ContainsKey($command)) {
+                        Set-Alias -Name $command -Value $previousAliases[$command] -Scope Global -Force
+                    }
+                }
+            }
+        }
     }
 
     Context 'Apply - import mode: skipInstall package' {
@@ -2385,15 +2559,15 @@ Describe 'WingetHandler' {
                                 [PSCustomObject]@{
                                     PackageIdentifier = "Oven-sh.Bun"
                                     directInstaller   = [PSCustomObject]@{
-                                        type          = "archive"
-                                        url           = "https://example.invalid/bun.zip"
-                                        sha256        = ("ab" * 32)
-                                        destination   = $script:directDestination
-                                        executable    = "bun.exe"
+                                        type           = "archive"
+                                        url            = "https://example.invalid/bun.zip"
+                                        sha256         = ("ab" * 32)
+                                        destination    = $script:directDestination
+                                        executable     = "bun.exe"
                                         timeoutSeconds = 30
                                     }
-                                    pathEntries      = @($script:directDestination)
-                                    verifyCommand   = [PSCustomObject]@{ command = "bun"; args = @("--version") }
+                                    pathEntries       = @($script:directDestination)
+                                    verifyCommand     = [PSCustomObject]@{ command = "bun"; args = @("--version") }
                                 }
                             )
                         }
@@ -2651,8 +2825,8 @@ Describe 'WingetHandler' {
                                         executable     = "direnv.exe"
                                         timeoutSeconds = 30
                                     }
-                                    pathEntries      = @($fileDestination)
-                                    verifyCommand   = [PSCustomObject]@{ command = "direnv"; args = @("--version") }
+                                    pathEntries       = @($fileDestination)
+                                    verifyCommand     = [PSCustomObject]@{ command = "direnv"; args = @("--version") }
                                 }
                             )
                         }

@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 COMPOSE_FILE="${DOTFILES_COMPOSE_FILE:-$ROOT/docker/hermes-service/compose.yml}"
 runtime=0
+nix_only=0
 
 fail() {
   printf 'environment verification failed: %s\n' "$*" >&2
@@ -13,6 +14,7 @@ fail() {
 while (($# > 0)); do
   case "$1" in
   --runtime) runtime=1 ;;
+  --nix-only) nix_only=1 ;;
   *) fail "unknown argument: $1" ;;
   esac
   shift
@@ -46,7 +48,8 @@ required=(
 case "$platform" in
 darwin) required+=(brew darwin-rebuild) ;;
 linux)
-  required+=(systemctl docker)
+  required+=(systemctl)
+  ((nix_only == 1)) || required+=(docker)
   [[ $system_layer == "nixos" ]] && required+=(nixos-rebuild)
   ;;
 *) fail "unsupported verification platform: $platform" ;;
@@ -66,7 +69,7 @@ if ! chezmoi verify --exclude=scripts >/dev/null; then
   fail "chezmoi target state differs"
 fi
 
-if [[ $platform == "linux" ]] || ((runtime == 1)); then
+if { [[ $platform == "linux" ]] && ((nix_only == 0)); } || ((runtime == 1)); then
   [[ -f $COMPOSE_FILE ]] || fail "missing Compose file: $COMPOSE_FILE"
   docker compose version >/dev/null || fail "Docker Compose is unavailable"
   docker info >/dev/null || fail "Docker engine is unavailable"
@@ -83,8 +86,16 @@ if [[ $platform == "linux" ]]; then
     ;;
   *) fail "unsupported Linux system layer: $system_layer" ;;
   esac
-  systemctl is-active --quiet docker.service || fail "Docker service is inactive"
-  systemctl is-active --quiet docker.socket || fail "Docker socket is inactive"
+  if ((nix_only == 0)); then
+    systemctl is-active --quiet docker.service || fail "Docker service is inactive"
+    systemctl is-active --quiet docker.socket || fail "Docker socket is inactive"
+  fi
+fi
+
+if ((nix_only == 1)) && [[ $platform == "linux" && ${DOTFILES_WITH_HERMES:-0} == "1" ]]; then
+  command -v hermes >/dev/null 2>&1 || fail "missing native Hermes CLI: hermes"
+  systemctl --user is-active --quiet hermes-agent.service ||
+    fail "native Hermes user service is inactive: hermes-agent.service"
 fi
 
 if ((runtime == 1)); then

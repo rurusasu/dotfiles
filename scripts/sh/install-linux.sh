@@ -7,11 +7,12 @@ export DOTFILES_LOG_PREFIX="linux-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
 
-COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
 OS_RELEASE_FILE="${DOTFILES_OS_RELEASE_FILE:-/etc/os-release}"
 SYSTEMD_DIR="${DOTFILES_SYSTEMD_DIR:-/run/systemd/system}"
 SYSTEMD_WAIT_ATTEMPTS="${DOTFILES_SYSTEMD_WAIT_ATTEMPTS:-30}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
+COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
+DOTFILES_WITH_HERMES="${DOTFILES_WITH_HERMES:-0}"
 LINUX_CONFIG=""
 
 preflight() {
@@ -29,7 +30,6 @@ preflight() {
   for required in \
     "$ROOT/flake.nix" \
     "$ROOT/chezmoi" \
-    "$COMPOSE_FILE" \
     "$VERIFY_ENVIRONMENT"; do
     [[ -e $required ]] || dotfiles_die "Required repository path is missing: $required"
   done
@@ -114,8 +114,13 @@ apply_chezmoi() {
   chezmoi apply --force
 }
 
-docker_command() {
-  dotfiles_run_in_group docker docker "$@"
+stop_legacy_hermes_gateway() {
+  [[ $DOTFILES_WITH_HERMES == 1 ]] || return 0
+  [[ -f $COMPOSE_FILE ]] || return 0
+  dotfiles_have docker || return 0
+  docker info >/dev/null 2>&1 || return 0
+  dotfiles_log "Stopping only the legacy Hermes gateway before native Nix activation."
+  docker compose -f "$COMPOSE_FILE" stop hermes
 }
 
 main() {
@@ -126,10 +131,10 @@ main() {
   dotfiles_install_herdr
   dotfiles_update_flake "$ROOT"
   capture_host_identity
+  stop_legacy_hermes_gateway
   apply_linux_system
   apply_chezmoi
-  dotfiles_run_task_in_group docker hermes:bootstrap
-  dotfiles_run_in_group docker "$VERIFY_ENVIRONMENT" --runtime
+  "$VERIFY_ENVIRONMENT" --nix-only
   dotfiles_log "Linux setup complete."
 }
 

@@ -1,4 +1,12 @@
-{ inputs, ... }:
+{
+  inputs,
+  dotfilesUser ? builtins.getEnv "DOTFILES_USER",
+  dotfilesHome ? builtins.getEnv "DOTFILES_HOME",
+  dotfilesUid ? builtins.getEnv "DOTFILES_UID",
+  dotfilesGid ? builtins.getEnv "DOTFILES_GID",
+  dotfilesGroup ? builtins.getEnv "DOTFILES_GROUP",
+  ...
+}:
 let
   requestedSystem = builtins.getEnv "DOTFILES_SYSTEM";
   system = if requestedSystem == "" then "x86_64-linux" else requestedSystem;
@@ -10,11 +18,7 @@ let
       overlays = [ workmuxOverlay ];
       specialArgs = {
         inherit inputs distro;
-        dotfilesUser = builtins.getEnv "DOTFILES_USER";
-        dotfilesHome = builtins.getEnv "DOTFILES_HOME";
-        dotfilesUid = builtins.getEnv "DOTFILES_UID";
-        dotfilesGid = builtins.getEnv "DOTFILES_GID";
-        dotfilesGroup = builtins.getEnv "DOTFILES_GROUP";
+        inherit dotfilesUser dotfilesHome dotfilesUid dotfilesGid dotfilesGroup;
       };
       modules = [
         inputs.home-manager.nixosModules.home-manager

@@ -1,10 +1,7 @@
 { inputs }:
 let
   system = "aarch64-darwin";
-  pkgs = import inputs.nixpkgs {
-    inherit system;
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs system;
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
@@ -20,17 +17,28 @@ in
         inherit (support.windows) provider source identity;
       };
       darwin = {
-        inherit (support.darwin) provider source identity cask;
+        inherit (support.darwin)
+          provider
+          source
+          identity
+          cask
+          ;
       };
       linux = {
-        inherit (support.linux) provider source identity systemModule;
+        inherit (support.linux)
+          provider
+          source
+          identity
+          systemModule
+          ;
       };
       legacyDarwin = support.legacyDarwin;
-      defaultCaskExcluded = !(
-        builtins.elem "docker-desktop" (sets.darwinCasksForInstallFeatures [ ])
-      );
+      defaultCaskExcluded = !(builtins.elem "docker-desktop" (sets.darwinCasksForInstallFeatures [ ]));
       dockerCaskSelected = builtins.elem "docker-desktop" (
-        sets.darwinCasksForInstallFeatures [ "WithOllama" "WithDocker" ]
+        sets.darwinCasksForInstallFeatures [
+          "WithOllama"
+          "WithDocker"
+        ]
       );
     };
     expected = {

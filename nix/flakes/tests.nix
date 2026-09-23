@@ -20,6 +20,7 @@
       inherit (inputs)
         flake-parts
         home-manager
+        hermes-agent
         llm-agents
         nix-darwin
         nix-homebrew
@@ -93,12 +94,14 @@
       // (import ../tests/system-manager-user-identity.nix { inherit inputs; })
       // (import ../tests/system-manager-integrations.nix { inherit inputs; })
       // (import ../tests/hermes-docker.nix { inherit inputs; })
+      // (import ../tests/hermes-agent.nix { inherit inputs; })
       // (import ../tests/chatgpt-linux.nix { inherit inputs; })
       // (import ../tests/package-catalog-pnpm.nix { inherit inputs; })
       // (import ../tests/package-catalog-warp.nix { inherit inputs; })
       // (import ../tests/host-package-github-cli.nix { inherit inputs; })
       // (import ../tests/hosts/darwin-layout.nix)
       // (import ../tests/hosts/darwin-configuration.nix { inherit inputs; })
+      // (import ../tests/hosts/wsl-configuration.nix { inherit inputs; })
       // (import ../tests/flake-outputs.nix)
       // (import ../tests/ownership.nix { inherit inputs; });
   };

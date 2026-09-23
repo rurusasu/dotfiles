@@ -170,15 +170,15 @@ Describe 'Package catalog consistency' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $expectedRoots = @{
-                'Task.Task' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Task.Task*'
-                'hadolint.hadolint' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\hadolint.hadolint*'
-                'Artempyanykh.Marksman' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Artempyanykh.Marksman*'
-                'astral-sh.ruff' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.ruff*'
-                'JohnnyMorganz.StyLua' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\JohnnyMorganz.StyLua*'
-                'tamasfe.taplo' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\tamasfe.taplo*'
+                'Task.Task'                   = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Task.Task*'
+                'hadolint.hadolint'           = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\hadolint.hadolint*'
+                'Artempyanykh.Marksman'       = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Artempyanykh.Marksman*'
+                'astral-sh.ruff'              = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.ruff*'
+                'JohnnyMorganz.StyLua'        = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\JohnnyMorganz.StyLua*'
+                'tamasfe.taplo'               = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\tamasfe.taplo*'
                 'tree-sitter.tree-sitter-cli' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\tree-sitter.tree-sitter-cli*'
-                'astral-sh.ty' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.ty*'
-                'astral-sh.uv' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*'
+                'astral-sh.ty'                = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.ty*'
+                'astral-sh.uv'                = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*'
             }
 
             foreach ($id in $expectedRoots.Keys) {
@@ -432,6 +432,11 @@ Describe 'Package catalog consistency' {
 
             @($storeSource.Packages | Where-Object PackageIdentifier -EQ '9NT1R1C2HH7J').Count | Should -Be 0
             @($storeSource.Packages | Where-Object PackageIdentifier -EQ '9PLM9XGG6VKS').Count | Should -Be 1
+
+            $retiredPath = Join-Path (Split-Path -Parent $script:wingetJsonPath) 'retired-packages.json'
+            $retired = Get-Content -LiteralPath $retiredPath -Raw | ConvertFrom-Json
+            @($retired.packages | Where-Object { $_.id -eq '9NT1R1C2HH7J' -and $_.source -eq 'msstore' -and $_.name -eq 'ChatGPT Classic' }).Count | Should -Be 1
+            @($retired.packages | Where-Object { $_.id -eq '9PLM9XGG6VKS' }).Count | Should -Be 0
         }
 
         It 'should require a concrete verifier for all 65 Windows package entries' {
@@ -443,17 +448,17 @@ Describe 'Package catalog consistency' {
             $pnpm = Get-Content -LiteralPath $script:pnpmJsonPath -Raw | ConvertFrom-Json
             $packageCount = $wingetPackages.Count + @($npm.globalPackages).Count + @($pnpm.globalPackages).Count
             $specialVerifiers = @{
-                'AgileBits.1Password' = @{ type = 'windowsInstalledProduct'; command = 'AgileBits.1Password' }
-                'AutoHotkey.AutoHotkey' = @{ type = 'windowsInstalledProduct'; command = 'AutoHotkey' }
-                'Discord.Discord' = @{ type = 'windowsInstalledProduct'; command = 'Discord' }
-                'Docker.DockerDesktop' = @{ type = 'windowsInstalledProduct'; command = 'Docker Desktop' }
-                'Google.Chrome' = @{ type = 'windowsInstalledProduct'; command = 'Google Chrome' }
-                'Obsidian.Obsidian' = @{ type = 'windowsInstalledProduct'; command = 'Obsidian' }
-                'StablyAI.Orca' = @{ type = 'windowsInstalledProduct'; command = 'OrcaSlicer' }
-                'Microsoft.PowerToys' = @{ type = 'windowsInstalledProduct'; command = 'Microsoft PowerToys' }
-                'Microsoft.VCRedist.2015+.x64' = @{ type = 'windowsInstalledProduct'; command = 'Microsoft Visual C++ 2015-2022 Redistributable (x64)' }
+                'AgileBits.1Password'                    = @{ type = 'windowsInstalledProduct'; command = 'AgileBits.1Password' }
+                'AutoHotkey.AutoHotkey'                  = @{ type = 'windowsInstalledProduct'; command = 'AutoHotkey' }
+                'Discord.Discord'                        = @{ type = 'windowsInstalledProduct'; command = 'Discord' }
+                'Docker.DockerDesktop'                   = @{ type = 'windowsInstalledProduct'; command = 'Docker Desktop' }
+                'Google.Chrome'                          = @{ type = 'windowsInstalledProduct'; command = 'Google Chrome' }
+                'Obsidian.Obsidian'                      = @{ type = 'windowsInstalledProduct'; command = 'Obsidian' }
+                'StablyAI.Orca'                          = @{ type = 'windowsInstalledProduct'; command = 'OrcaSlicer' }
+                'Microsoft.PowerToys'                    = @{ type = 'windowsInstalledProduct'; command = 'Microsoft PowerToys' }
+                'Microsoft.VCRedist.2015+.x64'           = @{ type = 'windowsInstalledProduct'; command = 'Microsoft Visual C++ 2015-2022 Redistributable (x64)' }
                 'Microsoft.VisualStudio.2022.BuildTools' = @{ type = 'visualStudioInstanceVersion'; command = 'Microsoft.VisualStudio.Product.BuildTools' }
-                'Rustlang.rust-analyzer' = @{ type = 'portableLinkCommand'; command = 'rust-analyzer.exe' }
+                'Rustlang.rust-analyzer'                 = @{ type = 'portableLinkCommand'; command = 'rust-analyzer.exe' }
             }
             $supportedTypes = @('command', 'commandExists', 'appxPackage', 'appxLaunchTarget', 'portableLinkCommand', 'windowsInstalledProduct', 'visualStudioInstanceVersion')
 
@@ -477,7 +482,7 @@ Describe 'Package catalog consistency' {
                 Should -Be 'AutoHotkey.AutoHotkey,Microsoft.VisualStudio.2022.BuildTools' -Because 'admin phase exclusions must remain explicit and reviewed'
             (@($winGetOnlyPackages | Where-Object installFeature | ForEach-Object { "$($_.PackageIdentifier):$($_.installFeature)" } | Sort-Object) -join ',') |
                 Should -Be 'Docker.DockerDesktop:WithDocker,Google.Chrome:WithHermes,Ollama.Ollama:WithOllama' -Because 'feature-gated CI runtime exclusions must remain explicit and reviewed'
-            ($winGetOnlyPackages | Where-Object PackageIdentifier -eq 'Discord.Discord').installFeature |
+            ($winGetOnlyPackages | Where-Object PackageIdentifier -EQ 'Discord.Discord').installFeature |
                 Should -BeNullOrEmpty -Because 'Discord is part of the default cross-platform installation'
 
             foreach ($package in $wingetPackages) {
@@ -524,15 +529,15 @@ Describe 'Package catalog consistency' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $expectedAppxTargets = @{
-                'TheBrowserCompany.Arc' = @{
-                    PackageName = 'TheBrowserCompany.Arc'
+                'TheBrowserCompany.Arc'     = @{
+                    PackageName       = 'TheBrowserCompany.Arc'
                     PackageFamilyName = 'TheBrowserCompany.Arc_ttt1ap7aakyb4'
-                    AppUserModelId = 'TheBrowserCompany.Arc_ttt1ap7aakyb4!Arc'
+                    AppUserModelId    = 'TheBrowserCompany.Arc_ttt1ap7aakyb4!Arc'
                 }
                 'Microsoft.WindowsTerminal' = @{
-                    PackageName = 'Microsoft.WindowsTerminal'
+                    PackageName       = 'Microsoft.WindowsTerminal'
                     PackageFamilyName = 'Microsoft.WindowsTerminal_8wekyb3d8bbwe'
-                    AppUserModelId = 'Microsoft.WindowsTerminal_8wekyb3d8bbwe!App'
+                    AppUserModelId    = 'Microsoft.WindowsTerminal_8wekyb3d8bbwe!App'
                 }
             }
 

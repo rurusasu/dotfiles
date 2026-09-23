@@ -1,9 +1,6 @@
 { inputs }:
 let
-  pkgs = import inputs.nixpkgs {
-    system = "aarch64-darwin";
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs "aarch64-darwin";
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
@@ -42,9 +39,8 @@ in
       wingetPortableLinks = {
         "OpenAI.Codex" = sets.wingetPortableLinksById."OpenAI.Codex";
       };
-      onePasswordPortableLinkAliasAbsent = !(
-        builtins.hasAttr "_1password-cli" sets.wingetPortableLinksById
-      );
+      onePasswordPortableLinkAliasAbsent =
+        !(builtins.hasAttr "_1password-cli" sets.wingetPortableLinksById);
     };
     expected = {
       wingetPathEntries = {

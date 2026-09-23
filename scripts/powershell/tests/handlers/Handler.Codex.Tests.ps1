@@ -73,6 +73,7 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
+                if ($LiteralPath -like "*codex-code-mode-host.exe") { return $true }
                 if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
@@ -218,7 +219,7 @@ Describe 'CodexHandler' {
     Context 'Apply - creates link when missing' {
         BeforeEach {
             Set-CodexPackageInstalled
-            $script:includeCodexHost = $false
+            $script:includeCodexHost = $true
             Mock Test-Path {
                 if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
                 $candidate = if ($LiteralPath) { $LiteralPath } else { $Path }
@@ -285,6 +286,7 @@ Describe 'CodexHandler' {
         }
 
         It 'should create a copy fallback without creating a hardlink' {
+            $script:includeCodexHost = $true
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             $script:newItemTypes | Should -Contain "SymbolicLink"
@@ -299,6 +301,72 @@ Describe 'CodexHandler' {
             $result.Success | Should -BeTrue
             Should -Invoke Copy-Item -Times 1 -ParameterFilter {
                 $LiteralPath -like '*codex-code-mode-host.exe' -and
+                $Destination -like '*WinGet\Links\codex-code-mode-host.exe'
+            }
+        }
+
+        It 'should fail instead of reporting success when the copied executable has no adjacent code-mode host' {
+            $script:includeCodexHost = $false
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Error.Message | Should -Match 'codex-code-mode-host\.exe'
+        }
+    }
+
+    Context 'CanApply - current link is missing its adjacent code-mode host' {
+        BeforeEach {
+            Set-CodexPackageInstalled
+            Mock Test-Path {
+                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*codex-code-mode-host.exe") { return $false }
+                if ($LiteralPath -like "*Links\codex.exe") { return $true }
+                return $false
+            }
+            Mock Get-Item {
+                return [PSCustomObject]@{ LinkType = "SymbolicLink"; Target = $script:codexExe }
+            } -ParameterFilter { $LiteralPath -like "*Links\codex.exe" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks;$script:expectedLocalBin" }
+            Mock Write-Host { }
+        }
+
+        It 'should reapply and report a missing adjacent host instead of skipping setup' {
+            $handler.CanApply($ctx) | Should -BeTrue
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -BeFalse
+            $result.Error.Message | Should -Match 'codex-code-mode-host\.exe'
+        }
+    }
+
+    Context 'CanApply - current copied shim is missing its adjacent code-mode host' {
+        BeforeEach {
+            Set-CodexPackageInstalled
+            Mock Test-Path {
+                if ($LiteralPath -like '*codex-code-mode-host.exe' -and $LiteralPath -notlike '*WinGet\Links*') { return $true }
+                if ($LiteralPath -like '*codex-x86_64-pc-windows-msvc.exe') { return $true }
+                if ($LiteralPath -like '*Links\codex.exe') { return $true }
+                if ($LiteralPath -like '*Links\codex-code-mode-host.exe') { return $false }
+                if ($Path -like '*codex-x86_64-pc-windows-msvc.exe') { return $true }
+                return $false
+            }
+            Mock Get-Item {
+                return [PSCustomObject]@{ LinkType = ''; Target = $null }
+            } -ParameterFilter { $LiteralPath -like '*Links\codex.exe' }
+            Mock Get-FileHash { return [PSCustomObject]@{ Hash = 'same-content' } }
+            Mock Copy-Item { }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks;$script:expectedLocalBin" }
+            Mock Write-Host { }
+        }
+
+        It 'should restore the adjacent code-mode host beside a current copied shim' {
+            $handler.CanApply($ctx) | Should -BeTrue
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            Should -Invoke Copy-Item -Times 1 -ParameterFilter {
+                $LiteralPath -like '*WinGet\Packages\OpenAI.Codex_*\codex-code-mode-host.exe' -and
                 $Destination -like '*WinGet\Links\codex-code-mode-host.exe'
             }
         }
@@ -326,6 +394,7 @@ Describe 'CodexHandler' {
             Set-CodexPackageInstalled
             Mock Test-Path {
                 if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($script:includeCodexHost -and $LiteralPath -like "*codex-code-mode-host.exe") { return $LiteralPath -notlike "*WinGet\Links\*" }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $false }
                 return $false
@@ -340,6 +409,7 @@ Describe 'CodexHandler' {
         }
 
         It 'should succeed with a copy fallback' {
+            $script:includeCodexHost = $true
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
@@ -353,6 +423,7 @@ Describe 'CodexHandler' {
             Set-CodexPackageInstalled
             Mock Test-Path {
                 if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($script:includeCodexHost -and $LiteralPath -like "*codex-code-mode-host.exe") { return $LiteralPath -notlike "*WinGet\Links\*" }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
@@ -388,6 +459,7 @@ Describe 'CodexHandler' {
             Set-CodexPackageInstalled
             Mock Test-Path {
                 if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($script:includeCodexHost -and $LiteralPath -like "*codex-code-mode-host.exe") { return $LiteralPath -notlike "*WinGet\Links\*" }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
@@ -406,6 +478,7 @@ Describe 'CodexHandler' {
         }
 
         It 'should replace the stale copy without moving it first' {
+            $script:includeCodexHost = $true
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
@@ -420,6 +493,7 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
+                if ($LiteralPath -like "*codex-code-mode-host.exe") { return $true }
                 if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
@@ -453,6 +527,7 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
+                if ($LiteralPath -like "*codex-code-mode-host.exe") { return $true }
                 if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
@@ -485,6 +560,7 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
+                if ($LiteralPath -like "*codex-code-mode-host.exe") { return $true }
                 if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }

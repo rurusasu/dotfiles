@@ -1,6 +1,8 @@
 name: hermes-service
 
 services:
+  # Legacy Docker-owned gateway. Normal Hermes setup uses the Home Manager
+  # service; keep this service and its named volume for explicit legacy use.
   hermes:
     build:
       context: ..

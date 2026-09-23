@@ -90,6 +90,34 @@ EOF
 	! grep -q '^docker ' "$COMMAND_LOG"
 }
 
+@test "Linux Nix-only verification checks Hermes CLI and native user service without Docker" {
+	export DOTFILES_VERIFY_PLATFORM=linux
+	export DOTFILES_WITH_HERMES=1
+	rm "$STUB_BIN/brew" "$STUB_BIN/darwin-rebuild" "$STUB_BIN/docker"
+	write_stub systemctl
+	write_stub hermes
+
+	run "$VERIFIER" --nix-only
+
+	[ "$status" -eq 0 ]
+	grep -q '^systemctl --user is-active --quiet hermes-agent.service$' "$COMMAND_LOG"
+	! grep -q '^docker ' "$COMMAND_LOG"
+	! grep -q 'docker.service\|docker.socket' "$COMMAND_LOG"
+}
+
+@test "Linux Nix-only verification does not require optional Hermes when feature is disabled" {
+	export DOTFILES_VERIFY_PLATFORM=linux
+	unset DOTFILES_WITH_HERMES
+	rm "$STUB_BIN/brew" "$STUB_BIN/darwin-rebuild" "$STUB_BIN/docker"
+	write_stub systemctl
+
+	run "$VERIFIER" --nix-only
+
+	[ "$status" -eq 0 ]
+	! grep -q 'hermes-agent.service' "$COMMAND_LOG"
+	! grep -q '^docker ' "$COMMAND_LOG"
+}
+
 @test "missing running Compose service fails runtime verification" {
 	export COMPOSE_RUNNING_MISMATCH=1
 

@@ -342,6 +342,12 @@ class NixRebuildHandler : SetupHandlerBase {
         return "'" + ($value -replace "'", "'\\''") + "'"
     }
 
+    hidden [bool] IsTruthy([object]$value) {
+        if ($null -eq $value) { return $false }
+        if ($value -is [bool]) { return [bool]$value }
+        return ([string]$value).Trim() -in @("1", "true", "TRUE", "True", "yes", "YES", "Yes", "on", "ON", "On")
+    }
+
     hidden [void] EnsureDotfilesAvailable([string]$distroName, [string]$dotfilesPath) {
         # Windows パス (D:\ruru\dotfiles) を WSL マウントパス (/mnt/d/ruru/dotfiles) に変換
         $driveLetter = $dotfilesPath.Substring(0, 1).ToLower()
@@ -421,7 +427,8 @@ class NixRebuildHandler : SetupHandlerBase {
 
             # 実ユーザーの identity を wrapper に渡して nixos-rebuild switch を実行する。
             # 2>&1 で stderr も捕捉しエラー詳細をログに残す。
-            $rebuildCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && DOTFILES_USER=$($this.QuoteShellArg($this.NixOsUser)) DOTFILES_HOME=$($this.QuoteShellArg($this.NixOsHome)) bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure 2>&1"
+            $withHermes = if ($this.IsTruthy($ctx.GetOption("WithHermes", $false))) { "1" } else { "0" }
+            $rebuildCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && DOTFILES_USER=$($this.QuoteShellArg($this.NixOsUser)) DOTFILES_HOME=$($this.QuoteShellArg($this.NixOsHome)) DOTFILES_WITH_HERMES=$withHermes bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure 2>&1"
             $output = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", $rebuildCommand)
             $nixosExitCode = $LASTEXITCODE
 

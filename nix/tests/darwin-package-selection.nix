@@ -1,10 +1,7 @@
 { inputs }:
 let
   system = "aarch64-darwin";
-  pkgs = import inputs.nixpkgs {
-    inherit system;
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs system;
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
@@ -48,8 +45,8 @@ let
     diaBrowser = pkgs.callPackage ../packages/dia-browser { };
     orcaEditor = pkgs.callPackage ../packages/orca-editor { };
   };
-  containsDerivation = expected: packages:
-    builtins.any (package: package.drvPath == expected.drvPath) packages;
+  containsDerivation =
+    expected: packages: builtins.any (package: package.drvPath == expected.drvPath) packages;
 in
 {
   testDarwinGuiPackagesUseSystemSetAndCommandsUseHomeManager = {
@@ -105,9 +102,7 @@ in
   };
 
   testRaycastCatalogDerivationIsSelectedForDarwinSystem = {
-    expr = containsDerivation pkgs.raycast (
-      catalogSets.darwinSystemPackagesForInstallFeatures [ ]
-    );
+    expr = containsDerivation pkgs.raycast (catalogSets.darwinSystemPackagesForInstallFeatures [ ]);
     expected = true;
   };
 }

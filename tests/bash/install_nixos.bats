@@ -94,9 +94,11 @@ else
 	printf "%s\n" "$HERMES_ITEM_JSON"
 fi
 '
-	write_stub docker '
+write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
+  *" info "*) [[ ${DOCKER_ENGINE_RUNNING:-0} == 1 ]] ;;
+  *" compose -f "*" stop hermes"*) [[ ${DOCKER_ENGINE_RUNNING:-0} == 1 ]] ;;
   *" network inspect bridge --format "*) printf "172.17.0.1\n" ;;
   *" ps --all --services hermes "*) printf "hermes\n" ;;
   *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
@@ -152,40 +154,51 @@ line_of() {
 	grep -nF "$1" "$COMMAND_LOG" | head -1 | cut -d: -f1
 }
 
-@test "NixOS rebuilds then applies chezmoi Compose and acceptance" {
+@test "NixOS rebuild activates native Hermes without starting the Docker gateway" {
 	run "$INSTALLER"
 
 	[ "$status" -eq 0 ]
 	grep -q "nixos-rebuild user=test-user home=$HOME uid=1000 gid=1000 group=users args=switch --flake $REPO_ROOT#linux --impure" "$COMMAND_LOG"
 	grep -q "DOTFILES_NIXOS_HARDWARE_CONFIG=$HARDWARE_CONFIG" "$COMMAND_LOG"
+	grep -q "DOTFILES_WITH_HERMES=0" "$COMMAND_LOG"
 	[ "$(line_of 'nix flake update --flake')" -lt "$(line_of nixos-rebuild)" ]
 	[ "$(line_of nixos-rebuild)" -lt "$(line_of 'chezmoi init')" ]
-	[ "$(line_of 'chezmoi apply')" -lt "$(line_of 'docker compose')" ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml config --quiet")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp")" ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp")" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes")" ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes")" -lt "$(line_of 'hermes-bootstrap secret-plan')" ]
-	[ "$(line_of 'hermes-bootstrap secret-plan')" -lt "$(line_of 'hermes-bootstrap apply')" ]
-	[ "$(line_of 'hermes-bootstrap apply')" -lt "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml up -d --force-recreate")" ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml up -d --force-recreate")" -lt "$(line_of 'docker image prune --force')" ]
-	[ "$(line_of 'docker image prune --force')" -lt "$(line_of verify-environment)" ]
-	grep -q '^verify-environment layer=nixos args=--runtime$' "$COMMAND_LOG"
-	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 16 ]
-	[ "$(grep -c '^op --account my.1password.com read ' "$COMMAND_LOG")" -eq 1 ]
-	! grep -q '^op signin ' "$COMMAND_LOG"
-	[ -s "$PAYLOAD_CAPTURE" ]
+	[ "$(line_of 'chezmoi apply')" -lt "$(line_of verify-environment)" ]
+	grep -q '^verify-environment layer=nixos args=--nix-only$' "$COMMAND_LOG"
+	! grep -q 'hermes:bootstrap\|docker compose.*hermes\|hermes-bootstrap' "$COMMAND_LOG"
 }
 
-@test "Hermes bootstrap failure recovers NixOS runtime before returning failure" {
+@test "NixOS forwards an explicitly enabled Hermes feature to activation and verification" {
+	export DOTFILES_WITH_HERMES=1
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	grep -q "DOTFILES_WITH_HERMES=1" "$COMMAND_LOG"
+	grep -q '^verify-environment layer=nixos args=--nix-only$' "$COMMAND_LOG"
+}
+
+@test "NixOS Hermes setup does not invoke the legacy Docker bootstrap" {
 	export HERMES_BOOTSTRAP_STATUS=45
 
 	run "$INSTALLER"
 
-	[ "$status" -eq 45 ]
-	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
-	! grep -q ' up -d --force-recreate' "$COMMAND_LOG"
-	grep -q ' start' "$COMMAND_LOG"
-	! grep -q ' up ' "$COMMAND_LOG"
-	! grep -q '^verify-environment ' "$COMMAND_LOG"
+	[ "$status" -eq 0 ]
+	! grep -q 'hermes:bootstrap\|hermes-bootstrap' "$COMMAND_LOG"
+	grep -q '^verify-environment layer=nixos args=--nix-only$' "$COMMAND_LOG"
+}
+
+@test "NixOS stops only a running legacy Hermes service before system activation" {
+	export DOCKER_ENGINE_RUNNING=1
+	export DOTFILES_WITH_HERMES=1
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes")" -lt "$(line_of nixos-rebuild)" ]
+	grep -q 'docker compose .* stop hermes' "$COMMAND_LOG"
+	! grep -q 'docker compose .* stop .*\(api\|browser\|dashboard\)' "$COMMAND_LOG"
+	! grep -q 'docker \(volume\|image\) ' "$COMMAND_LOG"
 }
 
 @test "NixOS refuses activation without a readable hardware profile" {
@@ -225,25 +238,18 @@ exit 42
 
 	[ "$status" -eq 42 ]
 	! grep -q '^chezmoi ' "$COMMAND_LOG"
-	! grep -q '^docker ' "$COMMAND_LOG"
+	! grep -q '^docker compose ' "$COMMAND_LOG"
 }
 
-@test "NixOS Compose failure stops before acceptance" {
-	write_stub docker '
-printf "docker %s\n" "$*" >>"$COMMAND_LOG"
-case " $* " in
-  *" network inspect bridge --format "*) printf "172.17.0.1\n" ;;
-  *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
-  *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE" ;;
-  *" up -d --force-recreate "*) exit 43 ;;
-esac
-'
+@test "NixOS native Hermes setup does not require Docker Compose" {
+	rm -f "$STUB_BIN/docker"
 
 	run "$INSTALLER"
 
-	[ "$status" -eq 43 ]
-	grep -q ' ps --all$' "$COMMAND_LOG"
-	! grep -q '^verify-environment ' "$COMMAND_LOG"
+	[ "$status" -eq 0 ]
+	! grep -q '^docker ' "$COMMAND_LOG"
+	! grep -q 'hermes:bootstrap\|hermes-bootstrap' "$COMMAND_LOG"
+	grep -q '^verify-environment layer=nixos args=--nix-only$' "$COMMAND_LOG"
 }
 
 @test "NixOS acceptance failure is propagated" {

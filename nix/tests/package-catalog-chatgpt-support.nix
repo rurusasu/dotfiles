@@ -1,9 +1,6 @@
 { inputs }:
 let
-  pkgs = import inputs.nixpkgs {
-    system = "aarch64-darwin";
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs "aarch64-darwin";
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
@@ -79,12 +76,10 @@ in
   };
 
   testChatGPTLinuxDerivationPreservesPinnedSourceUrlsAndHashes = {
-    expr = builtins.mapAttrs (
-      _: package: {
-        url = package.src.url;
-        hash = package.src.outputHash;
-      }
-    ) chatgptBySystem;
+    expr = builtins.mapAttrs (_: package: {
+      url = package.src.url;
+      hash = package.src.outputHash;
+    }) chatgptBySystem;
     expected = {
       x86_64-linux = {
         url = "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.818.41705_amd64.deb";

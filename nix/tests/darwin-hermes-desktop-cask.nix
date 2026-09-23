@@ -1,11 +1,7 @@
 { inputs }:
 let
   system = "aarch64-darwin";
-  pkgs = import inputs.nixpkgs {
-    inherit system;
-    config.allowUnfree = true;
-    overlays = [ (_: _: { workmux = inputs.workmux.packages.${system}.default; }) ];
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs system;
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
@@ -18,9 +14,8 @@ in
     expr = {
       installFeature = hermesSupport.installFeature;
       darwinSupport = hermesSupport.darwin;
-      excludedFromDefaultCasks = !(
-        builtins.elem "hermes-desktop" (sets.darwinCasksForInstallFeatures [ ])
-      );
+      excludedFromDefaultCasks =
+        !(builtins.elem "hermes-desktop" (sets.darwinCasksForInstallFeatures [ ]));
       includedWithHermes = builtins.elem "hermes-desktop" (
         sets.darwinCasksForInstallFeatures [ "WithHermes" ]
       );

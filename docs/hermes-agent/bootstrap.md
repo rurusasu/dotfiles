@@ -1,12 +1,21 @@
 # Hermes Bootstrap Operations
 
-Hermes uses one container-owned bootstrap on every supported host. The host
-adapter supplies prerequisites and secrets, and writes only the private
-Compose-side `.op.env` service-account file; Hermes config, profiles,
-repositories, and managed `.env` files remain container-owned.
+On macOS and Linux/WSL, the pinned `hermes-agent` flake and Home Manager module
+manage the Hermes CLI and native gateway service. The Docker Compose sidecars
+and the container-owned bootstrap described here remain separate operations;
+this bootstrap still supplies its prerequisites and secrets and writes only
+the private Compose-side `.op.env` service-account file. Docker-managed Hermes
+config, profiles, repositories, and managed `.env` files remain container-owned.
 
-Hermes の組み込み 1Password 連携と `op` CLI の利用手順は、[Hermes Agent で
-1Password を使う](./onepassword.md)を参照してください。
+The native service uses the host's `~/.hermes` directory. The Compose gateway
+and bootstrap instead use the Docker named volume `hermes-data` (or the volume
+selected by `HERMES_DATA_VOLUME`) at `/opt/data`. Enabling the native service
+does not migrate, modify, or remove an existing Docker volume or its state.
+Moving data between these runtimes is an operator-led migration: take and
+verify an explicit backup first, then decide how to resolve path conflicts
+before copying anything. No automatic merge or winner is defined.
+
+Hermes の組み込み 1Password 連携と `op` CLI の利用手順は、[Hermes Agent で 1Password を使う](./onepassword.md)を参照してください。
 
 ## Run Bootstrap
 
@@ -21,10 +30,10 @@ the focused adapter does not route these commands through WSL. Under WSL,
 Ollama runs on Windows and Docker reaches it through `host.docker.internal`; do
 not enable a second WSL Ollama service.
 
-For a focused full bootstrap on any supported host, run:
+For the separate Docker sidecars and bootstrap, run:
 
 ```text
-task hermes:bootstrap
+task hermes:docker:bootstrap
 ```
 
 On Unix, the task sources `scripts/sh/hermes-agent.sh` and invokes its Docker
@@ -50,7 +59,7 @@ install.cmd -> install.ps1 -> install.admin.ps1 -> HermesAgentHandler -> PowerSh
 `RequiresAdmin = false`. It must stay in the user context so native `op.exe`
 can use 1Password desktop integration.
 
-`task hermes:bootstrap` returns the selected focused adapter status; it neither
+`task hermes:docker:bootstrap` returns the selected focused adapter status; it neither
 runs the full-machine installer nor hides a nonzero result.
 
 Hindsight の運用、バックアップ、復元、受入検証、privacy boundary は

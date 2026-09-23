@@ -1,12 +1,24 @@
 { inputs }:
 let
   system = "x86_64-linux";
-  systemManagerModule = import ../flakes/system-manager.nix { inherit inputs; };
+  systemManagerModule = import ../flakes/system-manager.nix {
+    inherit inputs;
+    dotfilesUser = "test-user";
+    dotfilesHome = "/srv/dotfiles/test-user";
+    dotfilesUid = "4242";
+    dotfilesGid = "4243";
+    dotfilesGroup = "test-primary";
+  };
   systemConfigs = systemManagerModule.flake.systemConfigs;
+  workmux = import ../flakes/lib/workmux.nix { inherit inputs; };
+  workmuxOverlay = workmux.mkOverlay (target: inputs.workmux.packages.${target}.default);
   nixos = inputs.nixpkgs.lib.nixosSystem {
     inherit system;
     specialArgs = { inherit inputs; };
-    modules = [ ../../modules/host/default.nix ];
+    modules = [
+      { nixpkgs.overlays = [ workmuxOverlay ]; }
+      ../modules/host/default.nix
+    ];
   };
 
   supportsDistro =
@@ -18,7 +30,8 @@ let
     && osVersion.enable
     && inputs.nixpkgs.lib.hasInfix "if [ $ID = \"${distro}\" ]; then" osVersion.script;
 
-  hostPackages = pkgs:
+  hostPackages =
+    pkgs:
     (import ../packages/sets.nix {
       inherit pkgs;
       inherit (pkgs) lib;
@@ -27,11 +40,10 @@ let
 
   includesHostPackages =
     config: pkgs:
-    builtins.all (
-      package: builtins.elem package config.environment.systemPackages
-    ) (hostPackages pkgs);
+    builtins.all (package: builtins.elem package config.environment.systemPackages) (hostPackages pkgs);
 
-  includesSystemManagerHostPackages = distro:
+  includesSystemManagerHostPackages =
+    distro:
     let
       config = systemConfigs.${distro}.config;
     in

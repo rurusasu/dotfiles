@@ -18,8 +18,12 @@ assert_no_profile_gateway_lifecycle() {
 		[ "$status" -eq 0 ]
 		assert_no_profile_gateway_lifecycle "$output"
 		case "$action" in
-		up | restart)
-			[[ "$output" == *"task: [hermes:bootstrap]"* ]]
+		up)
+			[[ "$output" == *"task: [hermes:docker:up]"* ]]
+			[[ "$output" == *"-p personal-ops gateway status"* ]]
+			;;
+		restart)
+			[[ "$output" == *"task: [hermes:docker:restart]"* ]]
 			[[ "$output" == *"-p personal-ops gateway status"* ]]
 			;;
 		down)
@@ -38,8 +42,12 @@ assert_no_profile_gateway_lifecycle() {
 			[ "$status" -eq 0 ]
 			assert_no_profile_gateway_lifecycle "$output"
 			case "$action" in
-			up | restart)
-				[[ "$output" == *"task: [hermes:bootstrap]"* ]]
+			up)
+				[[ "$output" == *"task: [hermes:docker:up]"* ]]
+				[[ "$output" == *"-p $profile gateway status"* ]]
+				;;
+			restart)
+				[[ "$output" == *"task: [hermes:docker:restart]"* ]]
 				[[ "$output" == *"-p $profile gateway status"* ]]
 				;;
 			down)
@@ -49,4 +57,13 @@ assert_no_profile_gateway_lifecycle() {
 			esac
 		done
 	done
+}
+
+@test "explicit Docker gateway stop preserves the legacy named volume" {
+	run task --dir "$REPO_ROOT" --dry --force hermes:docker:down
+
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"docker compose -f docker/hermes-service/compose.yml stop hermes"* ]]
+	[[ "$output" != *"down -v"* ]]
+	[[ "$output" != *"docker volume rm"* ]]
 }

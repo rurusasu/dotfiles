@@ -200,6 +200,53 @@ Describe 'OnePasswordCliHandler' {
         }
     }
 
+    Context 'Apply - existing unrelated WinGet Links alias' {
+        BeforeEach {
+            $script:previousOpPkgDir = $script:opPkgDir
+            $script:previousOpExe = $script:opExe
+            $script:previousExpectedLinks = $script:expectedLinks
+            $script:previousLocalAppData = $env:LOCALAPPDATA
+
+            $script:opPkgDir = Join-Path $TestDrive 'Packages\AgileBits.1Password.CLI_test'
+            $script:opExe = Join-Path $script:opPkgDir 'op.exe'
+            $script:expectedLinks = Join-Path $TestDrive 'Microsoft\WinGet\Links'
+            $env:LOCALAPPDATA = $TestDrive
+            New-Item -ItemType Directory -Path $script:opPkgDir, $script:expectedLinks -Force | Out-Null
+            Set-Content -LiteralPath $script:opExe -Value 'installed 1Password CLI' -NoNewline
+            $script:unrelatedAliasPath = Join-Path $script:expectedLinks 'op.exe'
+            Set-Content -LiteralPath $script:unrelatedAliasPath -Value 'unrelated op alias' -NoNewline
+
+            Set-OnePasswordCliPackageInstalled
+            $script:mockUserPath = "C:\Windows;$script:expectedLinks"
+            Mock Get-UserEnvironmentPath { return $script:mockUserPath }
+            Mock Set-UserEnvironmentPath { $script:mockUserPath = $Path }
+            Mock Write-Host { }
+            $env:PATH = "$script:expectedLinks;C:\Windows"
+        }
+
+        AfterEach {
+            $script:opPkgDir = $script:previousOpPkgDir
+            $script:opExe = $script:previousOpExe
+            $script:expectedLinks = $script:previousExpectedLinks
+            $env:LOCALAPPDATA = $script:previousLocalAppData
+        }
+
+        It 'preserves an unrelated alias while making the installed executable win in a new shell' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            [System.IO.File]::ReadAllText($script:unrelatedAliasPath) | Should -Be 'unrelated op alias'
+            ($script:mockUserPath -split ';')[0] | Should -Be $script:opPkgDir
+
+            $shell = Join-Path $PSHOME $(if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh.exe' } else { 'powershell.exe' })
+            $env:PATH = $script:mockUserPath
+            $resolvedPath = & $shell -NoLogo -NoProfile -Command '& "$env:SystemRoot\System32\where.exe" op.exe | Select-Object -First 1'
+            $LASTEXITCODE | Should -Be 0
+            [System.IO.Path]::GetFullPath(($resolvedPath | Select-Object -Last 1).Trim()) |
+                Should -Be ([System.IO.Path]::GetFullPath($script:opExe))
+        }
+    }
+
     Context 'Apply - required USER PATH update fails' {
         BeforeEach {
             Set-OnePasswordCliPackageInstalled
@@ -233,7 +280,6 @@ Describe 'OnePasswordCliHandler' {
             $env:LOCALAPPDATA = $TestDrive
             New-Item -ItemType Directory -Path $script:opPkgDir, $script:expectedLinks -Force | Out-Null
             Set-Content -LiteralPath $script:opExe -Value 'version one' -NoNewline
-            Set-Content -LiteralPath (Join-Path $script:expectedLinks 'op.exe') -Value 'old working shim' -NoNewline
 
             Set-OnePasswordCliPackageInstalled
             Mock New-Item { throw 'Administrator privilege required for this operation' } -ParameterFilter {
@@ -253,7 +299,7 @@ Describe 'OnePasswordCliHandler' {
             $env:LOCALAPPDATA = $script:previousLocalAppData
         }
 
-        It 'should copy safely, detect identical content, and refresh the shim after an upgrade' {
+        It 'should create a non-admin copy and keep package PATH effective after an upgrade' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
@@ -261,63 +307,11 @@ Describe 'OnePasswordCliHandler' {
             $handler.CanApply($ctx) | Should -Be $false
 
             Set-Content -LiteralPath $script:opExe -Value 'version two' -NoNewline
-            $handler.CanApply($ctx) | Should -Be $true
-
             $upgradeResult = $handler.Apply($ctx)
 
             $upgradeResult.Success | Should -Be $true
-            [System.IO.File]::ReadAllText((Join-Path $script:expectedLinks 'op.exe')) | Should -Be 'version two'
+            [System.IO.File]::ReadAllText((Join-Path $script:expectedLinks 'op.exe')) | Should -Be 'version one'
             $handler.CanApply($ctx) | Should -Be $false
-        }
-    }
-
-    Context 'Apply - WinGet Links copy fallback restores existing shim on replacement failure' {
-        BeforeEach {
-            $script:previousOpPkgDir = $script:opPkgDir
-            $script:previousOpExe = $script:opExe
-            $script:previousExpectedLinks = $script:expectedLinks
-            $script:previousLocalAppData = $env:LOCALAPPDATA
-
-            $script:opPkgDir = Join-Path $TestDrive 'Packages\AgileBits.1Password.CLI_test'
-            $script:opExe = Join-Path $script:opPkgDir 'op.exe'
-            $script:expectedLinks = Join-Path $TestDrive 'Microsoft\WinGet\Links'
-            $env:LOCALAPPDATA = $TestDrive
-            New-Item -ItemType Directory -Path $script:opPkgDir, $script:expectedLinks -Force | Out-Null
-            Set-Content -LiteralPath $script:opExe -Value 'new target' -NoNewline
-            $script:existingShim = Join-Path $script:expectedLinks 'op.exe'
-            Set-Content -LiteralPath $script:existingShim -Value 'old working shim' -NoNewline
-
-            Set-OnePasswordCliPackageInstalled
-            Mock New-Item { throw 'Administrator privilege required for this operation' } -ParameterFilter {
-                $ItemType -eq 'SymbolicLink'
-            }
-            Mock Move-Item {
-                if ($Destination -eq $script:existingShim -and $LiteralPath -like '*.tmp') {
-                    throw 'shim activation failed'
-                }
-                [System.IO.File]::Move($LiteralPath, $Destination)
-            }
-            $script:mockUserPath = 'C:\Windows'
-            Mock Get-UserEnvironmentPath { return $script:mockUserPath }
-            Mock Set-UserEnvironmentPath { $script:mockUserPath = $Path }
-            Mock Write-Host { }
-            $env:PATH = "$script:expectedLinks;C:\Windows"
-        }
-
-        AfterEach {
-            $script:opPkgDir = $script:previousOpPkgDir
-            $script:opExe = $script:previousOpExe
-            $script:expectedLinks = $script:previousExpectedLinks
-            $env:LOCALAPPDATA = $script:previousLocalAppData
-        }
-
-        It 'should restore the previous working shim if the staged copy cannot be activated' {
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $false
-            $result.Error | Should -Match 'shim activation failed'
-            [System.IO.File]::ReadAllText($script:existingShim) | Should -Be 'old working shim'
-            Should -Invoke Move-Item -Times 3
         }
     }
 
@@ -351,14 +345,14 @@ Describe 'OnePasswordCliHandler' {
             Mock Write-Host { }
         }
 
-        It 'should add the package directory and replace only the WinGet Links shim' {
+        It 'should add the package directory without replacing an unknown WinGet Links shim' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
             Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter { $Path -like "*$script:opPkgDir*" }
-            Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "SymbolicLink" }
             Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "HardLink" }
-            Should -Invoke Move-Item -Times 2
+            Should -Invoke Move-Item -Times 0
             Should -Invoke Copy-Item -Times 0
         }
     }

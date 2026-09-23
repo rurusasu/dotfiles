@@ -118,6 +118,8 @@ class WingetHandler : SetupHandlerBase {
             $this.Log("winget パッケージをインストールしています...")
             $this.Log("ソース: $packagesPath")
 
+            $this.RemoveRetiredPackages((Split-Path -Parent $packagesPath)) | Out-Null
+
             # packages.json を読み込んで各パッケージを取得
             $packagesJson = Get-JsonContent -Path $packagesPath
             $packages = @()
@@ -202,7 +204,11 @@ class WingetHandler : SetupHandlerBase {
 
             if ($ctx.GetOption("WingetVerifyCommandOnly", $false)) {
                 $ciSkipped = @($packages | Where-Object { $_.CiSkipInstall }).Count
-                $packages = @($packages | Where-Object { $null -ne $_.VerifyCommand -and -not $_.CiSkipInstall })
+                $packages = @($packages | Where-Object {
+                        $null -ne $_.VerifyCommand -and
+                        -not $_.CiSkipInstall -and
+                        -not $_.SkipInstall
+                    })
                 $ciSkipMessage = if ($ciSkipped -gt 0) { ", $ciSkipped 個 CI 対象外" } else { "" }
                 $this.Log("CI 検証モード: verifyCommand 付きパッケージのみ対象にします ($($packages.Count) 個$ciSkipMessage)", "Gray")
             }
@@ -234,8 +240,9 @@ class WingetHandler : SetupHandlerBase {
             }
 
             # インストール済みパッケージを一括取得（winget list を1回だけ実行）
-            # 正規表現で検出できないパッケージ（ARP エントリ等）は個別チェックにフォールバック
-            $installedIds = $this.GetInstalledPackageIds()
+            # 表示名やバージョンに含まれるドットを ID と誤認しないよう、manifest ID と照合する。
+            $wingetPackageIds = @($packages | Where-Object { $_.SourceName -eq "winget" } | ForEach-Object { [string]$_.Id })
+            $installedIds = $this.GetInstalledPackageIds($wingetPackageIds)
 
             # 通常実行ではインストール済みも含めて winget install を流し、
             # winget 側の install-or-upgrade 動作で latest を選ばせる。
@@ -493,8 +500,8 @@ class WingetHandler : SetupHandlerBase {
             InstallTimeoutSeconds = $pkg.InstallTimeoutSeconds
             DirectInstaller       = $pkg.DirectInstaller
             CiSkipInstall         = $pkg.CiSkipInstall
-            PortableLink           = $pkg.PortableLink
-            PathEntries            = $pkg.PathEntries
+            PortableLink          = $pkg.PortableLink
+            PathEntries           = $pkg.PathEntries
             Force                 = $force
             WasInstalled          = $wasInstalled
             WasVerified           = $wasVerified
@@ -881,8 +888,8 @@ class WingetHandler : SetupHandlerBase {
         # the generated default for every package. Explicit per-package
         # values remain the fallback when no override is present.
         $hasEnvironmentOverride =
-            -not [string]::IsNullOrWhiteSpace($env:DOTFILES_INSTALL_TIMEOUT_SECONDS) -or
-            -not [string]::IsNullOrWhiteSpace($env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS)
+        -not [string]::IsNullOrWhiteSpace($env:DOTFILES_INSTALL_TIMEOUT_SECONDS) -or
+        -not [string]::IsNullOrWhiteSpace($env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS)
         if ($hasEnvironmentOverride) {
             return Get-PackageInstallTimeoutSecond -LegacyEnvironmentVariable "DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS"
         }
@@ -1020,35 +1027,95 @@ class WingetHandler : SetupHandlerBase {
         winget list を1回実行し、全インストール済みパッケージ ID を返す。
         パッケージごとに winget を呼ぶより大幅に高速。
     #>
-    hidden [string[]] GetInstalledPackageIds() {
+    hidden [string[]] GetInstalledPackageIds([string[]]$candidateIds) {
         try {
+            if (-not $candidateIds -or $candidateIds.Count -eq 0) {
+                return @()
+            }
+
             # Restrict the bulk query to the community source. Without an
             # explicit source winget may probe Microsoft Store and block on a
             # network timeout before the package loop even starts.
             $output = Invoke-Winget -Arguments @("list", "--source", "winget", "--disable-interactivity")
             if ($LASTEXITCODE -ne 0) { return @() }
-            # winget list の固定幅カラムは CJK 文字や省略記号で列位置がずれるため、
-            # パッケージ ID のフォーマット (Publisher.Package) を正規表現で直接抽出する。
-            # winget の公式 ID は必ず "組織名.パッケージ名" の形式。
+            # winget list は固定幅表示なので列位置には依存せず、manifest にある完全一致 ID だけを拾う。
+            # 表示名やバージョンもドットを含み得るため、形式だけで ID を推測してはいけない。
             $ids = @()
             $headerPassed = $false
             foreach ($line in $output) {
                 if ($line -match '^-{2,}') { $headerPassed = $true; continue }
                 if (-not $headerPassed) { continue }
-                # Publisher.Package 形式の ID を抽出 (例: Git.Git, Microsoft.VCRedist.2015+.x64)
-                if ($line -match '(\S+\.\S+)') {
-                    $candidate = $Matches[1]
-                    # ARP エントリ (ARP\Machine\...) や URL は除外
-                    if ($candidate -notmatch '^ARP\\' -and $candidate -notmatch '://') {
-                        $ids += $candidate
+
+                foreach ($candidateId in $candidateIds) {
+                    if ([string]::IsNullOrWhiteSpace($candidateId)) { continue }
+                    $escapedId = [regex]::Escape($candidateId)
+                    if ($line -match "(?<!\S)$escapedId(?!\S)") {
+                        $ids += $candidateId
+                        break
                     }
                 }
             }
-            return $ids
+            return @($ids | Select-Object -Unique)
         }
         catch {
             throw "インストール済みパッケージ一覧の取得に失敗しました: $($_.Exception.Message)"
         }
+    }
+
+    <#
+        .SYNOPSIS
+        旧 manifest から外したパッケージを、インストール済みの場合のみ削除する
+    #>
+    hidden [int] RemoveRetiredPackages([string]$manifestDirectory) {
+        $retiredManifestPath = Join-Path $manifestDirectory "retired-packages.json"
+        if (-not [System.IO.File]::Exists($retiredManifestPath)) {
+            return 0
+        }
+
+        $retiredManifest = Get-JsonContent -Path $retiredManifestPath
+        $removedCount = 0
+        foreach ($package in @($retiredManifest.packages)) {
+            $packageId = [string]$package.id
+            $packageName = [string]$package.name
+            $sourceName = [string]$package.source
+            if (
+                [string]::IsNullOrWhiteSpace($packageId) -or
+                [string]::IsNullOrWhiteSpace($packageName) -or
+                $sourceName -notin @("winget", "msstore")
+            ) {
+                throw "retired package entry is missing a valid id, name, or source: $retiredManifestPath"
+            }
+
+            $arguments = @(
+                "uninstall", "--id", $packageId, "--exact", "--source", $sourceName,
+                "--silent", "--disable-interactivity", "--accept-source-agreements"
+            )
+            $output = @(Invoke-Winget -Arguments $arguments -TimeoutSeconds (Get-PackageInstallTimeoutSecond))
+            foreach ($line in $output) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                    $this.Log("  $line", "Gray")
+                }
+            }
+
+            if ($LASTEXITCODE -eq 0) {
+                $removedCount++
+                $this.Log("RETIRED_PACKAGE_CLEANUP: id=$packageId status=removed", "Green")
+                $this.Log("削除済み (retired package): $packageName ($packageId)", "Green")
+                continue
+            }
+
+            $exitCodeUnsigned = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$LASTEXITCODE), 0)
+            $exitCodeHex = $exitCodeUnsigned.ToString("X8")
+            if ($exitCodeHex -eq "8A150014") {
+                $this.Log("RETIRED_PACKAGE_CLEANUP: id=$packageId status=absent", "Gray")
+                $this.Log("未インストール (retired package): $packageName ($packageId)", "Gray")
+                continue
+            }
+
+            throw "retired package uninstall failed: $packageName ($packageId), exit code $exitCodeHex"
+        }
+
+        return $removedCount
     }
 
     <#
@@ -1126,7 +1193,29 @@ class WingetHandler : SetupHandlerBase {
                 return $this.TestVisualStudioInstanceVersion($verifyCmd)
             }
 
-            $output = @(Invoke-VerifyCommand -Command $command -Arguments $arguments -TimeoutSeconds $timeoutSeconds)
+            # Get-Command can return a PowerShell alias before a same-named
+            # WinGet executable. In that case, resolve only applications and
+            # invoke the executable path so the alias cannot shadow it.
+            $discoveredCommand = Get-Command -Name $command -ErrorAction SilentlyContinue
+            $commandPath = $command
+            if ($discoveredCommand -and $discoveredCommand.CommandType -eq [System.Management.Automation.CommandTypes]::Alias) {
+                $resolvedCommand = Get-Command -Name $command -CommandType Application -ErrorAction SilentlyContinue |
+                    Select-Object -First 1
+                if (-not $resolvedCommand) {
+                    if (-not $quiet) {
+                        $this.Log("検証コマンドが見つかりません: $command", "Yellow")
+                    }
+                    return $false
+                }
+
+                $commandPath = if (-not [string]::IsNullOrWhiteSpace([string]$resolvedCommand.Path)) {
+                    [string]$resolvedCommand.Path
+                }
+                else {
+                    [string]$resolvedCommand.Source
+                }
+            }
+            $output = @(Invoke-VerifyCommand -Command $commandPath -Arguments $arguments -TimeoutSeconds $timeoutSeconds)
             if ($LASTEXITCODE -eq 0) {
                 return $true
             }
@@ -1249,7 +1338,7 @@ class WingetHandler : SetupHandlerBase {
                     $displayNameMatch = $entryDisplayName -match $expectedDisplayNamePattern
                 }
                 $publisherMatch = [string]::IsNullOrWhiteSpace($expectedPublisher) -or
-                    $entryPublisher -eq $expectedPublisher
+                $entryPublisher -eq $expectedPublisher
 
                 $identityMatch = if ($productCodes.Count -gt 0) { $productCodeMatch } else { $displayNameMatch }
                 if (-not $identityMatch -or -not $displayNameMatch -or -not $publisherMatch) { continue }

@@ -103,21 +103,21 @@ process/liveness signal and is not treated as proof that OAuth is valid.
 Start or recreate the stack through the atomic bootstrap task:
 
 ```bash
-task hermes:up
+task hermes:docker:up
 task hermes:xapi:logs
 ```
 
-`task hermes:up` first runs the transactional Hermes bootstrap, which
+`task hermes:docker:up` first runs the transactional Hermes bootstrap, which
 reconciles Hindsight memory configuration for every managed profile, then
 builds and starts `xapi-mcp` and the Hermes stack. The explicit bootstrap
 task remains available for the same operation:
 
 ```bash
-task hermes:bootstrap
+task hermes:docker:bootstrap
 ```
 
 This path uses the same 1Password-backed credential and refresh-token wrapper
-as `task hermes:up` on Unix and Windows, so no `X_API_CLIENT_*` values need to
+as `task hermes:docker:up` on Unix and Windows, so no `X_API_CLIENT_*` values need to
 be exported before bootstrap.
 
 ## Verification

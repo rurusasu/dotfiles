@@ -1,9 +1,6 @@
 { inputs }:
 let
-  pkgs = import inputs.nixpkgs {
-    system = "aarch64-darwin";
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs "aarch64-darwin";
   fixturePackage = pkgs.hello;
   sets = import ../packages/sets.nix {
     inherit pkgs;
@@ -20,9 +17,8 @@ let
       };
     };
   };
-  windowsErrorsFor = name: builtins.filter
-    (pkgs.lib.hasPrefix "${name}: windows:")
-    sets.providerErrors;
+  windowsErrorsFor =
+    name: builtins.filter (pkgs.lib.hasPrefix "${name}: windows:") sets.providerErrors;
 in
 {
   testPackageCatalogRequiresProviderOrReviewedUnsupportedReason = {

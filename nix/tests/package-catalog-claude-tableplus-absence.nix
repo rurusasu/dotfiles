@@ -1,19 +1,16 @@
 { inputs }:
 let
-  pkgs = import inputs.nixpkgs {
-    system = "aarch64-darwin";
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs "aarch64-darwin";
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
     codexPackage = pkgs.hello;
   };
-  isClaudeOrTablePlus = value:
-    builtins.match ".*(claude|tableplus).*" (pkgs.lib.toLower value) != null;
+  isClaudeOrTablePlus =
+    value: builtins.match ".*(claude|tableplus).*" (pkgs.lib.toLower value) != null;
   matchingNames = attrs: builtins.filter isClaudeOrTablePlus (builtins.attrNames attrs);
-  matchingMappingEntries = attrs:
-    builtins.filter isClaudeOrTablePlus (builtins.attrNames attrs ++ builtins.attrValues attrs);
+  matchingMappingEntries =
+    attrs: builtins.filter isClaudeOrTablePlus (builtins.attrNames attrs ++ builtins.attrValues attrs);
   matchingListEntries = values: builtins.filter isClaudeOrTablePlus values;
 in
 {

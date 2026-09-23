@@ -35,12 +35,13 @@ EOF
 		"$workflow" "$nixos_test"
 }
 
-@test "production Linux installers keep the canonical Hermes Compose path" {
+@test "production Linux installers leave Docker Hermes bootstrap out of native setup" {
 	for installer in install-linux.sh install-nixos.sh; do
 		file="$REPO_ROOT/scripts/sh/$installer"
-		grep -Fq 'COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"' "$file"
-		grep -Fq 'dotfiles_run_task_in_group docker hermes:bootstrap' "$file"
-		! grep -q 'DOTFILES_COMPOSE_FILE' "$file"
+		! grep -Fq 'hermes:bootstrap' "$file"
+		! grep -Fq 'docker/hermes-service/compose.yml' "$file"
+		grep -Fq '"$VERIFY_ENVIRONMENT"' "$file"
+		! grep -q -- '--runtime' "$file"
 	done
 	grep -Fq 'docker/hermes-service/compose.yml' "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
 }

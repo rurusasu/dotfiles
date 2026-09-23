@@ -12,7 +12,7 @@ desktop_data_dir="${HOME}/Library/Application Support/Hermes"
 registry_file="$desktop_data_dir/connections.json"
 
 if ! curl --fail --silent --show-error --max-time 5 "$remote_url/api/health" >/dev/null; then
-  hermes_desktop_docker_die "Docker gateway is unavailable at $remote_url; run 'task hermes:up' first"
+  hermes_desktop_docker_die "Docker gateway is unavailable at $remote_url; run 'task hermes:docker:up' first"
 fi
 
 [[ -f $registry_file ]] ||

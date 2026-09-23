@@ -1,9 +1,6 @@
 { inputs }:
 let
-  pkgs = import inputs.nixpkgs {
-    system = "aarch64-darwin";
-    config.allowUnfree = true;
-  };
+  pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs "aarch64-darwin";
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
@@ -31,6 +28,11 @@ in
         identity = "wezterm";
         nixAttr = "wezterm";
       };
+      windows = {
+        provider = "winget";
+        source = "winget";
+        identity = "wez.wezterm.nightly";
+      };
       installFeature = null;
       legacyDarwin = {
         provider = "homebrew-cask";
@@ -57,6 +59,11 @@ in
         source = "nixpkgs";
         identity = "ollama";
         nixAttr = "ollama";
+      };
+      windows = {
+        provider = "winget";
+        source = "winget";
+        identity = "Ollama.Ollama";
       };
       installFeature = "WithOllama";
       legacyDarwin = {
