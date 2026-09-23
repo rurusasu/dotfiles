@@ -98,11 +98,12 @@ if [[ -n ${REAL_NIX:-} ]]; then
 		flake_ref="$(cd "$flake_ref" && pwd -P)"
 	fi
 	flake_ref="path:$flake_ref"
+	export DOTFILES_TEST_FLAKE_URI="$flake_ref"
 
 	if ((${#nix_eval_args[@]} == 1)); then
-		nix_eval_expr=$(cat <<NIX_EXPR
+		nix_eval_expr=$(cat <<'NIX_EXPR'
       let
-        flake = builtins.getFlake flakeUri;
+        flake = builtins.getFlake (builtins.getEnv "DOTFILES_TEST_FLAKE_URI");
         config = flake.nixosConfigurations.nixos.config;
         homeManager = builtins.getAttr "home-manager" config;
       in
@@ -117,7 +118,7 @@ if [[ -n ${REAL_NIX:-} ]]; then
 
 NIX_EXPR
 		)
-		"$REAL_NIX" eval "${nix_eval_args[@]}" --argstr flakeUri "$flake_ref" --raw --no-write-lock-file --expr "$nix_eval_expr" >"$NIX_EVAL_CAPTURE"
+		"$REAL_NIX" eval "${nix_eval_args[@]}" --raw --no-write-lock-file --expr "$nix_eval_expr" >"$NIX_EVAL_CAPTURE"
   else
     printf "nix eval skipped: nixos-rebuild argv has no --impure\n" >>"$COMMAND_LOG"
   fi
