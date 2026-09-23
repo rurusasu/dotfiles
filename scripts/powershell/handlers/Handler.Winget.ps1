@@ -240,18 +240,22 @@ class WingetHandler : SetupHandlerBase {
             # 通常実行ではインストール済みも含めて winget install を流し、
             # winget 側の install-or-upgrade 動作で latest を選ばせる。
             $verifyCommandOnly = $ctx.GetOption("WingetVerifyCommandOnly", $false)
+            if ($verifyCommandOnly) {
+                $inventoryIds = @($packages | ForEach-Object { [string]$_.Id } | Sort-Object -Unique)
+                $this.Log("CI_VERIFICATION_INVENTORY: $($inventoryIds -join '|')", "Gray")
+            }
             $toInstall = @()
             $skipped = 0
             $verified = 0
             $verifyFailed = 0
             $deferred = 0
             foreach ($pkg in $packages) {
-                $isInstalled = $pkg.Id -in $installedIds
+                $directInstallerCurrent = $pkg.DirectInstaller -and $this.TestDirectInstallerCurrent($pkg)
+                $isInstalled = ($pkg.Id -in $installedIds) -or $directInstallerCurrent
                 if (-not $isInstalled) {
                     $isInstalled = $this.IsPackageInstalled($pkg.Id, $pkg.SourceName)
                 }
 
-                $directInstallerCurrent = $pkg.DirectInstaller -and $this.TestDirectInstallerCurrent($pkg)
                 $verificationPassed = $false
                 if ($pkg.VerifyCommand -and $this.ShouldDeferWslVerificationToAdminInstall($pkg, $ctx)) {
                     $this.LogWarning("Microsoft.WSL の検証は Phase 2b の管理者 WSL インストールに委譲します")
@@ -286,12 +290,6 @@ class WingetHandler : SetupHandlerBase {
                     }
                 }
 
-                if ($directInstallerCurrent -and $verificationPassed) {
-                    $verified++
-                    $this.Log("スキップ (直接インストーラーで検証済み): $($pkg.Id)", "Gray")
-                    continue
-                }
-
                 if ($pkg.SkipInstall) {
                     if ($verificationPassed) {
                         $this.Log("スキップ (検証済み/手動対象): $($pkg.Id)", "Gray")
@@ -305,7 +303,7 @@ class WingetHandler : SetupHandlerBase {
 
                 if ($isInstalled) {
                     if ($pkg.VerifyCommand -and $verificationPassed) {
-                        $toInstall += $this.NewInstallCandidate($pkg, $false)
+                        $toInstall += $this.NewInstallCandidate($pkg, $false, $isInstalled, $verificationPassed)
                     }
                     elseif ($pkg.VerifyCommand) {
                         if (-not [string]::IsNullOrWhiteSpace($this.GetRecoveryStrategy($pkg.VerifyCommand))) {
@@ -321,7 +319,7 @@ class WingetHandler : SetupHandlerBase {
 
                         if ($this.ShouldReinstallOnVerifyFailure($pkg.VerifyCommand)) {
                             $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $($pkg.Id)")
-                            $toInstall += $this.NewInstallCandidate($pkg, $true)
+                            $toInstall += $this.NewInstallCandidate($pkg, $true, $isInstalled, $verificationPassed)
                         }
                         else {
                             $this.LogWarning("✗ $($pkg.Id) はインストール済みですが検証に失敗しました")
@@ -329,11 +327,11 @@ class WingetHandler : SetupHandlerBase {
                         }
                     }
                     else {
-                        $toInstall += $this.NewInstallCandidate($pkg, $false)
+                        $toInstall += $this.NewInstallCandidate($pkg, $false, $isInstalled, $verificationPassed)
                     }
                 }
                 else {
-                    $toInstall += $this.NewInstallCandidate($pkg, $false)
+                    $toInstall += $this.NewInstallCandidate($pkg, $false, $isInstalled, $verificationPassed)
                 }
             }
 
@@ -362,7 +360,7 @@ class WingetHandler : SetupHandlerBase {
                 $installArgs = $this.NewWingetInstallArguments($pkg, [bool]$pkg.Force)
 
                 $installOutput = $this.InvokePackageInstall($pkg, $installArgs)
-                $alreadyInstalledInstallFailure = (-not $pkg.DirectInstaller) -and $this.IsAlreadyInstalledInstallFailure($installOutput)
+                $alreadyInstalledInstallFailure = $this.IsAlreadyInstalledInstallFailure($installOutput)
                 foreach ($line in $installOutput) {
                     if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
                         $this.Log("  $line", "Gray")
@@ -412,7 +410,7 @@ class WingetHandler : SetupHandlerBase {
                     }
 
                     $failed++
-                    $this.LogWarning("✗ $($pkg.Id) のインストールに失敗しました")
+                    $this.LogWarning("✗ $($pkg.Id) のインストールに失敗しました (exit code: $($this.LastInstallExitCode))")
                     continue
                 }
 
@@ -485,7 +483,7 @@ class WingetHandler : SetupHandlerBase {
         $this.Log("スキップ (手動対象): $($pkg.Id)$reason", "Yellow")
     }
 
-    hidden [object] NewInstallCandidate([object]$pkg, [bool]$force) {
+    hidden [object] NewInstallCandidate([object]$pkg, [bool]$force, [bool]$wasInstalled, [bool]$wasVerified) {
         return [PSCustomObject]@{
             Id                    = $pkg.Id
             Version               = $pkg.Version
@@ -498,6 +496,8 @@ class WingetHandler : SetupHandlerBase {
             PortableLink           = $pkg.PortableLink
             PathEntries            = $pkg.PathEntries
             Force                 = $force
+            WasInstalled          = $wasInstalled
+            WasVerified           = $wasVerified
         }
     }
 
@@ -561,7 +561,16 @@ class WingetHandler : SetupHandlerBase {
                 return $wingetOutput
             }
 
-            $this.Log("winget が $($pkg.Id) を完了できなかったため、公式 archive fallback を実行します", "Gray")
+            if ($pkg.WasVerified -and ($pkg.WasInstalled -or $this.IsAlreadyInstalledInstallFailure($wingetOutput))) {
+                return $wingetOutput
+            }
+
+            $this.LogWarning("WinGet $($pkg.Id) failed with exit code $wingetExitCode; attempting the configured direct fallback")
+            foreach ($line in $wingetOutput) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                    $this.Log("  WinGet: $line", "Gray")
+                }
+            }
             $directOutput = @($this.InvokeDirectInstaller($pkg))
             $directExitCode = $LASTEXITCODE
             $this.LastInstallExitCode = $directExitCode
@@ -582,14 +591,89 @@ class WingetHandler : SetupHandlerBase {
 
     hidden [object[]] InvokeWingetInstall([object]$pkg, [object[]]$installArgs) {
         $installTimeoutSeconds = $this.GetInstallTimeoutSeconds($pkg)
+        $startedAt = [DateTime]::UtcNow
         if ($installTimeoutSeconds -gt 0) {
             $output = @(Invoke-Winget -Arguments $installArgs -TimeoutSeconds $installTimeoutSeconds)
             $this.LastInstallExitCode = [int]$LASTEXITCODE
+            if ($this.LastInstallExitCode -eq 124) {
+                $diagnosis = $this.GetWingetTimeoutDiagnosis([string]$pkg.Id, $startedAt)
+                $this.Log("TIMEOUT_DIAGNOSTIC: $diagnosis", "Yellow")
+            }
             return $output
         }
         $output = @(Invoke-Winget -Arguments $installArgs)
         $this.LastInstallExitCode = [int]$LASTEXITCODE
         return $output
+    }
+
+    hidden [string] GetWingetTimeoutDiagnosis([string]$packageId, [DateTime]$startedAt) {
+        $logDirectory = $env:DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR
+        if ([string]::IsNullOrWhiteSpace($logDirectory) -and
+            -not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+            $logDirectory = Join-Path $env:LOCALAPPDATA "Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir"
+        }
+
+        if ([string]::IsNullOrWhiteSpace($logDirectory) -or -not [System.IO.Directory]::Exists($logDirectory)) {
+            return "package=$packageId class=unknown confidence=low evidence=no diagnostic log directory"
+        }
+
+        $matchingLog = $null
+        $matchingText = $null
+        foreach ($logPath in [System.IO.Directory]::GetFiles($logDirectory, "WinGet-*.log")) {
+            $info = [System.IO.FileInfo]::new($logPath)
+            if ($info.LastWriteTimeUtc -lt $startedAt.AddSeconds(-3)) { continue }
+            $text = [System.IO.File]::ReadAllText($logPath)
+            if ($text.IndexOf($packageId, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+            if ($null -eq $matchingLog -or $info.LastWriteTimeUtc -gt $matchingLog.LastWriteTimeUtc) {
+                $matchingLog = $info
+                $matchingText = $text
+            }
+        }
+
+        if ($null -eq $matchingLog) {
+            return "package=$packageId class=unknown confidence=low evidence=no matching recent WinGet log"
+        }
+
+        $lines = @($matchingText -split "\r?\n")
+        $cacheLock = @($lines | Where-Object {
+                $_ -match 'Failed to remove installer file|being used by another process|process cannot access the file'
+            })
+        $downloadStart = @($lines | Where-Object { $_ -match 'DeliveryOptimization downloading from url|Downloading to path' })
+        $networkError = @($lines | Where-Object {
+                $_ -match 'WinHttpSendRequest|0x80072ee2|0x80072efe|download failed|Failed to connect|connection.*timed out'
+            })
+        $sourceError = @($lines | Where-Object { $_ -match '0x8a15000[0-9a-f]|Failed to open source|source.*failed' })
+
+        $classification = "unknown"
+        $confidence = "low"
+        $evidenceLines = @()
+        if ($cacheLock.Count -gt 0) {
+            $classification = "installer-cache-contention"
+            $confidence = "medium"
+            $evidenceLines = @($cacheLock | Select-Object -First 1) + @($downloadStart | Select-Object -First 1)
+        }
+        elseif ($networkError.Count -gt 0) {
+            $classification = "network-download-failure"
+            $confidence = "high"
+            $evidenceLines = @($networkError | Select-Object -First 1)
+        }
+        elseif ($sourceError.Count -gt 0) {
+            $classification = "source-resolution-failure"
+            $confidence = "high"
+            $evidenceLines = @($sourceError | Select-Object -First 1)
+        }
+        elseif ($downloadStart.Count -gt 0 -and $matchingText -notmatch 'Installer download completed|Download completed|download completed successfully') {
+            $classification = "delivery-optimization-download-incomplete"
+            $confidence = "medium"
+            $evidenceLines = @($downloadStart | Select-Object -First 1)
+        }
+
+        $evidence = ($evidenceLines -join "; ") -replace 'https?://[^\s"'']+', '<url>'
+        $evidence = $evidence -replace '(?i)[A-Z]:\\Users\\[^\\\s"'']+\\AppData\\Local\\Temp\\[^\s"'']+', '%LOCALAPPDATA%\\Temp\\<installer>'
+        $evidence = $evidence.Trim()
+        if ($evidence.Length -gt 240) { $evidence = $evidence.Substring(0, 240) }
+        if ([string]::IsNullOrWhiteSpace($evidence)) { $evidence = "no classified evidence in $($matchingLog.Name)" }
+        return "package=$packageId class=$classification confidence=$confidence evidence=$evidence"
     }
 
     hidden [object[]] InvokeDirectInstaller([object]$pkg) {
@@ -963,8 +1047,7 @@ class WingetHandler : SetupHandlerBase {
             return $ids
         }
         catch {
-            $this.LogWarning("インストール済みパッケージ一覧の取得に失敗しました: $($_.Exception.Message)")
-            return @()
+            throw "インストール済みパッケージ一覧の取得に失敗しました: $($_.Exception.Message)"
         }
     }
 
@@ -984,8 +1067,7 @@ class WingetHandler : SetupHandlerBase {
             return $LASTEXITCODE -eq 0
         }
         catch {
-            $this.LogWarning("パッケージ確認中にエラーが発生しました ($packageId): $($_.Exception.Message)")
-            return $false
+            throw "パッケージ確認中にエラーが発生しました ($packageId): $($_.Exception.Message)"
         }
     }
 
@@ -1008,6 +1090,7 @@ class WingetHandler : SetupHandlerBase {
             $command = $verifyCmd.command
             $arguments = if ($verifyCmd.PSObject.Properties.Name -contains "args") { @($verifyCmd.args) } else { @() }
             $type = if ($verifyCmd.PSObject.Properties.Name -contains "type") { [string]$verifyCmd.type } else { "command" }
+            $timeoutSeconds = $this.GetVerifyTimeoutSeconds($verifyCmd)
 
             if ($type -eq "commandExists") {
                 return $null -ne (Get-ExternalCommand -Name $command)
@@ -1020,14 +1103,29 @@ class WingetHandler : SetupHandlerBase {
                 }
 
                 $appxPackage = Get-AppxPackage -Name $command -ErrorAction SilentlyContinue
-                return $null -ne $appxPackage
+                if ($null -eq $appxPackage -or [string]::IsNullOrWhiteSpace([string]$appxPackage.InstallLocation)) {
+                    return $false
+                }
+                $appxVersion = $null
+                return [version]::TryParse([string]$appxPackage.Version, [ref]$appxVersion)
             }
 
             if ($type -eq "appxLaunchTarget") {
                 return $this.TestAppxLaunchTarget($command, $arguments)
             }
 
-            $timeoutSeconds = $this.GetVerifyTimeoutSeconds($verifyCmd)
+            if ($type -eq "portableLinkCommand") {
+                return $this.TestPortableLinkCommand($command, $arguments, $timeoutSeconds)
+            }
+
+            if ($type -eq "windowsInstalledProduct") {
+                return $this.TestWindowsInstalledProduct($verifyCmd)
+            }
+
+            if ($type -eq "visualStudioInstanceVersion") {
+                return $this.TestVisualStudioInstanceVersion($verifyCmd)
+            }
+
             $output = @(Invoke-VerifyCommand -Command $command -Arguments $arguments -TimeoutSeconds $timeoutSeconds)
             if ($LASTEXITCODE -eq 0) {
                 return $true
@@ -1052,6 +1150,212 @@ class WingetHandler : SetupHandlerBase {
         }
     }
 
+    hidden [bool] TestPortableLinkCommand([string]$linkName, [object[]]$arguments, [int]$timeoutSeconds) {
+        if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+            $this.Log("portableLinkCommand 検証に LOCALAPPDATA が必要です", "Yellow")
+            return $false
+        }
+
+        $linkPath = Join-Path (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links") $linkName
+        if (-not (Test-Path -LiteralPath $linkPath -PathType Leaf)) {
+            $this.Log("WinGet portable link が見つかりません: $linkPath", "Yellow")
+            return $false
+        }
+
+        $output = @(Invoke-VerifyCommand -Command $linkPath -Arguments $arguments -TimeoutSeconds $timeoutSeconds)
+        if ($LASTEXITCODE -eq 0) {
+            return $true
+        }
+
+        $displayCommand = "$linkPath $($arguments -join ' ')".Trim()
+        $this.Log("検証コマンド失敗 (exit code: $LASTEXITCODE): $displayCommand", "Yellow")
+        foreach ($line in $output) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                $this.Log("  $line", "Gray")
+            }
+        }
+        return $false
+    }
+
+    hidden [bool] TestWindowsInstalledProduct([object]$verifyCmd) {
+        $appx = if ($verifyCmd.PSObject.Properties.Name -contains "appxPackage") { $verifyCmd.appxPackage } else { $null }
+        if ($appx) {
+            if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) {
+                $this.Log("検証コマンド実行エラー: Get-AppxPackage が利用できません", "Yellow")
+                return $false
+            }
+
+            $appxPackage = Get-AppxPackage -Name ([string]$appx.name) -ErrorAction SilentlyContinue |
+                Where-Object { $_.PackageFamilyName -eq [string]$appx.packageFamilyName } |
+                Select-Object -First 1
+            $appxVersion = $null
+            if ($null -ne $appxPackage -and
+                [version]::TryParse([string]$appxPackage.Version, [ref]$appxVersion) -and
+                -not [string]::IsNullOrWhiteSpace([string]$appxPackage.InstallLocation)) {
+                $appxExecutable = Join-Path ([string]$appxPackage.InstallLocation) ([string]$appx.executable)
+                if ($this.TestInstalledExecutableVersion(@($appxExecutable))) {
+                    return $true
+                }
+                $this.Log("AppX package の実行ファイルまたは製品バージョンが不正です: $appxExecutable", "Yellow")
+            }
+            else {
+                $this.Log("AppX package family またはインストールバージョンを確認できません: $($appx.name)", "Yellow")
+            }
+        }
+
+        $uninstall = if ($verifyCmd.PSObject.Properties.Name -contains "uninstallEntry") { $verifyCmd.uninstallEntry } else { $null }
+        if (-not $uninstall) {
+            return $false
+        }
+
+        $productCodes = @()
+        if ($uninstall.PSObject.Properties.Name -contains "productCodes") {
+            $productCodes = @($uninstall.productCodes | ForEach-Object { ([string]$_).Trim().Trim("{}") } | Where-Object { $_ })
+        }
+        $registryRoots = @(
+            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKCU:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        )
+
+        $matchingRegistrationFound = $false
+        foreach ($registryRoot in $registryRoots) {
+            foreach ($registryKey in (Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue)) {
+                $entry = Get-ItemProperty -LiteralPath $registryKey.PSPath -ErrorAction SilentlyContinue
+                if ($null -eq $entry) { continue }
+
+                $keyName = if ($registryKey.PSObject.Properties.Name -contains "PSChildName") {
+                    [string]$registryKey.PSChildName
+                }
+                else {
+                    [string]$registryKey.Name.Split("\")[-1]
+                }
+                $uninstallString = if ($entry.PSObject.Properties.Name -contains "UninstallString") { [string]$entry.UninstallString } else { "" }
+                $productCodeMatch = $productCodes.Count -gt 0 -and (
+                    $productCodes -contains $keyName.Trim().Trim("{}") -or
+                    (($productCodes | Where-Object { $uninstallString -match [regex]::Escape($_) }).Count -gt 0)
+                )
+                $entryDisplayName = if ($entry.PSObject.Properties.Name -contains "DisplayName") { [string]$entry.DisplayName } else { "" }
+                $entryPublisher = if ($entry.PSObject.Properties.Name -contains "Publisher") { [string]$entry.Publisher } else { "" }
+                $expectedDisplayName = if ($uninstall.PSObject.Properties.Name -contains "displayName") { [string]$uninstall.displayName } else { "" }
+                $expectedDisplayNamePattern = if ($uninstall.PSObject.Properties.Name -contains "displayNamePattern") { [string]$uninstall.displayNamePattern } else { "" }
+                $expectedPublisher = if ($uninstall.PSObject.Properties.Name -contains "publisher") { [string]$uninstall.publisher } else { "" }
+                $displayNameMatch = $true
+                if (-not [string]::IsNullOrWhiteSpace($expectedDisplayName)) {
+                    $displayNameMatch = $entryDisplayName -eq $expectedDisplayName
+                }
+                if (-not [string]::IsNullOrWhiteSpace($expectedDisplayNamePattern)) {
+                    $displayNameMatch = $entryDisplayName -match $expectedDisplayNamePattern
+                }
+                $publisherMatch = [string]::IsNullOrWhiteSpace($expectedPublisher) -or
+                    $entryPublisher -eq $expectedPublisher
+
+                $identityMatch = if ($productCodes.Count -gt 0) { $productCodeMatch } else { $displayNameMatch }
+                if (-not $identityMatch -or -not $displayNameMatch -or -not $publisherMatch) { continue }
+                $matchingRegistrationFound = $true
+
+                $executablePaths = if ($uninstall.PSObject.Properties.Name -contains "executablePaths") {
+                    @($uninstall.executablePaths)
+                }
+                else {
+                    @()
+                }
+                $displayIconValue = if ($entry.PSObject.Properties.Name -contains "DisplayIcon") { [string]$entry.DisplayIcon } else { "" }
+                if (-not [string]::IsNullOrWhiteSpace($displayIconValue)) {
+                    $displayIcon = [regex]::Match($displayIconValue, '^\s*"?([^",]+\.exe)').Groups[1].Value
+                    if ($displayIcon) { $executablePaths += $displayIcon }
+                }
+                if ($this.TestInstalledExecutableVersion($executablePaths)) {
+                    return $true
+                }
+                $this.Log("一致するアンインストール登録に実行可能な製品ファイルがありません: $($verifyCmd.command) ($($executablePaths -join ', '))", "Yellow")
+            }
+        }
+
+        if (-not $matchingRegistrationFound) {
+            $this.Log("製品ID/表示名/発行元に一致するアンインストール登録がありません: $($verifyCmd.command)", "Yellow")
+        }
+
+        return $false
+    }
+
+    hidden [bool] TestInstalledExecutableVersion([string[]]$executablePaths) {
+        foreach ($rawPath in $executablePaths) {
+            if ([string]::IsNullOrWhiteSpace($rawPath)) { continue }
+            $path = [Environment]::ExpandEnvironmentVariables($rawPath)
+            $files = @(Get-ChildItem -Path $path -File -ErrorAction SilentlyContinue)
+            foreach ($file in $files) {
+                $fileVersion = if (-not [string]::IsNullOrWhiteSpace([string]$file.VersionInfo.ProductVersion)) {
+                    [string]$file.VersionInfo.ProductVersion
+                }
+                else {
+                    [string]$file.VersionInfo.FileVersion
+                }
+                if ($fileVersion -match '^\s*[vV]?\d+(?:\.\d+){1,3}(?:\s|[-+]|$)') {
+                    return $true
+                }
+            }
+        }
+        return $false
+    }
+
+    hidden [bool] TestVisualStudioInstanceVersion([object]$verifyCmd) {
+        $vswhere = Get-Command -Name "vswhere.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $vswherePath = if ($vswhere) { [string]$vswhere.Source } else { $null }
+        if ([string]::IsNullOrWhiteSpace($vswherePath)) {
+            $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+            if ($programFilesX86) {
+                $candidate = Join-Path $programFilesX86 "Microsoft Visual Studio\Installer\vswhere.exe"
+                if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                    $vswherePath = $candidate
+                }
+            }
+        }
+        if ([string]::IsNullOrWhiteSpace($vswherePath)) {
+            $this.Log("Visual Studio Installer の vswhere.exe が見つかりません", "Yellow")
+            return $false
+        }
+
+        $arguments = @(
+            "-all",
+            "-products", [string]$verifyCmd.productId,
+            "-requires", [string]$verifyCmd.requiredComponent,
+            "-format", "json",
+            "-utf8"
+        )
+        $output = @(Invoke-VerifyCommand -Command $vswherePath -Arguments $arguments -TimeoutSeconds 30)
+        if ($LASTEXITCODE -ne 0) {
+            $this.Log("vswhere が Visual Studio インスタンスを確認できませんでした (exit code: $LASTEXITCODE)", "Yellow")
+            return $false
+        }
+
+        try {
+            $instances = @((($output -join [Environment]::NewLine) | ConvertFrom-Json))
+        }
+        catch {
+            $this.Log("vswhere の JSON 出力を解析できません: $($_.Exception.Message)", "Yellow")
+            return $false
+        }
+
+        foreach ($instance in $instances) {
+            $version = $null
+            if (-not [version]::TryParse([string]$instance.installationVersion, [ref]$version)) { continue }
+            $minimumVersion = $null
+            if (-not [version]::TryParse([string]$verifyCmd.minimumVersion, [ref]$minimumVersion) -or
+                $version -lt $minimumVersion) { continue }
+            if ([string]::IsNullOrWhiteSpace([string]$instance.installationPath)) { continue }
+
+            $compilerPattern = Join-Path ([string]$instance.installationPath) ([string]$verifyCmd.compilerRelativePath)
+            if (Get-ChildItem -Path $compilerPattern -File -ErrorAction SilentlyContinue | Select-Object -First 1) {
+                return $true
+            }
+        }
+
+        $this.Log("VCTools を含む Build Tools の cl.exe が見つかりません: $($verifyCmd.compilerRelativePath)", "Yellow")
+        return $false
+    }
+
     hidden [bool] TestAppxLaunchTarget([string]$packageName, [object[]]$arguments) {
         if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) {
             $this.Log("検証コマンド実行エラー: Get-AppxPackage が利用できません", "Yellow")
@@ -1066,6 +1370,12 @@ class WingetHandler : SetupHandlerBase {
         $appUserModelId = [string]$arguments[0]
         $appxPackage = Get-AppxPackage -Name $packageName -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($null -eq $appxPackage) {
+            return $false
+        }
+
+        $appxVersion = $null
+        if (-not [version]::TryParse([string]$appxPackage.Version, [ref]$appxVersion)) {
+            $this.LogWarning("AppX package version が不正です: $packageName")
             return $false
         }
 
@@ -1103,7 +1413,22 @@ class WingetHandler : SetupHandlerBase {
             [xml]$manifest = Get-Content -LiteralPath $manifestPath -Raw
             $match = Select-Xml -Xml $manifest -XPath "//*[local-name()='Application' and @Id='$applicationId']" |
                 Select-Object -First 1
-            return $null -ne $match
+            if ($null -eq $match) {
+                return $false
+            }
+
+            $executableRelativePath = [string]$match.Node.GetAttribute("Executable")
+            if ([string]::IsNullOrWhiteSpace($executableRelativePath)) {
+                $this.LogWarning("AppX manifest に executable がありません: $applicationId")
+                return $false
+            }
+
+            $executablePath = Join-Path $installLocation $executableRelativePath
+            if (Test-Path -LiteralPath $executablePath -PathType Leaf) {
+                return $true
+            }
+            $this.LogWarning("AppX manifest の executable が存在しません: $executablePath")
+            return $false
         }
         catch {
             $this.LogWarning("AppX manifest の読み込みに失敗しました: $($_.Exception.Message)")

@@ -656,6 +656,17 @@ function Invoke-Npm {
         [Parameter(Mandatory)]
         [string[]]$Arguments
     )
+
+    $isGlobalInstall = $Arguments.Count -gt 1 -and
+        $Arguments[0] -eq "install" -and
+        ($Arguments -contains "-g" -or $Arguments -contains "--global")
+    if ($isGlobalInstall) {
+        $timeoutSeconds = Get-PackageInstallTimeoutSecond
+        if ($timeoutSeconds -gt 0) {
+            return Invoke-ExternalCommandWithTimeout -Command "npm" -Arguments $Arguments -TimeoutSeconds $timeoutSeconds
+        }
+    }
+
     Invoke-NativeCommand -Command "npm" -Arguments $Arguments
 }
 
@@ -682,15 +693,25 @@ function Invoke-Pnpm {
     # ERROR_BAD_EXE_FORMAT (os error 193) になるため、.cmd を優先する。
     $pnpmCommand = Get-Command -Name "pnpm.cmd" -ErrorAction SilentlyContinue |
         Select-Object -First 1
+    $pnpmPath = "pnpm"
     if ($pnpmCommand) {
-        $pnpmPath = if ($pnpmCommand.Source) { $pnpmCommand.Source } else { $pnpmCommand.Path }
-        if ($pnpmPath) {
-            Invoke-NativeCommand -Command $pnpmPath -Arguments $Arguments
-            return
+        $resolvedPnpmPath = if ($pnpmCommand.Source) { $pnpmCommand.Source } else { $pnpmCommand.Path }
+        if ($resolvedPnpmPath) {
+            $pnpmPath = $resolvedPnpmPath
         }
     }
 
-    Invoke-NativeCommand -Command "pnpm" -Arguments $Arguments
+    $isGlobalAdd = $Arguments.Count -gt 1 -and
+        $Arguments[0] -eq "add" -and
+        ($Arguments -contains "-g" -or $Arguments -contains "--global")
+    if ($isGlobalAdd) {
+        $timeoutSeconds = Get-PackageInstallTimeoutSecond
+        if ($timeoutSeconds -gt 0) {
+            return Invoke-ExternalCommandWithTimeout -Command $pnpmPath -Arguments $Arguments -TimeoutSeconds $timeoutSeconds
+        }
+    }
+
+    Invoke-NativeCommand -Command $pnpmPath -Arguments $Arguments
 }
 
 <#
@@ -1279,9 +1300,20 @@ function Invoke-ExternalCommandWithTimeout {
             catch {
                 Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             }
+            [void]$process.WaitForExit(5000)
             $global:LASTEXITCODE = 124
             $timeoutLabel = if ($Command -eq "winget") { "winget コマンド" } else { "検証コマンド" }
-            return "$timeoutLabel がタイムアウトしました (${TimeoutSeconds}s): $Command $($Arguments -join ' ')"
+            $output = [System.Collections.Generic.List[string]]::new()
+            foreach ($streamTask in @($stdoutTask, $stderrTask)) {
+                if (-not $streamTask.Wait(2000)) { continue }
+                $streamText = $streamTask.GetAwaiter().GetResult()
+                if ([string]::IsNullOrEmpty($streamText)) { continue }
+                foreach ($line in ($streamText -split "\r?\n")) {
+                    if ($line.Length -gt 0) { $output.Add($line) }
+                }
+            }
+            $output.Add("$timeoutLabel がタイムアウトしました (${TimeoutSeconds}s): $Command $($Arguments -join ' ')")
+            return $output.ToArray()
         }
         $process.WaitForExit()
 

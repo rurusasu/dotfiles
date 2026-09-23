@@ -7,7 +7,8 @@
     `op` を解決する。op.exe は winget パッケージ内の実体名とコマンド名が
     一致しているため、実体ディレクトリを USER PATH に追加する。
     既に起動している VS Code が古い PATH を保持している場合に備えて、
-    既存 PATH 上の shim は現行 exe へのシンボリックリンクとして維持する。
+    USER PATH またはプロセス PATH ですでに使われている WinGet Links shim のみ維持する。
+    WindowsApps は OS 管理領域のため変更しない。
 
 .NOTES
     Order = 9 (Winget/Codex/Bun の後、Chezmoi の前)
@@ -39,10 +40,6 @@ class OnePasswordCliHandler : SetupHandlerBase {
 
         $compatibilityShims = @(
             @{
-                Directory = $this.GetWindowsAppsPath()
-                LinkPath  = Join-Path $this.GetWindowsAppsPath() "op.exe"
-            },
-            @{
                 Directory = $this.GetLinksPath()
                 LinkPath  = Join-Path $this.GetLinksPath() "op.exe"
             }
@@ -51,7 +48,7 @@ class OnePasswordCliHandler : SetupHandlerBase {
         foreach ($shim in $compatibilityShims) {
             if (
                 $this.NeedsCompatibilityShim($shim.Directory, $shim.LinkPath) -and
-                -not $this.IsPortableLinkCurrent($shim.LinkPath, $opExe)
+                -not $this.IsCompatibilityShimCurrent($shim.LinkPath, $opExe)
             ) {
                 return $true
             }
@@ -71,7 +68,6 @@ class OnePasswordCliHandler : SetupHandlerBase {
 
             $packageDir = Split-Path -Parent $opExe
             $this.EnsureUserPathEntry($packageDir, "1Password CLI package directory")
-            $this.EnsureCompatibilityShim($this.GetWindowsAppsPath(), "op.exe", $opExe, "WindowsApps")
             $this.EnsureCompatibilityShim($this.GetLinksPath(), "op.exe", $opExe, "WinGet Links")
 
             return $this.CreateSuccessResult("1Password CLI PATH を設定しました")
@@ -92,13 +88,71 @@ class OnePasswordCliHandler : SetupHandlerBase {
             New-Item -ItemType Directory -Path $directory -Force | Out-Null
         }
 
-        if ($this.IsPortableLinkCurrent($linkPath, $targetExe)) {
+        if ($this.IsCompatibilityShimCurrent($linkPath, $targetExe)) {
             $this.Log("$label の op.exe shim は最新です", "Gray")
             return
         }
 
-        $this.CreatePortableLink($linkPath, $targetExe)
-        $this.Log("$label の op.exe shim を現行 exe への symlink に更新しました", "Green")
+        try {
+            $this.CreatePortableLink($linkPath, $targetExe)
+            $this.Log("$label の op.exe shim を現行 exe への symlink に更新しました", "Green")
+        }
+        catch {
+            $this.LogWarning("symlink を作成できないため $label の op.exe shim をコピーで更新します")
+            $this.CreateCompatibilityCopy($linkPath, $targetExe)
+            $this.Log("$label の op.exe shim を現行 exe のコピーに更新しました", "Green")
+        }
+    }
+
+    hidden [bool] IsCompatibilityShimCurrent([string]$linkPath, [string]$targetExe) {
+        return (
+            $this.IsPortableLinkCurrent($linkPath, $targetExe) -or
+            $this.IsPortableCopyCurrent($linkPath, $targetExe)
+        )
+    }
+
+    hidden [void] CreateCompatibilityCopy([string]$linkPath, [string]$targetExe) {
+        $parentDir = Split-Path -Parent $linkPath
+        $linkName = Split-Path -Leaf $linkPath
+        $suffix = [System.Guid]::NewGuid().ToString("N")
+        $tempCopyPath = Join-Path $parentDir ".$linkName.$suffix.tmp"
+        $backupPath = Join-Path $parentDir ".$linkName.$suffix.backup"
+        $oldMoved = $false
+
+        try {
+            Copy-Item -LiteralPath $targetExe -Destination $tempCopyPath -Force -ErrorAction Stop
+            if (-not $this.IsPortableCopyCurrent($tempCopyPath, $targetExe)) {
+                throw "一時コピーの SHA-256 検証に失敗しました: $tempCopyPath"
+            }
+
+            if (Test-Path -LiteralPath $linkPath) {
+                Move-Item -LiteralPath $linkPath -Destination $backupPath -Force -ErrorAction Stop
+                $oldMoved = $true
+            }
+
+            Move-Item -LiteralPath $tempCopyPath -Destination $linkPath -Force -ErrorAction Stop
+            if ($oldMoved) {
+                Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+        catch {
+            $copyError = $_.Exception
+            if ($oldMoved -and (Test-Path -LiteralPath $backupPath)) {
+                try {
+                    if (Test-Path -LiteralPath $linkPath) {
+                        Remove-Item -LiteralPath $linkPath -Force -ErrorAction Stop
+                    }
+                    Move-Item -LiteralPath $backupPath -Destination $linkPath -Force -ErrorAction Stop
+                }
+                catch {
+                    throw "shim コピーに失敗し、以前の shim を復元できませんでした。退避先: $backupPath. Copy error: $($copyError.Message). Restore error: $($_.Exception.Message)"
+                }
+            }
+            if (Test-Path -LiteralPath $tempCopyPath) {
+                Remove-Item -LiteralPath $tempCopyPath -Force -ErrorAction SilentlyContinue
+            }
+            throw $copyError
+        }
     }
 
     hidden [bool] NeedsCompatibilityShim([string]$directory, [string]$linkPath) {
@@ -123,10 +177,6 @@ class OnePasswordCliHandler : SetupHandlerBase {
         }
 
         return $null
-    }
-
-    hidden [string] GetWindowsAppsPath() {
-        return Join-Path $this.GetLocalAppDataPath() "Microsoft\WindowsApps"
     }
 
     hidden [string] GetLinksPath() {

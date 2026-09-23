@@ -125,6 +125,60 @@ exit 0
         $hasBom | Should -BeFalse
     }
 
+    It 'should preserve an overlong inherited PATH when using the explicit PowerShell 7 path' {
+        if (-not $script:runsOnWindows) {
+            Set-ItResult -Skipped -Because "install.cmd is a Windows entrypoint"
+            return
+        }
+
+        $pwshExe = Join-Path $PSHOME "pwsh.exe"
+        if (-not (Test-Path -LiteralPath $pwshExe -PathType Leaf)) {
+            Set-ItResult -Skipped -Because "PowerShell 7 executable is unavailable"
+            return
+        }
+
+        $workDir = Join-Path $TestDrive "install-cmd-long-path"
+        $scriptDir = Join-Path $workDir "scripts\powershell"
+        New-Item -ItemType Directory -Path $scriptDir -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $script:repoRoot "install.cmd") -Destination (Join-Path $workDir "install.cmd")
+        [System.IO.File]::WriteAllText(
+            (Join-Path $scriptDir "install.ps1"),
+            'Write-Host "PS_MAJOR=$($PSVersionTable.PSVersion.Major) PATH_CHARS=$($env:PATH.Length)"; exit 37',
+            [System.Text.UTF8Encoding]::new($false)
+        )
+
+        $oldDotfilesPs7Dir = $env:DOTFILES_PS7_DIR
+        $oldPath = $env:PATH
+        try {
+            Remove-Item Env:\DOTFILES_PS7_DIR -ErrorAction SilentlyContinue
+            $env:PATH = @(
+                $oldPath
+                (Split-Path -Parent $pwshExe)
+                (0..500 | ForEach-Object { "C:\missing-path-entry-$_" })
+            ) -join ";"
+            $expectedPathLength = $env:PATH.Length
+            $expectedPathLength | Should -BeGreaterThan 8191
+
+            $result = Invoke-TestCmdProcess -WorkingDirectory $workDir -CommandLine "install.cmd -NoPause"
+        }
+        finally {
+            if ($null -eq $oldDotfilesPs7Dir) {
+                Remove-Item Env:\DOTFILES_PS7_DIR -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:DOTFILES_PS7_DIR = $oldDotfilesPs7Dir
+            }
+            $env:PATH = $oldPath
+        }
+
+        $outputText = @($result.Stdout, $result.Stderr) -join [Environment]::NewLine
+        $result.ExitCode | Should -Be 37 -Because "stdout=[$($result.Stdout)] stderr=[$($result.Stderr)]"
+        $outputText | Should -Match 'PS_MAJOR=7'
+        $pathLengthMatch = [regex]::Match($outputText, 'PATH_CHARS=(\d+)')
+        $pathLengthMatch.Success | Should -BeTrue
+        [int]$pathLengthMatch.Groups[1].Value | Should -BeGreaterOrEqual $expectedPathLength
+    }
+
     It 'should fall back to Windows PowerShell and still execute install.ps1 when pwsh is absent' {
         if (-not $script:runsOnWindows) {
             Set-ItResult -Skipped -Because "install.cmd is a Windows entrypoint"

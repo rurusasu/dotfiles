@@ -73,7 +73,7 @@ Describe 'CI workflow configuration' {
         $wingetWorkflow | Should -Match 'User Phase Complete!'
         $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess -Output \$out'
         $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess\.ps1'
-        $wingetAssertion | Should -Match 'did not attempt any WinGet package installations'
+        $wingetAssertion | Should -Match 'did not report the WinGet CI verification inventory'
     }
 
     It 'should build the NixOS WSL system on hosted Nix CI' {

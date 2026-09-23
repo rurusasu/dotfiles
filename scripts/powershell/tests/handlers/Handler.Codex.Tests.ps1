@@ -56,6 +56,7 @@ Describe 'CodexHandler' {
 
     Context 'CanApply - Codex not installed' {
         BeforeEach {
+            Mock Test-Path { return $false }
             Mock Get-ChildItem { return $null } -ParameterFilter {
                 $Path -like "*WinGet\Packages" -and $Filter -like "OpenAI.Codex_*"
             }
@@ -217,8 +218,11 @@ Describe 'CodexHandler' {
     Context 'Apply - creates link when missing' {
         BeforeEach {
             Set-CodexPackageInstalled
+            $script:includeCodexHost = $false
             Mock Test-Path {
                 if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                $candidate = if ($LiteralPath) { $LiteralPath } else { $Path }
+                if ($script:includeCodexHost -and $candidate -like "*codex-code-mode-host.exe") { return $candidate -notlike "*WinGet\Links\*" }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $false }
                 return $false
@@ -238,14 +242,25 @@ Describe 'CodexHandler' {
             $result.Success | Should -Be $true
             Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
         }
+
+        It 'should not copy the host beside a symlink shim' {
+            $script:includeCodexHost = $true
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            Should -Invoke Copy-Item -Times 0 -ParameterFilter { $LiteralPath -like '*codex-code-mode-host.exe' }
+        }
     }
 
     Context 'Apply - user-copy fallback when symlink cannot be created' {
         BeforeEach {
             Set-CodexPackageInstalled
+            $script:includeCodexHost = $false
             $script:newItemTypes = @()
             Mock Test-Path {
                 if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                $candidate = if ($LiteralPath) { $LiteralPath } else { $Path }
+                if ($script:includeCodexHost -and $candidate -like "*codex-code-mode-host.exe") { return $candidate -notlike "*WinGet\Links\*" }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $false }
                 return $false
@@ -274,7 +289,18 @@ Describe 'CodexHandler' {
             $result.Success | Should -Be $true
             $script:newItemTypes | Should -Contain "SymbolicLink"
             $script:newItemTypes | Should -Not -Contain "HardLink"
-            Should -Invoke Copy-Item -Times 1
+            Should -Invoke Copy-Item -Times 1 -ParameterFilter { $LiteralPath -like '*codex-x86_64-pc-windows-msvc.exe' }
+        }
+
+        It 'should copy the adjacent code-mode host with the fallback executable' {
+            $script:includeCodexHost = $true
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            Should -Invoke Copy-Item -Times 1 -ParameterFilter {
+                $LiteralPath -like '*codex-code-mode-host.exe' -and
+                $Destination -like '*WinGet\Links\codex-code-mode-host.exe'
+            }
         }
     }
 

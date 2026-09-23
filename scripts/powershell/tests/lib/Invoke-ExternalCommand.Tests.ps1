@@ -215,10 +215,11 @@ Describe 'Invoke-VerifyCommand' {
             "-NoLogo",
             "-NoProfile",
             "-Command",
-            "Start-Sleep -Seconds 5; exit 0"
+            "Write-Output 'partial output'; Start-Sleep -Seconds 5; exit 0"
         ) -TimeoutSeconds 1
 
-        $result | Should -Match "タイムアウト"
+        ($result -join "`n") | Should -Match "タイムアウト"
+        $result | Should -Contain 'partial output'
         $global:LASTEXITCODE | Should -Be 124
     }
 

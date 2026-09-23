@@ -15,17 +15,47 @@
         },
         {
           "PackageIdentifier": "AgileBits.1Password",
-          "installTimeoutSeconds": 900
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "appxPackage": {
+              "executable": "1Password.exe",
+              "name": "AgileBits.1Password",
+              "packageFamilyName": "Agilebits.1Password_amwd9z03whsfe"
+            },
+            "command": "AgileBits.1Password",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "1Password",
+              "executablePaths": [
+                "%ProgramFiles%\\1Password\\1Password.exe",
+                "%LOCALAPPDATA%\\1Password\\app\\*\\1Password.exe"
+              ]
+            }
+          }
         },
         {
           "PackageIdentifier": "TheBrowserCompany.Arc",
-          "installTimeoutSeconds": 900
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "args": ["TheBrowserCompany.Arc_ttt1ap7aakyb4!Arc"],
+            "command": "TheBrowserCompany.Arc",
+            "type": "appxLaunchTarget"
+          }
         },
         {
           "PackageIdentifier": "AutoHotkey.AutoHotkey",
           "installArgs": ["--scope", "machine"],
           "installTimeoutSeconds": 900,
-          "requiresAdmin": true
+          "requiresAdmin": true,
+          "verifyCommand": {
+            "command": "AutoHotkey",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "AutoHotkey",
+              "executablePaths": ["%ProgramFiles%\\AutoHotkey\\v2\\AutoHotkey.exe"],
+              "productCodes": ["AutoHotkey"]
+            }
+          }
         },
         {
           "PackageIdentifier": "Oven-sh.Bun",
@@ -108,13 +138,34 @@
         },
         {
           "PackageIdentifier": "Discord.Discord",
-          "installFeature": "WithHermes",
-          "installTimeoutSeconds": 900
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "command": "Discord",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "Discord",
+              "executablePaths": ["%LOCALAPPDATA%\\Discord\\app-*\\Discord.exe"],
+              "productCodes": ["Discord"],
+              "publisher": "Discord Inc."
+            }
+          }
         },
         {
           "PackageIdentifier": "Docker.DockerDesktop",
           "installFeature": "WithDocker",
-          "installTimeoutSeconds": 900
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "command": "Docker Desktop",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "Docker Desktop",
+              "executablePaths": [
+                "%ProgramFiles%\\Docker\\Docker\\Docker Desktop.exe",
+                "%LOCALAPPDATA%\\Programs\\DockerDesktop\\Docker Desktop.exe"
+              ],
+              "publisher": "Docker Inc."
+            }
+          }
         },
         {
           "PackageIdentifier": "dprint.dprint",
@@ -212,6 +263,7 @@
         },
         {
           "PackageIdentifier": "Task.Task",
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Task.Task*"],
           "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
@@ -221,7 +273,20 @@
         {
           "PackageIdentifier": "Google.Chrome",
           "installFeature": "WithHermes",
-          "installTimeoutSeconds": 900
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "command": "Google Chrome",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "Google Chrome",
+              "executablePaths": [
+                "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe",
+                "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe",
+                "%LOCALAPPDATA%\\Google\\Chrome\\Application\\chrome.exe"
+              ],
+              "publisher": "Google LLC"
+            }
+          }
         },
         {
           "PackageIdentifier": "Google.CloudSDK",
@@ -239,6 +304,7 @@
         },
         {
           "PackageIdentifier": "hadolint.hadolint",
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\hadolint.hadolint*"],
           "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
@@ -279,6 +345,7 @@
         },
         {
           "PackageIdentifier": "Artempyanykh.Marksman",
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Artempyanykh.Marksman*"],
           "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
@@ -296,6 +363,7 @@
         {
           "PackageIdentifier": "OpenJS.NodeJS.LTS",
           "installTimeoutSeconds": 900,
+          "pathEntries": ["%ProgramFiles%\\nodejs"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "node"
@@ -303,7 +371,19 @@
         },
         {
           "PackageIdentifier": "Obsidian.Obsidian",
-          "installTimeoutSeconds": 900
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "command": "Obsidian",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "Obsidian",
+              "executablePaths": [
+                "%LOCALAPPDATA%\\Programs\\Obsidian\\Obsidian.exe",
+                "%ProgramFiles%\\Obsidian\\Obsidian.exe"
+              ],
+              "productCodes": ["bd400747-f0c1-5638-a859-982036102edf"]
+            }
+          }
         },
         {
           "PackageIdentifier": "Ollama.Ollama",
@@ -317,10 +397,21 @@
         {
           "PackageIdentifier": "StablyAI.Orca",
           "ciSkipInstall": true,
-          "installTimeoutSeconds": 900
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "command": "OrcaSlicer",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "Orca",
+              "productCodes": ["2b325ec9-0ed1-575f-ad70-e08307aee879"]
+            }
+          }
         },
         {
           "PackageIdentifier": "oxc-project.oxlint",
+          "pathEntries": [
+            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"
+          ],
           "installArgs": ["--scope", "user"],
           "installTimeoutSeconds": 900,
           "portableLink": {
@@ -362,6 +453,7 @@
         },
         {
           "PackageIdentifier": "astral-sh.ruff",
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ruff*"],
           "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
@@ -379,7 +471,8 @@
           },
           "verifyCommand": {
             "args": ["--version"],
-            "command": "rust-analyzer"
+            "command": "rust-analyzer.exe",
+            "type": "portableLinkCommand"
           }
         },
         {
@@ -401,6 +494,7 @@
         },
         {
           "PackageIdentifier": "JohnnyMorganz.StyLua",
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\JohnnyMorganz.StyLua*"],
           "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
@@ -409,6 +503,7 @@
         },
         {
           "PackageIdentifier": "tamasfe.taplo",
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tamasfe.taplo*"],
           "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
@@ -417,6 +512,7 @@
         },
         {
           "PackageIdentifier": "tree-sitter.tree-sitter-cli",
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"],
           "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
@@ -425,6 +521,7 @@
         },
         {
           "PackageIdentifier": "astral-sh.ty",
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ty*"],
           "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
@@ -433,6 +530,7 @@
         },
         {
           "PackageIdentifier": "astral-sh.uv",
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.uv*"],
           "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
@@ -467,11 +565,32 @@
         },
         {
           "PackageIdentifier": "Microsoft.PowerToys",
-          "installTimeoutSeconds": 900
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "command": "Microsoft PowerToys",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "Microsoft PowerToys",
+              "executablePaths": [
+                "%ProgramFiles%\\PowerToys\\PowerToys.exe",
+                "%LOCALAPPDATA%\\PowerToys\\PowerToys.exe"
+              ],
+              "publisher": "Microsoft Corporation"
+            }
+          }
         },
         {
           "PackageIdentifier": "Microsoft.VCRedist.2015+.x64",
-          "installTimeoutSeconds": 900
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "command": "Microsoft Visual C++ 2015-2022 Redistributable (x64)",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayNamePattern": "^Microsoft Visual C\\+\\+ (?:2015-2022 Redistributable|v14 Redistributable) \\(x64\\)",
+              "executablePaths": ["%SystemRoot%\\System32\\vcruntime140.dll"],
+              "publisher": "Microsoft Corporation"
+            }
+          }
         },
         {
           "PackageIdentifier": "Microsoft.VisualStudio.2022.BuildTools",
@@ -480,11 +599,24 @@
             "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart"
           ],
           "installTimeoutSeconds": 900,
-          "requiresAdmin": true
+          "requiresAdmin": true,
+          "verifyCommand": {
+            "command": "Microsoft.VisualStudio.Product.BuildTools",
+            "compilerRelativePath": "VC\\Tools\\MSVC\\*\\bin\\Hostx64\\x64\\cl.exe",
+            "productId": "Microsoft.VisualStudio.Product.BuildTools",
+            "minimumVersion": "17.0",
+            "requiredComponent": "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+            "type": "visualStudioInstanceVersion"
+          }
         },
         {
           "PackageIdentifier": "Microsoft.WindowsTerminal",
-          "installTimeoutSeconds": 900
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "args": ["Microsoft.WindowsTerminal_8wekyb3d8bbwe!App"],
+            "command": "Microsoft.WindowsTerminal",
+            "type": "appxLaunchTarget"
+          }
         },
         {
           "PackageIdentifier": "Microsoft.WSL",
@@ -506,10 +638,6 @@
     },
     {
       "Packages": [
-        {
-          "PackageIdentifier": "9NT1R1C2HH7J",
-          "installTimeoutSeconds": 900
-        },
         {
           "PackageIdentifier": "9PLM9XGG6VKS",
           "ciSkipInstall": true,

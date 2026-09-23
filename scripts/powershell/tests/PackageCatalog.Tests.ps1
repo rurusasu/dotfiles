@@ -294,13 +294,13 @@ in sets.providerErrors
     }
 
     Context 'optional installer profiles' {
-        It 'marks Docker Chrome and Discord with their owning feature' {
+        It 'keeps Docker and Chrome optional while installing Discord by default' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $packages = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' } | ForEach-Object Packages)
 
             (@($packages | Where-Object PackageIdentifier -EQ 'Docker.DockerDesktop'))[0].installFeature | Should -Be 'WithDocker'
             (@($packages | Where-Object PackageIdentifier -EQ 'Google.Chrome'))[0].installFeature | Should -Be 'WithHermes'
-            (@($packages | Where-Object PackageIdentifier -EQ 'Discord.Discord'))[0].installFeature | Should -Be 'WithHermes'
+            (@($packages | Where-Object PackageIdentifier -EQ 'Discord.Discord'))[0].installFeature | Should -BeNullOrEmpty
         }
 
         It 'marks Playwright browser packages as Hermes-only' {
@@ -341,6 +341,68 @@ in sets.providerErrors
 
             $packages.Count | Should -BeGreaterThan 0
             @($packages | Where-Object { $_.installTimeoutSeconds -ne 900 }).Count | Should -Be 0
+        }
+    }
+
+    Context 'Node.js package PATH' {
+        It 'should add the Winget Node.js installation directory to the SSOT PATH entries' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+
+            $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?nodejs\s*=\s*\[\s*"%ProgramFiles%\\\\nodejs"'
+        }
+
+        It 'should expose the Task executable directory to package verification' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+            $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $task = @($winget.Sources | ForEach-Object { $_.Packages } | Where-Object PackageIdentifier -EQ 'Task.Task') | Select-Object -First 1
+
+            $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?"Task\.Task"\s*=\s*\[\s*"%LOCALAPPDATA%\\\\Microsoft\\\\WinGet\\\\Packages\\\\Task\.Task\*"'
+            @($task.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Task.Task*'
+        }
+
+        It 'should expose each installed CLI package root required by its verifier' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+            $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $expectedRoots = @{
+                'Task.Task' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Task.Task*'
+                'hadolint.hadolint' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\hadolint.hadolint*'
+                'Artempyanykh.Marksman' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Artempyanykh.Marksman*'
+                'astral-sh.ruff' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.ruff*'
+                'JohnnyMorganz.StyLua' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\JohnnyMorganz.StyLua*'
+                'tamasfe.taplo' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\tamasfe.taplo*'
+                'tree-sitter.tree-sitter-cli' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\tree-sitter.tree-sitter-cli*'
+                'astral-sh.ty' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.ty*'
+                'astral-sh.uv' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*'
+            }
+
+            foreach ($id in $expectedRoots.Keys) {
+                $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ $id) | Select-Object -First 1
+                $nixPath = $expectedRoots[$id].Replace('\', '\\')
+                $ssotPattern = '(?s)wingetPathEntries\s*=\s*\{.*?"' + [regex]::Escape($id) + '"\s*=\s*\[\s*"' + [regex]::Escape($nixPath) + '"'
+
+                $package | Should -Not -BeNullOrEmpty -Because "$id must remain in the generated package catalog"
+                @($package.pathEntries) | Should -Contain $expectedRoots[$id] -Because "$id's verifier runs its executable from the package root"
+                $sets | Should -Match $ssotPattern -Because "$id's PATH entry must be defined in the Nix package SSOT"
+            }
+        }
+
+        It 'should expose the WinGet Links directory for the oxlint portable command' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+            $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $oxlint = @($winget.Sources | ForEach-Object { $_.Packages } | Where-Object PackageIdentifier -EQ 'oxc-project.oxlint') | Select-Object -First 1
+
+            @($oxlint.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Links'
+            $sets | Should -Match '(?s)wingetPathEntries\s*=\s*\{.*?"oxc-project\.oxlint"\s*=\s*\[\s*"%LOCALAPPDATA%\\\\Microsoft\\\\WinGet\\\\Links"'
+        }
+
+        It 'should generate the Node.js installation directory into winget packages.json' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'OpenJS.NodeJS.LTS' }) | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            @($package.pathEntries) | Should -Contain '%ProgramFiles%\nodejs'
         }
     }
 
@@ -569,8 +631,9 @@ in sets.providerErrors
             $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'Rustlang.rust-analyzer') | Select-Object -First 1
 
             $package | Should -Not -BeNullOrEmpty
-            $sets | Should -Match '(?s)rust-analyzer\s*=\s*\{\s*command\s*=\s*"rust-analyzer";\s*args\s*=\s*\[\s*"--version"\s*\];'
-            $package.verifyCommand.command | Should -Be 'rust-analyzer'
+            $sets | Should -Match '(?s)rust-analyzer\s*=\s*\{\s*type\s*=\s*"portableLinkCommand";\s*command\s*=\s*"rust-analyzer\.exe";\s*args\s*=\s*\[\s*"--version"\s*\];'
+            $package.verifyCommand.type | Should -Be 'portableLinkCommand'
+            $package.verifyCommand.command | Should -Be 'rust-analyzer.exe'
             @($package.verifyCommand.args) | Should -Be @('--version')
             $sets | Should -Match '(?s)"Rustlang\.rust-analyzer"\s*=\s*\{\s*linkName\s*=\s*"rust-analyzer\.exe";\s*targetPattern\s*=\s*"rust-analyzer\.exe";\s*\};'
             $package.portableLink.linkName | Should -Be 'rust-analyzer.exe'
@@ -631,6 +694,135 @@ in sets.providerErrors
             @($wingetSource.Packages | Where-Object PackageIdentifier -Match 'Hammerspoon').Count | Should -Be 0
         }
 
+        It 'should remove ChatGPT Classic from Windows while preserving cross-platform ChatGPT' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+            $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $storeSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'msstore' }) | Select-Object -First 1
+
+            $sets | Should -Not -Match 'msstore\s*=\s*"9NT1R1C2HH7J"'
+            $sets | Should -Match '(?s)chatgpt\s*=\s*\{.*?darwin\s*=\s*\{.*?provider\s*=\s*"nix";.*?linux\s*=\s*\{.*?provider\s*=\s*"nix";'
+            @($storeSource.Packages | Where-Object PackageIdentifier -EQ '9NT1R1C2HH7J').Count | Should -Be 0
+            @($storeSource.Packages | Where-Object PackageIdentifier -EQ '9PLM9XGG6VKS').Count | Should -Be 1
+        }
+
+        It 'should require a concrete verifier for all 65 Windows package entries' {
+            $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetPackages = @($winget.Sources | ForEach-Object { $_.Packages })
+            $winGetOnlyPackages = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' } | ForEach-Object { $_.Packages })
+            $storePackages = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'msstore' } | ForEach-Object { $_.Packages })
+            $npm = Get-Content -LiteralPath $script:npmJsonPath -Raw | ConvertFrom-Json
+            $pnpm = Get-Content -LiteralPath $script:pnpmJsonPath -Raw | ConvertFrom-Json
+            $packageCount = $wingetPackages.Count + @($npm.globalPackages).Count + @($pnpm.globalPackages).Count
+            $specialVerifiers = @{
+                'AgileBits.1Password' = @{ type = 'windowsInstalledProduct'; command = 'AgileBits.1Password' }
+                'AutoHotkey.AutoHotkey' = @{ type = 'windowsInstalledProduct'; command = 'AutoHotkey' }
+                'Discord.Discord' = @{ type = 'windowsInstalledProduct'; command = 'Discord' }
+                'Docker.DockerDesktop' = @{ type = 'windowsInstalledProduct'; command = 'Docker Desktop' }
+                'Google.Chrome' = @{ type = 'windowsInstalledProduct'; command = 'Google Chrome' }
+                'Obsidian.Obsidian' = @{ type = 'windowsInstalledProduct'; command = 'Obsidian' }
+                'StablyAI.Orca' = @{ type = 'windowsInstalledProduct'; command = 'OrcaSlicer' }
+                'Microsoft.PowerToys' = @{ type = 'windowsInstalledProduct'; command = 'Microsoft PowerToys' }
+                'Microsoft.VCRedist.2015+.x64' = @{ type = 'windowsInstalledProduct'; command = 'Microsoft Visual C++ 2015-2022 Redistributable (x64)' }
+                'Microsoft.VisualStudio.2022.BuildTools' = @{ type = 'visualStudioInstanceVersion'; command = 'Microsoft.VisualStudio.Product.BuildTools' }
+                'Rustlang.rust-analyzer' = @{ type = 'portableLinkCommand'; command = 'rust-analyzer.exe' }
+            }
+            $supportedTypes = @('command', 'commandExists', 'appxPackage', 'appxLaunchTarget', 'portableLinkCommand', 'windowsInstalledProduct', 'visualStudioInstanceVersion')
+
+            $packageCount | Should -Be 65
+            @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' } | ForEach-Object { $_.Packages }).Count | Should -Be 53
+            @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'msstore' } | ForEach-Object { $_.Packages }).Count | Should -Be 1
+            @($wingetPackages | ForEach-Object { $_.PackageIdentifier }).Count | Should -Be @($wingetPackages | ForEach-Object { $_.PackageIdentifier } | Select-Object -Unique).Count
+            @($npm.globalPackages | Where-Object { $null -eq $_.verifyCommand }).Count | Should -Be 0
+            @($pnpm.globalPackages | Where-Object { $null -eq $_.verifyCommand }).Count | Should -Be 0
+
+            foreach ($package in @($npm.globalPackages) + @($pnpm.globalPackages)) {
+                [string]::IsNullOrWhiteSpace([string]$package.verifyCommand.command) | Should -BeFalse -Because "$($package.name) must identify its verification executable"
+                @($package.verifyCommand.args).Count | Should -BeGreaterThan 0 -Because "$($package.name) must execute a verification command"
+                @($package.verifyCommand.args | Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }).Count | Should -Be 0 -Because "$($package.name) verifier arguments must be concrete"
+            }
+
+            (@($winGetOnlyPackages | Where-Object ciSkipInstall | ForEach-Object PackageIdentifier | Sort-Object) -join ',') |
+                Should -Be 'Google.CloudSDK,StablyAI.Orca,wez.wezterm.nightly' -Because 'CI runtime exclusions must remain explicit and reviewed'
+            @($storePackages | Where-Object ciSkipInstall | ForEach-Object PackageIdentifier) | Should -Be @('9PLM9XGG6VKS')
+            (@($winGetOnlyPackages | Where-Object requiresAdmin | ForEach-Object PackageIdentifier | Sort-Object) -join ',') |
+                Should -Be 'AutoHotkey.AutoHotkey,Microsoft.VisualStudio.2022.BuildTools' -Because 'admin phase exclusions must remain explicit and reviewed'
+            (@($winGetOnlyPackages | Where-Object installFeature | ForEach-Object { "$($_.PackageIdentifier):$($_.installFeature)" } | Sort-Object) -join ',') |
+                Should -Be 'Docker.DockerDesktop:WithDocker,Google.Chrome:WithHermes,Ollama.Ollama:WithOllama' -Because 'feature-gated CI runtime exclusions must remain explicit and reviewed'
+            ($winGetOnlyPackages | Where-Object PackageIdentifier -eq 'Discord.Discord').installFeature |
+                Should -BeNullOrEmpty -Because 'Discord is part of the default cross-platform installation'
+
+            foreach ($package in $wingetPackages) {
+                $id = [string]$package.PackageIdentifier
+                $package.verifyCommand | Should -Not -BeNullOrEmpty -Because "$id must have an executable or installed-artifact verifier"
+                $type = if ([string]::IsNullOrWhiteSpace([string]$package.verifyCommand.type)) { 'command' } else { [string]$package.verifyCommand.type }
+                $supportedTypes | Should -Contain $type -Because "$id must use a verifier implemented by Handler.Winget"
+                [string]::IsNullOrWhiteSpace([string]$package.verifyCommand.command) | Should -BeFalse -Because "$id must identify what the verifier checks"
+                if ($specialVerifiers.ContainsKey($id)) {
+                    $type | Should -Be $specialVerifiers[$id].type -Because "$id must use its package-specific non-launching verification strategy"
+                    [string]$package.verifyCommand.command | Should -Be $specialVerifiers[$id].command
+                    if ($type -eq 'windowsInstalledProduct') {
+                        $hasAppxIdentity = $null -ne $package.verifyCommand.appxPackage
+                        $hasUninstallIdentity = $null -ne $package.verifyCommand.uninstallEntry
+                        ($hasAppxIdentity -or $hasUninstallIdentity) | Should -BeTrue -Because "$id must identify the installed product"
+                        if ($hasAppxIdentity) {
+                            $package.verifyCommand.appxPackage.name | Should -Not -BeNullOrEmpty
+                            $package.verifyCommand.appxPackage.packageFamilyName | Should -Not -BeNullOrEmpty
+                            $package.verifyCommand.appxPackage.executable | Should -Not -BeNullOrEmpty
+                        }
+                        if ($hasUninstallIdentity) {
+                            $identity = $package.verifyCommand.uninstallEntry
+                            ($identity.productCodes.Count -gt 0 -or $identity.displayName -or $identity.displayNamePattern) |
+                                Should -BeTrue -Because "$id must identify its uninstall registration"
+                            @($identity.executablePaths).Count | Should -BeGreaterThan 0 -Because "$id must validate an installed executable version"
+                        }
+                    }
+                }
+            }
+
+            $onePassword = $wingetPackages | Where-Object PackageIdentifier -EQ 'AgileBits.1Password'
+            $onePassword.verifyCommand.appxPackage.packageFamilyName | Should -Be 'Agilebits.1Password_amwd9z03whsfe'
+            $onePassword.verifyCommand.appxPackage.executable | Should -Be '1Password.exe'
+            @($onePassword.verifyCommand.uninstallEntry.executablePaths).Count | Should -BeGreaterThan 0
+            $vsBuildTools = $wingetPackages | Where-Object PackageIdentifier -EQ 'Microsoft.VisualStudio.2022.BuildTools'
+            $vsBuildTools.verifyCommand.requiredComponent | Should -Be 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
+            $vsBuildTools.verifyCommand.minimumVersion | Should -Be '17.0'
+            $vsBuildTools.verifyCommand.compilerRelativePath | Should -Match 'cl\.exe$'
+            $vcRuntime = $wingetPackages | Where-Object PackageIdentifier -EQ 'Microsoft.VCRedist.2015+.x64'
+            $vcRuntime.verifyCommand.uninstallEntry.displayNamePattern | Should -Match 'v14 Redistributable'
+        }
+
+        It 'should verify Arc and Windows Terminal AppX identity, install path, and application ID without launching them' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
+            $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $expectedAppxTargets = @{
+                'TheBrowserCompany.Arc' = @{
+                    PackageName = 'TheBrowserCompany.Arc'
+                    PackageFamilyName = 'TheBrowserCompany.Arc_ttt1ap7aakyb4'
+                    AppUserModelId = 'TheBrowserCompany.Arc_ttt1ap7aakyb4!Arc'
+                }
+                'Microsoft.WindowsTerminal' = @{
+                    PackageName = 'Microsoft.WindowsTerminal'
+                    PackageFamilyName = 'Microsoft.WindowsTerminal_8wekyb3d8bbwe'
+                    AppUserModelId = 'Microsoft.WindowsTerminal_8wekyb3d8bbwe!App'
+                }
+            }
+
+            foreach ($id in $expectedAppxTargets.Keys) {
+                $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ $id)
+                $package.Count | Should -Be 1
+                $package[0].verifyCommand.type | Should -Be 'appxLaunchTarget'
+                $package[0].verifyCommand.command | Should -Be $expectedAppxTargets[$id].PackageName
+                @($package[0].verifyCommand.args) | Should -Be @($expectedAppxTargets[$id].AppUserModelId)
+                $expectedAppxTargets[$id].AppUserModelId.Split('!')[0] | Should -Be $expectedAppxTargets[$id].PackageFamilyName
+
+                $ssotEntry = [regex]::Match($sets, '(?s)"' + [regex]::Escape($id) + '"\s*=\s*\{.*?\};').Value
+                $ssotEntry | Should -Match 'type\s*=\s*"appxLaunchTarget"'
+                $ssotEntry | Should -Match ('command\s*=\s*"' + [regex]::Escape($expectedAppxTargets[$id].PackageName) + '"')
+                $ssotEntry | Should -Match ('args\s*=\s*\[\s*"' + [regex]::Escape($expectedAppxTargets[$id].AppUserModelId) + '"\s*\]')
+            }
+        }
+
         It 'should expose provider coverage outputs from the package SSOT' {
             $sets = Get-Content -LiteralPath $script:setsPath -Raw
 
@@ -650,7 +842,6 @@ in sets.providerErrors
                 'hadolint.hadolint'
                 'Google.Chrome'
                 'OpenAI.Codex'
-                '9NT1R1C2HH7J'
                 'Oven-sh.Bun'
                 'zig.zig'
             ) | ForEach-Object {

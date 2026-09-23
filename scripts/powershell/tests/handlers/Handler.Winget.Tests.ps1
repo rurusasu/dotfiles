@@ -16,6 +16,7 @@
 Describe 'WingetHandler' {
     BeforeEach {
         $script:origUserProfileForWingetTests = $env:USERPROFILE
+        $script:origLocalAppDataForWingetTests = $env:LOCALAPPDATA
         $env:USERPROFILE = Join-Path $TestDrive "UserProfile"
         $script:handler = [WingetHandler]::new()
         $script:ctx = [SetupContext]::new((Join-Path $TestDrive "dotfiles"))
@@ -40,6 +41,279 @@ Describe 'WingetHandler' {
 
     AfterEach {
         $env:USERPROFILE = $script:origUserProfileForWingetTests
+        $env:LOCALAPPDATA = $script:origLocalAppDataForWingetTests
+    }
+
+    Context 'TestPackageVerification - package-specific installed artifact probes' {
+        It 'should execute a portable WinGet link directly instead of resolving a same-named rustup shim' {
+            $script:origLocalAppDataForWingetTests = $env:LOCALAPPDATA
+            $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppData'
+            $linksPath = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
+            New-Item -ItemType Directory -Path $linksPath -Force | Out-Null
+            $expectedCommand = Join-Path $linksPath 'rust-analyzer.exe'
+            New-Item -ItemType File -Path $expectedCommand -Force | Out-Null
+
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments)
+                $script:verifiedCommand = $Command
+                $script:verifiedArguments = $Arguments
+                $global:LASTEXITCODE = 0
+                return 'rust-analyzer 1.0.0'
+            }
+
+            $verified = $handler.TestPackageVerification([PSCustomObject]@{
+                    type    = 'portableLinkCommand'
+                    command = 'rust-analyzer.exe'
+                    args    = @('--version')
+                })
+
+            $verified | Should -BeTrue
+            $script:verifiedCommand | Should -Be $expectedCommand
+            $script:verifiedArguments | Should -Be @('--version')
+        }
+
+        It 'should reject a portable WinGet link probe when the package link is missing' {
+            $script:origLocalAppDataForWingetTests = $env:LOCALAPPDATA
+            $env:LOCALAPPDATA = Join-Path $TestDrive 'MissingLocalAppData'
+            Mock Invoke-VerifyCommand { throw 'A missing package link must not run another PATH command' }
+
+            $verified = $handler.TestPackageVerification([PSCustomObject]@{
+                    type    = 'portableLinkCommand'
+                    command = 'rust-analyzer.exe'
+                    args    = @('--version')
+                })
+
+            $verified | Should -BeFalse
+            Should -Invoke Invoke-VerifyCommand -Times 0
+        }
+
+        It 'should verify a Windows application from its AppX family and version without launching it' {
+            Mock Get-Command { return [PSCustomObject]@{ Name = 'Get-AppxPackage' } } -ParameterFilter {
+                $Name -eq 'Get-AppxPackage'
+            }
+            Mock Get-AppxPackage {
+                param($Name)
+                if ($Name -eq 'AgileBits.1Password') {
+                    return [PSCustomObject]@{
+                        PackageFamilyName = 'Agilebits.1Password_amwd9z03whsfe'
+                        Version = [version]'8.12.36.40'
+                        InstallLocation = 'C:\Apps\1Password'
+                    }
+                }
+                return $null
+            }
+            Mock Get-ChildItem {
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '8.12.36.40' } }
+            } -ParameterFilter { $Path -eq 'C:\Apps\1Password\1Password.exe' }
+
+            $verified = $handler.TestPackageVerification([PSCustomObject]@{
+                    command = 'AgileBits.1Password'
+                    type = 'windowsInstalledProduct'
+                    appxPackage = [PSCustomObject]@{
+                        name = 'AgileBits.1Password'
+                        packageFamilyName = 'Agilebits.1Password_amwd9z03whsfe'
+                        executable = '1Password.exe'
+                    }
+                })
+
+            $verified | Should -BeTrue
+            Should -Invoke Get-AppxPackage -Times 1 -ParameterFilter { $Name -eq 'AgileBits.1Password' }
+        }
+
+        It 'should verify an MSI application from an exact uninstall product code and installed version' {
+            $registryKey = [PSCustomObject]@{
+                Name = '{BD400747-F0C1-5638-A859-982036102EDF}'
+                PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\{BD400747-F0C1-5638-A859-982036102EDF}'
+            }
+            Mock Get-AppxPackage { return $null }
+            Mock Get-ChildItem { return @($registryKey) } -ParameterFilter {
+                $LiteralPath -like '*\Uninstall'
+            }
+            Mock Get-ItemProperty {
+                return [PSCustomObject]@{ DisplayVersion = '1.13.7'; DisplayName = 'Obsidian'; Publisher = 'Dynalist Inc.' }
+            } -ParameterFilter {
+                $LiteralPath -eq $registryKey.PSPath
+            }
+            Mock Get-ChildItem {
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '1.13.7' } }
+            } -ParameterFilter { $Path -eq 'C:\Apps\Obsidian.exe' }
+
+            $verified = $handler.TestPackageVerification([PSCustomObject]@{
+                    command = 'Obsidian'
+                    type = 'windowsInstalledProduct'
+                    uninstallEntry = [PSCustomObject]@{
+                        productCodes = @('{bd400747-f0c1-5638-a859-982036102edf}')
+                        displayName = 'Obsidian'
+                        publisher = 'Dynalist Inc.'
+                        executablePaths = @('C:\Apps\Obsidian.exe')
+                    }
+                })
+
+            $verified | Should -BeTrue
+            Should -Invoke Get-ItemProperty -Times 1
+        }
+
+        It 'should verify Orca from its actual per-user uninstall name and DisplayIcon executable' {
+            $orcaExecutable = Join-Path $env:LOCALAPPDATA 'Programs\orca\Orca.exe'
+            $registryKey = [PSCustomObject]@{
+                Name = '{2B325EC9-0ED1-575F-AD70-E08307AEE879}'
+                PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\{2B325EC9-0ED1-575F-AD70-E08307AEE879}'
+            }
+            Mock Get-AppxPackage { return $null }
+            Mock Get-ChildItem { return @($registryKey) } -ParameterFilter {
+                $LiteralPath -like '*\Uninstall'
+            }
+            Mock Get-ItemProperty {
+                return [PSCustomObject]@{
+                    DisplayVersion = '1.4.205'
+                    DisplayName = 'Orca'
+                    Publisher = 'Stably AI'
+                    DisplayIcon = "$orcaExecutable,0"
+                }
+            } -ParameterFilter { $LiteralPath -eq $registryKey.PSPath }
+            Mock Get-ChildItem {
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '1.4.205.0' } }
+            } -ParameterFilter { $Path -eq $orcaExecutable }
+
+            $verified = $handler.TestPackageVerification([PSCustomObject]@{
+                    command = 'OrcaSlicer'
+                    type = 'windowsInstalledProduct'
+                    uninstallEntry = [PSCustomObject]@{
+                        productCodes = @('2b325ec9-0ed1-575f-ad70-e08307aee879')
+                        displayName = 'Orca'
+                    }
+                })
+
+            $verified | Should -BeTrue
+        }
+
+        It 'should reject an uninstall registration with no valid installed version' {
+            $registryKey = [PSCustomObject]@{
+                Name = 'Discord'
+                PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\Discord'
+            }
+            Mock Get-AppxPackage { return $null }
+            Mock Get-ChildItem { return @($registryKey) } -ParameterFilter {
+                $LiteralPath -like '*\Uninstall'
+            }
+            Mock Get-ItemProperty {
+                return [PSCustomObject]@{ DisplayVersion = 'unknown'; DisplayName = 'Discord'; Publisher = 'Discord Inc.' }
+            } -ParameterFilter {
+                $LiteralPath -eq $registryKey.PSPath
+            }
+
+            $verified = $handler.TestPackageVerification([PSCustomObject]@{
+                    command = 'Discord'
+                    type = 'windowsInstalledProduct'
+                    uninstallEntry = [PSCustomObject]@{
+                        productCodes = @('Discord')
+                        displayName = 'Discord'
+                        publisher = 'Discord Inc.'
+                        executablePaths = @('C:\Apps\Discord.exe')
+                    }
+                })
+
+            $verified | Should -BeFalse
+        }
+
+        It 'should require an installed Visual Studio Build Tools instance and the configured compiler component' {
+            Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe' } } -ParameterFilter {
+                $Name -eq 'vswhere.exe'
+            }
+            Mock Test-Path { return $true } -ParameterFilter {
+                $LiteralPath -like '*\\VC\\Tools\\MSVC\\*\\bin\\Hostx64\\x64\\cl.exe'
+            }
+            Mock Get-ChildItem {
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '19.44.35222' } }
+            } -ParameterFilter {
+                $Path -like '*VC\Tools\MSVC*\bin\Hostx64\x64\cl.exe'
+            }
+            Mock Invoke-VerifyCommand {
+                $global:LASTEXITCODE = 0
+                return '[{"installationVersion":"17.14.41","installationPath":"C:\\BuildTools"}]'
+            } -ParameterFilter {
+                $Command -like '*vswhere.exe'
+            }
+
+            $verified = $handler.TestPackageVerification([PSCustomObject]@{
+                    command = 'Microsoft.VisualStudio.Product.BuildTools'
+                    type = 'visualStudioInstanceVersion'
+                    productId = 'Microsoft.VisualStudio.Product.BuildTools'
+                    minimumVersion = '17.0'
+                    requiredComponent = 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
+                    compilerRelativePath = 'VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe'
+                })
+
+            $verified | Should -BeTrue
+            Should -Invoke Invoke-VerifyCommand -Times 1 -ParameterFilter {
+                $Arguments -contains '-requires' -and $Arguments -contains 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
+            }
+        }
+
+        It 'should reject an older Visual Studio Build Tools instance even when the C++ compiler exists' {
+            Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe' } } -ParameterFilter {
+                $Name -eq 'vswhere.exe'
+            }
+            Mock Get-ChildItem {
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '19.44.35222' } }
+            } -ParameterFilter { $Path -like '*VC\Tools\MSVC*\bin\Hostx64\x64\cl.exe' }
+            Mock Invoke-VerifyCommand {
+                $global:LASTEXITCODE = 0
+                return '[{"installationVersion":"16.11.35","installationPath":"C:\\BuildTools"}]'
+            } -ParameterFilter { $Command -like '*vswhere.exe' }
+
+            $verified = $handler.TestPackageVerification([PSCustomObject]@{
+                    command = 'Microsoft.VisualStudio.Product.BuildTools'
+                    type = 'visualStudioInstanceVersion'
+                    productId = 'Microsoft.VisualStudio.Product.BuildTools'
+                    minimumVersion = '17.0'
+                    requiredComponent = 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
+                    compilerRelativePath = 'VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe'
+                })
+
+            $verified | Should -BeFalse
+        }
+    }
+
+    Context 'WinGet timeout diagnostics' {
+        It 'should classify a locked stale cache and redact local user paths' {
+            $logDir = Join-Path $TestDrive 'winget-logs'
+            New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+            $env:DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR = $logDir
+            try {
+                $logPath = Join-Path $logDir 'WinGet-test.log'
+                [System.IO.File]::WriteAllText($logPath, @'
+2026-09-23 [CLI ] Found one app. App id: hadolint.hadolint
+2026-09-23 [CLI ] Hash does not match. Removing existing installer file C:\Users\private\AppData\Local\Temp\hadolint.exe
+2026-09-23 [W] Failed to remove installer file. Reason: The process cannot access the file because it is being used by another process.
+2026-09-23 [CORE] DeliveryOptimization downloading from url: https://example.invalid/file.exe?token=secret
+'@)
+
+                $diagnosis = $handler.GetWingetTimeoutDiagnosis('hadolint.hadolint', [DateTime]::UtcNow.AddMinutes(-1))
+
+                $diagnosis | Should -Match 'class=installer-cache-contention'
+                $diagnosis | Should -Match 'confidence=medium'
+                $diagnosis | Should -Match 'another process'
+                $diagnosis | Should -Not -Match 'C:\\Users\\private'
+                $diagnosis | Should -Not -Match 'token=secret'
+            }
+            finally {
+                Remove-Item Env:\DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR -ErrorAction SilentlyContinue
+            }
+        }
+
+        It 'should report an unknown diagnosis if no matching package log exists' {
+            $logDir = Join-Path $TestDrive 'empty-winget-logs'
+            New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+            $env:DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR = $logDir
+            try {
+                $diagnosis = $handler.GetWingetTimeoutDiagnosis('unknown.package', [DateTime]::UtcNow.AddMinutes(-1))
+                $diagnosis | Should -Match 'class=unknown confidence=low'
+            }
+            finally {
+                Remove-Item Env:\DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR -ErrorAction SilentlyContinue
+            }
+        }
     }
 
     Context 'Constructor' {
@@ -554,6 +828,8 @@ Describe 'WingetHandler' {
   </Applications>
 </Package>
 '@ | Set-Content -LiteralPath (Join-Path $script:codexInstallLocation "AppxManifest.xml") -Encoding utf8
+            New-Item -ItemType Directory -Path (Join-Path $script:codexInstallLocation "app") -Force | Out-Null
+            New-Item -ItemType File -Path (Join-Path $script:codexInstallLocation "app\Codex.exe") -Force | Out-Null
 
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
             Mock Test-PathExist { return $true }
@@ -589,6 +865,7 @@ Describe 'WingetHandler' {
                 return [PSCustomObject]@{
                     Name              = "OpenAI.Codex"
                     PackageFamilyName = "OpenAI.Codex_2p2nqsd0c76g0"
+                    Version           = [version]"1.0.0.0"
                     InstallLocation   = $script:codexInstallLocation
                 }
             }
@@ -726,11 +1003,12 @@ Describe 'WingetHandler' {
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
-        It 'should treat as not installed and attempt install' {
+        It 'should report a detection failure instead of treating the package as absent' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
-            $result.Message | Should -Match "インストール"
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "winget list failed"
+            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains "install" }
         }
     }
 
@@ -1013,6 +1291,7 @@ Describe 'WingetHandler' {
 
         It 'should install only packages with verifyCommand' {
             $script:installIds = @()
+            $handler._bufferLogs = $true
             Mock Invoke-Winget {
                 param($Arguments)
                 if ($Arguments -contains "list") {
@@ -1033,6 +1312,8 @@ Describe 'WingetHandler' {
             $script:installIds | Should -Contain "CLI.Tool"
             $script:installIds | Should -Not -Contain "GUI.App"
             $script:installIds | Should -Not -Contain "Volatile.Nightly"
+            @($handler._logBuffer | ForEach-Object { $_.Message } | Where-Object { $_ -like 'CI_VERIFICATION_INVENTORY:*' }) |
+                Should -Be @('CI_VERIFICATION_INVENTORY: CLI.Tool')
         }
 
         It 'should skip install when an installed package verifyCommand already works' {
@@ -2044,7 +2325,12 @@ Describe 'WingetHandler' {
             }
         }
 
-        It 'should use the direct archive after WinGet fails without post-install verification' {
+        It 'should use the direct archive after WinGet fails and retain the original failure diagnostics' {
+            $script:loggedMessages = @()
+            Mock Write-Host {
+                param($Object)
+                $script:loggedMessages += [string]$Object
+            }
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
 
@@ -2057,6 +2343,125 @@ Describe 'WingetHandler' {
             # The installed-package pre-check may run once; the timed-out
             # install must not trigger a second verification attempt.
             $script:verifyAttempts | Should -Be 1
+            ($script:loggedMessages -join "`n") | Should -Match "exit code 124"
+            ($script:loggedMessages -join "`n") | Should -Match "winget timed out after downloading the archive"
+        }
+
+        It 'should run the WinGet latest-version check but not fallback for verified installed Codex' {
+            $script:codexDestination = Join-Path $TestDrive "Codex"
+            $script:codexHash = ("cd" * 32).ToUpperInvariant()
+            New-Item -ItemType Directory -Path $script:codexDestination -Force | Out-Null
+            New-Item -ItemType File -Path (Join-Path $script:codexDestination "codex.exe") -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $script:codexDestination ".dotfiles-direct-installer.sha256") -Value $script:codexHash -Encoding ASCII
+            $script:installCalls = 0
+            $script:webRequestCalls = 0
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "OpenAI.Codex"
+                                    directInstaller   = [PSCustomObject]@{
+                                        type           = "archive"
+                                        url            = "https://example.invalid/codex.zip"
+                                        sha256         = $script:codexHash
+                                        destination    = $script:codexDestination
+                                        executable     = "codex.exe"
+                                        timeoutSeconds = 30
+                                    }
+                                    verifyCommand     = [PSCustomObject]@{ command = "codex"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
+                    $global:LASTEXITCODE = 0
+                    return @("Name Id Version Source", "-------------------", "Codex OpenAI.Codex 1.0 winget")
+                }
+                if ($Arguments -contains "install") {
+                    $script:installCalls++
+                    $global:LASTEXITCODE = 1
+                    return "No applicable update found"
+                }
+                $global:LASTEXITCODE = 1
+                return @()
+            }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "codex 1.0.0" }
+            Mock Invoke-WebRequest { $script:webRequestCalls++ }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個検証済み"
+            $script:installCalls | Should -Be 1
+            $script:webRequestCalls | Should -Be 0
+        }
+
+        It 'should keep installed Codex network failures visible without direct fallback' {
+            $script:codexDestination = Join-Path $TestDrive "CodexNetwork"
+            $script:installCalls = 0
+            $script:webRequestCalls = 0
+            $script:loggedMessages = @()
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = "winget" }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = "OpenAI.Codex"
+                                    directInstaller   = [PSCustomObject]@{
+                                        type           = "archive"
+                                        url            = "https://example.invalid/codex.zip"
+                                        sha256         = ("cd" * 32)
+                                        destination    = $script:codexDestination
+                                        executable     = "codex.exe"
+                                        timeoutSeconds = 30
+                                    }
+                                    verifyCommand     = [PSCustomObject]@{ command = "codex"; args = @("--version") }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
+                    $global:LASTEXITCODE = 0
+                    return @("Name Id Version Source", "-------------------", "Codex OpenAI.Codex 1.0 winget")
+                }
+                if ($Arguments -contains "install") {
+                    $script:installCalls++
+                    $global:LASTEXITCODE = 1
+                    return "Failed when opening source: network unreachable"
+                }
+                $global:LASTEXITCODE = 1
+                return @()
+            }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "codex 1.0.0" }
+            Mock Invoke-WebRequest { $script:webRequestCalls++ }
+            Mock Write-Host {
+                param($Object)
+                $script:loggedMessages += [string]$Object
+            }
+
+            $ctx.Options["WingetMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "1 個失敗"
+            $script:installCalls | Should -Be 1
+            $script:webRequestCalls | Should -Be 0
+            ($script:loggedMessages -join "`n") | Should -Match "network unreachable"
+            ($script:loggedMessages -join "`n") | Should -Match "exit code: 1"
         }
 
         It 'should not accept a stale direct-installer marker after fallback fails' {
@@ -2108,6 +2513,18 @@ Describe 'WingetHandler' {
 
         It 'should support a direct file fallback for portable binaries without an archive' {
             $fileDestination = Join-Path $TestDrive "direnv"
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 1
+                    return @()
+                }
+                if ($Arguments -contains "install") {
+                    $global:LASTEXITCODE = 124
+                    return "winget timed out before installing the package"
+                }
+                $global:LASTEXITCODE = 1
+            }
             Mock Get-JsonContent {
                 return [PSCustomObject]@{
                     Sources = @(

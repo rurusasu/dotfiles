@@ -442,7 +442,6 @@ let
         };
         chatgpt = {
           pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.chatgpt else pkgs.callPackage ./chatgpt { };
-          msstore = "9NT1R1C2HH7J";
           category = "desktop";
           support = {
             darwin = {
@@ -524,7 +523,6 @@ let
           pkg = if pkgs.stdenv.hostPlatform.isDarwin then darwinDiscordPackage else pkgs.discord;
           winget = "Discord.Discord";
           category = "desktop";
-          installFeature = "WithHermes";
           support = {
             darwin = {
               provider = "nix";
@@ -1767,7 +1765,8 @@ lib.mapAttrs (_: resolve) grouped
       args = [ "--version" ];
     };
     rust-analyzer = {
-      command = "rust-analyzer";
+      type = "portableLinkCommand";
+      command = "rust-analyzer.exe";
       args = [ "--version" ];
     };
     ollama = {
@@ -1943,6 +1942,16 @@ lib.mapAttrs (_: resolve) grouped
   # Extra PATH directories for installers that do not register CLI commands on PATH.
   # Entries may contain Windows environment variables and glob wildcards.
   wingetPathEntries = {
+    nodejs = [ "%ProgramFiles%\\nodejs" ];
+    "Task.Task" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Task.Task*" ];
+    "hadolint.hadolint" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\hadolint.hadolint*" ];
+    "Artempyanykh.Marksman" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Artempyanykh.Marksman*" ];
+    "astral-sh.ruff" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ruff*" ];
+    "JohnnyMorganz.StyLua" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\JohnnyMorganz.StyLua*" ];
+    "tamasfe.taplo" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tamasfe.taplo*" ];
+    "tree-sitter.tree-sitter-cli" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*" ];
+    "astral-sh.ty" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ty*" ];
+    "astral-sh.uv" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.uv*" ];
     _1password-cli = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*" ];
     "AgileBits.1Password.CLI" = [
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"
@@ -1960,6 +1969,8 @@ lib.mapAttrs (_: resolve) grouped
       "%LOCALAPPDATA%\\Programs\\Bun\\bun-windows-x64"
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Oven-sh.Bun*\\bun-windows-x64"
     ];
+    oxlint = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
+    "oxc-project.oxlint" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
     chezmoi = [ "%LOCALAPPDATA%\\Programs\\chezmoi" ];
     codex = [ "%LOCALAPPDATA%\\Programs\\Codex" ];
     "OpenAI.Codex" = [ "%LOCALAPPDATA%\\Programs\\Codex" ];
@@ -2003,9 +2014,74 @@ lib.mapAttrs (_: resolve) grouped
   # Post-install verification commands for Windows-only winget packages.
   # Keys match PackageIdentifier values because these packages have no catalog attr.
   wingetVerifyById = {
+    "AgileBits.1Password" = {
+      type = "windowsInstalledProduct";
+      command = "AgileBits.1Password";
+      appxPackage = {
+        name = "AgileBits.1Password";
+        packageFamilyName = "Agilebits.1Password_amwd9z03whsfe";
+        executable = "1Password.exe";
+      };
+      uninstallEntry = {
+        displayName = "1Password";
+        executablePaths = [
+          "%ProgramFiles%\\1Password\\1Password.exe"
+          "%LOCALAPPDATA%\\1Password\\app\\*\\1Password.exe"
+        ];
+      };
+    };
+    "TheBrowserCompany.Arc" = {
+      type = "appxLaunchTarget";
+      command = "TheBrowserCompany.Arc";
+      args = [ "TheBrowserCompany.Arc_ttt1ap7aakyb4!Arc" ];
+    };
+    "AutoHotkey.AutoHotkey" = {
+      type = "windowsInstalledProduct";
+      command = "AutoHotkey";
+      uninstallEntry = {
+        productCodes = [ "AutoHotkey" ];
+        displayName = "AutoHotkey";
+        executablePaths = [ "%ProgramFiles%\\AutoHotkey\\v2\\AutoHotkey.exe" ];
+      };
+    };
+    "Discord.Discord" = {
+      type = "windowsInstalledProduct";
+      command = "Discord";
+      uninstallEntry = {
+        productCodes = [ "Discord" ];
+        displayName = "Discord";
+        publisher = "Discord Inc.";
+        executablePaths = [ "%LOCALAPPDATA%\\Discord\\app-*\\Discord.exe" ];
+      };
+    };
+    "Docker.DockerDesktop" = {
+      type = "windowsInstalledProduct";
+      command = "Docker Desktop";
+      uninstallEntry = {
+        displayName = "Docker Desktop";
+        publisher = "Docker Inc.";
+        executablePaths = [
+          "%ProgramFiles%\\Docker\\Docker\\Docker Desktop.exe"
+          "%LOCALAPPDATA%\\Programs\\DockerDesktop\\Docker Desktop.exe"
+        ];
+      };
+    };
     "dprint.dprint" = {
       command = "dprint";
       args = [ "--version" ];
+    };
+    "Google.Chrome" = {
+      type = "windowsInstalledProduct";
+      command = "Google Chrome";
+      uninstallEntry = {
+        displayName = "Google Chrome";
+        publisher = "Google LLC";
+        executablePaths = [
+          "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+          "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+          "%LOCALAPPDATA%\\Google\\Chrome\\Application\\chrome.exe"
+        ];
+      };
     };
     "hadolint.hadolint" = {
       command = "hadolint";
@@ -2014,6 +2090,18 @@ lib.mapAttrs (_: resolve) grouped
     "OpenAI.Codex" = {
       command = "codex";
       args = [ "--version" ];
+    };
+    "Obsidian.Obsidian" = {
+      type = "windowsInstalledProduct";
+      command = "Obsidian";
+      uninstallEntry = {
+        productCodes = [ "bd400747-f0c1-5638-a859-982036102edf" ];
+        displayName = "Obsidian";
+        executablePaths = [
+          "%LOCALAPPDATA%\\Programs\\Obsidian\\Obsidian.exe"
+          "%ProgramFiles%\\Obsidian\\Obsidian.exe"
+        ];
+      };
     };
     "Microsoft.WSL" = {
       command = "wsl";
@@ -2024,6 +2112,48 @@ lib.mapAttrs (_: resolve) grouped
     "Oven-sh.Bun" = {
       command = "bun";
       args = [ "--version" ];
+    };
+    "Microsoft.PowerToys" = {
+      type = "windowsInstalledProduct";
+      command = "Microsoft PowerToys";
+      uninstallEntry = {
+        displayName = "Microsoft PowerToys";
+        publisher = "Microsoft Corporation";
+        executablePaths = [
+          "%ProgramFiles%\\PowerToys\\PowerToys.exe"
+          "%LOCALAPPDATA%\\PowerToys\\PowerToys.exe"
+        ];
+      };
+    };
+    "Microsoft.VCRedist.2015+.x64" = {
+      type = "windowsInstalledProduct";
+      command = "Microsoft Visual C++ 2015-2022 Redistributable (x64)";
+      uninstallEntry = {
+        displayNamePattern = "^Microsoft Visual C\\+\\+ (?:2015-2022 Redistributable|v14 Redistributable) \\(x64\\)";
+        publisher = "Microsoft Corporation";
+        executablePaths = [ "%SystemRoot%\\System32\\vcruntime140.dll" ];
+      };
+    };
+    "Microsoft.VisualStudio.2022.BuildTools" = {
+      type = "visualStudioInstanceVersion";
+      command = "Microsoft.VisualStudio.Product.BuildTools";
+      productId = "Microsoft.VisualStudio.Product.BuildTools";
+      minimumVersion = "17.0";
+      requiredComponent = "Microsoft.VisualStudio.Component.VC.Tools.x86.x64";
+      compilerRelativePath = "VC\\Tools\\MSVC\\*\\bin\\Hostx64\\x64\\cl.exe";
+    };
+    "Microsoft.WindowsTerminal" = {
+      type = "appxLaunchTarget";
+      command = "Microsoft.WindowsTerminal";
+      args = [ "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App" ];
+    };
+    "StablyAI.Orca" = {
+      type = "windowsInstalledProduct";
+      command = "OrcaSlicer";
+      uninstallEntry = {
+        productCodes = [ "2b325ec9-0ed1-575f-ad70-e08307aee879" ];
+        displayName = "Orca";
+      };
     };
     "zig.zig" = {
       command = "zig";

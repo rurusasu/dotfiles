@@ -6,6 +6,59 @@
 }
 
 Describe 'NpmHandler' {
+    Context 'Invoke-Npm package install timeout routing' {
+        BeforeEach {
+            $script:originalInstallTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
+        }
+        AfterEach {
+            if ($null -eq $script:originalInstallTimeout) {
+                Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $script:originalInstallTimeout
+            }
+        }
+
+        It 'should invoke global installs through the shared 900-second timeout by default' {
+            Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+            Mock Invoke-ExternalCommandWithTimeout { $global:LASTEXITCODE = 0; return 'install ok' }
+            Mock Invoke-NativeCommand { throw 'global install must use the timeout wrapper' }
+
+            $result = Invoke-Npm -Arguments @('install', '-g', 'example-package')
+
+            $result | Should -Contain 'install ok'
+            Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+                $Command -eq 'npm' -and $Arguments -contains 'example-package' -and $TimeoutSeconds -eq 900
+            }
+            Should -Invoke Invoke-NativeCommand -Times 0
+        }
+
+        It 'should honor DOTFILES_INSTALL_TIMEOUT_SECONDS for global installs' {
+            $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = '73'
+            Mock Invoke-ExternalCommandWithTimeout { $global:LASTEXITCODE = 0; return 'install ok' }
+            Mock Invoke-NativeCommand { throw 'global install must use the timeout wrapper' }
+
+            $result = Invoke-Npm -Arguments @('install', '--global', 'example-package')
+
+            $result | Should -Contain 'install ok'
+            Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+                $Command -eq 'npm' -and $TimeoutSeconds -eq 73
+            }
+            Should -Invoke Invoke-NativeCommand -Times 0
+        }
+
+        It 'should leave version and global list commands on the native path' {
+            Mock Invoke-ExternalCommandWithTimeout { throw 'non-install npm commands must not be timed' }
+            Mock Invoke-NativeCommand { $global:LASTEXITCODE = 0; return 'native npm' }
+
+            Invoke-Npm -Arguments @('--version') | Should -Contain 'native npm'
+            Invoke-Npm -Arguments @('list', '-g', '--depth=0') | Should -Contain 'native npm'
+
+            Should -Invoke Invoke-ExternalCommandWithTimeout -Times 0
+            Should -Invoke Invoke-NativeCommand -Times 2 -ParameterFilter { $Command -eq 'npm' }
+        }
+    }
+
     BeforeEach {
         $script:handler = [NpmHandler]::new()
         $script:ctx = [SetupContext]::new($script:projectRoot)
@@ -325,6 +378,79 @@ Describe 'NpmHandler' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $false
             $result.Message | Should -Match "npm error"
+        }
+    }
+
+    Context 'Apply - Windows npm manifest contracts' {
+        BeforeEach {
+            $script:npmInstallCalls = @()
+            $script:npmVerifyCalls = @()
+            Mock Get-ExternalCommand { return @{ Source = "C:\npm.cmd" } }
+            Mock Test-PathExist { return $true }
+            Mock Invoke-Npm {
+                param($Arguments)
+                if ($Arguments -contains "list") {
+                    $global:LASTEXITCODE = 0
+                    return '{"dependencies":{"@devcontainers/cli":{},"agent-browser":{}}}'
+                }
+                $script:npmInstallCalls += , @($Arguments)
+                $global:LASTEXITCODE = 0
+                return "installed"
+            }
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $script:npmVerifyCalls += , ([PSCustomObject]@{
+                    Command        = $Command
+                    Arguments      = @($Arguments)
+                    TimeoutSeconds = $TimeoutSeconds
+                })
+                $global:LASTEXITCODE = 0
+                return "1.0.0"
+            }
+        }
+
+        It 'should install and verify every current manifest package using its declared command' {
+            $manifest = Get-JsonContent -Path (Join-Path $script:projectRoot "windows\npm\packages.json")
+            $expected = @(
+                @{ Spec = "@devcontainers/cli"; Command = "devcontainer"; Arguments = @("--version") }
+                @{ Spec = "agent-browser@0.38.1"; Command = "agent-browser"; Arguments = @("--version") }
+            )
+            $actualSpecs = @($manifest.globalPackages | ForEach-Object { $_.name })
+            ($actualSpecs | Sort-Object) -join "|" | Should -Be "@devcontainers/cli|agent-browser@0.38.1"
+
+            $ctx.Options["NpmMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:npmInstallCalls.Count | Should -Be 2
+            foreach ($entry in $expected) {
+                $script:npmInstallCalls | Where-Object { $_ -contains $entry.Spec } | Should -HaveCount 1
+                $script:npmVerifyCalls | Where-Object {
+                    $_.Command -eq $entry.Command -and ($_.Arguments -join "|") -eq ($entry.Arguments -join "|")
+                } | Should -HaveCount 2
+            }
+            $script:npmVerifyCalls | Where-Object { $_.TimeoutSeconds -ne 30 } | Should -BeNullOrEmpty
+        }
+
+        It 'should classify verification timeouts for the current manifest packages as failures' {
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $script:npmVerifyCalls += , ([PSCustomObject]@{
+                    Command        = $Command
+                    Arguments      = @($Arguments)
+                    TimeoutSeconds = $TimeoutSeconds
+                })
+                $global:LASTEXITCODE = 124
+                return "verification timed out"
+            }
+
+            $ctx.Options["NpmMode"] = "import"
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match "2 個検証失敗"
+            $script:npmInstallCalls.Count | Should -Be 2
+            $script:npmVerifyCalls | Where-Object { $_.TimeoutSeconds -ne 30 } | Should -BeNullOrEmpty
         }
     }
 }

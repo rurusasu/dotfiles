@@ -80,6 +80,7 @@ class CodexHandler : SetupHandlerBase {
             # 既存リンクは、現行 exe への symlink 作成に成功してから置き換える。
             $linkIsCurrent = $this.IsPortableLinkCurrent($linkPath, $codexExe)
             $copyIsCurrent = $this.IsPortableCopyCurrent($linkPath, $codexExe)
+            $shimIsCopy = $copyIsCurrent
             if (-not $linkIsCurrent -and -not $copyIsCurrent) {
                 try {
                     $this.CreatePortableLink($linkPath, $codexExe)
@@ -93,12 +94,19 @@ class CodexHandler : SetupHandlerBase {
                         Remove-Item -LiteralPath $linkPath -Force -ErrorAction Stop
                     }
                     Copy-Item -LiteralPath $codexExe -Destination $linkPath -Force -ErrorAction Stop
+                    $shimIsCopy = $true
                     $this.Log("codex.exe shim をコピーで作成しました", "Green")
                 }
             }
             else {
                 $shimType = if ($linkIsCurrent) { "シンボリックリンク" } else { "コピー" }
                 $this.Log("codex.exe shim は最新です ($shimType)", "Gray")
+            }
+
+            # Codex canonicalizes symlink targets and resolves the helper from
+            # the WinGet package root. A copied shim loses that relationship.
+            if ($shimIsCopy) {
+                $this.SyncCodexHostExecutable($linksPath, $codexExe)
             }
 
             # PATH は常に冪等チェック。リンクが既存でも PATH 未設定なら追加する。
@@ -140,6 +148,23 @@ class CodexHandler : SetupHandlerBase {
         }
 
         return $null
+    }
+
+    hidden [string] GetCodexHostExecutablePath([string]$codexExe) {
+        return Join-Path (Split-Path -Parent $codexExe) "codex-code-mode-host.exe"
+    }
+
+    hidden [void] SyncCodexHostExecutable([string]$linksPath, [string]$codexExe) {
+        $sourcePath = $this.GetCodexHostExecutablePath($codexExe)
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+            return
+        }
+
+        $shimPath = Join-Path $linksPath "codex-code-mode-host.exe"
+        if (-not $this.IsPortableCopyCurrent($shimPath, $sourcePath)) {
+            Copy-Item -LiteralPath $sourcePath -Destination $shimPath -Force -ErrorAction Stop
+            $this.Log("codex-code-mode-host.exe を shim の隣に同期しました", "Green")
+        }
     }
 
     <#

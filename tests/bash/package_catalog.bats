@@ -666,7 +666,7 @@ EOF
 	"
 	[ "$status" -eq 0 ]
 	run jq -e '
-		.installFeature == "WithHermes"
+		.installFeature == null
 		and .windows == {
 			"provider": "winget",
 			"source": "winget",
@@ -964,7 +964,7 @@ EOF
 	! grep -q 'docker-desktop' "$REPO_ROOT/nix/packages/darwin-provider-candidates.nix"
 }
 
-@test "ChatGPT uses the nixpkgs Darwin application with legacy cask migration metadata" {
+@test "ChatGPT keeps macOS and Linux providers without the Classic Store package" {
 	run awk '
 		/^[[:space:]]*chatgpt = \{/ { in_entry=1 }
 		in_entry { print }
@@ -972,7 +972,7 @@ EOF
 	' "$SETS"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *'pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.chatgpt else pkgs.callPackage ./chatgpt { };'* ]]
-	[[ "$output" == *'msstore = "9NT1R1C2HH7J";'* ]]
+	[[ "$output" != *'9NT1R1C2HH7J'* ]]
 	[[ "$output" == *'provider = "nix"'* ]]
 	[[ "$output" == *'source = "nixpkgs";'* ]]
 	[[ "$output" == *'nixAttr = "chatgpt";'* ]]

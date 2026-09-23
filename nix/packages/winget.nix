@@ -26,17 +26,7 @@ let
     if verify == null then
       pkg
     else
-      pkg
-      // {
-        verifyCommand = {
-          inherit (verify) command args;
-        }
-        // lib.optionalAttrs (verify ? type) { inherit (verify) type; }
-        // lib.optionalAttrs (verify ? timeoutSeconds) { inherit (verify) timeoutSeconds; }
-        // lib.optionalAttrs (verify ? recoveryStrategy) {
-          inherit (verify) recoveryStrategy;
-        };
-      };
+      pkg // { verifyCommand = verify; };
 
   attachInstallArgs =
     installArgsMap: key: pkg:

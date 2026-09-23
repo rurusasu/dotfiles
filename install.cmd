@@ -11,15 +11,11 @@ if defined DOTFILES_PS7_DIR (
   set "PS7_DIR=%ProgramFiles%\PowerShell\7"
 )
 if exist "%PS7_DIR%\pwsh.exe" (
-  set "PATH=%PS7_DIR%;%PATH%"
   set "PS_CMD=%PS7_DIR%\pwsh.exe"
 )
 
-if not defined PS_CMD if exist "%SystemRoot%\System32\where.exe" (
-  "%SystemRoot%\System32\where.exe" pwsh >nul 2>&1
-  if not errorlevel 1 (
-    set "PS_CMD=pwsh"
-  )
+if not defined PS_CMD (
+  for %%I in (pwsh.exe) do if not "%%~$PATH:I"=="" set "PS_CMD=%%~$PATH:I"
 )
 
 if not defined PS_CMD (

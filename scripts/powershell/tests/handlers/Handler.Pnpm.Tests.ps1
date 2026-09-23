@@ -16,6 +16,62 @@ BeforeAll {
 }
 
 Describe 'PnpmHandler' {
+    Context 'Invoke-Pnpm package install timeout routing' {
+        BeforeEach {
+            $script:originalInstallTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'pnpm.cmd' }
+        }
+        AfterEach {
+            if ($null -eq $script:originalInstallTimeout) {
+                Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $script:originalInstallTimeout
+            }
+        }
+
+        It 'should invoke global adds through the shared 900-second timeout by default' {
+            Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+            Mock Get-Command { return @{ Source = 'C:\tools\pnpm.cmd' } } -ParameterFilter { $Name -eq 'pnpm.cmd' }
+            Mock Invoke-ExternalCommandWithTimeout { $global:LASTEXITCODE = 0; return 'add ok' }
+            Mock Invoke-NativeCommand { throw 'global add must use the timeout wrapper' }
+
+            $result = Invoke-Pnpm -Arguments @('add', '-g', 'example-package')
+
+            $result | Should -Contain 'add ok'
+            Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+                $Command -eq 'C:\tools\pnpm.cmd' -and $Arguments -contains 'example-package' -and $TimeoutSeconds -eq 900
+            }
+            Should -Invoke Invoke-NativeCommand -Times 0
+        }
+
+        It 'should honor DOTFILES_INSTALL_TIMEOUT_SECONDS for global adds' {
+            $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = '73'
+            Mock Invoke-ExternalCommandWithTimeout { $global:LASTEXITCODE = 0; return 'add ok' }
+            Mock Invoke-NativeCommand { throw 'global add must use the timeout wrapper' }
+
+            $result = Invoke-Pnpm -Arguments @('add', '--global', 'example-package')
+
+            $result | Should -Contain 'add ok'
+            Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+                $Command -eq 'pnpm' -and $TimeoutSeconds -eq 73
+            }
+            Should -Invoke Invoke-NativeCommand -Times 0
+        }
+
+        It 'should leave version, list, and root commands on the native path' {
+            Mock Invoke-ExternalCommandWithTimeout { throw 'non-install pnpm commands must not be timed' }
+            Mock Invoke-NativeCommand { $global:LASTEXITCODE = 0; return 'native pnpm' }
+
+            Invoke-Pnpm -Arguments @('--version') | Should -Contain 'native pnpm'
+            Invoke-Pnpm -Arguments @('list', '-g') | Should -Contain 'native pnpm'
+            Invoke-Pnpm -Arguments @('root', '-g') | Should -Contain 'native pnpm'
+
+            Should -Invoke Invoke-ExternalCommandWithTimeout -Times 0
+            Should -Invoke Invoke-NativeCommand -Times 3
+        }
+    }
+
     BeforeEach {
         $script:handler = [PnpmHandler]::new()
         $script:ctx = [SetupContext]::new($script:projectRoot)
@@ -714,7 +770,7 @@ Describe 'PnpmHandler' {
             } -Times 2
         }
 
-        It 'should install every configured Windows pnpm tool without timeout' {
+        It 'should install every configured Windows pnpm tool' {
             $script:addCalls = @()
             Mock Get-JsonContent {
                 return @{
@@ -1416,6 +1472,174 @@ Describe 'PnpmHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match "1 個インストール"
             Should -Invoke Invoke-VerifyCommand -Times 0
+        }
+    }
+
+    Context 'Apply - Windows pnpm manifest contracts' {
+        BeforeEach {
+            $script:originalProcessPath = $env:PATH
+            $script:originalPnpmHome = $env:PNPM_HOME
+            $script:pnpmBin = Join-Path $TestDrive "manifest-pnpm-bin"
+            $script:pnpmRoot = Join-Path $TestDrive ("manifest-pnpm-root-" + [guid]::NewGuid().ToString("N"))
+            New-Item $script:pnpmRoot -ItemType Directory -Force | Out-Null
+            $env:PNPM_HOME = $script:pnpmBin
+            $script:pnpmAddCalls = @()
+            $script:pnpmVerifyCalls = @()
+            $script:verifyExitCodeByCommand = @{}
+
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq "pnpm") { return @{ Source = "C:\pnpm.cmd" } }
+                return $null
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmRoot
+                }
+                if ($Arguments -contains "add") {
+                    $script:pnpmAddCalls += , @($Arguments)
+                }
+                $global:LASTEXITCODE = 0
+                return "installed"
+            }
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $key = (@($Command) + @($Arguments)) -join " "
+                $script:pnpmVerifyCalls += , ([PSCustomObject]@{
+                    Command        = $Command
+                    Arguments      = @($Arguments)
+                    TimeoutSeconds = $TimeoutSeconds
+                })
+                if ($script:verifyExitCodeByCommand.ContainsKey($key)) {
+                    $global:LASTEXITCODE = $script:verifyExitCodeByCommand[$key]
+                }
+                else {
+                    $global:LASTEXITCODE = 0
+                }
+                return "command output"
+            }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+        AfterEach {
+            $env:PATH = $script:originalProcessPath
+            $env:PNPM_HOME = $script:originalPnpmHome
+        }
+
+        It 'should install and verify every manifest package, including feature-gated entries, with declared options' {
+            $expected = @(
+                @{ Spec = "bash-language-server"; Command = "bash-language-server"; Arguments = @("--version") }
+                @{ Spec = "yaml-language-server"; Command = "yaml-language-server"; Arguments = @("--version") }
+                @{ Spec = "@prisma/language-server"; Command = "prisma-language-server"; Arguments = @("--version") }
+                @{ Spec = "@deepseek-ai/dsh"; Command = "dsh"; Arguments = @("--version") }
+                @{ Spec = "@playwright/cli@0.1.21"; Command = "playwright-cli"; Arguments = @("--version") }
+                @{ Spec = "playwright@1.63.0"; Command = "playwright"; Arguments = @("--version") }
+                @{ Spec = "typescript-language-server"; Command = "typescript-language-server"; Arguments = @("--version") }
+                @{ Spec = "typescript"; Command = "tsc"; Arguments = @("--version") }
+                @{ Spec = "@google/gemini-cli"; Command = "gemini"; Arguments = @("--version") }
+            )
+            $manifest = Get-JsonContent -Path (Join-Path $script:projectRoot "windows\pnpm\packages.json")
+            (@($manifest.globalPackages | ForEach-Object { $_.name } | Sort-Object) -join "|") |
+                Should -Be ((@($expected | ForEach-Object { $_.Spec } | Sort-Object) -join "|"))
+
+            $ctx.Options["WithHermes"] = $true
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:pnpmAddCalls.Count | Should -Be 9
+            (@($script:pnpmAddCalls | ForEach-Object { $_[-1] } | Sort-Object) -join "|") |
+                Should -Be ((@($expected | ForEach-Object { $_.Spec } | Sort-Object) -join "|"))
+            foreach ($entry in $expected) {
+                $script:pnpmVerifyCalls | Where-Object {
+                    $_.Command -eq $entry.Command -and ($_.Arguments -join "|") -eq ($entry.Arguments -join "|")
+                } | Should -HaveCount 1
+            }
+            $script:pnpmVerifyCalls | Where-Object {
+                $_.Command -eq "playwright" -and $_.Arguments -contains "install"
+            } | Should -HaveCount 1
+            ($script:pnpmVerifyCalls | Where-Object {
+                $_.Command -eq "playwright" -and $_.Arguments -contains "install"
+            }).TimeoutSeconds | Should -Be 600
+            $script:pnpmVerifyCalls | Where-Object {
+                $_.Command -ne "playwright" -or $_.Arguments -notcontains "install"
+            } | ForEach-Object { $_.TimeoutSeconds | Should -Be 30 }
+
+            $dshCall = $script:pnpmAddCalls | Where-Object { $_ -contains "@deepseek-ai/dsh" } | Select-Object -First 1
+            $dshCall | Should -Contain "--allow-build=@deepseek-ai/dsh-subprocess-local"
+            $dshCall | Should -Contain "--allow-build=@google/genai"
+            $dshCall | Should -Contain "--allow-build=koffi"
+            $dshCall | Should -Contain "--allow-build=node-pty"
+            $dshCall | Should -Contain "--allow-build=protobufjs"
+            $geminiCall = $script:pnpmAddCalls | Where-Object { $_ -contains "@google/gemini-cli" } | Select-Object -First 1
+            $geminiCall | Should -Contain "--allow-build=@github/keytar"
+            $geminiCall | Should -Contain "--allow-build=node-pty"
+        }
+
+        It 'should detect every installed manifest package and still refresh each declared spec' {
+            $installedPackagePaths = @(
+                "bash-language-server"
+                "yaml-language-server"
+                "@prisma\language-server"
+                "@deepseek-ai\dsh"
+                "@playwright\cli"
+                "playwright"
+                "typescript-language-server"
+                "typescript"
+                "@google\gemini-cli"
+            )
+            foreach ($relativePath in $installedPackagePaths) {
+                New-Item -Path (Join-Path $script:pnpmRoot $relativePath) -ItemType Directory -Force | Out-Null
+            }
+            $ctx.Options["WithHermes"] = $true
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:pnpmAddCalls.Count | Should -Be 9
+            foreach ($command in @(
+                "bash-language-server", "yaml-language-server", "prisma-language-server",
+                "dsh", "playwright-cli", "playwright", "typescript-language-server", "tsc", "gemini"
+            )) {
+                $script:pnpmVerifyCalls | Where-Object {
+                    $_.Command -eq $command -and ($_.Arguments -join "|") -eq "--version"
+                } | Should -HaveCount 2
+            }
+        }
+
+        It 'should omit both Hermes packages when WithHermes is disabled' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:pnpmAddCalls.Count | Should -Be 7
+            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Not -Contain "@playwright/cli@0.1.21"
+            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Not -Contain "playwright@1.63.0"
+            $script:pnpmVerifyCalls | Where-Object { $_.Command -in @("playwright-cli", "playwright") } | Should -BeNullOrEmpty
+        }
+
+        It 'should classify a manifest package verification timeout as a verification failure' {
+            $script:verifyExitCodeByCommand["bash-language-server --version"] = 124
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match "1 個検証失敗"
+            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "bash-language-server"
+        }
+
+        It 'should classify the manifest Playwright post-install failure and stop before version verification' {
+            $ctx.Options["WithHermes"] = $true
+            $script:verifyExitCodeByCommand["playwright install chromium"] = 1
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match "1 個post-install失敗"
+            $script:pnpmVerifyCalls | Where-Object {
+                $_.Command -eq "playwright" -and $_.Arguments -contains "--version"
+            } | Should -BeNullOrEmpty
         }
     }
 }
