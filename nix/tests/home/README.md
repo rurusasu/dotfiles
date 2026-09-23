@@ -104,7 +104,7 @@ Nix-native test へ移行する。
 |   23 | `missing providers require an explicitly reviewed unsupported reason`                                         |
 |   24 | `catalog Winget packages preserve ID-keyed metadata`                                                          |
 |   25 | `macOS desktop apps include Dia and Orca migration metadata`                                                  |
-|   26 | `retired package IDs are absent from the SSOT and generated manifests`                                         |
+|   26 | `retired package IDs are absent from the SSOT and generated manifests`                                        |
 |   27 | `Darwin routes Nix GUI apps to system packages and keeps commands in Home Manager`                            |
 |   28 | `Arc remains Windows-only and Dia remains macOS-only`                                                         |
 |   29 | `Discord preserves Windows and Linux providers while declaring a Nix Darwin GUI migration`                    |

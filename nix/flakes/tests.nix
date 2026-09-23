@@ -32,6 +32,8 @@
         treefmt-nix
         workmux
         ;
+      # nix-unit evaluates the nested llm-agents input in its isolated builder.
+      "llm-agents/nixpkgs" = inputs.nixpkgs;
     };
 
     nix-unit.tests =

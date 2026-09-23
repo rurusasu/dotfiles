@@ -41,8 +41,7 @@ let
   hasDarwinCask = name: config: builtins.any (cask: cask.name == name) config.homebrew.casks;
   packageNames =
     config: builtins.map (package: package.name or package.pname) config.environment.systemPackages;
-  homePackageNames =
-    home: builtins.map (package: package.name or package.pname) home.home.packages;
+  homePackageNames = home: builtins.map (package: package.name or package.pname) home.home.packages;
   darwinHomeSource = builtins.readFile ../../home/darwin.nix;
   hasPrefix = prefix: value: builtins.match "${prefix}.*" value != null;
   hasPackage = name: packages: builtins.any (package: package == name) packages;

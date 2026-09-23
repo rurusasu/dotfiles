@@ -151,19 +151,19 @@ let
     key: pkg:
     attachRequiresAdmin sets.wingetRequiresAdmin key (
       attachSkipInstall sets.wingetSkipInstall key (
-      attachCiSkipInstall sets.wingetCiSkipInstall key (
-        attachPathEntries sets.wingetPathEntries key (
-          attachPortableLink sets.wingetPortableLinksById key (
-            attachDirectInstaller sets.wingetDirectInstallers key (
-              attachInstallTimeout sets.wingetInstallTimeoutSeconds key (
-                attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+        attachCiSkipInstall sets.wingetCiSkipInstall key (
+          attachPathEntries sets.wingetPathEntries key (
+            attachPortableLink sets.wingetPortableLinksById key (
+              attachDirectInstaller sets.wingetDirectInstallers key (
+                attachInstallTimeout sets.wingetInstallTimeoutSeconds key (
+                  attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+                )
               )
             )
           )
         )
       )
-    )
-  );
+    );
 
   # Catalog migrations change metadata lookup from PackageIdentifier to the
   # catalog attr name. Apply the ID-keyed metadata as a fallback so generated
@@ -172,19 +172,19 @@ let
     id: pkg:
     attachRequiresAdmin sets.wingetRequiresAdmin id (
       attachSkipInstall sets.wingetSkipInstall id (
-      attachCiSkipInstall sets.wingetCiSkipInstall id (
-        attachPathEntries sets.wingetPathEntries id (
-          attachPortableLink sets.wingetPortableLinksById id (
-            attachDirectInstaller sets.wingetDirectInstallers id (
-              attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
-                attachInstallArgs sets.wingetInstallArgs id (attachVerify sets.wingetVerifyById id pkg)
+        attachCiSkipInstall sets.wingetCiSkipInstall id (
+          attachPathEntries sets.wingetPathEntries id (
+            attachPortableLink sets.wingetPortableLinksById id (
+              attachDirectInstaller sets.wingetDirectInstallers id (
+                attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
+                  attachInstallArgs sets.wingetInstallArgs id (attachVerify sets.wingetVerifyById id pkg)
+                )
               )
             )
           )
         )
       )
-    )
-  );
+    );
 
   # --- winget ---
   wingetFromMap = lib.mapAttrsToList (
@@ -198,19 +198,19 @@ let
     id:
     attachRequiresAdmin sets.wingetRequiresAdmin id (
       attachSkipInstall sets.wingetSkipInstall id (
-      attachCiSkipInstall sets.wingetCiSkipInstall id (
-        attachPathEntries sets.wingetPathEntries id (
-          attachPortableLink sets.wingetPortableLinksById id (
-            attachDirectInstaller sets.wingetDirectInstallers id (
-              attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
-                attachInstallArgs sets.wingetInstallArgs id (
-                  attachVerify sets.wingetVerifyById id { PackageIdentifier = id; }
+        attachCiSkipInstall sets.wingetCiSkipInstall id (
+          attachPathEntries sets.wingetPathEntries id (
+            attachPortableLink sets.wingetPortableLinksById id (
+              attachDirectInstaller sets.wingetDirectInstallers id (
+                attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
+                  attachInstallArgs sets.wingetInstallArgs id (
+                    attachVerify sets.wingetVerifyById id { PackageIdentifier = id; }
+                  )
                 )
               )
             )
           )
         )
-      )
       )
     )
   ) sets.windowsOnly.winget;
@@ -221,8 +221,8 @@ let
     name: id:
     attachSkipInstall sets.wingetSkipInstall name (
       attachCiSkipInstall sets.wingetCiSkipInstall name (
-      attachSkipInstall sets.wingetSkipInstall id (
-        attachCiSkipInstall sets.wingetCiSkipInstall id (
+        attachSkipInstall sets.wingetSkipInstall id (
+          attachCiSkipInstall sets.wingetCiSkipInstall id (
             attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
               attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
             )

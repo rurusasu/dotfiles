@@ -42,7 +42,8 @@
 let
   # The same appearance data is consumed by chezmoi templates and exposed to
   # Nix consumers so font/theme values do not drift by platform.
-  appearance = (builtins.fromJSON (builtins.readFile ../../chezmoi/.chezmoidata/appearance.json)).appearance;
+  appearance =
+    (builtins.fromJSON (builtins.readFile ../../chezmoi/.chezmoidata/appearance.json)).appearance;
   darwinProviderCandidates = import ./darwin-provider-candidates.nix;
   darwinProviderCandidate = name: darwinProviderCandidates.${name};
   selectDarwinPackage =

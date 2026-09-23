@@ -96,6 +96,7 @@ Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢
   - `Alt+Shift+H/J/K/L`: editor group move
   - `Ctrl+Alt+\` / `Ctrl+Alt+-` / `Ctrl+Alt+X/W`: split/close/toggle widths
   - それ以外は標準キーバインドを優先
+
 ### Shells
 
 - tmux (Unix/Linux/WSL)

@@ -18,11 +18,14 @@ in
 
   # macOS installs the WezTerm GUI through Homebrew, so add its Nix terminfo
   # output separately for shells and tools that resolve TERM=wezterm.
-  home.packages = lib.unique (sets.darwinHomePackagesForInstallFeatures installFeatures ++ [
-    managedFontPackage
-    pkgs.coreutils
-    pkgs.wezterm.terminfo
-  ]);
+  home.packages = lib.unique (
+    sets.darwinHomePackagesForInstallFeatures installFeatures
+    ++ [
+      managedFontPackage
+      pkgs.coreutils
+      pkgs.wezterm.terminfo
+    ]
+  );
 
   # Nix installs the font into the profile, but macOS GUI applications discover
   # user fonts through ~/Library/Fonts. Keep the package declarative while
