@@ -934,10 +934,8 @@ jobs:
       matrix:
         include:
           - runtime: Windows PowerShell 5.1
-            shell: powershell
             version: '5.1'
           - runtime: PowerShell 7
-            shell: pwsh
             version: '7'
     permissions:
       contents: read
@@ -949,7 +947,7 @@ jobs:
           persist-credentials: false
 
       - name: Bootstrap winget
-        shell: ${{ matrix.shell }}
+        shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -1000,7 +998,7 @@ jobs:
           winget source list
 
       - name: Run install.cmd strict user phase
-        shell: ${{ matrix.shell }}
+        shell: pwsh
         timeout-minutes: 70
         env:
           DOTFILES_INSTALL_TIMEOUT_SECONDS: "900"
@@ -1009,15 +1007,8 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $expectedVersion = $env:DOTFILES_E2E_POWERSHELL_VERSION
-          $actualVersion = $PSVersionTable.PSVersion
-          $versionMatches = if ($expectedVersion -eq '5.1') {
-            $actualVersion.Major -eq 5 -and $actualVersion.Minor -eq 1
-          }
-          else {
-            $actualVersion.Major -eq 7
-          }
-          if (-not $versionMatches) {
-            throw "Windows installer E2E shell mismatch: expected PowerShell $expectedVersion, got $($PSVersionTable.PSVersion)"
+          if ($PSVersionTable.PSVersion.Major -ne 7) {
+            throw "Windows installer E2E orchestrator must run under PowerShell 7, got $($PSVersionTable.PSVersion)"
           }
 
           $originalPath = $env:PATH

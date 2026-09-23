@@ -192,10 +192,12 @@ jobs:
       matrix:
         include:
           - runtime: Windows PowerShell 5.1
-            shell: powershell
+            executable: powershell.exe
+            module_directory: WindowsPowerShell
             module_path: ~\Documents\WindowsPowerShell\Modules
           - runtime: PowerShell 7
-            shell: pwsh
+            executable: pwsh.exe
+            module_directory: PowerShell
             module_path: ~\Documents\PowerShell\Modules
     permissions:
       contents: read
@@ -246,7 +248,7 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.runtime }}-psmodules-pester-5.6.1-pssa-1.22.0
 
       - name: Install PowerShell modules
-        shell: ${{ matrix.shell }}
+        shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -262,13 +264,7 @@ jobs:
             }
           }
 
-          $moduleDirectory = if ($PSVersionTable.PSVersion.Major -eq 5) {
-            'Documents\WindowsPowerShell\Modules'
-          }
-          else {
-            'Documents\PowerShell\Modules'
-          }
-          $moduleRoot = Join-Path $HOME $moduleDirectory
+          $moduleRoot = Join-Path $HOME "Documents\$env:PS_MODULE_DIRECTORY"
           if ($env:PSModulePath -notlike "*$moduleRoot*") {
             $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
           }
@@ -299,15 +295,19 @@ jobs:
 
           Install-GalleryModuleArchive -Name Pester -Version '5.6.1'
           Install-GalleryModuleArchive -Name PSScriptAnalyzer -Version '1.22.0'
+        env:
+          PS_MODULE_DIRECTORY: ${{ matrix.module_directory }}
 
       - name: Run tests
-        shell: ${{ matrix.shell }}
+        shell: pwsh
         working-directory: scripts/powershell
         run: |
-          .\tests\Invoke-Tests.ps1 `
+          & $env:PS_TEST_EXECUTABLE -NoProfile -File .\tests\Invoke-Tests.ps1 `
             -MinimumCoverage 0 `
             -OutputFile test-results.xml `
             -CoverageOutputFile coverage.xml
+        env:
+          PS_TEST_EXECUTABLE: ${{ matrix.executable }}
 
       - name: Upload test results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
