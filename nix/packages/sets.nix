@@ -1767,14 +1767,8 @@ lib.mapAttrs (_: resolve) grouped
       args = [ "--version" ];
     };
     rust-analyzer = {
-      # Windows PowerShell 5.1 is the install.cmd fallback, so verification
-      # must not require the optional pwsh executable.
-      command = "powershell";
-      args = [
-        "-NoProfile"
-        "-Command"
-        "& (Join-Path $env:LOCALAPPDATA 'Microsoft/WinGet/Links/rust-analyzer.exe') --version"
-      ];
+      command = "rust-analyzer";
+      args = [ "--version" ];
     };
     ollama = {
       command = "ollama";
@@ -1991,6 +1985,10 @@ lib.mapAttrs (_: resolve) grouped
     "OpenAI.Codex" = {
       linkName = "codex.exe";
       targetPattern = "codex-x86_64-pc-windows-msvc.exe";
+    };
+    "Rustlang.rust-analyzer" = {
+      linkName = "rust-analyzer.exe";
+      targetPattern = "rust-analyzer.exe";
     };
     oxlint = {
       linkName = "oxlint.exe";

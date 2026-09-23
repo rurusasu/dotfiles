@@ -373,13 +373,13 @@
           "installArgs": ["--scope", "user"],
           "installTimeoutSeconds": 900,
           "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
+          "portableLink": {
+            "linkName": "rust-analyzer.exe",
+            "targetPattern": "rust-analyzer.exe"
+          },
           "verifyCommand": {
-            "args": [
-              "-NoProfile",
-              "-Command",
-              "& (Join-Path $env:LOCALAPPDATA Microsoft/WinGet/Links/rust-analyzer.exe) --version"
-            ],
-            "command": "powershell"
+            "args": ["--version"],
+            "command": "rust-analyzer"
           }
         },
         {

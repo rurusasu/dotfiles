@@ -62,6 +62,7 @@ Describe 'CI workflow configuration' {
 
     It 'should run install.cmd in CI with timeout and completion marker checks' {
         $wingetWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
+        $wingetAssertion = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/powershell/ci/Assert-WingetInstallSuccess.ps1") -Raw
 
         $wingetWorkflow | Should -Match '& cmd\.exe /d /c install\.cmd'
         $wingetWorkflow | Should -Match 'install\.cmd'
@@ -70,6 +71,9 @@ Describe 'CI workflow configuration' {
         $wingetWorkflow | Should -Not -Match 'RedirectStandardOutput'
         $wingetWorkflow | Should -Match 'DOTFILES_INSTALL_TIMEOUT_SECONDS:\s*"900"'
         $wingetWorkflow | Should -Match 'User Phase Complete!'
+        $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess -Output \$out'
+        $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess\.ps1'
+        $wingetAssertion | Should -Match 'did not attempt any WinGet package installations'
     }
 
     It 'should build the NixOS WSL system on hosted Nix CI' {

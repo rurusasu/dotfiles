@@ -563,13 +563,18 @@ in sets.providerErrors
         }
 
         It 'should not depend on pwsh to verify the portable rust-analyzer package' {
+            $sets = Get-Content -LiteralPath $script:setsPath -Raw
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'Rustlang.rust-analyzer') | Select-Object -First 1
 
             $package | Should -Not -BeNullOrEmpty
-            $package.verifyCommand.command | Should -Be 'powershell'
-            @($package.verifyCommand.args) | Should -Contain '-Command'
+            $sets | Should -Match '(?s)rust-analyzer\s*=\s*\{\s*command\s*=\s*"rust-analyzer";\s*args\s*=\s*\[\s*"--version"\s*\];'
+            $package.verifyCommand.command | Should -Be 'rust-analyzer'
+            @($package.verifyCommand.args) | Should -Be @('--version')
+            $sets | Should -Match '(?s)"Rustlang\.rust-analyzer"\s*=\s*\{\s*linkName\s*=\s*"rust-analyzer\.exe";\s*targetPattern\s*=\s*"rust-analyzer\.exe";\s*\};'
+            $package.portableLink.linkName | Should -Be 'rust-analyzer.exe'
+            $package.portableLink.targetPattern | Should -Be 'rust-analyzer.exe'
             @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Links'
         }
 

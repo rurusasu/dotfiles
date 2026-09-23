@@ -972,6 +972,9 @@ jobs:
             throw 'install.cmd did not reach the user phase completion marker'
           }
 
+          . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WingetInstallSuccess.ps1')
+          Assert-WingetInstallSuccess -Output $out
+
   complete:
     name: Bootstrap / Complete
     if: ${{ always() }}
