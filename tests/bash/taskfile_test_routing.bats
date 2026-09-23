@@ -37,7 +37,7 @@ includes:
   git:
     taskfile: "$REPO_ROOT/taskfiles/git/taskfile.yml"
     flatten: true
-	tasks:
+tasks:
   skills:sync:
     cmds: ["true"]
   fmt:
