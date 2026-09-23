@@ -668,6 +668,26 @@ class HindsightAcceptanceTests(unittest.TestCase):
             else:
                 os.environ["HERMES_HOME"] = original_home
 
+    def test_default_provider_factory_uses_hermes_provider_discovery(self) -> None:
+        import types
+        from unittest.mock import patch
+
+        provider = object()
+        calls: list[tuple[str, dict[str, Any]]] = []
+
+        def load_memory_provider(name: str, **kwargs: Any) -> object:
+            calls.append((name, kwargs))
+            return provider
+
+        memory_module = types.ModuleType("plugins.memory")
+        memory_module.load_memory_provider = load_memory_provider
+
+        with patch.dict(sys.modules, {"plugins.memory": memory_module}):
+            actual = acceptance._default_provider_factory()
+
+        self.assertIs(actual, provider)
+        self.assertEqual(calls, [("hindsight", {})])
+
     def test_degraded_requires_empty_prefetch_bounded_sync_and_failed_tools(
         self,
     ) -> None:

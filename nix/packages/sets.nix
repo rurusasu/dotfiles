@@ -461,6 +461,9 @@ let
               identity = "chatgpt";
               nixAttr = "chatgpt";
             };
+            windows = {
+              unsupported = "The Windows Store app is intentionally excluded from this package catalog";
+            };
           };
           legacyDarwin = {
             provider = "homebrew-cask";
@@ -2119,7 +2122,7 @@ lib.mapAttrs (_: resolve) grouped
       type = "windowsInstalledProduct";
       command = "Microsoft PowerToys";
       uninstallEntry = {
-        displayName = "PowerToys";
+        displayNamePattern = "^PowerToys(?: \\(Preview\\))?$";
         publisher = "Microsoft Corporation";
         executablePaths = [
           "%ProgramFiles%\\PowerToys\\PowerToys.exe"

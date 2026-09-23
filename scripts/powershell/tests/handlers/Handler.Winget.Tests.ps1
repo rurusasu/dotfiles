@@ -153,6 +153,41 @@ Describe 'WingetHandler' {
             Should -Invoke Get-ItemProperty -Times 1
         }
 
+        It 'should verify PowerToys when WinGet uses its preview ARP display name' {
+            $env:LOCALAPPDATA = 'C:\Users\test\AppData\Local'
+            $wingetManifestPath = Join-Path $PSScriptRoot '../../../../windows/winget/packages.json'
+            $wingetManifest = Get-Content -LiteralPath $wingetManifestPath -Raw | ConvertFrom-Json
+            $wingetSource = @($wingetManifest.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'Microsoft.PowerToys') | Select-Object -First 1
+            $verifyCommand = $package.verifyCommand
+            $verifyCommand.uninstallEntry.displayNamePattern | Should -Be '^PowerToys(?: \(Preview\))?$'
+            'Microsoft PowerToys Preview' | Should -Not -Match $verifyCommand.uninstallEntry.displayNamePattern
+            $registryKey = [PSCustomObject]@{
+                Name = 'PowerToys'
+                PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\PowerToys'
+            }
+            Mock Get-AppxPackage { return $null }
+            Mock Get-ChildItem { return @($registryKey) } -ParameterFilter {
+                $LiteralPath -like '*\Uninstall'
+            }
+            Mock Get-ItemProperty {
+                return [PSCustomObject]@{
+                    DisplayName = 'PowerToys (Preview)'
+                    Publisher = 'Microsoft Corporation'
+                }
+            } -ParameterFilter { $LiteralPath -eq $registryKey.PSPath }
+            Mock Get-ChildItem {
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '0.101.2362.0' } }
+            } -ParameterFilter { $Path -eq 'C:\Users\test\AppData\Local\PowerToys\PowerToys.exe' }
+
+            $verified = $handler.TestPackageVerification($verifyCommand)
+
+            $verified | Should -BeTrue
+            Should -Invoke Get-ChildItem -Times 1 -ParameterFilter {
+                $Path -eq 'C:\Users\test\AppData\Local\PowerToys\PowerToys.exe'
+            }
+        }
+
         It 'should verify a product code found in a single matching uninstall string' {
             $registryKey = [PSCustomObject]@{
                 Name = 'DiscordSetup'

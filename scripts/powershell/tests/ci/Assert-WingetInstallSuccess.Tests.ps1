@@ -36,6 +36,29 @@ Total: 1 | Success: 1 | Failure: 0
         { Assert-WingetInstallSuccess -Output $output } | Should -Not -Throw
     }
 
+    It "rejects a successful run whose verification inventory omits expected Windows E2E packages" {
+        $output = @"
+[Winget] CI_VERIFICATION_INVENTORY: Test.Tool
+[Winget] ✓ Test.Tool
+Total: 1 | Success: 1 | Failure: 0
+"@
+
+        { Assert-WingetInstallSuccess -Output $output -ExpectedPackageIds @("Task.Task") } |
+            Should -Throw "*expected Windows E2E packages are missing from the verification inventory: Task.Task*"
+    }
+
+    It "rejects a verification inventory that contains packages outside the expected Windows E2E scope" {
+        $output = @"
+[Winget] CI_VERIFICATION_INVENTORY: Test.Tool|Unexpected.Tool
+[Winget] ✓ Test.Tool
+[Winget] ✓ Unexpected.Tool
+Total: 2 | Success: 2 | Failure: 0
+"@
+
+        { Assert-WingetInstallSuccess -Output $output -ExpectedPackageIds @("Test.Tool") } |
+            Should -Throw "*verification inventory contains packages outside the Windows E2E scope: Unexpected.Tool*"
+    }
+
     It "rejects a nonzero handler failure count even when output has an install attempt" {
 $output = @"
 [Winget] CI_VERIFICATION_INVENTORY: Test.Tool

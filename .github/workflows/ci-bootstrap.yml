@@ -973,7 +973,25 @@ jobs:
           }
 
           . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WingetInstallSuccess.ps1')
-          Assert-WingetInstallSuccess -Output $out
+          $wingetManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json') -Raw | ConvertFrom-Json
+          $wingetSource = @($wingetManifest.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+          if ($null -eq $wingetSource) {
+            throw 'Windows E2E manifest does not contain the winget source'
+          }
+
+          # User-phase E2E covers every ordinary package. Feature-gated packages,
+          # explicit CI skips, and elevated-only installs belong to different
+          # execution boundaries and are intentionally excluded from this run.
+          $expectedWindowsPackageIds = @(
+            $wingetSource.Packages |
+              Where-Object { -not $_.ciSkipInstall -and -not $_.requiresAdmin -and -not $_.installFeature } |
+              ForEach-Object { [string]$_.PackageIdentifier } |
+              Sort-Object -Unique
+          )
+          if ($expectedWindowsPackageIds.Count -eq 0) {
+            throw 'Windows E2E manifest has no eligible packages to install and verify'
+          }
+          Assert-WingetInstallSuccess -Output $out -ExpectedPackageIds $expectedWindowsPackageIds
 
   complete:
     name: Bootstrap / Complete

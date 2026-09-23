@@ -1,4 +1,4 @@
-"""Docker-only gate for the bundled Hindsight provider resolver.
+"""Docker-only gate for Hermes' discovered Hindsight provider.
 
 The filename intentionally stays outside unittest's default ``test*.py``
 pattern.  The Docker test stage invokes it explicitly because the host test
@@ -14,8 +14,6 @@ import stat
 import sys
 import unittest
 from pathlib import Path
-
-from plugins.memory.hindsight import HindsightMemoryProvider
 
 MODULE_PATH = Path("/workspace/docker/hermes-agent/hindsight_acceptance.py")
 SPEC = importlib.util.spec_from_file_location(
@@ -39,7 +37,7 @@ PROFILES = (
 RUN_ID = "0123456789abcdef0123456789abcdef"
 
 
-class RealBundledProviderGateTests(unittest.TestCase):
+class RealDiscoveredProviderGateTests(unittest.TestCase):
     def test_all_profiles_resolve_exact_banks_through_the_production_factory(
         self,
     ) -> None:
@@ -56,7 +54,9 @@ class RealBundledProviderGateTests(unittest.TestCase):
                     timeout=300,
                     provider_factory=None,
                 ) as (provider, bank):
-                    self.assertIs(type(provider), HindsightMemoryProvider)
+                    self.assertEqual(
+                        type(provider).__name__, "HindsightMemoryProvider"
+                    )
                     self.assertEqual(bank, expected_bank)
 
                     hermes_home = Path(os.environ["HERMES_HOME"])

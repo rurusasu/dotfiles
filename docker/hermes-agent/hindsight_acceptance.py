@@ -201,9 +201,9 @@ def nearest_rank(values: Sequence[float], percentile: int) -> float | None:
 
 
 def _default_provider_factory() -> Any:
-    from plugins.memory.hindsight import HindsightMemoryProvider
+    from plugins.memory import load_memory_provider
 
-    return HindsightMemoryProvider()
+    return load_memory_provider("hindsight")
 
 
 def _provider_config(api_url: str, run_id: str, timeout: float) -> dict[str, Any]:

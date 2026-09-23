@@ -158,7 +158,7 @@ Describe 'Package catalog consistency' {
         }
     }
 
-    Context 'Node.js package PATH' {
+    Context 'WinGet package PATH' {
         It 'should expose the Task executable directory to package verification' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $task = @($winget.Sources | ForEach-Object { $_.Packages } | Where-Object PackageIdentifier -EQ 'Task.Task') | Select-Object -First 1
@@ -297,6 +297,24 @@ Describe 'Package catalog consistency' {
             $uv | Should -Not -BeNullOrEmpty
             $uv.verifyCommand.command | Should -Be 'uv'
             @($uv.verifyCommand.args) | Should -Contain '--version'
+        }
+    }
+
+    Context 'PowerToys Windows installation verification' {
+        It 'should match the user installer ARP display name and require a versioned executable' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'Microsoft.PowerToys') | Select-Object -First 1
+            $entry = $package.verifyCommand.uninstallEntry
+
+            $package | Should -Not -BeNullOrEmpty
+            $entry.displayNamePattern | Should -Not -BeNullOrEmpty
+            $entry.displayNamePattern | Should -Match 'PowerToys'
+            'PowerToys' | Should -Match $entry.displayNamePattern
+            'PowerToys (Preview)' | Should -Match $entry.displayNamePattern
+            'Microsoft PowerToys Preview' | Should -Not -Match $entry.displayNamePattern
+            $entry.publisher | Should -Be 'Microsoft Corporation'
+            @($entry.executablePaths) | Should -Contain '%LOCALAPPDATA%\PowerToys\PowerToys.exe'
         }
     }
 

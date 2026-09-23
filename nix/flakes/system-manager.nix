@@ -10,6 +10,11 @@ let
       overlays = [ workmuxOverlay ];
       specialArgs = {
         inherit inputs distro;
+        dotfilesUser = builtins.getEnv "DOTFILES_USER";
+        dotfilesHome = builtins.getEnv "DOTFILES_HOME";
+        dotfilesUid = builtins.getEnv "DOTFILES_UID";
+        dotfilesGid = builtins.getEnv "DOTFILES_GID";
+        dotfilesGroup = builtins.getEnv "DOTFILES_GROUP";
       };
       modules = [
         inputs.home-manager.nixosModules.home-manager

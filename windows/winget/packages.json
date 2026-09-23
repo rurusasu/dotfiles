@@ -511,9 +511,7 @@
         {
           "PackageIdentifier": "tree-sitter.tree-sitter-cli",
           "installTimeoutSeconds": 900,
-          "pathEntries": [
-            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"
-          ],
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "tree-sitter"
@@ -570,7 +568,7 @@
             "command": "Microsoft PowerToys",
             "type": "windowsInstalledProduct",
             "uninstallEntry": {
-              "displayName": "PowerToys",
+              "displayNamePattern": "^PowerToys(?: \\(Preview\\))?$",
               "executablePaths": [
                 "%ProgramFiles%\\PowerToys\\PowerToys.exe",
                 "%LOCALAPPDATA%\\PowerToys\\PowerToys.exe"

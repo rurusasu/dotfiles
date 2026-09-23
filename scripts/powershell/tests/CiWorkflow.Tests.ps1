@@ -73,6 +73,10 @@ Describe 'CI workflow configuration' {
         $wingetWorkflow | Should -Match 'User Phase Complete!'
         $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess -Output \$out'
         $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess\.ps1'
+        $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
+        $wingetWorkflow | Should -Match '\$wingetManifest = Get-Content.*windows/winget/packages\.json'
+        $wingetWorkflow | Should -Match 'Where-Object \{ -not \$_.ciSkipInstall -and -not \$_.requiresAdmin -and -not \$_.installFeature \}'
+        $wingetWorkflow | Should -Match 'Sort-Object -Unique'
         $wingetAssertion | Should -Match 'did not report the WinGet CI verification inventory'
     }
 

@@ -148,7 +148,6 @@ in
         excludesOllama = true;
       };
     };
-  };
 
   testDarwinHomeModuleOwnsDarwinSessionVariables = {
     expr = {

@@ -14,8 +14,12 @@ in
   testPowerToysUsesWinGetUninstallRegistrationIdentity = {
     expr = sets.wingetVerifyById."Microsoft.PowerToys".uninstallEntry;
     expected = {
-      displayName = "PowerToys";
+      displayNamePattern = "^PowerToys(?: \\(Preview\\))?$";
       publisher = "Microsoft Corporation";
+      executablePaths = [
+        "%ProgramFiles%\\PowerToys\\PowerToys.exe"
+        "%LOCALAPPDATA%\\PowerToys\\PowerToys.exe"
+      ];
     };
   };
 

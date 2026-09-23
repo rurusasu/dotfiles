@@ -2,7 +2,8 @@
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$Output
+        [string]$Output,
+        [string[]]$ExpectedPackageIds = @()
     )
 
     $summaryMatch = [regex]::Match(
@@ -36,13 +37,26 @@
         throw 'install.cmd reported duplicate package IDs in the WinGet CI verification inventory'
     }
 
+    $expectedSet = @{}
+    foreach ($id in $expectedIds) { $expectedSet[$id] = $true }
+    if ($ExpectedPackageIds.Count -gt 0) {
+        $requiredSet = @{}
+        foreach ($id in $ExpectedPackageIds) { $requiredSet[$id] = $true }
+        $missingExpectedIds = @($ExpectedPackageIds | Select-Object -Unique | Where-Object { -not $expectedSet.ContainsKey($_) })
+        if ($missingExpectedIds.Count -gt 0) {
+            throw "expected Windows E2E packages are missing from the verification inventory: $($missingExpectedIds -join ', ')"
+        }
+        $unexpectedInventoryIds = @($expectedIds | Where-Object { -not $requiredSet.ContainsKey($_) })
+        if ($unexpectedInventoryIds.Count -gt 0) {
+            throw "verification inventory contains packages outside the Windows E2E scope: $($unexpectedInventoryIds -join ', ')"
+        }
+    }
+
     $successMatches = [regex]::Matches(
         $Output,
         '(?m)^\[Winget\]\s+(?:✓\s+|検証済み:\s+|スキップ \(検証済み\):\s+)(?<id>[\w.+-]+)(?:\s|\(|$)'
     )
     $successfulIds = @($successMatches | ForEach-Object { $_.Groups['id'].Value } | Select-Object -Unique)
-    $expectedSet = @{}
-    foreach ($id in $expectedIds) { $expectedSet[$id] = $true }
     $successfulSet = @{}
     foreach ($id in $successfulIds) { $successfulSet[$id] = $true }
 
