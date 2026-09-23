@@ -268,7 +268,11 @@ jobs:
           }
 
       - name: Check source formatting (style only)
-        run: nix fmt -- --fail-on-change
+        run: |
+          if ! nix fmt -- --fail-on-change; then
+            git diff -- .
+            exit 1
+          fi
 
   nix-test:
     name: Bootstrap / Test / Nix outputs
@@ -322,7 +326,7 @@ jobs:
           fi
 
       - name: Run Nix-native configuration tests
-        run: nix build .#checks.x86_64-linux.nix-unit --no-link
+        run: nix build .#checks.x86_64-linux.nix-unit --no-link --print-build-logs
 
       - name: Run Ghostty configuration deployment tests
         run: nix build .#checks.x86_64-linux.ghostty-config --no-link

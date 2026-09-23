@@ -35,7 +35,14 @@ render_ghostty() {
     expected="$BATS_TEST_TMPDIR/$os-ghostty-config"
     render_ghostty "$os" > "$expected"
     cmp "$expected" "$test_home/.config/ghostty/config"
-    cmp "$REPO_ROOT/chezmoi/terminals/wezterm/wezterm.lua" "$test_home/.config/wezterm/wezterm.lua"
+    expected="$BATS_TEST_TMPDIR/$os-wezterm-config"
+    chezmoi --config /dev/null --config-format toml --source "$REPO_ROOT/chezmoi" \
+      --destination "$test_home" \
+      --cache "$BATS_TEST_TMPDIR/cache" \
+      --persistent-state "$BATS_TEST_TMPDIR/state.boltdb" \
+      --override-data "{\"chezmoi\":{\"os\":\"$os\"}}" \
+      execute-template --file "$REPO_ROOT/chezmoi/terminals/wezterm/wezterm.lua" > "$expected"
+    cmp "$expected" "$test_home/.config/wezterm/wezterm.lua"
     run env HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" CHEZMOI_SOURCE_DIR="$REPO_ROOT/chezmoi" bash -c "$rendered"
     [ "$status" -eq 0 ]
   done
