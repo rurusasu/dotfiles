@@ -32,7 +32,9 @@
         treefmt-nix
         workmux
         ;
-      # nix-unit evaluates the nested llm-agents input in its isolated builder.
+      # nix-unit evaluates flake inputs in its sandbox; provide llm-agents' nested
+      # bun2nix source explicitly so evaluation does not need a network fetch.
+      "llm-agents/bun2nix" = inputs.bun2nix;
       "llm-agents/nixpkgs" = inputs.nixpkgs;
     };
 

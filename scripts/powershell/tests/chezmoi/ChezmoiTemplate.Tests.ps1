@@ -1,4 +1,4 @@
-﻿#Requires -Module Pester
+#Requires -Module Pester
 
 <#
 .SYNOPSIS
@@ -906,6 +906,15 @@ Describe 'chezmoi テンプレート バリデーション' {
 
             $cursorExtensions = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "editors/cursor/extensions.json") -Raw
             $cursorExtensions | Should -Not -Match '(?i)github\.copilot'
+
+            $codexConfig = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl") -Raw
+            $codexConfig | Should -Not -Match '(?i)copilot-instructions\.md'
+
+            $projectConfig = Get-Content -LiteralPath (Join-Path $script:repoRoot ".codex/config.toml") -Raw
+            $projectConfig | Should -Not -Match '(?i)copilot-instructions\.md'
+
+            $mcpConfig = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml") -Raw
+            $mcpConfig | Should -Not -Match '(?m)^\s+-\s+(?:vscode|zed)\s*$'
         }
     }
 }

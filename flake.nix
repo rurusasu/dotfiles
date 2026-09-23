@@ -49,6 +49,9 @@
     # llm-agents.nix package set. Keep its nixpkgs input independent so the
     # package uses the nixpkgs revision it is tested against.
     llm-agents.url = "github:numtide/llm-agents.nix";
+    # nix-unit runs in a network-isolated builder; expose the nested source so
+    # its package-evaluation tests can receive it as an input override.
+    bun2nix.follows = "llm-agents/bun2nix";
   };
 
   outputs =

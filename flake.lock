@@ -427,6 +427,7 @@
     },
     "root": {
       "inputs": {
+        "bun2nix": "bun2nix",
         "flake-parts": "flake-parts",
         "home-manager": "home-manager",
         "llm-agents": "llm-agents",
