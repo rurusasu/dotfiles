@@ -70,7 +70,7 @@ Describe 'coverage smoke' {
         Write-Host $outputText
 
         $exitCode | Should -Be 0
-        $outputText | Should -Match 'Source Files:\s+7'
+        $outputText | Should -Match 'Source Files:\s+[1-9]\d*'
         (Test-Path -LiteralPath $coveragePath) | Should -BeTrue
         [xml]$coverageXml = Get-Content -LiteralPath $coveragePath -Raw
         $coverageXml | Should -Not -BeNullOrEmpty

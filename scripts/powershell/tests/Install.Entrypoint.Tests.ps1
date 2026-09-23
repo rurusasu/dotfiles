@@ -138,12 +138,23 @@ exit 0
 
         Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\install.ps1") -Destination (Join-Path $scriptDir "install.ps1")
         Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\Test-Environment.ps1") -Destination (Join-Path $scriptDir "Test-Environment.ps1")
-        foreach ($library in "WindowsEnvironment.ps1", "InstallProfiles.ps1") {
+        $libDir = Join-Path $scriptDir "lib"
+        New-Item -ItemType Directory -Path $libDir -Force | Out-Null
+        foreach ($library in "WindowsEnvironment.ps1", "InstallProfiles.ps1", "Invoke-ExternalCommand.ps1") {
             Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\lib\$library") -Destination (Join-Path $scriptDir "lib\$library")
         }
         Set-Content -LiteralPath (Join-Path $scriptDir "install.user.ps1") -Value @'
 [CmdletBinding()]
-param([hashtable]$Options = @{})
+param(
+    [string]$DistroName,
+    [string]$InstallDir,
+    [string]$ReleaseTag,
+    [string]$PostInstallScript,
+    [string]$StateVersion,
+    [hashtable]$Options = @{},
+    [string]$SyncMode,
+    [string]$SyncBack
+)
 Write-Host 'STUB_USER_PHASE_COMPLETE'
 exit 0
 '@ -Encoding UTF8
