@@ -269,9 +269,24 @@ Describe '標準キーバインド方針' {
 
     It 'should run the production UIAccess interpreter in every Windows CI job that runs chezmoi Pester' {
         $ciJobs = @(
-            @{ Workflow = '.github/workflows/ci-chezmoi.yml'; Job = 'lint'; PesterStep = '- name: Install Pester' },
-            @{ Workflow = '.github/workflows/ci-powershell.yml'; Job = 'test'; PesterStep = '- name: Install PowerShell modules' },
-            @{ Workflow = '.github/workflows/ci-bootstrap.yml'; Job = 'windows'; PesterStep = '- name: Install pinned Pester' }
+            @{
+                Workflow = '.github/workflows/ci-chezmoi.yml'
+                Job = 'lint'
+                InstallMarker = 'winget install --id AutoHotkey\.AutoHotkey --exact --source winget --scope machine'
+                PesterStep = '- name: Install Pester'
+            },
+            @{
+                Workflow = '.github/workflows/ci-powershell.yml'
+                Job = 'test'
+                InstallMarker = 'winget install --id AutoHotkey\.AutoHotkey --exact --source winget --scope machine'
+                PesterStep = '- name: Install PowerShell modules'
+            },
+            @{
+                Workflow = '.github/workflows/ci-bootstrap.yml'
+                Job = 'windows'
+                InstallMarker = 'Admin-only installer did not attempt AutoHotkey\.AutoHotkey'
+                PesterStep = '- name: Install pinned Pester'
+            }
         )
         foreach ($case in $ciJobs) {
             $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot $case.Workflow) -Raw
@@ -280,14 +295,14 @@ Describe '標準キーバインド方針' {
                 "(?ms)^  $($case.Job)`:\s*.*?(?=^  [a-zA-Z0-9_-]+`:\s*$|\z)"
             ).Value
             $job | Should -Not -BeNullOrEmpty
-            $job | Should -Match 'winget install --id AutoHotkey\.AutoHotkey --exact --source winget --scope machine'
+            $job | Should -Match $case.InstallMarker
             $job | Should -Match 'AutoHotkey\\v2\\AutoHotkey64_UIA\.exe'
             $job | Should -Match ([regex]::Escape("& `$uiAccess '/ErrorStdOut' `$scriptPath '--check'"))
             $job | Should -Match ([regex]::Escape("& `$uiAccess '/ErrorStdOut' `$scriptPath '--self-test'"))
             $job | Should -Match 'AutoHotkey v2 UIAccess syntax validation failed'
             $job | Should -Match 'AutoHotkey v2 UIAccess behavioral self-tests failed'
             $job | Should -Not -Match ([regex]::Escape("& `$autoHotkey '/ErrorStdOut'"))
-            $job.IndexOf('winget install --id AutoHotkey.AutoHotkey') |
+            $job.IndexOf(($case.InstallMarker -replace '\\','')) |
                 Should -BeLessThan $job.IndexOf($case.PesterStep) -Because "$($case.Workflow) $($case.Job) must install AutoHotkey before Pester"
         }
     }
