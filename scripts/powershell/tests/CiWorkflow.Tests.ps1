@@ -122,6 +122,8 @@ Describe 'CI workflow configuration' {
         $installerScript | Should -Match '\$expectedWindowsPackageIds'
         $installerScript | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
         $installerScript | Should -Match 'Update-ProcessEnvironmentPath -ExcludePath \$runnerPnpmDirectories'
+        ([regex]::Matches($installerScript, [regex]::Escape("Invoke-Npm -Arguments @('prefix', '--global')"))).Count | Should -Be 2
+        $installerScript | Should -Not -Match '\bnpm prefix --global\b'
         $installerScript | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'
         $installerScript | Should -Match '& \$npmPnpmShim --version'
         $installerScript | Should -Match 'Write-Host \$failureSummary -ForegroundColor Red'
