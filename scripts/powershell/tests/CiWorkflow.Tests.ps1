@@ -418,7 +418,8 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'loginctl show-user nixos -p Linger --value \| grep -qx yes'
         $script | Should -Not -Match 'systemctl --user restart hermes-agent\.service'
         $workflow | Should -Match 'GITHUB_TOKEN:\s+\$\{\{ secrets\.GITHUB_TOKEN \}\}'
-        $workflow | Should -Match 'WSLENV:\s+GITHUB_TOKEN/u'
+        $workflow | Should -Match 'NIX_CONFIG:\s*\|\s*access-tokens = github\.com=\$\{\{ secrets\.GITHUB_TOKEN \}\}'
+        $workflow | Should -Match 'WSLENV:\s+GITHUB_TOKEN/u:NIX_CONFIG/u'
         $script | Should -Match ([regex]::Escape('GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey"'))
         $script | Should -Match ([regex]::Escape('rg "\"\^\[q\" __zoxide_zi_widget"'))
         $script | Should -Not -Match ([regex]::Escape('rg "\"\^\[z\" __zoxide_zi_widget"'))

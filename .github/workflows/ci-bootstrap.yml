@@ -761,7 +761,9 @@ jobs:
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WSLENV: GITHUB_TOKEN/u
+          NIX_CONFIG: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+          WSLENV: GITHUB_TOKEN/u:NIX_CONFIG/u
           HEAD_REF: ${{ github.head_ref }}
           REF_NAME: ${{ github.ref_name }}
         run: |

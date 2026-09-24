@@ -20,6 +20,7 @@ elif [ "${1:-}" = "remove" ] && [ "${2:-}" = "-g" ]; then
 	exit "${PNPM_REMOVE_STATUS:-0}"
 elif [ "${1:-}" = "add" ] && [ "${2:-}" = "-g" ]; then
 	printf '%s\n' "$PATH" >>"$PNPM_ADD_PATH_LOG"
+	printf '%s\n' "${PNPM_CONFIG_GLOBAL_BIN_DIR:-}" >>"$PNPM_ADD_GLOBAL_BIN_LOG"
 	exit "${PNPM_ADD_STATUS:-0}"
 fi
 EOF
@@ -45,6 +46,7 @@ run_installer() {
 	env HOME="$TEST_ROOT/home" \
 		CHEZMOI_SOURCE_DIR="$REPO_ROOT/chezmoi" \
 		PNPM_ADD_PATH_LOG="$TEST_ROOT/add-path.log" \
+		PNPM_ADD_GLOBAL_BIN_LOG="$TEST_ROOT/add-global-bin.log" \
 		PNPM_COMMAND_LOG="$TEST_ROOT/pnpm-command.log" \
 		PATH="$TEST_ROOT/stub-bin:$PATH" \
 		bash "$TEST_ROOT/install-pnpm-global.sh"
@@ -95,6 +97,18 @@ run_installer() {
 		esac
 	done <"$TEST_ROOT/add-path.log"
 }
+
+@test "configured global-bin-dir is explicitly passed to each pnpm add process" {
+	export PNPM_REPORTED_GLOBAL_BIN_DIR="$TEST_ROOT/configured-global-bin"
+
+	run run_installer
+	[ "$status" -eq 0 ]
+	[ -s "$TEST_ROOT/add-global-bin.log" ]
+	while IFS= read -r install_global_bin; do
+		[ "$install_global_bin" = "$PNPM_REPORTED_GLOBAL_BIN_DIR" ] || return 1
+	done <"$TEST_ROOT/add-global-bin.log"
+}
+
 @test "pnpm package failures are summarized and return nonzero" {
 	export PNPM_HOME="$TEST_ROOT/pnpm-home"
 	export PNPM_ADD_STATUS=1

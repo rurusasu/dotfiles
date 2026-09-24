@@ -193,6 +193,14 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                     "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}",
                     job,
                 )
+
+        wsl_job = self._workflow_job(workflow, "wsl")
+        self.assertIn("NIX_CONFIG: |", wsl_job)
+        self.assertIn(
+            "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}",
+            wsl_job,
+        )
+        self.assertIn("WSLENV: GITHUB_TOKEN/u:NIX_CONFIG/u", wsl_job)
     def test_bootstrap_workflow_watches_nix_validation_paths(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
         for event in ("push",):

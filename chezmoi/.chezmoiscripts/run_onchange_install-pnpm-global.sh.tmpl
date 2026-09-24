@@ -27,6 +27,16 @@ if [ -n "$PNPM_GLOBAL_BIN_DIR" ]; then
   esac
 fi
 
+pnpm_add_global() {
+  if [ -n "$PNPM_GLOBAL_BIN_DIR" ]; then
+    PNPM_CONFIG_GLOBAL_BIN_DIR="$PNPM_GLOBAL_BIN_DIR" \
+      PATH="$PATH" \
+      pnpm add -g "$@"
+  else
+    pnpm add -g "$@"
+  fi
+}
+
 {{ include ".chezmoitemplates/pnpm_global_installed.sh" }}
 
 FAILED=0
@@ -64,7 +74,7 @@ if pnpm_global_package_installed "$PKG_NAME"; then
 fi
 if [ "$INSTALL_REQUIRED" -eq 1 ] && [ "$REMOVE_FAILED" -eq 0 ]; then
   echo "  インストール中: $PKG_NAME"
-  if pnpm add -g "${PNPM_BUILD_ARGS[@]}" "$PKG_NAME"; then
+  if pnpm_add_global "${PNPM_BUILD_ARGS[@]}" "$PKG_NAME"; then
     echo "  ✓ $PKG_NAME"
     INSTALLED=$((INSTALLED + 1))
   else
