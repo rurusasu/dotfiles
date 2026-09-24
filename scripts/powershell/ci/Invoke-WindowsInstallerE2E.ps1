@@ -182,6 +182,7 @@ Update-ProcessEnvironmentPath -ExcludePath $runnerPnpmDirectories
 if ($env:PATH.Length -gt 8191) {
   throw "Post-install PATH exceeds the cmd.exe command environment limit: $($env:PATH.Length)"
 }
+$script:npmPnpmShim = $null
 $persistedPnpmHome = [Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
 if (-not [string]::IsNullOrWhiteSpace($persistedPnpmHome)) {
   $env:PNPM_HOME = $persistedPnpmHome
@@ -220,26 +221,28 @@ if ($out -notmatch '\[INFO\] Process PATH normalized: removed \d+ missing direct
 Invoke-WindowsE2EValidation -Name 'WinGet package inventory' -Validation {
 . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WingetInstallSuccess.ps1')
 $wingetManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json') -Raw | ConvertFrom-Json
-$wingetSource = @($wingetManifest.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-if ($null -eq $wingetSource) {
-  throw 'Windows E2E manifest does not contain the winget source'
+$wingetSources = @(
+  $wingetManifest.Sources |
+    Where-Object { $_.SourceDetails.Name -in @('winget', 'msstore') }
+)
+if ($wingetSources.Count -eq 0) {
+  throw 'Windows E2E manifest does not contain a supported WinGet source'
 }
 
-# This uses the normal install path, not WingetVerifyCommandOnly. Check
-# every package the user phase normally applies, including packages
-# marked ciSkipInstall for the separate verify-only CI mode.
+# CI-skipped packages are still verify-only obligations. Include every
+# source the user phase applies, and omit only admin, feature-gated, or
+# explicitly skipped packages.
 $expectedWindowsPackageIds = @(
-  $wingetSource.Packages |
+  $wingetSources |
+    ForEach-Object { $_.Packages } |
     Where-Object {
       $properties = $_.PSObject.Properties
       $requiresAdmin = $properties['requiresAdmin']
       $installFeature = $properties['installFeature']
       $skipInstall = $properties['skipInstall']
-      $ciSkipInstall = $properties['ciSkipInstall']
       ($null -eq $requiresAdmin -or -not [bool]$requiresAdmin.Value) -and
       ($null -eq $installFeature -or [string]::IsNullOrWhiteSpace([string]$installFeature.Value)) -and
-      ($null -eq $skipInstall -or -not [bool]$skipInstall.Value) -and
-      ($null -eq $ciSkipInstall -or -not [bool]$ciSkipInstall.Value)
+      ($null -eq $skipInstall -or -not [bool]$skipInstall.Value)
     } |
     ForEach-Object { [string]$_.PackageIdentifier } |
     Sort-Object -Unique
@@ -258,11 +261,11 @@ if ([string]::IsNullOrWhiteSpace($npmGlobalPrefix)) {
   throw "Unable to resolve the npm global prefix for the pnpm bootstrap (exit=$npmPrefixExitCode): $($npmPrefixOutput -join ' ')"
 }
 $npmGlobalPrefix = [System.IO.Path]::GetFullPath($npmGlobalPrefix.Trim())
-$npmPnpmShim = Join-Path $npmGlobalPrefix 'pnpm.cmd'
-if (-not (Test-Path -LiteralPath $npmPnpmShim -PathType Leaf)) {
-  throw "npm did not install the pnpm command shim under its global prefix: $npmPnpmShim"
+$script:npmPnpmShim = Join-Path $npmGlobalPrefix 'pnpm.cmd'
+if (-not (Test-Path -LiteralPath $script:npmPnpmShim -PathType Leaf)) {
+  throw "npm did not install the pnpm command shim under its global prefix: $script:npmPnpmShim"
 }
-$npmPnpmOutput = @(& $npmPnpmShim --version 2>&1)
+$npmPnpmOutput = @(& $script:npmPnpmShim --version 2>&1)
 $npmPnpmExitCode = $LASTEXITCODE
 if ($npmPnpmExitCode -ne 0 -or ($npmPnpmOutput -join ' ') -notmatch '\d+\.\d+') {
   throw "npm-installed pnpm shim failed its version probe (exit=$npmPnpmExitCode): $($npmPnpmOutput -join ' ')"
@@ -394,7 +397,7 @@ foreach ($requiredCommand in $requiredCommands) {
 
   if ($requiredCommand.Name -eq 'pnpm') {
     $resolvedPnpmPath = [System.IO.Path]::GetFullPath((Get-ExternalCommandPath -CommandInfo $resolvedCommand))
-    $expectedPnpmPath = [System.IO.Path]::GetFullPath($npmPnpmShim)
+    $expectedPnpmPath = [System.IO.Path]::GetFullPath($script:npmPnpmShim)
     if (-not [System.StringComparer]::OrdinalIgnoreCase.Equals($resolvedPnpmPath, $expectedPnpmPath)) {
       throw "PATH-resolved pnpm is not the npm-installed pnpm shim: resolved=$resolvedPnpmPath expected=$expectedPnpmPath"
     }
