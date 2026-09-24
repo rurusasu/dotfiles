@@ -125,6 +125,12 @@ fi
 '
 }
 
+@test "NixOS WSL rebuild helper is executable for direct shell aliases" {
+  run git -C "$REPO_ROOT" ls-files --stage -- scripts/sh/nixos-rebuild-with-user.sh
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ ^100755[[:space:]] ]]
+}
+
 write_stub() {
 	local name="$1"
 	local body="$2"

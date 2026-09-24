@@ -103,6 +103,8 @@ Describe 'Windows installer success workflow contract' {
         $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'ChatGPT Classic removal'"
         $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'Codex package structure'"
         $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'required command smoke tests'"
+        $installerJob | Should -Match "Get-Command -Name 'op.exe' -CommandType Application -ErrorAction Stop"
+        $installerJob | Should -Match 'resolvedOnePasswordPath.*GetFullPath\(\$onePasswordExecutable\.FullName\)'
     }
 
     It 'does not retain temporary formatter artifact steps' {

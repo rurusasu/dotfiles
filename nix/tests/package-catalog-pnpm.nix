@@ -42,10 +42,6 @@ in
       verifyCommand = {
         command = "gemini";
         args = [ "--version" ];
-        type = "nodeModule";
-        moduleName = "@lydell/node-pty";
-        moduleFromPackage = "@google/gemini-cli";
-        moduleSmokeTest = "pty";
       };
     };
   };

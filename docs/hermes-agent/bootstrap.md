@@ -18,6 +18,41 @@ Moving data between these runtimes is an operator-led migration: take and
 verify an explicit backup first, then decide how to resolve path conflicts
 before copying anything. No automatic merge or winner is defined.
 
+### One-time Docker-volume migration
+
+Run this only in a Linux/WSL shell whose Docker CLI can access the old volume.
+First identify its exact name with `docker volume ls` (Compose commonly prefixes
+`hermes-data` with the project name); do not assume the name. Stop the legacy
+`hermes` gateway with its existing Compose project before exporting so its
+SQLite and session files are quiescent. Do not run `docker volume rm`.
+
+```bash
+set -euo pipefail
+umask 077
+volume='REPLACE_WITH_THE_EXACT_VOLUME_NAME'
+export_dir="$HOME/.local/share/hermes-migration"
+install -d -m 700 "$export_dir"
+docker run --rm \
+  --mount "type=volume,src=$volume,dst=/source,readonly" \
+  --mount "type=bind,src=$export_dir,dst=/export" \
+  busybox:1.36.1 sh -c 'tar -czf /export/hermes-data.tar.gz -C /source .'
+chmod 600 "$export_dir/hermes-data.tar.gz"
+tar -tzf "$export_dir/hermes-data.tar.gz" >/dev/null
+
+stage="$(mktemp -d "$HOME/.hermes-migration.XXXXXX")"
+chmod 700 "$stage"
+tar -xzf "$export_dir/hermes-data.tar.gz" -C "$stage"
+```
+
+Review the staged tree before activation. If `~/.hermes` does not exist, move
+the reviewed staging directory to that path and make the current WSL user its
+owner. If it already exists, do not overlay it: compare the two trees and merge
+conflicts deliberately, especially `.env`, provider credentials, profiles, and
+session databases. The original Docker volume and the mode-`0600` archive remain
+available for rollback; retain them until the Nix-managed CLI and gateway have
+been verified. The Windows installer and Nix activation never perform this
+copy or remove the old volume automatically.
+
 Hermes の組み込み 1Password 連携と `op` CLI の利用手順は、[Hermes Agent で 1Password を使う](./onepassword.md)を参照してください。
 
 ## Run Bootstrap
@@ -64,6 +99,10 @@ took ownership. If WSL is absent or the rebuild failed, installation fails
 clearly instead of silently falling back to Docker. The legacy Docker tasks
 remain separate, and no existing Docker volume is deleted or automatically
 copied into `~/.hermes`.
+
+The installer accepts this repository's pinned flake cache configuration only
+for the individual NixOS rebuild invocation. The helper does not persist the
+flake's substituter or signing key into user or machine Nix configuration.
 
 `HermesAgentHandler` is Phase `2`, order `56`, and
 `RequiresAdmin = false`. It must stay in the user context so native `op.exe`

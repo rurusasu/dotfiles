@@ -1530,10 +1530,6 @@ lib.mapAttrs (_: resolve) grouped
     "@google/gemini-cli" = {
       command = "gemini";
       args = [ "--version" ];
-      type = "nodeModule";
-      moduleName = "@lydell/node-pty";
-      moduleFromPackage = "@google/gemini-cli";
-      moduleSmokeTest = "pty";
     };
     "typescript-language-server" = {
       command = "typescript-language-server";

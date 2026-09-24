@@ -114,6 +114,22 @@ Describe 'CI workflow configuration' {
         $installerJob | Should -Match 'Could not seed the ChatGPT Classic uninstall E2E'
     }
 
+    It 'should keep every line of the Windows installer E2E inside its YAML run block' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $installerStep = [regex]::Match(
+            $workflow,
+            '(?ms)^      - name: Run install\.cmd strict user phase\s*(?<step>.*?)(?=^  complete:|\z)'
+        ).Groups['step'].Value
+        $scriptBody = [regex]::Match($installerStep, '(?ms)^        run: \|\r?\n(?<body>.*)$').Groups['body'].Value
+
+        $scriptBody | Should -Not -BeNullOrEmpty
+        $underIndentedLines = @(
+            $scriptBody -split '\r?\n' |
+                Where-Object { $_.Trim() -and ([regex]::Match($_, '^ *').Length -lt 12) }
+        )
+        @($underIndentedLines).Count | Should -Be 0
+    }
+
     It 'should verify the installed Codex code-mode host exists beside its shim and launches' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
         $installerJob = [regex]::Match(
@@ -209,6 +225,8 @@ Describe 'CI workflow configuration' {
         $installerJob | Should -Match "'pnpm'"
         $installerJob | Should -Match "'gemini'"
         $installerJob | Should -Match "'op\.exe'"
+        $installerJob | Should -Match 'OnePassword CLI package directory is missing from persisted user PATH'
+        $installerJob | Should -Match 'WinGet Links op\.exe shim is missing after OnePasswordCli setup'
         $installerJob | Should -Match "GetEnvironmentVariable\('Path',\s*'User'\)"
         $installerJob | Should -Match "GetEnvironmentVariable\('PNPM_HOME',\s*'User'\)"
         $installerJob | Should -Match 'Get-Command -Name \$requiredCommand\.Name -CommandType Application'

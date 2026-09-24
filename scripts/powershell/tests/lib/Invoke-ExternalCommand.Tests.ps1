@@ -129,8 +129,8 @@ exit /b 3
         ($env:PATH -split ';') | Should -Not -Contain $script:nodeFixtureDirectory
         [System.IO.File]::Exists($script:nodeFixture) | Should -BeTrue
         Get-NpmNodeDirectory | Should -Be $script:nodeFixtureDirectory
-        $null = & $env:ComSpec /d /c 'where node' 2>&1
-        $LASTEXITCODE | Should -Not -Be 0
+        & $env:ComSpec /d /c 'where.exe node >nul 2>nul'
+        $global:LASTEXITCODE | Should -Be 1
 
         $postinstallOutput = @(Invoke-Npm -Arguments @('install', '-g', 'agent-browser@0.38.1'))
 

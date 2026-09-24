@@ -130,7 +130,8 @@ Describe 'NixRebuildHandler' {
                 $ForegroundColor -eq 'Gray' -and ([string]$Object) -match 'building NixOS'
             } -Times 1
             Should -Invoke Invoke-Wsl -ParameterFilter {
-                ($Arguments -join " ") -match "nixos-rebuild-with-user"
+                ($Arguments -join " ") -match "nixos-rebuild-with-user" -and
+                ($Arguments -join " ") -match "DOTFILES_ACCEPT_FLAKE_CONFIG=1"
             } -Times 1
         }
 
