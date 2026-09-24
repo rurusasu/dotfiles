@@ -90,9 +90,9 @@ in
       package = hasPackage linux.testPackage linux.config.home.packages;
       home = linux.config.home.sessionVariables.HERMES_HOME;
       featureFlag = linux.config.home.sessionVariables.DOTFILES_WITH_HERMES;
-      serviceUsesInjectedPackage = builtins.any
-        (command: inputs.nixpkgs.lib.hasPrefix "${linux.testPackage}/bin/hermes" command)
-        (inputs.nixpkgs.lib.toList linux.config.systemd.user.services.hermes-agent.Service.ExecStart);
+      serviceUsesInjectedPackage = builtins.any (
+        command: inputs.nixpkgs.lib.hasPrefix "${linux.testPackage}/bin/hermes" command
+      ) (inputs.nixpkgs.lib.toList linux.config.systemd.user.services.hermes-agent.Service.ExecStart);
     };
     expected = {
       package = true;

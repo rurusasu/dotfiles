@@ -1067,6 +1067,7 @@ jobs:
           $runtimeCommand = if ($expectedRuntime -eq '5.1') { 'powershell.exe' } else { 'pwsh.exe' }
           $runtimeExecutable = Get-Command -Name $runtimeCommand -CommandType Application -ErrorAction Stop |
             Select-Object -First 1
+          $runtimePath = [string]$runtimeExecutable.Source
           $installerE2EScript = @'
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -1515,7 +1516,7 @@ jobs:
           '@
           $encodedE2EScript = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($installerE2EScript))
           Write-Host "Running the complete Windows installer E2E under $expectedRuntime ($($runtimeExecutable.Source))"
-          & $runtimeExecutable.Source -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedE2EScript
+          & $runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedE2EScript
           $installerE2EExitCode = $LASTEXITCODE
           if ($installerE2EExitCode -ne 0) {
             exit $installerE2EExitCode

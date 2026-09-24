@@ -102,6 +102,8 @@ Describe 'CI workflow configuration' {
         $installerJob | Should -Match 'runtime: PowerShell 7[\s\S]*?version: "7"'
         $installerJob | Should -Match 'shell:\s+pwsh'
         $installerJob | Should -Match '(?s)\$runtimeCommand = if \(\$expectedRuntime -eq ''5\.1''\) \{ ''powershell\.exe'' \} else \{ ''pwsh\.exe'' \}.*?\$installerE2EScript = @''.*?install\.cmd -NoPause -UserPhaseOnly.*?''@.*?-EncodedCommand \$encodedE2EScript'
+        $installerJob | Should -Match '\$runtimePath = \[string\]\$runtimeExecutable\.Source'
+        $installerJob | Should -Match '& \$runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand \$encodedE2EScript'
         $installerJob | Should -Match 'DOTFILES_E2E_POWERSHELL_VERSION:\s+\$\{\{\s*matrix\.version\s*\}\}'
         $installerJob | Should -Match 'Windows installer E2E must run under PowerShell \$expectedVersion'
         $installerJob | Should -Match 'Using Windows PowerShell'
