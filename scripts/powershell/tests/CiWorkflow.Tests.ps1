@@ -90,62 +90,56 @@ Describe 'CI workflow configuration' {
         $wingetAssertion | Should -Match 'reported an empty WinGet CI verification inventory'
     }
 
-    It 'should run the real Windows installer concurrently in Windows PowerShell 5.1 and PowerShell 7' {
+    It 'should run the real installer in concurrent PowerShell 5.1 and 7 processes' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw -Encoding UTF8
         $installerJob = [regex]::Match(
             $workflow,
             '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
         ).Groups['job'].Value
+        $installerStep = [regex]::Match(
+            $installerJob,
+            '(?ms)^      - name: Run install\.cmd strict user phase\s*(?<step>.*?)(?=^      - name:|\z)'
+        ).Groups['step'].Value
+        $installerScriptPath = Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1'
+        $installerScript = Get-Content -LiteralPath $installerScriptPath -Raw -Encoding UTF8
 
         $installerJob | Should -Match 'fail-fast:\s*false'
         $installerJob | Should -Match 'max-parallel:\s*2'
-        $installerJob | Should -Match 'runtime: Windows PowerShell 5\.1[\s\S]*?version: "5\.1"[\s\S]*?shell: powershell'
-        $installerJob | Should -Match 'runtime: PowerShell 7[\s\S]*?version: "7"[\s\S]*?shell: pwsh'
-        $installerJob | Should -Match 'name: Run install\.cmd strict user phase\s+shell: powershell'
-        $installerJob | Should -Not -Match 'shell:\s+\$\{\{\s*matrix\.shell\s*\}\}'
-        $installerJob | Should -Match "if \(\$expectedRuntime -eq '7'\)"
-        $installerJob | Should -Match 'ciSkipInstall'
-        $installerJob | Should -Match '\$ciSkipInstall = \$properties\[''ciSkipInstall''\]'
-        $installerJob | Should -Match '(?s)\$runtimeCommand = if \(\$expectedRuntime -eq ''5\.1''\) \{ ''powershell\.exe'' \} else \{ ''pwsh\.exe'' \}.*?\$installerE2EScript = @''.*?install\.cmd -NoPause -UserPhaseOnly.*?''@.*?WriteAllText\(\$installerE2EScriptPath.*?-File \$installerE2EScriptPath'
-        $installerJob | Should -Match '\$runtimePath = \[string\]\$runtimeExecutable\.Source'
-        $installerJob | Should -Match '& \$runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File \$installerE2EScriptPath'
-        $installerJob | Should -Match 'Remove-Item -LiteralPath \$installerE2EScriptPath -Force -ErrorAction SilentlyContinue'
-        $installerJob | Should -Not -Match 'EncodedCommand.*installerE2EScript'
+        $installerJob | Should -Match 'runtime: Windows PowerShell 5\.1[\s\S]*?version: "5\.1"'
+        $installerJob | Should -Match 'runtime: PowerShell 7[\s\S]*?version: "7"'
+        $installerStep | Should -Match 'shell:\s+cmd'
+        $installerStep | Should -Match 'run:\s+powershell\.exe .*Invoke-WindowsInstallerE2E\.ps1'
         $installerJob | Should -Match 'DOTFILES_E2E_POWERSHELL_VERSION:\s+\$\{\{\s*matrix\.version\s*\}\}'
-        $installerJob | Should -Match 'Windows installer E2E must run under PowerShell \$expectedVersion'
-        $installerJob | Should -Match 'Using Windows PowerShell'
-        $installerJob | Should -Match 'install\.cmd -NoPause -UserPhaseOnly(?!\s+-WingetVerifyCommandOnly)'
-        $installerJob | Should -Match 'RequiredOutputMarkers\s+\$requiredPackageManagerMarkers'
-        $installerJob | Should -Match "\[Pnpm\] npm で pnpm をインストールしました"
-        $installerJob | Should -Match '\[Npm\] ✓ \$\(\$package\.name\)'
-        $installerJob | Should -Match 'Using Windows PowerShell'
-        $installerJob | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'
-        $installerJob | Should -Match 'Get-Command -Name ''pnpm'' -CommandType Application -All'
-        $installerJob | Should -Match 'Could not isolate the preinstalled pnpm executable for the bootstrap E2E'
-        $installerJob | Should -Match 'npm did not install the pnpm command shim under its global prefix'
-        $installerJob | Should -Match 'Update-ProcessEnvironmentPath -ExcludePath \$runnerPnpmDirectories'
-        $installerJob | Should -Match 'Windows installer E2E must run under PowerShell \$expectedVersion'
-        $installerJob | Should -Match '& \$npmPnpmShim --version'
-        $installerJob | Should -Match 'Could not seed the ChatGPT Classic uninstall E2E'
-        $installerJob | Should -Match 'Write-Host \$failureSummary -ForegroundColor Red'
+
+        $installerScript | Should -Match "\$runtimeCommand = if \(\$expectedRuntime -eq '5\.1'\) \{ 'powershell\.exe' \} else \{ 'pwsh\.exe' \}"
+        $installerScript | Should -Match 'install\.cmd -NoPause -UserPhaseOnly(?!\s+-WingetVerifyCommandOnly)'
+        $installerScript | Should -Match 'RequiredOutputMarkers\s+\$requiredPackageManagerMarkers'
+        $installerScript | Should -Match "\[Pnpm\] npm で pnpm をインストールしました"
+        $installerScript | Should -Match '\[Npm\] ✓ \$\(\$package\.name\)'
+        $installerScript | Should -Match 'if \(\$expectedRuntime -eq ''7''\)'
+        $installerScript | Should -Match 'ciSkipInstall = \$true'
+        $installerScript | Should -Match '\$ciSkipInstall = \$properties\[''ciSkipInstall''\]'
+        $installerScript | Should -Match '\$expectedWindowsPackageIds'
+        $installerScript | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
+        $installerScript | Should -Match 'Update-ProcessEnvironmentPath -ExcludePath \$runnerPnpmDirectories'
+        $installerScript | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'
+        $installerScript | Should -Match '& \$npmPnpmShim --version'
+        $installerScript | Should -Match 'Write-Host \$failureSummary -ForegroundColor Red'
     }
 
-    It 'should keep every line of the Windows installer E2E inside its YAML run block' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
-        $installerStep = [regex]::Match(
-            $workflow,
-            '(?ms)^      - name: Run install\.cmd strict user phase\s*(?<step>.*?)(?=^  complete:|\z)'
-        ).Groups['step'].Value
-        $scriptBody = [regex]::Match($installerStep, '(?ms)^        run: \|\r?\n(?<body>.*)$').Groups['body'].Value
+    It 'should keep the dedicated Windows installer E2E script UTF-8 BOM encoded and parseable' {
+        $installerScriptPath = Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1'
+        $bytes = [System.IO.File]::ReadAllBytes($installerScriptPath)
+        ($bytes[0..2] -join ',') | Should -Be '239,187,191'
 
-        $scriptBody | Should -Not -BeNullOrEmpty
-        $scriptLines = @($scriptBody -split '\r?\n' | Where-Object { $_.Trim() })
-        $minimumIndent = [regex]::Match($scriptLines[0], '^ *').Length
-        $underIndentedLines = @(
-            $scriptLines | Where-Object { [regex]::Match($_, '^ *').Length -lt $minimumIndent }
-        )
-        $minimumIndent | Should -BeGreaterOrEqual 10
-        @($underIndentedLines).Count | Should -Be 0
+        $tokens = $null
+        $parseErrors = $null
+        [System.Management.Automation.Language.Parser]::ParseFile(
+            $installerScriptPath,
+            [ref]$tokens,
+            [ref]$parseErrors
+        ) | Out-Null
+        $parseErrors | Should -BeNullOrEmpty
     }
 
     It 'should verify the installed Codex code-mode host exists beside its shim and launches' {
