@@ -60,6 +60,14 @@ class CiJobRoutingTests(unittest.TestCase):
     def test_bash_test_selects_contracts_without_container_builds(self) -> None:
         self.assertEqual(self.selected("tests/bash/example.bats"), {"python", "bash"})
 
+    def test_pnpm_global_runtime_test_routes_linux_bootstrap_e2e(self) -> None:
+        for path in (
+            "chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl",
+            "tests/bash/pnpm_global_runtime.bats",
+        ):
+            with self.subTest(path=path):
+                self.assertIn("linux", self.selected(path, manifest=BOOTSTRAP))
+
     def test_powershell_extensions_select_lint_and_contracts(self) -> None:
         for suffix in ("ps1", "psm1", "psd1"):
             with self.subTest(suffix=suffix):
