@@ -99,6 +99,12 @@ exit 0
 }
 
 Describe 'install.cmd entrypoint' {
+    It 'should normalize the inherited PATH before discovering or running setup handlers' {
+        $userPhase = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/install.user.ps1') -Raw
+
+        $userPhase | Should -Match '(?s)Invoke-ExternalCommand\.ps1.*?Update-ProcessEnvironmentPath\s*.*?Get-SetupHandler'
+    }
+
     It 'should execute install.ps1 directly and return before timeout' {
         if (-not $script:runsOnWindows) {
             Set-ItResult -Skipped -Because "install.cmd is a Windows entrypoint"

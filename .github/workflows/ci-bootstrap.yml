@@ -986,10 +986,8 @@ jobs:
         include:
           - runtime: Windows PowerShell 5.1
             version: "5.1"
-            shell: powershell
           - runtime: PowerShell 7
             version: "7"
-            shell: pwsh
     permissions:
       contents: read
     steps:
@@ -1059,12 +1057,17 @@ jobs:
           }
 
       - name: Run install.cmd strict user phase
-        shell: ${{ matrix.shell }}
+        shell: pwsh
         timeout-minutes: 70
         env:
           DOTFILES_INSTALL_TIMEOUT_SECONDS: "900"
           DOTFILES_E2E_POWERSHELL_VERSION: ${{ matrix.version }}
         run: |
+          $expectedRuntime = $env:DOTFILES_E2E_POWERSHELL_VERSION
+          $runtimeCommand = if ($expectedRuntime -eq '5.1') { 'powershell.exe' } else { 'pwsh.exe' }
+          $runtimeExecutable = Get-Command -Name $runtimeCommand -CommandType Application -ErrorAction Stop |
+            Select-Object -First 1
+          $installerE2EScript = @'
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $validationErrors = [System.Collections.Generic.List[string]]::new()
@@ -1168,6 +1171,14 @@ jobs:
               }
             }
 
+            # Reproduce a stale/oversized inherited PATH before the real install.
+            # install.user.ps1 must normalize it before its first child process.
+            $oversizedPathEntries = 1..500 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
+            $env:PATH = (@($env:PATH -split ';') + @($oversizedPathEntries)) -join ';'
+            if ($env:PATH.Length -le 8191 -or $env:PATH.Length -ge 32767) {
+              throw "Could not seed a valid oversized process PATH for the installer E2E: $($env:PATH.Length) characters"
+            }
+
             $ErrorActionPreference = 'Continue'
             $output = & cmd.exe /d /c install.cmd -NoPause -UserPhaseOnly 2>&1 |
               ForEach-Object {
@@ -1245,6 +1256,9 @@ jobs:
           }
           if (-not $isWindowsPowerShell -and $out -match '(Using Windows PowerShell|Falling back to Windows PowerShell)') {
             throw 'The PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5.1 path'
+          }
+          if ($out -notmatch 'Process PATH refresh omitted \d+ entries to stay within the Windows cmd\.exe limit of 8191 characters') {
+            throw 'The real installer E2E did not normalize its seeded oversized PATH before starting package commands'
           }
           }
 
@@ -1497,6 +1511,14 @@ jobs:
             $failureSummary = "Windows installer E2E validation failed:`n - $($validationErrors -join "`n - ")"
             Write-Host $failureSummary -ForegroundColor Red
             throw $failureSummary
+          }
+          '@
+          $encodedE2EScript = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($installerE2EScript))
+          Write-Host "Running the complete Windows installer E2E under $expectedRuntime ($($runtimeExecutable.Source))"
+          & $runtimeExecutable.Source -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedE2EScript
+          $installerE2EExitCode = $LASTEXITCODE
+          if ($installerE2EExitCode -ne 0) {
+            exit $installerE2EExitCode
           }
 
   complete:

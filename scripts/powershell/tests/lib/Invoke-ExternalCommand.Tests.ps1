@@ -938,9 +938,10 @@ Describe 'Update-ProcessEnvironmentPath' {
             return
         }
 
-        $oversizedUserPath = (1..80 | ForEach-Object { "C:\$([string]::new('U', 80))$_" }) -join ';'
+        $oversizedUserPath = (1..600 | ForEach-Object { "C:\$([string]::new('U', 80))$_" }) -join ';'
         Mock Get-UserEnvironmentPath { return $oversizedUserPath }
         $env:PATH = "$script:originalPath;" + ((1..120 | ForEach-Object { "C:\$([string]::new('P', 80))$_" }) -join ';')
+        $oversizedUserPath.Length | Should -BeGreaterThan 50000
 
         Update-ProcessEnvironmentPath
 
