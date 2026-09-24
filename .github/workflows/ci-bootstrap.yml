@@ -986,10 +986,8 @@ jobs:
         include:
           - runtime: Windows PowerShell 5.1
             version: "5.1"
-            shell: powershell
           - runtime: PowerShell 7
             version: "7"
-            shell: pwsh
     permissions:
       contents: read
     steps:
