@@ -58,7 +58,7 @@
         $expectedPackageBlock | Should -Match '\$skipInstall'
         $expectedPackageBlock | Should -Match '\$ciSkipInstall'
         $expectedPackageBlock | Should -Match 'ciSkipInstall\.Value'
-        $installerE2E | Should -Match 'if \(\$expectedRuntime -eq ''7''\)[\s\S]*?ciSkipInstall = \$true'
+        $installerE2E | Should -Match 'if \(\$expectedRuntime -eq ''7''\)[\s\S]*?Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue \$true'
         $installerE2E | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
     }
     It 'runs the full installer in separate parallel PowerShell 5.1 and 7 jobs' {
