@@ -119,7 +119,7 @@ Describe 'CI workflow configuration' {
         $installerScript | Should -Match '\[Npm\] ✓ \$\(\$package\.name\)'
         $installerScript | Should -Match 'if \(\$expectedRuntime -eq ''7''\)'
         $installerScript | Should -Match 'Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue \$true'
-        $installerScript | Should -Match '\$ciSkipInstall = \$properties\[''ciSkipInstall''\]'
+        $installerScript | Should -Match '\$powerShellPackages\[0\]\s*\|\s*Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue \$true -Force'
         $installerScript | Should -Match '\$expectedWindowsPackageIds'
         $installerScript | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
         $installerScript | Should -Match 'Update-ProcessEnvironmentPath -ExcludePath \$runnerPnpmDirectories'
