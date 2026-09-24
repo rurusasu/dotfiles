@@ -357,9 +357,14 @@ Describe 'CI workflow configuration' {
         $scriptPath = Join-Path $script:repoRoot "scripts/powershell/ci/Invoke-NixosWslE2E.ps1"
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
         $script = Get-Content -LiteralPath $scriptPath -Raw
+        $wslJob = [regex]::Match($workflow, '(?s)(?m)^  wsl:.*?(?=^  [\w-]+:|\z)').Value
+        $jobTimeout = [int]([regex]::Match($wslJob, '(?m)^    timeout-minutes:\s+(\d+)\s*$').Groups[1].Value)
+        $rebuildTimeoutSeconds = [int]([regex]::Match($script, '(?m)^\s*\[int\]\$PostInstallTimeoutSeconds\s*=\s*(\d+)(?=\s*[,\r\n])').Groups[1].Value)
+        $rebuildBudgetCount = [regex]::Matches($script, '\$context\.Options\["PostInstallTimeoutSeconds"\]\s*=\s*\$PostInstallTimeoutSeconds|\$rebuildContext\.Options\["NixRebuildTimeoutSeconds"\]\s*=\s*\$PostInstallTimeoutSeconds').Count
 
         $workflow | Should -Match 'runs-on:\s+windows-2025'
-        $workflow | Should -Match '(?s)wsl:\s+.*?timeout-minutes:\s+150'
+        $jobTimeout | Should -BeGreaterOrEqual (($rebuildTimeoutSeconds * $rebuildBudgetCount / 60) + 60) -Because 'the job must allow each independent rebuild timeout plus one hour for WSL setup and verification'
+        $rebuildBudgetCount | Should -Be 2 -Because 'the E2E performs a post-install switch and a separate Hermes-enabled switch'
         $workflow | Should -Match 'winget install --id Microsoft\.WSL --exact'
         $workflow | Should -Match 'wsl --set-default-version 2'
         $workflow | Should -Match 'Invoke-NixosWslE2E\.ps1'

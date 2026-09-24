@@ -1536,6 +1536,7 @@ Describe 'WingetHandler' {
             }
             Mock Invoke-Winget {
                 param($Arguments)
+                $null = $Arguments
                 $global:LASTEXITCODE = 0
             }
             Mock Set-UserEnvironmentPath { }
@@ -1566,6 +1567,7 @@ Describe 'WingetHandler' {
             }
             Mock Invoke-Winget {
                 param($Arguments)
+                $null = $Arguments
                 $global:LASTEXITCODE = 0
             }
             Mock Test-Path { return $true } -ParameterFilter { $Path -like "*\.cargo\bin" }
@@ -1600,6 +1602,7 @@ Describe 'WingetHandler' {
             }
             Mock Invoke-Winget {
                 param($Arguments)
+                $null = $Arguments
                 $global:LASTEXITCODE = 0
             }
             Mock Test-Path { return $true } -ParameterFilter { $Path -like "*\.cargo\bin" }
@@ -3095,6 +3098,7 @@ Describe 'WingetHandler' {
             # both output streams, as the production wrapper does.
             Mock Invoke-ExternalCommandWithTimeout {
                 param($Command, $Arguments, $TimeoutSeconds)
+                $null = $TimeoutSeconds
                 $output = @(& $Command @Arguments 2>&1 | ForEach-Object { [string]$_ })
                 $tarExitCode = $LASTEXITCODE
                 $global:LASTEXITCODE = $tarExitCode

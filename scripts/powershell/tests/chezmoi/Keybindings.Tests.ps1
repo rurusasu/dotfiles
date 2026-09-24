@@ -35,8 +35,8 @@ BeforeAll {
             if (-not $process.Start()) { throw 'Failed to start chezmoi.' }
             $stdout = $process.StandardOutput.ReadToEndAsync()
             $stderr = $process.StandardError.ReadToEndAsync()
-            $input = ([System.Text.UTF8Encoding]::new($false)).GetBytes($Template)
-            $process.StandardInput.BaseStream.Write($input, 0, $input.Length)
+            $inputBytes = ([System.Text.UTF8Encoding]::new($false)).GetBytes($Template)
+            $process.StandardInput.BaseStream.Write($inputBytes, 0, $inputBytes.Length)
             $process.StandardInput.Close()
             $process.WaitForExit()
             if ($process.ExitCode -ne 0) { throw "chezmoi execute-template failed ($($process.ExitCode)): $($stderr.GetAwaiter().GetResult())" }

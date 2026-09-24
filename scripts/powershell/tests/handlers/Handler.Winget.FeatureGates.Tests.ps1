@@ -68,6 +68,7 @@ Describe 'WingetHandler feature gates at the install boundary' {
     It 'excludes <PackageId> from installation when <Feature> is disabled' -ForEach $script:featureCases {
         param($Feature, $PackageId)
 
+        $script:ctx.Options[$Feature] | Should -BeFalse
         $result = $script:handler.Apply($script:ctx)
 
         $result.Success | Should -BeTrue

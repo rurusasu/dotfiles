@@ -135,50 +135,50 @@ Describe 'Plane GitHub sync state' {
 
 Describe 'GitHub issue helpers' {
     BeforeEach {
-        $global:PlaneGithubTestGhArgs = @()
-        $global:PlaneGithubTestGhOutput = @()
-        $global:PlaneGithubTestGhExitCode = 0
+        $script:PlaneGithubTestGhArgs = @()
+        $script:PlaneGithubTestGhOutput = @()
+        $script:PlaneGithubTestGhExitCode = 0
         $global:LASTEXITCODE = 0
 
-        function global:gh {
+        function script:gh {
             param(
                 [Parameter(ValueFromRemainingArguments = $true)]
                 [object[]]$Arguments
             )
 
-            $global:PlaneGithubTestGhArgs = @($Arguments)
-            $global:LASTEXITCODE = $global:PlaneGithubTestGhExitCode
-            return $global:PlaneGithubTestGhOutput
+            $script:PlaneGithubTestGhArgs = @($Arguments)
+            $global:LASTEXITCODE = $script:PlaneGithubTestGhExitCode
+            return $script:PlaneGithubTestGhOutput
         }
     }
 
     AfterEach {
-        Remove-Item Function:\gh -ErrorAction SilentlyContinue
-        Remove-Variable -Name PlaneGithubTestGhArgs -Scope Global -ErrorAction SilentlyContinue
-        Remove-Variable -Name PlaneGithubTestGhOutput -Scope Global -ErrorAction SilentlyContinue
-        Remove-Variable -Name PlaneGithubTestGhExitCode -Scope Global -ErrorAction SilentlyContinue
+        Remove-Item Function:\script:gh -ErrorAction SilentlyContinue
+        Remove-Variable -Name PlaneGithubTestGhArgs -Scope Script -ErrorAction SilentlyContinue
+        Remove-Variable -Name PlaneGithubTestGhOutput -Scope Script -ErrorAction SilentlyContinue
+        Remove-Variable -Name PlaneGithubTestGhExitCode -Scope Script -ErrorAction SilentlyContinue
         $global:LASTEXITCODE = 0
     }
 
     It 'lists GitHub issues from slurped paginated output' {
-        $global:PlaneGithubTestGhOutput = '[[{"number":1,"html_url":"https://github.com/rurusasu/dotfiles/issues/1"}],[{"number":2,"html_url":"https://github.com/rurusasu/dotfiles/issues/2"}]]'
+        $script:PlaneGithubTestGhOutput = '[[{"number":1,"html_url":"https://github.com/rurusasu/dotfiles/issues/1"}],[{"number":2,"html_url":"https://github.com/rurusasu/dotfiles/issues/2"}]]'
 
         $issues = @(Invoke-GitHubIssueList -Repository 'rurusasu/dotfiles')
 
-    ($global:PlaneGithubTestGhArgs -join '|') | Should -Be 'api|repos/rurusasu/dotfiles/issues|--method|GET|-f|state=all|--paginate|--slurp'
+    ($script:PlaneGithubTestGhArgs -join '|') | Should -Be 'api|repos/rurusasu/dotfiles/issues|--method|GET|-f|state=all|--paginate|--slurp'
         $issues | Should -HaveCount 2
         $issues[0].PSObject.Properties['number'].Value | Should -Be 1
         $issues[1].PSObject.Properties['number'].Value | Should -Be 2
     }
 
     It 'returns no GitHub issues when list output is empty' {
-        $global:PlaneGithubTestGhOutput = @()
+        $script:PlaneGithubTestGhOutput = @()
 
         @(Invoke-GitHubIssueList -Repository 'rurusasu/dotfiles') | Should -HaveCount 0
     }
 
     It 'throws when listing GitHub issues fails' {
-        $global:PlaneGithubTestGhExitCode = 1
+        $script:PlaneGithubTestGhExitCode = 1
 
         { Invoke-GitHubIssueList -Repository 'rurusasu/dotfiles' } |
             Should -Throw -ExpectedMessage '*Failed to list GitHub issues in rurusasu/dotfiles*'
@@ -200,26 +200,26 @@ Describe 'GitHub issue helpers' {
     }
 
     It 'patches a GitHub issue with title, body, and state' {
-        $global:PlaneGithubTestGhOutput = '{"html_url":"https://github.com/rurusasu/dotfiles/issues/12","state":"closed"}'
+        $script:PlaneGithubTestGhOutput = '{"html_url":"https://github.com/rurusasu/dotfiles/issues/12","state":"closed"}'
 
         $issue = Invoke-GitHubIssuePatch -Repository 'rurusasu/dotfiles' -Number 12 -Title 'Plane title' -Body 'Plane body' -State 'closed'
 
-    ($global:PlaneGithubTestGhArgs -join '|') | Should -Be 'api|repos/rurusasu/dotfiles/issues/12|--method|PATCH|-f|state=closed|-f|title=Plane title|-f|body=Plane body'
+    ($script:PlaneGithubTestGhArgs -join '|') | Should -Be 'api|repos/rurusasu/dotfiles/issues/12|--method|PATCH|-f|state=closed|-f|title=Plane title|-f|body=Plane body'
         $issue.html_url | Should -Be 'https://github.com/rurusasu/dotfiles/issues/12'
         $issue.state | Should -Be 'closed'
     }
 
     It 'returns an empty object when patch output is empty' {
-        $global:PlaneGithubTestGhOutput = @()
+        $script:PlaneGithubTestGhOutput = @()
 
         $issue = Invoke-GitHubIssuePatch -Repository 'rurusasu/dotfiles' -Number 12 -State 'open' -Title '' -Body $null
 
-    ($global:PlaneGithubTestGhArgs -join '|') | Should -Be 'api|repos/rurusasu/dotfiles/issues/12|--method|PATCH|-f|state=open'
+    ($script:PlaneGithubTestGhArgs -join '|') | Should -Be 'api|repos/rurusasu/dotfiles/issues/12|--method|PATCH|-f|state=open'
         $issue.PSObject.Properties | Should -HaveCount 0
     }
 
     It 'throws when patching a GitHub issue fails' {
-        $global:PlaneGithubTestGhExitCode = 1
+        $script:PlaneGithubTestGhExitCode = 1
 
         { Invoke-GitHubIssuePatch -Repository 'rurusasu/dotfiles' -Number 12 -State 'open' } |
             Should -Throw -ExpectedMessage '*Failed to update GitHub issue #12 in rurusasu/dotfiles*'

@@ -84,7 +84,6 @@
     }
 
     It 'attempts both Codex launch probes after validation failures and reports all errors at the end' {
-        $workflow = $script:installerE2E
         $installerJob = $script:installerE2E
 
         $installerJob | Should -Match '(?s)\$validationErrors\s*=.*?try\s*\{[\s\S]*?\$expectedVersion\s*=.*?Could not seed the ChatGPT Classic uninstall E2E[\s\S]*?Assert-WindowsInstallerSuccess'

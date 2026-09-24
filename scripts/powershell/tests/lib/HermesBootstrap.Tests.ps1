@@ -86,7 +86,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
         $script:dockerOutput = @(
             '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
         )
-        $script:dockerOutput = @(Add-HermesBootstrapPlanMetadata -Json $script:dockerOutput[0] -ManifestSha256 $script:manifestSha256)
+        $script:dockerOutput = @(Add-HermesBootstrapPlanAnnotation -Json $script:dockerOutput[0] -ManifestSha256 $script:manifestSha256)
         function global:Invoke-Docker {
             param([string[]]$Arguments)
 
@@ -371,7 +371,7 @@ function global:Restore-HermesBootstrapTestErrorHistory {
     }
 }
 
-function global:Add-HermesBootstrapPlanMetadata {
+function global:Add-HermesBootstrapPlanAnnotation {
     param(
         [Parameter(Mandatory)][string]$Json,
         [Parameter(Mandatory)][string]$ManifestSha256
@@ -426,7 +426,7 @@ Describe "Invoke-HermesBootstrap" {
         $script:dockerOutput = @(
             '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
         )
-        $script:dockerOutput = @(Add-HermesBootstrapPlanMetadata -Json $script:dockerOutput[0] -ManifestSha256 $script:manifestSha256)
+        $script:dockerOutput = @(Add-HermesBootstrapPlanAnnotation -Json $script:dockerOutput[0] -ManifestSha256 $script:manifestSha256)
         function global:Invoke-Docker {
             param([string[]]$Arguments)
 
