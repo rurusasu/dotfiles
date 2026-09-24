@@ -58,13 +58,13 @@
         $expectedPackageBlock | Should -Match '\$skipInstall'
         $expectedPackageBlock | Should -Match '\$ciSkipInstall'
         $expectedPackageBlock | Should -Match 'ciSkipInstall\.Value'
-        $installerE2E | Should -Match "if \(\$expectedRuntime -eq '7'\)[\s\S]*?ciSkipInstall = \$true"
+        $installerE2E | Should -Match 'if \(\$expectedRuntime -eq ''7''\)[\s\S]*?ciSkipInstall = \$true'
         $installerE2E | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
     }
     It 'runs the full installer in separate parallel PowerShell 5.1 and 7 jobs' {
         $script:workflow | Should -Match '(?s)windows-installer:.*?max-parallel:\s*2.*?runtime: Windows PowerShell 5\.1\s+version: "5\.1".*?runtime: PowerShell 7\s+version: "7"'
         $script:workflow | Should -Match 'shell:\s+cmd[\s\S]*?powershell\.exe .*Invoke-WindowsInstallerE2E\.ps1'
-        $script:installerE2E | Should -Match "\$runtimeCommand = if \(\$expectedRuntime -eq '5\.1'\) \{ 'powershell\.exe' \} else \{ 'pwsh\.exe' \}"
+        $script:installerE2E | Should -Match '\$runtimeCommand = if \(\$expectedRuntime -eq ''5\.1''\) \{ ''powershell\.exe'' \} else \{ ''pwsh\.exe'' \}'
         $script:installerE2E | Should -Match 'install\.cmd -NoPause -UserPhaseOnly(?!\s+-WingetVerifyCommandOnly)'
         $script:installerE2E | Should -Match '& \$runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File \$installerE2EScriptPath'
         $script:installerE2E | Should -Match '\$expectedMajorVersion = if \(\$expectedVersion -eq ''5\.1''\) \{ 5 \} else \{ 7 \}'
@@ -114,7 +114,7 @@
         $installerJob | Should -Match '& \$resolvedOnePasswordPath --version'
         $installerJob | Should -Match 'Update-ProcessEnvironmentPath -ExcludePath \$runnerPnpmDirectories'
         $installerJob | Should -Match 'Post-install PATH exceeds the cmd\.exe command environment limit'
-        $installerJob | Should -Match 'winget source list failed \(exit=\$wingetSourcesExitCode\)'
+        $script:workflow | Should -Match 'winget source list failed \(exit=\$wingetSourcesExitCode\)'
         $installerJob | Should -Match 'Unable to inspect ChatGPT Classic E2E seed state'
         $installerJob | Should -Match '(?s)\$resolvedCommand\s*=\s*Get-Command -Name \$requiredCommand\.Name -CommandType Application -ErrorAction SilentlyContinue\s*\|\s*Select-Object -First 1'
         $installerJob | Should -Match 'Codex PATH shim does not match the selected installed package executable'
