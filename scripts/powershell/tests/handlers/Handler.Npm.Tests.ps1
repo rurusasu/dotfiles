@@ -9,6 +9,14 @@ Describe 'NpmHandler' {
     Context 'Invoke-Npm package install timeout routing' {
         BeforeEach {
             $script:originalInstallTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
+            # Keep these tests independent of whether Node/npm is installed on the host.
+            Mock Get-NpmInvocation {
+                param($Arguments)
+                return [PSCustomObject]@{
+                    Command   = "npm"
+                    Arguments = @($Arguments)
+                }
+            }
         }
         AfterEach {
             if ($null -eq $script:originalInstallTimeout) {

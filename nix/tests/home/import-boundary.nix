@@ -37,7 +37,7 @@ let
   # so example text cannot be mistaken for an import declaration.
   stripStrings =
     content:
-    builtins.concatStringsSep " " (
+    builtins.concatStringsSep "\n" (
       builtins.filter builtins.isString (builtins.split "\"[^\"]*\"|''[^']*''" content)
     );
   stripBlockComments =
@@ -66,9 +66,10 @@ let
     content:
     let
       uncommented = stripBlockComments (stripStrings content);
+      lines = builtins.split "\n" uncommented;
     in
-    builtins.concatStringsSep " " (
-      builtins.filter builtins.isString (builtins.split "#[^\\n]*" uncommented)
+    builtins.concatStringsSep "\n" (
+      map (line: builtins.head (builtins.split "#.*" line)) lines
     );
   containsImport =
     target: content:
