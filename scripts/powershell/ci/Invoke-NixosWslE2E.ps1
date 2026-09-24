@@ -14,7 +14,7 @@ param(
     [string]$DistroName = "",
     [string]$InstallDir = "",
     [string]$ReleaseTag = "",
-    [int]$PostInstallTimeoutSeconds = 5400,
+    [int]$PostInstallTimeoutSeconds = 7200,
     [switch]$KeepDistro
 )
 
@@ -173,6 +173,7 @@ systemctl status nix-daemon --no-pager 2>&1 | tail -n 40
 echo '--- recent kernel messages ---'
 dmesg --time-format iso 2>&1 | tail -n 100
 '@
+        $diagnosticScript = $diagnosticScript -replace "`r`n?", "`n"
         Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "root", "--",
             "bash", "-lc", $diagnosticScript

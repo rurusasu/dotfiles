@@ -263,7 +263,7 @@
           "verifyCommand": {
             "args": ["version"],
             "command": "go",
-            "timeoutSeconds": 60
+            "timeoutSeconds": 900
           }
         },
         {

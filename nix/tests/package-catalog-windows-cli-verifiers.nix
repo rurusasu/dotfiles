@@ -47,7 +47,7 @@ in
       verifier = {
         command = "go";
         args = [ "version" ];
-        timeoutSeconds = 60;
+        timeoutSeconds = 900;
       };
     };
   };

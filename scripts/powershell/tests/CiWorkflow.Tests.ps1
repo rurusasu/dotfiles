@@ -359,6 +359,7 @@ Describe 'CI workflow configuration' {
         $script = Get-Content -LiteralPath $scriptPath -Raw
 
         $workflow | Should -Match 'runs-on:\s+windows-2025'
+        $workflow | Should -Match '(?s)wsl:\s+.*?timeout-minutes:\s+150'
         $workflow | Should -Match 'winget install --id Microsoft\.WSL --exact'
         $workflow | Should -Match 'wsl --set-default-version 2'
         $workflow | Should -Match 'Invoke-NixosWslE2E\.ps1'
@@ -387,6 +388,7 @@ Describe 'CI workflow configuration' {
         $script | Should -Match '\$rebuildContext\.Options\["WithHermes"\] = \$true'
         $script | Should -Match '\$rebuildContext\.Options\["SkipFlakeUpdate"\] = \$true'
         $script | Should -Match '\$rebuildContext\.Options\["NixRebuildTimeoutSeconds"\] = \$PostInstallTimeoutSeconds'
+        $script | Should -Match '\[int\]\$PostInstallTimeoutSeconds = 7200'
         $script | Should -Match '\$rebuildHandler = \[NixRebuildHandler\]::new\(\)'
         $script | Should -Match 'function Write-WslRebuildDiagnostic'
         $script | Should -Match 'Write-WslRebuildDiagnostic -Phase "before Hermes rebuild"'
@@ -394,6 +396,7 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'free -h'
         $script | Should -Match 'df -h / /nix'
         $script | Should -Match 'dmesg --time-format iso'
+        $script | Should -Match '\$diagnosticScript = \$diagnosticScript -replace "`r`n\?", "`n"'
         $script | Should -Match '\$rebuildHandler\.Apply\(\$rebuildContext\)'
         $script | Should -Match 'CI_ASSERTION: production NixRebuildHandler applied WithHermes'
         $script | Should -Match 'hermes_executable="\$\(readlink -f "\$\(command -v hermes\)"\)"'

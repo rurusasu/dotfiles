@@ -1657,7 +1657,7 @@ lib.mapAttrs (_: resolve) grouped
     go = {
       command = "go";
       args = [ "version" ];
-      timeoutSeconds = 60;
+      timeoutSeconds = packageInstallTimeoutSeconds;
     };
     rustup = {
       command = "rustup";

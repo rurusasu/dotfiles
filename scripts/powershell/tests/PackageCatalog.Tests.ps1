@@ -106,9 +106,9 @@ Describe 'Package catalog consistency' {
             $go = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'GoLang.Go') | Select-Object -First 1
 
             $gh.verifyCommand.timeoutSeconds | Should -Be 60
-            $go.verifyCommand.timeoutSeconds | Should -Be 60
+            $go.verifyCommand.timeoutSeconds | Should -Be 900
             (@($wingetSource.Packages | Where-Object { $_.verifyCommand.timeoutSeconds } | ForEach-Object { "$($_.PackageIdentifier):$($_.verifyCommand.timeoutSeconds)" } | Sort-Object) -join ',') |
-                Should -Be 'GitHub.cli:60,GoLang.Go:60,Microsoft.WSL:30' -Because 'verification timeouts must remain package-scoped'
+                Should -Be 'GitHub.cli:60,GoLang.Go:900,Microsoft.WSL:30' -Because 'verification timeouts must remain package-scoped'
         }
     }
 
