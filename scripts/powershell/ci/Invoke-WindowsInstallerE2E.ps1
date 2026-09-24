@@ -166,6 +166,7 @@ $out = $output -join [Environment]::NewLine
 # install.cmd persists PATH and PNPM_HOME to the user environment in
 # its child process. Re-read those values so post-install probes use
 # the shims the installer just published, not only the runner PATH.
+. (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/lib/Invoke-ExternalCommand.ps1')
 $npmPrefixOutput = @(Invoke-Npm -Arguments @('prefix', '--global'))
 $npmPrefixExitCode = $LASTEXITCODE
 $npmGlobalPrefix = if ($npmPrefixExitCode -eq 0) { [string]($npmPrefixOutput | Select-Object -Last 1) } else { '' }
@@ -250,7 +251,7 @@ Assert-WingetInstallSuccess -Output $out -ExpectedPackageIds $expectedWindowsPac
 }
 
 Invoke-WindowsE2EValidation -Name 'pnpm bootstrap' -Validation {
-$npmPrefixOutput = @(npm prefix --global 2>&1)
+$npmPrefixOutput = @(Invoke-Npm -Arguments @('prefix', '--global'))
 $npmPrefixExitCode = $LASTEXITCODE
 $npmGlobalPrefix = if ($npmPrefixExitCode -eq 0) { [string]($npmPrefixOutput | Select-Object -Last 1) } else { '' }
 if ([string]::IsNullOrWhiteSpace($npmGlobalPrefix)) {
