@@ -129,12 +129,21 @@ try {
 
   # Seed stale persisted User PATH entries. Keep the launcher PATH viable:
   # install.cmd invokes chcp before PowerShell can normalize the environment.
-  $oversizedUserPathEntries = 1..500 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
+  $oversizedUserPathEntries = 1..1000 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
   $seededUserPath = (@($oversizedUserPathEntries) + @($originalUserPath -split ';' | Where-Object { $_ })) -join ';'
-  if ($seededUserPath.Length -ge 32767) {
-    throw "Could not seed a valid oversized User PATH for the installer E2E: $($seededUserPath.Length) characters"
+  if ($seededUserPath.Length -le 32767) {
+    throw "Could not seed an over-limit User PATH for the installer E2E: $($seededUserPath.Length) characters"
   }
-  [Environment]::SetEnvironmentVariable('PATH', $seededUserPath, 'User')
+  $userEnvironmentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+  if (-not $userEnvironmentKey) {
+    throw 'Could not open the current user Environment registry key for the PATH E2E'
+  }
+  try {
+    $userEnvironmentKey.SetValue('PATH', $seededUserPath, [Microsoft.Win32.RegistryValueKind]::ExpandString)
+  }
+  finally {
+    $userEnvironmentKey.Dispose()
+  }
 
   $ErrorActionPreference = 'Continue'
   $output = & cmd.exe /d /c install.cmd -NoPause -UserPhaseOnly 2>&1 |
