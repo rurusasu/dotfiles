@@ -83,6 +83,17 @@ run_installer() {
 	done <"$TEST_ROOT/add-path.log"
 }
 
+@test "pnpm default global-bin-dir is added to PATH when config query is empty" {
+	unset PNPM_HOME PNPM_REPORTED_GLOBAL_BIN_DIR
+	expected_global_bin="$TEST_ROOT/home/.local/share/pnpm/bin"
+
+	run run_installer
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"pnpm global bin directory is available in PATH: $expected_global_bin"* ]]
+	grep -Fq "$expected_global_bin" "$TEST_ROOT/add-path.log"
+	grep -Fxq "$expected_global_bin" "$TEST_ROOT/add-global-bin.log"
+}
+
 @test "pnpm reported tilde global-bin-dir is expanded before PATH validation" {
 	unset PNPM_HOME
 	export PNPM_REPORTED_GLOBAL_BIN_DIR='~/.local/share/pnpm/bin'

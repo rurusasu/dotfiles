@@ -18,7 +18,10 @@ echo "pnpm グローバルパッケージをインストールしています...
 # parent directory and may not describe a customized global-bin-dir.
 PNPM_GLOBAL_BIN_DIR="$(pnpm config get global-bin-dir 2>/dev/null || true)"
 case "$PNPM_GLOBAL_BIN_DIR" in
-  "" | undefined | null) PNPM_GLOBAL_BIN_DIR="${PNPM_HOME:+$PNPM_HOME/bin}" ;;
+  "" | undefined | null)
+    PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+    PNPM_GLOBAL_BIN_DIR="$PNPM_HOME/bin"
+    ;;
 esac
 case "$PNPM_GLOBAL_BIN_DIR" in
   "~") PNPM_GLOBAL_BIN_DIR="$HOME" ;;
