@@ -155,6 +155,37 @@ function Invoke-WslChecked {
     }
 }
 
+function Write-WslRebuildDiagnostic {
+    param([Parameter(Mandatory)][string]$Phase)
+
+    Write-CiSection "WSL rebuild diagnostics: $Phase"
+    try {
+        $diagnosticScript = @'
+set +e
+echo '--- memory ---'
+free -h
+echo '--- filesystem ---'
+df -h / /nix
+echo '--- meminfo ---'
+grep -E '^(MemTotal|MemAvailable|SwapTotal|SwapFree):' /proc/meminfo
+echo '--- nix-daemon ---'
+systemctl status nix-daemon --no-pager 2>&1 | tail -n 40
+echo '--- recent kernel messages ---'
+dmesg --time-format iso 2>&1 | tail -n 100
+'@
+        Invoke-WslChecked -Arguments @(
+            "-d", $DistroName, "-u", "root", "--",
+            "bash", "-lc", $diagnosticScript
+        ) -TimeoutSeconds 90 -AllowFailure | Out-Null
+    }
+    catch {
+        Write-Warning "Could not collect WSL rebuild diagnostics ($Phase): $($_.Exception.Message)"
+    }
+    finally {
+        Complete-CiSection
+    }
+}
+
 function Remove-TemporaryDistro {
     param([Parameter(Mandatory)][string]$Name)
 
@@ -295,9 +326,16 @@ try {
             if (-not $rebuildHandler.CanApply($rebuildContext)) {
                 throw "NixRebuildHandler cannot apply to the newly installed WSL distro $DistroName"
             }
-            $rebuildResult = $rebuildHandler.Apply($rebuildContext)
-            if (-not $rebuildResult.Success) {
-                throw "Nix-managed Hermes setup via NixRebuildHandler failed: $($rebuildResult.Message)"
+            Write-WslRebuildDiagnostic -Phase "before Hermes rebuild"
+            try {
+                $rebuildResult = $rebuildHandler.Apply($rebuildContext)
+                if (-not $rebuildResult.Success) {
+                    throw "Nix-managed Hermes setup via NixRebuildHandler failed: $($rebuildResult.Message)"
+                }
+            }
+            catch {
+                Write-WslRebuildDiagnostic -Phase "after Hermes rebuild failure"
+                throw
             }
             Write-Host "CI_ASSERTION: production NixRebuildHandler applied WithHermes to $DistroName."
             if (-not $rebuildContext.Options['LegacyHermesGatewayStopped']) {
