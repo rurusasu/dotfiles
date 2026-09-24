@@ -61,35 +61,35 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should run install.cmd in CI with timeout and completion marker checks' {
-        $wingetWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
+        $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1") -Raw -Encoding UTF8
         $wingetAssertion = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/powershell/ci/Assert-WingetInstallSuccess.ps1") -Raw
 
-        $wingetWorkflow | Should -Match '& cmd\.exe /d /c install\.cmd'
-        $wingetWorkflow | Should -Match 'install\.cmd'
-        $wingetWorkflow | Should -Match 'ForEach-Object'
-        $wingetWorkflow | Should -Match '\$LASTEXITCODE'
-        $wingetWorkflow | Should -Not -Match 'RedirectStandardOutput'
-        $wingetWorkflow | Should -Match 'DOTFILES_INSTALL_TIMEOUT_SECONDS:\s*"900"'
-        $wingetWorkflow | Should -Match 'User Phase Complete!'
-        $wingetWorkflow | Should -Match 'Get-Command -Name ''pwsh\.exe'' -CommandType Application -ErrorAction Stop'
-        $wingetWorkflow | Should -Match "DOTFILES_FORCE_WINDOWS_POWERSHELL = '1'"
-        $wingetWorkflow | Should -Not -Match 'NoPowerShell7Dir|where\.exe pwsh\.exe'
+        $installerScript | Should -Match '& cmd\.exe /d /c install\.cmd'
+        $installerScript | Should -Match 'install\.cmd'
+        $installerScript | Should -Match 'ForEach-Object'
+        $installerScript | Should -Match '\$LASTEXITCODE'
+        $installerScript | Should -Not -Match 'RedirectStandardOutput'
+        $workflow | Should -Match 'DOTFILES_INSTALL_TIMEOUT_SECONDS:\s*"900"'
+        $installerScript | Should -Match 'User Phase Complete!'
+        $installerScript | Should -Match 'Get-Command -Name \$runtimeCommand -CommandType Application -ErrorAction Stop'
+        $installerScript | Should -Match "DOTFILES_FORCE_WINDOWS_POWERSHELL = '1'"
+        $installerScript | Should -Not -Match 'NoPowerShell7Dir|where\.exe pwsh\.exe'
         $installCmd = Get-Content -LiteralPath (Join-Path $script:repoRoot 'install.cmd') -Raw
         $installCmd | Should -Match 'DOTFILES_FORCE_WINDOWS_POWERSHELL'
-        $wingetWorkflow | Should -Match 'The full Windows installer E2E did not exercise the forced Windows PowerShell 5\.1 path'
-        $wingetWorkflow | Should -Match 'oversizedPathEntries = 1\.\.500'
-        $wingetWorkflow | Should -Match 'Process PATH normalized: removed'
-        $wingetWorkflow | Should -Match 'missing directories and omitted.*final length.*8191'
-        $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess -Output \$out'
-        $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess\.ps1'
-        $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
-        $wingetWorkflow | Should -Match '\$wingetManifest = Get-Content.*windows/winget/packages\.json'
-        $wingetWorkflow | Should -Match '\$properties = \$_.PSObject.Properties'
-        $wingetWorkflow | Should -Match '\$null -eq \$skipInstall -or -not \[bool\]\$skipInstall\.Value'
-        $wingetWorkflow | Should -Match 'Sort-Object -Unique'
+        $installerScript | Should -Match 'The full Windows installer E2E did not exercise the forced Windows PowerShell 5\.1 path'
+        $installerScript | Should -Match 'oversizedPathEntries = 1\.\.500'
+        $installerScript | Should -Match 'Process PATH normalized: removed'
+        $installerScript | Should -Match 'missing directories and omitted.*final length.*8191'
+        $installerScript | Should -Match 'Assert-WingetInstallSuccess -Output \$out'
+        $installerScript | Should -Match 'Assert-WingetInstallSuccess\.ps1'
+        $installerScript | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
+        $installerScript | Should -Match '\$wingetManifest = Get-Content.*windows/winget/packages\.json'
+        $installerScript | Should -Match '\$properties = \$_.PSObject.Properties'
+        $installerScript | Should -Match '\$null -eq \$skipInstall -or -not \[bool\]\$skipInstall\.Value'
+        $installerScript | Should -Match 'Sort-Object -Unique'
         $wingetAssertion | Should -Match 'reported an empty WinGet CI verification inventory'
     }
-
     It 'should run the real installer in concurrent PowerShell 5.1 and 7 processes' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw -Encoding UTF8
         $installerJob = [regex]::Match(
@@ -100,8 +100,7 @@ Describe 'CI workflow configuration' {
             $installerJob,
             '(?ms)^      - name: Run install\.cmd strict user phase\s*(?<step>.*?)(?=^      - name:|\z)'
         ).Groups['step'].Value
-        $installerScriptPath = Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1'
-        $installerScript = Get-Content -LiteralPath $installerScriptPath -Raw -Encoding UTF8
+        $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
 
         $installerJob | Should -Match 'fail-fast:\s*false'
         $installerJob | Should -Match 'max-parallel:\s*2'
@@ -111,10 +110,10 @@ Describe 'CI workflow configuration' {
         $installerStep | Should -Match 'run:\s+powershell\.exe .*Invoke-WindowsInstallerE2E\.ps1'
         $installerJob | Should -Match 'DOTFILES_E2E_POWERSHELL_VERSION:\s+\$\{\{\s*matrix\.version\s*\}\}'
 
-        $installerScript | Should -Match "\$runtimeCommand = if \(\$expectedRuntime -eq '5\.1'\) \{ 'powershell\.exe' \} else \{ 'pwsh\.exe' \}"
+        $installerScript | Should -Match '\$runtimeCommand = if \(\$expectedRuntime -eq ''5\.1''\) \{ ''powershell\.exe'' \} else \{ ''pwsh\.exe'' \}'
         $installerScript | Should -Match 'install\.cmd -NoPause -UserPhaseOnly(?!\s+-WingetVerifyCommandOnly)'
         $installerScript | Should -Match 'RequiredOutputMarkers\s+\$requiredPackageManagerMarkers'
-        $installerScript | Should -Match "\[Pnpm\] npm で pnpm をインストールしました"
+        $installerScript | Should -Match '\[Pnpm\] npm で pnpm をインストールしました'
         $installerScript | Should -Match '\[Npm\] ✓ \$\(\$package\.name\)'
         $installerScript | Should -Match 'if \(\$expectedRuntime -eq ''7''\)'
         $installerScript | Should -Match 'ciSkipInstall = \$true'
@@ -128,7 +127,6 @@ Describe 'CI workflow configuration' {
         $installerScript | Should -Match '& \$npmPnpmShim --version'
         $installerScript | Should -Match 'Write-Host \$failureSummary -ForegroundColor Red'
     }
-
     It 'should keep the dedicated Windows installer E2E script UTF-8 BOM encoded and parseable' {
         $installerScriptPath = Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1'
         $bytes = [System.IO.File]::ReadAllBytes($installerScriptPath)
@@ -145,38 +143,43 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should verify the installed Codex code-mode host exists beside its shim and launches' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
-        $installerJob = [regex]::Match(
-            $workflow,
-            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
-        ).Groups['job'].Value
-
-        $installerJob | Should -Match 'codex-code-mode-host\.exe'
-        $installerJob | Should -Match 'Get-Command -Name ''codex\.exe'' -CommandType Application'
-        $installerJob | Should -Match 'Codex CLI shim is not the command exposed on PATH'
-        $installerJob | Should -Match 'code-mode host is missing beside the selected Codex executable'
-        $installerJob | Should -Match '\$codexHostPath.*--help'
-        $installerJob | Should -Match 'Codex code-mode host --help failed'
-        $installerJob | Should -Match '\$codexShimPath.*--help'
-        $installerJob | Should -Match 'Codex CLI --help failed'
-    }
-
-    It 'should resolve Codex package paths in the PS5.1 CI fallback without LinkType or Target metadata' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw -Encoding UTF8
+        $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
         $codexHandler = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/handlers/Handler.Codex.ps1') -Raw
-        $installerJob = [regex]::Match(
-            $workflow,
-            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
-        ).Groups['job'].Value
 
-        $installerJob | Should -Match 'Resolve-CodexPackageExecutablePath'
-        $installerJob | Should -Match 'handlers/Handler\.Codex\.ps1'
-        $installerJob | Should -Match 'FileAttributes\]::ReparsePoint'
+        $installerScript | Should -Match 'codex-code-mode-host\.exe'
+        $installerScript | Should -Match 'Get-Command -Name ''codex\.exe'' -CommandType Application'
+        $installerScript | Should -Match 'Codex CLI shim is not the command exposed on PATH'
+        $installerScript | Should -Match 'code-mode host is missing beside the selected Codex executable'
+        $installerScript | Should -Match '\$codexHostPath.*--help'
+        $installerScript | Should -Match 'Codex code-mode host --help failed'
+        $installerScript | Should -Match '\$codexShimPath.*--help'
+        $installerScript | Should -Match 'Codex CLI --help failed'
+        $installerScript | Should -Match 'Resolve-CodexPackageExecutablePath'
+        $installerScript | Should -Match 'handlers/Handler\.Codex\.ps1'
+        $installerScript | Should -Match 'FileAttributes\]::ReparsePoint'
         $codexHandler | Should -Match 'Programs\\Codex'
         $codexHandler | Should -Match 'bin\\codex\.exe'
-        $installerJob | Should -Not -Match "PSObject\.Properties\['(LinkType|Target)'\]"
+        $installerScript | Should -Not -Match "PSObject\.Properties\['(LinkType|Target)'\]"
     }
+    It 'should resolve Codex package paths in the PS5.1 CI fallback without LinkType or Target metadata' {
+        $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
+        $codexHandler = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/handlers/Handler.Codex.ps1') -Raw
 
+        $installerScript | Should -Match 'codex-code-mode-host\.exe'
+        $installerScript | Should -Match 'Get-Command -Name ''codex\.exe'' -CommandType Application'
+        $installerScript | Should -Match 'Codex CLI shim is not the command exposed on PATH'
+        $installerScript | Should -Match 'code-mode host is missing beside the selected Codex executable'
+        $installerScript | Should -Match '\$codexHostPath.*--help'
+        $installerScript | Should -Match 'Codex code-mode host --help failed'
+        $installerScript | Should -Match '\$codexShimPath.*--help'
+        $installerScript | Should -Match 'Codex CLI --help failed'
+        $installerScript | Should -Match 'Resolve-CodexPackageExecutablePath'
+        $installerScript | Should -Match 'handlers/Handler\.Codex\.ps1'
+        $installerScript | Should -Match 'FileAttributes\]::ReparsePoint'
+        $codexHandler | Should -Match 'Programs\\Codex'
+        $codexHandler | Should -Match 'bin\\codex\.exe'
+        $installerScript | Should -Not -Match "PSObject\.Properties\['(LinkType|Target)'\]"
+    }
     It 'should verify ChatGPT Classic is removed by the real Windows installer E2E' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
 
