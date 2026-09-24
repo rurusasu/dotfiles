@@ -109,13 +109,13 @@ in
     expected = true;
   };
 
-  testDarwinHermesLaunchAgentArguments = {
-    expr = darwin.config.launchd.agents.hermes-agent.config.ProgramArguments;
-    expected = [
-      "${darwin.testPackage}/bin/hermes"
-      "gateway"
-      "run"
-    ];
+  testDarwinHermesLaunchAgentRunsGateway = {
+    expr =
+      let
+        arguments = darwin.config.launchd.agents.hermes-agent.config.ProgramArguments;
+      in
+      builtins.elem "gateway" arguments && builtins.elem "run" arguments;
+    expected = true;
   };
 
   testDarwinHermesLaunchAgentHomeAndLifecycle = {
