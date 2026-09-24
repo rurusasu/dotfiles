@@ -103,10 +103,24 @@ if ((runtime == 1)); then
   docker compose -f "$COMPOSE_FILE" config >/dev/null || fail "Compose configuration is invalid"
   docker compose -f "$COMPOSE_FILE" ps --status running >/dev/null ||
     fail "Compose services are not running"
-  expected_services="$(docker compose -f "$COMPOSE_FILE" config --services | LC_ALL=C sort)"
+  expected_services="$(docker compose -f "$COMPOSE_FILE" config --format json |
+    jq -r --arg profiles "${COMPOSE_PROFILES:-}" '
+      ($profiles | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))) as $enabled_profiles
+      | .services
+      | to_entries[]
+      | select(
+          (.value.profiles // []) as $service_profiles
+          | ($service_profiles | length) == 0 or
+            any($service_profiles[]; . as $profile | $enabled_profiles | index($profile) != null)
+        )
+      | .key
+    ' | LC_ALL=C sort)"
   running_services="$(docker compose -f "$COMPOSE_FILE" ps --status running --services | LC_ALL=C sort)"
-  [[ -n $expected_services && $running_services == "$expected_services" ]] ||
+  if [[ -z $expected_services || $running_services != "$expected_services" ]]; then
+    printf 'Expected Compose services:\n%s\n' "${expected_services:-<none>}" >&2
+    printf 'Running Compose services:\n%s\n' "${running_services:-<none>}" >&2
     fail "not all Compose services are running"
+  fi
 fi
 
 printf 'Environment verification passed.\n'

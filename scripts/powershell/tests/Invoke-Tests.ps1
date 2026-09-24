@@ -69,6 +69,91 @@ else {
 $projectRoot = Split-Path -Parent $scriptRoot
 $coverageRequested = ($MinimumCoverage -gt 0) -or $ShowCoverage -or (-not [string]::IsNullOrWhiteSpace($CoverageOutputFile))
 
+function ConvertTo-Xml10SafeText {
+    param([AllowNull()][object]$Value)
+
+    if ($null -eq $Value) {
+        return ''
+    }
+
+    # Pester's JUnit exporter writes failure text directly to XML attributes.
+    # Keep diagnostics readable while representing XML 1.0-forbidden controls.
+    return [regex]::Replace([string]$Value, '[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]', {
+            param($match)
+            '[U+{0:X4}]' -f [int][char]$match.Value[0]
+        })
+}
+
+function Write-SafeJUnitReport {
+    param(
+        [Parameter(Mandatory)]$Result,
+        [Parameter(Mandatory)][string]$Path
+    )
+
+    $tests = @($Result.Tests | Where-Object ShouldRun)
+    $failures = @($tests | Where-Object Result -EQ 'Failed')
+    $skipped = @($tests | Where-Object { $_.Result -notin @('Passed', 'Failed') })
+    $settings = New-Object System.Xml.XmlWriterSettings
+    $settings.Indent = $true
+    $settings.Encoding = New-Object System.Text.UTF8Encoding($false)
+    $writer = [System.Xml.XmlWriter]::Create([System.IO.Path]::GetFullPath($Path), $settings)
+    try {
+        $writer.WriteStartDocument()
+        $writer.WriteStartElement('testsuites')
+        $writer.WriteAttributeString('name', (ConvertTo-Xml10SafeText $Result.Configuration.TestResult.TestSuiteName.Value))
+        $writer.WriteAttributeString('tests', [string]$tests.Count)
+        $writer.WriteAttributeString('errors', [string]($Result.FailedContainersCount + $Result.FailedBlocksCount))
+        $writer.WriteAttributeString('failures', [string]$failures.Count)
+        $writer.WriteAttributeString('disabled', [string]($Result.NotRunCount + $Result.SkippedCount))
+        $writer.WriteAttributeString('time', $Result.Duration.TotalSeconds.ToString('0.000', [Globalization.CultureInfo]::InvariantCulture))
+        $writer.WriteStartElement('testsuite')
+        $writer.WriteAttributeString('name', 'PowerShell')
+        $writer.WriteAttributeString('tests', [string]$tests.Count)
+        $writer.WriteAttributeString('errors', '0')
+        $writer.WriteAttributeString('failures', [string]$failures.Count)
+        $writer.WriteAttributeString('skipped', [string]$skipped.Count)
+        $writer.WriteAttributeString('time', $Result.Duration.TotalSeconds.ToString('0.000', [Globalization.CultureInfo]::InvariantCulture))
+
+        foreach ($test in $tests) {
+            $writer.WriteStartElement('testcase')
+            $writer.WriteAttributeString('name', (ConvertTo-Xml10SafeText $test.ExpandedPath))
+            $writer.WriteAttributeString('classname', (ConvertTo-Xml10SafeText ($test.Block.Path -join '.')))
+            $writer.WriteAttributeString('time', $test.Duration.TotalSeconds.ToString('0.000', [Globalization.CultureInfo]::InvariantCulture))
+
+            if ($test.Result -eq 'Failed') {
+                $messages = @($test.ErrorRecord | ForEach-Object {
+                        if ($_.DisplayErrorMessage) { $_.DisplayErrorMessage } else { $_.ToString() }
+                    })
+                $traces = @($test.ErrorRecord | ForEach-Object {
+                        if ($_.DisplayStackTrace) { $_.DisplayStackTrace }
+                    })
+                $writer.WriteStartElement('failure')
+                $writer.WriteAttributeString('message', (ConvertTo-Xml10SafeText ($messages -join [Environment]::NewLine)))
+                if ($traces.Count -gt 0) {
+                    $writer.WriteString((ConvertTo-Xml10SafeText ($traces -join [Environment]::NewLine)))
+                }
+                $writer.WriteEndElement()
+            }
+            elseif ($test.Result -notin @('Passed', 'Failed')) {
+                $writer.WriteStartElement('skipped')
+                $reason = @($test.ErrorRecord | ForEach-Object { if ($_.DisplayErrorMessage) { $_.DisplayErrorMessage } }) -join [Environment]::NewLine
+                if ($reason) { $writer.WriteAttributeString('message', (ConvertTo-Xml10SafeText $reason)) }
+                $writer.WriteEndElement()
+            }
+
+            $writer.WriteEndElement()
+        }
+
+        $writer.WriteEndElement()
+        $writer.WriteEndElement()
+        $writer.WriteEndDocument()
+        $writer.Flush()
+    }
+    finally {
+        $writer.Dispose()
+    }
+}
+
 # Pester v3 / v6 が自動ロードされるのを防ぐ
 $currentPester = Get-Module -Name Pester | Select-Object -First 1
 if ($currentPester) {
@@ -177,9 +262,9 @@ else {
 
 # JUnit XML 出力
 if ($OutputFile) {
-    $pesterConfig.TestResult.Enabled = $true
-    $pesterConfig.TestResult.OutputPath = $OutputFile
-    $pesterConfig.TestResult.OutputFormat = "JUnitXml"
+    # Pester 5.9's JUnit exporter can fail on ANSI ESC in failure details. Write
+    # the report after the run so invalid XML controls are represented, not lost.
+    $pesterConfig.TestResult.Enabled = $false
 }
 
 Write-Host ""
@@ -196,6 +281,10 @@ Write-Host ""
 # 呼び出し元の StrictMode をテストスコープへ継承させず、通常の Pester CI と実行条件を揃える
 Set-StrictMode -Off
 $result = Invoke-Pester -Configuration $pesterConfig
+
+if ($OutputFile -and $result) {
+    Write-SafeJUnitReport -Result $result -Path $OutputFile
+}
 
 if (-not $result) {
     Write-Host "FAIL: Test runner did not return a result." -ForegroundColor Red

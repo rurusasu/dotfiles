@@ -21,13 +21,22 @@ function Assert-WindowsInstallerSuccess {
         throw 'Windows installer output contains a fatal or incomplete marker'
     }
 
-    $failureSummaries = @(
-        [regex]::Matches($Output, '(?m)^Total:\s*\d+\s*\|\s*Success:\s*\d+\s*\|\s*Failure:\s*(?<failures>\d+)') |
-            ForEach-Object { [int]$_.Groups['failures'].Value } |
-            Where-Object { $_ -gt 0 }
+    $summaryMatches = [regex]::Matches(
+        $Output,
+        '(?m)^Total:\s*(?<total>\d+)\s*\|\s*Success:\s*(?<success>\d+)\s*\|\s*Failure:\s*(?<failure>\d+)\s*$'
     )
-    if ($failureSummaries.Count -gt 0) {
-        $failureCount = ($failureSummaries | Measure-Object -Sum).Sum
+    if ($summaryMatches.Count -ne 1) {
+        throw "Windows installer must report exactly one parseable setup summary; found $($summaryMatches.Count)"
+    }
+
+    $summary = $summaryMatches[0]
+    $totalCount = [int]$summary.Groups['total'].Value
+    $successCount = [int]$summary.Groups['success'].Value
+    $failureCount = [int]$summary.Groups['failure'].Value
+    if ($totalCount -ne ($successCount + $failureCount)) {
+        throw "Windows installer reported inconsistent handler counts: total=$totalCount success=$successCount failure=$failureCount"
+    }
+    if ($failureCount -gt 0) {
         throw "Windows installer reported $failureCount failed handler(s)"
     }
 

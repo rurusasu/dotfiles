@@ -1,5 +1,6 @@
 ﻿BeforeAll {
     . (Join-Path $PSScriptRoot "../../ci/Assert-WingetInstallSuccess.ps1")
+    . (Join-Path $PSScriptRoot "../../ci/Assert-WindowsInstallerSuccess.ps1")
 }
 
 Describe "Assert-WingetInstallSuccess" {
@@ -113,10 +114,14 @@ Total: 1 | Success: 0 | Failure: 1
         { Assert-WingetInstallSuccess -Output $installerOutput } | Should -Throw "*installer-cache-contention*cached installer file is locked*"
     }
 
-    It "rejects a successful summary when CI never reported its verification inventory" {
-        $output = "Total: 1 | Success: 1 | Failure: 0"
+    It "uses manifest-provided expected IDs when the installer did not emit an optional inventory marker" {
+        $output = @"
+[Winget] ✓ Test.Tool
+Total: 1 | Success: 1 | Failure: 0
+"@
 
-        { Assert-WingetInstallSuccess -Output $output } | Should -Throw "*did not report the WinGet CI verification inventory*"
+        { Assert-WingetInstallSuccess -Output $output -ExpectedPackageIds @('Test.Tool') } | Should -Not -Throw
+        { Assert-WingetInstallSuccess -Output $output } | Should -Throw "*empty WinGet CI verification inventory*"
     }
 
     It "rejects package-level failures even if the aggregate summary says success" {
@@ -137,7 +142,7 @@ Total: 1 | Success: 1 | Failure: 0
 Total: 2 | Success: 1 | Failure: 0
 "@
 
-        { Assert-WingetInstallSuccess -Output $output } | Should -Throw "*missing: Other.Tool*"
+        { Assert-WingetInstallSuccess -Output $output } | Should -Throw "*inconsistent handler counts*"
     }
 
     It "rejects package IDs reported successful outside the expected inventory" {
@@ -174,5 +179,43 @@ Total: 1 | Success: 1 | Failure: 0
         $output = "[Winget] インストール/更新中: Test.Tool"
 
         { Assert-WingetInstallSuccess -Output $output } | Should -Throw "*did not report a parseable setup summary*"
+    }
+}
+
+Describe "Assert-WindowsInstallerSuccess summary integrity" {
+    It "accepts a complete installer run with reconciled handler counts" {
+        $output = @"
+Total: 2 | Success: 2 | Failure: 0
+User Phase Complete!
+[Npm] ✓ package
+"@
+
+        {
+            Assert-WindowsInstallerSuccess -Output $output -ExitCode 0 -CompletionMarker 'User Phase Complete!' -RequiredOutputMarkers @('[Npm] ✓ package')
+        } | Should -Not -Throw
+    }
+
+    It "rejects handler summaries whose total does not equal success plus failure" {
+        $output = @"
+Total: 2 | Success: 1 | Failure: 0
+User Phase Complete!
+[Npm] ✓ package
+"@
+
+        {
+            Assert-WindowsInstallerSuccess -Output $output -ExitCode 0 -CompletionMarker 'User Phase Complete!' -RequiredOutputMarkers @('[Npm] ✓ package')
+        } | Should -Throw '*inconsistent handler counts*'
+    }
+
+    It "rejects missing or repeated setup summaries" {
+        $output = "User Phase Complete!`n[Npm] ✓ package"
+        {
+            Assert-WindowsInstallerSuccess -Output $output -ExitCode 0 -CompletionMarker 'User Phase Complete!' -RequiredOutputMarkers @('[Npm] ✓ package')
+        } | Should -Throw '*exactly one parseable setup summary*'
+
+        $output = "Total: 1 | Success: 1 | Failure: 0`nTotal: 1 | Success: 1 | Failure: 0`nUser Phase Complete!`n[Npm] ✓ package"
+        {
+            Assert-WindowsInstallerSuccess -Output $output -ExitCode 0 -CompletionMarker 'User Phase Complete!' -RequiredOutputMarkers @('[Npm] ✓ package')
+        } | Should -Throw '*exactly one parseable setup summary*'
     }
 }

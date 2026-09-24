@@ -1,6 +1,7 @@
 ﻿#Requires -Module Pester
 
 BeforeAll {
+    $PSDefaultParameterValues['Get-Content:Encoding'] = 'UTF8'
     $script:repoRoot = Resolve-Path (Join-Path $PSScriptRoot "../../../..")
     $script:chezmoiRoot = Join-Path $script:repoRoot "chezmoi"
     $script:keybindingsDocsPath = if ($env:DOTFILES_KEYBINDINGS_DOCS_PATH) {
@@ -10,19 +11,49 @@ BeforeAll {
         Join-Path $script:repoRoot "docs/chezmoi/keybindings.md"
     }
 
+    function Invoke-ChezmoiTemplateForTest {
+        param([Parameter(Mandatory)][string]$Template, [Parameter(Mandatory)][string]$OverrideData)
+
+        $command = Get-Command chezmoi -ErrorAction Stop
+        $arguments = @('--source', $script:chezmoiRoot, "--override-data=$OverrideData", 'execute-template') | ForEach-Object {
+            $value = [string]$_
+            '"' + (($value -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
+        }
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = $command.Source
+        $startInfo.Arguments = $arguments -join ' '
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardInput = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $startInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+        $startInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $startInfo
+        try {
+            if (-not $process.Start()) { throw 'Failed to start chezmoi.' }
+            $stdout = $process.StandardOutput.ReadToEndAsync()
+            $stderr = $process.StandardError.ReadToEndAsync()
+            $input = ([System.Text.UTF8Encoding]::new($false)).GetBytes($Template)
+            $process.StandardInput.BaseStream.Write($input, 0, $input.Length)
+            $process.StandardInput.Close()
+            $process.WaitForExit()
+            if ($process.ExitCode -ne 0) { throw "chezmoi execute-template failed ($($process.ExitCode)): $($stderr.GetAwaiter().GetResult())" }
+            return $stdout.GetAwaiter().GetResult() -split "`r?`n"
+        }
+        finally { $process.Dispose() }
+    }
+
     function Get-JsonContent {
         param([string]$Path)
         $fullPath = Join-Path $script:repoRoot $Path
-        $raw = Get-Content -LiteralPath $fullPath -Raw
+        $raw = Get-Content -Encoding UTF8 -LiteralPath $fullPath -Raw
         if ($raw -notmatch '\{\{') {
             return $raw | ConvertFrom-Json
         }
 
-        $rendered = $raw |
-            & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"windows"}}' execute-template
-        if ($LASTEXITCODE -ne 0) {
-            throw "chezmoi execute-template failed for $Path with exit code $LASTEXITCODE"
-        }
+        $rendered = Invoke-ChezmoiTemplateForTest -Template $raw -OverrideData '{"chezmoi":{"os":"windows"}}'
 
         ($rendered -join [Environment]::NewLine) | ConvertFrom-Json
     }
@@ -45,14 +76,14 @@ BeforeAll {
 
 Describe '標準キーバインド方針' {
     It 'docs は editor と Unix/Vim 系の標準レイヤーを明示すること' {
-        $docs = Get-Content -LiteralPath $script:keybindingsDocsPath -Raw
+        $docs = Get-Content -Encoding UTF8 -LiteralPath $script:keybindingsDocsPath -Raw
 
         $docs | Should -Match 'Alt\+H/J/K/L' -Because "other GUI editors should keep Alt focus"
         $docs | Should -Match 'Ctrl\+H/J/K/L' -Because "Unix/Vim/tmux focus should keep the standard Ctrl+H/J/K/L layer"
     }
 
     It 'docs は共通 terminal window-manager metadata を明示すること' {
-        $docs = Get-Content -LiteralPath $script:keybindingsDocsPath -Raw
+        $docs = Get-Content -Encoding UTF8 -LiteralPath $script:keybindingsDocsPath -Raw
         $expectations = [ordered]@{
             'Ctrl\+Space Ctrl\+Space'               = 'nested prefix should be documented'
             'Hammerspoon.*com\.apple\.Terminal.*1秒' = 'Terminal.app adapter scope and timeout should be explicit'
@@ -66,7 +97,7 @@ Describe '標準キーバインド方針' {
     }
 
     It 'docs は共通 terminal window-manager suffix table の全行を exactly once で定義すること' {
-        $docs = Get-Content -LiteralPath $script:keybindingsDocsPath -Raw
+        $docs = Get-Content -Encoding UTF8 -LiteralPath $script:keybindingsDocsPath -Raw
         $expectedRows = @(
             @{ Target = 'Workspace'; Suffix = '`w`'; Operation = 'picker を開く' },
             @{ Target = 'Workspace'; Suffix = '`a`'; Operation = '新規作成' },
@@ -92,7 +123,7 @@ Describe '標準キーバインド方針' {
     }
 
     It 'docs は全 target の全 capability cell を定義すること' {
-        $docs = Get-Content -LiteralPath $script:keybindingsDocsPath -Raw
+        $docs = Get-Content -Encoding UTF8 -LiteralPath $script:keybindingsDocsPath -Raw
         $expectedTargets = @(
             @{
                 Target       = 'WezTerm'
@@ -145,7 +176,7 @@ Describe '標準キーバインド方針' {
     }
 
     It 'docs と source は代表的な旧 terminal window-manager bindings を再導入しないこと' {
-        $docs = Get-Content -LiteralPath $script:keybindingsDocsPath -Raw
+        $docs = Get-Content -Encoding UTF8 -LiteralPath $script:keybindingsDocsPath -Raw
         $legacyBindings = @(
             @{
                 Name          = 'WezTerm Command split'
@@ -168,7 +199,7 @@ Describe '標準キーバインド方針' {
         )
 
         foreach ($legacy in $legacyBindings) {
-            $source = Get-Content -LiteralPath (Join-Path $script:repoRoot $legacy.Path) -Raw
+            $source = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot $legacy.Path) -Raw
             $source | Should -Not -Match $legacy.SourcePattern -Because "$($legacy.Name) must remain absent from source"
             $docs | Should -Not -Match $legacy.DocsPattern -Because "$($legacy.Name) must remain absent from docs"
         }
@@ -246,7 +277,7 @@ Describe '標準キーバインド方針' {
     It 'should implement the Windows Terminal AutoHotkey prefix state and mapping contract' {
         $path = Join-Path $script:chezmoiRoot 'terminals/windows-terminal/terminal-keybindings.ahk'
         Test-Path -LiteralPath $path -PathType Leaf | Should -BeTrue
-        $ahk = Get-Content -LiteralPath $path -Raw
+        $ahk = Get-Content -Encoding UTF8 -LiteralPath $path -Raw
 
         $ahk | Should -Match '#Requires AutoHotkey v2\.0'
         $ahk | Should -Match '#HotIf WinActive\("ahk_exe WindowsTerminal\.exe"\).*IsExactTerminalPrefix\(\)'
@@ -270,26 +301,26 @@ Describe '標準キーバインド方針' {
     It 'should run the production UIAccess interpreter in every Windows CI job that runs chezmoi Pester' {
         $ciJobs = @(
             @{
-                Workflow = '.github/workflows/ci-chezmoi.yml'
-                Job = 'lint'
+                Workflow      = '.github/workflows/ci-chezmoi.yml'
+                Job           = 'lint'
                 InstallMarker = 'winget install --id AutoHotkey\.AutoHotkey --exact --source winget --scope machine'
-                PesterStep = '- name: Install Pester'
+                PesterStep    = '- name: Install Pester'
             },
             @{
-                Workflow = '.github/workflows/ci-powershell.yml'
-                Job = 'test'
+                Workflow      = '.github/workflows/ci-powershell.yml'
+                Job           = 'test'
                 InstallMarker = 'winget install --id AutoHotkey\.AutoHotkey --exact --source winget --scope machine'
-                PesterStep = '- name: Install PowerShell modules'
+                PesterStep    = '- name: Install PowerShell modules'
             },
             @{
-                Workflow = '.github/workflows/ci-bootstrap.yml'
-                Job = 'windows'
+                Workflow      = '.github/workflows/ci-bootstrap.yml'
+                Job           = 'windows'
                 InstallMarker = 'Admin-only installer did not attempt AutoHotkey\.AutoHotkey'
-                PesterStep = '- name: Install pinned Pester'
+                PesterStep    = '- name: Install pinned Pester'
             }
         )
         foreach ($case in $ciJobs) {
-            $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot $case.Workflow) -Raw
+            $workflow = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot $case.Workflow) -Raw
             $job = [regex]::Match(
                 $workflow,
                 "(?ms)^  $($case.Job)`:\s*.*?(?=^  [a-zA-Z0-9_-]+`:\s*$|\z)"
@@ -302,13 +333,13 @@ Describe '標準キーバインド方針' {
             $job | Should -Match 'AutoHotkey v2 UIAccess syntax validation failed'
             $job | Should -Match 'AutoHotkey v2 UIAccess behavioral self-tests failed'
             $job | Should -Not -Match ([regex]::Escape("& `$autoHotkey '/ErrorStdOut'"))
-            $job.IndexOf(($case.InstallMarker -replace '\\','')) |
+            $job.IndexOf(($case.InstallMarker -replace '\\', '')) |
                 Should -BeLessThan $job.IndexOf($case.PesterStep) -Because "$($case.Workflow) $($case.Job) must install AutoHotkey before Pester"
         }
     }
 
     It 'WezTerm は共通 terminal window-manager 契約と nested prefix を提供すること' {
-        $content = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "terminals/wezterm/wezterm.lua") -Raw
+        $content = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "terminals/wezterm/wezterm.lua") -Raw
 
         $content | Should -Match 'key = "Space", mods = "CTRL", timeout_milliseconds = 1000'
         $content | Should -Match 'key = "Space", mods = "LEADER\|CTRL", action = act\.SendKey\(\{ key = "Space", mods = "CTRL" \}\)'
@@ -360,7 +391,7 @@ Describe '標準キーバインド方針' {
         $path = Join-Path $script:chezmoiRoot 'terminals/hammerspoon/init.lua'
 
         Test-Path -LiteralPath $path -PathType Leaf | Should -BeTrue
-        $content = Get-Content -LiteralPath $path -Raw
+        $content = Get-Content -Encoding UTF8 -LiteralPath $path -Raw
 
         $content | Should -Match 'com\.apple\.Terminal'
         $content | Should -Match 'hs\.timer\.doAfter\(1\s*,'
@@ -402,8 +433,8 @@ Describe '標準キーバインド方針' {
     }
 
     It 'Unix/Linux/WSL の tmux と Neovim は Ctrl+H/J/K/L focus を維持すること' {
-        $tmux = (Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "dot_tmux.conf") -Raw) -replace "\r\n?", "`n"
-        $nvim = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/nvim/lua/config/keymaps.lua") -Raw
+        $tmux = (Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "dot_tmux.conf") -Raw) -replace "\r\n?", "`n"
+        $nvim = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/nvim/lua/config/keymaps.lua") -Raw
 
         $tmux | Should -Match '(?m)^set -g prefix C-Space$'
         $tmux | Should -Match '(?m)^bind C-Space send-prefix$'

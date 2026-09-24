@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 BeforeAll {
     $script:repoRoot = Resolve-Path (Join-Path $PSScriptRoot "../../..")
@@ -22,12 +22,20 @@ Describe 'configure-lifelog-root.ps1' {
         $root = Join-Path $TestDrive "not-lifelog"
         New-Item -ItemType Directory -Path $root -Force | Out-Null
 
-        $result = & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script:scriptPath `
-            -Path $root `
-            -EnvironmentTarget Process `
-            -SkipChezmoiApply 2>&1
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $result = & pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script:scriptPath `
+                -Path $root `
+                -EnvironmentTarget Process `
+                -SkipChezmoiApply 2>&1
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
 
-        $LASTEXITCODE | Should -Not -Be 0
+        $exitCode | Should -Not -Be 0
         ($result | Out-String) | Should -Match 'AGENTS\.md'
     }
 

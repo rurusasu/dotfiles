@@ -332,15 +332,50 @@ Describe 'NpmHandler' {
                     return '{"dependencies":{}}'
                 }
                 $global:LASTEXITCODE = 1
-                return 'npm ERR! E403 package access denied'
+                return @(
+                    'npm ERR! code E403'
+                    'npm ERR! package access denied'
+                    'npm ERR! debug log: C:\npm-cache\_logs\debug-0.log'
+                )
             }
 
             $ctx.Options['NpmMode'] = 'import'
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeFalse
-            ($script:loggedOutput -join "`n") | Should -Match 'npm ERR! E403 package access denied'
+            ($script:loggedOutput -join "`n") | Should -Match 'npm ERR! code E403'
+            ($script:loggedOutput -join "`n") | Should -Match 'npm ERR! package access denied'
+            ($script:loggedOutput -join "`n") | Should -Match 'npm ERR! debug log: C:\\npm-cache\\_logs\\debug-0\.log'
             ($script:loggedOutput -join "`n") | Should -Match 'npm install exited with code 1'
+        }
+
+        It 'should direct users to npm debug logs when a failed install emits no output' {
+            $script:loggedOutput = @()
+            Mock Write-Host { $script:loggedOutput += [string]$Object }
+            Mock Invoke-Npm {
+                param($Arguments)
+                if ($Arguments -contains 'list') {
+                    $global:LASTEXITCODE = 0
+                    return '{"dependencies":{}}'
+                }
+                $global:LASTEXITCODE = 1
+                return @()
+            }
+
+            $ctx.Options['NpmMode'] = 'import'
+            $result = $handler.Apply($ctx)
+            $diagnostic = $script:loggedOutput -join "`n"
+
+            $result.Success | Should -BeFalse
+            $diagnostic | Should -Match 'npm install exited with code 1 for pkg1'
+            $diagnostic | Should -Match '出力なし'
+            $diagnostic | Should -Match 'npm debug log'
+            $diagnostic | Should -Match 'npm config get cache'
+            $diagnostic | Should -Match 'npm config get logs-dir'
+            $diagnostic | Should -Match '_logs'
+            $diagnostic | Should -Match 'npm config get loglevel'
+            $diagnostic | Should -Match 'npm config get logs-max'
+            $diagnostic | Should -Match 'npm install -g --loglevel verbose pkg1'
         }
     }
 

@@ -1,4 +1,4 @@
-Describe 'Windows installer success workflow contract' {
+﻿Describe 'Windows installer success workflow contract' {
     BeforeAll {
         $workflowPath = Join-Path $PSScriptRoot '../../../../.github/workflows/ci-bootstrap.yml'
         $script:workflowLines = @(Get-Content -LiteralPath $workflowPath -Encoding UTF8)
@@ -30,7 +30,6 @@ Describe 'Windows installer success workflow contract' {
         $workflow = $script:workflowLines -join "`n"
         $workflow | Should -Match '\$npmManifest\s*=\s*Get-Content'
         $workflow | Should -Match '\$pnpmManifest\s*=\s*Get-Content'
-        $successMarker = [string][char]0x2713
         $workflow | Should -Match '\[Npm\] \u2713 \$\(\$package\.name\)'
         $workflow | Should -Match '\[Pnpm\] \u2713 \$\(\$package\.name\)'
         $workflow | Should -Match '\$package\.PSObject\.Properties\[''installFeature''\]'
@@ -60,12 +59,35 @@ Describe 'Windows installer success workflow contract' {
         $markers.Count | Should -BeGreaterThan 0
     }
 
+    It 'requires every package included by the normal Winget user phase, including verify-only CI skips' {
+        $workflow = $script:workflowLines -join "`n"
+        $installerJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
+        ).Groups['job'].Value
+        $expectedPackageBlock = [regex]::Match(
+            $installerJob,
+            '(?s)\$expectedWindowsPackageIds\s*=\s*@\((?<block>.*?)\)\s*\n\s*if \(\$expectedWindowsPackageIds.Count'
+        ).Groups['block'].Value
+
+        $expectedPackageBlock | Should -Not -Be ''
+        $expectedPackageBlock | Should -Match '\$requiresAdmin'
+        $expectedPackageBlock | Should -Match '\$installFeature'
+        $expectedPackageBlock | Should -Match '\$skipInstall'
+        $expectedPackageBlock | Should -Not -Match 'ciSkipInstall'
+
+        $installerJob | Should -Match '(?s)\$npmGlobalPrefix\s*=.*?\$npmPnpmShim\s*=\s*Join-Path \$npmGlobalPrefix ''pnpm\.cmd''.*?& \$npmPnpmShim --version'
+    }
+
     It 'runs the full installer in separate parallel PowerShell 5.1 and 7 jobs' {
         $workflow = $script:workflowLines -join "`n"
         $workflow | Should -Match '(?s)windows-installer:.*?max-parallel:\s*2.*?runtime: Windows PowerShell 5\.1\s+version: "5\.1".*?runtime: PowerShell 7\s+version: "7"'
         $workflow | Should -Match '(?s)windows-installer:.*?shell: pwsh.*?install\.cmd -NoPause -UserPhaseOnly'
+        $workflow | Should -Match 'Using Windows PowerShell'
+        $workflow | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'
         $workflow | Should -Match 'Falling back to Windows PowerShell'
-        $workflow | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 fallback'
+        $workflow | Should -Match '\$isWindowsPowerShell -and \$out -notmatch ''Using Windows PowerShell'''
+        $workflow | Should -Match '-not \$isWindowsPowerShell -and \$out -match ''\(Using Windows PowerShell\|Falling back to Windows PowerShell\)'''
     }
 
     It 'preserves the installer process exit code and full output through the success assertion' {
@@ -86,7 +108,10 @@ Describe 'Windows installer success workflow contract' {
         $installerJob | Should -Match '(?s)finally\s*\{[\s\S]*?Codex CLI.*?try\s*\{[\s\S]*?--help[\s\S]*?catch\s*\{[\s\S]*?\$validationErrors\.Add'
         $installerJob | Should -Match '(?s)finally\s*\{[\s\S]*?code-mode host.*?try\s*\{[\s\S]*?--help[\s\S]*?catch\s*\{[\s\S]*?\$validationErrors\.Add'
         $installerJob | Should -Match '(?s)finally\s*\{[\s\S]*?Codex CLI[\s\S]*?code-mode host'
-        $installerJob | Should -Match '(?s)if\s*\(\$validationErrors\.Count\s*-gt\s*0\)[\s\S]*?throw[\s\S]*?Windows installer E2E validation failed'
+        $installerJob | Should -Match '(?s)if\s*\(\$validationErrors\.Count\s*-gt\s*0\)[\s\S]*?\$failureSummary\s*=\s*"Windows installer E2E validation failed:'
+        $installerJob | Should -Match '(?s)\$failureSummary\s*=.*?\$validationErrors\s*-join'
+        $installerJob | Should -Match 'Write-Host \$failureSummary -ForegroundColor Red'
+        $installerJob | Should -Match '(?m)^\s*throw \$failureSummary\s*$'
     }
 
     It 'continues independent fatal validation groups after an installer assertion fails' {
@@ -104,7 +129,15 @@ Describe 'Windows installer success workflow contract' {
         $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'Codex package structure'"
         $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'required command smoke tests'"
         $installerJob | Should -Match "Get-Command -Name 'op.exe' -CommandType Application -ErrorAction Stop"
-        $installerJob | Should -Match 'resolvedOnePasswordPath.*GetFullPath\(\$onePasswordExecutable\.FullName\)'
+        $installerJob | Should -Match '(?s)\$onePasswordPackagesPath\s*=.*?AgileBits\.1Password\.CLI_\*'
+        $installerJob | Should -Match '(?s)Get-FileHash -LiteralPath \$onePasswordExecutablePath -Algorithm SHA256.*?Get-FileHash -LiteralPath \$resolvedOnePassword\.Source -Algorithm SHA256'
+        $installerJob | Should -Match 'Persisted user PATH does not identify an installed AgileBits\.1Password\.CLI package directory'
+        $installerJob | Should -Match 'PATH-resolved op\.exe does not match the configured WinGet package binary'
+        $installerJob | Should -Match 'PATH-resolved pnpm is not the npm-installed pnpm shim'
+        $installerJob | Should -Match '(?s)\$onePasswordUserPathEntries\s*=.*?\$onePasswordPackageDirectory\s*='
+        $installerJob | Should -Match '& \$resolvedOnePassword\.Source --version'
+        $installerJob | Should -Match 'Codex PATH shim does not match the selected installed package executable'
+        $installerJob | Should -Not -Match 'onePasswordPackageSearchPath|pnpm resolved outside the npm global prefix'
     }
 
     It 'does not retain temporary formatter artifact steps' {

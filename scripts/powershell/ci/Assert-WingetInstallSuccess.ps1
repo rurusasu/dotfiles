@@ -8,15 +8,20 @@
 
     $summaryMatch = [regex]::Match(
         $Output,
-        '(?m)Total:\s*\d+\s*\|\s*Success:\s*\d+\s*\|\s*Failure:\s*(?<failureCount>\d+)'
+        '(?m)^Total:\s*(?<totalCount>\d+)\s*\|\s*Success:\s*(?<successCount>\d+)\s*\|\s*Failure:\s*(?<failureCount>\d+)\s*$'
     )
     if (-not $summaryMatch.Success) {
         throw 'install.cmd did not report a parseable setup summary'
     }
 
+    $totalCount = [int]$summaryMatch.Groups['totalCount'].Value
+    $successCount = [int]$summaryMatch.Groups['successCount'].Value
     $timeoutDiagnostics = @([regex]::Matches($Output, '(?m)^\[Winget\][ \t]+TIMEOUT_DIAGNOSTIC:[ \t]*(?<diagnostic>[^\r\n]+)\r?$') |
             ForEach-Object { $_.Groups['diagnostic'].Value })
     $failureCount = [int]$summaryMatch.Groups['failureCount'].Value
+    if ($totalCount -ne ($successCount + $failureCount)) {
+        throw "install.cmd reported inconsistent handler counts: total=$totalCount success=$successCount failure=$failureCount"
+    }
     if ($failureCount -ne 0) {
         $diagnosticSummary = if ($timeoutDiagnostics.Count -gt 0) { "; WinGet timeout diagnostics: $($timeoutDiagnostics -join ' | ')" } else { "" }
         throw "install.cmd reported $failureCount failed setup handler(s)$diagnosticSummary"
@@ -26,10 +31,12 @@
     }
 
     $inventoryMatch = [regex]::Match($Output, '(?m)^\[Winget\][ \t]+CI_VERIFICATION_INVENTORY:[ \t]*(?<ids>[^\r\n]*)\r?$')
-    if (-not $inventoryMatch.Success) {
-        throw 'install.cmd did not report the WinGet CI verification inventory'
+    $expectedIds = if ($inventoryMatch.Success) {
+        @($inventoryMatch.Groups['ids'].Value -split '\|' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     }
-    $expectedIds = @($inventoryMatch.Groups['ids'].Value -split '\|' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    else {
+        @($ExpectedPackageIds | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+    }
     if ($expectedIds.Count -eq 0) {
         throw 'install.cmd reported an empty WinGet CI verification inventory'
     }

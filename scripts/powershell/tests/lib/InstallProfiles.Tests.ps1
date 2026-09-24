@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 BeforeAll {
     . $PSScriptRoot/../../lib/InstallProfiles.ps1

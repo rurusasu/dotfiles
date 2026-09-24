@@ -31,7 +31,7 @@ in
       windows = {
         provider = "winget";
         source = "winget";
-        identity = "wez.wezterm.nightly";
+        identity = "wez.wezterm";
       };
       installFeature = null;
       legacyDarwin = {

@@ -1,4 +1,4 @@
-BeforeAll {
+﻿BeforeAll {
     $script:repositoryRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
     $script:entrypointPath = Join-Path $script:repositoryRoot 'scripts/powershell/hermes-bootstrap.ps1'
     $script:taskfilePath = Join-Path $script:repositoryRoot 'taskfiles/hermes/taskfile.yml'
@@ -47,7 +47,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         $script:originalBrowserEnvironment = Get-HermesTestEnvironmentVariableState -Name 'HERMES_BROWSER_DATA_DIR'
         $script:readinessEnvironment = @{}
         foreach ($name in @(
-            'HERMES_API_PORT',
+                'HERMES_API_PORT',
                 'HERMES_DASHBOARD_PORT',
                 'HERMES_API_READY_ATTEMPTS',
                 'HERMES_API_READY_DELAY_SECONDS',
@@ -516,9 +516,17 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
     It 'should return nonzero from direct invocation when preflight fails' {
         $missingCompose = Join-Path $TestDrive 'missing-compose.yml'
 
-        $output = @(& pwsh -NoProfile -File $script:entrypointPath -ComposeFile $missingCompose 2>&1)
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $output = @(& pwsh -NoProfile -File $script:entrypointPath -ComposeFile $missingCompose 2>&1)
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
 
-        $LASTEXITCODE | Should -Be 2
+        $exitCode | Should -Be 2
         ($output -join "`n") | Should -Be 'Hermes Compose file was not found.'
     }
 

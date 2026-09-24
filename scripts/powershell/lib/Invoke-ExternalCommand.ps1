@@ -658,7 +658,7 @@ function Invoke-Npm {
     )
 
     $isGlobalInstall = $Arguments.Count -gt 1 -and
-        $Arguments[0] -eq "install" -and
+    $Arguments[0] -eq "install" -and
         ($Arguments -contains "-g" -or $Arguments -contains "--global")
     if ($isGlobalInstall) {
         Add-NpmNodeDirectoryToProcessPath
@@ -765,7 +765,7 @@ function Invoke-Pnpm {
     }
 
     $isGlobalAdd = $Arguments.Count -gt 1 -and
-        $Arguments[0] -eq "add" -and
+    $Arguments[0] -eq "add" -and
         ($Arguments -contains "-g" -or $Arguments -contains "--global")
     if ($isGlobalAdd) {
         $timeoutSeconds = Get-PackageInstallTimeoutSecond

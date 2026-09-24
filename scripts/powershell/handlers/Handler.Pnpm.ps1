@@ -15,6 +15,8 @@ $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath "lib\Invoke-ExternalCommand.ps1")
 
 class PnpmHandler : SetupHandlerBase {
+    hidden [string]$BootstrapPnpmDirectory
+
     PnpmHandler() {
         $this.Name = "Pnpm"
         $this.Description = "pnpm グローバルパッケージ管理（Windows）"
@@ -54,6 +56,8 @@ class PnpmHandler : SetupHandlerBase {
         セットアップ成功時は $true、失敗時は $false
     #>
     hidden [bool] TryBootstrapPnpm() {
+        $this.BootstrapPnpmDirectory = $null
+
         # 方法1: npm で pnpm をインストール
         # Corepack は Windows で extensionless な pnpm shim を生成することがあり、
         # pnpm add -g 実行時に ERROR_BAD_EXE_FORMAT (os error 193) になるため、
@@ -62,6 +66,7 @@ class PnpmHandler : SetupHandlerBase {
         if ($npmCmd) {
             $this.Log("pnpm が見つかりません。npm 経由でインストールします...")
             try {
+                $this.AddRuntimeNodeDirectoryToProcessPath($npmCmd)
                 $npmOutput = @(Invoke-Npm -Arguments @("install", "-g", "pnpm@latest"))
                 $npmExitCode = [int]$LASTEXITCODE
                 if ($npmExitCode -eq 0) {
@@ -69,8 +74,11 @@ class PnpmHandler : SetupHandlerBase {
                     $prefixExitCode = [int]$LASTEXITCODE
                     $npmGlobalPrefix = ($prefixOutput | Select-Object -Last 1)
                     if ($prefixExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace([string]$npmGlobalPrefix)) {
-                        $this.PrependUserPath(([string]$npmGlobalPrefix).Trim())
-                        if ($this.TestPnpmExecutable()) {
+                        $npmGlobalPrefix = ([string]$npmGlobalPrefix).Trim()
+                        $this.PrependUserPath($npmGlobalPrefix)
+                        $npmPnpmShim = Join-Path $npmGlobalPrefix "pnpm.cmd"
+                        if ($this.TestPnpmExecutableAtPath($npmPnpmShim)) {
+                            $this.BootstrapPnpmDirectory = $npmGlobalPrefix
                             $this.Log("npm で pnpm をインストールしました", "Green")
                             return $true
                         }
@@ -98,21 +106,31 @@ class PnpmHandler : SetupHandlerBase {
         if ($corepackCmd) {
             $this.Log("pnpm が見つかりません。corepack で有効化を試みます...")
             try {
+                $this.AddRuntimeNodeDirectoryToProcessPath($corepackCmd)
                 $enableOutput = @(Invoke-Corepack -Arguments @("enable"))
                 $enableExitCode = [int]$LASTEXITCODE
-                if ($enableExitCode -eq 0 -and $this.TestPnpmExecutable()) {
+                if ($enableExitCode -eq 0) {
                     $prepareOutput = @(Invoke-Corepack -Arguments @("prepare", "pnpm@latest", "--activate"))
                     $prepareExitCode = [int]$LASTEXITCODE
-                    if ($prepareExitCode -eq 0 -and $this.TestPnpmExecutable()) {
+                    $corepackPath = if ($corepackCmd.Source) { $corepackCmd.Source } else { $corepackCmd.Path }
+                    $corepackDirectory = if ($corepackPath) { Split-Path -Parent $corepackPath } else { $null }
+                    $corepackPnpmShim = if ($corepackDirectory) { Join-Path $corepackDirectory "pnpm.cmd" } else { $null }
+                    if ($prepareExitCode -eq 0 -and $corepackPnpmShim -and $this.TestPnpmExecutableAtPath($corepackPnpmShim)) {
+                        $this.BootstrapPnpmDirectory = $corepackDirectory
                         $this.Log("corepack で pnpm を有効化しました", "Green")
                         return $true
                     }
-                    foreach ($line in $prepareOutput) {
-                        if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
-                            $this.Log("corepack prepare: $line", "Yellow")
-                        }
+                    if ($prepareExitCode -eq 0) {
+                        $this.LogWarning("corepack prepare は成功しましたが、pnpm shim の検証に失敗しました: $corepackPnpmShim")
                     }
-                    $this.LogWarning("corepack prepare pnpm@latest exited with code $prepareExitCode")
+                    else {
+                        foreach ($line in $prepareOutput) {
+                            if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                                $this.Log("corepack prepare: $line", "Yellow")
+                            }
+                        }
+                        $this.LogWarning("corepack prepare pnpm@latest exited with code $prepareExitCode")
+                    }
                 }
                 else {
                     foreach ($line in $enableOutput) {
@@ -133,6 +151,42 @@ class PnpmHandler : SetupHandlerBase {
         return $false
     }
 
+    hidden [void] AddRuntimeNodeDirectoryToProcessPath([object]$runtimeCommand) {
+        $runtimePath = if ($runtimeCommand.Source) { $runtimeCommand.Source } else { $runtimeCommand.Path }
+        if (-not $runtimePath) { return }
+
+        $runtimeDirectory = Split-Path -Parent $runtimePath
+        $nodeExecutable = Join-Path $runtimeDirectory "node.exe"
+        if (-not (Test-Path -LiteralPath $nodeExecutable -PathType Leaf)) { return }
+
+        foreach ($pathEntry in @($env:PATH -split ";")) {
+            if ([System.StringComparer]::OrdinalIgnoreCase.Equals($pathEntry.TrimEnd("\"), $runtimeDirectory.TrimEnd("\"))) {
+                return
+            }
+        }
+
+        if ([string]::IsNullOrWhiteSpace($env:PATH)) {
+            $env:PATH = $runtimeDirectory
+        }
+        else {
+            $env:PATH = "$runtimeDirectory;$env:PATH"
+        }
+        $this.Log("Node.js ディレクトリを現プロセス PATH に追加しました: $runtimeDirectory", "Gray")
+    }
+
+    hidden [bool] TestPnpmExecutableAtPath([string]$pnpmPath) {
+        try {
+            if (-not $pnpmPath -or -not (Test-Path -LiteralPath $pnpmPath -PathType Leaf)) {
+                return $false
+            }
+            $output = Invoke-NativeCommand -Command $pnpmPath -Arguments @("--version")
+            return ($LASTEXITCODE -eq 0 -and $output -match '\d+\.\d+')
+        }
+        catch {
+            return $false
+        }
+    }
+
     hidden [bool] TestPnpmExecutable() {
         try {
             $output = Invoke-Pnpm -Arguments @("--version")
@@ -149,13 +203,22 @@ class PnpmHandler : SetupHandlerBase {
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
             $pnpmCmd = Get-ExternalCommand -Name "pnpm"
-            if (-not $pnpmCmd) {
+            $pnpmCommandPath = if ($pnpmCmd.Source) { $pnpmCmd.Source } else { $pnpmCmd.Path }
+            $pnpmIsUnusable = $pnpmCmd -and $pnpmCommandPath -and
+                (Test-Path -LiteralPath $pnpmCommandPath -PathType Leaf) -and
+            -not $this.TestPnpmExecutable()
+            if (-not $pnpmCmd -or $pnpmIsUnusable) {
                 if (-not $this.TryBootstrapPnpm()) {
                     return $this.CreateFailureResult("pnpm のセットアップに失敗しました")
                 }
             }
             $pnpmBinPath = $this.EnsurePnpmSetup()
             $this.AddPnpmBinToPath($pnpmBinPath)
+            if ($this.BootstrapPnpmDirectory) {
+                # AddPnpmBinToPath can put a different installation ahead of the
+                # npm/Corepack shim. Keep the package manager selected at bootstrap first.
+                $this.PrependUserPath($this.BootstrapPnpmDirectory)
+            }
 
             $packagesPath = $this.GetPackagesPath($ctx)
             $this.Log("pnpm グローバルパッケージをインストールしています...")
@@ -617,14 +680,17 @@ class PnpmHandler : SetupHandlerBase {
     hidden [void] PrependUserPath([string]$pathToPrepend) {
         $userPath = Get-UserEnvironmentPath
         $items = if ($userPath) { @($userPath -split ";" | Where-Object { $_ }) } else { @() }
-        $items = @($items | Where-Object { $_ -ne $pathToPrepend })
+        $items = @($items | Where-Object {
+                -not [System.StringComparer]::OrdinalIgnoreCase.Equals($_.TrimEnd("\"), $pathToPrepend.TrimEnd("\"))
+            })
         $newPath = (@($pathToPrepend) + $items) -join ";"
         Set-UserEnvironmentPath -Path $newPath
 
         $processItems = if ($env:PATH) { @($env:PATH -split ";" | Where-Object { $_ }) } else { @() }
-        if (-not ($processItems -contains $pathToPrepend)) {
-            $env:PATH = "$pathToPrepend;$env:PATH"
-        }
+        $processItems = @($processItems | Where-Object {
+                -not [System.StringComparer]::OrdinalIgnoreCase.Equals($_.TrimEnd("\"), $pathToPrepend.TrimEnd("\"))
+            })
+        $env:PATH = (@($pathToPrepend) + $processItems) -join ";"
     }
 
     hidden [string] GetPackagesPath([SetupContext]$ctx) {

@@ -582,6 +582,39 @@ Describe 'NixRebuildHandler' {
             $handler.Apply($ctx)
 
             $script:wslArgs | Should -Match 'DOTFILES_WITH_HERMES=1'
+            Should -Invoke Invoke-Wsl -ParameterFilter {
+                ($Arguments -join ' ') -match 'docker compose -f docker/hermes-service/compose\.yml stop hermes'
+            } -Times 1
+        }
+
+        It 'should stop only the legacy Hermes gateway before activation and fail if stopping it fails' {
+            $ctx.Options['WithHermes'] = $true
+            $ctx.Options['SkipFlakeUpdate'] = $true
+            $script:rebuildCalled = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join ' '
+                if ($argStr -match 'docker compose -f docker/hermes-service/compose\.yml stop hermes') {
+                    $global:LASTEXITCODE = 1
+                    return 'legacy gateway could not stop'
+                }
+                if ($argStr -match 'nixos-rebuild') {
+                    $script:rebuildCalled = $true
+                    $global:LASTEXITCODE = 0
+                    return ''
+                }
+                $global:LASTEXITCODE = 0
+                return ''
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match 'legacy Hermes Compose gateway could not be stopped'
+            $script:rebuildCalled | Should -BeFalse
+            Should -Invoke Invoke-Wsl -ParameterFilter {
+                ($Arguments -join ' ') -match 'docker compose -f docker/hermes-service/compose\.yml stop hermes'
+            } -Times 1
         }
 
         It 'should update the flake lock before nixos-rebuild so Nix packages use latest inputs' {
@@ -615,6 +648,28 @@ Describe 'NixRebuildHandler' {
             $script:flakeUpdateCalled | Should -Be $true
             $script:flakeUpdateCalledFirst | Should -Be $true
             $script:flakeUpdateArgs | Should -Match "-u nixos"
+        }
+
+        It 'should skip flake updates when the caller pins the checked-out inputs' {
+            $ctx.Options['SkipFlakeUpdate'] = $true
+            $script:flakeUpdateCalled = $false
+            $script:rebuildCalled = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nix flake update") { $script:flakeUpdateCalled = $true }
+                if ($argStr -match "nixos-rebuild") { $script:rebuildCalled = $true; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g|pnpm add|core\.hooksPath|pre-commit install|echo exists|pnpm setup|grep.*PNPM_HOME|test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:flakeUpdateCalled | Should -BeFalse
+            $script:rebuildCalled | Should -BeTrue
         }
 
         It 'should set git safe.directory before nixos-rebuild as root' {
@@ -1055,7 +1110,7 @@ Describe 'NixRebuildHandler' {
                 $global:LASTEXITCODE = 0; return ""
             }
 
-            try { $handler.EnsureDotfilesAvailable("NixOS", "C:\Users\foo\dotfiles") } catch { }
+            { $handler.EnsureDotfilesAvailable("NixOS", "C:\Users\foo\dotfiles") } | Should -Throw "*dotfiles が見つかりません*"
 
             $script:mountPath | Should -Be "/mnt/c/Users/foo/dotfiles"
         }

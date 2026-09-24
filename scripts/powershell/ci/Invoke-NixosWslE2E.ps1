@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Run an isolated NixOS-WSL install and nixos-rebuild switch E2E check.
 
@@ -32,6 +32,7 @@ Repair-WindowsSetupEnvironment
 . (Join-Path $libPath "SetupHandler.ps1")
 . (Join-Path $libPath "Invoke-ExternalCommand.ps1")
 . (Join-Path $repoRoot "scripts\powershell\handlers\Handler.NixOSWSL.ps1")
+. (Join-Path $repoRoot "scripts\powershell\handlers\Handler.NixRebuild.ps1")
 
 # The setup handler has legacy Invoke-Wsl calls without per-command timeouts.
 # Bound those calls in this disposable E2E process; long post-install rebuilds
@@ -209,6 +210,7 @@ try {
         if (-not $result.Success) {
             throw "NixOS-WSL install failed: $($result.Message)"
         }
+        Write-Host "CI_ASSERTION: production NixOSWSLHandler and nixos-rebuild switch completed for $DistroName."
     }
     finally {
         Complete-CiSection
@@ -262,21 +264,24 @@ try {
                 "install -d -m 700 /home/nixos/.hermes/memories && printf '%s\\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' > /home/nixos/.hermes/.env && chmod 600 /home/nixos/.hermes/.env && printf '%s\\n' 'preserve-existing-hermes-state' > /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt && chmod 600 /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
             ) -TimeoutSeconds 60 | Out-Null
 
+            $rebuildContext = [SetupContext]::new($repoRoot)
+            $rebuildContext.DistroName = $DistroName
+            $rebuildContext.Options["WithHermes"] = $true
+            $rebuildContext.Options["SkipFlakeUpdate"] = $true
+            $rebuildHandler = [NixRebuildHandler]::new()
+            if (-not $rebuildHandler.CanApply($rebuildContext)) {
+                throw "NixRebuildHandler cannot apply to the newly installed WSL distro $DistroName"
+            }
+            $rebuildResult = $rebuildHandler.Apply($rebuildContext)
+            if (-not $rebuildResult.Success) {
+                throw "Nix-managed Hermes setup via NixRebuildHandler failed: $($rebuildResult.Message)"
+            }
+            Write-Host "CI_ASSERTION: production NixRebuildHandler applied WithHermes to $DistroName."
+
             Invoke-WslChecked -Arguments @(
-                "-d", $DistroName, "-u", "root", "--",
+                "-d", $DistroName, "-u", "nixos", "--",
                 "bash", "-lc",
-                'cd /home/nixos/.dotfiles && DOTFILES_USER=nixos DOTFILES_HOME=/home/nixos DOTFILES_WITH_HERMES=1 DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure'
-            ) -TimeoutSeconds 5400 | Out-Null
-
-            Invoke-WslChecked -Arguments @(
-                "-d", $DistroName, "-u", "nixos", "--",
-                "zsh", "-lc",
-                'cd /home/nixos/.dotfiles && test "$DOTFILES_WITH_HERMES" = 1 && DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure'
-            ) -TimeoutSeconds 5400 | Out-Null
-
-            Invoke-WslChecked -Arguments @(
-                "-d", $DistroName, "-u", "nixos", "--",
-                "bash", "-lc", "command -v hermes && hermes --version"
+                'hermes_executable="$(readlink -f "$(command -v hermes)")" && case "$hermes_executable" in /nix/store/*) test -x "$hermes_executable" ;; *) echo "Hermes CLI is not Nix-managed: $hermes_executable" >&2; exit 1 ;; esac && hermes --version'
             ) -TimeoutSeconds 300 | Out-Null
 
             Invoke-WslChecked -Arguments @(

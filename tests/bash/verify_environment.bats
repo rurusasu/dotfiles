@@ -5,11 +5,13 @@ setup() {
 	VERIFIER="$REPO_ROOT/scripts/sh/verify-environment.sh"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
+	REAL_JQ="$(command -v jq)"
 	mkdir -p "$STUB_BIN"
 	: >"$COMMAND_LOG"
 
 	export PATH="$STUB_BIN:/usr/bin:/bin"
 	export COMMAND_LOG
+	export REAL_JQ
 	export DOTFILES_COMPOSE_FILE="$REPO_ROOT/docker/hermes-service/compose.yml"
 	export DOTFILES_VERIFY_PLATFORM=darwin
 
@@ -29,14 +31,22 @@ printf '%s %s\n' "$command_name" "$*" >>"$COMMAND_LOG"
 if [[ $command_name == "chezmoi" && ${1:-} == "verify" && -n ${CHEZMOI_VERIFY_FAIL:-} ]]; then
 	exit 1
 fi
+if [[ $command_name == "jq" ]]; then
+	exec "$REAL_JQ" "$@"
+fi
 if [[ $command_name == "docker" ]]; then
 	case "$*" in
-		*" config --services") printf 'api\ndashboard\nbrowser\n' ;;
+		*" config --format json")
+			printf '{"services":{"api":{},"dashboard":{},"browser":{},"hermes-bootstrap":{"profiles":["bootstrap"]}}}\n'
+			;;
 		*" ps --status running --services")
 			if [[ -n ${COMPOSE_RUNNING_MISMATCH:-} ]]; then
 				printf 'api\ndashboard\n'
 			else
 				printf 'api\ndashboard\nbrowser\n'
+				if [[ ",${COMPOSE_PROFILES:-}," == *,bootstrap,* && -z ${COMPOSE_OMIT_PROFILE_SERVICE:-} ]]; then
+					printf 'hermes-bootstrap\n'
+				fi
 			fi
 			;;
 	esac
@@ -59,8 +69,29 @@ EOF
 
 	[ "$status" -eq 0 ]
 	grep -q '^docker run --rm hello-world$' "$COMMAND_LOG"
+	grep -q "^docker compose -f $DOTFILES_COMPOSE_FILE config --format json$" "$COMMAND_LOG"
 	grep -q "^docker compose -f $DOTFILES_COMPOSE_FILE config$" "$COMMAND_LOG"
 	grep -q "^docker compose -f $DOTFILES_COMPOSE_FILE ps --status running$" "$COMMAND_LOG"
+}
+
+@test "runtime verification includes explicitly enabled Compose profiles" {
+	export COMPOSE_PROFILES=bootstrap
+
+	run "$VERIFIER" --runtime
+
+	[ "$status" -eq 0 ]
+	grep -q '^docker compose .* config --format json$' "$COMMAND_LOG"
+}
+
+@test "runtime verification requires services from explicitly enabled profiles" {
+	export COMPOSE_PROFILES=bootstrap
+	export COMPOSE_OMIT_PROFILE_SERVICE=1
+
+	run "$VERIFIER" --runtime
+
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Expected Compose services:"* ]]
+	[[ "$output" == *"hermes-bootstrap"* ]]
 }
 
 @test "chezmoi drift fails verification" {
@@ -125,6 +156,8 @@ EOF
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"not all Compose services are running"* ]]
+	[[ "$output" == *"Expected Compose services:"* ]]
+	[[ "$output" == *"Running Compose services:"* ]]
 }
 
 @test "Linux verification checks System Manager and Docker systemd units" {

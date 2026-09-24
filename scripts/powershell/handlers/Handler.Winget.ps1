@@ -271,17 +271,10 @@ class WingetHandler : SetupHandlerBase {
                 }
 
                 if ($pkg.VerifyCommand -and ($isInstalled -or $directInstallerCurrent)) {
-                    Update-ProcessEnvironmentPath
                     # Existing portable packages need their command shim before
                     # verification. Missing package directories are expected
                     # before the first install, so keep this lookup quiet.
                     $this.EnsurePortableLinkQuiet($pkg)
-                    if ($verifyCommandOnly) {
-                        $this.EnsurePathEntries($pkg)
-                    }
-                    else {
-                        $this.EnsurePathEntriesQuiet($pkg)
-                    }
                     $verificationPassed = if ($verifyCommandOnly) {
                         $this.TestPackageVerificationForPackage($pkg, $false)
                     }
@@ -1119,28 +1112,49 @@ class WingetHandler : SetupHandlerBase {
                 "--silent", "--disable-interactivity", "--accept-source-agreements"
             )
             $output = @(Invoke-Winget -Arguments $arguments -TimeoutSeconds (Get-PackageInstallTimeoutSecond))
+            $uninstallExitCode = [int]$LASTEXITCODE
             foreach ($line in $output) {
                 if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
                     $this.Log("  $line", "Gray")
                 }
             }
 
-            if ($LASTEXITCODE -eq 0) {
+            $queryArguments = @(
+                "list", "--id", $packageId, "--exact", "--source", $sourceName,
+                "--disable-interactivity"
+            )
+            $queryOutput = @(Invoke-Winget -Arguments $queryArguments -TimeoutSeconds (Get-PackageInstallTimeoutSecond))
+            $queryExitCode = [int]$LASTEXITCODE
+            $escapedPackageId = [regex]::Escape($packageId)
+            $packageStillListed = @($queryOutput | Where-Object {
+                    ([string]$_) -match "(?<!\S)$escapedPackageId(?!\S)"
+                }).Count -gt 0
+            if ($packageStillListed) {
+                throw "retired package remains installed after uninstall: $packageName ($packageId)"
+            }
+
+            $queryExitCodeUnsigned = [BitConverter]::ToUInt32([BitConverter]::GetBytes($queryExitCode), 0)
+            $queryExitCodeHex = $queryExitCodeUnsigned.ToString("X8")
+            if ($queryExitCodeHex -ne "8A150014") {
+                throw "unable to verify retired package state: $packageName ($packageId), list exit code $queryExitCodeHex"
+            }
+
+            $uninstallExitCodeUnsigned = [BitConverter]::ToUInt32([BitConverter]::GetBytes($uninstallExitCode), 0)
+            $uninstallExitCodeHex = $uninstallExitCodeUnsigned.ToString("X8")
+            if ($uninstallExitCode -eq 0) {
                 $removedCount++
                 $this.Log("RETIRED_PACKAGE_CLEANUP: id=$packageId status=removed", "Green")
                 $this.Log("削除済み (retired package): $packageName ($packageId)", "Green")
                 continue
             }
 
-            $exitCodeUnsigned = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$LASTEXITCODE), 0)
-            $exitCodeHex = $exitCodeUnsigned.ToString("X8")
-            if ($exitCodeHex -eq "8A150014") {
+            if ($uninstallExitCodeHex -eq "8A150014") {
                 $this.Log("RETIRED_PACKAGE_CLEANUP: id=$packageId status=absent", "Gray")
                 $this.Log("未インストール (retired package): $packageName ($packageId)", "Gray")
                 continue
             }
 
-            throw "retired package uninstall failed: $packageName ($packageId), exit code $exitCodeHex"
+            throw "retired package uninstall failed: $packageName ($packageId), exit code $uninstallExitCodeHex"
         }
 
         return $removedCount
@@ -1171,12 +1185,8 @@ class WingetHandler : SetupHandlerBase {
     }
 
     hidden [bool] TestPackageVerificationForPackage([object]$pkg, [bool]$quiet) {
-        $verified = if ($quiet) {
-            $this.TestPackageVerificationQuiet($pkg.VerifyCommand)
-        }
-        else {
-            $this.TestPackageVerification($pkg.VerifyCommand)
-        }
+        $pathEntries = if ($pkg.PSObject.Properties.Name -contains "PathEntries") { [string[]]@($pkg.PathEntries) } else { @() }
+        $verified = $this.TestPackageVerificationInternal($pkg.VerifyCommand, $quiet, $pathEntries)
         if (-not $verified) {
             return $false
         }
@@ -1231,10 +1241,14 @@ class WingetHandler : SetupHandlerBase {
     }
 
     hidden [bool] TestPackageVerificationQuiet([object]$verifyCmd) {
-        return $this.TestPackageVerificationInternal($verifyCmd, $true)
+        return $this.TestPackageVerificationInternal($verifyCmd, $true, @())
     }
 
     hidden [bool] TestPackageVerificationInternal([object]$verifyCmd, [bool]$quiet) {
+        return $this.TestPackageVerificationInternal($verifyCmd, $quiet, @())
+    }
+
+    hidden [bool] TestPackageVerificationInternal([object]$verifyCmd, [bool]$quiet, [string[]]$pathEntries) {
         if (-not ($verifyCmd.PSObject.Properties.Name -contains "command")) {
             if (-not $quiet) {
                 $this.LogWarning("verifyCommand に 'command' フィールドがありません")
@@ -1281,43 +1295,57 @@ class WingetHandler : SetupHandlerBase {
                 return $this.TestVisualStudioInstanceVersion($verifyCmd)
             }
 
-            # Get-Command can return a PowerShell alias before a same-named
-            # WinGet executable. In that case, resolve only applications and
-            # invoke the executable path so the alias cannot shadow it.
+            # Resolve applications explicitly so PowerShell aliases cannot
+            # shadow them. If PATH has no executable, search only this package's
+            # manifest pathEntries; verification itself must not publish PATH.
             $discoveredCommand = Get-Command -Name $command -ErrorAction SilentlyContinue
-            $commandPath = $command
-            if ($discoveredCommand -and $discoveredCommand.CommandType -eq [System.Management.Automation.CommandTypes]::Alias) {
-                $resolvedCommand = Get-Command -Name $command -CommandType Application -ErrorAction SilentlyContinue |
-                    Select-Object -First 1
-                if (-not $resolvedCommand) {
-                    if (-not $quiet) {
-                        $this.Log("検証コマンドが見つかりません: $command", "Yellow")
+            $resolvedCommand = Get-Command -Name $command -CommandType Application -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            $commandPaths = @()
+            if ($resolvedCommand) {
+                if ($discoveredCommand -and $discoveredCommand.CommandType -eq [System.Management.Automation.CommandTypes]::Alias) {
+                    $commandPath = if (-not [string]::IsNullOrWhiteSpace([string]$resolvedCommand.Path)) {
+                        [string]$resolvedCommand.Path
                     }
-                    return $false
-                }
-
-                $commandPath = if (-not [string]::IsNullOrWhiteSpace([string]$resolvedCommand.Path)) {
-                    [string]$resolvedCommand.Path
+                    else {
+                        [string]$resolvedCommand.Source
+                    }
+                    $commandPaths = @($commandPath)
                 }
                 else {
-                    [string]$resolvedCommand.Source
+                    # Keep normal PATH resolution behavior for compatibility.
+                    $commandPaths = @([string]$command)
                 }
             }
-            $output = @(Invoke-VerifyCommand -Command $commandPath -Arguments $arguments -TimeoutSeconds $timeoutSeconds)
-            if ($LASTEXITCODE -eq 0) {
-                return $true
+            else {
+                $commandPaths = @($this.GetPackageCommandPaths([string]$command, $pathEntries))
+                if ($commandPaths.Count -eq 0) {
+                    # Preserve the existing process-level probe as a last resort;
+                    # Invoke-VerifyCommand reports a real missing command as failure.
+                    $commandPaths = @([string]$command)
+                }
+            }
+
+            $lastOutput = @()
+            $lastExitCode = 1
+            foreach ($commandPath in $commandPaths) {
+                $lastOutput = @(Invoke-VerifyCommand -Command $commandPath -Arguments $arguments -TimeoutSeconds $timeoutSeconds)
+                if ($global:LASTEXITCODE -eq 0) {
+                    return $true
+                }
+                $lastExitCode = [int]$global:LASTEXITCODE
             }
 
             $displayCommand = "$command $($arguments -join ' ')".Trim()
             if (-not $quiet) {
-                $this.Log("検証コマンド失敗 (exit code: $LASTEXITCODE): $displayCommand", "Yellow")
-                foreach ($line in $output) {
+                $this.Log("検証コマンド失敗 (exit code: $lastExitCode): $displayCommand", "Yellow")
+                foreach ($line in $lastOutput) {
                     if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
                         $this.Log("  $line", "Gray")
                     }
                 }
             }
-            return $LASTEXITCODE -eq 0
+            return $false
         }
         catch {
             if (-not $quiet) {
@@ -1325,6 +1353,46 @@ class WingetHandler : SetupHandlerBase {
             }
             return $false
         }
+    }
+
+    hidden [string[]] GetPackageCommandPaths([string]$command, [string[]]$pathEntries) {
+        if ([string]::IsNullOrWhiteSpace($command) -or -not $pathEntries) {
+            return @()
+        }
+
+        $commandName = [System.IO.Path]::GetFileName($command)
+        if ($commandName -ne $command) {
+            return @()
+        }
+
+        $extensions = @([System.IO.Path]::GetExtension($commandName))
+        if ([string]::IsNullOrWhiteSpace($extensions[0])) {
+            $extensions = @($env:PATHEXT -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            if ($extensions.Count -eq 0) {
+                $extensions = @('.COM', '.EXE', '.BAT', '.CMD')
+            }
+        }
+        $executableNames = @($extensions | ForEach-Object { "$commandName$_" } | Select-Object -Unique)
+        $commandPaths = [System.Collections.Generic.List[string]]::new()
+        $seenPaths = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+        foreach ($rawEntry in $pathEntries) {
+            if ([string]::IsNullOrWhiteSpace($rawEntry)) { continue }
+            $expandedEntry = [Environment]::ExpandEnvironmentVariables($rawEntry)
+            $directories = @(Get-Item -Path $expandedEntry -ErrorAction SilentlyContinue | Where-Object { $_.PSIsContainer })
+            foreach ($directory in $directories) {
+                foreach ($executableName in $executableNames) {
+                    $matchingExecutables = @(Get-ChildItem -LiteralPath $directory.FullName -Filter $executableName -File -Recurse -ErrorAction SilentlyContinue)
+                    foreach ($match in $matchingExecutables) {
+                        if ($seenPaths.Add($match.FullName)) {
+                            $commandPaths.Add($match.FullName)
+                        }
+                    }
+                }
+            }
+        }
+
+        return @($commandPaths)
     }
 
     hidden [bool] TestPortableLinkCommand([string]$linkName, [object[]]$arguments, [int]$timeoutSeconds) {

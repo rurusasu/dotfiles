@@ -272,11 +272,11 @@ $vhdPath = $context.SharedData["VhdPath"]
 | 40    | 2     | No    | VscodeServer    | [Handler.VscodeServer.ps1](../scripts/powershell/handlers/Handler.VscodeServer.ps1)       | VS Code Server キャッシュクリア          |
 | 55    | 2     | No    | NixRebuild      | [Handler.NixRebuild.ps1](../scripts/powershell/handlers/Handler.NixRebuild.ps1)           | nixos-rebuild switch の実行              |
 | 55    | 2     | No    | Hindsight       | [Handler.Hindsight.ps1](../scripts/powershell/handlers/Handler.Hindsight.ps1)             | 独立HindsightをHermesより先に起動        |
-| 56    | 2     | No    | HermesAgent     | [Handler.HermesAgent.ps1](../scripts/powershell/handlers/Handler.HermesAgent.ps1)         | Hermes Agent Docker コンテナセットアップ |
+| 56    | 2     | No    | HermesAgent     | [Handler.HermesAgent.ps1](../scripts/powershell/handlers/Handler.HermesAgent.ps1)         | NixOS WSL の Hermes native service 適用結果を検証 |
 | 57    | 2     | No    | Plane           | [Handler.Plane.ps1](../scripts/powershell/handlers/Handler.Plane.ps1)                     | Plane Docker Compose セットアップ        |
 | 58    | 2     | No    | PlaneGithubSync | [Handler.PlaneGithubSync.ps1](../scripts/powershell/handlers/Handler.PlaneGithubSync.ps1) | Plane / GitHub Issues 同期タスク登録     |
 
-**重要**: Order は依存関係を優先して設定する。Docker だけで完結するハンドラーは Docker の後、NixOS に依存するローカルコンテナ系ハンドラーは NixOSWSL/NixRebuild の後に置く。Hindsight は共有メモリネットワークを準備するため、HermesAgent より先に実行する。
+**重要**: Order は依存関係を優先して設定する。Docker だけで完結するハンドラーは Docker の後、NixOS に依存するハンドラーは NixOSWSL/NixRebuild の後に置く。Hindsight は独立した optional Docker service であり、Nix/Home Manager 管理の native Hermes Agent とは別に扱う。
 
 ### ハンドラー実行フロー
 

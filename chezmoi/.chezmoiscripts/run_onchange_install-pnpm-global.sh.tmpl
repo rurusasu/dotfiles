@@ -14,6 +14,22 @@ fi
 
 echo "pnpm グローバルパッケージをインストールしています..."
 
+PNPM_GLOBAL_BIN_DIR=""
+if [ -n "${PNPM_HOME:-}" ]; then
+  PNPM_GLOBAL_BIN_DIR="$PNPM_HOME/bin"
+else
+  PNPM_GLOBAL_BIN_DIR="$(pnpm config get global-bin-dir 2>/dev/null || true)"
+fi
+case "$PNPM_GLOBAL_BIN_DIR" in
+  "" | undefined | null) PNPM_GLOBAL_BIN_DIR="" ;;
+esac
+if [ -n "$PNPM_GLOBAL_BIN_DIR" ]; then
+  case ":$PATH:" in
+    *":$PNPM_GLOBAL_BIN_DIR:"*) ;;
+    *) export PATH="$PNPM_GLOBAL_BIN_DIR:$PATH" ;;
+  esac
+fi
+
 {{ include ".chezmoitemplates/pnpm_global_installed.sh" }}
 
 FAILED=0
@@ -64,4 +80,7 @@ fi
 
 {{ end -}}
 echo "pnpm グローバル: ${INSTALLED} 個インストール, ${SKIPPED} 個スキップ, ${FAILED} 個失敗"
+if [ "$FAILED" -gt 0 ]; then
+  exit 1
+fi
 {{ end -}}

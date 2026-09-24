@@ -71,10 +71,12 @@ Describe 'CI workflow configuration' {
         $wingetWorkflow | Should -Not -Match 'RedirectStandardOutput'
         $wingetWorkflow | Should -Match 'DOTFILES_INSTALL_TIMEOUT_SECONDS:\s*"900"'
         $wingetWorkflow | Should -Match 'User Phase Complete!'
-        $wingetWorkflow | Should -Match 'Get-Command -Name ''pwsh\.exe'' -CommandType Application -All'
-        $wingetWorkflow | Should -Match 'NoPowerShell7Dir'
-        $wingetWorkflow | Should -Match 'where\.exe pwsh\.exe'
-        $wingetWorkflow | Should -Match 'The full Windows installer E2E did not exercise the Windows PowerShell 5\.1 fallback'
+        $wingetWorkflow | Should -Match 'Get-Command -Name ''pwsh\.exe'' -CommandType Application -ErrorAction Stop'
+        $wingetWorkflow | Should -Match "DOTFILES_FORCE_WINDOWS_POWERSHELL = '1'"
+        $wingetWorkflow | Should -Not -Match 'NoPowerShell7Dir|where\.exe pwsh\.exe'
+        $installCmd = Get-Content -LiteralPath (Join-Path $script:repoRoot 'install.cmd') -Raw
+        $installCmd | Should -Match 'DOTFILES_FORCE_WINDOWS_POWERSHELL'
+        $wingetWorkflow | Should -Match 'The full Windows installer E2E did not exercise the forced Windows PowerShell 5\.1 path'
         $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess -Output \$out'
         $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess\.ps1'
         $wingetWorkflow | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
@@ -82,7 +84,7 @@ Describe 'CI workflow configuration' {
         $wingetWorkflow | Should -Match '\$properties = \$_.PSObject.Properties'
         $wingetWorkflow | Should -Match '\$null -eq \$skipInstall -or -not \[bool\]\$skipInstall\.Value'
         $wingetWorkflow | Should -Match 'Sort-Object -Unique'
-        $wingetAssertion | Should -Match 'did not report the WinGet CI verification inventory'
+        $wingetAssertion | Should -Match 'reported an empty WinGet CI verification inventory'
     }
 
     It 'should run the real Windows installer concurrently in Windows PowerShell 5.1 and PowerShell 7' {
@@ -100,18 +102,19 @@ Describe 'CI workflow configuration' {
         $installerJob | Should -Match 'shell:\s+pwsh'
         $installerJob | Should -Match 'DOTFILES_E2E_POWERSHELL_VERSION:\s+\$\{\{\s*matrix\.version\s*\}\}'
         $installerJob | Should -Match 'E2E orchestrator must run under PowerShell 7'
-        $installerJob | Should -Match 'Falling back to Windows PowerShell'
+        $installerJob | Should -Match 'Using Windows PowerShell'
         $installerJob | Should -Match 'install\.cmd -NoPause -UserPhaseOnly(?!\s+-WingetVerifyCommandOnly)'
         $installerJob | Should -Match 'RequiredOutputMarkers\s+\$requiredPackageManagerMarkers'
         $installerJob | Should -Match "\[Pnpm\] npm で pnpm をインストールしました"
         $installerJob | Should -Match '\[Npm\] ✓ \$\(\$package\.name\)'
-        $installerJob | Should -Match 'Falling back to Windows PowerShell'
-        $installerJob | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 fallback'
+        $installerJob | Should -Match 'Using Windows PowerShell'
+        $installerJob | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'
         $installerJob | Should -Match 'Get-Command -Name ''pnpm'' -CommandType Application -All'
         $installerJob | Should -Match 'Could not isolate the preinstalled pnpm executable for the bootstrap E2E'
-        $installerJob | Should -Match 'did not exercise the pnpm bootstrap path'
-        $installerJob | Should -Match 'pnpm resolved outside the npm global prefix'
+        $installerJob | Should -Match 'npm did not install the pnpm command shim under its global prefix'
+        $installerJob | Should -Match '& \$npmPnpmShim --version'
         $installerJob | Should -Match 'Could not seed the ChatGPT Classic uninstall E2E'
+        $installerJob | Should -Match 'Write-Host \$failureSummary -ForegroundColor Red'
     }
 
     It 'should keep every line of the Windows installer E2E inside its YAML run block' {
@@ -123,10 +126,12 @@ Describe 'CI workflow configuration' {
         $scriptBody = [regex]::Match($installerStep, '(?ms)^        run: \|\r?\n(?<body>.*)$').Groups['body'].Value
 
         $scriptBody | Should -Not -BeNullOrEmpty
+        $scriptLines = @($scriptBody -split '\r?\n' | Where-Object { $_.Trim() })
+        $minimumIndent = [regex]::Match($scriptLines[0], '^ *').Length
         $underIndentedLines = @(
-            $scriptBody -split '\r?\n' |
-                Where-Object { $_.Trim() -and ([regex]::Match($_, '^ *').Length -lt 12) }
+            $scriptLines | Where-Object { [regex]::Match($_, '^ *').Length -lt $minimumIndent }
         )
+        $minimumIndent | Should -BeGreaterOrEqual 10
         @($underIndentedLines).Count | Should -Be 0
     }
 
@@ -225,7 +230,7 @@ Describe 'CI workflow configuration' {
         $installerJob | Should -Match "'pnpm'"
         $installerJob | Should -Match "'gemini'"
         $installerJob | Should -Match "'op\.exe'"
-        $installerJob | Should -Match 'OnePassword CLI package directory is missing from persisted user PATH'
+        $installerJob | Should -Match 'Persisted user PATH does not identify an installed AgileBits\.1Password\.CLI package directory'
         $installerJob | Should -Match 'WinGet Links op\.exe shim is missing after OnePasswordCli setup'
         $installerJob | Should -Match "GetEnvironmentVariable\('Path',\s*'User'\)"
         $installerJob | Should -Match "GetEnvironmentVariable\('PNPM_HOME',\s*'User'\)"
@@ -254,7 +259,7 @@ Describe 'CI workflow configuration' {
         )
         $actualIds = @($packages | Where-Object $predicate | ForEach-Object { [string]$_.PackageIdentifier } | Sort-Object -Unique)
 
-        $actualIds | Should -Be @('EmptyFeature.Package', 'Ordinary.Package')
+        $actualIds | Should -Be @('CiSkipped.Package', 'EmptyFeature.Package', 'Ordinary.Package')
     }
 
     It 'should build the NixOS WSL system on hosted Nix CI' {
@@ -341,11 +346,21 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'SyncMode"\] = "repo"'
         $script | Should -Match 'SyncBack"\] = "none"'
         $script | Should -Match 'SkipFlakeUpdate"\] = \$true'
+        $script | Should -Match 'handlers\\Handler\.NixOSWSL\.ps1'
+        $script | Should -Match '\$handler = \[NixOSWSLHandler\]::new\(\)'
+        $script | Should -Match '\$result = \$handler\.Apply\(\$context\)'
+        $script | Should -Match 'CI_ASSERTION: production NixOSWSLHandler and nixos-rebuild switch completed'
         $script | Should -Match 'Welcome to your new NixOS-WSL system'
         $script | Should -Match 'nixos-rebuild list-generations'
-        $script | Should -Match 'DOTFILES_USER=nixos DOTFILES_HOME=/home/nixos DOTFILES_WITH_HERMES=1 DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user\.sh switch --flake \. --impure'
-        $script | Should -Match '"zsh", "-lc"[\s\S]*?test "\$DOTFILES_WITH_HERMES" = 1 && DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user\.sh switch --flake \. --impure'
-        $script | Should -Match 'command -v hermes && hermes --version'
+        $script | Should -Match 'handlers\\Handler\.NixRebuild\.ps1'
+        $script | Should -Match '\$rebuildContext\.Options\["WithHermes"\] = \$true'
+        $script | Should -Match '\$rebuildContext\.Options\["SkipFlakeUpdate"\] = \$true'
+        $script | Should -Match '\$rebuildHandler = \[NixRebuildHandler\]::new\(\)'
+        $script | Should -Match '\$rebuildHandler\.Apply\(\$rebuildContext\)'
+        $script | Should -Match 'CI_ASSERTION: production NixRebuildHandler applied WithHermes'
+        $script | Should -Match 'hermes_executable="\$\(readlink -f "\$\(command -v hermes\)"\)"'
+        $script | Should -Match '/nix/store/\*'
+        $script | Should -Match 'hermes --version'
         $script | Should -Match 'OPENROUTER_API_KEY=ci'
         $script | Should -Match 'API_SERVER_ENABLED=true'
         $script | Should -Match 'API_SERVER_PORT=18642'
@@ -473,11 +488,26 @@ esac
             [System.IO.File]::WriteAllText($shellPath, $shell.Replace("`r`n", "`n"), [System.Text.UTF8Encoding]::new($false))
             $env:HERMES_PROBE_STATE = $temp
 
+            function Invoke-ReadinessProbe {
+                param([Parameter(Mandatory)][string]$BashPath, [Parameter(Mandatory)][string]$ScriptPath)
+                $previousPreference = $ErrorActionPreference
+                try {
+                    $ErrorActionPreference = 'Continue'
+                    $probeOutput = @(& $BashPath $ScriptPath 2>&1)
+                    $probeExitCode = $LASTEXITCODE
+                }
+                finally {
+                    $ErrorActionPreference = $previousPreference
+                }
+                [PSCustomObject]@{ Output = $probeOutput; ExitCode = $probeExitCode }
+            }
+
             foreach ($scenario in @('startup', 'healthy')) {
                 Remove-Item -LiteralPath (Join-Path $temp 'missing'), (Join-Path $temp 'invalid') -Force -ErrorAction SilentlyContinue
                 $env:HERMES_PROBE_SCENARIO = $scenario
-                $output = & $bash $shellPath 2>&1
-                $exitCode = $LASTEXITCODE
+                $probe = Invoke-ReadinessProbe -BashPath $bash -ScriptPath $shellPath
+                $output = $probe.Output
+                $exitCode = $probe.ExitCode
                 $exitCode | Should -Be 0 -Because "$scenario must eventually receive strict 401 responses and a healthy authenticated readiness response; output: $($output -join ' | ')"
                 $expectedProbeCount = if ($scenario -eq 'startup') { '2' } else { '1' }
                 (Get-Content -LiteralPath (Join-Path $temp 'missing') -Raw).Trim() | Should -Be $expectedProbeCount
@@ -485,14 +515,16 @@ esac
             }
 
             $env:HERMES_PROBE_SCENARIO = 'unhealthy'
-            $output = & $bash $shellPath 2>&1
-            $exitCode = $LASTEXITCODE
+            $probe = Invoke-ReadinessProbe -BashPath $bash -ScriptPath $shellPath
+            $output = $probe.Output
+            $exitCode = $probe.ExitCode
             $exitCode | Should -Not -Be 0 -Because 'an unhealthy Hermes check must fail the readiness contract'
             ($output -join "`n") | Should -Match 'Hermes readiness did not report all required checks healthy'
 
             $env:HERMES_PROBE_SCENARIO = 'wrong-auth-response'
-            $output = & $bash $shellPath 2>&1
-            $exitCode = $LASTEXITCODE
+            $probe = Invoke-ReadinessProbe -BashPath $bash -ScriptPath $shellPath
+            $output = $probe.Output
+            $exitCode = $probe.ExitCode
             $exitCode | Should -Not -Be 0 -Because 'an HTTP response other than 401 must not be treated as listener startup'
             ($output -join "`n") | Should -Match 'missing bearer token probe expected HTTP 401 but received 200'
 
@@ -500,8 +532,9 @@ esac
                 Remove-Item -LiteralPath (Join-Path $temp 'missing'), (Join-Path $temp 'invalid') -Force -ErrorAction SilentlyContinue
                 $env:HERMES_PROBE_SCENARIO = 'missing-required-check'
                 $env:HERMES_MISSING_CHECK = $requiredCheck
-                $output = & $bash $shellPath 2>&1
-                $exitCode = $LASTEXITCODE
+                $probe = Invoke-ReadinessProbe -BashPath $bash -ScriptPath $shellPath
+                $output = $probe.Output
+                $exitCode = $probe.ExitCode
                 $exitCode | Should -Not -Be 0 -Because "missing required readiness check $requiredCheck must fail the contract"
                 ($output -join "`n") | Should -Match 'Hermes readiness did not report all required checks healthy'
             }
@@ -555,9 +588,9 @@ esac
         function Invoke-WslChecked {
             param([string[]]$Arguments, [int]$TimeoutSeconds, [switch]$AllowFailure)
             $script:cleanupCalls += [pscustomobject]@{
-                Arguments = $Arguments
+                Arguments      = $Arguments
                 TimeoutSeconds = $TimeoutSeconds
-                AllowFailure = [bool]$AllowFailure
+                AllowFailure   = [bool]$AllowFailure
             }
         }
         . ([scriptblock]::Create($cleanupAst.Extent.Text))

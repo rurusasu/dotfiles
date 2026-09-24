@@ -11,7 +11,13 @@ let
     ../../home/linux.nix
     ../../home/wsl.nix
   ];
-  moduleImports = path: (import path { pkgs = { }; lib = { }; inputs = { }; }).imports or [ ];
+  moduleImports =
+    path:
+    (import path {
+      pkgs = { };
+      lib = { };
+      inputs = { };
+    }).imports or [ ];
   importsCommon = path: builtins.elem (../../home/common.nix) (moduleImports path);
 in
 {

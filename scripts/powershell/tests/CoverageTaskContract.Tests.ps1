@@ -1,4 +1,4 @@
-BeforeAll {
+﻿BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 }
 
@@ -74,5 +74,39 @@ Describe 'coverage smoke' {
         (Test-Path -LiteralPath $coveragePath) | Should -BeTrue
         [xml]$coverageXml = Get-Content -LiteralPath $coveragePath -Raw
         $coverageXml | Should -Not -BeNullOrEmpty
+    }
+
+    It 'should preserve test failure details containing ESC in a valid JUnit report' {
+        $failurePath = Join-Path $TestDrive 'JUnitEsc.Tests.ps1'
+        $reportPath = Join-Path $TestDrive 'junit.xml'
+        @'
+Describe 'JUnit ESC serialization' {
+    It 'retains the diagnostic around an ANSI escape' {
+        throw "failure detail before $([char]27)[31m after"
+    }
+}
+'@ | Set-Content -LiteralPath $failurePath -Encoding UTF8
+
+        $shellName = if ($PSVersionTable.PSVersion.Major -ge 6) { 'pwsh' } else { 'powershell.exe' }
+        $shell = Get-Command $shellName -ErrorAction Stop
+        $shellPath = if ($shell.Source) { $shell.Source } else { $shell.Path }
+        $runnerPath = Join-Path $script:repoRoot 'scripts/powershell/tests/Invoke-Tests.ps1'
+        $previousPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            & $shellPath -NoProfile -File $runnerPath -Path $failurePath -OutputFile $reportPath 2>&1 | Out-Null
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousPreference
+        }
+
+        $exitCode | Should -Be 1 -Because 'a JUnit serialization fix must not turn a failing test run into success'
+        Test-Path -LiteralPath $reportPath -PathType Leaf | Should -BeTrue
+        [xml]$report = Get-Content -LiteralPath $reportPath -Raw -Encoding UTF8
+        $failure = $report.testsuites.testsuite.testcase.failure
+        $failure | Should -Not -BeNullOrEmpty
+        $failure.message | Should -Match 'failure detail before \[U\+001B\]'
+        $failure.message | Should -Match 'after'
     }
 }

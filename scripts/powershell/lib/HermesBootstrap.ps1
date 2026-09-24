@@ -1,4 +1,4 @@
-<#!
+﻿<#!
 .SYNOPSIS
     Streams the Hermes bootstrap 1Password payload to the container.
 #>

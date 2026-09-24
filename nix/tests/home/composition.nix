@@ -17,10 +17,21 @@ let
       module,
       specialArgs ? { },
     }:
-    inputs.home-manager.lib.homeManagerConfiguration {
+    let
       pkgs = mkPkgs system;
+      testInputs = inputs // {
+        "llm-agents" = {
+          packages.${system} = {
+            codex = pkgs.hello;
+            hermes-agent = pkgs.hello;
+          };
+        };
+      };
+    in
+    inputs.home-manager.lib.homeManagerConfiguration {
+      inherit pkgs;
       extraSpecialArgs = {
-        inherit inputs;
+        inputs = testInputs;
         installFeatures = [ ];
       }
       // specialArgs;
@@ -127,15 +138,25 @@ in
       sets = import ../../packages/sets.nix {
         inherit pkgs;
         lib = pkgs.lib;
-        codexPackage = inputs."llm-agents".packages.${pkgs.stdenv.hostPlatform.system}.codex;
+        codexPackage = pkgs.hello;
       };
       catalogDrvPaths = builtins.map (package: package.drvPath) sets.all;
       selectedCatalogDrvPaths = builtins.sort builtins.lessThan (
-        builtins.filter (drvPath: builtins.elem drvPath catalogDrvPaths)
-          (builtins.map (package: package.drvPath) wsl.config.home.packages)
+        pkgs.lib.unique (
+          builtins.filter (drvPath: builtins.elem drvPath catalogDrvPaths) (
+            builtins.map (package: package.drvPath) wsl.config.home.packages
+          )
+        )
       );
       expectedCatalogDrvPaths = builtins.sort builtins.lessThan (
-        builtins.map (package: package.drvPath) (sets.allWithout [ "discord" "ollama" ])
+        pkgs.lib.unique (
+          builtins.map (package: package.drvPath) (
+            sets.allWithout [
+              "discord"
+              "ollama"
+            ]
+          )
+        )
       );
       containsDrvPath =
         needle: packages: builtins.any (package: package.drvPath == needle.drvPath) packages;

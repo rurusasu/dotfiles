@@ -526,10 +526,10 @@ Write-Output 'Codex loader scope passed.'
             }
             Mock Test-Path {
                 return ($PathType -eq "Container" -and $LiteralPath -like "*Programs\Codex") -or
-                    $LiteralPath -like "*Programs\Codex\bin\codex.exe" -or
-                    $Path -like "*Programs\Codex\bin\codex.exe" -or
-                    $LiteralPath -like "*Programs\Codex\bin\codex-code-mode-host.exe" -or
-                    $Path -like "*Programs\Codex\bin\codex-code-mode-host.exe"
+                $LiteralPath -like "*Programs\Codex\bin\codex.exe" -or
+                $Path -like "*Programs\Codex\bin\codex.exe" -or
+                $LiteralPath -like "*Programs\Codex\bin\codex-code-mode-host.exe" -or
+                $Path -like "*Programs\Codex\bin\codex-code-mode-host.exe"
             }
             Mock Get-UserEnvironmentPath { return "" }
             Mock Write-Host { }

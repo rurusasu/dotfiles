@@ -33,20 +33,40 @@ let
 
   contains = pattern: content: builtins.length (builtins.split pattern content) > 1;
 
-  # External callers cannot be evaluated as Home Manager modules here, so
-  # inspect only import declarations after removing Nix line comments.
+  # Inspect declarations without evaluating caller modules. Mask strings first
+  # so example text cannot be mistaken for an import declaration.
+  stripStrings = content:
+    builtins.concatStringsSep " " (
+      builtins.filter builtins.isString (builtins.split "\"[^\"]*\"|''[^']*''" content)
+    );
+  stripBlockComments = content:
+    (builtins.foldl' (
+      state: token:
+      if builtins.isString token then
+        {
+          inherit (state) inComment;
+          text = state.text + (if state.inComment then "" else token);
+        }
+      else
+        {
+          text = state.text;
+          inComment = builtins.head token == "/*";
+        }
+    ) { inComment = false; text = ""; } (builtins.split "(/\\*|\\*/)" content)).text;
   stripLineComments = content:
+    let
+      uncommented = stripBlockComments (stripStrings content);
+    in
     builtins.replaceStrings [ "\n" "\r" ] [ " " " " ] (
-      builtins.concatStringsSep " " (builtins.split "#[^\\n]*" content)
+      builtins.concatStringsSep " " (
+        builtins.filter builtins.isString (builtins.split "#[^\\n]*" uncommented)
+      )
     );
   containsImport =
     target: content:
     builtins.match ".*imports[[:space:]]*=[[:space:]]*\\[[^]]*([^]]*/|[.]/)${target}\\.nix.*" (
       stripLineComments content
     ) != null;
-
-  moduleImports = path: (import path { pkgs = { }; lib = { }; inputs = { }; }).imports or [ ];
-  importsPath = path: target: builtins.elem target (moduleImports path);
 
   entryModules = [
     ../../home/darwin.nix
@@ -98,7 +118,7 @@ in
   };
 
   testOSHomeEntrypointsImportCommon = {
-    expr = builtins.map (path: importsPath path (../../home/common.nix)) entryModules;
+    expr = builtins.map (path: containsImport "common" (builtins.readFile path)) entryModules;
     expected = [
       true
       true
@@ -127,9 +147,26 @@ in
   testCommentOnlyCommonMentionIsNotAnImport = {
     expr = [
       (containsImport "common" "# imports = [ ./common.nix ];")
-      (containsImport "common" ''message = "./common.nix";'')
+      (containsImport "common" ''message = "imports = [ ./common.nix ]";'')
+      (containsImport "common" ''
+        /* imports = [ ./common.nix ];
+         * still a comment */
+        { }
+      '')
       (containsImport "common" "imports = [ ../home/common.nix ];")
+      (containsImport "common" ''
+        imports = [
+          # shared module
+          ./common.nix
+        ];
+      '')
     ];
-    expected = [ false false true ];
+    expected = [
+      false
+      false
+      false
+      true
+      true
+    ];
   };
 }

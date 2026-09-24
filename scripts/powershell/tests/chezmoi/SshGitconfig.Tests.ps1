@@ -13,6 +13,7 @@
 #>
 
 BeforeAll {
+    $PSDefaultParameterValues['Get-Content:Encoding'] = 'UTF8'
     $script:chezmoiRoot = Join-Path $PSScriptRoot "../../../../chezmoi"
     $script:sshConfigTmpl = Join-Path $script:chezmoiRoot "ssh/config.tmpl"
     $script:gitconfigTmpl = Join-Path $script:chezmoiRoot "dot_gitconfig.tmpl"
@@ -21,11 +22,45 @@ BeforeAll {
     $script:sshDeploySh = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_always_deploy.sh.tmpl"
     $script:chezmoiToml = Join-Path $script:chezmoiRoot ".chezmoi.toml.tmpl"
     $script:renderData = '{"chezmoi":{"os":"windows"},"op_account_personal":"test-account"}'
+
+    function Invoke-ChezmoiTemplateForTest {
+        param([Parameter(Mandatory)][string]$Template, [Parameter(Mandatory)][string]$OverrideData)
+
+        $command = Get-Command chezmoi -ErrorAction Stop
+        $arguments = @('--source', $script:chezmoiRoot, "--override-data=$OverrideData", 'execute-template') | ForEach-Object {
+            $value = [string]$_
+            '"' + (($value -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
+        }
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = $command.Source
+        $startInfo.Arguments = $arguments -join ' '
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardInput = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $startInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+        $startInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $startInfo
+        try {
+            if (-not $process.Start()) { throw 'Failed to start chezmoi.' }
+            $stdout = $process.StandardOutput.ReadToEndAsync()
+            $stderr = $process.StandardError.ReadToEndAsync()
+            $input = ([System.Text.UTF8Encoding]::new($false)).GetBytes($Template)
+            $process.StandardInput.BaseStream.Write($input, 0, $input.Length)
+            $process.StandardInput.Close()
+            $process.WaitForExit()
+            if ($process.ExitCode -ne 0) { throw "chezmoi execute-template failed ($($process.ExitCode)): $($stderr.GetAwaiter().GetResult())" }
+            return $stdout.GetAwaiter().GetResult() -split "`r?`n"
+        }
+        finally { $process.Dispose() }
+    }
 }
 
 Describe 'SSH config テンプレート' {
     BeforeAll {
-        $script:sshContent = Get-Content -Path $script:sshConfigTmpl -Raw
+        $script:sshContent = Get-Content -Encoding UTF8 -Path $script:sshConfigTmpl -Raw
     }
 
     It '1Password SSH Agent の IdentityAgent が Windows 用に設定されていること' {
@@ -65,7 +100,7 @@ Describe 'SSH config テンプレート' {
 
 Describe 'gitconfig テンプレート' {
     BeforeAll {
-        $script:gitconfigContent = Get-Content -Path $script:gitconfigTmpl -Raw
+        $script:gitconfigContent = Get-Content -Encoding UTF8 -Path $script:gitconfigTmpl -Raw
     }
 
     It 'gpg.format が ssh に設定されていること' {
@@ -102,7 +137,7 @@ Describe 'gitconfig テンプレート' {
 
     It 'op-ssh-sign-wsl wrapper が op-ssh-sign.exe を最終的に呼ぶこと' {
         $wrapperPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_op-ssh-sign-wsl"
-        (Get-Content -Path $wrapperPath -Raw) | Should -Match 'op-ssh-sign\.exe' -Because "wrapper 最終的に Windows binary を起動"
+        (Get-Content -Encoding UTF8 -Path $wrapperPath -Raw) | Should -Match 'op-ssh-sign\.exe' -Because "wrapper 最終的に Windows binary を起動"
     }
 
     It 'ssh-keygen を gpg.ssh.program に使用していないこと' {
@@ -127,7 +162,7 @@ Describe 'gitconfig テンプレート' {
 
 Describe 'gitconfig-work テンプレート' {
     BeforeAll {
-        $script:gitconfigWorkContent = Get-Content -Path $script:gitconfigWorkTmpl -Raw
+        $script:gitconfigWorkContent = Get-Content -Encoding UTF8 -Path $script:gitconfigWorkTmpl -Raw
     }
 
     It '[user] セクションを持つこと' {
@@ -146,7 +181,7 @@ Describe 'gitconfig-work テンプレート' {
 Describe 'SSH deploy スクリプト' {
     Context 'Windows (ps1.tmpl)' {
         BeforeAll {
-            $script:ps1Content = Get-Content -Path $script:sshDeployPs1 -Raw
+            $script:ps1Content = Get-Content -Encoding UTF8 -Path $script:sshDeployPs1 -Raw
         }
 
         It 'ssh/config.tmpl を includeTemplate で評価してインライン展開していること' {
@@ -154,9 +189,7 @@ Describe 'SSH deploy スクリプト' {
         }
 
         It '展開後のWindows用deployスクリプトに未評価のテンプレートを残さないこと' {
-            $render = $script:ps1Content |
-                & chezmoi --source $script:chezmoiRoot --override-data $script:renderData execute-template
-            $LASTEXITCODE | Should -Be 0
+            $render = Invoke-ChezmoiTemplateForTest -Template $script:ps1Content -OverrideData $script:renderData
             $rendered = $render -join [Environment]::NewLine
 
             $rendered | Should -Not -Match '\{\{'
@@ -197,7 +230,7 @@ Describe 'SSH deploy スクリプト' {
 
     Context 'Linux/macOS (sh.tmpl)' {
         BeforeAll {
-            $script:shContent = Get-Content -Path $script:sshDeploySh -Raw
+            $script:shContent = Get-Content -Encoding UTF8 -Path $script:sshDeploySh -Raw
         }
 
         It 'ssh/config.tmpl を includeTemplate で評価してインライン展開していること' {
@@ -205,9 +238,7 @@ Describe 'SSH deploy スクリプト' {
         }
 
         It '展開後のmacOS用deployスクリプトに未評価のテンプレートを残さないこと' {
-            $render = $script:shContent |
-                & chezmoi --source $script:chezmoiRoot --override-data ($script:renderData -replace '"windows"', '"darwin"') execute-template
-            $LASTEXITCODE | Should -Be 0
+            $render = Invoke-ChezmoiTemplateForTest -Template $script:shContent -OverrideData ($script:renderData -replace '"windows"', '"darwin"')
             $rendered = $render -join [Environment]::NewLine
 
             $rendered | Should -Not -Match '\{\{'
@@ -215,9 +246,7 @@ Describe 'SSH deploy スクリプト' {
         }
 
         It '展開後のLinux用deployスクリプトに未評価のテンプレートを残さないこと' {
-            $render = $script:shContent |
-                & chezmoi --source $script:chezmoiRoot --override-data ($script:renderData -replace '"windows"', '"linux"') execute-template
-            $LASTEXITCODE | Should -Be 0
+            $render = Invoke-ChezmoiTemplateForTest -Template $script:shContent -OverrideData ($script:renderData -replace '"windows"', '"linux"')
             $rendered = $render -join [Environment]::NewLine
 
             $rendered | Should -Not -Match '\{\{'
@@ -252,7 +281,7 @@ Describe 'SSH deploy スクリプト' {
 
 Describe 'chezmoi.toml テンプレート' {
     BeforeAll {
-        $script:tomlContent = Get-Content -Path $script:chezmoiToml -Raw
+        $script:tomlContent = Get-Content -Encoding UTF8 -Path $script:chezmoiToml -Raw
     }
 
     It '[data.git] セクションが含まれていないこと' {
@@ -275,7 +304,7 @@ Describe 'chezmoi.toml テンプレート' {
 
 Describe 'personal.yaml の git データ' {
     BeforeAll {
-        $script:personalYaml = Get-Content -Path (Join-Path $script:chezmoiRoot ".chezmoidata/personal.yaml") -Raw
+        $script:personalYaml = Get-Content -Encoding UTF8 -Path (Join-Path $script:chezmoiRoot ".chezmoidata/personal.yaml") -Raw
     }
 
     It 'git.personal サブツリーが定義されていること' {

@@ -64,21 +64,119 @@ Describe 'WingetHandler' {
                 )
             } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $retiredManifest -Encoding UTF8
 
+            $script:retiredPackageCalls = @()
             Mock Invoke-Winget {
                 param([string[]]$Arguments)
-                $script:retiredPackageArgs = $Arguments
-                $global:LASTEXITCODE = 0
-                return 'Successfully uninstalled'
+                $script:retiredPackageCalls += , @($Arguments)
+                if ($Arguments[0] -eq 'uninstall') {
+                    $global:LASTEXITCODE = 0
+                    return 'Successfully uninstalled'
+                }
+
+                $global:LASTEXITCODE = [BitConverter]::ToInt32([BitConverter]::GetBytes([Convert]::ToUInt32('8A150014', 16)), 0)
+                return '入力条件に一致するインストール済みのパッケージが見つかりませんでした。'
             }
 
             $removedCount = $handler.RemoveRetiredPackages($TestDrive)
 
             $removedCount | Should -Be 1
-            $script:retiredPackageArgs | Should -Contain '--exact'
-            $script:retiredPackageArgs | Should -Contain '9NT1R1C2HH7J'
-            $script:retiredPackageArgs | Should -Contain '--source'
-            $script:retiredPackageArgs | Should -Contain 'msstore'
-            $script:retiredPackageArgs | Should -Contain '--silent'
+            $script:retiredPackageCalls.Count | Should -Be 2
+            $script:retiredPackageCalls[0] | Should -Contain 'uninstall'
+            $script:retiredPackageCalls[0] | Should -Contain '--exact'
+            $script:retiredPackageCalls[0] | Should -Contain '9NT1R1C2HH7J'
+            $script:retiredPackageCalls[0] | Should -Contain '--source'
+            $script:retiredPackageCalls[0] | Should -Contain 'msstore'
+            $script:retiredPackageCalls[0] | Should -Contain '--silent'
+            $script:retiredPackageCalls[1] | Should -Contain 'list'
+            $script:retiredPackageCalls[1] | Should -Contain '--exact'
+            $script:retiredPackageCalls[1] | Should -Contain '9NT1R1C2HH7J'
+            $script:retiredPackageCalls[1] | Should -Contain '--source'
+            $script:retiredPackageCalls[1] | Should -Contain 'msstore'
+        }
+
+        It 'should fail if a retired package remains listed after a successful uninstall' {
+            @{
+                packages = @(
+                    @{
+                        id     = '9NT1R1C2HH7J'
+                        name   = 'ChatGPT Classic'
+                        source = 'msstore'
+                    }
+                )
+            } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $TestDrive 'retired-packages.json') -Encoding UTF8
+            $script:retiredLogs = @()
+            Mock Write-Host { $script:retiredLogs += [string]$Object }
+            Mock Invoke-Winget {
+                param([string[]]$Arguments)
+                if ($Arguments[0] -eq 'uninstall') {
+                    $global:LASTEXITCODE = 0
+                    return 'Successfully uninstalled'
+                }
+
+                $global:LASTEXITCODE = 0
+                return @(
+                    '名前    ID           バージョン    ソース'
+                    'ChatGPT 9NT1R1C2HH7J 1.0.0         msstore'
+                )
+            }
+
+            { $handler.RemoveRetiredPackages($TestDrive) } | Should -Throw '*remains installed after uninstall*'
+            ($script:retiredLogs -join "`n") | Should -Not -Match 'RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=removed'
+        }
+
+        It 'should report an already absent retired package only after the source-specific absence query' {
+            @{
+                packages = @(
+                    @{
+                        id     = '9NT1R1C2HH7J'
+                        name   = 'ChatGPT Classic'
+                        source = 'msstore'
+                    }
+                )
+            } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $TestDrive 'retired-packages.json') -Encoding UTF8
+            $script:retiredPackageCalls = @()
+            $script:retiredLogs = @()
+            Mock Write-Host { $script:retiredLogs += [string]$Object }
+            Mock Invoke-Winget {
+                param([string[]]$Arguments)
+                $script:retiredPackageCalls += , @($Arguments)
+                $global:LASTEXITCODE = [BitConverter]::ToInt32([BitConverter]::GetBytes([Convert]::ToUInt32('8A150014', 16)), 0)
+                return '入力条件に一致するインストール済みのパッケージが見つかりませんでした。'
+            }
+
+            $removedCount = $handler.RemoveRetiredPackages($TestDrive)
+
+            $removedCount | Should -Be 0
+            $script:retiredPackageCalls.Count | Should -Be 2
+            $script:retiredPackageCalls[1] | Should -Contain 'list'
+            $script:retiredPackageCalls[1] | Should -Contain '9NT1R1C2HH7J'
+            $script:retiredPackageCalls[1] | Should -Contain '--source'
+            $script:retiredPackageCalls[1] | Should -Contain 'msstore'
+            ($script:retiredLogs -join "`n") | Should -Match 'RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=absent'
+        }
+
+        It 'should fail when the retired package post-uninstall query is indeterminate' {
+            @{
+                packages = @(
+                    @{
+                        id     = '9NT1R1C2HH7J'
+                        name   = 'ChatGPT Classic'
+                        source = 'msstore'
+                    }
+                )
+            } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $TestDrive 'retired-packages.json') -Encoding UTF8
+            Mock Invoke-Winget {
+                param([string[]]$Arguments)
+                if ($Arguments[0] -eq 'uninstall') {
+                    $global:LASTEXITCODE = 0
+                    return 'Successfully uninstalled'
+                }
+
+                $global:LASTEXITCODE = 1
+                return 'source unavailable'
+            }
+
+            { $handler.RemoveRetiredPackages($TestDrive) } | Should -Throw '*unable to verify retired package state*'
         }
 
         It 'should apply the retired package manifest from the configured dotfiles root' {
@@ -98,20 +196,91 @@ Describe 'WingetHandler' {
             Mock Invoke-Winget {
                 param([string[]]$Arguments)
                 $script:retiredPackageArgs = $Arguments
-                $global:LASTEXITCODE = 0
-                return 'Successfully uninstalled'
+                if ($Arguments[0] -eq 'uninstall') {
+                    $global:LASTEXITCODE = 0
+                    return 'Successfully uninstalled'
+                }
+
+                $global:LASTEXITCODE = [BitConverter]::ToInt32([BitConverter]::GetBytes([Convert]::ToUInt32('8A150014', 16)), 0)
+                return '入力条件に一致するインストール済みのパッケージが見つかりませんでした。'
             }
 
             $ctx.Options['WingetMode'] = 'import'
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeTrue
-            $script:retiredPackageArgs | Should -Contain 'uninstall'
+            $script:retiredPackageArgs | Should -Contain 'list'
             $script:retiredPackageArgs | Should -Contain '9NT1R1C2HH7J'
         }
     }
 
     Context 'TestPackageVerification - package-specific installed artifact probes' {
+        It 'should execute a matching command from nested manifest pathEntries when PATH cannot resolve it' {
+            $originalPath = $env:PATH
+            $packageRoot = Join-Path $TestDrive 'WinGet\Packages\Sample.Tool_Source_hash'
+            $nestedBin = Join-Path $packageRoot 'runtime\bin'
+            $commandName = 'dotfiles-path-fallback-' + [guid]::NewGuid().ToString('N')
+            $commandPath = Join-Path $nestedBin "$commandName.exe"
+            $script:expectedFallbackCommandPath = $commandPath
+            New-Item -ItemType Directory -Path $nestedBin -Force | Out-Null
+            Set-Content -LiteralPath $commandPath -Value 'test executable placeholder'
+            $script:verifiedCommandPath = $null
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments)
+                $script:verifiedCommandPath = [string]$Command
+                if ($script:verifiedCommandPath -eq $script:expectedFallbackCommandPath -and $Arguments -contains '--version') {
+                    $global:LASTEXITCODE = 0
+                    return '1.0.0'
+                }
+
+                $global:LASTEXITCODE = 127
+                return 'unexpected command path'
+            }
+            $package = [PSCustomObject]@{
+                Id            = 'Sample.Tool'
+                PathEntries   = @((Join-Path (Join-Path $TestDrive 'WinGet\Packages') 'Sample.Tool*'))
+                VerifyCommand = [PSCustomObject]@{ command = $commandName; args = @('--version') }
+            }
+
+            try {
+                $verified = $handler.TestPackageVerificationForPackage($package, $false)
+
+                $script:verifiedCommandPath | Should -Be $commandPath
+                $verified | Should -BeTrue
+                $env:PATH | Should -Be $originalPath
+            }
+            finally {
+                $env:PATH = $originalPath
+            }
+        }
+
+        It 'should not treat a different executable under pathEntries as a successful command' {
+            $packageRoot = Join-Path $TestDrive 'WinGet\Packages\Sample.Other_Source_hash'
+            New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $packageRoot 'not-the-command.exe') -Value 'placeholder'
+            $commandName = 'dotfiles-missing-command-' + [guid]::NewGuid().ToString('N')
+            $script:expectedMissingFallbackCommand = $commandName
+            Mock Invoke-VerifyCommand {
+                param($Command)
+                if ([string]$Command -eq $script:expectedMissingFallbackCommand) {
+                    $global:LASTEXITCODE = 127
+                    return 'configured command was not found'
+                }
+
+                throw 'an unrelated executable must not be invoked'
+            }
+            $package = [PSCustomObject]@{
+                Id            = 'Sample.Other'
+                PathEntries   = @((Join-Path (Join-Path $TestDrive 'WinGet\Packages') 'Sample.Other*'))
+                VerifyCommand = [PSCustomObject]@{ command = $commandName; args = @('--version') }
+            }
+
+            $verified = $handler.TestPackageVerificationForPackage($package, $false)
+
+            $verified | Should -BeFalse
+            Should -Invoke Invoke-VerifyCommand -Times 1 -ParameterFilter { $Command -eq $script:expectedMissingFallbackCommand }
+        }
+
         It 'should execute a portable WinGet link directly instead of resolving a same-named rustup shim' {
             $script:origLocalAppDataForWingetTests = $env:LOCALAPPDATA
             $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppData'
@@ -1910,6 +2079,86 @@ Describe 'WingetHandler' {
         }
     }
 
+    Context 'Apply - import mode: installed package command missing from PATH' {
+        BeforeEach {
+            $script:originalVerifyOnlyPath = $env:PATH
+            $env:PATH = 'C:\Windows\System32'
+            $script:packageRoot = Join-Path $TestDrive 'WinGet\Packages\Sample.Tool_Source_hash'
+            $script:nestedPackageBin = Join-Path $script:packageRoot 'runtime\bin'
+            $script:packageCommandName = 'dotfiles-installed-package-' + [guid]::NewGuid().ToString('N')
+            $script:packageCommandPath = Join-Path $script:nestedPackageBin "$($script:packageCommandName).exe"
+            New-Item -ItemType Directory -Path $script:nestedPackageBin -Force | Out-Null
+            Set-Content -LiteralPath $script:packageCommandPath -Value 'test executable placeholder'
+
+            Mock Get-ExternalCommand { return @{ Source = 'C:\winget.exe' } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = 'winget' }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = 'Sample.Tool'
+                                    pathEntries       = @((Join-Path (Join-Path $TestDrive 'WinGet\Packages') 'Sample.Tool*'))
+                                    verifyCommand     = [PSCustomObject]@{
+                                        command = $script:packageCommandName
+                                        args    = @('--version')
+                                    }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains 'list') {
+                    $global:LASTEXITCODE = 0
+                    return @(
+                        'Name       Id          Version Source'
+                        '--------------------------------------'
+                        'Sample Tool Sample.Tool 1.0.0   winget'
+                    )
+                }
+
+                $global:LASTEXITCODE = 1
+                return 'verification-only mode must not install packages'
+            }
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments)
+                if ([string]$Command -eq $script:packageCommandPath -and $Arguments -contains '--version') {
+                    $global:LASTEXITCODE = 0
+                    return '1.0.0'
+                }
+
+                $global:LASTEXITCODE = 127
+                return 'unexpected executable'
+            }
+            Mock Get-UserEnvironmentPath { return 'C:\Windows\System32' }
+            Mock Set-UserEnvironmentPath { }
+            Mock Test-Path { return $false } -ParameterFilter { $Path -like '*\.cargo\bin' }
+        }
+
+        AfterEach {
+            $env:PATH = $script:originalVerifyOnlyPath
+        }
+
+        It 'should verify from package pathEntries without installing or changing PATH' {
+            $ctx.Options['WingetMode'] = 'import'
+            $ctx.Options['WingetVerifyCommandOnly'] = $true
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $result.Message | Should -Match '1 個検証済み'
+            $env:PATH | Should -Be 'C:\Windows\System32'
+            Should -Invoke Invoke-VerifyCommand -Times 1 -ParameterFilter { $Command -eq $script:packageCommandPath }
+            Should -Invoke Invoke-Winget -Times 0 -ParameterFilter { $Arguments -contains 'install' }
+            Should -Invoke Set-UserEnvironmentPath -Times 0
+        }
+    }
+
     Context 'Apply - import mode: Microsoft.WSL verification' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
@@ -2427,7 +2676,10 @@ Describe 'WingetHandler' {
 
                 $result.Success | Should -BeFalse
                 $result.Message | Should -Match '2 個検証失敗'
-                $script:verificationCommandPaths | Should -BeNullOrEmpty
+                $script:verificationCommandPaths | Should -Contain 'task'
+                $script:verificationCommandPaths | Should -Contain 'hadolint'
+                $script:verificationCommandPaths | Should -Not -Contain (Join-Path $shimDirectory 'task.cmd')
+                $script:verificationCommandPaths | Should -Not -Contain (Join-Path $shimDirectory 'hadolint.cmd')
             }
             finally {
                 $env:PATH = $originalPath
@@ -2749,18 +3001,18 @@ Describe 'WingetHandler' {
                     Sources = @(
                         [PSCustomObject]@{
                             SourceDetails = [PSCustomObject]@{ Name = 'winget' }
-                            Packages = @(
+                            Packages      = @(
                                 [PSCustomObject]@{
                                     PackageIdentifier = 'OpenAI.Codex'
-                                    directInstaller = [PSCustomObject]@{
-                                        type = 'archive'
-                                        url = 'https://example.invalid/codex.zip'
-                                        sha256 = ('cd' * 32)
-                                        destination = $script:codexDestination
-                                        executable = 'bin\codex.exe'
+                                    directInstaller   = [PSCustomObject]@{
+                                        type           = 'archive'
+                                        url            = 'https://example.invalid/codex.zip'
+                                        sha256         = ('cd' * 32)
+                                        destination    = $script:codexDestination
+                                        executable     = 'bin\codex.exe'
                                         timeoutSeconds = 30
                                     }
-                                    verifyCommand = [PSCustomObject]@{ command = 'codex'; args = @('--version') }
+                                    verifyCommand     = [PSCustomObject]@{ command = 'codex'; args = @('--version') }
                                 }
                             )
                         }
@@ -2931,18 +3183,18 @@ Describe 'WingetHandler' {
                     Sources = @(
                         [PSCustomObject]@{
                             SourceDetails = [PSCustomObject]@{ Name = 'winget' }
-                            Packages = @(
+                            Packages      = @(
                                 [PSCustomObject]@{
                                     PackageIdentifier = 'OpenAI.Codex'
-                                    directInstaller = [PSCustomObject]@{
-                                        type = 'archive'
-                                        url = 'https://example.invalid/codex-package.zip'
-                                        sha256 = $script:codexHash
-                                        destination = $script:codexDestination
-                                        executable = 'bin\codex.exe'
+                                    directInstaller   = [PSCustomObject]@{
+                                        type           = 'archive'
+                                        url            = 'https://example.invalid/codex-package.zip'
+                                        sha256         = $script:codexHash
+                                        destination    = $script:codexDestination
+                                        executable     = 'bin\codex.exe'
                                         timeoutSeconds = 30
                                     }
-                                    verifyCommand = [PSCustomObject]@{ command = 'codex'; args = @('--version') }
+                                    verifyCommand     = [PSCustomObject]@{ command = 'codex'; args = @('--version') }
                                 }
                             )
                         }

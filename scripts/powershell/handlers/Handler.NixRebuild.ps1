@@ -393,28 +393,50 @@ class NixRebuildHandler : SetupHandlerBase {
             # dotfiles が NixOS 内に存在しなければ Windows マウント経由でリンク
             $this.EnsureDotfilesAvailable($distroName, $ctx.DotfilesPath)
 
-            $this.Log("nix flake update を実行しています...")
-            $flakeUpdateCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && nix flake update 2>&1"
-            $flakeUpdateOutput = Invoke-Wsl -Arguments @("-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", $flakeUpdateCommand)
-            $flakeUpdateExitCode = $LASTEXITCODE
-            $flakeUpdateErrors = [System.Collections.Generic.List[string]]::new()
-            $flakeUpdateOutput | ForEach-Object {
-                if ($_ -notmatch '^\s*$') {
-                    if ($_ -match '^error:') {
-                        $this.LogError("  $_")
-                        $flakeUpdateErrors.Add([string]$_)
-                    }
-                    else {
-                        $this.Log("  $_", "Gray")
+            if (-not $this.IsTruthy($ctx.GetOption("SkipFlakeUpdate", $false))) {
+                $this.Log("nix flake update を実行しています...")
+                $flakeUpdateCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && nix flake update 2>&1"
+                $flakeUpdateOutput = Invoke-Wsl -Arguments @("-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", $flakeUpdateCommand)
+                $flakeUpdateExitCode = $LASTEXITCODE
+                $flakeUpdateErrors = [System.Collections.Generic.List[string]]::new()
+                $flakeUpdateOutput | ForEach-Object {
+                    if ($_ -notmatch '^\s*$') {
+                        if ($_ -match '^error:') {
+                            $this.LogError("  $_")
+                            $flakeUpdateErrors.Add([string]$_)
+                        }
+                        else {
+                            $this.Log("  $_", "Gray")
+                        }
                     }
                 }
+                if ($flakeUpdateExitCode -ne 0) {
+                    $errorDetail = if ($flakeUpdateErrors.Count -gt 0) { ": $($flakeUpdateErrors[0])" } else { "" }
+                    throw "nix flake update が失敗しました (exit code: $flakeUpdateExitCode)$errorDetail"
+                }
             }
-            if ($flakeUpdateExitCode -ne 0) {
-                $errorDetail = if ($flakeUpdateErrors.Count -gt 0) { ": $($flakeUpdateErrors[0])" } else { "" }
-                throw "nix flake update が失敗しました (exit code: $flakeUpdateExitCode)$errorDetail"
+            else {
+                $this.Log("SkipFlakeUpdate が設定されているため nix flake update をスキップします")
             }
 
             $this.Log("nixos-rebuild switch を実行しています...")
+
+            if ($this.IsTruthy($ctx.GetOption("WithHermes", $false))) {
+                $this.Log("Nix Hermes を有効にする前に legacy Compose gateway を停止します...")
+                $stopLegacyGatewayCommand = 'cd ~/.dotfiles && if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then docker compose -f docker/hermes-service/compose.yml stop hermes; else echo "Docker Compose runtime is unavailable; no legacy Hermes gateway can be active."; fi'
+                $stopLegacyGatewayOutput = Invoke-Wsl -Arguments @(
+                    "-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", $stopLegacyGatewayCommand
+                )
+                $stopLegacyGatewayExitCode = $LASTEXITCODE
+                $stopLegacyGatewayOutput | ForEach-Object {
+                    if ($_ -notmatch '^\s*$') {
+                        $this.Log("  $_", "Gray")
+                    }
+                }
+                if ($stopLegacyGatewayExitCode -ne 0) {
+                    throw "legacy Hermes Compose gateway could not be stopped (exit code: $stopLegacyGatewayExitCode)"
+                }
+            }
 
             # /mnt/ 配下の dotfiles は Windows 側オーナーのため CVE-2022-24765 の ownership チェックで
             # nix (libgit2) がフレークの読み込みを拒否する。root の gitconfig で回避する。

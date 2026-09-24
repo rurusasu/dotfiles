@@ -15,6 +15,7 @@ on:
       - "scripts/sh/install-macos.sh"
       - "scripts/sh/dcnvim.sh"
       - ".devcontainer/**"
+      - "chezmoi/**"
       - ".github/actions/detect-ci-changes/**"
       - ".github/workflows/**"
       - "tests/bash/**"
@@ -74,6 +75,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          nix profile install nixpkgs#chezmoi
+          echo "$HOME/.nix-profile/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.nix-profile/bin:$PATH"
+          chezmoi --version
           bats_version='1.13.0'
           bats_root="$RUNNER_TEMP/bats-core-$bats_version"
           bats_prefix="$RUNNER_TEMP/bats-prefix"

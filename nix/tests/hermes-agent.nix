@@ -1,36 +1,61 @@
 { inputs }:
 let
-  mkHome =
+  fixtures = import ../test-fixtures.nix { inherit inputs; };
+
+  mkTestHome =
     {
       system,
+      homeDirectory,
       installFeatures ? [ ],
     }:
-    inputs.home-manager.lib.homeManagerConfiguration {
-      pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs system;
+    let
+      pkgs = fixtures.mkPkgs system;
+      testPackage = pkgs.runCommand "hermes-agent-test-package" {
+        pname = "hermes-agent";
+        version = "test";
+      } ''
+        mkdir -p "$out/bin"
+        touch "$out/bin/hermes"
+      '';
+    in
+    (inputs.home-manager.lib.homeManagerConfiguration {
+      inherit pkgs;
       extraSpecialArgs = {
-        inherit inputs installFeatures;
+        inherit inputs;
+        inherit installFeatures;
       };
       modules = [
         {
           home.username = "test-user";
-          home.homeDirectory = if system == "aarch64-darwin" then "/Users/test-user" else "/home/test-user";
+          home.homeDirectory = homeDirectory;
           home.stateVersion = "25.05";
+          # The upstream module closes over inputs.self for its package
+          # default. Pin its supported package option here so evaluation uses
+          # this local derivation without forcing the upstream Python package.
+          services.hermes-agent.package = testPackage;
         }
         ../home/hermes-agent.nix
       ];
+    })
+    // {
+      inherit testPackage;
     };
 
-  linux = mkHome {
+  linux = mkTestHome {
     system = "x86_64-linux";
+    homeDirectory = "/home/test-user";
     installFeatures = [ "WithHermes" ];
   };
-  darwin = mkHome {
+  darwin = mkTestHome {
     system = "aarch64-darwin";
+    homeDirectory = "/Users/test-user";
     installFeatures = [ "WithHermes" ];
   };
-  disabled = mkHome { system = "x86_64-linux"; };
+  disabled = mkTestHome {
+    system = "x86_64-linux";
+    homeDirectory = "/home/test-user";
+  };
 
-  package = system: inputs.hermes-agent.packages.${system}.default;
   hasPackage = needle: packages: builtins.any (item: item.drvPath == needle.drvPath) packages;
 in
 {
@@ -44,7 +69,7 @@ in
 
   testHermesIsAbsentWithoutTheInstallFeature = {
     expr = {
-      package = hasPackage (package "x86_64-linux") disabled.config.home.packages;
+      package = hasPackage disabled.testPackage disabled.config.home.packages;
       sessionVariable = builtins.hasAttr "HERMES_HOME" disabled.config.home.sessionVariables;
       featureFlag = disabled.config.home.sessionVariables.DOTFILES_WITH_HERMES;
       systemdService = builtins.hasAttr "hermes-agent" disabled.config.systemd.user.services;
@@ -57,9 +82,9 @@ in
     };
   };
 
-  testLinuxHermesUsesLockedPackageAndExistingStatePath = {
+  testLinuxHermesUsesInjectedPackageAndSystemdContract = {
     expr = {
-      package = hasPackage (package "x86_64-linux") linux.config.home.packages;
+      package = hasPackage linux.testPackage linux.config.home.packages;
       home = linux.config.home.sessionVariables.HERMES_HOME;
       featureFlag = linux.config.home.sessionVariables.DOTFILES_WITH_HERMES;
       executable = linux.config.systemd.user.services.hermes-agent.Service.ExecStart;
@@ -71,16 +96,16 @@ in
       package = true;
       home = "/home/test-user/.hermes";
       featureFlag = "1";
-      executable = "${package "x86_64-linux"}/bin/hermes gateway run";
+      executable = "${linux.testPackage}/bin/hermes gateway run";
       workingDirectory = "/home/test-user";
       restart = "on-failure";
       wantedBy = [ "default.target" ];
     };
   };
 
-  testDarwinHermesUsesLaunchdAndExistingStatePath = {
+  testDarwinHermesUsesInjectedPackageAndLaunchdContract = {
     expr = {
-      package = hasPackage (package "aarch64-darwin") darwin.config.home.packages;
+      package = hasPackage darwin.testPackage darwin.config.home.packages;
       home = darwin.config.home.sessionVariables.HERMES_HOME;
       featureFlag = darwin.config.home.sessionVariables.DOTFILES_WITH_HERMES;
       enabled = darwin.config.launchd.agents.hermes-agent.enable;
@@ -95,7 +120,7 @@ in
       featureFlag = "1";
       enabled = true;
       arguments = [
-        "${package "aarch64-darwin"}/bin/hermes"
+        "${darwin.testPackage}/bin/hermes"
         "gateway"
         "run"
       ];

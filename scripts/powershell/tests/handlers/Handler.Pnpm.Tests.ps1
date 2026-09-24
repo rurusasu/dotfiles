@@ -101,14 +101,21 @@ Describe 'PnpmHandler' {
             $script:originalProcessPath = $env:PATH
             $script:originalPnpmHome = $env:PNPM_HOME
             $script:npmGlobalPrefix = Join-Path $TestDrive 'npm-global'
+            New-Item -Path (Join-Path $script:npmGlobalPrefix 'pnpm.cmd') -ItemType File -Force | Out-Null
+            $script:npmRuntimeDirectory = Join-Path $TestDrive 'npm-node-runtime'
+            $script:npmPath = Join-Path $script:npmRuntimeDirectory 'npm.cmd'
+            New-Item -Path $script:npmPath -ItemType File -Force | Out-Null
+            New-Item -Path (Join-Path $script:npmRuntimeDirectory 'node.exe') -ItemType File -Force | Out-Null
             $env:PNPM_HOME = $null
+            $env:PATH = 'C:\Windows\System32'
             Mock Get-ExternalCommand {
                 param($Name)
-                if ($Name -eq 'npm') { return @{ Source = 'C:\npm.cmd' } }
+                if ($Name -eq 'npm') { return @{ Source = $script:npmPath } }
                 return $null
             }
             Mock Invoke-Npm {
                 param($Arguments)
+                $env:PATH -split ';' | Should -Contain $script:npmRuntimeDirectory
                 if ($Arguments -contains 'prefix') {
                     $global:LASTEXITCODE = 0
                     return $script:npmGlobalPrefix
@@ -116,13 +123,12 @@ Describe 'PnpmHandler' {
                 $global:LASTEXITCODE = 0
                 return 'added pnpm'
             }
-            Mock Invoke-Pnpm {
-                if (($env:PATH -split ';') -contains $script:npmGlobalPrefix) {
-                    $global:LASTEXITCODE = 0
-                    return '10.0.0'
-                }
-                $global:LASTEXITCODE = 127
-                return 'pnpm not found'
+            Mock Invoke-NativeCommand {
+                param($Command, $Arguments)
+                $Command | Should -Be (Join-Path $script:npmGlobalPrefix 'pnpm.cmd')
+                $Arguments | Should -Be @('--version')
+                $global:LASTEXITCODE = 0
+                return '10.0.0'
             }
             Mock Get-UserEnvironmentPath { return '' }
             Mock Set-UserEnvironmentPath { }
@@ -135,6 +141,159 @@ Describe 'PnpmHandler' {
             }
             finally {
                 $env:PATH = $script:originalProcessPath
+                $env:PNPM_HOME = $script:originalPnpmHome
+            }
+        }
+
+        It 'should verify the pnpm shim installed by npm even when another pnpm resolves first' {
+            $script:originalProcessPath = $env:PATH
+            $script:originalPnpmHome = $env:PNPM_HOME
+            $script:npmGlobalPrefix = Join-Path $TestDrive 'npm-prefix-with-new-pnpm'
+            $script:pnpmShimPath = Join-Path $script:npmGlobalPrefix 'pnpm.cmd'
+            New-Item -Path $script:pnpmShimPath -ItemType File -Force | Out-Null
+            $env:PNPM_HOME = $null
+            $script:nativeCalls = @()
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq 'npm') { return @{ Source = 'C:\node-install\npm.cmd' } }
+                if ($Name -eq 'pnpm') { return @{ Source = 'C:\old-pnpm\pnpm.cmd' } }
+                return $null
+            }
+            Mock Invoke-Npm {
+                param($Arguments)
+                if ($Arguments -contains 'prefix') {
+                    $global:LASTEXITCODE = 0
+                    return $script:npmGlobalPrefix
+                }
+                $global:LASTEXITCODE = 0
+                return 'added pnpm@latest'
+            }
+            Mock Invoke-Pnpm { throw 'the pnpm on PATH must not be used to validate the npm install' }
+            Mock Invoke-NativeCommand {
+                param($Command, $Arguments)
+                $script:nativeCalls += , ([pscustomobject]@{ Command = $Command; Arguments = @($Arguments) })
+                $global:LASTEXITCODE = 0
+                return '10.0.0'
+            }
+            Mock Get-UserEnvironmentPath { return '' }
+            Mock Set-UserEnvironmentPath { }
+
+            try {
+                $result = $handler.TryBootstrapPnpm()
+
+                $result | Should -BeTrue
+                $script:nativeCalls | Should -HaveCount 1
+                $script:nativeCalls[0].Command | Should -Be $script:pnpmShimPath
+                $script:nativeCalls[0].Arguments | Should -Be @('--version')
+                ($env:PATH -split ';')[0] | Should -Be $script:npmGlobalPrefix
+            }
+            finally {
+                $env:PATH = $script:originalProcessPath
+                $env:PNPM_HOME = $script:originalPnpmHome
+            }
+        }
+    }
+
+    Context 'TryBootstrapPnpm - corepack Node runtime path' {
+        It 'should add the Node directory beside corepack to PATH and activate pnpm@latest' {
+            $script:originalProcessPath = $env:PATH
+            $script:originalPnpmHome = $env:PNPM_HOME
+            $script:corepackDirectory = Join-Path $TestDrive 'corepack-node-install'
+            $script:corepackPath = Join-Path $script:corepackDirectory 'corepack.cmd'
+            $script:corepackPnpmPath = Join-Path $script:corepackDirectory 'pnpm.cmd'
+            New-Item -Path $script:corepackPath -ItemType File -Force | Out-Null
+            New-Item -Path (Join-Path $script:corepackDirectory 'node.exe') -ItemType File -Force | Out-Null
+            New-Item -Path $script:corepackPnpmPath -ItemType File -Force | Out-Null
+            $env:PNPM_HOME = $null
+            $env:PATH = 'C:\Windows\System32'
+            $script:corepackCalls = @()
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq 'corepack') { return @{ Source = $script:corepackPath } }
+                return $null
+            }
+            Mock Invoke-Corepack {
+                param($Arguments)
+                $script:corepackCalls += , @($Arguments)
+                $env:PATH -split ';' | Should -Contain $script:corepackDirectory
+                $global:LASTEXITCODE = 0
+                return 'corepack ok'
+            }
+            Mock Invoke-NativeCommand {
+                param($Command, $Arguments)
+                $Command | Should -Be $script:corepackPnpmPath
+                $Arguments | Should -Be @('--version')
+                $global:LASTEXITCODE = 0
+                return '10.0.0'
+            }
+
+            try {
+                $result = $handler.TryBootstrapPnpm()
+
+                $result | Should -BeTrue
+                $script:corepackCalls | Should -HaveCount 2
+                $script:corepackCalls[0] | Should -Be @('enable')
+                $script:corepackCalls[1] | Should -Be @('prepare', 'pnpm@latest', '--activate')
+            }
+            finally {
+                $env:PATH = $script:originalProcessPath
+                $env:PNPM_HOME = $script:originalPnpmHome
+            }
+        }
+    }
+
+    Context 'Apply - existing pnpm is unusable' {
+        It 'should bootstrap through npm when the resolved pnpm executable fails its version check' {
+            $script:originalPnpmHome = $env:PNPM_HOME
+            $env:PNPM_HOME = Join-Path $TestDrive 'pnpm-home'
+            $script:npmGlobalPrefix = Join-Path $TestDrive 'npm-prefix-for-broken-pnpm'
+            $script:brokenPnpmPath = Join-Path $TestDrive 'broken-pnpm\pnpm.cmd'
+            New-Item -Path $script:brokenPnpmPath -ItemType File -Force | Out-Null
+            New-Item -Path (Join-Path $script:npmGlobalPrefix 'pnpm.cmd') -ItemType File -Force | Out-Null
+            $script:pnpmVersionChecks = 0
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq 'pnpm') { return @{ Source = $script:brokenPnpmPath } }
+                if ($Name -eq 'npm') { return @{ Source = 'C:\node-install\npm.cmd' } }
+                return $null
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains '--version') {
+                    $script:pnpmVersionChecks++
+                    if ($script:pnpmVersionChecks -eq 1) {
+                        $global:LASTEXITCODE = 1
+                        return 'old pnpm failed'
+                    }
+                    $global:LASTEXITCODE = 0
+                    return '10.0.0'
+                }
+                $global:LASTEXITCODE = 0
+                return ''
+            }
+            Mock Invoke-Npm {
+                param($Arguments)
+                if ($Arguments -contains 'prefix') {
+                    $global:LASTEXITCODE = 0
+                    return $script:npmGlobalPrefix
+                }
+                $global:LASTEXITCODE = 0
+                return 'added pnpm@latest'
+            }
+            Mock Invoke-NativeCommand { $global:LASTEXITCODE = 0; return '10.0.0' }
+            Mock Get-JsonContent { return @{ globalPackages = @() } }
+            Mock Get-UserEnvironmentPath { return '' }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+
+            try {
+                $result = $handler.Apply($ctx)
+
+                $result.Success | Should -BeTrue
+                Should -Invoke Invoke-Npm -Times 1 -ParameterFilter { $Arguments -contains 'pnpm@latest' }
+                ($env:PATH -split ';')[0] | Should -Be $script:npmGlobalPrefix
+            }
+            finally {
                 $env:PNPM_HOME = $script:originalPnpmHome
             }
         }

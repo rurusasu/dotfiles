@@ -248,7 +248,7 @@ Describe "Initialize-HermesBootstrapServiceAccountEnvironment" {
         @($acl.Access).Count | Should -Be 1
         $accessSid | Should -Be $currentSid.Value
         $expectedRights = [System.Security.AccessControl.FileSystemRights]::Read -bor
-            [System.Security.AccessControl.FileSystemRights]::Synchronize
+        [System.Security.AccessControl.FileSystemRights]::Synchronize
         $acl.Access[0].FileSystemRights | Should -Be $expectedRights
         $acl.Access[0].AccessControlType | Should -Be ([System.Security.AccessControl.AccessControlType]::Allow)
         $acl.Access[0].IsInherited | Should -BeFalse

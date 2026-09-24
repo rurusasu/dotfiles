@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Routes the Windows Hermes option to the NixOS WSL rebuild.
 #>
@@ -38,7 +38,7 @@ class HermesAgentHandler : SetupHandlerBase {
 
         $nixDistroExists = @($distros | Where-Object {
             ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim() -eq $ctx.DistroName
-        }).Count -gt 0
+            }).Count -gt 0
         if (-not $nixDistroExists) {
             throw "WithHermes on Windows requires the '$($ctx.DistroName)' NixOS WSL distribution. It is not registered; complete NixOS WSL setup and rerun the installer."
         }

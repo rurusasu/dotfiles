@@ -164,12 +164,20 @@ class NpmHandler : SetupHandlerBase {
 
                 if ($installExitCode -ne 0) {
                     $failed += $pkg.Spec
+                    $hasInstallOutput = $false
                     foreach ($line in $installOutput) {
                         if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                            $hasInstallOutput = $true
                             $this.Log("npm: $line", "Yellow")
                         }
                     }
                     $this.LogWarning("npm install exited with code $installExitCode for $($pkg.Spec)")
+                    if (-not $hasInstallOutput) {
+                        $this.LogWarning("npm stdout/stderr は出力なしです。npm debug log を確認してください。")
+                        $this.Log("ログ場所: npm config get logs-dir (未設定時は npm config get cache の _logs)", "Yellow")
+                        $this.Log("設定確認: npm config get loglevel / npm config get logs-max (0 の場合、ログファイルは作成されません)", "Yellow")
+                        $this.Log("再実行例: npm install -g --loglevel verbose $($pkg.Spec)", "Yellow")
+                    }
                     $this.LogWarning("✗ $($pkg.Spec) のインストールに失敗しました")
                     continue
                 }
