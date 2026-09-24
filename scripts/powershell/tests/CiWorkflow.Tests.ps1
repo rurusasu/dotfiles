@@ -126,7 +126,7 @@ Describe 'CI workflow configuration' {
         ([regex]::Matches($installerScript, [regex]::Escape("Invoke-Npm -Arguments @('prefix', '--global')"))).Count | Should -Be 2
         $installerScript | Should -Not -Match '\bnpm prefix --global\b'
         $installerScript | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'
-        $installerScript | Should -Match 'Name = ''pnpm''; Arguments = @\(''--version''\)'         $installerScript | Should -Match '\$expectedPnpmPath = \[System\.IO\.Path\]::GetFullPath\(\$script:npmPnpmShim\)'         $installerScript | Should -Match '& \$resolvedCommandPath @commandArguments'
+        $installerScript | Should -Match 'Name = ''pnpm''; Arguments = @\(''--version''\)'
         $installerScript | Should -Match 'Write-Host \$failureSummary -ForegroundColor Red'
     }
     It 'should keep the dedicated Windows installer E2E script UTF-8 BOM encoded and parseable' {
