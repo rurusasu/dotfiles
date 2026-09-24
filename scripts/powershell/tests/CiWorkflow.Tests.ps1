@@ -179,15 +179,12 @@ Describe 'CI workflow configuration' {
 
     It 'should verify ChatGPT Classic is removed by the real Windows installer E2E' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
-        $installerJob = [regex]::Match(
-            $installerScript,
-            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
-        ).Groups['job'].Value
 
-        $installerJob | Should -Match '9NT1R1C2HH7J'
-        $installerJob.Contains("RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=(removed|absent)") | Should -BeTrue
-        $installerJob | Should -Match 'winget list --id 9NT1R1C2HH7J --exact --source msstore'
-        $installerJob | Should -Match 'ChatGPT Classic is still installed after cleanup'
+
+        $installerScript | Should -Match '9NT1R1C2HH7J'
+        $installerScript.Contains("RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=(removed|absent)") | Should -BeTrue
+        $installerScript | Should -Match 'winget list --id 9NT1R1C2HH7J --exact --source msstore'
+        $installerScript | Should -Match 'ChatGPT Classic is still installed after cleanup'
     }
 
     It 'should run the admin-required Visual Studio package through an elevated installer and verify its compiler' {
@@ -226,37 +223,31 @@ Describe 'CI workflow configuration' {
 
     It 'should run npm pnpm and 1Password executables after the Windows installer' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
-        $installerJob = [regex]::Match(
-            $installerScript,
-            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
-        ).Groups['job'].Value
 
-        $installerJob | Should -Match "'agent-browser'"
-        $installerJob | Should -Match "Name = 'npm'"
-        $installerJob | Should -Match 'agent-browser@0\.38\.1 requires Node\.js >=24\.0\.0'
-        $installerJob | Should -Match '\[version\]''24\.0\.0'''
-        $installerJob | Should -Match "Name = 'herdr'"
-        $installerJob | Should -Match "'pnpm'"
-        $installerJob | Should -Match "'gemini'"
-        $installerJob | Should -Match "'op\.exe'"
-        $installerJob | Should -Match 'Persisted user PATH does not identify an installed AgileBits\.1Password\.CLI package directory'
-        $installerJob | Should -Match 'WinGet Links op\.exe shim is missing after OnePasswordCli setup'
-        $installerJob | Should -Match "GetEnvironmentVariable\('Path',\s*'User'\)"
-        $installerJob | Should -Match "GetEnvironmentVariable\('PNPM_HOME',\s*'User'\)"
-        $installerJob | Should -Match 'Get-Command -Name \$requiredCommand\.Name -CommandType Application'
-        $installerJob | Should -Match 'Windows installer did not expose required command'
-        $installerJob | Should -Match 'Windows installer command.*failed'
+
+        $installerScript | Should -Match "'agent-browser'"
+        $installerScript | Should -Match "Name = 'npm'"
+        $installerScript | Should -Match 'agent-browser@0\.38\.1 requires Node\.js >=24\.0\.0'
+        $installerScript | Should -Match '\[version\]''24\.0\.0'''
+        $installerScript | Should -Match "Name = 'herdr'"
+        $installerScript | Should -Match "'pnpm'"
+        $installerScript | Should -Match "'gemini'"
+        $installerScript | Should -Match "'op\.exe'"
+        $installerScript | Should -Match 'Persisted user PATH does not identify an installed AgileBits\.1Password\.CLI package directory'
+        $installerScript | Should -Match 'WinGet Links op\.exe shim is missing after OnePasswordCli setup'
+        $installerScript | Should -Match "GetEnvironmentVariable\('Path',\s*'User'\)"
+        $installerScript | Should -Match "GetEnvironmentVariable\('PNPM_HOME',\s*'User'\)"
+        $installerScript | Should -Match 'Get-Command -Name \$requiredCommand\.Name -CommandType Application'
+        $installerScript | Should -Match 'Windows installer did not expose required command'
+        $installerScript | Should -Match 'Windows installer command.*failed'
     }
 
     It 'should diagnose an unsupported Node version before probing agent-browser' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
-        $installerJob = [regex]::Match(
-            $installerScript,
-            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
-        ).Groups['job'].Value
 
-        $nodePreflightIndex = $installerJob.IndexOf('$nodeVersionOutput = @(node --version 2>&1)', [System.StringComparison]::Ordinal)
-        $requiredCommandIndex = $installerJob.IndexOf('$requiredCommands = @(', [System.StringComparison]::Ordinal)
+
+        $nodePreflightIndex = $installerScript.IndexOf('$nodeVersionOutput = @(node --version 2>&1)', [System.StringComparison]::Ordinal)
+        $requiredCommandIndex = $installerScript.IndexOf('$requiredCommands = @(', [System.StringComparison]::Ordinal)
 
         $nodePreflightIndex | Should -BeGreaterThan -1
         $requiredCommandIndex | Should -BeGreaterThan $nodePreflightIndex
