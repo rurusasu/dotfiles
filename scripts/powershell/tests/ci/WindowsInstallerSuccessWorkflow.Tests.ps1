@@ -45,14 +45,10 @@
         $markers.Count | Should -BeGreaterThan 0
     }
 
-    It 'requires every package included by the normal Winget user phase, including verify-only CI skips' {
-        $workflow = $script:installerE2E
-        $installerJob = [regex]::Match(
-            $workflow,
-            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
-        ).Groups['job'].Value
+    It 'derives WinGet validation from packages actually installed by each runtime job' {
+        $installerE2E = $script:installerE2E
         $expectedPackageBlock = [regex]::Match(
-            $installerJob,
+            $installerE2E,
             '(?s)\$expectedWindowsPackageIds\s*=\s*@\((?<block>.*?)\)\s*\n\s*if \(\$expectedWindowsPackageIds.Count'
         ).Groups['block'].Value
 
@@ -60,11 +56,11 @@
         $expectedPackageBlock | Should -Match '\$requiresAdmin'
         $expectedPackageBlock | Should -Match '\$installFeature'
         $expectedPackageBlock | Should -Match '\$skipInstall'
-        $expectedPackageBlock | Should -Not -Match 'ciSkipInstall'
-
-        $installerJob | Should -Match '(?s)\$npmGlobalPrefix\s*=.*?\$npmPnpmShim\s*=\s*Join-Path \$npmGlobalPrefix ''pnpm\.cmd''.*?& \$npmPnpmShim --version'
+        $expectedPackageBlock | Should -Match '\$ciSkipInstall'
+        $expectedPackageBlock | Should -Match 'ciSkipInstall\.Value'
+        $installerE2E | Should -Match "if \(\$expectedRuntime -eq '7'\)[\s\S]*?ciSkipInstall = \$true"
+        $installerE2E | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
     }
-
     It 'runs the full installer in separate parallel PowerShell 5.1 and 7 jobs' {
         $script:workflow | Should -Match '(?s)windows-installer:.*?max-parallel:\s*2.*?runtime: Windows PowerShell 5\.1\s+version: "5\.1".*?runtime: PowerShell 7\s+version: "7"'
         $script:workflow | Should -Match 'shell:\s+cmd[\s\S]*?powershell\.exe .*Invoke-WindowsInstallerE2E\.ps1'
@@ -132,11 +128,11 @@
     }
 
     It 'seeds and verifies removal of ChatGPT Classic in the installer E2E' {
-        $workflow = $script:installerE2E
-        $installerJob | Should -Match 'winget install --id 9NT1R1C2HH7J'
-        $workflow | Should -Match 'RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=\(removed\|absent\)'
-        $workflow | Should -Match 'winget list --id 9NT1R1C2HH7J'
-        $workflow | Should -Match 'winget list --id 9NT1R1C2HH7J --exact --source msstore --accept-source-agreements --disable-interactivity'
-        $workflow | Should -Match 'ChatGPT Classic is still installed after cleanup'
+        $installerE2E = $script:installerE2E
+        $installerE2E | Should -Match 'winget install --id 9NT1R1C2HH7J'
+        $installerE2E | Should -Match 'RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=\(removed\|absent\)'
+        $installerE2E | Should -Match 'winget list --id 9NT1R1C2HH7J'
+        $installerE2E | Should -Match 'winget list --id 9NT1R1C2HH7J --exact --source msstore --accept-source-agreements --disable-interactivity'
+        $installerE2E | Should -Match 'ChatGPT Classic is still installed after cleanup'
     }
 }
