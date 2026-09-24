@@ -1427,6 +1427,10 @@ let
   );
 
 in
+let
+  # Shared timeout for package adapters and their CLI verifiers.
+  packageInstallTimeoutSeconds = 900;
+in
 # Category-resolved package lists (auto-derived from catalog)
 lib.mapAttrs (_: resolve) grouped
 // {
@@ -1810,7 +1814,7 @@ lib.mapAttrs (_: resolve) grouped
   # remain supported for exceptional cases; only intentional WinGet entries
   # are emitted into the generated catalog so runtime environment overrides
   # remain effective for the generic case.
-  packageInstallTimeoutSeconds = 900;
+  inherit packageInstallTimeoutSeconds;
   wingetInstallTimeoutSeconds = { };
 
   wingetDirectInstallers = {

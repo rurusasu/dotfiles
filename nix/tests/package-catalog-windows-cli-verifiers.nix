@@ -41,6 +41,7 @@ in
     expr = {
       packageId = sets.wingetMap.go;
       verifier = sets.wingetVerify.go;
+      usesSharedTimeout = sets.wingetVerify.go.timeoutSeconds == sets.packageInstallTimeoutSeconds;
     };
     expected = {
       packageId = "GoLang.Go";
@@ -49,6 +50,7 @@ in
         args = [ "version" ];
         timeoutSeconds = 900;
       };
+      usesSharedTimeout = true;
     };
   };
 
