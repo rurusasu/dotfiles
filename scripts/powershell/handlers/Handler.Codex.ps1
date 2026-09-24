@@ -164,6 +164,13 @@ class CodexHandler : SetupHandlerBase {
         if (Test-Path -LiteralPath $programsCodexPath -PathType Container) {
             $codexDirectories += [System.IO.DirectoryInfo]$programsCodexPath
         }
+        # The OpenAI app keeps each CLI build in a hash-named directory under
+        # bin; prefer the most recently updated build and keep its adjacent host.
+        $openAICodexBinPath = Join-Path $localAppData "OpenAI\Codex\bin"
+        $codexDirectories += @(
+            Get-ChildItem -LiteralPath $openAICodexBinPath -Directory -ErrorAction SilentlyContinue |
+                Sort-Object -Property LastWriteTimeUtc -Descending
+        )
 
         $relativeExecutablePaths = @(
             "bin\codex.exe"

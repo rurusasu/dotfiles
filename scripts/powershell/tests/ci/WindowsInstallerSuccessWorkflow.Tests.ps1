@@ -74,6 +74,37 @@ Describe 'Windows installer success workflow contract' {
         $workflow | Should -Match '(?s)Assert-WindowsInstallerSuccess `\s+-Output \$out `\s+-ExitCode \$exitCode'
     }
 
+    It 'attempts both Codex launch probes after validation failures and reports all errors at the end' {
+        $workflow = $script:workflowLines -join "`n"
+        $installerJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
+        ).Groups['job'].Value
+
+        $installerJob | Should -Match '(?s)\$validationErrors\s*=.*?try\s*\{[\s\S]*?\$expectedVersion\s*=.*?Could not seed the ChatGPT Classic uninstall E2E[\s\S]*?Assert-WindowsInstallerSuccess'
+        $installerJob | Should -Match '(?s)catch\s*\{[\s\S]*?\$validationErrors\.Add'
+        $installerJob | Should -Match '(?s)finally\s*\{[\s\S]*?Codex CLI.*?try\s*\{[\s\S]*?--help[\s\S]*?catch\s*\{[\s\S]*?\$validationErrors\.Add'
+        $installerJob | Should -Match '(?s)finally\s*\{[\s\S]*?code-mode host.*?try\s*\{[\s\S]*?--help[\s\S]*?catch\s*\{[\s\S]*?\$validationErrors\.Add'
+        $installerJob | Should -Match '(?s)finally\s*\{[\s\S]*?Codex CLI[\s\S]*?code-mode host'
+        $installerJob | Should -Match '(?s)if\s*\(\$validationErrors\.Count\s*-gt\s*0\)[\s\S]*?throw[\s\S]*?Windows installer E2E validation failed'
+    }
+
+    It 'continues independent fatal validation groups after an installer assertion fails' {
+        $workflow = $script:workflowLines -join "`n"
+        $installerJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
+        ).Groups['job'].Value
+
+        $installerJob | Should -Match '(?s)function Invoke-WindowsE2EValidation[\s\S]*?try\s*\{\s*& \$Validation[\s\S]*?catch\s*\{[\s\S]*?\$validationErrors\.Add'
+        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'installer evidence'"
+        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'WinGet package inventory'"
+        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'pnpm bootstrap'"
+        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'ChatGPT Classic removal'"
+        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'Codex package structure'"
+        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'required command smoke tests'"
+    }
+
     It 'does not retain temporary formatter artifact steps' {
         $workflow = $script:workflowLines -join "`n"
         $workflow | Should -Not -Match 'Generate canonical formatter patch for local review'

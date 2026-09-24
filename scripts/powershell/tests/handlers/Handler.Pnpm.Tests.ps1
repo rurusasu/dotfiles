@@ -1545,7 +1545,7 @@ Describe 'PnpmHandler' {
     }
 
     Context 'Apply - Windows pnpm manifest contracts' {
-        It 'should load a required Node module through the installed global package root' {
+        It 'should verify Gemini by executing the installed CLI without probing an optional module' {
             $script:pnpmRoot = Join-Path $TestDrive 'pnpm-module-root'
             New-Item -Path (Join-Path $script:pnpmRoot '@google\gemini-cli') -ItemType Directory -Force | Out-Null
             $script:originalNodePath = $env:NODE_PATH
@@ -1556,12 +1556,8 @@ Describe 'PnpmHandler' {
                         @{
                             name          = '@google/gemini-cli'
                             verifyCommand = @{
-                                args       = @('--version')
-                                command    = 'gemini'
-                                type       = 'nodeModule'
-                                moduleName = '@lydell/node-pty'
-                                moduleFromPackage = '@google/gemini-cli'
-                                moduleSmokeTest = 'pty'
+                                args    = @('--version')
+                                command = 'gemini'
                             }
                         }
                     )
@@ -1592,17 +1588,11 @@ Describe 'PnpmHandler' {
 
                 $result.Success | Should -BeTrue
                 $result.Message | Should -Match '1 個インストール'
-                $script:pnpmVerifyCalls | Should -HaveCount 4
-                $script:pnpmVerifyCalls[0].Command | Should -Be 'node'
-                $script:pnpmVerifyCalls[0].Arguments | Should -Contain '-e'
-                ($script:pnpmVerifyCalls[0].Arguments -join ' ') | Should -Match 'createRequire'
-                ($script:pnpmVerifyCalls[0].Arguments -join ' ') | Should -Match 'require.resolve'
-                ($script:pnpmVerifyCalls[0].Arguments -join ' ') | Should -Match 'cmd.exe'
-                $script:pnpmVerifyCalls[0].NodePath | Should -Match ([regex]::Escape($script:pnpmRoot))
-                $script:pnpmVerifyCalls[1].Command | Should -Be 'gemini'
-                $script:pnpmVerifyCalls[2].Command | Should -Be 'node'
-                $script:pnpmVerifyCalls[2].NodePath | Should -Match ([regex]::Escape($script:pnpmRoot))
-                $script:pnpmVerifyCalls[3].Command | Should -Be 'gemini'
+                $script:pnpmVerifyCalls | Should -HaveCount 2
+                foreach ($call in $script:pnpmVerifyCalls) {
+                    $call.Command | Should -Be 'gemini'
+                    $call.Arguments | Should -Be @('--version')
+                }
                 $env:NODE_PATH | Should -Be 'prior-node-modules'
             }
             finally {
@@ -1711,10 +1701,12 @@ Describe 'PnpmHandler' {
             $geminiCall | Should -Contain "--allow-build=@github/keytar"
             $geminiCall | Should -Not -Contain "--allow-build=node-pty"
             $geminiEntry = $manifest.globalPackages | Where-Object name -EQ "@google/gemini-cli"
-            $geminiEntry.verifyCommand.type | Should -Be "nodeModule"
-            $geminiEntry.verifyCommand.moduleName | Should -Be "@lydell/node-pty"
-            $geminiEntry.verifyCommand.moduleFromPackage | Should -Be "@google/gemini-cli"
-            $geminiEntry.verifyCommand.moduleSmokeTest | Should -Be "pty"
+            $geminiEntry.verifyCommand.command | Should -Be "gemini"
+            $geminiEntry.verifyCommand.args | Should -Be @("--version")
+            $geminiEntry.verifyCommand.type | Should -BeNullOrEmpty
+            $geminiEntry.verifyCommand.moduleName | Should -BeNullOrEmpty
+            $geminiEntry.verifyCommand.moduleFromPackage | Should -BeNullOrEmpty
+            $geminiEntry.verifyCommand.moduleSmokeTest | Should -BeNullOrEmpty
         }
 
         It 'should detect every installed manifest package and still refresh each declared spec' {
@@ -1781,7 +1773,7 @@ Describe 'PnpmHandler' {
             } | Should -BeNullOrEmpty
         }
 
-        It 'should fail Gemini CLI verification when the installed node-pty runtime cannot load' {
+        It 'should fail Gemini verification when gemini --version exits nonzero' {
             New-Item -Path (Join-Path $script:pnpmRoot '@google\gemini-cli') -ItemType Directory -Force | Out-Null
             $script:originalNodePath = $env:NODE_PATH
             $env:NODE_PATH = 'prior-node-modules'
@@ -1791,12 +1783,8 @@ Describe 'PnpmHandler' {
                         @{
                             name          = '@google/gemini-cli'
                             verifyCommand = @{
-                                args       = @('--version')
-                                command    = 'gemini'
-                                type       = 'nodeModule'
-                                moduleName = '@lydell/node-pty'
-                                moduleFromPackage = '@google/gemini-cli'
-                                moduleSmokeTest = 'pty'
+                                args    = @('--version')
+                                command = 'gemini'
                             }
                         }
                     )
@@ -1819,7 +1807,7 @@ Describe 'PnpmHandler' {
                         NodePath  = $env:NODE_PATH
                     })
                 $global:LASTEXITCODE = 1
-                return 'Cannot find module @lydell/node-pty-win32-x64'
+                return 'Gemini CLI failed'
             }
 
             try {
@@ -1829,9 +1817,8 @@ Describe 'PnpmHandler' {
                 $result.Message | Should -Match '1 個検証失敗'
                 $script:pnpmVerifyCalls | Should -HaveCount 2
                 foreach ($call in $script:pnpmVerifyCalls) {
-                    $call.Command | Should -Be 'node'
-                    $call.Arguments | Should -Contain '-e'
-                    $call.NodePath | Should -Match ([regex]::Escape($script:pnpmRoot))
+                    $call.Command | Should -Be 'gemini'
+                    $call.Arguments | Should -Be @('--version')
                 }
             }
             finally {

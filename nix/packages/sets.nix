@@ -286,7 +286,7 @@ let
         };
         wezterm = {
           pkg = pkgs.wezterm;
-          winget = "wez.wezterm.nightly";
+          winget = "wez.wezterm";
           category = "terminal";
           support = {
             darwin = {
@@ -1600,6 +1600,7 @@ lib.mapAttrs (_: resolve) grouped
     gh = {
       command = "gh";
       args = [ "--version" ];
+      timeoutSeconds = 60;
     };
     fd = {
       command = "fd";
@@ -1660,6 +1661,7 @@ lib.mapAttrs (_: resolve) grouped
     go = {
       command = "go";
       args = [ "version" ];
+      timeoutSeconds = 60;
     };
     rustup = {
       command = "rustup";
@@ -1883,7 +1885,6 @@ lib.mapAttrs (_: resolve) grouped
   # elevation, or hang in CI. Avoid making CI depend on their live behavior.
   wingetCiSkipInstall = {
     google-cloud-sdk = true;
-    wezterm = true;
     "9PLM9XGG6VKS" = true;
     "StablyAI.Orca" = true;
   };

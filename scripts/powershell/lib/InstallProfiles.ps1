@@ -34,9 +34,11 @@ function Resolve-DotfilesInstallOption {
     $ollamaRequested = $WithOllama -or (ConvertTo-DotfilesFeatureBoolean $resolved['WithOllama'])
 
     # 依存関係は上位サービスから下位サービスへ閉包する。
-    # 個別フラグだけを指定した場合は、指定したサービス自身だけを有効にする。
+    # Hermes は Windows でも NixOS WSL の native runtime を選び、local-AI/Docker
+    # sidecar は別の任意サービスとして明示指定された場合だけ有効にする。
+    # 個別フラグだけを指定した場合は、指定したサービス自身とその依存だけを有効にする。
     $hermesEnabled = [bool]$hermesRequested
-    $hindsightEnabled = [bool]($hindsightRequested -or $hermesEnabled)
+    $hindsightEnabled = [bool]$hindsightRequested
     $mlflowEnabled = [bool]($mlflowRequested -or $hindsightEnabled)
     $dockerEnabled = [bool]($dockerRequested -or $mlflowEnabled)
     $ollamaEnabled = [bool]($ollamaRequested -or $mlflowEnabled)

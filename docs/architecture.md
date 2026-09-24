@@ -102,10 +102,12 @@ Python がない初期環境では従来の逐次表示を使用します。リ�
 
 On macOS and Linux/WSL, the pinned `hermes-agent` flake input and Home Manager
 module manage the Hermes CLI and gateway as a native user service: systemd on
-Linux/WSL and launchd on macOS. Native state remains at `~/.hermes`.
+Linux/WSL and launchd on macOS. On Windows, `WithHermes` is routed through the
+configured NixOS WSL distribution; the Windows installer no longer starts a
+Docker-managed Hermes Agent. Native state remains at `~/.hermes`.
 
-The existing Docker Compose stack has separate ownership. Its sidecars and
-container bootstrap continue to use the Docker named volume `hermes-data` (or
+The explicit legacy Docker Compose stack has separate ownership. Its sidecars
+and manually invoked container bootstrap continue to use the Docker named volume `hermes-data` (or
 the name selected by `HERMES_DATA_VOLUME`) mounted at `/opt/data`, not a Git
 checkout. Root and named-profile homes are applied from source repositories,
 while live secrets, memories, sessions, logs, and browser state remain local
@@ -143,11 +145,14 @@ traces.
 
 Hindsight remains an independent local-only memory provider. Its API and UI
 are published only on host loopback `127.0.0.1:8888` and `127.0.0.1:9999`, and
-its embedded PostgreSQL is not published. Hermes and Hindsight use the shared
-`local-ai-services` bridge network. Public Hermes startup prepares the memory network and
-service first, but the Compose lifecycles remain independent. If Hindsight is
-unavailable, memory recall/retain may be unavailable while the Hermes gateway
-continues running.
+its embedded PostgreSQL is not published. Native Nix Hermes does not require
+Docker, MLflow, Ollama, or Hindsight to install or run; Hindsight memory is an
+optional integration selected separately (`-WithHindsight` on Windows).
+The explicit legacy Docker Hermes stack and Hindsight use the shared
+`local-ai-services` bridge network. That Compose startup prepares the memory
+network and service first, but their Compose lifecycles remain independent. If
+Hindsight is unavailable, memory recall/retain may be unavailable while the
+Hermes gateway continues running.
 
 The onboarding fields, approved connection modes, MLflow operator tasks, and
 runtime-data policy are defined in [Local AI services onboarding and operations](./mlflow/local-ai-services.md).

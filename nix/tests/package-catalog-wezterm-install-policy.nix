@@ -9,14 +9,14 @@ let
   terminalWingetPackages = {
     autohotkey = "AutoHotkey.AutoHotkey";
     starship = "Starship.Starship";
-    wezterm = "wez.wezterm.nightly";
+    wezterm = "wez.wezterm";
   };
   terminalWingetMap = builtins.intersectAttrs terminalWingetPackages sets.wingetMap;
   terminalSkipKeys =
     builtins.attrNames terminalWingetPackages ++ builtins.attrValues terminalWingetMap;
 in
 {
-  testWeztermNightlyDoesNotRequireInstallerHashOverride = {
+  testWeztermStablePackageDoesNotRequireInstallerHashOverride = {
     expr = builtins.elem "--ignore-security-hash" (sets.wingetInstallArgs.wezterm or [ ]);
     expected = false;
   };

@@ -240,8 +240,11 @@ Describe 'OnePasswordCliHandler' {
 
             $shell = Join-Path $PSHOME $(if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh.exe' } else { 'powershell.exe' })
             $env:PATH = $script:mockUserPath
-            $resolvedPath = & $shell -NoLogo -NoProfile -Command '& "$env:SystemRoot\System32\where.exe" op.exe | Select-Object -First 1'
-            $LASTEXITCODE | Should -Be 0
+            $resolveCommand = '$ErrorActionPreference = ''Stop''; $command = Get-Command -Name ''op.exe'' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1; if (-not $command) { exit 1 }; [Console]::Out.WriteLine($command.Source); exit 0'
+            $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($resolveCommand))
+            $resolvedPath = & $shell -NoLogo -NoProfile -EncodedCommand $encodedCommand
+            $childExitCode = $LASTEXITCODE
+            $childExitCode | Should -Be 0 -Because "a new shell should resolve op.exe from the package directory; child output: $($resolvedPath -join ' ')"
             [System.IO.Path]::GetFullPath(($resolvedPath | Select-Object -Last 1).Trim()) |
                 Should -Be ([System.IO.Path]::GetFullPath($script:opExe))
         }
@@ -272,14 +275,18 @@ Describe 'OnePasswordCliHandler' {
             $script:previousOpPkgDir = $script:opPkgDir
             $script:previousOpExe = $script:opExe
             $script:previousExpectedLinks = $script:expectedLinks
+            $script:previousExpectedWindowsApps = $script:expectedWindowsApps
             $script:previousLocalAppData = $env:LOCALAPPDATA
 
             $script:opPkgDir = Join-Path $TestDrive 'Packages\AgileBits.1Password.CLI_test'
             $script:opExe = Join-Path $script:opPkgDir 'op.exe'
             $script:expectedLinks = Join-Path $TestDrive 'Microsoft\WinGet\Links'
+            $script:expectedWindowsApps = Join-Path $TestDrive 'Microsoft\WindowsApps'
             $env:LOCALAPPDATA = $TestDrive
-            New-Item -ItemType Directory -Path $script:opPkgDir, $script:expectedLinks -Force | Out-Null
+            New-Item -ItemType Directory -Path $script:opPkgDir, $script:expectedLinks, $script:expectedWindowsApps -Force | Out-Null
             Set-Content -LiteralPath $script:opExe -Value 'version one' -NoNewline
+            $script:windowsAppsMarker = Join-Path $script:expectedWindowsApps 'keep.txt'
+            Set-Content -LiteralPath $script:windowsAppsMarker -Value 'WindowsApps is OS-managed' -NoNewline
 
             Set-OnePasswordCliPackageInstalled
             Mock New-Item { throw 'Administrator privilege required for this operation' } -ParameterFilter {
@@ -296,22 +303,48 @@ Describe 'OnePasswordCliHandler' {
             $script:opPkgDir = $script:previousOpPkgDir
             $script:opExe = $script:previousOpExe
             $script:expectedLinks = $script:previousExpectedLinks
+            $script:expectedWindowsApps = $script:previousExpectedWindowsApps
             $env:LOCALAPPDATA = $script:previousLocalAppData
         }
 
-        It 'should create a non-admin copy and keep package PATH effective after an upgrade' {
+        It 'should avoid WindowsApps and resolve the upgraded package executable after symlink creation is denied' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
             [System.IO.File]::ReadAllText((Join-Path $script:expectedLinks 'op.exe')) | Should -Be 'version one'
+            Test-Path -LiteralPath (Join-Path $script:expectedLinks 'op.exe.dotfiles-managed') | Should -Be $true
+            $windowsAppsEntries = @(Get-ChildItem -LiteralPath $script:expectedWindowsApps -Force | Select-Object -ExpandProperty Name)
+            $windowsAppsEntries | Should -HaveCount 1
+            $windowsAppsEntries | Should -Contain 'keep.txt'
+            [System.IO.File]::ReadAllText($script:windowsAppsMarker) | Should -Be 'WindowsApps is OS-managed'
             $handler.CanApply($ctx) | Should -Be $false
 
             Set-Content -LiteralPath $script:opExe -Value 'version two' -NoNewline
-            $upgradeResult = $handler.Apply($ctx)
+            $env:PATH = "$script:expectedLinks;C:\Windows"
+            $handler.CanApply($ctx) | Should -Be $true
+            $upgradeResult = if ($handler.CanApply($ctx)) { $handler.Apply($ctx) }
 
             $upgradeResult.Success | Should -Be $true
-            [System.IO.File]::ReadAllText((Join-Path $script:expectedLinks 'op.exe')) | Should -Be 'version one'
+            [System.IO.File]::ReadAllText((Join-Path $script:expectedLinks 'op.exe')) | Should -Be 'version two'
+            $windowsAppsEntries = @(Get-ChildItem -LiteralPath $script:expectedWindowsApps -Force | Select-Object -ExpandProperty Name)
+            $windowsAppsEntries | Should -HaveCount 1
+            $windowsAppsEntries | Should -Contain 'keep.txt'
+            [System.IO.File]::ReadAllText($script:windowsAppsMarker) | Should -Be 'WindowsApps is OS-managed'
             $handler.CanApply($ctx) | Should -Be $false
+
+            $shell = Join-Path $PSHOME $(if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh.exe' } else { 'powershell.exe' })
+            $env:PATH = $script:mockUserPath
+            $resolvedPath = & $shell -NoLogo -NoProfile -Command '& "$env:SystemRoot\System32\where.exe" op.exe | Select-Object -First 1'
+            $LASTEXITCODE | Should -Be 0
+            $resolvedPath = [System.IO.Path]::GetFullPath(($resolvedPath | Select-Object -Last 1).Trim())
+            $resolvedPath | Should -Be ([System.IO.Path]::GetFullPath($script:opExe))
+            [System.IO.File]::ReadAllText($resolvedPath) | Should -Be 'version two'
+
+            Set-Content -LiteralPath (Join-Path $script:expectedLinks 'op.exe') -Value 'unrelated replacement' -NoNewline
+            $env:PATH = "$script:expectedLinks;C:\Windows"
+            $handler.CanApply($ctx) | Should -Be $false
+            $handler.Apply($ctx).Success | Should -Be $true
+            [System.IO.File]::ReadAllText((Join-Path $script:expectedLinks 'op.exe')) | Should -Be 'unrelated replacement'
         }
     }
 

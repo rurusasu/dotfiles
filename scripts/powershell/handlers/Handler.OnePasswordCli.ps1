@@ -34,9 +34,7 @@ class OnePasswordCliHandler : SetupHandlerBase {
         }
 
         $packageDir = Split-Path -Parent $opExe
-        if (-not $this.IsPathFirstInUserPath($packageDir)) {
-            return $true
-        }
+        $needsPathUpdate = -not $this.IsPathFirstInUserPath($packageDir)
 
         $compatibilityShims = @(
             @{
@@ -45,14 +43,20 @@ class OnePasswordCliHandler : SetupHandlerBase {
             }
         )
 
+        $needsShimUpdate = $false
         foreach ($shim in $compatibilityShims) {
             if (
                 $this.NeedsCompatibilityShim($shim.Directory, $shim.LinkPath) -and
-                $this.IsManagedCompatibilityShim($shim.LinkPath) -and
+                $this.IsManagedCompatibilityShim($shim.LinkPath, $opExe) -and
                 -not $this.IsCompatibilityShimCurrent($shim.LinkPath, $opExe)
             ) {
-                return $true
+                $needsShimUpdate = $true
+                break
             }
+        }
+
+        if ($needsPathUpdate -or $needsShimUpdate) {
+            return $true
         }
 
         $this.Log("1Password CLI PATH と互換 shim は既に設定されています", "Gray")
@@ -68,8 +72,8 @@ class OnePasswordCliHandler : SetupHandlerBase {
             }
 
             $packageDir = Split-Path -Parent $opExe
-            $this.EnsureUserPathEntry($packageDir, "1Password CLI package directory")
             $this.EnsureCompatibilityShim($this.GetLinksPath(), "op.exe", $opExe, "WinGet Links")
+            $this.EnsureUserPathEntry($packageDir, "1Password CLI package directory")
 
             return $this.CreateSuccessResult("1Password CLI PATH を設定しました")
         }
@@ -90,19 +94,27 @@ class OnePasswordCliHandler : SetupHandlerBase {
         }
 
         if ($this.IsCompatibilityShimCurrent($linkPath, $targetExe)) {
+            if (-not $this.IsPortableLinkCurrent($linkPath, $targetExe)) {
+                $this.WriteCompatibilityCopyMarker($linkPath)
+            }
             $this.Log("$label の op.exe shim は最新です", "Gray")
             return
         }
 
         if (Test-Path -LiteralPath $linkPath) {
-            if (-not $this.IsManagedCompatibilityShim($linkPath)) {
+            if (-not $this.IsManagedCompatibilityShim($linkPath, $targetExe)) {
                 $this.LogWarning("既存の $label op.exe は所有元を確認できないため変更しません: $linkPath")
                 return
             }
         }
 
+        $hadManagedCopyMarker = $this.IsManagedCompatibilityCopy($linkPath)
         try {
             $this.CreatePortableLink($linkPath, $targetExe)
+            $markerPath = $this.GetCompatibilityCopyMarkerPath($linkPath)
+            if ($hadManagedCopyMarker) {
+                Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue
+            }
             $this.Log("$label の op.exe shim を現行 exe への symlink に更新しました", "Green")
         }
         catch {
@@ -119,7 +131,7 @@ class OnePasswordCliHandler : SetupHandlerBase {
         )
     }
 
-    hidden [bool] IsManagedCompatibilityShim([string]$linkPath) {
+    hidden [bool] IsManagedCompatibilityShim([string]$linkPath, [string]$currentExe) {
         if (-not (Test-Path -LiteralPath $linkPath)) {
             return $false
         }
@@ -127,7 +139,10 @@ class OnePasswordCliHandler : SetupHandlerBase {
         try {
             $link = Get-Item -LiteralPath $linkPath -Force -ErrorAction Stop
             if ($link.LinkType -ne "SymbolicLink") {
-                return $false
+                return (
+                    $this.IsManagedCompatibilityCopy($linkPath) -or
+                    $this.IsPortableCopyCurrent($linkPath, $currentExe)
+                )
             }
 
             $target = [string]@($link.Target)[0]
@@ -135,6 +150,79 @@ class OnePasswordCliHandler : SetupHandlerBase {
         }
         catch {
             return $false
+        }
+    }
+
+    hidden [string] GetCompatibilityCopyMarkerPath([string]$linkPath) {
+        return "$linkPath.dotfiles-managed"
+    }
+
+    hidden [bool] IsManagedCompatibilityCopy([string]$linkPath) {
+        $markerPath = $this.GetCompatibilityCopyMarkerPath($linkPath)
+        if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf)) {
+            return $false
+        }
+
+        try {
+            $link = Get-Item -LiteralPath $linkPath -Force -ErrorAction Stop
+            if ($link.LinkType -eq "SymbolicLink") {
+                return $false
+            }
+
+            $marker = [System.IO.File]::ReadAllText($markerPath) | ConvertFrom-Json -ErrorAction Stop
+            if ($marker.owner -ne "dotfiles.OnePasswordCli" -or $marker.sha256 -notmatch '^[A-Fa-f0-9]{64}$') {
+                return $false
+            }
+
+            $linkHash = (Get-FileHash -LiteralPath $linkPath -Algorithm SHA256 -ErrorAction Stop).Hash
+            return $linkHash -eq $marker.sha256
+        }
+        catch {
+            return $false
+        }
+    }
+
+    hidden [void] WriteCompatibilityCopyMarker([string]$linkPath) {
+        $markerPath = $this.GetCompatibilityCopyMarkerPath($linkPath)
+        $parentDir = Split-Path -Parent $linkPath
+        $suffix = [System.Guid]::NewGuid().ToString("N")
+        $markerName = Split-Path -Leaf $markerPath
+        $tempMarkerPath = Join-Path $parentDir ".$markerName.$suffix.tmp"
+        $backupMarkerPath = Join-Path $parentDir ".$markerName.$suffix.backup"
+        $oldMarkerMoved = $false
+
+        try {
+            $linkHash = (Get-FileHash -LiteralPath $linkPath -Algorithm SHA256 -ErrorAction Stop).Hash
+            $markerJson = @{ owner = "dotfiles.OnePasswordCli"; sha256 = $linkHash } | ConvertTo-Json -Compress
+            [System.IO.File]::WriteAllText($tempMarkerPath, $markerJson, [System.Text.Encoding]::ASCII)
+
+            if (Test-Path -LiteralPath $markerPath) {
+                Move-Item -LiteralPath $markerPath -Destination $backupMarkerPath -Force -ErrorAction Stop
+                $oldMarkerMoved = $true
+            }
+
+            Move-Item -LiteralPath $tempMarkerPath -Destination $markerPath -Force -ErrorAction Stop
+            if ($oldMarkerMoved) {
+                Remove-Item -LiteralPath $backupMarkerPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+        catch {
+            $markerError = $_.Exception
+            if ($oldMarkerMoved -and (Test-Path -LiteralPath $backupMarkerPath)) {
+                try {
+                    if (Test-Path -LiteralPath $markerPath) {
+                        Remove-Item -LiteralPath $markerPath -Force -ErrorAction Stop
+                    }
+                    Move-Item -LiteralPath $backupMarkerPath -Destination $markerPath -Force -ErrorAction Stop
+                }
+                catch {
+                    throw "shim copy ownership marker failed and the previous marker could not be restored. Backup: $backupMarkerPath. Marker error: $($markerError.Message). Restore error: $($_.Exception.Message)"
+                }
+            }
+            if (Test-Path -LiteralPath $tempMarkerPath) {
+                Remove-Item -LiteralPath $tempMarkerPath -Force -ErrorAction SilentlyContinue
+            }
+            throw $markerError
         }
     }
 
@@ -158,6 +246,7 @@ class OnePasswordCliHandler : SetupHandlerBase {
             }
 
             Move-Item -LiteralPath $tempCopyPath -Destination $linkPath -Force -ErrorAction Stop
+            $this.WriteCompatibilityCopyMarker($linkPath)
             if ($oldMoved) {
                 Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
             }
@@ -174,6 +263,9 @@ class OnePasswordCliHandler : SetupHandlerBase {
                 catch {
                     throw "shim コピーに失敗し、以前の shim を復元できませんでした。退避先: $backupPath. Copy error: $($copyError.Message). Restore error: $($_.Exception.Message)"
                 }
+            }
+            elseif (-not $oldMoved -and (Test-Path -LiteralPath $linkPath)) {
+                Remove-Item -LiteralPath $linkPath -Force -ErrorAction SilentlyContinue
             }
             if (Test-Path -LiteralPath $tempCopyPath) {
                 Remove-Item -LiteralPath $tempCopyPath -Force -ErrorAction SilentlyContinue

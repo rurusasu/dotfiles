@@ -333,6 +333,21 @@ function New-HermesBootstrapProcessStartInfo {
     return $startInfo
 }
 
+function New-HermesBootstrapProcessOutputReader {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.IO.Stream]$Stream
+    )
+
+    return [System.IO.StreamReader]::new(
+        $Stream,
+        [System.Text.UTF8Encoding]::new($false),
+        $false,
+        4096
+    )
+}
+
 function Get-HermesBootstrapSecretPlan {
     [CmdletBinding()]
     param(
@@ -515,6 +530,8 @@ function Invoke-HermesBootstrap {
     $drainCancellation = [System.Threading.CancellationTokenSource]::new()
     $stdoutDrain = $null
     $stderrDrain = $null
+    $stdoutReader = $null
+    $stderrReader = $null
     $invokerOutput = $null
     $item = $null
     $record = $null
@@ -550,8 +567,20 @@ function Invoke-HermesBootstrap {
                 $writer.AutoFlush = $true
                 $writer
             }
-            $stdoutDrain = $drain.DrainAsync($process.StandardOutput, $drainCancellation.Token)
-            $stderrDrain = $drain.DrainAsync($process.StandardError, $drainCancellation.Token)
+            $stdoutReader = if ($null -ne $startInfo.PSObject.Properties["StandardOutputEncoding"]) {
+                $process.StandardOutput
+            }
+            else {
+                New-HermesBootstrapProcessOutputReader -Stream $process.StandardOutput.BaseStream
+            }
+            $stderrReader = if ($null -ne $startInfo.PSObject.Properties["StandardErrorEncoding"]) {
+                $process.StandardError
+            }
+            else {
+                New-HermesBootstrapProcessOutputReader -Stream $process.StandardError.BaseStream
+            }
+            $stdoutDrain = $drain.DrainAsync($stdoutReader, $drainCancellation.Token)
+            $stderrDrain = $drain.DrainAsync($stderrReader, $drainCancellation.Token)
             $processInput.NewLine = "`n"
             try {
                 $processInput.WriteLine('{"type":"header","schema_version":1}')
@@ -730,6 +759,12 @@ function Invoke-HermesBootstrap {
             [void](Invoke-HermesBootstrapCleanup -Action { $process.StandardInput.Dispose() })
             [void](Invoke-HermesBootstrapCleanup -Action { $process.StandardOutput.Dispose() })
             [void](Invoke-HermesBootstrapCleanup -Action { $process.StandardError.Dispose() })
+        }
+        if ($stdoutReader) {
+            [void](Invoke-HermesBootstrapCleanup -Action { $stdoutReader.Dispose() })
+        }
+        if ($stderrReader) {
+            [void](Invoke-HermesBootstrapCleanup -Action { $stderrReader.Dispose() })
         }
         if ($stdoutDrain -and $stdoutDrain.IsCompleted) {
             [void](Invoke-HermesBootstrapCleanup -Action { $stdoutDrain.Dispose() })

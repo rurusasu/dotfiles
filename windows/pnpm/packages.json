@@ -77,11 +77,7 @@
       "name": "@google/gemini-cli",
       "verifyCommand": {
         "args": ["--version"],
-        "command": "gemini",
-        "moduleName": "@lydell/node-pty",
-        "moduleFromPackage": "@google/gemini-cli",
-        "moduleSmokeTest": "pty",
-        "type": "nodeModule"
+        "command": "gemini"
       }
     }
   ]

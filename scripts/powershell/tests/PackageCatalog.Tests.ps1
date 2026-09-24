@@ -27,31 +27,25 @@ Describe 'Package catalog consistency' {
             $versionedPackages.Count | Should -Be 0
         }
 
-        It 'should generate WezTerm nightly without ignore-security-hash install args' {
+        It 'should generate the stable WezTerm package without pinning a version or bypassing hash validation' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'wez.wezterm.nightly' }) | Select-Object -First 1
+            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'wez.wezterm' }) | Select-Object -First 1
 
             $package | Should -Not -BeNullOrEmpty
             @($package.installArgs) | Should -Not -Contain '--ignore-security-hash'
+            $package.PSObject.Properties.Name | Should -Not -Contain 'Version'
         }
 
-        It 'should generate terminal packages without normal-run skipInstall metadata' {
+        It 'should generate terminal packages without normal-run or CI skip metadata' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $wezterm = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'wez.wezterm.nightly' }) | Select-Object -First 1
+            $wezterm = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'wez.wezterm' }) | Select-Object -First 1
 
             $wezterm | Should -Not -BeNullOrEmpty
             $wezterm.PSObject.Properties.Name | Should -Not -Contain 'skipInstall'
             $wezterm.PSObject.Properties.Name | Should -Not -Contain 'skipReason'
-        }
-
-        It 'should keep volatile terminal installers out of CI-only winget verification' {
-            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $wezterm = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'wez.wezterm.nightly' }) | Select-Object -First 1
-
-            $wezterm.ciSkipInstall | Should -BeTrue
+            $wezterm.PSObject.Properties.Name | Should -Not -Contain 'ciSkipInstall'
         }
 
         It 'should keep Warp out of the generated Windows manifest' {
@@ -101,6 +95,20 @@ Describe 'Package catalog consistency' {
             @($package.verifyCommand.args) | Should -Contain '--version'
             $package.verifyCommand.timeoutSeconds | Should -Be 30
             $package.verifyCommand.recoveryStrategy | Should -Be 'wingetRepairThenReinstall'
+        }
+    }
+
+    Context 'slow CLI verifier timeouts' {
+        It 'should give only GitHub CLI and Go longer execution verification windows' {
+            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
+            $gh = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'GitHub.cli') | Select-Object -First 1
+            $go = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'GoLang.Go') | Select-Object -First 1
+
+            $gh.verifyCommand.timeoutSeconds | Should -Be 60
+            $go.verifyCommand.timeoutSeconds | Should -Be 60
+            (@($wingetSource.Packages | Where-Object { $_.verifyCommand.timeoutSeconds } | ForEach-Object { "$($_.PackageIdentifier):$($_.verifyCommand.timeoutSeconds)" } | Sort-Object) -join ',') |
+                Should -Be 'GitHub.cli:60,GoLang.Go:60,Microsoft.WSL:30' -Because 'verification timeouts must remain package-scoped'
         }
     }
 
@@ -482,7 +490,7 @@ Describe 'Package catalog consistency' {
             }
 
             (@($winGetOnlyPackages | Where-Object ciSkipInstall | ForEach-Object PackageIdentifier | Sort-Object) -join ',') |
-                Should -Be 'Google.CloudSDK,StablyAI.Orca,wez.wezterm.nightly' -Because 'CI runtime exclusions must remain explicit and reviewed'
+                Should -Be 'Google.CloudSDK,StablyAI.Orca' -Because 'CI runtime exclusions must remain explicit and reviewed'
             @($storePackages | Where-Object ciSkipInstall | ForEach-Object PackageIdentifier) | Should -Be @('9PLM9XGG6VKS')
             (@($winGetOnlyPackages | Where-Object requiresAdmin | ForEach-Object PackageIdentifier | Sort-Object) -join ',') |
                 Should -Be 'AutoHotkey.AutoHotkey,Microsoft.VisualStudio.2022.BuildTools' -Because 'admin phase exclusions must remain explicit and reviewed'

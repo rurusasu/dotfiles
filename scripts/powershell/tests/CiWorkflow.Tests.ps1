@@ -325,8 +325,8 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'SkipFlakeUpdate"\] = \$true'
         $script | Should -Match 'Welcome to your new NixOS-WSL system'
         $script | Should -Match 'nixos-rebuild list-generations'
-        $script | Should -Match 'DOTFILES_USER=nixos DOTFILES_HOME=/home/nixos DOTFILES_WITH_HERMES=1 bash scripts/sh/nixos-rebuild-with-user\.sh switch --flake \. --impure'
-        $script | Should -Match '"zsh", "-lc"[\s\S]*?test "\$DOTFILES_WITH_HERMES" = 1 && bash scripts/sh/nixos-rebuild-with-user\.sh switch --flake \. --impure'
+        $script | Should -Match 'DOTFILES_USER=nixos DOTFILES_HOME=/home/nixos DOTFILES_WITH_HERMES=1 DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user\.sh switch --flake \. --impure'
+        $script | Should -Match '"zsh", "-lc"[\s\S]*?test "\$DOTFILES_WITH_HERMES" = 1 && DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user\.sh switch --flake \. --impure'
         $script | Should -Match 'command -v hermes && hermes --version'
         $script | Should -Match 'OPENROUTER_API_KEY=ci'
         $script | Should -Match 'API_SERVER_ENABLED=true'
@@ -338,15 +338,16 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'expect_unauthorized ''missing bearer token'''
         $script | Should -Match 'expect_unauthorized ''invalid bearer token'''
         $script | Should -Match 'set -euo pipefail'
-        $script | Should -Match 'status_code != 401'
-        $script.IndexOf('expect_unauthorized ''missing bearer token''') |
-            Should -BeLessThan $script.IndexOf('for attempt in {1..__READINESS_ATTEMPTS__}')
-        $script.IndexOf('expect_unauthorized ''invalid bearer token''') |
-            Should -BeLessThan $script.IndexOf('for attempt in {1..__READINESS_ATTEMPTS__}')
+        $script | Should -Match 'status_code != 000'
+        $script | Should -Match 'for attempt in \{1\.\.__READINESS_ATTEMPTS__\}'
+        $script | Should -Match 'Hermes \$description probe expected HTTP 401 but received \$status_code'
+        $script | Should -Match '\$script:InvokeWslOriginal = \(Get-Command Invoke-Wsl\)\.ScriptBlock'
+        $script | Should -Match '\$TimeoutSeconds = 900'
         $script | Should -Match 'jq -e'
         $script | Should -Match '\.status == "ok"'
         $script | Should -Match '\.readiness\.status == "ok"'
         $script | Should -Match '\.readiness\.checks \| type == "object" and length > 0 and all\(\.\[\]; \.status == "ok"\)'
+        $script | Should -Match '\["state_db", "session_store", "config", "model", "disk", "gateway", "background_queues"\]'
         $script | Should -Match '\$readinessAttempts\s*=\s*30'
         $script | Should -Match '\$readinessCurlTimeoutSeconds\s*=\s*2'
         $script | Should -Match '\$readinessRetryDelaySeconds\s*=\s*1'
@@ -371,6 +372,186 @@ Describe 'CI workflow configuration' {
         $script | Should -Match ([regex]::Escape('rg "\"\^\[q\" __zoxide_zi_widget"'))
         $script | Should -Not -Match ([regex]::Escape('rg "\"\^\[z\" __zoxide_zi_widget"'))
         $script | Should -Match 'Remove-TemporaryDistro'
+    }
+
+    It 'should wait for the Hermes listener before checking both unauthorized responses' {
+        $scriptPath = Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-NixosWslE2E.ps1'
+        $script = Get-Content -LiteralPath $scriptPath -Raw
+        $shellMatch = [regex]::Match($script, '(?ms)^[ \t]*\$readinessCommand = @''\r?\n(?<body>.*?)^[ \t]*''@')
+        $shellMatch.Success | Should -BeTrue
+
+        $shell = $shellMatch.Groups['body'].Value
+        $shell = $shell -replace "(?m)^nix shell .*?<<'DOTFILES_HERMES_READINESS'\r?\n", ''
+        $shell = $shell -replace "(?m)^DOTFILES_HERMES_READINESS\r?\n$", ''
+        $shell = $shell.Replace('__READINESS_ATTEMPTS__', '3')
+        $shell = $shell.Replace('__READINESS_CURL_TIMEOUT_SECONDS__', '1')
+        $shell = $shell.Replace('__READINESS_RETRY_DELAY_SECONDS__', '0')
+
+        $bash = 'C:\Program Files\Git\bin\bash.exe'
+        if (-not (Test-Path -LiteralPath $bash)) {
+            $bashCommand = Get-Command bash.exe -ErrorAction Stop
+            $bash = $bashCommand.Source
+        }
+        $bash | Should -Exist
+
+        $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("hermes-readiness-" + [guid]::NewGuid().ToString('N'))
+        $previousProbeState = $env:HERMES_PROBE_STATE
+        $previousProbeScenario = $env:HERMES_PROBE_SCENARIO
+        $previousMissingCheck = $env:HERMES_MISSING_CHECK
+        $null = New-Item -ItemType Directory -Path $temp
+        try {
+            # The readiness script itself is the subject; curl/jq are external
+            # process boundaries, so supply deterministic HTTP/JSON responses.
+            $curlStub = @'
+jq() {
+  local query="$2"
+  local response
+  response=$(cat)
+  node -e 'const [query, raw] = process.argv.slice(1); const data = JSON.parse(raw); const required = ["state_db", "session_store", "config", "model", "disk", "gateway", "background_queues"]; const completeQuery = required.every((name) => query.includes(name)); const checks = data.readiness && data.readiness.checks; const healthy = completeQuery && data.status === "ok" && data.readiness.status === "ok" && checks && typeof checks === "object" && Object.keys(checks).length > 0 && Object.values(checks).every((check) => check && check.status === "ok") && required.every((name) => checks[name] && checks[name].status === "ok"); process.exitCode = healthy ? 0 : 1' "$query" "$response"
+}
+curl() {
+local scenario=${HERMES_PROBE_SCENARIO:?}
+local state_dir=${HERMES_PROBE_STATE:?}
+local auth=missing
+local arg
+for arg in "$@"; do
+  case "$arg" in
+    'Authorization: Bearer invalid-dotfiles-ci-health-probe') auth=invalid ;;
+    'Authorization: Bearer dotfiles-ci-health-probe') auth=valid ;;
+  esac
+done
+if [[ $auth != valid ]]; then
+  if [[ $scenario == wrong-auth-response ]]; then
+    printf '200'
+    return 0
+  fi
+  count_file="$state_dir/$auth"
+  count=0
+  [[ -f $count_file ]] && read -r count < "$count_file"
+  count=$((count + 1))
+  printf '%s\n' "$count" > "$count_file"
+  if [[ $scenario == startup && $count == 1 ]]; then
+    return 7
+  fi
+  printf '401'
+  return 0
+fi
+case "$scenario" in
+  healthy|startup)
+    printf '%s' '{"status":"ok","readiness":{"status":"ok","checks":{"state_db":{"status":"ok"},"session_store":{"status":"ok"},"config":{"status":"ok"},"model":{"status":"ok"},"disk":{"status":"ok"},"gateway":{"status":"ok"},"background_queues":{"status":"ok"}}}}'
+    ;;
+  unhealthy)
+    printf '%s' '{"status":"ok","readiness":{"status":"error","checks":{"state_db":{"status":"ok"},"session_store":{"status":"ok"},"config":{"status":"ok"},"model":{"status":"error"},"disk":{"status":"ok"},"gateway":{"status":"ok"},"background_queues":{"status":"ok"}}}}'
+    ;;
+    missing-required-check)
+      printf '%s' '{"status":"ok","readiness":{"status":"ok","checks":{"state_db":{"status":"ok"},"session_store":{"status":"ok"},"config":{"status":"ok"},"model":{"status":"ok"},"disk":{"status":"ok"},"gateway":{"status":"ok"},"background_queues":{"status":"ok"}}}}' |
+        node -e 'let raw = ""; process.stdin.on("data", (chunk) => raw += chunk); process.stdin.on("end", () => { const data = JSON.parse(raw); delete data.readiness.checks[process.argv[1]]; process.stdout.write(JSON.stringify(data)); });' "$HERMES_MISSING_CHECK"
+    ;;
+esac
+}
+'@
+            $shellPath = Join-Path $temp 'readiness.sh'
+            $shell = $curlStub + "`n" + $shell
+            [System.IO.File]::WriteAllText($shellPath, $shell.Replace("`r`n", "`n"), [System.Text.UTF8Encoding]::new($false))
+            $env:HERMES_PROBE_STATE = $temp
+
+            foreach ($scenario in @('startup', 'healthy')) {
+                Remove-Item -LiteralPath (Join-Path $temp 'missing'), (Join-Path $temp 'invalid') -Force -ErrorAction SilentlyContinue
+                $env:HERMES_PROBE_SCENARIO = $scenario
+                $output = & $bash $shellPath 2>&1
+                $exitCode = $LASTEXITCODE
+                $exitCode | Should -Be 0 -Because "$scenario must eventually receive strict 401 responses and a healthy authenticated readiness response; output: $($output -join ' | ')"
+                $expectedProbeCount = if ($scenario -eq 'startup') { '2' } else { '1' }
+                (Get-Content -LiteralPath (Join-Path $temp 'missing') -Raw).Trim() | Should -Be $expectedProbeCount
+                (Get-Content -LiteralPath (Join-Path $temp 'invalid') -Raw).Trim() | Should -Be $expectedProbeCount
+            }
+
+            $env:HERMES_PROBE_SCENARIO = 'unhealthy'
+            $output = & $bash $shellPath 2>&1
+            $exitCode = $LASTEXITCODE
+            $exitCode | Should -Not -Be 0 -Because 'an unhealthy Hermes check must fail the readiness contract'
+            ($output -join "`n") | Should -Match 'Hermes readiness did not report all required checks healthy'
+
+            $env:HERMES_PROBE_SCENARIO = 'wrong-auth-response'
+            $output = & $bash $shellPath 2>&1
+            $exitCode = $LASTEXITCODE
+            $exitCode | Should -Not -Be 0 -Because 'an HTTP response other than 401 must not be treated as listener startup'
+            ($output -join "`n") | Should -Match 'missing bearer token probe expected HTTP 401 but received 200'
+
+            foreach ($requiredCheck in @('state_db', 'session_store', 'config', 'model', 'disk', 'gateway', 'background_queues')) {
+                Remove-Item -LiteralPath (Join-Path $temp 'missing'), (Join-Path $temp 'invalid') -Force -ErrorAction SilentlyContinue
+                $env:HERMES_PROBE_SCENARIO = 'missing-required-check'
+                $env:HERMES_MISSING_CHECK = $requiredCheck
+                $output = & $bash $shellPath 2>&1
+                $exitCode = $LASTEXITCODE
+                $exitCode | Should -Not -Be 0 -Because "missing required readiness check $requiredCheck must fail the contract"
+                ($output -join "`n") | Should -Match 'Hermes readiness did not report all required checks healthy'
+            }
+        }
+        finally {
+            if ($null -eq $previousProbeState) { Remove-Item Env:HERMES_PROBE_STATE -ErrorAction SilentlyContinue } else { $env:HERMES_PROBE_STATE = $previousProbeState }
+            if ($null -eq $previousProbeScenario) { Remove-Item Env:HERMES_PROBE_SCENARIO -ErrorAction SilentlyContinue } else { $env:HERMES_PROBE_SCENARIO = $previousProbeScenario }
+            if ($null -eq $previousMissingCheck) { Remove-Item Env:HERMES_MISSING_CHECK -ErrorAction SilentlyContinue } else { $env:HERMES_MISSING_CHECK = $previousMissingCheck }
+            Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'should bound legacy WSL setup calls and both cleanup commands' {
+        $scriptPath = Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-NixosWslE2E.ps1'
+        $tokens = $null
+        $parseErrors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
+        $parseErrors | Should -BeNullOrEmpty
+
+        $invokeWslAst = $ast.Find({
+                param($node)
+                $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-Wsl'
+            }, $true)
+        $cleanupAst = $ast.Find({
+                param($node)
+                $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Remove-TemporaryDistro'
+            }, $true)
+        $invokeWslAst | Should -Not -BeNullOrEmpty
+        $cleanupAst | Should -Not -BeNullOrEmpty
+
+        $script:observedTimeout = $null
+        $script:observedArguments = @()
+        $script:InvokeWslOriginal = {
+            param([string[]]$Arguments, [int]$TimeoutSeconds)
+            $script:observedTimeout = $TimeoutSeconds
+            $script:observedArguments = $Arguments
+            $global:LASTEXITCODE = 0
+            'bounded-call'
+        }
+        . ([scriptblock]::Create($invokeWslAst.Extent.Text))
+
+        Invoke-Wsl -Arguments @('--status') | Should -Be 'bounded-call'
+        $script:observedTimeout | Should -Be 900
+        $script:observedArguments | Should -Be @('--status')
+        Invoke-Wsl -Arguments @('--status') -TimeoutSeconds 0 | Should -Be 'bounded-call'
+        $script:observedTimeout | Should -Be 900
+        Invoke-Wsl -Arguments @('--status') -TimeoutSeconds 45 | Should -Be 'bounded-call'
+        $script:observedTimeout | Should -Be 45
+
+        $script:cleanupCalls = @()
+        function Invoke-WslChecked {
+            param([string[]]$Arguments, [int]$TimeoutSeconds, [switch]$AllowFailure)
+            $script:cleanupCalls += [pscustomobject]@{
+                Arguments = $Arguments
+                TimeoutSeconds = $TimeoutSeconds
+                AllowFailure = [bool]$AllowFailure
+            }
+        }
+        . ([scriptblock]::Create($cleanupAst.Extent.Text))
+        Remove-TemporaryDistro -Name 'NixOS-CI-Test'
+
+        $script:cleanupCalls.Count | Should -Be 2
+        $script:cleanupCalls[0].Arguments | Should -Be @('--terminate', 'NixOS-CI-Test')
+        $script:cleanupCalls[0].TimeoutSeconds | Should -Be 60
+        $script:cleanupCalls[0].AllowFailure | Should -BeTrue
+        $script:cleanupCalls[1].Arguments | Should -Be @('--unregister', 'NixOS-CI-Test')
+        $script:cleanupCalls[1].TimeoutSeconds | Should -Be 300
+        $script:cleanupCalls[1].AllowFailure | Should -BeTrue
     }
 
     It 'should cover Windows PowerShell 5.1 timeout wrapper compatibility in CI' {

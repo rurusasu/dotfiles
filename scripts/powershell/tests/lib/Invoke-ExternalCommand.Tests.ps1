@@ -77,6 +77,98 @@ Describe 'Invoke-NativeCommand' {
     }
 }
 
+$script:isWindowsRuntime = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+Describe 'Invoke-Npm global install Node PATH' {
+
+    BeforeEach {
+        $script:originalPath = $env:PATH
+        $script:userPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+        $script:machinePath = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine')
+        $script:nodeFixtureDirectory = Join-Path $TestDrive 'node-install-not-on-path'
+        $null = New-Item -ItemType Directory -Path $script:nodeFixtureDirectory -Force
+        $script:nodeFixture = Join-Path $script:nodeFixtureDirectory 'node.cmd'
+
+        [System.IO.File]::WriteAllText($script:nodeFixture, @'
+@echo off
+if /i "%~nx1"=="postinstall.js" (echo lifecycle:postinstall & exit /b 0)
+if /i "%~nx1"=="install.js" (echo lifecycle:preinstall & exit /b 0)
+echo unexpected lifecycle: %~nx1 1>&2
+exit /b 3
+'@, [System.Text.Encoding]::ASCII)
+        $script:postinstallScript = Join-Path $TestDrive 'postinstall.js'
+        $script:preinstallScript = Join-Path $TestDrive 'install.js'
+        [System.IO.File]::WriteAllText($script:postinstallScript, "// postinstall fixture`r`n", [System.Text.Encoding]::ASCII)
+        [System.IO.File]::WriteAllText($script:preinstallScript, "// preinstall fixture`r`n", [System.Text.Encoding]::ASCII)
+        $env:PATH = Join-Path $env:SystemRoot 'System32'
+
+        Mock Get-ExternalCommand {
+            if ($Name -eq 'node.exe') {
+                return [pscustomobject]@{ Source = $script:nodeFixture; Path = $script:nodeFixture }
+            }
+            return $null
+        }
+        Mock Invoke-ExternalCommandWithTimeout {
+            param($Command, $Arguments, $TimeoutSeconds)
+            $null = $TimeoutSeconds
+            if ($Command -ne 'npm' -or $Arguments[0] -ne 'install') {
+                throw "Unexpected npm test command: $Command $($Arguments -join ' ')"
+            }
+            $scriptPath = if ($Arguments -contains 'pnpm@latest') { $script:preinstallScript } else { $script:postinstallScript }
+            $script:lifecycleOutput = @(& $env:ComSpec /d /c "node `"$scriptPath`"" 2>&1)
+            $global:LASTEXITCODE = $LASTEXITCODE
+            return $script:lifecycleOutput
+        }
+    }
+
+    AfterEach {
+        $env:PATH = $script:originalPath
+    }
+
+    It 'should run npm postinstall and downstream pnpm preinstall through cmd with Node initially hidden from PATH' -Skip:(-not $script:isWindowsRuntime) {
+        ($env:PATH -split ';') | Should -Not -Contain $script:nodeFixtureDirectory
+        [System.IO.File]::Exists($script:nodeFixture) | Should -BeTrue
+        Get-NpmNodeDirectory | Should -Be $script:nodeFixtureDirectory
+        $null = & $env:ComSpec /d /c 'where node' 2>&1
+        $LASTEXITCODE | Should -Not -Be 0
+
+        $postinstallOutput = @(Invoke-Npm -Arguments @('install', '-g', 'agent-browser@0.38.1'))
+
+        ($env:PATH -split ';') | Should -Contain $script:nodeFixtureDirectory
+        $global:LASTEXITCODE | Should -Be 0
+        ($postinstallOutput -join "`n") | Should -Match 'lifecycle:postinstall'
+        @($env:PATH -split ';' | Where-Object { $_ -eq $script:nodeFixtureDirectory }).Count | Should -Be 1
+
+        $pnpmOutput = @(Invoke-Npm -Arguments @('install', '-g', 'pnpm@latest'))
+
+        $global:LASTEXITCODE | Should -Be 0
+        ($pnpmOutput -join "`n") | Should -Match 'lifecycle:preinstall'
+        @($env:PATH -split ';' | Where-Object { $_ -eq $script:nodeFixtureDirectory }).Count | Should -Be 1
+        [System.Environment]::GetEnvironmentVariable('PATH', 'User') | Should -Be $script:userPath
+        [System.Environment]::GetEnvironmentVariable('PATH', 'Machine') | Should -Be $script:machinePath
+    }
+}
+
+Describe 'Get-NpmNodeDirectory sibling fallback' {
+    It 'should resolve node.exe beside absolute npm.cmd when node is absent from PATH' {
+        $nodeDirectory = Join-Path $TestDrive 'node-from-npm-install'
+        $npmPath = Join-Path $nodeDirectory 'npm.cmd'
+        $nodePath = Join-Path $nodeDirectory 'node.exe'
+        $null = New-Item -ItemType Directory -Path $nodeDirectory -Force
+        [System.IO.File]::WriteAllText($npmPath, '@echo off', [System.Text.Encoding]::ASCII)
+        [System.IO.File]::WriteAllText($nodePath, 'fixture', [System.Text.Encoding]::ASCII)
+        Mock Get-ExternalCommand {
+            if ($Name -eq 'node.exe') { return $null }
+            if ($Name -eq 'npm.cmd') {
+                return [pscustomobject]@{ Source = $npmPath; Path = $npmPath }
+            }
+            return $null
+        }
+
+        Get-NpmNodeDirectory | Should -Be $nodeDirectory
+    }
+}
+
 Describe 'Invoke-Pnpm' {
     It 'should prefer the Windows cmd shim over an extensionless pnpm shim' {
         Mock Get-Command {

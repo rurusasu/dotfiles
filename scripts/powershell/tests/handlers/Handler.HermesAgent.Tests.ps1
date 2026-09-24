@@ -3,730 +3,111 @@
 BeforeAll {
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
-    . $PSScriptRoot/../../lib/HermesBootstrap.ps1
-    . $PSScriptRoot/../../lib/HermesXApi.ps1
-    . $PSScriptRoot/../../lib/HermesGateway.ps1
-    . $PSScriptRoot/../../handlers/Handler.NixOSWSL.ps1
     . $PSScriptRoot/../../handlers/Handler.NixRebuild.ps1
     . $PSScriptRoot/../../handlers/Handler.HermesAgent.ps1
 }
 
-Describe 'HermesAgentHandler' {
+Describe 'HermesAgentHandler Windows-to-NixOS-WSL routing' {
     BeforeEach {
         $script:handler = [HermesAgentHandler]::new()
         $script:ctx = [SetupContext]::new($TestDrive)
         $script:ctx.Options['WithHermes'] = $true
-        $script:composeDir = Join-Path $TestDrive 'docker/hermes-service'
-        $script:composeFile = Join-Path $script:composeDir 'compose.yml'
-        $script:userProfile = Join-Path $TestDrive 'user'
-        $script:oldUserProfile = $env:USERPROFILE
-        $script:oldHome = $env:HOME
-        $script:oldHermesDataDir = $env:HERMES_DATA_DIR
-        $script:oldHermesBrowserDataDir = $env:HERMES_BROWSER_DATA_DIR
-        $script:oldHermesBrowserViewPort = $env:HERMES_BROWSER_VIEW_PORT
-        $script:oldHermesApiPort = $env:HERMES_API_PORT
-        $script:oldHermesDashboardPort = $env:HERMES_DASHBOARD_PORT
-        $script:oldHermesApiReadyAttempts = $env:HERMES_API_READY_ATTEMPTS
-        $script:oldHermesApiReadyDelaySeconds = $env:HERMES_API_READY_DELAY_SECONDS
-        $script:oldHermesApiProbeTimeoutSeconds = $env:HERMES_API_PROBE_TIMEOUT_SECONDS
-        $script:dockerCalls = [System.Collections.Generic.List[string]]::new()
-        $script:eventLog = [System.Collections.Generic.List[string]]::new()
-        $script:readinessAttempts = 0
-
-        New-Item -ItemType Directory -Path $script:composeDir -Force | Out-Null
-        New-Item -ItemType Directory -Path $script:userProfile -Force | Out-Null
-        Set-Content -LiteralPath $script:composeFile -Value 'services: {}' -Encoding utf8
-        $env:USERPROFILE = $script:userProfile
-        Remove-Item Env:\HOME -ErrorAction SilentlyContinue
-        Remove-Item Env:\HERMES_DATA_DIR -ErrorAction SilentlyContinue
-        Remove-Item Env:\HERMES_BROWSER_DATA_DIR -ErrorAction SilentlyContinue
-        Remove-Item Env:\HERMES_BROWSER_VIEW_PORT -ErrorAction SilentlyContinue
-        Remove-Item Env:\HERMES_API_PORT -ErrorAction SilentlyContinue
-        Remove-Item Env:\HERMES_DASHBOARD_PORT -ErrorAction SilentlyContinue
-        $env:HERMES_API_READY_ATTEMPTS = '3'
-        $env:HERMES_API_READY_DELAY_SECONDS = '0'
-        $env:HERMES_API_PROBE_TIMEOUT_SECONDS = '1'
+        $script:wslCommandChecks = 0
+        $script:wslListCalls = 0
+        $script:dockerCalls = 0
 
         Mock Write-Host { }
         Mock Get-Command {
-            [PSCustomObject]@{ Name = 'docker'; Source = 'C:\\Program Files\\Docker\\docker.exe' }
-        } -ParameterFilter { $Name -eq 'docker' }
-        Mock Test-DockerDaemon { $true }
-        Mock Invoke-Docker {
-            param([string[]]$Arguments)
-            $script:dockerCalls.Add(($Arguments -join ' '))
-            if ($Arguments -contains 'ps' -and $Arguments -contains '--services') {
-                $global:LASTEXITCODE = 0
-                return
-            }
-            if ($Arguments.Count -gt 3 -and $Arguments[0] -eq 'compose' -and $Arguments[1] -eq '-f') {
-                $script:eventLog.Add([string]$Arguments[3])
-            }
+            $script:wslCommandChecks++
+            $null
+        } -ParameterFilter { $Name -eq 'wsl' }
+        Mock Invoke-Wsl {
+            $script:wslListCalls++
             $global:LASTEXITCODE = 0
-        }
-        Mock Invoke-HermesBootstrap {
-            $script:eventLog.Add('bootstrap')
-            [PSCustomObject]@{ Success = $true; Changed = $true; Message = 'Hermes bootstrap completed.' }
-        }
-        Mock Initialize-HermesBootstrapServiceAccountEnvironment { $true }
-        Mock Invoke-HermesXApiCredentialScope {
-            $script:eventLog.Add('xapi-credentials')
-            & $Action
-        }
-        Mock Invoke-WebRequest {
-            $script:readinessAttempts++
-            $script:eventLog.Add('health')
-            [PSCustomObject]@{ StatusCode = 200 }
-        }
-        Mock Invoke-HermesGatewayConvergence { }
-        Mock Start-Sleep { }
-    }
-
-    AfterEach {
-        $env:USERPROFILE = $script:oldUserProfile
-        foreach ($entry in @(
-                @{ Name = 'HOME'; Value = $script:oldHome },
-                @{ Name = 'HERMES_DATA_DIR'; Value = $script:oldHermesDataDir },
-                @{ Name = 'HERMES_BROWSER_DATA_DIR'; Value = $script:oldHermesBrowserDataDir },
-                @{ Name = 'HERMES_BROWSER_VIEW_PORT'; Value = $script:oldHermesBrowserViewPort },
-                @{ Name = 'HERMES_API_PORT'; Value = $script:oldHermesApiPort },
-                @{ Name = 'HERMES_DASHBOARD_PORT'; Value = $script:oldHermesDashboardPort },
-                @{ Name = 'HERMES_API_READY_ATTEMPTS'; Value = $script:oldHermesApiReadyAttempts },
-                @{ Name = 'HERMES_API_READY_DELAY_SECONDS'; Value = $script:oldHermesApiReadyDelaySeconds },
-                @{ Name = 'HERMES_API_PROBE_TIMEOUT_SECONDS'; Value = $script:oldHermesApiProbeTimeoutSeconds }
-            )) {
-            if ($null -eq $entry.Value) {
-                Remove-Item "Env:\\$($entry.Name)" -ErrorAction SilentlyContinue
-            }
-            else {
-                Set-Item "Env:\\$($entry.Name)" $entry.Value
-            }
+            return @('NixOS')
+        } -ParameterFilter { $Arguments -contains '--list' -and $Arguments -contains '--quiet' }
+        Mock Invoke-Docker {
+            $script:dockerCalls++
+            throw 'The Windows Hermes handler must never invoke Docker.'
         }
     }
 
-    Context 'constructor and prerequisites' {
-        It 'resolves the current Hermes service Compose path' {
-            $handler.CanApply($ctx) | Should -BeTrue
-        }
-
-        It 'is disabled by default without WithHermes' {
-            $ctx.Options.Remove('WithHermes')
-
-            $handler.CanApply($ctx) | Should -BeFalse
-        }
-
-        It 'keeps the Phase 2 non-admin installer metadata and ordering' {
-            $handler.Name | Should -Be 'HermesAgent'
-            $handler.Order | Should -Be 56
-            $handler.RequiresAdmin | Should -BeFalse
-            $handler.Phase | Should -Be 2
-            $handler.Order | Should -BeGreaterThan ([NixOSWSLHandler]::new().Order)
-            $handler.Order | Should -BeGreaterThan ([NixRebuildHandler]::new().Order)
-        }
-
-        It 'honors its enable option and native Docker readiness checks' {
-            $ctx.Options['SkipHermesAgent'] = $true
-            $handler.CanApply($ctx) | Should -BeFalse
-
-            $ctx.Options['SkipHermesAgent'] = $false
-            Remove-Item -LiteralPath $script:composeFile -Force
-            $handler.CanApply($ctx) | Should -BeFalse
-
-            Set-Content -LiteralPath $script:composeFile -Value 'services: {}' -Encoding utf8
-            Mock Get-Command { $null } -ParameterFilter { $Name -eq 'docker' }
-            $handler.CanApply($ctx) | Should -BeFalse
-
-            Mock Get-Command { [PSCustomObject]@{ Name = 'docker' } } -ParameterFilter { $Name -eq 'docker' }
-            Mock Test-DockerDaemon { $false }
-            $handler.CanApply($ctx) | Should -BeFalse
-
-            Mock Test-DockerDaemon { $true }
-            Mock Test-WslAvailable { $false }
-            $ctx.Options['NixRebuildApplied'] = $false
-            $handler.CanApply($ctx) | Should -BeTrue
-            Should -Invoke Test-WslAvailable -Times 0 -Exactly
-        }
+    It 'runs after NixRebuild so the completed rebuild marker is available' {
+        $handler.Order | Should -BeGreaterThan ([NixRebuildHandler]::new().Order)
+        $handler.Name | Should -Be 'HermesAgent'
+        $handler.RequiresAdmin | Should -BeFalse
+        $handler.Phase | Should -Be 2
     }
 
-    Context 'host paths' {
-        It 'preserves data and browser path overrides and the browser viewer URL' {
-            $env:HERMES_DATA_DIR = Join-Path $TestDrive 'data'
-            $env:HERMES_BROWSER_DATA_DIR = Join-Path $TestDrive 'browser'
-            $env:HERMES_BROWSER_VIEW_PORT = '6090'
+    It 'is disabled unless WithHermes is enabled' {
+        $ctx.Options.Remove('WithHermes')
 
-            $handler.GetDataDir() | Should -Be $env:HERMES_DATA_DIR
-            $handler.GetBrowserDataDir() | Should -Be $env:HERMES_BROWSER_DATA_DIR
-            $handler.GetBrowserViewUrl() | Should -Be 'http://127.0.0.1:6090'
-        }
+        $handler.CanApply($ctx) | Should -BeFalse
+        $script:wslCommandChecks | Should -Be 0
     }
 
-    Context 'Apply' {
-        It 'builds bootstraps and recreates Hermes without owning Hindsight' {
-            $dataDir = Join-Path $TestDrive 'data'
-            $browserDir = Join-Path $TestDrive 'browser'
-            $env:HERMES_DATA_DIR = $dataDir
-            $env:HERMES_BROWSER_DATA_DIR = $browserDir
-            $env:HERMES_BROWSER_VIEW_PORT = '6090'
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeTrue
-            $result.HandlerName | Should -Be 'HermesAgent'
-            $result.Message | Should -Match 'http://127.0.0.1:9119'
-            $result.Message | Should -Match 'http://127.0.0.1:6090'
-            $dataDir | Should -Exist
-            (Join-Path $dataDir '.xurl') | Should -Exist
-            $browserDir | Should -Exist
-            $script:dockerCalls | Should -Be @(
-                "compose -f $script:composeFile config --quiet",
-                "compose -f $script:composeFile build --pull hermes hermes-bootstrap chromium browser-mcp xapi-mcp",
-                "compose -f $script:composeFile ps --all --services hermes",
-                "compose -f $script:composeFile stop hermes",
-                "volume inspect --format {{ index .Labels `"com.rurusasu.dotfiles.hermes-storage.schema`" }} hermes-data",
-                "compose -f $script:composeFile up -d --force-recreate --remove-orphans hermes chromium browser-mcp xapi-mcp"
-            )
-            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials', 'up', 'health')
-            Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
-                $Uri -eq 'http://127.0.0.1:9119/api/health' -and
-                $Method -eq 'Get' -and
-                $TimeoutSec -eq 1
-            }
-            Should -Invoke Invoke-HermesBootstrap -Times 1 -Exactly -ParameterFilter {
-                $ComposeFile -eq $script:composeFile -and $DataDir -eq $dataDir
-            }
-            Should -Invoke Invoke-HermesXApiCredentialScope -Times 1 -Exactly
-        }
-
-        It 'does not bootstrap or recreate services when compose validation fails' {
-            Mock Invoke-Docker {
-                $script:dockerCalls.Add(($Arguments -join ' '))
-                $global:LASTEXITCODE = 17
-                'compose validation failure'
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Match 'compose validation failure'
-            Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
-            $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate"
-        }
-
-        It 'does not request secrets or recreate services when image build fails' {
-            Mock Invoke-Docker {
-                $script:dockerCalls.Add(($Arguments -join ' '))
-                if ($Arguments[-1] -eq 'xapi-mcp') {
-                    $global:LASTEXITCODE = 18
-                    return 'build failure'
-                }
-                $global:LASTEXITCODE = 0
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Match 'build failure'
-            Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
-            $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate"
-        }
-
-        It 'fails before requesting secrets when the running gateway cannot be stopped' {
-            Mock Invoke-Docker {
-                $script:dockerCalls.Add(($Arguments -join ' '))
-                if ($Arguments -contains 'stop') {
-                    $global:LASTEXITCODE = 20
-                    return 'stop failure'
-                }
-                $global:LASTEXITCODE = 0
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Match 'stop failure'
-            Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
-            $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate"
-        }
-
-        It 'recovers an existing Hermes runtime after a redacted bootstrap failure' {
-            $secret = 'bootstrap-secret-value'
-            Mock Invoke-Docker {
-                $script:dockerCalls.Add(($Arguments -join ' '))
-                $script:eventLog.Add([string]$Arguments[3])
-                if ($Arguments -contains 'ps') {
-                    $global:LASTEXITCODE = 0
-                    return 'hermes'
-                }
-                $global:LASTEXITCODE = 0
-            }
-            Mock Invoke-HermesBootstrap {
-                [PSCustomObject]@{
-                    Success = $false
-                    Changed = $false
-                    Message = 'Hermes bootstrap failed (exit code 23). [REDACTED]'
-                }
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Match '\[REDACTED\]'
-            $result.Message | Should -Not -Match ([regex]::Escape($secret))
-            $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
-            $script:dockerCalls | Should -Contain "compose -f $script:composeFile stop hermes"
-        }
-
-        It 'retains bootstrap and recovery start failures in the component failure result' {
-            Mock Invoke-Docker {
-                $script:dockerCalls.Add(($Arguments -join ' '))
-                if ($Arguments -contains 'ps') {
-                    $global:LASTEXITCODE = 0
-                    return 'hermes'
-                }
-                if ($Arguments -contains 'start') {
-                    $global:LASTEXITCODE = 71
-                    return 'runtime recovery start failure'
-                }
-                $global:LASTEXITCODE = 0
-            }
-            Mock Invoke-HermesBootstrap {
-                [PSCustomObject]@{ Success = $false; Changed = $false; Message = 'bootstrap failure' }
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.HandlerName | Should -Be 'HermesAgent'
-            $result.Message | Should -Match 'Hermes bootstrap failed: bootstrap failure'
-            $result.Message | Should -Match 'Hermes runtime recovery start failed: runtime recovery start failure'
-            Should -Invoke Invoke-WebRequest -Times 0 -Exactly
-        }
-
-        It 'retains bootstrap and recovery readiness timeout failures in the component failure result' {
-            $env:HERMES_API_READY_ATTEMPTS = '1'
-            Mock Invoke-Docker {
-                $script:dockerCalls.Add(($Arguments -join ' '))
-                if ($Arguments -contains 'ps') {
-                    $global:LASTEXITCODE = 0
-                    return 'hermes'
-                }
-                $global:LASTEXITCODE = 0
-            }
-            Mock Invoke-HermesBootstrap {
-                [PSCustomObject]@{ Success = $false; Changed = $false; Message = 'bootstrap failure' }
-            }
-            Mock Invoke-WebRequest { throw 'not ready' }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.HandlerName | Should -Be 'HermesAgent'
-            $result.Message | Should -Match 'Hermes bootstrap failed: bootstrap failure'
-            $result.Message | Should -Match 'Hermes runtime recovery readiness failed: Hermes Desktop backend did not become ready after 1 attempts.'
-            Should -Invoke Invoke-WebRequest -Times 1 -Exactly
-        }
-
-        It 'reports compose startup failure after the existing gateway was stopped' {
-            Mock Invoke-Docker {
-                $script:dockerCalls.Add(($Arguments -join ' '))
-                $script:eventLog.Add([string]$Arguments[3])
-                if ($Arguments -contains '--force-recreate') {
-                    $global:LASTEXITCODE = 19
-                    return 'startup failure'
-                }
-                $global:LASTEXITCODE = 0
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Match 'startup failure'
-            $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile up -d --force-recreate --remove-orphans hermes chromium browser-mcp xapi-mcp"
-            $script:dockerCalls | Should -Contain "compose -f $script:composeFile stop hermes"
-        }
-
-        It 'fails without exposing X API credentials when credential retrieval fails' {
-            Mock Invoke-HermesXApiCredentialScope {
-                $script:eventLog.Add('xapi-credentials')
-                throw [System.InvalidOperationException]::new('Hermes X API credential retrieval failed.')
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Be 'Hermes X API credential retrieval failed.'
-            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials')
-            $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate --remove-orphans hermes chromium browser-mcp xapi-mcp"
-        }
-
-        It 'recovers an existing runtime when storage initialization throws after stop' {
-            Mock Invoke-Docker {
-                $script:dockerCalls.Add(($Arguments -join ' '))
-                if ($Arguments -contains 'ps' -and $Arguments -contains '--services') {
-                    $global:LASTEXITCODE = 0
-                    return 'hermes'
-                }
-                $global:LASTEXITCODE = 0
-            }
-            Mock Initialize-HermesStorageVolume { throw 'secret storage exception' }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Be 'Hermes data volume configuration failed.'
-            $result.Message | Should -Not -Match 'secret storage exception'
-            $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
-            Should -Invoke Invoke-WebRequest -Times 1 -Exactly
-            Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
-        }
-
-        It 'recovers an existing runtime when storage initialization returns failure after stop' {
-            Mock Invoke-Docker {
-                $script:dockerCalls.Add(($Arguments -join ' '))
-                if ($Arguments -contains 'ps' -and $Arguments -contains '--services') {
-                    $global:LASTEXITCODE = 0
-                    return 'hermes'
-                }
-                $global:LASTEXITCODE = 0
-            }
-            Mock Initialize-HermesStorageVolume {
-                [PSCustomObject]@{ Success = $false; Message = 'Hermes storage marker validation failed.' }
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Be 'Hermes storage marker validation failed.'
-            $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
-            Should -Invoke Invoke-WebRequest -Times 1 -Exactly
-            Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
-        }
-
-        It 'returns actionable OAuth recovery guidance before recreating services' {
-            Mock Invoke-HermesXApiCredentialScope {
-                $script:eventLog.Add('xapi-credentials')
-                throw [System.InvalidOperationException]::new(
-                    'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
-                )
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Be 'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
-            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap', 'xapi-credentials')
-            $script:dockerCalls | Should -Not -Contain "compose -f $script:composeFile up -d --force-recreate --remove-orphans hermes chromium browser-mcp xapi-mcp"
-        }
-
-        It 'passes the token probe Docker exit code and diagnostics through the classifier' {
-            $script:probeResult = $null
-            Mock Invoke-Docker {
-                $script:dockerCalls.Add(($Arguments -join ' '))
-                if (($Arguments -join ' ') -match 'xurl token') {
-                    $global:LASTEXITCODE = 125
-                    return 'Cannot connect to the Docker daemon.'
-                }
-                $global:LASTEXITCODE = 0
-            }
-            Mock Invoke-HermesXApiCredentialScope {
-                $script:eventLog.Add('xapi-credentials')
-                $script:probeResult = & $TokenProbe
-                return & $Action
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeTrue
-            $script:probeResult.Kind | Should -Be 'InfrastructureFailure'
-            $script:probeResult.ExitCode | Should -Be 125
-            $script:probeResult.PSObject.Properties.Name | Should -Not -Contain 'Output'
-        }
-
-        It 'should recover a previously existing runtime after OAuth validation fails' {
-            Mock Invoke-Docker {
-                $script:dockerCalls.Add(($Arguments -join ' '))
-                if ($Arguments -contains 'ps' -and $Arguments -contains '--services') {
-                    $global:LASTEXITCODE = 0
-                    return 'hermes'
-                }
-                $global:LASTEXITCODE = 0
-            }
-            Mock Invoke-HermesXApiCredentialScope {
-                throw [System.InvalidOperationException]::new(
-                    'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
-                )
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Be 'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
-            $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
-            Should -Invoke Invoke-WebRequest -Times 1 -Exactly
-        }
-
-        It 'should recover a previously existing runtime after Compose startup fails' {
-            Mock Invoke-Docker {
-                $script:dockerCalls.Add(($Arguments -join ' '))
-                if ($Arguments -contains 'ps' -and $Arguments -contains '--services') {
-                    $global:LASTEXITCODE = 0
-                    return 'hermes'
-                }
-                if ($Arguments -contains '--force-recreate') {
-                    $global:LASTEXITCODE = 19
-                    return 'startup failure'
-                }
-                $global:LASTEXITCODE = 0
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Be 'Hermes Agent startup failed: startup failure'
-            $script:dockerCalls | Should -Contain "compose -f $script:composeFile start hermes chromium browser-mcp xapi-mcp"
-            Should -Invoke Invoke-WebRequest -Times 1 -Exactly
-        }
-
-        It 'waits through transient API failures before reporting startup success' {
-            Mock Invoke-WebRequest {
-                $script:readinessAttempts++
-                $script:eventLog.Add('health')
-                if ($script:readinessAttempts -lt 3) { throw 'not ready' }
-                [PSCustomObject]@{ StatusCode = 200 }
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeTrue
-            $script:readinessAttempts | Should -Be 3
-            Should -Invoke Invoke-WebRequest -Times 3 -Exactly
-            Should -Invoke Start-Sleep -Times 2 -Exactly
-            $script:eventLog[-1] | Should -Be 'health'
-        }
-
-        It 'converges gateways after API readiness and before reporting success' {
-            Mock Invoke-HermesGatewayConvergence {
-                $script:eventLog.Add('gateway-convergence')
-            }
-
-            $result = $handler.Apply($ctx)
-            $script:eventLog.Add('success')
-
-            $result.Success | Should -BeTrue
-            $script:eventLog | Should -Be @(
-                'config', 'build',
-                'stop', 'bootstrap', 'xapi-credentials', 'up', 'health',
-                'gateway-convergence', 'success'
-            )
-            Should -Invoke Invoke-HermesGatewayConvergence -Times 1 -Exactly -ParameterFilter {
-                $ComposeFile -eq $script:composeFile
-            }
-        }
-
-        It 'returns a sanitized component failure when gateway convergence fails' {
-            $secret = 'gateway-secret-output'
-            Mock Invoke-HermesGatewayConvergence {
-                $inner = [System.InvalidOperationException]::new($secret)
-                throw [System.InvalidOperationException]::new(
-                    'Hermes profile Gateway convergence failed with exit code 42.',
-                    $inner
-                )
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Match 'Hermes profile Gateway convergence failed'
-            $result.Message | Should -Not -Match ([regex]::Escape($secret))
-            Should -Invoke Invoke-HermesGatewayConvergence -Times 1 -Exactly
-        }
-
-        It 'fails after bounded API readiness attempts without exposing probe errors' {
-            $secret = 'api-secret-value'
-            Mock Invoke-WebRequest {
-                $script:readinessAttempts++
-                throw "not ready: $secret"
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Be 'Hermes Desktop backend did not become ready after 3 attempts.'
-            $result.Message | Should -Not -Match ([regex]::Escape($secret))
-            $script:readinessAttempts | Should -Be 3
-            Should -Invoke Invoke-WebRequest -Times 3 -Exactly
-            Should -Invoke Start-Sleep -Times 2 -Exactly
-            $script:dockerCalls[-1] | Should -Be "compose -f $script:composeFile ps --all"
-        }
-
-        It 'returns failure and stops after a compose validation exception' {
-            Mock Invoke-Docker {
-                $phase = [string]$Arguments[3]
-                $script:eventLog.Add($phase)
-                if ($phase -eq 'config') { throw 'config exception' }
-                $global:LASTEXITCODE = 0
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Be 'Hermes Agent setup failed.'
-            $script:eventLog | Should -Be @('config')
-            Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
-        }
-
-        It 'returns failure and stops after an image build exception' {
-            Mock Invoke-Docker {
-                $phase = [string]$Arguments[3]
-                $script:eventLog.Add($phase)
-                if ($phase -eq 'build') { throw 'build exception' }
-                $global:LASTEXITCODE = 0
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Be 'Hermes Agent setup failed.'
-            $script:eventLog | Should -Be @('config', 'build')
-            Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
-        }
-
-        It 'returns failure and never starts services after a bootstrap exception' {
-            Mock Invoke-HermesBootstrap {
-                $script:eventLog.Add('bootstrap')
-                throw 'bootstrap exception'
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Be 'Hermes bootstrap failed.'
-            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap')
-            @($script:eventLog | Where-Object { $_ -eq 'up' }).Count | Should -Be 0
-        }
-
-        It 'returns failure after a compose startup exception with no later phase' {
-            Mock Invoke-Docker {
-                if ($Arguments.Count -gt 3 -and $Arguments[0] -eq 'compose' -and $Arguments[1] -eq '-f') {
-                    $script:eventLog.Add([string]$Arguments[3])
-                }
-                if ($Arguments -contains '--force-recreate') { throw 'startup exception' }
-                $global:LASTEXITCODE = 0
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Be 'Hermes Agent setup failed.'
-            $script:eventLog | Should -Be @('config', 'build', 'ps', 'stop', 'bootstrap', 'xapi-credentials', 'up')
-        }
-
-        It 'propagates migration exit code 5 without starting services or writing host content' {
-            $dataDir = Join-Path $TestDrive 'migration-data'
-            $browserDir = Join-Path $TestDrive 'migration-browser'
-            $env:HERMES_DATA_DIR = $dataDir
-            $env:HERMES_BROWSER_DATA_DIR = $browserDir
-            Mock Invoke-HermesBootstrap {
-                $script:eventLog.Add('bootstrap')
-                [PSCustomObject]@{
-                    Success  = $false
-                    Changed  = $false
-                    ExitCode = 5
-                    Message  = 'Hermes bootstrap failed (exit code 5). Migration conflict.'
-                }
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Match 'exit code 5'
-            $script:eventLog | Should -Be @('config', 'build', 'stop', 'bootstrap')
-            @($script:eventLog | Where-Object { $_ -eq 'up' }).Count | Should -Be 0
-            $dataDir | Should -Exist
-            $browserDir | Should -Exist
-            (Join-Path $dataDir '.xurl') | Should -Exist
-            @(Get-ChildItem -LiteralPath $dataDir -Recurse -File).Count | Should -Be 0
-            @(Get-ChildItem -LiteralPath $browserDir -Recurse -File).Count | Should -Be 0
-            @(Get-ChildItem -LiteralPath $dataDir -Directory -Force | Select-Object -ExpandProperty Name) |
-                Should -Be @('.xurl')
-        }
+    It 'honors SkipHermesAgent without inspecting WSL or Docker' {
+        $ctx.Options['SkipHermesAgent'] = $true
+
+        $handler.CanApply($ctx) | Should -BeFalse
+        $script:wslCommandChecks | Should -Be 0
+        $script:wslListCalls | Should -Be 0
+        $script:dockerCalls | Should -Be 0
     }
 
-    Context 'loader and ownership boundary' {
-        It 'loads one Hermes handler and the actual bootstrap adapter in a separate PowerShell process' {
-            $pwshPath = (Get-Process -Id $PID -ErrorAction Stop).Path
-            $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../../..')).Path
-            $loaderScriptPath = Join-Path $TestDrive 'loader-simulation.ps1'
-            $loaderScript = @'
-param([Parameter(Mandatory)][string]$RepositoryRoot)
+    It 'delegates to Nix after a successful rebuild and never probes or invokes Docker' {
+        $ctx.Options['NixRebuildApplied'] = $true
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-$libPath = Join-Path $RepositoryRoot 'scripts/powershell/lib'
-. (Join-Path $libPath 'SetupHandler.ps1')
-. (Join-Path $libPath 'Invoke-ExternalCommand.ps1')
-. (Join-Path $libPath 'HermesBootstrap.ps1')
-. (Join-Path $libPath 'HermesXApi.ps1')
+        $handler.CanApply($ctx) | Should -BeFalse
+        $handler.Apply($ctx).Success | Should -BeTrue
+        $script:wslCommandChecks | Should -Be 0
+        $script:wslListCalls | Should -Be 0
+        $script:dockerCalls | Should -Be 0
+    }
 
-$handlersPath = Join-Path $RepositoryRoot 'scripts/powershell/handlers'
-$handlers = Get-SetupHandler -HandlersPath $handlersPath
-$hermes = @($handlers | Where-Object { $_.Name -eq 'HermesAgent' })
-if ($hermes.Count -ne 1) { throw "Expected one Hermes handler, found $($hermes.Count)." }
+    It 'fails with the WSL prerequisite and never invokes Docker when WSL is unavailable' {
+        { $handler.CanApply($ctx) } | Should -Throw '*WithHermes on Windows requires WSL and the* NixOS distribution*'
+        $script:wslListCalls | Should -Be 0
+        $script:dockerCalls | Should -Be 0
+    }
 
-$adapter = Get-Command Invoke-HermesBootstrap -CommandType Function -ErrorAction Stop
-$xapiAdapter = Get-Command Invoke-HermesXApiCredentialScope -CommandType Function -ErrorAction Stop
-$expectedAdapterPath = (Resolve-Path -LiteralPath (Join-Path $libPath 'HermesBootstrap.ps1')).Path
-$expectedXApiAdapterPath = (Resolve-Path -LiteralPath (Join-Path $libPath 'HermesXApi.ps1')).Path
-$actualAdapterPath = (Resolve-Path -LiteralPath $adapter.ScriptBlock.File).Path
-$actualXApiAdapterPath = (Resolve-Path -LiteralPath $xapiAdapter.ScriptBlock.File).Path
-$types = @(
-    ('HermesBootstrapBoundedDrain' -as [type]),
-    ('HermesBootstrapErrorHistory' -as [type])
-)
+    It 'fails with the distro prerequisite and never invokes Docker when NixOS WSL is missing' {
+        Mock Get-Command { [PSCustomObject]@{ Name = 'wsl' } } -ParameterFilter { $Name -eq 'wsl' }
+        Mock Invoke-Wsl {
+            $script:wslListCalls++
+            $global:LASTEXITCODE = 0
+            return @('Ubuntu')
+        } -ParameterFilter { $Arguments -contains '--list' -and $Arguments -contains '--quiet' }
 
-[PSCustomObject]@{
-    HermesCount = $hermes.Count
-    RequiresAdmin = $hermes[0].RequiresAdmin
-    Phase = $hermes[0].Phase
-    Order = $hermes[0].Order
-    AdapterIsActual = $actualAdapterPath -eq $expectedAdapterPath
-    XApiAdapterIsActual = $actualXApiAdapterPath -eq $expectedXApiAdapterPath
-    BootstrapTypeCount = @($types | Where-Object { $null -ne $_ }).Count
-} | ConvertTo-Json -Compress
-'@
-            Set-Content -LiteralPath $loaderScriptPath -Value $loaderScript -Encoding utf8
+        { $handler.CanApply($ctx) } | Should -Throw "*requires the '$($ctx.DistroName)' NixOS WSL distribution*"
+        $script:dockerCalls | Should -Be 0
+    }
 
-            $output = @(& $pwshPath -NoProfile -File $loaderScriptPath -RepositoryRoot $repoRoot 2>&1)
-            $exitCode = $LASTEXITCODE
-            $outputText = ($output | Out-String).Trim()
+    It 'fails closed without invoking Docker when WSL distribution discovery fails' {
+        Mock Get-Command { [PSCustomObject]@{ Name = 'wsl' } } -ParameterFilter { $Name -eq 'wsl' }
+        Mock Invoke-Wsl {
+            $script:wslListCalls++
+            $global:LASTEXITCODE = 1
+            return @('WSL failed')
+        } -ParameterFilter { $Arguments -contains '--list' -and $Arguments -contains '--quiet' }
 
-            $exitCode | Should -Be 0 -Because $outputText
-            $loaded = $output[-1] | ConvertFrom-Json
-            $loaded.HermesCount | Should -Be 1
-            $loaded.RequiresAdmin | Should -BeFalse
-            $loaded.Phase | Should -Be 2
-            $loaded.Order | Should -Be 56
-            $loaded.AdapterIsActual | Should -BeTrue
-            $loaded.XApiAdapterIsActual | Should -BeTrue
-            $loaded.BootstrapTypeCount | Should -Be 2
-        }
+        { $handler.CanApply($ctx) } | Should -Throw '*Unable to inspect WSL distributions*refusing to start a Docker Hermes Agent*'
+        $script:dockerCalls | Should -Be 0
+    }
 
-        It 'loads the bootstrap library in installer order without calling op in an elevated phase' {
-            $installer = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../install.admin.ps1') -Raw
-            $installer | Should -Match 'HermesBootstrap\.ps1'
-            $installer | Should -Not -Match '(?im)^\s*(?:&\s*)?op\b'
-        }
+    It 'fails rather than falling back to Docker when the NixOS distro exists but rebuild did not complete' {
+        Mock Get-Command { [PSCustomObject]@{ Name = 'wsl' } } -ParameterFilter { $Name -eq 'wsl' }
 
-        It 'contains orchestration only and no legacy host content generators' {
-            $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../handlers/Handler.HermesAgent.ps1') -Raw
-            foreach ($legacyMethod in @(
-                    'EnsureDashboardAuth', 'EnsureSlackEnvironment', 'EnsureGitHubEnvironment',
-                    'EnsureHomeRepositoryLayout', 'EnsureLifelogCore', 'EnsureLifelogCronJob',
-                    'EnsureModelConfiguration', 'EnsureMcpConfiguration', 'InvokeLifelogCoreBootstrap'
-                )) {
-                $source | Should -Not -Match "function $legacyMethod|hidden .* $legacyMethod"
-            }
-            $source | Should -Not -Match 'dashboard-basic-auth-password|NewDashboardCredentials|GetOnePassword'
-        }
+        { $handler.CanApply($ctx) } | Should -Throw '*registered, but its Hermes Nix rebuild did not complete*Docker fallback is disabled*'
+        $script:wslListCalls | Should -Be 1
+        $script:dockerCalls | Should -Be 0
+    }
+
+    It 'does not let direct Apply calls start Docker before the Nix rebuild succeeds' {
+        $result = $handler.Apply($ctx)
+
+        $result.Success | Should -BeFalse
+        $result.Message | Should -Match 'successful NixOS WSL rebuild'
+        $script:dockerCalls | Should -Be 0
     }
 }

@@ -117,7 +117,10 @@ let
   # evaluation of the complete NixOS module graph.
   hostLib = import ../flakes/lib/hosts.nix {
     inputs = {
-      nixpkgs.lib.nixosSystem = args: args;
+      nixpkgs.lib = {
+        nixosSystem = args: args;
+        optionals = condition: values: if condition then values else [ ];
+      };
       home-manager.nixosModules.home-manager = "home-manager-module";
     };
   };
@@ -213,7 +216,7 @@ in
 
   testNixosVscodeServerUsesRootFlakeParts = {
     expr = lock.nodes.${rootInputs."nixos-vscode-server"}.inputs."flake-parts";
-    expected = rootInputs."flake-parts";
+    expected = [ rootInputs."flake-parts" ];
   };
 
   testRunnerAppsEvaluateForTheirSupportedPlatforms = {

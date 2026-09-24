@@ -6,27 +6,25 @@ setup() {
 	REBUILD_WRAPPER="$REPO_ROOT/scripts/sh/nixos-rebuild-with-user.sh"
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	USER_HOME="$TEST_HOME/alice"
-	SYNC_SOURCE="$BATS_TEST_TMPDIR/sync-source"
+	SYNC_SOURCE="$REPO_ROOT"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	NIXOS_ARGV_CAPTURE="$BATS_TEST_TMPDIR/nixos-rebuild.argv"
+	NIX_CONFIG_CAPTURE="$BATS_TEST_TMPDIR/nix-config.capture"
 	NIX_EVAL_CAPTURE="$BATS_TEST_TMPDIR/nix-eval.result"
 	DOTFILES_STATE_DIR="$BATS_TEST_TMPDIR/state"
 	REAL_NIX="$(command -v nix || true)"
 
-	mkdir -p "$USER_HOME" "$SYNC_SOURCE" "$STUB_BIN"
+	mkdir -p "$USER_HOME" "$STUB_BIN"
 	SYNC_SOURCE="$(cd "$SYNC_SOURCE" && pwd -P)"
-	git -C "$REPO_ROOT" archive --format=tar HEAD | (
-		cd "$SYNC_SOURCE"
-		tar -xf -
-	)
 	: >"$COMMAND_LOG"
 	: >"$NIXOS_ARGV_CAPTURE"
+	: >"$NIX_CONFIG_CAPTURE"
 	: >"$NIX_EVAL_CAPTURE"
 
 	export HOME="$TEST_HOME"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG NIXOS_ARGV_CAPTURE NIX_EVAL_CAPTURE REAL_NIX REPO_ROOT USER_HOME SYNC_SOURCE DOTFILES_STATE_DIR
+	export COMMAND_LOG NIXOS_ARGV_CAPTURE NIX_CONFIG_CAPTURE NIX_EVAL_CAPTURE REAL_NIX REPO_ROOT USER_HOME SYNC_SOURCE DOTFILES_STATE_DIR
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 
 	write_stub id '
@@ -70,8 +68,9 @@ printf "chown %s\n" "$*" >>"$COMMAND_LOG"
 	write_stub sudo '
 exec "$@"
 '
-	write_stub nixos-rebuild '
+write_stub nixos-rebuild '
 printf "%s\n" "$@" >"$NIXOS_ARGV_CAPTURE"
+printf "%s" "${NIX_CONFIG:-}" >"$NIX_CONFIG_CAPTURE"
 printf "nixos-rebuild user=%s home=%s uid=%s gid=%s group=%s\n" \
   "${DOTFILES_USER:-}" "${DOTFILES_HOME:-}" "${DOTFILES_UID:-}" \
   "${DOTFILES_GID:-}" "${DOTFILES_GROUP:-}" >>"$COMMAND_LOG"
@@ -151,6 +150,7 @@ EOF
 
 	[ "$status" -eq 0 ]
 	grep -Fqx "nixos-rebuild user=alice home=$USER_HOME uid=4242 gid=4343 group=alicegrp" "$COMMAND_LOG"
+	grep -Fq 'accept-flake-config = true' "$NIX_CONFIG_CAPTURE"
 
 	expected_args=(switch --flake "path:$SYNC_SOURCE#nixos" --impure)
 	mapfile -t actual_args <"$NIXOS_ARGV_CAPTURE"
@@ -162,6 +162,24 @@ EOF
 	if [[ -n $REAL_NIX ]]; then
 		[ "$(<"$NIX_EVAL_CAPTURE")" = ok ]
 	fi
+}
+
+@test "NixOS rebuild wrapper accepts the pinned flake cache only when explicitly requested" {
+	run env \
+		PATH="$STUB_BIN:/usr/bin:/bin" \
+		DOTFILES_USER=alice \
+		DOTFILES_HOME="$USER_HOME" \
+		DOTFILES_UID=4242 \
+		DOTFILES_GID=4343 \
+		DOTFILES_GROUP=alicegrp \
+		DOTFILES_WITH_HERMES=1 \
+		DOTFILES_ACCEPT_FLAKE_CONFIG=1 \
+		DOTFILES_STATE_DIR="$DOTFILES_STATE_DIR" \
+		REAL_NIX= \
+		bash "$REBUILD_WRAPPER" switch --flake . --impure
+
+	[ "$status" -eq 0 ]
+	grep -Fq 'accept-flake-config = true' "$NIX_CONFIG_CAPTURE"
 }
 
 @test "nix sync requires an existing complete WSL checkout" {
@@ -226,6 +244,7 @@ EOF
 
 	[ "$status" -eq 0 ]
 	grep -Fqx 'nixos-rebuild hermes=0' "$COMMAND_LOG"
+	! grep -Fq 'accept-flake-config = true' "$NIX_CONFIG_CAPTURE"
 }
 
 @test "NixOS rebuild wrapper rejects an invalid Hermes feature value" {

@@ -1053,9 +1053,27 @@ jobs:
           DOTFILES_INSTALL_TIMEOUT_SECONDS: "900"
           DOTFILES_E2E_POWERSHELL_VERSION: ${{ matrix.version }}
         run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          $expectedVersion = $env:DOTFILES_E2E_POWERSHELL_VERSION
+            Set-StrictMode -Version Latest
+            $ErrorActionPreference = 'Stop'
+            $validationErrors = [System.Collections.Generic.List[string]]::new()
+            function Invoke-WindowsE2EValidation {
+              param(
+                [Parameter(Mandatory)]
+                [string]$Name,
+                [Parameter(Mandatory)]
+                [scriptblock]$Validation
+              )
+
+              try {
+                & $Validation
+              }
+              catch {
+                $validationErrors.Add("${Name}: $($_.Exception.Message)")
+              }
+            }
+
+            try {
+            $expectedVersion = $env:DOTFILES_E2E_POWERSHELL_VERSION
           if ($PSVersionTable.PSVersion.Major -ne 7) {
             throw "Windows installer E2E orchestrator must run under PowerShell 7, got $($PSVersionTable.PSVersion)"
           }
@@ -1172,6 +1190,7 @@ jobs:
             $env:PNPM_HOME = $persistedPnpmHome
           }
 
+          Invoke-WindowsE2EValidation -Name 'installer evidence' -Validation {
           . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WindowsInstallerSuccess.ps1')
           $npmManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/npm/packages.json') -Raw | ConvertFrom-Json
           $pnpmManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/pnpm/packages.json') -Raw | ConvertFrom-Json
@@ -1196,7 +1215,9 @@ jobs:
           if (-not $isWindowsPowerShell -and $out -match 'Falling back to Windows PowerShell') {
             throw 'The PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5.1 fallback'
           }
+          }
 
+          Invoke-WindowsE2EValidation -Name 'WinGet package inventory' -Validation {
           . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WingetInstallSuccess.ps1')
           $wingetManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json') -Raw | ConvertFrom-Json
           $wingetSource = @($wingetManifest.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
@@ -1227,7 +1248,9 @@ jobs:
             throw 'Windows E2E manifest has no eligible packages to install and verify'
           }
           Assert-WingetInstallSuccess -Output $out -ExpectedPackageIds $expectedWindowsPackageIds
+          }
 
+          Invoke-WindowsE2EValidation -Name 'pnpm bootstrap' -Validation {
           $npmPrefixOutput = @(npm prefix --global 2>&1)
           $npmPrefixExitCode = $LASTEXITCODE
           $npmGlobalPrefix = if ($npmPrefixExitCode -eq 0) { [string]($npmPrefixOutput | Select-Object -Last 1) } else { '' }
@@ -1242,7 +1265,12 @@ jobs:
             )) {
             throw "pnpm resolved outside the npm global prefix; a preinstalled runner copy may have masked failed bootstrap: expected=$npmGlobalPrefix actual=$($pnpmCommand.Source)"
           }
+          if ($out -notmatch 'pnpm が見つかりません。npm 経由でインストールします') {
+            throw 'Windows installer E2E did not exercise the pnpm bootstrap path'
+          }
+          }
 
+          Invoke-WindowsE2EValidation -Name 'ChatGPT Classic removal' -Validation {
           if ($out -notmatch '(?m)RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=(removed|absent)') {
             throw 'ChatGPT Classic retired-package cleanup did not complete successfully'
           }
@@ -1259,7 +1287,9 @@ jobs:
               throw "Unable to verify ChatGPT Classic removal (winget list exit=$($classicListExitCodeUnsigned.ToString('X8'))): $classicListText"
             }
           }
+          }
 
+          Invoke-WindowsE2EValidation -Name 'Codex package structure' -Validation {
           $codexLinksPath = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
           $codexShimPath = Join-Path $codexLinksPath 'codex.exe'
           if (-not (Test-Path -LiteralPath $codexShimPath -PathType Leaf)) {
@@ -1293,18 +1323,9 @@ jobs:
           if (-not (Test-Path -LiteralPath $codexHostPath -PathType Leaf)) {
             throw "Codex code-mode host is missing beside the selected Codex executable: $codexHostPath"
           }
-          $codexHostOutput = @(& $codexHostPath --help 2>&1)
-          $codexHostExitCode = $LASTEXITCODE
-          if ($codexHostExitCode -ne 0) {
-            throw "Codex code-mode host --help failed (exit=$codexHostExitCode): $($codexHostOutput -join ' ')"
           }
 
-          $codexCliOutput = @(& $codexShimPath --help 2>&1)
-          $codexCliExitCode = $LASTEXITCODE
-          if ($codexCliExitCode -ne 0) {
-            throw "Codex CLI --help failed (exit=$codexCliExitCode): $($codexCliOutput -join ' ')"
-          }
-
+          Invoke-WindowsE2EValidation -Name 'required command smoke tests' -Validation {
           # A handler that cannot run its setup predicate is skipped, not failed.
           # Require the key npm/pnpm/1Password tools themselves so a green phase
           # cannot hide missing prerequisites or an unconfigured PATH.
@@ -1339,8 +1360,64 @@ jobs:
           if (-not [version]::TryParse($nodeVersionText, [ref]$nodeVersion) -or $nodeVersion -lt [version]'24.0.0') {
             throw "agent-browser@0.38.1 requires Node.js >=24.0.0; active Node.js version is '$nodeVersionText'"
           }
-          if ($out -notmatch 'pnpm が見つかりません。npm 経由でインストールします') {
-            throw 'Windows installer E2E did not exercise the pnpm bootstrap path'
+          }
+          }
+          catch {
+            $validationErrors.Add("Windows installer E2E setup: $($_.Exception.Message)")
+          }
+          finally {
+            try {
+              $codexShimPath = Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links') 'codex.exe'
+              if (-not (Test-Path -LiteralPath $codexShimPath -PathType Leaf)) {
+                throw "Codex CLI shim is missing: $codexShimPath"
+              }
+              $codexCliOutput = @(& $codexShimPath --help 2>&1)
+              $codexCliExitCode = $LASTEXITCODE
+              if ($codexCliExitCode -ne 0) {
+                throw "Codex CLI --help failed (exit=$codexCliExitCode): $($codexCliOutput -join ' ')"
+              }
+              Write-Host 'Codex CLI launch probe passed'
+            }
+            catch {
+              $validationErrors.Add("Codex CLI launch probe: $($_.Exception.Message)")
+            }
+
+            try {
+              . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/lib/SetupHandler.ps1')
+              . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/handlers/Handler.Codex.ps1')
+              $codexPackageExecutablePath = Resolve-CodexPackageExecutablePath -LocalAppData $env:LOCALAPPDATA
+              if (-not $codexPackageExecutablePath) {
+                throw 'Codex executable with an adjacent code-mode host cannot be located in WinGet, Programs\Codex, or OpenAI\Codex'
+              }
+
+              $codexLinksPath = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
+              $codexShimPath = Join-Path $codexLinksPath 'codex.exe'
+              $codexHostDirectory = $codexLinksPath
+              if (Test-Path -LiteralPath $codexShimPath -PathType Leaf) {
+                $codexShim = Get-Item -LiteralPath $codexShimPath
+                if (($codexShim.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                  $codexHostDirectory = Split-Path -Parent $codexPackageExecutablePath
+                }
+              }
+
+              $codexHostPath = Join-Path $codexHostDirectory 'codex-code-mode-host.exe'
+              if (-not (Test-Path -LiteralPath $codexHostPath -PathType Leaf)) {
+                throw "Codex code-mode host is missing beside the selected Codex executable: $codexHostPath"
+              }
+              $codexHostOutput = @(& $codexHostPath --help 2>&1)
+              $codexHostExitCode = $LASTEXITCODE
+              if ($codexHostExitCode -ne 0) {
+                throw "Codex code-mode host --help failed (exit=$codexHostExitCode): $($codexHostOutput -join ' ')"
+              }
+              Write-Host 'Codex code-mode host launch probe passed'
+            }
+            catch {
+              $validationErrors.Add("Codex code-mode host launch probe: $($_.Exception.Message)")
+            }
+          }
+
+          if ($validationErrors.Count -gt 0) {
+            throw "Windows installer E2E validation failed:`n - $($validationErrors -join "`n - ")"
           }
 
   complete:

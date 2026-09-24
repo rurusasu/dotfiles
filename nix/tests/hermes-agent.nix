@@ -14,6 +14,7 @@ let
         {
           home.username = "test-user";
           home.homeDirectory = if system == "aarch64-darwin" then "/Users/test-user" else "/home/test-user";
+          home.stateVersion = "25.05";
         }
         ../home/hermes-agent.nix
       ];

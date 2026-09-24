@@ -661,6 +661,7 @@ function Invoke-Npm {
         $Arguments[0] -eq "install" -and
         ($Arguments -contains "-g" -or $Arguments -contains "--global")
     if ($isGlobalInstall) {
+        Add-NpmNodeDirectoryToProcessPath
         $timeoutSeconds = Get-PackageInstallTimeoutSecond
         if ($timeoutSeconds -gt 0) {
             return Invoke-ExternalCommandWithTimeout -Command "npm" -Arguments $Arguments -TimeoutSeconds $timeoutSeconds
@@ -668,6 +669,68 @@ function Invoke-Npm {
     }
 
     Invoke-NativeCommand -Command "npm" -Arguments $Arguments
+}
+
+function Get-NpmNodeDirectory {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+
+    $nodeCommand = Get-ExternalCommand -Name "node.exe"
+    $nodePath = if ($nodeCommand.Source) { $nodeCommand.Source } else { $nodeCommand.Path }
+    if ($nodePath -and (Test-Path -LiteralPath $nodePath -PathType Leaf)) {
+        return Split-Path -Parent $nodePath
+    }
+
+    # npm.cmd and node.exe normally share the Node installation directory. This
+    # resolves Node even when winget updated the registry PATH after this process
+    # started, leaving node.exe undiscoverable by Get-Command.
+    foreach ($npmName in @("npm.cmd", "npm")) {
+        $npmCommand = Get-ExternalCommand -Name $npmName
+        if (-not $npmCommand) { continue }
+
+        $npmPath = if ($npmCommand.Source) { $npmCommand.Source } else { $npmCommand.Path }
+        if (-not $npmPath) { continue }
+
+        $nodePath = Join-Path (Split-Path -Parent $npmPath) "node.exe"
+        if (Test-Path -LiteralPath $nodePath -PathType Leaf) {
+            return Split-Path -Parent $nodePath
+        }
+    }
+
+    return $null
+}
+
+function Add-NpmNodeDirectoryToProcessPath {
+    [CmdletBinding()]
+    param()
+
+    $isWindowsRuntime = $true
+    $isWindowsVariable = Get-Variable -Name IsWindows -Scope Global -ErrorAction SilentlyContinue
+    if ($null -ne $isWindowsVariable) {
+        $isWindowsRuntime = [bool]$isWindowsVariable.Value
+    }
+    elseif ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+        $isWindowsRuntime = $false
+    }
+    if (-not $isWindowsRuntime) { return }
+
+    $nodeDirectory = Get-NpmNodeDirectory
+    if ([string]::IsNullOrWhiteSpace($nodeDirectory)) { return }
+
+    $pathEntries = @($env:PATH -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    foreach ($entry in $pathEntries) {
+        if ([System.StringComparer]::OrdinalIgnoreCase.Equals($entry.TrimEnd('\'), $nodeDirectory.TrimEnd('\'))) {
+            return
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($env:PATH)) {
+        $env:PATH = $nodeDirectory
+    }
+    else {
+        $env:PATH = "$nodeDirectory;$env:PATH"
+    }
 }
 
 <#

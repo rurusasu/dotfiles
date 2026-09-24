@@ -22,6 +22,36 @@ in
     };
   };
 
+  testGitHubCliUsesPackageScopedVerifierTimeout = {
+    expr = {
+      packageId = sets.wingetMap.gh;
+      verifier = sets.wingetVerify.gh;
+    };
+    expected = {
+      packageId = "GitHub.cli";
+      verifier = {
+        command = "gh";
+        args = [ "--version" ];
+        timeoutSeconds = 60;
+      };
+    };
+  };
+
+  testGoUsesPackageScopedVerifierTimeout = {
+    expr = {
+      packageId = sets.wingetMap.go;
+      verifier = sets.wingetVerify.go;
+    };
+    expected = {
+      packageId = "GoLang.Go";
+      verifier = {
+        command = "go";
+        args = [ "version" ];
+        timeoutSeconds = 60;
+      };
+    };
+  };
+
   testOnePasswordCliUsesOpVersionVerifier = {
     expr = {
       packageId = sets.wingetMap._1password-cli;

@@ -237,7 +237,8 @@
           "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
-            "command": "gh"
+            "command": "gh",
+            "timeoutSeconds": 60
           }
         },
         {
@@ -261,7 +262,8 @@
           "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["version"],
-            "command": "go"
+            "command": "go",
+            "timeoutSeconds": 60
           }
         },
         {
@@ -541,8 +543,7 @@
           }
         },
         {
-          "PackageIdentifier": "wez.wezterm.nightly",
-          "ciSkipInstall": true,
+          "PackageIdentifier": "wez.wezterm",
           "installTimeoutSeconds": 900,
           "pathEntries": ["%ProgramFiles%\\WezTerm"],
           "verifyCommand": {

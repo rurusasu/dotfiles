@@ -82,8 +82,8 @@ in
 
   testDarwinGuiPromotionsSelectTheirCustomSystemDerivations = {
     expr = builtins.mapAttrs (_: package: {
-      system = containsDerivation package defaultSystem;
-      home = containsDerivation package defaultHome;
+      system = containsDerivation package (catalogSets.darwinSystemPackagesForInstallFeatures [ ]);
+      home = containsDerivation package (catalogSets.darwinHomePackagesForInstallFeatures [ ]);
     }) promotedDarwinGuiPackages;
     expected = {
       hammerspoon = {

@@ -33,11 +33,20 @@ let
 
   contains = pattern: content: builtins.length (builtins.split pattern content) > 1;
 
+  # External callers cannot be evaluated as Home Manager modules here, so
+  # inspect only import declarations after removing Nix line comments.
+  stripLineComments = content:
+    builtins.replaceStrings [ "\n" "\r" ] [ " " " " ] (
+      builtins.concatStringsSep " " (builtins.split "#[^\\n]*" content)
+    );
   containsImport =
     target: content:
-    builtins.any (
-      line: builtins.match ".*(import|imports)[[:space:]=].*${target}\\.nix.*" line != null
-    ) (builtins.filter builtins.isString (builtins.split "\n" content));
+    builtins.match ".*imports[[:space:]]*=[[:space:]]*\\[[^]]*([^]]*/|[.]/)${target}\\.nix.*" (
+      stripLineComments content
+    ) != null;
+
+  moduleImports = path: (import path { pkgs = { }; lib = { }; inputs = { }; }).imports or [ ];
+  importsPath = path: target: builtins.elem target (moduleImports path);
 
   entryModules = [
     ../../home/darwin.nix
@@ -89,7 +98,7 @@ in
   };
 
   testOSHomeEntrypointsImportCommon = {
-    expr = builtins.map (path: containsImport "common" (builtins.readFile path)) entryModules;
+    expr = builtins.map (path: importsPath path (../../home/common.nix)) entryModules;
     expected = [
       true
       true
@@ -113,5 +122,14 @@ in
   testExternalCallersDoNotImportCommon = {
     expr = externalDirectImports;
     expected = [ ];
+  };
+
+  testCommentOnlyCommonMentionIsNotAnImport = {
+    expr = [
+      (containsImport "common" "# imports = [ ./common.nix ];")
+      (containsImport "common" ''message = "./common.nix";'')
+      (containsImport "common" "imports = [ ../home/common.nix ];")
+    ];
+    expected = [ false false true ];
   };
 }

@@ -1,11 +1,14 @@
 # Hermes Bootstrap Operations
 
 On macOS and Linux/WSL, the pinned `hermes-agent` flake and Home Manager module
-manage the Hermes CLI and native gateway service. The Docker Compose sidecars
-and the container-owned bootstrap described here remain separate operations;
-this bootstrap still supplies its prerequisites and secrets and writes only
-the private Compose-side `.op.env` service-account file. Docker-managed Hermes
-config, profiles, repositories, and managed `.env` files remain container-owned.
+manage the Hermes CLI and native gateway service. On Windows, `WithHermes`
+selects that Nix-managed runtime in the configured NixOS WSL distribution; the
+Windows installer does not start a Docker Hermes Agent. This page documents the
+explicit legacy Docker Compose bootstrap, which remains available for operators
+who still need that stack. It is not part of the standard Hermes install path.
+The legacy bootstrap writes only the private Compose-side `.op.env`
+service-account file. Docker-managed Hermes config, profiles, repositories,
+and managed `.env` files remain in the Docker volume.
 
 The native service uses the host's `~/.hermes` directory. The Compose gateway
 and bootstrap instead use the Docker named volume `hermes-data` (or the volume
@@ -30,7 +33,7 @@ the focused adapter does not route these commands through WSL. Under WSL,
 Ollama runs on Windows and Docker reaches it through `host.docker.internal`; do
 not enable a second WSL Ollama service.
 
-For the separate Docker sidecars and bootstrap, run:
+For the explicit legacy Docker stack only, run:
 
 ```text
 task hermes:docker:bootstrap
@@ -47,13 +50,20 @@ connected database. They then build `hermes`, `hermes-bootstrap`, and
 `xapi-mcp`, run the container bootstrap, and recreate the stack only after
 success. The final recreate is wrapped with the host X API credential adapter
 on both Unix and Windows, so `X_API_CLIENT_*` values are read from the
-configured 1Password item instead of being exported or stored locally. The full
-installer chains remain:
+configured 1Password item instead of being exported or stored locally. The
+standard installer paths and the separate legacy Docker path are:
 
 ```text
-install.sh -> OS installer -> shell adapter (scripts/sh/hermes-agent.sh) -> hermes-bootstrap container -> compose up
-install.cmd -> install.ps1 -> install.admin.ps1 -> HermesAgentHandler -> PowerShell adapter (HermesBootstrap.ps1) -> hermes-bootstrap container -> compose up
+install.sh -> OS installer -> task hermes:bootstrap -> Nix/Home Manager CLI and native gateway
+install.cmd + WithHermes -> NixRebuild -> NixOS WSL Hermes profile and native gateway
+task hermes:docker:bootstrap -> legacy Docker adapters -> hermes-bootstrap container -> compose up
 ```
+
+The Windows `HermesAgentHandler` verifies that a successful NixOS WSL rebuild
+took ownership. If WSL is absent or the rebuild failed, installation fails
+clearly instead of silently falling back to Docker. The legacy Docker tasks
+remain separate, and no existing Docker volume is deleted or automatically
+copied into `~/.hermes`.
 
 `HermesAgentHandler` is Phase `2`, order `56`, and
 `RequiresAdmin = false`. It must stay in the user context so native `op.exe`

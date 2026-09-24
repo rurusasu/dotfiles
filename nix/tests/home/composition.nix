@@ -8,6 +8,7 @@ let
     {
       home.username = "test-user";
       home.homeDirectory = "/home/test-user";
+      home.stateVersion = "25.05";
     };
 
   mkHome =
@@ -128,24 +129,25 @@ in
         lib = pkgs.lib;
         codexPackage = inputs."llm-agents".packages.${pkgs.stdenv.hostPlatform.system}.codex;
       };
-      packageDrvPaths =
-        packages: builtins.sort builtins.lessThan (builtins.map (package: package.drvPath) packages);
+      catalogDrvPaths = builtins.map (package: package.drvPath) sets.all;
+      selectedCatalogDrvPaths = builtins.sort builtins.lessThan (
+        builtins.filter (drvPath: builtins.elem drvPath catalogDrvPaths)
+          (builtins.map (package: package.drvPath) wsl.config.home.packages)
+      );
+      expectedCatalogDrvPaths = builtins.sort builtins.lessThan (
+        builtins.map (package: package.drvPath) (sets.allWithout [ "discord" "ollama" ])
+      );
       containsDrvPath =
         needle: packages: builtins.any (package: package.drvPath == needle.drvPath) packages;
     in
     {
       expr = {
-        packageComposition = packageDrvPaths wsl.config.home.packages;
+        selectedCatalogDrvPaths = selectedCatalogDrvPaths;
         excludesDiscord = !(containsDrvPath pkgs.discord wsl.config.home.packages);
         excludesOllama = !(containsDrvPath pkgs.ollama wsl.config.home.packages);
       };
       expected = {
-        packageComposition = packageDrvPaths (
-          sets.allWithout [
-            "discord"
-            "ollama"
-          ]
-        );
+        selectedCatalogDrvPaths = expectedCatalogDrvPaths;
         excludesDiscord = true;
         excludesOllama = true;
       };

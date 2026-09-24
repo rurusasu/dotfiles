@@ -1,26 +1,18 @@
 <#
 .SYNOPSIS
-    Orchestrates the Hermes bootstrap container and Compose services.
+    Routes the Windows Hermes option to the NixOS WSL rebuild.
 #>
 
 $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath 'lib\Invoke-ExternalCommand.ps1')
-. (Join-Path $libPath 'lib\HermesBootstrap.ps1')
-. (Join-Path $libPath 'lib\HermesXApi.ps1')
-. (Join-Path $libPath 'lib\HermesGateway.ps1')
-. (Join-Path $libPath 'lib\HermesStorage.ps1')
 
 class HermesAgentHandler : SetupHandlerBase {
-    [int]$DockerCheckTimeoutSeconds = 15
-    [int]$DockerComposeTimeoutSeconds = 180
-
     HermesAgentHandler() {
         $this.Name = 'HermesAgent'
-        $this.Description = 'Hermes Agent Docker container setup'
+        $this.Description = 'Hermes Agent NixOS WSL setup validation'
         $this.Order = 56
         $this.RequiresAdmin = $false
         $this.Phase = 2
-        $this.DependsOn = @('Hindsight')
     }
 
     [bool] CanApply([SetupContext]$ctx) {
@@ -29,187 +21,37 @@ class HermesAgentHandler : SetupHandlerBase {
             return $false
         }
 
-        $composeFile = $this.GetComposeFilePath($ctx)
-        if (-not (Test-Path -LiteralPath $composeFile)) {
-            $this.Log("Hermes compose file was not found: $composeFile", 'Gray')
+        if ($this.IsNixRebuildApplied($ctx)) {
+            $this.Log('Hermes Agent is managed by the completed NixOS WSL rebuild.', 'Gray')
             return $false
         }
 
-        if (-not (Get-Command -Name 'docker' -ErrorAction SilentlyContinue)) {
-            $this.Log('docker command was not found.', 'Gray')
-            return $false
+        if (-not (Get-Command -Name 'wsl' -ErrorAction SilentlyContinue)) {
+            throw "WithHermes on Windows requires WSL and the '$($ctx.DistroName)' NixOS distribution. Enable the WSL/NixOS setup and do not skip NixRebuild."
         }
 
-        if (-not (Test-DockerDaemon -TimeoutSeconds $this.DockerCheckTimeoutSeconds)) {
-            $this.Log('Docker daemon is not ready; skipping Hermes Agent.', 'Gray')
-            return $false
+        $distros = @(Invoke-Wsl -TimeoutSeconds (Get-WslCheckTimeoutSecond) -Arguments @('--list', '--quiet'))
+        $wslExitCode = $LASTEXITCODE
+        if ($wslExitCode -ne 0) {
+            throw "Unable to inspect WSL distributions (exit code: $wslExitCode); refusing to start a Docker Hermes Agent."
         }
 
-        return $true
+        $nixDistroExists = @($distros | Where-Object {
+            ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim() -eq $ctx.DistroName
+        }).Count -gt 0
+        if (-not $nixDistroExists) {
+            throw "WithHermes on Windows requires the '$($ctx.DistroName)' NixOS WSL distribution. It is not registered; complete NixOS WSL setup and rerun the installer."
+        }
+
+        throw "The '$($ctx.DistroName)' WSL distribution is registered, but its Hermes Nix rebuild did not complete. Fix NixRebuild (and do not skip it) before rerunning; Docker fallback is disabled."
     }
 
     [SetupResult] Apply([SetupContext]$ctx) {
-        try {
-            $runtimeExisted = $false
-            $composeFile = $this.GetComposeFilePath($ctx)
-            if (-not (Test-Path -LiteralPath $composeFile)) {
-                return $this.CreateFailureResult("Hermes compose file was not found: $composeFile")
-            }
-
-            $dataDir = $this.GetDataDir()
-            $this.EnsureDirectory($dataDir)
-            $this.EnsureDirectory((Join-Path $dataDir '.xurl'))
-            $this.EnsureDirectory($this.GetBrowserDataDir())
-
-            try {
-                $null = Initialize-HermesBootstrapServiceAccountEnvironment -DataDir $dataDir
-            }
-            catch {
-                return $this.CreateFailureResult('Hermes 1Password Service Account is unavailable.')
-            }
-
-            $validation = $this.InvokeCompose($composeFile, @('config', '--quiet'))
-            if (-not $validation.Success) {
-                return $this.CreateFailureResult("Hermes Compose validation failed: $($validation.Message)")
-            }
-
-            $build = $this.InvokeCompose($composeFile, @('build', '--pull', 'hermes', 'hermes-bootstrap', 'chromium', 'browser-mcp', 'xapi-mcp'))
-            if (-not $build.Success) {
-                return $this.CreateFailureResult("Hermes image build failed: $($build.Message)")
-            }
-
-            $runtime = $this.GetRuntimeState($composeFile)
-            if (-not $runtime.Success) {
-                return $this.CreateFailureResult("Hermes runtime inspection failed: $($runtime.Message)")
-            }
-            $runtimeExisted = $runtime.Exists
-
-            $stop = $this.InvokeCompose($composeFile, @('stop', 'hermes'))
-            if (-not $stop.Success) {
-                return $this.CreateFailureResult("Hermes Agent stop failed: $($stop.Message)")
-            }
-
-            try {
-                $storage = Initialize-HermesStorageVolume -DataDir $dataDir
-            }
-            catch {
-                $storageFailure = 'Hermes data volume configuration failed.'
-                if ($runtimeExisted) {
-                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
-                    if (-not $recovery.Success) {
-                        return $this.CreateFailureResult("$storageFailure $($recovery.Component) failed: $($recovery.Message)")
-                    }
-                }
-                return $this.CreateFailureResult($storageFailure)
-            }
-            if (-not $storage.Success) {
-                $storageFailure = [string]$storage.Message
-                if ($runtimeExisted) {
-                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
-                    if (-not $recovery.Success) {
-                        return $this.CreateFailureResult("$storageFailure $($recovery.Component) failed: $($recovery.Message)")
-                    }
-                }
-                return $this.CreateFailureResult($storageFailure)
-            }
-
-            try {
-                $bootstrap = Invoke-HermesBootstrap -ComposeFile $composeFile -DataDir $dataDir
-            }
-            catch {
-                $bootstrapFailure = 'Hermes bootstrap failed.'
-                if ($runtimeExisted) {
-                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
-                    if (-not $recovery.Success) {
-                        return $this.CreateFailureResult("$bootstrapFailure $($recovery.Component) failed: $($recovery.Message)")
-                    }
-                }
-                return $this.CreateFailureResult($bootstrapFailure)
-            }
-            if (-not $bootstrap.Success) {
-                $bootstrapFailure = "Hermes bootstrap failed: $($bootstrap.Message)"
-                if ($runtimeExisted) {
-                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
-                    if (-not $recovery.Success) {
-                        return $this.CreateFailureResult("$bootstrapFailure $($recovery.Component) failed: $($recovery.Message)")
-                    }
-                }
-                return $this.CreateFailureResult($bootstrapFailure)
-            }
-
-            try {
-                $handler = $this
-                $start = Invoke-HermesXApiCredentialScope `
-                    -DataDir $dataDir `
-                    -TokenProbe {
-                    $probe = $handler.InvokeCompose($composeFile, @(
-                            'run', '--rm', '--no-deps', '--entrypoint', '/bin/sh', 'xapi-mcp',
-                            '-lc', 'CLIENT_ID="$X_API_CLIENT_ID" CLIENT_SECRET="$X_API_CLIENT_SECRET" node_modules/.bin/xurl token >/dev/null'
-                        ))
-                    return Resolve-HermesXApiTokenProbeResult `
-                        -ExitCode $probe.ExitCode `
-                        -Output @($probe.Message)
-                } `
-                    -Action {
-                    $handler.InvokeCompose($composeFile, @('up', '-d', '--force-recreate', '--remove-orphans', 'hermes', 'chromium', 'browser-mcp', 'xapi-mcp'))
-                }
-            }
-            catch {
-                $xApiFailure = $_.Exception.Message
-                if ($runtimeExisted) {
-                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
-                    if (-not $recovery.Success) {
-                        $safeFailure = if ($xApiFailure -in @(
-                                'Hermes X API credential retrieval failed.',
-                                'Hermes X API token probe failed.',
-                                'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
-                            )) { $xApiFailure } else { 'Hermes Agent setup failed.' }
-                        return $this.CreateFailureResult("$safeFailure $($recovery.Component) failed: $($recovery.Message)")
-                    }
-                }
-                if ($xApiFailure -in @(
-                        'Hermes X API credential retrieval failed.',
-                        'Hermes X API token probe failed.',
-                        'Hermes X API OAuth is invalid. Run task hermes:xapi:setup to reauthorize it.'
-                    )) {
-                    return $this.CreateFailureResult($xApiFailure)
-                }
-                throw
-            }
-            if (-not $start.Success) {
-                $startupFailure = "Hermes Agent startup failed: $($start.Message)"
-                if ($runtimeExisted) {
-                    $recovery = $this.RecoverRuntimeAfterBootstrapFailure($composeFile)
-                    if (-not $recovery.Success) {
-                        return $this.CreateFailureResult("$startupFailure $($recovery.Component) failed: $($recovery.Message)")
-                    }
-                }
-                return $this.CreateFailureResult($startupFailure)
-            }
-
-            if (-not $this.WaitForApi()) {
-                try {
-                    $this.InvokeCompose($composeFile, @('ps', '--all')) | Out-Null
-                }
-                catch {
-                    $null = $_
-                }
-                $attempts = $this.GetPositiveEnvironmentInteger('HERMES_API_READY_ATTEMPTS', 30)
-                return $this.CreateFailureResult("Hermes Desktop backend did not become ready after $attempts attempts.")
-            }
-
-            try {
-                Invoke-HermesGatewayConvergence -ComposeFile $composeFile
-            }
-            catch [System.InvalidOperationException] {
-                return $this.CreateFailureResult($_.Exception.Message)
-            }
-
-            return $this.CreateSuccessResult("Hermes Agent started: http://127.0.0.1:9119 / browser: $($this.GetBrowserViewUrl())")
+        if ($this.IsNixRebuildApplied($ctx)) {
+            return $this.CreateSuccessResult('Hermes Agent is managed by the completed NixOS WSL rebuild.')
         }
-        catch {
-            return $this.CreateFailureResult('Hermes Agent setup failed.')
-        }
+
+        return $this.CreateFailureResult('Hermes Agent on Windows requires a successful NixOS WSL rebuild; Docker fallback is disabled.')
     }
 
     hidden [bool] IsSkipped([SetupContext]$ctx) {
@@ -220,159 +62,14 @@ class HermesAgentHandler : SetupHandlerBase {
         return -not $this.IsTruthy($ctx.GetOption('WithHermes', $false))
     }
 
+    hidden [bool] IsNixRebuildApplied([SetupContext]$ctx) {
+        return $this.IsTruthy($ctx.GetOption('NixRebuildApplied', $false))
+    }
+
     hidden [bool] IsTruthy([object]$value) {
         if ($null -eq $value) { return $false }
         if ($value -is [bool]) { return [bool]$value }
 
         return ([string]$value).Trim() -in @('1', 'true', 'TRUE', 'True', 'yes', 'YES', 'Yes', 'on', 'ON', 'On')
-    }
-
-    hidden [string] GetComposeFilePath([SetupContext]$ctx) {
-        return Join-Path $ctx.DotfilesPath 'docker\hermes-service\compose.yml'
-    }
-
-    hidden [string] GetDataDir() {
-        if (-not [string]::IsNullOrWhiteSpace($env:HERMES_DATA_DIR)) {
-            return $env:HERMES_DATA_DIR
-        }
-
-        return Join-Path $this.GetHomeDir() '.hermes'
-    }
-
-    hidden [string] GetBrowserDataDir() {
-        if (-not [string]::IsNullOrWhiteSpace($env:HERMES_BROWSER_DATA_DIR)) {
-            return $env:HERMES_BROWSER_DATA_DIR
-        }
-
-        return Join-Path (Join-Path $this.GetHomeDir() '.hermes') '.browser'
-    }
-
-    hidden [string] GetBrowserViewUrl() {
-        $port = if ([string]::IsNullOrWhiteSpace($env:HERMES_BROWSER_VIEW_PORT)) {
-            '6080'
-        }
-        else {
-            $env:HERMES_BROWSER_VIEW_PORT
-        }
-        return "http://127.0.0.1:$port"
-    }
-
-    hidden [string] GetApiHealthUrl() {
-        $port = if ([string]::IsNullOrWhiteSpace($env:HERMES_DASHBOARD_PORT)) {
-            '9119'
-        }
-        else {
-            $env:HERMES_DASHBOARD_PORT
-        }
-        return "http://127.0.0.1:$port/api/health"
-    }
-
-    hidden [int] GetPositiveEnvironmentInteger([string]$name, [int]$defaultValue) {
-        $rawValue = [Environment]::GetEnvironmentVariable($name)
-        $parsedValue = 0
-        if ([int]::TryParse($rawValue, [ref]$parsedValue) -and $parsedValue -gt 0) {
-            return $parsedValue
-        }
-        return $defaultValue
-    }
-
-    hidden [int] GetNonNegativeEnvironmentInteger([string]$name, [int]$defaultValue) {
-        $rawValue = [Environment]::GetEnvironmentVariable($name)
-        $parsedValue = 0
-        if ([int]::TryParse($rawValue, [ref]$parsedValue) -and $parsedValue -ge 0) {
-            return $parsedValue
-        }
-        return $defaultValue
-    }
-
-    hidden [bool] WaitForApi() {
-        $attempts = $this.GetPositiveEnvironmentInteger('HERMES_API_READY_ATTEMPTS', 30)
-        $delaySeconds = $this.GetNonNegativeEnvironmentInteger('HERMES_API_READY_DELAY_SECONDS', 2)
-        $timeoutSeconds = $this.GetPositiveEnvironmentInteger('HERMES_API_PROBE_TIMEOUT_SECONDS', 2)
-        $healthUrl = $this.GetApiHealthUrl()
-
-        for ($attempt = 1; $attempt -le $attempts; $attempt++) {
-            try {
-                $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing `
-                    -TimeoutSec $timeoutSeconds -ErrorAction Stop
-                if ($null -ne $response -and [int]$response.StatusCode -ge 200 -and [int]$response.StatusCode -lt 300) {
-                    return $true
-                }
-            }
-            catch {
-                $null = $_
-            }
-
-            if ($attempt -lt $attempts) {
-                Start-Sleep -Seconds $delaySeconds
-            }
-        }
-
-        return $false
-    }
-
-    hidden [string] GetHomeDir() {
-        if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) { return $env:USERPROFILE }
-        if (-not [string]::IsNullOrWhiteSpace($env:HOME)) { return $env:HOME }
-        return [Environment]::GetFolderPath('UserProfile')
-    }
-
-    hidden [void] EnsureDirectory([string]$path) {
-        if (-not (Test-Path -LiteralPath $path -PathType Container)) {
-            New-Item -ItemType Directory -Path $path -Force | Out-Null
-        }
-    }
-
-    hidden [pscustomobject] InvokeCompose([string]$composeFile, [string[]]$command) {
-        $arguments = @('compose', '-f', $composeFile) + $command
-        $output = @(Invoke-Docker -Arguments $arguments -TimeoutSeconds $this.DockerComposeTimeoutSeconds)
-        $exitCode = $LASTEXITCODE
-        if ($exitCode -eq 0) {
-            return [PSCustomObject]@{ Success = $true; Message = ''; ExitCode = 0 }
-        }
-
-        $message = (($output -join "`n").Trim())
-        if ([string]::IsNullOrWhiteSpace($message)) {
-            $message = "exit code $exitCode"
-        }
-        elseif ($message.Length -gt 4096) {
-            $message = "$($message.Substring(0, 4096))..."
-        }
-        return [PSCustomObject]@{ Success = $false; Message = $message; ExitCode = $exitCode }
-    }
-
-    hidden [pscustomobject] GetRuntimeState([string]$composeFile) {
-        $arguments = @('compose', '-f', $composeFile, 'ps', '--all', '--services', 'hermes')
-        $output = @(Invoke-Docker -Arguments $arguments -TimeoutSeconds $this.DockerComposeTimeoutSeconds)
-        $exitCode = $LASTEXITCODE
-        if ($exitCode -ne 0) {
-            $message = ($output -join "`n").Trim()
-            if ([string]::IsNullOrWhiteSpace($message)) { $message = "exit code $exitCode" }
-            return [PSCustomObject]@{ Success = $false; Exists = $false; Message = $message }
-        }
-        $exists = @($output | Where-Object { ([string]$_).Trim() -eq 'hermes' }).Count -eq 1
-        return [PSCustomObject]@{ Success = $true; Exists = $exists; Message = '' }
-    }
-
-    hidden [pscustomobject] RecoverRuntimeAfterBootstrapFailure([string]$composeFile) {
-        $recovery = $this.InvokeCompose($composeFile, @('start', 'hermes', 'chromium', 'browser-mcp', 'xapi-mcp'))
-        if (-not $recovery.Success) {
-            return [PSCustomObject]@{
-                Success   = $false
-                Component = 'Hermes runtime recovery start'
-                Message   = $recovery.Message
-            }
-        }
-
-        if (-not $this.WaitForApi()) {
-            $attempts = $this.GetPositiveEnvironmentInteger('HERMES_API_READY_ATTEMPTS', 30)
-            return [PSCustomObject]@{
-                Success   = $false
-                Component = 'Hermes runtime recovery readiness'
-                Message   = "Hermes Desktop backend did not become ready after $attempts attempts."
-            }
-        }
-
-        return [PSCustomObject]@{ Success = $true; Component = ''; Message = '' }
     }
 }

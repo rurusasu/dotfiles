@@ -33,6 +33,25 @@ Repair-WindowsSetupEnvironment
 . (Join-Path $libPath "Invoke-ExternalCommand.ps1")
 . (Join-Path $repoRoot "scripts\powershell\handlers\Handler.NixOSWSL.ps1")
 
+# The setup handler has legacy Invoke-Wsl calls without per-command timeouts.
+# Bound those calls in this disposable E2E process; long post-install rebuilds
+# keep using their explicit timeout from SetupContext.
+$script:InvokeWslOriginal = (Get-Command Invoke-Wsl).ScriptBlock
+function Invoke-Wsl {
+    [CmdletBinding(PositionalBinding = $false)]
+    param(
+        [Parameter(Position = 0, ValueFromRemainingArguments)]
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds = 0
+    )
+
+    if ($TimeoutSeconds -le 0) {
+        $TimeoutSeconds = 900
+    }
+
+    & $script:InvokeWslOriginal -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
+}
+
 if ([string]::IsNullOrWhiteSpace($DistroName)) {
     $suffix = if ($env:GITHUB_RUN_ID) {
         "$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"
@@ -246,13 +265,13 @@ try {
             Invoke-WslChecked -Arguments @(
                 "-d", $DistroName, "-u", "root", "--",
                 "bash", "-lc",
-                'cd /home/nixos/.dotfiles && DOTFILES_USER=nixos DOTFILES_HOME=/home/nixos DOTFILES_WITH_HERMES=1 bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure'
+                'cd /home/nixos/.dotfiles && DOTFILES_USER=nixos DOTFILES_HOME=/home/nixos DOTFILES_WITH_HERMES=1 DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure'
             ) -TimeoutSeconds 5400 | Out-Null
 
             Invoke-WslChecked -Arguments @(
                 "-d", $DistroName, "-u", "nixos", "--",
                 "zsh", "-lc",
-                'cd /home/nixos/.dotfiles && test "$DOTFILES_WITH_HERMES" = 1 && bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure'
+                'cd /home/nixos/.dotfiles && test "$DOTFILES_WITH_HERMES" = 1 && DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure'
             ) -TimeoutSeconds 5400 | Out-Null
 
             Invoke-WslChecked -Arguments @(
@@ -289,15 +308,30 @@ expect_unauthorized() {
   local description="$1"
   shift
   local status_code
+  local curl_exit_code
 
-  if ! status_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time __READINESS_CURL_TIMEOUT_SECONDS__ "$@" "$health_url"); then
-    echo "Hermes $description probe failed before receiving an HTTP response" >&2
-    return 1
-  fi
-  if [[ $status_code != 401 ]]; then
-    echo "Hermes $description probe expected HTTP 401 but received $status_code" >&2
-    return 1
-  fi
+  for attempt in {1..__READINESS_ATTEMPTS__}; do
+    if status_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time __READINESS_CURL_TIMEOUT_SECONDS__ "$@" "$health_url"); then
+      curl_exit_code=0
+    else
+      curl_exit_code=$?
+    fi
+
+    if [[ $curl_exit_code -eq 0 && $status_code == 401 ]]; then
+      return 0
+    fi
+    if [[ -n $status_code && $status_code != 000 ]]; then
+      echo "Hermes $description probe expected HTTP 401 but received $status_code" >&2
+      return 1
+    fi
+
+    if [[ $attempt -lt __READINESS_ATTEMPTS__ ]]; then
+      sleep __READINESS_RETRY_DELAY_SECONDS__
+    fi
+  done
+
+  echo "Hermes $description probe received no HTTP response after __READINESS_ATTEMPTS__ attempts (last curl exit code: $curl_exit_code)" >&2
+  return 1
 }
 
 expect_unauthorized 'missing bearer token'

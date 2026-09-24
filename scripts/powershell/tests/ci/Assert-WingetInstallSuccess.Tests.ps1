@@ -14,6 +14,22 @@ Total: 1 | Success: 1 | Failure: 0
         { Assert-WingetInstallSuccess -Output $output } | Should -Not -Throw
     }
 
+    It "should require GitHub CLI and Go to appear in and pass the CI verification inventory" {
+        $output = @"
+[Winget] CI_VERIFICATION_INVENTORY: GitHub.cli|GoLang.Go
+[Winget] ✓ GitHub.cli
+[Winget] ✓ GoLang.Go
+Total: 2 | Success: 2 | Failure: 0
+"@
+
+        { Assert-WingetInstallSuccess -Output $output -ExpectedPackageIds @("GitHub.cli", "GoLang.Go") } |
+            Should -Not -Throw
+
+        $missingGo = $output -replace '\|GoLang\.Go', '' -replace '\[Winget\] ✓ GoLang\.Go\r?\n', ''
+        { Assert-WingetInstallSuccess -Output $missingGo -ExpectedPackageIds @("GitHub.cli", "GoLang.Go") } |
+            Should -Throw "*expected Windows E2E packages are missing from the verification inventory: GoLang.Go*"
+    }
+
     It "rejects a successful handler summary when WinGet only reported an unverified no-op" {
         $output = @"
 [Winget] CI_VERIFICATION_INVENTORY: Test.Tool
