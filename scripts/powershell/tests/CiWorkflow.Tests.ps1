@@ -276,7 +276,7 @@ Describe 'CI workflow configuration' {
         )
         $actualIds = @($packages | Where-Object $predicate | ForEach-Object { [string]$_.PackageIdentifier } | Sort-Object -Unique)
 
-        $actualIds | Should -Be @('EmptyFeature.Package', 'Ordinary.Package')
+        $actualIds | Should -Be @('CiSkipped.Package', 'EmptyFeature.Package', 'Ordinary.Package')
     }
 
     It 'should build the NixOS WSL system on hosted Nix CI' {
