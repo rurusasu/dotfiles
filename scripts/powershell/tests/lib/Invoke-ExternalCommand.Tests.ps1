@@ -308,7 +308,7 @@ Describe 'Invoke-VerifyCommand' {
             "-NoProfile",
             "-Command",
             "Write-Output 'partial output'; Start-Sleep -Seconds 5; exit 0"
-        ) -TimeoutSeconds 1
+        ) -TimeoutSeconds 2
 
         ($result -join "`n") | Should -Match "タイムアウト"
         $result | Should -Contain 'partial output'
@@ -543,6 +543,19 @@ Describe 'Get-ExternalCommand' {
         else {
             $result | Should -Not -BeNullOrEmpty
             $result.Name | Should -Be $name
+        }
+    }
+}
+
+Describe 'Get-ExternalCommandPath' {
+    It 'should resolve Path-only command metadata in strict mode' {
+        Set-StrictMode -Version Latest
+        try {
+            Get-ExternalCommandPath -CommandInfo ([pscustomobject]@{ Path = 'C:\tools\npm.cmd' }) |
+                Should -Be 'C:\tools\npm.cmd'
+        }
+        finally {
+            Set-StrictMode -Off
         }
     }
 }
@@ -904,6 +917,38 @@ Describe 'Update-ProcessEnvironmentPath' {
         Update-ProcessEnvironmentPath
 
         @($env:PATH -split ";" | Where-Object { $_ -eq $uniquePath -or $_ -eq $uniquePath.ToUpperInvariant() }).Count | Should -Be 1
+    }
+
+    It 'should exclude selected paths while importing updated User PATH entries' {
+        $excludedPath = "C:\RunnerPnpm-$([guid]::NewGuid())"
+        $userPath = "C:\NewUserPath-$([guid]::NewGuid());$excludedPath"
+        Mock Get-UserEnvironmentPath { return $userPath }
+        $env:PATH = "C:\ExistingPath;$excludedPath"
+
+        Update-ProcessEnvironmentPath -ExcludePath @($excludedPath)
+
+        ($env:PATH -split ';') | Should -Contain 'C:\ExistingPath'
+        ($env:PATH -split ';') | Should -Contain ($userPath -split ';')[0]
+        ($env:PATH -split ';') | Should -Not -Contain $excludedPath
+    }
+
+    It 'should keep the refreshed PATH below the Windows command environment limit' {
+        if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+            Set-ItResult -Skipped -Because 'the cmd.exe environment limit is Windows-specific'
+            return
+        }
+
+        $oversizedUserPath = (1..80 | ForEach-Object { "C:\$([string]::new('U', 80))$_" }) -join ';'
+        Mock Get-UserEnvironmentPath { return $oversizedUserPath }
+        $env:PATH = "$script:originalPath;" + ((1..120 | ForEach-Object { "C:\$([string]::new('P', 80))$_" }) -join ';')
+
+        Update-ProcessEnvironmentPath
+
+        $env:PATH.Length | Should -BeLessOrEqual 8191
+        ($env:PATH -split ';') | Should -Contain (Split-Path -Parent (Get-Command cmd.exe).Source)
+        $commandInterpreter = Join-Path $env:SystemRoot 'System32\cmd.exe'
+        $child = Start-Process -FilePath $commandInterpreter -ArgumentList '/d', '/c', 'exit 0' -Wait -PassThru -NoNewWindow
+        $child.ExitCode | Should -Be 0
     }
 }
 

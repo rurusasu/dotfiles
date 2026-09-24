@@ -390,6 +390,7 @@ class NixRebuildHandler : SetupHandlerBase {
         }
 
         $legacyGatewayWasRunning = $false
+        $nixosSwitchSucceeded = $false
         try {
             $distroName = $ctx.DistroName
             $this.ResolveNixOsIdentity($distroName)
@@ -482,26 +483,10 @@ class NixRebuildHandler : SetupHandlerBase {
             if ($nixosExitCode -ne 0) {
                 $errorDetail = if ($errorLines.Count -gt 0) { ": $($errorLines[0])" } else { "" }
                 $rebuildFailure = "nixos-rebuild switch が失敗しました (exit code: $nixosExitCode)$errorDetail"
-                if ($legacyGatewayWasRunning) {
-                    $this.LogWarning("NixOS rebuild が失敗したため legacy Hermes gateway を復旧します")
-                    try {
-                        $restoreCommand = 'docker start hermes'
-                        $restoreOutput = Invoke-Wsl -Arguments @(
-                            "-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", $restoreCommand
-                        )
-                        $restoreExitCode = $LASTEXITCODE
-                        if ($restoreExitCode -ne 0) {
-                            $restoreDetail = if ($restoreOutput) { ": $($restoreOutput -join '; ')" } else { "" }
-                            throw "legacy Hermes gateway restart failed (exit code: $restoreExitCode)$restoreDetail"
-                        }
-                    }
-                    catch {
-                        throw "$rebuildFailure; rollback failed: $($_.Exception.Message)"
-                    }
-                }
                 throw $rebuildFailure
             }
 
+            $nixosSwitchSucceeded = $true
             $this.Log("nixos-rebuild switch 完了", "Green")
 
             # pnpm グローバルパッケージをインストール（SSOT: nix/packages/sets.nix → windows/pnpm/packages.json）
@@ -517,7 +502,24 @@ class NixRebuildHandler : SetupHandlerBase {
             return $this.CreateSuccessResult("NixOS 設定を適用しました")
         }
         catch {
-            return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
+            $failureMessage = $_.Exception.Message
+            if ($legacyGatewayWasRunning -and -not $nixosSwitchSucceeded) {
+                $this.LogWarning("NixOS rebuild が完了しなかったため legacy Hermes gateway を復旧します")
+                try {
+                    $restoreOutput = Invoke-Wsl -Arguments @(
+                        "-d", $ctx.DistroName, "-u", $this.NixOsUser, "--", "bash", "-lc", 'docker start hermes'
+                    )
+                    $restoreExitCode = $LASTEXITCODE
+                    if ($restoreExitCode -ne 0) {
+                        $restoreDetail = if ($restoreOutput) { ": $($restoreOutput -join '; ')" } else { "" }
+                        throw "legacy Hermes gateway restart failed (exit code: $restoreExitCode)$restoreDetail"
+                    }
+                }
+                catch {
+                    $failureMessage = "$failureMessage; rollback failed: $($_.Exception.Message)"
+                }
+            }
+            return $this.CreateFailureResult($failureMessage, $_.Exception)
         }
     }
 }

@@ -986,8 +986,10 @@ jobs:
         include:
           - runtime: Windows PowerShell 5.1
             version: "5.1"
+            shell: powershell
           - runtime: PowerShell 7
             version: "7"
+            shell: pwsh
     permissions:
       contents: read
     steps:
@@ -1045,11 +1047,19 @@ jobs:
           # with exit 0 still leaves later winget install calls unable to resolve
           # packages, so detect it explicitly.
           Invoke-WingetSourceUpdate
-          winget --version
-          winget source list
+          $wingetVersion = @(winget --version 2>&1)
+          $wingetVersionExitCode = $LASTEXITCODE
+          if ($wingetVersionExitCode -ne 0) {
+            throw "winget --version failed (exit=$wingetVersionExitCode): $($wingetVersion -join ' ')"
+          }
+          $wingetSources = @(winget source list 2>&1)
+          $wingetSourcesExitCode = $LASTEXITCODE
+          if ($wingetSourcesExitCode -ne 0) {
+            throw "winget source list failed (exit=$wingetSourcesExitCode): $($wingetSources -join ' ')"
+          }
 
       - name: Run install.cmd strict user phase
-        shell: pwsh
+        shell: ${{ matrix.shell }}
         timeout-minutes: 70
         env:
           DOTFILES_INSTALL_TIMEOUT_SECONDS: "900"
@@ -1070,14 +1080,17 @@ jobs:
               & $Validation
             }
             catch {
-              $validationErrors.Add("${Name}: $($_.Exception.Message)")
+              $validationError = "${Name}: $($_.Exception.Message)"
+              $validationErrors.Add($validationError)
+              Write-Host "Windows installer E2E validation failed: $validationError" -ForegroundColor Red
             }
           }
 
           try {
           $expectedVersion = $env:DOTFILES_E2E_POWERSHELL_VERSION
-          if ($PSVersionTable.PSVersion.Major -ne 7) {
-            throw "Windows installer E2E orchestrator must run under PowerShell 7, got $($PSVersionTable.PSVersion)"
+          $expectedMajorVersion = if ($expectedVersion -eq '5.1') { 5 } else { 7 }
+          if ($PSVersionTable.PSVersion.Major -ne $expectedMajorVersion) {
+            throw "Windows installer E2E must run under PowerShell $expectedVersion, got $($PSVersionTable.PSVersion)"
           }
 
           $originalPath = $env:PATH
@@ -1120,7 +1133,14 @@ jobs:
             }
 
             $classicBefore = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --disable-interactivity 2>&1)
+            $classicBeforeExitCode = $LASTEXITCODE
             $classicBeforeText = $classicBefore -join [Environment]::NewLine
+            if ($classicBeforeExitCode -ne 0) {
+              $classicBeforeExitCodeUnsigned = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$classicBeforeExitCode), 0)
+              if ($classicBeforeExitCodeUnsigned.ToString('X8') -ne '8A150014') {
+                throw "Unable to inspect ChatGPT Classic E2E seed state (winget list exit=$($classicBeforeExitCodeUnsigned.ToString('X8'))): $classicBeforeText"
+              }
+            }
             if ($classicBeforeText -notmatch '(?im)^\s*.*\b9NT1R1C2HH7J\b') {
               $classicInstallOutput = @(winget install --id 9NT1R1C2HH7J --exact --source msstore --silent --accept-package-agreements --accept-source-agreements --disable-interactivity 2>&1)
               $classicInstallExitCode = $LASTEXITCODE
@@ -1190,10 +1210,12 @@ jobs:
               [System.IO.Path]::GetFullPath($npmGlobalPrefix.Trim()).TrimEnd('\')
             )
           })
-          $persistedUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-          $userPathEntries = @($persistedUserPath -split ';' | Where-Object { $_ -and $_ -notin $runnerPnpmDirectories })
-          $runnerPathEntries = @($originalPath -split ';' | Where-Object { $_ -and $_ -notin $runnerPnpmDirectories })
-          $env:PATH = @($userPathEntries + $runnerPathEntries) -join ';'
+          . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/lib/Invoke-ExternalCommand.ps1')
+          $env:PATH = $originalPath
+          Update-ProcessEnvironmentPath -ExcludePath $runnerPnpmDirectories
+          if ($env:PATH.Length -gt 8191) {
+            throw "Post-install PATH exceeds the cmd.exe command environment limit: $($env:PATH.Length)"
+          }
           $persistedPnpmHome = [Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
           if (-not [string]::IsNullOrWhiteSpace($persistedPnpmHome)) {
             $env:PNPM_HOME = $persistedPnpmHome
@@ -1301,13 +1323,15 @@ jobs:
           if (-not (Test-Path -LiteralPath $codexShimPath -PathType Leaf)) {
             throw "Codex CLI shim is missing after installation: $codexShimPath"
           }
-          $codexPathCommand = Get-Command -Name 'codex.exe' -CommandType Application -ErrorAction SilentlyContinue
+          $codexPathCommand = Get-Command -Name 'codex.exe' -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          $codexPathCommandPath = Get-ExternalCommandPath -CommandInfo $codexPathCommand
           if (-not $codexPathCommand -or
-            -not ([System.IO.Path]::GetFullPath($codexPathCommand.Source)).Equals(
+            -not ([System.IO.Path]::GetFullPath($codexPathCommandPath)).Equals(
               [System.IO.Path]::GetFullPath($codexShimPath),
               [System.StringComparison]::OrdinalIgnoreCase
             )) {
-            throw "Codex CLI shim is not the command exposed on PATH: expected=$codexShimPath actual=$($codexPathCommand.Source)"
+            throw "Codex CLI shim is not the command exposed on PATH: expected=$codexShimPath actual=$codexPathCommandPath"
           }
 
           . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/lib/SetupHandler.ps1')
@@ -1356,12 +1380,13 @@ jobs:
           }
           $onePasswordExecutablePath = Join-Path $onePasswordPackageDirectory 'op.exe'
           $resolvedOnePassword = Get-Command -Name 'op.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $resolvedOnePasswordPath = Get-ExternalCommandPath -CommandInfo $resolvedOnePassword
           $installedOnePasswordHash = (Get-FileHash -LiteralPath $onePasswordExecutablePath -Algorithm SHA256).Hash
-          $resolvedOnePasswordHash = (Get-FileHash -LiteralPath $resolvedOnePassword.Source -Algorithm SHA256).Hash
+          $resolvedOnePasswordHash = (Get-FileHash -LiteralPath $resolvedOnePasswordPath -Algorithm SHA256).Hash
           if (-not [System.StringComparer]::OrdinalIgnoreCase.Equals($installedOnePasswordHash, $resolvedOnePasswordHash)) {
-            throw "PATH-resolved op.exe does not match the configured WinGet package binary: resolved=$($resolvedOnePassword.Source) installed=$onePasswordExecutablePath"
+            throw "PATH-resolved op.exe does not match the configured WinGet package binary: resolved=$resolvedOnePasswordPath installed=$onePasswordExecutablePath"
           }
-          $onePasswordVersion = @(& $resolvedOnePassword.Source --version 2>&1)
+          $onePasswordVersion = @(& $resolvedOnePasswordPath --version 2>&1)
           $onePasswordExitCode = $LASTEXITCODE
           if ($onePasswordExitCode -ne 0) {
             throw "Installed 1Password CLI failed its version probe (exit=$onePasswordExitCode): $($onePasswordVersion -join ' ')"
@@ -1369,35 +1394,6 @@ jobs:
           $winGetLinksPath = [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'))
           if ($onePasswordUserPathEntries -contains $winGetLinksPath -and -not (Test-Path -LiteralPath (Join-Path $winGetLinksPath 'op.exe') -PathType Leaf)) {
             throw 'WinGet Links op.exe shim is missing after OnePasswordCli setup'
-          }
-          $requiredCommands = @(
-            @{ Name = 'npm'; Arguments = @('--version') }
-            @{ Name = 'agent-browser'; Arguments = @('--version') }
-            @{ Name = 'herdr'; Arguments = @('--version') }
-            @{ Name = 'pnpm'; Arguments = @('--version') }
-            @{ Name = 'gemini'; Arguments = @('--version') }
-            @{ Name = 'op.exe'; Arguments = @('--version') }
-          )
-          foreach ($requiredCommand in $requiredCommands) {
-            $resolvedCommand = Get-Command -Name $requiredCommand.Name -CommandType Application -ErrorAction SilentlyContinue
-            if (-not $resolvedCommand) {
-              throw "Windows installer did not expose required command '$($requiredCommand.Name)'"
-            }
-
-            if ($requiredCommand.Name -eq 'pnpm') {
-              $resolvedPnpmPath = [System.IO.Path]::GetFullPath($resolvedCommand.Source)
-              $expectedPnpmPath = [System.IO.Path]::GetFullPath($npmPnpmShim)
-              if (-not [System.StringComparer]::OrdinalIgnoreCase.Equals($resolvedPnpmPath, $expectedPnpmPath)) {
-                throw "PATH-resolved pnpm is not the npm-installed pnpm shim: resolved=$resolvedPnpmPath expected=$expectedPnpmPath"
-              }
-            }
-
-            $commandArguments = @($requiredCommand.Arguments)
-            $commandOutput = @(& $resolvedCommand.Source @commandArguments 2>&1)
-            $commandExitCode = $LASTEXITCODE
-            if ($commandExitCode -ne 0) {
-              throw "Windows installer command '$($requiredCommand.Name)' failed (exit=$commandExitCode): $($commandOutput -join ' ')"
-            }
           }
           $nodeVersionOutput = @(node --version 2>&1)
           $nodeVersionExitCode = $LASTEXITCODE
@@ -1408,6 +1404,38 @@ jobs:
           $nodeVersion = $null
           if (-not [version]::TryParse($nodeVersionText, [ref]$nodeVersion) -or $nodeVersion -lt [version]'24.0.0') {
             throw "agent-browser@0.38.1 requires Node.js >=24.0.0; active Node.js version is '$nodeVersionText'"
+          }
+
+          $requiredCommands = @(
+            @{ Name = 'npm'; Arguments = @('--version') }
+            @{ Name = 'agent-browser'; Arguments = @('--version') }
+            @{ Name = 'herdr'; Arguments = @('--version') }
+            @{ Name = 'pnpm'; Arguments = @('--version') }
+            @{ Name = 'gemini'; Arguments = @('--version') }
+            @{ Name = 'op.exe'; Arguments = @('--version') }
+          )
+          foreach ($requiredCommand in $requiredCommands) {
+            $resolvedCommand = Get-Command -Name $requiredCommand.Name -CommandType Application -ErrorAction SilentlyContinue |
+              Select-Object -First 1
+            if (-not $resolvedCommand) {
+              throw "Windows installer did not expose required command '$($requiredCommand.Name)'"
+            }
+
+            if ($requiredCommand.Name -eq 'pnpm') {
+              $resolvedPnpmPath = [System.IO.Path]::GetFullPath((Get-ExternalCommandPath -CommandInfo $resolvedCommand))
+              $expectedPnpmPath = [System.IO.Path]::GetFullPath($npmPnpmShim)
+              if (-not [System.StringComparer]::OrdinalIgnoreCase.Equals($resolvedPnpmPath, $expectedPnpmPath)) {
+                throw "PATH-resolved pnpm is not the npm-installed pnpm shim: resolved=$resolvedPnpmPath expected=$expectedPnpmPath"
+              }
+            }
+
+            $commandArguments = @($requiredCommand.Arguments)
+            $resolvedCommandPath = Get-ExternalCommandPath -CommandInfo $resolvedCommand
+            $commandOutput = @(& $resolvedCommandPath @commandArguments 2>&1)
+            $commandExitCode = $LASTEXITCODE
+            if ($commandExitCode -ne 0) {
+              throw "Windows installer command '$($requiredCommand.Name)' failed (exit=$commandExitCode): $($commandOutput -join ' ')"
+            }
           }
           }
           }

@@ -307,6 +307,36 @@ function Get-ExternalCommand {
     Get-Command $Name -ErrorAction SilentlyContinue
 }
 
+function Get-ExternalCommandPath {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter()]
+        [AllowNull()]
+        [object]$CommandInfo
+    )
+
+    if ($null -eq $CommandInfo) { return $null }
+    if ($CommandInfo -is [string]) { return $CommandInfo }
+
+    foreach ($propertyName in @('Source', 'Path')) {
+        if ($CommandInfo -is [System.Collections.IDictionary] -and $CommandInfo.Contains($propertyName)) {
+            $value = [string]$CommandInfo[$propertyName]
+            if (-not [string]::IsNullOrWhiteSpace($value)) {
+                return $value
+            }
+            continue
+        }
+
+        $property = $CommandInfo.PSObject.Properties[$propertyName]
+        if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+            return [string]$property.Value
+        }
+    }
+
+    return $null
+}
+
 <#
 .SYNOPSIS
     WinGet Packages から実行ファイルを検索する（全ユーザー対応）
@@ -677,7 +707,7 @@ function Get-NpmNodeDirectory {
     param()
 
     $nodeCommand = Get-ExternalCommand -Name "node.exe"
-    $nodePath = if ($nodeCommand.Source) { $nodeCommand.Source } else { $nodeCommand.Path }
+    $nodePath = Get-ExternalCommandPath -CommandInfo $nodeCommand
     if ($nodePath -and (Test-Path -LiteralPath $nodePath -PathType Leaf)) {
         return Split-Path -Parent $nodePath
     }
@@ -689,7 +719,7 @@ function Get-NpmNodeDirectory {
         $npmCommand = Get-ExternalCommand -Name $npmName
         if (-not $npmCommand) { continue }
 
-        $npmPath = if ($npmCommand.Source) { $npmCommand.Source } else { $npmCommand.Path }
+        $npmPath = Get-ExternalCommandPath -CommandInfo $npmCommand
         if (-not $npmPath) { continue }
 
         $nodePath = Join-Path (Split-Path -Parent $npmPath) "node.exe"
@@ -758,7 +788,7 @@ function Invoke-Pnpm {
         Select-Object -First 1
     $pnpmPath = "pnpm"
     if ($pnpmCommand) {
-        $resolvedPnpmPath = if ($pnpmCommand.Source) { $pnpmCommand.Source } else { $pnpmCommand.Path }
+        $resolvedPnpmPath = Get-ExternalCommandPath -CommandInfo $pnpmCommand
         if ($resolvedPnpmPath) {
             $pnpmPath = $resolvedPnpmPath
         }
@@ -1042,28 +1072,55 @@ function Set-UserEnvironmentPath {
 #>
 function Update-ProcessEnvironmentPath {
     [CmdletBinding()]
-    param()
+    param(
+        [string[]]$ExcludePath = @()
+    )
 
     $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
     $userPath = Get-UserEnvironmentPath
     $processPath = [System.Environment]::GetEnvironmentVariable("PATH", "Process")
 
+    # cmd.exe rejects environment variables over 8191 characters. Since the
+    # installer launches .cmd shims (npm, pnpm, corepack, and winget aliases),
+    # keep the merged PATH below that boundary instead of importing an
+    # arbitrarily large registry User PATH into every child process.
+    $maxPathLength = 8191
     $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $items = [System.Collections.Generic.List[string]]::new()
+    $pathLength = 0
+    $omittedEntries = 0
+    $excluded = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in $ExcludePath) {
+        if (-not [string]::IsNullOrWhiteSpace($entry)) { [void]$excluded.Add($entry.Trim()) }
+    }
 
-    foreach ($pathValue in @($machinePath, $userPath, $processPath)) {
+    # Preserve the machine PATH and entries already available to this process
+    # before importing new registry User PATH entries.
+    foreach ($pathValue in @($machinePath, $processPath, $userPath)) {
         if ([string]::IsNullOrWhiteSpace($pathValue)) { continue }
 
         foreach ($item in ($pathValue -split ";")) {
             $trimmed = $item.Trim()
             if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
-            if ($seen.Add($trimmed)) {
-                $items.Add($trimmed)
+            if ($excluded.Contains($trimmed)) { continue }
+            if (-not $seen.Add($trimmed)) { continue }
+
+            $nextLength = $pathLength + $trimmed.Length
+            if ($items.Count -gt 0) { $nextLength++ }
+            if ($nextLength -gt $maxPathLength) {
+                $omittedEntries++
+                continue
             }
+
+            $items.Add($trimmed)
+            $pathLength = $nextLength
         }
     }
 
     $env:PATH = $items -join ";"
+    if ($omittedEntries -gt 0) {
+        Write-Warning "Process PATH refresh omitted $omittedEntries entries to stay within the Windows cmd.exe limit of $maxPathLength characters. Trim stale entries from the User PATH if required commands are missing."
+    }
 }
 
 <#
@@ -1316,13 +1373,14 @@ function Invoke-ExternalCommandWithTimeout {
             $global:LASTEXITCODE = 127
             return "コマンドが見つかりません: $Command"
         }
-        if ($resolvedCommand -and $resolvedCommand.Source -like "*.ps1") {
+        $resolvedCommandPath = Get-ExternalCommandPath -CommandInfo $resolvedCommand
+        if ($resolvedCommandPath -like "*.ps1") {
             $psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell.exe" }
             $filePath = $psExe
-            $argumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $resolvedCommand.Source) + @($Arguments)
+            $argumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $resolvedCommandPath) + @($Arguments)
         }
-        elseif ($resolvedCommand.Source) {
-            $filePath = $resolvedCommand.Source
+        elseif ($resolvedCommandPath) {
+            $filePath = $resolvedCommandPath
         }
 
         $processStartInfo = [System.Diagnostics.ProcessStartInfo]::new()

@@ -97,6 +97,46 @@ Describe 'PnpmHandler' {
     }
 
     Context 'TryBootstrapPnpm - npm global prefix' {
+        It 'should resolve npm commands that expose Path without a Source property' {
+            $script:originalProcessPath = $env:PATH
+            $script:originalPnpmHome = $env:PNPM_HOME
+            $script:npmGlobalPrefix = Join-Path $TestDrive 'npm-global-path-only'
+            $script:npmRuntimeDirectory = Join-Path $TestDrive 'npm-node-runtime-path-only'
+            $script:npmPath = Join-Path $script:npmRuntimeDirectory 'npm.cmd'
+            New-Item -Path (Join-Path $script:npmGlobalPrefix 'pnpm.cmd') -ItemType File -Force | Out-Null
+            New-Item -Path $script:npmPath -ItemType File -Force | Out-Null
+            New-Item -Path (Join-Path $script:npmRuntimeDirectory 'node.exe') -ItemType File -Force | Out-Null
+            $env:PNPM_HOME = $null
+            $env:PATH = 'C:\Windows\System32'
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq 'npm') { return [pscustomobject]@{ Path = $script:npmPath } }
+                return $null
+            }
+            Mock Invoke-Npm {
+                param($Arguments)
+                if ($Arguments -contains 'prefix') { $global:LASTEXITCODE = 0; return $script:npmGlobalPrefix }
+                $global:LASTEXITCODE = 0
+                return 'added pnpm'
+            }
+            Mock Invoke-NativeCommand { $global:LASTEXITCODE = 0; return '10.0.0' }
+            Mock Get-UserEnvironmentPath { return '' }
+            Mock Set-UserEnvironmentPath { }
+
+            try {
+                Set-StrictMode -Version Latest
+                $result = $handler.TryBootstrapPnpm()
+
+                $result | Should -BeTrue
+                $handler.BootstrapPnpmDirectory | Should -Be $script:npmGlobalPrefix
+            }
+            finally {
+                Set-StrictMode -Off
+                $env:PATH = $script:originalProcessPath
+                $env:PNPM_HOME = $script:originalPnpmHome
+            }
+        }
+
         It 'should add npm global prefix to PATH before checking the installed pnpm shim' {
             $script:originalProcessPath = $env:PATH
             $script:originalPnpmHome = $env:PNPM_HOME
@@ -1633,14 +1673,27 @@ Describe 'PnpmHandler' {
         AfterEach { $env:PATH = $script:origPath }
 
         It 'should verify stdio tools by command existence without executing them' {
-            $result = $handler.Apply($ctx)
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq "pnpm") { return @{ Source = "C:\pnpm.cmd" } }
+                if ($Name -eq "claude-agent-acp") { return [pscustomobject]@{ Path = (Join-Path $script:pnpmBin "claude-agent-acp.CMD") } }
+                return $null
+            }
 
-            $result.Success | Should -Be $true
-            $result.Message | Should -Match "1 個インストール"
-            Should -Invoke Invoke-VerifyCommand -Times 0
-            Should -Invoke Write-Host -ParameterFilter {
-                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "検証中: command -v claude-agent-acp"
-            } -Times 1
+            Set-StrictMode -Version Latest
+            try {
+                $result = $handler.Apply($ctx)
+
+                $result.Success | Should -Be $true
+                $result.Message | Should -Match "1 個インストール"
+                Should -Invoke Invoke-VerifyCommand -Times 0
+                Should -Invoke Write-Host -ParameterFilter {
+                    $ForegroundColor -eq "Gray" -and ([string]$Object) -match "検証中: command -v claude-agent-acp"
+                } -Times 1
+            }
+            finally {
+                Set-StrictMode -Off
+            }
         }
 
         It 'should fail when commandExists target is missing' {
@@ -1737,6 +1790,7 @@ Describe 'PnpmHandler' {
                         Command   = $Command
                         Arguments = @($Arguments)
                         NodePath  = $env:NODE_PATH
+                        Timeout   = $TimeoutSeconds
                     })
                 $global:LASTEXITCODE = 0
                 return 'module loaded'
@@ -1964,6 +2018,7 @@ Describe 'PnpmHandler' {
                         Command   = $Command
                         Arguments = @($Arguments)
                         NodePath  = $env:NODE_PATH
+                        Timeout   = $TimeoutSeconds
                     })
                 $global:LASTEXITCODE = 1
                 return 'Gemini CLI failed'

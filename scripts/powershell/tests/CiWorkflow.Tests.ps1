@@ -98,10 +98,11 @@ Describe 'CI workflow configuration' {
         $installerJob | Should -Match 'max-parallel:\s*2'
         $installerJob | Should -Match 'runtime: Windows PowerShell 5\.1[\s\S]*?version: "5\.1"'
         $installerJob | Should -Match 'runtime: PowerShell 7[\s\S]*?version: "7"'
-        $installerJob | Should -Not -Match 'shell:\s+\$\{\{\s*matrix\.'
-        $installerJob | Should -Match 'shell:\s+pwsh'
+        $installerJob | Should -Match 'runtime: Windows PowerShell 5\.1[\s\S]*?shell: powershell'
+        $installerJob | Should -Match 'runtime: PowerShell 7[\s\S]*?shell: pwsh'
+        $installerJob | Should -Match 'shell:\s+\$\{\{\s*matrix\.shell\s*\}\}'
         $installerJob | Should -Match 'DOTFILES_E2E_POWERSHELL_VERSION:\s+\$\{\{\s*matrix\.version\s*\}\}'
-        $installerJob | Should -Match 'E2E orchestrator must run under PowerShell 7'
+        $installerJob | Should -Match 'Windows installer E2E must run under PowerShell \$expectedVersion'
         $installerJob | Should -Match 'Using Windows PowerShell'
         $installerJob | Should -Match 'install\.cmd -NoPause -UserPhaseOnly(?!\s+-WingetVerifyCommandOnly)'
         $installerJob | Should -Match 'RequiredOutputMarkers\s+\$requiredPackageManagerMarkers'
@@ -112,6 +113,8 @@ Describe 'CI workflow configuration' {
         $installerJob | Should -Match 'Get-Command -Name ''pnpm'' -CommandType Application -All'
         $installerJob | Should -Match 'Could not isolate the preinstalled pnpm executable for the bootstrap E2E'
         $installerJob | Should -Match 'npm did not install the pnpm command shim under its global prefix'
+        $installerJob | Should -Match 'Update-ProcessEnvironmentPath -ExcludePath \$runnerPnpmDirectories'
+        $installerJob | Should -Match 'Windows installer E2E must run under PowerShell \$expectedVersion'
         $installerJob | Should -Match '& \$npmPnpmShim --version'
         $installerJob | Should -Match 'Could not seed the ChatGPT Classic uninstall E2E'
         $installerJob | Should -Match 'Write-Host \$failureSummary -ForegroundColor Red'
@@ -237,6 +240,20 @@ Describe 'CI workflow configuration' {
         $installerJob | Should -Match 'Get-Command -Name \$requiredCommand\.Name -CommandType Application'
         $installerJob | Should -Match 'Windows installer did not expose required command'
         $installerJob | Should -Match 'Windows installer command.*failed'
+    }
+
+    It 'should diagnose an unsupported Node version before probing agent-browser' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $installerJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
+        ).Groups['job'].Value
+
+        $nodePreflightIndex = $installerJob.IndexOf('$nodeVersionOutput = @(node --version 2>&1)', [System.StringComparison]::Ordinal)
+        $requiredCommandIndex = $installerJob.IndexOf('$requiredCommands = @(', [System.StringComparison]::Ordinal)
+
+        $nodePreflightIndex | Should -BeGreaterThan -1
+        $requiredCommandIndex | Should -BeGreaterThan $nodePreflightIndex
     }
 
     It 'should derive the Windows E2E inventory when optional package metadata is omitted' {

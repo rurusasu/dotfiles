@@ -82,7 +82,9 @@
     It 'runs the full installer in separate parallel PowerShell 5.1 and 7 jobs' {
         $workflow = $script:workflowLines -join "`n"
         $workflow | Should -Match '(?s)windows-installer:.*?max-parallel:\s*2.*?runtime: Windows PowerShell 5\.1\s+version: "5\.1".*?runtime: PowerShell 7\s+version: "7"'
-        $workflow | Should -Match '(?s)windows-installer:.*?shell: pwsh.*?install\.cmd -NoPause -UserPhaseOnly'
+        $workflow | Should -Match '(?s)windows-installer:.*?runtime: Windows PowerShell 5\.1\s+version: "5\.1"\s+shell: powershell.*?runtime: PowerShell 7\s+version: "7"\s+shell: pwsh'
+        $workflow | Should -Match '(?s)shell: \$\{\{ matrix\.shell \}\}.*?install\.cmd -NoPause -UserPhaseOnly'
+        $workflow | Should -Match '\$expectedMajorVersion = if \(\$expectedVersion -eq ''5\.1''\) \{ 5 \} else \{ 7 \}'
         $workflow | Should -Match 'Using Windows PowerShell'
         $workflow | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'
         $workflow | Should -Match 'Falling back to Windows PowerShell'
@@ -130,12 +132,17 @@
         $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'required command smoke tests'"
         $installerJob | Should -Match "Get-Command -Name 'op.exe' -CommandType Application -ErrorAction Stop"
         $installerJob | Should -Match '(?s)\$onePasswordPackagesPath\s*=.*?AgileBits\.1Password\.CLI_\*'
-        $installerJob | Should -Match '(?s)Get-FileHash -LiteralPath \$onePasswordExecutablePath -Algorithm SHA256.*?Get-FileHash -LiteralPath \$resolvedOnePassword\.Source -Algorithm SHA256'
+        $installerJob | Should -Match '(?s)\$resolvedOnePasswordPath\s*=\s*Get-ExternalCommandPath -CommandInfo \$resolvedOnePassword.*?Get-FileHash -LiteralPath \$onePasswordExecutablePath -Algorithm SHA256.*?Get-FileHash -LiteralPath \$resolvedOnePasswordPath -Algorithm SHA256'
         $installerJob | Should -Match 'Persisted user PATH does not identify an installed AgileBits\.1Password\.CLI package directory'
         $installerJob | Should -Match 'PATH-resolved op\.exe does not match the configured WinGet package binary'
         $installerJob | Should -Match 'PATH-resolved pnpm is not the npm-installed pnpm shim'
         $installerJob | Should -Match '(?s)\$onePasswordUserPathEntries\s*=.*?\$onePasswordPackageDirectory\s*='
-        $installerJob | Should -Match '& \$resolvedOnePassword\.Source --version'
+        $installerJob | Should -Match '& \$resolvedOnePasswordPath --version'
+        $installerJob | Should -Match 'Update-ProcessEnvironmentPath -ExcludePath \$runnerPnpmDirectories'
+        $installerJob | Should -Match 'Post-install PATH exceeds the cmd\.exe command environment limit'
+        $installerJob | Should -Match 'winget source list failed \(exit=\$wingetSourcesExitCode\)'
+        $installerJob | Should -Match 'Unable to inspect ChatGPT Classic E2E seed state'
+        $installerJob | Should -Match '(?s)\$resolvedCommand\s*=\s*Get-Command -Name \$requiredCommand\.Name -CommandType Application -ErrorAction SilentlyContinue\s*\|\s*Select-Object -First 1'
         $installerJob | Should -Match 'Codex PATH shim does not match the selected installed package executable'
         $installerJob | Should -Not -Match 'onePasswordPackageSearchPath|pnpm resolved outside the npm global prefix'
     }

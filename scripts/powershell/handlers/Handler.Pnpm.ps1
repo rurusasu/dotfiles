@@ -112,7 +112,7 @@ class PnpmHandler : SetupHandlerBase {
                 if ($enableExitCode -eq 0) {
                     $prepareOutput = @(Invoke-Corepack -Arguments @("prepare", "pnpm@latest", "--activate"))
                     $prepareExitCode = [int]$LASTEXITCODE
-                    $corepackPath = if ($corepackCmd.Source) { $corepackCmd.Source } else { $corepackCmd.Path }
+                    $corepackPath = Get-ExternalCommandPath -CommandInfo $corepackCmd
                     $corepackDirectory = if ($corepackPath) { Split-Path -Parent $corepackPath } else { $null }
                     $corepackPnpmShim = if ($corepackDirectory) { Join-Path $corepackDirectory "pnpm.cmd" } else { $null }
                     if ($prepareExitCode -eq 0 -and $corepackPnpmShim -and $this.TestPnpmExecutableAtPath($corepackPnpmShim)) {
@@ -152,7 +152,7 @@ class PnpmHandler : SetupHandlerBase {
     }
 
     hidden [void] AddRuntimeNodeDirectoryToProcessPath([object]$runtimeCommand) {
-        $runtimePath = if ($runtimeCommand.Source) { $runtimeCommand.Source } else { $runtimeCommand.Path }
+        $runtimePath = Get-ExternalCommandPath -CommandInfo $runtimeCommand
         if (-not $runtimePath) { return }
 
         $runtimeDirectory = Split-Path -Parent $runtimePath
@@ -203,7 +203,7 @@ class PnpmHandler : SetupHandlerBase {
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
             $pnpmCmd = Get-ExternalCommand -Name "pnpm"
-            $pnpmCommandPath = if ($pnpmCmd.Source) { $pnpmCmd.Source } else { $pnpmCmd.Path }
+            $pnpmCommandPath = Get-ExternalCommandPath -CommandInfo $pnpmCmd
             $pnpmIsUnusable = $pnpmCmd -and $pnpmCommandPath -and
                 (Test-Path -LiteralPath $pnpmCommandPath -PathType Leaf) -and
             -not $this.TestPnpmExecutable()
@@ -405,7 +405,7 @@ class PnpmHandler : SetupHandlerBase {
                 $this.Log("検証中: command -v $command", "Gray")
                 $cmd = Get-ExternalCommand -Name $command
                 if ($cmd) {
-                    $this.Log("  $($cmd.Source)", "Gray")
+                    $this.Log("  $(Get-ExternalCommandPath -CommandInfo $cmd)", "Gray")
                     return $true
                 }
                 $this.Log("検証コマンドが見つかりません: $command", "Yellow")

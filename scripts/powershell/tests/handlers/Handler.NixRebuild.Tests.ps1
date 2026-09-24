@@ -650,6 +650,34 @@ Describe 'NixRebuildHandler' {
             } -Times 1
         }
 
+        It 'should restore the legacy Hermes gateway when the rebuild command throws' {
+            $ctx.Options['WithHermes'] = $true
+            $ctx.Options['SkipFlakeUpdate'] = $true
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join ' '
+                if ($argStr -match 'docker ps .*hermes') {
+                    $global:LASTEXITCODE = 0
+                    return @('hermes', 'DOTFILES_LEGACY_HERMES_WAS_RUNNING')
+                }
+                if ($argStr -match 'nixos-rebuild') { throw 'rebuild process timed out' }
+                if ($argStr -match 'docker start hermes') {
+                    $global:LASTEXITCODE = 0
+                    return 'legacy gateway restored'
+                }
+                $global:LASTEXITCODE = 0
+                return ''
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match 'rebuild process timed out'
+            Should -Invoke Invoke-Wsl -ParameterFilter {
+                ($Arguments -join ' ') -match 'docker start hermes'
+            } -Times 1
+        }
+
         It 'should update the flake lock before nixos-rebuild so Nix packages use latest inputs' {
             $script:flakeUpdateCalled = $false
             $script:rebuildCalled = $false
