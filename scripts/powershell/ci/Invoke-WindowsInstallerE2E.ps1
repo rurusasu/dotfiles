@@ -52,6 +52,7 @@ if ($PSVersionTable.PSVersion.Major -ne $expectedMajorVersion) {
 }
 
 $originalPath = $env:PATH
+$originalUserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
 $originalPs7Dir = $env:DOTFILES_PS7_DIR
 $originalForceWindowsPowerShell = $env:DOTFILES_FORCE_WINDOWS_POWERSHELL
 $isWindowsPowerShell = $expectedVersion -eq '5.1'
@@ -126,13 +127,14 @@ try {
     }
   }
 
-  # Reproduce a stale/oversized inherited PATH before the real install.
-  # install.user.ps1 must normalize it before its first child process.
-  $oversizedPathEntries = 1..500 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
-  $env:PATH = (@($env:PATH -split ';') + @($oversizedPathEntries)) -join ';'
-  if ($env:PATH.Length -le 8191 -or $env:PATH.Length -ge 32767) {
-    throw "Could not seed a valid oversized process PATH for the installer E2E: $($env:PATH.Length) characters"
+  # Seed stale persisted User PATH entries. Keep the launcher PATH viable:
+  # install.cmd invokes chcp before PowerShell can normalize the environment.
+  $oversizedUserPathEntries = 1..500 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
+  $seededUserPath = (@($oversizedUserPathEntries) + @($originalUserPath -split ';' | Where-Object { $_ })) -join ';'
+  if ($seededUserPath.Length -ge 32767) {
+    throw "Could not seed a valid oversized User PATH for the installer E2E: $($seededUserPath.Length) characters"
   }
+  [Environment]::SetEnvironmentVariable('PATH', $seededUserPath, 'User')
 
   $ErrorActionPreference = 'Continue'
   $output = & cmd.exe /d /c install.cmd -NoPause -UserPhaseOnly 2>&1 |
@@ -215,6 +217,17 @@ if (-not $isWindowsPowerShell -and $out -match '(Using Windows PowerShell|Fallin
 }
 if ($out -notmatch '\[INFO\] Process PATH normalized: removed \d+ missing directories and omitted \d+ over-limit entries; final length \d+/8191\.') {
   throw 'The real installer E2E did not remove stale PATH entries before starting package commands'
+}
+$persistedUserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+if ($persistedUserPath.Length -gt 32767) {
+  throw "Post-install User PATH exceeds the Windows environment-variable limit: $($persistedUserPath.Length)"
+}
+$remainingStaleUserPathEntries = @($oversizedUserPathEntries | Where-Object { $persistedUserPath -split ';' -contains $_ })
+if ($remainingStaleUserPathEntries.Count -gt 0) {
+  throw "The installer left $($remainingStaleUserPathEntries.Count) stale entries in the persisted User PATH"
+}
+if ($out -notmatch '\[INFO\] User PATH repaired: removed \d+ missing local directories and \d+ duplicate entries; final length \d+/32767\.') {
+  throw 'The real installer E2E did not repair stale entries in the persisted User PATH'
 }
 }
 
@@ -417,6 +430,14 @@ catch {
   $validationErrors.Add("Windows installer E2E setup: $($_.Exception.Message)")
 }
 finally {
+  try {
+    [Environment]::SetEnvironmentVariable('PATH', $originalUserPath, 'User')
+    Write-Host 'Restored the original User PATH after the Windows installer E2E'
+  }
+  catch {
+    $validationErrors.Add("User PATH cleanup: $($_.Exception.Message)")
+  }
+
   try {
     $codexShimPath = Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links') 'codex.exe'
     if (-not (Test-Path -LiteralPath $codexShimPath -PathType Leaf)) {

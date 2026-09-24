@@ -1095,8 +1095,12 @@ function Set-UserEnvironmentPath {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
+        [AllowEmptyString()]
         [string]$Path
     )
+    if ($Path.Length -gt 32767) {
+        throw "User PATH exceeds the Windows 32767-character environment-variable limit ($($Path.Length) characters)."
+    }
     [System.Environment]::SetEnvironmentVariable("PATH", $Path, "User")
 }
 
@@ -1117,6 +1121,54 @@ function Update-ProcessEnvironmentPath {
 
     $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
     $userPath = Get-UserEnvironmentPath
+    $removedMissingUserEntries = 0
+    $removedDuplicateUserEntries = 0
+    if (-not [string]::IsNullOrWhiteSpace($userPath)) {
+        $normalizedUserItems = [System.Collections.Generic.List[string]]::new()
+        $normalizedUserEntries = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($userItem in ($userPath -split ";")) {
+            $item = $userItem.Trim()
+            if ([string]::IsNullOrWhiteSpace($item)) { continue }
+
+            $comparisonPath = [System.Environment]::ExpandEnvironmentVariables($item.Trim('"'))
+            $pathRoot = [System.IO.Path]::GetPathRoot($comparisonPath)
+            if ($comparisonPath.Length -gt $pathRoot.Length) {
+                $comparisonPath = $comparisonPath.TrimEnd([char[]]@("\", "/"))
+            }
+            if (-not $normalizedUserEntries.Add($comparisonPath)) {
+                $removedDuplicateUserEntries++
+                continue
+            }
+
+            # Keep missing UNC and unresolved environment-variable entries because their
+            # targets may be temporarily unavailable; stale local PATH entries can never
+            # resolve a command and commonly accumulate from versioned package folders.
+            if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT -and
+                $comparisonPath -match "^[A-Za-z]:[\\/]" -and
+                $comparisonPath -notmatch "%[^%]+%") {
+                $driveRoot = [System.IO.Path]::GetPathRoot($comparisonPath)
+                if ((Test-Path -LiteralPath $driveRoot -PathType Container) -and
+                    -not (Test-Path -LiteralPath $comparisonPath)) {
+                    $removedMissingUserEntries++
+                    continue
+                }
+            }
+
+            $normalizedUserItems.Add($item)
+        }
+
+        $normalizedUserPath = $normalizedUserItems -join ";"
+        if ($normalizedUserPath.Length -gt 32767) {
+            throw "User PATH remains over the Windows 32767-character environment-variable limit after removing stale local entries ($($normalizedUserPath.Length) characters). Remove obsolete PATH entries before setup can continue."
+        }
+        if (-not [string]::Equals($normalizedUserPath, $userPath, [System.StringComparison]::Ordinal)) {
+            Set-UserEnvironmentPath -Path $normalizedUserPath
+            $userPath = $normalizedUserPath
+            if ($ReportStatus) {
+                Write-Host "[INFO] User PATH repaired: removed $removedMissingUserEntries missing local directories and $removedDuplicateUserEntries duplicate entries; final length $($userPath.Length)/32767."
+            }
+        }
+    }
     $processPath = [System.Environment]::GetEnvironmentVariable("PATH", "Process")
 
     # cmd.exe rejects environment variables over 8191 characters. Since the
@@ -1131,7 +1183,10 @@ function Update-ProcessEnvironmentPath {
     $missingEntries = 0
     $excluded = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($entry in $ExcludePath) {
-        if (-not [string]::IsNullOrWhiteSpace($entry)) { [void]$excluded.Add($entry.Trim()) }
+        if (-not [string]::IsNullOrWhiteSpace($entry)) {
+            $expandedEntry = [System.Environment]::ExpandEnvironmentVariables($entry.Trim())
+            [void]$excluded.Add($expandedEntry)
+        }
     }
 
     # Preserve the machine PATH and entries already available to this process
@@ -1142,22 +1197,26 @@ function Update-ProcessEnvironmentPath {
         foreach ($item in ($pathValue -split ";")) {
             $trimmed = $item.Trim()
             if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
-            if ($excluded.Contains($trimmed)) { continue }
-            if (-not $seen.Add($trimmed)) { continue }
+            $expandedPath = [System.Environment]::ExpandEnvironmentVariables($trimmed)
+            $hasUnresolvedVariable = $expandedPath -match "%[^%]+%"
+            $pathToUse = if ($hasUnresolvedVariable) { $trimmed } else { $expandedPath }
+            if ($excluded.Contains($pathToUse)) { continue }
+            if (-not $seen.Add($pathToUse)) { continue }
             if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT -and
-                -not [System.IO.Directory]::Exists($trimmed)) {
+                -not $hasUnresolvedVariable -and
+                -not [System.IO.Directory]::Exists($expandedPath)) {
                 $missingEntries++
                 continue
             }
 
-            $nextLength = $pathLength + $trimmed.Length
+            $nextLength = $pathLength + $pathToUse.Length
             if ($items.Count -gt 0) { $nextLength++ }
             if ($nextLength -gt $maxPathLength) {
                 $omittedEntries++
                 continue
             }
 
-            $items.Add($trimmed)
+            $items.Add($pathToUse)
             $pathLength = $nextLength
         }
     }

@@ -463,7 +463,8 @@ class NixRebuildHandler : SetupHandlerBase {
             # Accept that checked-in flake config only for this rebuild invocation;
             # do not persist trust in the user's or machine's Nix configuration.
             $rebuildCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && DOTFILES_USER=$($this.QuoteShellArg($this.NixOsUser)) DOTFILES_HOME=$($this.QuoteShellArg($this.NixOsHome)) DOTFILES_WITH_HERMES=$withHermes DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure 2>&1"
-            $output = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", $rebuildCommand)
+            $nixRebuildTimeoutSeconds = [int]$ctx.GetOption("NixRebuildTimeoutSeconds", 5400)
+            $output = Invoke-Wsl -TimeoutSeconds $nixRebuildTimeoutSeconds -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", $rebuildCommand)
             $nixosExitCode = $LASTEXITCODE
 
             # error: で始まる行は LogError（赤）、それ以外は Gray で表示

@@ -106,10 +106,11 @@ Describe 'NixRebuildHandler' {
         }
 
         It 'should succeed when nixos-rebuild switch succeeds' {
+            $script:nixosRebuildTimeoutSeconds = $null
             Mock Invoke-Wsl {
-                param($Arguments)
+                param($Arguments, $TimeoutSeconds)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return @("building NixOS...") }
+                if ($argStr -match "nixos-rebuild") { $script:nixosRebuildTimeoutSeconds = $TimeoutSeconds; $global:LASTEXITCODE = 0; return @("building NixOS...") }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return @("installed") }
@@ -125,6 +126,7 @@ Describe 'NixRebuildHandler' {
 
             $result.Success | Should -Be $true
             $result.Message | Should -Be "NixOS 設定を適用しました"
+            $script:nixosRebuildTimeoutSeconds | Should -Be 5400
             $ctx.Options["NixRebuildApplied"] | Should -Be $true
             Should -Invoke Write-Host -ParameterFilter {
                 $ForegroundColor -eq 'Gray' -and ([string]$Object) -match 'building NixOS'

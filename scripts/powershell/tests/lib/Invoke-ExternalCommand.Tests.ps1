@@ -946,6 +946,22 @@ Describe 'Update-ProcessEnvironmentPath' {
         ($env:PATH -split ";") | Should -Contain $existingPath
     }
 
+    It 'should expand valid environment-variable PATH entries before checking and importing them' {
+        $variablePath = Join-Path $TestDrive "VariablePath-$([guid]::NewGuid())"
+        $null = New-Item -ItemType Directory -Path $variablePath -Force
+        $env:DOTFILES_CI_EXPANDED_PATH = $variablePath
+        Mock Get-UserEnvironmentPath { return '%DOTFILES_CI_EXPANDED_PATH%' }
+        $env:PATH = $script:originalPath
+
+        try {
+            Update-ProcessEnvironmentPath
+            ($env:PATH -split ';') | Should -Contain $variablePath
+        }
+        finally {
+            Remove-Item Env:\DOTFILES_CI_EXPANDED_PATH -ErrorAction SilentlyContinue
+        }
+    }
+
     It 'should remove duplicate entries case-insensitively' {
         $uniquePath = Join-Path $TestDrive "DuplicatePath-$([guid]::NewGuid())"
         $null = New-Item -ItemType Directory -Path $uniquePath -Force
@@ -985,6 +1001,7 @@ Describe 'Update-ProcessEnvironmentPath' {
         $null = New-Item -ItemType Directory -Path $validUserPath -Force
         $staleEntries = 1..500 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
         Mock Get-UserEnvironmentPath { return (@($staleEntries) + @($validUserPath)) -join ';' }
+        Mock Set-UserEnvironmentPath { }
         $env:PATH = (@($script:originalPath -split ';') + @($staleEntries)) -join ';'
 
         Update-ProcessEnvironmentPath
@@ -996,6 +1013,34 @@ Describe 'Update-ProcessEnvironmentPath' {
         }
     }
 
+    It 'should persistently remove stale local directories while retaining unresolved and offline User PATH entries' {
+        if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+            Set-ItResult -Skipped -Because 'User PATH registry repair is Windows-specific'
+            return
+        }
+
+        $validUserPath = Join-Path $TestDrive 'valid-persistent-user-path'
+        $null = New-Item -ItemType Directory -Path $validUserPath -Force
+        $staleUserPath = Join-Path $env:TEMP "dotfiles-stale-user-path-$([guid]::NewGuid())"
+        $offlineUserPath = '\\dotfiles-ci-unavailable\share\bin'
+        $unresolvedUserPath = '%DOTFILES_CI_UNRESOLVED_PATH%\bin'
+        $script:persistedUserPath = $null
+        Mock Get-UserEnvironmentPath { return "$staleUserPath;$validUserPath;$offlineUserPath;$unresolvedUserPath" }
+        Mock Set-UserEnvironmentPath {
+            param([string]$Path)
+            $script:persistedUserPath = $Path
+        }
+        $env:PATH = $script:originalPath
+
+        Update-ProcessEnvironmentPath -ReportStatus
+
+        $script:persistedUserPath -split ';' | Should -Contain $validUserPath
+        $script:persistedUserPath -split ';' | Should -Contain $offlineUserPath
+        $script:persistedUserPath -split ';' | Should -Contain $unresolvedUserPath
+        $script:persistedUserPath -split ';' | Should -Not -Contain $staleUserPath
+        ($env:PATH -split ';') | Should -Contain $validUserPath
+    }
+
     It 'should keep the refreshed PATH below the Windows command environment limit' {
         if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
             Set-ItResult -Skipped -Because 'the cmd.exe environment limit is Windows-specific'
@@ -1004,6 +1049,7 @@ Describe 'Update-ProcessEnvironmentPath' {
 
         $oversizedUserPath = (1..600 | ForEach-Object { "C:\$([string]::new('U', 80))$_" }) -join ';'
         Mock Get-UserEnvironmentPath { return $oversizedUserPath }
+        Mock Set-UserEnvironmentPath { }
         $env:PATH = "$script:originalPath;" + ((1..120 | ForEach-Object { "C:\$([string]::new('P', 80))$_" }) -join ';')
         $oversizedUserPath.Length | Should -BeGreaterThan 50000
 

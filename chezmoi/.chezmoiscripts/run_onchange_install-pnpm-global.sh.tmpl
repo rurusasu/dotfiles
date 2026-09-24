@@ -20,17 +20,22 @@ PNPM_GLOBAL_BIN_DIR="$(pnpm config get global-bin-dir 2>/dev/null || true)"
 case "$PNPM_GLOBAL_BIN_DIR" in
   "" | undefined | null) PNPM_GLOBAL_BIN_DIR="${PNPM_HOME:+$PNPM_HOME/bin}" ;;
 esac
+case "$PNPM_GLOBAL_BIN_DIR" in
+  "~") PNPM_GLOBAL_BIN_DIR="$HOME" ;;
+  "~/"*) PNPM_GLOBAL_BIN_DIR="$HOME/${PNPM_GLOBAL_BIN_DIR#\~/}" ;;
+esac
 if [ -n "$PNPM_GLOBAL_BIN_DIR" ]; then
   case ":$PATH:" in
     *":$PNPM_GLOBAL_BIN_DIR:"*) ;;
     *) export PATH="$PNPM_GLOBAL_BIN_DIR:$PATH" ;;
   esac
+  printf 'pnpm global bin directory is available in PATH: %s\n' "$PNPM_GLOBAL_BIN_DIR"
 fi
 
 pnpm_add_global() {
   if [ -n "$PNPM_GLOBAL_BIN_DIR" ]; then
     PNPM_CONFIG_GLOBAL_BIN_DIR="$PNPM_GLOBAL_BIN_DIR" \
-      PATH="$PATH" \
+      PATH="$PNPM_GLOBAL_BIN_DIR:$PATH" \
       pnpm add -g "$@"
   else
     pnpm add -g "$@"

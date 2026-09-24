@@ -290,6 +290,7 @@ try {
             $rebuildContext.DistroName = $DistroName
             $rebuildContext.Options["WithHermes"] = $true
             $rebuildContext.Options["SkipFlakeUpdate"] = $true
+            $rebuildContext.Options["NixRebuildTimeoutSeconds"] = $PostInstallTimeoutSeconds
             $rebuildHandler = [NixRebuildHandler]::new()
             if (-not $rebuildHandler.CanApply($rebuildContext)) {
                 throw "NixRebuildHandler cannot apply to the newly installed WSL distro $DistroName"

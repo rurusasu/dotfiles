@@ -54,6 +54,12 @@ task lint:all
 - `task commit -- "message"` を使う。
 - 必要に応じて `pre-commit run --all-files` を実行する。
 
+## PR / CI の SHA と報告
+
+- CI 状態を確認・報告するときは、GitHub から PR の最新 head SHA をその場で取得する。会話履歴、ローカル HEAD、開いたままの Actions ページにある SHA を最新とみなさない。
+- 各 workflow の検証対象は、そのイベントで受け取った head SHA に固定する。push 後は新しい head SHA の必須チェックを取り直し、以前の SHA の成功結果を新しい変更の検証として扱わない。
+- PR の検証状況を書く場合は、完全な head SHA と、その SHA に対応する実際の Actions 結果を反映する。「実行中」「成功」は確認時点の状態に合わせ、失敗・未完了の必須チェックがあれば成功と表現しない。
+
 ## 参照先
 
 - `docs/architecture.md`
