@@ -166,7 +166,7 @@ $out = $output -join [Environment]::NewLine
 # install.cmd persists PATH and PNPM_HOME to the user environment in
 # its child process. Re-read those values so post-install probes use
 # the shims the installer just published, not only the runner PATH.
-$npmPrefixOutput = @(npm prefix --global 2>&1)
+$npmPrefixOutput = @(Invoke-Npm -Arguments @('prefix', '--global'))
 $npmPrefixExitCode = $LASTEXITCODE
 $npmGlobalPrefix = if ($npmPrefixExitCode -eq 0) { [string]($npmPrefixOutput | Select-Object -Last 1) } else { '' }
 $runnerPnpmDirectories = @($pnpmExecutableDirectories | Where-Object {
@@ -176,7 +176,6 @@ $runnerPnpmDirectories = @($pnpmExecutableDirectories | Where-Object {
     [System.IO.Path]::GetFullPath($npmGlobalPrefix.Trim()).TrimEnd('\')
   )
 })
-. (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/lib/Invoke-ExternalCommand.ps1')
 $env:PATH = $originalPath
 Update-ProcessEnvironmentPath -ExcludePath $runnerPnpmDirectories
 if ($env:PATH.Length -gt 8191) {
