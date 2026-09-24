@@ -66,9 +66,10 @@ let
     content:
     let
       uncommented = stripBlockComments (stripStrings content);
-      lines = builtins.split "\\n" uncommented;
     in
-    builtins.concatStringsSep "\\n" (map (line: builtins.head (builtins.split "#.*" line)) lines);
+    builtins.concatStringsSep " " (
+      builtins.filter builtins.isString (builtins.split "#[^[:cntrl:]]*" uncommented)
+    );
   containsImport =
     target: content:
     builtins.match ".*imports[[:space:]]*=[[:space:]]*\\[[^]]*([^]]*/|[.]/)${target}\\.nix.*" (
