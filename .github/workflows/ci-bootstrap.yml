@@ -1514,10 +1514,16 @@ jobs:
             throw $failureSummary
           }
           '@
-          $encodedE2EScript = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($installerE2EScript))
+          $installerE2EScriptPath = Join-Path $env:RUNNER_TEMP "windows-installer-e2e-$expectedRuntime-$PID.ps1"
+          [System.IO.File]::WriteAllText($installerE2EScriptPath, $installerE2EScript, [System.Text.Encoding]::Unicode)
           Write-Host "Running the complete Windows installer E2E under $expectedRuntime ($($runtimeExecutable.Source))"
-          & $runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedE2EScript
-          $installerE2EExitCode = $LASTEXITCODE
+          try {
+            & $runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File $installerE2EScriptPath
+            $installerE2EExitCode = $LASTEXITCODE
+          }
+          finally {
+            Remove-Item -LiteralPath $installerE2EScriptPath -Force -ErrorAction SilentlyContinue
+          }
           if ($installerE2EExitCode -ne 0) {
             exit $installerE2EExitCode
           }

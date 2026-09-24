@@ -82,9 +82,11 @@
     It 'runs the full installer in separate parallel PowerShell 5.1 and 7 jobs' {
         $workflow = $script:workflowLines -join "`n"
         $workflow | Should -Match '(?s)windows-installer:.*?max-parallel:\s*2.*?runtime: Windows PowerShell 5\.1\s+version: "5\.1".*?runtime: PowerShell 7\s+version: "7"'
-        $workflow | Should -Match '(?s)shell: pwsh.*?\$runtimeCommand = if \(\$expectedRuntime -eq ''5\.1''\) \{ ''powershell\.exe'' \} else \{ ''pwsh\.exe'' \}.*?\$installerE2EScript = @''.*?install\.cmd -NoPause -UserPhaseOnly.*?''@.*?-EncodedCommand \$encodedE2EScript'
+        $workflow | Should -Match '(?s)shell: pwsh.*?\$runtimeCommand = if \(\$expectedRuntime -eq ''5\.1''\) \{ ''powershell\.exe'' \} else \{ ''pwsh\.exe'' \}.*?\$installerE2EScript = @''.*?install\.cmd -NoPause -UserPhaseOnly.*?''@.*?WriteAllText\(\$installerE2EScriptPath.*?-File \$installerE2EScriptPath'
         $workflow | Should -Match '\$runtimePath = \[string\]\$runtimeExecutable\.Source'
-        $workflow | Should -Match '& \$runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand \$encodedE2EScript'
+        $workflow | Should -Match '& \$runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File \$installerE2EScriptPath'
+        $workflow | Should -Match 'Remove-Item -LiteralPath \$installerE2EScriptPath -Force -ErrorAction SilentlyContinue'
+        $workflow | Should -Not -Match 'EncodedCommand.*installerE2EScript'
         $workflow | Should -Match '\$expectedMajorVersion = if \(\$expectedVersion -eq ''5\.1''\) \{ 5 \} else \{ 7 \}'
         $workflow | Should -Match 'Using Windows PowerShell'
         $workflow | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'
