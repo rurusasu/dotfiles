@@ -212,6 +212,11 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn('"docker/mlflow/**"', paths)
             self.assertIn('"docs/mlflow/**"', paths)
 
+    def test_bootstrap_push_watches_pnpm_global_runtime_bats(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        paths = self._trigger_paths(workflow, "push")
+        self.assertIn('"tests/bash/pnpm_global_runtime.bats"', paths)
+
     def test_contract_workflow_runs_the_dedicated_mlflow_gateway_tests(self) -> None:
         workflow = self._workflow()
         push_paths = self._trigger_paths(workflow, "push")

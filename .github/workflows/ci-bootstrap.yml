@@ -33,6 +33,7 @@ on:
       - ".github/e2e/**"
       - "tests/bash/install_linux.bats"
       - "tests/bash/install_macos.bats"
+      - "tests/bash/pnpm_global_runtime.bats"
       - "ci/path-routing.json"
       - "ci/bootstrap-path-routing.json"
       - "ci/job-path-routing.json"
