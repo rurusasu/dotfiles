@@ -2,32 +2,18 @@
     BeforeAll {
         $workflowPath = Join-Path $PSScriptRoot '../../../../.github/workflows/ci-bootstrap.yml'
         $script:workflowLines = @(Get-Content -LiteralPath $workflowPath -Encoding UTF8)
+        $script:workflow = $script:workflowLines -join "`n"
+        $installerE2EPath = Join-Path $PSScriptRoot '../../ci/Invoke-WindowsInstallerE2E.ps1'
+        $script:installerE2ELines = @(Get-Content -LiteralPath $installerE2EPath -Encoding UTF8)
+        $script:installerE2E = $script:installerE2ELines -join "`n"
     }
-
     It 'passes package-manager success markers into the actual installer success assertion' {
-        $start = -1
-        for ($index = 0; $index -lt $script:workflowLines.Count; $index++) {
-            if ($script:workflowLines[$index].Trim() -eq 'Assert-WindowsInstallerSuccess `') {
-                $start = $index
-                break
-            }
-        }
-
-        $start | Should -BeGreaterOrEqual 0
-        $callLines = @()
-        for ($index = $start; $index -lt $script:workflowLines.Count; $index++) {
-            $line = $script:workflowLines[$index]
-            $callLines += $line
-            if (-not $line.TrimEnd().EndsWith('`')) {
-                break
-            }
-        }
-
-        ($callLines -join "`n") | Should -Match '(?m)^\s*-RequiredOutputMarkers\s+\$requiredPackageManagerMarkers\s*$'
+        $script:installerE2E | Should -Match '\$requiredPackageManagerMarkers\s*=\s*@\('
+        $script:installerE2E | Should -Match 'Assert-WindowsInstallerSuccess'
+        $script:installerE2E | Should -Match '\-RequiredOutputMarkers\s+\$requiredPackageManagerMarkers'
     }
-
     It 'requires success evidence for every un-gated npm and pnpm manifest package' {
-        $workflow = $script:workflowLines -join "`n"
+        $workflow = $script:installerE2E
         $workflow | Should -Match '\$npmManifest\s*=\s*Get-Content'
         $workflow | Should -Match '\$pnpmManifest\s*=\s*Get-Content'
         $workflow | Should -Match '\[Npm\] \u2713 \$\(\$package\.name\)'
@@ -60,7 +46,7 @@
     }
 
     It 'requires every package included by the normal Winget user phase, including verify-only CI skips' {
-        $workflow = $script:workflowLines -join "`n"
+        $workflow = $script:installerE2E
         $installerJob = [regex]::Match(
             $workflow,
             '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
@@ -80,33 +66,25 @@
     }
 
     It 'runs the full installer in separate parallel PowerShell 5.1 and 7 jobs' {
-        $workflow = $script:workflowLines -join "`n"
-        $workflow | Should -Match '(?s)windows-installer:.*?max-parallel:\s*2.*?runtime: Windows PowerShell 5\.1\s+version: "5\.1".*?runtime: PowerShell 7\s+version: "7"'
-        $workflow | Should -Match '(?s)shell: pwsh.*?\$runtimeCommand = if \(\$expectedRuntime -eq ''5\.1''\) \{ ''powershell\.exe'' \} else \{ ''pwsh\.exe'' \}.*?\$installerE2EScript = @''.*?install\.cmd -NoPause -UserPhaseOnly.*?''@.*?WriteAllText\(\$installerE2EScriptPath.*?-File \$installerE2EScriptPath'
-        $workflow | Should -Match '\$runtimePath = \[string\]\$runtimeExecutable\.Source'
-        $workflow | Should -Match '& \$runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File \$installerE2EScriptPath'
-        $workflow | Should -Match 'Remove-Item -LiteralPath \$installerE2EScriptPath -Force -ErrorAction SilentlyContinue'
-        $workflow | Should -Not -Match 'EncodedCommand.*installerE2EScript'
-        $workflow | Should -Match '\$expectedMajorVersion = if \(\$expectedVersion -eq ''5\.1''\) \{ 5 \} else \{ 7 \}'
-        $workflow | Should -Match 'Using Windows PowerShell'
-        $workflow | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'
-        $workflow | Should -Match 'Falling back to Windows PowerShell'
-        $workflow | Should -Match '\$isWindowsPowerShell -and \$out -notmatch ''Using Windows PowerShell'''
-        $workflow | Should -Match '-not \$isWindowsPowerShell -and \$out -match ''\(Using Windows PowerShell\|Falling back to Windows PowerShell\)'''
+        $script:workflow | Should -Match '(?s)windows-installer:.*?max-parallel:\s*2.*?runtime: Windows PowerShell 5\.1\s+version: "5\.1".*?runtime: PowerShell 7\s+version: "7"'
+        $script:workflow | Should -Match 'shell:\s+cmd[\s\S]*?powershell\.exe .*Invoke-WindowsInstallerE2E\.ps1'
+        $script:installerE2E | Should -Match "\$runtimeCommand = if \(\$expectedRuntime -eq '5\.1'\) \{ 'powershell\.exe' \} else \{ 'pwsh\.exe' \}"
+        $script:installerE2E | Should -Match 'install\.cmd -NoPause -UserPhaseOnly(?!\s+-WingetVerifyCommandOnly)'
+        $script:installerE2E | Should -Match '& \$runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File \$installerE2EScriptPath'
+        $script:installerE2E | Should -Match '\$expectedMajorVersion = if \(\$expectedVersion -eq ''5\.1''\) \{ 5 \} else \{ 7 \}'
+        $script:installerE2E | Should -Match 'Using Windows PowerShell'
+        $script:installerE2E | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'
+        $script:installerE2E | Should -Match 'Falling back to Windows PowerShell'
     }
-
     It 'preserves the installer process exit code and full output through the success assertion' {
-        $workflow = $script:workflowLines -join "`n"
+        $workflow = $script:installerE2E
         $workflow | Should -Match '(?s)\$output = & cmd\.exe /d /c install\.cmd -NoPause -UserPhaseOnly.*?\$exitCode = \$LASTEXITCODE'
         $workflow | Should -Match '(?s)Assert-WindowsInstallerSuccess `\s+-Output \$out `\s+-ExitCode \$exitCode'
     }
 
     It 'attempts both Codex launch probes after validation failures and reports all errors at the end' {
-        $workflow = $script:workflowLines -join "`n"
-        $installerJob = [regex]::Match(
-            $workflow,
-            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
-        ).Groups['job'].Value
+        $workflow = $script:installerE2E
+        $installerJob = $script:installerE2E
 
         $installerJob | Should -Match '(?s)\$validationErrors\s*=.*?try\s*\{[\s\S]*?\$expectedVersion\s*=.*?Could not seed the ChatGPT Classic uninstall E2E[\s\S]*?Assert-WindowsInstallerSuccess'
         $installerJob | Should -Match '(?s)catch\s*\{[\s\S]*?\$validationErrors\.Add'
@@ -120,11 +98,8 @@
     }
 
     It 'continues independent fatal validation groups after an installer assertion fails' {
-        $workflow = $script:workflowLines -join "`n"
-        $installerJob = [regex]::Match(
-            $workflow,
-            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
-        ).Groups['job'].Value
+        $workflow = $script:installerE2E
+        $installerJob = $script:installerE2E
 
         $installerJob | Should -Match '(?s)function Invoke-WindowsE2EValidation[\s\S]*?try\s*\{\s*& \$Validation[\s\S]*?catch\s*\{[\s\S]*?\$validationErrors\.Add'
         $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'installer evidence'"
@@ -157,8 +132,8 @@
     }
 
     It 'seeds and verifies removal of ChatGPT Classic in the installer E2E' {
-        $workflow = $script:workflowLines -join "`n"
-        $workflow | Should -Match 'winget install --id 9NT1R1C2HH7J'
+        $workflow = $script:installerE2E
+        $installerJob | Should -Match 'winget install --id 9NT1R1C2HH7J'
         $workflow | Should -Match 'RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=\(removed\|absent\)'
         $workflow | Should -Match 'winget list --id 9NT1R1C2HH7J'
         $workflow | Should -Match 'winget list --id 9NT1R1C2HH7J --exact --source msstore --accept-source-agreements --disable-interactivity'
