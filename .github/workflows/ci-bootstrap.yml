@@ -986,8 +986,10 @@ jobs:
         include:
           - runtime: Windows PowerShell 5.1
             version: "5.1"
+            shell: powershell
           - runtime: PowerShell 7
             version: "7"
+            shell: pwsh
     permissions:
       contents: read
     steps:
@@ -1057,7 +1059,7 @@ jobs:
           }
 
       - name: Run install.cmd strict user phase
-        shell: pwsh
+        shell: \${{ matrix.shell }}
         timeout-minutes: 70
         env:
           DOTFILES_INSTALL_TIMEOUT_SECONDS: "900"
@@ -1068,6 +1070,25 @@ jobs:
           $runtimeExecutable = Get-Command -Name $runtimeCommand -CommandType Application -ErrorAction Stop |
             Select-Object -First 1
           $runtimePath = [string]$runtimeExecutable.Source
+
+          # The PowerShell 7 E2E host cannot safely update its own executable.
+          # Windows PowerShell 5.1 runs the same full install and verifies this package.
+          if ($expectedRuntime -eq '7') {
+            $manifestPath = Join-Path $env:GITHUB_WORKSPACE 'windows\winget\packages.json'
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+            $powerShellPackages = @(
+              $manifest.Sources | ForEach-Object { $_.Packages } |
+                Where-Object { $_.PackageIdentifier -eq 'Microsoft.PowerShell' }
+            )
+            if ($powerShellPackages.Count -ne 1) {
+              throw "Expected one Microsoft.PowerShell manifest entry; found $($powerShellPackages.Count)."
+            }
+            $powerShellPackages[0] | Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue $true -Force
+            $manifest | ConvertTo-Json -Depth 100 |
+              Set-Content -LiteralPath $manifestPath -Encoding utf8
+            Write-Host 'Microsoft.PowerShell self-update is covered by the Windows PowerShell 5.1 E2E job'
+          }
+
           $installerE2EScript = @'
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -1281,9 +1302,11 @@ jobs:
                 $requiresAdmin = $properties['requiresAdmin']
                 $installFeature = $properties['installFeature']
                 $skipInstall = $properties['skipInstall']
+                $ciSkipInstall = $properties['ciSkipInstall']
                 ($null -eq $requiresAdmin -or -not [bool]$requiresAdmin.Value) -and
                 ($null -eq $installFeature -or [string]::IsNullOrWhiteSpace([string]$installFeature.Value)) -and
-                ($null -eq $skipInstall -or -not [bool]$skipInstall.Value)
+                ($null -eq $skipInstall -or -not [bool]$skipInstall.Value) -and
+                ($null -eq $ciSkipInstall -or -not [bool]$ciSkipInstall.Value)
               } |
               ForEach-Object { [string]$_.PackageIdentifier } |
               Sort-Object -Unique
