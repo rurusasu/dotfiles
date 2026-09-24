@@ -99,9 +99,12 @@ Describe 'CI workflow configuration' {
 
         $installerJob | Should -Match 'fail-fast:\s*false'
         $installerJob | Should -Match 'max-parallel:\s*2'
-        $installerJob | Should -Match 'runtime: Windows PowerShell 5\.1[\s\S]*?version: "5\.1"'
-        $installerJob | Should -Match 'runtime: PowerShell 7[\s\S]*?version: "7"'
-        $installerJob | Should -Match 'shell:\s+pwsh'
+        $installerJob | Should -Match 'runtime: Windows PowerShell 5\.1[\s\S]*?version: "5\.1"[\s\S]*?shell: powershell'
+        $installerJob | Should -Match 'runtime: PowerShell 7[\s\S]*?version: "7"[\s\S]*?shell: pwsh'
+        $installerJob | Should -Match 'shell:\s+\$\{\{\s*matrix\.shell\s*\}\}'
+        $installerJob | Should -Match "if \(\$expectedRuntime -eq '7'\)"
+        $installerJob | Should -Match 'ciSkipInstall'
+        $installerJob | Should -Match '\$ciSkipInstall = \$properties\[''ciSkipInstall''\]'
         $installerJob | Should -Match '(?s)\$runtimeCommand = if \(\$expectedRuntime -eq ''5\.1''\) \{ ''powershell\.exe'' \} else \{ ''pwsh\.exe'' \}.*?\$installerE2EScript = @''.*?install\.cmd -NoPause -UserPhaseOnly.*?''@.*?WriteAllText\(\$installerE2EScriptPath.*?-File \$installerE2EScriptPath'
         $installerJob | Should -Match '\$runtimePath = \[string\]\$runtimeExecutable\.Source'
         $installerJob | Should -Match '& \$runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File \$installerE2EScriptPath'
