@@ -583,7 +583,7 @@ Describe 'NixRebuildHandler' {
 
             $script:wslArgs | Should -Match 'DOTFILES_WITH_HERMES=1'
             Should -Invoke Invoke-Wsl -ParameterFilter {
-                ($Arguments -join ' ') -match 'docker compose -f docker/hermes-service/compose\.yml stop hermes'
+                ($Arguments -join ' ') -match 'docker stop hermes'
             } -Times 1
         }
 
@@ -594,7 +594,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join ' '
-                if ($argStr -match 'docker compose -f docker/hermes-service/compose\.yml stop hermes') {
+                if ($argStr -match 'docker stop hermes') {
                     $global:LASTEXITCODE = 1
                     return 'legacy gateway could not stop'
                 }
@@ -610,10 +610,43 @@ Describe 'NixRebuildHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeFalse
-            $result.Message | Should -Match 'legacy Hermes Compose gateway could not be stopped'
+            $result.Message | Should -Match 'legacy Hermes gateway could not be stopped'
             $script:rebuildCalled | Should -BeFalse
             Should -Invoke Invoke-Wsl -ParameterFilter {
-                ($Arguments -join ' ') -match 'docker compose -f docker/hermes-service/compose\.yml stop hermes'
+                ($Arguments -join ' ') -match 'docker stop hermes'
+            } -Times 1
+        }
+
+        It 'should restore a running legacy Hermes gateway when the Nix rebuild fails' {
+            $ctx.Options['WithHermes'] = $true
+            $ctx.Options['SkipFlakeUpdate'] = $true
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join ' '
+                if ($argStr -match 'docker stop hermes') {
+                    $global:LASTEXITCODE = 0
+                    return 'DOTFILES_LEGACY_HERMES_WAS_RUNNING'
+                }
+                if ($argStr -match 'nixos-rebuild') {
+                    $global:LASTEXITCODE = 1
+                    return 'error: simulated rebuild failure'
+                }
+                if ($argStr -match 'docker start hermes') {
+                    $global:LASTEXITCODE = 0
+                    return 'legacy gateway restored'
+                }
+                if ($argStr -match 'command -v pnpm') { $global:LASTEXITCODE = 0; return '/nix/store/bin/pnpm' }
+                $global:LASTEXITCODE = 0
+                return ''
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match 'nixos-rebuild switch が失敗しました'
+            $ctx.Options['LegacyHermesGatewayStopped'] | Should -BeTrue
+            Should -Invoke Invoke-Wsl -ParameterFilter {
+                ($Arguments -join ' ') -match 'docker start hermes'
             } -Times 1
         }
 

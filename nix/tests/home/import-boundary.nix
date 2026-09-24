@@ -35,25 +35,35 @@ let
 
   # Inspect declarations without evaluating caller modules. Mask strings first
   # so example text cannot be mistaken for an import declaration.
-  stripStrings = content:
+  stripStrings =
+    content:
     builtins.concatStringsSep " " (
       builtins.filter builtins.isString (builtins.split "\"[^\"]*\"|''[^']*''" content)
     );
-  stripBlockComments = content:
-    (builtins.foldl' (
-      state: token:
-      if builtins.isString token then
-        {
-          inherit (state) inComment;
-          text = state.text + (if state.inComment then "" else token);
-        }
-      else
-        {
-          text = state.text;
-          inComment = builtins.head token == "/*";
-        }
-    ) { inComment = false; text = ""; } (builtins.split "(/\\*|\\*/)" content)).text;
-  stripLineComments = content:
+  stripBlockComments =
+    content:
+    (builtins.foldl'
+      (
+        state: token:
+        if builtins.isString token then
+          {
+            inherit (state) inComment;
+            text = state.text + (if state.inComment then "" else token);
+          }
+        else
+          {
+            text = state.text;
+            inComment = builtins.head token == "/*";
+          }
+      )
+      {
+        inComment = false;
+        text = "";
+      }
+      (builtins.split "(/\\*|\\*/)" content)
+    ).text;
+  stripLineComments =
+    content:
     let
       uncommented = stripBlockComments (stripStrings content);
     in

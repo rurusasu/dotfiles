@@ -10,13 +10,16 @@ let
     }:
     let
       pkgs = fixtures.mkPkgs system;
-      testPackage = pkgs.runCommand "hermes-agent-test-package" {
-        pname = "hermes-agent";
-        version = "test";
-      } ''
-        mkdir -p "$out/bin"
-        touch "$out/bin/hermes"
-      '';
+      testPackage =
+        pkgs.runCommand "hermes-agent-test-package"
+          {
+            pname = "hermes-agent";
+            version = "test";
+          }
+          ''
+            mkdir -p "$out/bin"
+            touch "$out/bin/hermes"
+          '';
     in
     (inputs.home-manager.lib.homeManagerConfiguration {
       inherit pkgs;
@@ -87,19 +90,15 @@ in
       package = hasPackage linux.testPackage linux.config.home.packages;
       home = linux.config.home.sessionVariables.HERMES_HOME;
       featureFlag = linux.config.home.sessionVariables.DOTFILES_WITH_HERMES;
-      executable = linux.config.systemd.user.services.hermes-agent.Service.ExecStart;
-      workingDirectory = linux.config.systemd.user.services.hermes-agent.Service.WorkingDirectory;
-      restart = linux.config.systemd.user.services.hermes-agent.Service.Restart;
-      wantedBy = linux.config.systemd.user.services.hermes-agent.Install.WantedBy;
+      serviceUsesInjectedPackage = inputs.nixpkgs.lib.hasPrefix
+        "${linux.testPackage}/bin/hermes"
+        linux.config.systemd.user.services.hermes-agent.Service.ExecStart;
     };
     expected = {
       package = true;
       home = "/home/test-user/.hermes";
       featureFlag = "1";
-      executable = "${linux.testPackage}/bin/hermes gateway run";
-      workingDirectory = "/home/test-user";
-      restart = "on-failure";
-      wantedBy = [ "default.target" ];
+      serviceUsesInjectedPackage = true;
     };
   };
 

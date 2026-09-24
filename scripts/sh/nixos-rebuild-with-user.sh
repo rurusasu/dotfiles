@@ -62,22 +62,22 @@ rebuild_env=(
 
 accept_flake_config="${DOTFILES_ACCEPT_FLAKE_CONFIG:-0}"
 case "$accept_flake_config" in
-  0) ;;
-  1)
-    nix_config="${NIX_CONFIG:-}"
-    case "$nix_config" in
-      *$'accept-flake-config = true'*) ;;
-      *)
-        [[ -z $nix_config ]] || nix_config+=$'\n'
-        nix_config+="accept-flake-config = true"
-        ;;
-    esac
-    rebuild_env+=("NIX_CONFIG=$nix_config")
-    ;;
+0) ;;
+1)
+  nix_config="${NIX_CONFIG:-}"
+  case "$nix_config" in
+  *$'accept-flake-config = true'*) ;;
   *)
-    echo "Invalid DOTFILES_ACCEPT_FLAKE_CONFIG: $accept_flake_config (expected 0 or 1)." >&2
-    exit 1
+    [[ -z $nix_config ]] || nix_config+=$'\n'
+    nix_config+="accept-flake-config = true"
     ;;
+  esac
+  rebuild_env+=("NIX_CONFIG=$nix_config")
+  ;;
+*)
+  echo "Invalid DOTFILES_ACCEPT_FLAKE_CONFIG: $accept_flake_config (expected 0 or 1)." >&2
+  exit 1
+  ;;
 esac
 
 if [[ $(id -u) -eq 0 ]]; then

@@ -385,7 +385,11 @@ class NixRebuildHandler : SetupHandlerBase {
         if ($ctx.Options.ContainsKey("NixRebuildApplied")) {
             $ctx.Options.Remove("NixRebuildApplied")
         }
+        if ($ctx.Options.ContainsKey("LegacyHermesGatewayStopped")) {
+            $ctx.Options.Remove("LegacyHermesGatewayStopped")
+        }
 
+        $legacyGatewayWasRunning = $false
         try {
             $distroName = $ctx.DistroName
             $this.ResolveNixOsIdentity($distroName)
@@ -423,7 +427,7 @@ class NixRebuildHandler : SetupHandlerBase {
 
             if ($this.IsTruthy($ctx.GetOption("WithHermes", $false))) {
                 $this.Log("Nix Hermes を有効にする前に legacy Compose gateway を停止します...")
-                $stopLegacyGatewayCommand = 'cd ~/.dotfiles && if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then docker compose -f docker/hermes-service/compose.yml stop hermes; else echo "Docker Compose runtime is unavailable; no legacy Hermes gateway can be active."; fi'
+                $stopLegacyGatewayCommand = 'if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then running_container=$(docker ps --filter name=^/hermes$ --filter status=running --format ''{{.Names}}'') || exit $?; if [ "$running_container" = hermes ]; then docker stop hermes && echo DOTFILES_LEGACY_HERMES_WAS_RUNNING; else echo "Legacy Hermes gateway was not running."; fi; else echo "Docker runtime is unavailable; no legacy Hermes gateway can be active."; fi'
                 $stopLegacyGatewayOutput = Invoke-Wsl -Arguments @(
                     "-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", $stopLegacyGatewayCommand
                 )
@@ -434,7 +438,11 @@ class NixRebuildHandler : SetupHandlerBase {
                     }
                 }
                 if ($stopLegacyGatewayExitCode -ne 0) {
-                    throw "legacy Hermes Compose gateway could not be stopped (exit code: $stopLegacyGatewayExitCode)"
+                    throw "legacy Hermes gateway could not be stopped (exit code: $stopLegacyGatewayExitCode)"
+                }
+                $legacyGatewayWasRunning = @($stopLegacyGatewayOutput | ForEach-Object { ([string]$_).Trim() }) -contains 'DOTFILES_LEGACY_HERMES_WAS_RUNNING'
+                if ($legacyGatewayWasRunning) {
+                    $ctx.Options["LegacyHermesGatewayStopped"] = $true
                 }
             }
 
@@ -473,7 +481,25 @@ class NixRebuildHandler : SetupHandlerBase {
 
             if ($nixosExitCode -ne 0) {
                 $errorDetail = if ($errorLines.Count -gt 0) { ": $($errorLines[0])" } else { "" }
-                throw "nixos-rebuild switch が失敗しました (exit code: $nixosExitCode)$errorDetail"
+                $rebuildFailure = "nixos-rebuild switch が失敗しました (exit code: $nixosExitCode)$errorDetail"
+                if ($legacyGatewayWasRunning) {
+                    $this.LogWarning("NixOS rebuild が失敗したため legacy Hermes gateway を復旧します")
+                    try {
+                        $restoreCommand = 'docker start hermes'
+                        $restoreOutput = Invoke-Wsl -Arguments @(
+                            "-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", $restoreCommand
+                        )
+                        $restoreExitCode = $LASTEXITCODE
+                        if ($restoreExitCode -ne 0) {
+                            $restoreDetail = if ($restoreOutput) { ": $($restoreOutput -join '; ')" } else { "" }
+                            throw "legacy Hermes gateway restart failed (exit code: $restoreExitCode)$restoreDetail"
+                        }
+                    }
+                    catch {
+                        throw "$rebuildFailure; rollback failed: $($_.Exception.Message)"
+                    }
+                }
+                throw $rebuildFailure
             }
 
             $this.Log("nixos-rebuild switch 完了", "Green")

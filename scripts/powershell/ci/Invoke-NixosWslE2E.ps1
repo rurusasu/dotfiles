@@ -33,6 +33,7 @@ Repair-WindowsSetupEnvironment
 . (Join-Path $libPath "Invoke-ExternalCommand.ps1")
 . (Join-Path $repoRoot "scripts\powershell\handlers\Handler.NixOSWSL.ps1")
 . (Join-Path $repoRoot "scripts\powershell\handlers\Handler.NixRebuild.ps1")
+. (Join-Path $repoRoot "scripts\powershell\handlers\Handler.HermesAgent.ps1")
 
 # The setup handler has legacy Invoke-Wsl calls without per-command timeouts.
 # Bound those calls in this disposable E2E process; long post-install rebuilds
@@ -255,6 +256,14 @@ try {
 
         Write-CiSection "Enable Hermes Agent through Nix"
         try {
+            # Seed a real running container under the legacy Compose service name
+            # so the production rebuild handler must exercise its stop path.
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "root", "--",
+                "bash", "-lc",
+                'systemctl start docker && for attempt in {1..60}; do docker info >/dev/null 2>&1 && break; sleep 1; done && docker info >/dev/null && docker run --detach --pull=missing --name hermes alpine:3.22 sleep 3600 && docker inspect --format ''{{.State.Running}}'' hermes | grep -qx true'
+            ) -TimeoutSeconds 300 | Out-Null
+
             # Seed the disposable distro with pre-existing Hermes state before
             # Home Manager activation. This proves activation preserves user
             # data and that the gateway can read a private provider env file.
@@ -277,6 +286,23 @@ try {
                 throw "Nix-managed Hermes setup via NixRebuildHandler failed: $($rebuildResult.Message)"
             }
             Write-Host "CI_ASSERTION: production NixRebuildHandler applied WithHermes to $DistroName."
+            if (-not $rebuildContext.Options['LegacyHermesGatewayStopped']) {
+                throw 'Production NixRebuildHandler did not stop the seeded running legacy Hermes gateway'
+            }
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "root", "--",
+                "bash", "-lc", 'test "$(docker inspect --format ''{{.State.Running}}'' hermes)" = false'
+            ) -TimeoutSeconds 60 | Out-Null
+
+            $hermesHandler = [HermesAgentHandler]::new()
+            if (-not $hermesHandler.CanApply($rebuildContext)) {
+                throw "HermesAgentHandler skipped validation after NixRebuildHandler completed for $DistroName"
+            }
+            $hermesResult = $hermesHandler.Apply($rebuildContext)
+            if (-not $hermesResult.Success) {
+                throw "Production HermesAgentHandler readiness validation failed: $($hermesResult.Message)"
+            }
+            Write-Host "CI_ASSERTION: production HermesAgentHandler verified its active Nix service and CLI."
 
             Invoke-WslChecked -Arguments @(
                 "-d", $DistroName, "-u", "nixos", "--",

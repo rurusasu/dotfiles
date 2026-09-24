@@ -21,10 +21,7 @@ class HermesAgentHandler : SetupHandlerBase {
             return $false
         }
 
-        if ($this.IsNixRebuildApplied($ctx)) {
-            $this.Log('Hermes Agent is managed by the completed NixOS WSL rebuild.', 'Gray')
-            return $false
-        }
+        if ($this.IsNixRebuildApplied($ctx)) { return $true }
 
         if (-not (Get-Command -Name 'wsl' -ErrorAction SilentlyContinue)) {
             throw "WithHermes on Windows requires WSL and the '$($ctx.DistroName)' NixOS distribution. Enable the WSL/NixOS setup and do not skip NixRebuild."
@@ -48,7 +45,22 @@ class HermesAgentHandler : SetupHandlerBase {
 
     [SetupResult] Apply([SetupContext]$ctx) {
         if ($this.IsNixRebuildApplied($ctx)) {
-            return $this.CreateSuccessResult('Hermes Agent is managed by the completed NixOS WSL rebuild.')
+            try {
+                $output = Invoke-Wsl -TimeoutSeconds 60 -Arguments @(
+                    '-d', $ctx.DistroName, '-u', 'nixos', '--',
+                    'bash', '-lc', 'systemctl --user is-active --quiet hermes-agent.service && command -v hermes >/dev/null && hermes --version'
+                )
+                $exitCode = $LASTEXITCODE
+                if ($exitCode -ne 0) {
+                    $details = if ($output) { ": $($output -join '; ')" } else { '' }
+                    return $this.CreateFailureResult("Hermes Agent Nix service validation failed (exit code: $exitCode)$details")
+                }
+
+                return $this.CreateSuccessResult('Hermes Agent Nix service is active and its CLI is available.')
+            }
+            catch {
+                return $this.CreateFailureResult("Hermes Agent Nix service validation failed: $($_.Exception.Message)", $_.Exception)
+            }
         }
 
         return $this.CreateFailureResult('Hermes Agent on Windows requires a successful NixOS WSL rebuild; Docker fallback is disabled.')

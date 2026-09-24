@@ -55,13 +55,37 @@ Describe 'HermesAgentHandler Windows-to-NixOS-WSL routing' {
         $script:dockerCalls | Should -Be 0
     }
 
-    It 'delegates to Nix after a successful rebuild and never probes or invokes Docker' {
+    It 'validates the Nix-managed service and CLI after a successful rebuild' {
         $ctx.Options['NixRebuildApplied'] = $true
+        Mock Invoke-Wsl {
+            $global:LASTEXITCODE = 0
+            return @('active', '/nix/store/hermes/bin/hermes', 'hermes 1.0.0')
+        }
 
-        $handler.CanApply($ctx) | Should -BeFalse
-        $handler.Apply($ctx).Success | Should -BeTrue
+        $handler.CanApply($ctx) | Should -BeTrue
+        $result = $handler.Apply($ctx)
+
+        $result.Success | Should -BeTrue
+        $result.Message | Should -Match 'Hermes Agent Nix service is active'
+        Should -Invoke Invoke-Wsl -ParameterFilter {
+            ($Arguments -join ' ') -match 'systemctl --user is-active --quiet hermes-agent.service' -and
+            ($Arguments -join ' ') -match 'command -v hermes'
+        } -Times 1
         $script:wslCommandChecks | Should -Be 0
-        $script:wslListCalls | Should -Be 0
+        $script:dockerCalls | Should -Be 0
+    }
+
+    It 'fails if the Nix-managed service is not active after rebuild' {
+        $ctx.Options['NixRebuildApplied'] = $true
+        Mock Invoke-Wsl {
+            $global:LASTEXITCODE = 3
+            return @('inactive')
+        }
+
+        $result = $handler.Apply($ctx)
+
+        $result.Success | Should -BeFalse
+        $result.Message | Should -Match 'Hermes Agent Nix service validation failed'
         $script:dockerCalls | Should -Be 0
     }
 
