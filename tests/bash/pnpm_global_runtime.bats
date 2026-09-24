@@ -81,6 +81,20 @@ run_installer() {
 	done <"$TEST_ROOT/add-path.log"
 }
 
+@test "configured global-bin-dir takes precedence over PNPM_HOME" {
+	export PNPM_HOME="$TEST_ROOT/pnpm-home"
+	export PNPM_REPORTED_GLOBAL_BIN_DIR="$TEST_ROOT/configured-global-bin"
+
+	run run_installer
+	[ "$status" -eq 0 ]
+	[ -s "$TEST_ROOT/add-path.log" ]
+	while IFS= read -r install_path; do
+		case ":$install_path:" in
+			*":$PNPM_REPORTED_GLOBAL_BIN_DIR:"*) ;;
+			*) return 1 ;;
+		esac
+	done <"$TEST_ROOT/add-path.log"
+}
 @test "pnpm package failures are summarized and return nonzero" {
 	export PNPM_HOME="$TEST_ROOT/pnpm-home"
 	export PNPM_ADD_STATUS=1
