@@ -101,7 +101,8 @@ Describe 'CI workflow configuration' {
         $installerJob | Should -Match 'max-parallel:\s*2'
         $installerJob | Should -Match 'runtime: Windows PowerShell 5\.1[\s\S]*?version: "5\.1"[\s\S]*?shell: powershell'
         $installerJob | Should -Match 'runtime: PowerShell 7[\s\S]*?version: "7"[\s\S]*?shell: pwsh'
-        $installerJob | Should -Match 'shell:\s+\$\{\{\s*matrix\.shell\s*\}\}'
+        $installerJob | Should -Match 'name: Run install\.cmd strict user phase\s+shell: powershell'
+        $installerJob | Should -Not -Match 'shell:\s+\$\{\{\s*matrix\.shell\s*\}\}'
         $installerJob | Should -Match "if \(\$expectedRuntime -eq '7'\)"
         $installerJob | Should -Match 'ciSkipInstall'
         $installerJob | Should -Match '\$ciSkipInstall = \$properties\[''ciSkipInstall''\]'
