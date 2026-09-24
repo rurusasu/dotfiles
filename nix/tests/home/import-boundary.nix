@@ -67,10 +67,8 @@ let
     let
       uncommented = stripBlockComments (stripStrings content);
     in
-    builtins.replaceStrings [ "\n" "\r" ] [ " " " " ] (
-      builtins.concatStringsSep " " (
-        builtins.filter builtins.isString (builtins.split "#[^\\n]*" uncommented)
-      )
+    builtins.concatStringsSep " " (
+      builtins.filter builtins.isString (builtins.split "#[^\\n]*" uncommented)
     );
   containsImport =
     target: content:

@@ -1258,8 +1258,8 @@ jobs:
           if (-not $isWindowsPowerShell -and $out -match '(Using Windows PowerShell|Falling back to Windows PowerShell)') {
             throw 'The PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5.1 path'
           }
-          if ($out -notmatch 'Process PATH refresh omitted \d+ entries to stay within the Windows cmd\.exe limit of 8191 characters') {
-            throw 'The real installer E2E did not normalize its seeded oversized PATH before starting package commands'
+          if ($out -notmatch '\[INFO\] Process PATH normalized: removed \d+ missing directories and omitted \d+ over-limit entries; final length \d+/8191\.') {
+            throw 'The real installer E2E did not remove stale PATH entries before starting package commands'
           }
           }
 

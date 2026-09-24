@@ -42,7 +42,7 @@ $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..\..")).Path
 
 # User PATH can exceed Windows' child-process environment limits. Normalize it
 # before handler discovery or any package-manager command is started.
-Update-ProcessEnvironmentPath
+Update-ProcessEnvironmentPath -ReportStatus
 
 if (-not $PSBoundParameters.ContainsKey("PostInstallScript")) {
     $PostInstallScript = Join-Path $repoRoot "scripts\sh\nixos-wsl-postinstall.sh"

@@ -692,13 +692,51 @@ function Invoke-Npm {
         ($Arguments -contains "-g" -or $Arguments -contains "--global")
     if ($isGlobalInstall) {
         Add-NpmNodeDirectoryToProcessPath
+    }
+    $npmInvocation = Get-NpmInvocation -Arguments $Arguments
+    if ($isGlobalInstall) {
         $timeoutSeconds = Get-PackageInstallTimeoutSecond
         if ($timeoutSeconds -gt 0) {
-            return Invoke-ExternalCommandWithTimeout -Command "npm" -Arguments $Arguments -TimeoutSeconds $timeoutSeconds
+            return Invoke-ExternalCommandWithTimeout `
+                -Command $npmInvocation.Command `
+                -Arguments $npmInvocation.Arguments `
+                -TimeoutSeconds $timeoutSeconds
         }
     }
 
-    Invoke-NativeCommand -Command "npm" -Arguments $Arguments
+    Invoke-NativeCommand -Command $npmInvocation.Command -Arguments $npmInvocation.Arguments
+}
+
+function Get-NpmInvocation {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Arguments
+    )
+
+    $npmCommand = Get-ExternalCommand -Name "npm"
+    $npmPath = Get-ExternalCommandPath -CommandInfo $npmCommand
+    $isWindowsRuntime = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+    if ($isWindowsRuntime -and $npmPath -like "*.ps1") {
+        $npmDirectory = Split-Path -Parent $npmPath
+        $nodePath = Join-Path $npmDirectory "node.exe"
+        $npmCliCandidates = @(
+            (Join-Path $npmDirectory "node_modules\npm\bin\npm-cli.js"),
+            (Join-Path $npmDirectory "npm\node_modules\npm\bin\npm-cli.js")
+        )
+        $npmCliPath = $npmCliCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+        if ((Test-Path -LiteralPath $nodePath -PathType Leaf) -and $npmCliPath) {
+            return [pscustomobject]@{
+                Command   = $nodePath
+                Arguments = @($npmCliPath) + @($Arguments)
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Command   = "npm"
+        Arguments = @($Arguments)
+    }
 }
 
 function Get-NpmNodeDirectory {
@@ -1073,7 +1111,8 @@ function Set-UserEnvironmentPath {
 function Update-ProcessEnvironmentPath {
     [CmdletBinding()]
     param(
-        [string[]]$ExcludePath = @()
+        [string[]]$ExcludePath = @(),
+        [switch]$ReportStatus
     )
 
     $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
@@ -1089,6 +1128,7 @@ function Update-ProcessEnvironmentPath {
     $items = [System.Collections.Generic.List[string]]::new()
     $pathLength = 0
     $omittedEntries = 0
+    $missingEntries = 0
     $excluded = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($entry in $ExcludePath) {
         if (-not [string]::IsNullOrWhiteSpace($entry)) { [void]$excluded.Add($entry.Trim()) }
@@ -1104,6 +1144,11 @@ function Update-ProcessEnvironmentPath {
             if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
             if ($excluded.Contains($trimmed)) { continue }
             if (-not $seen.Add($trimmed)) { continue }
+            if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT -and
+                -not [System.IO.Directory]::Exists($trimmed)) {
+                $missingEntries++
+                continue
+            }
 
             $nextLength = $pathLength + $trimmed.Length
             if ($items.Count -gt 0) { $nextLength++ }
@@ -1118,6 +1163,9 @@ function Update-ProcessEnvironmentPath {
     }
 
     $env:PATH = $items -join ";"
+    if ($ReportStatus -and ($missingEntries -gt 0 -or $omittedEntries -gt 0)) {
+        Write-Host "[INFO] Process PATH normalized: removed $missingEntries missing directories and omitted $omittedEntries over-limit entries; final length $pathLength/$maxPathLength."
+    }
     if ($omittedEntries -gt 0) {
         Write-Warning "Process PATH refresh omitted $omittedEntries entries to stay within the Windows cmd.exe limit of $maxPathLength characters. Trim stale entries from the User PATH if required commands are missing."
     }

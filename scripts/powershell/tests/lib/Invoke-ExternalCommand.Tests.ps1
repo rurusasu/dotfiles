@@ -79,6 +79,41 @@ Describe 'Invoke-NativeCommand' {
 
 $script:isWindowsRuntime = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 
+Describe 'Get-NpmInvocation on Windows' {
+    It 'runs npm.ps1 through node.exe and npm-cli.js instead of nesting PowerShell' -Skip:(-not $script:isWindowsRuntime) {
+        $nodeDirectory = Join-Path $TestDrive 'npm-cli-runtime'
+        $npmPath = Join-Path $nodeDirectory 'npm.ps1'
+        $nodePath = Join-Path $nodeDirectory 'node.exe'
+        $npmCliPath = Join-Path $nodeDirectory 'node_modules/npm/bin/npm-cli.js'
+        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $npmCliPath) -Force
+        foreach ($path in @($npmPath, $nodePath, $npmCliPath)) {
+            [System.IO.File]::WriteAllText($path, '', [System.Text.Encoding]::ASCII)
+        }
+        Mock Get-ExternalCommand {
+            if ($Name -eq 'npm') { return [pscustomobject]@{ Source = $npmPath; Path = $npmPath } }
+            if ($Name -eq 'node.exe') { return [pscustomobject]@{ Source = $nodePath; Path = $nodePath } }
+            return $null
+        }
+        $script:capturedNpmInvocation = $null
+        Mock Invoke-ExternalCommandWithTimeout {
+            param($Command, $Arguments, $TimeoutSeconds)
+            $script:capturedNpmInvocation = [pscustomobject]@{
+                Command = $Command
+                Arguments = @($Arguments)
+                TimeoutSeconds = $TimeoutSeconds
+            }
+            $global:LASTEXITCODE = 0
+            return 'install ok'
+        }
+
+        Invoke-Npm -Arguments @('install', '-g', 'pnpm@latest') | Should -Be 'install ok'
+
+        $script:capturedNpmInvocation.Command | Should -Be $nodePath
+        $script:capturedNpmInvocation.Arguments | Should -Be @($npmCliPath, 'install', '-g', 'pnpm@latest')
+        $script:capturedNpmInvocation.TimeoutSeconds | Should -BeGreaterThan 0
+    }
+}
+
 Describe 'Invoke-Npm global install Node PATH' {
 
     BeforeEach {
@@ -897,19 +932,23 @@ Describe 'Update-ProcessEnvironmentPath' {
     }
 
     It 'should include User PATH entries in the current process PATH' {
-        $uniqueUserPath = "C:\TestUserPath-$([guid]::NewGuid())"
+        $uniqueUserPath = Join-Path $TestDrive "TestUserPath-$([guid]::NewGuid())"
+        $null = New-Item -ItemType Directory -Path $uniqueUserPath -Force
         Mock Get-UserEnvironmentPath { return $uniqueUserPath }
 
-        $env:PATH = "C:\ExistingPath"
+        $existingPath = Join-Path $TestDrive 'ExistingPath'
+        $null = New-Item -ItemType Directory -Path $existingPath -Force
+        $env:PATH = $existingPath
 
         Update-ProcessEnvironmentPath
 
         ($env:PATH -split ";") | Should -Contain $uniqueUserPath
-        ($env:PATH -split ";") | Should -Contain "C:\ExistingPath"
+        ($env:PATH -split ";") | Should -Contain $existingPath
     }
 
     It 'should remove duplicate entries case-insensitively' {
-        $uniquePath = "C:\DuplicatePath-$([guid]::NewGuid())"
+        $uniquePath = Join-Path $TestDrive "DuplicatePath-$([guid]::NewGuid())"
+        $null = New-Item -ItemType Directory -Path $uniquePath -Force
         Mock Get-UserEnvironmentPath { return $uniquePath }
 
         $env:PATH = "$uniquePath;$($uniquePath.ToUpperInvariant())"
@@ -920,16 +959,41 @@ Describe 'Update-ProcessEnvironmentPath' {
     }
 
     It 'should exclude selected paths while importing updated User PATH entries' {
-        $excludedPath = "C:\RunnerPnpm-$([guid]::NewGuid())"
-        $userPath = "C:\NewUserPath-$([guid]::NewGuid());$excludedPath"
+        $excludedPath = Join-Path $TestDrive "RunnerPnpm-$([guid]::NewGuid())"
+        $newUserPath = Join-Path $TestDrive "NewUserPath-$([guid]::NewGuid())"
+        $null = New-Item -ItemType Directory -Path $excludedPath, $newUserPath -Force
+        $userPath = "$newUserPath;$excludedPath"
         Mock Get-UserEnvironmentPath { return $userPath }
-        $env:PATH = "C:\ExistingPath;$excludedPath"
+        $existingPath = Join-Path $TestDrive 'ExistingPath'
+        $null = New-Item -ItemType Directory -Path $existingPath -Force
+        $env:PATH = "$existingPath;$excludedPath"
 
         Update-ProcessEnvironmentPath -ExcludePath @($excludedPath)
 
-        ($env:PATH -split ';') | Should -Contain 'C:\ExistingPath'
-        ($env:PATH -split ';') | Should -Contain ($userPath -split ';')[0]
+        ($env:PATH -split ';') | Should -Contain $existingPath
+        ($env:PATH -split ';') | Should -Contain $newUserPath
         ($env:PATH -split ';') | Should -Not -Contain $excludedPath
+    }
+
+    It 'should discard missing PATH directories before they crowd valid command paths out of the child environment' {
+        if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+            Set-ItResult -Skipped -Because 'missing directory filtering is Windows-specific'
+            return
+        }
+
+        $validUserPath = Join-Path $TestDrive 'valid-command-directory'
+        $null = New-Item -ItemType Directory -Path $validUserPath -Force
+        $staleEntries = 1..500 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
+        Mock Get-UserEnvironmentPath { return (@($staleEntries) + @($validUserPath)) -join ';' }
+        $env:PATH = (@($script:originalPath -split ';') + @($staleEntries)) -join ';'
+
+        Update-ProcessEnvironmentPath
+
+        $env:PATH.Length | Should -BeLessOrEqual 8191
+        ($env:PATH -split ';') | Should -Contain $validUserPath
+        foreach ($entry in $staleEntries) {
+            ($env:PATH -split ';') | Should -Not -Contain $entry
+        }
     }
 
     It 'should keep the refreshed PATH below the Windows command environment limit' {

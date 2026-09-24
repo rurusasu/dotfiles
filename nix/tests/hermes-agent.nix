@@ -104,20 +104,22 @@ in
 
   testDarwinHermesUsesInjectedPackageAndLaunchdContract = {
     expr = {
-      package = hasPackage darwin.testPackage darwin.config.home.packages;
       home = darwin.config.home.sessionVariables.HERMES_HOME;
       featureFlag = darwin.config.home.sessionVariables.DOTFILES_WITH_HERMES;
       enabled = darwin.config.launchd.agents.hermes-agent.enable;
+      packageIsUsedByLaunchAgent = builtins.elem "${darwin.testPackage}/bin/hermes" (
+        darwin.config.launchd.agents.hermes-agent.config.ProgramArguments
+      );
       arguments = darwin.config.launchd.agents.hermes-agent.config.ProgramArguments;
       homeVariable = darwin.config.launchd.agents.hermes-agent.config.EnvironmentVariables.HERMES_HOME;
       runAtLoad = darwin.config.launchd.agents.hermes-agent.config.RunAtLoad;
       keepAlive = darwin.config.launchd.agents.hermes-agent.config.KeepAlive;
     };
     expected = {
-      package = true;
       home = "/Users/test-user/.hermes";
       featureFlag = "1";
       enabled = true;
+      packageIsUsedByLaunchAgent = true;
       arguments = [
         "${darwin.testPackage}/bin/hermes"
         "gateway"
