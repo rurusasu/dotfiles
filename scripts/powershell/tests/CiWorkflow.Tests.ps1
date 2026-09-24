@@ -178,9 +178,9 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should verify ChatGPT Classic is removed by the real Windows installer E2E' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
         $installerJob = [regex]::Match(
-            $workflow,
+            $installerScript,
             '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
         ).Groups['job'].Value
 
@@ -225,9 +225,9 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should run npm pnpm and 1Password executables after the Windows installer' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
         $installerJob = [regex]::Match(
-            $workflow,
+            $installerScript,
             '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
         ).Groups['job'].Value
 
@@ -249,9 +249,9 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should diagnose an unsupported Node version before probing agent-browser' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
         $installerJob = [regex]::Match(
-            $workflow,
+            $installerScript,
             '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
         ).Groups['job'].Value
 
@@ -263,9 +263,9 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should derive the Windows E2E inventory when optional package metadata is omitted' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
         $predicateMatch = [regex]::Match(
-            $workflow,
+            $installerScript,
             '(?ms)\$expectedWindowsPackageIds\s*=\s*@\(\s*\$wingetSource\.Packages\s*\|\s*Where-Object\s*\{(.*?)\}\s*\|'
         )
         $predicateMatch.Success | Should -BeTrue
@@ -282,7 +282,7 @@ Describe 'CI workflow configuration' {
         )
         $actualIds = @($packages | Where-Object $predicate | ForEach-Object { [string]$_.PackageIdentifier } | Sort-Object -Unique)
 
-        $actualIds | Should -Be @('CiSkipped.Package', 'EmptyFeature.Package', 'Ordinary.Package')
+        $actualIds | Should -Be @('EmptyFeature.Package', 'Ordinary.Package')
     }
 
     It 'should build the NixOS WSL system on hosted Nix CI' {
