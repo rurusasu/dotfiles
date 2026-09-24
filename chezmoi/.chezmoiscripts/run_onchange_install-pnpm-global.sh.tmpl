@@ -14,14 +14,11 @@ fi
 
 echo "pnpm グローバルパッケージをインストールしています..."
 
-PNPM_GLOBAL_BIN_DIR=""
-if [ -n "${PNPM_HOME:-}" ]; then
-  PNPM_GLOBAL_BIN_DIR="$PNPM_HOME/bin"
-else
-  PNPM_GLOBAL_BIN_DIR="$(pnpm config get global-bin-dir 2>/dev/null || true)"
-fi
+# pnpm validates its configured global-bin-dir against PATH. PNPM_HOME is the
+# parent directory and may not describe a customized global-bin-dir.
+PNPM_GLOBAL_BIN_DIR="$(pnpm config get global-bin-dir 2>/dev/null || true)"
 case "$PNPM_GLOBAL_BIN_DIR" in
-  "" | undefined | null) PNPM_GLOBAL_BIN_DIR="" ;;
+  "" | undefined | null) PNPM_GLOBAL_BIN_DIR="${PNPM_HOME:+$PNPM_HOME/bin}" ;;
 esac
 if [ -n "$PNPM_GLOBAL_BIN_DIR" ]; then
   case ":$PATH:" in
