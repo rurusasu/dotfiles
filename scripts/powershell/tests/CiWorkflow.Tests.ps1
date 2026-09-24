@@ -85,7 +85,9 @@ Describe 'CI workflow configuration' {
         $installerScript | Should -Match 'Assert-WingetInstallSuccess\.ps1'
         $installerScript | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
         $installerScript | Should -Match '\$wingetManifest = Get-Content.*windows/winget/packages\.json'
-        $installerScript | Should -Match '\$properties = \$_.PSObject.Properties'
+        $installerScript | Should -Match '\$wingetSources\s*=\s*@\('
+        $installerScript | Should -Match 'SourceDetails\.Name -in @\(''winget'', ''msstore''\)'
+        $installerScript | Should -Match 'Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue \$true'
         $installerScript | Should -Match '\$null -eq \$skipInstall -or -not \[bool\]\$skipInstall\.Value'
         $installerScript | Should -Match 'Sort-Object -Unique'
         $wingetAssertion | Should -Match 'reported an empty WinGet CI verification inventory'
@@ -260,7 +262,7 @@ Describe 'CI workflow configuration' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
         $predicateMatch = [regex]::Match(
             $installerScript,
-            '(?ms)\$expectedWindowsPackageIds\s*=\s*@\(\s*\$wingetSource\.Packages\s*\|\s*Where-Object\s*\{(.*?)\}\s*\|'
+            '(?ms)\$expectedWindowsPackageIds\s*=\s*@\(\s*\$wingetSources\s*\|\s*ForEach-Object\s*\{\s*\$_.Packages\s*\}\s*\|\s*Where-Object\s*\{(.*?)\}\s*\|'
         )
         $predicateMatch.Success | Should -BeTrue
 
@@ -278,7 +280,6 @@ Describe 'CI workflow configuration' {
 
         $actualIds | Should -Be @('CiSkipped.Package', 'EmptyFeature.Package', 'Ordinary.Package')
     }
-
     It 'should build the NixOS WSL system on hosted Nix CI' {
         $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
 
