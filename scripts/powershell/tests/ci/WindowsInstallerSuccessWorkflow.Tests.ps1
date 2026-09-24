@@ -45,7 +45,7 @@
         $markers.Count | Should -BeGreaterThan 0
     }
 
-    It 'derives WinGet validation from packages actually installed by each runtime job' {
+    It 'derives the WinGet inventory across sources and keeps verify-only CI packages' {
         $installerE2E = $script:installerE2E
         $expectedPackageBlock = [regex]::Match(
             $installerE2E,
@@ -56,10 +56,15 @@
         $expectedPackageBlock | Should -Match '\$requiresAdmin'
         $expectedPackageBlock | Should -Match '\$installFeature'
         $expectedPackageBlock | Should -Match '\$skipInstall'
-        $expectedPackageBlock | Should -Match '\$ciSkipInstall'
-        $expectedPackageBlock | Should -Match 'ciSkipInstall\.Value'
-        $installerE2E | Should -Match 'if \(\$expectedRuntime -eq ''7''\)[\s\S]*?Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue \$true'
+        $expectedPackageBlock | Should -Not -Match 'ciSkipInstall'
+
+        $installerE2E | Should -Match '\$wingetSources\s*=\s*@\([\s\S]*?SourceDetails\.Name -in @\(''winget'', ''msstore''\)'
+        $installerE2E | Should -Match 'Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue \$true'
         $installerE2E | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
+        $installerE2E | Should -Match '(?s)\$script:npmPnpmShim = \$null.*?Invoke-WindowsE2EValidation -Name ''pnpm bootstrap'''
+        $installerE2E | Should -Match '\$script:npmPnpmShim = Join-Path \$npmGlobalPrefix ''pnpm\.cmd'''
+        $installerE2E | Should -Match '& \$script:npmPnpmShim --version'
+        $installerE2E | Should -Match '\$expectedPnpmPath = \[System\.IO\.Path\]::GetFullPath\(\$script:npmPnpmShim\)'
     }
     It 'runs the full installer in separate parallel PowerShell 5.1 and 7 jobs' {
         $script:workflow | Should -Match '(?s)windows-installer:.*?max-parallel:\s*2.*?runtime: Windows PowerShell 5\.1\s+version: "5\.1".*?runtime: PowerShell 7\s+version: "7"'
