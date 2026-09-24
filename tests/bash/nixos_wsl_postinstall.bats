@@ -188,6 +188,27 @@ EOF
 	grep -Fq 'accept-flake-config = true' "$NIX_CONFIG_CAPTURE"
 }
 
+@test "NixOS rebuild wrapper preserves GitHub access-token config without exposing it" {
+	run env \
+		PATH="$STUB_BIN:/usr/bin:/bin" \
+		NIX_CONFIG='access-tokens = github.com=ci-test-token' \
+		DOTFILES_USER=alice \
+		DOTFILES_HOME="$USER_HOME" \
+		DOTFILES_UID=4242 \
+		DOTFILES_GID=4343 \
+		DOTFILES_GROUP=alicegrp \
+		DOTFILES_WITH_HERMES=1 \
+		DOTFILES_ACCEPT_FLAKE_CONFIG=1 \
+		DOTFILES_STATE_DIR="$DOTFILES_STATE_DIR" \
+		REAL_NIX= \
+		bash "$REBUILD_WRAPPER" switch --flake . --impure
+
+	[ "$status" -eq 0 ]
+	grep -Fq 'access-tokens = github.com=ci-test-token' "$NIX_CONFIG_CAPTURE"
+	grep -Fq 'accept-flake-config = true' "$NIX_CONFIG_CAPTURE"
+	[[ "$output" != *ci-test-token* ]]
+}
+
 @test "nix sync requires an existing complete WSL checkout" {
 	RUN_REPO_DIR="$BATS_TEST_TMPDIR/partial-repo"
 

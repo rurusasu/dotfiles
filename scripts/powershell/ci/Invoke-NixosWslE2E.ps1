@@ -217,6 +217,19 @@ try {
         Complete-CiSection
     }
 
+    Write-CiSection "Verify authenticated Nix configuration reaches WSL"
+    try {
+        $authNixConfigCheck = 'case "${NIX_CONFIG:-}" in *"access-tokens = github.com="*) echo "GitHub access-token config is available inside WSL." ;; *) echo "NIX_CONFIG is missing the GitHub access-token configuration inside WSL." >&2; exit 1 ;; esac'
+        Invoke-WslChecked -Arguments @(
+            "-d", $DistroName, "-u", "root", "--",
+            "bash", "-lc", $authNixConfigCheck
+        ) -TimeoutSeconds 60 | Out-Null
+        Write-Host "CI_ASSERTION: NIX_CONFIG GitHub access-token setting is available inside WSL."
+    }
+    finally {
+        Complete-CiSection
+    }
+
     Write-CiSection "Verify nixos-rebuild switch"
     try {
         Invoke-WslChecked -Arguments @("--terminate", $DistroName) -TimeoutSeconds 60 -AllowFailure | Out-Null
