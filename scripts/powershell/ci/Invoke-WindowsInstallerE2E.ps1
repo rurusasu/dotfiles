@@ -53,6 +53,27 @@ if ($PSVersionTable.PSVersion.Major -ne $expectedMajorVersion) {
 
 $originalPath = $env:PATH
 $originalUserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+$originalUserPathExists = $false
+$originalUserPathRegistryValue = $null
+$originalUserPathRegistryKind = [Microsoft.Win32.RegistryValueKind]::ExpandString
+$userEnvironmentReadKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
+if ($userEnvironmentReadKey) {
+  try {
+    $originalUserPathExists = $userEnvironmentReadKey.GetValueNames() -contains 'PATH'
+    if ($originalUserPathExists) {
+      $originalUserPathRegistryValue = $userEnvironmentReadKey.GetValue(
+        'PATH',
+        $null,
+        [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
+      )
+      $originalUserPathRegistryKind = $userEnvironmentReadKey.GetValueKind('PATH')
+      $originalUserPath = [string]$originalUserPathRegistryValue
+    }
+  }
+  finally {
+    $userEnvironmentReadKey.Dispose()
+  }
+}
 $originalPs7Dir = $env:DOTFILES_PS7_DIR
 $originalForceWindowsPowerShell = $env:DOTFILES_FORCE_WINDOWS_POWERSHELL
 $isWindowsPowerShell = $expectedVersion -eq '5.1'
@@ -440,7 +461,21 @@ catch {
 }
 finally {
   try {
-    [Environment]::SetEnvironmentVariable('PATH', $originalUserPath, 'User')
+    $userEnvironmentCleanupKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+    if (-not $userEnvironmentCleanupKey) {
+      throw 'Could not open the current user Environment registry key to restore PATH'
+    }
+    try {
+      if ($originalUserPathExists) {
+        $userEnvironmentCleanupKey.SetValue('PATH', $originalUserPathRegistryValue, $originalUserPathRegistryKind)
+      }
+      else {
+        $userEnvironmentCleanupKey.DeleteValue('PATH', $false)
+      }
+    }
+    finally {
+      $userEnvironmentCleanupKey.Dispose()
+    }
     Write-Host 'Restored the original User PATH after the Windows installer E2E'
   }
   catch {
