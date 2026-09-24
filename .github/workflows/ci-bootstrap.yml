@@ -1059,7 +1059,7 @@ jobs:
           }
 
       - name: Run install.cmd strict user phase
-        shell: \${{ matrix.shell }}
+        shell: ${{ matrix.shell }}
         timeout-minutes: 70
         env:
           DOTFILES_INSTALL_TIMEOUT_SECONDS: "900"
