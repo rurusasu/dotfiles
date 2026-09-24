@@ -161,6 +161,7 @@
         $workflow | Should -Match 'winget install --id 9NT1R1C2HH7J'
         $workflow | Should -Match 'RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=\(removed\|absent\)'
         $workflow | Should -Match 'winget list --id 9NT1R1C2HH7J'
+        $workflow | Should -Match 'winget list --id 9NT1R1C2HH7J --exact --source msstore --accept-source-agreements --disable-interactivity'
         $workflow | Should -Match 'ChatGPT Classic is still installed after cleanup'
     }
 }

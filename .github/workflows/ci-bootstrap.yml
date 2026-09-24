@@ -1136,7 +1136,7 @@ jobs:
               throw 'Cannot exercise the pnpm bootstrap E2E because npm is unavailable after pnpm isolation'
             }
 
-            $classicBefore = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --disable-interactivity 2>&1)
+            $classicBefore = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --accept-source-agreements --disable-interactivity 2>&1)
             $classicBeforeExitCode = $LASTEXITCODE
             $classicBeforeText = $classicBefore -join [Environment]::NewLine
             if ($classicBeforeExitCode -ne 0) {
@@ -1151,7 +1151,7 @@ jobs:
               if ($classicInstallExitCode -ne 0) {
                 throw "Could not seed the ChatGPT Classic uninstall E2E (winget exit=$classicInstallExitCode): $($classicInstallOutput -join ' ')"
               }
-              $classicInstalled = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --disable-interactivity 2>&1)
+              $classicInstalled = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --accept-source-agreements --disable-interactivity 2>&1)
               $classicInstalledText = $classicInstalled -join [Environment]::NewLine
               if ($classicInstalledText -notmatch '(?im)^\s*.*\b9NT1R1C2HH7J\b') {
                 throw "ChatGPT Classic E2E seed install did not become visible in WinGet: $classicInstalledText"
@@ -1318,7 +1318,7 @@ jobs:
             throw 'ChatGPT Classic retired-package cleanup did not complete successfully'
           }
 
-          $classicListOutput = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --disable-interactivity 2>&1)
+          $classicListOutput = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --accept-source-agreements --disable-interactivity 2>&1)
           $classicListExitCode = $LASTEXITCODE
           $classicListText = $classicListOutput -join [Environment]::NewLine
           if ($classicListText -match '(?im)^\s*.*\b9NT1R1C2HH7J\b') {
