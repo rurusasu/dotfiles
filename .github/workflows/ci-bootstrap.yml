@@ -289,6 +289,7 @@ jobs:
         experimental-features = nix-command flakes
         extra-substituters = https://cache.numtide.com
         extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=
+        access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: read
     steps:
@@ -432,6 +433,7 @@ jobs:
         experimental-features = nix-command flakes
         extra-substituters = https://cache.numtide.com
         extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=
+        access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

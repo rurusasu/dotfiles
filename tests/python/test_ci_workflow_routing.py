@@ -183,6 +183,16 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
         self.assertNotIn("npm install -g @devcontainers/cli", devcontainer)
 
+    def test_nix_build_jobs_use_authenticated_github_fetches(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        for job_name in ("nix-test", "linux-build"):
+            with self.subTest(job=job_name):
+                job = self._workflow_job(workflow, job_name)
+                self.assertIn("NIX_CONFIG: |", job)
+                self.assertIn(
+                    "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}",
+                    job,
+                )
     def test_bootstrap_workflow_watches_nix_validation_paths(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
         for event in ("push",):
