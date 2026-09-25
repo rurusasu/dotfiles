@@ -312,8 +312,18 @@ fi
             'GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey" | rg "\"\^\[q\" __zoxide_zi_widget"'
         ) -TimeoutSeconds 300 | Out-Null
 
-        Write-CiSection "Enable Hermes Agent through Nix"
-        try {
+    Write-CiSection "Enable Hermes Agent through Nix"
+    try {
+            # Hermes' default package is large enough to trigger memory
+            # pressure on the Windows runner while Nix evaluates/builds it.
+            # The distro is disposable, so a bounded swap file is a safer
+            # CI guardrail than raising parallelism and causing an OOM kill.
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "root", "--",
+                "bash", "-lc",
+                'if ! swapon --show=NAME --noheadings | grep -q .; then dd if=/dev/zero of=/swapfile bs=1M count=8192 status=none && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile; fi && free -h'
+            ) -TimeoutSeconds 300 | Out-Null
+
             # Seed a real running container under the legacy Compose service name
             # so the production rebuild handler must exercise its stop path.
             Invoke-WslChecked -Arguments @(

@@ -366,8 +366,8 @@ fi
 NIX_CONFIG="$(printf '%s\n' \
   'experimental-features = nix-command flakes' \
   'accept-flake-config = true' \
-  'extra-substituters = https://cache.numtide.com' \
-  'extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=')" \
+  'extra-substituters = https://cache.numtide.com https://hermes-agent.cachix.org' \
+  'extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g= hermes-agent.cachix.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU=')" \
   bash "$REBUILD_HELPER" switch --flake "path:$TARGET_DIR#$FLAKE_NAME" --impure
 
 # Handle sync-back

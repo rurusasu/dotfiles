@@ -2,9 +2,13 @@
   # llm-agents.nix publishes pre-built Codex outputs so first-time NixOS and
   # NixOS-WSL activations do not compile the Rust/V8 package from source.
   nixConfig = {
-    extra-substituters = [ "https://cache.numtide.com" ];
+    extra-substituters = [
+      "https://cache.numtide.com"
+      "https://hermes-agent.cachix.org"
+    ];
     extra-trusted-public-keys = [
       "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
+      "hermes-agent.cachix.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU="
     ];
   };
 
