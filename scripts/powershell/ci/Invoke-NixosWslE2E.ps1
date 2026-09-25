@@ -276,7 +276,7 @@ try {
         }
         $cachePathResult = Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "root", "--",
-            "wslpath", "-a", $cacheDir
+            "wslpath", "-a", $cacheDir.Replace('\', '/')
         ) -TimeoutSeconds 60
         $cacheLinuxPath = ($cachePathResult.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -match '^/' } | Select-Object -First 1)
         if ([string]::IsNullOrWhiteSpace($cacheLinuxPath)) {
