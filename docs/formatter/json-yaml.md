@@ -90,6 +90,10 @@ treefmt
 command = "oxfmt"
 options = ["--write"]
 includes = ["*.json", "*.yaml", "*.yml"]
+excludes = [
+  "chezmoi/editors/cursor/settings.json",
+  "chezmoi/terminals/windows-terminal/settings.json",
+]
 ```
 
 ## treefmt-nix 設定

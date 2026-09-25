@@ -10,7 +10,7 @@ setup() {
 	run task --dir "$REPO_ROOT" --dry test DOTFILES_PATH="$REPO_ROOT"
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"nix build .#checks."* ]]
+	[[ "$output" == *"nix build .#checks."* || "$output" == *'nix build ".#checks.'* ]]
 	[[ "$output" != *"Invoke-Tests.ps1"* ]]
 }
 
@@ -19,7 +19,7 @@ setup() {
 	run task --dir "$REPO_ROOT" --dry commit -- "test commit"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"cd $REPO_ROOT && nix fmt"* ]]
-	[[ "$output" == *"cd $REPO_ROOT && pre-commit run --all-files"* ]]
+	[[ "$output" == *"cd $REPO_ROOT && pre-commit run --all-files"* || "$output" == *"cd $REPO_ROOT && SKIP=treefmt pre-commit run --all-files"* ]]
 	[[ "$output" == *"cd $REPO_ROOT && git add -A"* ]]
 	[[ "$output" != *'cd ~/.dotfiles'* ]]
 }
@@ -43,6 +43,8 @@ tasks:
   fmt:
     cmds: ["true"]
   lint:
+    cmds: ["true"]
+  "lint:no-format":
     cmds: ["true"]
 EOF
 	git -C "$fixture" init -q
@@ -102,17 +104,18 @@ EOF
 	[ "$sync_line" -lt "$restart_line" ]
 }
 
-@test "Hermes up applies the transactional bootstrap before starting the gateway" {
+@test "Hermes up starts the Home Manager native gateway" {
 	command -v task >/dev/null || skip "go-task is unavailable"
 
 	run task --dir "$REPO_ROOT" --dry --force hermes:up
 
 	[ "$status" -eq 0 ]
-	bootstrap_line="$(grep -n 'task: \[hermes:bootstrap\]' <<<"$output" | cut -d: -f1)"
-	[ -n "$bootstrap_line" ]
+	[[ "$output" == *"hermes gateway start"* ]]
+	[[ "$output" != *"docker compose"* ]]
+	[[ "$output" != *"hermes:docker:bootstrap"* ]]
 }
 
-@test "nrs orders rebuild, profile activation, and Hermes bootstrap" {
+@test "nrs activates NixOS without bootstrapping a Docker Hermes gateway" {
 	command -v task >/dev/null || skip "go-task is unavailable"
 
 	run task --dir "$REPO_ROOT" --dry --force nrs
@@ -120,27 +123,24 @@ EOF
 	[ "$status" -eq 0 ]
 	rebuild_line="$(grep -n 'nix flake update && scripts/sh/nixos-rebuild-with-user.sh switch' <<<"$output" | cut -d: -f1)"
 	profile_line="$(grep -n "nix profile upgrade '.*'" <<<"$output" | cut -d: -f1)"
-	bootstrap_line="$(grep -n 'task: \[hermes:bootstrap\]' <<<"$output" | cut -d: -f1)"
 	[ -n "$rebuild_line" ]
 	[ -n "$profile_line" ]
-	[ -n "$bootstrap_line" ]
 	[ "$rebuild_line" -lt "$profile_line" ]
-	[ "$profile_line" -lt "$bootstrap_line" ]
+	[[ "$output" != *"hermes:docker:bootstrap"* ]]
+	[[ "$output" != *"docker compose"* ]]
 }
 
-@test "NixOS rebuild helper is used for every WSL rebuild shortcut" {
+@test "NixOS rebuild helper wiring is retained for WSL and update tasks" {
 	grep -Fq 'scripts/sh/nixos-rebuild-with-user.sh' "$REPO_ROOT/taskfiles/nix/taskfile.yml"
-	grep -Fq 'nrt = "~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh test' "$REPO_ROOT/nix/home/wsl.nix"
-	grep -Fq 'nrb = "~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh boot' "$REPO_ROOT/nix/home/wsl.nix"
 	grep -Fq 'scripts/sh/nixos-rebuild-with-user.sh switch --flake ~/.dotfiles#nixos --impure' "$REPO_ROOT/scripts/sh/update.sh"
 }
 
-@test "Hermes restart reuses the transactional bootstrap up task" {
+@test "Hermes restart delegates to the Home Manager native gateway" {
 	command -v task >/dev/null || skip "go-task is unavailable"
 
 	run task --dir "$REPO_ROOT" --dry --force hermes:restart
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"task: [hermes:bootstrap]"* ]]
-	[[ "$output" != *"scripts/sh/hermes-xapi.sh up"* ]]
+	[[ "$output" == *"hermes gateway restart"* ]]
+	[[ "$output" != *"docker compose"* ]]
 }

@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 BeforeAll {
     . $PSScriptRoot/../../lib/SetupHandler.ps1
@@ -119,26 +119,23 @@ Describe 'OnePasswordCliHandler' {
         }
     }
 
-    Context 'CanApply - legacy shim is stale copy from old version' {
+    Context 'CanApply - stale WindowsApps shim is ignored' {
         BeforeEach {
             Set-OnePasswordCliPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*op.exe") { return $true }
-                if ($LiteralPath -like "*op.exe") { return $true }
+                if ($Path -like "*AgileBits.1Password.CLI*op.exe") { return $true }
+                if ($LiteralPath -like "*WindowsApps\op.exe") { return $true }
                 return $false
             }
             Mock Get-Item {
-                if ($LiteralPath -like "*WindowsApps\op.exe") {
-                    return [PSCustomObject]@{ LinkType = ""; Length = 100; LastWriteTimeUtc = [datetime]'2024-01-01' }
-                }
-                return [PSCustomObject]@{ LinkType = ""; Length = 200; LastWriteTimeUtc = [datetime]'2024-06-01' }
+                return [PSCustomObject]@{ LinkType = ""; Length = 100; LastWriteTimeUtc = [datetime]'2024-01-01' }
             }
-            Mock Get-UserEnvironmentPath { return "$script:opPkgDir;C:\Windows;$script:expectedWindowsApps;$script:expectedLinks" }
+            Mock Get-UserEnvironmentPath { return "$script:opPkgDir;C:\Windows;$script:expectedWindowsApps" }
             Mock Write-Host { }
         }
 
-        It 'should return true so stale shims are replaced after winget upgrade' {
-            $handler.CanApply($ctx) | Should -Be $true
+        It 'should return false instead of treating the OS-managed shim as required' {
+            $handler.CanApply($ctx) | Should -Be $false
         }
     }
 
@@ -173,6 +170,184 @@ Describe 'OnePasswordCliHandler' {
         }
     }
 
+    Context 'Apply - WindowsApps is OS-managed' {
+        BeforeEach {
+            Set-OnePasswordCliPackageInstalled
+            Mock Test-Path {
+                if ($Path -like "*AgileBits.1Password.CLI*op.exe") { return $true }
+                if ($Path -like "*WinGet\Links" -or $LiteralPath -like "*WinGet\Links") { return $false }
+                if ($LiteralPath -like "*op.exe") { return $false }
+                return $false
+            }
+            Mock New-Item {
+                if ($Path -like "*WindowsApps*") {
+                    throw "Administrator privilege required for this operation"
+                }
+            }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedWindowsApps" }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+
+        It 'should not write an op.exe shim to WindowsApps' {
+            $env:PATH = "C:\Windows;$script:expectedWindowsApps"
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $Path -like "*WindowsApps*" }
+            Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter { $Path -like "*$script:opPkgDir*" }
+        }
+    }
+
+    Context 'Apply - existing unrelated WinGet Links alias' {
+        BeforeEach {
+            $script:previousOpPkgDir = $script:opPkgDir
+            $script:previousOpExe = $script:opExe
+            $script:previousExpectedLinks = $script:expectedLinks
+            $script:previousLocalAppData = $env:LOCALAPPDATA
+
+            $script:opPkgDir = Join-Path $TestDrive 'Packages\AgileBits.1Password.CLI_test'
+            $script:opExe = Join-Path $script:opPkgDir 'op.exe'
+            $script:expectedLinks = Join-Path $TestDrive 'Microsoft\WinGet\Links'
+            $env:LOCALAPPDATA = $TestDrive
+            New-Item -ItemType Directory -Path $script:opPkgDir, $script:expectedLinks -Force | Out-Null
+            Set-Content -LiteralPath $script:opExe -Value 'installed 1Password CLI' -NoNewline
+            $script:unrelatedAliasPath = Join-Path $script:expectedLinks 'op.exe'
+            Set-Content -LiteralPath $script:unrelatedAliasPath -Value 'unrelated op alias' -NoNewline
+
+            Set-OnePasswordCliPackageInstalled
+            $script:mockUserPath = "C:\Windows;$script:expectedLinks"
+            Mock Get-UserEnvironmentPath { return $script:mockUserPath }
+            Mock Set-UserEnvironmentPath { $script:mockUserPath = $Path }
+            Mock Write-Host { }
+            $env:PATH = "$script:expectedLinks;C:\Windows"
+        }
+
+        AfterEach {
+            $script:opPkgDir = $script:previousOpPkgDir
+            $script:opExe = $script:previousOpExe
+            $script:expectedLinks = $script:previousExpectedLinks
+            $env:LOCALAPPDATA = $script:previousLocalAppData
+        }
+
+        It 'preserves an unrelated alias while making the installed executable win in a new shell' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            [System.IO.File]::ReadAllText($script:unrelatedAliasPath) | Should -Be 'unrelated op alias'
+            ($script:mockUserPath -split ';')[0] | Should -Be $script:opPkgDir
+
+            $shell = Join-Path $PSHOME $(if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh.exe' } else { 'powershell.exe' })
+            $env:PATH = $script:mockUserPath
+            $resolveCommand = '$ErrorActionPreference = ''Stop''; $command = Get-Command -Name ''op.exe'' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1; if (-not $command) { exit 1 }; [Console]::Out.WriteLine($command.Source); exit 0'
+            $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($resolveCommand))
+            $resolvedPath = & $shell -NoLogo -NoProfile -EncodedCommand $encodedCommand
+            $childExitCode = $LASTEXITCODE
+            $childExitCode | Should -Be 0 -Because "a new shell should resolve op.exe from the package directory; child output: $($resolvedPath -join ' ')"
+            [System.IO.Path]::GetFullPath(($resolvedPath | Select-Object -Last 1).Trim()) |
+                Should -Be ([System.IO.Path]::GetFullPath($script:opExe))
+        }
+    }
+
+    Context 'Apply - required USER PATH update fails' {
+        BeforeEach {
+            Set-OnePasswordCliPackageInstalled
+            Mock Test-Path {
+                if ($Path -like "*AgileBits.1Password.CLI*op.exe") { return $true }
+                return $false
+            }
+            Mock Get-UserEnvironmentPath { return "C:\Windows" }
+            Mock Set-UserEnvironmentPath { throw "USER PATH write failed" }
+            Mock Write-Host { }
+        }
+
+        It 'should return failure when the package directory cannot be persisted' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Error | Should -Match "USER PATH write failed"
+        }
+    }
+
+    Context 'Apply - WinGet Links symlink privilege fallback' {
+        BeforeEach {
+            $script:previousOpPkgDir = $script:opPkgDir
+            $script:previousOpExe = $script:opExe
+            $script:previousExpectedLinks = $script:expectedLinks
+            $script:previousExpectedWindowsApps = $script:expectedWindowsApps
+            $script:previousLocalAppData = $env:LOCALAPPDATA
+
+            $script:opPkgDir = Join-Path $TestDrive 'Packages\AgileBits.1Password.CLI_test'
+            $script:opExe = Join-Path $script:opPkgDir 'op.exe'
+            $script:expectedLinks = Join-Path $TestDrive 'Microsoft\WinGet\Links'
+            $script:expectedWindowsApps = Join-Path $TestDrive 'Microsoft\WindowsApps'
+            $env:LOCALAPPDATA = $TestDrive
+            New-Item -ItemType Directory -Path $script:opPkgDir, $script:expectedLinks, $script:expectedWindowsApps -Force | Out-Null
+            Set-Content -LiteralPath $script:opExe -Value 'version one' -NoNewline
+            $script:windowsAppsMarker = Join-Path $script:expectedWindowsApps 'keep.txt'
+            Set-Content -LiteralPath $script:windowsAppsMarker -Value 'WindowsApps is OS-managed' -NoNewline
+
+            Set-OnePasswordCliPackageInstalled
+            Mock New-Item { throw 'Administrator privilege required for this operation' } -ParameterFilter {
+                $ItemType -eq 'SymbolicLink'
+            }
+            $script:mockUserPath = 'C:\Windows'
+            Mock Get-UserEnvironmentPath { return $script:mockUserPath }
+            Mock Set-UserEnvironmentPath { $script:mockUserPath = $Path }
+            Mock Write-Host { }
+            $env:PATH = "$script:expectedLinks;C:\Windows"
+        }
+
+        AfterEach {
+            $script:opPkgDir = $script:previousOpPkgDir
+            $script:opExe = $script:previousOpExe
+            $script:expectedLinks = $script:previousExpectedLinks
+            $script:expectedWindowsApps = $script:previousExpectedWindowsApps
+            $env:LOCALAPPDATA = $script:previousLocalAppData
+        }
+
+        It 'should avoid WindowsApps and resolve the upgraded package executable after symlink creation is denied' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $true
+            [System.IO.File]::ReadAllText((Join-Path $script:expectedLinks 'op.exe')) | Should -Be 'version one'
+            Test-Path -LiteralPath (Join-Path $script:expectedLinks 'op.exe.dotfiles-managed') | Should -Be $true
+            $windowsAppsEntries = @(Get-ChildItem -LiteralPath $script:expectedWindowsApps -Force | Select-Object -ExpandProperty Name)
+            $windowsAppsEntries | Should -HaveCount 1
+            $windowsAppsEntries | Should -Contain 'keep.txt'
+            [System.IO.File]::ReadAllText($script:windowsAppsMarker) | Should -Be 'WindowsApps is OS-managed'
+            $handler.CanApply($ctx) | Should -Be $false
+
+            Set-Content -LiteralPath $script:opExe -Value 'version two' -NoNewline
+            $env:PATH = "$script:expectedLinks;C:\Windows"
+            $handler.CanApply($ctx) | Should -Be $true
+            $upgradeResult = if ($handler.CanApply($ctx)) { $handler.Apply($ctx) }
+
+            $upgradeResult.Success | Should -Be $true
+            [System.IO.File]::ReadAllText((Join-Path $script:expectedLinks 'op.exe')) | Should -Be 'version two'
+            $windowsAppsEntries = @(Get-ChildItem -LiteralPath $script:expectedWindowsApps -Force | Select-Object -ExpandProperty Name)
+            $windowsAppsEntries | Should -HaveCount 1
+            $windowsAppsEntries | Should -Contain 'keep.txt'
+            [System.IO.File]::ReadAllText($script:windowsAppsMarker) | Should -Be 'WindowsApps is OS-managed'
+            $handler.CanApply($ctx) | Should -Be $false
+
+            $shell = Join-Path $PSHOME $(if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh.exe' } else { 'powershell.exe' })
+            $env:PATH = $script:mockUserPath
+            $resolvedPath = & $shell -NoLogo -NoProfile -Command '& "$env:SystemRoot\System32\where.exe" op.exe | Select-Object -First 1'
+            $LASTEXITCODE | Should -Be 0
+            $resolvedPath = [System.IO.Path]::GetFullPath(($resolvedPath | Select-Object -Last 1).Trim())
+            $resolvedPath | Should -Be ([System.IO.Path]::GetFullPath($script:opExe))
+            [System.IO.File]::ReadAllText($resolvedPath) | Should -Be 'version two'
+
+            Set-Content -LiteralPath (Join-Path $script:expectedLinks 'op.exe') -Value 'unrelated replacement' -NoNewline
+            $env:PATH = "$script:expectedLinks;C:\Windows"
+            $handler.CanApply($ctx) | Should -Be $false
+            $handler.Apply($ctx).Success | Should -Be $true
+            [System.IO.File]::ReadAllText((Join-Path $script:expectedLinks 'op.exe')) | Should -Be 'unrelated replacement'
+        }
+    }
+
     Context 'Apply - direct package directory PATH' {
         BeforeEach {
             Set-OnePasswordCliPackageInstalled
@@ -186,6 +361,12 @@ Describe 'OnePasswordCliHandler' {
             Mock Get-Item {
                 return [PSCustomObject]@{ LinkType = ""; Length = 100; LastWriteTimeUtc = [datetime]'2024-01-01' }
             } -ParameterFilter { $LiteralPath -like "*op.exe" }
+            Mock Get-FileHash {
+                if ($LiteralPath -like "*WinGet\Links\op.exe") {
+                    return [PSCustomObject]@{ Hash = "OLD-SHIM-HASH" }
+                }
+                return [PSCustomObject]@{ Hash = "PACKAGE-EXE-HASH" }
+            }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "SymbolicLink" }
             Mock New-Item { throw "hardlink fallback must not be used" } -ParameterFilter { $ItemType -eq "HardLink" }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
@@ -197,14 +378,14 @@ Describe 'OnePasswordCliHandler' {
             Mock Write-Host { }
         }
 
-        It 'should add the package directory and replace old shims with symlinks' {
+        It 'should add the package directory without replacing an unknown WinGet Links shim' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $true
             Should -Invoke Set-UserEnvironmentPath -Times 1 -ParameterFilter { $Path -like "*$script:opPkgDir*" }
-            Should -Invoke New-Item -Times 2 -ParameterFilter { $ItemType -eq "SymbolicLink" }
+            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "SymbolicLink" }
             Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "HardLink" }
-            Should -Invoke Move-Item -Times 4
+            Should -Invoke Move-Item -Times 0
             Should -Invoke Copy-Item -Times 0
         }
     }

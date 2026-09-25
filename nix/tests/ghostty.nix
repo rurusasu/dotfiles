@@ -8,12 +8,7 @@ let
   check =
     system:
     let
-      pkgs =
-        (import inputs.nixpkgs {
-          inherit system;
-          config.allowUnfree = true;
-        }).extend
-          (_: _: { workmux = inputs.workmux.packages.${system}.default; });
+      pkgs = (import ../test-fixtures.nix { inherit inputs; }).mkPkgs system;
       sets = import ../packages/sets.nix {
         inherit pkgs;
         inherit (pkgs) lib;

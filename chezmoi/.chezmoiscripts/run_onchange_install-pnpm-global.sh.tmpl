@@ -2,7 +2,6 @@
 #!/usr/bin/env bash
 # pnpm グローバルパッケージ インストールスクリプト (Linux/macOS)
 # SSOT: nix/packages/sets.nix (pnpmGlobal)
-# Generated from: {{ range .pnpm_global_packages }}{{ . }} {{ end }}
 
 set -euo pipefail
 
@@ -15,6 +14,37 @@ fi
 
 echo "pnpm グローバルパッケージをインストールしています..."
 
+# pnpm validates its configured global-bin-dir against PATH. PNPM_HOME is the
+# parent directory and may not describe a customized global-bin-dir.
+PNPM_GLOBAL_BIN_DIR="$(pnpm config get global-bin-dir 2>/dev/null || true)"
+case "$PNPM_GLOBAL_BIN_DIR" in
+  "" | undefined | null)
+    PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+    PNPM_GLOBAL_BIN_DIR="$PNPM_HOME/bin"
+    ;;
+esac
+case "$PNPM_GLOBAL_BIN_DIR" in
+  "~") PNPM_GLOBAL_BIN_DIR="$HOME" ;;
+  "~/"*) PNPM_GLOBAL_BIN_DIR="$HOME/${PNPM_GLOBAL_BIN_DIR#\~/}" ;;
+esac
+if [ -n "$PNPM_GLOBAL_BIN_DIR" ]; then
+  case ":$PATH:" in
+    *":$PNPM_GLOBAL_BIN_DIR:"*) ;;
+    *) export PATH="$PNPM_GLOBAL_BIN_DIR:$PATH" ;;
+  esac
+  printf 'pnpm global bin directory is available in PATH: %s\n' "$PNPM_GLOBAL_BIN_DIR"
+fi
+
+pnpm_add_global() {
+  if [ -n "$PNPM_GLOBAL_BIN_DIR" ]; then
+    PNPM_CONFIG_GLOBAL_BIN_DIR="$PNPM_GLOBAL_BIN_DIR" \
+      PATH="$PNPM_GLOBAL_BIN_DIR:$PATH" \
+      pnpm add -g "$@"
+  else
+    pnpm add -g "$@"
+  fi
+}
+
 {{ include ".chezmoitemplates/pnpm_global_installed.sh" }}
 
 FAILED=0
@@ -23,7 +53,6 @@ SKIPPED=0
 PNPM_BUILD_ARGS=()
 
 {{ range .pnpm_global_packages -}}
-# {{ . }}
 PKG_NAME="{{ . }}"
 if [ "$PKG_NAME" = "@deepseek-ai/dsh" ]; then
   PNPM_BUILD_ARGS=(
@@ -53,7 +82,7 @@ if pnpm_global_package_installed "$PKG_NAME"; then
 fi
 if [ "$INSTALL_REQUIRED" -eq 1 ] && [ "$REMOVE_FAILED" -eq 0 ]; then
   echo "  インストール中: $PKG_NAME"
-  if pnpm add -g "${PNPM_BUILD_ARGS[@]}" "$PKG_NAME"; then
+  if pnpm_add_global "${PNPM_BUILD_ARGS[@]}" "$PKG_NAME"; then
     echo "  ✓ $PKG_NAME"
     INSTALLED=$((INSTALLED + 1))
   else
@@ -66,4 +95,7 @@ fi
 
 {{ end -}}
 echo "pnpm グローバル: ${INSTALLED} 個インストール, ${SKIPPED} 個スキップ, ${FAILED} 個失敗"
+if [ "$FAILED" -gt 0 ]; then
+  exit 1
+fi
 {{ end -}}

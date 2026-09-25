@@ -6,6 +6,7 @@ ARG ARTICLE_COLLECTOR_VERSION=v0.6.17
 ARG GOOGLE_CALENDAR_MCP_VERSION=2.6.2
 ARG GOOGLE_GMAIL_MCP_VERSION=1.2.3
 ARG HINDSIGHT_CLIENT_VERSION=0.6.1
+ARG HINDSIGHT_PLUGIN_COMMIT=dc75038866a3966b5bf5c82ff57c7a758bb4070a
 ARG HERMES_LCM_VERSION=v0.20.0
 ARG HERMES_LCM_COMMIT=49e99a272d2d461e5c90732e7ef2bc20e96f0826
 
@@ -14,11 +15,14 @@ COPY hermes-agent/gh-wrapper.sh /usr/local/bin/gh
 COPY hermes-agent/bootstrap/hermes_bootstrap /usr/local/lib/hermes-bootstrap/hermes_bootstrap
 COPY hermes-agent/bootstrap-manifest.yaml /usr/local/share/hermes-bootstrap/bootstrap-manifest.yaml
 COPY hermes-agent/hermes-bootstrap /usr/local/bin/hermes-bootstrap
-COPY hermes-agent/hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance
+COPY hermes-agent/hindsight_acceptance.py /usr/local/bin/hindsight_acceptance.py
 COPY hermes-agent/gateway_convergence.py /usr/local/bin/hermes-gateway-converge
 COPY hermes-agent/hermes_storage_seed.py /usr/local/bin/hermes-storage-seed
 COPY hermes-agent/hermes_storage_ownership.py /usr/local/bin/hermes-storage-ownership
-RUN chmod 0755 /usr/local/bin/hermes-hindsight-acceptance
+RUN sed -i 's/\r$//' /usr/local/bin/hindsight_acceptance.py \
+  && chmod 0755 /usr/local/bin/hindsight_acceptance.py \
+  && ln -s /usr/local/bin/hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance \
+  && /usr/local/bin/hermes-hindsight-acceptance --help >/dev/null
 RUN chmod 0755 /usr/local/bin/hermes-gateway-converge
 RUN chmod 0755 /usr/local/bin/hermes-storage-seed
 RUN chmod 0755 /usr/local/bin/hermes-storage-ownership
@@ -194,6 +198,34 @@ RUN apt-get update \
   && chmod 0755 /usr/local/bin/hermes-xapi-mcp \
   && chmod 0755 /usr/local/bin/hermes-bootstrap \
   && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /tmp/hindsight-provider /opt/hermes/plugins/memory/hindsight \
+  && git -C /tmp/hindsight-provider init --quiet \
+  && git -C /tmp/hindsight-provider remote add origin https://github.com/vectorize-io/hindsight \
+  && git -C /tmp/hindsight-provider fetch --quiet --depth 1 origin "${HINDSIGHT_PLUGIN_COMMIT}" \
+  && test "$(git -C /tmp/hindsight-provider rev-parse FETCH_HEAD)" = "${HINDSIGHT_PLUGIN_COMMIT}" \
+  && git -C /tmp/hindsight-provider archive FETCH_HEAD hindsight-integrations/hermes \
+    | tar -x --strip-components=2 -C /opt/hermes/plugins/memory/hindsight \
+  && test -f /opt/hermes/plugins/memory/hindsight/plugin.yaml \
+  && test -f /opt/hermes/plugins/memory/hindsight/__init__.py \
+  && /opt/hermes/.venv/bin/python -m py_compile /opt/hermes/plugins/memory/hindsight/__init__.py \
+  && /opt/hermes/.venv/bin/python -c \
+      "from importlib.metadata import version; assert version('hindsight-client') == '${HINDSIGHT_CLIENT_VERSION}'"
+
+RUN PYTHONPATH=/usr/local/bin /opt/hermes/.venv/bin/python - <<'PY'
+from hindsight_acceptance import _resolved_provider
+
+with _resolved_provider(
+    profile="default",
+    run_id="0123456789abcdef0123456789abcdef",
+    api_url="http://127.0.0.1:9",
+    timeout=1,
+    provider_factory=None,
+) as (provider, bank_id):
+    assert provider.name == "hindsight"
+    assert provider.__class__.__module__ == "plugins.memory.hindsight"
+    assert f"Bank: {bank_id}," in provider.system_prompt_block()
+PY
 
 RUN git clone --quiet --depth 1 --branch "${HERMES_LCM_VERSION}" \
     https://github.com/stephenschoettler/hermes-lcm \

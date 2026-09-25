@@ -1,5 +1,7 @@
 -- Plugin specifications for lazy.nvim
 
+local appearance = require("config.appearance")
+
 return {
     -- Colorscheme
     {
@@ -8,8 +10,11 @@ return {
         lazy = false,
         priority = 1000,
         config = function()
-            require("catppuccin").setup({ flavour = "mocha", transparent_background = true })
-            vim.cmd.colorscheme("catppuccin-mocha")
+            require("catppuccin").setup({
+                flavour = appearance.nvim_flavour,
+                transparent_background = true,
+            })
+            vim.cmd.colorscheme(appearance.nvim_colorscheme)
         end,
     },
 

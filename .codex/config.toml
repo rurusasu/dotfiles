@@ -3,7 +3,6 @@ model_reasoning_effort = "high"
 plan_mode_reasoning_effort = "high"
 model_reasoning_summary = "auto"
 model_verbosity = "low"
-project_doc_fallback_filenames = [ "copilot-instructions.md" ]
 approval_policy = "never"
 default_permissions = ":danger-full-access"
 web_search = "live"

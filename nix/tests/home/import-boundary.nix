@@ -33,11 +33,48 @@ let
 
   contains = pattern: content: builtins.length (builtins.split pattern content) > 1;
 
+  # Inspect declarations without evaluating caller modules. Mask strings first
+  # so example text cannot be mistaken for an import declaration.
+  stripStrings =
+    content:
+    builtins.concatStringsSep "\n" (
+      builtins.filter builtins.isString (builtins.split "\"[^\"]*\"|''[^']*''" content)
+    );
+  stripBlockComments =
+    content:
+    (builtins.foldl'
+      (
+        state: token:
+        if builtins.isString token then
+          {
+            inherit (state) inComment;
+            text = state.text + (if state.inComment then "" else token);
+          }
+        else
+          {
+            text = state.text;
+            inComment = builtins.head token == "/*";
+          }
+      )
+      {
+        inComment = false;
+        text = "";
+      }
+      (builtins.split "(/\\*|\\*/)" content)
+    ).text;
+  stripLineComments =
+    content:
+    let
+      uncommented = stripBlockComments (stripStrings content);
+    in
+    builtins.concatStringsSep " " (
+      builtins.filter builtins.isString (builtins.split "#[^[:cntrl:]]*" uncommented)
+    );
   containsImport =
     target: content:
-    builtins.any (
-      line: builtins.match ".*(import|imports)[[:space:]=].*${target}\\.nix.*" line != null
-    ) (builtins.filter builtins.isString (builtins.split "\n" content));
+    builtins.match ".*imports[[:space:]]*=[[:space:]]*\\[[^]]*([^]]*/|[.]/)${target}\\.nix.*" (
+      stripLineComments content
+    ) != null;
 
   entryModules = [
     ../../home/darwin.nix
@@ -113,5 +150,31 @@ in
   testExternalCallersDoNotImportCommon = {
     expr = externalDirectImports;
     expected = [ ];
+  };
+
+  testCommentOnlyCommonMentionIsNotAnImport = {
+    expr = [
+      (containsImport "common" "# imports = [ ./common.nix ];")
+      (containsImport "common" ''message = "imports = [ ./common.nix ]";'')
+      (containsImport "common" ''
+        /* imports = [ ./common.nix ];
+         * still a comment */
+        { }
+      '')
+      (containsImport "common" "imports = [ ../home/common.nix ];")
+      (containsImport "common" ''
+        imports = [
+          # shared module
+          ./common.nix
+        ];
+      '')
+    ];
+    expected = [
+      false
+      false
+      false
+      true
+      true
+    ];
   };
 }

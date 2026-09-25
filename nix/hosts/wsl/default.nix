@@ -1,5 +1,6 @@
 {
   config,
+  dotfilesWithHermes ? builtins.getEnv "DOTFILES_WITH_HERMES" == "1",
   inputs,
   pkgs,
   ...
@@ -24,6 +25,7 @@ in
     isNormalUser = true;
     inherit home group;
     createHome = true;
+    linger = dotfilesWithHermes;
     shell = pkgs.zsh;
     extraGroups = [
       "wheel"

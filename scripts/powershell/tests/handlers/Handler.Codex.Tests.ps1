@@ -14,9 +14,11 @@ BeforeAll {
     . $PSScriptRoot/../../handlers/Handler.Codex.ps1
     $script:projectRoot = (Resolve-Path -LiteralPath "$PSScriptRoot/../../../..").Path
 
-    # GetCodexExecutablePath() が返すパス（パッケージ dir + 実行ファイル名）
-    $script:codexPkgDir = "C:\Users\test\AppData\Local\Microsoft\WinGet\Packages\OpenAI.Codex_Microsoft.Winget.Source_8wekyb3d8bbwe"
-    $script:codexExe = Join-Path $script:codexPkgDir "codex-x86_64-pc-windows-msvc.exe"
+    # Official complete Codex package layout: bin contains the CLI and adjacent host.
+    $script:testDriveRoot = $TestDrive
+    $script:codexPkgDir = $null
+    $script:codexBinDir = $null
+    $script:codexExe = $null
     $script:homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } elseif ($env:HOME) { $env:HOME } else { [Environment]::GetFolderPath("UserProfile") }
     $script:localAppData = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $script:homeDir "AppData\Local" }
     $script:expectedLinks = Join-Path $script:localAppData "Microsoft\WinGet\Links"
@@ -24,6 +26,12 @@ BeforeAll {
 
     # Codex パッケージが存在することにする共通モック
     function script:Set-CodexPackageInstalled {
+        $script:codexPkgDir = Join-Path $script:testDriveRoot "WinGet\Packages\OpenAI.Codex_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        $script:codexBinDir = Join-Path $script:codexPkgDir "bin"
+        $script:codexExe = Join-Path $script:codexBinDir "codex.exe"
+        New-Item -ItemType Directory -Path $script:codexBinDir -Force | Out-Null
+        [System.IO.File]::WriteAllText($script:codexExe, "codex CLI fixture")
+        [System.IO.File]::WriteAllText((Join-Path $script:codexBinDir "codex-code-mode-host.exe"), "codex host fixture")
         Mock Get-ChildItem {
             return [PSCustomObject]@{ FullName = $script:codexPkgDir }
         } -ParameterFilter {
@@ -36,6 +44,39 @@ Describe 'CodexHandler' {
     BeforeEach {
         $script:handler = [CodexHandler]::new()
         $script:ctx = [SetupContext]::new($script:projectRoot)
+    }
+
+    Context 'installer handler loader scope' {
+        It 'resolves Codex through Get-SetupHandler in a clean PowerShell process' {
+            $fixtureRoot = Join-Path $TestDrive 'codex-loader-scope'
+            $localAppDataPath = Join-Path $fixtureRoot 'local-app-data'
+            $codexBinPath = Join-Path $localAppDataPath 'Microsoft\WinGet\Packages\OpenAI.Codex_fixture\bin'
+            $runnerPath = Join-Path $fixtureRoot 'run-handler-loader.ps1'
+            New-Item -ItemType Directory -Path $codexBinPath -Force | Out-Null
+            New-Item -ItemType File -Path (Join-Path $codexBinPath 'codex.exe') -Force | Out-Null
+            New-Item -ItemType File -Path (Join-Path $codexBinPath 'codex-code-mode-host.exe') -Force | Out-Null
+
+            @'
+param([string]$RepositoryRoot, [string]$LocalAppDataPath)
+$ErrorActionPreference = 'Stop'
+$env:LOCALAPPDATA = $LocalAppDataPath
+. (Join-Path $RepositoryRoot 'scripts\powershell\lib\SetupHandler.ps1')
+. (Join-Path $RepositoryRoot 'scripts\powershell\lib\Invoke-ExternalCommand.ps1')
+$handlers = Get-SetupHandler -HandlersPath (Join-Path $RepositoryRoot 'scripts\powershell\handlers')
+$handler = $handlers | Where-Object Name -EQ 'Codex' | Select-Object -First 1
+if (-not $handler -or -not $handler.CanApply([SetupContext]::new($RepositoryRoot))) {
+    throw 'Get-SetupHandler did not resolve the installed Codex package.'
+}
+Write-Output 'Codex loader scope passed.'
+'@ | Set-Content -LiteralPath $runnerPath -Encoding UTF8
+
+            $enginePath = (Get-Process -Id $PID).Path
+            $output = @(& $enginePath -NoLogo -NoProfile -NonInteractive -File $runnerPath $script:projectRoot $localAppDataPath 2>&1)
+            $exitCode = $LASTEXITCODE
+
+            $exitCode | Should -Be 0 -Because ($output -join [Environment]::NewLine)
+            ($output -join [Environment]::NewLine) | Should -Match 'Codex loader scope passed\.'
+        }
     }
 
     Context 'Constructor' {
@@ -54,8 +95,115 @@ Describe 'CodexHandler' {
         }
     }
 
+    Context 'Codex package executable path resolution' {
+        It 'should resolve the app-managed OpenAI Codex version directory and its adjacent host' {
+            $testLocalAppData = Join-Path $TestDrive 'OpenAICodexLocalAppData'
+            $versionBin = Join-Path $testLocalAppData 'OpenAI\Codex\bin\247581e40ee272fb'
+            New-Item -ItemType Directory -Path $versionBin -Force | Out-Null
+            [System.IO.File]::WriteAllText((Join-Path $versionBin 'codex.exe'), 'app-managed Codex CLI')
+            [System.IO.File]::WriteAllText((Join-Path $versionBin 'codex-code-mode-host.exe'), 'adjacent code-mode host')
+
+            $result = Resolve-CodexPackageExecutablePath -LocalAppData $testLocalAppData
+
+            $result | Should -Be (Join-Path $versionBin 'codex.exe')
+            (Join-Path (Split-Path -Parent $result) 'codex-code-mode-host.exe') | Should -Exist
+        }
+
+        It 'should prefer a complete nested Programs Codex package over a CLI-only WinGet package' {
+            $testLocalAppData = Join-Path $TestDrive 'LocalAppData'
+            $wingetPackage = Join-Path $testLocalAppData 'Microsoft\WinGet\Packages\OpenAI.Codex_Test'
+            $directBin = Join-Path $testLocalAppData 'Programs\Codex\bin'
+            New-Item -ItemType Directory -Path $wingetPackage -Force | Out-Null
+            New-Item -ItemType Directory -Path $directBin -Force | Out-Null
+            [System.IO.File]::WriteAllText((Join-Path $wingetPackage 'codex-x86_64-pc-windows-msvc.exe'), 'CLI only')
+            [System.IO.File]::WriteAllText((Join-Path $directBin 'codex.exe'), 'complete package CLI')
+            [System.IO.File]::WriteAllText((Join-Path $directBin 'codex-code-mode-host.exe'), 'adjacent code-mode host')
+
+            $result = Resolve-CodexPackageExecutablePath -LocalAppData $testLocalAppData
+
+            $result | Should -Be (Join-Path $directBin 'codex.exe')
+        }
+
+        It 'should resolve the nested package path using filesystem probes that work without LinkType or Target metadata' {
+            $testLocalAppData = Join-Path $TestDrive 'PowerShell51LocalAppData'
+            $directBin = Join-Path $testLocalAppData 'Programs\Codex\bin'
+            New-Item -ItemType Directory -Path $directBin -Force | Out-Null
+            [System.IO.File]::WriteAllText((Join-Path $directBin 'codex.exe'), 'complete package CLI')
+            [System.IO.File]::WriteAllText((Join-Path $directBin 'codex-code-mode-host.exe'), 'adjacent code-mode host')
+
+            $result = Resolve-CodexPackageExecutablePath -LocalAppData $testLocalAppData
+
+            $result | Should -Be (Join-Path $directBin 'codex.exe')
+        }
+
+        It 'should resolve the newest complete versioned OpenAI Codex app directory' {
+            $testLocalAppData = Join-Path $TestDrive 'OpenAICodexLocalAppData'
+            $versionedBinRoot = Join-Path $testLocalAppData 'OpenAI\Codex\bin'
+            $oldVersionDir = Join-Path $versionedBinRoot '247581e40ee272fb'
+            $newVersionDir = Join-Path $versionedBinRoot 'f99a87b33145ab0c'
+            $otherToolDir = Join-Path $versionedBinRoot '73fd6465d9c76545'
+            foreach ($directory in @($oldVersionDir, $newVersionDir, $otherToolDir)) {
+                New-Item -ItemType Directory -Path $directory -Force | Out-Null
+            }
+
+            $oldCli = Join-Path $oldVersionDir 'codex.exe'
+            $oldHost = Join-Path $oldVersionDir 'codex-code-mode-host.exe'
+            $newCli = Join-Path $newVersionDir 'codex.exe'
+            $newHost = Join-Path $newVersionDir 'codex-code-mode-host.exe'
+            [System.IO.File]::WriteAllText($oldCli, 'older Codex CLI')
+            [System.IO.File]::WriteAllText($oldHost, 'older code-mode host')
+            [System.IO.File]::WriteAllText($newCli, 'newer Codex CLI')
+            [System.IO.File]::WriteAllText($newHost, 'newer code-mode host')
+            [System.IO.File]::WriteAllText((Join-Path $otherToolDir 'rg.exe'), 'unrelated Codex tool')
+            [System.IO.File]::SetLastWriteTimeUtc($oldCli, [datetime]::UtcNow.AddDays(-2))
+            [System.IO.File]::SetLastWriteTimeUtc($newCli, [datetime]::UtcNow)
+            [System.IO.Directory]::SetLastWriteTimeUtc($oldVersionDir, [datetime]::UtcNow.AddDays(-2))
+            [System.IO.Directory]::SetLastWriteTimeUtc($newVersionDir, [datetime]::UtcNow)
+
+            $result = Resolve-CodexPackageExecutablePath -LocalAppData $testLocalAppData
+
+            $result | Should -Be $newCli
+            (Split-Path -Parent $result) | Should -Be (Split-Path -Parent $newHost)
+        }
+    }
+
+    Context 'Installed Codex command smoke tests' {
+        It 'should run the CLI shim and its adjacent code-mode host' {
+            $shimCliPath = Join-Path $script:expectedLinks 'codex.exe'
+            if (-not (Test-Path -LiteralPath $shimCliPath -PathType Leaf)) {
+                Set-ItResult -Skipped -Because 'Codex is not installed in this test environment.'
+                return
+            }
+
+            $installedCliPath = Resolve-CodexPackageExecutablePath -LocalAppData $script:localAppData
+            $shimHostPath = Join-Path $script:expectedLinks 'codex-code-mode-host.exe'
+            $installedHostPath = if ($installedCliPath) {
+                Join-Path (Split-Path -Parent $installedCliPath) 'codex-code-mode-host.exe'
+            }
+            if (Test-Path -LiteralPath $shimHostPath -PathType Leaf) {
+                $hostPath = $shimHostPath
+            }
+            else {
+                $hostPath = $installedHostPath
+            }
+
+            $hostPath | Should -Exist -Because 'The CLI must retain its adjacent code-mode host.'
+
+            $cliOutput = Invoke-ExternalCommandWithTimeout -Command $shimCliPath -Arguments @('--version') -TimeoutSeconds 30
+            $cliExitCode = $LASTEXITCODE
+            $cliExitCode | Should -Be 0 -Because ($cliOutput -join [Environment]::NewLine)
+            ($cliOutput -join [Environment]::NewLine) | Should -Match 'codex-cli'
+
+            $hostOutput = Invoke-ExternalCommandWithTimeout -Command $hostPath -Arguments @('--help') -TimeoutSeconds 30
+            $hostExitCode = $LASTEXITCODE
+            $hostExitCode | Should -Be 0 -Because ($hostOutput -join [Environment]::NewLine)
+            ($hostOutput -join [Environment]::NewLine) | Should -Match 'Usage: codex-code-mode-host'
+        }
+    }
+
     Context 'CanApply - Codex not installed' {
         BeforeEach {
+            Mock Test-Path { return $false }
             Mock Get-ChildItem { return $null } -ParameterFilter {
                 $Path -like "*WinGet\Packages" -and $Filter -like "OpenAI.Codex_*"
             }
@@ -72,7 +220,8 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*codex-code-mode-host.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
             }
@@ -94,7 +243,7 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
             }
@@ -120,7 +269,7 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
             }
@@ -142,7 +291,7 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
             }
@@ -163,7 +312,7 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
             }
@@ -184,7 +333,7 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $false }
                 return $false
             }
@@ -217,8 +366,11 @@ Describe 'CodexHandler' {
     Context 'Apply - creates link when missing' {
         BeforeEach {
             Set-CodexPackageInstalled
+            $script:includeCodexHost = $true
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
+                $candidate = if ($LiteralPath) { $LiteralPath } else { $Path }
+                if ($script:includeCodexHost -and $candidate -like "*codex-code-mode-host.exe") { return $candidate -notlike "*WinGet\Links\*" }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $false }
                 return $false
@@ -238,14 +390,25 @@ Describe 'CodexHandler' {
             $result.Success | Should -Be $true
             Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
         }
+
+        It 'should not copy the host beside a symlink shim' {
+            $script:includeCodexHost = $true
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            Should -Invoke Copy-Item -Times 0 -ParameterFilter { $LiteralPath -like '*codex-code-mode-host.exe' }
+        }
     }
 
-    Context 'Apply - no hardlink fallback when symlink cannot be created' {
+    Context 'Apply - user-copy fallback when symlink cannot be created' {
         BeforeEach {
             Set-CodexPackageInstalled
+            $script:includeCodexHost = $false
             $script:newItemTypes = @()
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
+                $candidate = if ($LiteralPath) { $LiteralPath } else { $Path }
+                if ($script:includeCodexHost -and $candidate -like "*codex-code-mode-host.exe") { return $candidate -notlike "*WinGet\Links\*" }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $false }
                 return $false
@@ -269,12 +432,111 @@ Describe 'CodexHandler' {
             Mock Write-Host { }
         }
 
-        It 'should fail without creating hardlink or copy fallbacks' {
+        It 'should create a copy fallback without creating a hardlink' {
+            $script:includeCodexHost = $true
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $false
+            $result.Success | Should -Be $true
             $script:newItemTypes | Should -Contain "SymbolicLink"
             $script:newItemTypes | Should -Not -Contain "HardLink"
-            Should -Invoke Copy-Item -Times 0
+            Should -Invoke Copy-Item -Times 1 -ParameterFilter { $LiteralPath -like '*bin\codex.exe' }
+        }
+
+        It 'should copy the adjacent code-mode host with the fallback executable' {
+            $script:includeCodexHost = $true
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            Should -Invoke Copy-Item -Times 1 -ParameterFilter {
+                $LiteralPath -like '*codex-code-mode-host.exe' -and
+                $Destination -like '*WinGet\Links\codex-code-mode-host.exe'
+            }
+        }
+
+        It 'should fail instead of reporting success when the copied executable has no adjacent code-mode host' {
+            $script:includeCodexHost = $false
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Error.Message | Should -Match 'codex-code-mode-host\.exe'
+        }
+    }
+
+    Context 'CanApply - current link is missing its adjacent code-mode host' {
+        BeforeEach {
+            Set-CodexPackageInstalled
+            Mock Test-Path {
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
+                if ($LiteralPath -like "*codex-code-mode-host.exe") { return $false }
+                if ($LiteralPath -like "*Links\codex.exe") { return $true }
+                return $false
+            }
+            Mock Get-Item {
+                return [PSCustomObject]@{ LinkType = "SymbolicLink"; Target = $script:codexExe }
+            } -ParameterFilter { $LiteralPath -like "*Links\codex.exe" }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks;$script:expectedLocalBin" }
+            Mock Write-Host { }
+        }
+
+        It 'should reapply and report a missing adjacent host instead of skipping setup' {
+            $handler.CanApply($ctx) | Should -BeTrue
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -BeFalse
+            $result.Error.Message | Should -Match 'codex-code-mode-host\.exe'
+        }
+    }
+
+    Context 'CanApply - current copied shim is missing its adjacent code-mode host' {
+        BeforeEach {
+            Set-CodexPackageInstalled
+            Mock Test-Path {
+                if ($LiteralPath -like '*codex-code-mode-host.exe' -and $LiteralPath -notlike '*WinGet\Links*') { return $true }
+                if ($LiteralPath -like '*bin\codex.exe') { return $true }
+                if ($LiteralPath -like '*Links\codex.exe') { return $true }
+                if ($LiteralPath -like '*Links\codex-code-mode-host.exe') { return $false }
+                if ($Path -like '*bin\codex.exe') { return $true }
+                return $false
+            }
+            Mock Get-Item {
+                return [PSCustomObject]@{ LinkType = ''; Target = $null }
+            } -ParameterFilter { $LiteralPath -like '*Links\codex.exe' }
+            Mock Get-FileHash { return [PSCustomObject]@{ Hash = 'same-content' } }
+            Mock Copy-Item { }
+            Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks;$script:expectedLocalBin" }
+            Mock Write-Host { }
+        }
+
+        It 'should restore the adjacent code-mode host beside a current copied shim' {
+            $handler.CanApply($ctx) | Should -BeTrue
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            Should -Invoke Copy-Item -Times 1 -ParameterFilter {
+                $LiteralPath -like '*WinGet\Packages\OpenAI.Codex_*\codex-code-mode-host.exe' -and
+                $Destination -like '*WinGet\Links\codex-code-mode-host.exe'
+            }
+        }
+    }
+
+    Context 'CanApply - direct archive fallback' {
+        BeforeEach {
+            Mock Get-ChildItem { return $null } -ParameterFilter {
+                $Path -like "*WinGet\Packages" -and $Filter -like "OpenAI.Codex_*"
+            }
+            Mock Test-Path {
+                return ($PathType -eq "Container" -and $LiteralPath -like "*Programs\Codex") -or
+                $LiteralPath -like "*Programs\Codex\bin\codex.exe" -or
+                $Path -like "*Programs\Codex\bin\codex.exe" -or
+                $LiteralPath -like "*Programs\Codex\bin\codex-code-mode-host.exe" -or
+                $Path -like "*Programs\Codex\bin\codex-code-mode-host.exe"
+            }
+            Mock Get-UserEnvironmentPath { return "" }
+            Mock Write-Host { }
+        }
+
+        It 'should discover the archive fallback installation outside WinGet' {
+            $handler.CanApply($ctx) | Should -BeTrue
         }
     }
 
@@ -282,29 +544,28 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
+                if ($script:includeCodexHost -and $LiteralPath -like "*codex-code-mode-host.exe") { return $LiteralPath -notlike "*WinGet\Links\*" }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $false }
                 return $false
             }
             Mock New-Item { throw "Developer Mode is required" } -ParameterFilter { $ItemType -eq "SymbolicLink" }
-            Mock New-Item { throw "hardlink fallback must not be used" } -ParameterFilter { $ItemType -eq "HardLink" }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Remove-Item { }
-            Mock Copy-Item { throw "copy fallback must not be used" }
+            Mock Copy-Item { }
             Mock Get-UserEnvironmentPath { return "C:\Windows" }
             Mock Set-UserEnvironmentPath { }
             Mock Write-Host { }
         }
 
-        It 'should fail instead of creating a hardlink or copy fallback' {
+        It 'should succeed with a copy fallback' {
+            $script:includeCodexHost = $true
             $result = $handler.Apply($ctx)
 
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match "Codex 設定に失敗しました"
+            $result.Success | Should -Be $true
             Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
-            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "HardLink" }
-            Should -Invoke Copy-Item -Times 0
+            Should -Invoke Copy-Item -Times 1
         }
     }
 
@@ -312,7 +573,8 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
+                if ($script:includeCodexHost -and $LiteralPath -like "*codex-code-mode-host.exe") { return $LiteralPath -notlike "*WinGet\Links\*" }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
@@ -347,7 +609,8 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
+                if ($script:includeCodexHost -and $LiteralPath -like "*codex-code-mode-host.exe") { return $LiteralPath -notlike "*WinGet\Links\*" }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
@@ -356,25 +619,24 @@ Describe 'CodexHandler' {
                 return [PSCustomObject]@{ LinkType = ""; Length = 174106600; LastWriteTimeUtc = [datetime]'2024-01-01' }
             } -ParameterFilter { $LiteralPath -like "*Links\codex.exe" }
             Mock New-Item { throw "Developer Mode is required" } -ParameterFilter { $ItemType -eq "SymbolicLink" }
-            Mock New-Item { throw "hardlink fallback must not be used" } -ParameterFilter { $ItemType -eq "HardLink" }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
             Mock Remove-Item { }
             Mock Move-Item { throw "old link should not be moved before symlink creation succeeds" }
-            Mock Copy-Item { throw "copy fallback must not be used" }
+            Mock Copy-Item { }
             Mock Get-UserEnvironmentPath { return "C:\Windows;$script:expectedLinks" }
             Mock Set-UserEnvironmentPath { }
             Mock Write-Host { }
         }
 
-        It 'should fail without removing or moving the existing link' {
+        It 'should replace the stale copy without moving it first' {
+            $script:includeCodexHost = $true
             $result = $handler.Apply($ctx)
 
-            $result.Success | Should -Be $false
+            $result.Success | Should -Be $true
             Should -Invoke New-Item -Times 1 -ParameterFilter { $ItemType -eq "SymbolicLink" }
             Should -Invoke Move-Item -Times 0
-            Should -Invoke Remove-Item -Times 0 -ParameterFilter { $LiteralPath -like "*Links\codex.exe" }
-            Should -Invoke New-Item -Times 0 -ParameterFilter { $ItemType -eq "HardLink" }
-            Should -Invoke Copy-Item -Times 0
+            Should -Invoke Remove-Item -Times 1 -ParameterFilter { $LiteralPath -like "*Links\codex.exe" }
+            Should -Invoke Copy-Item -Times 1
         }
     }
 
@@ -382,7 +644,8 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*codex-code-mode-host.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
@@ -415,7 +678,8 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*codex-code-mode-host.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false
@@ -447,7 +711,8 @@ Describe 'CodexHandler' {
         BeforeEach {
             Set-CodexPackageInstalled
             Mock Test-Path {
-                if ($Path -like "*codex-x86_64-pc-windows-msvc.exe") { return $true }
+                if ($LiteralPath -like "*codex-code-mode-host.exe") { return $true }
+                if ($LiteralPath -like "*bin\codex.exe" -or $Path -like "*bin\codex.exe") { return $true }
                 if ($Path -like "*Links") { return $true }
                 if ($LiteralPath -like "*Links\codex.exe") { return $true }
                 return $false

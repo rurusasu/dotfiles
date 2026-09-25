@@ -158,7 +158,12 @@ function Invoke-Winget {
     )
 
     if ($TimeoutSeconds -lt 0) {
-        $TimeoutSeconds = Get-WingetCommandTimeoutSecond
+        $TimeoutSeconds = if ($Arguments.Count -gt 0 -and $Arguments[0] -in @("install", "upgrade")) {
+            Get-PackageInstallTimeoutSecond -LegacyEnvironmentVariable "DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS"
+        }
+        else {
+            0
+        }
     }
     if ($TimeoutSeconds -gt 0) {
         return Invoke-ExternalCommandWithTimeout -Command "winget" -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
@@ -167,23 +172,41 @@ function Invoke-Winget {
     Invoke-NativeCommand -Command "winget" -Arguments $Arguments
 }
 
-function Get-WingetCommandTimeoutSecond {
+function Get-PackageInstallTimeoutSecond {
     [CmdletBinding()]
     [OutputType([int])]
-    param()
+    param(
+        [Parameter()]
+        [string]$LegacyEnvironmentVariable
+    )
 
-    $timeoutSeconds = 300
-    $rawTimeout = $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS
+    # Shared install override > adapter-specific legacy override > default.
+    # A valid zero explicitly disables the timeout.
+    $rawTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
     if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
         $parsed = 0
         if ([int]::TryParse($rawTimeout, [ref]$parsed)) {
             if ($parsed -le 0) {
                 return 0
             }
-            $timeoutSeconds = $parsed
+            return $parsed
         }
     }
-    return $timeoutSeconds
+
+    if (-not [string]::IsNullOrWhiteSpace($LegacyEnvironmentVariable)) {
+        $rawTimeout = [System.Environment]::GetEnvironmentVariable($LegacyEnvironmentVariable)
+        if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
+            $parsed = 0
+            if ([int]::TryParse($rawTimeout, [ref]$parsed)) {
+                if ($parsed -le 0) {
+                    return 0
+                }
+                return $parsed
+            }
+        }
+    }
+
+    return 900
 }
 
 <#
@@ -282,6 +305,36 @@ function Get-ExternalCommand {
         [string]$Name
     )
     Get-Command $Name -ErrorAction SilentlyContinue
+}
+
+function Get-ExternalCommandPath {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter()]
+        [AllowNull()]
+        [object]$CommandInfo
+    )
+
+    if ($null -eq $CommandInfo) { return $null }
+    if ($CommandInfo -is [string]) { return $CommandInfo }
+
+    foreach ($propertyName in @('Source', 'Path')) {
+        if ($CommandInfo -is [System.Collections.IDictionary] -and $CommandInfo.Contains($propertyName)) {
+            $value = [string]$CommandInfo[$propertyName]
+            if (-not [string]::IsNullOrWhiteSpace($value)) {
+                return $value
+            }
+            continue
+        }
+
+        $property = $CommandInfo.PSObject.Properties[$propertyName]
+        if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+            return [string]$property.Value
+        }
+    }
+
+    return $null
 }
 
 <#
@@ -633,7 +686,119 @@ function Invoke-Npm {
         [Parameter(Mandatory)]
         [string[]]$Arguments
     )
-    Invoke-NativeCommand -Command "npm" -Arguments $Arguments
+
+    $isGlobalInstall = $Arguments.Count -gt 1 -and
+    $Arguments[0] -eq "install" -and
+        ($Arguments -contains "-g" -or $Arguments -contains "--global")
+    if ($isGlobalInstall) {
+        Add-NpmNodeDirectoryToProcessPath
+    }
+    $npmInvocation = Get-NpmInvocation -Arguments $Arguments
+    if ($isGlobalInstall) {
+        $timeoutSeconds = Get-PackageInstallTimeoutSecond
+        if ($timeoutSeconds -gt 0) {
+            return Invoke-ExternalCommandWithTimeout `
+                -Command $npmInvocation.Command `
+                -Arguments $npmInvocation.Arguments `
+                -TimeoutSeconds $timeoutSeconds
+        }
+    }
+
+    Invoke-NativeCommand -Command $npmInvocation.Command -Arguments $npmInvocation.Arguments
+}
+
+function Get-NpmInvocation {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Arguments
+    )
+
+    $npmCommand = Get-ExternalCommand -Name "npm"
+    $npmPath = Get-ExternalCommandPath -CommandInfo $npmCommand
+    $isWindowsRuntime = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+    if ($isWindowsRuntime -and $npmPath -like "*.ps1") {
+        $npmDirectory = Split-Path -Parent $npmPath
+        $nodePath = Join-Path $npmDirectory "node.exe"
+        $npmCliCandidates = @(
+            (Join-Path $npmDirectory "node_modules\npm\bin\npm-cli.js"),
+            (Join-Path $npmDirectory "npm\node_modules\npm\bin\npm-cli.js")
+        )
+        $npmCliPath = $npmCliCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+        if ((Test-Path -LiteralPath $nodePath -PathType Leaf) -and $npmCliPath) {
+            return [pscustomobject]@{
+                Command   = $nodePath
+                Arguments = @($npmCliPath) + @($Arguments)
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Command   = "npm"
+        Arguments = @($Arguments)
+    }
+}
+
+function Get-NpmNodeDirectory {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+
+    $nodeCommand = Get-ExternalCommand -Name "node.exe"
+    $nodePath = Get-ExternalCommandPath -CommandInfo $nodeCommand
+    if ($nodePath -and (Test-Path -LiteralPath $nodePath -PathType Leaf)) {
+        return Split-Path -Parent $nodePath
+    }
+
+    # npm.cmd and node.exe normally share the Node installation directory. This
+    # resolves Node even when winget updated the registry PATH after this process
+    # started, leaving node.exe undiscoverable by Get-Command.
+    foreach ($npmName in @("npm.cmd", "npm")) {
+        $npmCommand = Get-ExternalCommand -Name $npmName
+        if (-not $npmCommand) { continue }
+
+        $npmPath = Get-ExternalCommandPath -CommandInfo $npmCommand
+        if (-not $npmPath) { continue }
+
+        $nodePath = Join-Path (Split-Path -Parent $npmPath) "node.exe"
+        if (Test-Path -LiteralPath $nodePath -PathType Leaf) {
+            return Split-Path -Parent $nodePath
+        }
+    }
+
+    return $null
+}
+
+function Add-NpmNodeDirectoryToProcessPath {
+    [CmdletBinding()]
+    param()
+
+    $isWindowsRuntime = $true
+    $isWindowsVariable = Get-Variable -Name IsWindows -Scope Global -ErrorAction SilentlyContinue
+    if ($null -ne $isWindowsVariable) {
+        $isWindowsRuntime = [bool]$isWindowsVariable.Value
+    }
+    elseif ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+        $isWindowsRuntime = $false
+    }
+    if (-not $isWindowsRuntime) { return }
+
+    $nodeDirectory = Get-NpmNodeDirectory
+    if ([string]::IsNullOrWhiteSpace($nodeDirectory)) { return }
+
+    $pathEntries = @($env:PATH -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    foreach ($entry in $pathEntries) {
+        if ([System.StringComparer]::OrdinalIgnoreCase.Equals($entry.TrimEnd('\'), $nodeDirectory.TrimEnd('\'))) {
+            return
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($env:PATH)) {
+        $env:PATH = $nodeDirectory
+    }
+    else {
+        $env:PATH = "$nodeDirectory;$env:PATH"
+    }
 }
 
 <#
@@ -659,15 +824,25 @@ function Invoke-Pnpm {
     # ERROR_BAD_EXE_FORMAT (os error 193) になるため、.cmd を優先する。
     $pnpmCommand = Get-Command -Name "pnpm.cmd" -ErrorAction SilentlyContinue |
         Select-Object -First 1
+    $pnpmPath = "pnpm"
     if ($pnpmCommand) {
-        $pnpmPath = if ($pnpmCommand.Source) { $pnpmCommand.Source } else { $pnpmCommand.Path }
-        if ($pnpmPath) {
-            Invoke-NativeCommand -Command $pnpmPath -Arguments $Arguments
-            return
+        $resolvedPnpmPath = Get-ExternalCommandPath -CommandInfo $pnpmCommand
+        if ($resolvedPnpmPath) {
+            $pnpmPath = $resolvedPnpmPath
         }
     }
 
-    Invoke-NativeCommand -Command "pnpm" -Arguments $Arguments
+    $isGlobalAdd = $Arguments.Count -gt 1 -and
+    $Arguments[0] -eq "add" -and
+        ($Arguments -contains "-g" -or $Arguments -contains "--global")
+    if ($isGlobalAdd) {
+        $timeoutSeconds = Get-PackageInstallTimeoutSecond
+        if ($timeoutSeconds -gt 0) {
+            return Invoke-ExternalCommandWithTimeout -Command $pnpmPath -Arguments $Arguments -TimeoutSeconds $timeoutSeconds
+        }
+    }
+
+    Invoke-NativeCommand -Command $pnpmPath -Arguments $Arguments
 }
 
 <#
@@ -920,8 +1095,12 @@ function Set-UserEnvironmentPath {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
+        [AllowEmptyString()]
         [string]$Path
     )
+    if ($Path.Length -gt 32767) {
+        throw "User PATH exceeds the Windows 32767-character environment-variable limit ($($Path.Length) characters)."
+    }
     [System.Environment]::SetEnvironmentVariable("PATH", $Path, "User")
 }
 
@@ -935,28 +1114,120 @@ function Set-UserEnvironmentPath {
 #>
 function Update-ProcessEnvironmentPath {
     [CmdletBinding()]
-    param()
+    param(
+        [string[]]$ExcludePath = @(),
+        [switch]$ReportStatus
+    )
 
     $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
     $userPath = Get-UserEnvironmentPath
+    $removedMissingUserEntries = 0
+    $removedDuplicateUserEntries = 0
+    if (-not [string]::IsNullOrWhiteSpace($userPath)) {
+        $normalizedUserItems = [System.Collections.Generic.List[string]]::new()
+        $normalizedUserEntries = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($userItem in ($userPath -split ";")) {
+            $item = $userItem.Trim()
+            if ([string]::IsNullOrWhiteSpace($item)) { continue }
+
+            $comparisonPath = [System.Environment]::ExpandEnvironmentVariables($item.Trim('"'))
+            $pathRoot = [System.IO.Path]::GetPathRoot($comparisonPath)
+            if ($comparisonPath.Length -gt $pathRoot.Length) {
+                $comparisonPath = $comparisonPath.TrimEnd([char[]]@("\", "/"))
+            }
+            if (-not $normalizedUserEntries.Add($comparisonPath)) {
+                $removedDuplicateUserEntries++
+                continue
+            }
+
+            # Keep missing UNC and unresolved environment-variable entries because their
+            # targets may be temporarily unavailable; stale local PATH entries can never
+            # resolve a command and commonly accumulate from versioned package folders.
+            if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT -and
+                $comparisonPath -match "^[A-Za-z]:[\\/]" -and
+                $comparisonPath -notmatch "%[^%]+%") {
+                $driveRoot = [System.IO.Path]::GetPathRoot($comparisonPath)
+                if ((Test-Path -LiteralPath $driveRoot -PathType Container) -and
+                    -not (Test-Path -LiteralPath $comparisonPath)) {
+                    $removedMissingUserEntries++
+                    continue
+                }
+            }
+
+            $normalizedUserItems.Add($item)
+        }
+
+        $normalizedUserPath = $normalizedUserItems -join ";"
+        if ($normalizedUserPath.Length -gt 32767) {
+            throw "User PATH remains over the Windows 32767-character environment-variable limit after removing stale local entries ($($normalizedUserPath.Length) characters). Remove obsolete PATH entries before setup can continue."
+        }
+        if (-not [string]::Equals($normalizedUserPath, $userPath, [System.StringComparison]::Ordinal)) {
+            Set-UserEnvironmentPath -Path $normalizedUserPath
+            $userPath = $normalizedUserPath
+            if ($ReportStatus) {
+                Write-Host "[INFO] User PATH repaired: removed $removedMissingUserEntries missing local directories and $removedDuplicateUserEntries duplicate entries; final length $($userPath.Length)/32767."
+            }
+        }
+    }
     $processPath = [System.Environment]::GetEnvironmentVariable("PATH", "Process")
 
+    # cmd.exe rejects environment variables over 8191 characters. Since the
+    # installer launches .cmd shims (npm, pnpm, corepack, and winget aliases),
+    # keep the merged PATH below that boundary instead of importing an
+    # arbitrarily large registry User PATH into every child process.
+    $maxPathLength = 8191
     $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $items = [System.Collections.Generic.List[string]]::new()
+    $pathLength = 0
+    $omittedEntries = 0
+    $missingEntries = 0
+    $excluded = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in $ExcludePath) {
+        if (-not [string]::IsNullOrWhiteSpace($entry)) {
+            $expandedEntry = [System.Environment]::ExpandEnvironmentVariables($entry.Trim())
+            [void]$excluded.Add($expandedEntry)
+        }
+    }
 
-    foreach ($pathValue in @($machinePath, $userPath, $processPath)) {
+    # Preserve the machine PATH and entries already available to this process
+    # before importing new registry User PATH entries.
+    foreach ($pathValue in @($machinePath, $processPath, $userPath)) {
         if ([string]::IsNullOrWhiteSpace($pathValue)) { continue }
 
         foreach ($item in ($pathValue -split ";")) {
             $trimmed = $item.Trim()
             if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
-            if ($seen.Add($trimmed)) {
-                $items.Add($trimmed)
+            $expandedPath = [System.Environment]::ExpandEnvironmentVariables($trimmed)
+            $hasUnresolvedVariable = $expandedPath -match "%[^%]+%"
+            $pathToUse = if ($hasUnresolvedVariable) { $trimmed } else { $expandedPath }
+            if ($excluded.Contains($pathToUse)) { continue }
+            if (-not $seen.Add($pathToUse)) { continue }
+            if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT -and
+                -not $hasUnresolvedVariable -and
+                -not [System.IO.Directory]::Exists($expandedPath)) {
+                $missingEntries++
+                continue
             }
+
+            $nextLength = $pathLength + $pathToUse.Length
+            if ($items.Count -gt 0) { $nextLength++ }
+            if ($nextLength -gt $maxPathLength) {
+                $omittedEntries++
+                continue
+            }
+
+            $items.Add($pathToUse)
+            $pathLength = $nextLength
         }
     }
 
     $env:PATH = $items -join ";"
+    if ($ReportStatus -and ($missingEntries -gt 0 -or $omittedEntries -gt 0)) {
+        Write-Host "[INFO] Process PATH normalized: removed $missingEntries missing directories and omitted $omittedEntries over-limit entries; final length $pathLength/$maxPathLength."
+    }
+    if ($omittedEntries -gt 0) {
+        Write-Warning "Process PATH refresh omitted $omittedEntries entries to stay within the Windows cmd.exe limit of $maxPathLength characters. Trim stale entries from the User PATH if required commands are missing."
+    }
 }
 
 <#
@@ -1014,18 +1285,7 @@ function Get-WslInstallTimeoutSecond {
     [OutputType([int])]
     param()
 
-    $timeoutSeconds = 300
-    $rawTimeout = $env:DOTFILES_WSL_INSTALL_TIMEOUT_SECONDS
-    if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
-        $parsed = 0
-        if ([int]::TryParse($rawTimeout, [ref]$parsed)) {
-            if ($parsed -le 0) {
-                return 0
-            }
-            $timeoutSeconds = $parsed
-        }
-    }
-    return $timeoutSeconds
+    return Get-PackageInstallTimeoutSecond -LegacyEnvironmentVariable "DOTFILES_WSL_INSTALL_TIMEOUT_SECONDS"
 }
 
 function Get-WindowsNativeOutputEncoding {
@@ -1216,10 +1476,18 @@ function Invoke-ExternalCommandWithTimeout {
         $filePath = $Command
         $argumentList = @($Arguments)
         $resolvedCommand = Get-Command $Command -ErrorAction SilentlyContinue
-        if ($resolvedCommand -and $resolvedCommand.Source -like "*.ps1") {
+        if (-not $resolvedCommand) {
+            $global:LASTEXITCODE = 127
+            return "コマンドが見つかりません: $Command"
+        }
+        $resolvedCommandPath = Get-ExternalCommandPath -CommandInfo $resolvedCommand
+        if ($resolvedCommandPath -like "*.ps1") {
             $psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell.exe" }
             $filePath = $psExe
-            $argumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $resolvedCommand.Source) + @($Arguments)
+            $argumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $resolvedCommandPath) + @($Arguments)
+        }
+        elseif ($resolvedCommandPath) {
+            $filePath = $resolvedCommandPath
         }
 
         $processStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -1260,8 +1528,20 @@ function Invoke-ExternalCommandWithTimeout {
             catch {
                 Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             }
+            [void]$process.WaitForExit(5000)
             $global:LASTEXITCODE = 124
-            return "検証コマンドがタイムアウトしました (${TimeoutSeconds}s): $Command $($Arguments -join ' ')"
+            $timeoutLabel = if ($Command -eq "winget") { "winget コマンド" } else { "検証コマンド" }
+            $output = [System.Collections.Generic.List[string]]::new()
+            foreach ($streamTask in @($stdoutTask, $stderrTask)) {
+                if (-not $streamTask.Wait(2000)) { continue }
+                $streamText = $streamTask.GetAwaiter().GetResult()
+                if ([string]::IsNullOrEmpty($streamText)) { continue }
+                foreach ($line in ($streamText -split "\r?\n")) {
+                    if ($line.Length -gt 0) { $output.Add($line) }
+                }
+            }
+            $output.Add("$timeoutLabel がタイムアウトしました (${TimeoutSeconds}s): $Command $($Arguments -join ' ')")
+            return $output.ToArray()
         }
         $process.WaitForExit()
 

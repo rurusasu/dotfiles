@@ -28,7 +28,7 @@ in
   # this value at the release version of the first install of this system.
   # Before changing this value read the documentation for this option
   # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
-  # New installs and explicitly approved migrations pass 26.05 through
-  # DOTFILES_STATE_VERSION. Existing systems remain on 25.05 by default.
+  # New installs and explicitly approved migrations pass a value through
+  # DOTFILES_STATE_VERSION. Existing systems retain their existing/default value.
   system.stateVersion = stateVersion; # Did you read the comment?
 }

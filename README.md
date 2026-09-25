@@ -88,19 +88,19 @@ editor 同期が完了してから起動します。
 ```bash
 ./install.sh --with-ollama # Ollama のみ
 ./install.sh --with-docker # Ollama + Docker + 独立 Hindsight
-./install.sh --with-hermes # 上記 + native Hermes Desktop + Docker Agent/Dashboard + Chrome + Discord + browser-mcp
+./install.sh --with-hermes # native Hermes CLI/gateway + Hermes Desktop + Chrome + Discord
 ```
 
 Nix installer と nix-darwin がシステムを収束させ、nix-homebrew が選択した
 Homebrew formula/cask を管理します。Home Manager と chezmoi も同じコマンド内で
 適用します。macOS では WSL や NixOS を導入しません。
 
-`--with-hermes` の macOS 構成では、Hermes Desktop はパッケージカタログで選択した
-公式 Homebrew Cask `hermes-desktop` として nix-homebrew からホストに導入されます。
-Agent/gateway と Web Dashboard は既存の Docker Compose 側で起動し、Desktop から
-`http://127.0.0.1:9119` に接続します。
-Dashboard の認証情報、セッション、モデル、その他の runtime state は Nix store
-に保存しません。Desktop を Agent コンテナへインストールする構成ではありません。
+`--with-hermes` の macOS 構成では、Hermes Desktop は公式 Homebrew Cask
+`hermes-desktop` として nix-homebrew から導入され、Agent CLI と gateway は
+Nix/Home Manager が管理する native per-user service として起動します。
+Docker Compose の Agent/Dashboard は既存環境向けの明示的な legacy runtime であり、
+標準セットアップでは起動しません。Hermes の設定や runtime state は Nix store
+に保存しません。
 
 詳細は [Hermes Desktop の運用](./docs/hermes-agent/desktop.md) を参照してください。
 

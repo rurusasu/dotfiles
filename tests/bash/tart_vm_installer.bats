@@ -5,7 +5,6 @@ bats_require_minimum_version 1.5.0
 setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 	INSTALLER="$REPO_ROOT/scripts/sh/install-tart-vm.sh"
-	SETS="$REPO_ROOT/nix/packages/sets.nix"
 	TASKFILE="$REPO_ROOT/taskfiles/install/taskfile.yml"
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	TART_HOME="$TEST_HOME/.tart"
@@ -34,26 +33,6 @@ printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
 printf '/dev/mock 100000000 0 36700160 0%% /\n'
 EOF
 	chmod +x "$STUB_BIN/df"
-}
-
-@test "catalog declares Tart as a Nix command with legacy formula migration metadata" {
-	run awk '
-		/^[[:space:]]*tart = \{/ { in_entry=1 }
-		in_entry { print }
-		in_entry && /^        };$/ { exit }
-	' "$SETS"
-
-	[ "$status" -eq 0 ]
-	[[ "$output" == *'pkg = pkgs.tart;'* ]]
-	[[ "$output" == *'provider = "nix";'* ]]
-	[[ "$output" == *'source = "nixpkgs";'* ]]
-	[[ "$output" == *'nixAttr = "tart";'* ]]
-	[[ "$output" == *'homepage = "https://tart.run/";'* ]]
-	[[ "$output" == *'command = "tart";'* ]]
-	[[ "$output" == *'versionArgs = [ "--version" ];'* ]]
-	[[ "$output" == *'legacyDarwin = {'* ]]
-	[[ "$output" == *'name = "openai/tools/tart";'* ]]
-	[[ "$output" != *'formula = "openai/tools/tart";'* ]]
 }
 
 @test "macOS install tasks expose an explicit Tart VM preparation step" {

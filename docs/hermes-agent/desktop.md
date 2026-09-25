@@ -1,136 +1,64 @@
-# Hermes Desktop
+# Hermes Desktop and Agent
 
-## 構成
+## Runtime ownership
 
-macOS の `./install.sh --with-hermes` は、次の2つを別々に管理します。
+The normal macOS `./install.sh --with-hermes` and NixOS `task nrs` flows install
+and activate Hermes Agent through the Nix/Home Manager configuration. The
+gateway is a native per-user service: systemd on Linux and launchd on macOS.
+Use `task hermes:up`, `task hermes:down`, `task hermes:restart`, and
+`task hermes:logs` to control that service through the Hermes CLI.
 
-- ホスト: 公式 Homebrew Cask `hermes-desktop` を nix-homebrew で宣言し、
-  `/Applications/Hermes.app` に公式セットアップアプリを導入する。セットアップは
-  Hermes の管理runtime、CLI、packaged Desktopをユーザー領域へ導入する。
-- Docker: `docker/hermes-service/compose.yml` の Hermes Agent、gateway、Web
-  Dashboard、Browser/MCP サービスを起動する。
+The Hermes Desktop application is installed separately. It does not make the
+Docker Compose gateway the owner of the Agent runtime. The standard Hermes
+setup does not start Docker, bootstrap a Docker gateway, or modify the existing
+`hermes-data` volume.
 
-Desktop の GUI を Agent コンテナに入れる必要はありません。コンテナは GUI を
-提供するイメージではなく、Agent の実行環境と Dashboard/API を提供します。
+## Legacy task names
 
-## 公式セットアップ
-
-`./install.sh --with-hermes` はcaskの配置だけでは成功扱いにしません。
-`task hermes:desktop:install` が公式セットアップを起動し、次のすべてが揃うまで
-待機します。
-
-- `~/.local/bin/hermes`
-- `~/.hermes/hermes-agent/.hermes-bootstrap-complete`
-- `~/.hermes/hermes-agent/apps/desktop/release/.../Hermes.app/Contents/MacOS/Hermes`
-
-セットアップ起動時は、呼び出し元だけに有効な
-`GIT_CONFIG_COUNT`、`GIT_CONFIG_KEY_*`、`GIT_CONFIG_VALUE_*`を継承しません。
-これにより、欠けたcommand-scope設定でセットアップ内部の`git clone`が毎回失敗する
-状態を防ぎます。完了済みの場合はセットアップを再起動せず、成果物を再検証します。
-
-## CLI の実行
-
-公式セットアップはmacOSホストに`~/.local/bin/hermes`を導入します。これはDesktop
-自身が使うローカルruntimeを操作します。Docker上の既存Hermes Agentを明示的に
-操作する場合は、`WithHermes`プロファイルの`hermes-docker`を使用します。
-
-リポジトリからは、次のように実行できます。引数はコンテナ内の CLI へそのまま
-渡されます。
+The gateway is no longer a Compose service. Existing Docker-prefixed task names
+remain as compatibility aliases, but they control the native Nix-managed
+gateway and do not start Docker:
 
 ```bash
-task hermes:cli -- -p sophia config check
-task hermes:cli -- profile list
+task hermes:docker:up
+task hermes:docker:logs
+task hermes:docker:down
 ```
 
-Compose は `GATEWAY_MULTIPLEX_PROFILES=true` で、root gateway の1プロセスから
-すべてのProfileを提供します。対象Profileの状態確認は次のように実行できます。
+These aliases do not access or remove the old `hermes-data` volume. No volume
+migration or deletion is performed by the Nix setup.
 
-```bash
-PROFILE=sophia task hermes:profile:status
-PROFILE=sophia task hermes:profile:up
-PROFILE=sophia task hermes:profile:restart
-PROFILE=sophia task hermes:profile:down
-PROFILE=clara task hermes:profile:status
-PROFILE=ada task hermes:profile:status
-```
+The browser and MCP support containers remain separately available through
+their dedicated Compose tasks; they are not the Hermes Agent runtime.
 
-`hermes:profile:status` だけが指定Profileの状態を照会します。
-`hermes:profile:up` はroot multiplexerを起動してから指定Profileの状態を表示し、
-`hermes:profile:restart` もroot multiplexer全体を再起動してから状態を表示します。
-`hermes:profile:down` はHermes Compose stackを停止するため、ほかのProfileも同時に
-停止します。multiplexモードでは `-p <profile> gateway start|run|stop|restart` を
-直接実行しません。
+## Desktop installation and launch
 
-既存のProfile名付きtaskも、同じroot lifecycleへのaliasとして利用できます。
-
-```bash
-task hermes:rick:up
-task hermes:rick:restart
-task hermes:rick:down
-```
-
-`hoffman`、`risarisa`、`nancy` にも同じ `up`、`restart`、`down` aliasがあります。
-Profile名はTaskfile側でshell-safeにargv化されます。CLIの既定Composeファイルは既存の
-`docker/hermes-service/compose.yml`に固定され、別ファイルを使う場合だけ
-`HERMES_COMPOSE_FILE`で明示指定します。
-
-リポジトリ外から直接実行する場合は、Compose ファイルを明示します。
-
-```bash
-HERMES_COMPOSE_FILE="$HOME/.dotfiles/docker/hermes-service/compose.yml" \
-  hermes-docker -p sophia chat
-```
-
-このアダプターはサービスを自動起動・停止しません。先に `task hermes:up` を
-実行し、Docker Desktop と Hermes コンテナが起動していることを確認してください。
-対話端末ではTTYを維持し、パイプやCIではTTY割り当てを無効にするため、チャットと
-設定検証の両方を同じコマンドで扱えます。
-
-公式ドキュメントでも Desktop App、CLI/TUI、Web Dashboard は同じ Agent に接続
-する別のフロントエンドとして説明されています。Desktop は
-`hermes-desktop-docker` が macOS の `open /Applications/Hermes.app` を通して起動し、Web
-Dashboard は `hermes dashboard` が提供します。
-
-## 接続先
-
-Compose は Dashboard をホストの次の loopback ポートへ公開します。
-
-```text
-http://127.0.0.1:9119
-```
-
-Desktop の Remote Gateway には、この URL を指定します。dotfiles の `WithHermes`
-プロファイルを適用済みなら、保存済みの Desktop remote 接続と gateway health を
-検証する `hermes-desktop-docker` を使って起動できます。初回だけ Desktop の
-Settings > Gateway でこの URL を登録し、システムブラウザで認証してください。
-Docker gateway は先に `task hermes:up` で起動してください。別のマシンから接続する場合は loopback 公開のままでは到達できないため、
-認証、TLS、ファイアウォールを含む別の公開設計が必要です。
-
-## 状態と秘密情報
-
-API key、OAuth token、profile、session、memory、モデル、Docker のデータは
-`~/.hermes` などの runtime path に保存します。Nix 式へ秘密値を記述したり、Nix
-store に runtime state を生成したりしないでください。
-
-## 手動確認
+`task hermes:desktop:install` verifies that the nix-darwin cask and Nix-managed
+CLI are present; installation and repair belong to the Nix activation flow.
+Launch the GUI with:
 
 ```bash
 task hermes:desktop
-docker compose -f docker/hermes-service/compose.yml ps
-curl -fsS http://127.0.0.1:9119/api/health
 ```
 
-`9119` は Desktop が接続する `hermes serve` / Dashboard backend であり、起動確認も
-公開エンドポイント `/api/health` に対して行います。`8642` は gateway の
-OpenAI-compatible API で、Desktop backend の起動確認には使用しません。
-`hermes-desktop-docker` は Desktop の app-owned
-`connections.json` に保存された remote 接続を検証します。OAuth 接続の token は
-Desktop の native token store、token 接続の envelope は Desktop/OS Keychain の
-管理境界に残り、launcher はいずれも読み出しません。秘密情報は Git、Nix store、
-通常ログ、プロセス引数へコピーされません。
-接続が未設定、gateway が停止中の場合は、Desktop を起動せず終了します。
+The Desktop app's own backend/remote connection settings are separate from the
+native messaging gateway service. The Docker-only dashboard at
+`http://127.0.0.1:9119` is available only when the legacy Docker gateway is
+running; native Hermes setup does not publish that endpoint.
 
-公式の Desktop 操作と remote backend の設定は、[Hermes Desktop
-documentation](https://hermes-agent.nousresearch.com/docs/user-guide/desktop) と
-[Web Dashboard の remote 接続ガイド](https://hermes-agent.nousresearch.com/docs/user-guide/features/web-dashboard)
-を参照してください。
+For the native CLI, use the Hermes command directly or pass arguments through
+the Taskfile:
+
+```bash
+task hermes:cli -- --help
+hermes gateway status
+```
+
+## Existing data and migration boundary
+
+Hermes API keys, profiles, sessions, and memory remain in their current
+runtime storage. Nix activation does not copy Docker volume contents into
+`~/.hermes`, and it does not delete or rewrite that volume. If you want to move
+legacy Docker data into the native runtime, that is a separate migration that
+must be planned and verified before running; this setup intentionally leaves
+both data stores untouched.

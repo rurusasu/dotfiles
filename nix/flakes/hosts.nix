@@ -7,16 +7,14 @@ let
   Hosts = import ./lib/hosts.nix { inherit inputs; };
   Workmux = import ./lib/workmux.nix { inherit inputs; };
   workmuxOverlay = Workmux.mkOverlay (system: inputs.workmux.packages.${system}.default);
-  hardwareConfig = builtins.getEnv "DOTFILES_NIXOS_HARDWARE_CONFIG";
-  requestedSystem = builtins.getEnv "DOTFILES_SYSTEM";
-  nativeLinuxSystem = if requestedSystem == "" then "x86_64-linux" else requestedSystem;
+  hostSpecs = Hosts.mkNixosHostSpecs { };
 in
 {
   flake = {
     nixosConfigurations = {
       nixos =
         let
-          system = "x86_64-linux";
+          inherit (hostSpecs.nixos) system;
         in
         withSystem system (
           { pkgs, ... }:
@@ -28,8 +26,7 @@ in
           in
           Hosts.mkNixos {
             inherit system siteLib;
-            hostPath = ../hosts/wsl;
-            homeModulePath = ../home/wsl.nix;
+            inherit (hostSpecs.nixos) hostPath homeModulePath;
             overlays = [ workmuxOverlay ];
             extraModules = [
               inputs.nixos-wsl.nixosModules.wsl
@@ -38,10 +35,11 @@ in
         );
 
     }
-    // inputs.nixpkgs.lib.optionalAttrs (hardwareConfig != "") {
+    // inputs.nixpkgs.lib.optionalAttrs (hostSpecs ? linux) {
       linux =
         let
-          system = nativeLinuxSystem;
+          hostSpec = hostSpecs.linux;
+          inherit (hostSpec) system;
         in
         withSystem system (
           { pkgs, ... }:
@@ -53,10 +51,9 @@ in
           in
           Hosts.mkNixos {
             inherit system siteLib;
-            hostPath = ../hosts/linux;
-            homeModulePath = ../home/linux.nix;
+            inherit (hostSpec) hostPath homeModulePath;
             overlays = [ workmuxOverlay ];
-            extraModules = [ (/. + hardwareConfig) ];
+            extraModules = [ (/. + hostSpec.hardwareConfig) ];
           }
         );
     };

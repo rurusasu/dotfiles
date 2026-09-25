@@ -23,20 +23,7 @@ let
     let
       verify = verifyMap.${key} or null;
     in
-    if verify == null then
-      pkg
-    else
-      pkg
-      // {
-        verifyCommand = {
-          inherit (verify) command args;
-        }
-        // lib.optionalAttrs (verify ? type) { inherit (verify) type; }
-        // lib.optionalAttrs (verify ? timeoutSeconds) { inherit (verify) timeoutSeconds; }
-        // lib.optionalAttrs (verify ? recoveryStrategy) {
-          inherit (verify) recoveryStrategy;
-        };
-      };
+    if verify == null then pkg else pkg // { verifyCommand = verify; };
 
   attachInstallArgs =
     installArgsMap: key: pkg:
@@ -44,6 +31,10 @@ let
       installArgs = installArgsMap.${key} or null;
     in
     if installArgs == null then pkg else pkg // { inherit installArgs; };
+
+  attachRequiresAdmin =
+    requiresAdminMap: key: pkg:
+    if requiresAdminMap.${key} or false then pkg // { requiresAdmin = true; } else pkg;
 
   attachInstallFeature =
     featureMap: key: pkg:
@@ -55,7 +46,11 @@ let
   attachInstallTimeout =
     installTimeoutMap: key: pkg:
     let
-      installTimeoutSeconds = installTimeoutMap.${key} or null;
+      # Only intentional per-package overrides belong in the manifest. The
+      # generic install timeout is resolved by the runtime adapter so the
+      # shared environment variable can override its default. Metadata is
+      # attached in ID-then-catalog-key order, making the catalog key win.
+      installTimeoutSeconds = installTimeoutMap.${key} or sets.packageInstallTimeoutSeconds;
     in
     if installTimeoutSeconds == null then pkg else pkg // { inherit installTimeoutSeconds; };
 
@@ -141,13 +136,15 @@ let
 
   attachWingetMetadata =
     key: pkg:
-    attachSkipInstall sets.wingetSkipInstall key (
-      attachCiSkipInstall sets.wingetCiSkipInstall key (
-        attachPathEntries sets.wingetPathEntries key (
-          attachPortableLink sets.wingetPortableLinksById key (
-            attachDirectInstaller sets.wingetDirectInstallers key (
-              attachInstallTimeout sets.wingetInstallTimeoutSeconds key (
-                attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+    attachRequiresAdmin sets.wingetRequiresAdmin key (
+      attachSkipInstall sets.wingetSkipInstall key (
+        attachCiSkipInstall sets.wingetCiSkipInstall key (
+          attachPathEntries sets.wingetPathEntries key (
+            attachPortableLink sets.wingetPortableLinksById key (
+              attachDirectInstaller sets.wingetDirectInstallers key (
+                attachInstallTimeout sets.wingetInstallTimeoutSeconds key (
+                  attachInstallArgs sets.wingetInstallArgs key (attachVerify sets.wingetVerify key pkg)
+                )
               )
             )
           )
@@ -160,13 +157,15 @@ let
   # Windows verification and installer behavior remain compatible.
   attachWingetIdMetadata =
     id: pkg:
-    attachSkipInstall sets.wingetSkipInstall id (
-      attachCiSkipInstall sets.wingetCiSkipInstall id (
-        attachPathEntries sets.wingetPathEntries id (
-          attachPortableLink sets.wingetPortableLinksById id (
-            attachDirectInstaller sets.wingetDirectInstallers id (
-              attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
-                attachInstallArgs sets.wingetInstallArgs id (attachVerify sets.wingetVerifyById id pkg)
+    attachRequiresAdmin sets.wingetRequiresAdmin id (
+      attachSkipInstall sets.wingetSkipInstall id (
+        attachCiSkipInstall sets.wingetCiSkipInstall id (
+          attachPathEntries sets.wingetPathEntries id (
+            attachPortableLink sets.wingetPortableLinksById id (
+              attachDirectInstaller sets.wingetDirectInstallers id (
+                attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
+                  attachInstallArgs sets.wingetInstallArgs id (attachVerify sets.wingetVerifyById id pkg)
+                )
               )
             )
           )
@@ -184,14 +183,16 @@ let
 
   wingetFromWindowsOnly = map (
     id:
-    attachSkipInstall sets.wingetSkipInstall id (
-      attachCiSkipInstall sets.wingetCiSkipInstall id (
-        attachPathEntries sets.wingetPathEntries id (
-          attachPortableLink sets.wingetPortableLinksById id (
-            attachDirectInstaller sets.wingetDirectInstallers id (
-              attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
-                attachInstallArgs sets.wingetInstallArgs id (
-                  attachVerify sets.wingetVerifyById id { PackageIdentifier = id; }
+    attachRequiresAdmin sets.wingetRequiresAdmin id (
+      attachSkipInstall sets.wingetSkipInstall id (
+        attachCiSkipInstall sets.wingetCiSkipInstall id (
+          attachPathEntries sets.wingetPathEntries id (
+            attachPortableLink sets.wingetPortableLinksById id (
+              attachDirectInstaller sets.wingetDirectInstallers id (
+                attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
+                  attachInstallArgs sets.wingetInstallArgs id (
+                    attachVerify sets.wingetVerifyById id { PackageIdentifier = id; }
+                  )
                 )
               )
             )
@@ -209,7 +210,9 @@ let
       attachCiSkipInstall sets.wingetCiSkipInstall name (
         attachSkipInstall sets.wingetSkipInstall id (
           attachCiSkipInstall sets.wingetCiSkipInstall id (
-            attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+            attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
+              attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+            )
           )
         )
       )
@@ -220,7 +223,9 @@ let
     id:
     attachSkipInstall sets.wingetSkipInstall id (
       attachCiSkipInstall sets.wingetCiSkipInstall id (
-        attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+        attachInstallTimeout sets.wingetInstallTimeoutSeconds id (
+          attachVerify sets.msstoreVerifyById id { PackageIdentifier = id; }
+        )
       )
     )
   ) sets.windowsOnly.msstore;

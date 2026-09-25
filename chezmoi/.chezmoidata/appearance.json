@@ -1,0 +1,12 @@
+{
+  "appearance": {
+    "font_family": "UDEV Gothic NF",
+    "font_size": 10,
+    "font_release": {
+      "archive_name": "UDEVGothic_NF",
+      "version": "v2.2.0"
+    },
+    "theme": "Catppuccin Mocha",
+    "icon_theme": "material-icon-theme"
+  }
+}

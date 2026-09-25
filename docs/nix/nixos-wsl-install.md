@@ -138,7 +138,7 @@ Windows 側 checkout に戻す場合だけ使用します。通常の初回 setu
 # ディストリビューション名と VHD の保存先
 .\install.cmd -DistroName NixOS -InstallDir "$env:USERPROFILE\NixOS"
 
-# 特定の NixOS-WSL release を使う場合（例: 2605.7.2）
+# 特定の NixOS-WSL release を使う場合は release tag を指定
 .\install.cmd -ReleaseTag 2605.7.2
 
 # 対話的な終了待ちを抑止

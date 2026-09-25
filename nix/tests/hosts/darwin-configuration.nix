@@ -41,6 +41,7 @@ let
   hasDarwinCask = name: config: builtins.any (cask: cask.name == name) config.homebrew.casks;
   packageNames =
     config: builtins.map (package: package.name or package.pname) config.environment.systemPackages;
+  homePackageNames = home: builtins.map (package: package.name or package.pname) home.home.packages;
   darwinHomeSource = builtins.readFile ../../home/darwin.nix;
   hasPrefix = prefix: value: builtins.match "${prefix}.*" value != null;
   hasPackage = name: packages: builtins.any (package: package == name) packages;
@@ -63,7 +64,6 @@ in
     expr = {
       homebrew = defaultConfig.homebrew.enable;
       nixHomebrew = defaultConfig.nix-homebrew.enable;
-      vscode = builtins.any (name: hasPrefix "vscode" name) (packageNames defaultConfig);
       raycast = builtins.any (name: hasPrefix "raycast" name) (packageNames defaultConfig);
       weztermTerminfo = builtins.match ".*pkgs[.]wezterm[.]terminfo.*" darwinHomeSource != null;
       github = builtins.any (name: builtins.match "^(gh|github-cli)($|[-.].*)" name != null) (
@@ -75,7 +75,6 @@ in
     expected = {
       homebrew = true;
       nixHomebrew = true;
-      vscode = true;
       raycast = true;
       weztermTerminfo = true;
       github = true;
@@ -118,6 +117,17 @@ in
       homebrewPath = true;
       sharedPath = true;
       terminfo = true;
+    };
+  };
+
+  testDarwinHomeManagerInstallsAndRegistersManagedFont = {
+    expr = {
+      fontPackage = builtins.any (name: hasPrefix "udev-gothic-nf" name) (homePackageNames defaultHome);
+      fontActivation = builtins.hasAttr "installDotfilesFonts" defaultHome.home.activation;
+    };
+    expected = {
+      fontPackage = true;
+      fontActivation = true;
     };
   };
 

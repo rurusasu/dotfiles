@@ -31,7 +31,7 @@ local function resize_sidekick_cli_toward(terminal, direction)
 end
 
 return {
-    -- AI sidekick: AI CLI terminal (codex/gemini/opencode)
+    -- AI sidekick: AI CLI terminal (codex/gemini)
     {
         "folke/sidekick.nvim",
         event = "VeryLazy",

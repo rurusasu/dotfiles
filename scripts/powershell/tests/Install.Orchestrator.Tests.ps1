@@ -47,6 +47,11 @@ Describe 'install.ps1 (orchestrator)' {
         $content | Should -Match '\[switch\]\$NoPause'
     }
 
+    It 'should forward NoPause to the elevated admin phase' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match '(?s)\$argList = @\(.*"-AdminOnly:\$true".*"-NoPause:\$NoPause"'
+    }
+
     It 'should expose one explicit switch for each local AI service' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '\[switch\]\$WithOllama'
@@ -80,15 +85,16 @@ Describe 'install.ps1 (orchestrator)' {
         $content | Should -Match '\$PSBoundParameters\.ContainsKey\("InstallDir"\)'
     }
 
-    It 'install.cmd should prepend the PowerShell 7 MSI directory before resolving pwsh' {
+    It 'install.cmd should invoke the explicit PowerShell 7 path without changing PATH' {
         $content = Get-Content -LiteralPath $script:cmdTarget -Raw
         $content | Should -Match 'if defined DOTFILES_PS7_DIR'
         $content | Should -Match 'set "PS7_DIR=%DOTFILES_PS7_DIR%"'
         $content | Should -Match 'set "PS7_DIR=%ProgramFiles%\\PowerShell\\7"'
         $content | Should -Match 'if exist "%PS7_DIR%\\pwsh\.exe"'
-        $content | Should -Match 'set "PATH=%PS7_DIR%;%PATH%"'
+        $content | Should -Not -Match 'set "PATH=%PS7_DIR%;%PATH%"'
         $content | Should -Match 'set "PS_CMD=%PS7_DIR%\\pwsh\.exe"'
-        $content | Should -Match '%SystemRoot%\\System32\\where\.exe" pwsh'
+        $content | Should -Match 'for %%I in \(pwsh\.exe\) do if not "%%~\$PATH:I"==""'
+        $content | Should -Not -Match 'where\.exe.*pwsh'
         $content | Should -Match '%SystemRoot%\\System32\\WindowsPowerShell\\v1\.0\\powershell\.exe'
         $content | Should -Match 'Falling back to Windows PowerShell'
     }

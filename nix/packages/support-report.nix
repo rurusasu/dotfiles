@@ -18,5 +18,10 @@ pkgs.runCommand "package-support-report" { } ''
   ${pkgs.jq}/bin/jq . ${reportFile} > "$out/support.json"
   ${pkgs.jq}/bin/jq . ${darwinPackagesFile} > "$out/darwin-packages.json"
   ${pkgs.jq}/bin/jq . ${errorsFile} > "$out/errors.json"
-  test "$(${pkgs.jq}/bin/jq length "$out/errors.json")" -eq 0
+  error_count="$(${pkgs.jq}/bin/jq length "$out/errors.json")"
+  if [ "$error_count" -gt 0 ]; then
+    echo "package-support-report: expected zero provider errors; found $error_count:" >&2
+    ${pkgs.jq}/bin/jq -r '.[]' "$out/errors.json" >&2
+  fi
+  test "$error_count" -eq 0
 ''

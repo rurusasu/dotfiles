@@ -77,6 +77,133 @@ Describe 'Invoke-NativeCommand' {
     }
 }
 
+$script:isWindowsRuntime = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+Describe 'Get-NpmInvocation on Windows' {
+    It 'runs npm.ps1 through node.exe and npm-cli.js instead of nesting PowerShell' -Skip:(-not $script:isWindowsRuntime) {
+        $nodeDirectory = Join-Path $TestDrive 'npm-cli-runtime'
+        $npmPath = Join-Path $nodeDirectory 'npm.ps1'
+        $nodePath = Join-Path $nodeDirectory 'node.exe'
+        $npmCliPath = Join-Path $nodeDirectory 'node_modules/npm/bin/npm-cli.js'
+        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $npmCliPath) -Force
+        foreach ($path in @($npmPath, $nodePath, $npmCliPath)) {
+            [System.IO.File]::WriteAllText($path, '', [System.Text.Encoding]::ASCII)
+        }
+        Mock Get-ExternalCommand {
+            if ($Name -eq 'npm') { return [pscustomobject]@{ Source = $npmPath; Path = $npmPath } }
+            if ($Name -eq 'node.exe') { return [pscustomobject]@{ Source = $nodePath; Path = $nodePath } }
+            return $null
+        }
+        $script:capturedNpmInvocation = $null
+        Mock Invoke-ExternalCommandWithTimeout {
+            param($Command, $Arguments, $TimeoutSeconds)
+            $script:capturedNpmInvocation = [pscustomobject]@{
+                Command = $Command
+                Arguments = @($Arguments)
+                TimeoutSeconds = $TimeoutSeconds
+            }
+            $global:LASTEXITCODE = 0
+            return 'install ok'
+        }
+
+        Invoke-Npm -Arguments @('install', '-g', 'pnpm@latest') | Should -Be 'install ok'
+
+        $script:capturedNpmInvocation.Command | Should -Be $nodePath
+        $script:capturedNpmInvocation.Arguments | Should -Be @($npmCliPath, 'install', '-g', 'pnpm@latest')
+        $script:capturedNpmInvocation.TimeoutSeconds | Should -BeGreaterThan 0
+    }
+}
+
+Describe 'Invoke-Npm global install Node PATH' {
+
+    BeforeEach {
+        $script:originalPath = $env:PATH
+        $script:userPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+        $script:machinePath = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine')
+        $script:nodeFixtureDirectory = Join-Path $TestDrive 'node-install-not-on-path'
+        $null = New-Item -ItemType Directory -Path $script:nodeFixtureDirectory -Force
+        $script:nodeFixture = Join-Path $script:nodeFixtureDirectory 'node.cmd'
+
+        [System.IO.File]::WriteAllText($script:nodeFixture, @'
+@echo off
+if /i "%~nx1"=="postinstall.js" (echo lifecycle:postinstall & exit /b 0)
+if /i "%~nx1"=="install.js" (echo lifecycle:preinstall & exit /b 0)
+echo unexpected lifecycle: %~nx1 1>&2
+exit /b 3
+'@, [System.Text.Encoding]::ASCII)
+        $script:postinstallScript = Join-Path $TestDrive 'postinstall.js'
+        $script:preinstallScript = Join-Path $TestDrive 'install.js'
+        [System.IO.File]::WriteAllText($script:postinstallScript, "// postinstall fixture`r`n", [System.Text.Encoding]::ASCII)
+        [System.IO.File]::WriteAllText($script:preinstallScript, "// preinstall fixture`r`n", [System.Text.Encoding]::ASCII)
+        $env:PATH = Join-Path $env:SystemRoot 'System32'
+
+        Mock Get-ExternalCommand {
+            if ($Name -eq 'node.exe') {
+                return [pscustomobject]@{ Source = $script:nodeFixture; Path = $script:nodeFixture }
+            }
+            return $null
+        }
+        Mock Invoke-ExternalCommandWithTimeout {
+            param($Command, $Arguments, $TimeoutSeconds)
+            $null = $TimeoutSeconds
+            if ($Command -ne 'npm' -or $Arguments[0] -ne 'install') {
+                throw "Unexpected npm test command: $Command $($Arguments -join ' ')"
+            }
+            $scriptPath = if ($Arguments -contains 'pnpm@latest') { $script:preinstallScript } else { $script:postinstallScript }
+            $script:lifecycleOutput = @(& $env:ComSpec /d /c "node `"$scriptPath`"" 2>&1)
+            $global:LASTEXITCODE = $LASTEXITCODE
+            return $script:lifecycleOutput
+        }
+    }
+
+    AfterEach {
+        $env:PATH = $script:originalPath
+    }
+
+    It 'should run npm postinstall and downstream pnpm preinstall through cmd with Node initially hidden from PATH' -Skip:(-not $script:isWindowsRuntime) {
+        ($env:PATH -split ';') | Should -Not -Contain $script:nodeFixtureDirectory
+        [System.IO.File]::Exists($script:nodeFixture) | Should -BeTrue
+        Get-NpmNodeDirectory | Should -Be $script:nodeFixtureDirectory
+        & $env:ComSpec /d /c 'where.exe node >nul 2>nul'
+        $global:LASTEXITCODE | Should -Be 1
+
+        $postinstallOutput = @(Invoke-Npm -Arguments @('install', '-g', 'agent-browser@0.38.1'))
+
+        ($env:PATH -split ';') | Should -Contain $script:nodeFixtureDirectory
+        $global:LASTEXITCODE | Should -Be 0
+        ($postinstallOutput -join "`n") | Should -Match 'lifecycle:postinstall'
+        @($env:PATH -split ';' | Where-Object { $_ -eq $script:nodeFixtureDirectory }).Count | Should -Be 1
+
+        $pnpmOutput = @(Invoke-Npm -Arguments @('install', '-g', 'pnpm@latest'))
+
+        $global:LASTEXITCODE | Should -Be 0
+        ($pnpmOutput -join "`n") | Should -Match 'lifecycle:preinstall'
+        @($env:PATH -split ';' | Where-Object { $_ -eq $script:nodeFixtureDirectory }).Count | Should -Be 1
+        [System.Environment]::GetEnvironmentVariable('PATH', 'User') | Should -Be $script:userPath
+        [System.Environment]::GetEnvironmentVariable('PATH', 'Machine') | Should -Be $script:machinePath
+    }
+}
+
+Describe 'Get-NpmNodeDirectory sibling fallback' {
+    It 'should resolve node.exe beside absolute npm.cmd when node is absent from PATH' {
+        $nodeDirectory = Join-Path $TestDrive 'node-from-npm-install'
+        $npmPath = Join-Path $nodeDirectory 'npm.cmd'
+        $nodePath = Join-Path $nodeDirectory 'node.exe'
+        $null = New-Item -ItemType Directory -Path $nodeDirectory -Force
+        [System.IO.File]::WriteAllText($npmPath, '@echo off', [System.Text.Encoding]::ASCII)
+        [System.IO.File]::WriteAllText($nodePath, 'fixture', [System.Text.Encoding]::ASCII)
+        Mock Get-ExternalCommand {
+            if ($Name -eq 'node.exe') { return $null }
+            if ($Name -eq 'npm.cmd') {
+                return [pscustomobject]@{ Source = $npmPath; Path = $npmPath }
+            }
+            return $null
+        }
+
+        Get-NpmNodeDirectory | Should -Be $nodeDirectory
+    }
+}
+
 Describe 'Invoke-Pnpm' {
     It 'should prefer the Windows cmd shim over an extensionless pnpm shim' {
         Mock Get-Command {
@@ -120,27 +247,40 @@ Describe 'Invoke-Pnpm' {
 
 Describe 'Invoke-Winget' {
     BeforeEach {
+        $script:originalInstallTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
         $script:originalWingetTimeout = $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS
     }
 
     AfterEach {
-        $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = $script:originalWingetTimeout
+        if ($null -eq $script:originalInstallTimeout) {
+            Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $script:originalInstallTimeout
+        }
+        if ($null -eq $script:originalWingetTimeout) {
+            Remove-Item Env:\DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = $script:originalWingetTimeout
+        }
     }
 
-    It 'should run winget through a timeout wrapper by default' {
+    It 'should run winget through the shared 900-second timeout wrapper by default' {
+        Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
         Remove-Item Env:\DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
         Mock Invoke-ExternalCommandWithTimeout {
             $global:LASTEXITCODE = 0
             return "winget ok"
         }
 
-        $result = Invoke-Winget -Arguments @("--version")
+        $result = Invoke-Winget -Arguments @("install", "--id", "example.package")
 
         $result | Should -Contain "winget ok"
         Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
             $Command -eq "winget" -and
-            $Arguments -contains "--version" -and
-            $TimeoutSeconds -eq 300
+            $Arguments -contains "example.package" -and
+            $TimeoutSeconds -eq 900
         }
     }
 
@@ -162,6 +302,7 @@ Describe 'Invoke-Winget' {
     }
 
     It 'should prefer an explicit timeout over the default environment timeout' {
+        Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
         $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = "180"
         Mock Invoke-ExternalCommandWithTimeout {
             $global:LASTEXITCODE = 0
@@ -201,10 +342,11 @@ Describe 'Invoke-VerifyCommand' {
             "-NoLogo",
             "-NoProfile",
             "-Command",
-            "Start-Sleep -Seconds 5; exit 0"
-        ) -TimeoutSeconds 1
+            "Write-Output 'partial output'; Start-Sleep -Seconds 5; exit 0"
+        ) -TimeoutSeconds 2
 
-        $result | Should -Match "タイムアウト"
+        ($result -join "`n") | Should -Match "タイムアウト"
+        $result | Should -Contain 'partial output'
         $global:LASTEXITCODE | Should -Be 124
     }
 
@@ -230,6 +372,15 @@ exit 0
             $env:PATH = $oldPath
             Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
+    }
+
+    It 'should report a missing timed verification command without throwing a ProcessStart exception' {
+        $missingCommand = Join-Path $TestDrive 'does-not-exist.exe'
+
+        $result = Invoke-VerifyCommand -Command $missingCommand -Arguments @('--version') -TimeoutSeconds 1
+
+        $result | Should -Match 'コマンドが見つかりません'
+        $global:LASTEXITCODE | Should -Be 127
     }
 }
 
@@ -277,7 +428,7 @@ Describe 'Invoke-Wsl' {
     It 'should pass arguments to WSL' {
         Mock wsl { return "test output" }
 
-        $result = Invoke-Wsl --list --quiet
+        Invoke-Wsl --list --quiet
 
         Should -Invoke wsl -Times 1
     }
@@ -291,7 +442,7 @@ Describe 'Invoke-Wsl' {
     }
 
     It 'should pass multiple arguments' {
-        Mock wsl { param($args) return "OK" }
+        Mock wsl { return "OK" }
 
         Invoke-Wsl -d NixOS -u root -- sh -lc "whoami"
 
@@ -321,7 +472,7 @@ Describe 'Invoke-Dism' {
     It 'should pass arguments to dism.exe' {
         Mock dism.exe { return "test output" }
 
-        $result = Invoke-Dism /online /get-features
+        Invoke-Dism /online /get-features
 
         Should -Invoke dism.exe -Times 1
     }
@@ -427,6 +578,19 @@ Describe 'Get-ExternalCommand' {
         else {
             $result | Should -Not -BeNullOrEmpty
             $result.Name | Should -Be $name
+        }
+    }
+}
+
+Describe 'Get-ExternalCommandPath' {
+    It 'should resolve Path-only command metadata in strict mode' {
+        Set-StrictMode -Version Latest
+        try {
+            Get-ExternalCommandPath -CommandInfo ([pscustomobject]@{ Path = 'C:\tools\npm.cmd' }) |
+                Should -Be 'C:\tools\npm.cmd'
+        }
+        finally {
+            Set-StrictMode -Off
         }
     }
 }
@@ -768,19 +932,39 @@ Describe 'Update-ProcessEnvironmentPath' {
     }
 
     It 'should include User PATH entries in the current process PATH' {
-        $uniqueUserPath = "C:\TestUserPath-$([guid]::NewGuid())"
+        $uniqueUserPath = Join-Path $TestDrive "TestUserPath-$([guid]::NewGuid())"
+        $null = New-Item -ItemType Directory -Path $uniqueUserPath -Force
         Mock Get-UserEnvironmentPath { return $uniqueUserPath }
 
-        $env:PATH = "C:\ExistingPath"
+        $existingPath = Join-Path $TestDrive 'ExistingPath'
+        $null = New-Item -ItemType Directory -Path $existingPath -Force
+        $env:PATH = $existingPath
 
         Update-ProcessEnvironmentPath
 
         ($env:PATH -split ";") | Should -Contain $uniqueUserPath
-        ($env:PATH -split ";") | Should -Contain "C:\ExistingPath"
+        ($env:PATH -split ";") | Should -Contain $existingPath
+    }
+
+    It 'should expand valid environment-variable PATH entries before checking and importing them' {
+        $variablePath = Join-Path $TestDrive "VariablePath-$([guid]::NewGuid())"
+        $null = New-Item -ItemType Directory -Path $variablePath -Force
+        $env:DOTFILES_CI_EXPANDED_PATH = $variablePath
+        Mock Get-UserEnvironmentPath { return '%DOTFILES_CI_EXPANDED_PATH%' }
+        $env:PATH = $script:originalPath
+
+        try {
+            Update-ProcessEnvironmentPath
+            ($env:PATH -split ';') | Should -Contain $variablePath
+        }
+        finally {
+            Remove-Item Env:\DOTFILES_CI_EXPANDED_PATH -ErrorAction SilentlyContinue
+        }
     }
 
     It 'should remove duplicate entries case-insensitively' {
-        $uniquePath = "C:\DuplicatePath-$([guid]::NewGuid())"
+        $uniquePath = Join-Path $TestDrive "DuplicatePath-$([guid]::NewGuid())"
+        $null = New-Item -ItemType Directory -Path $uniquePath -Force
         Mock Get-UserEnvironmentPath { return $uniquePath }
 
         $env:PATH = "$uniquePath;$($uniquePath.ToUpperInvariant())"
@@ -788,6 +972,94 @@ Describe 'Update-ProcessEnvironmentPath' {
         Update-ProcessEnvironmentPath
 
         @($env:PATH -split ";" | Where-Object { $_ -eq $uniquePath -or $_ -eq $uniquePath.ToUpperInvariant() }).Count | Should -Be 1
+    }
+
+    It 'should exclude selected paths while importing updated User PATH entries' {
+        $excludedPath = Join-Path $TestDrive "RunnerPnpm-$([guid]::NewGuid())"
+        $newUserPath = Join-Path $TestDrive "NewUserPath-$([guid]::NewGuid())"
+        $null = New-Item -ItemType Directory -Path $excludedPath, $newUserPath -Force
+        $userPath = "$newUserPath;$excludedPath"
+        Mock Get-UserEnvironmentPath { return $userPath }
+        $existingPath = Join-Path $TestDrive 'ExistingPath'
+        $null = New-Item -ItemType Directory -Path $existingPath -Force
+        $env:PATH = "$existingPath;$excludedPath"
+
+        Update-ProcessEnvironmentPath -ExcludePath @($excludedPath)
+
+        ($env:PATH -split ';') | Should -Contain $existingPath
+        ($env:PATH -split ';') | Should -Contain $newUserPath
+        ($env:PATH -split ';') | Should -Not -Contain $excludedPath
+    }
+
+    It 'should discard missing PATH directories before they crowd valid command paths out of the child environment' {
+        if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+            Set-ItResult -Skipped -Because 'missing directory filtering is Windows-specific'
+            return
+        }
+
+        $validUserPath = Join-Path $TestDrive 'valid-command-directory'
+        $null = New-Item -ItemType Directory -Path $validUserPath -Force
+        $staleEntries = 1..500 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
+        Mock Get-UserEnvironmentPath { return (@($staleEntries) + @($validUserPath)) -join ';' }
+        Mock Set-UserEnvironmentPath { }
+        $env:PATH = (@($script:originalPath -split ';') + @($staleEntries)) -join ';'
+
+        Update-ProcessEnvironmentPath
+
+        $env:PATH.Length | Should -BeLessOrEqual 8191
+        ($env:PATH -split ';') | Should -Contain $validUserPath
+        foreach ($entry in $staleEntries) {
+            ($env:PATH -split ';') | Should -Not -Contain $entry
+        }
+    }
+
+    It 'should persistently remove stale local directories while retaining unresolved and offline User PATH entries' {
+        if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+            Set-ItResult -Skipped -Because 'User PATH registry repair is Windows-specific'
+            return
+        }
+
+        $validUserPath = Join-Path $TestDrive 'valid-persistent-user-path'
+        $null = New-Item -ItemType Directory -Path $validUserPath -Force
+        $staleUserPath = Join-Path $env:TEMP "dotfiles-stale-user-path-$([guid]::NewGuid())"
+        $offlineUserPath = '\\dotfiles-ci-unavailable\share\bin'
+        $unresolvedUserPath = '%DOTFILES_CI_UNRESOLVED_PATH%\bin'
+        $script:persistedUserPath = $null
+        Mock Get-UserEnvironmentPath { return "$staleUserPath;$validUserPath;$offlineUserPath;$unresolvedUserPath" }
+        Mock Set-UserEnvironmentPath {
+            param([string]$Path)
+            $script:persistedUserPath = $Path
+        }
+        $env:PATH = $script:originalPath
+
+        Update-ProcessEnvironmentPath -ReportStatus
+
+        $script:persistedUserPath -split ';' | Should -Contain $validUserPath
+        $script:persistedUserPath -split ';' | Should -Contain $offlineUserPath
+        $script:persistedUserPath -split ';' | Should -Contain $unresolvedUserPath
+        $script:persistedUserPath -split ';' | Should -Not -Contain $staleUserPath
+        ($env:PATH -split ';') | Should -Contain $validUserPath
+    }
+
+    It 'should keep the refreshed PATH below the Windows command environment limit' {
+        if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+            Set-ItResult -Skipped -Because 'the cmd.exe environment limit is Windows-specific'
+            return
+        }
+
+        $oversizedUserPath = (1..600 | ForEach-Object { "C:\$([string]::new('U', 80))$_" }) -join ';'
+        Mock Get-UserEnvironmentPath { return $oversizedUserPath }
+        Mock Set-UserEnvironmentPath { }
+        $env:PATH = "$script:originalPath;" + ((1..120 | ForEach-Object { "C:\$([string]::new('P', 80))$_" }) -join ';')
+        $oversizedUserPath.Length | Should -BeGreaterThan 50000
+
+        Update-ProcessEnvironmentPath
+
+        $env:PATH.Length | Should -BeLessOrEqual 8191
+        ($env:PATH -split ';') | Should -Contain (Split-Path -Parent (Get-Command cmd.exe).Source)
+        $commandInterpreter = Join-Path $env:SystemRoot 'System32\cmd.exe'
+        $child = Start-Process -FilePath $commandInterpreter -ArgumentList '/d', '/c', 'exit 0' -Wait -PassThru -NoNewWindow
+        $child.ExitCode | Should -Be 0
     }
 }
 

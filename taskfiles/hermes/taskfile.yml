@@ -2,35 +2,28 @@ version: "3"
 
 tasks:
   hermes:setup:
-    desc: Run Hermes Agent setup wizard in Docker
+    desc: Run the native Hermes setup wizard
     interactive: true
     deps:
       - task: hindsight:up
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-      - sh: test -f {{.HERMES_COMPOSE_FILE}}
-        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
-      - sh: test -f {{.HINDSIGHT_COMPOSE_FILE}}
-        msg: "Hindsight compose file not found: {{.HINDSIGHT_COMPOSE_FILE}}"
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} run --rm hermes setup
+      - cmd: hermes setup
+        platforms: [linux, darwin]
+      - cmd: '{{.WSL}}bash -lc "hermes setup"'
+        platforms: [windows]
+
+  hermes:docker:bootstrap:
+    desc: Compatibility alias for the Nix-managed Hermes activation
+    cmds:
+      - task: hermes:bootstrap
 
   hermes:bootstrap:
-    desc: Initialize the Docker data volume and bootstrap Hermes through the supported host adapter
-    interactive: true
-    deps:
-      - task: hindsight:up
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-      - sh: test -f {{.HERMES_COMPOSE_FILE}}
-        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
+    desc: Apply the Nix-managed Hermes Agent profile and gateway service
     cmds:
-      - cmd: bash -lc 'set -euo pipefail; source scripts/sh/install-common.sh; source scripts/sh/hermes-agent.sh; dotfiles_hermes_start_stack docker "{{.HERMES_COMPOSE_FILE}}"'
-        platforms: [linux, darwin]
-      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-bootstrap.ps1 -ComposeFile "{{.HERMES_COMPOSE_FILE}}"
-        platforms: [windows]
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && DOTFILES_WITH_HERMES=1 scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure"'
+        platforms: [windows, linux]
+      - cmd: DOTFILES_WITH_OLLAMA=0 DOTFILES_WITH_DOCKER=0 DOTFILES_WITH_HERMES=1 DOTFILES_ROOT="{{.ROOT_DIR}}" task darwin:install
+        platforms: [darwin]
 
   hermes:storage:inspect:
     desc: Inspect the Docker-managed Hermes runtime data volume
@@ -62,8 +55,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test -f docker/hermes-agent/Dockerfile docker
-      - docker build --target hermes-bootstrap-runtime -t local/hermes-agent-gh:latest -f docker/hermes-agent/Dockerfile docker
+      - docker buildx bake -f docker/hermes-agent/docker-bake.hcl
       - cmd: docker/hermes-agent/tests/test_storage_volume_integration.sh
         platforms: [linux, darwin]
       - docker/hermes-agent/bootstrap/tests/test_gh_wrapper.sh
@@ -101,12 +93,12 @@ tasks:
         platforms: [windows]
 
   hermes:pull:
-    desc: Rebuild the Hermes Agent Docker images with the latest base images
+    desc: Rebuild the Hermes browser and MCP sidecar images
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull hermes chromium browser-mcp xapi-mcp
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull chromium browser-mcp xapi-mcp
 
   hermes:xapi:auth:
     desc: Authenticate the X MCP bridge with the headless OAuth flow
@@ -190,62 +182,50 @@ tasks:
         platforms: [windows]
 
   hermes:up:
-    desc: Bootstrap Hermes memory configuration and start the gateway in Docker
-    deps:
-      - task: hermes:bootstrap
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Start the Nix-managed native Hermes Gateway service
+    cmds:
+      - cmd: hermes gateway start
+        platforms: [linux, darwin]
+      - cmd: '{{.WSL}}bash -lc "hermes gateway start"'
+        platforms: [windows]
 
   hermes:desktop:
-    desc: Launch Hermes Desktop connected to the Docker gateway
-    preconditions:
-      - sh: command -v hermes-desktop-docker
-        msg: "Hermes Desktop Docker launcher is not installed. Apply the WithHermes profile."
+    desc: Launch the native Hermes Desktop application
     cmds:
-      - cmd: hermes-desktop-docker
+      - cmd: open -a /Applications/Hermes.app
         platforms: [darwin]
 
   hermes:desktop:install:
-    desc: Complete and verify the official Hermes Desktop installation
+    desc: Verify the Nix-managed Hermes CLI and nix-darwin Desktop cask
     cmds:
       - cmd: scripts/sh/hermes-desktop-install.sh
         platforms: [darwin]
 
   hermes:cli:
-    desc: Run the Hermes CLI inside the Docker Agent container
+    desc: Run the Nix-managed native Hermes CLI
     interactive: true
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-      - sh: test -f {{.HERMES_COMPOSE_FILE}}
-        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
-      - sh: command -v hermes-docker
-        msg: "Hermes Docker CLI adapter is not installed. Apply the WithHermes profile."
     cmds:
-      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE | shellQuote}} hermes-docker {{range .CLI_ARGS_LIST}}{{. | shellQuote}} {{end}}
-        platforms: [darwin]
+      - cmd: hermes {{range .CLI_ARGS_LIST}}{{. | shellQuote}} {{end}}
+        platforms: [darwin, linux]
 
   hermes:profile:status:
-    desc: Show the gateway status for a Hermes profile
+    desc: Show a Hermes profile status in the Nix-managed gateway
     vars:
       PROFILE: '{{.PROFILE | default ""}}'
     preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
       - sh: test -n {{.PROFILE | shellQuote}}
         msg: "Set PROFILE to an installed Hermes profile name."
     cmds:
-      - cmd: docker exec hermes /opt/hermes/.venv/bin/hermes -p {{.PROFILE | shellQuote}} gateway status
+      - cmd: hermes -p {{.PROFILE | shellQuote}} gateway status
         platforms: [darwin, linux]
+      - cmd: '{{.WSL}}bash -lc "hermes -p {{.PROFILE | shellQuote}} gateway status"'
+        platforms: [windows]
 
   hermes:profile:up:
-    desc: Start the root multiplex gateway and show one Hermes profile status
+    desc: Start the Nix-managed gateway and show one Hermes profile status
     vars:
       PROFILE: '{{.PROFILE | default ""}}'
     preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
       - sh: test -n {{.PROFILE | shellQuote}}
         msg: "Set PROFILE to an installed Hermes profile name."
     cmds:
@@ -255,24 +235,20 @@ tasks:
           PROFILE: "{{.PROFILE}}"
 
   hermes:profile:down:
-    desc: Stop the root multiplex gateway for all Hermes profiles
+    desc: Stop the shared Nix-managed gateway for all Hermes profiles
     vars:
       PROFILE: '{{.PROFILE | default ""}}'
     preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
       - sh: test -n {{.PROFILE | shellQuote}}
         msg: "Set PROFILE to an installed Hermes profile name."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} stop hermes
+      - task: hermes:down
 
   hermes:profile:restart:
-    desc: Restart the root multiplex gateway and show one Hermes profile status
+    desc: Restart the Nix-managed gateway and show one Hermes profile status
     vars:
       PROFILE: '{{.PROFILE | default ""}}'
     preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
       - sh: test -n {{.PROFILE | shellQuote}}
         msg: "Set PROFILE to an installed Hermes profile name."
     cmds:
@@ -282,29 +258,49 @@ tasks:
           PROFILE: "{{.PROFILE}}"
 
   hermes:down:
-    desc: Stop Hermes Agent Docker container
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Stop the Nix-managed native Hermes Gateway service
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} down
+      - cmd: hermes gateway stop
+        platforms: [linux, darwin]
+      - cmd: '{{.WSL}}bash -lc "hermes gateway stop"'
+        platforms: [windows]
 
   hermes:restart:
-    desc: Recreate Hermes Agent Docker container with xapi credentials
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Restart the Nix-managed native Hermes Gateway service
+    cmds:
+      - cmd: hermes gateway restart
+        platforms: [linux, darwin]
+      - cmd: '{{.WSL}}bash -lc "hermes gateway restart"'
+        platforms: [windows]
+
+  hermes:logs:
+    desc: Follow native Hermes Gateway logs
+    interactive: true
+    cmds:
+      - cmd: hermes logs -f
+        platforms: [darwin, linux]
+      - cmd: '{{.WSL}}bash -lc "hermes logs -f"'
+        platforms: [windows]
+
+  hermes:docker:up:
+    desc: Compatibility alias for the Nix-managed Hermes gateway start
     cmds:
       - task: hermes:up
 
-  hermes:logs:
-    desc: Follow Hermes Agent Docker logs
-    interactive: true
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+  hermes:docker:down:
+    desc: Compatibility alias for the Nix-managed Hermes gateway stop
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 hermes
+      - task: hermes:down
+
+  hermes:docker:restart:
+    desc: Compatibility alias for the Nix-managed Hermes gateway restart
+    cmds:
+      - task: hermes:restart
+
+  hermes:docker:logs:
+    desc: Compatibility alias for the native Hermes gateway logs
+    cmds:
+      - task: hermes:logs
 
   hermes:browser:pull:
     desc: Rebuild Hermes browser and Browser MCP Docker images
@@ -363,11 +359,8 @@ tasks:
   hermes:rick:logs:
     desc: Follow Rick Hermes gateway logs
     interactive: true
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker exec hermes sh -lc 'tail -F /opt/data/logs/gateways/rick/current'
+      - task: hermes:logs
 
   hermes:hoffman:up:
     desc: Start the root multiplex gateway and show Hoffman profile status
@@ -393,11 +386,8 @@ tasks:
   hermes:hoffman:logs:
     desc: Follow Hoffman Hermes gateway logs
     interactive: true
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker exec hermes sh -lc 'tail -F /opt/data/logs/gateways/hoffman/current'
+      - task: hermes:logs
 
   hermes:risarisa:up:
     desc: Start the root multiplex gateway and show RisaRisa profile status
@@ -423,11 +413,8 @@ tasks:
   hermes:risarisa:logs:
     desc: Follow RisaRisa Hermes gateway logs
     interactive: true
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker exec hermes sh -lc 'tail -F /opt/data/logs/gateways/risarisa/current'
+      - task: hermes:logs
 
   hermes:nancy:up:
     desc: Start the root multiplex gateway and show Nancy profile status
@@ -453,25 +440,21 @@ tasks:
   hermes:nancy:logs:
     desc: Follow Nancy Hermes gateway logs
     interactive: true
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker exec hermes sh -lc 'tail -F /opt/data/logs/gateways/nancy/current'
+      - task: hermes:logs
 
   hermes:ps:
-    desc: Show Hermes Agent Docker container status
+    desc: Show Hermes browser and MCP sidecar container status
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} ps
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} ps chromium browser-mcp xapi-mcp hermes-bootstrap
 
   hermes:upgrade:
-    desc: Rebuild and recreate Hermes Agent Docker container
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Update the Hermes flake input and activate the Nix-managed Hermes Agent
     cmds:
-      - task: hermes:pull
-      - task: hermes:up
+      - cmd: nix flake update hermes-agent && task hermes:bootstrap
+        platforms: [linux, darwin]
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix flake update hermes-agent && DOTFILES_WITH_HERMES=1 scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure"'
+        platforms: [windows]

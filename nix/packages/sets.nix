@@ -15,7 +15,9 @@
 #   - wingetVerify       → catalog attr name → { command, args } for post-install verification
 #   - msstoreVerifyById  → Microsoft Store Product ID → { command, args } for post-install verification
 #   - wingetInstallArgs  → catalog attr name → extra winget install arguments
-#   - wingetInstallTimeoutSeconds → catalog attr name or winget ID → winget install timeout
+#   - wingetRequiresAdmin → catalog attr name or winget ID → administrator-only install
+#   - packageInstallTimeoutSeconds → shared install timeout for package adapters
+#   - wingetInstallTimeoutSeconds → optional catalog attr name or winget ID overrides
 #   - wingetDirectInstallers → catalog attr name or winget ID → direct installer metadata
 #   - wingetSkipInstall → catalog attr name or winget/msstore ID → skip normal automated install
 #   - wingetCiSkipInstall → catalog attr name or winget/msstore ID → skip CI winget install smoke test
@@ -38,6 +40,10 @@
   catalogOverride ? null,
 }:
 let
+  # The same appearance data is consumed by chezmoi templates and exposed to
+  # Nix consumers so font/theme values do not drift by platform.
+  appearance =
+    (builtins.fromJSON (builtins.readFile ../../chezmoi/.chezmoidata/appearance.json)).appearance;
   darwinProviderCandidates = import ./darwin-provider-candidates.nix;
   darwinProviderCandidate = name: darwinProviderCandidates.${name};
   selectDarwinPackage =
@@ -280,7 +286,7 @@ let
         };
         wezterm = {
           pkg = pkgs.wezterm;
-          winget = "wez.wezterm.nightly";
+          winget = "wez.wezterm";
           category = "terminal";
           support = {
             darwin = {
@@ -403,29 +409,6 @@ let
             };
           };
         };
-        vscode = {
-          pkg = pkgs.vscode;
-          winget = "Microsoft.VisualStudioCode";
-          category = "editors";
-          support = {
-            darwin = {
-              provider = "nix";
-              source = "nixpkgs";
-              nixAttr = "vscode";
-              identity = {
-                homepage = "https://code.visualstudio.com/";
-                appName = "Visual Studio Code.app";
-                bundleId = "com.microsoft.VSCode";
-                executable = "Code";
-              };
-            };
-          };
-          legacyDarwin = {
-            provider = "homebrew-cask";
-            name = "visual-studio-code";
-          };
-        };
-
         # ── fonts ─────────────────────────────────────────────
         udev-gothic-nf = {
           pkg = pkgs.udev-gothic-nf;
@@ -459,7 +442,6 @@ let
         };
         chatgpt = {
           pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.chatgpt else pkgs.callPackage ./chatgpt { };
-          msstore = "9NT1R1C2HH7J";
           category = "desktop";
           support = {
             darwin = {
@@ -478,6 +460,9 @@ let
               source = "dotfiles";
               identity = "chatgpt";
               nixAttr = "chatgpt";
+            };
+            windows = {
+              unsupported = "The Windows Store app is intentionally excluded from this package catalog";
             };
           };
           legacyDarwin = {
@@ -519,13 +504,6 @@ let
           category = "llm";
         };
 
-        # ── communication ─────────────────────────────────────
-        slack = {
-          pkg = pkgs.slack;
-          winget = "SlackTechnologies.Slack";
-          category = "communication";
-        };
-
         # ── desktop applications ──────────────────────────────
         steam = {
           category = "desktop";
@@ -548,7 +526,6 @@ let
           pkg = if pkgs.stdenv.hostPlatform.isDarwin then darwinDiscordPackage else pkgs.discord;
           winget = "Discord.Discord";
           category = "desktop";
-          installFeature = "WithHermes";
           support = {
             darwin = {
               provider = "nix";
@@ -797,63 +774,6 @@ let
             };
           };
         };
-        hermes-desktop-docker = {
-          pkg =
-            if pkgs.stdenv.hostPlatform.isDarwin then
-              pkgs.writeShellApplication {
-                name = "hermes-desktop-docker";
-                runtimeInputs = [
-                  pkgs.curl
-                  pkgs.jq
-                ];
-                text = builtins.readFile ../../scripts/sh/hermes-desktop-docker.sh;
-              }
-            else
-              null;
-          winget = null;
-          category = "terminal";
-          installFeature = "WithHermes";
-          support = {
-            darwin = {
-              provider = "nix";
-              source = "dotfiles";
-              identity.command = "hermes-desktop-docker";
-            };
-            linux = {
-              unsupported = "Hermes Desktop Docker launcher is provisioned by the native macOS profile";
-            };
-            windows = {
-              unsupported = "Hermes Desktop Docker launcher is provisioned by the native macOS profile";
-            };
-          };
-        };
-        hermes-docker = {
-          pkg =
-            if pkgs.stdenv.hostPlatform.isDarwin then
-              pkgs.writeShellApplication {
-                name = "hermes-docker";
-                text = builtins.readFile ../../scripts/sh/hermes-docker.sh;
-              }
-            else
-              null;
-          winget = null;
-          category = "terminal";
-          installFeature = "WithHermes";
-          support = {
-            darwin = {
-              provider = "nix";
-              source = "dotfiles";
-              identity.command = "hermes-docker";
-            };
-            linux = {
-              unsupported = "Hermes Docker CLI is provisioned by the native macOS profile";
-            };
-            windows = {
-              unsupported = "Hermes Docker CLI is provisioned by the native macOS profile";
-            };
-          };
-        };
-
         # ── k8s ───────────────────────────────────────────────
         kind = {
           pkg = pkgs.kind;
@@ -945,11 +865,6 @@ let
         _1password-cli = {
           pkg = pkgs._1password-cli;
           winget = "AgileBits.1Password.CLI";
-          category = "infra";
-        };
-        opencode = {
-          pkg = pkgs.opencode;
-          winget = "SST.opencode";
           category = "infra";
         };
         google-cloud-sdk = {
@@ -1200,7 +1115,6 @@ let
   };
 
   windowsOnlySupport = {
-    "GitHub.Copilot" = mkWindowsOnlySupport "winget" "GitHub.Copilot" "Windows application package";
     "Microsoft.PowerToys" =
       mkWindowsOnlySupport "winget" "Microsoft.PowerToys"
         "Windows system utility";
@@ -1513,6 +1427,10 @@ let
   );
 
 in
+let
+  # Shared timeout for package adapters and their CLI verifiers.
+  packageInstallTimeoutSeconds = 900;
+in
 # Category-resolved package lists (auto-derived from catalog)
 lib.mapAttrs (_: resolve) grouped
 // {
@@ -1552,6 +1470,7 @@ lib.mapAttrs (_: resolve) grouped
     ;
 
   inherit
+    appearance
     resolveForInstallFeatures
     supportReport
     darwinDiscordPackage
@@ -1586,8 +1505,8 @@ lib.mapAttrs (_: resolve) grouped
     "yaml-language-server"
     "@prisma/language-server"
     "@deepseek-ai/dsh"
-    "@playwright/cli@0.1.14"
-    "playwright@1.61.0"
+    "@playwright/cli@0.1.21"
+    "playwright@1.63.0"
     "typescript-language-server"
     "typescript"
   ];
@@ -1664,7 +1583,6 @@ lib.mapAttrs (_: resolve) grouped
     ];
     "@google/gemini-cli" = [
       "--allow-build=@github/keytar"
-      "--allow-build=node-pty"
     ];
   };
 
@@ -1682,6 +1600,7 @@ lib.mapAttrs (_: resolve) grouped
     gh = {
       command = "gh";
       args = [ "--version" ];
+      timeoutSeconds = 60;
     };
     fd = {
       command = "fd";
@@ -1742,6 +1661,7 @@ lib.mapAttrs (_: resolve) grouped
     go = {
       command = "go";
       args = [ "version" ];
+      timeoutSeconds = packageInstallTimeoutSeconds;
     };
     rustup = {
       command = "rustup";
@@ -1796,15 +1716,8 @@ lib.mapAttrs (_: resolve) grouped
       args = [ "--version" ];
     };
     rust-analyzer = {
-      command = "pwsh";
-      args = [
-        "-NoProfile"
-        "-Command"
-        "& (Join-Path $env:LOCALAPPDATA 'Microsoft/WinGet/Links/rust-analyzer.exe') --version"
-      ];
-    };
-    opencode = {
-      command = "opencode";
+      type = "portableLinkCommand";
+      command = "rust-analyzer.exe";
       args = [ "--version" ];
     };
     ollama = {
@@ -1823,6 +1736,34 @@ lib.mapAttrs (_: resolve) grouped
 
   # Extra winget install arguments for packages that need a specific installer.
   wingetInstallArgs = {
+    _1password-cli = [
+      "--scope"
+      "user"
+    ];
+    bun = [
+      "--scope"
+      "user"
+    ];
+    chezmoi = [
+      "--scope"
+      "user"
+    ];
+    codex = [
+      "--scope"
+      "user"
+    ];
+    direnv = [
+      "--scope"
+      "user"
+    ];
+    dprint = [
+      "--scope"
+      "user"
+    ];
+    eza = [
+      "--scope"
+      "user"
+    ];
     autohotkey = [
       "--scope"
       "machine"
@@ -1831,18 +1772,111 @@ lib.mapAttrs (_: resolve) grouped
       "--override"
       "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart"
     ];
+    oxlint = [
+      "--scope"
+      "user"
+    ];
+    "oxc-project.oxlint" = [
+      "--scope"
+      "user"
+    ];
     powershell = [
       "--installer-type"
       "wix"
     ];
+    rust-analyzer = [
+      "--scope"
+      "user"
+    ];
+    "Rustlang.rust-analyzer" = [
+      "--scope"
+      "user"
+    ];
+    fd = [
+      "--scope"
+      "user"
+    ];
+    "sharkdp.fd" = [
+      "--scope"
+      "user"
+    ];
   };
 
-  wingetInstallTimeoutSeconds = {
-    google-cloud-sdk = 900;
-    "Microsoft.VisualStudio.2022.BuildTools" = 1800;
+  # Packages that must be installed from the elevated Windows phase. Keeping
+  # this metadata in the catalog prevents the non-elevated user phase from
+  # accidentally passing machine-scope installers to winget.
+  wingetRequiresAdmin = {
+    autohotkey = true;
+    "Microsoft.VisualStudio.2022.BuildTools" = true;
   };
 
-  wingetDirectInstallers = { };
+  # One install timeout shared by every package adapter. Per-package entries
+  # remain supported for exceptional cases; only intentional WinGet entries
+  # are emitted into the generated catalog so runtime environment overrides
+  # remain effective for the generic case.
+  inherit packageInstallTimeoutSeconds;
+  wingetInstallTimeoutSeconds = { };
+
+  wingetDirectInstallers = {
+    bun = {
+      # Keep this in sync with the current Winget Bun archive. This is only a
+      # fallback for WinGet/Delivery Optimization registration failures.
+      type = "archive";
+      url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-windows-x64.zip";
+      sha256 = "ce4c17497b2f29712a99d3d53f028de28cd42e3bacb8589599e7f000e49b6405";
+      destination = "%LOCALAPPDATA%\\Programs\\Bun";
+      executable = "bun-windows-x64\\bun.exe";
+      timeoutSeconds = 900;
+    };
+    chezmoi = {
+      type = "archive";
+      url = "https://github.com/twpayne/chezmoi/releases/download/v2.72.2/chezmoi_2.72.2_windows_amd64.zip";
+      sha256 = "5c2038736c485d4e3eaad4ac06ea1fe3c4b63d4d51e470547bf12737c02f37f6";
+      destination = "%LOCALAPPDATA%\\Programs\\chezmoi";
+      executable = "chezmoi.exe";
+      timeoutSeconds = 900;
+    };
+    codex = {
+      type = "archive";
+      url = "https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-package-x86_64-pc-windows-msvc.tar.gz";
+      sha256 = "f45c273b7835c192aaa9cef5b93aa9528966ac7301444632de80a565a9bf14e8";
+      destination = "%LOCALAPPDATA%\\Programs\\Codex";
+      executable = "bin\\codex.exe";
+      timeoutSeconds = 900;
+    };
+    direnv = {
+      type = "file";
+      url = "https://github.com/direnv/direnv/releases/download/v2.37.1/direnv.windows-amd64";
+      sha256 = "d96fc8b7cf020c2d4c1dbbc2ccec5fd1cab05b51c491f02c8527a7fa6c50a1cd";
+      destination = "%LOCALAPPDATA%\\Programs\\direnv";
+      executable = "direnv.exe";
+      timeoutSeconds = 900;
+    };
+    dprint = {
+      type = "archive";
+      url = "https://github.com/dprint/dprint/releases/download/0.57.4/dprint-x86_64-pc-windows-msvc.zip";
+      sha256 = "1038af32fade7a79f9c3a690d9546bb17be13dd7b4568a3684692fdcb0a52a1d";
+      destination = "%LOCALAPPDATA%\\Programs\\dprint";
+      executable = "dprint.exe";
+      timeoutSeconds = 900;
+    };
+    fd = {
+      type = "archive";
+      url = "https://github.com/sharkdp/fd/releases/download/v10.5.0/fd-v10.5.0-x86_64-pc-windows-msvc.zip";
+      sha256 = "a227701b8551c35a9931d9f6da75503cf86d88e182d71fb849a70864c5d57cd7";
+      destination = "%LOCALAPPDATA%\\Programs\\fd";
+      executable = "fd-v10.5.0-x86_64-pc-windows-msvc\\fd.exe";
+      timeoutSeconds = 900;
+    };
+    eza = {
+      type = "archive";
+      url = "https://github.com/eza-community/eza/releases/download/v0.23.5/eza.exe_x86_64-pc-windows-gnu.zip";
+      sha256 = "c830638c844a5b89d39ba662b5549903a71fa539018e813880f5b8afa77bac2e";
+      destination = "%LOCALAPPDATA%\\Programs\\eza";
+      executable = "eza.exe";
+      timeoutSeconds = 900;
+    };
+  };
 
   # Packages kept in the catalog but skipped by the normal Windows installer.
   wingetSkipInstall = { };
@@ -1851,7 +1885,6 @@ lib.mapAttrs (_: resolve) grouped
   # elevation, or hang in CI. Avoid making CI depend on their live behavior.
   wingetCiSkipInstall = {
     google-cloud-sdk = true;
-    wezterm = true;
     "9PLM9XGG6VKS" = true;
     "StablyAI.Orca" = true;
   };
@@ -1859,6 +1892,18 @@ lib.mapAttrs (_: resolve) grouped
   # Extra PATH directories for installers that do not register CLI commands on PATH.
   # Entries may contain Windows environment variables and glob wildcards.
   wingetPathEntries = {
+    nodejs = [ "%ProgramFiles%\\nodejs" ];
+    "Task.Task" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Task.Task*" ];
+    "hadolint.hadolint" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\hadolint.hadolint*" ];
+    "Artempyanykh.Marksman" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Artempyanykh.Marksman*" ];
+    "astral-sh.ruff" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ruff*" ];
+    "JohnnyMorganz.StyLua" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\JohnnyMorganz.StyLua*" ];
+    "tamasfe.taplo" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tamasfe.taplo*" ];
+    "tree-sitter.tree-sitter-cli" = [
+      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"
+    ];
+    "astral-sh.ty" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ty*" ];
+    "astral-sh.uv" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.uv*" ];
     _1password-cli = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*" ];
     "AgileBits.1Password.CLI" = [
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"
@@ -1868,6 +1913,35 @@ lib.mapAttrs (_: resolve) grouped
       "%ProgramFiles(x86)%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
       "%LOCALAPPDATA%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
     ];
+    bun = [
+      "%LOCALAPPDATA%\\Programs\\Bun\\bun-windows-x64"
+      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Oven-sh.Bun*\\bun-windows-x64"
+    ];
+    "Oven-sh.Bun" = [
+      "%LOCALAPPDATA%\\Programs\\Bun\\bun-windows-x64"
+      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Oven-sh.Bun*\\bun-windows-x64"
+    ];
+    oxlint = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
+    "oxc-project.oxlint" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
+    chezmoi = [ "%LOCALAPPDATA%\\Programs\\chezmoi" ];
+    codex = [
+      "%LOCALAPPDATA%\\Programs\\Codex\\bin"
+      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"
+    ];
+    "OpenAI.Codex" = [
+      "%LOCALAPPDATA%\\Programs\\Codex\\bin"
+      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"
+    ];
+    direnv = [ "%LOCALAPPDATA%\\Programs\\direnv" ];
+    "direnv.direnv" = [ "%LOCALAPPDATA%\\Programs\\direnv" ];
+    dprint = [ "%LOCALAPPDATA%\\Programs\\dprint" ];
+    "dprint.dprint" = [ "%LOCALAPPDATA%\\Programs\\dprint" ];
+    fd = [ "%LOCALAPPDATA%\\Programs\\fd\\fd-v10.5.0-x86_64-pc-windows-msvc" ];
+    "sharkdp.fd" = [ "%LOCALAPPDATA%\\Programs\\fd\\fd-v10.5.0-x86_64-pc-windows-msvc" ];
+    eza = [ "%LOCALAPPDATA%\\Programs\\eza" ];
+    "eza-community.eza" = [ "%LOCALAPPDATA%\\Programs\\eza" ];
+    rust-analyzer = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
+    "Rustlang.rust-analyzer" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
     poppler-utils = [
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"
     ];
@@ -1879,7 +1953,11 @@ lib.mapAttrs (_: resolve) grouped
   wingetPortableLinksById = {
     "OpenAI.Codex" = {
       linkName = "codex.exe";
-      targetPattern = "codex-x86_64-pc-windows-msvc.exe";
+      targetPattern = "codex.exe";
+    };
+    "Rustlang.rust-analyzer" = {
+      linkName = "rust-analyzer.exe";
+      targetPattern = "rust-analyzer.exe";
     };
     oxlint = {
       linkName = "oxlint.exe";
@@ -1894,9 +1972,74 @@ lib.mapAttrs (_: resolve) grouped
   # Post-install verification commands for Windows-only winget packages.
   # Keys match PackageIdentifier values because these packages have no catalog attr.
   wingetVerifyById = {
+    "AgileBits.1Password" = {
+      type = "windowsInstalledProduct";
+      command = "AgileBits.1Password";
+      appxPackage = {
+        name = "AgileBits.1Password";
+        packageFamilyName = "Agilebits.1Password_amwd9z03whsfe";
+        executable = "1Password.exe";
+      };
+      uninstallEntry = {
+        displayName = "1Password";
+        executablePaths = [
+          "%ProgramFiles%\\1Password\\1Password.exe"
+          "%LOCALAPPDATA%\\1Password\\app\\*\\1Password.exe"
+        ];
+      };
+    };
+    "TheBrowserCompany.Arc" = {
+      type = "appxLaunchTarget";
+      command = "TheBrowserCompany.Arc";
+      args = [ "TheBrowserCompany.Arc_ttt1ap7aakyb4!Arc" ];
+    };
+    "AutoHotkey.AutoHotkey" = {
+      type = "windowsInstalledProduct";
+      command = "AutoHotkey";
+      uninstallEntry = {
+        productCodes = [ "AutoHotkey" ];
+        displayName = "AutoHotkey";
+        executablePaths = [ "%ProgramFiles%\\AutoHotkey\\v2\\AutoHotkey.exe" ];
+      };
+    };
+    "Discord.Discord" = {
+      type = "windowsInstalledProduct";
+      command = "Discord";
+      uninstallEntry = {
+        productCodes = [ "Discord" ];
+        displayName = "Discord";
+        publisher = "Discord Inc.";
+        executablePaths = [ "%LOCALAPPDATA%\\Discord\\app-*\\Discord.exe" ];
+      };
+    };
+    "Docker.DockerDesktop" = {
+      type = "windowsInstalledProduct";
+      command = "Docker Desktop";
+      uninstallEntry = {
+        displayName = "Docker Desktop";
+        publisher = "Docker Inc.";
+        executablePaths = [
+          "%ProgramFiles%\\Docker\\Docker\\Docker Desktop.exe"
+          "%LOCALAPPDATA%\\Programs\\DockerDesktop\\Docker Desktop.exe"
+        ];
+      };
+    };
     "dprint.dprint" = {
       command = "dprint";
       args = [ "--version" ];
+    };
+    "Google.Chrome" = {
+      type = "windowsInstalledProduct";
+      command = "Google Chrome";
+      uninstallEntry = {
+        displayName = "Google Chrome";
+        publisher = "Google LLC";
+        executablePaths = [
+          "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+          "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+          "%LOCALAPPDATA%\\Google\\Chrome\\Application\\chrome.exe"
+        ];
+      };
     };
     "hadolint.hadolint" = {
       command = "hadolint";
@@ -1905,6 +2048,18 @@ lib.mapAttrs (_: resolve) grouped
     "OpenAI.Codex" = {
       command = "codex";
       args = [ "--version" ];
+    };
+    "Obsidian.Obsidian" = {
+      type = "windowsInstalledProduct";
+      command = "Obsidian";
+      uninstallEntry = {
+        productCodes = [ "bd400747-f0c1-5638-a859-982036102edf" ];
+        displayName = "Obsidian";
+        executablePaths = [
+          "%LOCALAPPDATA%\\Programs\\Obsidian\\Obsidian.exe"
+          "%ProgramFiles%\\Obsidian\\Obsidian.exe"
+        ];
+      };
     };
     "Microsoft.WSL" = {
       command = "wsl";
@@ -1915,6 +2070,48 @@ lib.mapAttrs (_: resolve) grouped
     "Oven-sh.Bun" = {
       command = "bun";
       args = [ "--version" ];
+    };
+    "Microsoft.PowerToys" = {
+      type = "windowsInstalledProduct";
+      command = "Microsoft PowerToys";
+      uninstallEntry = {
+        displayNamePattern = "^PowerToys(?: \\(Preview\\))?$";
+        publisher = "Microsoft Corporation";
+        executablePaths = [
+          "%ProgramFiles%\\PowerToys\\PowerToys.exe"
+          "%LOCALAPPDATA%\\PowerToys\\PowerToys.exe"
+        ];
+      };
+    };
+    "Microsoft.VCRedist.2015+.x64" = {
+      type = "windowsInstalledProduct";
+      command = "Microsoft Visual C++ 2015-2022 Redistributable (x64)";
+      uninstallEntry = {
+        displayNamePattern = "^Microsoft Visual C\\+\\+ (?:2015-2022 Redistributable|v14 Redistributable) \\(x64\\)";
+        publisher = "Microsoft Corporation";
+        executablePaths = [ "%SystemRoot%\\System32\\vcruntime140.dll" ];
+      };
+    };
+    "Microsoft.VisualStudio.2022.BuildTools" = {
+      type = "visualStudioInstanceVersion";
+      command = "Microsoft.VisualStudio.Product.BuildTools";
+      productId = "Microsoft.VisualStudio.Product.BuildTools";
+      minimumVersion = "17.0";
+      requiredComponent = "Microsoft.VisualStudio.Component.VC.Tools.x86.x64";
+      compilerRelativePath = "VC\\Tools\\MSVC\\*\\bin\\Hostx64\\x64\\cl.exe";
+    };
+    "Microsoft.WindowsTerminal" = {
+      type = "appxLaunchTarget";
+      command = "Microsoft.WindowsTerminal";
+      args = [ "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App" ];
+    };
+    "StablyAI.Orca" = {
+      type = "windowsInstalledProduct";
+      command = "OrcaSlicer";
+      uninstallEntry = {
+        productCodes = [ "2b325ec9-0ed1-575f-ad70-e08307aee879" ];
+        displayName = "Orca";
+      };
     };
     "zig.zig" = {
       command = "zig";
@@ -1935,7 +2132,6 @@ lib.mapAttrs (_: resolve) grouped
   # Windows-only packages (no nix equivalent)
   windowsOnly = {
     winget = [
-      "GitHub.Copilot"
       "Microsoft.PowerToys"
       "Microsoft.VCRedist.2015+.x64"
       "Microsoft.VisualStudio.2022.BuildTools"
@@ -1946,7 +2142,7 @@ lib.mapAttrs (_: resolve) grouped
       "9PLM9XGG6VKS"
     ];
     npm = [
-      "agent-browser@0.29.1"
+      "agent-browser@0.38.1"
     ];
     pnpm = [
       "@google/gemini-cli"

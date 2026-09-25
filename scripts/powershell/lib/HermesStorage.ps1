@@ -138,8 +138,14 @@ function Get-HermesStorageLockName {
     )
 
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($VolumeName)
-    $hash = [System.Security.Cryptography.SHA256]::HashData($bytes)
-    $hex = [System.Convert]::ToHexString($hash).ToLowerInvariant()
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha256.ComputeHash($bytes)
+    }
+    finally {
+        $sha256.Dispose()
+    }
+    $hex = ([System.BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
     return 'dotfiles-hermes-storage-' + $hex.Substring(0, 20)
 }
 

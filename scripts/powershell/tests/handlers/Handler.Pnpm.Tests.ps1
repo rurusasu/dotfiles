@@ -16,6 +16,329 @@ BeforeAll {
 }
 
 Describe 'PnpmHandler' {
+    Context 'Invoke-Pnpm package install timeout routing' {
+        BeforeEach {
+            $script:originalInstallTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'pnpm.cmd' }
+        }
+        AfterEach {
+            if ($null -eq $script:originalInstallTimeout) {
+                Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+            }
+            else {
+                $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $script:originalInstallTimeout
+            }
+        }
+
+        It 'should invoke global adds through the shared 900-second timeout by default' {
+            Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+            Mock Get-Command { return @{ Source = 'C:\tools\pnpm.cmd' } } -ParameterFilter { $Name -eq 'pnpm.cmd' }
+            Mock Invoke-ExternalCommandWithTimeout { $global:LASTEXITCODE = 0; return 'add ok' }
+            Mock Invoke-NativeCommand { throw 'global add must use the timeout wrapper' }
+
+            $result = Invoke-Pnpm -Arguments @('add', '-g', 'example-package')
+
+            $result | Should -Contain 'add ok'
+            Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+                $Command -eq 'C:\tools\pnpm.cmd' -and $Arguments -contains 'example-package' -and $TimeoutSeconds -eq 900
+            }
+            Should -Invoke Invoke-NativeCommand -Times 0
+        }
+
+        It 'should honor DOTFILES_INSTALL_TIMEOUT_SECONDS for global adds' {
+            $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = '73'
+            Mock Invoke-ExternalCommandWithTimeout { $global:LASTEXITCODE = 0; return 'add ok' }
+            Mock Invoke-NativeCommand { throw 'global add must use the timeout wrapper' }
+
+            $result = Invoke-Pnpm -Arguments @('add', '--global', 'example-package')
+
+            $result | Should -Contain 'add ok'
+            Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
+                $Command -eq 'pnpm' -and $TimeoutSeconds -eq 73
+            }
+            Should -Invoke Invoke-NativeCommand -Times 0
+        }
+
+        It 'should leave version, list, and root commands on the native path' {
+            Mock Invoke-ExternalCommandWithTimeout { throw 'non-install pnpm commands must not be timed' }
+            Mock Invoke-NativeCommand { $global:LASTEXITCODE = 0; return 'native pnpm' }
+
+            Invoke-Pnpm -Arguments @('--version') | Should -Contain 'native pnpm'
+            Invoke-Pnpm -Arguments @('list', '-g') | Should -Contain 'native pnpm'
+            Invoke-Pnpm -Arguments @('root', '-g') | Should -Contain 'native pnpm'
+
+            Should -Invoke Invoke-ExternalCommandWithTimeout -Times 0
+            Should -Invoke Invoke-NativeCommand -Times 3
+        }
+    }
+
+    Context 'Apply - pnpm bootstrap diagnostics' {
+        BeforeEach {
+            $script:loggedOutput = @()
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq 'npm') { return @{ Source = 'C:\npm.cmd' } }
+                return $null
+            }
+            Mock Invoke-Npm {
+                $global:LASTEXITCODE = 1
+                return 'npm ERR! ECONNRESET registry connection closed'
+            }
+            Mock Write-Host { $script:loggedOutput += [string]$Object }
+        }
+
+        It 'should include npm bootstrap output and exit code when pnpm setup fails' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            ($script:loggedOutput -join "`n") | Should -Match 'npm ERR! ECONNRESET registry connection closed'
+            ($script:loggedOutput -join "`n") | Should -Match 'npm install -g pnpm@latest exited with code 1'
+        }
+    }
+
+    Context 'TryBootstrapPnpm - npm global prefix' {
+        It 'should resolve npm commands that expose Path without a Source property' {
+            $script:originalProcessPath = $env:PATH
+            $script:originalPnpmHome = $env:PNPM_HOME
+            $script:npmGlobalPrefix = Join-Path $TestDrive 'npm-global-path-only'
+            $script:npmRuntimeDirectory = Join-Path $TestDrive 'npm-node-runtime-path-only'
+            $script:npmPath = Join-Path $script:npmRuntimeDirectory 'npm.cmd'
+            New-Item -Path (Join-Path $script:npmGlobalPrefix 'pnpm.cmd') -ItemType File -Force | Out-Null
+            New-Item -Path $script:npmPath -ItemType File -Force | Out-Null
+            New-Item -Path (Join-Path $script:npmRuntimeDirectory 'node.exe') -ItemType File -Force | Out-Null
+            $env:PNPM_HOME = $null
+            $env:PATH = 'C:\Windows\System32'
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq 'npm') { return [pscustomobject]@{ Path = $script:npmPath } }
+                return $null
+            }
+            Mock Invoke-Npm {
+                param($Arguments)
+                if ($Arguments -contains 'prefix') { $global:LASTEXITCODE = 0; return $script:npmGlobalPrefix }
+                $global:LASTEXITCODE = 0
+                return 'added pnpm'
+            }
+            Mock Invoke-NativeCommand { $global:LASTEXITCODE = 0; return '10.0.0' }
+            Mock Get-UserEnvironmentPath { return '' }
+            Mock Set-UserEnvironmentPath { }
+
+            try {
+                Set-StrictMode -Version Latest
+                $result = $handler.TryBootstrapPnpm()
+
+                $result | Should -BeTrue
+                $handler.BootstrapPnpmDirectory | Should -Be $script:npmGlobalPrefix
+            }
+            finally {
+                Set-StrictMode -Off
+                $env:PATH = $script:originalProcessPath
+                $env:PNPM_HOME = $script:originalPnpmHome
+            }
+        }
+
+        It 'should add npm global prefix to PATH before checking the installed pnpm shim' {
+            $script:originalProcessPath = $env:PATH
+            $script:originalPnpmHome = $env:PNPM_HOME
+            $script:npmGlobalPrefix = Join-Path $TestDrive 'npm-global'
+            New-Item -Path (Join-Path $script:npmGlobalPrefix 'pnpm.cmd') -ItemType File -Force | Out-Null
+            $script:npmRuntimeDirectory = Join-Path $TestDrive 'npm-node-runtime'
+            $script:npmPath = Join-Path $script:npmRuntimeDirectory 'npm.cmd'
+            New-Item -Path $script:npmPath -ItemType File -Force | Out-Null
+            New-Item -Path (Join-Path $script:npmRuntimeDirectory 'node.exe') -ItemType File -Force | Out-Null
+            $env:PNPM_HOME = $null
+            $env:PATH = 'C:\Windows\System32'
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq 'npm') { return @{ Source = $script:npmPath } }
+                return $null
+            }
+            Mock Invoke-Npm {
+                param($Arguments)
+                $env:PATH -split ';' | Should -Contain $script:npmRuntimeDirectory
+                if ($Arguments -contains 'prefix') {
+                    $global:LASTEXITCODE = 0
+                    return $script:npmGlobalPrefix
+                }
+                $global:LASTEXITCODE = 0
+                return 'added pnpm'
+            }
+            Mock Invoke-NativeCommand {
+                param($Command, $Arguments)
+                $Command | Should -Be (Join-Path $script:npmGlobalPrefix 'pnpm.cmd')
+                $Arguments | Should -Be @('--version')
+                $global:LASTEXITCODE = 0
+                return '10.0.0'
+            }
+            Mock Get-UserEnvironmentPath { return '' }
+            Mock Set-UserEnvironmentPath { }
+
+            try {
+                $result = $handler.TryBootstrapPnpm()
+
+                $result | Should -BeTrue
+                ($env:PATH -split ';') | Should -Contain $script:npmGlobalPrefix
+            }
+            finally {
+                $env:PATH = $script:originalProcessPath
+                $env:PNPM_HOME = $script:originalPnpmHome
+            }
+        }
+
+        It 'should verify the pnpm shim installed by npm even when another pnpm resolves first' {
+            $script:originalProcessPath = $env:PATH
+            $script:originalPnpmHome = $env:PNPM_HOME
+            $script:npmGlobalPrefix = Join-Path $TestDrive 'npm-prefix-with-new-pnpm'
+            $script:pnpmShimPath = Join-Path $script:npmGlobalPrefix 'pnpm.cmd'
+            New-Item -Path $script:pnpmShimPath -ItemType File -Force | Out-Null
+            $env:PNPM_HOME = $null
+            $script:nativeCalls = @()
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq 'npm') { return @{ Source = 'C:\node-install\npm.cmd' } }
+                if ($Name -eq 'pnpm') { return @{ Source = 'C:\old-pnpm\pnpm.cmd' } }
+                return $null
+            }
+            Mock Invoke-Npm {
+                param($Arguments)
+                if ($Arguments -contains 'prefix') {
+                    $global:LASTEXITCODE = 0
+                    return $script:npmGlobalPrefix
+                }
+                $global:LASTEXITCODE = 0
+                return 'added pnpm@latest'
+            }
+            Mock Invoke-Pnpm { throw 'the pnpm on PATH must not be used to validate the npm install' }
+            Mock Invoke-NativeCommand {
+                param($Command, $Arguments)
+                $script:nativeCalls += , ([pscustomobject]@{ Command = $Command; Arguments = @($Arguments) })
+                $global:LASTEXITCODE = 0
+                return '10.0.0'
+            }
+            Mock Get-UserEnvironmentPath { return '' }
+            Mock Set-UserEnvironmentPath { }
+
+            try {
+                $result = $handler.TryBootstrapPnpm()
+
+                $result | Should -BeTrue
+                $script:nativeCalls | Should -HaveCount 1
+                $script:nativeCalls[0].Command | Should -Be $script:pnpmShimPath
+                $script:nativeCalls[0].Arguments | Should -Be @('--version')
+                ($env:PATH -split ';')[0] | Should -Be $script:npmGlobalPrefix
+            }
+            finally {
+                $env:PATH = $script:originalProcessPath
+                $env:PNPM_HOME = $script:originalPnpmHome
+            }
+        }
+    }
+
+    Context 'TryBootstrapPnpm - corepack Node runtime path' {
+        It 'should add the Node directory beside corepack to PATH and activate pnpm@latest' {
+            $script:originalProcessPath = $env:PATH
+            $script:originalPnpmHome = $env:PNPM_HOME
+            $script:corepackDirectory = Join-Path $TestDrive 'corepack-node-install'
+            $script:corepackPath = Join-Path $script:corepackDirectory 'corepack.cmd'
+            $script:corepackPnpmPath = Join-Path $script:corepackDirectory 'pnpm.cmd'
+            New-Item -Path $script:corepackPath -ItemType File -Force | Out-Null
+            New-Item -Path (Join-Path $script:corepackDirectory 'node.exe') -ItemType File -Force | Out-Null
+            New-Item -Path $script:corepackPnpmPath -ItemType File -Force | Out-Null
+            $env:PNPM_HOME = $null
+            $env:PATH = 'C:\Windows\System32'
+            $script:corepackCalls = @()
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq 'corepack') { return @{ Source = $script:corepackPath } }
+                return $null
+            }
+            Mock Invoke-Corepack {
+                param($Arguments)
+                $script:corepackCalls += , @($Arguments)
+                $env:PATH -split ';' | Should -Contain $script:corepackDirectory
+                $global:LASTEXITCODE = 0
+                return 'corepack ok'
+            }
+            Mock Invoke-NativeCommand {
+                param($Command, $Arguments)
+                $Command | Should -Be $script:corepackPnpmPath
+                $Arguments | Should -Be @('--version')
+                $global:LASTEXITCODE = 0
+                return '10.0.0'
+            }
+
+            try {
+                $result = $handler.TryBootstrapPnpm()
+
+                $result | Should -BeTrue
+                $script:corepackCalls | Should -HaveCount 2
+                $script:corepackCalls[0] | Should -Be @('enable')
+                $script:corepackCalls[1] | Should -Be @('prepare', 'pnpm@latest', '--activate')
+            }
+            finally {
+                $env:PATH = $script:originalProcessPath
+                $env:PNPM_HOME = $script:originalPnpmHome
+            }
+        }
+    }
+
+    Context 'Apply - existing pnpm is unusable' {
+        It 'should bootstrap through npm when the resolved pnpm executable fails its version check' {
+            $script:originalPnpmHome = $env:PNPM_HOME
+            $env:PNPM_HOME = Join-Path $TestDrive 'pnpm-home'
+            $script:npmGlobalPrefix = Join-Path $TestDrive 'npm-prefix-for-broken-pnpm'
+            $script:brokenPnpmPath = Join-Path $TestDrive 'broken-pnpm\pnpm.cmd'
+            New-Item -Path $script:brokenPnpmPath -ItemType File -Force | Out-Null
+            New-Item -Path (Join-Path $script:npmGlobalPrefix 'pnpm.cmd') -ItemType File -Force | Out-Null
+            $script:pnpmVersionChecks = 0
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq 'pnpm') { return @{ Source = $script:brokenPnpmPath } }
+                if ($Name -eq 'npm') { return @{ Source = 'C:\node-install\npm.cmd' } }
+                return $null
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains '--version') {
+                    $script:pnpmVersionChecks++
+                    if ($script:pnpmVersionChecks -eq 1) {
+                        $global:LASTEXITCODE = 1
+                        return 'old pnpm failed'
+                    }
+                    $global:LASTEXITCODE = 0
+                    return '10.0.0'
+                }
+                $global:LASTEXITCODE = 0
+                return ''
+            }
+            Mock Invoke-Npm {
+                param($Arguments)
+                if ($Arguments -contains 'prefix') {
+                    $global:LASTEXITCODE = 0
+                    return $script:npmGlobalPrefix
+                }
+                $global:LASTEXITCODE = 0
+                return 'added pnpm@latest'
+            }
+            Mock Invoke-NativeCommand { $global:LASTEXITCODE = 0; return '10.0.0' }
+            Mock Get-JsonContent { return @{ globalPackages = @() } }
+            Mock Get-UserEnvironmentPath { return '' }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+
+            try {
+                $result = $handler.Apply($ctx)
+
+                $result.Success | Should -BeTrue
+                Should -Invoke Invoke-Npm -Times 1 -ParameterFilter { $Arguments -contains 'pnpm@latest' }
+                ($env:PATH -split ';')[0] | Should -Be $script:npmGlobalPrefix
+            }
+            finally {
+                $env:PNPM_HOME = $script:originalPnpmHome
+            }
+        }
+    }
+
     BeforeEach {
         $script:handler = [PnpmHandler]::new()
         $script:ctx = [SetupContext]::new($script:projectRoot)
@@ -37,21 +360,27 @@ Describe 'PnpmHandler' {
         }
     }
 
-    Context 'CanApply - pnpm not found, bootstrap fails' {
+    Context 'CanApply - pnpm not found, npm is available' {
         BeforeEach {
-            Mock Get-ExternalCommand { return $null }
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq "npm") { return @{ Source = "C:\npm.cmd" } }
+                return $null
+            }
             Mock Invoke-Corepack { $global:LASTEXITCODE = 1 }
             Mock Invoke-Npm { $global:LASTEXITCODE = 1 }
             Mock Write-Host { }
         }
 
-        It 'should return false' {
+        It 'should return true without bootstrapping' {
             $result = $handler.CanApply($ctx)
-            $result | Should -Be $false
+            $result | Should -Be $true
+            Should -Invoke Invoke-Corepack -Times 0
+            Should -Invoke Invoke-Npm -Times 0
         }
     }
 
-    Context 'CanApply - pnpm not found, corepack bootstrap succeeds' {
+    Context 'CanApply - pnpm not found, corepack is available' {
         BeforeEach {
             $script:callCount = 0
             Mock Get-ExternalCommand {
@@ -74,13 +403,14 @@ Describe 'PnpmHandler' {
             Mock Write-Host { }
         }
 
-        It 'should return true' {
+        It 'should return true without bootstrapping' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $true
+            Should -Invoke Invoke-Corepack -Times 0
         }
     }
 
-    Context 'CanApply - pnpm not found, npm bootstrap succeeds' {
+    Context 'CanApply - pnpm not found, npm is available' {
         BeforeEach {
             Mock Get-ExternalCommand {
                 param($Name)
@@ -98,13 +428,14 @@ Describe 'PnpmHandler' {
             Mock Write-Host { }
         }
 
-        It 'should return true' {
+        It 'should return true without invoking installers' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $true
+            Should -Invoke Invoke-Npm -Times 0
         }
     }
 
-    Context 'CanApply - npm bootstrap is preferred when both installers exist' {
+    Context 'CanApply - npm and corepack are available' {
         BeforeEach {
             Mock Get-ExternalCommand {
                 param($Name)
@@ -123,10 +454,10 @@ Describe 'PnpmHandler' {
             Mock Write-Host { }
         }
 
-        It 'should return true without invoking corepack' {
+        It 'should return true without invoking installers' {
             $result = $handler.CanApply($ctx)
             $result | Should -Be $true
-            Should -Invoke Invoke-Npm -Times 1 -ParameterFilter { $Arguments -contains "pnpm@latest" }
+            Should -Invoke Invoke-Npm -Times 0
             Should -Invoke Invoke-Corepack -Times 0
         }
     }
@@ -706,7 +1037,7 @@ Describe 'PnpmHandler' {
             } -Times 2
         }
 
-        It 'should install every configured Windows pnpm tool without timeout' {
+        It 'should install every configured Windows pnpm tool' {
             $script:addCalls = @()
             Mock Get-JsonContent {
                 return @{
@@ -716,7 +1047,7 @@ Describe 'PnpmHandler' {
                         @{ name = "typescript-language-server" },
                         @{
                             name        = "@google/gemini-cli"
-                            installArgs = @("--allow-build=@github/keytar", "--allow-build=node-pty")
+                            installArgs = @("--allow-build=@github/keytar")
                         }
                     )
                 }
@@ -755,7 +1086,7 @@ Describe 'PnpmHandler' {
             }
             $geminiCall = $script:addCalls | Where-Object { $_ -contains "@google/gemini-cli" } | Select-Object -First 1
             $geminiCall | Should -Contain "--allow-build=@github/keytar"
-            $geminiCall | Should -Contain "--allow-build=node-pty"
+            $geminiCall | Should -Not -Contain "--allow-build=node-pty"
         }
     }
 
@@ -890,9 +1221,9 @@ Describe 'PnpmHandler' {
             $script:origProfile = $env:USERPROFILE
             $env:USERPROFILE = $TestDrive
             $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
-            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\dist"
+            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\bundle"
             New-Item $entryDir -ItemType Directory -Force | Out-Null
-            Set-Content -Path (Join-Path $entryDir "index.js") -Value "console.log('ok')" -NoNewline
+            Set-Content -Path (Join-Path $entryDir "gemini.js") -Value "console.log('ok')" -NoNewline
             Mock Invoke-Pnpm {
                 param($Arguments)
                 if ($Arguments -contains "root") {
@@ -926,9 +1257,9 @@ Describe 'PnpmHandler' {
             $script:origProfile = $env:USERPROFILE
             $env:USERPROFILE = $TestDrive
             $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
-            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\dist"
+            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\bundle"
             New-Item $entryDir -ItemType Directory -Force | Out-Null
-            Set-Content -Path (Join-Path $entryDir "index.js") -Value "console.log('ok')" -NoNewline
+            Set-Content -Path (Join-Path $entryDir "gemini.js") -Value "console.log('ok')" -NoNewline
             Mock Invoke-Pnpm {
                 param($Arguments)
                 if ($Arguments -contains "root") {
@@ -957,6 +1288,7 @@ Describe 'PnpmHandler' {
             $content = Get-Content $shimPath -Raw
             $content | Should -Match 'GEMINI_JS'
             $content | Should -Match 'pnpm root -g'
+            $content | Should -Match '@google\\gemini-cli\\bundle\\gemini.js'
             $content | Should -Match 'node "%GEMINI_JS%" %\*'
             Should -Invoke Set-UserEnvironmentPath -Times 1
         }
@@ -967,9 +1299,9 @@ Describe 'PnpmHandler' {
             $script:origProfile = $env:USERPROFILE
             $env:USERPROFILE = $TestDrive
             $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
-            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\dist"
+            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\bundle"
             New-Item $entryDir -ItemType Directory -Force | Out-Null
-            Set-Content -Path (Join-Path $entryDir "index.js") -Value "console.log('ok')" -NoNewline
+            Set-Content -Path (Join-Path $entryDir "gemini.js") -Value "console.log('ok')" -NoNewline
             Mock Invoke-Pnpm { $global:LASTEXITCODE = 0; return "" }
             Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "broken" }
             Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
@@ -1080,7 +1412,7 @@ Describe 'PnpmHandler' {
                 return @{
                     globalPackages = @(
                         @{
-                            name               = "playwright@1.61.0"
+                            name               = "playwright@1.63.0"
                             postInstallCommand = @{
                                 command        = "playwright"
                                 args           = @("install", "chromium")
@@ -1152,7 +1484,7 @@ Describe 'PnpmHandler' {
                 return @{
                     globalPackages = @(
                         @{
-                            name               = "playwright@1.61.0"
+                            name               = "playwright@1.63.0"
                             postInstallCommand = @{
                                 command        = "playwright"
                                 args           = @("install", "chromium")
@@ -1341,14 +1673,27 @@ Describe 'PnpmHandler' {
         AfterEach { $env:PATH = $script:origPath }
 
         It 'should verify stdio tools by command existence without executing them' {
-            $result = $handler.Apply($ctx)
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq "pnpm") { return @{ Source = "C:\pnpm.cmd" } }
+                if ($Name -eq "claude-agent-acp") { return [pscustomobject]@{ Path = (Join-Path $script:pnpmBin "claude-agent-acp.CMD") } }
+                return $null
+            }
 
-            $result.Success | Should -Be $true
-            $result.Message | Should -Match "1 個インストール"
-            Should -Invoke Invoke-VerifyCommand -Times 0
-            Should -Invoke Write-Host -ParameterFilter {
-                $ForegroundColor -eq "Gray" -and ([string]$Object) -match "検証中: command -v claude-agent-acp"
-            } -Times 1
+            Set-StrictMode -Version Latest
+            try {
+                $result = $handler.Apply($ctx)
+
+                $result.Success | Should -Be $true
+                $result.Message | Should -Match "1 個インストール"
+                Should -Invoke Invoke-VerifyCommand -Times 0
+                Should -Invoke Write-Host -ParameterFilter {
+                    $ForegroundColor -eq "Gray" -and ([string]$Object) -match "検証中: command -v claude-agent-acp"
+                } -Times 1
+            }
+            finally {
+                Set-StrictMode -Off
+            }
         }
 
         It 'should fail when commandExists target is missing' {
@@ -1408,6 +1753,291 @@ Describe 'PnpmHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match "1 個インストール"
             Should -Invoke Invoke-VerifyCommand -Times 0
+        }
+    }
+
+    Context 'Apply - Windows pnpm manifest contracts' {
+        It 'should verify Gemini by executing the installed CLI without probing an optional module' {
+            $script:pnpmRoot = Join-Path $TestDrive 'pnpm-module-root'
+            New-Item -Path (Join-Path $script:pnpmRoot '@google\gemini-cli') -ItemType Directory -Force | Out-Null
+            $script:originalNodePath = $env:NODE_PATH
+            $env:NODE_PATH = 'prior-node-modules'
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{
+                            name          = '@google/gemini-cli'
+                            verifyCommand = @{
+                                args    = @('--version')
+                                command = 'gemini'
+                            }
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains 'root') {
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmRoot
+                }
+                $global:LASTEXITCODE = 0
+                return 'installed'
+            }
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $script:pnpmVerifyCalls += , ([PSCustomObject]@{
+                        Command   = $Command
+                        Arguments = @($Arguments)
+                        NodePath  = $env:NODE_PATH
+                        Timeout   = $TimeoutSeconds
+                    })
+                $global:LASTEXITCODE = 0
+                return 'module loaded'
+            }
+
+            try {
+                $result = $handler.Apply($ctx)
+
+                $result.Success | Should -BeTrue
+                $result.Message | Should -Match '1 個インストール'
+                $script:pnpmVerifyCalls | Should -HaveCount 2
+                foreach ($call in $script:pnpmVerifyCalls) {
+                    $call.Command | Should -Be 'gemini'
+                    $call.Arguments | Should -Be @('--version')
+                }
+                $env:NODE_PATH | Should -Be 'prior-node-modules'
+            }
+            finally {
+                $env:NODE_PATH = $script:originalNodePath
+            }
+        }
+
+        BeforeEach {
+            $script:originalProcessPath = $env:PATH
+            $script:originalPnpmHome = $env:PNPM_HOME
+            $script:pnpmBin = Join-Path $TestDrive "manifest-pnpm-bin"
+            $script:pnpmRoot = Join-Path $TestDrive ("manifest-pnpm-root-" + [guid]::NewGuid().ToString("N"))
+            New-Item $script:pnpmRoot -ItemType Directory -Force | Out-Null
+            $env:PNPM_HOME = $script:pnpmBin
+            $script:pnpmAddCalls = @()
+            $script:pnpmVerifyCalls = @()
+            $script:verifyExitCodeByCommand = @{}
+
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -eq "pnpm") { return @{ Source = "C:\pnpm.cmd" } }
+                return $null
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains "root") {
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmRoot
+                }
+                if ($Arguments -contains "add") {
+                    $script:pnpmAddCalls += , @($Arguments)
+                }
+                $global:LASTEXITCODE = 0
+                return "installed"
+            }
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $key = (@($Command) + @($Arguments)) -join " "
+                $script:pnpmVerifyCalls += , ([PSCustomObject]@{
+                        Command        = $Command
+                        Arguments      = @($Arguments)
+                        TimeoutSeconds = $TimeoutSeconds
+                    })
+                if ($script:verifyExitCodeByCommand.ContainsKey($key)) {
+                    $global:LASTEXITCODE = $script:verifyExitCodeByCommand[$key]
+                }
+                else {
+                    $global:LASTEXITCODE = 0
+                }
+                return "command output"
+            }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+        AfterEach {
+            $env:PATH = $script:originalProcessPath
+            $env:PNPM_HOME = $script:originalPnpmHome
+        }
+
+        It 'should install and verify every manifest package, including feature-gated entries, with declared options' {
+            $expected = @(
+                @{ Spec = "bash-language-server"; Command = "bash-language-server"; Arguments = @("--version") }
+                @{ Spec = "yaml-language-server"; Command = "yaml-language-server"; Arguments = @("--version") }
+                @{ Spec = "@prisma/language-server"; Command = "prisma-language-server"; Arguments = @("--version") }
+                @{ Spec = "@deepseek-ai/dsh"; Command = "dsh"; Arguments = @("--version") }
+                @{ Spec = "@playwright/cli@0.1.21"; Command = "playwright-cli"; Arguments = @("--version") }
+                @{ Spec = "playwright@1.63.0"; Command = "playwright"; Arguments = @("--version") }
+                @{ Spec = "typescript-language-server"; Command = "typescript-language-server"; Arguments = @("--version") }
+                @{ Spec = "typescript"; Command = "tsc"; Arguments = @("--version") }
+                @{ Spec = "@google/gemini-cli"; Command = "gemini"; Arguments = @("--version") }
+            )
+            $manifest = Get-JsonContent -Path (Join-Path $script:projectRoot "windows\pnpm\packages.json")
+            (@($manifest.globalPackages | ForEach-Object { $_.name } | Sort-Object) -join "|") |
+                Should -Be ((@($expected | ForEach-Object { $_.Spec } | Sort-Object) -join "|"))
+
+            $ctx.Options["WithHermes"] = $true
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:pnpmAddCalls.Count | Should -Be 9
+            (@($script:pnpmAddCalls | ForEach-Object { $_[-1] } | Sort-Object) -join "|") |
+                Should -Be ((@($expected | ForEach-Object { $_.Spec } | Sort-Object) -join "|"))
+            foreach ($entry in $expected) {
+                $script:pnpmVerifyCalls | Where-Object {
+                    $_.Command -eq $entry.Command -and ($_.Arguments -join "|") -eq ($entry.Arguments -join "|")
+                } | Should -HaveCount 1
+            }
+            $script:pnpmVerifyCalls | Where-Object {
+                $_.Command -eq "playwright" -and $_.Arguments -contains "install"
+            } | Should -HaveCount 1
+            ($script:pnpmVerifyCalls | Where-Object {
+                $_.Command -eq "playwright" -and $_.Arguments -contains "install"
+            }).TimeoutSeconds | Should -Be 600
+            $script:pnpmVerifyCalls | Where-Object {
+                $_.Command -ne "playwright" -or $_.Arguments -notcontains "install"
+            } | ForEach-Object { $_.TimeoutSeconds | Should -Be 30 }
+
+            $dshCall = $script:pnpmAddCalls | Where-Object { $_ -contains "@deepseek-ai/dsh" } | Select-Object -First 1
+            $dshCall | Should -Contain "--allow-build=@deepseek-ai/dsh-subprocess-local"
+            $dshCall | Should -Contain "--allow-build=@google/genai"
+            $dshCall | Should -Contain "--allow-build=koffi"
+            $dshCall | Should -Contain "--allow-build=node-pty"
+            $dshCall | Should -Contain "--allow-build=protobufjs"
+            $geminiCall = $script:pnpmAddCalls | Where-Object { $_ -contains "@google/gemini-cli" } | Select-Object -First 1
+            $geminiCall | Should -Contain "--allow-build=@github/keytar"
+            $geminiCall | Should -Not -Contain "--allow-build=node-pty"
+            $geminiEntry = $manifest.globalPackages | Where-Object name -EQ "@google/gemini-cli"
+            $geminiEntry.verifyCommand.command | Should -Be "gemini"
+            $geminiEntry.verifyCommand.args | Should -Be @("--version")
+            $geminiEntry.verifyCommand.type | Should -BeNullOrEmpty
+            $geminiEntry.verifyCommand.moduleName | Should -BeNullOrEmpty
+            $geminiEntry.verifyCommand.moduleFromPackage | Should -BeNullOrEmpty
+            $geminiEntry.verifyCommand.moduleSmokeTest | Should -BeNullOrEmpty
+        }
+
+        It 'should detect every installed manifest package and still refresh each declared spec' {
+            $installedPackagePaths = @(
+                "bash-language-server"
+                "yaml-language-server"
+                "@prisma\language-server"
+                "@deepseek-ai\dsh"
+                "@playwright\cli"
+                "playwright"
+                "typescript-language-server"
+                "typescript"
+                "@google\gemini-cli"
+            )
+            foreach ($relativePath in $installedPackagePaths) {
+                New-Item -Path (Join-Path $script:pnpmRoot $relativePath) -ItemType Directory -Force | Out-Null
+            }
+            $ctx.Options["WithHermes"] = $true
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:pnpmAddCalls.Count | Should -Be 9
+            foreach ($command in @(
+                    "bash-language-server", "yaml-language-server", "prisma-language-server",
+                    "dsh", "playwright-cli", "playwright", "typescript-language-server", "tsc", "gemini"
+                )) {
+                $script:pnpmVerifyCalls | Where-Object {
+                    $_.Command -eq $command -and ($_.Arguments -join "|") -eq "--version"
+                } | Should -HaveCount 2
+            }
+        }
+
+        It 'should omit both Hermes packages when WithHermes is disabled' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:pnpmAddCalls.Count | Should -Be 7
+            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Not -Contain "@playwright/cli@0.1.21"
+            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Not -Contain "playwright@1.63.0"
+            $script:pnpmVerifyCalls | Where-Object { $_.Command -in @("playwright-cli", "playwright") } | Should -BeNullOrEmpty
+        }
+
+        It 'should classify a manifest package verification timeout as a verification failure' {
+            $script:verifyExitCodeByCommand["bash-language-server --version"] = 124
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match "1 個検証失敗"
+            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "bash-language-server"
+        }
+
+        It 'should classify the manifest Playwright post-install failure and stop before version verification' {
+            $ctx.Options["WithHermes"] = $true
+            $script:verifyExitCodeByCommand["playwright install chromium"] = 1
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match "1 個post-install失敗"
+            $script:pnpmVerifyCalls | Where-Object {
+                $_.Command -eq "playwright" -and $_.Arguments -contains "--version"
+            } | Should -BeNullOrEmpty
+        }
+
+        It 'should fail Gemini verification when gemini --version exits nonzero' {
+            New-Item -Path (Join-Path $script:pnpmRoot '@google\gemini-cli') -ItemType Directory -Force | Out-Null
+            $script:originalNodePath = $env:NODE_PATH
+            $env:NODE_PATH = 'prior-node-modules'
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{
+                            name          = '@google/gemini-cli'
+                            verifyCommand = @{
+                                args    = @('--version')
+                                command = 'gemini'
+                            }
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains 'root') {
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmRoot
+                }
+                $global:LASTEXITCODE = 0
+                return 'installed'
+            }
+            Mock Invoke-VerifyCommand {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $script:pnpmVerifyCalls += , ([PSCustomObject]@{
+                        Command   = $Command
+                        Arguments = @($Arguments)
+                        NodePath  = $env:NODE_PATH
+                        Timeout   = $TimeoutSeconds
+                    })
+                $global:LASTEXITCODE = 1
+                return 'Gemini CLI failed'
+            }
+
+            try {
+                $result = $handler.Apply($ctx)
+
+                $result.Success | Should -BeFalse
+                $result.Message | Should -Match '1 個検証失敗'
+                $script:pnpmVerifyCalls | Should -HaveCount 2
+                foreach ($call in $script:pnpmVerifyCalls) {
+                    $call.Command | Should -Be 'gemini'
+                    $call.Arguments | Should -Be @('--version')
+                }
+            }
+            finally {
+                $env:NODE_PATH = $script:originalNodePath
+            }
         }
     }
 }

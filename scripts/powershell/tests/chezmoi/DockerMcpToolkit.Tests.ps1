@@ -20,9 +20,7 @@ BeforeAll {
     $script:toolkitClients = @(
         "codex",
         "cursor",
-        "gemini",
-        "vscode",
-        "zed"
+        "gemini"
     )
 
     $script:removedServers = @(
@@ -37,11 +35,7 @@ BeforeAll {
         "dot_codex/config.toml.tmpl",
         "dot_cursor/cli-config.json.tmpl",
         "dot_gemini/settings.json.tmpl",
-        "dot_codeium/windsurf/mcp_config.json.tmpl",
-        ".chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.ps1.tmpl",
-        ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.ps1.tmpl",
-        ".chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.sh.tmpl",
-        ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.sh.tmpl"
+        "dot_codeium/windsurf/mcp_config.json.tmpl"
     ) | ForEach-Object { Join-Path $script:chezmoiRoot $_ }
 }
 
@@ -69,7 +63,7 @@ Describe 'Docker MCP Toolkit shared profile' {
     It 'keeps Hindsight as a direct local HTTP server' {
         $script:mcpData | Should -Match '(?m)^\s+- name:\s*hindsight\s*$'
         $script:mcpData | Should -Match 'http://127\.0\.0\.1:8888/mcp/codex-shared/'
-        $script:mcpData | Should -Match '(?ms)- name:\s*hindsight.*?supports:\s*\n(?:\s+- \w+\s*\n){6}'
+        $script:mcpData | Should -Match '(?ms)- name:\s*hindsight.*?supports:\s*\n(?:\s+- \w+\s*\n){4}'
     }
 }
 
@@ -86,42 +80,6 @@ Describe 'MCP Docker gateway client templates' {
         }
     }
 
-    It 'keeps Unix MCP script shebangs at the first rendered byte' {
-        foreach ($name in @(
-                '.chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.sh.tmpl',
-                '.chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.sh.tmpl'
-            )) {
-            $content = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot $name) -Raw
-            $content | Should -Match '^\{\{- if ne \.chezmoi\.os "windows" -\}\}\r?\n#!/usr/bin/env bash'
-        }
-    }
-
-    It 'preserves Zed URL strings while removing legacy managed servers' {
-        $zedUnixPath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.sh.tmpl'
-        $zedWindowsPath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.ps1.tmpl'
-        $zedUnix = Get-Content -LiteralPath $zedUnixPath -Raw
-        $zedWindows = Get-Content -LiteralPath $zedWindowsPath -Raw
-
-        $zedUnix | Should -Match 'legacy_managed_servers'
-        $zedUnix | Should -Match 'context_servers\.pop'
-        $zedWindows | Should -Match 'Remove-JsonComments'
-        $zedWindows | Should -Match 'legacyManagedServerNames'
-        $zedWindows | Should -Match 'context_servers\.PSObject\.Properties\.Remove'
-    }
-
-    It 'writes VS Code MCP settings to the macOS support directories' {
-        $vscodeUnixPath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.sh.tmpl'
-        $vscodeUnix = Get-Content -LiteralPath $vscodeUnixPath -Raw
-
-        $vscodeUnix | Should -Match 'Library.*Application Support.*Code'
-    }
-
-    It 'keeps direct Zed servers alongside the Docker gateway' {
-        $zedUnixPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.sh.tmpl"
-        $zedUnix = Get-Content -LiteralPath $zedUnixPath -Raw
-        $zedUnix | Should -Match 'range \.mcp_servers'
-        $zedUnix | Should -Match 'has "zed" \.supports'
-    }
 }
 
 Describe 'MCP Toolkit convergence adapters' {

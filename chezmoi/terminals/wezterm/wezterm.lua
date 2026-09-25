@@ -55,13 +55,13 @@ config.term = "wezterm"
 
 config.automatically_reload_config = true
 
--- Color scheme: Catppuccin Mocha (shared with Windows Terminal and Neovim).
+-- Color scheme: shared with Windows Terminal and Neovim.
 -- The scheme defines its own cursor/selection colors so no override is needed.
-config.color_scheme = "Catppuccin Mocha"
+config.color_scheme = "{{ .appearance.theme }}"
 
 -- Font settings
-config.font = wezterm.font("UDEV Gothic NF")
-config.font_size = 10.0
+config.font = wezterm.font("{{ .appearance.font_family }}")
+config.font_size = tonumber("{{ .appearance.font_size }}")
 config.line_height = 1.0
 config.cell_width = 1.0
 

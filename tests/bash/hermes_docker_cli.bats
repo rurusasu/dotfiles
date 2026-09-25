@@ -46,6 +46,21 @@ write_stub() {
 	[ "$(<"$DOCKER_CAPTURE")" = "compose -f $compose_file exec -T hermes /opt/hermes/bin/hermes --version" ]
 }
 
+@test "Docker CLI honors an explicit Compose plugin override" {
+	compose_file="$BATS_TEST_TMPDIR/custom-compose.yml"
+	plugin="$STUB_BIN/docker-compose-plugin"
+	touch "$compose_file"
+	write_stub docker-compose-plugin '
+printf "%s\n" "$*" >"$DOCKER_CAPTURE"
+'
+
+	run env HERMES_COMPOSE_FILE="$compose_file" HERMES_DOCKER_COMPOSE_PLUGIN="$plugin" \
+		"$REPO_ROOT/scripts/sh/hermes-docker.sh" --version
+
+	[ "$status" -eq 0 ]
+	[ "$(<"$DOCKER_CAPTURE")" = "-f $compose_file exec -T hermes /opt/hermes/bin/hermes --version" ]
+}
+
 @test "Docker CLI reports how to configure a missing compose file" {
 	rm "$TEST_HOME/.dotfiles/docker/hermes-service/compose.yml"
 	cd "$TEST_HOME"

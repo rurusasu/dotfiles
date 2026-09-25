@@ -52,11 +52,10 @@ tasks:
       - "python3 scripts/python/update_darwin_packages.py --write --promote --output darwin-package-update.json"
 
   nrs:
-    desc: Update inputs, activate NixOS, upgrade the profile, and bootstrap Hermes
+    desc: Update inputs, activate NixOS, and upgrade the Nix profile
     cmds:
       - task: rebuild
       - '{{.WSL}}bash -lc "nix profile upgrade ''.*'' || nix profile install {{.DOTFILES_PATH}}#default"'
-      - task: hermes:bootstrap
 
   rebuild:
     desc: Run nixos-rebuild switch

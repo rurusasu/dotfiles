@@ -18,13 +18,16 @@ assert_no_profile_gateway_lifecycle() {
 		[ "$status" -eq 0 ]
 		assert_no_profile_gateway_lifecycle "$output"
 		case "$action" in
-		up | restart)
-			[[ "$output" == *"task: [hermes:bootstrap]"* ]]
+		up)
+			[[ "$output" == *"task: [hermes:up]"* ]]
+			[[ "$output" == *"-p personal-ops gateway status"* ]]
+			;;
+		restart)
+			[[ "$output" == *"task: [hermes:restart]"* ]]
 			[[ "$output" == *"-p personal-ops gateway status"* ]]
 			;;
 		down)
-			[[ "$output" == *"docker compose -f docker/hermes-service/compose.yml stop hermes"* ]]
-			[[ "$output" != *"docker compose -f docker/hermes-service/compose.yml down"* ]]
+			[[ "$output" == *"hermes gateway stop"* ]]
 			;;
 		esac
 	done
@@ -38,15 +41,27 @@ assert_no_profile_gateway_lifecycle() {
 			[ "$status" -eq 0 ]
 			assert_no_profile_gateway_lifecycle "$output"
 			case "$action" in
-			up | restart)
-				[[ "$output" == *"task: [hermes:bootstrap]"* ]]
+			up)
+				[[ "$output" == *"task: [hermes:up]"* ]]
+				[[ "$output" == *"-p $profile gateway status"* ]]
+				;;
+			restart)
+				[[ "$output" == *"task: [hermes:restart]"* ]]
 				[[ "$output" == *"-p $profile gateway status"* ]]
 				;;
 			down)
-				[[ "$output" == *"docker compose -f docker/hermes-service/compose.yml stop hermes"* ]]
-				[[ "$output" != *"docker compose -f docker/hermes-service/compose.yml down"* ]]
+				[[ "$output" == *"hermes gateway stop"* ]]
 				;;
 			esac
 		done
 	done
+}
+
+@test "legacy Docker-named stop task controls the native gateway without Docker" {
+	run task --dir "$REPO_ROOT" --dry --force hermes:docker:down
+
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"task: [hermes:down]"* ]]
+	[[ "$output" == *"hermes gateway stop"* ]]
+	[[ "$output" != *"docker compose"* ]]
 }

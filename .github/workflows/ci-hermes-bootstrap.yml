@@ -22,7 +22,7 @@ jobs:
       hermes: ${{ steps.detect.outputs.hermes }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -49,7 +49,7 @@ jobs:
         shell: bash
         run: exit 1
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -59,11 +59,8 @@ jobs:
       - name: Run X API image contract
         run: python3 -m unittest tests/python/test_xapi_image_contract.py -v
 
-      - name: Run the pinned container suite
-        run: docker build --target hermes-bootstrap-test -t local/hermes-bootstrap-test -f docker/hermes-agent/Dockerfile docker
-
-      - name: Build the Hermes storage integration image
-        run: docker build --target hermes-bootstrap-runtime -t local/hermes-agent-gh:latest -f docker/hermes-agent/Dockerfile docker
+      - name: Build the pinned container suite and storage integration image
+        run: docker buildx bake -f docker/hermes-agent/docker-bake.hcl
 
       - name: Run the Hermes storage volume integration
         run: docker/hermes-agent/tests/test_storage_volume_integration.sh

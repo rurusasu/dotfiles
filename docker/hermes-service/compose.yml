@@ -1,54 +1,6 @@
 name: hermes-service
 
 services:
-  hermes:
-    build:
-      context: ..
-      dockerfile: hermes-agent/Dockerfile
-    image: local/hermes-agent-gh:latest
-    container_name: hermes
-    restart: unless-stopped
-    env_file:
-      - path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.op.env
-        required: false
-    shm_size: 1g
-    command: gateway run
-    depends_on:
-      browser-mcp:
-        condition: service_healthy
-      xapi-mcp:
-        condition: service_healthy
-    ports:
-      - "127.0.0.1:${HERMES_API_PORT:-8642}:8642"
-      - "127.0.0.1:${HERMES_DASHBOARD_PORT:-9119}:9119"
-      - "127.0.0.1:3500-3505:3500-3505"
-    volumes:
-      - type: volume
-        source: hermes-data
-        target: /opt/data
-      - type: bind
-        source: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl
-        target: /root/.xurl
-    environment:
-      API_SERVER_HOST: "0.0.0.0"
-      HERMES_HOME: /opt/data
-      HERMES_DASHBOARD: "1"
-      HERMES_DASHBOARD_HOST: "0.0.0.0"
-      # One root gateway serves every profile with profile-scoped credentials,
-      # sessions, adapters, and routes. Starting one process per profile can
-      # overwhelm Docker Desktop during simultaneous cold starts.
-      GATEWAY_MULTIPLEX_PROFILES: "true"
-      # Rebuild a Discord Gateway on the first failed WebSocket liveness
-      # sample. This prevents a closed secondary profile socket from staying
-      # live while silently dropping inbound mentions.
-      HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD: "${HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD:-1}"
-      LIFELOG_ROOT: /opt/data/shared/lifelog
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - hermes-browser
-      - local-ai-services
-
   hermes-bootstrap:
     build:
       context: ..
@@ -176,9 +128,6 @@ networks:
   hermes-browser:
     name: hermes-browser
     driver: bridge
-  local-ai-services:
-    name: local-ai-services
-    external: true
 
 volumes:
   hermes-data:

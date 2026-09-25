@@ -11,11 +11,14 @@ let
     ../../home/linux.nix
     ../../home/wsl.nix
   ];
-  hasCommonImport =
+  moduleImports =
     path:
-    builtins.any (line: builtins.match ".*imports.*common[.]nix.*" line != null) (
-      builtins.filter builtins.isString (builtins.split "\n" (builtins.readFile path))
-    );
+    (import path {
+      pkgs = { };
+      lib = { };
+      inputs = { };
+    }).imports or [ ];
+  importsCommon = path: builtins.elem (../../home/common.nix) (moduleImports path);
 in
 {
   testCommonHomeModuleDoesNotRequireWSLSpecialArg = {
@@ -42,7 +45,7 @@ in
   };
 
   testOSHomeEntrypointsKeepCommonImport = {
-    expr = builtins.map hasCommonImport osEntrypoints;
+    expr = builtins.map importsCommon osEntrypoints;
     expected = [
       true
       true

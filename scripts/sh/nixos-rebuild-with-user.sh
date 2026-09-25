@@ -26,6 +26,11 @@ fi
 uid="${DOTFILES_UID:-$(id -u "$user")}"
 gid="${DOTFILES_GID:-$(id -g "$user")}"
 group="${DOTFILES_GROUP:-$(id -gn "$user")}"
+with_hermes="${DOTFILES_WITH_HERMES:-0}"
+[[ $with_hermes == 0 || $with_hermes == 1 ]] || {
+  echo "Invalid DOTFILES_WITH_HERMES: $with_hermes (expected 0 or 1)." >&2
+  exit 1
+}
 
 state_dir="${DOTFILES_STATE_DIR:-/var/lib/dotfiles}"
 state_version_file="$state_dir/system-state-version"
@@ -35,7 +40,7 @@ elif [[ -r $state_version_file ]]; then
   state_version="$(cat "$state_version_file")"
 elif [[ -e /run/current-system ]]; then
   # Existing systems keep their original state schema unless migration is
-  # explicitly requested. Fresh installers pass 26.05 explicitly.
+  # explicitly requested. Fresh installers pass an explicit state version.
   state_version="25.05"
 else
   state_version="26.05"
@@ -51,8 +56,29 @@ rebuild_env=(
   "DOTFILES_UID=$uid"
   "DOTFILES_GID=$gid"
   "DOTFILES_GROUP=$group"
+  "DOTFILES_WITH_HERMES=$with_hermes"
   "DOTFILES_STATE_VERSION=$state_version"
 )
+
+accept_flake_config="${DOTFILES_ACCEPT_FLAKE_CONFIG:-0}"
+case "$accept_flake_config" in
+0) ;;
+1)
+  nix_config="${NIX_CONFIG:-}"
+  case "$nix_config" in
+  *$'accept-flake-config = true'*) ;;
+  *)
+    [[ -z $nix_config ]] || nix_config+=$'\n'
+    nix_config+="accept-flake-config = true"
+    ;;
+  esac
+  rebuild_env+=("NIX_CONFIG=$nix_config")
+  ;;
+*)
+  echo "Invalid DOTFILES_ACCEPT_FLAKE_CONFIG: $accept_flake_config (expected 0 or 1)." >&2
+  exit 1
+  ;;
+esac
 
 if [[ $(id -u) -eq 0 ]]; then
   /usr/bin/env "${rebuild_env[@]}" nixos-rebuild "$@"

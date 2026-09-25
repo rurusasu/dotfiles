@@ -33,9 +33,7 @@ BeforeAll {
     $script:fontConsumers = @(
         "chezmoi/terminals/wezterm/wezterm.lua",
         "chezmoi/terminals/windows-terminal/settings.json",
-        "chezmoi/editors/zed/settings.json",
-        "chezmoi/editors/cursor/settings.json",
-        "chezmoi/editors/vscode/settings.json"
+        "chezmoi/editors/cursor/settings.json"
     )
 
     # nix package 参照箇所
@@ -44,9 +42,39 @@ BeforeAll {
     # Windows font installer template
     $script:windowsInstallerDir = "chezmoi/.chezmoiscripts/setup/fonts"
     $script:windowsInstaller = "chezmoi/.chezmoiscripts/setup/fonts/run_onchange_before_00-install-udev-gothic.ps1.tmpl"
+    $script:appearanceData = "chezmoi/.chezmoidata/appearance.json"
 }
 
 Describe 'フォント設定の一貫性' {
+
+    Context '共通 appearance データ' {
+        It 'should define the managed font and theme in one data file' {
+            $full = Join-Path $script:repoRoot $script:appearanceData
+            Test-Path -LiteralPath $full -PathType Leaf | Should -BeTrue
+            $appearance = Get-Content -LiteralPath $full -Raw | ConvertFrom-Json
+            $appearance.appearance.font_family | Should -Be $script:expectedFont
+            $appearance.appearance.font_release.archive_name | Should -Be 'UDEVGothic_NF'
+            $appearance.appearance.font_release.version | Should -Match '^v\d+\.\d+\.\d+$'
+            $appearance.appearance.theme | Should -Be 'Catppuccin Mocha'
+        }
+
+        It 'should make every terminal and editor consumer read the shared appearance data' {
+            $consumers = @(
+                "chezmoi/terminals/wezterm/wezterm.lua",
+                "chezmoi/terminals/windows-terminal/settings.json",
+                "chezmoi/terminals/ghostty/config",
+                "chezmoi/editors/cursor/settings.json"
+            )
+            foreach ($relativePath in $consumers) {
+                $content = Get-Content -LiteralPath (Join-Path $script:repoRoot $relativePath) -Raw
+                $content | Should -Match '\{\{\s*\.appearance\.font_family\s*\}\}' -Because $relativePath
+                $content | Should -Match '\{\{\s*\.appearance\.theme\s*\}\}' -Because $relativePath
+            }
+
+            $windowsTerminal = Get-Content -LiteralPath (Join-Path $script:repoRoot 'chezmoi/terminals/windows-terminal/settings.json') -Raw
+            $windowsTerminal | Should -Match '"size"\s*:\s*\{\{\s*\.appearance\.font_size\s*\}\}'
+        }
+    }
 
     Context '旧フォント (Moralerspace) の残存チェック' {
         It '追跡対象の dotfiles にレガシー "Moralerspace" 参照がないこと' {
@@ -72,20 +100,18 @@ Describe 'フォント設定の一貫性' {
     }
 
     Context '新フォント family 名の整合' {
-        It 'editor/terminal 設定すべてに "<expected>" が含まれること' -ForEach @(
-            @{ Path = "chezmoi/terminals/wezterm/wezterm.lua"; Expected = $script:expectedFont }
-            @{ Path = "chezmoi/terminals/windows-terminal/settings.json"; Expected = $script:expectedFont }
-            @{ Path = "chezmoi/editors/zed/settings.json"; Expected = $script:expectedFont }
-            @{ Path = "chezmoi/editors/cursor/settings.json"; Expected = $script:expectedFont }
-            @{ Path = "chezmoi/editors/vscode/settings.json"; Expected = $script:expectedFont }
+        It 'editor/terminal 設定すべてが共通 appearance の family を参照すること' -ForEach @(
+            @{ Path = "chezmoi/terminals/wezterm/wezterm.lua" }
+            @{ Path = "chezmoi/terminals/windows-terminal/settings.json" }
+            @{ Path = "chezmoi/editors/cursor/settings.json" }
         ) {
-            param($Path, $Expected)
+            param($Path)
             $full = Join-Path $script:repoRoot $Path
             Test-Path -LiteralPath $full | Should -BeTrue -Because "$Path が存在しない"
 
             $content = Get-Content -LiteralPath $full -Raw
-            $content | Should -Match ([regex]::Escape($Expected)) -Because (
-                "$Path に '$Expected' が含まれていない。フォント統一が崩れている可能性。"
+            $content | Should -Match '\{\{\s*\.appearance\.font_family\s*\}\}' -Because (
+                "$Path が共通 appearance.font_family を参照していない。フォント統一が崩れている可能性。"
             )
         }
     }
@@ -121,8 +147,17 @@ Describe 'フォント設定の一貫性' {
             $content | Should -Match 'yuru7/udev-gothic/releases/download' -Because (
                 "installer の DownloadUrl が yuru7/udev-gothic を指していない"
             )
-            $content | Should -Match 'UDEVGothic_NF' -Because (
-                "installer の FontName / URL に UDEVGothic_NF が含まれていない"
+            $content | Should -Match '\{\{\s*\.appearance\.font_release\.archive_name\s*\}\}' -Because (
+                "installer の archive name は appearance data を参照する必要がある"
+            )
+            $content | Should -Match '\{\{\s*\.appearance\.font_release\.version\s*\}\}' -Because (
+                "installer の version は appearance data を参照する必要がある"
+            )
+            $content | Should -Not -Match '\$FontVersion\s*=\s*"v\d+\.\d+\.\d+"' -Because (
+                "installer に font version をハードコードすると chezmoi data と不一致になる"
+            )
+            $content | Should -Not -Match '\$FontName\s*=\s*"UDEVGothic_NF"' -Because (
+                "installer に archive name をハードコードすると chezmoi data と不一致になる"
             )
         }
 

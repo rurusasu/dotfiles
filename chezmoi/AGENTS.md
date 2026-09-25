@@ -21,6 +21,12 @@
 7. SSH config の `IdentityFile` で参照する公開鍵は、deploy スクリプトで必ずデプロイすること。
 8. 1Password SSH Agent / signing の OS 別パスは `docs/1password/` を確認すること。
 
+## データとコメントの境界
+
+- font、theme、release version などの変更される値は `.chezmoidata/` を正本とし、テンプレートやコメントに同じ値を複製しない。
+- `# hash: {{ include ... | sha256sum }}` は `run_onchange` の変更検知入力であり、説明用コメントではないため削除しない。
+- 値の由来や運用ルールを説明するコメントは残してよいが、現在値を写した version/hash コメントや手動の `script-version` マーカーは追加しない。
+
 ## 実行
 
 ```bash

@@ -1,4 +1,4 @@
-<#!
+﻿<#!
 .SYNOPSIS
     Streams the Hermes bootstrap 1Password payload to the container.
 #>
@@ -184,9 +184,27 @@ function Protect-HermesBootstrapServiceAccountFile {
         throw [System.InvalidOperationException]::new('Could not resolve the current Windows user.')
     }
 
-    $fileSecurity = [System.Security.AccessControl.FileSecurity]::new()
-    $fileSecurity.SetOwner($currentSid)
+    $accessSection = [System.Security.AccessControl.AccessControlSections]::Access
+    $fileInfo = [System.IO.FileInfo]::new($Path)
+    if ($PSVersionTable.PSEdition -eq 'Core') {
+        $fileSecurity = [System.IO.FileSystemAclExtensions]::GetAccessControl(
+            $fileInfo,
+            $accessSection
+        )
+    }
+    else {
+        $fileSecurity = [System.IO.File]::GetAccessControl($Path, $accessSection)
+    }
+
     $fileSecurity.SetAccessRuleProtection($true, $false)
+    foreach ($existingRule in $fileSecurity.GetAccessRules(
+            $true,
+            $false,
+            [System.Security.Principal.SecurityIdentifier]
+        )) {
+        $fileSecurity.RemoveAccessRuleSpecific($existingRule)
+    }
+
     $readRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
         $currentSid,
         [System.Security.AccessControl.FileSystemRights]::Read,
@@ -195,7 +213,13 @@ function Protect-HermesBootstrapServiceAccountFile {
         [System.Security.AccessControl.AccessControlType]::Allow
     )
     [void]$fileSecurity.AddAccessRule($readRule)
-    Set-Acl -LiteralPath $Path -AclObject $fileSecurity
+
+    if ($PSVersionTable.PSEdition -eq 'Core') {
+        [System.IO.FileSystemAclExtensions]::SetAccessControl($fileInfo, $fileSecurity)
+    }
+    else {
+        [System.IO.File]::SetAccessControl($Path, $fileSecurity)
+    }
 }
 
 function Initialize-HermesBootstrapServiceAccountEnvironment {
@@ -307,6 +331,21 @@ function New-HermesBootstrapProcessStartInfo {
         ) -join " "
     }
     return $startInfo
+}
+
+function New-HermesBootstrapProcessOutputReader {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.IO.Stream]$Stream
+    )
+
+    return [System.IO.StreamReader]::new(
+        $Stream,
+        [System.Text.UTF8Encoding]::new($false),
+        $false,
+        4096
+    )
 }
 
 function Get-HermesBootstrapSecretPlan {
@@ -491,6 +530,8 @@ function Invoke-HermesBootstrap {
     $drainCancellation = [System.Threading.CancellationTokenSource]::new()
     $stdoutDrain = $null
     $stderrDrain = $null
+    $stdoutReader = $null
+    $stderrReader = $null
     $invokerOutput = $null
     $item = $null
     $record = $null
@@ -526,8 +567,20 @@ function Invoke-HermesBootstrap {
                 $writer.AutoFlush = $true
                 $writer
             }
-            $stdoutDrain = $drain.DrainAsync($process.StandardOutput, $drainCancellation.Token)
-            $stderrDrain = $drain.DrainAsync($process.StandardError, $drainCancellation.Token)
+            $stdoutReader = if ($null -ne $startInfo.PSObject.Properties["StandardOutputEncoding"]) {
+                $process.StandardOutput
+            }
+            else {
+                New-HermesBootstrapProcessOutputReader -Stream $process.StandardOutput.BaseStream
+            }
+            $stderrReader = if ($null -ne $startInfo.PSObject.Properties["StandardErrorEncoding"]) {
+                $process.StandardError
+            }
+            else {
+                New-HermesBootstrapProcessOutputReader -Stream $process.StandardError.BaseStream
+            }
+            $stdoutDrain = $drain.DrainAsync($stdoutReader, $drainCancellation.Token)
+            $stderrDrain = $drain.DrainAsync($stderrReader, $drainCancellation.Token)
             $processInput.NewLine = "`n"
             try {
                 $processInput.WriteLine('{"type":"header","schema_version":1}')
@@ -706,6 +759,12 @@ function Invoke-HermesBootstrap {
             [void](Invoke-HermesBootstrapCleanup -Action { $process.StandardInput.Dispose() })
             [void](Invoke-HermesBootstrapCleanup -Action { $process.StandardOutput.Dispose() })
             [void](Invoke-HermesBootstrapCleanup -Action { $process.StandardError.Dispose() })
+        }
+        if ($stdoutReader) {
+            [void](Invoke-HermesBootstrapCleanup -Action { $stdoutReader.Dispose() })
+        }
+        if ($stderrReader) {
+            [void](Invoke-HermesBootstrapCleanup -Action { $stderrReader.Dispose() })
         }
         if ($stdoutDrain -and $stdoutDrain.IsCompleted) {
             [void](Invoke-HermesBootstrapCleanup -Action { $stdoutDrain.Dispose() })

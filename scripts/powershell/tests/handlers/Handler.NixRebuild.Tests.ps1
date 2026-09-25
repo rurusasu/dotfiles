@@ -106,10 +106,11 @@ Describe 'NixRebuildHandler' {
         }
 
         It 'should succeed when nixos-rebuild switch succeeds' {
+            $script:nixosRebuildTimeoutSeconds = $null
             Mock Invoke-Wsl {
-                param($Arguments)
+                param($Arguments, $TimeoutSeconds)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return @("building NixOS...") }
+                if ($argStr -match "nixos-rebuild") { $script:nixosRebuildTimeoutSeconds = $TimeoutSeconds; $global:LASTEXITCODE = 0; return @("building NixOS...") }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return @("installed") }
@@ -125,12 +126,14 @@ Describe 'NixRebuildHandler' {
 
             $result.Success | Should -Be $true
             $result.Message | Should -Be "NixOS 設定を適用しました"
+            $script:nixosRebuildTimeoutSeconds | Should -Be 5400
             $ctx.Options["NixRebuildApplied"] | Should -Be $true
             Should -Invoke Write-Host -ParameterFilter {
                 $ForegroundColor -eq 'Gray' -and ([string]$Object) -match 'building NixOS'
             } -Times 1
             Should -Invoke Invoke-Wsl -ParameterFilter {
-                ($Arguments -join " ") -match "nixos-rebuild-with-user"
+                ($Arguments -join " ") -match "nixos-rebuild-with-user" -and
+                ($Arguments -join " ") -match "DOTFILES_ACCEPT_FLAKE_CONFIG=1"
             } -Times 1
         }
 
@@ -560,6 +563,30 @@ Describe 'NixRebuildHandler' {
             $script:wslArgs | Should -Match "-d NixOS"
             $script:wslArgs | Should -Match "-u root"
             $script:wslArgs | Should -Match "nixos-rebuild-with-user.sh switch --flake . --impure"
+            $script:wslArgs | Should -Match "DOTFILES_WITH_HERMES=0"
+        }
+
+        It 'should pass the Hermes feature to the NixOS rebuild wrapper' {
+            $ctx.Options['WithHermes'] = $true
+            $script:wslArgs = ''
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join ' '
+                if ($argStr -match 'nixos-rebuild') { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return '' }
+                if ($argStr -match 'command -v pnpm') { $global:LASTEXITCODE = 0; return '/nix/store/bin/pnpm' }
+                if ($argStr -match 'pnpm ls -g') { $global:LASTEXITCODE = 0; return '' }
+                if ($argStr -match 'pnpm add') { $global:LASTEXITCODE = 0; return '' }
+                if ($argStr -match 'core\.hooksPath|pre-commit install|echo exists|pnpm setup|grep.*PNPM_HOME|test -e') { $global:LASTEXITCODE = 0; return '' }
+                $global:LASTEXITCODE = 0
+                return ''
+            }
+
+            $handler.Apply($ctx)
+
+            $script:wslArgs | Should -Match 'DOTFILES_WITH_HERMES=1'
+            Should -Invoke Invoke-Wsl -ParameterFilter {
+                ($Arguments -join ' ') -match '\bdocker\b'
+            } -Times 0
         }
 
         It 'should update the flake lock before nixos-rebuild so Nix packages use latest inputs' {
@@ -593,6 +620,28 @@ Describe 'NixRebuildHandler' {
             $script:flakeUpdateCalled | Should -Be $true
             $script:flakeUpdateCalledFirst | Should -Be $true
             $script:flakeUpdateArgs | Should -Match "-u nixos"
+        }
+
+        It 'should skip flake updates when the caller pins the checked-out inputs' {
+            $ctx.Options['SkipFlakeUpdate'] = $true
+            $script:flakeUpdateCalled = $false
+            $script:rebuildCalled = $false
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join " "
+                if ($argStr -match "nix flake update") { $script:flakeUpdateCalled = $true }
+                if ($argStr -match "nixos-rebuild") { $script:rebuildCalled = $true; $global:LASTEXITCODE = 0; return "" }
+                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
+                if ($argStr -match "pnpm ls -g|pnpm add|core\.hooksPath|pre-commit install|echo exists|pnpm setup|grep.*PNPM_HOME|test -e") { $global:LASTEXITCODE = 0; return "" }
+                $global:LASTEXITCODE = 0
+                return ""
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:flakeUpdateCalled | Should -BeFalse
+            $script:rebuildCalled | Should -BeTrue
         }
 
         It 'should set git safe.directory before nixos-rebuild as root' {
@@ -1033,7 +1082,7 @@ Describe 'NixRebuildHandler' {
                 $global:LASTEXITCODE = 0; return ""
             }
 
-            try { $handler.EnsureDotfilesAvailable("NixOS", "C:\Users\foo\dotfiles") } catch { }
+            { $handler.EnsureDotfilesAvailable("NixOS", "C:\Users\foo\dotfiles") } | Should -Throw "*dotfiles が見つかりません*"
 
             $script:mountPath | Should -Be "/mnt/c/Users/foo/dotfiles"
         }

@@ -201,9 +201,13 @@ def nearest_rank(values: Sequence[float], percentile: int) -> float | None:
 
 
 def _default_provider_factory() -> Any:
-    from plugins.memory.hindsight import HindsightMemoryProvider
+    hermes_root = Path("/opt/hermes")
+    if hermes_root.is_dir() and str(hermes_root) not in sys.path:
+        sys.path.insert(0, str(hermes_root))
 
-    return HindsightMemoryProvider()
+    from plugins.memory import load_memory_provider
+
+    return load_memory_provider("hindsight")
 
 
 def _provider_config(api_url: str, run_id: str, timeout: float) -> dict[str, Any]:
@@ -234,6 +238,12 @@ def _resolved_provider(
     timeout: float,
     provider_factory: ProviderFactory | None,
 ) -> Iterator[tuple[Any, str]]:
+    """Resolve the production provider against isolated per-run config and state.
+
+    The acceptance home intentionally contains no plugin code: the image must
+    provide the installed provider through Hermes' bundled plugin discovery,
+    independently of whichever temporary HERMES_HOME is active.
+    """
     if profile not in PROFILES:
         raise AcceptanceError(f"Unsupported Hermes profile: {profile}")
     if not _HEX_RE.fullmatch(run_id):
@@ -245,12 +255,21 @@ def _resolved_provider(
     with tempfile.TemporaryDirectory(prefix="hermes-hindsight-", dir="/tmp") as home:
         config_dir = Path(home) / "hindsight"
         config_dir.mkdir(mode=0o700)
+        hermes_config_path = Path(home) / "config.yaml"
+        hermes_config_path.write_text(
+            "memory:\n  provider: hindsight\n", encoding="utf-8"
+        )
+        os.chmod(hermes_config_path, 0o600)
         config_path = config_dir / "config.json"
         _write_json(config_path, _provider_config(api_url, run_id, timeout), mode=0o600)
         os.environ["HERMES_HOME"] = home
         provider = None
         try:
             provider = (provider_factory or _default_provider_factory)()
+            if provider is None:
+                raise AcceptanceError(
+                    "Hindsight memory provider discovery returned no provider"
+                )
             provider.initialize(
                 f"acceptance-{run_id}-{profile}",
                 agent_identity=profile,

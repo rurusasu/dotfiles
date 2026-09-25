@@ -1,9 +1,14 @@
-# Hermes Agent Bootstrap Design
+# Legacy Docker Hermes Bootstrap Design
 
 ## Status
 
-Approved design for the container-owned Hermes bootstrap used on every host OS.
-The implementation is split between this dotfiles repository, the
+This document describes the retained, explicit legacy Docker bootstrap. The
+standard Hermes CLI and gateway runtime is managed by the pinned Nix flake and
+Home Manager service on macOS and Linux/WSL; Windows routes `WithHermes`
+through its configured NixOS WSL distribution. The Windows installer no longer
+starts the Docker Hermes Agent. Docker bootstrap tasks remain opt-in for
+existing deployments and do not migrate or delete their volumes. The legacy
+implementation is split between this dotfiles repository, the
 remote-authoritative root distribution, and the configured named-profile
 remotes.
 
@@ -11,8 +16,12 @@ remotes.
 
 Hermes setup historically had independent shell and PowerShell implementations:
 
-- macOS, Linux, and NixOS source `scripts/sh/hermes-agent.sh`.
-- Windows runs `scripts/powershell/handlers/Handler.HermesAgent.ps1`.
+- macOS, Linux, and NixOS sourced `scripts/sh/hermes-agent.sh`.
+- Windows ran `scripts/powershell/handlers/Handler.HermesAgent.ps1`.
+
+The PowerShell handler now validates that NixOS WSL successfully took
+ownership; the explicit `task hermes:docker:bootstrap` path still invokes the
+legacy container adapters when deliberately requested.
 
 The PowerShell handler provisions a GitHub token, while the shell implementation
 did not. The container `gh` wrapper originally only mapped an existing process

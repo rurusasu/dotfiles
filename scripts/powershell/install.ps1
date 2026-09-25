@@ -72,7 +72,7 @@ function Test-IsAdminCurrent {
     return $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
 }
 
-function Get-PhaseParameters {
+function Get-PhaseConfiguration {
     [CmdletBinding()]
     param()
 
@@ -105,7 +105,7 @@ if (-not (Test-Path -LiteralPath $adminScriptPath)) {
     throw "Admin phase script not found: $adminScriptPath"
 }
 
-$phaseParams = Get-PhaseParameters
+$phaseParams = Get-PhaseConfiguration
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
@@ -193,7 +193,8 @@ if ($adminRequired) {
             $SyncMode,
             "-SyncBack",
             $SyncBack,
-            "-AdminOnly:$true"
+            "-AdminOnly:$true",
+            "-NoPause:$NoPause"
         )
 
         if (-not [string]::IsNullOrWhiteSpace($ReleaseTag)) {

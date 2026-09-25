@@ -1,4 +1,26 @@
 ﻿Describe "Hermes bootstrap type loading" {
+    It "parses nested JSON through the Windows PowerShell 5.1 compatibility helper" {
+        . (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1")
+        $json = '{"outer":{"middle":{"inner":{"value":51}}}}'
+        $parsed = ConvertFrom-HermesBootstrapJson -Json $json -Depth 32
+
+        $parsed.outer.middle.inner.value | Should -Be 51
+    }
+
+    It "decodes redirected process bytes as UTF-8 when encoding properties are unavailable" {
+        . (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1")
+        $expected = "bootstrap-秘密"
+        $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($expected)
+        $stream = [System.IO.MemoryStream]::new($bytes)
+        $reader = New-HermesBootstrapProcessOutputReader -Stream $stream
+        try {
+            $reader.ReadToEnd() | Should -Be $expected
+        }
+        finally {
+            $reader.Dispose()
+        }
+    }
+
     It "uses stream APIs available in Windows PowerShell 5.1" {
         $sourcePath = Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1"
         $source = Get-Content -LiteralPath $sourcePath -Raw
@@ -39,6 +61,10 @@ exit 0
     }
 }
 
+function global:Test-HermesBootstrapIsWindows {
+    return [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+}
+
 Describe "Get-HermesBootstrapSecretPlan" {
     BeforeAll {
         $sourcePath = Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1"
@@ -60,7 +86,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
         $script:dockerOutput = @(
             '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
         )
-        $script:dockerOutput = @(Add-HermesBootstrapPlanMetadata -Json $script:dockerOutput[0] -ManifestSha256 $script:manifestSha256)
+        $script:dockerOutput = @(Add-HermesBootstrapPlanAnnotation -Json $script:dockerOutput[0] -ManifestSha256 $script:manifestSha256)
         function global:Invoke-Docker {
             param([string[]]$Arguments)
 
@@ -89,7 +115,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
         )
 
         foreach ($mutation in $mutations) {
-            $invalidPlan = $validJson | ConvertFrom-Json -Depth 32
+            $invalidPlan = ConvertFrom-HermesBootstrapJson -Json $validJson -Depth 32
             $invalidPlan.items[$mutation.Index].($mutation.Property) = $mutation.Value
             $script:dockerOutput = @($invalidPlan | ConvertTo-Json -Compress -Depth 32)
 
@@ -99,7 +125,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
     }
 
     It "accepts a reordered manifest-driven 1Password plan" {
-        $invalidPlan = $script:dockerOutput[0] | ConvertFrom-Json -Depth 32
+        $invalidPlan = ConvertFrom-HermesBootstrapJson -Json $script:dockerOutput[0] -Depth 32
         $items = @($invalidPlan.items)
         $invalidPlan.items = @($items[1], $items[0]) + $items[2..7]
         $script:dockerOutput = @($invalidPlan | ConvertTo-Json -Compress -Depth 32)
@@ -109,7 +135,7 @@ Describe "Get-HermesBootstrapSecretPlan" {
     }
 
     It "rejects plans that do not satisfy the manifest-driven metadata schema" {
-        $validPlan = ($script:dockerOutput -join "`n") | ConvertFrom-Json -Depth 32
+        $validPlan = ConvertFrom-HermesBootstrapJson -Json ($script:dockerOutput -join "`n") -Depth 32
         $invalidPlans = @()
 
         $wrongSchema = $validPlan.PSObject.Copy()
@@ -207,28 +233,33 @@ Describe "Initialize-HermesBootstrapServiceAccountEnvironment" {
         $content.Length | Should -BeGreaterThan 0
     }
 
-    It "writes the service account env file with a user-only ACL on Windows" -Skip:(-not $IsWindows) {
+    It "writes the service account env file with a user-only ACL on Windows" -Skip:(-not (Test-HermesBootstrapIsWindows)) {
         Initialize-HermesBootstrapServiceAccountEnvironment `
             -DataDir $script:serviceAccountDirectory `
             -InvokeOnePassword { return 'test-service-account-token' }
 
         $envPath = Join-Path $script:serviceAccountDirectory '.op.env'
         $acl = Get-Acl -LiteralPath $envPath
-        $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
         $accessSid = $acl.Access[0].IdentityReference.Translate(
             [System.Security.Principal.SecurityIdentifier]
         ).Value
 
         @($acl.Access).Count | Should -Be 1
-        $accessSid | Should -Be $currentSid
+        $accessSid | Should -Be $currentSid.Value
+        $expectedRights = [System.Security.AccessControl.FileSystemRights]::Read -bor
+        [System.Security.AccessControl.FileSystemRights]::Synchronize
+        $acl.Access[0].FileSystemRights | Should -Be $expectedRights
+        $acl.Access[0].AccessControlType | Should -Be ([System.Security.AccessControl.AccessControlType]::Allow)
         $acl.Access[0].IsInherited | Should -BeFalse
+        $acl.AreAccessRulesProtected | Should -BeTrue
     }
 }
 
 function global:New-HermesBootstrapFakeDocker {
     param([Parameter(Mandatory)][string]$Directory)
 
-    if ($IsWindows) {
+    if (Test-HermesBootstrapIsWindows) {
         $path = Join-Path $Directory "docker.cmd"
         @'
 @echo off
@@ -239,11 +270,11 @@ set input=%HERMES_BOOTSTRAP_TEST_DIR%\stdin.txt
   for %%A in (%*) do echo %%~A
 )
 if "%HERMES_BOOTSTRAP_TEST_EXIT_EARLY%"=="1" exit /b %HERMES_BOOTSTRAP_TEST_EXIT%
-more > "%input%"
-if "%HERMES_BOOTSTRAP_TEST_HANG%"=="1" ping 127.0.0.1 -n 3 >nul
-if "%HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT%"=="1" pwsh -NoLogo -NoProfile -NonInteractive -Command "$text = '0123456789abcdef' * 131072; [Console]::Out.Write($text); [Console]::Error.Write($text)"
-if not "%HERMES_BOOTSTRAP_TEST_STDOUT%"=="" pwsh -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Out.Write($env:HERMES_BOOTSTRAP_TEST_STDOUT)"
-if not "%HERMES_BOOTSTRAP_TEST_STDERR%"=="" pwsh -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Error.Write($env:HERMES_BOOTSTRAP_TEST_STDERR)"
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "$inputStream = [Console]::OpenStandardInput(); $outputStream = [IO.File]::Create($env:HERMES_BOOTSTRAP_TEST_DIR + '\stdin.txt'); $inputStream.CopyTo($outputStream); $outputStream.Dispose()"
+if "%HERMES_BOOTSTRAP_TEST_HANG%"=="1" "%SystemRoot%\System32\ping.exe" 127.0.0.1 -n 3 >nul
+if "%HERMES_BOOTSTRAP_TEST_LARGE_OUTPUT%"=="1" "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "$text = '0123456789abcdef' * 131072; [Console]::Out.Write($text); [Console]::Error.Write($text)"
+if not "%HERMES_BOOTSTRAP_TEST_STDOUT%"=="" "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Out.Write($env:HERMES_BOOTSTRAP_TEST_STDOUT)"
+if not "%HERMES_BOOTSTRAP_TEST_STDERR%"=="" "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); [Console]::Error.Write($env:HERMES_BOOTSTRAP_TEST_STDERR)"
 exit /b %HERMES_BOOTSTRAP_TEST_EXIT%
 '@ | Set-Content -LiteralPath $path -NoNewline
         return $path
@@ -291,7 +322,7 @@ function global:Test-HermesBootstrapErrorGraphMarker {
         $value = $pending.Pop()
         if ($null -eq $value) { continue }
         if ($value -is [string]) {
-            if ($value.Contains($Marker, [StringComparison]::Ordinal)) { return $true }
+            if ($value.IndexOf($Marker, [StringComparison]::Ordinal) -ge 0) { return $true }
             continue
         }
 
@@ -340,13 +371,13 @@ function global:Restore-HermesBootstrapTestErrorHistory {
     }
 }
 
-function global:Add-HermesBootstrapPlanMetadata {
+function global:Add-HermesBootstrapPlanAnnotation {
     param(
         [Parameter(Mandatory)][string]$Json,
         [Parameter(Mandatory)][string]$ManifestSha256
     )
 
-    $plan = $Json | ConvertFrom-Json -Depth 32
+    $plan = $Json | ConvertFrom-Json
     $plan | Add-Member -NotePropertyName manifest_sha256 -NotePropertyValue $ManifestSha256
     $items = @($plan.items)
     $xai = [PSCustomObject]@{
@@ -395,7 +426,7 @@ Describe "Invoke-HermesBootstrap" {
         $script:dockerOutput = @(
             '{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["bot_token"]}]}]}'
         )
-        $script:dockerOutput = @(Add-HermesBootstrapPlanMetadata -Json $script:dockerOutput[0] -ManifestSha256 $script:manifestSha256)
+        $script:dockerOutput = @(Add-HermesBootstrapPlanAnnotation -Json $script:dockerOutput[0] -ManifestSha256 $script:manifestSha256)
         function global:Invoke-Docker {
             param([string[]]$Arguments)
 
@@ -408,7 +439,7 @@ Describe "Invoke-HermesBootstrap" {
         $script:fakeDockerDirectory = Join-Path $TestDrive "bin"
         New-Item -ItemType Directory -Path $script:fakeDockerDirectory -Force | Out-Null
         $fakeDockerPath = New-HermesBootstrapFakeDocker -Directory $script:fakeDockerDirectory
-        $script:dockerProcessParameters = if ($IsWindows) {
+        $script:dockerProcessParameters = if (Test-HermesBootstrapIsWindows) {
             @{
                 DockerExecutable      = $env:ComSpec
                 DockerPrefixArguments = @("/d", "/c", $fakeDockerPath)
@@ -476,7 +507,7 @@ Describe "Invoke-HermesBootstrap" {
         )
 
         $records = (Get-Content -LiteralPath (Join-Path $TestDrive "stdin.txt") -Raw -Encoding utf8) -split "\r?\n" |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json -Depth 32 }
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json }
         @($records).Count | Should -Be 13
         $records[0].type | Should -Be "header"
         $records[0].schema_version | Should -Be 1
@@ -488,7 +519,7 @@ Describe "Invoke-HermesBootstrap" {
         $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../../lib/HermesBootstrap.ps1") -Raw
         $source | Should -Match "ArgumentList\.Add"
         $source | Should -Not -Match "New-TemporaryFile|GetTempFileName|Set-Content|Out-File"
-        $arguments = if ($IsWindows) {
+        $arguments = if (Test-HermesBootstrapIsWindows) {
             Get-Content -LiteralPath (Join-Path $TestDrive "arguments.txt") -Raw
         }
         else {
@@ -496,7 +527,7 @@ Describe "Invoke-HermesBootstrap" {
         }
         $arguments | Should -Not -Match ([regex]::Escape($secret))
         $arguments | Should -Not -Match "--reveal"
-        $argumentList = if ($IsWindows) {
+        $argumentList = if (Test-HermesBootstrapIsWindows) {
             @(Get-Content -LiteralPath (Join-Path $TestDrive "arguments.txt"))
         }
         else {
@@ -550,7 +581,7 @@ Describe "Invoke-HermesBootstrap" {
             $invoker = {
                 param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
                 [void]$Arguments
-                if (-not $IsWindows) {
+                if (-not (Test-HermesBootstrapIsWindows)) {
                     $deadline = [DateTime]::UtcNow.AddSeconds(1)
                     while (-not (Test-Path -LiteralPath $pidPath) -and [DateTime]::UtcNow -lt $deadline) {
                         Start-Sleep -Milliseconds 10
@@ -572,7 +603,7 @@ Describe "Invoke-HermesBootstrap" {
                 [object]::ReferenceEquals($actual[$index], $baseline[$index]) | Should -BeTrue
             }
             Test-HermesBootstrapErrorGraphMarker -Roots $actual -Marker $secretMarker | Should -BeFalse
-            if (-not $IsWindows) {
+            if (-not (Test-HermesBootstrapIsWindows)) {
                 $childProcessId = [int](Get-Content -LiteralPath $pidPath -Raw)
                 { Get-Process -Id $childProcessId -ErrorAction Stop } | Should -Throw
             }
@@ -737,7 +768,7 @@ Describe "Invoke-HermesBootstrap" {
         $result.Message | Should -Be "Hermes bootstrap secret retrieval failed."
         $global:LASTEXITCODE | Should -Be 1
         $watch.Elapsed.TotalSeconds | Should -BeLessThan 1.8
-        if (-not $IsWindows) {
+        if (-not (Test-HermesBootstrapIsWindows)) {
             $childProcessId = [int](Get-Content -LiteralPath (Join-Path $TestDrive "pid") -Raw)
             { Get-Process -Id $childProcessId -ErrorAction Stop } | Should -Throw
             $descendantPidPath = Join-Path $TestDrive "descendant-pid"
@@ -770,7 +801,7 @@ Describe "Invoke-HermesBootstrap" {
         $result.Message | Should -Be "Hermes bootstrap timed out."
         $global:LASTEXITCODE | Should -Be 124
         $watch.Elapsed.TotalSeconds | Should -BeLessThan 1.8
-        if (-not $IsWindows) {
+        if (-not (Test-HermesBootstrapIsWindows)) {
             $childProcessId = [int](Get-Content -LiteralPath (Join-Path $TestDrive "pid") -Raw)
             { Get-Process -Id $childProcessId -ErrorAction Stop } | Should -Throw
             $descendantProcessId = [int](Get-Content -LiteralPath (Join-Path $TestDrive "descendant-pid") -Raw)
@@ -792,7 +823,7 @@ Describe "Invoke-HermesBootstrap" {
             return @{ id = "id-$($Arguments[2])"; fields = @(@{ label = "credential"; value = "repeat-secret" }) } | ConvertTo-Json -Compress
         }
         $currentProcess = [System.Diagnostics.Process]::GetCurrentProcess()
-        $before = if ($IsWindows) {
+        $before = if (Test-HermesBootstrapIsWindows) {
             $currentProcess.HandleCount
         }
         else {
@@ -803,7 +834,7 @@ Describe "Invoke-HermesBootstrap" {
             $result = Invoke-HermesBootstrap -ComposeFile $script:composeFile -DataDir "C:\Users\test\.hermes" -InvokeOnePasswordItem $invoker @script:dockerProcessParameters
             $result.Success | Should -BeTrue
         }
-        $after = if ($IsWindows) {
+        $after = if (Test-HermesBootstrapIsWindows) {
             $currentProcess.Refresh()
             $currentProcess.HandleCount
         }

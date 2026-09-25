@@ -23,7 +23,7 @@ jobs:
       powershell_test: ${{ steps.detect.outputs.powershell_test }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -51,12 +51,12 @@ jobs:
         shell: bash
         run: exit 1
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
       - name: Cache PSScriptAnalyzer
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: ~\Documents\PowerShell\Modules\PSScriptAnalyzer
           key: ${{ runner.os }}-pssa-lint-1.22.0
@@ -130,7 +130,10 @@ jobs:
                 locations = @(@{
                   physicalLocation = @{
                     artifactLocation = @{ uri = $uri; uriBaseId = '%SRCROOT%' }
-                    region           = @{ startLine = [int]$_.Line; startColumn = [int]$_.Column }
+                    region           = @{
+                      startLine   = [Math]::Max(1, [int]$_.Line)
+                      startColumn = [Math]::Max(1, [int]$_.Column)
+                    }
                   }
                 })
               }
@@ -157,7 +160,7 @@ jobs:
           Set-Content pssa_errors.txt $errors
 
       - name: Upload SARIF to Security tab
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd
         if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           sarif_file: pssa.sarif
@@ -180,9 +183,22 @@ jobs:
   test:
     needs: [changes, lint]
     if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.powershell_test == 'true') }}
-    name: Test (Pester + Codecov)
+    name: Test (Pester + Codecov / ${{ matrix.runtime }})
     runs-on: windows-2025
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - runtime: Windows PowerShell 5.1
+            executable: powershell.exe
+            module_directory: WindowsPowerShell
+            module_path: ~\Documents\WindowsPowerShell\Modules
+          - runtime: PowerShell 7
+            executable: pwsh.exe
+            module_directory: PowerShell
+            module_path: ~\Documents\PowerShell\Modules
     permissions:
       contents: read
     steps:
@@ -191,28 +207,19 @@ jobs:
         shell: bash
         run: exit 1
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
       - name: Install chezmoi
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          winget install --id twpayne.chezmoi --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-          if ($LASTEXITCODE -ne 0) {
-            throw "winget failed to install chezmoi (exit $LASTEXITCODE)"
-          }
-          $chezmoiDirectory = Split-Path -Parent (Get-Command chezmoi -ErrorAction Stop).Source
-          Add-Content -LiteralPath $env:GITHUB_PATH -Value $chezmoiDirectory -Encoding utf8
+        uses: ./.github/actions/install-chezmoi
 
       - name: Install and validate AutoHotkey v2
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          winget install --id AutoHotkey.AutoHotkey --exact --scope machine --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          winget install --id AutoHotkey.AutoHotkey --exact --source winget --scope machine --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
           if ($LASTEXITCODE -ne 0) {
             throw "winget failed to install AutoHotkey v2 (exit $LASTEXITCODE)"
           }
@@ -235,10 +242,10 @@ jobs:
           }
 
       - name: Cache PowerShell modules
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
-          path: ~\Documents\PowerShell\Modules
-          key: ${{ runner.os }}-psmodules-pester-5.6.1-pssa-1.22.0
+          path: ${{ matrix.module_path }}
+          key: ${{ runner.os }}-${{ matrix.runtime }}-psmodules-pester-5.6.1-pssa-1.22.0
 
       - name: Install PowerShell modules
         shell: pwsh
@@ -257,7 +264,7 @@ jobs:
             }
           }
 
-          $moduleRoot = Join-Path $HOME 'Documents\PowerShell\Modules'
+          $moduleRoot = Join-Path $HOME "Documents\$env:PS_MODULE_DIRECTORY\Modules"
           if ($env:PSModulePath -notlike "*$moduleRoot*") {
             $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
           }
@@ -288,60 +295,25 @@ jobs:
 
           Install-GalleryModuleArchive -Name Pester -Version '5.6.1'
           Install-GalleryModuleArchive -Name PSScriptAnalyzer -Version '1.22.0'
+        env:
+          PS_MODULE_DIRECTORY: ${{ matrix.module_directory }}
 
       - name: Run tests
         shell: pwsh
         working-directory: scripts/powershell
         run: |
-          $pesterConfig = New-PesterConfiguration
-          $pesterConfig.Run.Path = "./tests"
-          $pesterConfig.Run.ExcludePath = @("**/Integration.Tests.ps1")
-          $pesterConfig.Run.PassThru = $true
-          $pesterConfig.Output.Verbosity = "Detailed"
-
-          # Code coverage — dynamic discovery
-          $sourceFiles = @(
-            Get-ChildItem ./lib      -Filter "*.ps1"         -ErrorAction SilentlyContinue
-            Get-ChildItem ./handlers -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
-          ) | Select-Object -ExpandProperty FullName
-
-          if ($sourceFiles.Count -eq 0) {
-            Write-Warning "Coverage disabled: no source files found under ./lib or ./handlers (PWD: $PWD)"
-          }
-
-          if ($sourceFiles.Count -gt 0) {
-            $pesterConfig.CodeCoverage.Enabled = $true
-            $pesterConfig.CodeCoverage.Path = $sourceFiles
-            $pesterConfig.CodeCoverage.OutputPath = "coverage.xml"
-            $pesterConfig.CodeCoverage.OutputFormat = "CoverageGutters"
-          }
-
-          # JUnit output for GitHub
-          $pesterConfig.TestResult.Enabled = $true
-          $pesterConfig.TestResult.OutputPath = "test-results.xml"
-          $pesterConfig.TestResult.OutputFormat = "JUnitXml"
-
-          $result = Invoke-Pester -Configuration $pesterConfig
-
-          Write-Host ""
-          Write-Host "=== Test Summary ===" -ForegroundColor Cyan
-          Write-Host "Passed: $($result.PassedCount)" -ForegroundColor Green
-          Write-Host "Failed: $($result.FailedCount)" -ForegroundColor $(if ($result.FailedCount -gt 0) { "Red" } else { "Gray" })
-          Write-Host "Skipped: $($result.SkippedCount)" -ForegroundColor Yellow
-
-          if ($result.CodeCoverage) {
-            Write-Host ""
-            Write-Host "=== Coverage ===" -ForegroundColor Cyan
-            Write-Host "Coverage: $([math]::Round($result.CodeCoverage.CoveragePercent, 2))%"
-          }
-
-          if ($result.FailedCount -gt 0) { exit 1 }
+          & $env:PS_TEST_EXECUTABLE -NoProfile -File .\tests\Invoke-Tests.ps1 `
+            -MinimumCoverage 0 `
+            -OutputFile test-results.xml `
+            -CoverageOutputFile coverage.xml
+        env:
+          PS_TEST_EXECUTABLE: ${{ matrix.executable }}
 
       - name: Upload test results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: test-results
+          name: test-results-${{ matrix.runtime }}
           path: |
             scripts/powershell/test-results.xml
             scripts/powershell/coverage.xml
@@ -362,12 +334,12 @@ jobs:
         shell: bash
         run: exit 1
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
       - name: Cache Windows PowerShell modules
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: ~\Documents\WindowsPowerShell\Modules
           key: ${{ runner.os }}-windows-powershell-pester-5.6.1
@@ -475,24 +447,34 @@ jobs:
             Remove-Item -LiteralPath $workDir -Recurse -Force
           }
           New-Item -ItemType Directory -Force -Path $scriptDir | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $scriptDir 'lib') | Out-Null
           Copy-Item -LiteralPath install.cmd -Destination (Join-Path $workDir 'install.cmd')
 
-          $stubInstall = @(
-            '[CmdletBinding()]'
-            'param('
-            '  [switch]$NoPause,'
-            '  [switch]$UserPhaseOnly'
-            ')'
-            ''
-            'Write-Host "STUB_INSTALL_COMPLETE NoPause=$NoPause UserPhaseOnly=$UserPhaseOnly"'
-            'Write-Host "User Phase Complete!"'
-            'exit 0'
-          ) -join [Environment]::NewLine
-          [System.IO.File]::WriteAllText(
-            (Join-Path $scriptDir 'install.ps1'),
-            $stubInstall,
-            [System.Text.UTF8Encoding]::new($false)
+          Copy-Item -LiteralPath .\scripts\powershell\install.ps1 -Destination (Join-Path $scriptDir 'install.ps1')
+          Copy-Item -LiteralPath .\scripts\powershell\Test-Environment.ps1 -Destination (Join-Path $scriptDir 'Test-Environment.ps1')
+          foreach ($library in 'WindowsEnvironment.ps1', 'InstallProfiles.ps1', 'Invoke-ExternalCommand.ps1') {
+            Copy-Item -LiteralPath (Join-Path .\scripts\powershell\lib $library) -Destination (Join-Path $scriptDir "lib\$library")
+          }
+          Set-Content -LiteralPath (Join-Path $scriptDir 'install.user.ps1') -Value @'
+          [CmdletBinding()]
+          param(
+            [string]$DistroName,
+            [string]$InstallDir,
+            [string]$ReleaseTag,
+            [string]$PostInstallScript,
+            [string]$StateVersion,
+            [hashtable]$Options = @{},
+            [string]$SyncMode,
+            [string]$SyncBack
           )
+          Write-Host 'STUB_USER_PHASE_COMPLETE'
+          exit 0
+          '@ -Encoding UTF8
+          Set-Content -LiteralPath (Join-Path $scriptDir 'install.admin.ps1') -Value @'
+          [CmdletBinding()]
+          param()
+          exit 0
+          '@ -Encoding UTF8
 
           $oldDotfilesPs7Dir = $env:DOTFILES_PS7_DIR
           $oldPath = $env:PATH
@@ -537,8 +519,8 @@ jobs:
           if ($out -notmatch 'Falling back to Windows PowerShell') {
             throw 'install.cmd did not exercise the Windows PowerShell fallback path'
           }
-          if ($out -notmatch 'STUB_INSTALL_COMPLETE') {
-            throw 'install.cmd fallback did not execute the stub install script'
+          if ($out -notmatch 'STUB_USER_PHASE_COMPLETE') {
+            throw 'install.cmd fallback did not execute the real install orchestrator'
           }
           if ($out -notmatch 'User Phase Complete!') {
             throw 'install.cmd fallback did not reach the user phase completion marker'

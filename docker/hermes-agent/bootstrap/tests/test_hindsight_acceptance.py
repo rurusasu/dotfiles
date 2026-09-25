@@ -115,6 +115,7 @@ class FakeProvider:
         self.profile = ""
         self.bank_id = ""
         self.home = ""
+        self.hermes_config = ""
         self.config: dict[str, Any] = {}
         self.initialized: tuple[str, str, str] | None = None
         self.calls: list[tuple[str, dict[str, Any]]] = []
@@ -124,6 +125,9 @@ class FakeProvider:
     def initialize(self, session_id: str, **kwargs: Any) -> None:
         self.profile = str(kwargs["agent_identity"])
         self.home = os.environ["HERMES_HOME"]
+        self.hermes_config = (Path(self.home) / "config.yaml").read_text(
+            encoding="utf-8"
+        )
         config_path = Path(self.home) / "hindsight" / "config.json"
         self.config = json.loads(config_path.read_text(encoding="utf-8"))
         self.bank_id = str(self.config["bank_id_template"]).format(profile=self.profile)
@@ -667,6 +671,77 @@ class HindsightAcceptanceTests(unittest.TestCase):
                 os.environ.pop("HERMES_HOME", None)
             else:
                 os.environ["HERMES_HOME"] = original_home
+
+    def test_resolved_provider_activates_hindsight_in_hermes_config(self) -> None:
+        world = ProviderWorld()
+
+        with acceptance._resolved_provider(
+            profile="default",
+            run_id="0123456789abcdef0123456789abcdef",
+            api_url="http://hindsight:8888",
+            timeout=300,
+            provider_factory=world.factory,
+        ) as (provider, bank):
+            self.assertEqual(provider.hermes_config, "memory:\n  provider: hindsight\n")
+            self.assertEqual(
+                bank,
+                "test-hermes-default-0123456789abcdef0123456789abcdef",
+            )
+
+        self.assertEqual(world.instances[0].shutdown_calls, 1)
+
+    def test_missing_provider_has_a_clear_error_and_restores_hermes_home(self) -> None:
+        http = FakeHttpFactory()
+        original_home = os.environ.get("HERMES_HOME")
+        os.environ["HERMES_HOME"] = "/tmp/original-hermes-home"
+        try:
+            with self.assertRaisesRegex(
+                acceptance.AcceptanceError,
+                "Hindsight memory provider discovery returned no provider",
+            ):
+                acceptance.run_probe(
+                    api_url="http://hindsight:8888",
+                    ollama_url="http://ollama:11434",
+                    strict_probes=20,
+                    timeout=300,
+                    evidence_path=self.evidence,
+                    http_factory=http,
+                    provider_factory=lambda: None,
+                    token_hex=TokenSource(),
+                )
+            self.assertEqual(
+                os.environ.get("HERMES_HOME"), "/tmp/original-hermes-home"
+            )
+        finally:
+            if original_home is None:
+                os.environ.pop("HERMES_HOME", None)
+            else:
+                os.environ["HERMES_HOME"] = original_home
+
+    def test_default_provider_factory_uses_hermes_provider_discovery(self) -> None:
+        import types
+        from unittest.mock import patch
+
+        provider = object()
+        calls: list[tuple[str, dict[str, Any]]] = []
+
+        def load_memory_provider(name: str, **kwargs: Any) -> object:
+            calls.append((name, kwargs))
+            return provider
+
+        memory_module = types.ModuleType("plugins.memory")
+        memory_module.load_memory_provider = load_memory_provider
+
+        with (
+            patch.object(acceptance.Path, "is_dir", return_value=True),
+            patch.object(sys, "path", []),
+            patch.dict(sys.modules, {"plugins.memory": memory_module}),
+        ):
+            actual = acceptance._default_provider_factory()
+            self.assertEqual(sys.path[0], str(acceptance.Path("/opt/hermes")))
+
+        self.assertIs(actual, provider)
+        self.assertEqual(calls, [("hindsight", {})])
 
     def test_degraded_requires_empty_prefetch_bounded_sync_and_failed_tools(
         self,

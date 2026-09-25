@@ -12,7 +12,7 @@ setup() {
 	[ "$status" -eq 1 ]
 
 	run grep -F '127.0.0.1:3500-3505:3500-3505' "$compose_file"
-	[ "$status" -eq 0 ]
+	[ "$status" -eq 1 ]
 }
 
 @test "pins the stdio Google Calendar MCP in the Hermes image" {

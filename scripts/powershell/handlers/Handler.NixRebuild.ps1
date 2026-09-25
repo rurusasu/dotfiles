@@ -342,6 +342,12 @@ class NixRebuildHandler : SetupHandlerBase {
         return "'" + ($value -replace "'", "'\\''") + "'"
     }
 
+    hidden [bool] IsTruthy([object]$value) {
+        if ($null -eq $value) { return $false }
+        if ($value -is [bool]) { return [bool]$value }
+        return ([string]$value).Trim() -in @("1", "true", "TRUE", "True", "yes", "YES", "Yes", "on", "ON", "On")
+    }
+
     hidden [void] EnsureDotfilesAvailable([string]$distroName, [string]$dotfilesPath) {
         # Windows パス (D:\ruru\dotfiles) を WSL マウントパス (/mnt/d/ruru/dotfiles) に変換
         $driveLetter = $dotfilesPath.Substring(0, 1).ToLower()
@@ -379,7 +385,6 @@ class NixRebuildHandler : SetupHandlerBase {
         if ($ctx.Options.ContainsKey("NixRebuildApplied")) {
             $ctx.Options.Remove("NixRebuildApplied")
         }
-
         try {
             $distroName = $ctx.DistroName
             $this.ResolveNixOsIdentity($distroName)
@@ -387,25 +392,30 @@ class NixRebuildHandler : SetupHandlerBase {
             # dotfiles が NixOS 内に存在しなければ Windows マウント経由でリンク
             $this.EnsureDotfilesAvailable($distroName, $ctx.DotfilesPath)
 
-            $this.Log("nix flake update を実行しています...")
-            $flakeUpdateCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && nix flake update 2>&1"
-            $flakeUpdateOutput = Invoke-Wsl -Arguments @("-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", $flakeUpdateCommand)
-            $flakeUpdateExitCode = $LASTEXITCODE
-            $flakeUpdateErrors = [System.Collections.Generic.List[string]]::new()
-            $flakeUpdateOutput | ForEach-Object {
-                if ($_ -notmatch '^\s*$') {
-                    if ($_ -match '^error:') {
-                        $this.LogError("  $_")
-                        $flakeUpdateErrors.Add([string]$_)
-                    }
-                    else {
-                        $this.Log("  $_", "Gray")
+            if (-not $this.IsTruthy($ctx.GetOption("SkipFlakeUpdate", $false))) {
+                $this.Log("nix flake update を実行しています...")
+                $flakeUpdateCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && nix flake update 2>&1"
+                $flakeUpdateOutput = Invoke-Wsl -Arguments @("-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", $flakeUpdateCommand)
+                $flakeUpdateExitCode = $LASTEXITCODE
+                $flakeUpdateErrors = [System.Collections.Generic.List[string]]::new()
+                $flakeUpdateOutput | ForEach-Object {
+                    if ($_ -notmatch '^\s*$') {
+                        if ($_ -match '^error:') {
+                            $this.LogError("  $_")
+                            $flakeUpdateErrors.Add([string]$_)
+                        }
+                        else {
+                            $this.Log("  $_", "Gray")
+                        }
                     }
                 }
+                if ($flakeUpdateExitCode -ne 0) {
+                    $errorDetail = if ($flakeUpdateErrors.Count -gt 0) { ": $($flakeUpdateErrors[0])" } else { "" }
+                    throw "nix flake update が失敗しました (exit code: $flakeUpdateExitCode)$errorDetail"
+                }
             }
-            if ($flakeUpdateExitCode -ne 0) {
-                $errorDetail = if ($flakeUpdateErrors.Count -gt 0) { ": $($flakeUpdateErrors[0])" } else { "" }
-                throw "nix flake update が失敗しました (exit code: $flakeUpdateExitCode)$errorDetail"
+            else {
+                $this.Log("SkipFlakeUpdate が設定されているため nix flake update をスキップします")
             }
 
             $this.Log("nixos-rebuild switch を実行しています...")
@@ -421,8 +431,13 @@ class NixRebuildHandler : SetupHandlerBase {
 
             # 実ユーザーの identity を wrapper に渡して nixos-rebuild switch を実行する。
             # 2>&1 で stderr も捕捉しエラー詳細をログに残す。
-            $rebuildCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && DOTFILES_USER=$($this.QuoteShellArg($this.NixOsUser)) DOTFILES_HOME=$($this.QuoteShellArg($this.NixOsHome)) bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure 2>&1"
-            $output = Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", $rebuildCommand)
+            $withHermes = if ($this.IsTruthy($ctx.GetOption("WithHermes", $false))) { "1" } else { "0" }
+            # This repository pins its binary-cache URL and signing key in flake.nix.
+            # Accept that checked-in flake config only for this rebuild invocation;
+            # do not persist trust in the user's or machine's Nix configuration.
+            $rebuildCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && DOTFILES_USER=$($this.QuoteShellArg($this.NixOsUser)) DOTFILES_HOME=$($this.QuoteShellArg($this.NixOsHome)) DOTFILES_WITH_HERMES=$withHermes DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure 2>&1"
+            $nixRebuildTimeoutSeconds = [int]$ctx.GetOption("NixRebuildTimeoutSeconds", 5400)
+            $output = Invoke-Wsl -TimeoutSeconds $nixRebuildTimeoutSeconds -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", $rebuildCommand)
             $nixosExitCode = $LASTEXITCODE
 
             # error: で始まる行は LogError（赤）、それ以外は Gray で表示
@@ -441,12 +456,13 @@ class NixRebuildHandler : SetupHandlerBase {
 
             if ($nixosExitCode -ne 0) {
                 $errorDetail = if ($errorLines.Count -gt 0) { ": $($errorLines[0])" } else { "" }
-                throw "nixos-rebuild switch が失敗しました (exit code: $nixosExitCode)$errorDetail"
+                $rebuildFailure = "nixos-rebuild switch が失敗しました (exit code: $nixosExitCode)$errorDetail"
+                throw $rebuildFailure
             }
 
             $this.Log("nixos-rebuild switch 完了", "Green")
 
-            # pnpm グローバルパッケージをインストール（SSOT: all.nix → windows/pnpm/packages.json）
+            # pnpm グローバルパッケージをインストール（SSOT: nix/packages/sets.nix → windows/pnpm/packages.json）
             $packagesJsonPath = Join-Path $ctx.DotfilesPath "windows\pnpm\packages.json"
             if (-not $this.InstallPnpmGlobalPackages($distroName, $packagesJsonPath)) {
                 throw "pnpm グローバルパッケージのインストールまたは検証に失敗しました"
@@ -459,7 +475,8 @@ class NixRebuildHandler : SetupHandlerBase {
             return $this.CreateSuccessResult("NixOS 設定を適用しました")
         }
         catch {
-            return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
+            $failureMessage = $_.Exception.Message
+            return $this.CreateFailureResult($failureMessage, $_.Exception)
         }
     }
 }

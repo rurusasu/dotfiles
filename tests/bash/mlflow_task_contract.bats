@@ -37,7 +37,7 @@ run_task_command_through_shell() {
   run task --taskfile "$REPO_ROOT/Taskfile.yml" --list
 
   [ "$status" -eq 0 ]
-  for task_name in mlflow:up mlflow:configure mlflow:down mlflow:status mlflow:logs mlflow:verify; do
+  for task_name in mlflow:up mlflow:update mlflow:configure mlflow:down mlflow:status mlflow:logs mlflow:verify; do
     [[ "$output" == *"$task_name"* ]]
   done
 }
@@ -47,8 +47,20 @@ run_task_command_through_shell() {
 
   [ -f "$taskfile" ]
   grep -Fq 'docker network inspect local-ai-services >/dev/null 2>&1 || docker network create local-ai-services' "$taskfile"
-  grep -Fq 'docker compose -f {{.MLFLOW_COMPOSE_FILE}} pull mlflow' "$taskfile"
-  grep -Fq 'docker compose -f {{.MLFLOW_COMPOSE_FILE}} up -d --force-recreate --remove-orphans --wait mlflow' "$taskfile"
+  up_block="$(awk '
+    /^  mlflow:up:/ { in_up = 1; next }
+    /^  [^[:space:]][^:]*:/ { in_up = 0 }
+    in_up { print }
+  ' "$taskfile")"
+  update_block="$(awk '
+    /^  mlflow:update:/ { in_update = 1; next }
+    /^  [^[:space:]][^:]*:/ { in_update = 0 }
+    in_update { print }
+  ' "$taskfile")"
+  [[ "$up_block" != *'pull mlflow'* ]]
+  [[ "$up_block" == *'up -d --remove-orphans --wait mlflow'* ]]
+  [[ "$update_block" == *'pull mlflow'* ]]
+  [[ "$update_block" == *'task: mlflow:up'* ]]
   down_block="$(awk '
     /^  mlflow:down:/ { in_down = 1; next }
     /^  [^[:space:]][^:]*:/ { in_down = 0 }

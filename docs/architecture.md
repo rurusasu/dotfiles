@@ -98,24 +98,36 @@ Python がない初期環境では従来の逐次表示を使用します。リ�
 | ユーザー設定            | chezmoi                 | shell、Git、terminal、editor の OS 差分をテンプレート化        |
 | 受入検証                | platform verifier       | runtime acceptance と drift を検出                             |
 
-## Hermes Bootstrap Ownership
+## Hermes Runtime and Bootstrap Ownership
 
-Hermes uses one containerized bootstrap across supported operating systems. The
-runtime mount is `/opt/data`, not a Git checkout. The root and named profile
-homes are applied from source repositories, while live secrets, memories,
-sessions, logs, and browser state remain local runtime data.
+On macOS and Linux/WSL, the pinned `hermes-agent` flake input and Home Manager
+module manage the Hermes CLI and gateway as a native user service: systemd on
+Linux/WSL and launchd on macOS. On Windows, `WithHermes` is routed through the
+configured NixOS WSL distribution; the Windows installer no longer starts a
+Docker-managed Hermes Agent. Native state remains at `~/.hermes`.
 
-| Owner                  | Source                                                                                    | Responsibility                                                                              |
-| ---------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Dotfiles               | [rurusasu/dotfiles](https://github.com/rurusasu/dotfiles)                                 | Compose wiring, manifest, host adapters, operator Taskfile and documentation                |
-| Root distribution      | [rurusasu/hermes-profile-alfred](https://github.com/rurusasu/hermes-profile-alfred)       | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks |
-| Rick distribution      | [rurusasu/hermes-profile-rick](https://github.com/rurusasu/hermes-profile-rick)           | Official `distribution.yaml` and Rick declarative content                                   |
-| Hoffman distribution   | [rurusasu/hermes-profile-hoffman](https://github.com/rurusasu/hermes-profile-hoffman)     | Official `distribution.yaml` and Hoffman declarative content                                |
-| Risarisa distribution  | [rurusasu/hermes-profile-risarisa](https://github.com/rurusasu/hermes-profile-risarisa)   | Official `distribution.yaml` and Risarisa declarative content                               |
-| Nancy distribution     | [rurusasu/hermes-profile-nancy](https://github.com/rurusasu/hermes-profile-nancy)         | Official `distribution.yaml` and Nancy declarative content                                  |
-| Kuroda distribution    | [rurusasu/hermes-profile-kuroda](https://github.com/rurusasu/hermes-profile-kuroda)       | Official `distribution.yaml` and Kuroda declarative content                                 |
-| Shiraishi distribution | [rurusasu/hermes-profile-shiraishi](https://github.com/rurusasu/hermes-profile-shiraishi) | Official `distribution.yaml` and Shiraishi declarative content                              |
-| Shared data            | [rurusasu/lifelog](https://github.com/rurusasu/lifelog)                                   | The one locked read-write checkout at `/opt/data/shared/lifelog`                            |
+The explicit legacy Docker Compose stack has separate ownership. Its sidecars
+and manually invoked container bootstrap continue to use the Docker named volume `hermes-data` (or
+the name selected by `HERMES_DATA_VOLUME`) mounted at `/opt/data`, not a Git
+checkout. Root and named-profile homes are applied from source repositories,
+while live secrets, memories, sessions, logs, and browser state remain local
+runtime data. Enabling the native service does not migrate, modify, or remove
+the existing Docker volume or its state. Any operator-led migration requires a
+verified backup and an explicit policy for resolving conflicting paths before
+data is copied; no automatic merge or precedence is defined.
+
+| Owner                  | Source                                                                                    | Responsibility                                                                                 |
+| ---------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Dotfiles               | [rurusasu/dotfiles](https://github.com/rurusasu/dotfiles)                                 | Compose wiring, Docker bootstrap, manifest, host adapters, operator Taskfile and documentation |
+| Nix + Home Manager     | `flake.nix`, `nix/home/hermes-agent.nix`                                                  | Pinned CLI package and native gateway user service on macOS and Linux/WSL                      |
+| Root distribution      | [rurusasu/hermes-profile-alfred](https://github.com/rurusasu/hermes-profile-alfred)       | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks    |
+| Rick distribution      | [rurusasu/hermes-profile-rick](https://github.com/rurusasu/hermes-profile-rick)           | Official `distribution.yaml` and Rick declarative content                                      |
+| Hoffman distribution   | [rurusasu/hermes-profile-hoffman](https://github.com/rurusasu/hermes-profile-hoffman)     | Official `distribution.yaml` and Hoffman declarative content                                   |
+| Risarisa distribution  | [rurusasu/hermes-profile-risarisa](https://github.com/rurusasu/hermes-profile-risarisa)   | Official `distribution.yaml` and Risarisa declarative content                                  |
+| Nancy distribution     | [rurusasu/hermes-profile-nancy](https://github.com/rurusasu/hermes-profile-nancy)         | Official `distribution.yaml` and Nancy declarative content                                     |
+| Kuroda distribution    | [rurusasu/hermes-profile-kuroda](https://github.com/rurusasu/hermes-profile-kuroda)       | Official `distribution.yaml` and Kuroda declarative content                                    |
+| Shiraishi distribution | [rurusasu/hermes-profile-shiraishi](https://github.com/rurusasu/hermes-profile-shiraishi) | Official `distribution.yaml` and Shiraishi declarative content                                 |
+| Shared data            | [rurusasu/lifelog](https://github.com/rurusasu/lifelog)                                   | The one locked read-write checkout at `/opt/data/shared/lifelog`                               |
 
 `/opt/data/core/lifelog` is migration-only and is absent after bootstrap;
 profile homes are never Git repositories. The default profile owns
@@ -133,15 +145,17 @@ traces.
 
 Hindsight remains an independent local-only memory provider. Its API and UI
 are published only on host loopback `127.0.0.1:8888` and `127.0.0.1:9999`, and
-its embedded PostgreSQL is not published. Hermes and Hindsight use the shared
-`local-ai-services` bridge network. Public Hermes startup prepares the memory network and
-service first, but the Compose lifecycles remain independent. If Hindsight is
-unavailable, memory recall/retain may be unavailable while the Hermes gateway
-continues running.
+its embedded PostgreSQL is not published. Native Nix Hermes does not require
+Docker, MLflow, Ollama, or Hindsight to install or run; Hindsight memory is an
+optional integration selected separately (`-WithHindsight` on Windows).
+The explicit legacy Docker Hermes stack and Hindsight use the shared
+`local-ai-services` bridge network. That Compose startup prepares the memory
+network and service first, but their Compose lifecycles remain independent. If
+Hindsight is unavailable, memory recall/retain may be unavailable while the
+Hermes gateway continues running.
 
 The onboarding fields, approved connection modes, MLflow operator tasks, and
-runtime-data policy are defined in [Local AI services onboarding and
-operations](./mlflow/local-ai-services.md).
+runtime-data policy are defined in [Local AI services onboarding and operations](./mlflow/local-ai-services.md).
 
 | 所有者                                               | 永続化対象                           | Git との境界                                                          |
 | ---------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------- |
@@ -241,28 +255,28 @@ $vhdPath = $context.SharedData["VhdPath"]
 
 ### ハンドラー実行順序
 
-| Order | Phase | Admin | ハンドラー      | ソースファイル                                                                            | 説明                                     |
-| ----- | ----- | ----- | --------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------- |
-| 5     | 1     | No    | Winget          | [Handler.Winget.ps1](../scripts/powershell/handlers/Handler.Winget.ps1)                   | winget パッケージ管理                    |
-| 5     | 2     | Yes   | WslInstall      | [Handler.WslInstall.ps1](../scripts/powershell/handlers/Handler.WslInstall.ps1)           | WSL コンポーネントのインストール         |
-| 6     | 1     | No    | Codex           | [Handler.Codex.ps1](../scripts/powershell/handlers/Handler.Codex.ps1)                     | Codex CLI リンクと MCP PATH 設定         |
-| 6     | 1     | No    | Npm             | [Handler.Npm.ps1](../scripts/powershell/handlers/Handler.Npm.ps1)                         | npm グローバルパッケージ管理             |
-| 7     | 1     | No    | Pnpm            | [Handler.Pnpm.ps1](../scripts/powershell/handlers/Handler.Pnpm.ps1)                       | pnpm グローバルパッケージ管理            |
-| 8     | 1     | No    | Bun             | [Handler.Bun.ps1](../scripts/powershell/handlers/Handler.Bun.ps1)                         | Bun シンボリックリンク作成               |
-| 9     | 1     | No    | OnePasswordCli  | [Handler.OnePasswordCli.ps1](../scripts/powershell/handlers/Handler.OnePasswordCli.ps1)   | 1Password CLI op.exe shim 作成           |
-| 10    | 2     | No    | Chezmoi         | [Handler.Chezmoi.ps1](../scripts/powershell/handlers/Handler.Chezmoi.ps1)                 | chezmoi dotfiles 適用                    |
-| 17    | 2     | No    | NixOSWSL        | [Handler.NixOSWSL.ps1](../scripts/powershell/handlers/Handler.NixOSWSL.ps1)               | NixOS-WSL インストール                   |
-| 18    | 2     | No    | Docker          | [Handler.Docker.ps1](../scripts/powershell/handlers/Handler.Docker.ps1)                   | Docker Desktop WSL 連携                  |
-| 20    | 2     | No    | WslConfig       | [Handler.WslConfig.ps1](../scripts/powershell/handlers/Handler.WslConfig.ps1)             | .wslconfig 適用                          |
-| 21    | 2     | Yes   | VhdManager      | [Handler.VhdManager.ps1](../scripts/powershell/handlers/Handler.VhdManager.ps1)           | WSL VHD サイズ拡張                       |
-| 40    | 2     | No    | VscodeServer    | [Handler.VscodeServer.ps1](../scripts/powershell/handlers/Handler.VscodeServer.ps1)       | VS Code Server キャッシュクリア          |
-| 55    | 2     | No    | NixRebuild      | [Handler.NixRebuild.ps1](../scripts/powershell/handlers/Handler.NixRebuild.ps1)           | nixos-rebuild switch の実行              |
-| 55    | 2     | No    | Hindsight       | [Handler.Hindsight.ps1](../scripts/powershell/handlers/Handler.Hindsight.ps1)             | 独立HindsightをHermesより先に起動        |
-| 56    | 2     | No    | HermesAgent     | [Handler.HermesAgent.ps1](../scripts/powershell/handlers/Handler.HermesAgent.ps1)         | Hermes Agent Docker コンテナセットアップ |
-| 57    | 2     | No    | Plane           | [Handler.Plane.ps1](../scripts/powershell/handlers/Handler.Plane.ps1)                     | Plane Docker Compose セットアップ        |
-| 58    | 2     | No    | PlaneGithubSync | [Handler.PlaneGithubSync.ps1](../scripts/powershell/handlers/Handler.PlaneGithubSync.ps1) | Plane / GitHub Issues 同期タスク登録     |
+| Order | Phase | Admin | ハンドラー      | ソースファイル                                                                            | 説明                                              |
+| ----- | ----- | ----- | --------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| 5     | 1     | No    | Winget          | [Handler.Winget.ps1](../scripts/powershell/handlers/Handler.Winget.ps1)                   | winget パッケージ管理                             |
+| 5     | 2     | Yes   | WslInstall      | [Handler.WslInstall.ps1](../scripts/powershell/handlers/Handler.WslInstall.ps1)           | WSL コンポーネントのインストール                  |
+| 6     | 1     | No    | Codex           | [Handler.Codex.ps1](../scripts/powershell/handlers/Handler.Codex.ps1)                     | Codex CLI リンクと MCP PATH 設定                  |
+| 6     | 1     | No    | Npm             | [Handler.Npm.ps1](../scripts/powershell/handlers/Handler.Npm.ps1)                         | npm グローバルパッケージ管理                      |
+| 7     | 1     | No    | Pnpm            | [Handler.Pnpm.ps1](../scripts/powershell/handlers/Handler.Pnpm.ps1)                       | pnpm グローバルパッケージ管理                     |
+| 8     | 1     | No    | Bun             | [Handler.Bun.ps1](../scripts/powershell/handlers/Handler.Bun.ps1)                         | Bun シンボリックリンク作成                        |
+| 9     | 1     | No    | OnePasswordCli  | [Handler.OnePasswordCli.ps1](../scripts/powershell/handlers/Handler.OnePasswordCli.ps1)   | 1Password CLI op.exe shim 作成                    |
+| 10    | 2     | No    | Chezmoi         | [Handler.Chezmoi.ps1](../scripts/powershell/handlers/Handler.Chezmoi.ps1)                 | chezmoi dotfiles 適用                             |
+| 17    | 2     | No    | NixOSWSL        | [Handler.NixOSWSL.ps1](../scripts/powershell/handlers/Handler.NixOSWSL.ps1)               | NixOS-WSL インストール                            |
+| 18    | 2     | No    | Docker          | [Handler.Docker.ps1](../scripts/powershell/handlers/Handler.Docker.ps1)                   | Docker Desktop WSL 連携                           |
+| 20    | 2     | No    | WslConfig       | [Handler.WslConfig.ps1](../scripts/powershell/handlers/Handler.WslConfig.ps1)             | .wslconfig 適用                                   |
+| 21    | 2     | Yes   | VhdManager      | [Handler.VhdManager.ps1](../scripts/powershell/handlers/Handler.VhdManager.ps1)           | WSL VHD サイズ拡張                                |
+| 40    | 2     | No    | VscodeServer    | [Handler.VscodeServer.ps1](../scripts/powershell/handlers/Handler.VscodeServer.ps1)       | VS Code Server キャッシュクリア                   |
+| 55    | 2     | No    | NixRebuild      | [Handler.NixRebuild.ps1](../scripts/powershell/handlers/Handler.NixRebuild.ps1)           | nixos-rebuild switch の実行                       |
+| 55    | 2     | No    | Hindsight       | [Handler.Hindsight.ps1](../scripts/powershell/handlers/Handler.Hindsight.ps1)             | 独立HindsightをHermesより先に起動                 |
+| 56    | 2     | No    | HermesAgent     | [Handler.HermesAgent.ps1](../scripts/powershell/handlers/Handler.HermesAgent.ps1)         | NixOS WSL の Hermes native service 適用結果を検証 |
+| 57    | 2     | No    | Plane           | [Handler.Plane.ps1](../scripts/powershell/handlers/Handler.Plane.ps1)                     | Plane Docker Compose セットアップ                 |
+| 58    | 2     | No    | PlaneGithubSync | [Handler.PlaneGithubSync.ps1](../scripts/powershell/handlers/Handler.PlaneGithubSync.ps1) | Plane / GitHub Issues 同期タスク登録              |
 
-**重要**: Order は依存関係を優先して設定する。Docker だけで完結するハンドラーは Docker の後、NixOS に依存するローカルコンテナ系ハンドラーは NixOSWSL/NixRebuild の後に置く。Hindsight は共有メモリネットワークを準備するため、HermesAgent より先に実行する。
+**重要**: Order は依存関係を優先して設定する。Docker だけで完結するハンドラーは Docker の後、NixOS に依存するハンドラーは NixOSWSL/NixRebuild の後に置く。Hindsight は独立した optional Docker service であり、Nix/Home Manager 管理の native Hermes Agent とは別に扱う。
 
 ### ハンドラー実行フロー
 
@@ -341,7 +355,7 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 | `ci-powershell.yml`  | hosted Windows             | handlers、entrypoint、Windows acceptance の Pester                                                                                  |
 | `ci-bootstrap.yml`   | hosted Linux/macOS/Windows | Statix、treefmt、flake/package smoke、Linux/Darwin/WSL/Windows の platform-routed build、Windows installer、E2E、contract aggregate |
 
-`ci-bootstrap.yml` は変更パスから Linux、Darwin、WSL、Windows の実行対象を個別に選択します。Docker Desktop、WSL2、nix-darwin switch の実機適用は nested virtualization と OS 制約のため CI では実行せず、one-command installer 末尾の local acceptance が判定します。
+`ci-bootstrap.yml` は変更パスから Linux、Darwin、WSL、Windows の実行対象を個別に選択します。WSL job は一時 NixOS-WSL 環境で Hermes の native Nix/Home Manager switch を適用し、既存 `~/.hermes` state の保持、CLI 起動、user service の再起動と active 状態を smoke test します。Docker Desktop の実機適用と nix-darwin switch は runner の OS 制約により CI では実行せず、one-command installer 末尾の local acceptance が判定します。詳細は [WSL Hermes E2E](../scripts/powershell/ci/Invoke-NixosWslE2E.ps1) を参照してください。
 
 言語・用途別のジョブは `ci/job-path-routing.json` で選択します。`.ps1` / `.psm1` / `.psd1` は PowerShell 検証、`.tmpl` はテンプレート検証、workflow YAML は actionlint、パッケージ定義は catalog 整合性検証に接続します。契約テストは別言語の設定も読むため、拡張子に加えて Taskfile、Nix、chezmoi、Docker の依存パスも判定します。変更が複数なら対象の和集合を実行し、削除・移動元のパスも検証対象に残します。
 

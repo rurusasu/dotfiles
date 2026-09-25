@@ -16,6 +16,16 @@
 $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath "lib\Invoke-ExternalCommand.ps1")
 
+function Resolve-CodexPackageExecutablePath {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [string]$LocalAppData = $env:LOCALAPPDATA
+    )
+
+    return [CodexHandler]::ResolveCodexPackageExecutablePath($LocalAppData)
+}
+
 class CodexHandler : SetupHandlerBase {
     CodexHandler() {
         $this.Name = "Codex"
@@ -42,12 +52,20 @@ class CodexHandler : SetupHandlerBase {
 
         $linksPath = $this.GetLinksPath()
         $linkPath = Join-Path $linksPath "codex.exe"
+        $shimHostPath = Join-Path $linksPath "codex-code-mode-host.exe"
         $localBin = $this.GetLocalBinPath()
+        $codexHostPath = $this.GetCodexHostExecutablePath($codexExe)
+        $codexHostAvailable = Test-Path -LiteralPath $codexHostPath -PathType Leaf
+        $shimUsesCopy = $this.IsPortableCopyCurrent($linkPath, $codexExe)
+        $adjacentShimHostAvailable = -not $shimUsesCopy -or
+            (Test-Path -LiteralPath $shimHostPath -PathType Leaf)
 
         # リンクが最新でも PATH 設定が欠けていれば適用する。
-        # (winget upgrade 後の陳腐化, copy フォールバック後, 過去の部分実行を想定。)
+        # WinGet upgrade 後の陳腐化、copy fallback、host欠落などの部分実行を想定。
         if (
             $this.IsPortableLinkCurrent($linkPath, $codexExe) -and
+            $codexHostAvailable -and
+            $adjacentShimHostAvailable -and
             $this.IsPathInUserPath($linksPath) -and
             $this.IsPathInUserPath($localBin)
         ) {
@@ -69,6 +87,11 @@ class CodexHandler : SetupHandlerBase {
                 return $this.CreateFailureResult("Codex 実行ファイルが見つかりません")
             }
 
+            $codexHostPath = $this.GetCodexHostExecutablePath($codexExe)
+            if (-not (Test-Path -LiteralPath $codexHostPath -PathType Leaf)) {
+                throw "Codex CLI package is missing its adjacent code-mode host executable: $codexHostPath"
+            }
+
             $linksPath = $this.GetLinksPath()
             if (-not (Test-Path $linksPath)) {
                 New-Item -ItemType Directory -Path $linksPath -Force | Out-Null
@@ -78,11 +101,35 @@ class CodexHandler : SetupHandlerBase {
 
             # リンクが陳腐化している（旧バージョンを指すコピー等）場合のみ貼り直す。
             # 既存リンクは、現行 exe への symlink 作成に成功してから置き換える。
-            if (-not $this.IsPortableLinkCurrent($linkPath, $codexExe)) {
-                $this.CreatePortableLink($linkPath, $codexExe)
+            $linkIsCurrent = $this.IsPortableLinkCurrent($linkPath, $codexExe)
+            $copyIsCurrent = $this.IsPortableCopyCurrent($linkPath, $codexExe)
+            $shimIsCopy = $copyIsCurrent
+            if (-not $linkIsCurrent -and -not $copyIsCurrent) {
+                try {
+                    $this.CreatePortableLink($linkPath, $codexExe)
+                }
+                catch {
+                    # Windows PowerShell without Developer Mode cannot create
+                    # symlinks from a user phase. A content-checked copy keeps
+                    # Codex usable without requiring elevation.
+                    $this.LogWarning("シンボリックリンクを作成できないため codex.exe をコピーで作成します")
+                    if (Test-Path -LiteralPath $linkPath) {
+                        Remove-Item -LiteralPath $linkPath -Force -ErrorAction Stop
+                    }
+                    Copy-Item -LiteralPath $codexExe -Destination $linkPath -Force -ErrorAction Stop
+                    $shimIsCopy = $true
+                    $this.Log("codex.exe shim をコピーで作成しました", "Green")
+                }
             }
             else {
-                $this.Log("codex.exe shim は最新です", "Gray")
+                $shimType = if ($linkIsCurrent) { "シンボリックリンク" } else { "コピー" }
+                $this.Log("codex.exe shim は最新です ($shimType)", "Gray")
+            }
+
+            # Codex canonicalizes symlink targets and resolves the helper from
+            # the WinGet package root. A copied shim loses that relationship.
+            if ($shimIsCopy) {
+                $this.SyncCodexHostExecutable($linksPath, $codexExe)
             }
 
             # PATH は常に冪等チェック。リンクが既存でも PATH 未設定なら追加する。
@@ -103,25 +150,77 @@ class CodexHandler : SetupHandlerBase {
     .SYNOPSIS
         Codex パッケージの実行ファイルパスを取得する
     #>
-    hidden [string] GetCodexExecutablePath() {
-        $packagesBase = Join-Path $this.GetLocalAppDataPath() "Microsoft\WinGet\Packages"
-        $codexPattern = "OpenAI.Codex_*"
-
-        $codexDir = Get-ChildItem -Path $packagesBase -Directory -Filter $codexPattern -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (-not $codexDir) {
-            return $null
+    static [string] ResolveCodexPackageExecutablePath([string]$localAppData) {
+        if ([string]::IsNullOrWhiteSpace($localAppData)) {
+            $profilePath = if ($env:USERPROFILE) { $env:USERPROFILE } else { [Environment]::GetFolderPath("UserProfile") }
+            $localAppData = Join-Path $profilePath "AppData\Local"
         }
 
-        # codex-x86_64-pc-windows-msvc.exe または codex.exe を探す
-        $exePatterns = @("codex-x86_64-pc-windows-msvc.exe", "codex.exe")
-        foreach ($pattern in $exePatterns) {
-            $exePath = Join-Path $codexDir.FullName $pattern
-            if (Test-Path $exePath) {
-                return $exePath
+        $packagesPath = Join-Path $localAppData "Microsoft\WinGet\Packages"
+        $codexDirectories = @(
+            Get-ChildItem -Path $packagesPath -Directory -Filter "OpenAI.Codex_*" -ErrorAction SilentlyContinue
+        )
+        $programsCodexPath = Join-Path $localAppData "Programs\Codex"
+        if (Test-Path -LiteralPath $programsCodexPath -PathType Container) {
+            $codexDirectories += [System.IO.DirectoryInfo]$programsCodexPath
+        }
+        # The OpenAI app keeps each CLI build in a hash-named directory under
+        # bin; prefer the most recently updated build and keep its adjacent host.
+        $openAICodexBinPath = Join-Path $localAppData "OpenAI\Codex\bin"
+        $codexDirectories += @(
+            Get-ChildItem -LiteralPath $openAICodexBinPath -Directory -ErrorAction SilentlyContinue |
+                Sort-Object -Property LastWriteTimeUtc -Descending
+        )
+
+        $relativeExecutablePaths = @(
+            "bin\codex.exe"
+            "codex-x86_64-pc-windows-msvc.exe"
+            "codex.exe"
+        )
+        $firstExecutablePath = $null
+        foreach ($codexDirectory in $codexDirectories) {
+            if (-not $codexDirectory) {
+                continue
+            }
+            foreach ($relativePath in $relativeExecutablePaths) {
+                $executablePath = Join-Path $codexDirectory.FullName $relativePath
+                if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
+                    continue
+                }
+
+                if (-not $firstExecutablePath) {
+                    $firstExecutablePath = $executablePath
+                }
+                $hostPath = Join-Path (Split-Path -Parent $executablePath) "codex-code-mode-host.exe"
+                if (Test-Path -LiteralPath $hostPath -PathType Leaf) {
+                    return $executablePath
+                }
             }
         }
 
-        return $null
+        # Keep CLI-only candidates visible so Apply reports a missing adjacent host.
+        return $firstExecutablePath
+    }
+
+    hidden [string] GetCodexExecutablePath() {
+        return [CodexHandler]::ResolveCodexPackageExecutablePath($this.GetLocalAppDataPath())
+    }
+
+    hidden [string] GetCodexHostExecutablePath([string]$codexExe) {
+        return Join-Path (Split-Path -Parent $codexExe) "codex-code-mode-host.exe"
+    }
+
+    hidden [void] SyncCodexHostExecutable([string]$linksPath, [string]$codexExe) {
+        $sourcePath = $this.GetCodexHostExecutablePath($codexExe)
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+            throw "Codex CLI package is missing its adjacent code-mode host executable: $sourcePath"
+        }
+
+        $shimPath = Join-Path $linksPath "codex-code-mode-host.exe"
+        if (-not $this.IsPortableCopyCurrent($shimPath, $sourcePath)) {
+            Copy-Item -LiteralPath $sourcePath -Destination $shimPath -Force -ErrorAction Stop
+            $this.Log("codex-code-mode-host.exe を shim の隣に同期しました", "Green")
+        }
     }
 
     <#

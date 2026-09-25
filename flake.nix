@@ -2,9 +2,13 @@
   # llm-agents.nix publishes pre-built Codex outputs so first-time NixOS and
   # NixOS-WSL activations do not compile the Rust/V8 package from source.
   nixConfig = {
-    extra-substituters = [ "https://cache.numtide.com" ];
+    extra-substituters = [
+      "https://cache.numtide.com"
+      "https://hermes-agent.cachix.org"
+    ];
     extra-trusted-public-keys = [
       "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
+      "hermes-agent.cachix.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU="
     ];
   };
 
@@ -19,7 +23,10 @@
       url = "github:nix-community/NixOS-WSL";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    nixos-vscode-server.url = "github:nix-community/nixos-vscode-server";
+    nixos-vscode-server = {
+      url = "github:nix-community/nixos-vscode-server";
+      inputs.flake-parts.follows = "flake-parts";
+    };
     nix-darwin = {
       url = "github:nix-darwin/nix-darwin/master";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -49,6 +56,15 @@
     # llm-agents.nix package set. Keep its nixpkgs input independent so the
     # package uses the nixpkgs revision it is tested against.
     llm-agents.url = "github:numtide/llm-agents.nix";
+    hermes-agent = {
+      url = "github:NousResearch/hermes-agent/d337b736aa1e8ebecfab043842d13e4a2d2f48a3";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-parts.follows = "flake-parts";
+      inputs.home-manager.follows = "home-manager";
+    };
+    # nix-unit runs in a network-isolated builder; expose the nested source so
+    # its package-evaluation tests can receive it as an input override.
+    bun2nix.follows = "llm-agents/bun2nix";
   };
 
   outputs =

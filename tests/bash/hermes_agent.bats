@@ -971,22 +971,53 @@ EOF
 		"$MOCK_REPO/install.sh" "$@"
 }
 
-@test "Unix installers use the Taskfile as the canonical Hermes handoff" {
+@test "Unix installers do not hand off native Hermes to the Docker bootstrap" {
 	local installer contents
 	for installer in install-macos.sh install-linux.sh install-nixos.sh; do
 		contents="$REPO_ROOT/scripts/sh/$installer"
 		! grep -Fq 'hermes-agent.sh' "$contents"
-			grep -Fq 'dotfiles_run_task hermes:bootstrap' "$contents" ||
-				grep -Fq 'dotfiles_run_task_in_group docker hermes:bootstrap' "$contents"
+		if [[ $installer == install-macos.sh ]]; then
+			grep -Fq 'dotfiles_run_task hermes:desktop:install' "$contents"
+			! grep -Fq 'hermes:bootstrap' "$contents"
+			continue
+		fi
+		! grep -Fq 'hermes:bootstrap' "$contents"
+		! grep -Fq 'hermes:docker:bootstrap' "$contents"
+		! grep -Fq 'dotfiles_hermes_start_stack' "$contents"
 	done
 }
 
+@test "hermes:bootstrap activates the Nix-managed Hermes profile" {
+	local bootstrap_task
+	bootstrap_task="$(awk '
+		/^  hermes:bootstrap:$/ { in_task = 1 }
+		in_task && /^  [^ ]/ && $0 !~ /^  hermes:bootstrap:/ { exit }
+		in_task { print }
+	' "$REPO_ROOT/taskfiles/hermes/taskfile.yml")"
+
+	[[ "$bootstrap_task" == *'DOTFILES_WITH_HERMES=1'* ]]
+	[[ "$bootstrap_task" == *'nixos-rebuild-with-user.sh switch --flake . --impure'* ]]
+	[[ "$bootstrap_task" == *'task darwin:install'* ]]
+	[[ "$bootstrap_task" != *'hermes:docker:bootstrap'* ]]
+	[[ "$bootstrap_task" != *'docker compose'* ]]
+}
+
+@test "NixOS-WSL Hermes readiness requires every critical check" {
+	local readiness_script required_checks
+	readiness_script="$(<"$REPO_ROOT/scripts/powershell/ci/Invoke-NixosWslE2E.ps1")"
+	required_checks='["state_db", "session_store", "config", "model", "disk", "gateway", "background_queues"]'
+
+	[[ "$readiness_script" == *"$required_checks"* ]]
+	[[ "$readiness_script" == *'type == "object" and .status == "ok"'* ]]
+	[[ "$readiness_script" == *'all(.[]; .status == "ok")'* ]]
+}
+
 @test "install.sh routes each Unix installer through the Taskfile after chezmoi" {
-	local platform task_line apply_line task_line_number expected_sudo_count target
+	local platform task_line apply_line task_line_number verify_line expected_sudo_count target
 	for platform in macos linux nixos; do
 		: >"$COMMAND_LOG"
 		if [[ $platform == macos ]]; then
-			run_mocked_installer "$platform" --with-hermes
+			run_mocked_installer "$platform" --with-docker --with-hermes
 		else
 			run_mocked_installer "$platform"
 		fi
@@ -995,12 +1026,23 @@ EOF
 			printf '%s installer failed:\n%s\n' "$platform" "$output" >&3
 			false
 		fi
-		task_line="task --dir $MOCK_REPO hermes:bootstrap"
-		grep -Fxq "$task_line" "$COMMAND_LOG"
+		if [[ $platform == macos ]]; then
+			task_line="task --dir $MOCK_REPO hermes:desktop:install"
+		else
+		task_line=""
+		fi
 		apply_line="$(grep -n -m 1 '^chezmoi apply --force$' "$COMMAND_LOG" | cut -d: -f1)"
 		[ -n "$apply_line" ]
-		task_line_number="$(grep -n -m 1 -F "$task_line" "$COMMAND_LOG" | cut -d: -f1)"
-		[ "$task_line_number" -gt "$apply_line" ]
+		if [[ -n $task_line ]]; then
+			grep -Fxq "$task_line" "$COMMAND_LOG"
+			task_line_number="$(grep -n -m 1 -F "$task_line" "$COMMAND_LOG" | cut -d: -f1)"
+			[ "$task_line_number" -gt "$apply_line" ]
+		else
+			! grep -q 'hermes:bootstrap\|docker compose.*hermes' "$COMMAND_LOG"
+			verify_line="$(grep -n -m 1 '^verify-environment ' "$COMMAND_LOG" | cut -d: -f1)"
+			[ -n "$verify_line" ]
+			[ "$verify_line" -gt "$apply_line" ]
+		fi
 		! grep -q '^unexpected nixos-rebuild$' "$COMMAND_LOG"
 		if [[ $platform == macos ]]; then
 			grep -Fxq 'docker info' "$COMMAND_LOG"

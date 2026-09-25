@@ -12,7 +12,7 @@ Describe 'Integration Verification - Windows Environment' {
         It "should have <_> installed" -ForEach @(
             'Obsidian.Obsidian'
         ) {
-            $result = & winget list --id $_ --accept-source-agreements 2>$null
+            $null = & winget list --id $_ --accept-source-agreements 2>$null
             if ($LASTEXITCODE -ne 0) { throw "winget パッケージ '$_' がインストールされていません" }
             Write-Host "確認完了: '$_'"
         }
@@ -50,7 +50,6 @@ Describe 'Integration Verification - Windows Environment' {
 
         It "should have <_> installed in NixOS" -ForEach @(
             'nvim'
-            'zed'
             'task'
             'op'
             'obsidian'

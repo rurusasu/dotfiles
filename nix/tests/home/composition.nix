@@ -1,17 +1,14 @@
 { inputs }:
 let
-  mkPkgs =
-    system:
-    import inputs.nixpkgs {
-      inherit system;
-      config.allowUnfree = true;
-    };
+  fixtures = import ../../test-fixtures.nix { inherit inputs; };
+  mkPkgs = system: fixtures.mkPkgs system;
 
   baseModule =
     { ... }:
     {
       home.username = "test-user";
       home.homeDirectory = "/home/test-user";
+      home.stateVersion = "25.05";
     };
 
   mkHome =
@@ -20,10 +17,22 @@ let
       module,
       specialArgs ? { },
     }:
-    inputs.home-manager.lib.homeManagerConfiguration {
+    let
       pkgs = mkPkgs system;
+      testInputs = inputs // {
+        "llm-agents" = {
+          packages.${system} = {
+            codex = pkgs.hello;
+            hermes-agent = pkgs.hello;
+          };
+        };
+      };
+    in
+    inputs.home-manager.lib.homeManagerConfiguration {
+      inherit pkgs;
       extraSpecialArgs = {
-        inherit inputs;
+        inputs = testInputs;
+        installFeatures = [ ];
       }
       // specialArgs;
       modules = [
@@ -92,6 +101,19 @@ in
     expected = "eza -lhaT --level=2 --icons=auto --hyperlink -F --group-directories-first --color=auto";
   };
 
+  testNRShellAliasUsesPlatformInstallCommand = {
+    expr = {
+      wsl = wsl.config.programs.zsh.shellAliases.nrs;
+      linux = linux.config.programs.zsh.shellAliases.nrs;
+      darwin = darwin.config.programs.zsh.shellAliases.nrs;
+    };
+    expected = {
+      wsl = "task --dir ~/.dotfiles nrs";
+      linux = "~/.dotfiles/install.sh";
+      darwin = "~/.dotfiles/install.sh";
+    };
+  };
+
   testLinuxHomeModuleDoesNotReceiveDarwinSessionVariables = {
     expr = builtins.hasAttr "HOMEBREW_AUTO_UPDATE_SECS" linux.config.home.sessionVariables;
     expected = false;
@@ -110,23 +132,47 @@ in
     };
   };
 
-  testWSLHomeModuleExcludesNativeDesktopPackages = {
-    expr =
-      let
-        source = builtins.readFile ../../home/wsl.nix;
-        has = needle: builtins.match ".*${needle}.*" source != null;
-      in
-      {
-        usesWithout = has "allWithout";
-        excludesDiscord = has "discord";
-        excludesOllama = has "ollama";
+  testWSLHomeModuleExcludesNativeDesktopPackages =
+    let
+      pkgs = mkPkgs "x86_64-linux";
+      sets = import ../../packages/sets.nix {
+        inherit pkgs;
+        lib = pkgs.lib;
+        codexPackage = pkgs.hello;
       };
-    expected = {
-      usesWithout = true;
-      excludesDiscord = true;
-      excludesOllama = true;
+      catalogDrvPaths = builtins.map (package: package.drvPath) sets.all;
+      selectedCatalogDrvPaths = builtins.sort builtins.lessThan (
+        pkgs.lib.unique (
+          builtins.filter (drvPath: builtins.elem drvPath catalogDrvPaths) (
+            builtins.map (package: package.drvPath) wsl.config.home.packages
+          )
+        )
+      );
+      expectedCatalogDrvPaths = builtins.sort builtins.lessThan (
+        pkgs.lib.unique (
+          builtins.map (package: package.drvPath) (
+            sets.allWithout [
+              "discord"
+              "ollama"
+            ]
+          )
+        )
+      );
+      containsDrvPath =
+        needle: packages: builtins.any (package: package.drvPath == needle.drvPath) packages;
+    in
+    {
+      expr = {
+        selectedCatalogDrvPaths = selectedCatalogDrvPaths;
+        excludesDiscord = !(containsDrvPath pkgs.discord wsl.config.home.packages);
+        excludesOllama = !(containsDrvPath pkgs.ollama wsl.config.home.packages);
+      };
+      expected = {
+        selectedCatalogDrvPaths = expectedCatalogDrvPaths;
+        excludesDiscord = true;
+        excludesOllama = true;
+      };
     };
-  };
 
   testDarwinHomeModuleOwnsDarwinSessionVariables = {
     expr = {
@@ -189,4 +235,59 @@ in
       home = false;
     };
   };
+
+  testTerminalKeybindingHelpersHavePlatformScopedProviders =
+    let
+      report = darwinPackageSets.sets.supportReport;
+    in
+    {
+      expr = {
+        hammerspoon = {
+          inTerminal = builtins.any (
+            package: (package.pname or null) == "hammerspoon"
+          ) darwinPackageSets.sets.terminal;
+          darwin = {
+            provider = report.hammerspoon.darwin.provider;
+            source = report.hammerspoon.darwin.source;
+            appName = report.hammerspoon.darwin.identity.appName;
+            legacyName = report.hammerspoon.legacyDarwin.name;
+          };
+          linuxUnsupported = report.hammerspoon.linux.unsupported;
+          windowsUnsupported = report.hammerspoon.windows.unsupported;
+        };
+        autohotkey = {
+          wingetId = darwinPackageSets.sets.wingetMap.autohotkey;
+          windows = {
+            provider = report.autohotkey.windows.provider;
+            source = report.autohotkey.windows.source;
+            identity = report.autohotkey.windows.identity;
+          };
+          darwinUnsupported = report.autohotkey.darwin.unsupported;
+          linuxUnsupported = report.autohotkey.linux.unsupported;
+        };
+      };
+      expected = {
+        hammerspoon = {
+          inTerminal = true;
+          darwin = {
+            provider = "nix";
+            source = "custom";
+            appName = "Hammerspoon.app";
+            legacyName = "hammerspoon";
+          };
+          linuxUnsupported = "Hammerspoon is only available on macOS";
+          windowsUnsupported = "Hammerspoon is only available on macOS";
+        };
+        autohotkey = {
+          wingetId = "AutoHotkey.AutoHotkey";
+          windows = {
+            provider = "winget";
+            source = "winget";
+            identity = "AutoHotkey.AutoHotkey";
+          };
+          darwinUnsupported = "AutoHotkey is only available on Windows";
+          linuxUnsupported = "AutoHotkey is only available on Windows";
+        };
+      };
+    };
 }

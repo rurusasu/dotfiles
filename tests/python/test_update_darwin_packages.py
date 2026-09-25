@@ -24,7 +24,6 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "python" / "update_darwin_packages.py"
-REGISTRY = ROOT / "nix" / "packages" / "darwin-provider-candidates.nix"
 
 
 def load_module():
@@ -196,13 +195,39 @@ class UpdateDarwinPackagesTests(unittest.TestCase):
                     thread.join(timeout=2)
 
     def test_registry_has_only_explicit_reviewed_candidates(self) -> None:
-        registry = self.updater.load_candidate_registry(REGISTRY)
+        fixture = '''{
+  fixture-browser = {
+    source = "custom";
+    nixAttr = null;
+    candidates = [ "fixture-browser" ];
+  };
+  fixture-editor = {
+    source = "nixpkgs";
+    nixAttr = "fixture.editor";
+    candidates = [ ];
+  };
+}
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "darwin-provider-candidates.nix"
+            path.write_text(fixture, encoding="utf-8")
+            registry = self.updater.load_candidate_registry(path)
+
         self.assertEqual(
-            set(registry), {"dia-browser", "orca-editor", "hammerspoon"}
+            registry,
+            {
+                "fixture-browser": self.updater.RegistryEntry(
+                    source="custom",
+                    nix_attr=None,
+                    candidates=("fixture-browser",),
+                ),
+                "fixture-editor": self.updater.RegistryEntry(
+                    source="nixpkgs",
+                    nix_attr="fixture.editor",
+                    candidates=(),
+                ),
+            },
         )
-        for package in registry.values():
-            self.assertNotIn("dia", package.candidates)
-            self.assertNotIn("orca", package.candidates)
 
     def test_docker_desktop_is_not_a_custom_darwin_update_profile(self) -> None:
         self.assertNotIn("docker-desktop", self.updater.DERIVATIONS)

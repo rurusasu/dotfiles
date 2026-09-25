@@ -1,4 +1,4 @@
-BeforeAll {
+﻿BeforeAll {
     $script:repositoryRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
     $script:entrypointPath = Join-Path $script:repositoryRoot 'scripts/powershell/hermes-bootstrap.ps1'
     $script:taskfilePath = Join-Path $script:repositoryRoot 'taskfiles/hermes/taskfile.yml'
@@ -47,7 +47,7 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         $script:originalBrowserEnvironment = Get-HermesTestEnvironmentVariableState -Name 'HERMES_BROWSER_DATA_DIR'
         $script:readinessEnvironment = @{}
         foreach ($name in @(
-            'HERMES_API_PORT',
+                'HERMES_API_PORT',
                 'HERMES_DASHBOARD_PORT',
                 'HERMES_API_READY_ATTEMPTS',
                 'HERMES_API_READY_DELAY_SECONDS',
@@ -184,7 +184,14 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         Should -Invoke Start-Sleep -Times 0 -Exactly
     }
 
-    It 'should stop before bootstrap and recreate when storage ownership convergence fails' {
+    It 'should forward a storage ownership failure and stop before bootstrap' {
+        Mock Initialize-HermesStorageVolume {
+            [PSCustomObject]@{
+                Success = $false
+                Message = 'Hermes data volume ownership convergence failed with status 42.'
+            }
+        }
+
         Mock Invoke-Docker {
             $script:dockerCalls.Add(($Arguments -join ' '))
             if ($Arguments.Count -gt 3 -and $Arguments[0] -eq 'compose' -and $Arguments[1] -eq '-f') {
@@ -223,9 +230,10 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
 
         $result.ExitCode | Should -Be 1
         $result.Message | Should -Be 'Hermes data volume ownership convergence failed with status 42.'
-        $ownershipCall = @($script:dockerCalls | Where-Object { $_ -match '/usr/local/bin/hermes-storage-ownership' })[0]
-        $releaseCall = 'rm -f 1111111111111111111111111111111111111111111111111111111111111111'
-        $script:dockerCalls.IndexOf($releaseCall) | Should -BeGreaterThan $script:dockerCalls.IndexOf($ownershipCall)
+        Should -Invoke Initialize-HermesStorageVolume -Times 1 -Exactly -ParameterFilter {
+            $DataDir -eq $script:dataDir
+        }
+        $script:eventLog | Should -Be @('config', 'build', 'ps', 'stop')
         Should -Invoke Invoke-HermesBootstrap -Times 0 -Exactly
         Should -Invoke Invoke-HermesXApiCredentialScope -Times 0 -Exactly
         ($script:dockerCalls -join "`n") | Should -Not -Match 'up -d --force-recreate'
@@ -455,14 +463,12 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         Should -Invoke Invoke-WebRequest -Times 2 -Exactly
     }
 
-    It 'should make the Windows task use the focused pwsh entrypoint without installer skip gates' {
+    It 'should route the Windows Hermes setup task through Nix-managed WSL' {
         $taskfile = Get-Content -LiteralPath $script:taskfilePath -Raw
-        $source = Get-Content -LiteralPath $script:entrypointPath -Raw
 
-        $taskfile | Should -Match "pwsh -NoProfile -File scripts/powershell/hermes-bootstrap\.ps1"
-        $taskfile | Should -Match 'hermes-bootstrap\.ps1 -ComposeFile "\{\{\.HERMES_COMPOSE_FILE\}\}"'
-        $taskfile | Should -Not -Match "cmd\.exe /d /c install\.cmd"
-        $source | Should -Not -Match 'SkipHermesAgent|NixRebuildApplied|Test-WslAvailable|install\.cmd'
+        $taskfile | Should -Match '{{\.WSL}}bash -lc "hermes setup"'
+        $taskfile | Should -Match 'hermes:bootstrap:[\s\S]*?nixos-rebuild-with-user\.sh switch --flake \. --impure'
+        $taskfile | Should -Not -Match 'pwsh -NoProfile -File scripts/powershell/hermes-bootstrap\.ps1'
     }
 
     It 'should resolve the canonical Compose and Windows runtime paths' {
@@ -508,9 +514,17 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
     It 'should return nonzero from direct invocation when preflight fails' {
         $missingCompose = Join-Path $TestDrive 'missing-compose.yml'
 
-        $output = @(& pwsh -NoProfile -File $script:entrypointPath -ComposeFile $missingCompose 2>&1)
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $output = @(& pwsh -NoProfile -File $script:entrypointPath -ComposeFile $missingCompose 2>&1)
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
 
-        $LASTEXITCODE | Should -Be 2
+        $exitCode | Should -Be 2
         ($output -join "`n") | Should -Be 'Hermes Compose file was not found.'
     }
 

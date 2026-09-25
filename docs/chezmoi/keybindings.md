@@ -89,16 +89,13 @@ Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢
   - Markdown のインライン表示切り替え: `Space+mp`（`render-markdown.nvim`）
   - Marp のブラウザプレビュー切り替え: `Space+marp`
   - 詳細・terminal prefix と補完の競合は [Neovim](./neovim.md) を参照
-- VS Code / Cursor
+- Cursor
   - `Vim` 拡張は利用しない
   - terminal focus の `Shift+Enter`: AI CLI / terminal prompt の複数行入力
   - `Alt+H/J/K/L`: editor group 移動
   - `Alt+Shift+H/J/K/L`: editor group move
   - `Ctrl+Alt+\` / `Ctrl+Alt+-` / `Ctrl+Alt+X/W`: split/close/toggle widths
   - それ以外は標準キーバインドを優先
-- Zed
-  - `Alt+H/J/K/L`: pane 移動
-  - `Ctrl+Alt+\` / `Ctrl+Alt+-` / `Ctrl+Alt+X/W`: split/close/zoom
 
 ### Shells
 

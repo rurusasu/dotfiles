@@ -19,7 +19,14 @@
 ## テスト責務
 
 - Nix expression、Home Manager option、flake output、Nix package 選択のテストは `nix/tests/` に Nix 式で記載し、`nix-unit` / `nix flake check` を authoritative check とする。
-- Bats は shell、installer、外部コマンド、runtime/integration 契約に限定する。Nix option を `nix eval` するだけの Bats テストは追加しない。ただし既存の `tests/bash/package_catalog.bats` は、`nix/tests/home/README.md` に完全分類した一時的な catalog/Nix/source-shape 例外であり、`tests/bash/nixos_wsl_postinstall.bats` の `nix eval` は、stubbed `nixos-rebuild` 境界内で選択 user と `--impure` 伝播を実 Nix eval で確認する runtime/integration assertion に限る。新しい例外は追加しない。
+- Bats は shell、installer、外部コマンド、runtime/integration 契約に限定する。Nix option を `nix eval` するだけの Bats テストは追加しない。既存の `tests/bash/package_catalog.bats` 全体が例外なのではなく、`nix/tests/home/README.md` に分類した同ファイル内の catalog/Nix/source-shape assertion のみを一時例外として扱う。同READMEの runtime/artifact 契約7件は通常のBats契約として維持し、Nix-unitで置換しない。`tests/bash/nixos_wsl_postinstall.bats` の `nix eval` は、stubbed `nixos-rebuild` 境界内で選択 user と `--impure` 伝播を実 Nix eval で確認する runtime/integration assertion に限る。新しい例外は追加しない。
+
+## フォーマット・テスト・実行時間の境界
+
+- `task fmt` は formatter の書き換え、`task lint` は pre-commit の検査として分離する。`task commit` は先に `fmt` を実行するため、後続の `lint:no-format` では treefmt を再実行しない。
+- formatter の対象外は構文が未展開時に成立しない chezmoi テンプレートなど、理由を `docs/formatter/AGENTS.md` と設定コメントに残せるものだけにする。対象外にしたファイルは展開後の semantic test で検証する。
+- テスト runner は CI とローカルで共有し、テスト件数が 0 の実行を成功扱いにしない。skip は実行環境の境界として明示し、必要な契約を削除して時間を短縮しない。
+- `CanApply` は判定専用で外部インストールやネットワークなどの副作用を持たせない。bootstrap は `Apply` に限定する。重複した preflight、同一 `nix eval`、同じ Docker build の再実行は、依存関係と成果物を保ったまま一度にまとめる。
 
 ## 実行コマンド
 
@@ -46,6 +53,12 @@ task lint:all
 - Windows から直接 `git commit` しない。
 - `task commit -- "message"` を使う。
 - 必要に応じて `pre-commit run --all-files` を実行する。
+
+## PR / CI の SHA と報告
+
+- CI 状態を確認・報告するときは、GitHub から PR の最新 head SHA をその場で取得する。会話履歴、ローカル HEAD、開いたままの Actions ページにある SHA を最新とみなさない。
+- 各 workflow の検証対象は、そのイベントで受け取った head SHA に固定する。push 後は新しい head SHA の必須チェックを取り直し、以前の SHA の成功結果を新しい変更の検証として扱わない。
+- PR の検証状況を書く場合は、完全な head SHA と、その SHA に対応する実際の Actions 結果を反映する。「実行中」「成功」は確認時点の状態に合わせ、失敗・未完了の必須チェックがあれば成功と表現しない。
 
 ## 参照先
 

@@ -11,16 +11,93 @@
 #>
 
 BeforeAll {
+    $PSDefaultParameterValues['Get-Content:Encoding'] = 'UTF8'
     $script:repoRoot = Join-Path $PSScriptRoot "../../../.."
     $script:chezmoiRoot = Join-Path $PSScriptRoot "../../../../chezmoi"
     $script:templateFiles = Get-ChildItem -Path $script:chezmoiRoot -Filter "*.tmpl" -Recurse
+    function script:ConvertTo-ChezmoiWindowsArgument {
+        param([Parameter(Mandatory)][string]$Argument)
+
+        $builder = New-Object System.Text.StringBuilder
+        [void]$builder.Append('"')
+        $backslashCount = 0
+        foreach ($character in $Argument.ToCharArray()) {
+            if ($character -eq [char]92) {
+                $backslashCount++
+                continue
+            }
+
+            if ($character -eq [char]34) {
+                [void]$builder.Append(('\' * (($backslashCount * 2) + 1)))
+                [void]$builder.Append('"')
+            }
+            else {
+                [void]$builder.Append(('\' * $backslashCount))
+                [void]$builder.Append($character)
+            }
+            $backslashCount = 0
+        }
+
+        [void]$builder.Append(('\' * ($backslashCount * 2)))
+        [void]$builder.Append('"')
+        return $builder.ToString()
+    }
+
+    function script:Invoke-ChezmoiTemplateForTest {
+        param(
+            [Parameter(Mandatory)][string]$Template,
+            [Parameter(Mandatory)][string]$OverrideData
+        )
+
+        $chezmoiCommand = Get-Command chezmoi -ErrorAction Stop
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = $chezmoiCommand.Source
+        $nativeArguments = @(
+            '--source'
+            $script:chezmoiRoot
+            "--override-data=$OverrideData"
+            'execute-template'
+        ) | ForEach-Object { ConvertTo-ChezmoiWindowsArgument -Argument ([string]$_) }
+        $startInfo.Arguments = $nativeArguments -join ' '
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardInput = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $startInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+        $startInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $startInfo
+        try {
+            if (-not $process.Start()) {
+                throw 'Failed to start chezmoi.'
+            }
+
+            $standardOutput = $process.StandardOutput.ReadToEndAsync()
+            $standardError = $process.StandardError.ReadToEndAsync()
+            $inputBytes = ([System.Text.UTF8Encoding]::new($false)).GetBytes($Template)
+            $process.StandardInput.BaseStream.Write($inputBytes, 0, $inputBytes.Length)
+            $process.StandardInput.BaseStream.Close()
+            $process.WaitForExit()
+
+            return [PSCustomObject]@{
+                ExitCode       = $process.ExitCode
+                StandardOutput = $standardOutput.Result
+                StandardError  = $standardError.Result
+            }
+        }
+        finally {
+            $process.Dispose()
+        }
+    }
 }
 
 Describe 'chezmoi テンプレート バリデーション' {
     Context 'Codex global instructions deployment' {
         It 'should deploy AGENTS.override.md and include it in the change hash for both OSes' {
-            $unixScript = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/llms/run_onchange_deploy.sh.tmpl') -Raw
-            $windowsScript = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/llms/run_onchange_deploy.ps1.tmpl') -Raw
+            $unixScript = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/llms/run_onchange_deploy.sh.tmpl') -Raw
+            $windowsScript = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/llms/run_onchange_deploy.ps1.tmpl') -Raw
 
             $unixScript | Should -Match 'include "dot_codex/AGENTS\.override\.md" \| sha256sum'
             $unixScript | Should -Match 'deploy_file "\$CHEZMOI_SOURCE/dot_codex/AGENTS\.override\.md" "\$HOME_DIR/\.codex/AGENTS\.override\.md"'
@@ -32,36 +109,35 @@ Describe 'chezmoi テンプレート バリデーション' {
     Context 'Terminal config deployment' {
         It 'should render Hammerspoon deployment only for Darwin and include its source hash' {
             $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/terminals/run_onchange_deploy.sh.tmpl'
-            $template = Get-Content -LiteralPath $templatePath -Raw
+            $template = Get-Content -Encoding UTF8 -LiteralPath $templatePath -Raw
 
             $template | Should -Match 'include "terminals/hammerspoon/init\.lua" \| sha256sum'
+            $template | Should -Match 'includeTemplate "terminals/ghostty/config" \.?'
+            $template | Should -Not -Match 'deploy_file "\$CHEZMOI_SOURCE/terminals/ghostty/config"'
 
-            $darwinRender = $template |
-                & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"darwin"}}' execute-template
-            $LASTEXITCODE | Should -Be 0
-            $darwinContent = ($darwinRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
+            $darwinRender = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"darwin"}}'
+            $darwinRender.ExitCode | Should -Be 0 -Because $darwinRender.StandardError
+            $darwinContent = $darwinRender.StandardOutput -replace "\r\n?", "`n"
             $ghosttyHash = (Get-FileHash -LiteralPath (Join-Path $script:chezmoiRoot 'terminals/ghostty/config') -Algorithm SHA256).Hash.ToLowerInvariant()
             $darwinContent | Should -Match "(?m)^# hash: [0-9a-f]{64}${ghosttyHash}[0-9a-f]{64}$"
             $darwinContent |
                 Should -Match 'deploy_file "\$CHEZMOI_SOURCE/terminals/hammerspoon/init\.lua" "\$HOME_DIR/\.hammerspoon/init\.lua"'
 
-            $linuxRender = $template |
-                & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"linux"}}' execute-template
-            $LASTEXITCODE | Should -Be 0
-            $linuxContent = ($linuxRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
+            $linuxRender = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"linux"}}'
+            $linuxRender.ExitCode | Should -Be 0 -Because $linuxRender.StandardError
+            $linuxContent = $linuxRender.StandardOutput -replace "\r\n?", "`n"
             $linuxContent | Should -Match "(?m)^# hash: [0-9a-f]{64}${ghosttyHash}$"
             $linuxContent | Should -Not -Match '\.hammerspoon/init\.lua'
         }
 
         It 'should deploy the managed AutoHotkey source on Windows and include its source hash' {
             $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/terminals/run_onchange_deploy.ps1.tmpl'
-            $template = Get-Content -LiteralPath $templatePath -Raw
+            $template = Get-Content -Encoding UTF8 -LiteralPath $templatePath -Raw
 
             $template | Should -Match 'include "terminals/windows-terminal/terminal-keybindings\.ahk" \| sha256sum'
-            $windowsRender = $template |
-                & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"windows"}}' execute-template
-            $LASTEXITCODE | Should -Be 0
-            $windowsContent = ($windowsRender -join [Environment]::NewLine) -replace "\r\n?", "`n"
+            $windowsRender = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"windows"}}'
+            $windowsRender.ExitCode | Should -Be 0 -Because $windowsRender.StandardError
+            $windowsContent = $windowsRender.StandardOutput -replace "\r\n?", "`n"
             $windowsContent | Should -Match '(?m)^# hash: [0-9a-f]{192}$'
             $windowsContent |
                 Should -Match 'Deploy-File "\$ChezmoiSource\\terminals\\windows-terminal\\terminal-keybindings\.ahk" "\$env:APPDATA\\dotfiles\\terminal-keybindings\.ahk"'
@@ -78,11 +154,10 @@ Describe 'chezmoi テンプレート バリデーション' {
 
                 $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/run_onchange_start-terminal-keybindings_windows.ps1.tmpl'
                 Test-Path -LiteralPath $templatePath -PathType Leaf | Should -BeTrue
-                $script:startupTemplate = Get-Content -LiteralPath $templatePath -Raw
-                $render = $script:startupTemplate |
-                    & chezmoi --source $script:chezmoiRoot --override-data '{"chezmoi":{"os":"windows"}}' execute-template
-                $LASTEXITCODE | Should -Be 0
-                $script:startupContent = $render -join [Environment]::NewLine
+                $script:startupTemplate = Get-Content -Encoding UTF8 -LiteralPath $templatePath -Raw
+                $render = Invoke-ChezmoiTemplateForTest -Template $script:startupTemplate -OverrideData '{"chezmoi":{"os":"windows"}}'
+                $render.ExitCode | Should -Be 0 -Because $render.StandardError
+                $script:startupContent = $render.StandardOutput
                 $script:startupScriptBlock = [scriptblock]::Create($script:startupContent)
 
                 $managedDirectory = Join-Path $env:APPDATA 'dotfiles'
@@ -186,7 +261,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $violations = @()
 
             foreach ($file in $script:templateFiles) {
-                $content = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
+                $content = Get-Content -Encoding UTF8 -Path $file.FullName -Raw -ErrorAction SilentlyContinue
                 if (-not $content) { continue }
 
                 if ($content -match '\{\{[^}]*onepasswordRead') {
@@ -202,7 +277,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'should not recommend template-time 1Password lookup in secret docs' {
             $secretsDocPath = Join-Path $script:repoRoot "docs/chezmoi/secrets.md"
-            $content = Get-Content -LiteralPath $secretsDocPath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $secretsDocPath -Raw
 
             $content | Should -Not -Match '\{\{\s*onepassword(Read)?\b' -Because 'docs must not recommend template-time 1Password lookups'
             $content | Should -Match 'op read --account' -Because 'docs should describe explicit-account runtime reads'
@@ -211,7 +286,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'should keep Hermes Discord bot token capture out of logged Browser MCP output' {
             $secretsDocPath = Join-Path $script:repoRoot "docs/chezmoi/secrets.md"
-            $content = Get-Content -LiteralPath $secretsDocPath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $secretsDocPath -Raw
 
             $content | Should -Match 'Browser MCP や tool output に token 値を戻さない'
             $content | Should -Match 'non-logged secret channel'
@@ -223,12 +298,12 @@ Describe 'chezmoi テンプレート バリデーション' {
     Context 'mcp_servers.yaml の op_env は env キーと一致すること' {
         BeforeAll {
             $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"
-            $script:mcpContent = Get-Content -Path $script:mcpServersPath -Raw
+            $script:mcpContent = Get-Content -Encoding UTF8 -Path $script:mcpServersPath -Raw
         }
 
         It 'op_env のキーが対応する env のキーに含まれていること' {
             # YAML をシンプルにパースして op_env キーが env キーに存在するか検証
-            $lines = Get-Content -Path $script:mcpServersPath
+            $lines = Get-Content -Encoding UTF8 -Path $script:mcpServersPath
             $currentEnvKeys = @()
             $currentOpEnvKeys = @()
             $currentServerName = ""
@@ -289,14 +364,14 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'should not call onepasswordRead during template rendering' {
             foreach ($path in $script:mcpClientTemplates) {
-                $content = Get-Content -LiteralPath $path -Raw
+                $content = Get-Content -Encoding UTF8 -LiteralPath $path -Raw
                 $content | Should -Not -Match 'onepasswordRead' -Because "$path must not fail chezmoi apply when 1Password app integration is unavailable"
             }
         }
 
         It 'should use non-failing op read and fall back to the configured env value' {
             foreach ($path in $script:mcpClientTemplates) {
-                $content = Get-Content -LiteralPath $path -Raw
+                $content = Get-Content -Encoding UTF8 -LiteralPath $path -Raw
                 $content | Should -Match '\$envValue := \$value' -Because "$path should keep the mcp_servers.yaml env value as fallback"
                 $content | Should -Match '\bread\b.*--account' -Because "$path should resolve op_env secrets with op read"
                 $content | Should -Match 'exit 0' -Because "$path should not abort template rendering on Windows op read failures"
@@ -311,26 +386,10 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
-    Context 'Windows MCP deploy scripts の env fallback' {
-        It 'PowerShell 展開時に ${VAR} fallback を空文字にしないこと' {
-            $templates = @(
-                ".chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.ps1.tmpl",
-                ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.ps1.tmpl"
-            ) | ForEach-Object { Join-Path $script:chezmoiRoot $_ }
-
-            foreach ($path in $templates) {
-                $content = Get-Content -LiteralPath $path -Raw
-
-                $content | Should -Match '"\{\{ \$key \}\}" = ''\{\{ \$value \}\}''' -Because "$path should write mcp_servers.yaml env fallback values literally"
-                $content | Should -Not -Match '"\{\{ \$key \}\}" = "\{\{ \$value \}\}"' -Because "$path must not let PowerShell expand `${VAR} fallback values"
-            }
-        }
-    }
-
     Context 'Plane MCP server configuration' {
         BeforeAll {
             $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"
-            $script:mcpContent = Get-Content -Path $script:mcpServersPath -Raw
+            $script:mcpContent = Get-Content -Encoding UTF8 -Path $script:mcpServersPath -Raw
             $match = [regex]::Match($script:mcpContent, '(?ms)-\s+name:\s+plane\b.*?(?=^\s+-\s+name:|\z)')
             $script:planeBlock = if ($match.Success) { $match.Value } else { "" }
         }
@@ -354,7 +413,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
     Context 'Shell keybindings' {
         It 'should source bashrc from profile for interactive login bash' {
-            $profileContent = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "shells/profile") -Raw
+            $profileContent = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "shells/profile") -Raw
 
             $profileContent | Should -Match '\$\{BASH_VERSION:-\}' -Because "profile is read by multiple POSIX shells and should guard bash-specific startup"
             $profileContent | Should -Match '\$HOME/\.bashrc' -Because "login bash must load the managed bash aliases"
@@ -369,16 +428,16 @@ Describe 'chezmoi テンプレート バリデーション' {
             )
 
             foreach ($path in $shellFiles) {
-                $content = Get-Content -LiteralPath $path -Raw
+                $content = Get-Content -Encoding UTF8 -LiteralPath $path -Raw
                 $content | Should -Not -Match '--total-size' -Because "$path default ls aliases must stay fast on large WSL-mounted Windows directories"
             }
         }
 
         It 'should keep zoxide interactive jump on Alt+Q across shells and terminals' {
-            $bashrc = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "shells/bashrc") -Raw
-            $powershellProfile = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1") -Raw
-            $homeManagerZsh = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/home/common.nix") -Raw
-            $wezterm = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "terminals/wezterm/wezterm.lua") -Raw
+            $bashrc = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "shells/bashrc") -Raw
+            $powershellProfile = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1") -Raw
+            $homeManagerZsh = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot "nix/home/common.nix") -Raw
+            $wezterm = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "terminals/wezterm/wezterm.lua") -Raw
 
             $bashrc | Should -Match 'bind -x ''"\\eq": __zoxide_zi_widget'''
             $bashrc | Should -Not -Match 'bind -x ''"\\ez": __zoxide_zi_widget'''
@@ -396,7 +455,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $configPath = Join-Path $script:chezmoiRoot "dot_config/direnv/direnv.toml"
 
             Test-Path -LiteralPath $configPath | Should -BeTrue
-            $content = Get-Content -LiteralPath $configPath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $configPath -Raw
 
             $content | Should -Match '(?m)^\[global\]\s*$'
             $content | Should -Match '(?m)^hide_env_diff\s*=\s*true\s*$'
@@ -405,7 +464,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'should print a human-readable dev shell summary for this repository' {
             $envrcPath = Join-Path $script:repoRoot ".envrc"
-            $content = Get-Content -LiteralPath $envrcPath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $envrcPath -Raw
 
             $content | Should -Match 'log_status "dotfiles dev shell ready: treefmt, statix, deadnix"'
             $content | Should -Match 'use flake \. && log_status' -Because "direnv must preserve use flake failure status"
@@ -415,11 +474,11 @@ Describe 'chezmoi テンプレート バリデーション' {
     Context 'Docker MCP SDK サーバーの設定整合性' {
         BeforeAll {
             $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"
-            $script:mcpLines = Get-Content -Path $script:mcpServersPath
+            $script:mcpLines = Get-Content -Encoding UTF8 -Path $script:mcpServersPath
         }
 
         It 'Docker MCP サーバーの args に docker run -i --rm パターンが含まれていること' {
-            $content = Get-Content -Path $script:mcpServersPath -Raw
+            $content = Get-Content -Encoding UTF8 -Path $script:mcpServersPath -Raw
             # command: docker のサーバーを抽出
             $dockerBlocks = [regex]::Matches($content, '(?ms)-\s+name:\s+(\S+).*?command:\s+docker.*?args:.*?(?=-\s+name:|\z)')
 
@@ -435,7 +494,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'Docker MCP サーバーの env で指定した変数が args の -e でも渡されていること' {
             # YAML を行単位でパースし、Docker サーバーの env キーが args に含まれるか検証
-            $lines = Get-Content -Path $script:mcpServersPath
+            $lines = Get-Content -Encoding UTF8 -Path $script:mcpServersPath
             $violations = @()
             $currentServer = ""
             $isDocker = $false
@@ -501,7 +560,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'Codex Windows テンプレートでは Docker MCP が起動 wrapper 経由で実行されること' {
             $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
-            $content = Get-Content -Path $templatePath -Raw
+            $content = Get-Content -Encoding UTF8 -Path $templatePath -Raw
 
             $content | Should -Match 'eq \.command "docker"' -Because "Docker MCP だけを wrapper 経由にする"
             $content | Should -Match 'command = "pwsh"' -Because "PowerShell 7 で wrapper を起動できる"
@@ -510,7 +569,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'Codex Windows テンプレートでは最小 Windows 環境を明示していること' {
             $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
-            $content = Get-Content -Path $templatePath -Raw
+            $content = Get-Content -Encoding UTF8 -Path $templatePath -Raw
 
             $content | Should -Match '\[shell_environment_policy\.set\]' -Because "profile を読まない Codex 子プロセスにも env を渡す"
             $content | Should -Match 'if eq \.chezmoi\.os "windows"' -Because "Windows 固有のパスは Windows だけに出力する"
@@ -541,7 +600,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             )
 
             foreach ($configPath in $configPaths) {
-                $content = Get-Content -Path $configPath -Raw
+                $content = Get-Content -Encoding UTF8 -Path $configPath -Raw
 
                 $content | Should -Match '(?m)^default_permissions\s*=\s*":danger-full-access"\s*$' -Because "Deep Security Scan worker は親タスクの managed permission profile を継承する: $configPath"
                 $content | Should -Not -Match '(?m)^sandbox_mode\s*=' -Because "旧 sandbox 設定があると permission profile が無効になる: $configPath"
@@ -551,7 +610,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'should enable Codex apps for plugin-bundled connectors' {
             $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
-            $content = Get-Content -Path $templatePath -Raw
+            $content = Get-Content -Encoding UTF8 -Path $templatePath -Raw
 
             $content | Should -Match '(?m)^apps\s*=\s*true\s*$' -Because "Gmail や Google Calendar などの app connector は features.apps が無効だと露出しない"
             $content | Should -Not -Match '(?m)^apps\s*=\s*false\s*$' -Because "chezmoi 再適用で connector 利用を無効化しない"
@@ -559,7 +618,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'should keep Codex project config apps enabled' {
             $projectConfigPath = Join-Path $script:repoRoot ".codex/config.toml"
-            $content = Get-Content -Path $projectConfigPath -Raw
+            $content = Get-Content -Encoding UTF8 -Path $projectConfigPath -Raw
 
             $content | Should -Match '(?m)^apps\s*=\s*true\s*$' -Because "project-scoped config が global/chezmoi の apps=true を上書きしない"
             $content | Should -Not -Match '(?m)^apps\s*=\s*false\s*$' -Because "この repo で connector tool が露出しなくなる"
@@ -567,7 +626,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'project-scoped config should not re-enable noisy Codex MCP servers' {
             $projectConfigPath = Join-Path $script:repoRoot ".codex/config.toml"
-            $content = Get-Content -LiteralPath $projectConfigPath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $projectConfigPath -Raw
 
             foreach ($serverName in @('context7', 'drawio', 'playwright', 'linear', 'notion')) {
                 $content | Should -Not -Match "(?m)^\[mcp_servers\.$serverName\]" -Because "$serverName should not auto-start from project config"
@@ -576,7 +635,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'Codex Docker MCP wrapper は stdout に制御ログを書かないこと' {
             $wrapperPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_codex-docker-mcp.ps1"
-            $content = Get-Content -Path $wrapperPath -Raw
+            $content = Get-Content -Encoding UTF8 -Path $wrapperPath -Raw
 
             $content | Should -Match '\[Console\]::Error\.WriteLine' -Because "MCP stdio の stdout を壊さないためログは stderr に出す"
             $content | Should -Not -Match 'Write-Host' -Because "Write-Host は MCP stdio と相性が悪い"
@@ -587,7 +646,7 @@ Describe 'chezmoi テンプレート バリデーション' {
     Context 'Agent skill synchronization' {
         It 'should enumerate and safely remove orphaned Windows skill links' {
             $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/run_after_sync-agent-skills_windows.ps1.tmpl'
-            $content = Get-Content -LiteralPath $templatePath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $templatePath -Raw
 
             $content | Should -Match 'Get-ChildItem -LiteralPath \$targetSkillsDir -Force' -Because 'dangling links are not directories'
             $content | Should -Match 'FileAttributes\]::ReparsePoint' -Because 'directory links require explicit link handling'
@@ -601,7 +660,7 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
 
         It 'mcp_servers.yaml で Claude client ID が残っていないこと' {
-            $lines = Get-Content -Path $script:mcpServersPath
+            $lines = Get-Content -Encoding UTF8 -Path $script:mcpServersPath
             $violations = @()
             foreach ($line in $lines) {
                 if ($line -match '^\s+-\s+claude(?:-code|-desktop)?\s*$') {
@@ -620,7 +679,7 @@ Describe 'chezmoi テンプレート バリデーション' {
     Context 'Codex remote MCP テンプレート' {
         It 'should emit URL-based MCP as native Streamable HTTP without stdio settings' {
             $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
-            $content = Get-Content -Path $templatePath -Raw
+            $content = Get-Content -Encoding UTF8 -Path $templatePath -Raw
 
             $marker = '{{- if hasKey . "url" }}'
             $elseMarker = '{{- else }}'
@@ -644,7 +703,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'should define required role metadata for Codex CLI' {
             foreach ($file in $script:codexAgentFiles) {
-                $content = Get-Content -LiteralPath $file.FullName -Raw
+                $content = Get-Content -Encoding UTF8 -LiteralPath $file.FullName -Raw
 
                 $content | Should -Match '(?m)^name\s*=\s*"[^"]+"\s*$' -Because "$($file.Name) must define a non-empty name"
                 $content | Should -Match '(?ms)^developer_instructions\s*=\s*""".+?"""\s*$' -Because "$($file.Name) must define developer_instructions"
@@ -653,7 +712,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'project-scoped config should not hardcode repo-local Codex paths' {
             $projectConfigPath = Join-Path $script:repoRoot ".codex/config.toml"
-            $content = Get-Content -LiteralPath $projectConfigPath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $projectConfigPath -Raw
 
             $content | Should -Not -Match '(?i)[A-Z]:[\\/].*\.codex[\\/](agents|hooks)' -Because "project config must be portable across checkout paths"
             $content | Should -Match '(?m)^config_file\s*=\s*"agents/fast_worker\.toml"\s*$' -Because "agent role files should be resolved relative to .codex/config.toml"
@@ -665,7 +724,7 @@ Describe 'chezmoi テンプレート バリデーション' {
     Context 'Codex hook Python runtime policy' {
         It 'should run Windows Python hooks through uv managed Python' {
             $templatePath = Join-Path $script:chezmoiRoot "dot_codex/hooks.json.tmpl"
-            $content = Get-Content -LiteralPath $templatePath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $templatePath -Raw
 
             $content | Should -Not -Match '"command":\s*"python\s+' -Because "Windows must not depend on native Python installs"
             $content | Should -Match 'uv run --isolated --managed-python python .+command_permission_policy\.py' -Because "Codex hooks should use uv-managed Python on Windows"
@@ -679,7 +738,7 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
 
         It 'should not auto-start auth or API-key MCP servers in Codex' {
-            $content = Get-Content -LiteralPath $script:mcpServersPath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $script:mcpServersPath -Raw
             $serverBlocks = [regex]::Matches($content, '(?ms)-\s+name:\s+(\S+).*?(?=^\s+-\s+name:|\z)')
             $codexDisabled = @(
                 'context7',
@@ -708,7 +767,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'should keep OAuth plugin MCP servers disabled until login' {
             $templatePath = Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl"
-            $content = Get-Content -LiteralPath $templatePath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $templatePath -Raw
 
             foreach ($plugin in @('linear', 'notion')) {
                 $block = [regex]::Match(
@@ -731,8 +790,8 @@ Describe 'chezmoi テンプレート バリデーション' {
             Test-Path -LiteralPath $hooksTemplatePath | Should -BeTrue
             Test-Path -LiteralPath $cleanupScript | Should -BeFalse
 
-            $hooksContent = Get-Content -LiteralPath $hooksTemplatePath -Raw
-            $configContent = Get-Content -LiteralPath $configTemplatePath -Raw
+            $hooksContent = Get-Content -Encoding UTF8 -LiteralPath $hooksTemplatePath -Raw
+            $configContent = Get-Content -Encoding UTF8 -LiteralPath $configTemplatePath -Raw
 
             $hooksContent | Should -Match '"PreToolUse"' -Because 'Orca mirrors ~/.codex/hooks.json into its managed Codex runtime'
             $configContent | Should -Not -Match '(?m)^\[\[hooks\.' -Because 'config.toml hooks conflict with Orca-managed hooks.json'
@@ -743,7 +802,7 @@ Describe 'chezmoi テンプレート バリデーション' {
         It 'should launch Orca directly by default and keep 1Password env-file injection opt-in' {
             $launcherPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_orca-launch.cmd"
             Test-Path -LiteralPath $launcherPath | Should -BeTrue
-            $content = Get-Content -LiteralPath $launcherPath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $launcherPath -Raw
 
             $content | Should -Match 'DOTFILES_GUI_EAGER_SECRET_LOAD' -Because 'opening Orca should not prompt for 1Password unless explicitly requested'
             $content | Should -Match 'start "" "%ORCA_EXE%" %\*' -Because 'the default launch path should bypass op run'
@@ -762,7 +821,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $scriptPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_always_update-orca-shortcut_windows.ps1.tmpl"
             Test-Path -LiteralPath $legacyScriptPath | Should -BeFalse -Because 'Orca updates can rewrite shortcuts after the chezmoi script content last changed'
             Test-Path -LiteralPath $scriptPath | Should -BeTrue
-            $content = Get-Content -LiteralPath $scriptPath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $scriptPath -Raw
 
             $content | Should -Match 'orca-launch\.cmd' -Because 'normal Orca launches should use the lazy 1Password-aware launcher'
             $content | Should -Match 'Orca\.lnk' -Because 'the Start Menu shortcut is the launch surface Windows users normally hit'
@@ -774,7 +833,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $scriptPath = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_always_update-wezterm-shortcut_windows.ps1.tmpl"
             Test-Path -LiteralPath $legacyScriptPath | Should -BeFalse -Because 'WezTerm updates can rewrite shortcuts after the chezmoi script content last changed'
             Test-Path -LiteralPath $scriptPath | Should -BeTrue
-            $content = Get-Content -LiteralPath $scriptPath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $scriptPath -Raw
 
             $content | Should -Match 'wezterm-launch\.cmd' -Because 'normal WezTerm launches should use the lazy 1Password-aware launcher'
             $content | Should -Match 'WezTerm\.lnk' -Because 'the Start Menu shortcut is the launch surface Windows users normally hit'
@@ -785,7 +844,7 @@ Describe 'chezmoi テンプレート バリデーション' {
         It 'should launch direct Codex CLI through 1Password env-file injection' {
             $launcherPath = Join-Path $script:chezmoiRoot "dot_local/bin/executable_codex.cmd"
             Test-Path -LiteralPath $launcherPath | Should -BeTrue
-            $content = Get-Content -LiteralPath $launcherPath -Raw
+            $content = Get-Content -Encoding UTF8 -LiteralPath $launcherPath -Raw
 
             $content | Should -Match '"%OP_EXE%" run --account "%PERSONAL_ACCOUNT%" --env-file="%PERSONAL_SECRETS_ENV%"' -Because 'direct codex CLI should satisfy personal GitHub MCP startup auth'
             $content | Should -Match '"%OP_EXE%" run --account "%WORK_ACCOUNT%" --env-file="%WORK_SECRETS_ENV%"' -Because 'direct codex CLI should inherit work GitHub token from the company account'
@@ -806,7 +865,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
             foreach ($scriptPath in $scriptPaths) {
                 Test-Path -LiteralPath $scriptPath | Should -BeTrue
-                $content = Get-Content -LiteralPath $scriptPath -Raw
+                $content = Get-Content -Encoding UTF8 -LiteralPath $scriptPath -Raw
 
                 $content | Should -Match 'dot_config[\\/]shell[\\/]secret\.(sh|ps1)'
                 $content | Should -Match 'dot_config[\\/]shell[\\/]secrets\.env'
@@ -833,7 +892,7 @@ Describe 'chezmoi テンプレート バリデーション' {
                 Set-ItResult -Skipped -Because "Windsurf テンプレートが存在しない"
                 return
             }
-            $content = Get-Content -Path $templatePath -Raw
+            $content = Get-Content -Encoding UTF8 -Path $templatePath -Raw
             $content | Should -Match 'serverUrl' -Because "Windsurf は HTTP サーバーに serverUrl を使用する"
         }
     }
@@ -844,7 +903,7 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
 
         It 'security.auth セクションが含まれていること' {
-            $content = Get-Content -Path $script:geminiTemplate -Raw
+            $content = Get-Content -Encoding UTF8 -Path $script:geminiTemplate -Raw
             $content | Should -Match '"security"' -Because "Gemini CLI の OAuth 認証設定が必要"
             $content | Should -Match '"selectedType"' -Because "認証タイプの指定が必要"
         }
@@ -867,7 +926,7 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'should not call onepasswordRead during template rendering' {
             foreach ($path in @($script:kaggleDeployWindows, $script:kaggleDeployLinux)) {
-                $content = Get-Content -LiteralPath $path -Raw
+                $content = Get-Content -Encoding UTF8 -LiteralPath $path -Raw
                 $content | Should -Not -Match 'onepasswordRead' -Because "1Password app connection failures must not abort chezmoi template rendering"
                 $content | Should -Match 'ArgumentList\.Add\("read"\)|read "\$SECRET_REF"' -Because "secret lookup should happen at script runtime"
                 $content | Should -Match 'ArgumentList\.Add\("--cache=false"\)|OP_CACHE_ARGS=\(--cache=false\)' -Because "Windows/op.exe runtime reads should disable 1Password cache"
@@ -876,8 +935,8 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
 
         It 'should bound runtime op reads with a timeout' {
-            $windowsContent = Get-Content -LiteralPath $script:kaggleDeployWindows -Raw
-            $linuxContent = Get-Content -LiteralPath $script:kaggleDeployLinux -Raw
+            $windowsContent = Get-Content -Encoding UTF8 -LiteralPath $script:kaggleDeployWindows -Raw
+            $linuxContent = Get-Content -Encoding UTF8 -LiteralPath $script:kaggleDeployLinux -Raw
 
             $windowsContent | Should -Match '\$OpReadTimeoutSeconds' -Because "run_always scripts must not hang when 1Password app integration prompts or stalls"
             $windowsContent | Should -Match '\$OpReadTimeoutSeconds = 60' -Because "1Password reads can exceed 20 seconds after app auth"
@@ -899,10 +958,36 @@ Describe 'chezmoi テンプレート バリデーション' {
             Test-Path -LiteralPath $linuxScript | Should -BeFalse
         }
 
-        It 'should not enable Warp plugins in opencode settings' {
-            $opencodeSettings = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/opencode/opencode.json") -Raw
+        It 'should remove retired editor and AI configuration' {
+            foreach ($relativePath in @(
+                    "editors/vscode/AGENTS.md",
+                    "editors/vscode/extensions.json",
+                    "editors/vscode/keybindings.json",
+                    "editors/vscode/settings.json",
+                    "editors/zed/AGENTS.md",
+                    "editors/zed/keymap.json",
+                    "editors/zed/settings.json",
+                    "github/copilot-instructions.md",
+                    "dot_config/opencode/opencode.json",
+                    ".chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.sh.tmpl",
+                    ".chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.ps1.tmpl",
+                    ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.sh.tmpl",
+                    ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.ps1.tmpl"
+                )) {
+                Test-Path -LiteralPath (Join-Path $script:chezmoiRoot $relativePath) | Should -BeFalse -Because "$relativePath is retired"
+            }
 
-            $opencodeSettings | Should -Not -Match 'warp-dot-dev|opencode-warp'
+            $cursorExtensions = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "editors/cursor/extensions.json") -Raw
+            $cursorExtensions | Should -Not -Match '(?i)github\.copilot'
+
+            $codexConfig = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl") -Raw
+            $codexConfig | Should -Not -Match '(?i)copilot-instructions\.md'
+
+            $projectConfig = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot ".codex/config.toml") -Raw
+            $projectConfig | Should -Not -Match '(?i)copilot-instructions\.md'
+
+            $mcpConfig = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml") -Raw
+            $mcpConfig | Should -Not -Match '(?m)^\s+-\s+(?:vscode|zed)\s*$'
         }
     }
 }

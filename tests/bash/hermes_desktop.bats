@@ -85,6 +85,6 @@ write_stub() {
 	run "$REPO_ROOT/scripts/sh/hermes-desktop-docker.sh"
 
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"task hermes:up"* ]]
+	[[ "$output" == *"task hermes:docker:up"* ]]
 	[ ! -e "$DESKTOP_CAPTURE" ]
 }

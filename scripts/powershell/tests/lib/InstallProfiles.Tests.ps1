@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 BeforeAll {
     . $PSScriptRoot/../../lib/InstallProfiles.ps1
@@ -58,17 +58,27 @@ Describe 'Resolve-DotfilesInstallOption' {
         $result.WithHermes | Should -BeFalse
     }
 
-    It 'expands WithHermes to its complete desktop and runtime profile' {
+    It 'enables the native Hermes desktop profile without enabling optional Docker AI services' {
         $result = Resolve-DotfilesInstallOption -Options @{} -WithHermes
 
-        $result.WithOllama | Should -BeTrue
-        $result.WithDocker | Should -BeTrue
-        $result.WithMLflow | Should -BeTrue
-        $result.WithHindsight | Should -BeTrue
+        $result.WithOllama | Should -BeFalse
+        $result.WithDocker | Should -BeFalse
+        $result.WithMLflow | Should -BeFalse
+        $result.WithHindsight | Should -BeFalse
         $result.WithHermes | Should -BeTrue
         $result.WithChrome | Should -BeTrue
         $result.WithDiscord | Should -BeTrue
         $result.WithChromium | Should -BeTrue
+    }
+
+    It 'keeps Hindsight and its Docker, MLflow, and Ollama dependencies opt-in alongside Hermes' {
+        $result = Resolve-DotfilesInstallOption -Options @{} -WithHermes -WithHindsight
+
+        $result.WithHermes | Should -BeTrue
+        $result.WithHindsight | Should -BeTrue
+        $result.WithMLflow | Should -BeTrue
+        $result.WithDocker | Should -BeTrue
+        $result.WithOllama | Should -BeTrue
     }
 
     It 'preserves unrelated caller options' {

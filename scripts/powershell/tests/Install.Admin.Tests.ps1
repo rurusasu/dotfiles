@@ -74,7 +74,10 @@ Describe 'install.admin.ps1' {
 
         $exitCode | Should -Be 0 -Because $outputText
         $outputText | Should -Not -Match "Cannot process argument transformation on parameter 'AdminOnly'"
-        $outputLines[-1] | Should -Be "False" -Because $outputText
+        # The generated catalog now contains administrator-only WinGet
+        # packages (AutoHotkey/Build Tools), so the admin phase is applicable
+        # even when WSL and VHD setup are explicitly skipped.
+        $outputLines[-1] | Should -Be "True" -Because $outputText
     }
 
     It 'should encode elevated options so Start-Process cannot strip JSON quotes' {
@@ -96,10 +99,19 @@ Describe 'install.admin.ps1' {
         $content | Should -Match '\$PSBoundParameters\.ContainsKey\("InstallDir"\)'
     }
 
-    It 'should print preflight handler names before Phase 2 apply checks' {
+    It 'should keep the preflight status text out of normal Phase 2 execution' {
         $content = Get-Content -LiteralPath $script:target -Raw
-        $content | Should -Match '適用可否を確認しています'
-        $content | Should -Match '\$\(\$handler\.Name\)'
+        $content | Should -Not -Match '適用可否を確認しています'
+    }
+
+    It 'should only reserve full handler preflight for CheckOnly mode' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match '(?s)if \(\$CheckOnly\) \{.*\$handler\.CanApply\(\$context\).*return \(\$applicableCount -gt 0\).*\$results = Invoke-SetupHandler'
+    }
+
+    It 'should only pause the elevated child when NoPause is not requested' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match '(?s)\[switch\]\$NoPause.*if \(\$LogFile -and -not \$NoPause\).*Read-Host'
     }
 
     It 'should skip WSL-dependent final processing when WSL is still unavailable' {

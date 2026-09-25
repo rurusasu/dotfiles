@@ -1,7 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Sync editor extensions for Windows (install missing, remove unlisted)
-# hash: {{ include "editors/vscode/extensions.json" | sha256sum }}{{ include "editors/cursor/extensions.json" | sha256sum }}
-# script-version: 4
+# hash: {{ include "editors/cursor/extensions.json" | sha256sum }}
 
 $ErrorActionPreference = "Continue"
 
@@ -79,8 +78,6 @@ function Sync-Extensions {
 
 Write-Host "Syncing editor extensions..."
 
-Sync-Extensions "code" "VSCode" "$ChezmoiSource\editors\vscode\extensions.json"
-Sync-Extensions "code-insiders" "VSCode Insiders" "$ChezmoiSource\editors\vscode\extensions.json"
 Sync-Extensions "cursor" "Cursor" "$ChezmoiSource\editors\cursor\extensions.json"
 
 Write-Host "Editor extensions sync complete."

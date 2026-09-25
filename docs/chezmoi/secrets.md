@@ -83,11 +83,11 @@ Docker MCP Toolkit が直接登録できる client は、profile取得後に次�
 task mcp:toolkit:clients
 ```
 
-これは Codex、Cursor、Gemini、VS Code、Zed の system-wide 設定へ `dotfiles` profile の gatewayを
+これは Codex、Cursor、Gemini の system-wide 設定へ `dotfiles` profile の gatewayを
 登録する。Windsurf は Docker MCP Toolkit CLI の client 登録対象外のため、chezmoi が生成する
 既存の gateway 設定を利用する。
 
-Toolkit 管理サーバーの API key は生成された Codex/Cursor/Gemini/VS Code/Windsurf/Zed
+Toolkit 管理サーバーの API key は生成された Codex/Cursor/Gemini/Windsurf
 設定や Git に書かず、Docker Desktop の secret store に登録する。現在の secret 名は次のとおり。
 
 | Server          | Docker MCP Toolkit secret      |

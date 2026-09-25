@@ -4,6 +4,7 @@ setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 	FIXTURE_ROOT="$REPO_ROOT/.github/e2e"
 	RUNNER="$FIXTURE_ROOT/run-bootstrap-acceptance.sh"
+	RUNTIME_STARTER="$FIXTURE_ROOT/start-bootstrap-runtime.sh"
 }
 
 @test "devcontainer installer contracts provision go-task before running Bats" {
@@ -30,17 +31,48 @@ EOF
 	nixos_test="$REPO_ROOT/nix/tests/bootstrap-nixos.nix"
 
 	[ "$(grep -c '.github/e2e/run-bootstrap-acceptance.sh' "$workflow")" -ge 3 ]
+	[ "$(grep -c '.github/e2e/start-bootstrap-runtime.sh' "$workflow")" -eq 2 ]
 	grep -q '.github/e2e/run-bootstrap-acceptance.sh' "$nixos_test"
+	[ "$(grep -c '.github/e2e/start-bootstrap-runtime.sh' "$nixos_test")" -eq 2 ]
 	! grep -Eq 'DOTFILES_HERMES_(DASHBOARD_AUTH|AGENT_SLACK_1PASSWORD)_ENABLED' \
 		"$workflow" "$nixos_test"
 }
 
-@test "production Linux installers keep the canonical Hermes Compose path" {
+@test "acceptance runtime starts the complete stack on its external network" {
+	stub_bin="$BATS_TEST_TMPDIR/bin"
+	export COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
+	mkdir -p "$stub_bin"
+	cat >"$stub_bin/docker" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$COMMAND_LOG"
+if [[ $* == "network inspect local-ai-services" ]]; then
+	exit "${NETWORK_EXISTS_STATUS:-1}"
+fi
+EOF
+	chmod +x "$stub_bin/docker"
+
+	run env PATH="$stub_bin:$PATH" "$RUNTIME_STARTER"
+
+	[ "$status" -eq 0 ]
+	grep -Fxq 'network inspect local-ai-services' "$COMMAND_LOG"
+	grep -Fxq 'network create local-ai-services' "$COMMAND_LOG"
+	grep -Fxq "compose -f $REPO_ROOT/docker/hermes-service/compose.yml up --detach --wait" "$COMMAND_LOG"
+
+	: >"$COMMAND_LOG"
+	run env PATH="$stub_bin:$PATH" NETWORK_EXISTS_STATUS=0 "$RUNTIME_STARTER"
+	[ "$status" -eq 0 ]
+	grep -Fxq 'network inspect local-ai-services' "$COMMAND_LOG"
+	! grep -q 'network create local-ai-services' "$COMMAND_LOG"
+	grep -Fq 'compose -f ' "$COMMAND_LOG"
+}
+
+@test "production Linux installers leave Docker Hermes bootstrap out of native setup" {
 	for installer in install-linux.sh install-nixos.sh; do
 		file="$REPO_ROOT/scripts/sh/$installer"
-		grep -Fq 'COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"' "$file"
-		grep -Fq 'dotfiles_run_task_in_group docker hermes:bootstrap' "$file"
-		! grep -q 'DOTFILES_COMPOSE_FILE' "$file"
+		! grep -Fq 'hermes:bootstrap' "$file"
+		! grep -Fq 'docker/hermes-service/compose.yml' "$file"
+		grep -Fq '"$VERIFY_ENVIRONMENT"' "$file"
+		! grep -q -- '--runtime' "$file"
 	done
 	grep -Fq 'docker/hermes-service/compose.yml' "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
 }

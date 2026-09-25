@@ -20,10 +20,11 @@ setup() {
 	grep -q 'external: true' "$HINDSIGHT_COMPOSE"
 }
 
-@test "Hermes joins the shared memory network without owning Hindsight" {
+@test "Compose retains Hermes bootstrap and MCP sidecars but not the native gateway" {
 	! grep -q '^  hindsight:$' "$HERMES_COMPOSE"
-	grep -q 'name: local-ai-services' "$HERMES_COMPOSE"
-	grep -q 'external: true' "$HERMES_COMPOSE"
+	! grep -q '^  hermes:$' "$HERMES_COMPOSE"
+	grep -q '^  hermes-bootstrap:$' "$HERMES_COMPOSE"
+	! grep -q 'local-ai-services' "$HERMES_COMPOSE"
 	! grep -q 'HERMES_DATA_DIR.*hindsight' "$HERMES_COMPOSE"
 }
 

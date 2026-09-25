@@ -1,7 +1,7 @@
 {{ if ne .chezmoi.os "windows" -}}
 #!/usr/bin/env bash
 # Sync editor extensions for Linux/macOS (install missing, remove unlisted)
-# hash: {{ include "editors/vscode/extensions.json" | sha256sum }}{{ include "editors/cursor/extensions.json" | sha256sum }}
+# hash: {{ include "editors/cursor/extensions.json" | sha256sum }}
 
 set -euo pipefail
 
@@ -65,7 +65,6 @@ sync_extensions() {
 
 echo "Syncing editor extensions..."
 
-sync_extensions "code" "VSCode" "$CHEZMOI_SOURCE/editors/vscode/extensions.json"
 sync_extensions "cursor" "Cursor" "$CHEZMOI_SOURCE/editors/cursor/extensions.json"
 
 echo "Editor extensions sync complete."

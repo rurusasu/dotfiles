@@ -130,6 +130,13 @@
       "outputs": ["linux", "darwin", "wsl", "windows"]
     },
     {
+      "patterns": [
+        "chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl",
+        "tests/bash/pnpm_global_runtime.bats"
+      ],
+      "outputs": ["linux", "darwin", "wsl"]
+    },
+    {
       "patterns": ["scripts/sh/install-home-manager.sh"],
       "outputs": ["linux", "darwin", "wsl"]
     },

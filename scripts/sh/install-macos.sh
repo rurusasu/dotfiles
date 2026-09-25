@@ -16,7 +16,6 @@ export OP_BIOMETRIC_UNLOCK_ENABLED
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-display.sh"
 
-COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
 HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/local-ai-services/compose.yml"
 DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
 LEGACY_DOCKER_APP="${DOTFILES_LEGACY_DOCKER_APP_PATH:-/Applications/Nix Apps/Docker.app}"
@@ -67,17 +66,17 @@ Usage: ./install.sh [--with-ollama | --with-docker | --with-hermes]
 
   --with-ollama  Install and update Ollama.
   --with-docker  Include Ollama, Docker Desktop, and independent Hindsight.
-  --with-hermes  Include native Hermes Desktop, the Docker Agent/Dashboard,
-                  Chrome, and Discord (Dashboard: http://127.0.0.1:9119).
+  --with-hermes  Include native Hermes Agent/Desktop and its Home Manager
+                  gateway service.
 EOF
 }
 
 resolve_install_profile() {
   # The public entrypoint selects profiles only through explicit CLI flags.
   # A sourced activation adapter retains the already-resolved environment.
-  DOTFILES_WITH_OLLAMA=0
-  DOTFILES_WITH_DOCKER=0
-  DOTFILES_WITH_HERMES=0
+  DOTFILES_WITH_OLLAMA="${DOTFILES_WITH_OLLAMA:-0}"
+  DOTFILES_WITH_DOCKER="${DOTFILES_WITH_DOCKER:-0}"
+  DOTFILES_WITH_HERMES="${DOTFILES_WITH_HERMES:-0}"
   while (($# > 0)); do
     case "$1" in
     --with-ollama) DOTFILES_WITH_OLLAMA=1 ;;
@@ -92,9 +91,6 @@ resolve_install_profile() {
     shift
   done
 
-  if ((DOTFILES_WITH_HERMES == 1)); then
-    DOTFILES_WITH_DOCKER=1
-  fi
   if ((DOTFILES_WITH_DOCKER == 1)); then
     DOTFILES_WITH_OLLAMA=1
   fi
@@ -122,10 +118,6 @@ preflight() {
   if ((DOTFILES_WITH_DOCKER == 1)); then
     required_paths+=("$HINDSIGHT_COMPOSE_FILE")
   fi
-  if ((DOTFILES_WITH_HERMES == 1)); then
-    required_paths+=("$COMPOSE_FILE")
-  fi
-
   for required in "${required_paths[@]}"; do
     [[ -e $required ]] || dotfiles_die "Required repository path is missing: $required"
   done
@@ -1012,17 +1004,10 @@ finish_macos_install() {
   if ((DOTFILES_WITH_DOCKER == 1)); then
     dotfiles_step 'Starting Docker' \
       'Start Docker Desktop and wait for its engine.' setup_docker_runtime
-    if ((DOTFILES_WITH_HERMES == 1)); then
-      dotfiles_step 'Preparing Hermes services' \
-        'Prepare storage, images, and local services through the Hermes bootstrap task.' dotfiles_run_task hermes:bootstrap
-      DOTFILES_COMPOSE_FILE="$COMPOSE_FILE" dotfiles_step 'Verifying the installed environment' \
-        'Check the Hermes runtime and required tools.' "$VERIFY_ENVIRONMENT" --runtime
-    else
-      dotfiles_step 'Starting Hindsight services' \
-        'Prepare and start the independent local memory services.' dotfiles_run_task hindsight:up
-      DOTFILES_COMPOSE_FILE="$HINDSIGHT_COMPOSE_FILE" dotfiles_step 'Verifying the installed environment' \
-        'Check the local services and required tools.' "$VERIFY_ENVIRONMENT" --runtime
-    fi
+    dotfiles_step 'Starting Hindsight services' \
+      'Prepare and start the independent local memory services.' dotfiles_run_task hindsight:up
+    DOTFILES_COMPOSE_FILE="$HINDSIGHT_COMPOSE_FILE" dotfiles_step 'Verifying the installed environment' \
+      'Check the local services and required tools.' "$VERIFY_ENVIRONMENT" --runtime
   else
     dotfiles_step 'Verifying the installed environment' \
       'Check required tools and installed configuration.' "$VERIFY_ENVIRONMENT"

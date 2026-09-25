@@ -1,12 +1,59 @@
 # Hermes Bootstrap Operations
 
-Hermes uses one container-owned bootstrap on every supported host. The host
-adapter supplies prerequisites and secrets, and writes only the private
-Compose-side `.op.env` service-account file; Hermes config, profiles,
-repositories, and managed `.env` files remain container-owned.
+On macOS and Linux/WSL, the pinned `hermes-agent` flake and Home Manager module
+manage the Hermes CLI and native gateway service. On Windows, `WithHermes`
+selects that Nix-managed runtime in the configured NixOS WSL distribution; the
+Windows installer does not start a Docker Hermes Agent. This page documents the
+explicit legacy Docker Compose bootstrap, which remains available for operators
+who still need that stack. It is not part of the standard Hermes install path.
+The legacy bootstrap writes only the private Compose-side `.op.env`
+service-account file. Docker-managed Hermes config, profiles, repositories,
+and managed `.env` files remain in the Docker volume.
 
-Hermes の組み込み 1Password 連携と `op` CLI の利用手順は、[Hermes Agent で
-1Password を使う](./onepassword.md)を参照してください。
+The native service uses the host's `~/.hermes` directory. The Compose gateway
+and bootstrap instead use the Docker named volume `hermes-data` (or the volume
+selected by `HERMES_DATA_VOLUME`) at `/opt/data`. Enabling the native service
+does not migrate, modify, or remove an existing Docker volume or its state.
+Moving data between these runtimes is an operator-led migration: take and
+verify an explicit backup first, then decide how to resolve path conflicts
+before copying anything. No automatic merge or winner is defined.
+
+### One-time Docker-volume migration
+
+Run this only in a Linux/WSL shell whose Docker CLI can access the old volume.
+First identify its exact name with `docker volume ls` (Compose commonly prefixes
+`hermes-data` with the project name); do not assume the name. Stop the legacy
+`hermes` gateway with its existing Compose project before exporting so its
+SQLite and session files are quiescent. Do not run `docker volume rm`.
+
+```bash
+set -euo pipefail
+umask 077
+volume='REPLACE_WITH_THE_EXACT_VOLUME_NAME'
+export_dir="$HOME/.local/share/hermes-migration"
+install -d -m 700 "$export_dir"
+docker run --rm \
+  --mount "type=volume,src=$volume,dst=/source,readonly" \
+  --mount "type=bind,src=$export_dir,dst=/export" \
+  busybox:1.36.1 sh -c 'tar -czf /export/hermes-data.tar.gz -C /source .'
+chmod 600 "$export_dir/hermes-data.tar.gz"
+tar -tzf "$export_dir/hermes-data.tar.gz" >/dev/null
+
+stage="$(mktemp -d "$HOME/.hermes-migration.XXXXXX")"
+chmod 700 "$stage"
+tar -xzf "$export_dir/hermes-data.tar.gz" -C "$stage"
+```
+
+Review the staged tree before activation. If `~/.hermes` does not exist, move
+the reviewed staging directory to that path and make the current WSL user its
+owner. If it already exists, do not overlay it: compare the two trees and merge
+conflicts deliberately, especially `.env`, provider credentials, profiles, and
+session databases. The original Docker volume and the mode-`0600` archive remain
+available for rollback; retain them until the Nix-managed CLI and gateway have
+been verified. The Windows installer and Nix activation never perform this
+copy or remove the old volume automatically.
+
+Hermes の組み込み 1Password 連携と `op` CLI の利用手順は、[Hermes Agent で 1Password を使う](./onepassword.md)を参照してください。
 
 ## Run Bootstrap
 
@@ -21,10 +68,10 @@ the focused adapter does not route these commands through WSL. Under WSL,
 Ollama runs on Windows and Docker reaches it through `host.docker.internal`; do
 not enable a second WSL Ollama service.
 
-For a focused full bootstrap on any supported host, run:
+For the explicit legacy Docker stack only, run:
 
 ```text
-task hermes:bootstrap
+task hermes:docker:bootstrap
 ```
 
 On Unix, the task sources `scripts/sh/hermes-agent.sh` and invokes its Docker
@@ -38,19 +85,30 @@ connected database. They then build `hermes`, `hermes-bootstrap`, and
 `xapi-mcp`, run the container bootstrap, and recreate the stack only after
 success. The final recreate is wrapped with the host X API credential adapter
 on both Unix and Windows, so `X_API_CLIENT_*` values are read from the
-configured 1Password item instead of being exported or stored locally. The full
-installer chains remain:
+configured 1Password item instead of being exported or stored locally. The
+standard installer paths and the separate legacy Docker path are:
 
 ```text
-install.sh -> OS installer -> shell adapter (scripts/sh/hermes-agent.sh) -> hermes-bootstrap container -> compose up
-install.cmd -> install.ps1 -> install.admin.ps1 -> HermesAgentHandler -> PowerShell adapter (HermesBootstrap.ps1) -> hermes-bootstrap container -> compose up
+install.sh -> OS installer -> task hermes:bootstrap -> Nix/Home Manager CLI and native gateway
+install.cmd + WithHermes -> NixRebuild -> NixOS WSL Hermes profile and native gateway
+task hermes:docker:bootstrap -> legacy Docker adapters -> hermes-bootstrap container -> compose up
 ```
+
+The Windows `HermesAgentHandler` verifies that a successful NixOS WSL rebuild
+took ownership. If WSL is absent or the rebuild failed, installation fails
+clearly instead of silently falling back to Docker. The legacy Docker tasks
+remain separate, and no existing Docker volume is deleted or automatically
+copied into `~/.hermes`.
+
+The installer accepts this repository's pinned flake cache configuration only
+for the individual NixOS rebuild invocation. The helper does not persist the
+flake's substituter or signing key into user or machine Nix configuration.
 
 `HermesAgentHandler` is Phase `2`, order `56`, and
 `RequiresAdmin = false`. It must stay in the user context so native `op.exe`
 can use 1Password desktop integration.
 
-`task hermes:bootstrap` returns the selected focused adapter status; it neither
+`task hermes:docker:bootstrap` returns the selected focused adapter status; it neither
 runs the full-machine installer nor hides a nonzero result.
 
 Hindsight の運用、バックアップ、復元、受入検証、privacy boundary は

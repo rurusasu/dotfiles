@@ -4,7 +4,6 @@
 
 - `SetupHandler.Tests.ps1`
 - `Invoke-ExternalCommand.Tests.ps1`
-- `Request-AdminElevation.Tests.ps1`
 
 ## 重点確認
 

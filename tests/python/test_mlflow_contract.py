@@ -180,6 +180,7 @@ class MlflowContractTests(unittest.TestCase):
             set(tasks),
             {
                 "mlflow:up",
+                "mlflow:update",
                 "mlflow:configure",
                 "mlflow:down",
                 "mlflow:status",
@@ -204,9 +205,16 @@ class MlflowContractTests(unittest.TestCase):
                     "cmd": "pwsh -NoProfile -Command 'docker network inspect local-ai-services *> $null; if ($LASTEXITCODE -ne 0) { docker network create local-ai-services }'",
                     "platforms": ["windows"],
                 },
-                "docker compose -f {{.MLFLOW_COMPOSE_FILE}} pull mlflow",
-                "docker compose -f {{.MLFLOW_COMPOSE_FILE}} up -d --force-recreate --remove-orphans --wait mlflow",
+                "docker compose -f {{.MLFLOW_COMPOSE_FILE}} up -d --remove-orphans --wait mlflow",
                 {"task": "mlflow:configure"},
+            ],
+        )
+
+        self.assertEqual(
+            tasks["mlflow:update"]["cmds"],
+            [
+                "docker compose -f {{.MLFLOW_COMPOSE_FILE}} pull mlflow",
+                {"task": "mlflow:up"},
             ],
         )
 

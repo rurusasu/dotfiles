@@ -1,4 +1,4 @@
 # Shared with WezTerm; retain Ghostty's native shortcuts and shell integration.
-theme = Catppuccin Mocha
-font-family = UDEV Gothic NF
-font-size = 10
+theme = {{ .appearance.theme }}
+font-family = {{ .appearance.font_family }}
+font-size = {{ .appearance.font_size }}

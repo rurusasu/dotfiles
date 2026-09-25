@@ -12,7 +12,10 @@ let
   };
 in
 {
-  imports = [ ./common.nix ];
+  imports = [
+    ./common.nix
+    ./hermes-agent.nix
+  ];
 
   home.packages = sets.allWithout [
     "discord"

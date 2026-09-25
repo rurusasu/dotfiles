@@ -237,6 +237,31 @@ default_app: default
         $cache | Should -Not -Match 'access_token'
     }
 
+    It 'protects the Windows xurl cache with only the current user modify access' -Skip:([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+        $dataDir = Join-Path $TestDrive 'hermes-windows-acl'
+        Write-HermesXApiAuthCache `
+            -DataDir $dataDir `
+            -ClientId 'xapi-client-id-marker' `
+            -ClientSecret 'xapi-client-secret-marker' `
+            -RefreshToken 'xapi-refresh-token-marker'
+
+        $cachePath = Join-Path $dataDir '.xurl\auth.yml'
+        $acl = Get-Acl -LiteralPath $cachePath
+        $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $accessSid = $acl.Access[0].IdentityReference.Translate(
+            [System.Security.Principal.SecurityIdentifier]
+        ).Value
+        $expectedRights = [System.Security.AccessControl.FileSystemRights]::Modify -bor
+            [System.Security.AccessControl.FileSystemRights]::Synchronize
+
+        @($acl.Access).Count | Should -Be 1
+        $accessSid | Should -Be $currentSid
+        $acl.Access[0].FileSystemRights | Should -Be $expectedRights
+        $acl.Access[0].AccessControlType | Should -Be ([System.Security.AccessControl.AccessControlType]::Allow)
+        $acl.Access[0].IsInherited | Should -BeFalse
+        $acl.AreAccessRulesProtected | Should -BeTrue
+    }
+
     It 'replaces an invalid local token from 1Password and probes it once more' {
         $dataDir = Join-Path $TestDrive 'hermes-reconcile'
         $xurlDir = Join-Path $dataDir '.xurl'

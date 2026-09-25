@@ -2,6 +2,11 @@
   lib,
   inputs,
   pkgs,
+  dotfilesUser ? builtins.getEnv "DOTFILES_USER",
+  dotfilesHome ? builtins.getEnv "DOTFILES_HOME",
+  dotfilesUid ? builtins.getEnv "DOTFILES_UID",
+  dotfilesGid ? builtins.getEnv "DOTFILES_GID",
+  dotfilesGroup ? builtins.getEnv "DOTFILES_GROUP",
   ...
 }:
 let
@@ -10,11 +15,11 @@ let
     inherit pkgs lib;
     inherit codexPackage;
   };
-  user = builtins.getEnv "DOTFILES_USER";
-  home = builtins.getEnv "DOTFILES_HOME";
-  uidText = builtins.getEnv "DOTFILES_UID";
-  gidText = builtins.getEnv "DOTFILES_GID";
-  groupText = builtins.getEnv "DOTFILES_GROUP";
+  user = dotfilesUser;
+  home = dotfilesHome;
+  uidText = dotfilesUid;
+  gidText = dotfilesGid;
+  groupText = dotfilesGroup;
   primaryGroup = if groupText == "" then user else groupText;
   isNumericId = value: builtins.match "[0-9]+" value != null;
   uid = if isNumericId uidText then lib.toInt uidText else 0;
@@ -70,6 +75,7 @@ in
     extraSpecialArgs = {
       inherit inputs;
       isWSL = false;
+      installFeatures = [ ];
     };
   };
 }

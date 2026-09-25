@@ -183,6 +183,24 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
         self.assertNotIn("npm install -g @devcontainers/cli", devcontainer)
 
+    def test_nix_build_jobs_use_authenticated_github_fetches(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        for job_name in ("nix-test", "linux-build"):
+            with self.subTest(job=job_name):
+                job = self._workflow_job(workflow, job_name)
+                self.assertIn("NIX_CONFIG: |", job)
+                self.assertIn(
+                    "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}",
+                    job,
+                )
+
+        wsl_job = self._workflow_job(workflow, "wsl")
+        self.assertIn("NIX_CONFIG: |", wsl_job)
+        self.assertIn(
+            "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}",
+            wsl_job,
+        )
+        self.assertIn("WSLENV: GITHUB_TOKEN/u:NIX_CONFIG/u", wsl_job)
     def test_bootstrap_workflow_watches_nix_validation_paths(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
         for event in ("push",):
@@ -193,6 +211,11 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn('"docker/local-ai-services/**"', paths)
             self.assertIn('"docker/mlflow/**"', paths)
             self.assertIn('"docs/mlflow/**"', paths)
+
+    def test_bootstrap_push_watches_pnpm_global_runtime_bats(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        paths = self._trigger_paths(workflow, "push")
+        self.assertIn('"tests/bash/pnpm_global_runtime.bats"', paths)
 
     def test_contract_workflow_runs_the_dedicated_mlflow_gateway_tests(self) -> None:
         workflow = self._workflow()
@@ -221,8 +244,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
 
         self.assertIn("Bootstrap / Nix / Lint", workflow)
-        self.assertIn("Bootstrap / Nix / Format", workflow)
-        self.assertIn("Bootstrap / Nix / Test", workflow)
+        self.assertIn("Bootstrap / Format / Style", workflow)
+        self.assertIn("Bootstrap / Test / Nix outputs", workflow)
         self.assertIn("Bootstrap / Windows / Installer", workflow)
 
         complete = self._workflow_job(workflow, "complete")
@@ -431,6 +454,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "Bootstrap / Linux / E2E / Debian",
             "Bootstrap / Linux / E2E / NixOS",
             "Bootstrap / Darwin",
+            "Bootstrap / WSL / Prebuild",
             "Bootstrap / WSL",
             "Bootstrap / Windows",
             "Bootstrap / Complete",
@@ -440,12 +464,18 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         for job_name, output in (
             ("linux-build", "linux"),
             ("darwin", "darwin"),
-            ("wsl", "wsl"),
             ("windows", "windows"),
         ):
             job = self._workflow_job(workflow, job_name)
             self.assertIn("needs: changes", job)
             self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
+
+        wsl_prebuild = self._workflow_job(workflow, "wsl-prebuild")
+        self.assertIn("needs: changes", wsl_prebuild)
+        self.assertIn("needs.changes.outputs.wsl == 'true'", wsl_prebuild)
+        self.assertIn("ref: ${{ env.TESTED_SHA }}", wsl_prebuild)
+        wsl = self._workflow_job(workflow, "wsl")
+        self.assertIn("needs: [changes, wsl-prebuild]", wsl)
 
         for job_name in ("linux-ubuntu", "linux-debian", "linux-nixos"):
             job = self._workflow_job(workflow, job_name)
@@ -471,6 +501,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("PLATFORM_REQUIRED", complete)
         self.assertIn("LINUX_REQUIRED", complete)
         self.assertIn("WSL_REQUIRED", complete)
+        self.assertIn("WSL_PREBUILD_RESULT", complete)
+        self.assertIn('check_required_job "WSL / Prebuild"', complete)
         self.assertIn("check_platform", complete)
         self.assertNotIn("success|skipped", complete)
 
@@ -480,11 +512,26 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "linux-debian",
             "linux-nixos",
             "darwin",
+            "wsl-prebuild",
             "wsl",
             "windows",
         ):
             job = self._workflow_job(workflow, job_name)
             self.assertIn("ref: ${{ env.TESTED_SHA }}", job)
+
+    def test_bootstrap_checks_out_the_pull_request_head_sha(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+
+        self.assertIn(
+            "group: bootstrap-${{ github.workflow }}-${{ github.ref }}",
+            workflow,
+        )
+        self.assertIn("cancel-in-progress: true", workflow)
+        self.assertIn(
+            "TESTED_SHA: ${{ github.event_name == 'pull_request' && "
+            "github.event.pull_request.head.sha || github.sha }}",
+            workflow,
+        )
 
     def test_chezmoi_ci_runs_pester_once_in_lint_and_uploads_its_junit_result(
         self,
@@ -593,3 +640,4 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

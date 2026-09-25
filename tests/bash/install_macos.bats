@@ -262,6 +262,7 @@ exit 97
 printf "task %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
   *" darwin:install "*) exec "$REAL_TASK" "$@" ;;
+  *" hermes:desktop:install "*) exit "${HERMES_DESKTOP_INSTALL_STATUS:-0}" ;;
   *" hermes:bootstrap "*)
     source "$REPO_ROOT/scripts/sh/install-common.sh"
     source "$REPO_ROOT/scripts/sh/hermes-agent.sh"
@@ -365,9 +366,11 @@ fi
 '
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub launchctl 'printf "launchctl %s\n" "$*" >>"$COMMAND_LOG"'
-	write_stub docker '
+write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
+  *" info "*) [[ ${DOCKER_ENGINE_RUNNING:-0} == 1 ]] || exit 1 ;;
+  *" compose -f "*" stop hermes "*) exit 0 ;;
   *" ps --all --services hermes "*) printf "hermes\n" ;;
   *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
   *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
@@ -598,13 +601,12 @@ exit 37
 	! grep -q 'nix shell\|darwin-rebuild' "$COMMAND_LOG"
 }
 
-@test "public install ignores inherited optional profiles" {
+@test "public install preserves the inherited Hermes feature for subsequent rebuilds" {
 	write_installed_stubs
-	export DOTFILES_WITH_OLLAMA=1 DOTFILES_WITH_DOCKER=1 DOTFILES_WITH_HERMES=1
+	export DOTFILES_WITH_HERMES=1
 	run_macos_installer
 	[ "$status" -eq 0 ]
-	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
-	! grep -q '^docker ' "$COMMAND_LOG"
+	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=1>' "$COMMAND_LOG"
 }
 
 @test "pinned installer mode skips both flake and custom package updates" {
@@ -721,47 +723,52 @@ exit 1
 	! grep -q 'task .*hindsight:up' "$COMMAND_LOG"
 }
 
-@test "WithHermes runs nix-darwin chezmoi and Compose in order" {
+@test "WithHermes activates the native Nix gateway without starting Docker" {
 	write_installed_stubs
 
 	run_macos_installer --with-hermes
 
 	[ "$status" -eq 0 ]
-	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=1>' "$COMMAND_LOG"
+	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=1>' "$COMMAND_LOG"
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"migrate-darwin-provider --all --feature WithOllama --feature WithDocker --feature WithHermes" \
+		"migrate-darwin-provider --all --feature WithHermes" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"task --dir $REPO_ROOT hermes:desktop:install" \
-		"docker info" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml config --quiet" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap apply" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml up -d --force-recreate" \
-		"docker image prune --force" \
-		"verify-environment compose=$REPO_ROOT/docker/hermes-service/compose.yml args=--runtime"
-	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 16 ]
-	[ "$(grep -c '^op --account my.1password.com read ' "$COMMAND_LOG")" -eq 1 ]
-	! grep -q '^op signin ' "$COMMAND_LOG"
-	[ -s "$PAYLOAD_CAPTURE" ]
+		"verify-environment compose= args="
+	! grep -q '^docker compose' "$COMMAND_LOG"
+	! grep -q '^task .*hermes:docker:' "$COMMAND_LOG"
+	! grep -q '^op ' "$COMMAND_LOG"
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
 	! grep -q 'docker-install' "$COMMAND_LOG"
 }
 
-@test "WithHermes help documents the native Desktop and container dashboard" {
+@test "WithHermes Nix activation does not target a Docker gateway" {
+	write_installed_stubs
+	export DOCKER_ENGINE_RUNNING=1
+
+	run_macos_installer --with-hermes
+
+	[ "$status" -eq 0 ]
+	activation_line="$(grep -nF 'nix run .#darwin-rebuild -- switch --flake .#macos --impure' "$COMMAND_LOG" | cut -d: -f1)"
+	[ -n "$activation_line" ]
+	! grep -q 'docker compose .* hermes' "$COMMAND_LOG"
+	! grep -qE '^docker compose .* (stop|restart|rm|down) (chromium|browser-mcp|xapi-mcp)' "$COMMAND_LOG"
+	! grep -qE '^docker (volume rm|image prune)' "$COMMAND_LOG"
+}
+
+@test "WithHermes help documents the native Home Manager gateway" {
 	run "$INSTALLER" --help
 
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"--with-ollama"* ]]
 	[[ "$output" == *"--with-docker"* ]]
 	[[ "$output" == *"--with-hermes"* ]]
-	[[ "$output" == *"Hermes Desktop"* ]]
-	[[ "$output" == *"127.0.0.1:9119"* ]]
+	[[ "$output" == *"native Hermes Agent/Desktop"* ]]
+	[[ "$output" == *"Home Manager"* ]]
 }
 
 @test "unknown install profile stops before mutation" {
@@ -1189,17 +1196,16 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	! grep -Fq 'sudo </bin/chmod>' "$COMMAND_LOG"
 }
 
-@test "Hermes bootstrap failure recovers macOS runtime before returning failure" {
+@test "native Hermes Desktop install failure stops later verification" {
 	write_installed_stubs
-	export HERMES_BOOTSTRAP_STATUS=45
+	export HERMES_DESKTOP_INSTALL_STATUS=45
 
 	run_macos_installer --with-hermes
 
 	[ "$status" -eq 45 ]
-	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
-	! grep -q ' up -d --force-recreate' "$COMMAND_LOG"
-	grep -q ' start' "$COMMAND_LOG"
-	! grep -q ' up ' "$COMMAND_LOG"
+	grep -Fq "task --dir $REPO_ROOT hermes:desktop:install" "$COMMAND_LOG"
+	! grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
+	! grep -q '^docker compose .*hermes' "$COMMAND_LOG"
 	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 
@@ -1651,7 +1657,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	! grep -q '^docker compose ' "$COMMAND_LOG"
 }
 
-@test "fresh install provisions Nix then delegates apps and Rosetta to nix-darwin" {
+@test "fresh Hermes install provisions Nix then delegates apps to nix-darwin and the native desktop installer" {
 	write_fresh_install_stubs
 	rmdir "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 
@@ -1664,11 +1670,11 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 		"nix-installer --daemon" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
-		"docker-install --accept-license --user=test-user"
+		"task --dir $REPO_ROOT hermes:desktop:install"
 	[ "$(grep -c 'nix-installer --daemon' "$COMMAND_LOG")" -eq 1 ]
 	! grep -q 'raw.githubusercontent.com/Homebrew/install' "$COMMAND_LOG"
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
-	! grep -q 'desktop.docker.com/mac' "$COMMAND_LOG"
+	! grep -q '^docker-install ' "$COMMAND_LOG"
 	! grep -q 'softwareupdate' "$COMMAND_LOG"
 }
 

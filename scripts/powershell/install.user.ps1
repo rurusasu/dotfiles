@@ -40,6 +40,10 @@ $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..\..")).Path
 . (Join-Path $libPath "SetupHandler.ps1")
 . (Join-Path $libPath "Invoke-ExternalCommand.ps1")
 
+# User PATH can exceed Windows' child-process environment limits. Normalize it
+# before handler discovery or any package-manager command is started.
+Update-ProcessEnvironmentPath -ReportStatus
+
 if (-not $PSBoundParameters.ContainsKey("PostInstallScript")) {
     $PostInstallScript = Join-Path $repoRoot "scripts\sh\nixos-wsl-postinstall.sh"
 }
@@ -79,7 +83,7 @@ if ($CheckOnly) {
             }
         }
         catch {
-            Write-Warning "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
+            throw "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
         }
     }
     return $canApply

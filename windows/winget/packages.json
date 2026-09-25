@@ -5,6 +5,8 @@
       "Packages": [
         {
           "PackageIdentifier": "AgileBits.1Password.CLI",
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 900,
           "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"],
           "verifyCommand": {
             "args": ["--version"],
@@ -12,17 +14,65 @@
           }
         },
         {
-          "PackageIdentifier": "AgileBits.1Password"
+          "PackageIdentifier": "AgileBits.1Password",
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "appxPackage": {
+              "executable": "1Password.exe",
+              "name": "AgileBits.1Password",
+              "packageFamilyName": "Agilebits.1Password_amwd9z03whsfe"
+            },
+            "command": "AgileBits.1Password",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "1Password",
+              "executablePaths": [
+                "%ProgramFiles%\\1Password\\1Password.exe",
+                "%LOCALAPPDATA%\\1Password\\app\\*\\1Password.exe"
+              ]
+            }
+          }
         },
         {
-          "PackageIdentifier": "TheBrowserCompany.Arc"
+          "PackageIdentifier": "TheBrowserCompany.Arc",
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "args": ["TheBrowserCompany.Arc_ttt1ap7aakyb4!Arc"],
+            "command": "TheBrowserCompany.Arc",
+            "type": "appxLaunchTarget"
+          }
         },
         {
           "PackageIdentifier": "AutoHotkey.AutoHotkey",
-          "installArgs": ["--scope", "machine"]
+          "installArgs": ["--scope", "machine"],
+          "installTimeoutSeconds": 900,
+          "requiresAdmin": true,
+          "verifyCommand": {
+            "command": "AutoHotkey",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "AutoHotkey",
+              "executablePaths": ["%ProgramFiles%\\AutoHotkey\\v2\\AutoHotkey.exe"],
+              "productCodes": ["AutoHotkey"]
+            }
+          }
         },
         {
           "PackageIdentifier": "Oven-sh.Bun",
+          "directInstaller": {
+            "destination": "%LOCALAPPDATA%\\Programs\\Bun",
+            "executable": "bun-windows-x64\\bun.exe",
+            "sha256": "ce4c17497b2f29712a99d3d53f028de28cd42e3bacb8589599e7f000e49b6405",
+            "timeoutSeconds": 900,
+            "type": "archive",
+            "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-windows-x64.zip"
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 900,
+          "pathEntries": [
+            "%LOCALAPPDATA%\\Programs\\Bun\\bun-windows-x64",
+            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Oven-sh.Bun*\\bun-windows-x64"
+          ],
           "verifyCommand": {
             "args": ["--version"],
             "command": "bun"
@@ -30,6 +80,17 @@
         },
         {
           "PackageIdentifier": "twpayne.chezmoi",
+          "directInstaller": {
+            "destination": "%LOCALAPPDATA%\\Programs\\chezmoi",
+            "executable": "chezmoi.exe",
+            "sha256": "5c2038736c485d4e3eaad4ac06ea1fe3c4b63d4d51e470547bf12737c02f37f6",
+            "timeoutSeconds": 900,
+            "type": "archive",
+            "url": "https://github.com/twpayne/chezmoi/releases/download/v2.72.2/chezmoi_2.72.2_windows_amd64.zip"
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Programs\\chezmoi"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "chezmoi"
@@ -37,9 +98,23 @@
         },
         {
           "PackageIdentifier": "OpenAI.Codex",
+          "directInstaller": {
+            "destination": "%LOCALAPPDATA%\\Programs\\Codex",
+            "executable": "bin\\codex.exe",
+            "sha256": "f45c273b7835c192aaa9cef5b93aa9528966ac7301444632de80a565a9bf14e8",
+            "timeoutSeconds": 900,
+            "type": "archive",
+            "url": "https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-package-x86_64-pc-windows-msvc.tar.gz"
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 900,
+          "pathEntries": [
+            "%LOCALAPPDATA%\\Programs\\Codex\\bin",
+            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"
+          ],
           "portableLink": {
             "linkName": "codex.exe",
-            "targetPattern": "codex-x86_64-pc-windows-msvc.exe"
+            "targetPattern": "codex.exe"
           },
           "verifyCommand": {
             "args": ["--version"],
@@ -48,6 +123,17 @@
         },
         {
           "PackageIdentifier": "direnv.direnv",
+          "directInstaller": {
+            "destination": "%LOCALAPPDATA%\\Programs\\direnv",
+            "executable": "direnv.exe",
+            "sha256": "d96fc8b7cf020c2d4c1dbbc2ccec5fd1cab05b51c491f02c8527a7fa6c50a1cd",
+            "timeoutSeconds": 900,
+            "type": "file",
+            "url": "https://github.com/direnv/direnv/releases/download/v2.37.1/direnv.windows-amd64"
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Programs\\direnv"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "direnv"
@@ -55,14 +141,48 @@
         },
         {
           "PackageIdentifier": "Discord.Discord",
-          "installFeature": "WithHermes"
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "command": "Discord",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "Discord",
+              "executablePaths": ["%LOCALAPPDATA%\\Discord\\app-*\\Discord.exe"],
+              "productCodes": ["Discord"],
+              "publisher": "Discord Inc."
+            }
+          }
         },
         {
           "PackageIdentifier": "Docker.DockerDesktop",
-          "installFeature": "WithDocker"
+          "installFeature": "WithDocker",
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "command": "Docker Desktop",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "Docker Desktop",
+              "executablePaths": [
+                "%ProgramFiles%\\Docker\\Docker\\Docker Desktop.exe",
+                "%LOCALAPPDATA%\\Programs\\DockerDesktop\\Docker Desktop.exe"
+              ],
+              "publisher": "Docker Inc."
+            }
+          }
         },
         {
           "PackageIdentifier": "dprint.dprint",
+          "directInstaller": {
+            "destination": "%LOCALAPPDATA%\\Programs\\dprint",
+            "executable": "dprint.exe",
+            "sha256": "1038af32fade7a79f9c3a690d9546bb17be13dd7b4568a3684692fdcb0a52a1d",
+            "timeoutSeconds": 900,
+            "type": "archive",
+            "url": "https://github.com/dprint/dprint/releases/download/0.57.4/dprint-x86_64-pc-windows-msvc.zip"
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Programs\\dprint"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "dprint"
@@ -70,6 +190,17 @@
         },
         {
           "PackageIdentifier": "eza-community.eza",
+          "directInstaller": {
+            "destination": "%LOCALAPPDATA%\\Programs\\eza",
+            "executable": "eza.exe",
+            "sha256": "c830638c844a5b89d39ba662b5549903a71fa539018e813880f5b8afa77bac2e",
+            "timeoutSeconds": 900,
+            "type": "archive",
+            "url": "https://github.com/eza-community/eza/releases/download/v0.23.5/eza.exe_x86_64-pc-windows-gnu.zip"
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Programs\\eza"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "eza"
@@ -77,6 +208,17 @@
         },
         {
           "PackageIdentifier": "sharkdp.fd",
+          "directInstaller": {
+            "destination": "%LOCALAPPDATA%\\Programs\\fd",
+            "executable": "fd-v10.5.0-x86_64-pc-windows-msvc\\fd.exe",
+            "sha256": "a227701b8551c35a9931d9f6da75503cf86d88e182d71fb849a70864c5d57cd7",
+            "timeoutSeconds": 900,
+            "type": "archive",
+            "url": "https://github.com/sharkdp/fd/releases/download/v10.5.0/fd-v10.5.0-x86_64-pc-windows-msvc.zip"
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Programs\\fd\\fd-v10.5.0-x86_64-pc-windows-msvc"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "fd"
@@ -84,6 +226,7 @@
         },
         {
           "PackageIdentifier": "junegunn.fzf",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "fzf"
@@ -91,13 +234,16 @@
         },
         {
           "PackageIdentifier": "GitHub.cli",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
-            "command": "gh"
+            "command": "gh",
+            "timeoutSeconds": 60
           }
         },
         {
           "PackageIdentifier": "x-motemen.ghq",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "ghq"
@@ -105,6 +251,7 @@
         },
         {
           "PackageIdentifier": "Git.Git",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "git"
@@ -112,13 +259,17 @@
         },
         {
           "PackageIdentifier": "GoLang.Go",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["version"],
-            "command": "go"
+            "command": "go",
+            "timeoutSeconds": 900
           }
         },
         {
           "PackageIdentifier": "Task.Task",
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Task.Task*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "task"
@@ -126,7 +277,21 @@
         },
         {
           "PackageIdentifier": "Google.Chrome",
-          "installFeature": "WithHermes"
+          "installFeature": "WithHermes",
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "command": "Google Chrome",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "Google Chrome",
+              "executablePaths": [
+                "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe",
+                "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe",
+                "%LOCALAPPDATA%\\Google\\Chrome\\Application\\chrome.exe"
+              ],
+              "publisher": "Google LLC"
+            }
+          }
         },
         {
           "PackageIdentifier": "Google.CloudSDK",
@@ -144,6 +309,8 @@
         },
         {
           "PackageIdentifier": "hadolint.hadolint",
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\hadolint.hadolint*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "hadolint"
@@ -151,6 +318,7 @@
         },
         {
           "PackageIdentifier": "ImageMagick.ImageMagick",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "magick"
@@ -158,6 +326,7 @@
         },
         {
           "PackageIdentifier": "jqlang.jq",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "jq"
@@ -165,6 +334,7 @@
         },
         {
           "PackageIdentifier": "JesseDuffield.lazygit",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "lazygit"
@@ -172,6 +342,7 @@
         },
         {
           "PackageIdentifier": "LuaLS.lua-language-server",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "lua-language-server"
@@ -179,6 +350,8 @@
         },
         {
           "PackageIdentifier": "Artempyanykh.Marksman",
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Artempyanykh.Marksman*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "marksman"
@@ -186,6 +359,7 @@
         },
         {
           "PackageIdentifier": "Neovim.Neovim",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "nvim"
@@ -193,35 +367,56 @@
         },
         {
           "PackageIdentifier": "OpenJS.NodeJS.LTS",
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%ProgramFiles%\\nodejs"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "node"
           }
         },
         {
-          "PackageIdentifier": "Obsidian.Obsidian"
+          "PackageIdentifier": "Obsidian.Obsidian",
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "command": "Obsidian",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "Obsidian",
+              "executablePaths": [
+                "%LOCALAPPDATA%\\Programs\\Obsidian\\Obsidian.exe",
+                "%ProgramFiles%\\Obsidian\\Obsidian.exe"
+              ],
+              "productCodes": ["bd400747-f0c1-5638-a859-982036102edf"]
+            }
+          }
         },
         {
           "PackageIdentifier": "Ollama.Ollama",
           "installFeature": "WithOllama",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "ollama"
           }
         },
         {
-          "PackageIdentifier": "SST.opencode",
+          "PackageIdentifier": "StablyAI.Orca",
+          "ciSkipInstall": true,
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
-            "args": ["--version"],
-            "command": "opencode"
+            "command": "OrcaSlicer",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "Orca",
+              "productCodes": ["2b325ec9-0ed1-575f-ad70-e08307aee879"]
+            }
           }
         },
         {
-          "PackageIdentifier": "StablyAI.Orca",
-          "ciSkipInstall": true
-        },
-        {
           "PackageIdentifier": "oxc-project.oxlint",
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
           "portableLink": {
             "linkName": "oxlint.exe",
             "targetPattern": "oxlint-*.exe"
@@ -233,6 +428,7 @@
         },
         {
           "PackageIdentifier": "oschwartz10612.Poppler",
+          "installTimeoutSeconds": 900,
           "pathEntries": [
             "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"
           ],
@@ -244,6 +440,7 @@
         {
           "PackageIdentifier": "Microsoft.PowerShell",
           "installArgs": ["--installer-type", "wix"],
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "pwsh"
@@ -251,6 +448,7 @@
         },
         {
           "PackageIdentifier": "BurntSushi.ripgrep.MSVC",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "rg"
@@ -258,6 +456,8 @@
         },
         {
           "PackageIdentifier": "astral-sh.ruff",
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ruff*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "ruff"
@@ -265,17 +465,22 @@
         },
         {
           "PackageIdentifier": "Rustlang.rust-analyzer",
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
+          "portableLink": {
+            "linkName": "rust-analyzer.exe",
+            "targetPattern": "rust-analyzer.exe"
+          },
           "verifyCommand": {
-            "args": [
-              "-NoProfile",
-              "-Command",
-              "& (Join-Path $env:LOCALAPPDATA Microsoft/WinGet/Links/rust-analyzer.exe) --version"
-            ],
-            "command": "pwsh"
+            "args": ["--version"],
+            "command": "rust-analyzer.exe",
+            "type": "portableLinkCommand"
           }
         },
         {
           "PackageIdentifier": "Rustlang.Rustup",
+          "installTimeoutSeconds": 900,
           "pathEntries": ["%USERPROFILE%\\.cargo\\bin"],
           "verifyCommand": {
             "args": ["--version"],
@@ -283,10 +488,8 @@
           }
         },
         {
-          "PackageIdentifier": "SlackTechnologies.Slack"
-        },
-        {
           "PackageIdentifier": "Starship.Starship",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "starship"
@@ -294,6 +497,8 @@
         },
         {
           "PackageIdentifier": "JohnnyMorganz.StyLua",
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\JohnnyMorganz.StyLua*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "stylua"
@@ -301,6 +506,8 @@
         },
         {
           "PackageIdentifier": "tamasfe.taplo",
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tamasfe.taplo*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "taplo"
@@ -308,6 +515,10 @@
         },
         {
           "PackageIdentifier": "tree-sitter.tree-sitter-cli",
+          "installTimeoutSeconds": 900,
+          "pathEntries": [
+            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"
+          ],
           "verifyCommand": {
             "args": ["--version"],
             "command": "tree-sitter"
@@ -315,6 +526,8 @@
         },
         {
           "PackageIdentifier": "astral-sh.ty",
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ty*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "ty"
@@ -322,17 +535,16 @@
         },
         {
           "PackageIdentifier": "astral-sh.uv",
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.uv*"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "uv"
           }
         },
         {
-          "PackageIdentifier": "Microsoft.VisualStudioCode"
-        },
-        {
-          "PackageIdentifier": "wez.wezterm.nightly",
-          "ciSkipInstall": true,
+          "PackageIdentifier": "wez.wezterm",
+          "installTimeoutSeconds": 900,
           "pathEntries": ["%ProgramFiles%\\WezTerm"],
           "verifyCommand": {
             "args": ["--version"],
@@ -341,6 +553,7 @@
         },
         {
           "PackageIdentifier": "zig.zig",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["version"],
             "command": "zig"
@@ -348,19 +561,40 @@
         },
         {
           "PackageIdentifier": "ajeetdsouza.zoxide",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "zoxide"
           }
         },
         {
-          "PackageIdentifier": "GitHub.Copilot"
+          "PackageIdentifier": "Microsoft.PowerToys",
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "command": "Microsoft PowerToys",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayNamePattern": "^PowerToys(?: \\(Preview\\))?$",
+              "executablePaths": [
+                "%ProgramFiles%\\PowerToys\\PowerToys.exe",
+                "%LOCALAPPDATA%\\PowerToys\\PowerToys.exe"
+              ],
+              "publisher": "Microsoft Corporation"
+            }
+          }
         },
         {
-          "PackageIdentifier": "Microsoft.PowerToys"
-        },
-        {
-          "PackageIdentifier": "Microsoft.VCRedist.2015+.x64"
+          "PackageIdentifier": "Microsoft.VCRedist.2015+.x64",
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "command": "Microsoft Visual C++ 2015-2022 Redistributable (x64)",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayNamePattern": "^Microsoft Visual C\\+\\+ (?:2015-2022 Redistributable|v14 Redistributable) \\(x64\\)",
+              "executablePaths": ["%SystemRoot%\\System32\\vcruntime140.dll"],
+              "publisher": "Microsoft Corporation"
+            }
+          }
         },
         {
           "PackageIdentifier": "Microsoft.VisualStudio.2022.BuildTools",
@@ -368,13 +602,29 @@
             "--override",
             "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart"
           ],
-          "installTimeoutSeconds": 1800
+          "installTimeoutSeconds": 900,
+          "requiresAdmin": true,
+          "verifyCommand": {
+            "command": "Microsoft.VisualStudio.Product.BuildTools",
+            "compilerRelativePath": "VC\\Tools\\MSVC\\*\\bin\\Hostx64\\x64\\cl.exe",
+            "minimumVersion": "17.0",
+            "productId": "Microsoft.VisualStudio.Product.BuildTools",
+            "requiredComponent": "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+            "type": "visualStudioInstanceVersion"
+          }
         },
         {
-          "PackageIdentifier": "Microsoft.WindowsTerminal"
+          "PackageIdentifier": "Microsoft.WindowsTerminal",
+          "installTimeoutSeconds": 900,
+          "verifyCommand": {
+            "args": ["Microsoft.WindowsTerminal_8wekyb3d8bbwe!App"],
+            "command": "Microsoft.WindowsTerminal",
+            "type": "appxLaunchTarget"
+          }
         },
         {
           "PackageIdentifier": "Microsoft.WSL",
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["--version"],
             "command": "wsl",
@@ -393,11 +643,9 @@
     {
       "Packages": [
         {
-          "PackageIdentifier": "9NT1R1C2HH7J"
-        },
-        {
           "PackageIdentifier": "9PLM9XGG6VKS",
           "ciSkipInstall": true,
+          "installTimeoutSeconds": 900,
           "verifyCommand": {
             "args": ["OpenAI.Codex_2p2nqsd0c76g0!App"],
             "command": "OpenAI.Codex",

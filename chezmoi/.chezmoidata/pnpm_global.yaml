@@ -3,8 +3,11 @@
 # Windows: PnpmHandler が windows/pnpm/packages.json から一括インストール
 # Linux/macOS: chezmoi run_onchange スクリプトがこのリストからインストール
 pnpm_global_packages:
+  - "bash-language-server"
+  - "yaml-language-server"
   - "@prisma/language-server"
   - "@deepseek-ai/dsh"
   - "@playwright/cli"
+  - "playwright"
   - "typescript-language-server"
   - "typescript"

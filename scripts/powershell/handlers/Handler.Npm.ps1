@@ -159,10 +159,25 @@ class NpmHandler : SetupHandlerBase {
 
             foreach ($pkg in $toInstall) {
                 $this.Log("インストール/更新中: $($pkg.Spec)")
-                Invoke-Npm -Arguments @("install", "-g", $pkg.Spec) | Out-Null
+                $installOutput = @(Invoke-Npm -Arguments @("install", "-g", $pkg.Spec))
+                $installExitCode = [int]$LASTEXITCODE
 
-                if ($LASTEXITCODE -ne 0) {
+                if ($installExitCode -ne 0) {
                     $failed += $pkg.Spec
+                    $hasInstallOutput = $false
+                    foreach ($line in $installOutput) {
+                        if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
+                            $hasInstallOutput = $true
+                            $this.Log("npm: $line", "Yellow")
+                        }
+                    }
+                    $this.LogWarning("npm install exited with code $installExitCode for $($pkg.Spec)")
+                    if (-not $hasInstallOutput) {
+                        $this.LogWarning("npm stdout/stderr は出力なしです。npm debug log を確認してください。")
+                        $this.Log("ログ場所: npm config get logs-dir (未設定時は npm config get cache の _logs)", "Yellow")
+                        $this.Log("設定確認: npm config get loglevel / npm config get logs-max (0 の場合、ログファイルは作成されません)", "Yellow")
+                        $this.Log("再実行例: npm install -g --loglevel verbose $($pkg.Spec)", "Yellow")
+                    }
                     $this.LogWarning("✗ $($pkg.Spec) のインストールに失敗しました")
                     continue
                 }
@@ -202,13 +217,33 @@ class NpmHandler : SetupHandlerBase {
         try {
             $command = $verifyCmd.command
             $arguments = @($verifyCmd.args)
-            $null = Invoke-VerifyCommand -Command $command -Arguments $arguments
+            $timeoutSeconds = $this.GetVerifyTimeoutSeconds($verifyCmd)
+            $null = Invoke-VerifyCommand -Command $command -Arguments $arguments -TimeoutSeconds $timeoutSeconds
+            if ($LASTEXITCODE -eq 124) {
+                $this.LogWarning("検証コマンドがタイムアウトしました (${timeoutSeconds}s): $command $($arguments -join ' ')")
+            }
             return $LASTEXITCODE -eq 0
         }
         catch {
             $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
             return $false
         }
+    }
+
+    hidden [int] GetVerifyTimeoutSeconds([object]$verifyCmd) {
+        if ($verifyCmd -is [hashtable] -and $verifyCmd.ContainsKey("timeoutSeconds")) {
+            $timeoutSeconds = [int]$verifyCmd["timeoutSeconds"]
+            if ($timeoutSeconds -gt 0) {
+                return $timeoutSeconds
+            }
+        }
+        if ($verifyCmd -and ($verifyCmd.PSObject.Properties.Name -contains "timeoutSeconds")) {
+            $timeoutSeconds = [int]$verifyCmd.timeoutSeconds
+            if ($timeoutSeconds -gt 0) {
+                return $timeoutSeconds
+            }
+        }
+        return 30
     }
 
     <#

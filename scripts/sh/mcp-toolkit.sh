@@ -18,8 +18,6 @@ toolkit_clients=(
   "codex"
   "cursor"
   "gemini"
-  "vscode"
-  "zed"
 )
 
 catalog_refs=(

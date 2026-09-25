@@ -34,9 +34,7 @@ $SecretRefs = [ordered]@{
 $ToolkitClients = @(
     "codex",
     "cursor",
-    "gemini",
-    "vscode",
-    "zed"
+    "gemini"
 )
 
 $CatalogRefs = @(

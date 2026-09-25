@@ -107,9 +107,11 @@ else
 	printf "%s\n" "$HERMES_ITEM_JSON"
 fi
 '
-	write_stub docker '
+write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
+  *" info "*) [[ ${DOCKER_ENGINE_RUNNING:-0} == 1 ]] ;;
+  *" compose -f "*" stop hermes"*) [[ ${DOCKER_ENGINE_RUNNING:-0} == 1 ]] ;;
   *" network inspect bridge --format "*) printf "172.17.0.1\n" ;;
   *" ps --all --services hermes "*) printf "hermes\n" ;;
   *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
@@ -187,7 +189,7 @@ assert_log_order() {
 	done
 }
 
-@test "Ubuntu applies System Manager then chezmoi Compose and acceptance" {
+@test "Ubuntu activates native Hermes through Nix without starting a Compose gateway" {
 	write_nix_stub
 
 	run "$INSTALLER"
@@ -199,18 +201,9 @@ assert_log_order() {
 		"switch --flake .#ubuntu --sudo" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml config --quiet" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml build --pull hermes hermes-bootstrap chromium xapi-mcp" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap secret-plan" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap apply" \
-		"docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml up -d --force-recreate" \
-		"docker image prune --force" \
-		"verify-environment --runtime"
-	[ "$(grep -c '^op item get ' "$COMMAND_LOG")" -eq 16 ]
-	[ "$(grep -c '^op --account my.1password.com read ' "$COMMAND_LOG")" -eq 1 ]
-	! grep -q '^op signin ' "$COMMAND_LOG"
-	[ -s "$PAYLOAD_CAPTURE" ]
+		"verify-environment --nix-only"
+	! grep -q 'hermes:bootstrap\|docker compose.*hermes' "$COMMAND_LOG"
+	! grep -q -- '--runtime' "$COMMAND_LOG"
 }
 
 @test "flake update failure stops Linux activation" {
@@ -258,18 +251,27 @@ fi
 	grep -q '^access-tokens = github.com=test-github-token args=flake update --flake' "$COMMAND_LOG"
 }
 
-@test "Hermes bootstrap failure recovers Linux runtime before returning failure" {
+@test "Linux native Hermes setup does not invoke the legacy Docker bootstrap" {
 	write_nix_stub
 	export HERMES_BOOTSTRAP_STATUS=45
 
 	run "$INSTALLER"
 
-	[ "$status" -eq 45 ]
-	grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
-	! grep -q ' up -d --force-recreate' "$COMMAND_LOG"
-	grep -q ' start' "$COMMAND_LOG"
-	! grep -q ' up ' "$COMMAND_LOG"
-	! grep -q '^verify-environment ' "$COMMAND_LOG"
+	[ "$status" -eq 0 ]
+	! grep -q 'hermes:bootstrap\|hermes-bootstrap' "$COMMAND_LOG"
+	grep -q '^verify-environment --nix-only$' "$COMMAND_LOG"
+}
+
+@test "Linux Nix activation does not target a Docker Hermes gateway" {
+	write_nix_stub
+	export DOCKER_ENGINE_RUNNING=1
+	export DOTFILES_WITH_HERMES=1
+
+	run "$INSTALLER"
+
+	[ "$status" -eq 0 ]
+	grep -q 'switch --flake .#ubuntu' "$COMMAND_LOG"
+	! grep -q 'docker compose .* hermes' "$COMMAND_LOG"
 }
 
 @test "Linux accepts a responsive systemd manager while the global state is starting" {
@@ -363,7 +365,7 @@ esac
 	! grep -q 'switch --flake' "$COMMAND_LOG"
 }
 
-@test "a stale shell enters the declared docker group for runtime commands" {
+@test "native Hermes verification runs without Docker group switching" {
 	write_nix_stub
 	write_stub id '
 case "${1:-}" in
@@ -380,7 +382,8 @@ esac
 	run "$INSTALLER"
 
 	[ "$status" -eq 0 ]
-	grep -q '^sg docker -c ' "$COMMAND_LOG"
+	! grep -q '^sg docker -c ' "$COMMAND_LOG"
+	grep -q '^verify-environment --nix-only$' "$COMMAND_LOG"
 }
 
 @test "Home Manager fallback requires direct explicit opt-in" {

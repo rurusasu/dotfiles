@@ -1,0 +1,10 @@
+{
+  "description": "Exact WinGet packages to remove when they are no longer part of the desired Windows package set.",
+  "packages": [
+    {
+      "id": "9NT1R1C2HH7J",
+      "name": "ChatGPT Classic",
+      "source": "msstore"
+    }
+  ]
+}
