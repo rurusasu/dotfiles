@@ -396,7 +396,7 @@ Describe 'CI workflow configuration' {
         $script | Should -Match '\$result = \$handler\.Apply\(\$context\)'
         $script | Should -Match 'SkipPostInstallSetup"\] = \$true'
         $script | Should -Match 'wslpath", "-a", \$cacheDir\.Replace\('\''\\'\'', '\''/'\''\)'
-        $script | Should -Match 'nix copy --no-check-sigs --from ''file://'
+        $script | Should -Match "nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from 'file://"
         $script | Should -Match 'CI_ASSERTION: imported base and Hermes system closures'
         $script | Should -Match 'bash ''\$postInstallWslPath'' --sync-mode repo --sync-back none --state-version 25\.05 --skip-flake-update'
         $script | Should -Match 'CI_ASSERTION: production NixOS-WSL post-install switch completed'

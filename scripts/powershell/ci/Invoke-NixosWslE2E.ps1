@@ -283,7 +283,7 @@ try {
             throw "Could not resolve WSL path for Nix cache artifact: $cacheDir"
         }
 
-        $importCommand = "nix copy --no-check-sigs --from 'file://$cacheLinuxPath' '$($systemPaths[0])' '$($systemPaths[1])' && nix path-info '$($systemPaths[0])' '$($systemPaths[1])'"
+        $importCommand = "nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from 'file://$cacheLinuxPath' '$($systemPaths[0])' '$($systemPaths[1])' && nix --extra-experimental-features 'nix-command flakes' path-info '$($systemPaths[0])' '$($systemPaths[1])'"
         Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "root", "--",
             "bash", "-lc", $importCommand
