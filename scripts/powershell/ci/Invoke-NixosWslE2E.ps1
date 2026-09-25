@@ -391,11 +391,16 @@ fi
             ) -TimeoutSeconds 300 | Out-Null
 
             # Seed a real running container under the legacy Compose service name
-            # so the production rebuild handler must exercise its stop path.
+            # as the same user whose Docker context the production rebuild handler uses.
             Invoke-WslChecked -Arguments @(
                 "-d", $DistroName, "-u", "root", "--",
                 "bash", "-lc",
-                'systemctl start docker && for attempt in {1..60}; do docker info >/dev/null 2>&1 && break; sleep 1; done && docker info >/dev/null && docker run --detach --pull=missing --name hermes alpine:3.22 sleep 3600 && docker inspect --format ''{{.State.Running}}'' hermes | grep -qx true'
+                'systemctl start docker && for attempt in {1..60}; do docker info >/dev/null 2>&1 && break; sleep 1; done && docker info >/dev/null'
+            ) -TimeoutSeconds 300 | Out-Null
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "nixos", "--",
+                "bash", "-lc",
+                'docker run --detach --pull=missing --name hermes alpine:3.22 sleep 3600 && docker inspect --format ''{{.State.Running}}'' hermes | grep -qx true'
             ) -TimeoutSeconds 300 | Out-Null
 
             # Seed the disposable distro with pre-existing Hermes state before
@@ -432,7 +437,7 @@ fi
                 throw 'Production NixRebuildHandler did not stop the seeded running legacy Hermes gateway'
             }
             Invoke-WslChecked -Arguments @(
-                "-d", $DistroName, "-u", "root", "--",
+                "-d", $DistroName, "-u", "nixos", "--",
                 "bash", "-lc", 'test "$(docker inspect --format ''{{.State.Running}}'' hermes)" = false'
             ) -TimeoutSeconds 60 | Out-Null
 
