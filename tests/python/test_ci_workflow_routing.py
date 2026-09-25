@@ -513,6 +513,11 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         workflow = self._named_workflow("ci-bootstrap.yml")
 
         self.assertIn(
+            "group: bootstrap-${{ github.workflow }}-${{ github.ref }}",
+            workflow,
+        )
+        self.assertIn("cancel-in-progress: true", workflow)
+        self.assertIn(
             "TESTED_SHA: ${{ github.event_name == 'pull_request' && "
             "github.event.pull_request.head.sha || github.sha }}",
             workflow,

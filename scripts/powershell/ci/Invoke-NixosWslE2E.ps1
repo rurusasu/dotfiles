@@ -251,7 +251,25 @@ try {
 
     Write-CiSection "Verify authenticated Nix configuration reaches WSL"
     try {
-        $authNixConfigCheck = 'case "${NIX_CONFIG:-}" in *"access-tokens = github.com="*) echo "GitHub access-token config is available inside WSL." ;; *) echo "NIX_CONFIG is missing the GitHub access-token configuration inside WSL." >&2; exit 1 ;; esac'
+        $authNixConfigCheck = @'
+set -o pipefail
+case "${NIX_CONFIG:-}" in
+  *"access-tokens = github.com="*) echo "GitHub access-token config is available inside WSL." ;;
+  *) echo "NIX_CONFIG is missing the GitHub access-token configuration inside WSL." >&2; exit 1 ;;
+esac
+nix show-config | awk -F ' = ' '
+  $1 == "max-jobs" { max_jobs = $2 }
+  $1 == "cores" { cores = $2 }
+  END {
+    if (max_jobs != "2" || cores != "1") {
+      printf "Unexpected Nix builder limits: max-jobs=%s cores=%s\n", max_jobs, cores > "/dev/stderr"
+      exit 1
+    }
+    print "Nix builder limits are max-jobs=2 and cores=1."
+  }
+'
+'@
+        $authNixConfigCheck = $authNixConfigCheck -replace "`r`n?", "`n"
         Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "root", "--",
             "bash", "-lc", $authNixConfigCheck
