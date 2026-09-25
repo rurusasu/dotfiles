@@ -233,6 +233,11 @@ try {
         $context.Options["PostInstallTimeoutSeconds"] = $PostInstallTimeoutSeconds
         $context.Options["SyncMode"] = "repo"
         $context.Options["SyncBack"] = "none"
+        $context.Options["StateVersion"] = "25.05"
+        # Import CI's prebuilt system closures before executing the production
+        # post-install script so both switches consume the same verified Nix
+        # outputs instead of compiling them again inside the WSL runner.
+        $context.Options["SkipPostInstallSetup"] = $true
         # The CI checkout is already pinned to TESTED_SHA. Do not let the
         # post-install flow perform an unrelated network flake update.
         $context.Options["SkipFlakeUpdate"] = $true
@@ -243,7 +248,68 @@ try {
         if (-not $result.Success) {
             throw "NixOS-WSL install failed: $($result.Message)"
         }
-        Write-Host "CI_ASSERTION: production NixOSWSLHandler and nixos-rebuild switch completed for $DistroName."
+        Write-Host "CI_ASSERTION: production NixOSWSLHandler imported $DistroName before its post-install switch."
+    }
+    finally {
+        Complete-CiSection
+    }
+
+    Write-CiSection "Import prebuilt NixOS and Hermes closures"
+    try {
+        $artifactDir = Join-Path $env:RUNNER_TEMP "wsl-nix-cache-artifact"
+        $cacheArchive = Join-Path $artifactDir "wsl-nix-cache.tar"
+        $pathsFile = Join-Path $artifactDir "wsl-system-paths.txt"
+        if (-not (Test-Path -LiteralPath $cacheArchive -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $pathsFile -PathType Leaf)) {
+            throw "WSL prebuild artifact is incomplete: $artifactDir"
+        }
+        $systemPaths = @(Get-Content -LiteralPath $pathsFile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if ($systemPaths.Count -ne 2 -or $systemPaths.Where({ $_ -notmatch '^/nix/store/[a-z0-9]{32}-' }).Count -ne 0) {
+            throw "WSL prebuild artifact must contain exactly two Nix store paths: $($systemPaths -join ', ')"
+        }
+
+        $cacheDir = Join-Path $env:RUNNER_TEMP "wsl-nix-cache"
+        New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+        & tar.exe -xf $cacheArchive -C $cacheDir
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not extract WSL Nix cache artifact (exit $LASTEXITCODE)"
+        }
+        $cachePathResult = Invoke-WslChecked -Arguments @(
+            "-d", $DistroName, "-u", "root", "--",
+            "wslpath", "-a", $cacheDir
+        ) -TimeoutSeconds 60
+        $cacheLinuxPath = ($cachePathResult.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -match '^/' } | Select-Object -First 1)
+        if ([string]::IsNullOrWhiteSpace($cacheLinuxPath)) {
+            throw "Could not resolve WSL path for Nix cache artifact: $cacheDir"
+        }
+
+        $importCommand = "nix copy --no-check-sigs --from 'file://$cacheLinuxPath' '$($systemPaths[0])' '$($systemPaths[1])' && nix path-info '$($systemPaths[0])' '$($systemPaths[1])'"
+        Invoke-WslChecked -Arguments @(
+            "-d", $DistroName, "-u", "root", "--",
+            "bash", "-lc", $importCommand
+        ) -TimeoutSeconds 1800 | Out-Null
+        Write-Host "CI_ASSERTION: imported base and Hermes system closures from the Linux prebuild artifact."
+    }
+    finally {
+        Complete-CiSection
+    }
+
+    Write-CiSection "Run production NixOS-WSL post-install switch"
+    try {
+        $postInstallPath = [string]$context.Options["PostInstallScript"]
+        $postInstallWslPathResult = Invoke-WslChecked -Arguments @(
+            "-d", $DistroName, "-u", "root", "--",
+            "wslpath", "-a", $postInstallPath.Replace('\', '/')
+        ) -TimeoutSeconds 60
+        $postInstallWslPath = ($postInstallWslPathResult.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -match '^/' } | Select-Object -First 1)
+        if ([string]::IsNullOrWhiteSpace($postInstallWslPath)) {
+            throw "Could not resolve WSL post-install script path: $postInstallPath"
+        }
+        Invoke-WslChecked -Arguments @(
+            "-d", $DistroName, "-u", "root", "--",
+            "bash", "-lc", "bash '$postInstallWslPath' --sync-mode repo --sync-back none --state-version 25.05 --skip-flake-update"
+        ) -TimeoutSeconds $PostInstallTimeoutSeconds | Out-Null
+        Write-Host "CI_ASSERTION: production NixOS-WSL post-install switch completed for $DistroName."
     }
     finally {
         Complete-CiSection
@@ -312,8 +378,8 @@ fi
             'GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey" | rg "\"\^\[q\" __zoxide_zi_widget"'
         ) -TimeoutSeconds 300 | Out-Null
 
-    Write-CiSection "Enable Hermes Agent through Nix"
-    try {
+        Write-CiSection "Enable Hermes Agent through Nix"
+        try {
             # Hermes' default package is large enough to trigger memory
             # pressure on the Windows runner while Nix evaluates/builds it.
             # The distro is disposable, so a bounded swap file is a safer

@@ -730,9 +730,67 @@ jobs:
           name: bootstrap-darwin-${{ github.run_id }}-${{ github.run_attempt }}
           path: darwin-contract-attestation.txt
 
+  wsl-prebuild:
+    name: Bootstrap / WSL / Prebuild
+    needs: changes
+    if: ${{ needs.changes.outputs.wsl == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      DOTFILES_USER: nixos
+      DOTFILES_HOME: /home/nixos
+      DOTFILES_GROUP: users
+      DOTFILES_STATE_VERSION: "25.05"
+      DOTFILES_SYSTEM: x86_64-linux
+      NIX_CONFIG: |
+        experimental-features = nix-command flakes
+        extra-substituters = https://cache.numtide.com https://hermes-agent.cachix.org
+        extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g= hermes-agent.cachix.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU=
+        access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build both WSL system closures and export a local cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache_dir="$RUNNER_TEMP/wsl-nix-cache"
+          mkdir -p "$cache_dir"
+
+          base_system="$(nix build \
+            .#nixosConfigurations.nixos.config.system.build.toplevel \
+            --impure --no-link --print-out-paths)"
+          hermes_system="$(DOTFILES_WITH_HERMES=1 nix build \
+            .#nixosConfigurations.nixos.config.system.build.toplevel \
+            --impure --no-link --print-out-paths)"
+          printf '%s\n%s\n' "$base_system" "$hermes_system" > "$RUNNER_TEMP/wsl-system-paths.txt"
+
+          nix copy --to "file://$cache_dir" "$base_system" "$hermes_system"
+          du -sh "$cache_dir"
+          tar -cf "$RUNNER_TEMP/wsl-nix-cache.tar" -C "$cache_dir" .
+
+      - name: Upload WSL Nix store cache
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bootstrap-wsl-nix-cache-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/wsl-nix-cache.tar
+            ${{ runner.temp }}/wsl-system-paths.txt
+          if-no-files-found: error
+          compression-level: 0
+
   wsl:
     name: Bootstrap / WSL
-    needs: changes
+    needs: [changes, wsl-prebuild]
     if: ${{ needs.changes.outputs.wsl == 'true' }}
     runs-on: windows-2025
     # The isolated WSL E2E runs two independent rebuilds with 120-minute caps, plus setup and verification.
@@ -743,6 +801,12 @@ jobs:
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
+
+      - name: Download prebuilt WSL Nix store cache
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: bootstrap-wsl-nix-cache-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/wsl-nix-cache-artifact
 
       - name: Prepare WSL2
         shell: pwsh
@@ -1080,6 +1144,7 @@ jobs:
     needs:
       [
         changes,
+        wsl-prebuild,
         nix-lint,
         nix-format,
         nix-test,
@@ -1108,6 +1173,7 @@ jobs:
       LINUX_NIXOS_RESULT: ${{ needs.linux-nixos.result }}
       DARWIN_RESULT: ${{ needs.darwin.result }}
       WSL_RESULT: ${{ needs.wsl.result }}
+      WSL_PREBUILD_RESULT: ${{ needs.wsl-prebuild.result }}
       WINDOWS_RESULT: ${{ needs.windows.result }}
       NIX_LINT_RESULT: ${{ needs.nix-lint.result }}
       NIX_FORMAT_RESULT: ${{ needs.nix-format.result }}
@@ -1161,6 +1227,7 @@ jobs:
           check_required_job "Nix / Format" "${NIX_REQUIRED}" "${NIX_FORMAT_RESULT}"
           check_required_job "Nix / Test" "${NIX_REQUIRED}" "${NIX_TEST_RESULT}"
           check_required_job "Windows / Installer" "${WINDOWS_REQUIRED}" "${WINDOWS_INSTALLER_RESULT}"
+          check_required_job "WSL / Prebuild" "${WSL_REQUIRED}" "${WSL_PREBUILD_RESULT}"
 
           check_platform "Linux / Build" "${LINUX_REQUIRED}" "${LINUX_BUILD_RESULT}"
           check_platform "Linux / E2E / Ubuntu" "${LINUX_REQUIRED}" "${LINUX_UBUNTU_RESULT}"

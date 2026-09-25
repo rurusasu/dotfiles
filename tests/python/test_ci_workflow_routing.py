@@ -454,6 +454,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "Bootstrap / Linux / E2E / Debian",
             "Bootstrap / Linux / E2E / NixOS",
             "Bootstrap / Darwin",
+            "Bootstrap / WSL / Prebuild",
             "Bootstrap / WSL",
             "Bootstrap / Windows",
             "Bootstrap / Complete",
@@ -463,12 +464,18 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         for job_name, output in (
             ("linux-build", "linux"),
             ("darwin", "darwin"),
-            ("wsl", "wsl"),
             ("windows", "windows"),
         ):
             job = self._workflow_job(workflow, job_name)
             self.assertIn("needs: changes", job)
             self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
+
+        wsl_prebuild = self._workflow_job(workflow, "wsl-prebuild")
+        self.assertIn("needs: changes", wsl_prebuild)
+        self.assertIn("needs.changes.outputs.wsl == 'true'", wsl_prebuild)
+        self.assertIn("ref: ${{ env.TESTED_SHA }}", wsl_prebuild)
+        wsl = self._workflow_job(workflow, "wsl")
+        self.assertIn("needs: [changes, wsl-prebuild]", wsl)
 
         for job_name in ("linux-ubuntu", "linux-debian", "linux-nixos"):
             job = self._workflow_job(workflow, job_name)
@@ -494,6 +501,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("PLATFORM_REQUIRED", complete)
         self.assertIn("LINUX_REQUIRED", complete)
         self.assertIn("WSL_REQUIRED", complete)
+        self.assertIn("WSL_PREBUILD_RESULT", complete)
+        self.assertIn('check_required_job "WSL / Prebuild"', complete)
         self.assertIn("check_platform", complete)
         self.assertNotIn("success|skipped", complete)
 
@@ -503,6 +512,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "linux-debian",
             "linux-nixos",
             "darwin",
+            "wsl-prebuild",
             "wsl",
             "windows",
         ):
