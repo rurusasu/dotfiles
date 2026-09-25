@@ -417,6 +417,16 @@ fi
             $rebuildContext.Options["WithHermes"] = $true
             $rebuildContext.Options["SkipFlakeUpdate"] = $true
             $rebuildContext.Options["NixRebuildTimeoutSeconds"] = $PostInstallTimeoutSeconds
+            $legacyGatewayState = Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "nixos", "--",
+                "bash", "-lc", 'docker inspect --format ''{{.State.Running}}'' hermes'
+            ) -TimeoutSeconds 60
+            $legacyGatewayIsRunning = @($legacyGatewayState.Output | ForEach-Object { ([string]$_).Trim() }) -contains 'true'
+            if (-not $legacyGatewayIsRunning) {
+                throw 'The seeded legacy Hermes gateway was not running immediately before NixRebuildHandler.Apply'
+            }
+            Write-Host "CI_ASSERTION: seeded legacy Hermes gateway is running immediately before NixRebuildHandler.Apply."
+
             $rebuildHandler = [NixRebuildHandler]::new()
             if (-not $rebuildHandler.CanApply($rebuildContext)) {
                 throw "NixRebuildHandler cannot apply to the newly installed WSL distro $DistroName"
