@@ -430,10 +430,7 @@ fi
             }
             Write-Host "CI_ASSERTION: production HermesAgentHandler verified its active Nix service and CLI."
 
-            Invoke-WslChecked -Arguments @(
-                "-d", $DistroName, "-u", "nixos", "--",
-                "bash", "-lc",
-                @'
+            $hermesVerifier = @'
 set -eu
 if ! hermes_path="$(type -P hermes)" || [ -z "$hermes_path" ]; then
   echo 'Hermes CLI is missing from the NixOS user PATH' >&2
@@ -447,6 +444,11 @@ case "$hermes_store_path" in
 esac
 hermes --version
 '@
+            $hermesVerifierBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($hermesVerifier))
+            $hermesVerifierCommand = "set -o pipefail; printf '%s' '$hermesVerifierBase64' | base64 -d | bash"
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", "nixos", "--",
+                "bash", "-lc", $hermesVerifierCommand
             ) -TimeoutSeconds 300 | Out-Null
 
             Invoke-WslChecked -Arguments @(
