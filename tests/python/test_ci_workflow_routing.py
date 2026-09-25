@@ -509,6 +509,15 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             job = self._workflow_job(workflow, job_name)
             self.assertIn("ref: ${{ env.TESTED_SHA }}", job)
 
+    def test_bootstrap_checks_out_the_pull_request_head_sha(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+
+        self.assertIn(
+            "TESTED_SHA: ${{ github.event_name == 'pull_request' && "
+            "github.event.pull_request.head.sha || github.sha }}",
+            workflow,
+        )
+
     def test_chezmoi_ci_runs_pester_once_in_lint_and_uploads_its_junit_result(
         self,
     ) -> None:
@@ -616,3 +625,4 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
