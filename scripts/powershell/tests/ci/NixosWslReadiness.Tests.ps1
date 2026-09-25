@@ -10,4 +10,10 @@ Describe 'NixOS WSL Hermes readiness verifier transport' {
         $script:verifier | Should -Match 'printf ''%s'' ''\$readinessCommandBase64'' \| base64 -d \| bash'
         $script:verifier | Should -Not -Match '"bash", "-lc",\s*\$readinessCommand\b'
     }
+
+    It 'seeds and preserves an explicit model for Hermes readiness' {
+        $script:verifier | Should -Match 'default: openrouter/auto'
+        $script:verifier | Should -Match "grep -qx '  default: openrouter/auto' /home/nixos/\.hermes/config\.yaml"
+        $script:verifier | Should -Match 'config\.yaml.*chmod 600'
+    }
 }

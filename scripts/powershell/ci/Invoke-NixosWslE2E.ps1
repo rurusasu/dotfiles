@@ -393,10 +393,12 @@ fi
             # Seed the disposable distro with pre-existing Hermes state before
             # Home Manager activation. This proves activation preserves user
             # data and that the gateway can read a private provider env file.
+            # The readiness endpoint also requires an explicitly configured
+            # model; this fixture does not make model-provider requests.
             Invoke-WslChecked -Arguments @(
                 "-d", $DistroName, "-u", "nixos", "--",
                 "bash", "-lc",
-                "install -d -m 700 /home/nixos/.hermes/memories && printf '%s\\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' > /home/nixos/.hermes/.env && chmod 600 /home/nixos/.hermes/.env && printf '%s\\n' 'preserve-existing-hermes-state' > /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt && chmod 600 /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
+                "install -d -m 700 /home/nixos/.hermes/memories && printf '%s\\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' > /home/nixos/.hermes/.env && chmod 600 /home/nixos/.hermes/.env && printf '%s\\n' 'model:' '  default: openrouter/auto' > /home/nixos/.hermes/config.yaml && chmod 600 /home/nixos/.hermes/config.yaml && printf '%s\\n' 'preserve-existing-hermes-state' > /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt && chmod 600 /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
             ) -TimeoutSeconds 60 | Out-Null
 
             $rebuildContext = [SetupContext]::new($repoRoot)
@@ -455,7 +457,7 @@ hermes --version
             Invoke-WslChecked -Arguments @(
                 "-d", $DistroName, "-u", "nixos", "--",
                 "bash", "-lc",
-                "test `$(stat -c '%a' /home/nixos/.hermes/.env) = 600 && grep -qx 'OPENROUTER_API_KEY=ci' /home/nixos/.hermes/.env && grep -qx 'API_SERVER_ENABLED=true' /home/nixos/.hermes/.env && grep -qx 'API_SERVER_PORT=18642' /home/nixos/.hermes/.env && grep -qx 'preserve-existing-hermes-state' /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
+                "test `$(stat -c '%a' /home/nixos/.hermes/.env) = 600 && grep -qx 'OPENROUTER_API_KEY=ci' /home/nixos/.hermes/.env && grep -qx 'API_SERVER_ENABLED=true' /home/nixos/.hermes/.env && grep -qx 'API_SERVER_PORT=18642' /home/nixos/.hermes/.env && test `$(stat -c '%a' /home/nixos/.hermes/config.yaml) = 600 && grep -qx '  default: openrouter/auto' /home/nixos/.hermes/config.yaml && grep -qx 'preserve-existing-hermes-state' /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
             ) -TimeoutSeconds 60 | Out-Null
 
             Invoke-WslChecked -Arguments @(
