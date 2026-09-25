@@ -90,6 +90,7 @@ in
       package = hasPackage linux.testPackage linux.config.home.packages;
       home = linux.config.home.sessionVariables.HERMES_HOME;
       featureFlag = linux.config.home.sessionVariables.DOTFILES_WITH_HERMES;
+      multiplexProfiles = linux.config.services.hermes-agent.settings.gateway.multiplex_profiles;
       serviceUsesInjectedPackage = builtins.any (
         command: inputs.nixpkgs.lib.hasPrefix "${linux.testPackage}/bin/hermes" command
       ) (inputs.nixpkgs.lib.toList linux.config.systemd.user.services.hermes-agent.Service.ExecStart);
@@ -98,6 +99,7 @@ in
       package = true;
       home = "/home/test-user/.hermes";
       featureFlag = "1";
+      multiplexProfiles = true;
       serviceUsesInjectedPackage = true;
     };
   };

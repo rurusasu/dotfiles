@@ -13,10 +13,11 @@ Docker Compose gateway the owner of the Agent runtime. The standard Hermes
 setup does not start Docker, bootstrap a Docker gateway, or modify the existing
 `hermes-data` volume.
 
-## Explicit legacy Docker runtime
+## Legacy task names
 
-The Compose Agent remains available for existing users and data, but it is a
-separate, opt-in legacy runtime. Start it only when explicitly needed:
+The gateway is no longer a Compose service. Existing Docker-prefixed task names
+remain as compatibility aliases, but they control the native Nix-managed
+gateway and do not start Docker:
 
 ```bash
 task hermes:docker:up
@@ -24,16 +25,11 @@ task hermes:docker:logs
 task hermes:docker:down
 ```
 
-`task hermes:docker:down` stops only the gateway container; it does not remove
-the Compose project or named volume. The existing volume name defaults to
-`hermes-data` and can be overridden with `HERMES_DATA_VOLUME`. No volume
-migration or deletion is performed by the Nix setup. The compatibility task
-`task hermes:bootstrap` still invokes this legacy Docker bootstrap for existing
-installer integrations; new normal setup flows must not call it.
+These aliases do not access or remove the old `hermes-data` volume. No volume
+migration or deletion is performed by the Nix setup.
 
-The Docker Browser/MCP sidecars remain attached to that legacy Compose runtime.
-They are not started by the native Nix/Home Manager service, and the native
-setup does not require Docker Desktop.
+The browser and MCP support containers remain separately available through
+their dedicated Compose tasks; they are not the Hermes Agent runtime.
 
 ## Desktop installation and launch
 

@@ -19,16 +19,15 @@ assert_no_profile_gateway_lifecycle() {
 		assert_no_profile_gateway_lifecycle "$output"
 		case "$action" in
 		up)
-			[[ "$output" == *"task: [hermes:docker:bootstrap]"* ]]
+			[[ "$output" == *"task: [hermes:up]"* ]]
 			[[ "$output" == *"-p personal-ops gateway status"* ]]
 			;;
 		restart)
-			[[ "$output" == *"task: [hermes:docker:restart]"* ]]
+			[[ "$output" == *"task: [hermes:restart]"* ]]
 			[[ "$output" == *"-p personal-ops gateway status"* ]]
 			;;
 		down)
-			[[ "$output" == *"docker compose -f docker/hermes-service/compose.yml stop hermes"* ]]
-			[[ "$output" != *"docker compose -f docker/hermes-service/compose.yml down"* ]]
+			[[ "$output" == *"hermes gateway stop"* ]]
 			;;
 		esac
 	done
@@ -43,27 +42,26 @@ assert_no_profile_gateway_lifecycle() {
 			assert_no_profile_gateway_lifecycle "$output"
 			case "$action" in
 			up)
-				[[ "$output" == *"task: [hermes:docker:bootstrap]"* ]]
+				[[ "$output" == *"task: [hermes:up]"* ]]
 				[[ "$output" == *"-p $profile gateway status"* ]]
 				;;
 			restart)
-				[[ "$output" == *"task: [hermes:docker:restart]"* ]]
+				[[ "$output" == *"task: [hermes:restart]"* ]]
 				[[ "$output" == *"-p $profile gateway status"* ]]
 				;;
 			down)
-				[[ "$output" == *"docker compose -f docker/hermes-service/compose.yml stop hermes"* ]]
-				[[ "$output" != *"docker compose -f docker/hermes-service/compose.yml down"* ]]
+				[[ "$output" == *"hermes gateway stop"* ]]
 				;;
 			esac
 		done
 	done
 }
 
-@test "explicit Docker gateway stop preserves the legacy named volume" {
+@test "legacy Docker-named stop task controls the native gateway without Docker" {
 	run task --dir "$REPO_ROOT" --dry --force hermes:docker:down
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"docker compose -f docker/hermes-service/compose.yml stop hermes"* ]]
-	[[ "$output" != *"down -v"* ]]
-	[[ "$output" != *"docker volume rm"* ]]
+	[[ "$output" == *"task: [hermes:down]"* ]]
+	[[ "$output" == *"hermes gateway stop"* ]]
+	[[ "$output" != *"docker compose"* ]]
 }

@@ -746,46 +746,18 @@ exit 1
 	! grep -q 'docker-install' "$COMMAND_LOG"
 }
 
-@test "WithHermes stops only a running legacy gateway before Nix activation" {
+@test "WithHermes Nix activation does not target a Docker gateway" {
 	write_installed_stubs
 	export DOCKER_ENGINE_RUNNING=1
 
 	run_macos_installer --with-hermes
 
 	[ "$status" -eq 0 ]
-	stop_line="$(grep -nF "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes" "$COMMAND_LOG" | cut -d: -f1)"
 	activation_line="$(grep -nF 'nix run .#darwin-rebuild -- switch --flake .#macos --impure' "$COMMAND_LOG" | cut -d: -f1)"
-	[ -n "$stop_line" ]
 	[ -n "$activation_line" ]
-	[ "$stop_line" -lt "$activation_line" ]
-	[ "$(grep -cF "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes" "$COMMAND_LOG")" -eq 1 ]
+	! grep -q 'docker compose .* hermes' "$COMMAND_LOG"
 	! grep -qE '^docker compose .* (stop|restart|rm|down) (chromium|browser-mcp|xapi-mcp)' "$COMMAND_LOG"
 	! grep -qE '^docker (volume rm|image prune)' "$COMMAND_LOG"
-}
-
-@test "WithHermes safely skips legacy gateway stop when Docker CLI is unavailable" {
-	write_installed_stubs
-	rm "$STUB_BIN/docker"
-
-	run_macos_installer --with-hermes
-
-	[ "$status" -eq 0 ]
-	[[ "$output" == *"Docker CLI is unavailable; skipping legacy Hermes gateway stop"* ]]
-	! grep -q '^docker ' "$COMMAND_LOG"
-	grep -Fq 'nix run .#darwin-rebuild -- switch --flake .#macos --impure' "$COMMAND_LOG"
-}
-
-@test "WithHermes safely skips legacy gateway stop when Docker daemon is unavailable" {
-	write_installed_stubs
-	export DOCKER_ENGINE_RUNNING=0
-
-	run_macos_installer --with-hermes
-
-	[ "$status" -eq 0 ]
-	[[ "$output" == *"Docker engine is unavailable; skipping legacy Hermes gateway stop"* ]]
-	grep -Fq 'docker info' "$COMMAND_LOG"
-	! grep -q '^docker compose' "$COMMAND_LOG"
-	grep -Fq 'nix run .#darwin-rebuild -- switch --flake .#macos --impure' "$COMMAND_LOG"
 }
 
 @test "WithHermes help documents the native Home Manager gateway" {

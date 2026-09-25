@@ -8,7 +8,6 @@ export DOTFILES_LOG_PREFIX="nixos-install"
 . "$ROOT/scripts/sh/install-common.sh"
 
 NIXOS_MARKER="${DOTFILES_NIXOS_MARKER:-/etc/NIXOS}"
-COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
 DOTFILES_WITH_HERMES="${DOTFILES_WITH_HERMES:-0}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 NIXOS_HARDWARE_CONFIG="${DOTFILES_NIXOS_HARDWARE_CONFIG:-/etc/nixos/hardware-configuration.nix}"
@@ -94,22 +93,12 @@ apply_chezmoi() {
   chezmoi apply --force
 }
 
-stop_legacy_hermes_gateway() {
-  [[ $DOTFILES_WITH_HERMES == 1 ]] || return 0
-  [[ -f $COMPOSE_FILE ]] || return 0
-  dotfiles_have docker || return 0
-  docker info >/dev/null 2>&1 || return 0
-  dotfiles_log "Stopping only the legacy Hermes gateway before native Nix activation."
-  docker compose -f "$COMPOSE_FILE" stop hermes
-}
-
 main() {
   preflight
   dotfiles_link_checkout "$ROOT"
   dotfiles_install_herdr
   dotfiles_update_flake "$ROOT"
   capture_host_identity
-  stop_legacy_hermes_gateway
   apply_nixos_system
   apply_chezmoi
   export DOTFILES_VERIFY_SYSTEM_LAYER=nixos

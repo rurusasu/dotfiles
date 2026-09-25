@@ -16,7 +16,6 @@ export OP_BIOMETRIC_UNLOCK_ENABLED
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-display.sh"
 
-COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
 HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/local-ai-services/compose.yml"
 DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
 LEGACY_DOCKER_APP="${DOTFILES_LEGACY_DOCKER_APP_PATH:-/Applications/Nix Apps/Docker.app}"
@@ -871,27 +870,6 @@ docker_engine_is_ready() {
   docker_cli_probe info
 }
 
-stop_legacy_hermes_gateway() {
-  ((DOTFILES_WITH_HERMES == 1)) || return 0
-
-  if [[ ! -f $COMPOSE_FILE ]]; then
-    dotfiles_log "Compose file is unavailable; skipping legacy Hermes gateway stop: $COMPOSE_FILE"
-    return 0
-  fi
-  if ! dotfiles_have docker; then
-    dotfiles_log "Docker CLI is unavailable; skipping legacy Hermes gateway stop."
-    return 0
-  fi
-  if ! docker_cli_probe info; then
-    dotfiles_log "Docker engine is unavailable; skipping legacy Hermes gateway stop."
-    return 0
-  fi
-
-  dotfiles_step 'Stopping legacy Hermes Docker gateway' \
-    'Stop only the legacy Hermes service before Nix activates the native gateway; preserve its volume and sidecars.' \
-    docker compose -f "$COMPOSE_FILE" stop hermes
-}
-
 docker_cli_probe() {
   local timeout_seconds="$DOCKER_PROBE_TIMEOUT_SECONDS"
   if [[ ! $timeout_seconds =~ ^[1-9][0-9]*$ ]] || ((timeout_seconds > 60)); then
@@ -989,7 +967,6 @@ finish_macos_install() {
   dotfiles_display_init
   dotfiles_step 'Preparing shell configuration' \
     'Preserve existing shell startup files before activation.' preserve_shell_rc_for_nix_darwin
-  stop_legacy_hermes_gateway
   if ((DOTFILES_WITH_DOCKER == 1)); then
     dotfiles_step 'Stopping Docker Desktop' \
       'Stop Docker Desktop before updating its installation.' stop_existing_docker_desktop

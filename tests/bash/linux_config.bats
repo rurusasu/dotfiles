@@ -9,6 +9,7 @@ setup() {
 	! grep -q 'task: hermes:bootstrap\|task: hermes:docker:bootstrap' "$REPO_ROOT/taskfiles/nix/taskfile.yml"
 }
 
-@test "Docker Compose maps the host gateway for Ollama access" {
-  grep -q 'host.docker.internal:host-gateway' "$REPO_ROOT/docker/hermes-service/compose.yml"
+@test "Hermes gateway is managed by Nix rather than Docker Compose" {
+	! grep -q '^  hermes:$' "$REPO_ROOT/docker/hermes-service/compose.yml"
+	grep -q '^  hermes-bootstrap:$' "$REPO_ROOT/docker/hermes-service/compose.yml"
 }

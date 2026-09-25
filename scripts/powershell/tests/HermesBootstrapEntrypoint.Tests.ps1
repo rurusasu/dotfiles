@@ -463,14 +463,12 @@ Describe 'Hermes bootstrap PowerShell entrypoint' {
         Should -Invoke Invoke-WebRequest -Times 2 -Exactly
     }
 
-    It 'should make the Windows task use the focused pwsh entrypoint without installer skip gates' {
+    It 'should route the Windows Hermes setup task through Nix-managed WSL' {
         $taskfile = Get-Content -LiteralPath $script:taskfilePath -Raw
-        $source = Get-Content -LiteralPath $script:entrypointPath -Raw
 
-        $taskfile | Should -Match "pwsh -NoProfile -File scripts/powershell/hermes-bootstrap\.ps1"
-        $taskfile | Should -Match 'hermes-bootstrap\.ps1 -ComposeFile "\{\{\.HERMES_COMPOSE_FILE\}\}"'
-        $taskfile | Should -Not -Match "cmd\.exe /d /c install\.cmd"
-        $source | Should -Not -Match 'SkipHermesAgent|NixRebuildApplied|Test-WslAvailable|install\.cmd'
+        $taskfile | Should -Match '{{\.WSL}}bash -lc "hermes setup"'
+        $taskfile | Should -Match 'hermes:bootstrap:[\s\S]*?nixos-rebuild-with-user\.sh switch --flake \. --impure'
+        $taskfile | Should -Not -Match 'pwsh -NoProfile -File scripts/powershell/hermes-bootstrap\.ps1'
     }
 
     It 'should resolve the canonical Compose and Windows runtime paths' {

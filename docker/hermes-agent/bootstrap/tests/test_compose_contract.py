@@ -89,7 +89,6 @@ class ComposeContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.compose = yaml.safe_load(COMPOSE_FILE.read_text(encoding="utf-8"))
         self.services = self.compose["services"]
-        self.hermes = self.services["hermes"]
         self.bootstrap = self.services.get("hermes-bootstrap")
         self.hindsight_compose = yaml.safe_load(
             HINDSIGHT_COMPOSE_FILE.read_text(encoding="utf-8")
@@ -99,12 +98,11 @@ class ComposeContractTests(unittest.TestCase):
     def test_bootstrap_service_is_an_isolated_hermes_companion(self) -> None:
         self.assertIsNotNone(self.bootstrap)
         assert self.bootstrap is not None
-        self.assertEqual(self.bootstrap["build"], self.hermes["build"])
         self.assertEqual(
-            self.hermes["build"],
+            self.bootstrap["build"],
             {"context": "..", "dockerfile": "hermes-agent/Dockerfile"},
         )
-        self.assertEqual(self.bootstrap["image"], self.hermes["image"])
+        self.assertEqual(self.bootstrap["image"], "local/hermes-agent-gh:latest")
         self.assertEqual(self.bootstrap["volumes"], [DATA_VOLUME])
         self.assertEqual(self.bootstrap["environment"], BOOTSTRAP_ENVIRONMENT)
         self.assertEqual(self.bootstrap["user"], "10000:10000")
@@ -119,20 +117,14 @@ class ComposeContractTests(unittest.TestCase):
             self.assertNotIn(forbidden, self.bootstrap)
         self.assertFalse(any(_is_secret_key(key) for key in self.bootstrap["environment"]))
 
-    def test_gateway_uses_the_canonical_shared_lifelog_path(self) -> None:
-        self.assertEqual(self.hermes["environment"]["LIFELOG_ROOT"], "/opt/data/shared/lifelog")
+    def test_nix_managed_gateway_is_not_a_compose_service(self) -> None:
+        self.assertNotIn("hermes", self.services)
+        self.assertIn("hermes-bootstrap", self.services)
+        self.assertIn("chromium", self.services)
+        self.assertIn("browser-mcp", self.services)
+        self.assertIn("xapi-mcp", self.services)
 
-    def test_gateway_uses_the_canonical_hermes_home(self) -> None:
-        self.assertEqual(self.hermes["environment"]["HERMES_HOME"], "/opt/data")
-
-    def test_gateway_multiplexes_profiles_in_one_process(self) -> None:
-        self.assertEqual(
-            self.hermes["environment"]["GATEWAY_MULTIPLEX_PROFILES"],
-            "true",
-        )
-
-    def test_gateway_runtime_home_uses_a_docker_managed_named_volume(self) -> None:
-        self.assertEqual(self.hermes["volumes"][0], DATA_VOLUME)
+    def test_bootstrap_runtime_home_uses_a_docker_managed_named_volume(self) -> None:
         self.assertEqual(self.bootstrap["volumes"][0], DATA_VOLUME)
         self.assertEqual(
             self.compose["volumes"]["hermes-data"],
@@ -144,12 +136,6 @@ class ComposeContractTests(unittest.TestCase):
                 for service in self.services.values()
                 for mount in service.get("volumes", [])
             )
-        )
-
-    def test_gateway_reconnects_on_the_first_failed_discord_liveness_sample(self) -> None:
-        self.assertEqual(
-            self.hermes["environment"]["HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD"],
-            "${HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD:-1}",
         )
 
     def test_hindsight_is_a_pinned_multi_arch_private_memory_runtime(self) -> None:
@@ -205,12 +191,9 @@ class ComposeContractTests(unittest.TestCase):
             },
         )
 
-    def test_hermes_can_reach_memory_without_waiting_for_its_runtime(self) -> None:
-        self.assertEqual(self.hermes["networks"], ["hermes-browser", "local-ai-services"])
-        self.assertEqual(
-            self.hermes["extra_hosts"], ["host.docker.internal:host-gateway"]
-        )
-        self.assertNotIn("hindsight", self.hermes["depends_on"])
+    def test_hermes_support_services_keep_their_compose_networks(self) -> None:
+        self.assertEqual(self.services["xapi-mcp"]["networks"], ["hermes-browser"])
+        self.assertEqual(self.services["browser-mcp"]["networks"], ["hermes-browser"])
         self.assertEqual(
             self.hindsight_compose["networks"]["local-ai-services"],
             {"name": "local-ai-services", "external": True},
@@ -247,20 +230,14 @@ class ComposeContractTests(unittest.TestCase):
         self.assertNotIn("HINDSIGHT_API_LLM_MODEL", powershell_source)
         self.assertNotIn("HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL", powershell_source)
 
-    def test_hermes_services_load_the_private_service_account_environment_file(self) -> None:
+    def test_bootstrap_service_loads_the_private_service_account_environment_file(self) -> None:
         expected = [
             {
                 "path": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.op.env",
                 "required": False,
             }
         ]
-        self.assertEqual(self.hermes["env_file"], expected)
         self.assertEqual(self.bootstrap["env_file"], expected)
-
-    def test_gateway_exposes_the_authenticated_api_on_the_container_interface(self) -> None:
-        self.assertEqual(self.hermes["environment"]["API_SERVER_HOST"], "0.0.0.0")
-        self.assertIn("127.0.0.1:${HERMES_API_PORT:-8642}:8642", self.hermes["ports"])
-        self.assertNotIn("API_SERVER_KEY", self.hermes["environment"])
 
     def test_browser_mcp_and_novnc_share_the_compose_chromium_process(self) -> None:
         chromium = self.services["chromium"]
@@ -370,10 +347,6 @@ class ComposeContractTests(unittest.TestCase):
                 "/usr/local/bin/hermes-xapi-mcp",
             ],
         )
-        self.assertEqual(
-            self.hermes["depends_on"]["xapi-mcp"],
-            {"condition": "service_healthy"},
-        )
 
     def test_dockerfile_builds_runtime_test_and_final_stages(self) -> None:
         dockerfile = DOCKERFILE.read_text(encoding="utf-8")
@@ -420,11 +393,11 @@ class ComposeContractTests(unittest.TestCase):
             self.skipTest("host-resolved Compose config was not supplied")
 
         resolved = json.loads(Path(config_path).read_text(encoding="utf-8"))["services"]
-        hermes = resolved["hermes"]
         bootstrap = resolved["hermes-bootstrap"]
 
-        self.assertEqual(bootstrap["image"], hermes["image"])
-        self.assertEqual(_volume_for_target(bootstrap, "/opt/data"), _volume_for_target(hermes, "/opt/data"))
+        self.assertNotIn("hermes", resolved)
+        self.assertEqual(bootstrap["image"], "local/hermes-agent-gh:latest")
+        self.assertEqual(_volume_for_target(bootstrap, "/opt/data"), DATA_VOLUME)
         self.assertEqual(bootstrap["environment"], BOOTSTRAP_ENVIRONMENT)
         self.assertEqual(bootstrap["user"], "10000:10000")
         self.assertEqual(bootstrap["cap_drop"], ["ALL"])

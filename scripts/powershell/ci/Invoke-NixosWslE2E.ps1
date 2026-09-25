@@ -390,19 +390,6 @@ fi
                 'if ! swapon --show=NAME --noheadings | grep -q .; then dd if=/dev/zero of=/swapfile bs=1M count=8192 status=none && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile; fi && free -h'
             ) -TimeoutSeconds 300 | Out-Null
 
-            # Seed a real running container under the legacy Compose service name
-            # as the same user whose Docker context the production rebuild handler uses.
-            Invoke-WslChecked -Arguments @(
-                "-d", $DistroName, "-u", "root", "--",
-                "bash", "-lc",
-                'systemctl start docker && for attempt in {1..60}; do docker info >/dev/null 2>&1 && break; sleep 1; done && docker info >/dev/null'
-            ) -TimeoutSeconds 300 | Out-Null
-            Invoke-WslChecked -Arguments @(
-                "-d", $DistroName, "-u", "nixos", "--",
-                "bash", "-lc",
-                'docker run --detach --pull=missing --name hermes alpine:3.22 sleep 3600 && docker inspect --format ''{{.State.Running}}'' hermes | grep -qx true'
-            ) -TimeoutSeconds 300 | Out-Null
-
             # Seed the disposable distro with pre-existing Hermes state before
             # Home Manager activation. This proves activation preserves user
             # data and that the gateway can read a private provider env file.
@@ -417,16 +404,6 @@ fi
             $rebuildContext.Options["WithHermes"] = $true
             $rebuildContext.Options["SkipFlakeUpdate"] = $true
             $rebuildContext.Options["NixRebuildTimeoutSeconds"] = $PostInstallTimeoutSeconds
-            $legacyGatewayState = Invoke-WslChecked -Arguments @(
-                "-d", $DistroName, "-u", "nixos", "--",
-                "bash", "-lc", 'docker inspect --format ''{{.State.Running}}'' hermes'
-            ) -TimeoutSeconds 60
-            $legacyGatewayIsRunning = @($legacyGatewayState.Output | ForEach-Object { ([string]$_).Trim() }) -contains 'true'
-            if (-not $legacyGatewayIsRunning) {
-                throw 'The seeded legacy Hermes gateway was not running immediately before NixRebuildHandler.Apply'
-            }
-            Write-Host "CI_ASSERTION: seeded legacy Hermes gateway is running immediately before NixRebuildHandler.Apply."
-
             $rebuildHandler = [NixRebuildHandler]::new()
             if (-not $rebuildHandler.CanApply($rebuildContext)) {
                 throw "NixRebuildHandler cannot apply to the newly installed WSL distro $DistroName"
@@ -443,14 +420,6 @@ fi
                 throw
             }
             Write-Host "CI_ASSERTION: production NixRebuildHandler applied WithHermes to $DistroName."
-            if (-not $rebuildContext.Options['LegacyHermesGatewayStopped']) {
-                throw 'Production NixRebuildHandler did not stop the seeded running legacy Hermes gateway'
-            }
-            Invoke-WslChecked -Arguments @(
-                "-d", $DistroName, "-u", "nixos", "--",
-                "bash", "-lc", 'test "$(docker inspect --format ''{{.State.Running}}'' hermes)" = false'
-            ) -TimeoutSeconds 60 | Out-Null
-
             $hermesHandler = [HermesAgentHandler]::new()
             if (-not $hermesHandler.CanApply($rebuildContext)) {
                 throw "HermesAgentHandler skipped validation after NixRebuildHandler completed for $DistroName"

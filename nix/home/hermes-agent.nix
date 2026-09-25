@@ -16,5 +16,6 @@ in
     enable = enabled;
     gateway.enable = enabled;
     hermesHome = "${config.home.homeDirectory}/.hermes";
+    settings.gateway.multiplex_profiles = true;
   };
 }

@@ -11,7 +11,6 @@ OS_RELEASE_FILE="${DOTFILES_OS_RELEASE_FILE:-/etc/os-release}"
 SYSTEMD_DIR="${DOTFILES_SYSTEMD_DIR:-/run/systemd/system}"
 SYSTEMD_WAIT_ATTEMPTS="${DOTFILES_SYSTEMD_WAIT_ATTEMPTS:-30}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
-COMPOSE_FILE="$DOTFILES_ROOT/docker/hermes-service/compose.yml"
 DOTFILES_WITH_HERMES="${DOTFILES_WITH_HERMES:-0}"
 LINUX_CONFIG=""
 
@@ -114,15 +113,6 @@ apply_chezmoi() {
   chezmoi apply --force
 }
 
-stop_legacy_hermes_gateway() {
-  [[ $DOTFILES_WITH_HERMES == 1 ]] || return 0
-  [[ -f $COMPOSE_FILE ]] || return 0
-  dotfiles_have docker || return 0
-  docker info >/dev/null 2>&1 || return 0
-  dotfiles_log "Stopping only the legacy Hermes gateway before native Nix activation."
-  docker compose -f "$COMPOSE_FILE" stop hermes
-}
-
 main() {
   preflight
   ensure_systemd
@@ -131,7 +121,6 @@ main() {
   dotfiles_install_herdr
   dotfiles_update_flake "$ROOT"
   capture_host_identity
-  stop_legacy_hermes_gateway
   apply_linux_system
   apply_chezmoi
   "$VERIFY_ENVIRONMENT" --nix-only

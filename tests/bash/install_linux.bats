@@ -262,7 +262,7 @@ fi
 	grep -q '^verify-environment --nix-only$' "$COMMAND_LOG"
 }
 
-@test "Linux stops only a running legacy Hermes service before Nix activation" {
+@test "Linux Nix activation does not target a Docker Hermes gateway" {
 	write_nix_stub
 	export DOCKER_ENGINE_RUNNING=1
 	export DOTFILES_WITH_HERMES=1
@@ -270,12 +270,8 @@ fi
 	run "$INSTALLER"
 
 	[ "$status" -eq 0 ]
-	stop_line="$(grep -nF "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes" "$COMMAND_LOG" | cut -d: -f1)"
-	activate_line="$(grep -nF 'switch --flake .#ubuntu' "$COMMAND_LOG" | cut -d: -f1)"
-	[ "$stop_line" -lt "$activate_line" ]
-	grep -q 'docker compose .* stop hermes' "$COMMAND_LOG"
-	! grep -q 'docker compose .* stop .*\(api\|browser\|dashboard\)' "$COMMAND_LOG"
-	! grep -q 'docker \(volume\|image\) ' "$COMMAND_LOG"
+	grep -q 'switch --flake .#ubuntu' "$COMMAND_LOG"
+	! grep -q 'docker compose .* hermes' "$COMMAND_LOG"
 }
 
 @test "Linux accepts a responsive systemd manager while the global state is starting" {

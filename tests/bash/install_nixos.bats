@@ -188,17 +188,15 @@ line_of() {
 	grep -q '^verify-environment layer=nixos args=--nix-only$' "$COMMAND_LOG"
 }
 
-@test "NixOS stops only a running legacy Hermes service before system activation" {
+@test "NixOS activation does not target a Docker Hermes gateway" {
 	export DOCKER_ENGINE_RUNNING=1
 	export DOTFILES_WITH_HERMES=1
 
 	run "$INSTALLER"
 
 	[ "$status" -eq 0 ]
-	[ "$(line_of "docker compose -f $REPO_ROOT/docker/hermes-service/compose.yml stop hermes")" -lt "$(line_of nixos-rebuild)" ]
-	grep -q 'docker compose .* stop hermes' "$COMMAND_LOG"
-	! grep -q 'docker compose .* stop .*\(api\|browser\|dashboard\)' "$COMMAND_LOG"
-	! grep -q 'docker \(volume\|image\) ' "$COMMAND_LOG"
+	grep -q 'nixos-rebuild' "$COMMAND_LOG"
+	! grep -q 'docker compose .* hermes' "$COMMAND_LOG"
 }
 
 @test "NixOS refuses activation without a readable hardware profile" {
@@ -279,5 +277,4 @@ exit 44
 	grep -q 'host = "0.0.0.0"' "$REPO_ROOT/nix/hosts/linux/configuration.nix"
 	grep -q 'port = 11434' "$REPO_ROOT/nix/hosts/linux/configuration.nix"
 	! grep -Eq 'allowedTCPPorts.*11434' "$REPO_ROOT/nix/hosts/linux/configuration.nix"
-	grep -q 'host.docker.internal:host-gateway' "$REPO_ROOT/docker/hermes-service/compose.yml"
 }

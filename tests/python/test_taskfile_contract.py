@@ -69,20 +69,16 @@ class TaskfileContractTests(unittest.TestCase):
 
     def test_task_contracts_read_tasks_from_the_hermes_feature_taskfile(self) -> None:
         self.assertIn(
-            'dotfiles_hermes_start_stack docker "{{.HERMES_COMPOSE_FILE}}"',
+            "task: hermes:bootstrap",
             self._command_text("hermes:docker:bootstrap"),
         )
 
-    def test_bootstrap_uses_the_same_container_startup_guardrails(self) -> None:
+    def test_bootstrap_is_a_compatibility_alias_for_nix_activation(self) -> None:
         task = self._task_block("hermes:docker:bootstrap")
 
-        self.assertIn("interactive: true", task)
-        self.assertIn("docker info", task)
-        self.assertIn("test -f {{.HERMES_COMPOSE_FILE}}", task)
-        self.assertIn(
-            'dotfiles_hermes_start_stack docker "{{.HERMES_COMPOSE_FILE}}"',
-            self._command_text("hermes:docker:bootstrap"),
-        )
+        self.assertIn("Compatibility alias", task)
+        self.assertIn("task: hermes:bootstrap", task)
+        self.assertNotIn("docker info", task)
 
     def test_hermes_bootstrap_tests_use_one_bake_invocation(self) -> None:
         task = self._task_block("hermes:bootstrap:test:container")
@@ -109,15 +105,13 @@ class TaskfileContractTests(unittest.TestCase):
             1,
         )
 
-    def test_legacy_docker_hermes_entrypoints_start_the_independent_memory_service(self) -> None:
+    def test_native_hermes_setup_starts_the_independent_memory_service(self) -> None:
         self.assertIn("task: hindsight:up", self._task_block("hermes:setup"))
-        self.assertIn("task: hindsight:up", self._task_block("hermes:docker:bootstrap"))
         for profile in ("rick", "hoffman", "risarisa", "nancy"):
             with self.subTest(profile=profile):
                 plan = self._task_plan(f"hermes:{profile}:up")
 
-                self.assertIn("task: [hindsight:up]", plan)
-                self.assertIn("task: [hermes:docker:bootstrap]", plan)
+                self.assertIn("task: [hermes:up]", plan)
                 self.assertIn(f"-p {profile} gateway status", plan)
 
     def test_desktop_entrypoint_uses_the_native_gateway(self) -> None:
@@ -136,11 +130,6 @@ class TaskfileContractTests(unittest.TestCase):
         self.assertIn("shellQuote", task)
         self.assertIn("platforms: [darwin, linux]", task)
         self.assertNotIn("hermes-docker", task)
-
-    def test_legacy_gateway_commands_are_explicitly_docker_prefixed(self) -> None:
-        for name in ("hermes:docker:bootstrap", "hermes:docker:up", "hermes:docker:down"):
-            with self.subTest(task=name):
-                self.assertIn("explicit opt-in", self._task_block(name))
 
     def test_desktop_install_does_not_run_the_upstream_agent_installer(self) -> None:
         installer = (REPOSITORY_ROOT / "scripts" / "sh" / "hermes-desktop-install.sh").read_text(
@@ -167,18 +156,25 @@ class TaskfileContractTests(unittest.TestCase):
                 if action in ("status", "up", "restart"):
                     self.assertIn("-p personal-ops gateway status", plan)
                 if action == "up":
-                    self.assertIn("task: [hermes:docker:bootstrap]", plan)
+                    self.assertIn("task: [hermes:up]", plan)
                 if action == "restart":
-                    self.assertIn("task: [hermes:docker:restart]", plan)
+                    self.assertIn("task: [hermes:restart]", plan)
                 if action == "down":
                     self.assertIn(
-                        "docker compose -f docker/hermes-service/compose.yml stop hermes",
+                        "hermes gateway stop",
                         plan,
                     )
-                    self.assertNotIn(
-                        "docker compose -f docker/hermes-service/compose.yml down",
-                        plan,
-                    )
+
+    def test_gateway_taskfile_never_targets_a_removed_compose_service(self) -> None:
+        taskfile = HERMES_TASKFILE.read_text(encoding="utf-8")
+        self.assertNotRegex(
+            taskfile,
+            r"docker compose[^\n]*\b(?:stop|restart|logs|run|exec)\b[^\n]*[ \t]hermes(?:[ \t]|$)",
+        )
+        hermes_module = (REPOSITORY_ROOT / "nix/home/hermes-agent.nix").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("settings.gateway.multiplex_profiles", hermes_module)
 
     def test_xapi_lifecycle_reads_oauth_credentials_from_1password(self) -> None:
         wrapper = XAPI_WRAPPER.read_text(encoding="utf-8")
