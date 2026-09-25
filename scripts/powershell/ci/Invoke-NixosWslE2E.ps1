@@ -433,7 +433,20 @@ fi
             Invoke-WslChecked -Arguments @(
                 "-d", $DistroName, "-u", "nixos", "--",
                 "bash", "-lc",
-                'hermes_executable="$(readlink -f "$(command -v hermes)")" && case "$hermes_executable" in /nix/store/*) test -x "$hermes_executable" ;; *) echo "Hermes CLI is not Nix-managed: $hermes_executable" >&2; exit 1 ;; esac && hermes --version'
+                @'
+set -eu
+if ! hermes_path="$(type -P hermes)" || [ -z "$hermes_path" ]; then
+  echo 'Hermes CLI is missing from the NixOS user PATH' >&2
+  exit 1
+fi
+hermes_store_path="$(readlink -f "$hermes_path")"
+printf 'Hermes CLI path: %s\nResolved path: %s\n' "$hermes_path" "$hermes_store_path"
+case "$hermes_store_path" in
+  /nix/store/*) test -x "$hermes_store_path" ;;
+  *) echo "Hermes CLI is not Nix-managed: $hermes_store_path" >&2; exit 1 ;;
+esac
+hermes --version
+'@
             ) -TimeoutSeconds 300 | Out-Null
 
             Invoke-WslChecked -Arguments @(
