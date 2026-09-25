@@ -360,849 +360,297 @@ Describe 'NixRebuildHandler' {
         It 'should fail WSL pnpm verification clearly when timeout expires' {
             Mock Get-JsonContent {
                 return @{ globalPackages = @(
-                        @{ name = "@agentclientprotocol/claude-agent-acp"; verifyCommand = @{ command = "claude-agent-acp"; args = @("--version") } }
-                    )
-                }
-            }
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "installed" }
-                if ($argStr -match "timeout 30s") { $global:LASTEXITCODE = 124; return "" }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match "pnpm ã‚°ãƒ­ãƒ¼ãƒãƒ«ãƒ‘ãƒƒã‚±ãƒ¼ã‚¸ã®ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã¾ãŸã¯æ¤œè¨¼ã«å¤±æ•—ã—ã¾ã—ãŸ"
-            Should -Invoke Write-Host -ParameterFilter {
-                $ForegroundColor -eq "Yellow" -and ([string]$Object) -match "ã‚¿ã‚¤ãƒ ã‚¢ã‚¦ãƒˆ"
-            } -Times 1
-        }
-
-        It 'should install pnpm global packages when entries are objects with name field' {
-            $script:pnpmArgs = ""
-            Mock Get-JsonContent {
-                return @{ globalPackages = @(
-                        @{
-                            name          = "@example/native-tool"
-                            installArgs   = @("--allow-build", "native-addon")
-                            verifyCommand = @{ command = "native-tool"; args = @("status") }
-                        },
-                        @{ name = "@google/gemini-cli" }
-                    )
-                }
-            }
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") {
-                    $script:pnpmArgs = $argStr
-                    $global:LASTEXITCODE = 0
-                    return @("installed")
-                }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $handler.Apply($ctx)
-
-            $script:pnpmArgs | Should -Match "pnpm add -g"
-            $script:pnpmArgs | Should -Match "--allow-build"
-            $script:pnpmArgs | Should -Match "native-addon"
-            $script:pnpmArgs | Should -Match "gemini-cli"
-            $script:pnpmArgs | Should -Not -Match "@\{name="
-        }
-
-        It 'should install already installed pnpm packages so they can update to latest' {
-            $script:pnpmAddCalled = $false
-            Mock Get-JsonContent {
-                return @{ globalPackages = @(
-                        "@example/native-tool",
-                        "@prisma/language-server",
-                        "@agentclientprotocol/claude-agent-acp",
-                        "typescript-language-server",
-                        "typescript",
-                        "@google/gemini-cli"
-                    )
-                }
-            }
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g") {
-                    $global:LASTEXITCODE = 0
-                    return @("@example/native-tool@1.0.0", "@prisma/language-server@5.22.0", "@agentclientprotocol/claude-agent-acp@1.0.0", "typescript-language-server@4.3.3", "typescript@5.6.3", "@google/gemini-cli@0.32.1")
-                }
-                if ($argStr -match "pnpm add") {
-                    $script:pnpmAddCalled = $true
-                    $global:LASTEXITCODE = 0
-                    return ""
-                }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $handler.Apply($ctx)
-
-            $script:pnpmAddCalled | Should -Be $true
-        }
-
-        It 'should reinstall installed pnpm package when verifyCommand fails in WSL' {
-            $script:pnpmAddCalled = $false
-            $script:verifyCalls = 0
-            Mock Get-JsonContent {
-                return @{ globalPackages = @(
-                        @{ name = "@example/native-tool"; verifyCommand = @{ command = "native-tool"; args = @("status") } }
-                    )
-                }
-            }
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g") {
-                    $global:LASTEXITCODE = 0
-                    return @("@example/native-tool@1.0.0")
-                }
-                if ($argStr -match "native-tool.*status") {
-                    $script:verifyCalls++
-                    if ($script:verifyCalls -eq 1) {
-                        $global:LASTEXITCODE = 1
-                        return "native-tool not found"
-                    }
-                    $global:LASTEXITCODE = 0
-                    return "ok"
-                }
-                if ($argStr -match "pnpm add") {
-                    $script:pnpmAddCalled = $true
-                    $global:LASTEXITCODE = 0
-                    return @("installed")
-                }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $script:pnpmAddCalled | Should -Be $true
-            $script:verifyCalls | Should -Be 2
-        }
-
-        It 'should fail when pnpm global install fails' {
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 1; return @("error") }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match "pnpm ã‚°ãƒ­ãƒ¼ãƒãƒ«ãƒ‘ãƒƒã‚±ãƒ¼ã‚¸"
-        }
-
-        It 'should pass correct arguments to WSL' {
-            $script:wslArgs = ""
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $handler.Apply($ctx)
-
-            $script:wslArgs | Should -Match "-d NixOS"
-            $script:wslArgs | Should -Match "-u root"
-            $script:wslArgs | Should -Match "nixos-rebuild-with-user.sh switch --flake . --impure"
-            $script:wslArgs | Should -Match "DOTFILES_WITH_HERMES=0"
-        }
-
-        It 'should pass the Hermes feature to the NixOS rebuild wrapper' {
-            $ctx.Options['WithHermes'] = $true
-            $script:wslArgs = ''
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join ' '
-                if ($argStr -match 'nixos-rebuild') { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return '' }
-                if ($argStr -match 'command -v pnpm') { $global:LASTEXITCODE = 0; return '/nix/store/bin/pnpm' }
-                if ($argStr -match 'pnpm ls -g') { $global:LASTEXITCODE = 0; return '' }
-                if ($argStr -match 'pnpm add') { $global:LASTEXITCODE = 0; return '' }
-                if ($argStr -match 'core\.hooksPath|pre-commit install|echo exists|pnpm setup|grep.*PNPM_HOME|test -e') { $global:LASTEXITCODE = 0; return '' }
-                $global:LASTEXITCODE = 0
-                return ''
-            }
-
-            $handler.Apply($ctx)
-
-            $script:wslArgs | Should -Match 'DOTFILES_WITH_HERMES=1'
-            Should -Invoke Invoke-Wsl -ParameterFilter {
-                ($Arguments -join ' ') -match 'docker stop hermes'
-            } -Times 1
-        }
-
-        It 'should stop only the legacy Hermes gateway before activation and fail if stopping it fails' {
-            $ctx.Options['WithHermes'] = $true
-            $ctx.Options['SkipFlakeUpdate'] = $true
-            $script:rebuildCalled = $false
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join ' '
-                if ($argStr -match 'docker stop hermes') {
-                    $global:LASTEXITCODE = 1
-                    return 'legacy gateway could not stop'
-                }
-                if ($argStr -match 'nixos-rebuild') {
-                    $script:rebuildCalled = $true
-                    $global:LASTEXITCODE = 0
-                    return ''
-                }
-                $global:LASTEXITCODE = 0
-                return ''
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Match 'legacy Hermes gateway could not be stopped'
-            $script:rebuildCalled | Should -BeFalse
-            Should -Invoke Invoke-Wsl -ParameterFilter {
-                ($Arguments -join ' ') -match 'docker stop hermes'
-            } -Times 1
-        }
-
-        It 'should restore a running legacy Hermes gateway when the Nix rebuild fails' {
-            $ctx.Options['WithHermes'] = $true
-            $ctx.Options['SkipFlakeUpdate'] = $true
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join ' '
-                if ($argStr -match 'docker stop hermes') {
-                    $global:LASTEXITCODE = 0
-                    return 'DOTFILES_LEGACY_HERMES_WAS_RUNNING'
-                }
-                if ($argStr -match 'nixos-rebuild') {
-                    $global:LASTEXITCODE = 1
-                    return 'error: simulated rebuild failure'
-                }
-                if ($argStr -match 'docker start hermes') {
-                    $global:LASTEXITCODE = 0
-                    return 'legacy gateway restored'
-                }
-                if ($argStr -match 'command -v pnpm') { $global:LASTEXITCODE = 0; return '/nix/store/bin/pnpm' }
-                $global:LASTEXITCODE = 0
-                return ''
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Match 'nixos-rebuild switch ãŒå¤±æ•—ã—ã¾ã—ãŸ'
-            $ctx.Options['LegacyHermesGatewayStopped'] | Should -BeTrue
-            Should -Invoke Invoke-Wsl -ParameterFilter {
-                ($Arguments -join ' ') -match 'docker start hermes'
-            } -Times 1
-        }
-
-        It 'should restore the legacy Hermes gateway when the rebuild command throws' {
-            $ctx.Options['WithHermes'] = $true
-            $ctx.Options['SkipFlakeUpdate'] = $true
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join ' '
-                if ($argStr -match 'docker ps .*hermes') {
-                    $global:LASTEXITCODE = 0
-                    return @('hermes', 'DOTFILES_LEGACY_HERMES_WAS_RUNNING')
-                }
-                if ($argStr -match 'nixos-rebuild') { throw 'rebuild process timed out' }
-                if ($argStr -match 'docker start hermes') {
-                    $global:LASTEXITCODE = 0
-                    return 'legacy gateway restored'
-                }
-                $global:LASTEXITCODE = 0
-                return ''
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Match 'rebuild process timed out'
-            Should -Invoke Invoke-Wsl -ParameterFilter {
-                ($Arguments -join ' ') -match 'docker start hermes'
-            } -Times 1
-        }
-
-        It 'should update the flake lock before nixos-rebuild so Nix packages use latest inputs' {
-            $script:flakeUpdateCalled = $false
-            $script:rebuildCalled = $false
-            $script:flakeUpdateCalledFirst = $false
-            $script:flakeUpdateArgs = ""
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nix flake update") {
-                    $script:flakeUpdateArgs = $argStr
-                    $script:flakeUpdateCalled = $true
-                    if (-not $script:rebuildCalled) { $script:flakeUpdateCalledFirst = $true }
-                    $global:LASTEXITCODE = 0; return @("updated lock file")
-                }
-                if ($argStr -match "nixos-rebuild") { $script:rebuildCalled = $true; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $handler.Apply($ctx)
-
-            $script:flakeUpdateCalled | Should -Be $true
-            $script:flakeUpdateCalledFirst | Should -Be $true
-            $script:flakeUpdateArgs | Should -Match "-u nixos"
-        }
-
-        It 'should skip flake updates when the caller pins the checked-out inputs' {
-            $ctx.Options['SkipFlakeUpdate'] = $true
-            $script:flakeUpdateCalled = $false
-            $script:rebuildCalled = $false
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nix flake update") { $script:flakeUpdateCalled = $true }
-                if ($argStr -match "nixos-rebuild") { $script:rebuildCalled = $true; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g|pnpm add|core\.hooksPath|pre-commit install|echo exists|pnpm setup|grep.*PNPM_HOME|test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0
-                return ""
-            }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeTrue
-            $script:flakeUpdateCalled | Should -BeFalse
-            $script:rebuildCalled | Should -BeTrue
-        }
-
-        It 'should set git safe.directory before nixos-rebuild as root' {
-            $script:gitConfigCalled = $false
-            $script:rebuildCalled = $false
-            $script:gitCalledFirst = $false
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "grep.*directory.*gitconfig|printf.*\[safe\]") {
-                    $script:gitConfigCalled = $true
-                    if (-not $script:rebuildCalled) { $script:gitCalledFirst = $true }
-                    $global:LASTEXITCODE = 0; return ""
-                }
-                if ($argStr -match "nixos-rebuild") { $script:rebuildCalled = $true; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $handler.Apply($ctx)
-
-            $script:gitConfigCalled | Should -Be $true
-            $script:gitCalledFirst | Should -Be $true
-        }
-
-        It 'should use custom distro name from context' {
-            $ctx.DistroName = "CustomNixOS"
-            $script:wslArgs = ""
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $script:wslArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $handler.Apply($ctx)
-
-            $script:wslArgs | Should -Match "-d CustomNixOS"
-        }
-
-        It 'should install pre-commit hooks after pnpm packages' {
-            $script:callOrder = [System.Collections.Generic.List[string]]::new()
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") {
-                    $script:callOrder.Add("pnpm")
-                    $global:LASTEXITCODE = 0
-                    return ""
-                }
-                if ($argStr -match "core\.hooksPath") {
-                    $script:callOrder.Add("unset-hookspath")
-                    $global:LASTEXITCODE = 0
-                    return ""
-                }
-                if ($argStr -match "pre-commit install") {
-                    $script:callOrder.Add("pre-commit")
-                    $global:LASTEXITCODE = 0
-                    return @("pre-commit installed at .git/hooks/pre-commit")
-                }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $script:callOrder | Should -Contain "pnpm"
-            $script:callOrder | Should -Contain "unset-hookspath"
-            $script:callOrder | Should -Contain "pre-commit"
-            $script:callOrder.IndexOf("pnpm") | Should -BeLessThan $script:callOrder.IndexOf("unset-hookspath")
-            $script:callOrder.IndexOf("unset-hookspath") | Should -BeLessThan $script:callOrder.IndexOf("pre-commit")
-        }
-
-        It 'should succeed even when pre-commit install fails' {
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 1; return @("error") }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $result = $handler.Apply($ctx)
-
-            # pre-commit install å¤±æ•—ã§ã‚‚ Apply è‡ªä½“ã¯æˆåŠŸã¨ã¿ãªã™
-            $result.Success | Should -Be $true
-        }
-
-        It 'should pass correct WSL args for pre-commit install' {
-            $script:preCommitArgs = ""
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") {
-                    $script:preCommitArgs = $argStr
-                    $global:LASTEXITCODE = 0
-                    return ""
-                }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $handler.Apply($ctx)
-
-            $script:preCommitArgs | Should -Match "-d NixOS"
-            $script:preCommitArgs | Should -Match "-u nixos"
-            $script:preCommitArgs | Should -Match "cd ~/.dotfiles"
-            $script:preCommitArgs | Should -Match "pre-commit install --install-hooks"
-        }
-
-        It 'should not call corepack when pnpm is already available' {
-            $script:corepakCalled = $false
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "npm install -g pnpm") { $script:corepakCalled = $true; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $handler.Apply($ctx)
-
-            $script:corepakCalled | Should -Be $false
-        }
-
-        It 'should install native pnpm when only Windows interop pnpm is found via /mnt/' {
-            $script:npmInstallCalled = $false
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                # grep -qv '^/mnt/' ã§ /mnt/ ãƒ‘ã‚¹ã‚’å¼¾ã â†’ exit 1 ã‚’è¿”ã™
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 1; return "" }
-                if ($argStr -match "npm install -g pnpm") { $script:npmInstallCalled = $true; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $handler.Apply($ctx)
-
-            $script:npmInstallCalled | Should -Be $true
-        }
-
-        It 'should enable pnpm via corepack when pnpm is not found' {
-            $script:corepakCalled = $false
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 1; return "" }
-                if ($argStr -match "npm install -g pnpm") { $script:corepakCalled = $true; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $handler.Apply($ctx)
-
-            $script:corepakCalled | Should -Be $true
-        }
-
-        It 'should fail when pnpm bootstrap fails' {
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 1; return "" }
-                if ($argStr -match "npm install -g pnpm") { $global:LASTEXITCODE = 1; return @("error") }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match "pnpm ã‚°ãƒ­ãƒ¼ãƒãƒ«ãƒ‘ãƒƒã‚±ãƒ¼ã‚¸"
-        }
-
-        It 'should setup PNPM_HOME when directory does not exist' {
-            $script:pnpmSetupCalled = $false
-            $script:bashrcUpdated = $false
-            $script:pnpmHomeCheckArgs = ""
-            $script:pnpmSetupArgs = ""
-            $script:bashrcArgs = ""
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "echo exists") { $script:pnpmHomeCheckArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm setup") { $script:pnpmSetupCalled = $true; $script:pnpmSetupArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $script:bashrcUpdated = $true; $script:bashrcArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $script:pnpmSetupCalled | Should -Be $true
-            $script:bashrcUpdated | Should -Be $true
-            $script:pnpmHomeCheckArgs | Should -Match '\$PNPM_HOME/bin'
-            $script:pnpmSetupArgs | Should -Match '\$PNPM_HOME/bin'
-            $script:bashrcArgs | Should -Match '\$PNPM_HOME/bin:\$PNPM_HOME'
-        }
-
-        It 'should skip PNPM_HOME setup when directory already exists' {
-            $script:pnpmSetupCalled = $false
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $script:pnpmSetupCalled = $true; $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "core\.hooksPath") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pre-commit install") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $script:pnpmSetupCalled | Should -Be $false
-        }
-
-        It 'should unset core.hooksPath before pre-commit install' {
-            $script:hooksPathUnset = $false
-            $script:preCommitCalled = $false
-            $script:unsetBeforePreCommit = $false
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "nixos-rebuild") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
-                if ($argStr -match "pnpm ls -g") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "pnpm add") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "core\.hooksPath") {
-                    $script:hooksPathUnset = $true
-                    $global:LASTEXITCODE = 0; return ""
-                }
-                if ($argStr -match "pre-commit install") {
-                    $script:preCommitCalled = $true
-                    $script:unsetBeforePreCommit = $script:hooksPathUnset
-                    $global:LASTEXITCODE = 0; return ""
-                }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-            $handler.Apply($ctx)
-
-            $script:hooksPathUnset | Should -Be $true
-            $script:preCommitCalled | Should -Be $true
-            $script:unsetBeforePreCommit | Should -Be $true
-        }
-
-        It 'should return failure when exception is thrown' {
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "-l -q") {
-                    $global:LASTEXITCODE = 0
-                    return @("NixOS")
-                }
-                if ($argStr -match "test -e") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "echo exists") { $global:LASTEXITCODE = 0; return "exists" }
-                if ($argStr -match "pnpm setup") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "grep.*PNPM_HOME") { $global:LASTEXITCODE = 0; return "" }
-                throw "WSL error"
-            }
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match "WSL error"
-        }
-    }
-
-    Context 'EnsureDotfilesAvailable' {
-        BeforeEach {
-            Mock Write-Host { }
-        }
-
-        It 'should return early when dotfiles exists as a non-symlink' {
-            $script:linkCalled = $false
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "if \[ -L /home/nixos/\.dotfiles \]") { $global:LASTEXITCODE = 0; return "__non_symlink__" }
-                if ($argStr -match "ln -sfn") { $script:linkCalled = $true; $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-
-            $handler.EnsureDotfilesAvailable("NixOS", "D:\ruru\dotfiles")
-
-            $script:linkCalled | Should -Be $false
-        }
-
-        It 'should return early when dotfiles symlink already targets the requested path' {
-            $script:linkCalled = $false
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "if \[ -L /home/nixos/\.dotfiles \]") { $global:LASTEXITCODE = 0; return "/mnt/d/ruru/dotfiles" }
-                if ($argStr -match "ln -sfn") { $script:linkCalled = $true; $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-
-            $handler.EnsureDotfilesAvailable("NixOS", "D:\ruru\dotfiles")
-
-            $script:linkCalled | Should -Be $false
-        }
-
-        It 'should update dotfiles symlink when it targets a different path' {
-            $script:linkArgs = ""
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "if \[ -L /home/nixos/\.dotfiles \]") { $global:LASTEXITCODE = 0; return "/mnt/d/ruru/dotfiles" }
-                if ($argStr -match "test -d") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "ln -sfn") { $script:linkArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-
-            $handler.EnsureDotfilesAvailable("NixOS", "D:\ruru\dotfiles-nixrebuild-link-clone")
-
-            $script:linkArgs | Should -Match "ln -sfn"
-            $script:linkArgs | Should -Match "/mnt/d/ruru/dotfiles-nixrebuild-link-clone"
-            $script:linkArgs | Should -Match "/home/nixos/.dotfiles"
-        }
-
-        It 'should create symlink when dotfiles missing but WSL mount accessible' {
-            $script:linkArgs = ""
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "if \[ -L /home/nixos/\.dotfiles \]") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -d") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "ln -sfn") { $script:linkArgs = $argStr; $global:LASTEXITCODE = 0; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-
-            $handler.EnsureDotfilesAvailable("NixOS", "D:\ruru\dotfiles")
-
-            $script:linkArgs | Should -Match "ln -sf"
-            $script:linkArgs | Should -Match "/mnt/d/ruru/dotfiles"
-            $script:linkArgs | Should -Match "/home/nixos/.dotfiles"
-        }
-
-        It 'should throw when dotfiles missing and WSL mount inaccessible' {
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "if \[ -L /home/nixos/\.dotfiles \]") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -d") { $global:LASTEXITCODE = 1; return "" }
-                $global:LASTEXITCODE = 0; return ""
-            }
-
-            { $handler.EnsureDotfilesAvailable("NixOS", "D:\ruru\dotfiles") } | Should -Throw
-        }
-
-        It 'should convert Windows path to WSL mount path correctly' {
-            $script:mountPath = ""
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "if \[ -L /home/nixos/\.dotfiles \]") { $global:LASTEXITCODE = 0; return "" }
-                if ($argStr -match "test -d") {
-                    # argStr ã‹ã‚‰ /mnt/... ãƒ‘ã‚¹ã‚’æŠ½å‡º
-                    if ($argStr -match '(/mnt/[^\s"]+)') { $script:mountPath = $Matches[1] }
-                    $global:LASTEXITCODE = 1; return ""
-                }
-                $global:LASTEXITCODE = 0; return ""
-            }
-
-            { $handler.EnsureDotfilesAvailable("NixOS", "C:\Users\foo\dotfiles") } | Should -Throw "*dotfiles ãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“*"
-
-            $script:mountPath | Should -Be "/mnt/c/Users/foo/dotfiles"
-        }
-
-        It 'should resolve the configured WSL user and home instead of assuming nixos' {
-            $script:identityArgs = ""
-            $script:userArgs = ""
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $argStr = $Arguments -join " "
-                if ($argStr -match "/var/lib/dotfiles/user") {
-                    $script:identityArgs = $argStr
-                    $global:LASTEXITCODE = 0
-                    return "alice`t/home/alice"
-                }
-                if ($argStr -match "-u alice") {
-                    $script:userArgs = $argStr
-                }
-                $global:LASTEXITCODE = 0
-                return ""
-            }
-
-            $handler.ResolveNixOsIdentity("NixOS")
-            $handler.EnsureDotfilesAvailable("NixOS", "D:\ruru\dotfiles")
-
-            $handler.NixOsUser | Should -Be "alice"
-            $handler.NixOsHome | Should -Be "/home/alice"
-            $script:identityArgs | Should -Match "-u root"
-            $script:userArgs | Should -Match "-u alice"
-        }
-    }
-}
+                        @{ name = "@agentclientprotoc_4¶‰ËkºwµçOHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆš[œİ[YˆBˆYˆ
+	\™Ôİˆ[X]Ú[Y[İ]ÌÈŠHÈ	ÛØ˜[“TÕVUÓÑHHLÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆB‚ˆ	™\İ[H	[™\‹\J	İ
+B‚ˆ	™\İ[”İXØÙ\ÜÈÚİ[P™H	˜[ÙBˆ	™\İ[“Y\ÜØYÙHÚİ[SX]ÚœœH8à¬8àëxàï8àä8àêøàäxààøà¬xàï8à®8àk¸à©8àìøà®xàâ8àï8àêøào¸àgøàkù©':*/8àjùi,y¥eøàeøào¸àeøàgÈ‚ˆÚİ[R[›ÚÙHÜš]KRÜİT\˜[Y]\‘š[\ˆÂˆ	›Ü™YÜ›İ[™ÛÛÜˆY\H–Y[İÈˆX[™
+Üİš[™×IØš™Xİ
+H[X]Ú¸à¯øà©8àè8à¨¸à©¸àâ‚ˆHU[Y\ÈBˆB‚ˆ]	ÜÚİ[[œİ[œHÛØ˜[XÚØYÙ\ÈÚ[ˆ[šY\È\™HØš™XİÈÚ]˜[YHšY[	ÈÂˆ	ØÜš\œœP\™ÜÈHˆ‚ˆ[ØÚÈÙ]RœÛÛÛÛ[Âˆ™]\›ˆÈÛØ˜[XÚØYÙ\ÈH
+ˆÂˆ˜[YHH^[\KÛ˜]]™K]ÛÛ‚ˆ[œİ[\™ÜÈH
+‹KX[İËXZ[‹›˜]]™KXYÛˆŠBˆ™\šYPÛÛ[X[™HÈÛÛ[X[™H›˜]]™K]ÛÛÈ\™ÜÈH
+œİ]\ÈŠHBˆKˆÈ˜[YHHÛÛÙÛKÙÙ[Z[šKXÛHˆBˆ
+BˆBˆBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÂˆ	ØÜš\œœP\™ÜÈH	\™Ôİ‚ˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ
+š[œİ[YŠBˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	[™\‹\J	İ
+B‚ˆ	ØÜš\œœP\™ÜÈÚİ[SX]ÚœœHYYÈ‚ˆ	ØÜš\œœP\™ÜÈÚİ[SX]Ú‹KX[İËXZ[‚ˆ	ØÜš\œœP\™ÜÈÚİ[SX]Ú›˜]]™KXYÛˆ‚ˆ	ØÜš\œœP\™ÜÈÚİ[SX]Ú™Ù[Z[šKXÛH‚ˆ	ØÜš\œœP\™ÜÈÚİ[S›İSX]ÚÛ˜[YOH‚ˆB‚ˆ]	ÜÚİ[[œİ[[™XYH[œİ[YœHXÚØYÙ\ÈÛÈ^HØ[ˆ\]HÈ]\İ	ÈÂˆ	ØÜš\œœPYØ[YH	˜[ÙBˆ[ØÚÈÙ]RœÛÛÛÛ[Âˆ™]\›ˆÈÛØ˜[XÚØYÙ\ÈH
+ˆ^[\KÛ˜]]™K]ÛÛ‹ˆš\ÛXKÛ[™İXYÙK\Ù\™\ˆ‹ˆYÙ[ÛY[›İØÛÛØÛ]YKXYÙ[XXÜ‹ˆ\\ØÜš\[[™İXYÙK\Ù\™\ˆ‹ˆ\\ØÜš\‹ˆÛÛÙÛKÙÙ[Z[šKXÛH‚ˆ
+BˆBˆBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÂˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ
+^[\KÛ˜]]™K]ÛÛKŒŒ‹š\ÛXKÛ[™İXYÙK\Ù\™\KŒŒ‹Œ‹YÙ[ÛY[›İØÛÛØÛ]YKXYÙ[XXÜKŒŒ‹\\ØÜš\[[™İXYÙK\Ù\™\ŒËŒÈ‹\\ØÜš\K‹ŒÈ‹ÛÛÙÛKÙÙ[Z[šKXÛPŒÌ‹ŒHŠBˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÂˆ	ØÜš\œœPYØ[YH	YBˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆˆ‚ˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	[™\‹\J	İ
+B‚ˆ	ØÜš\œœPYØ[YÚİ[P™H	YBˆB‚ˆ]	ÜÚİ[™Z[œİ[[œİ[YœHXÚØYÙHÚ[ˆ™\šYPÛÛ[X[™˜Z[È[ˆÔÓ	ÈÂˆ	ØÜš\œœPYØ[YH	˜[ÙBˆ	ØÜš\™\šYPØ[ÈHˆ[ØÚÈÙ]RœÛÛÛÛ[Âˆ™]\›ˆÈÛØ˜[XÚØYÙ\ÈH
+ˆÈ˜[YHH^[\KÛ˜]]™K]ÛÛÈ™\šYPÛÛ[X[™HÈÛÛ[X[™H›˜]]™K]ÛÛÈ\™ÜÈH
+œİ]\ÈŠHHBˆ
+BˆBˆBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÂˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ
+^[\KÛ˜]]™K]ÛÛKŒŒŠBˆBˆYˆ
+	\™Ôİˆ[X]Ú›˜]]™K]ÛÛŠœİ]\ÈŠHÂˆ	ØÜš\™\šYPØ[ÊÊÂˆYˆ
+	ØÜš\™\šYPØ[ÈY\HJHÂˆ	ÛØ˜[“TÕVUÓÑHHBˆ™]\›ˆ›˜]]™K]ÛÛ›İ›İ[™‚ˆBˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ›ÚÈ‚ˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÂˆ	ØÜš\œœPYØ[YH	YBˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ
+š[œİ[YŠBˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆB‚ˆ	™\İ[H	[™\‹\J	İ
+B‚ˆ	™\İ[”İXØÙ\ÜÈÚİ[P™H	YBˆ	ØÜš\œœPYØ[YÚİ[P™H	YBˆ	ØÜš\™\šYPØ[ÈÚİ[P™H‚ˆB‚ˆ]	ÜÚİ[˜Z[Ú[ˆœHÛØ˜[[œİ[˜Z[ÉÈÂˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÈ	ÛØ˜[“TÕVUÓÑHHNÈ™]\›ˆ
+™\œ›ÜˆŠHBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	™\İ[H	[™\‹\J	İ
+B‚ˆ	™\İ[”İXØÙ\ÜÈÚİ[P™H	˜[ÙBˆ	™\İ[“Y\ÜØYÙHÚİ[SX]ÚœœH8à¬8àëxàï8àä8àêøàäxààøà¬xàï8à®‚ˆB‚ˆ]	ÜÚİ[\ÜÈÛÜœ™Xİ\™İ[Y[ÈÈÔÓ	ÈÂˆ	ØÜš\ÜÛ\™ÜÈHˆ‚ˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ØÜš\ÜÛ\™ÜÈH	\™ÔİÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	[™\‹\J	İ
+B‚ˆ	ØÜš\ÜÛ\™ÜÈÚİ[SX]Ú‹Yš^ÔÈ‚ˆ	ØÜš\ÜÛ\™ÜÈÚİ[SX]Ú‹]H›Ûİ‚ˆ	ØÜš\ÜÛ\™ÜÈÚİ[SX]Ú›š^ÜË\™XZ[]Ú]]\Ù\‹œÚİÚ]ÚKY›ZÙHˆKZ[\\™H‚ˆ	ØÜš\ÜÛ\™ÜÈÚİ[SX]Ú‘Õ’ST×ÕÒUÒT“QTÏL‚ˆB‚ˆ]	ÜÚİ[\ÜÈH\›Y\È™X]\™HÈHš^ÔÈ™XZ[Ü˜\\‰ÈÂˆ	İ“Ü[ÛœÖÉÕÚ]\›Y\É×HH	YBˆ	ØÜš\ÜÛ\™ÜÈH	ÉÂˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆ	È	ÂˆYˆ
+	\™Ôİˆ[X]Ú	Ûš^ÜË\™XZ[	ÊHÈ	ØÜš\ÜÛ\™ÜÈH	\™ÔİÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ	ÉÈBˆYˆ
+	\™Ôİˆ[X]Ú	ØÛÛ[X[™]ˆœIÊHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ	ËÛš^ÜİÜ™KØš[‹ÜœIÈBˆYˆ
+	\™Ôİˆ[X]Ú	ÜœHÈYÉÊHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ	ÉÈBˆYˆ
+	\™Ôİˆ[X]Ú	ÜœHY	ÊHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ	ÉÈBˆYˆ
+	\™Ôİˆ[X]Ú	ØÛÜ™WšÛÚÜÔ]™KXÛÛ[Z][œİ[XÚÈ^\İßœHÙ]\Ü™\Š””WÒÓQ_\İYIÊHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ	ÉÈBˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ	ÉÂˆB‚ˆ	[™\‹\J	İ
+B‚ˆ	ØÜš\ÜÛ\™ÜÈÚİ[SX]Ú	ÑÕ’ST×ÕÒUÒT“QTÏLIÂˆÚİ[R[›ÚÙH[›ÚÙKUÜÛT\˜[Y]\‘š[\ˆÂˆ
+	\™İ[Y[ÈZ›Ú[ˆ	È	ÊH[X]Ú	ÙØÚÙ\ˆİÜ\›Y\ÉÂˆHU[Y\ÈCBˆÚİ[R[›ÚÙH[›ÚÙKUÜÛT\˜[Y]\‘š[\ˆÂˆ
+	\™İ[Y[ÈZ›Ú[ˆ	È	ÊH[X]Ú	ÙØÚÙ\ˆ[œÜXİK]\HÛÛZ[™\ˆKY›Ü›X]Šš\›Y\ÉÂˆHU[Y\ÈBˆB‚ˆ]	ÜÚİ[İÜÛ›HHYØXŞH\›Y\ÈØ]]Ø^H™Y›Ü™HXİ]˜][Ûˆ[™˜Z[YˆİÜ[™È]˜Z[ÉÈÂˆ	İ“Ü[ÛœÖÉÕÚ]\›Y\É×HH	YBˆ	İ“Ü[ÛœÖÉÔÚÚ\›ZÙU\]I×HH	YBˆ	ØÜš\œ™XZ[Ø[YH	˜[ÙBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆ	È	ÂˆYˆ
+	\™Ôİˆ[X]Ú	ÙØÚÙ\ˆİÜ\›Y\ÉÊHÂˆ	ÛØ˜[“TÕVUÓÑHHBˆ™]\›ˆ	ÛYØXŞHØ]]Ø^HÛİ[›İİÜ	ÂˆBˆYˆ
+	\™Ôİˆ[X]Ú	Ûš^ÜË\™XZ[	ÊHÂˆ	ØÜš\œ™XZ[Ø[YH	YBˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ	ÉÂˆBˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ	ÉÂˆB‚ˆ	™\İ[H	[™\‹\J	İ
+B‚ˆ	™\İ[”İXØÙ\ÜÈÚİ[P™Q˜[ÙBˆ	™\İ[“Y\ÜØYÙHÚİ[SX]Ú	ÛYØXŞH\›Y\ÈØ]]Ø^HÛİ[›İ™HİÜY	Âˆ	ØÜš\œ™XZ[Ø[YÚİ[P™Q˜[ÙBˆÚİ[R[›ÚÙH[›ÚÙKUÜÛT\˜[Y]\‘š[\ˆÂˆ
+	\™İ[Y[ÈZ›Ú[ˆ	È	ÊH[X]Ú	ÙØÚÙ\ˆİÜ\›Y\ÉÂˆHU[Y\ÈBˆB‚ˆ]	ÜÚİ[™\İÜ™HH[›š[™ÈYØXŞH\›Y\ÈØ]]Ø^HÚ[ˆHš^™XZ[˜Z[ÉÈÂˆ	İ“Ü[ÛœÖÉÕÚ]\›Y\É×HH	YBˆ	İ“Ü[ÛœÖÉÔÚÚ\›ZÙU\]I×HH	YBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆ	È	ÂˆYˆ
+	\™Ôİˆ[X]Ú	ÙØÚÙ\ˆİÜ\›Y\ÉÊHÂˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ	ÑÕ’ST×ÓQĞPÖWÒT“QT×ÕĞT×Ô•S“’S‘ÉÂˆBˆYˆ
+	\™Ôİˆ[X]Ú	Ûš^ÜË\™XZ[	ÊHÂˆ	ÛØ˜[“TÕVUÓÑHHBˆ™]\›ˆ	Ù\œ›ÜˆÚ[][]Y™XZ[˜Z[\™IÂˆBˆYˆ
+	\™Ôİˆ[X]Ú	ÙØÚÙ\ˆİ\\›Y\ÉÊHÂˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ	ÛYØXŞHØ]]Ø^H™\İÜ™Y	ÂˆBˆYˆ
+	\™Ôİˆ[X]Ú	ØÛÛ[X[™]ˆœIÊHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ	ËÛš^ÜİÜ™KØš[‹ÜœIÈBˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ	ÉÂˆB‚ˆ	™\İ[H	[™\‹\J	İ
+B‚ˆ	™\İ[”İXØÙ\ÜÈÚİ[P™Q˜[ÙBˆ	™\İ[“Y\ÜØYÙHÚİ[SX]Ú	Ûš^ÜË\™XZ[İÚ]Ú8àc9i,y¥eøàeøào¸àeøàgÉÂˆ	İ“Ü[ÛœÖÉÓYØXŞR\›Y\ÑØ]]Ø^TİÜY	×HÚİ[P™UYBˆÚİ[R[›ÚÙH[›ÚÙKUÜÛT\˜[Y]\‘š[\ˆÂˆ
+	\™İ[Y[ÈZ›Ú[ˆ	È	ÊH[X]Ú	ÙØÚÙ\ˆİ\\›Y\ÉÂˆHU[Y\ÈBˆB‚ˆ]	ÜÚİ[™\İÜ™HHYØXŞH\›Y\ÈØ]]Ø^HÚ[ˆH™XZ[ÛÛ[X[™›İÜÉÈÂˆ	İ“Ü[ÛœÖÉÕÚ]\›Y\É×HH	YBˆ	İ“Ü[ÛœÖÉÔÚÚ\›ZÙU\]I×HH	YBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆ	È	ÂˆYˆ
+	\™Ôİˆ[X]Ú	ÙØÚÙ\ˆ[œÜXİK]\HÛÛZ[™\‰ÊHÂˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ
+	İYIË	ÑÕ’ST×ÓQĞPÖWÒT“QT×ÕĞT×Ô•S“’S‘ÉÊBˆBˆYˆ
+	\™Ôİˆ[X]Ú	Ûš^ÜË\™XZ[	ÊHÈ›İÈ	Ü™XZ[›ØÙ\ÜÈ[YYİ]	ÈBˆYˆ
+	\™Ôİˆ[X]Ú	ÙØÚÙ\ˆİ\\›Y\ÉÊHÂˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ	ÛYØXŞHØ]]Ø^H™\İÜ™Y	ÂˆBˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ	ÉÂˆB‚ˆ	™\İ[H	[™\‹\J	İ
+B‚ˆ	™\İ[”İXØÙ\ÜÈÚİ[P™Q˜[ÙBˆ	™\İ[“Y\ÜØYÙHÚİ[SX]Ú	Ü™XZ[›ØÙ\ÜÈ[YYİ]	ÂˆÚİ[R[›ÚÙH[›ÚÙKUÜÛT\˜[Y]\‘š[\ˆÂˆ
+	\™İ[Y[ÈZ›Ú[ˆ	È	ÊH[X]Ú	ÙØÚÙ\ˆİ\\›Y\ÉÂˆHU[Y\ÈBˆB‚ˆ]	ÜÚİ[\]HH›ZÙHØÚÈ™Y›Ü™Hš^ÜË\™XZ[ÛÈš^XÚØYÙ\È\ÙH]\İ[œ]ÉÈÂˆ	ØÜš\™›ZÙU\]PØ[YH	˜[ÙBˆ	ØÜš\œ™XZ[Ø[YH	˜[ÙBˆ	ØÜš\™›ZÙU\]PØ[Yš\œİH	˜[ÙBˆ	ØÜš\™›ZÙU\]P\™ÜÈHˆ‚ˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^›ZÙH\]HŠHÂˆ	ØÜš\™›ZÙU\]P\™ÜÈH	\™Ôİ‚ˆ	ØÜš\™›ZÙU\]PØ[YH	YBˆYˆ
+[›İ	ØÜš\œ™XZ[Ø[Y
+HÈ	ØÜš\™›ZÙU\]PØ[Yš\œİH	YHBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ
+\]YØÚÈš[HŠBˆBˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ØÜš\œ™XZ[Ø[YH	YNÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	[™\‹\J	İ
+B‚ˆ	ØÜš\™›ZÙU\]PØ[YÚİ[P™H	YBˆ	ØÜš\™›ZÙU\]PØ[Yš\œİÚİ[P™H	YBˆ	ØÜš\™›ZÙU\]P\™ÜÈÚİ[SX]Ú‹]Hš^ÜÈ‚ˆB‚ˆ]	ÜÚİ[ÚÚ\›ZÙH\]\ÈÚ[ˆHØ[\ˆ[œÈHÚXÚÙY[İ][œ]ÉÈÂˆ	İ“Ü[ÛœÖÉÔÚÚ\›ZÙU\]I×HH	YBˆ	ØÜš\™›ZÙU\]PØ[YH	˜[ÙBˆ	ØÜš\œ™XZ[Ø[YH	˜[ÙBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^›ZÙH\]HŠHÈ	ØÜš\™›ZÙU\]PØ[YH	YHBˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ØÜš\œ™XZ[Ø[YH	YNÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYßœHYÛÜ™WšÛÚÜÔ]™KXÛÛ[Z][œİ[XÚÈ^\İßœHÙ]\Ü™\Š””WÒÓQ_\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆˆ‚ˆB‚ˆ	™\İ[H	[™\‹\J	İ
+B‚ˆ	™\İ[”İXØÙ\ÜÈÚİ[P™UYBˆ	ØÜš\™›ZÙU\]PØ[YÚİ[P™Q˜[ÙBˆ	ØÜš\œ™XZ[Ø[YÚİ[P™UYBˆB‚ˆ]	ÜÚİ[Ù]Ú]ØY™K™\™XİÜH™Y›Ü™Hš^ÜË\™XZ[\È›Ûİ	ÈÂˆ	ØÜš\™Ú]ÛÛ™šYĞØ[YH	˜[ÙBˆ	ØÜš\œ™XZ[Ø[YH	˜[ÙBˆ	ØÜš\™Ú]Ø[Yš\œİH	˜[ÙBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š™\™XİÜKŠ™Ú]ÛÛ™šYßš[‹Š—ÜØY™WHŠHÂˆ	ØÜš\™Ú]ÛÛ™šYĞØ[YH	YBˆYˆ
+[›İ	ØÜš\œ™XZ[Ø[Y
+HÈ	ØÜš\™Ú]Ø[Yš\œİH	YHBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ØÜš\œ™XZ[Ø[YH	YNÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	[™\‹\J	İ
+B‚ˆ	ØÜš\™Ú]ÛÛ™šYĞØ[YÚİ[P™H	YBˆ	ØÜš\™Ú]Ø[Yš\œİÚİ[P™H	YBˆB‚ˆ]	ÜÚİ[\ÙHİ\İÛH\İ›È˜[YHœ›ÛHÛÛ^	ÈÂˆ	İ‘\İ›Ó˜[YHHİ\İÛSš^ÔÈ‚ˆ	ØÜš\ÜÛ\™ÜÈHˆ‚ˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ØÜš\ÜÛ\™ÜÈH	\™ÔİÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	[™\‹\J	İ
+B‚ˆ	ØÜš\ÜÛ\™ÜÈÚİ[SX]Ú‹Yİ\İÛSš^ÔÈ‚ˆB‚ˆ]	ÜÚİ[[œİ[™KXÛÛ[Z]ÛÚÜÈY\ˆœHXÚØYÙ\ÉÈÂˆ	ØÜš\˜Ø[Ü™\ˆHÔŞ\İ[KÛÛXİ[ÛœË‘Ù[™\šXË“\İÜİš[™×WN›™]Ê
+Bˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÂˆ	ØÜš\˜Ø[Ü™\‹Y
+œœHŠBˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆˆ‚ˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÂˆ	ØÜš\˜Ø[Ü™\‹Y
+[œÙ]ZÛÚÜÜ]ŠBˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆˆ‚ˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÂˆ	ØÜš\˜Ø[Ü™\‹Y
+œ™KXÛÛ[Z]ŠBˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ
+œ™KXÛÛ[Z][œİ[Y]™Ú]ÚÛÚÜËÜ™KXÛÛ[Z]ŠBˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	™\İ[H	[™\‹\J	İ
+B‚ˆ	™\İ[”İXØÙ\ÜÈÚİ[P™H	YBˆ	ØÜš\˜Ø[Ü™\ˆÚİ[PÛÛZ[ˆœœH‚ˆ	ØÜš\˜Ø[Ü™\ˆÚİ[PÛÛZ[ˆ[œÙ]ZÛÚÜÜ]‚ˆ	ØÜš\˜Ø[Ü™\ˆÚİ[PÛÛZ[ˆœ™KXÛÛ[Z]‚ˆ	ØÜš\˜Ø[Ü™\‹’[™^ÙŠœœHŠHÚİ[P™S\ÜÕ[ˆ	ØÜš\˜Ø[Ü™\‹’[™^ÙŠ[œÙ]ZÛÚÜÜ]ŠBˆ	ØÜš\˜Ø[Ü™\‹’[™^ÙŠ[œÙ]ZÛÚÜÜ]ŠHÚİ[P™S\ÜÕ[ˆ	ØÜš\˜Ø[Ü™\‹’[™^ÙŠœ™KXÛÛ[Z]ŠBˆB‚ˆ]	ÜÚİ[İXØÙYY]™[ˆÚ[ˆ™KXÛÛ[Z][œİ[˜Z[ÉÈÂˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHNÈ™]\›ˆ
+™\œ›ÜˆŠHBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	™\İ[H	[™\‹\J	İ
+B‚ˆÈ™KXÛÛ[Z][œİ[9i,y¥eøàiøà ˆ\H:!ê¹/døàkù¢$9b§øàj8àoøàj¸àfBˆ	™\İ[”İXØÙ\ÜÈÚİ[P™H	YBˆB‚ˆ]	ÜÚİ[\ÜÈÛÜœ™XİÔÓ\™ÜÈ›Üˆ™KXÛÛ[Z][œİ[	ÈÂˆ	ØÜš\œ™PÛÛ[Z]\™ÜÈHˆ‚ˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÂˆ	ØÜš\œ™PÛÛ[Z]\™ÜÈH	\™Ôİ‚ˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆˆ‚ˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	[™\‹\J	İ
+B‚ˆ	ØÜš\œ™PÛÛ[Z]\™ÜÈÚİ[SX]Ú‹Yš^ÔÈ‚ˆ	ØÜš\œ™PÛÛ[Z]\™ÜÈÚİ[SX]Ú‹]Hš^ÜÈ‚ˆ	ØÜš\œ™PÛÛ[Z]\™ÜÈÚİ[SX]Ú˜Ù‹Ë™İš[\È‚ˆ	ØÜš\œ™PÛÛ[Z]\™ÜÈÚİ[SX]Úœ™KXÛÛ[Z][œİ[KZ[œİ[ZÛÚÜÈ‚ˆB‚ˆ]	ÜÚİ[›İØ[ÛÜ™\XÚÈÚ[ˆœH\È[™XYH]˜Z[X›IÈÂˆ	ØÜš\˜ÛÜ™\ZĞØ[YH	˜[ÙBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]Ú›œH[œİ[YÈœHŠHÈ	ØÜš\˜ÛÜ™\ZĞØ[YH	YNÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	[™\‹\J	İ
+B‚ˆ	ØÜš\˜ÛÜ™\ZĞØ[YÚİ[P™H	˜[ÙBˆB‚ˆ]	ÜÚİ[[œİ[˜]]™HœHÚ[ˆÛ›HÚ[™İÜÈ[\›ÜœH\È›İ[™šXHÛ[ÉÈÂˆ	ØÜš\›œR[œİ[Ø[YH	˜[ÙBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆÈÜ™\\]ˆ	×‹Û[ÉÈ8àiÈÛ[È8àäxà®xà¤¹o/¸àcÈ8¡¤ˆ^]H8à¤º/å8àfBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHNÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú›œH[œİ[YÈœHŠHÈ	ØÜš\›œR[œİ[Ø[YH	YNÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	[™\‹\J	İ
+B‚ˆ	ØÜš\›œR[œİ[Ø[YÚİ[P™H	YBˆB‚ˆ]	ÜÚİ[[˜X›HœHšXHÛÜ™\XÚÈÚ[ˆœH\È›İ›İ[™	ÈÂˆ	ØÜš\˜ÛÜ™\ZĞØ[YH	˜[ÙBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHNÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú›œH[œİ[YÈœHŠHÈ	ØÜš\˜ÛÜ™\ZĞØ[YH	YNÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	[™\‹\J	İ
+B‚ˆ	ØÜš\˜ÛÜ™\ZĞØ[YÚİ[P™H	YBˆB‚ˆ]	ÜÚİ[˜Z[Ú[ˆœH›Ûİİ˜\˜Z[ÉÈÂˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHNÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú›œH[œİ[YÈœHŠHÈ	ÛØ˜[“TÕVUÓÑHHNÈ™]\›ˆ
+™\œ›ÜˆŠHBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	™\İ[H	[™\‹\J	İ
+B‚ˆ	™\İ[”İXØÙ\ÜÈÚİ[P™H	˜[ÙBˆ	™\İ[“Y\ÜØYÙHÚİ[SX]ÚœœH8à¬8àëxàï8àä8àêøàäxààøà¬xàï8à®‚ˆB‚ˆ]	ÜÚİ[Ù]\”WÒÓQHÚ[ˆ\™XİÜHÙ\È›İ^\İ	ÈÂˆ	ØÜš\œœTÙ]\Ø[YH	˜[ÙBˆ	ØÜš\˜˜\Ú˜Õ\]YH	˜[ÙBˆ	ØÜš\œœRÛYPÚXÚĞ\™ÜÈHˆ‚ˆ	ØÜš\œœTÙ]\\™ÜÈHˆ‚ˆ	ØÜš\˜˜\Ú˜Ğ\™ÜÈHˆ‚ˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ØÜš\œœRÛYPÚXÚĞ\™ÜÈH	\™ÔİÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ØÜš\œœTÙ]\Ø[YH	YNÈ	ØÜš\œœTÙ]\\™ÜÈH	\™ÔİÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ØÜš\˜˜\Ú˜Õ\]YH	YNÈ	ØÜš\˜˜\Ú˜Ğ\™ÜÈH	\™ÔİÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	™\İ[H	[™\‹\J	İ
+B‚ˆ	™\İ[”İXØÙ\ÜÈÚİ[P™H	YBˆ	ØÜš\œœTÙ]\Ø[YÚİ[P™H	YBˆ	ØÜš\˜˜\Ú˜Õ\]YÚİ[P™H	YBˆ	ØÜš\œœRÛYPÚXÚĞ\™ÜÈÚİ[SX]Ú	×	”WÒÓQKØš[‰Âˆ	ØÜš\œœTÙ]\\™ÜÈÚİ[SX]Ú	×	”WÒÓQKØš[‰Âˆ	ØÜš\˜˜\Ú˜Ğ\™ÜÈÚİ[SX]Ú	×	”WÒÓQKØš[—	”WÒÓQIÂˆB‚ˆ]	ÜÚİ[ÚÚ\”WÒÓQHÙ]\Ú[ˆ\™XİÜH[™XYH^\İÉÈÂˆ	ØÜš\œœTÙ]\Ø[YH	˜[ÙBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ØÜš\œœTÙ]\Ø[YH	YNÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	™\İ[H	[™\‹\J	İ
+B‚ˆ	™\İ[”İXØÙ\ÜÈÚİ[P™H	YBˆ	ØÜš\œœTÙ]\Ø[YÚİ[P™H	˜[ÙBˆB‚ˆ]	ÜÚİ[[œÙ]ÛÜ™KšÛÚÜÔ]™Y›Ü™H™KXÛÛ[Z][œİ[	ÈÂˆ	ØÜš\šÛÚÜÔ][œÙ]H	˜[ÙBˆ	ØÜš\œ™PÛÛ[Z]Ø[YH	˜[ÙBˆ	ØÜš\[œÙ]™Y›Ü™T™PÛÛ[Z]H	˜[ÙBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú›š^ÜË\™XZ[ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÛ[X[™]ˆœHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Ûš^ÜİÜ™KØš[‹ÜœHˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÈYÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú˜ÛÜ™WšÛÚÜÔ]ŠHÂˆ	ØÜš\šÛÚÜÔ][œÙ]H	YBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆYˆ
+	\™Ôİˆ[X]Úœ™KXÛÛ[Z][œİ[ŠHÂˆ	ØÜš\œ™PÛÛ[Z]Ø[YH	YBˆ	ØÜš\[œÙ]™Y›Ü™T™PÛÛ[Z]H	ØÜš\šÛÚÜÔ][œÙ]ˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆBˆ	[™\‹\J	İ
+B‚ˆ	ØÜš\šÛÚÜÔ][œÙ]Úİ[P™H	YBˆ	ØÜš\œ™PÛÛ[Z]Ø[YÚİ[P™H	YBˆ	ØÜš\[œÙ]™Y›Ü™T™PÛÛ[Z]Úİ[P™H	YBˆB‚ˆ]	ÜÚİ[™]\›ˆ˜Z[\™HÚ[ˆ^Ù\[Ûˆ\È›İÛ‰ÈÂˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú‹[\HŠHÂˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ
+“š^ÔÈŠBˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™XÚÈ^\İÈŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ™^\İÈˆBˆYˆ
+	\™Ôİˆ[X]ÚœœHÙ]\ŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú™Ü™\Š””WÒÓQHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ›İÈ•ÔÓ\œ›Üˆ‚ˆBˆ	™\İ[H	[™\‹\J	İ
+B‚ˆ	™\İ[”İXØÙ\ÜÈÚİ[P™H	˜[ÙBˆ	™\İ[“Y\ÜØYÙHÚİ[SX]Ú•ÔÓ\œ›Üˆ‚ˆBˆB‚ˆÛÛ^	Ñ[œİ\™Qİš[\Ğ]˜Z[X›IÈÂˆ™Y›Ü™QXXÚÂˆ[ØÚÈÜš]KRÜİÈBˆB‚ˆ]	ÜÚİ[™]\›ˆX\›HÚ[ˆİš[\È^\İÈ\ÈH›Û‹\Ş[[[šÉÈÂˆ	ØÜš\›[šĞØ[YH	˜[ÙBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]ÚšYˆÈSÚÛYKÛš^ÜË×™İš[\ÈHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ—×Û›Û—ÜŞ[[[š××ÈˆBˆYˆ
+	\™Ôİˆ[X]Ú›ˆ\Ù›ˆŠHÈ	ØÜš\›[šĞØ[YH	YNÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆB‚ˆ	[™\‹‘[œİ\™Qİš[\Ğ]˜Z[X›J“š^ÔÈ‹‘—\Wİš[\ÈŠB‚ˆ	ØÜš\›[šĞØ[YÚİ[P™H	˜[ÙBˆB‚ˆ]	ÜÚİ[™]\›ˆX\›HÚ[ˆİš[\ÈŞ[[[šÈ[™XYH\™Ù]ÈH™\]Y\İY]	ÈÂˆ	ØÜš\›[šĞØ[YH	˜[ÙBˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]ÚšYˆÈSÚÛYKÛš^ÜË×™İš[\ÈHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Û[ÙÜ\KÙİš[\ÈˆBˆYˆ
+	\™Ôİˆ[X]Ú›ˆ\Ù›ˆŠHÈ	ØÜš\›[šĞØ[YH	YNÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆB‚ˆ	[™\‹‘[œİ\™Qİš[\Ğ]˜Z[X›J“š^ÔÈ‹‘—\Wİš[\ÈŠB‚ˆ	ØÜš\›[šĞØ[YÚİ[P™H	˜[ÙBˆB‚ˆ]	ÜÚİ[\]Hİš[\ÈŞ[[[šÈÚ[ˆ]\™Ù]ÈHY™™\™[]	ÈÂˆ	ØÜš\›[šĞ\™ÜÈHˆ‚ˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]ÚšYˆÈSÚÛYKÛš^ÜË×™İš[\ÈHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆ‹Û[ÙÜ\KÙİš[\ÈˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú›ˆ\Ù›ˆŠHÈ	ØÜš\›[šĞ\™ÜÈH	\™ÔİÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆB‚ˆ	[™\‹‘[œİ\™Qİš[\Ğ]˜Z[X›J“š^ÔÈ‹‘—\Wİš[\Ë[š^™XZ[[[šËXÛÛ™HŠB‚ˆ	ØÜš\›[šĞ\™ÜÈÚİ[SX]Ú›ˆ\Ù›ˆ‚ˆ	ØÜš\›[šĞ\™ÜÈÚİ[SX]Ú‹Û[ÙÜ\KÙİš[\Ë[š^™XZ[[[šËXÛÛ™H‚ˆ	ØÜš\›[šĞ\™ÜÈÚİ[SX]Ú‹ÚÛYKÛš^ÜËË™İš[\È‚ˆB‚ˆ]	ÜÚİ[Ü™X]HŞ[[[šÈÚ[ˆİš[\ÈZ\ÜÚ[™È]ÔÓ[İ[XØÙ\ÜÚX›IÈÂˆ	ØÜš\›[šĞ\™ÜÈHˆ‚ˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]ÚšYˆÈSÚÛYKÛš^ÜË×™İš[\ÈHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú›ˆ\Ù›ˆŠHÈ	ØÜš\›[šĞ\™ÜÈH	\™ÔİÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆB‚ˆ	[™\‹‘[œİ\™Qİš[\Ğ]˜Z[X›J“š^ÔÈ‹‘—\Wİš[\ÈŠB‚ˆ	ØÜš\›[šĞ\™ÜÈÚİ[SX]Ú›ˆ\Ùˆ‚ˆ	ØÜš\›[šĞ\™ÜÈÚİ[SX]Ú‹Û[ÙÜ\KÙİš[\È‚ˆ	ØÜš\›[šĞ\™ÜÈÚİ[SX]Ú‹ÚÛYKÛš^ÜËË™İš[\È‚ˆB‚ˆ]	ÜÚİ[›İÈÚ[ˆİš[\ÈZ\ÜÚ[™È[™ÔÓ[İ[[˜XØÙ\ÜÚX›IÈÂˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]ÚšYˆÈSÚÛYKÛš^ÜË×™İš[\ÈHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYŠHÈ	ÛØ˜[“TÕVUÓÑHHNÈ™]\›ˆˆˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆB‚ˆÈ	[™\‹‘[œİ\™Qİš[\Ğ]˜Z[X›J“š^ÔÈ‹‘—\Wİš[\ÈŠHHÚİ[U›İÂˆB‚ˆ]	ÜÚİ[ÛÛ™\Ú[™İÜÈ]ÈÔÓ[İ[]ÛÜœ™XİIÈÂˆ	ØÜš\›[İ[]Hˆ‚ˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]ÚšYˆÈSÚÛYKÛš^ÜË×™İš[\ÈHŠHÈ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆˆBˆYˆ
+	\™Ôİˆ[X]Ú\İYŠHÂˆÈ\™Ôİˆ8àbøà¢HÛ[Ë‹‹ˆ8àäxà®xà¤¹¢¯yaî‚ˆYˆ
+	\™Ôİˆ[X]Ú	ÊÛ[Ö×—È—JÊIÊHÈ	ØÜš\›[İ[]H	X]Ú\ÖÌWHBˆ	ÛØ˜[“TÕVUÓÑHHNÈ™]\›ˆˆ‚ˆBˆ	ÛØ˜[“TÕVUÓÑHHÈ™]\›ˆˆ‚ˆB‚ˆÈ	[™\‹‘[œİ\™Qİš[\Ğ]˜Z[X›J“š^ÔÈ‹Î—\Ù\œ×›Û×İš[\ÈŠHHÚİ[U›İÈŠ™İš[\È8àc:)¢øài8àbøà¢¸ào¸àføà¤Êˆ‚‚ˆ	ØÜš\›[İ[]Úİ[P™H‹Û[ØËÕ\Ù\œËÙ›ÛËÙİš[\È‚ˆB‚ˆ]	ÜÚİ[™\ÛÛ™HHÛÛ™šYİ\™YÔÓ\Ù\ˆ[™ÛYH[œİXYÙˆ\Üİ[Z[™Èš^ÜÉÈÂˆ	ØÜš\šY[]P\™ÜÈHˆ‚ˆ	ØÜš\\Ù\\™ÜÈHˆ‚ˆ[ØÚÈ[›ÚÙKUÜÛÂˆ\˜[J	\™İ[Y[ÊBˆ	\™ÔİˆH	\™İ[Y[ÈZ›Ú[ˆˆ‚ˆYˆ
+	\™Ôİˆ[X]Ú‹İ˜\‹ÛX‹Ùİš[\Ëİ\Ù\ˆŠHÂˆ	ØÜš\šY[]P\™ÜÈH	\™Ôİ‚ˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆ˜[XÙXÚÛYKØ[XÙH‚ˆBˆYˆ
+	\™Ôİˆ[X]Ú‹]H[XÙHŠHÂˆ	ØÜš\\Ù\\™ÜÈH	\™Ôİ‚ˆBˆ	ÛØ˜[“TÕVUÓÑHHˆ™]\›ˆˆ‚ˆB‚ˆ	[™\‹”™\ÛÛ™Sš^ÜÒY[]J“š^ÔÈŠBˆ	[™\‹‘[œİ\™Qİš[\Ğ]˜Z[X›J“š^ÔÈ‹‘—\Wİš[\ÈŠB‚ˆ	[™\‹“š^ÜÕ\Ù\ˆÚİ[P™H˜[XÙH‚ˆ	[™\‹“š^ÜÒÛYHÚİ[P™H‹ÚÛYKØ[XÙH‚ˆ	ØÜš\šY[]P\™ÜÈÚİ[SX]Ú‹]H›Ûİ‚ˆ	ØÜš\\Ù\\™ÜÈÚİ[SX]Ú‹]H[XÙH‚ˆBˆBŸB

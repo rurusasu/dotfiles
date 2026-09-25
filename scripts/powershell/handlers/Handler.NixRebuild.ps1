@@ -428,7 +428,7 @@ class NixRebuildHandler : SetupHandlerBase {
 
             if ($this.IsTruthy($ctx.GetOption("WithHermes", $false))) {
                 $this.Log("Nix Hermes を有効にする前に legacy Compose gateway を停止します...")
-                $stopLegacyGatewayCommand = 'if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then running_container=$(docker ps --filter name=^/hermes$ --filter status=running --format ''{{.Names}}'') || exit $?; if [ "$running_container" = hermes ]; then docker stop hermes && echo DOTFILES_LEGACY_HERMES_WAS_RUNNING; else echo "Legacy Hermes gateway was not running."; fi; else echo "Docker runtime is unavailable; no legacy Hermes gateway can be active."; fi'
+                $stopLegacyGatewayCommand = 'if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then running_container=$(docker inspect --type container --format ''{{.State.Running}}'' hermes 2>/dev/null) || running_container=false; if [ "$running_container" = true ]; then docker stop hermes && echo DOTFILES_LEGACY_HERMES_WAS_RUNNING; else echo "Legacy Hermes gateway was not running."; fi; else echo "Docker runtime is unavailable; no legacy Hermes gateway can be active."; fi'
                 $stopLegacyGatewayOutput = Invoke-Wsl -Arguments @(
                     "-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", $stopLegacyGatewayCommand
                 )
