@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Run an isolated NixOS-WSL install and nixos-rebuild switch E2E check.
 
@@ -444,6 +444,7 @@ case "$hermes_store_path" in
 esac
 hermes --version
 '@
+            $hermesVerifier = $hermesVerifier -replace "`r`n?", "`n"
             $hermesVerifierBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($hermesVerifier))
             $hermesVerifierCommand = "set -o pipefail; printf '%s' '$hermesVerifierBase64' | base64 -d | bash"
             Invoke-WslChecked -Arguments @(
