@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Run an isolated NixOS-WSL install and nixos-rebuild switch E2E check.
 
