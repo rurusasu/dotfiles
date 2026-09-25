@@ -536,11 +536,14 @@ DOTFILES_HERMES_READINESS
             $readinessCommand = $readinessCommand.Replace('__READINESS_ATTEMPTS__', [string]$readinessAttempts)
             $readinessCommand = $readinessCommand.Replace('__READINESS_CURL_TIMEOUT_SECONDS__', [string]$readinessCurlTimeoutSeconds)
             $readinessCommand = $readinessCommand.Replace('__READINESS_RETRY_DELAY_SECONDS__', [string]$readinessRetryDelaySeconds)
+            $readinessCommand = $readinessCommand -replace "`r`n?", "`n"
+            $readinessCommandBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($readinessCommand))
+            $readinessCommandLine = "set -o pipefail; printf '%s' '$readinessCommandBase64' | base64 -d | bash"
 
             Invoke-WslChecked -Arguments @(
                 "-d", $DistroName, "-u", "nixos", "--",
                 "bash", "-lc",
-                $readinessCommand
+                $readinessCommandLine
             ) -TimeoutSeconds $readinessTimeoutSeconds | Out-Null
         }
         catch {
