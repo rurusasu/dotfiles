@@ -148,8 +148,20 @@ ensure_nix() {
     printf '%s\n' "$feature_line" >>"$HOME/.config/nix/nix.conf"
 }
 
+validate_nix_darwin_shell_backups() {
+  local rc backup
+  for rc in "$BASHRC_PATH" "$ZSHRC_PATH"; do
+    backup="$rc.before-nix-darwin"
+    if [[ -d $backup && ! -L $backup ]]; then
+      dotfiles_die "Refusing to remove directory at nix-darwin backup path: $backup"
+    fi
+  done
+}
+
 preserve_shell_rc_for_nix_darwin() {
   local rc backup
+  validate_nix_darwin_shell_backups
+
   for rc in "$BASHRC_PATH" "$ZSHRC_PATH"; do
     backup="$rc.before-nix-darwin"
     if [[ -e $backup || -L $backup ]]; then

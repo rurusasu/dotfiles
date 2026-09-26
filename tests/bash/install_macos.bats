@@ -1284,6 +1284,28 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	! grep -q '^nix run .#darwin-rebuild -- switch' "$COMMAND_LOG"
 }
 
+@test "all shell rc backups are validated before any backup is removed" {
+	write_installed_stubs
+	mkdir -p "$(dirname "$FAKE_BASHRC")"
+	printf 'current bashrc\n' >"$FAKE_BASHRC"
+	printf 'stale bashrc backup\n' >"$FAKE_BASHRC.before-nix-darwin"
+	printf 'current zshrc\n' >"$FAKE_ZSHRC"
+	mkdir "$FAKE_ZSHRC.before-nix-darwin"
+	printf 'keep this directory\n' >"$FAKE_ZSHRC.before-nix-darwin/keep"
+
+	run_macos_installer
+
+	[ "$status" -ne 0 ]
+	grep -q '^stale bashrc backup$' "$FAKE_BASHRC.before-nix-darwin"
+	[ -d "$FAKE_ZSHRC.before-nix-darwin" ]
+	grep -q '^keep this directory$' "$FAKE_ZSHRC.before-nix-darwin/keep"
+	grep -q '^current bashrc$' "$FAKE_BASHRC"
+	grep -q '^current zshrc$' "$FAKE_ZSHRC"
+	! grep -q '^sudo </bin/rm>' "$COMMAND_LOG"
+	! grep -q '^sudo <mv>' "$COMMAND_LOG"
+	! grep -q '^nix run .#darwin-rebuild -- switch' "$COMMAND_LOG"
+}
+
 @test "running Docker Desktop is stopped when its engine is unavailable" {
 	write_installed_stubs
 	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
