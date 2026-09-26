@@ -1228,6 +1228,45 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
 
+@test "existing shell rc backups are refreshed before nix-darwin activation" {
+	write_installed_stubs
+	mkdir -p "$(dirname "$FAKE_BASHRC")"
+	printf 'current bashrc\n' >"$FAKE_BASHRC"
+	printf 'current zshrc\n' >"$FAKE_ZSHRC"
+	printf 'stale bashrc backup\n' >"$FAKE_BASHRC.before-nix-darwin"
+	printf 'stale zshrc backup\n' >"$FAKE_ZSHRC.before-nix-darwin"
+
+	run_macos_installer
+
+	[ "$status" -eq 0 ]
+	grep -q '^current bashrc$' "$FAKE_BASHRC.before-nix-darwin"
+	grep -q '^current zshrc$' "$FAKE_ZSHRC.before-nix-darwin"
+	! grep -q '^stale ' "$FAKE_BASHRC.before-nix-darwin"
+	! grep -q '^stale ' "$FAKE_ZSHRC.before-nix-darwin"
+	assert_log_order \
+		"sudo </bin/rm> <-f> <--> <$FAKE_BASHRC.before-nix-darwin>" \
+		"sudo </bin/rm> <-f> <--> <$FAKE_ZSHRC.before-nix-darwin>" \
+		"sudo <mv> <$FAKE_BASHRC> <$FAKE_BASHRC.before-nix-darwin>" \
+		"sudo <mv> <$FAKE_ZSHRC> <$FAKE_ZSHRC.before-nix-darwin>"
+}
+
+@test "orphaned shell rc backups are removed before nix-darwin activation" {
+	write_installed_stubs
+	mkdir -p "$(dirname "$FAKE_BASHRC")"
+	printf 'orphaned bashrc backup\n' >"$FAKE_BASHRC.before-nix-darwin"
+	printf 'orphaned zshrc backup\n' >"$FAKE_ZSHRC.before-nix-darwin"
+
+	run_macos_installer
+
+	[ "$status" -eq 0 ]
+	[ ! -e "$FAKE_BASHRC.before-nix-darwin" ]
+	[ ! -e "$FAKE_ZSHRC.before-nix-darwin" ]
+	assert_log_order \
+		"sudo </bin/rm> <-f> <--> <$FAKE_BASHRC.before-nix-darwin>" \
+		"sudo </bin/rm> <-f> <--> <$FAKE_ZSHRC.before-nix-darwin>" \
+		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
+}
+
 @test "running Docker Desktop is stopped when its engine is unavailable" {
 	write_installed_stubs
 	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'

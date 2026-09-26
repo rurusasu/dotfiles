@@ -151,12 +151,18 @@ ensure_nix() {
 preserve_shell_rc_for_nix_darwin() {
   local rc backup
   for rc in "$BASHRC_PATH" "$ZSHRC_PATH"; do
+    backup="$rc.before-nix-darwin"
+    if [[ -e $backup || -L $backup ]]; then
+      dotfiles_log "Removing existing nix-darwin backup $backup..."
+      sudo /bin/rm -f -- "$backup"
+    fi
+  done
+
+  for rc in "$BASHRC_PATH" "$ZSHRC_PATH"; do
     [[ -e $rc || -L $rc ]] || continue
     [[ -L $rc ]] && continue
 
     backup="$rc.before-nix-darwin"
-    [[ ! -e $backup && ! -L $backup ]] ||
-      dotfiles_die "Refusing to overwrite existing nix-darwin backup: $backup"
 
     dotfiles_log "Preserving existing $rc as $backup..."
     sudo mv "$rc" "$backup"
