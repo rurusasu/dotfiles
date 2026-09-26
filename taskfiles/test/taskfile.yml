@@ -12,6 +12,7 @@ tasks:
       - |-
         system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
         nix build ".#checks.${system}.nix-unit" --no-link --no-write-lock-file
+        nix build ".#checks.${system}.custom-package-builds" --no-link --no-write-lock-file
         nix build ".#checks.${system}.neovim-native" --no-link --no-write-lock-file
         nix build ".#checks.${system}.ghostty-config" --no-link --no-write-lock-file
 
@@ -26,6 +27,6 @@ tasks:
       - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -IncludeIntegration -ShowCoverage"
 
   test:bash:
-    desc: Run classified Bats contracts (runtime/artifact plus documented package-catalog exception)
+    desc: Run classified Bats runtime and artifact contracts
     cmds:
       - '{{if eq OS "darwin"}}sh -c ''export PATH=/opt/homebrew/bin:/opt/homebrew/sbin:$PATH; cd "$(cd {{.DOTFILES_PATH}} && pwd -P)" && bats tests/bash''{{else}}{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bats tests/bash"{{end}}'

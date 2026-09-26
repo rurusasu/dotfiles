@@ -62,6 +62,7 @@ let
   dedicatedBuildAndFixtureModules = [
     "bootstrap-nixos.nix"
     "neovim.nix"
+    "packages/custom-builds.nix"
     "hardware-configuration.nix"
   ];
   nixUnitModuleFiles = builtins.filter (

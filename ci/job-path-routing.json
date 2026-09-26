@@ -252,6 +252,7 @@
     {
       "patterns": [
         "nix/packages/**/*.nix",
+        "nix/tests/packages/**/*.nix",
         "nix/flakes/**/*.nix",
         "nix/lib/**/*.nix",
         "nix/home/**/*.nix",
