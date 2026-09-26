@@ -632,7 +632,15 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         for command, job in (
             ("nix flake check --no-build", nix_test),
             ("nix build .#checks.x86_64-linux.nix-unit --no-link", nix_test),
+            (
+                "nix build .#checks.x86_64-linux.custom-package-builds --no-link",
+                nix_test,
+            ),
             ("nix build .#checks.aarch64-darwin.nix-unit --no-link", darwin),
+            (
+                "nix build .#checks.aarch64-darwin.custom-package-builds --no-link",
+                darwin,
+            ),
         ):
             self.assertIn(command, readme)
             self.assertIn(command, job)
