@@ -6,14 +6,22 @@
 
 dotfiles_install_codex_npm() {
   local prefix="${CODEX_NPM_PREFIX:-$HOME/.local/npm}"
+  # Acceptance tests may provide an explicit offline npm fixture. Normal
+  # installs continue to resolve the npm executable from PATH.
+  local npm_command="${DOTFILES_NPM_COMMAND:-npm}"
 
-  command -v npm >/dev/null 2>&1 || {
+  if [[ $npm_command == */* ]]; then
+    [[ -x $npm_command ]] || {
+      printf 'Configured npm executable is not available: %s\n' "$npm_command" >&2
+      return 1
+    }
+  elif ! command -v "$npm_command" >/dev/null 2>&1; then
     printf 'npm is required to install the Codex CLI.\n' >&2
     return 1
-  }
+  fi
 
   mkdir -p "$prefix"
-  NPM_CONFIG_PREFIX="$prefix" npm install --global --no-audit --no-fund @openai/codex@latest
+  NPM_CONFIG_PREFIX="$prefix" "$npm_command" install --global --no-audit --no-fund @openai/codex@latest
   export PATH="$prefix/bin:$PATH"
   hash -r 2>/dev/null || true
 

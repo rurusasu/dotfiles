@@ -133,7 +133,7 @@ pkgs.testers.runNixOSTest {
 
     # The VM intentionally has no external DNS. Herdr's official installer is
     # covered by the platform adapter tests; keep this bootstrap fixture offline.
-    install = "su - nixos -c 'env PATH=/home/nixos/ci-bin:$PATH DOTFILES_ACCEPTANCE_PRELOADED_STORAGE_SEED_IMAGE=local/hermes-agent-gh:latest DOTFILES_SKIP_FLAKE_UPDATE=1 DOTFILES_SKIP_HERDR_INSTALL=1 DOTFILES_NIXOS_PREBUILT_SYSTEM=${nodes.machine.system.build.toplevel} DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_CHECKOUT_TARGET=/home/nixos/dotfiles /home/nixos/dotfiles/.github/e2e/run-bootstrap-acceptance.sh'"
+    install = "su - nixos -c 'env DOTFILES_NPM_COMMAND=/home/nixos/ci-bin/npm DOTFILES_ACCEPTANCE_PRELOADED_STORAGE_SEED_IMAGE=local/hermes-agent-gh:latest DOTFILES_SKIP_FLAKE_UPDATE=1 DOTFILES_SKIP_HERDR_INSTALL=1 DOTFILES_NIXOS_PREBUILT_SYSTEM=${nodes.machine.system.build.toplevel} DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_CHECKOUT_TARGET=/home/nixos/dotfiles /home/nixos/dotfiles/.github/e2e/run-bootstrap-acceptance.sh'"
     machine.succeed(install)
     machine.succeed("su - nixos -c 'bash /home/nixos/dotfiles/.github/e2e/start-bootstrap-runtime.sh'")
     machine.succeed(install)
