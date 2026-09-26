@@ -374,12 +374,12 @@ jobs:
           check direnv --version
           check unzip -v
           check 7z
-           check node --version
-           codex_prefix="$RUNNER_TEMP/codex-npm"
-           npm install --global --prefix "$codex_prefix" --no-audit --no-fund @openai/codex@latest
-           export PATH="$codex_prefix/bin:$PATH"
-           npm list --global --prefix "$codex_prefix" --depth=0 @openai/codex
-           check python --version
+          check node --version
+          codex_prefix="$RUNNER_TEMP/codex-npm"
+          npm install --global --prefix "$codex_prefix" --no-audit --no-fund @openai/codex@latest
+          export PATH="$codex_prefix/bin:$PATH"
+          npm list --global --prefix "$codex_prefix" --depth=0 @openai/codex
+          check python --version
           check go version
           check make --version
           check cmake --version
@@ -397,7 +397,7 @@ jobs:
           check starship --version
           check wezterm --version
           check op --version
-           check codex --version
+          check codex --version
           check gcloud version
           check kind version
           check kubectl version --client=true
