@@ -112,6 +112,14 @@ class CiJobRoutingTests(unittest.TestCase):
         self.assertNotIn("powershell_lint", selected)
         self.assertNotIn("fonts", selected)
 
+    def test_package_test_layers_route_to_package_consistency(self) -> None:
+        for path in (
+            "nix/tests/packages/catalog.nix",
+            "nix/tests/packages/custom-builds.nix",
+        ):
+            with self.subTest(path=path):
+                self.assertIn("package_catalog", self.selected(path))
+
     def test_workflow_yaml_is_linted_but_regular_yaml_is_not(self) -> None:
         self.assertIn("actionlint", self.selected(".github/workflows/example.yaml"))
         self.assertNotIn("actionlint", self.selected("docker/mlflow/compose.yml"))

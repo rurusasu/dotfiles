@@ -81,6 +81,10 @@
       "outputs": ["linux", "contract", "nix"]
     },
     {
+      "patterns": ["nix/tests/packages/**"],
+      "outputs": ["linux", "darwin", "contract", "nix", "package_catalog"]
+    },
+    {
       "patterns": ["nix/home/wsl.nix", "nix/hosts/wsl/**", "nix/modules/wsl/**"],
       "outputs": ["wsl", "contract", "nix"]
     },

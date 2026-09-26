@@ -25,10 +25,15 @@
 5. dotfile と秘密情報は `chezmoi/` と既存の secret 経路を使い、所有を重複させない。
 6. Nix 設定の変更は `nix flake check --all-systems --no-write-lock-file` と focused `nix-unit`
    build で検証する。Bats は installer、shell、外部プロセス、runtime 契約に限って実行する。
-   既存の `tests/bash/package_catalog.bats` だけは、`nix/tests/home/README.md` に完全分類した
-   一時的な catalog/Nix/source-shape 例外であり、`nixos_wsl_postinstall.bats` の `nix eval` は
+   package catalog の構造、provider metadata、Nix package 選択、source shape は
+   `nix/tests/packages/catalog.nix` の nix-unit が所有し、`tests/bash/package_catalog.bats` は
+   runtime/artifact の5ケースだけを保持する。`nixos_wsl_postinstall.bats` の `nix eval` は
    stubbed `nixos-rebuild` 境界内で選択 user と `--impure` 伝播を実 Nix eval で確認する
-   runtime/integration assertion に限る。新しい例外は追加しない。
+   runtime/integration assertion に限る。
+
+   Repository-owned custom derivations は `checks.*.custom-package-builds` を build して確認する。
+   この check は chatgpt、Dia、Hammerspoon、Neovim、Orca の supported system だけを対象にし、
+   upstream nixpkgs package 全体や privileged activation は実行しない。
 
 ホストの標準レイアウトは `nix/hosts/<host>/default.nix` と
 `nix/hosts/<host>/configuration.nix` の組み合わせです。Darwin、native NixOS、NixOS-WSL

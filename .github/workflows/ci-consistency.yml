@@ -55,6 +55,12 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
 
+      - name: Run Nix-native package tests
+        run: nix build .#checks.x86_64-linux.nix-unit --no-link
+
+      - name: Build repository custom package derivations
+        run: nix build .#checks.x86_64-linux.custom-package-builds --no-link
+
       - name: Install and verify Codex npm package
         run: |
           set -euo pipefail
