@@ -259,7 +259,8 @@ EOF
 	second_store="$BATS_TEST_TMPDIR/store-profile-2"
 	guest_log="$BATS_TEST_TMPDIR/guest.log"
 	guest_repo="$BATS_TEST_TMPDIR/guest-repo"
-	mkdir -p "$bin" "$store/bin" "$second_store/bin" "$guest_repo/chezmoi"
+	mkdir -p "$bin" "$store/bin" "$second_store/bin" "$guest_repo/chezmoi" "$guest_repo/scripts/sh"
+	cp "$REPO_ROOT/scripts/sh/codex-npm.sh" "$guest_repo/scripts/sh/codex-npm.sh"
 	for command in git chezmoi nvim node npm; do
 		cat >"$store/bin/$command" <<EOF
 #!/usr/bin/env bash
