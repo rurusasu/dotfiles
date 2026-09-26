@@ -148,15 +148,33 @@ ensure_nix() {
     printf '%s\n' "$feature_line" >>"$HOME/.config/nix/nix.conf"
 }
 
+validate_nix_darwin_shell_backups() {
+  local rc backup
+  for rc in "$BASHRC_PATH" "$ZSHRC_PATH"; do
+    backup="$rc.before-nix-darwin"
+    if [[ -d $backup && ! -L $backup ]]; then
+      dotfiles_die "Refusing to remove directory at nix-darwin backup path: $backup"
+    fi
+  done
+}
+
 preserve_shell_rc_for_nix_darwin() {
   local rc backup
+  validate_nix_darwin_shell_backups
+
+  for rc in "$BASHRC_PATH" "$ZSHRC_PATH"; do
+    backup="$rc.before-nix-darwin"
+    if [[ -e $backup || -L $backup ]]; then
+      dotfiles_log "Removing existing nix-darwin backup $backup..."
+      sudo /bin/rm -f -- "$backup"
+    fi
+  done
+
   for rc in "$BASHRC_PATH" "$ZSHRC_PATH"; do
     [[ -e $rc || -L $rc ]] || continue
     [[ -L $rc ]] && continue
 
     backup="$rc.before-nix-darwin"
-    [[ ! -e $backup && ! -L $backup ]] ||
-      dotfiles_die "Refusing to overwrite existing nix-darwin backup: $backup"
 
     dotfiles_log "Preserving existing $rc as $backup..."
     sudo mv "$rc" "$backup"
