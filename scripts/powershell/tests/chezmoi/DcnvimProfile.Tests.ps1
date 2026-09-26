@@ -182,7 +182,7 @@ Describe 'PowerShell codex profile wrapper' {
         $script:oldLocalAppData = $env:LOCALAPPDATA
         $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppDataWithoutCodexPackage'
 
-        function global:codex.exe {
+        function global:codex.cmd {
             $script:codexArgs = [string[]]$args
             $script:termDuringCodex = $env:TERM
             $script:keyboardEnhancementDuringCodex = $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT
@@ -199,7 +199,7 @@ Describe 'PowerShell codex profile wrapper' {
                 "Invoke-CodexCli",
                 "Resolve-DotfilesCodexExecutable",
                 "Reset-DotfilesTerminalInputMode",
-                "codex.exe"
+                "codex.cmd"
             )) {
             Remove-Item "Function:\$functionName" -ErrorAction SilentlyContinue
         }
@@ -242,26 +242,27 @@ Describe 'PowerShell codex profile wrapper' {
         $codexBlock | Should -Not -Match 'opArgs'
     }
 
-    It 'should prefer the current winget package executable over a stale WinGet Links copy' {
-        $oldLocalAppData = $env:LOCALAPPDATA
+    It 'should resolve the npm-installed codex command' {
+        $oldAppData = $env:APPDATA
         try {
-            $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppData'
-            $packageDir = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\OpenAI.Codex_Microsoft.Winget.Source_8wekyb3d8bbwe'
-            $packageExe = Join-Path $packageDir 'codex-x86_64-pc-windows-msvc.exe'
-            $linksDir = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
-            $linksExe = Join-Path $linksDir 'codex.exe'
-            New-Item -ItemType Directory -Path $packageDir, $linksDir -Force | Out-Null
-            Set-Content -LiteralPath $packageExe -Encoding ascii -Value 'new'
-            Set-Content -LiteralPath $linksExe -Encoding ascii -Value 'old'
+            $env:APPDATA = Join-Path $TestDrive 'AppData'
+            $npmDir = Join-Path $env:APPDATA 'npm'
+            $npmCommand = Join-Path $npmDir 'codex.cmd'
+            New-Item -ItemType Directory -Path $npmDir -Force | Out-Null
+            Set-Content -LiteralPath $npmCommand -Encoding ascii -Value '@echo off'
 
-            Resolve-DotfilesCodexExecutable | Should -Be $packageExe
+            Mock Get-Command {
+                [pscustomobject]@{ Source = $npmCommand; Path = $npmCommand; Name = 'codex.cmd' }
+            } -ParameterFilter { $Name -eq 'codex.cmd' }
+
+            Resolve-DotfilesCodexExecutable | Should -Be $npmCommand
         }
         finally {
-            if ($oldLocalAppData) {
-                $env:LOCALAPPDATA = $oldLocalAppData
+            if ($oldAppData) {
+                $env:APPDATA = $oldAppData
             }
             else {
-                Remove-Item Env:\LOCALAPPDATA -ErrorAction SilentlyContinue
+                Remove-Item Env:\APPDATA -ErrorAction SilentlyContinue
             }
         }
     }

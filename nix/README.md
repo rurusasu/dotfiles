@@ -36,5 +36,5 @@
 
 ## Codex CLI
 
-Codex の Nix 更新方針と Windows の winget との責務分担は
+Codex CLI の全 OS npm 統一方針と、別製品であるデスクトップ AppX の責務分担は
 [`docs/nix/codex-cli.md`](../docs/nix/codex-cli.md) を参照する。

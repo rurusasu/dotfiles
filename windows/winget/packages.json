@@ -97,31 +97,6 @@
           }
         },
         {
-          "PackageIdentifier": "OpenAI.Codex",
-          "directInstaller": {
-            "destination": "%LOCALAPPDATA%\\Programs\\Codex",
-            "executable": "bin\\codex.exe",
-            "sha256": "f45c273b7835c192aaa9cef5b93aa9528966ac7301444632de80a565a9bf14e8",
-            "timeoutSeconds": 900,
-            "type": "archive",
-            "url": "https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-package-x86_64-pc-windows-msvc.tar.gz"
-          },
-          "installArgs": ["--scope", "user"],
-          "installTimeoutSeconds": 900,
-          "pathEntries": [
-            "%LOCALAPPDATA%\\Programs\\Codex\\bin",
-            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"
-          ],
-          "portableLink": {
-            "linkName": "codex.exe",
-            "targetPattern": "codex.exe"
-          },
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "codex"
-          }
-        },
-        {
           "PackageIdentifier": "direnv.direnv",
           "directInstaller": {
             "destination": "%LOCALAPPDATA%\\Programs\\direnv",

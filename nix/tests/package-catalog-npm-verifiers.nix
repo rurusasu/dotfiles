@@ -8,6 +8,26 @@ let
   };
 in
 {
+  testCodexIsAnAllPlatformNpmPackageAndUsesCliVerifier = {
+    expr = {
+      mapping = sets.npmMap.codex;
+      verifier = sets.npmVerify.codex;
+      providers = builtins.map (platform: sets.supportReport.codex.${platform}.provider) [
+        "windows"
+        "darwin"
+        "linux"
+      ];
+    };
+    expected = {
+      mapping = "@openai/codex";
+      verifier = {
+        command = "codex";
+        args = [ "--version" ];
+      };
+      providers = [ "npm" "npm" "npm" ];
+    };
+  };
+
   testDevcontainerNpmPackageAndVerifier = {
     expr = {
       nixPackageSelected = builtins.elem pkgs.devcontainer sets.all;

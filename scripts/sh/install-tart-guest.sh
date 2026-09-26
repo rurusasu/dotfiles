@@ -3,6 +3,9 @@ set -euo pipefail
 
 REPO_ROOT="${1:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)}"
 
+# shellcheck source=/dev/null
+. "$REPO_ROOT/scripts/sh/codex-npm.sh"
+
 load_nix() {
   if [[ -e /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]]; then
     # shellcheck source=/dev/null
@@ -53,7 +56,7 @@ install_cli_profile() {
   mv -f -- "$temporary_link" "$profile_link"
   trap - RETURN
 
-  for command in git chezmoi nvim codex; do
+  for command in git chezmoi nvim; do
     target="$HOME/.local/bin/$command"
     [[ ! -e $target || -L $target ]] || {
       printf 'tart-guest: refusing to replace unmanaged command: %s\n' "$target" >&2
@@ -81,5 +84,6 @@ apply_dotfiles() {
 
 ensure_nix
 install_cli_profile
+dotfiles_install_codex_npm
 install_wezterm
 apply_dotfiles

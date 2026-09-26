@@ -29,8 +29,6 @@ in
     expr = {
       wingetPathEntries = {
         nodejs = sets.wingetPathEntries.nodejs;
-        codex = sets.wingetPathEntries.codex;
-        "OpenAI.Codex" = sets.wingetPathEntries."OpenAI.Codex";
         "Task.Task" = sets.wingetPathEntries."Task.Task";
       }
       // verifierPackageRoots
@@ -38,24 +36,12 @@ in
         _1password-cli = sets.wingetPathEntries._1password-cli;
         "AgileBits.1Password.CLI" = sets.wingetPathEntries."AgileBits.1Password.CLI";
       };
-      wingetPortableLinks = {
-        "OpenAI.Codex" = sets.wingetPortableLinksById."OpenAI.Codex";
-      };
-      codexDirectInstaller = sets.wingetDirectInstallers.codex;
       onePasswordPortableLinkAliasAbsent =
         !(builtins.hasAttr "_1password-cli" sets.wingetPortableLinksById);
     };
     expected = {
       wingetPathEntries = {
         nodejs = [ "%ProgramFiles%\\nodejs" ];
-        codex = [
-          "%LOCALAPPDATA%\\Programs\\Codex\\bin"
-          "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"
-        ];
-        "OpenAI.Codex" = [
-          "%LOCALAPPDATA%\\Programs\\Codex\\bin"
-          "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"
-        ];
         "Task.Task" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Task.Task*" ];
         "hadolint.hadolint" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\hadolint.hadolint*" ];
         "Artempyanykh.Marksman" = [
@@ -77,18 +63,6 @@ in
         "AgileBits.1Password.CLI" = [
           "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"
         ];
-      };
-      wingetPortableLinks."OpenAI.Codex" = {
-        linkName = "codex.exe";
-        targetPattern = "codex.exe";
-      };
-      codexDirectInstaller = {
-        type = "archive";
-        url = "https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-package-x86_64-pc-windows-msvc.tar.gz";
-        sha256 = "f45c273b7835c192aaa9cef5b93aa9528966ac7301444632de80a565a9bf14e8";
-        destination = "%LOCALAPPDATA%\\Programs\\Codex";
-        executable = "bin\\codex.exe";
-        timeoutSeconds = 900;
       };
       onePasswordPortableLinkAliasAbsent = true;
     };

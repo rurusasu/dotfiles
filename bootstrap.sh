@@ -23,6 +23,9 @@ export PATH="$HOME/.local/bin:$HOME/.local/npm/bin:$PATH"
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 
+# shellcheck source=/dev/null
+. "$ROOT/scripts/sh/codex-npm.sh"
+
 log() { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*" >&2; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -58,16 +61,8 @@ elif ! have apt-get; then
 fi
 
 # ── Codex CLI ──────────────────────────────────────────────────────────
-if ! have codex; then
-  if ! have npm; then
-    log "npm is required to install Codex"
-    exit 1
-  fi
-  log "installing Codex CLI to ~/.local/npm"
-  mkdir -p "$HOME/.local/npm"
-  NPM_CONFIG_PREFIX="$HOME/.local/npm" \
-    npm install --global --no-audit --no-fund @openai/codex
-fi
+log "installing/updating Codex CLI from npm to ~/.local/npm"
+dotfiles_install_codex_npm
 
 # ── chezmoi binary (best effort) ────────────────────────────────────────
 # devcontainer-cli が dotfiles リポを ~/.dotfiles に clone しているので、

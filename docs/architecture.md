@@ -259,7 +259,6 @@ $vhdPath = $context.SharedData["VhdPath"]
 | ----- | ----- | ----- | --------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | 5     | 1     | No    | Winget          | [Handler.Winget.ps1](../scripts/powershell/handlers/Handler.Winget.ps1)                   | winget パッケージ管理                             |
 | 5     | 2     | Yes   | WslInstall      | [Handler.WslInstall.ps1](../scripts/powershell/handlers/Handler.WslInstall.ps1)           | WSL コンポーネントのインストール                  |
-| 6     | 1     | No    | Codex           | [Handler.Codex.ps1](../scripts/powershell/handlers/Handler.Codex.ps1)                     | Codex CLI リンクと MCP PATH 設定                  |
 | 6     | 1     | No    | Npm             | [Handler.Npm.ps1](../scripts/powershell/handlers/Handler.Npm.ps1)                         | npm グローバルパッケージ管理                      |
 | 7     | 1     | No    | Pnpm            | [Handler.Pnpm.ps1](../scripts/powershell/handlers/Handler.Pnpm.ps1)                       | pnpm グローバルパッケージ管理                     |
 | 8     | 1     | No    | Bun             | [Handler.Bun.ps1](../scripts/powershell/handlers/Handler.Bun.ps1)                         | Bun シンボリックリンク作成                        |

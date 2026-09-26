@@ -10,6 +10,13 @@
       }
     },
     {
+      "name": "@openai/codex",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "codex"
+      }
+    },
+    {
       "name": "agent-browser@0.38.1",
       "verifyCommand": {
         "args": ["--version"],

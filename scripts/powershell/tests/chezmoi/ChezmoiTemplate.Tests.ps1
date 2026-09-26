@@ -848,9 +848,10 @@ Describe 'chezmoi テンプレート バリデーション' {
 
             $content | Should -Match '"%OP_EXE%" run --account "%PERSONAL_ACCOUNT%" --env-file="%PERSONAL_SECRETS_ENV%"' -Because 'direct codex CLI should satisfy personal GitHub MCP startup auth'
             $content | Should -Match '"%OP_EXE%" run --account "%WORK_ACCOUNT%" --env-file="%WORK_SECRETS_ENV%"' -Because 'direct codex CLI should inherit work GitHub token from the company account'
-            $content | Should -Match 'WinGet\\Links\\codex\.exe' -Because 'the wrapper should call the real Codex executable instead of recursing through PATH'
+            $content | Should -Match '%APPDATA%\\npm\\codex\.cmd' -Because 'the wrapper should call the npm-installed Codex command'
             $content | Should -Match 'CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT' -Because 'direct CLI should keep the existing conservative terminal input setting'
             $content | Should -Match '%SystemRoot%\\System32\\where\.exe' -Because 'Codex shells can have a trimmed PATH without System32'
+            $content | Should -Match '%WHERE_EXE%.*codex\.cmd' -Because 'the wrapper should support a non-default npm prefix'
             $content | Should -Match 'WinGet\\Links\\op\.exe' -Because 'direct CLI can run before shell PATH repair'
             $content | Should -Match 'if "%GITHUB_WORK_TOKEN%"=="" set "NEEDS_SECRET_LOAD=1"' -Because 'direct codex CLI should inject work secrets even when the personal token is already present'
         }

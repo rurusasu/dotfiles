@@ -282,8 +282,8 @@ jobs:
     needs: [changes, nix-lint]
     if: ${{ needs.changes.outputs.nix == 'true' && needs.nix-lint.result == 'success' }}
     runs-on: ubuntu-24.04
-    # The full profile now builds the independently packaged Codex CLI. A cold
-    # runner can legitimately need more than an hour for the Rust/V8 build.
+    # The full profile contains the common Node.js runtime; the Codex CLI is
+    # installed and verified separately from npm in the smoke-test step.
     timeout-minutes: 120
     env:
       NIX_CONFIG: |
@@ -374,8 +374,12 @@ jobs:
           check direnv --version
           check unzip -v
           check 7z
-          check node --version
-          check python --version
+           check node --version
+           codex_prefix="$RUNNER_TEMP/codex-npm"
+           npm install --global --prefix "$codex_prefix" --no-audit --no-fund @openai/codex@latest
+           export PATH="$codex_prefix/bin:$PATH"
+           npm list --global --prefix "$codex_prefix" --depth=0 @openai/codex
+           check python --version
           check go version
           check make --version
           check cmake --version
@@ -393,7 +397,7 @@ jobs:
           check starship --version
           check wezterm --version
           check op --version
-          check codex --version
+           check codex --version
           check gcloud version
           check kind version
           check kubectl version --client=true

@@ -194,7 +194,7 @@ class SetupHandlerBase {
     [bool]$RequiresAdmin = $false
 
     # 実行フェーズ (1 = User Scope, 2 = Admin/後半)
-    # Phase 1: winget, codex, npm, pnpm
+    # Phase 1: winget, npm, pnpm
     # Phase 2: chezmoi, nix-rebuild, wsl-config, docker, vscode-server, nixos-wsl, vhd-manager
     [int]$Phase = 2
 

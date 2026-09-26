@@ -8,8 +8,14 @@ let
   };
 in
 {
-  testCodexCatalogIncludesInjectedPackage = {
-    expr = builtins.elem pkgs.hello sets.llm;
-    expected = true;
+  testCodexCatalogDoesNotInjectAHostPackage = {
+    expr = {
+      selected = builtins.elem pkgs.hello sets.all;
+      provider = sets.supportReport.codex.linux.provider;
+    };
+    expected = {
+      selected = false;
+      provider = "npm";
+    };
   };
 }

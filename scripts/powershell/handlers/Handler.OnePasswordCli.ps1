@@ -11,7 +11,7 @@
     WindowsApps は OS 管理領域のため変更しない。
 
 .NOTES
-    Order = 9 (Winget/Codex/Bun の後、Chezmoi の前)
+    Order = 9 (Winget/Bun の後、Chezmoi の前)
 #>
 
 $libPath = Split-Path -Parent $PSScriptRoot

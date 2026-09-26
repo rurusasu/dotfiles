@@ -10,7 +10,7 @@
 {
   pkgs,
   lib,
-  codexPackage,
+  codexPackage ? null,
 }:
 let
   sets = import ./sets.nix {

@@ -55,6 +55,7 @@ tasks:
     desc: Update inputs, activate NixOS, and upgrade the Nix profile
     cmds:
       - task: rebuild
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && source scripts/sh/codex-npm.sh && dotfiles_install_codex_npm"'
       - '{{.WSL}}bash -lc "nix profile upgrade ''.*'' || nix profile install {{.DOTFILES_PATH}}#default"'
 
   rebuild:

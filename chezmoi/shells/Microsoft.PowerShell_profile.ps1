@@ -36,27 +36,22 @@ function Reset-DotfilesTerminalInputMode {
 }
 
 function Resolve-DotfilesCodexExecutable {
-    if ($env:LOCALAPPDATA) {
-        $packagesBase = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
-        foreach ($packageDir in @(
-                Get-ChildItem -LiteralPath $packagesBase -Directory -Filter "OpenAI.Codex_*" -ErrorAction SilentlyContinue |
-                    Sort-Object LastWriteTime -Descending
-            )) {
-            foreach ($fileName in @("codex-x86_64-pc-windows-msvc.exe", "codex.exe")) {
-                $candidate = Join-Path $packageDir.FullName $fileName
-                if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-                    return $candidate
-                }
+    foreach ($commandName in @("codex.cmd", "codex.exe")) {
+        $codexCommand = Get-Command $commandName -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($codexCommand) {
+            if ($codexCommand.Source) {
+                return $codexCommand.Source
             }
+
+            if ($codexCommand.Path) {
+                return $codexCommand.Path
+            }
+
+            return $codexCommand.Name
         }
     }
 
-    $codexCommand = Get-Command codex.exe -ErrorAction Stop | Select-Object -First 1
-    if ($codexCommand.Source) {
-        return $codexCommand.Source
-    }
-
-    return $codexCommand.Name
+    throw "npm-installed Codex CLI was not found. Install @openai/codex with npm."
 }
 
 function Invoke-CodexCli {
