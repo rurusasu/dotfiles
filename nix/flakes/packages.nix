@@ -4,7 +4,7 @@
 #   nix profile install .#minimal   (core only)
 #   nix profile install .#full      (everything, unfree allowed)
 #   nix profile install .#core      (individual set)
-#   nix profile install .#tart-minimal (Tart: git + chezmoi + neovim + codex)
+#   nix profile install .#tart-minimal (Tart: git + chezmoi + neovim + Node.js)
 #   nix build .#winget-export       (generate Windows package JSON)
 { inputs, ... }:
 {
@@ -24,29 +24,21 @@
           config.allowUnfree = true;
         }).extend
           workmuxOverlay;
-      codexPackage = inputs."llm-agents".packages.${pkgs.stdenv.hostPlatform.system}.codex;
       sets = import ../packages/sets.nix {
         pkgs = pkgs.extend workmuxOverlay;
         inherit lib;
-        inherit codexPackage;
       };
       unfreeSets = import ../packages/sets.nix {
         pkgs = unfreePkgs;
         inherit lib;
-        inherit codexPackage;
       };
       packageSupportReport = import ../packages/support-report.nix {
         pkgs = unfreePkgs;
         inherit lib;
-        inherit codexPackage;
       };
     in
     {
       packages = {
-        # Expose the independently updated Codex derivation for version checks
-        # and direct installs in addition to the catalog build environments.
-        codex = codexPackage;
-
         # Main package sets
         default = pkgs.buildEnv {
           name = "dotfiles-default";
@@ -93,7 +85,7 @@
 
         # Windows package export
         winget-export = import ../packages/winget.nix {
-          inherit pkgs lib codexPackage;
+          inherit pkgs lib;
         };
         package-support-report = packageSupportReport;
       }

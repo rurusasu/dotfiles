@@ -16,22 +16,16 @@ if not exist "%OP_EXE%" (
 )
 :found_op
 
-set "CODEX_EXE="
-for /d %%I in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\OpenAI.Codex_*") do (
-  if not defined CODEX_EXE if exist "%%~fI\codex-x86_64-pc-windows-msvc.exe" set "CODEX_EXE=%%~fI\codex-x86_64-pc-windows-msvc.exe"
-  if not defined CODEX_EXE if exist "%%~fI\codex.exe" set "CODEX_EXE=%%~fI\codex.exe"
-)
-if not defined CODEX_EXE set "CODEX_EXE=%LOCALAPPDATA%\Microsoft\WinGet\Links\codex.exe"
+set "CODEX_EXE=%APPDATA%\npm\codex.cmd"
 if not exist "%CODEX_EXE%" (
-  for /f "delims=" %%I in ('"%WHERE_EXE%" codex.exe 2^>nul') do (
-    set "CODEX_EXE=%%I"
-    goto :found_codex
+  set "CODEX_EXE="
+  for /f "delims=" %%I in ('"%WHERE_EXE%" codex.cmd 2^>nul') do (
+    if /i not "%%~fI"=="%~f0" if not defined CODEX_EXE set "CODEX_EXE=%%~fI"
   )
 )
 
-:found_codex
 if not exist "%CODEX_EXE%" (
-  echo Unable to locate codex.exe 1>&2
+  echo Unable to locate the npm-installed codex.cmd 1>&2
   exit /b 1
 )
 

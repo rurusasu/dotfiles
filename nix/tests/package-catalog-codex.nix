@@ -5,14 +5,17 @@ let
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
-    codexPackage = inputs.llm-agents.packages.${system}.codex;
+    codexPackage = pkgs.hello;
   };
   support = sets.supportReport.codex;
 in
 {
-  testCodexSupportMetadataRecordsExternalProvider = {
+  testCodexUsesNpmOnEverySupportedPlatform = {
     expr = {
       providerErrors = sets.providerErrors;
+      nixPackageSelected = builtins.elem pkgs.hello sets.all;
+      npmMapping = sets.npmMap.codex;
+      npmVerify = sets.npmVerify.codex;
       support = {
         windows = {
           inherit (support.windows) provider source identity;
@@ -27,27 +30,27 @@ in
     };
     expected = {
       providerErrors = [ ];
+      nixPackageSelected = false;
+      npmMapping = "@openai/codex";
+      npmVerify = {
+        command = "codex";
+        args = [ "--version" ];
+      };
       support = {
         windows = {
-          provider = "winget";
-          source = "winget";
-          identity = "OpenAI.Codex";
+          provider = "npm";
+          source = "npm";
+          identity = "@openai/codex";
         };
         darwin = {
-          provider = "nix";
-          source = "llm-agents.nix";
-          identity = {
-            command = "codex";
-            versionArgs = [ "--version" ];
-          };
+          provider = "npm";
+          source = "npm";
+          identity = "@openai/codex";
         };
         linux = {
-          provider = "nix";
-          source = "llm-agents.nix";
-          identity = {
-            command = "codex";
-            versionArgs = [ "--version" ];
-          };
+          provider = "npm";
+          source = "npm";
+          identity = "@openai/codex";
         };
       };
     };

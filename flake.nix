@@ -1,6 +1,4 @@
 {
-  # llm-agents.nix publishes pre-built Codex outputs so first-time NixOS and
-  # NixOS-WSL activations do not compile the Rust/V8 package from source.
   nixConfig = {
     extra-substituters = [
       "https://cache.numtide.com"
@@ -52,19 +50,12 @@
       url = "github:raine/workmux";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # Codex is updated independently from nixpkgs by the maintained
-    # llm-agents.nix package set. Keep its nixpkgs input independent so the
-    # package uses the nixpkgs revision it is tested against.
-    llm-agents.url = "github:numtide/llm-agents.nix";
     hermes-agent = {
       url = "github:NousResearch/hermes-agent/d337b736aa1e8ebecfab043842d13e4a2d2f48a3";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-parts.follows = "flake-parts";
       inputs.home-manager.follows = "home-manager";
     };
-    # nix-unit runs in a network-isolated builder; expose the nested source so
-    # its package-evaluation tests can receive it as an input override.
-    bun2nix.follows = "llm-agents/bun2nix";
   };
 
   outputs =

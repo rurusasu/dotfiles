@@ -119,6 +119,13 @@ case " $* " in
 esac
 '
 	write_stub verify-environment 'printf "verify-environment %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub npm '
+prefix="${NPM_CONFIG_PREFIX:-$HOME/.local/npm}"
+mkdir -p "$prefix/bin"
+printf "npm %s prefix=%s\n" "$*" "$prefix" >>"$COMMAND_LOG"
+printf "#!/usr/bin/env bash\nexit 0\n" >"$prefix/bin/codex"
+chmod +x "$prefix/bin/codex"
+'
 	write_stub sg '
 printf "sg %s\n" "$*" >>"$COMMAND_LOG"
 [ "${2:-}" = "-c" ]
@@ -199,6 +206,7 @@ assert_log_order() {
 	assert_log_order \
 		"args=flake update --flake $REPO_ROOT" \
 		"switch --flake .#ubuntu --sudo" \
+		"npm install --global --no-audit --no-fund @openai/codex@latest" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"verify-environment --nix-only"
@@ -421,6 +429,7 @@ fi
 		"nix flake update --flake $REPO_ROOT" \
 		"homeConfigurations" \
 		"home-manager-activate" \
+		"npm install --global --no-audit --no-fund @openai/codex@latest" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force"
 	! grep -q '^docker ' "$COMMAND_LOG"

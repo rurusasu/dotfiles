@@ -5,7 +5,7 @@ let
   Workmux = import ../flakes/lib/workmux.nix { inherit inputs; };
   workmuxOverlay = Workmux.mkOverlay (_: inputs.workmux.packages.${system}.default);
   catalogPkgs = pkgs.extend workmuxOverlay;
-  codexPackage = inputs.llm-agents.packages.${system}.codex;
+  codexPackage = pkgs.hello;
   sets = import ../packages/sets.nix {
     pkgs = catalogPkgs;
     lib = pkgs.lib;
@@ -23,7 +23,7 @@ in
       "git"
       "chezmoi"
       "neovim"
-      "codex"
+      "nodejs"
     ];
   };
 

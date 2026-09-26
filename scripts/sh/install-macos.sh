@@ -14,6 +14,8 @@ export OP_BIOMETRIC_UNLOCK_ENABLED
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
 # shellcheck source=/dev/null
+. "$ROOT/scripts/sh/codex-npm.sh"
+# shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-display.sh"
 
 HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/local-ai-services/compose.yml"
@@ -997,6 +999,8 @@ finish_macos_install() {
     'Preserve an unmanaged WezTerm installation if one exists.' migrate_unmanaged_wezterm_install
   dotfiles_step 'Applying macOS packages and settings' \
     'Download or build packages, then activate nix-darwin, Homebrew, and Home Manager. sudo may request your password.' apply_darwin_system
+  dotfiles_step 'Installing Codex CLI from npm' \
+    'Install the user-local npm package so Codex updates use npm.' dotfiles_install_codex_npm
   dotfiles_step 'Checking Homebrew directories' \
     'Verify application CLI link directories after activation.' ensure_homebrew_cask_link_directories
   if ((DOTFILES_WITH_DOCKER == 1)); then

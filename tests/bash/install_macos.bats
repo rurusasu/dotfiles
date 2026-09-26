@@ -116,6 +116,13 @@ esac
 exit 0
 '
 	write_stub open 'printf "open %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub npm '
+prefix="${NPM_CONFIG_PREFIX:-$HOME/.local/npm}"
+mkdir -p "$prefix/bin"
+printf "npm %s prefix=%s\n" "$*" "$prefix" >>"$COMMAND_LOG"
+printf "#!/usr/bin/env bash\nexit 0\n" >"$prefix/bin/codex"
+chmod +x "$prefix/bin/codex"
+'
 	write_stub migrate-darwin-provider 'printf "migrate-darwin-provider %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub brew '
 if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions &&
@@ -1816,6 +1823,7 @@ printf "%s\n" "$DOCKER_APP"
 		"$HOME/.dotfiles/docker/hermes-service"
 	cp "$INSTALLER" "$HOME/.dotfiles/scripts/sh/install-macos.sh"
 	cp "$COMMON_INSTALLER" "$HOME/.dotfiles/scripts/sh/install-common.sh"
+	cp "$REPO_ROOT/scripts/sh/codex-npm.sh" "$HOME/.dotfiles/scripts/sh/codex-npm.sh"
 	cp "$REPO_ROOT/scripts/sh/install-display.sh" "$HOME/.dotfiles/scripts/sh/install-display.sh"
 	cp "$HERMES_INSTALLER" "$HOME/.dotfiles/scripts/sh/hermes-agent.sh"
 	cp "$REPO_ROOT/Taskfile.yml" "$HOME/.dotfiles/Taskfile.yml"

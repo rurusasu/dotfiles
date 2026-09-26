@@ -36,7 +36,7 @@ let
     (import ../packages/sets.nix {
       inherit pkgs;
       inherit (pkgs) lib;
-      codexPackage = inputs."llm-agents".packages.${system}.codex;
+      codexPackage = pkgs.hello;
     }).hostPackages;
 
   includesHostPackages =

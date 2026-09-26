@@ -53,6 +53,19 @@ let
       chmod 0755 usr/local/bin/hermes-storage-ownership
     '';
   };
+
+  # The NixOS VM intentionally has no external DNS. Keep the acceptance test
+  # focused on the npm installation boundary with a local npm fixture; real
+  # registry access is covered by the Linux, macOS, Windows, and consistency
+  # jobs.
+  offlineNpm = pkgs.writeShellScript "dotfiles-offline-npm" ''
+    #!/bin/sh
+    set -eu
+    prefix="''${NPM_CONFIG_PREFIX:-$HOME/.local/npm}"
+    mkdir -p "$prefix/bin"
+    printf '#!/bin/sh\nprintf "codex 0.0.0-offline\\n"\n' > "$prefix/bin/codex"
+    chmod 0755 "$prefix/bin/codex"
+  '';
 in
 pkgs.testers.runNixOSTest {
   name = "bootstrap-nixos-vm";
@@ -116,10 +129,11 @@ pkgs.testers.runNixOSTest {
     machine.succeed("docker load < ${storageSeedImage}")
     machine.succeed("cp -r ${dotfilesSource} /home/nixos/dotfiles")
     machine.succeed("chmod -R u+w /home/nixos/dotfiles && chown -R nixos:users /home/nixos/dotfiles")
+    machine.succeed("install -d /home/nixos/ci-bin && install -m 0755 ${offlineNpm} /home/nixos/ci-bin/npm")
 
     # The VM intentionally has no external DNS. Herdr's official installer is
     # covered by the platform adapter tests; keep this bootstrap fixture offline.
-    install = "su - nixos -c 'env DOTFILES_ACCEPTANCE_PRELOADED_STORAGE_SEED_IMAGE=local/hermes-agent-gh:latest DOTFILES_SKIP_FLAKE_UPDATE=1 DOTFILES_SKIP_HERDR_INSTALL=1 DOTFILES_NIXOS_PREBUILT_SYSTEM=${nodes.machine.system.build.toplevel} DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_CHECKOUT_TARGET=/home/nixos/dotfiles /home/nixos/dotfiles/.github/e2e/run-bootstrap-acceptance.sh'"
+    install = "su - nixos -c 'env DOTFILES_NPM_COMMAND=/home/nixos/ci-bin/npm DOTFILES_ACCEPTANCE_PRELOADED_STORAGE_SEED_IMAGE=local/hermes-agent-gh:latest DOTFILES_SKIP_FLAKE_UPDATE=1 DOTFILES_SKIP_HERDR_INSTALL=1 DOTFILES_NIXOS_PREBUILT_SYSTEM=${nodes.machine.system.build.toplevel} DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_CHECKOUT_TARGET=/home/nixos/dotfiles /home/nixos/dotfiles/.github/e2e/run-bootstrap-acceptance.sh'"
     machine.succeed(install)
     machine.succeed("su - nixos -c 'bash /home/nixos/dotfiles/.github/e2e/start-bootstrap-runtime.sh'")
     machine.succeed(install)

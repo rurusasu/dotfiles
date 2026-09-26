@@ -21,7 +21,6 @@
         flake-parts
         home-manager
         hermes-agent
-        llm-agents
         nix-darwin
         nix-homebrew
         nix-unit
@@ -33,10 +32,6 @@
         treefmt-nix
         workmux
         ;
-      # nix-unit evaluates flake inputs in its sandbox; provide llm-agents' nested
-      # bun2nix source explicitly so evaluation does not need a network fetch.
-      "llm-agents/bun2nix" = inputs.bun2nix;
-      "llm-agents/nixpkgs" = inputs.nixpkgs;
     };
 
     nix-unit.tests =
@@ -52,9 +47,7 @@
       // (import ../tests/package-catalog-discord.nix { inherit inputs; })
       // (import ../tests/package-catalog-codex.nix { inherit inputs; })
       // (import ../tests/package-catalog-codex-injection.nix { inherit inputs; })
-      // (import ../tests/package-catalog-codex-output.nix { inherit inputs; })
       // (import ../tests/package-catalog-hermes-default-output.nix { inherit inputs; })
-      // (import ../tests/llm-agents-codex-input.nix { inherit inputs; })
       // (import ../tests/package-catalog-devcontainers.nix { inherit inputs; })
       // (import ../tests/package-catalog-gcloud.nix { inherit inputs; })
       // (import ../tests/package-catalog-msstore.nix { inherit inputs; })

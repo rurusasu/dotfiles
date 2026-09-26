@@ -17,40 +17,6 @@
         "type": "github"
       }
     },
-    "bun2nix": {
-      "inputs": {
-        "flake-parts": [
-          "llm-agents",
-          "flake-parts"
-        ],
-        "nixpkgs": [
-          "llm-agents",
-          "nixpkgs"
-        ],
-        "systems": [
-          "llm-agents",
-          "systems"
-        ],
-        "treefmt-nix": [
-          "llm-agents",
-          "treefmt-nix"
-        ]
-      },
-      "locked": {
-        "lastModified": 1790001035,
-        "narHash": "sha256-1/SLBjSYBzDdDhvLQ83wrzBakyS/xNGgtxHGNuveOEQ=",
-        "owner": "Mic92",
-        "repo": "bun2nix",
-        "rev": "07a5bfc8ac36c5370199343fa620b69f63186e33",
-        "type": "github"
-      },
-      "original": {
-        "owner": "Mic92",
-        "ref": "llm-agents",
-        "repo": "bun2nix",
-        "type": "github"
-      }
-    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -217,28 +183,6 @@
       "original": {
         "owner": "nix-community",
         "repo": "home-manager",
-        "type": "github"
-      }
-    },
-    "llm-agents": {
-      "inputs": {
-        "bun2nix": "bun2nix",
-        "flake-parts": "flake-parts_2",
-        "nixpkgs": "nixpkgs",
-        "systems": "systems",
-        "treefmt-nix": "treefmt-nix"
-      },
-      "locked": {
-        "lastModified": 1790033111,
-        "narHash": "sha256-4/8fnnLUzJVMiN/td0nN95mcQGlEbEhl6ukB4+uydOA=",
-        "owner": "numtide",
-        "repo": "llm-agents.nix",
-        "rev": "9032892fd4d89bdad79c858a81aae1268ad2d191",
-        "type": "github"
-      },
-      "original": {
-        "owner": "numtide",
-        "repo": "llm-agents.nix",
         "type": "github"
       }
     },
@@ -498,14 +442,9 @@
     },
     "root": {
       "inputs": {
-        "bun2nix": [
-          "llm-agents",
-          "bun2nix"
-        ],
         "flake-parts": "flake-parts",
         "hermes-agent": "hermes-agent",
         "home-manager": "home-manager",
-        "llm-agents": "llm-agents",
         "nix-darwin": "nix-darwin",
         "nix-homebrew": "nix-homebrew",
         "nix-unit": "nix-unit",

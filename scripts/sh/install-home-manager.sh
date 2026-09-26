@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 export DOTFILES_LOG_PREFIX="home-manager-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
+# shellcheck source=/dev/null
+. "$ROOT/scripts/sh/codex-npm.sh"
 
 ensure_opt_in() {
   [[ ${DOTFILES_ALLOW_USER_ONLY:-0} == "1" ]] ||
@@ -74,6 +76,7 @@ main() {
   dotfiles_update_flake "$ROOT"
   capture_user_identity
   activate_home_manager
+  dotfiles_install_codex_npm
   apply_chezmoi
   printf 'User-only setup complete; Docker/systemd were not configured.\n'
 }

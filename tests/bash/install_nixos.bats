@@ -71,6 +71,13 @@ printf "sudo %s\n" "$*" >>"$COMMAND_LOG"
 exec "$@"
 '
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub npm '
+prefix="${NPM_CONFIG_PREFIX:-$HOME/.local/npm}"
+mkdir -p "$prefix/bin"
+printf "npm %s prefix=%s\n" "$*" "$prefix" >>"$COMMAND_LOG"
+printf "#!/usr/bin/env bash\nexit 0\n" >"$prefix/bin/codex"
+chmod +x "$prefix/bin/codex"
+'
 	write_stub jq 'exec "$REAL_JQ" "$@"'
 	write_stub task '
 printf "task %s\n" "$*" >>"$COMMAND_LOG"
@@ -162,6 +169,8 @@ line_of() {
 	grep -q "DOTFILES_NIXOS_HARDWARE_CONFIG=$HARDWARE_CONFIG" "$COMMAND_LOG"
 	grep -q "DOTFILES_WITH_HERMES=0" "$COMMAND_LOG"
 	[ "$(line_of 'nix flake update --flake')" -lt "$(line_of nixos-rebuild)" ]
+	[ "$(line_of nixos-rebuild)" -lt "$(line_of 'npm install --global --no-audit --no-fund @openai/codex@latest')" ]
+	[ "$(line_of 'npm install --global --no-audit --no-fund @openai/codex@latest')" -lt "$(line_of 'chezmoi init')" ]
 	[ "$(line_of nixos-rebuild)" -lt "$(line_of 'chezmoi init')" ]
 	[ "$(line_of 'chezmoi apply')" -lt "$(line_of verify-environment)" ]
 	grep -q '^verify-environment layer=nixos args=--nix-only$' "$COMMAND_LOG"

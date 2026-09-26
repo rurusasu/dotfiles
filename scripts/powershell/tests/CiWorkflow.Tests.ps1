@@ -154,43 +154,15 @@ Describe 'CI workflow configuration' {
         $parseErrors | Should -BeNullOrEmpty
     }
 
-    It 'should verify the installed Codex code-mode host exists beside its shim and launches' {
+    It 'should verify Codex is installed and launched from the npm package' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
-        $codexHandler = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/handlers/Handler.Codex.ps1') -Raw
 
-        $installerScript | Should -Match 'codex-code-mode-host\.exe'
-        $installerScript | Should -Match 'Get-Command -Name ''codex\.exe'' -CommandType Application'
-        $installerScript | Should -Match 'Codex CLI shim is not the command exposed on PATH'
-        $installerScript | Should -Match 'code-mode host is missing beside the selected Codex executable'
-        $installerScript | Should -Match '\$codexHostPath.*--help'
-        $installerScript | Should -Match 'Codex code-mode host --help failed'
-        $installerScript | Should -Match '\$codexShimPath.*--help'
+        $installerScript | Should -Match "@openai/codex"
+        $installerScript | Should -Match "npm.*list.*--global"
+        $installerScript | Should -Match "Get-Command -Name 'codex' -CommandType Application"
         $installerScript | Should -Match 'Codex CLI --help failed'
-        $installerScript | Should -Match 'Resolve-CodexPackageExecutablePath'
-        $installerScript | Should -Match 'handlers/Handler\.Codex\.ps1'
-        $installerScript | Should -Match 'FileAttributes\]::ReparsePoint'
-        $codexHandler | Should -Match 'Programs\\Codex'
-        $codexHandler | Should -Match 'bin\\codex\.exe'
-        $installerScript | Should -Not -Match "PSObject\.Properties\['(LinkType|Target)'\]"
-    }
-    It 'should resolve Codex package paths in the PS5.1 CI fallback without LinkType or Target metadata' {
-        $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
-        $codexHandler = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/handlers/Handler.Codex.ps1') -Raw
-
-        $installerScript | Should -Match 'codex-code-mode-host\.exe'
-        $installerScript | Should -Match 'Get-Command -Name ''codex\.exe'' -CommandType Application'
-        $installerScript | Should -Match 'Codex CLI shim is not the command exposed on PATH'
-        $installerScript | Should -Match 'code-mode host is missing beside the selected Codex executable'
-        $installerScript | Should -Match '\$codexHostPath.*--help'
-        $installerScript | Should -Match 'Codex code-mode host --help failed'
-        $installerScript | Should -Match '\$codexShimPath.*--help'
-        $installerScript | Should -Match 'Codex CLI --help failed'
-        $installerScript | Should -Match 'Resolve-CodexPackageExecutablePath'
-        $installerScript | Should -Match 'handlers/Handler\.Codex\.ps1'
-        $installerScript | Should -Match 'FileAttributes\]::ReparsePoint'
-        $codexHandler | Should -Match 'Programs\\Codex'
-        $codexHandler | Should -Match 'bin\\codex\.exe'
-        $installerScript | Should -Not -Match "PSObject\.Properties\['(LinkType|Target)'\]"
+        $installerScript | Should -Not -Match 'Handler\.Codex\.ps1'
+        $installerScript | Should -Not -Match 'codex-code-mode-host\.exe'
     }
     It 'should verify ChatGPT Classic is removed by the real Windows installer E2E' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
@@ -297,7 +269,7 @@ Describe 'CI workflow configuration' {
         $nixWorkflow | Should -Match 'nix build \.#nixosConfigurations\.nixos\.config\.system\.build\.toplevel --no-link'
     }
 
-    It 'should configure the llm-agents binary cache for Codex system builds' {
+    It 'should configure the Hermes binary cache for system builds' {
         $flake = Get-Content -LiteralPath (Join-Path $script:repoRoot "flake.nix") -Raw
         $postInstall = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
         $hostModule = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/modules/host/default.nix") -Raw

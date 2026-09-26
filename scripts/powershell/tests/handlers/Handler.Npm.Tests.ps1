@@ -478,21 +478,23 @@ Describe 'NpmHandler' {
             $manifest = Get-JsonContent -Path (Join-Path $script:projectRoot "windows\npm\packages.json")
             $expected = @(
                 @{ Spec = "@devcontainers/cli"; Command = "devcontainer"; Arguments = @("--version") }
+                @{ Spec = "@openai/codex"; Command = "codex"; Arguments = @("--version") }
                 @{ Spec = "agent-browser@0.38.1"; Command = "agent-browser"; Arguments = @("--version") }
             )
             $actualSpecs = @($manifest.globalPackages | ForEach-Object { $_.name })
-            ($actualSpecs | Sort-Object) -join "|" | Should -Be "@devcontainers/cli|agent-browser@0.38.1"
+            ($actualSpecs | Sort-Object) -join "|" | Should -Be "@devcontainers/cli|@openai/codex|agent-browser@0.38.1"
 
             $ctx.Options["NpmMode"] = "import"
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeTrue
-            $script:npmInstallCalls.Count | Should -Be 2
+            $script:npmInstallCalls.Count | Should -Be 3
             foreach ($entry in $expected) {
+                $expectedVerifyCount = if ($entry.Spec -eq "@openai/codex") { 1 } else { 2 }
                 $script:npmInstallCalls | Where-Object { $_ -contains $entry.Spec } | Should -HaveCount 1
                 $script:npmVerifyCalls | Where-Object {
                     $_.Command -eq $entry.Command -and ($_.Arguments -join "|") -eq ($entry.Arguments -join "|")
-                } | Should -HaveCount 2
+                } | Should -HaveCount $expectedVerifyCount
             }
             $script:npmVerifyCalls | Where-Object { $_.TimeoutSeconds -ne 30 } | Should -BeNullOrEmpty
         }
@@ -513,8 +515,8 @@ Describe 'NpmHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeFalse
-            $result.Message | Should -Match "2 個検証失敗"
-            $script:npmInstallCalls.Count | Should -Be 2
+            $result.Message | Should -Match "3 個検証失敗"
+            $script:npmInstallCalls.Count | Should -Be 3
             $script:npmVerifyCalls | Where-Object { $_.TimeoutSeconds -ne 30 } | Should -BeNullOrEmpty
         }
 

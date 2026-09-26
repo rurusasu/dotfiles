@@ -159,7 +159,7 @@ cd tests
 
 install.ps1 は 3 ステップでハンドラーを実行します:
 
-1. **Phase 1**（非昇格）: winget, codex, npm, pnpm 等のユーザースコープハンドラー
+1. **Phase 1**（非昇格）: winget, npm, pnpm 等のユーザースコープハンドラー
 2. **Phase 2a**（非昇格）: `RequiresAdmin = $false` の Phase 2 ハンドラー（chezmoi 等）
    - UAC 昇格なしで実行されるため、1Password デスクトップアプリ連携等が動作する
 3. **Phase 2b**（UAC 昇格）: `RequiresAdmin = $true` の Phase 2 ハンドラー（WSL, Docker 等）

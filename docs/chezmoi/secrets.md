@@ -34,7 +34,7 @@ SSH Agent / `op-ssh-sign` のパスは [1Password CLI 運用](../1password/READM
 - `chezmoi/.chezmoiscripts/run_always_update-wezterm-shortcut_windows.ps1.tmpl`
   - WezTerm の Start Menu shortcut と既存 taskbar pin を毎回 `wezterm-launch.cmd` に向け直す。launcher は既定で direct 起動し、既存 env があれば `WSLENV` で WSL に渡す。
 - `chezmoi/dot_local/bin/executable_codex.cmd`
-  - Codex CLI 直起動用。`~/.local/bin` が `WinGet\Links` より PATH の前にあるため、`codex` はこの wrapper を通ってから実体の `codex.exe` を起動する。`login` は OAuth / terminal handshake を壊さないよう `op run` で包まず、実行前に stale な login listener を掃除する。
+  - Codex CLI 直起動用。npm の `%APPDATA%\npm\codex.cmd` を実体として起動し、`login` は OAuth / terminal handshake を壊さないよう `op run` で包まず、実行前に stale な login listener を掃除する。
 - `chezmoi/dot_local/bin/executable_stop-stale-codex-login.ps1`
   - Codex OAuth callback port `127.0.0.1:1457` を以前の `codex.exe login` が掴んだまま残った場合だけ、その stale process を停止する。`-AdoptRuntimeCodexAuth` 付きでは runtime home の認証を Orca managed account に登録し、Orca 子プロセスの `codex login` では `-InitializeManagedCodexHomeFromRuntimeAuth` で managed `CODEX_HOME` に `auth.json` を同期して成功扱いにする。`-CleanFailedOrcaHomes` は手動復旧用で、通常の Orca launcher からは呼ばない。
 - `chezmoi/.chezmoidata/mcp_servers.yaml`
@@ -249,7 +249,7 @@ $env:DOTFILES_OP_RUN_TIMEOUT_SECONDS = "60"
 ~\.local\bin\orca-launch.cmd
 ```
 
-Codex CLI を直接起動する場合も、PATH 上の `~\.local\bin\codex.cmd` が同じ env-file injection を行う。`codex login` は例外で、1Password env-file injection を迂回して実体の `codex.exe` を直接起動する。login 前には `stop-stale-codex-login.ps1` を呼び、以前の `codex.exe login` が `127.0.0.1:1457` を掴んだまま残っている場合だけ停止する:
+Codex CLI を直接起動する場合も、PATH 上の `~\.local\bin\codex.cmd` が同じ env-file injection を行う。`codex login` は例外で、1Password env-file injection を迂回して npm の `codex.cmd` を直接起動する。login 前には `stop-stale-codex-login.ps1` を呼び、以前の Codex login process が `127.0.0.1:1457` を掴んだまま残っている場合だけ停止する:
 
 ```powershell
 codex

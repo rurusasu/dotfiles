@@ -5,7 +5,7 @@ let
   sets = import ../packages/sets.nix {
     inherit pkgs;
     inherit (pkgs) lib;
-    codexPackage = inputs.llm-agents.packages.${system}.codex;
+    codexPackage = pkgs.hello;
   };
   hermesSupport = sets.supportReport.hermes-desktop;
 in

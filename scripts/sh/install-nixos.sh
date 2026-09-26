@@ -6,6 +6,8 @@ export DOTFILES_ROOT="$ROOT"
 export DOTFILES_LOG_PREFIX="nixos-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
+# shellcheck source=/dev/null
+. "$ROOT/scripts/sh/codex-npm.sh"
 
 NIXOS_MARKER="${DOTFILES_NIXOS_MARKER:-/etc/NIXOS}"
 DOTFILES_WITH_HERMES="${DOTFILES_WITH_HERMES:-0}"
@@ -100,6 +102,7 @@ main() {
   dotfiles_update_flake "$ROOT"
   capture_host_identity
   apply_nixos_system
+  dotfiles_install_codex_npm
   apply_chezmoi
   export DOTFILES_VERIFY_SYSTEM_LAYER=nixos
   "$VERIFY_ENVIRONMENT" --nix-only

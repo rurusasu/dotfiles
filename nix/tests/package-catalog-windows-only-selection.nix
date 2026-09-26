@@ -12,7 +12,6 @@ let
     "dprint.dprint"
     "hadolint.hadolint"
     "Google.Chrome"
-    "OpenAI.Codex"
     "Oven-sh.Bun"
     "zig.zig"
   ];

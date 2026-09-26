@@ -35,9 +35,10 @@ in
       PNPM_HOME = "$HOME/.local/share/pnpm";
     };
 
-    # PATH: bun and pnpm global binaries
+    # PATH: user-local Codex npm, bun and pnpm global binaries
     sessionPath = [
       "$HOME/.local/bin"
+      "$HOME/.local/npm/bin"
       "$HOME/.bun/bin"
       "$HOME/.local/share/pnpm/bin"
       "$HOME/.local/share/pnpm"

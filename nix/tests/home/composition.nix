@@ -19,19 +19,11 @@ let
     }:
     let
       pkgs = mkPkgs system;
-      testInputs = inputs // {
-        "llm-agents" = {
-          packages.${system} = {
-            codex = pkgs.hello;
-            hermes-agent = pkgs.hello;
-          };
-        };
-      };
     in
     inputs.home-manager.lib.homeManagerConfiguration {
       inherit pkgs;
       extraSpecialArgs = {
-        inputs = testInputs;
+        inherit inputs;
         installFeatures = [ ];
       }
       // specialArgs;

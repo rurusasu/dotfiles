@@ -36,7 +36,7 @@
 {
   pkgs,
   lib,
-  codexPackage,
+  codexPackage ? null,
   catalogOverride ? null,
 }:
 let
@@ -418,25 +418,27 @@ let
 
         # ── llm ───────────────────────────────────────────────
         codex = {
-          pkg = codexPackage;
-          winget = "OpenAI.Codex";
+          # Codex CLI is intentionally kept out of Nix package outputs. The
+          # npm package is the single CLI provider on every supported OS so
+          # `codex update` can identify and update its installation method.
+          pkg = null;
+          npm = "@openai/codex";
           category = "llm";
           support = {
+            windows = {
+              provider = "npm";
+              source = "npm";
+              identity = "@openai/codex";
+            };
             darwin = {
-              provider = "nix";
-              source = "llm-agents.nix";
-              identity = {
-                command = "codex";
-                versionArgs = [ "--version" ];
-              };
+              provider = "npm";
+              source = "npm";
+              identity = "@openai/codex";
             };
             linux = {
-              provider = "nix";
-              source = "llm-agents.nix";
-              identity = {
-                command = "codex";
-                versionArgs = [ "--version" ];
-              };
+              provider = "npm";
+              source = "npm";
+              identity = "@openai/codex";
             };
           };
         };
@@ -1440,7 +1442,8 @@ lib.mapAttrs (_: resolve) grouped
     "git"
     "chezmoi"
     "neovim"
-    "codex"
+    # Codex is installed from npm after the Nix profile is activated.
+    "nodejs"
   ];
 
   # All packages (flat list)
@@ -1489,6 +1492,10 @@ lib.mapAttrs (_: resolve) grouped
   # Post-install verification commands for npm packages.
   # Keys match catalog attr names from npmMap.
   npmVerify = {
+    codex = {
+      command = "codex";
+      args = [ "--version" ];
+    };
     "agent-browser" = {
       command = "agent-browser";
       args = [ "--version" ];
@@ -1748,10 +1755,6 @@ lib.mapAttrs (_: resolve) grouped
       "--scope"
       "user"
     ];
-    codex = [
-      "--scope"
-      "user"
-    ];
     direnv = [
       "--scope"
       "user"
@@ -1836,14 +1839,6 @@ lib.mapAttrs (_: resolve) grouped
       executable = "chezmoi.exe";
       timeoutSeconds = 900;
     };
-    codex = {
-      type = "archive";
-      url = "https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-package-x86_64-pc-windows-msvc.tar.gz";
-      sha256 = "f45c273b7835c192aaa9cef5b93aa9528966ac7301444632de80a565a9bf14e8";
-      destination = "%LOCALAPPDATA%\\Programs\\Codex";
-      executable = "bin\\codex.exe";
-      timeoutSeconds = 900;
-    };
     direnv = {
       type = "file";
       url = "https://github.com/direnv/direnv/releases/download/v2.37.1/direnv.windows-amd64";
@@ -1924,14 +1919,6 @@ lib.mapAttrs (_: resolve) grouped
     oxlint = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
     "oxc-project.oxlint" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
     chezmoi = [ "%LOCALAPPDATA%\\Programs\\chezmoi" ];
-    codex = [
-      "%LOCALAPPDATA%\\Programs\\Codex\\bin"
-      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"
-    ];
-    "OpenAI.Codex" = [
-      "%LOCALAPPDATA%\\Programs\\Codex\\bin"
-      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"
-    ];
     direnv = [ "%LOCALAPPDATA%\\Programs\\direnv" ];
     "direnv.direnv" = [ "%LOCALAPPDATA%\\Programs\\direnv" ];
     dprint = [ "%LOCALAPPDATA%\\Programs\\dprint" ];
@@ -1951,10 +1938,6 @@ lib.mapAttrs (_: resolve) grouped
 
   # Portable winget packages whose package exe name does not match the command name.
   wingetPortableLinksById = {
-    "OpenAI.Codex" = {
-      linkName = "codex.exe";
-      targetPattern = "codex.exe";
-    };
     "Rustlang.rust-analyzer" = {
       linkName = "rust-analyzer.exe";
       targetPattern = "rust-analyzer.exe";
@@ -2043,10 +2026,6 @@ lib.mapAttrs (_: resolve) grouped
     };
     "hadolint.hadolint" = {
       command = "hadolint";
-      args = [ "--version" ];
-    };
-    "OpenAI.Codex" = {
-      command = "codex";
       args = [ "--version" ];
     };
     "Obsidian.Obsidian" = {

@@ -259,11 +259,17 @@ EOF
 	second_store="$BATS_TEST_TMPDIR/store-profile-2"
 	guest_log="$BATS_TEST_TMPDIR/guest.log"
 	guest_repo="$BATS_TEST_TMPDIR/guest-repo"
-	mkdir -p "$bin" "$store/bin" "$second_store/bin" "$guest_repo/chezmoi"
-	for command in git chezmoi nvim codex; do
+	mkdir -p "$bin" "$store/bin" "$second_store/bin" "$guest_repo/chezmoi" "$guest_repo/scripts/sh"
+	cp "$REPO_ROOT/scripts/sh/codex-npm.sh" "$guest_repo/scripts/sh/codex-npm.sh"
+	for command in git chezmoi nvim node npm; do
 		cat >"$store/bin/$command" <<EOF
 #!/usr/bin/env bash
 printf '$command %s\n' "\$*" >>"\$GUEST_LOG"
+if [[ $command == npm ]]; then
+		mkdir -p "\${NPM_CONFIG_PREFIX:-\$HOME/.local/npm}/bin"
+		printf '#!/usr/bin/env bash\nexit 0\n' >"\${NPM_CONFIG_PREFIX:-\$HOME/.local/npm}/bin/codex"
+		chmod +x "\${NPM_CONFIG_PREFIX:-\$HOME/.local/npm}/bin/codex"
+fi
 EOF
 		chmod +x "$store/bin/$command"
 		cp "$store/bin/$command" "$second_store/bin/$command"
@@ -312,5 +318,5 @@ EOF
 	grep -Fxq 'brew install --cask wezterm@nightly' "$guest_log"
 	grep -Fxq "chezmoi init --source $guest_repo/chezmoi" "$guest_log"
 	grep -Fxq 'chezmoi apply --force' "$guest_log"
-	[ "$(find "$BATS_TEST_TMPDIR/guest-home/.local/bin" -type l | wc -l | tr -d ' ')" -eq 4 ]
+	[ "$(find "$BATS_TEST_TMPDIR/guest-home/.local/bin" -type l | wc -l | tr -d ' ')" -eq 5 ]
 }

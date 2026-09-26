@@ -230,22 +230,21 @@ Describe 'Package catalog consistency' {
     }
 
     Context 'Codex CLI package' {
-        It 'should generate Codex portable link metadata into winget packages.json' {
+        It 'should generate Codex in the npm global package manifest' {
+            $json = Get-Content -LiteralPath $script:npmJsonPath -Raw | ConvertFrom-Json
+            $package = @($json.globalPackages | Where-Object { $_.name -eq '@openai/codex' }) | Select-Object -First 1
+
+            $package | Should -Not -BeNullOrEmpty
+            $package.verifyCommand.command | Should -Be 'codex'
+            @($package.verifyCommand.args) | Should -Contain '--version'
+        }
+
+        It 'should not generate a Codex CLI package in winget packages.json' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'OpenAI.Codex' }) | Select-Object -First 1
 
-            $package | Should -Not -BeNullOrEmpty
-            $package.directInstaller.type | Should -Be 'archive'
-            $package.directInstaller.url | Should -Be 'https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-package-x86_64-pc-windows-msvc.tar.gz'
-            $package.directInstaller.sha256 | Should -Be 'f45c273b7835c192aaa9cef5b93aa9528966ac7301444632de80a565a9bf14e8'
-            $package.directInstaller.executable | Should -Be 'bin\codex.exe'
-            @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Programs\Codex\bin'
-            @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Links'
-            $package.portableLink.linkName | Should -Be 'codex.exe'
-            $package.portableLink.targetPattern | Should -Be 'codex.exe'
-            $package.verifyCommand.command | Should -Be 'codex'
-            @($package.verifyCommand.args) | Should -Contain '--version'
+            $package | Should -BeNullOrEmpty
         }
     }
 
@@ -407,7 +406,6 @@ Describe 'Package catalog consistency' {
             $fallbackIds = @(
                 'Oven-sh.Bun'
                 'twpayne.chezmoi'
-                'OpenAI.Codex'
                 'direnv.direnv'
                 'dprint.dprint'
                 'sharkdp.fd'
@@ -450,6 +448,7 @@ Describe 'Package catalog consistency' {
             $retiredPath = Join-Path (Split-Path -Parent $script:wingetJsonPath) 'retired-packages.json'
             $retired = Get-Content -LiteralPath $retiredPath -Raw | ConvertFrom-Json
             @($retired.packages | Where-Object { $_.id -eq '9NT1R1C2HH7J' -and $_.source -eq 'msstore' -and $_.name -eq 'ChatGPT Classic' }).Count | Should -Be 1
+            @($retired.packages | Where-Object { $_.id -eq 'OpenAI.Codex' -and $_.source -eq 'winget' -and $_.name -eq 'Codex CLI' }).Count | Should -Be 1
             @($retired.packages | Where-Object { $_.id -eq '9PLM9XGG6VKS' }).Count | Should -Be 0
         }
 
@@ -477,7 +476,7 @@ Describe 'Package catalog consistency' {
             $supportedTypes = @('command', 'commandExists', 'appxPackage', 'appxLaunchTarget', 'portableLinkCommand', 'windowsInstalledProduct', 'visualStudioInstanceVersion')
 
             $packageCount | Should -Be 65
-            @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' } | ForEach-Object { $_.Packages }).Count | Should -Be 53
+            @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' } | ForEach-Object { $_.Packages }).Count | Should -Be 52
             @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'msstore' } | ForEach-Object { $_.Packages }).Count | Should -Be 1
             @($wingetPackages | ForEach-Object { $_.PackageIdentifier }).Count | Should -Be @($wingetPackages | ForEach-Object { $_.PackageIdentifier } | Select-Object -Unique).Count
             @($npm.globalPackages | Where-Object { $null -eq $_.verifyCommand }).Count | Should -Be 0

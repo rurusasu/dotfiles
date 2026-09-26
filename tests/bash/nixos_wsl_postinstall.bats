@@ -65,6 +65,13 @@ exec "$@"
 	write_stub chown '
 printf "chown %s\n" "$*" >>"$COMMAND_LOG"
 '
+write_stub npm '
+prefix="${NPM_CONFIG_PREFIX:-$HOME/.local/npm}"
+mkdir -p "$prefix/bin"
+printf "npm %s prefix=%s\n" "$*" "$prefix" >>"$COMMAND_LOG"
+printf "#!/usr/bin/env bash\nexit 0\n" >"$prefix/bin/codex"
+chmod +x "$prefix/bin/codex"
+'
 	write_stub sudo '
 exec "$@"
 '
@@ -156,6 +163,7 @@ EOF
 
 	[ "$status" -eq 0 ]
 	grep -Fqx "nixos-rebuild user=alice home=$USER_HOME uid=4242 gid=4343 group=alicegrp" "$COMMAND_LOG"
+	grep -Fq 'npm install --global --no-audit --no-fund @openai/codex@latest' "$COMMAND_LOG"
 	grep -Fq 'accept-flake-config = true' "$NIX_CONFIG_CAPTURE"
 
 	expected_args=(switch --flake "path:$SYNC_SOURCE#nixos" --impure)

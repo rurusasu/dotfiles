@@ -704,6 +704,7 @@ create_mocked_installer_fixture() {
 	cp "$REPO_ROOT/Taskfile.yml" "$MOCK_REPO/Taskfile.yml"
 	cp -R "$REPO_ROOT/taskfiles" "$MOCK_REPO/taskfiles"
 	cp "$REPO_ROOT/scripts/sh/install-common.sh" "$MOCK_REPO/scripts/sh/install-common.sh"
+	cp "$REPO_ROOT/scripts/sh/codex-npm.sh" "$MOCK_REPO/scripts/sh/codex-npm.sh"
 	cp "$REPO_ROOT/scripts/sh/install-display.sh" "$MOCK_REPO/scripts/sh/install-display.sh"
 	cat >"$MOCK_REPO/scripts/sh/migrate-darwin-provider.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -853,6 +854,12 @@ printf "\\n" >&2
 exit 97
 '
 	write_fixture_stub chezmoi 'printf "chezmoi %s\\n" "$*" >>"$COMMAND_LOG"'
+	write_fixture_stub npm '
+prefix="${NPM_CONFIG_PREFIX:-$HOME/.local/npm}"
+mkdir -p "$prefix/bin"
+printf "#!/usr/bin/env bash\\nexit 0\\n" >"$prefix/bin/codex"
+chmod +x "$prefix/bin/codex"
+'
 	write_fixture_stub curl 'printf "curl %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub ollama 'printf "ollama %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub launchctl 'printf "launchctl %s\\n" "$*" >>"$COMMAND_LOG"'

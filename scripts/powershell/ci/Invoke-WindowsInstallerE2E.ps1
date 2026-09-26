@@ -339,47 +339,26 @@ if ($classicListExitCode -ne 0) {
 }
 }
 
-Invoke-WindowsE2EValidation -Name 'Codex package structure' -Validation {
-$codexLinksPath = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
-$codexShimPath = Join-Path $codexLinksPath 'codex.exe'
-if (-not (Test-Path -LiteralPath $codexShimPath -PathType Leaf)) {
-  throw "Codex CLI shim is missing after installation: $codexShimPath"
-}
-$codexPathCommand = Get-Command -Name 'codex.exe' -CommandType Application -ErrorAction SilentlyContinue |
-  Select-Object -First 1
-$codexPathCommandPath = Get-ExternalCommandPath -CommandInfo $codexPathCommand
-if (-not $codexPathCommand -or
-  -not ([System.IO.Path]::GetFullPath($codexPathCommandPath)).Equals(
-    [System.IO.Path]::GetFullPath($codexShimPath),
-    [System.StringComparison]::OrdinalIgnoreCase
-  )) {
-  throw "Codex CLI shim is not the command exposed on PATH: expected=$codexShimPath actual=$codexPathCommandPath"
-}
+Invoke-WindowsE2EValidation -Name 'Codex npm package' -Validation {
+  $npmListOutput = @(npm list --global --depth=0 --json 2>&1)
+  $npmListExitCode = $LASTEXITCODE
+  if ($npmListExitCode -ne 0) {
+    throw "npm global package listing failed (exit=$npmListExitCode): $($npmListOutput -join ' ')"
+  }
+  $npmList = ($npmListOutput -join [Environment]::NewLine) | ConvertFrom-Json
+  if (-not $npmList.dependencies.PSObject.Properties['@openai/codex']) {
+    throw 'The @openai/codex npm package is missing from the global package list'
+  }
 
-. (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/lib/SetupHandler.ps1')
-. (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/handlers/Handler.Codex.ps1')
-$codexPackageExecutablePath = Resolve-CodexPackageExecutablePath -LocalAppData $env:LOCALAPPDATA
-if (-not $codexPackageExecutablePath) {
-  throw 'Codex executable with an adjacent code-mode host cannot be located in WinGet or Programs\Codex'
-}
-$codexShimHash = (Get-FileHash -LiteralPath $codexShimPath -Algorithm SHA256).Hash
-$codexPackageHash = (Get-FileHash -LiteralPath $codexPackageExecutablePath -Algorithm SHA256).Hash
-if (-not [System.StringComparer]::OrdinalIgnoreCase.Equals($codexShimHash, $codexPackageHash)) {
-  throw "Codex PATH shim does not match the selected installed package executable: shim=$codexShimPath package=$codexPackageExecutablePath"
-}
-
-$codexShim = Get-Item -LiteralPath $codexShimPath
-$codexHostDirectory = $codexLinksPath
-if (($codexShim.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-  # Resolve the package from known install roots. This works in Windows
-  # PowerShell 5.1, where FileInfo does not expose LinkType or Target.
-  $codexHostDirectory = Split-Path -Parent $codexPackageExecutablePath
-}
-
-$codexHostPath = Join-Path $codexHostDirectory 'codex-code-mode-host.exe'
-if (-not (Test-Path -LiteralPath $codexHostPath -PathType Leaf)) {
-  throw "Codex code-mode host is missing beside the selected Codex executable: $codexHostPath"
-}
+  $codexCommand = Get-Command -Name 'codex' -CommandType Application -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+  if (-not $codexCommand) {
+    throw 'The npm-installed Codex command is missing from PATH'
+  }
+  $codexVersion = @(& $codexCommand.Source --version 2>&1)
+  if ($LASTEXITCODE -ne 0) {
+    throw "Codex CLI --version failed: $($codexVersion -join ' ')"
+  }
 }
 
 Invoke-WindowsE2EValidation -Name 'required command smoke tests' -Validation {
@@ -488,11 +467,9 @@ finally {
   }
 
   try {
-    $codexShimPath = Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links') 'codex.exe'
-    if (-not (Test-Path -LiteralPath $codexShimPath -PathType Leaf)) {
-      throw "Codex CLI shim is missing: $codexShimPath"
-    }
-    $codexCliOutput = @(& $codexShimPath --help 2>&1)
+    $codexCommand = Get-Command -Name 'codex' -CommandType Application -ErrorAction Stop |
+      Select-Object -First 1
+    $codexCliOutput = @(& $codexCommand.Source --help 2>&1)
     $codexCliExitCode = $LASTEXITCODE
     if ($codexCliExitCode -ne 0) {
       throw "Codex CLI --help failed (exit=$codexCliExitCode): $($codexCliOutput -join ' ')"
@@ -503,38 +480,6 @@ finally {
     $validationErrors.Add("Codex CLI launch probe: $($_.Exception.Message)")
   }
 
-  try {
-    . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/lib/SetupHandler.ps1')
-    . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/handlers/Handler.Codex.ps1')
-    $codexPackageExecutablePath = Resolve-CodexPackageExecutablePath -LocalAppData $env:LOCALAPPDATA
-    if (-not $codexPackageExecutablePath) {
-      throw 'Codex executable with an adjacent code-mode host cannot be located in WinGet, Programs\Codex, or OpenAI\Codex'
-    }
-
-    $codexLinksPath = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
-    $codexShimPath = Join-Path $codexLinksPath 'codex.exe'
-    $codexHostDirectory = $codexLinksPath
-    if (Test-Path -LiteralPath $codexShimPath -PathType Leaf) {
-      $codexShim = Get-Item -LiteralPath $codexShimPath
-      if (($codexShim.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-        $codexHostDirectory = Split-Path -Parent $codexPackageExecutablePath
-      }
-    }
-
-    $codexHostPath = Join-Path $codexHostDirectory 'codex-code-mode-host.exe'
-    if (-not (Test-Path -LiteralPath $codexHostPath -PathType Leaf)) {
-      throw "Codex code-mode host is missing beside the selected Codex executable: $codexHostPath"
-    }
-    $codexHostOutput = @(& $codexHostPath --help 2>&1)
-    $codexHostExitCode = $LASTEXITCODE
-    if ($codexHostExitCode -ne 0) {
-      throw "Codex code-mode host --help failed (exit=$codexHostExitCode): $($codexHostOutput -join ' ')"
-    }
-    Write-Host 'Codex code-mode host launch probe passed'
-  }
-  catch {
-    $validationErrors.Add("Codex code-mode host launch probe: $($_.Exception.Message)")
-  }
 }
 
 if ($validationErrors.Count -gt 0) {

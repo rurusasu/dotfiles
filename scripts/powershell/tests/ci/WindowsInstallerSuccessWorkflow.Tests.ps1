@@ -83,14 +83,15 @@
         $workflow | Should -Match '(?s)Assert-WindowsInstallerSuccess `\s+-Output \$out `\s+-ExitCode \$exitCode'
     }
 
-    It 'attempts both Codex launch probes after validation failures and reports all errors at the end' {
+    It 'attempts the Codex npm launch probe after validation failures and reports all errors at the end' {
         $installerJob = $script:installerE2E
 
         $installerJob | Should -Match '(?s)\$validationErrors\s*=.*?try\s*\{[\s\S]*?\$expectedVersion\s*=.*?Could not seed the ChatGPT Classic uninstall E2E[\s\S]*?Assert-WindowsInstallerSuccess'
         $installerJob | Should -Match '(?s)catch\s*\{[\s\S]*?\$validationErrors\.Add'
         $installerJob | Should -Match '(?s)finally\s*\{[\s\S]*?Codex CLI.*?try\s*\{[\s\S]*?--help[\s\S]*?catch\s*\{[\s\S]*?\$validationErrors\.Add'
-        $installerJob | Should -Match '(?s)finally\s*\{[\s\S]*?code-mode host.*?try\s*\{[\s\S]*?--help[\s\S]*?catch\s*\{[\s\S]*?\$validationErrors\.Add'
-        $installerJob | Should -Match '(?s)finally\s*\{[\s\S]*?Codex CLI[\s\S]*?code-mode host'
+        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'Codex npm package'"
+        $installerJob | Should -Match 'npm list --global --depth=0 --json'
+        $installerJob | Should -Match '@openai/codex'
         $installerJob | Should -Match '(?s)if\s*\(\$validationErrors\.Count\s*-gt\s*0\)[\s\S]*?\$failureSummary\s*=\s*"Windows installer E2E validation failed:'
         $installerJob | Should -Match '(?s)\$failureSummary\s*=.*?\$validationErrors\s*-join'
         $installerJob | Should -Match 'Write-Host \$failureSummary -ForegroundColor Red'
@@ -106,7 +107,7 @@
         $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'WinGet package inventory'"
         $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'pnpm bootstrap'"
         $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'ChatGPT Classic removal'"
-        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'Codex package structure'"
+        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'Codex npm package'"
         $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'required command smoke tests'"
         $installerJob | Should -Match "Get-Command -Name 'op.exe' -CommandType Application -ErrorAction Stop"
         $installerJob | Should -Match '(?s)\$onePasswordPackagesPath\s*=.*?AgileBits\.1Password\.CLI_\*'
@@ -121,7 +122,7 @@
         $script:workflow | Should -Match 'winget source list failed \(exit=\$wingetSourcesExitCode\)'
         $installerJob | Should -Match 'Unable to inspect ChatGPT Classic E2E seed state'
         $installerJob | Should -Match '(?s)\$resolvedCommand\s*=\s*Get-Command -Name \$requiredCommand\.Name -CommandType Application -ErrorAction SilentlyContinue\s*\|\s*Select-Object -First 1'
-        $installerJob | Should -Match 'Codex PATH shim does not match the selected installed package executable'
+        $installerJob | Should -Match 'The @openai/codex npm package is missing from the global package list'
         $installerJob | Should -Not -Match 'onePasswordPackageSearchPath|pnpm resolved outside the npm global prefix'
     }
 
