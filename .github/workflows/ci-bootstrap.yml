@@ -697,7 +697,7 @@ jobs:
 
       - name: Build macOS declarative output
         run: |
-          nix build .#checks.aarch64-darwin.nix-unit --no-link \
+          nix build .#checks.aarch64-darwin.nix-unit --no-link --print-build-logs \
             --option extra-substituters "$NUMTIDE_CACHE" \
             --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY"
           nix build .#checks.aarch64-darwin.ghostty-config --no-link \

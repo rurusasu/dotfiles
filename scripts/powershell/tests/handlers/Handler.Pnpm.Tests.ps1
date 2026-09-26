@@ -341,6 +341,7 @@ Describe 'PnpmHandler' {
 
     BeforeEach {
         $script:handler = [PnpmHandler]::new()
+        Mock Update-NpmGlobalCommandPath { }
         $script:ctx = [SetupContext]::new($script:projectRoot)
     }
 

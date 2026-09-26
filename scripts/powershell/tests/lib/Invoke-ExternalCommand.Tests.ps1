@@ -98,8 +98,8 @@ Describe 'Get-NpmInvocation on Windows' {
         Mock Invoke-ExternalCommandWithTimeout {
             param($Command, $Arguments, $TimeoutSeconds)
             $script:capturedNpmInvocation = [pscustomobject]@{
-                Command = $Command
-                Arguments = @($Arguments)
+                Command        = $Command
+                Arguments      = @($Arguments)
                 TimeoutSeconds = $TimeoutSeconds
             }
             $global:LASTEXITCODE = 0
@@ -1058,8 +1058,8 @@ Describe 'Update-ProcessEnvironmentPath' {
         $env:PATH.Length | Should -BeLessOrEqual 8191
         ($env:PATH -split ';') | Should -Contain (Split-Path -Parent (Get-Command cmd.exe).Source)
         $commandInterpreter = Join-Path $env:SystemRoot 'System32\cmd.exe'
-        $child = Start-Process -FilePath $commandInterpreter -ArgumentList '/d', '/c', 'exit 0' -Wait -PassThru -NoNewWindow
-        $child.ExitCode | Should -Be 0
+        & $commandInterpreter /d /c 'exit 0'
+        $LASTEXITCODE | Should -Be 0
     }
 }
 

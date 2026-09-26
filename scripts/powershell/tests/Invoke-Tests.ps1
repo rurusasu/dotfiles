@@ -365,8 +365,9 @@ if ($totalCount -le 0) {
     exit 1
 }
 
-if ($failedCount -gt 0) {
-    Write-Host "FAIL: $failedCount test(s) failed" -ForegroundColor Red
+if ($failedCount -gt 0 -or $result.Result -eq 'Failed' -or
+    $result.FailedContainersCount -gt 0 -or $result.FailedBlocksCount -gt 0) {
+    Write-Host "FAIL: $failedCount test(s) failed; containers=$($result.FailedContainersCount), blocks=$($result.FailedBlocksCount)" -ForegroundColor Red
     exit 1
 }
 
