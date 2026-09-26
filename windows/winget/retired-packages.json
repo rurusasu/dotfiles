@@ -5,6 +5,11 @@
       "id": "9NT1R1C2HH7J",
       "name": "ChatGPT Classic",
       "source": "msstore"
+    },
+    {
+      "id": "OpenAI.Codex",
+      "name": "Codex CLI",
+      "source": "winget"
     }
   ]
 }

@@ -6,6 +6,8 @@ export DOTFILES_ROOT="$ROOT"
 export DOTFILES_LOG_PREFIX="linux-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
+# shellcheck source=/dev/null
+. "$ROOT/scripts/sh/codex-npm.sh"
 
 OS_RELEASE_FILE="${DOTFILES_OS_RELEASE_FILE:-/etc/os-release}"
 SYSTEMD_DIR="${DOTFILES_SYSTEMD_DIR:-/run/systemd/system}"
@@ -122,6 +124,7 @@ main() {
   dotfiles_update_flake "$ROOT"
   capture_host_identity
   apply_linux_system
+  dotfiles_install_codex_npm
   apply_chezmoi
   "$VERIFY_ENVIRONMENT" --nix-only
   dotfiles_log "Linux setup complete."

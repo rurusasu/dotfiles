@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=/dev/null
 . "$SCRIPT_ROOT/install-common.sh"
+# shellcheck source=/dev/null
+. "$SCRIPT_ROOT/codex-npm.sh"
 
 usage() {
   cat <<'USAGE'
@@ -353,6 +355,34 @@ install_herdr_for_user() {
     _ "$SCRIPT_ROOT/install-common.sh"
 }
 
+install_codex_for_user() {
+  local user_home
+  user_home="$(getent passwd "$USER_NAME" | cut -d: -f6)"
+  [[ -n $user_home && -d $user_home ]] || {
+    echo "Unable to resolve the home directory for $USER_NAME." >&2
+    return 1
+  }
+
+  local codex_script="$TARGET_DIR/scripts/sh/codex-npm.sh"
+  [[ -r $codex_script ]] || {
+    echo "Codex npm installer not found: $codex_script" >&2
+    return 1
+  }
+
+  local user_path="$PATH:/run/current-system/sw/bin:/etc/profiles/per-user/$USER_NAME/bin:$user_home/.local/bin"
+  if [[ $USER_NAME == root ]]; then
+    HOME="$user_home" PATH="$user_path" bash -c 'source "$1"; dotfiles_install_codex_npm' _ "$codex_script"
+    return
+  fi
+
+  runuser -u "$USER_NAME" -- env \
+    HOME="$user_home" \
+    USER="$USER_NAME" \
+    PATH="$user_path" \
+    bash -c 'source "$1"; dotfiles_install_codex_npm' \
+    _ "$codex_script"
+}
+
 install_herdr_for_user
 
 if [[ $SKIP_FLAKE_UPDATE -eq 0 ]]; then
@@ -369,6 +399,8 @@ NIX_CONFIG="$(printf '%s\n' \
   'extra-substituters = https://cache.numtide.com https://hermes-agent.cachix.org' \
   'extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g= hermes-agent.cachix.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU=')" \
   bash "$REBUILD_HELPER" switch --flake "path:$TARGET_DIR#$FLAKE_NAME" --impure
+
+install_codex_for_user
 
 # Handle sync-back
 if [[ $SYNC_BACK == "repo" && $SYNC_MODE != "link" ]]; then

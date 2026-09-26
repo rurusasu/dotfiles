@@ -116,6 +116,13 @@ esac
 exit 0
 '
 	write_stub open 'printf "open %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub npm '
+prefix="${NPM_CONFIG_PREFIX:-$HOME/.local/npm}"
+mkdir -p "$prefix/bin"
+printf "npm %s prefix=%s\n" "$*" "$prefix" >>"$COMMAND_LOG"
+printf "#!/usr/bin/env bash\nexit 0\n" >"$prefix/bin/codex"
+chmod +x "$prefix/bin/codex"
+'
 	write_stub migrate-darwin-provider 'printf "migrate-darwin-provider %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub brew '
 if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions &&

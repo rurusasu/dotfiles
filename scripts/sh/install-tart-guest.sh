@@ -56,7 +56,9 @@ install_cli_profile() {
   mv -f -- "$temporary_link" "$profile_link"
   trap - RETURN
 
-  for command in git chezmoi nvim; do
+  # Expose the Node.js runtime from the managed profile before installing the
+  # user-local Codex npm package. The profile path itself is not on PATH yet.
+  for command in git chezmoi nvim node npm; do
     target="$HOME/.local/bin/$command"
     [[ ! -e $target || -L $target ]] || {
       printf 'tart-guest: refusing to replace unmanaged command: %s\n' "$target" >&2
@@ -84,6 +86,7 @@ apply_dotfiles() {
 
 ensure_nix
 install_cli_profile
+export PATH="$HOME/.local/bin:$PATH"
 dotfiles_install_codex_npm
 install_wezterm
 apply_dotfiles

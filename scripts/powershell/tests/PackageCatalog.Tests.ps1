@@ -448,6 +448,7 @@ Describe 'Package catalog consistency' {
             $retiredPath = Join-Path (Split-Path -Parent $script:wingetJsonPath) 'retired-packages.json'
             $retired = Get-Content -LiteralPath $retiredPath -Raw | ConvertFrom-Json
             @($retired.packages | Where-Object { $_.id -eq '9NT1R1C2HH7J' -and $_.source -eq 'msstore' -and $_.name -eq 'ChatGPT Classic' }).Count | Should -Be 1
+            @($retired.packages | Where-Object { $_.id -eq 'OpenAI.Codex' -and $_.source -eq 'winget' -and $_.name -eq 'Codex CLI' }).Count | Should -Be 1
             @($retired.packages | Where-Object { $_.id -eq '9PLM9XGG6VKS' }).Count | Should -Be 0
         }
 
