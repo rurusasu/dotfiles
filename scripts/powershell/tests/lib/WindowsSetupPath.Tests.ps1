@@ -175,7 +175,11 @@ Describe 'Windows setup with missing command directories in PATH' -Skip:([Enviro
         $env:PATH | Should -Be $before
     }
 
-    It 'should verify an installed portable package after a winget no-op without its command link' {
+    It 'should recover an installed portable package before deciding to reinstall (verify-only: <VerifyOnly>)' -ForEach @(
+        @{ VerifyOnly = $false }
+        @{ VerifyOnly = $true }
+    ) {
+        $script:ctx.Options['WingetVerifyCommandOnly'] = $VerifyOnly
         $retiredDirectory = Join-Path $TestDrive 'windows/winget'
         New-Item -ItemType Directory -Path $retiredDirectory -Force | Out-Null
         '{"packages":[]}' | Set-Content -LiteralPath (Join-Path $retiredDirectory 'retired-packages.json')
@@ -199,6 +203,7 @@ Describe 'Windows setup with missing command directories in PATH' -Skip:([Enviro
                 return @('Name Id Version Source', '----------------------', 'Recovery Recovery.Tool 1.0 winget')
             }
             if ($Arguments[0] -eq 'install') {
+                if ($Arguments -contains '--force') { throw 'PATH recovery must precede the reinstall decision' }
                 $global:LASTEXITCODE = 1
                 return 'No applicable update found'
             }
@@ -212,7 +217,12 @@ Describe 'Windows setup with missing command directories in PATH' -Skip:([Enviro
 
         $result.Success | Should -BeTrue -Because $result.Message
         (Get-Command recovery-tool.exe | Select-Object -First 1).Source | Should -Be (Join-Path $commandDirectory 'recovery-tool.exe')
-        $script:logs -join "`n" | Should -Match 'Recovery.Tool.*no-op'
+        if ($VerifyOnly) {
+            Should -Invoke Invoke-Winget -Times 0 -Exactly -ParameterFilter { $Arguments[0] -eq 'install' }
+        }
+        else {
+            $script:logs -join "`n" | Should -Match 'Recovery.Tool.*no-op'
+        }
     }
 
     It 'should leave PATH unchanged when multiple executables match the same package' {

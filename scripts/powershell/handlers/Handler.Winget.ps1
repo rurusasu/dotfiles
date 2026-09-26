@@ -275,6 +275,9 @@ class WingetHandler : SetupHandlerBase {
                     # verification. Missing package directories are expected
                     # before the first install, so keep this lookup quiet.
                     $this.EnsurePortableLinkQuiet($pkg)
+                    # Explicit pathEntries already support direct verification
+                    # without changing PATH. Recover only the missing-link case.
+                    if (-not $pkg.PathEntries) { $this.EnsurePathEntriesQuiet($pkg) }
                     $verificationPassed = if ($verifyCommandOnly) {
                         $this.TestPackageVerificationForPackage($pkg, $false)
                     }
