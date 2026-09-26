@@ -29,11 +29,11 @@ Get-Command codex -All
 
 ## dotfiles のインストールフロー
 
-| 段階 | 役割 | Codex CLI との関係 |
-| --- | --- | --- |
-| install.cmd Phase 1 | npm handler | `@openai/codex` をグローバルインストール |
-| install.cmd Phase 2 | Chezmoi | `~/.codex/` の設定と skills を展開 |
-| 新しい PowerShell | PATH の再読込 | npm の `codex` を解決 |
+| 段階                | 役割          | Codex CLI との関係                       |
+| ------------------- | ------------- | ---------------------------------------- |
+| install.cmd Phase 1 | npm handler   | `@openai/codex` をグローバルインストール |
+| install.cmd Phase 2 | Chezmoi       | `~/.codex/` の設定と skills を展開       |
+| 新しい PowerShell   | PATH の再読込 | npm の `codex` を解決                    |
 
 確認コマンド:
 

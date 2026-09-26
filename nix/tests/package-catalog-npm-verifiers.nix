@@ -24,7 +24,11 @@ in
         command = "codex";
         args = [ "--version" ];
       };
-      providers = [ "npm" "npm" "npm" ];
+      providers = [
+        "npm"
+        "npm"
+        "npm"
+      ];
     };
   };
 
