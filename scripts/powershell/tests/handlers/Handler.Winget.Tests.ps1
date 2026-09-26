@@ -17,6 +17,11 @@ Describe 'WingetHandler' {
     BeforeEach {
         $script:origUserProfileForWingetTests = $env:USERPROFILE
         $script:origLocalAppDataForWingetTests = $env:LOCALAPPDATA
+        $script:origProgramFilesForWingetTests = $env:ProgramFiles
+        $script:origPathForWingetTests = $env:PATH
+        $env:PATH = "$PSHOME;$env:SystemRoot\System32"
+        $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppData'
+        $env:ProgramFiles = Join-Path $TestDrive 'ProgramFiles'
         $env:USERPROFILE = Join-Path $TestDrive "UserProfile"
         $script:handler = [WingetHandler]::new()
         $script:ctx = [SetupContext]::new((Join-Path $TestDrive "dotfiles"))
@@ -45,6 +50,8 @@ Describe 'WingetHandler' {
     AfterEach {
         $env:USERPROFILE = $script:origUserProfileForWingetTests
         $env:LOCALAPPDATA = $script:origLocalAppDataForWingetTests
+        $env:ProgramFiles = $script:origProgramFilesForWingetTests
+        $env:PATH = $script:origPathForWingetTests
     }
 
     Context 'RemoveRetiredPackages' {
@@ -282,7 +289,6 @@ Describe 'WingetHandler' {
         }
 
         It 'should execute a portable WinGet link directly instead of resolving a same-named rustup shim' {
-            $script:origLocalAppDataForWingetTests = $env:LOCALAPPDATA
             $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppData'
             $linksPath = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
             New-Item -ItemType Directory -Path $linksPath -Force | Out-Null
@@ -309,7 +315,6 @@ Describe 'WingetHandler' {
         }
 
         It 'should reject a portable WinGet link probe when the package link is missing' {
-            $script:origLocalAppDataForWingetTests = $env:LOCALAPPDATA
             $env:LOCALAPPDATA = Join-Path $TestDrive 'MissingLocalAppData'
             Mock Invoke-VerifyCommand { throw 'A missing package link must not run another PATH command' }
 

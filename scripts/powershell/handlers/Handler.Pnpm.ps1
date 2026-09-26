@@ -56,6 +56,10 @@ class PnpmHandler : SetupHandlerBase {
         セットアップ成功時は $true、失敗時は $false
     #>
     hidden [bool] TryBootstrapPnpm() {
+        return $this.TryBootstrapPnpm('')
+    }
+
+    hidden [bool] TryBootstrapPnpm([string]$knownNpmPrefix) {
         $this.BootstrapPnpmDirectory = $null
 
         # 方法1: npm で pnpm をインストール
@@ -70,9 +74,13 @@ class PnpmHandler : SetupHandlerBase {
                 $npmOutput = @(Invoke-Npm -Arguments @("install", "-g", "pnpm@latest"))
                 $npmExitCode = [int]$LASTEXITCODE
                 if ($npmExitCode -eq 0) {
-                    $prefixOutput = @(Invoke-Npm -Arguments @("prefix", "-g"))
-                    $prefixExitCode = [int]$LASTEXITCODE
-                    $npmGlobalPrefix = ($prefixOutput | Select-Object -Last 1)
+                    $npmGlobalPrefix = $knownNpmPrefix
+                    $prefixExitCode = 0
+                    if (-not $npmGlobalPrefix) {
+                        $prefixOutput = @(Invoke-Npm -Arguments @("prefix", "-g"))
+                        $prefixExitCode = [int]$LASTEXITCODE
+                        $npmGlobalPrefix = ($prefixOutput | Select-Object -Last 1)
+                    }
                     if ($prefixExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace([string]$npmGlobalPrefix)) {
                         $npmGlobalPrefix = ([string]$npmGlobalPrefix).Trim()
                         $this.PrependUserPath($npmGlobalPrefix)
@@ -202,13 +210,15 @@ class PnpmHandler : SetupHandlerBase {
 
     [SetupResult] Apply([SetupContext]$ctx) {
         try {
+            try { Update-NpmGlobalCommandPath -Cache $ctx.Options }
+            catch { $this.LogWarning("npm global PATH recovery failed: $($_.Exception.Message)") }
             $pnpmCmd = Get-ExternalCommand -Name "pnpm"
             $pnpmCommandPath = Get-ExternalCommandPath -CommandInfo $pnpmCmd
             $pnpmIsUnusable = $pnpmCmd -and $pnpmCommandPath -and
                 (Test-Path -LiteralPath $pnpmCommandPath -PathType Leaf) -and
             -not $this.TestPnpmExecutable()
             if (-not $pnpmCmd -or $pnpmIsUnusable) {
-                if (-not $this.TryBootstrapPnpm()) {
+                if (-not $this.TryBootstrapPnpm([string]$ctx.Options['NpmGlobalPrefix'])) {
                     return $this.CreateFailureResult("pnpm のセットアップに失敗しました")
                 }
             }

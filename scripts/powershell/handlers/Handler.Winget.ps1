@@ -275,6 +275,9 @@ class WingetHandler : SetupHandlerBase {
                     # verification. Missing package directories are expected
                     # before the first install, so keep this lookup quiet.
                     $this.EnsurePortableLinkQuiet($pkg)
+                    # Explicit pathEntries already support direct verification
+                    # without changing PATH. Recover only the missing-link case.
+                    if (-not $pkg.PathEntries) { $this.EnsurePathEntriesQuiet($pkg) }
                     $verificationPassed = if ($verifyCommandOnly) {
                         $this.TestPackageVerificationForPackage($pkg, $false)
                     }
@@ -1817,12 +1820,55 @@ class WingetHandler : SetupHandlerBase {
         $this.EnsurePathEntriesInternal($pkg, $true)
     }
 
+    hidden [void] EnsureProcessPathEntries([object]$pkg) {
+        $this.EnsurePathEntriesInternal($pkg, $true, $false)
+    }
+
+    hidden [string] FindPortableCommandDirectory([object]$pkg) {
+        if (-not $pkg.VerifyCommand -or
+            -not ($pkg.VerifyCommand.PSObject.Properties.Name -contains 'command')) { return '' }
+        $commandName = [string]$pkg.VerifyCommand.command
+        if ($commandName -notmatch '^[a-zA-Z0-9][a-zA-Z0-9_.-]*$' -or
+            [string]$pkg.Id -notmatch '^[a-zA-Z0-9][a-zA-Z0-9_.-]*$') { return '' }
+        if (($pkg.VerifyCommand.PSObject.Properties.Name -contains 'type') -and
+            [string]$pkg.VerifyCommand.type -notin @('command', 'commandExists')) { return '' }
+
+        $executableName = if ($commandName.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase)) { $commandName } else { "$commandName.exe" }
+        $candidates = @(
+            foreach ($base in @($env:LOCALAPPDATA, $env:ProgramFiles)) {
+                if (-not $base) { continue }
+                $relativeRoot = if ($base -eq $env:LOCALAPPDATA) { 'Microsoft\WinGet\Packages' } else { 'WinGet\Packages' }
+                $packagesRoot = Join-Path $base $relativeRoot
+                foreach ($packageDirectory in @(Get-ChildItem -LiteralPath $packagesRoot -Directory -Filter "$($pkg.Id)_*" -ErrorAction SilentlyContinue)) {
+                    Get-ChildItem -LiteralPath $packageDirectory.FullName -File -Filter $executableName -Recurse -ErrorAction SilentlyContinue
+                }
+            }
+        )
+        if ($candidates.Count -eq 1) { return $candidates[0].DirectoryName }
+        if ($candidates.Count -gt 1) {
+            $this.LogWarning("Multiple package executables found; cannot choose a PATH entry: $($pkg.Id) / $executableName")
+        }
+        return ''
+    }
+
     hidden [void] EnsurePathEntriesInternal([object]$pkg, [bool]$quiet) {
-        if (-not $pkg.PathEntries) { return }
+        $this.EnsurePathEntriesInternal($pkg, $quiet, $true)
+    }
+
+    hidden [void] EnsurePathEntriesInternal([object]$pkg, [bool]$quiet, [bool]$persist) {
+        $pathEntries = @($pkg.PathEntries)
+        if (-not $pkg.PathEntries) {
+            # WinGet can report "already installed" even if its Links shim is
+            # missing. Use the matching package's real directory, including
+            # nested bin directories, so sibling DLLs/resources remain intact.
+            $recoveredDirectory = $this.FindPortableCommandDirectory($pkg)
+            if (-not $recoveredDirectory) { return }
+            $pathEntries = @($recoveredDirectory)
+        }
 
         $resolvedEntries = [System.Collections.Generic.List[string]]::new()
         $missingEntries = [System.Collections.Generic.List[string]]::new()
-        foreach ($rawEntry in @($pkg.PathEntries)) {
+        foreach ($rawEntry in $pathEntries) {
             if ([string]::IsNullOrWhiteSpace([string]$rawEntry)) { continue }
 
             $expanded = [Environment]::ExpandEnvironmentVariables([string]$rawEntry)
@@ -1869,7 +1915,7 @@ class WingetHandler : SetupHandlerBase {
             }
         }
 
-        if ($updatedUserPath) {
+        if ($updatedUserPath -and $persist) {
             Set-UserEnvironmentPath -Path ($newUserPathItems -join ";")
             $this.Log("USER PATH にパッケージ PATH を追加しました: $($resolvedEntries -join ', ')", "Green")
         }

@@ -45,4 +45,15 @@ function Repair-WindowsSetupEnvironment {
         $env:TEMP = Join-Path $env:LOCALAPPDATA "Temp"
     }
     if (-not $env:TMP) { $env:TMP = $env:TEMP }
+
+    # App execution aliases can exist even when the inherited PATH is incomplete.
+    # Repair this process only; do not replace the user's persisted PATH.
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        $windowsApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
+        $pathItems = @($env:PATH -split ';' | Where-Object { $_ })
+        $normalizedItems = @($pathItems | ForEach-Object { $_.Trim('"').TrimEnd([char[]]'\/') })
+        if ((Test-Path -LiteralPath $windowsApps -PathType Container) -and $normalizedItems -notcontains $windowsApps) {
+            $env:PATH = (@($pathItems) + @($windowsApps)) -join ';'
+        }
+    }
 }

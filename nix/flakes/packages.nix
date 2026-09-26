@@ -103,6 +103,7 @@
 
       checks = {
         package-provider-coverage = packageSupportReport;
+        custom-package-builds = import ../tests/packages/custom-builds.nix { inherit pkgs; };
         neovim-native = import ../tests/neovim.nix { inherit pkgs; };
       }
       // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {

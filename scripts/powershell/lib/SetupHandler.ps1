@@ -207,7 +207,7 @@ class SetupHandlerBase {
     [string]$ConsentKey = ""
     [string]$ConsentLabel = ""
 
-    # ログバッファリング（CanApply 中はバッファリングし、スキップ時は破棄）
+    # ログバッファリング（CanApply 中はバッファリングし、判定後に表示）
     hidden [bool]$_bufferLogs = $false
     hidden [System.Collections.ArrayList]$_logBuffer = [System.Collections.ArrayList]::new()
 
@@ -744,7 +744,8 @@ function Invoke-SetupHandler {
         $handler._bufferLogs = $false
 
         if (-not $canApply) {
-            $handler.ClearLogBuffer()
+            $handler.FlushLogBuffer()
+            Write-Host "[$($handler.Name)] Skipped (CanApply returned false)" -ForegroundColor Gray
             continue
         }
 

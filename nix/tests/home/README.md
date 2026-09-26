@@ -43,6 +43,8 @@ derivation の build 成功を保証しません。変更時のローカル必�
 nix build .#checks.x86_64-linux.nix-unit --no-link --no-write-lock-file
 nix build .#checks.aarch64-linux.nix-unit --no-link --no-write-lock-file
 nix build .#checks.aarch64-darwin.nix-unit --no-link --no-write-lock-file
+nix build .#checks.x86_64-linux.custom-package-builds --no-link --no-write-lock-file
+nix build .#checks.aarch64-darwin.custom-package-builds --no-link --no-write-lock-file
 ```
 
 CI で Nix job が route された場合は `x86_64-linux`（`ubuntu-24.04`）で
