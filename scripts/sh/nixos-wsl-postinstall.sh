@@ -369,15 +369,19 @@ install_codex_for_user() {
     return 1
   }
 
-  local user_path="$PATH:/run/current-system/sw/bin:/etc/profiles/per-user/$USER_NAME/bin:$user_home/.local/bin"
+  # NixOS-WSL may append the Windows PATH, including a Windows npm prefix.
+  # Put the Linux Nix profile first so optional platform dependencies are
+  # installed into a WSL-local prefix instead of being reused from Windows.
+  local user_path="$user_home/.local/bin:/etc/profiles/per-user/$USER_NAME/bin:/run/current-system/sw/bin:/run/wrappers/bin:$PATH"
   if [[ $USER_NAME == root ]]; then
-    HOME="$user_home" PATH="$user_path" bash -c 'source "$1"; dotfiles_install_codex_npm' _ "$codex_script"
+    HOME="$user_home" CODEX_NPM_PREFIX="$user_home/.local/npm" PATH="$user_path" bash -c 'source "$1"; dotfiles_install_codex_npm' _ "$codex_script"
     return
   fi
 
   runuser -u "$USER_NAME" -- env \
     HOME="$user_home" \
     USER="$USER_NAME" \
+    CODEX_NPM_PREFIX="$user_home/.local/npm" \
     PATH="$user_path" \
     bash -c 'source "$1"; dotfiles_install_codex_npm' \
     _ "$codex_script"
@@ -431,3 +435,4 @@ if [[ $SYNC_MODE != "link" ]]; then
 fi
 
 echo "Post-install setup completed."
+
