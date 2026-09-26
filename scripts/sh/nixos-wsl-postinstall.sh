@@ -435,4 +435,3 @@ if [[ $SYNC_MODE != "link" ]]; then
 fi
 
 echo "Post-install setup completed."
-
