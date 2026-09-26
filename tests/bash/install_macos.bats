@@ -1267,6 +1267,23 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
 
+@test "directory shell rc backups are preserved and stop nix-darwin activation" {
+	write_installed_stubs
+	mkdir -p "$(dirname "$FAKE_BASHRC")"
+	printf 'current bashrc\n' >"$FAKE_BASHRC"
+	mkdir "$FAKE_BASHRC.before-nix-darwin"
+	printf 'keep this file\n' >"$FAKE_BASHRC.before-nix-darwin/keep"
+
+	run_macos_installer
+
+	[ "$status" -ne 0 ]
+	[ -d "$FAKE_BASHRC.before-nix-darwin" ]
+	grep -q '^keep this file$' "$FAKE_BASHRC.before-nix-darwin/keep"
+	grep -q '^current bashrc$' "$FAKE_BASHRC"
+	! grep -q '^sudo <mv>' "$COMMAND_LOG"
+	! grep -q '^nix run .#darwin-rebuild -- switch' "$COMMAND_LOG"
+}
+
 @test "running Docker Desktop is stopped when its engine is unavailable" {
 	write_installed_stubs
 	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
