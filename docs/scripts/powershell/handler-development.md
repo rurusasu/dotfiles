@@ -1,6 +1,18 @@
 # ハンドラー開発ガイド
 
+## Windows セットアップのコマンド探索
+
+- エントリーポイントの `Repair-WindowsSetupEnvironment` は、既存の `%LOCALAPPDATA%\Microsoft\WindowsApps` が PATH から欠落していれば、現在のプロセスに補完する。これにより WinGet の実行エイリアスを事前確認で検出できる。
+- npm / pnpm の `Apply` は `Update-NpmGlobalCommandPath` を呼ぶ。`npm prefix -g` が返す保存先を現在の PATH に補完してから、検証・bootstrap・インストールを行う。既定の `%APPDATA%\npm` に固定せず、カスタム prefix も扱う。
+- prefix の取得結果は同じ `SetupContext.Options` 内で共有し、npm と pnpm で重複して問い合わせない。永続 USER PATH は書き換えない。
+- `CanApply` が false の場合も、判定理由とスキップをログに表示する。検証に失敗した場合はコマンド・終了コード・出力を残す。
+- PATH 修復の回帰テストは `tests/lib/WindowsSetupPath.Tests.ps1`。実際のコマンド探索と子プロセスでの検証を使い、外部インストールと永続設定変更はモックする。Windows 以外では明示的にスキップする。
+- WinGet のコマンドリンクが欠落し `pathEntries` の明示設定もない場合は、対象 ID の WinGet パッケージディレクトリ内だけで検証コマンドと同名の exe を探す。候補が1件の場合に実体ディレクトリを PATH に追加し、DLL やデータファイルとの位置関係を保つ。候補が複数なら自動選択しない。
+- Windows Installer CI は PS7 / PS5.1 の両方で `ci/Assert-WingetCommandRecovery.ps1` を実行する。今回欠落した5パッケージについて PATH を最小限にした状態で復旧・実行し、runner の既存ツールによる偽陽性を防ぐ。対象なし・実体なし・検証失敗はエラーにする。検証専用の `EnsureProcessPathEntries` は永続 PATH を変更しない。
+
 ## 新しいハンドラーの作成
+
+テストは `tests/Invoke-Tests.ps1` から実行する。個別テストの失敗数だけでなく、Pester の discovery / container / block 失敗も非ゼロ終了にする。`TestRunnerFailures.Tests.ps1` は「正常なテスト + 読み込めないテスト」を子プロセスで実行し、成功扱いにならないことを確認する。
 
 ### ステップ 1: ハンドラーファイルの作成
 

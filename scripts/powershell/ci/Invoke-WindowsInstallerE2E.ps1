@@ -1,25 +1,25 @@
 ﻿$expectedRuntime = $env:DOTFILES_E2E_POWERSHELL_VERSION
 $runtimeCommand = if ($expectedRuntime -eq '5.1') { 'powershell.exe' } else { 'pwsh.exe' }
 $runtimeExecutable = Get-Command -Name $runtimeCommand -CommandType Application -ErrorAction Stop |
-  Select-Object -First 1
+    Select-Object -First 1
 $runtimePath = [string]$runtimeExecutable.Source
 
 # The PowerShell 7 E2E host cannot safely update its own executable.
 # Windows PowerShell 5.1 runs the same full install and verifies this package.
 if ($expectedRuntime -eq '7') {
-  $manifestPath = Join-Path $env:GITHUB_WORKSPACE 'windows\winget\packages.json'
-  $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-  $powerShellPackages = @(
-    $manifest.Sources | ForEach-Object { $_.Packages } |
-      Where-Object { $_.PackageIdentifier -eq 'Microsoft.PowerShell' }
-  )
-  if ($powerShellPackages.Count -ne 1) {
-    throw "Expected one Microsoft.PowerShell manifest entry; found $($powerShellPackages.Count)."
-  }
-  $powerShellPackages[0] | Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue $true -Force
-  $manifest | ConvertTo-Json -Depth 100 |
-    Set-Content -LiteralPath $manifestPath -Encoding utf8
-  Write-Host 'Microsoft.PowerShell self-update is covered by the Windows PowerShell 5.1 E2E job'
+    $manifestPath = Join-Path $env:GITHUB_WORKSPACE 'windows\winget\packages.json'
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $powerShellPackages = @(
+        $manifest.Sources | ForEach-Object { $_.Packages } |
+            Where-Object { $_.PackageIdentifier -eq 'Microsoft.PowerShell' }
+    )
+    if ($powerShellPackages.Count -ne 1) {
+        throw "Expected one Microsoft.PowerShell manifest entry; found $($powerShellPackages.Count)."
+    }
+    $powerShellPackages[0] | Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue $true -Force
+    $manifest | ConvertTo-Json -Depth 100 |
+        Set-Content -LiteralPath $manifestPath -Encoding utf8
+    Write-Host 'Microsoft.PowerShell self-update is covered by the Windows PowerShell 5.1 E2E job'
 }
 
 $installerE2EScript = @'
@@ -296,6 +296,11 @@ if ($expectedWindowsPackageIds.Count -eq 0) {
 Assert-WingetInstallSuccess -Output $out -ExpectedPackageIds $expectedWindowsPackageIds
 }
 
+Invoke-WindowsE2EValidation -Name 'portable command PATH recovery' -Validation {
+& (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WingetCommandRecovery.ps1') `
+  -ManifestPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json')
+}
+
 Invoke-WindowsE2EValidation -Name 'pnpm bootstrap' -Validation {
 $npmPrefixOutput = @(Invoke-Npm -Arguments @('prefix', '--global'))
 $npmPrefixExitCode = $LASTEXITCODE
@@ -542,12 +547,12 @@ $installerE2EScriptPath = Join-Path $env:RUNNER_TEMP "windows-installer-e2e-$exp
 [System.IO.File]::WriteAllText($installerE2EScriptPath, $installerE2EScript, [System.Text.Encoding]::Unicode)
 Write-Host "Running the complete Windows installer E2E under $expectedRuntime ($($runtimeExecutable.Source))"
 try {
-  & $runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File $installerE2EScriptPath
-  $installerE2EExitCode = $LASTEXITCODE
+    & $runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File $installerE2EScriptPath
+    $installerE2EExitCode = $LASTEXITCODE
 }
 finally {
-  Remove-Item -LiteralPath $installerE2EScriptPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $installerE2EScriptPath -Force -ErrorAction SilentlyContinue
 }
 if ($installerE2EExitCode -ne 0) {
-  exit $installerE2EExitCode
+    exit $installerE2EExitCode
 }

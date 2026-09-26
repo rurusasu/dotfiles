@@ -69,6 +69,7 @@ Describe 'NpmHandler' {
 
     BeforeEach {
         $script:handler = [NpmHandler]::new()
+        Mock Update-NpmGlobalCommandPath { }
         $script:ctx = [SetupContext]::new($script:projectRoot)
     }
 

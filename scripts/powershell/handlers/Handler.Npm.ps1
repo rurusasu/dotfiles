@@ -100,6 +100,7 @@ class NpmHandler : SetupHandlerBase {
     #>
     hidden [SetupResult] ImportPackages([SetupContext]$ctx) {
         try {
+            Update-NpmGlobalCommandPath -Cache $ctx.Options
             $packagesPath = $this.GetPackagesPath($ctx)
             $this.Log("npm グローバルパッケージをインストールしています...")
             $this.Log("ソース: $packagesPath")
@@ -218,11 +219,18 @@ class NpmHandler : SetupHandlerBase {
             $command = $verifyCmd.command
             $arguments = @($verifyCmd.args)
             $timeoutSeconds = $this.GetVerifyTimeoutSeconds($verifyCmd)
-            $null = Invoke-VerifyCommand -Command $command -Arguments $arguments -TimeoutSeconds $timeoutSeconds
-            if ($LASTEXITCODE -eq 124) {
+            $output = Invoke-VerifyCommand -Command $command -Arguments $arguments -TimeoutSeconds $timeoutSeconds
+            $exitCode = $LASTEXITCODE
+            if ($exitCode -eq 124) {
                 $this.LogWarning("検証コマンドがタイムアウトしました (${timeoutSeconds}s): $command $($arguments -join ' ')")
             }
-            return $LASTEXITCODE -eq 0
+            if ($exitCode -ne 0) {
+                $this.LogWarning("検証失敗 (exit code ${exitCode}): $command $($arguments -join ' ')")
+                foreach ($line in @($output)) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$line)) { $this.Log("  $line", "Gray") }
+                }
+            }
+            return $exitCode -eq 0
         }
         catch {
             $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")

@@ -801,6 +801,36 @@ function Add-NpmNodeDirectoryToProcessPath {
     }
 }
 
+function Update-NpmGlobalCommandPath {
+    [CmdletBinding()]
+    param(
+        [hashtable]$Cache = @{}
+    )
+
+    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { return }
+    if (-not $Cache.ContainsKey('NpmGlobalPrefix')) {
+        if (-not (Get-ExternalCommand -Name 'npm')) { return }
+        $output = @(Invoke-Npm -Arguments @('prefix', '-g'))
+        $exitCode = $LASTEXITCODE
+        $prefix = [string]($output | Select-Object -Last 1)
+        if ($exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($prefix) -or
+            -not [IO.Path]::IsPathRooted($prefix.Trim())) {
+            throw "npm prefix -g failed (exit code ${exitCode}): $($output -join ' ')"
+        }
+        $Cache['NpmGlobalPrefix'] = $prefix.Trim()
+    }
+
+    # On Windows npm places global command shims directly in its prefix.
+    # Include it before installation, even when npm has not created it yet.
+    $prefix = [string]$Cache['NpmGlobalPrefix']
+    $normalizedPrefix = $prefix.TrimEnd([char[]]'\/')
+    $pathItems = @($env:PATH -split ';' | Where-Object { $_ })
+    $normalizedItems = @($pathItems | ForEach-Object { $_.Trim('"').TrimEnd([char[]]'\/') })
+    if ($normalizedItems -notcontains $normalizedPrefix) {
+        $env:PATH = (@($prefix) + $pathItems) -join ';'
+    }
+}
+
 <#
 .SYNOPSIS
     pnpm コマンドを実行する
@@ -812,6 +842,7 @@ function Add-NpmNodeDirectoryToProcessPath {
     Invoke-Pnpm -Arguments @("--version")
     Invoke-Pnpm -Arguments @("add", "-g", "@google/gemini-cli")
 #>
+
 function Invoke-Pnpm {
     [CmdletBinding()]
     param(
