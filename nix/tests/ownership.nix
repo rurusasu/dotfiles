@@ -155,7 +155,7 @@ in
 
   testPackageCatalogPesterHasExpectedItCount = {
     expr = builtins.length packageCatalogPesterTests;
-    expected = 39;
+    expected = 40;
   };
 
   testTartVmInstallerKeepsOnlyRuntimeAndTaskfileContracts = {
