@@ -301,7 +301,7 @@ Describe 'Plane work item helpers' {
         $config = [pscustomobject]@{ planeBaseUrl = 'http://127.0.0.1:18080'; planeWorkspaceSlug = 'team' }
 
         { Invoke-PlaneApi -Method 'Put' -Config $config -Token 'token' -Path 'projects/project-1/work-items/' } |
-            Should -Throw -ExpectedMessage "*Cannot validate argument on parameter 'Method'*"
+            Should -Throw -ErrorId 'ParameterArgumentValidationError,Invoke-PlaneApi'
     }
 
     It 'reads every page from Plane API cursor collections' {

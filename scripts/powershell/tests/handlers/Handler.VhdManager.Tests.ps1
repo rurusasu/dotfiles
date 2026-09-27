@@ -65,6 +65,22 @@ Describe 'VhdManagerHandler' {
             $result | Should -Be $false
         }
 
+        It 'should ignore registry entries without a DistributionName property' {
+            Set-StrictMode -Version Latest
+            Mock Get-RegistryChildItem {
+                return @([PSCustomObject]@{ PSPath = "HKCU:\Test" })
+            }
+            Mock Get-RegistryValue {
+                return [PSCustomObject]@{
+                    BasePath = "C:\WSL\NixOS"
+                }
+            }
+
+            $result = $handler.CanApply($ctx)
+
+            $result | Should -Be $false
+        }
+
         It 'should return false when VHDX does not exist' {
             Mock Get-RegistryChildItem {
                 return @([PSCustomObject]@{ PSPath = "HKCU:\Test" })
