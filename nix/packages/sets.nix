@@ -1536,7 +1536,7 @@ lib.mapAttrs (_: resolve) grouped
     };
     "@prisma/language-server" = {
       command = "prisma-language-server";
-      args = [ "--version" ];
+      type = "commandExists";
     };
     "@google/gemini-cli" = {
       command = "gemini";
