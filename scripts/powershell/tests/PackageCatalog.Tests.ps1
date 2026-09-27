@@ -484,8 +484,15 @@ Describe 'Package catalog consistency' {
 
             foreach ($package in @($npm.globalPackages) + @($pnpm.globalPackages)) {
                 [string]::IsNullOrWhiteSpace([string]$package.verifyCommand.command) | Should -BeFalse -Because "$($package.name) must identify its verification executable"
-                @($package.verifyCommand.args).Count | Should -BeGreaterThan 0 -Because "$($package.name) must execute a verification command"
-                @($package.verifyCommand.args | Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }).Count | Should -Be 0 -Because "$($package.name) verifier arguments must be concrete"
+                $verifyType = if ([string]::IsNullOrWhiteSpace([string]$package.verifyCommand.type)) { 'command' } else { [string]$package.verifyCommand.type }
+                if ($verifyType -eq 'commandExists') {
+                    @($package.verifyCommand.args | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count |
+                        Should -Be 0 -Because "$($package.name) command-existence verifier must not execute the command"
+                }
+                else {
+                    @($package.verifyCommand.args).Count | Should -BeGreaterThan 0 -Because "$($package.name) must execute a verification command"
+                    @($package.verifyCommand.args | Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }).Count | Should -Be 0 -Because "$($package.name) verifier arguments must be concrete"
+                }
             }
 
             (@($winGetOnlyPackages | Where-Object ciSkipInstall | ForEach-Object PackageIdentifier | Sort-Object) -join ',') |

@@ -19,8 +19,8 @@
     {
       "name": "@prisma/language-server",
       "verifyCommand": {
-        "args": ["--version"],
-        "command": "prisma-language-server"
+        "command": "prisma-language-server",
+        "type": "commandExists"
       }
     },
     {

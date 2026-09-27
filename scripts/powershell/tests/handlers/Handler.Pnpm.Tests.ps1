@@ -1701,6 +1701,7 @@ Describe 'PnpmHandler' {
             Mock Get-ExternalCommand {
                 param($Name)
                 if ($Name -eq "pnpm") { return @{ Source = "C:\pnpm.cmd" } }
+                if ($Name -eq "prisma-language-server") { return @{ Source = "C:\prisma-language-server.cmd" } }
                 return $null
             }
 
@@ -1758,6 +1759,15 @@ Describe 'PnpmHandler' {
     }
 
     Context 'Apply - Windows pnpm manifest contracts' {
+        It 'should verify the Prisma language server by command existence instead of starting its stdio server' {
+            $manifest = Get-JsonContent -Path (Join-Path $script:projectRoot "windows\pnpm\packages.json")
+            $prismaEntry = $manifest.globalPackages | Where-Object name -EQ "@prisma/language-server"
+
+            $prismaEntry.verifyCommand.type | Should -Be "commandExists"
+            $prismaEntry.verifyCommand.command | Should -Be "prisma-language-server"
+            $prismaEntry.verifyCommand.args | Should -BeNullOrEmpty
+        }
+
         It 'should verify Gemini by executing the installed CLI without probing an optional module' {
             $script:pnpmRoot = Join-Path $TestDrive 'pnpm-module-root'
             New-Item -Path (Join-Path $script:pnpmRoot '@google\gemini-cli') -ItemType Directory -Force | Out-Null
@@ -1828,6 +1838,7 @@ Describe 'PnpmHandler' {
             Mock Get-ExternalCommand {
                 param($Name)
                 if ($Name -eq "pnpm") { return @{ Source = "C:\pnpm.cmd" } }
+                if ($Name -eq "prisma-language-server") { return @{ Source = "C:\prisma-language-server.cmd" } }
                 return $null
             }
             Mock Invoke-Pnpm {
@@ -1871,7 +1882,7 @@ Describe 'PnpmHandler' {
             $expected = @(
                 @{ Spec = "bash-language-server"; Command = "bash-language-server"; Arguments = @("--version") }
                 @{ Spec = "yaml-language-server"; Command = "yaml-language-server"; Arguments = @("--version") }
-                @{ Spec = "@prisma/language-server"; Command = "prisma-language-server"; Arguments = @("--version") }
+                @{ Spec = "@prisma/language-server"; Command = "prisma-language-server"; Arguments = @(); Type = "commandExists" }
                 @{ Spec = "@deepseek-ai/dsh"; Command = "dsh"; Arguments = @("--version") }
                 @{ Spec = "@playwright/cli@0.1.21"; Command = "playwright-cli"; Arguments = @("--version") }
                 @{ Spec = "playwright@1.63.0"; Command = "playwright"; Arguments = @("--version") }
@@ -1891,6 +1902,9 @@ Describe 'PnpmHandler' {
             (@($script:pnpmAddCalls | ForEach-Object { $_[-1] } | Sort-Object) -join "|") |
                 Should -Be ((@($expected | ForEach-Object { $_.Spec } | Sort-Object) -join "|"))
             foreach ($entry in $expected) {
+                if ($entry.Type -eq "commandExists") {
+                    continue
+                }
                 $script:pnpmVerifyCalls | Where-Object {
                     $_.Command -eq $entry.Command -and ($_.Arguments -join "|") -eq ($entry.Arguments -join "|")
                 } | Should -HaveCount 1
@@ -1945,7 +1959,7 @@ Describe 'PnpmHandler' {
             $result.Success | Should -BeTrue
             $script:pnpmAddCalls.Count | Should -Be 9
             foreach ($command in @(
-                    "bash-language-server", "yaml-language-server", "prisma-language-server",
+                    "bash-language-server", "yaml-language-server",
                     "dsh", "playwright-cli", "playwright", "typescript-language-server", "tsc", "gemini"
                 )) {
                 $script:pnpmVerifyCalls | Where-Object {
