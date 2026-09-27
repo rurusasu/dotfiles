@@ -1923,7 +1923,7 @@ Describe 'PnpmHandler' {
             $dshCall | Should -Contain "--allow-build=@deepseek-ai/dsh-subprocess-local"
             $dshCall | Should -Contain "--allow-build=@google/genai"
             $dshCall | Should -Contain "--allow-build=koffi"
-            $dshCall | Should -Contain "--allow-build=node-pty"
+        $dshCall | Should -Not -Contain "--allow-build=node-pty"
             $dshCall | Should -Contain "--allow-build=protobufjs"
             $geminiCall = $script:pnpmAddCalls | Where-Object { $_ -contains "@google/gemini-cli" } | Select-Object -First 1
             $geminiCall | Should -Contain "--allow-build=@github/keytar"
