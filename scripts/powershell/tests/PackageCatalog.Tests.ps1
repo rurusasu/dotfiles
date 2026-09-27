@@ -386,6 +386,14 @@ Describe 'Package catalog consistency' {
             @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Links'
         }
 
+        It 'should not approve the legacy node-pty build for global pnpm packages' {
+            $pnpm = Get-Content -LiteralPath $script:pnpmJsonPath -Raw | ConvertFrom-Json
+            $dsh = @($pnpm.globalPackages | Where-Object { $_.name -eq '@deepseek-ai/dsh' }) | Select-Object -First 1
+
+            $dsh | Should -Not -BeNullOrEmpty
+            @($dsh.installArgs) | Should -Not -Contain '--allow-build=node-pty'
+        }
+
         It 'should add the portable Bun executable directory before verification' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
