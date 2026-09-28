@@ -17,7 +17,7 @@ BeforeAll {
     }
 
     $script:functionScriptBlockByName = @{}
-    foreach ($name in @("Reset-DotfilesTerminalInputMode", "Resolve-DotfilesCodexExecutable", "Invoke-CodexCli", "Import-MsvcDevEnvironment", "cargo-msvc", "nvim-msvc", "ConvertTo-DcnvimBashSingleQuoted", "dcnvim")) {
+    foreach ($name in @("Merge-DotfilesPathEntries", "Reset-DotfilesTerminalInputMode", "Resolve-DotfilesCodexExecutable", "Invoke-CodexCli", "Import-MsvcDevEnvironment", "cargo-msvc", "nvim-msvc", "ConvertTo-DcnvimBashSingleQuoted", "dcnvim")) {
         $functionAst = $profileAst.Find(
             {
                 param($node)
@@ -42,6 +42,10 @@ BeforeAll {
         foreach ($name in @("Reset-DotfilesTerminalInputMode", "Resolve-DotfilesCodexExecutable", "Invoke-CodexCli")) {
             Set-Item -Path "Function:\global:$name" -Value $script:functionScriptBlockByName[$name]
         }
+    }
+
+    function Import-PathProfileFunction {
+        Set-Item -Path "Function:\global:Merge-DotfilesPathEntries" -Value $script:functionScriptBlockByName["Merge-DotfilesPathEntries"]
     }
 
     function Import-MsvcProfileFunction {
@@ -294,18 +298,34 @@ Describe 'PowerShell codex profile wrapper' {
 }
 
 Describe 'PowerShell VS Code lightweight profile path' {
-    It 'should expose CLI wrappers before the VS Code lightweight return without rebuilding PATH' {
+    It 'should expose CLI wrappers before the VS Code lightweight return while merging PATH entries' {
         $returnIndex = $script:profileContent.IndexOf('if ($env:VSCODE_PID -or $env:VSCODE_INJECTION) { return }')
         ($returnIndex -ge 0) | Should -BeTrue
 
-        $pathIndex = $script:profileContent.IndexOf('$env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine")')
+        $pathFunctionIndex = $script:profileContent.IndexOf('function Merge-DotfilesPathEntries')
+        $pathInvocationIndex = $script:profileContent.IndexOf('$env:PATH = Merge-DotfilesPathEntries')
         $codexAliasIndex = $script:profileContent.IndexOf('Set-Alias -Name codex -Value Invoke-CodexCli')
 
-        ($pathIndex -ge 0) | Should -BeFalse
+        ($pathFunctionIndex -ge 0) | Should -BeTrue
+        ($pathInvocationIndex -ge 0) | Should -BeTrue
         ($codexAliasIndex -ge 0) | Should -BeTrue
         $script:profileContent | Should -Not -Match 'function claude'
 
         $codexAliasIndex | Should -BeLessThan $returnIndex
+    }
+}
+
+Describe 'PowerShell PATH repair' {
+    BeforeEach {
+        Import-PathProfileFunction
+    }
+
+    It 'should preserve inherited entries and append missing Machine and User entries once' {
+        Merge-DotfilesPathEntries `
+            -InheritedPath 'C:\inherited;C:\Shared;C:\Inherited' `
+            -MachinePath 'C:\Machine;C:\Shared' `
+            -UserPath 'C:\User;C:\machine' |
+            Should -Be 'C:\inherited;C:\Shared;C:\Machine;C:\User'
     }
 }
 

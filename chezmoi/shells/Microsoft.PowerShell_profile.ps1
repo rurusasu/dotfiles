@@ -19,6 +19,33 @@ if (-not $env:TEMP -or $env:TEMP -eq $env:USERPROFILE) { $env:TEMP = Join-Path $
 if (-not $env:TMP) { $env:TMP = $env:TEMP }
 if (-not $env:TERM -or $env:TERM -eq "dumb") { $env:TERM = "xterm-256color" }
 
+function Merge-DotfilesPathEntries {
+    param(
+        [AllowNull()][string]$InheritedPath,
+        [AllowNull()][string]$MachinePath,
+        [AllowNull()][string]$UserPath
+    )
+
+    $pathEntries = [System.Collections.Generic.List[string]]::new()
+    $seenPathEntries = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($pathValue in @($InheritedPath, $MachinePath, $UserPath)) {
+        if ([string]::IsNullOrWhiteSpace($pathValue)) { continue }
+
+        foreach ($pathEntry in ($pathValue -split ";")) {
+            $normalizedPathEntry = $pathEntry.Trim()
+            if (-not $normalizedPathEntry -or -not $seenPathEntries.Add($normalizedPathEntry)) { continue }
+            [void]$pathEntries.Add($normalizedPathEntry)
+        }
+    }
+
+    return ($pathEntries -join ";")
+}
+
+$_machine_path = [Environment]::GetEnvironmentVariable("PATH", "Machine")
+$_user_path = [Environment]::GetEnvironmentVariable("PATH", "User")
+$env:PATH = Merge-DotfilesPathEntries -InheritedPath $env:PATH -MachinePath $_machine_path -UserPath $_user_path
+Remove-Variable _machine_path, _user_path -ErrorAction SilentlyContinue
+
 # Tell snacks.nvim to use WezTerm's Kitty graphics protocol for image preview.
 $env:SNACKS_WEZTERM = "true"
 
