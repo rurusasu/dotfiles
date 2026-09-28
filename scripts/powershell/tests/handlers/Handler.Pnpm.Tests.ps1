@@ -842,6 +842,10 @@ Describe 'PnpmHandler' {
             Mock Invoke-Pnpm {
                 param($Arguments)
                 if ($Arguments -contains "root") { $global:LASTEXITCODE = 0; return $script:globalRoot }
+                if ($Arguments -contains "outdated") {
+                    $global:LASTEXITCODE = 0
+                    return '{"@google/gemini-cli":{"current":"1.0.0","latest":"1.1.0"},"typescript":{"current":"5.0.0","latest":"5.1.0"}}'
+                }
                 if ($Arguments -contains "bin") { $global:LASTEXITCODE = 0; return $script:pnpmBin }
                 $global:LASTEXITCODE = 0; return ""
             }
@@ -852,14 +856,14 @@ Describe 'PnpmHandler' {
         }
         AfterEach { $env:PATH = $script:origPath }
 
-        It 'should install all already-installed packages so pnpm selects latest' {
+        It 'should update installed packages reported as outdated' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             $result.Message | Should -Match "1 個検証済み"
             $result.Message | Should -Match "2 個インストール"
         }
 
-        It 'should call pnpm add for installed packages' {
+        It 'should call pnpm add for installed outdated packages' {
             $handler.Apply($ctx)
             Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "add" } -Times 2
         }
@@ -1834,6 +1838,7 @@ Describe 'PnpmHandler' {
             $script:pnpmAddCalls = @()
             $script:pnpmVerifyCalls = @()
             $script:verifyExitCodeByCommand = @{}
+            $script:outdatedJson = "{}"
 
             Mock Get-ExternalCommand {
                 param($Name)
@@ -1846,6 +1851,10 @@ Describe 'PnpmHandler' {
                 if ($Arguments -contains "root") {
                     $global:LASTEXITCODE = 0
                     return $script:pnpmRoot
+                }
+                if ($Arguments -contains "outdated") {
+                    $global:LASTEXITCODE = 0
+                    return $script:outdatedJson
                 }
                 if ($Arguments -contains "add") {
                     $script:pnpmAddCalls += , @($Arguments)
@@ -1937,7 +1946,7 @@ Describe 'PnpmHandler' {
             $geminiEntry.verifyCommand.moduleSmokeTest | Should -BeNullOrEmpty
         }
 
-        It 'should detect every installed manifest package and still refresh each declared spec' {
+        It 'should skip every installed manifest package that is verified and up to date' {
             $installedPackagePaths = @(
                 "bash-language-server"
                 "yaml-language-server"
@@ -1952,19 +1961,21 @@ Describe 'PnpmHandler' {
             foreach ($relativePath in $installedPackagePaths) {
                 New-Item -Path (Join-Path $script:pnpmRoot $relativePath) -ItemType Directory -Force | Out-Null
             }
+            $script:outdatedJson = '{"bash-language-server":{"current":"5.8.0","latest":"5.8.1"}}'
             $ctx.Options["WithHermes"] = $true
 
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeTrue
-            $script:pnpmAddCalls.Count | Should -Be 9
+            $script:pnpmAddCalls.Count | Should -Be 2
+            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "playwright@1.63.0"
             foreach ($command in @(
                     "bash-language-server", "yaml-language-server",
                     "dsh", "playwright-cli", "playwright", "typescript-language-server", "tsc", "gemini"
                 )) {
                 $script:pnpmVerifyCalls | Where-Object {
                     $_.Command -eq $command -and ($_.Arguments -join "|") -eq "--version"
-                } | Should -HaveCount 2
+                } | Should -HaveCount $(if ($command -in @("bash-language-server", "playwright")) { 2 } else { 1 })
             }
         }
 

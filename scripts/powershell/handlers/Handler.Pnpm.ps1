@@ -262,6 +262,14 @@ class PnpmHandler : SetupHandlerBase {
                 $this.Log("pnpm root の取得に失敗しました: $($_.Exception.Message)", "Gray")
             }
 
+            # Ask pnpm once which global packages are outdated. A verified
+            # package absent from this result does not need to be re-linked by
+            # pnpm add -g; packages that are missing, unverifiable, or listed
+            # as outdated still follow the normal install/update path.
+            $outdatedState = $this.GetOutdatedGlobalPackageState()
+            $outdatedNames = @($outdatedState.Names)
+            $outdatedCheckAvailable = [bool]$outdatedState.Available
+
             foreach ($pkgEntry in $packages) {
                 $pkgSpec = if ($pkgEntry -is [string]) { $pkgEntry } else { $pkgEntry.name }
                 $pkgName = $pkgSpec -replace '(?<=.)@[^\s@]+$', ''
@@ -272,7 +280,14 @@ class PnpmHandler : SetupHandlerBase {
                 if ($this.IsPackageInstalled($pkgName, $globalRootForCheck)) {
                     if ($verifyCmd) {
                         if ($this.TestPackageVerification($verifyCmd, $globalRootForCheck)) {
-                            $this.Log("検証済み。latest を確認します: $pkgName", "Gray")
+                            if ($outdatedCheckAvailable -and $pkgName -notin $outdatedNames -and -not $postInstallCmd) {
+                                $this.Log("スキップ (検証済み/最新): $pkgName", "Gray")
+                                $skipped++
+                                $verified++
+                                continue
+                            }
+
+                            $this.Log("検証済み。更新対象です: $pkgName", "Gray")
                             $verified++
                         }
                         else {
@@ -354,6 +369,45 @@ class PnpmHandler : SetupHandlerBase {
         if (-not $globalRoot) { return $false }
         $pkgPath = Join-Path $globalRoot $pkgName
         return (Test-Path -LiteralPath $pkgPath -PathType Container)
+    }
+
+    hidden [object] GetOutdatedGlobalPackageState() {
+        try {
+            $output = @(Invoke-Pnpm -Arguments @("outdated", "--global", "--format", "json"))
+            $exitCode = [int]$LASTEXITCODE
+            $jsonText = (($output | ForEach-Object { [string]$_ }) -join [Environment]::NewLine).Trim()
+
+            if ([string]::IsNullOrWhiteSpace($jsonText)) {
+                if ($exitCode -eq 0) {
+                    return [PSCustomObject]@{ Available = $true; Names = @() }
+                }
+                throw "pnpm outdated exited with code $exitCode without JSON output"
+            }
+
+            $json = $jsonText | ConvertFrom-Json -ErrorAction Stop
+            $names = @()
+            if ($json -is [System.Array]) {
+                foreach ($entry in @($json)) {
+                    if ($entry -and ($entry.PSObject.Properties.Name -contains "name")) {
+                        $names += [string]$entry.name
+                    }
+                }
+            }
+            else {
+                foreach ($property in @($json.PSObject.Properties)) {
+                    $names += [string]$property.Name
+                }
+            }
+
+            return [PSCustomObject]@{
+                Available = $true
+                Names     = @($names | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+            }
+        }
+        catch {
+            $this.LogWarning("pnpm outdated の取得に失敗しました。既存パッケージも更新を試みます: $($_.Exception.Message)")
+            return [PSCustomObject]@{ Available = $false; Names = @() }
+        }
     }
 
     hidden [object] GetPackageProperty([object]$pkgEntry, [string]$propertyName) {
