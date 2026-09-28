@@ -30,11 +30,11 @@
 
 **Files:**
 
-- Create: `nix/tests/packages/catalog.nix`
+- Create: topic-specific `nix/tests/unit/package-catalog-*.nix` modules
 - Modify: `nix/flakes/tests.nix`
-- Modify: `nix/tests/ownership.nix`
+- Modify: `nix/tests/unit/ownership.nix`
 - Modify: `tests/bash/package_catalog.bats`
-- Modify: `nix/tests/home/README.md`
+- Modify: `nix/tests/README.md`
 
 **Interfaces:**
 
@@ -55,7 +55,7 @@
 
   Expected: the ownership assertion fails because `tests/bash/package_catalog.bats` still contains Nix evaluation commands.
 
-- [ ] **Step 3: Add `nix/tests/packages/catalog.nix` and port the pure cases**
+- [ ] **Step 3: Add `nix/tests/unit/package-catalog-*.nix` modules and port the pure cases**
 
   Port the 41 catalog/provider/selection/source-shape cases into focused
   `{ expr, expected }` tests. Use shared local fixtures for the package sets
@@ -64,7 +64,7 @@
 
 - [ ] **Step 4: Register the new test attrset**
 
-  Import `../tests/packages/catalog.nix` from `nix/flakes/tests.nix`, passing
+  Import each `../tests/unit/package-catalog-*.nix` module explicitly from `nix/flakes/tests.nix`, passing
   `inputs` where needed, and preserve unique `test...` attribute names.
 
 - [ ] **Step 5: Remove the migrated Bats cases**
@@ -82,7 +82,7 @@
 
 - [ ] **Step 7: Update ownership documentation**
 
-  Update `nix/tests/home/README.md` to remove the migrated cases from the
+  Update `nix/tests/README.md` to remove the migrated cases from the
   temporary Nix/catalog exception list and document the five retained runtime
   contracts.
 
@@ -96,10 +96,10 @@
 
 **Files:**
 
-- Create: `nix/tests/packages/custom-builds.nix`
+- Create: `nix/tests/build/custom-packages.nix`
 - Modify: `nix/flakes/packages.nix`
 - Modify: `taskfiles/test/taskfile.yml`
-- Test: `nix/tests/packages/custom-builds.nix` through the focused flake check
+- Test: `nix/tests/build/custom-packages.nix` through the focused flake check
 
 **Interfaces:**
 
@@ -160,7 +160,7 @@
 - Modify: `.github/workflows/ci-consistency.yml` or the repository's package-check workflow selected by the existing routing manifest
 - Modify: `.github/workflows/ci-bootstrap.yml` if the Nix check matrix requires the new output
 - Modify: `tests/bash/ci_routing.bats` if path routing assertions change
-- Modify: `nix/README.md`, `nix/tests/home/README.md`, and task descriptions as needed
+- Modify: `nix/README.md`, `nix/tests/README.md`, and task descriptions as needed
 
 **Interfaces:**
 

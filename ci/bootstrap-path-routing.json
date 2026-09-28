@@ -90,7 +90,7 @@
       "outputs": ["linux"]
     },
     {
-      "patterns": ["nix/checks/**"],
+      "patterns": ["nix/tests/build/**", "nix/tests/fixtures/packages.nix"],
       "outputs": ["linux", "darwin"]
     },
     {

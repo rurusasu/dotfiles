@@ -122,8 +122,10 @@ class CiJobRoutingTests(unittest.TestCase):
 
     def test_package_test_layers_route_to_package_consistency(self) -> None:
         for path in (
-            "nix/tests/packages/catalog.nix",
-            "nix/tests/packages/custom-builds.nix",
+            "nix/tests/unit/package-catalog-modularity.nix",
+            "nix/tests/build/custom-packages.nix",
+            "nix/tests/build/windows-keybindings-generated.nix",
+            "nix/tests/fixtures/packages.nix",
             "nix/hosts/windows/omarchy-keybindings.nix",
             "nix/home/keybindings/windows-actions.ps1",
             "chezmoi/dot_glzr/glazewm/config.json",

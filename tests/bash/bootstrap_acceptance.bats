@@ -28,7 +28,7 @@ EOF
 
 @test "destructive Linux E2E routes installers through the acceptance fixture" {
 	workflow="$REPO_ROOT/.github/workflows/ci-bootstrap.yml"
-	nixos_test="$REPO_ROOT/nix/tests/bootstrap-nixos.nix"
+	nixos_test="$REPO_ROOT/nix/tests/build/bootstrap-nixos.nix"
 
 	[ "$(grep -c '.github/e2e/run-bootstrap-acceptance.sh' "$workflow")" -ge 3 ]
 	[ "$(grep -c '.github/e2e/start-bootstrap-runtime.sh' "$workflow")" -eq 2 ]
@@ -78,7 +78,7 @@ EOF
 }
 
 @test "NixOS bootstrap VM provides task before Hermes bootstrap" {
-	nixos_test="$REPO_ROOT/nix/tests/bootstrap-nixos.nix"
+	nixos_test="$REPO_ROOT/nix/tests/build/bootstrap-nixos.nix"
 
 	grep -Eq '^[[:space:]]+go-task([[:space:]]|$)' "$nixos_test"
 }
@@ -145,7 +145,7 @@ EOF
 }
 
 @test "NixOS offline Hermes fixture implements every storage entrypoint" {
-	nixos_test="$REPO_ROOT/nix/tests/bootstrap-nixos.nix"
+	nixos_test="$REPO_ROOT/nix/tests/build/bootstrap-nixos.nix"
 
 	grep -Fq 'hermes_storage_seed.py usr/local/bin/hermes-storage-seed' "$nixos_test"
 	grep -Fq 'hermes_storage_ownership.py usr/local/bin/hermes-storage-ownership' "$nixos_test"

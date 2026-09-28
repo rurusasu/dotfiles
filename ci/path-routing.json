@@ -68,7 +68,7 @@
       "outputs": ["wsl", "windows", "contract", "package_catalog"]
     },
     {
-      "patterns": ["nix/checks/**"],
+      "patterns": ["nix/tests/build/**", "nix/tests/fixtures/packages.nix"],
       "outputs": ["linux", "darwin", "contract", "nix"]
     },
     {
@@ -102,7 +102,7 @@
       "outputs": ["linux", "contract", "nix"]
     },
     {
-      "patterns": ["nix/tests/packages/**"],
+      "patterns": ["nix/tests/unit/package-catalog-*.nix", "nix/tests/build/custom-packages.nix"],
       "outputs": ["linux", "darwin", "contract", "nix", "package_catalog"]
     },
     {

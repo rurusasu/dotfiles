@@ -94,15 +94,7 @@
         lib.mapAttrs' (name: package: lib.nameValuePair "darwin-${name}" package) unfreeSets.darwinPackages
       );
 
-      checks = {
-        package-provider-coverage = packageSupportReport;
-        custom-package-builds = import ../tests/packages/custom-builds.nix { inherit pkgs; };
-        neovim-native = import ../tests/neovim.nix { inherit pkgs; };
-      }
-      // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-        bootstrap-nixos-vm = import ../tests/bootstrap-nixos.nix {
-          inherit inputs pkgs;
-        };
-      };
+      # The support report is also a validation derivation; reuse the same output.
+      checks.package-provider-coverage = packageSupportReport;
     };
 }

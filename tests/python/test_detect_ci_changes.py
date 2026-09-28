@@ -28,7 +28,14 @@ OUTPUTS = {
 }
 CASES = {
     "chezmoi/dot_glzr/glazewm/config.json": {"windows", "wsl", "contract", "nix", "chezmoi", "package_catalog"},
-    "nix/checks/aerospace-cycle.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/build/aerospace-cycle.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/build/neovim.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/build/ghostty-config.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/build/windows-keybindings-generated.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/build/custom-packages.nix": {"linux", "darwin", "contract", "nix", "package_catalog"},
+    "nix/tests/fixtures/packages.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/fixtures/hardware-configuration.nix": {"linux", "contract", "nix"},
+    "nix/tests/unit/package-catalog-modularity.nix": {"linux", "darwin", "contract", "nix", "package_catalog"},
     "nix/home/keybindings/bindings.nix": {"linux", "darwin", "windows", "wsl", "contract", "nix", "chezmoi", "package_catalog"},
     "nix/home/keybindings/hyprland.nix": {"linux", "darwin", "windows", "wsl", "contract", "nix", "chezmoi", "package_catalog"},
     "nix/hosts/windows/omarchy-keybindings.nix": {"windows", "wsl", "contract", "nix", "chezmoi", "package_catalog"},
@@ -158,7 +165,13 @@ CASES = {
 }
 BOOTSTRAP_CASES = {
     "chezmoi/dot_glzr/glazewm/config.json": {"windows", "wsl", "contract"},
-    "nix/checks/aerospace-cycle.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/build/aerospace-cycle.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/build/neovim.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/build/ghostty-config.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/build/windows-keybindings-generated.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/build/custom-packages.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/fixtures/packages.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/fixtures/hardware-configuration.nix": {"linux", "contract", "nix"},
     "nix/home/keybindings/bindings.nix": {"linux", "darwin", "windows", "wsl", "contract", "nix"},
     "nix/hosts/windows/omarchy-keybindings.nix": {"windows", "wsl", "contract", "nix"},
     "windows/winget/packages.json": {"windows", "contract"},

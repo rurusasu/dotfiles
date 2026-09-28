@@ -1,0 +1,144 @@
+{
+  inputs,
+  pkgs,
+}:
+let
+  dotfilesSource = ../../..;
+  helloWorldImage = pkgs.dockerTools.buildImage {
+    name = "hello-world";
+    tag = "latest";
+    copyToRoot = pkgs.buildEnv {
+      name = "hello-world-root";
+      paths = [ pkgs.busybox ];
+      pathsToLink = [ "/bin" ];
+    };
+    config.Cmd = [
+      "/bin/sh"
+      "-c"
+      "echo Hello from Docker!"
+    ];
+  };
+  acceptanceImage = pkgs.dockerTools.buildImage {
+    name = "nginx";
+    tag = "1.29-alpine";
+    copyToRoot = pkgs.buildEnv {
+      name = "acceptance-root";
+      paths = [ pkgs.busybox ];
+      pathsToLink = [ "/bin" ];
+    };
+    config.Cmd = [
+      "/bin/httpd"
+      "-f"
+      "-p"
+      "80"
+    ];
+  };
+  storageSeedImage = pkgs.dockerTools.buildImage {
+    name = "local/hermes-agent-gh";
+    tag = "latest";
+    copyToRoot = pkgs.buildEnv {
+      name = "hermes-storage-seed-root";
+      paths = [
+        pkgs.coreutils
+        pkgs.python3
+      ];
+      pathsToLink = [ "/bin" ];
+    };
+    extraCommands = ''
+      mkdir -p usr/bin usr/local/bin
+      ln -s /bin/env usr/bin/env
+      cp ${dotfilesSource}/docker/hermes-agent/hermes_storage_seed.py usr/local/bin/hermes-storage-seed
+      cp ${dotfilesSource}/docker/hermes-agent/hermes_storage_ownership.py usr/local/bin/hermes-storage-ownership
+      chmod 0755 usr/local/bin/hermes-storage-seed
+      chmod 0755 usr/local/bin/hermes-storage-ownership
+    '';
+  };
+
+  # The NixOS VM intentionally has no external DNS. Keep the acceptance test
+  # focused on the npm installation boundary with a local npm fixture; real
+  # registry access is covered by the Linux, macOS, Windows, and consistency
+  # jobs.
+  offlineNpm = pkgs.writeShellScript "dotfiles-offline-npm" ''
+    #!/bin/sh
+    set -eu
+    prefix="''${NPM_CONFIG_PREFIX:-$HOME/.local/npm}"
+    mkdir -p "$prefix/bin"
+    printf '#!/bin/sh\nprintf "codex 0.0.0-offline\\n"\n' > "$prefix/bin/codex"
+    chmod 0755 "$prefix/bin/codex"
+  '';
+in
+pkgs.testers.runNixOSTest {
+  name = "bootstrap-nixos-vm";
+
+  nodes.machine =
+    { lib, ... }:
+    {
+      imports = [
+        inputs.home-manager.nixosModules.home-manager
+        ../../hosts/linux/configuration.nix
+        ../fixtures/hardware-configuration.nix
+      ];
+
+      home-manager = {
+        useGlobalPkgs = true;
+        useUserPackages = true;
+        users.nixos = {
+          home.stateVersion = "25.05";
+          programs.home-manager.enable = true;
+        };
+      };
+
+      environment.systemPackages = with pkgs; [
+        nix
+        git
+        gh
+        chezmoi
+        ripgrep
+        fd
+        jq
+        go-task
+        neovim
+        nodejs
+        python3
+        go
+        rustup
+        netcat
+      ];
+
+      virtualisation = {
+        diskSize = 8192;
+        memorySize = 4096;
+      };
+
+      nix.settings.experimental-features = [
+        "nix-command"
+        "flakes"
+      ];
+
+      # NixOS tests disable switch-to-configuration by default to reduce
+      # rebuilds. This E2E intentionally activates the generated closure.
+      system.switch.enable = true;
+    };
+
+  testScript = { nodes, ... }: ''
+    start_all()
+    machine.wait_for_unit("multi-user.target")
+    machine.wait_for_unit("docker.service")
+    machine.succeed("docker load < ${helloWorldImage}")
+    machine.succeed("docker load < ${acceptanceImage}")
+    machine.succeed("docker load < ${storageSeedImage}")
+    machine.succeed("cp -r ${dotfilesSource} /home/nixos/dotfiles")
+    machine.succeed("chmod -R u+w /home/nixos/dotfiles && chown -R nixos:users /home/nixos/dotfiles")
+    machine.succeed("install -d /home/nixos/ci-bin && install -m 0755 ${offlineNpm} /home/nixos/ci-bin/npm")
+
+    # The VM intentionally has no external DNS. Herdr's official installer is
+    # covered by the platform adapter tests; keep this bootstrap fixture offline.
+    install = "su - nixos -c 'env DOTFILES_NPM_COMMAND=/home/nixos/ci-bin/npm DOTFILES_ACCEPTANCE_PRELOADED_STORAGE_SEED_IMAGE=local/hermes-agent-gh:latest DOTFILES_SKIP_FLAKE_UPDATE=1 DOTFILES_SKIP_HERDR_INSTALL=1 DOTFILES_NIXOS_PREBUILT_SYSTEM=${nodes.machine.system.build.toplevel} DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_CHECKOUT_TARGET=/home/nixos/dotfiles /home/nixos/dotfiles/.github/e2e/run-bootstrap-acceptance.sh'"
+    machine.succeed(install)
+    machine.succeed("su - nixos -c 'bash /home/nixos/dotfiles/.github/e2e/start-bootstrap-runtime.sh'")
+    machine.succeed(install)
+    machine.succeed("su - nixos -c 'bash /home/nixos/dotfiles/.github/e2e/start-bootstrap-runtime.sh'")
+    machine.succeed("su - nixos -c 'export PATH=/run/current-system/sw/bin:/etc/profiles/per-user/nixos/bin:$HOME/.nix-profile/bin:$PATH; cd /home/nixos/dotfiles; DOTFILES_VERIFY_SYSTEM_LAYER=nixos ./scripts/sh/verify-environment.sh --runtime'")
+    machine.succeed("docker compose -f /home/nixos/dotfiles/docker/hermes-service/compose.yml ps --status running --services | grep acceptance")
+  '';
+}

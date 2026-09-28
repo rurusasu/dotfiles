@@ -1,5 +1,7 @@
 # Package Test Boundaries Design
 
+> 過去の設計記録です。参照パスは現在の配置に更新していますが、件数と移行前の状態は当時の記録です。現在の責務と実行方法は [Nix テスト](../../../nix/tests/README.md) を参照してください。
+
 ## Context
 
 The repository currently mixes package catalog assertions, Nix configuration
@@ -35,7 +37,7 @@ single focused build-check surface.
 ### Nix-unit layer
 
 Move the pure package catalog cases from `tests/bash/package_catalog.bats` into
-one or more files under `nix/tests/packages/`, using `{ expr, expected }`
+topic-specific `nix/tests/unit/package-catalog-*.nix` files, using `{ expr, expected }`
 attributes and registering them from `nix/flakes/tests.nix`. This includes
 provider metadata, platform selection, package-set membership, catalog
 validation, and source-shape assertions that only inspect repository data.
@@ -69,7 +71,7 @@ runtime properties.
 4. Add explicit custom-package build checks and focused task/CI invocation.
 5. Keep the runtime/artifact Bats cases and adjust their surrounding naming or
    documentation only where needed.
-6. Update `nix/tests/ownership.nix`, `nix/tests/home/README.md`, CI routing,
+6. Update `nix/tests/unit/ownership.nix`, `nix/tests/README.md`, CI routing,
    and task descriptions.
 7. Run focused Nix-unit, package-build, and runtime tests, then run the
    relevant full suites where the environment supports them.

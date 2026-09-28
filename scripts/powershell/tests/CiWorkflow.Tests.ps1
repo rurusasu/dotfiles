@@ -828,7 +828,7 @@ esac
 
     It 'should run WSL E2E for fork pull requests and require it in the unified workflow' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
-        $test = Get-Content -LiteralPath (Join-Path $script:repoRoot 'nix/tests/bootstrap-nixos.nix') -Raw
+        $test = Get-Content -LiteralPath (Join-Path $script:repoRoot 'nix/tests/build/bootstrap-nixos.nix') -Raw
 
         $wslJob = [regex]::Match(
             $workflow,
