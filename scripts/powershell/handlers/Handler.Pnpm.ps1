@@ -280,7 +280,7 @@ class PnpmHandler : SetupHandlerBase {
                 if ($this.IsPackageInstalled($pkgName, $globalRootForCheck)) {
                     if ($verifyCmd) {
                         if ($this.TestPackageVerification($verifyCmd, $globalRootForCheck)) {
-                            if ($outdatedCheckAvailable -and $pkgName -notin $outdatedNames) {
+                            if ($outdatedCheckAvailable -and $pkgName -notin $outdatedNames -and -not $postInstallCmd) {
                                 $this.Log("スキップ (検証済み/最新): $pkgName", "Gray")
                                 $skipped++
                                 $verified++

@@ -1967,14 +1967,15 @@ Describe 'PnpmHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeTrue
-            $script:pnpmAddCalls.Count | Should -Be 1
+            $script:pnpmAddCalls.Count | Should -Be 2
+            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "playwright@1.63.0"
             foreach ($command in @(
                     "bash-language-server", "yaml-language-server",
                     "dsh", "playwright-cli", "playwright", "typescript-language-server", "tsc", "gemini"
                 )) {
                 $script:pnpmVerifyCalls | Where-Object {
                     $_.Command -eq $command -and ($_.Arguments -join "|") -eq "--version"
-                } | Should -HaveCount $(if ($command -eq "bash-language-server") { 2 } else { 1 })
+                } | Should -HaveCount $(if ($command -in @("bash-language-server", "playwright")) { 2 } else { 1 })
             }
         }
 
