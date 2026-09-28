@@ -1648,7 +1648,7 @@ Describe 'PnpmHandler' {
             Mock Get-JsonContent {
                 return @{
                     globalPackages = @(
-                        @{ name = "@agentclientprotocol/claude-agent-acp"; verifyCommand = @{ type = "commandExists"; command = "claude-agent-acp"; args = @() } }
+                        @{ name = "@agentclientprotocol/claude-agent-acp"; verifyCommand = @{ type = "commandExists"; command = "claude-agent-acp" } }
                     )
                 }
             }

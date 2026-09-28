@@ -409,7 +409,7 @@ class PnpmHandler : SetupHandlerBase {
     hidden [bool] TestPackageVerification([object]$verifyCmd, [string]$globalRoot = "") {
         try {
             $command = $verifyCmd.command
-            $arguments = @($verifyCmd.args)
+            $arguments = @($this.GetPackageProperty($verifyCmd, "args"))
             $verifyType = $this.GetVerifyType($verifyCmd)
             if ($verifyType -eq "commandExists") {
                 $this.Log("検証中: command -v $command", "Gray")
