@@ -1012,33 +1012,7 @@ jobs:
             throw "AutoHotkey v2 UIAccess behavioral self-tests failed (exit $selfTestExitCode)"
           }
 
-      - name: Install pinned Pester
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          & $env:WINDOWS_E2E_EXECUTABLE `
-            -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass `
-            -Command "Install-Module -Name Pester -RequiredVersion '5.6.1' -Scope CurrentUser -Force -SkipPublisherCheck -ErrorAction Stop"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not install pinned Pester under $env:WINDOWS_E2E_RUNTIME (exit $LASTEXITCODE)"
-          }
-
-      - name: Run Windows bootstrap contracts
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          & $env:WINDOWS_E2E_EXECUTABLE `
-            -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass `
-            -File .\scripts\powershell\tests\Invoke-Tests.ps1 `
-            -MinimumCoverage 0 `
-            -OutputFile windows-contract-junit.xml
-          if ($LASTEXITCODE -ne 0) {
-            throw "Windows bootstrap contracts failed under $env:WINDOWS_E2E_RUNTIME (exit $LASTEXITCODE)"
-          }
-
-      - name: Write Windows contract attestation
+      - name: Write Windows admin E2E attestation
         if: always()
         shell: pwsh
         run: |
@@ -1047,16 +1021,14 @@ jobs:
             "runner_image=$env:ImageOS-$env:ImageVersion"
             "layer=windows-bootstrap"
             "runtime=${{ matrix.runtime }}"
-          ) | Set-Content -LiteralPath windows-contract-attestation.txt -Encoding utf8
+          ) | Set-Content -LiteralPath windows-admin-e2e-attestation.txt -Encoding utf8
 
       - name: Upload Windows contract results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: bootstrap-windows-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            windows-contract-attestation.txt
-            windows-contract-junit.xml
+          name: bootstrap-windows-admin-${{ github.run_id }}-${{ github.run_attempt }}
+          path: windows-admin-e2e-attestation.txt
           if-no-files-found: warn
 
   windows-installer:

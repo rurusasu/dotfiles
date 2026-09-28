@@ -1,5 +1,7 @@
 # テスト
 
+Issue #652 で installer の phase 境界を見直し、PowerShell 5.1 / 7 の通常 Pester matrix を authoritative な PowerShell test lane とする。
+
 ## Pester v5 の強制使用
 
 ### テストランナー
@@ -50,19 +52,23 @@ cd scripts/powershell/tests
 # 特定のテストファイルのみ
 .\Invoke-Tests.ps1 -Path .\Install.Tests.ps1 -MinimumCoverage 0
 
+# installer の Phase 1 → Phase 2a integration contract のみ
+.\Invoke-Tests.ps1 -Path .\Install.Entrypoint.Tests.ps1 -MinimumCoverage 0
+
 # カバレッジ詳細表示
 .\Invoke-Tests.ps1 -ShowCoverage
 ```
 
-**現在の状態**: 230+ テスト成功（100%）、カバレッジ 95%+
+**CI の authoritative check**: `.github/workflows/ci-powershell.yml` の `test` job が、同じ `Invoke-Tests.ps1` suite を Windows PowerShell 5.1 と PowerShell 7 の両方で実行する。ローカルの Pester version やテスト件数は固定契約ではない。
 
 ## CI テスト戦略
 
-| Workflow           | Runner                     | Guarantee                                                      |
-| ------------------ | -------------------------- | -------------------------------------------------------------- |
-| `ci-bootstrap.yml` | hosted Linux/macOS/Windows | Linux/Darwin/WSL/Windows の platform-routed contract aggregate |
+| Workflow                              | Runner                                | Guarantee                                                                                   |
+| ------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci-powershell.yml` | Windows PowerShell 5.1 / PowerShell 7 | 全 Pester suite、launcher、encoding、handler unit、installer Phase 1 → Phase 2a integration |
+| `ci-bootstrap.yml`                    | hosted Linux/macOS/Windows            | Linux/Darwin/WSL/Windows の platform-routed contract aggregate と外部 runtime E2E           |
 
-Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を実行し、外部 process wrapper を mock した状態で entrypoint、handler order、failure propagation、second-run behavior を検証します。実機アプリを要求する `Integration.Tests.ps1` は含めません。Nix option、package、flake output は `nix-unit` で検証し、macOS の installer/runtime 契約は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats で実行します。
+Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を両 runtime で実行します。`Install.Entrypoint.Tests.ps1` は実物の `install.ps1`、`install.user.ps1`、`install.admin.ps1`、`SetupHandler.ps1` を一時 fixture にコピーし、副作用のない fixture handler だけを差し替えて、Phase 1 → Phase 2a → acceptance → `Setup Complete!` の同一実行フローを検証します。これにより `SetupContext` の class identity / reload 回帰を、stub phase script や直接 `CanApply()` 呼び出しではなく実 installer boundary で検出します。実機アプリを要求する外部 runtime E2E は `ci-bootstrap.yml` に残します。Nix option、package、flake output は `nix-unit` で検証し、macOS の installer/runtime 契約は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats で実行します。
 
 Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-bootstrap.yml` のLinux jobsがUbuntu、Debian、NixOSで検証し、Windows/macOS実機固有のruntimeは、Docker profile を選択した installer 末尾の acceptance が失敗を返します。
 
@@ -497,4 +503,4 @@ pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/po
 - CP932 をフォールバックにした BOM 自動検出付き reader で全 PowerShell ソースの文字列保持を確認します。
   CI runner の ANSI コードページが日本語以外でも、BOM 欠落を検出します。
 - formatter は本番と同じ PowerShell 7 でのみテストし、本文が変わらない場合の BOM 補完と冪等性を確認します。
-- launcher のスタブ試験はコマンド選択・引数伝播の検査です。実ファイル読み込み試験の代わりにはなりません。
+- launcher の stub 試験はコマンド選択・引数伝播・PowerShell 5.1 fallback の検査に限定します。installer の phase 成功を stub の `install.user.ps1` / `install.admin.ps1` で確認するテストは追加せず、実 installer integration fixture を使用します。

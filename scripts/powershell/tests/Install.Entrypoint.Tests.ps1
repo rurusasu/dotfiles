@@ -72,6 +72,201 @@ BeforeAll {
         }
     }
 
+    function Invoke-TestPowerShellProcess {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string]$WorkingDirectory,
+
+            [Parameter(Mandatory)]
+            [string]$ScriptPath,
+
+            [int]$TimeoutMilliseconds = 60000
+        )
+
+        $executable = if ($PSVersionTable.PSVersion.Major -ge 6) {
+            Join-Path $PSHOME 'pwsh.exe'
+        }
+        else {
+            Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        }
+
+        if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
+            throw "PowerShell executable was not found: $executable"
+        }
+
+        $psi = [System.Diagnostics.ProcessStartInfo]::new()
+        $psi.FileName = $executable
+        $quotedScriptPath = $ScriptPath.Replace('"', '\"')
+        $psi.Arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$quotedScriptPath`" -NoPause"
+        $psi.WorkingDirectory = $WorkingDirectory
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.CreateNoWindow = $true
+
+        $process = [System.Diagnostics.Process]::new()
+        $process.StartInfo = $psi
+
+        try {
+            [void]$process.Start()
+            $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+            $stderrTask = $process.StandardError.ReadToEndAsync()
+
+            $finished = $process.WaitForExit($TimeoutMilliseconds)
+            if (-not $finished) {
+                Stop-TestProcessTree -ProcessId $process.Id
+                [void]$process.WaitForExit(5000)
+            }
+            [void]$process.WaitForExit()
+
+            $stdout = $stdoutTask.Result
+            $stderr = $stderrTask.Result
+            if (-not $finished) {
+                throw "$executable timed out. stdout=[$stdout] stderr=[$stderr]"
+            }
+
+            [pscustomobject]@{
+                ExitCode = $process.ExitCode
+                Stdout   = $stdout
+                Stderr   = $stderr
+            }
+        }
+        finally {
+            $process.Dispose()
+        }
+    }
+
+    function New-PhaseIntegrationFixture {
+        param(
+            [Parameter(Mandatory)]
+            [string]$Name
+        )
+
+        $workDir = Join-Path $TestDrive $Name
+        $scriptDir = Join-Path $workDir 'scripts\powershell'
+        $libDir = Join-Path $scriptDir 'lib'
+        $handlersDir = Join-Path $scriptDir 'handlers'
+        New-Item -ItemType Directory -Path $libDir -Force | Out-Null
+        New-Item -ItemType Directory -Path $handlersDir -Force | Out-Null
+
+        Copy-Item -LiteralPath (Join-Path $script:repoRoot 'install.cmd') -Destination (Join-Path $workDir 'install.cmd')
+        foreach ($scriptName in 'install.ps1', 'install.user.ps1', 'install.admin.ps1') {
+            Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\$scriptName") -Destination (Join-Path $scriptDir $scriptName)
+        }
+        foreach ($library in 'WindowsEnvironment.ps1', 'InstallProfiles.ps1', 'SetupHandler.ps1', 'Invoke-ExternalCommand.ps1', 'HermesBootstrap.ps1') {
+            Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\lib\$library") -Destination (Join-Path $libDir $library)
+        }
+
+        $phaseOneHandler = @'
+class PhaseOneHandler : SetupHandlerBase {
+    PhaseOneHandler() {
+        $this.Name = 'FixturePhase1'
+        $this.Description = 'Deterministic Phase 1 fixture handler'
+        $this.Order = 10
+        $this.Phase = 1
+        $this.RequiresAdmin = $false
+    }
+
+    [bool] CanApply([SetupContext]$ctx) {
+        return $true
+    }
+
+    [SetupResult] Apply([SetupContext]$ctx) {
+        [System.IO.File]::AppendAllText(
+            (Join-Path $ctx.DotfilesPath 'phase-markers.txt'),
+            "PHASE1_APPLIED`n"
+        )
+        return $this.CreateSuccessResult('FIXTURE_PHASE1_APPLIED')
+    }
+}
+'@
+        $phaseTwoHandler = @'
+class PhaseTwoHandler : SetupHandlerBase {
+    PhaseTwoHandler() {
+        $this.Name = 'FixturePhase2a'
+        $this.Description = 'Deterministic Phase 2a fixture handler'
+        $this.Order = 20
+        $this.Phase = 2
+        $this.RequiresAdmin = $false
+    }
+
+    [bool] CanApply([SetupContext]$ctx) {
+        return $true
+    }
+
+    [SetupResult] Apply([SetupContext]$ctx) {
+        [System.IO.File]::AppendAllText(
+            (Join-Path $ctx.DotfilesPath 'phase-markers.txt'),
+            "PHASE2A_APPLIED`n"
+        )
+        return $this.CreateSuccessResult('FIXTURE_PHASE2A_APPLIED')
+    }
+}
+'@
+        $adminProbeHandler = @'
+class PhaseTwoAdminProbeHandler : SetupHandlerBase {
+    PhaseTwoAdminProbeHandler() {
+        $this.Name = 'FixtureAdminProbe'
+        $this.Description = 'Deterministic admin phase probe'
+        $this.Order = 30
+        $this.Phase = 2
+        $this.RequiresAdmin = $true
+    }
+
+    [bool] CanApply([SetupContext]$ctx) {
+        return $false
+    }
+
+    [SetupResult] Apply([SetupContext]$ctx) {
+        return $this.CreateSuccessResult('FIXTURE_ADMIN_PROBE_APPLIED')
+    }
+}
+'@
+        [System.IO.File]::WriteAllText(
+            (Join-Path $handlersDir 'Handler.PhaseOne.ps1'),
+            $phaseOneHandler,
+            [System.Text.UTF8Encoding]::new($false)
+        )
+        [System.IO.File]::WriteAllText(
+            (Join-Path $handlersDir 'Handler.PhaseTwo.ps1'),
+            $phaseTwoHandler,
+            [System.Text.UTF8Encoding]::new($false)
+        )
+        [System.IO.File]::WriteAllText(
+            (Join-Path $handlersDir 'Handler.PhaseTwoAdminProbe.ps1'),
+            $adminProbeHandler,
+            [System.Text.UTF8Encoding]::new($false)
+        )
+
+        $acceptance = @'
+function Test-DotfilesEnvironment {
+    [CmdletBinding()]
+    param(
+        [switch]$Docker,
+        [switch]$Runtime
+    )
+
+    Write-Host 'FIXTURE_ACCEPTANCE_COMPLETE'
+    return [pscustomobject]@{
+        Success = $true
+        Message = 'Fixture acceptance passed'
+    }
+}
+'@
+        [System.IO.File]::WriteAllText(
+            (Join-Path $scriptDir 'Test-Environment.ps1'),
+            $acceptance,
+            [System.Text.UTF8Encoding]::new($false)
+        )
+
+        return [pscustomobject]@{
+            WorkDirectory = $workDir
+            InstallScript = Join-Path $scriptDir 'install.ps1'
+            MarkerFile    = Join-Path $workDir 'phase-markers.txt'
+        }
+    }
+
     function New-InstallCmdSelectionFixture {
         param(
             [Parameter(Mandatory)]
@@ -387,78 +582,22 @@ exit 0
             return
         }
 
-        $workDir = Join-Path $TestDrive "install-cmd-orchestrator"
-        $scriptDir = Join-Path $workDir "scripts\powershell"
-        $libDir = Join-Path $scriptDir "lib"
-        New-Item -ItemType Directory -Path $scriptDir -Force | Out-Null
-        New-Item -ItemType Directory -Path $libDir -Force | Out-Null
-        Copy-Item -LiteralPath (Join-Path $script:repoRoot "install.cmd") -Destination (Join-Path $workDir "install.cmd")
-        Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\install.ps1") -Destination (Join-Path $scriptDir "install.ps1")
-        Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\lib\WindowsEnvironment.ps1") -Destination (Join-Path $libDir "WindowsEnvironment.ps1")
-        Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\lib\InstallProfiles.ps1") -Destination (Join-Path $libDir "InstallProfiles.ps1")
+        $fixture = New-PhaseIntegrationFixture -Name 'install-phase-integration'
+        $result = Invoke-TestPowerShellProcess `
+            -WorkingDirectory $fixture.WorkDirectory `
+            -ScriptPath $fixture.InstallScript
 
-        $stubUser = @'
-[CmdletBinding()]
-param(
-    [string]$DistroName = "NixOS",
-    [string]$InstallDir = "",
-    [string]$ReleaseTag = "",
-    [string]$PostInstallScript = "",
-    [string]$StateVersion = "26.05",
-    [hashtable]$Options = @{},
-    [string]$SyncMode = "link",
-    [string]$SyncBack = "lock"
-)
-Write-Host "STUB_USER_PHASE_COMPLETE"
-exit 0
-'@
-        $stubAdmin = @'
-[CmdletBinding()]
-param(
-    [string]$DistroName = "NixOS",
-    [string]$InstallDir = "",
-    [string]$ReleaseTag = "",
-    [string]$PostInstallScript = "",
-    [string]$StateVersion = "26.05",
-    [hashtable]$Options = @{},
-    [string]$OptionsJson = "",
-    [string]$SyncMode = "link",
-    [string]$SyncBack = "lock",
-    [switch]$CheckOnly,
-    [string]$LogFile = "",
-    [Nullable[bool]]$AdminOnly = $null
-)
-if ($CheckOnly) {
-    Write-Output $false
-    exit 0
-}
-if ($AdminOnly -eq $false) {
-    Write-Host "STUB_PHASE2A_COMPLETE"
-    exit 0
-}
-Write-Host "STUB_ADMIN_PHASE_COMPLETE"
-exit 0
-'@
-        $stubAcceptance = @'
-function Test-DotfilesEnvironment {
-    param([switch]$Docker, [switch]$Runtime)
-    Write-Host "STUB_ACCEPTANCE_COMPLETE"
-    return [pscustomobject]@{ Success = $true; Message = "OK" }
-}
-'@
-        [System.IO.File]::WriteAllText((Join-Path $scriptDir "install.user.ps1"), $stubUser, [System.Text.UTF8Encoding]::new($false))
-        [System.IO.File]::WriteAllText((Join-Path $scriptDir "install.admin.ps1"), $stubAdmin, [System.Text.UTF8Encoding]::new($false))
-        [System.IO.File]::WriteAllText((Join-Path $scriptDir "Test-Environment.ps1"), $stubAcceptance, [System.Text.UTF8Encoding]::new($false))
-
-        $result = Invoke-TestCmdProcess `
-            -WorkingDirectory $workDir `
-            -CommandLine "install.cmd -NoPause"
-
-        $result.ExitCode | Should -Be 0
-        $result.Stdout | Should -Match "STUB_USER_PHASE_COMPLETE"
+        $result.ExitCode | Should -Be 0 -Because "stdout=[$($result.Stdout)] stderr=[$($result.Stderr)]"
+        $result.Stdout | Should -Match "Phase 1: User Scope Setup"
         $result.Stdout | Should -Match "Phase 2a: Non-Admin Setup"
-        $result.Stdout | Should -Match "STUB_PHASE2A_COMPLETE"
-        $result.Stdout | Should -Match "STUB_ACCEPTANCE_COMPLETE"
+        $result.Stdout | Should -Match "FIXTURE_PHASE1_APPLIED"
+        $result.Stdout | Should -Match "FIXTURE_PHASE2A_APPLIED"
+        $result.Stdout | Should -Match "FIXTURE_ACCEPTANCE_COMPLETE"
+        $result.Stdout | Should -Not -Match "Cannot convert.*SetupContext"
         $result.Stdout | Should -Match "Setup Complete!"
+
+        $markers = Get-Content -LiteralPath $fixture.MarkerFile
+        $markers | Should -Contain 'PHASE1_APPLIED'
+        $markers | Should -Contain 'PHASE2A_APPLIED'
     }
 }

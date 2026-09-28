@@ -658,27 +658,6 @@ esac
         $script:cleanupCalls[1].AllowFailure | Should -BeTrue
     }
 
-    It 'should cover Windows PowerShell 5.1 timeout wrapper compatibility in CI' {
-        $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
-        $windowsPowerShellInstall = [regex]::Match(
-            $powershellWorkflow,
-            '(?s)- name: Install Pester for Windows PowerShell.*?- name: Run Invoke-ExternalCommand tests on Windows PowerShell'
-        ).Value
-
-        $powershellWorkflow | Should -Match 'name:\s+Test \(Windows PowerShell 5\.1 compatibility\)'
-        $powershellWorkflow | Should -Match 'shell:\s+powershell'
-        $powershellWorkflow | Should -Match 'Get-Content -LiteralPath \.\\Invoke-Tests\.ps1 -Raw -Encoding UTF8'
-        $powershellWorkflow | Should -Match '& \$runner -Path \.\\lib\\Invoke-ExternalCommand\.Tests\.ps1 -MinimumCoverage 0'
-        $powershellWorkflow | Should -Match '- name: Load Hermes bootstrap library on Windows PowerShell'
-        $powershellWorkflow | Should -Match 'New-HermesBootstrapProcessStartInfo'
-        $powershellWorkflow | Should -Not -Match '\$pesterConfig\.Filter\.FullName = "\*Invoke-VerifyCommand\*"'
-        $windowsPowerShellInstall | Should -Match 'https://www\.powershellgallery\.com/api/v2/package/Pester/\$pesterVersion'
-        $windowsPowerShellInstall | Should -Match 'Expand-Archive -LiteralPath \$packagePath -DestinationPath \$pesterPath'
-        $windowsPowerShellInstall | Should -Match 'Import-Module Pester -RequiredVersion \$pesterVersion -Force'
-        $windowsPowerShellInstall | Should -Not -Match 'Register-PSRepository'
-        $windowsPowerShellInstall | Should -Not -Match 'Register-PSRepository -Default'
-    }
-
     It 'should run the complete PowerShell test suite in parallel on Windows PowerShell 5.1 and PowerShell 7' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-powershell.yml') -Raw
         $testJob = [regex]::Match(
@@ -697,21 +676,7 @@ esac
         $testJob | Should -Match '& \$env:PS_TEST_EXECUTABLE -NoProfile -File'
         $testJob | Should -Match 'Documents\\\$env:PS_MODULE_DIRECTORY\\Modules'
         $testJob | Should -Match 'WindowsPowerShell\\Modules'
-    }
-
-    It 'should smoke test install.cmd when pwsh is absent from PATH' {
-        $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
-
-        $powershellWorkflow | Should -Match 'Run install\.cmd fallback without pwsh'
-        $powershellWorkflow | Should -Match 'DOTFILES_PS7_DIR'
-        $powershellWorkflow | Should -Match 'NoPowerShell7Dir'
-        $powershellWorkflow | Should -Match '\$env:PATH = @\('
-        $powershellWorkflow | Should -Match 'System32\\WindowsPowerShell\\v1\.0'
-        $powershellWorkflow | Should -Match '& cmd\.exe /d /c install\.cmd -NoPause -UserPhaseOnly'
-        $powershellWorkflow | Should -Match 'Falling back to Windows PowerShell'
-        $powershellWorkflow | Should -Match 'Copy-Item -LiteralPath \.\\scripts\\powershell\\install\.ps1'
-        $powershellWorkflow | Should -Not -Match 'STUB_INSTALL_COMPLETE'
-        $powershellWorkflow | Should -Match 'User Phase Complete!'
+        $workflow | Should -Not -Match '(?m)^  test-windows-powershell:'
     }
 
     It 'should retry winget source update when the runner reports Cancelled' {
@@ -891,8 +856,9 @@ esac
 
         $workflow | Should -Match 'runs-on:\s+windows-2025'
         $workflow | Should -Match 'runs-on:\s+macos-15'
-        $workflow | Should -Match "Install-Module -Name Pester -RequiredVersion '5\.6\.1'"
-        $workflow | Should -Match '(?s)Invoke-Tests\.ps1.*?-MinimumCoverage 0'
+        $workflow | Should -Not -Match "Install-Module -Name Pester -RequiredVersion '5\.6\.1'"
+        $workflow | Should -Not -Match '(?s)Invoke-Tests\.ps1.*?-MinimumCoverage 0'
+        $workflow | Should -Match 'windows-admin-e2e-attestation\.txt'
         $workflow | Should -Match 'brew install bash coreutils go-task'
         $workflow | Should -Match 'nix build \.\#darwinConfigurations\.macos\.system --impure --no-link'
         $workflow | Should -Match 'runtime=not-applicable-on-github-hosted-runner'
@@ -921,8 +887,7 @@ esac
     It 'should install chezmoi before every Windows job that runs chezmoi template tests' {
         $workflowCases = @(
             @{ Path = '.github/workflows/ci-chezmoi.yml'; Job = 'lint'; TestMarker = '.\tests\Invoke-Tests.ps1' },
-            @{ Path = '.github/workflows/ci-powershell.yml'; Job = 'test'; TestMarker = 'Invoke-Tests.ps1' },
-            @{ Path = '.github/workflows/ci-bootstrap.yml'; Job = 'windows'; TestMarker = 'Invoke-Tests.ps1' }
+            @{ Path = '.github/workflows/ci-powershell.yml'; Job = 'test'; TestMarker = 'Invoke-Tests.ps1' }
         )
 
         foreach ($case in $workflowCases) {
