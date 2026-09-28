@@ -301,12 +301,6 @@ Describe '標準キーバインド方針' {
                 Job           = 'test'
                 InstallMarker = 'winget install --id AutoHotkey\.AutoHotkey --exact --source winget --scope machine'
                 PesterStep    = '- name: Install PowerShell modules'
-            },
-            @{
-                Workflow      = '.github/workflows/ci-bootstrap.yml'
-                Job           = 'windows'
-                InstallMarker = 'Admin-only installer did not attempt AutoHotkey\.AutoHotkey'
-                PesterStep    = '- name: Install pinned Pester'
             }
         )
         foreach ($case in $ciJobs) {
@@ -376,7 +370,6 @@ Describe '標準キーバインド方針' {
         $content | Should -Match '\{ key = "l", mods = "ALT\|SHIFT", action = focus_adjacent_window\("right"\) \}'
         $content | Should -Match '\{ key = "Backspace", mods = "LEADER", action = act\.SendKey\(\{ key = "Backspace" \}\) \}'
     }
-
 
     It 'Warp keybindings are no longer managed' {
         Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "terminals/warp/keybindings.yaml") | Should -BeFalse

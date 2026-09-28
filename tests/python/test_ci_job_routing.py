@@ -26,7 +26,6 @@ JOBS = {
     "ci-powershell.yml": {
         "lint": "powershell_lint",
         "test": "powershell_test",
-        "test-windows-powershell": "powershell_test",
     },
     "ci-consistency.yml": {"check": "package_catalog"},
     "ci-devcontainer.yml": {
