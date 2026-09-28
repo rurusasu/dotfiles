@@ -1,4 +1,5 @@
 # npm/pnpm global package and adapter metadata.
+{ packageInstallTimeoutSeconds }:
 {
   # Post-install verification commands for npm packages.
   # Keys match catalog attr names from npmMap.
@@ -86,7 +87,7 @@
         "install"
         "chromium"
       ];
-      timeoutSeconds = 600;
+      timeoutSeconds = packageInstallTimeoutSeconds;
     };
   };
 
@@ -97,9 +98,11 @@
       "--allow-build=@google/genai"
       "--allow-build=koffi"
       "--allow-build=protobufjs"
+      "--allow-build=!node-pty"
     ];
     "@google/gemini-cli" = [
       "--allow-build=@github/keytar"
+      "--allow-build=!node-pty"
     ];
   };
 

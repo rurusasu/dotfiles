@@ -68,7 +68,7 @@ class PnpmHandler : SetupHandlerBase {
         # Windows のグローバル npm bin に .cmd shim を配置する経路を優先する。
         $npmCmd = Get-ExternalCommand -Name "npm"
         if ($npmCmd) {
-            $this.Log("pnpm が見つかりません。npm 経由でインストールします...")
+            $this.Log("pnpm 12.4.0 以降を npm 経由でセットアップします...")
             try {
                 $this.AddRuntimeNodeDirectoryToProcessPath($npmCmd)
                 $npmOutput = @(Invoke-Npm -Arguments @("install", "-g", "pnpm@latest"))
@@ -92,7 +92,7 @@ class PnpmHandler : SetupHandlerBase {
                         }
                     }
 
-                    $this.LogWarning("npm install は成功しましたが、npm global prefix に pnpm コマンドが見つかりません")
+                    $this.LogWarning("npm install は成功しましたが、npm global prefix の pnpm が使用できないか 12.4.0 未満です")
                 }
 
                 if ($npmExitCode -ne 0) {
@@ -188,17 +188,26 @@ class PnpmHandler : SetupHandlerBase {
                 return $false
             }
             $output = Invoke-NativeCommand -Command $pnpmPath -Arguments @("--version")
-            return ($LASTEXITCODE -eq 0 -and $output -match '\d+\.\d+')
+            return ($LASTEXITCODE -eq 0 -and $this.IsSupportedPnpmVersion($output))
         }
         catch {
             return $false
         }
     }
 
+    hidden [bool] IsSupportedPnpmVersion([object]$output) {
+        # Negated --allow-build and approve-builds decisions with no pending
+        # packages require 12.4.0. Reject diagnostic text and prereleases too.
+        $versionText = (@($output) -join "`n").Trim()
+        if ($versionText -notmatch '^\d+\.\d+\.\d+$') { return $false }
+        $parsedVersion = $null
+        return ([version]::TryParse($versionText, [ref]$parsedVersion) -and $parsedVersion -ge [version]'12.4.0')
+    }
+
     hidden [bool] TestPnpmExecutable() {
         try {
             $output = Invoke-Pnpm -Arguments @("--version")
-            if ($LASTEXITCODE -eq 0 -and $output -match '\d+\.\d+') {
+            if ($LASTEXITCODE -eq 0 -and $this.IsSupportedPnpmVersion($output)) {
                 return $true
             }
             return $false
@@ -212,8 +221,12 @@ class PnpmHandler : SetupHandlerBase {
         try {
             try { Update-NpmGlobalCommandPath -Cache $ctx.Options }
             catch { $this.LogWarning("npm global PATH recovery failed: $($_.Exception.Message)") }
-            $pnpmCmd = Get-ExternalCommand -Name "pnpm"
+            # Match Invoke-Pnpm's .cmd preference, which can differ from pnpm.exe
+            # returned by an unqualified command lookup.
+            $pnpmCmd = Get-ExternalCommand -Name 'pnpm.cmd'
+            if (-not $pnpmCmd) { $pnpmCmd = Get-ExternalCommand -Name 'pnpm' }
             $pnpmCommandPath = Get-ExternalCommandPath -CommandInfo $pnpmCmd
+            $existingPnpmDirectory = $null
             $pnpmIsUnusable = $pnpmCmd -and $pnpmCommandPath -and
                 (Test-Path -LiteralPath $pnpmCommandPath -PathType Leaf) -and
             -not $this.TestPnpmExecutable()
@@ -222,12 +235,37 @@ class PnpmHandler : SetupHandlerBase {
                     return $this.CreateFailureResult("pnpm のセットアップに失敗しました")
                 }
             }
+            elseif ($pnpmCommandPath -and (Test-Path -LiteralPath $pnpmCommandPath -PathType Leaf)) {
+                $existingPnpmDirectory = Split-Path -Parent $pnpmCommandPath
+            }
             $pnpmBinPath = $this.EnsurePnpmSetup()
+            if (-not $pnpmBinPath) {
+                if ($this.TestPnpmExecutable()) {
+                    $this.LogWarning("pnpm setup に失敗しましたが、既存の pnpm runtime は利用可能なため継続します")
+                }
+                else {
+                    return $this.CreateFailureResult("pnpm setup に失敗しました。グローバル bin を準備できません")
+                }
+            }
             $this.AddPnpmBinToPath($pnpmBinPath)
             if ($this.BootstrapPnpmDirectory) {
                 # AddPnpmBinToPath can put a different installation ahead of the
                 # npm/Corepack shim. Keep the package manager selected at bootstrap first.
                 $this.PrependUserPath($this.BootstrapPnpmDirectory)
+            }
+            elseif ($existingPnpmDirectory) {
+                $this.PrependProcessPath($existingPnpmDirectory)
+                # Adding home/bin may expose a .cmd shim even if the validated
+                # installation was an .exe. Only re-probe when selection changed.
+                $afterPathCommand = Get-ExternalCommand -Name 'pnpm.cmd'
+                if (-not $afterPathCommand) { $afterPathCommand = Get-ExternalCommand -Name 'pnpm' }
+                $afterPath = Get-ExternalCommandPath -CommandInfo $afterPathCommand
+                if ($afterPath -ne $pnpmCommandPath -and -not $this.TestPnpmExecutable()) {
+                    if (-not $this.TryBootstrapPnpm([string]$ctx.Options['NpmGlobalPrefix'])) {
+                        return $this.CreateFailureResult("PATH 更新後の pnpm のセットアップに失敗しました")
+                    }
+                    $this.PrependUserPath($this.BootstrapPnpmDirectory)
+                }
             }
 
             $packagesPath = $this.GetPackagesPath($ctx)
@@ -245,10 +283,29 @@ class PnpmHandler : SetupHandlerBase {
                 return $this.CreateSuccessResult("パッケージリストが空です")
             }
 
+            # Persist explicit denials before any verification/skip or install.
+            # Removing an old allow flag alone does not revoke saved permission.
+            $denials = @($packages | ForEach-Object {
+                    $this.GetPackageStringArray($_, 'installArgs') | Where-Object {
+                        $_ -match '^--allow-build=!.+'
+                    } | ForEach-Object { $_.Substring('--allow-build='.Length) }
+                } | Sort-Object -Unique)
+            if ($denials.Count -gt 0) {
+                $policyOutput = @(Invoke-Pnpm -Arguments (@('approve-builds', '-g') + $denials))
+                $policyExitCode = $LASTEXITCODE
+                foreach ($line in $policyOutput) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$line)) { $this.Log("pnpm approve-builds: $line", 'Gray') }
+                }
+                if ($policyExitCode -ne 0) {
+                    return $this.CreateFailureResult("pnpm approve-builds exited with code $policyExitCode")
+                }
+            }
+
             $failed = @()
             $succeeded = @()
             $verifyFailed = @()
             $postInstallFailed = @()
+            $preserved = @()
             $skipped = 0
             $verified = 0
 
@@ -262,18 +319,35 @@ class PnpmHandler : SetupHandlerBase {
                 $this.Log("pnpm root の取得に失敗しました: $($_.Exception.Message)", "Gray")
             }
 
+            # Ask pnpm once which global packages are outdated. A verified
+            # package absent from this result does not need to be re-linked by
+            # pnpm add -g; packages that are missing, unverifiable, or listed
+            # as outdated still follow the normal install/update path.
+            $outdatedState = $this.GetOutdatedGlobalPackageState()
+            $outdatedNames = @($outdatedState.Names)
+            $outdatedCheckAvailable = [bool]$outdatedState.Available
+
             foreach ($pkgEntry in $packages) {
                 $pkgSpec = if ($pkgEntry -is [string]) { $pkgEntry } else { $pkgEntry.name }
                 $pkgName = $pkgSpec -replace '(?<=.)@[^\s@]+$', ''
                 $verifyCmd = $this.GetPackageProperty($pkgEntry, "verifyCommand")
                 $postInstallCmd = $this.GetPackageProperty($pkgEntry, "postInstallCommand")
                 $installArgs = $this.GetPackageStringArray($pkgEntry, "installArgs")
+                $wasVerified = $false
 
                 if ($this.IsPackageInstalled($pkgName, $globalRootForCheck)) {
                     if ($verifyCmd) {
                         if ($this.TestPackageVerification($verifyCmd, $globalRootForCheck)) {
-                            $this.Log("検証済み。latest を確認します: $pkgName", "Gray")
+                            if ($outdatedCheckAvailable -and $pkgName -notin $outdatedNames -and -not $postInstallCmd) {
+                                $this.Log("スキップ (検証済み/最新): $pkgName", "Gray")
+                                $skipped++
+                                $verified++
+                                continue
+                            }
+
+                            $this.Log("検証済み。更新対象です: $pkgName", "Gray")
                             $verified++
+                            $wasVerified = $true
                         }
                         else {
                             $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
@@ -288,6 +362,11 @@ class PnpmHandler : SetupHandlerBase {
                 $pnpmExitCode = $this.InvokePnpmInstall(@("add", "-g", "--reporter=append-only", "--yes") + $installArgs + @($pkgSpec))
 
                 if ($pnpmExitCode -ne 0) {
+                    if ($wasVerified -and $this.TestPackageVerification($verifyCmd, $globalRootForCheck)) {
+                        $preserved += $pkgSpec
+                        $this.LogWarning("⚠ $pkgSpec の更新に失敗しましたが、既存の実行可能状態を維持しました (exit code: $pnpmExitCode)")
+                        continue
+                    }
                     $failed += $pkgSpec
                     $this.LogWarning("✗ $pkgSpec のインストールに失敗しました")
                     continue
@@ -326,6 +405,7 @@ class PnpmHandler : SetupHandlerBase {
             if ($postInstallFailed.Count -gt 0) { $parts += "$($postInstallFailed.Count) 個post-install失敗" }
             if ($verifyFailed.Count -gt 0) { $parts += "$($verifyFailed.Count) 個検証失敗" }
             if ($failed.Count -gt 0) { $parts += "$($failed.Count) 個失敗" }
+            if ($preserved.Count -gt 0) { $parts += "$($preserved.Count) 個更新失敗（既存を維持）" }
             if ($verified -gt 0) { $parts += "$verified 個検証済み" }
             $parts += "$skipped 個スキップ"
             $message = $parts -join ", "
@@ -356,6 +436,45 @@ class PnpmHandler : SetupHandlerBase {
         return (Test-Path -LiteralPath $pkgPath -PathType Container)
     }
 
+    hidden [object] GetOutdatedGlobalPackageState() {
+        try {
+            $output = @(Invoke-Pnpm -Arguments @("outdated", "--global", "--format", "json"))
+            $exitCode = [int]$LASTEXITCODE
+            $jsonText = (($output | ForEach-Object { [string]$_ }) -join [Environment]::NewLine).Trim()
+
+            if ([string]::IsNullOrWhiteSpace($jsonText)) {
+                if ($exitCode -eq 0) {
+                    return [PSCustomObject]@{ Available = $true; Names = @() }
+                }
+                throw "pnpm outdated exited with code $exitCode without JSON output"
+            }
+
+            $json = $jsonText | ConvertFrom-Json -ErrorAction Stop
+            $names = @()
+            if ($json -is [System.Array]) {
+                foreach ($entry in @($json)) {
+                    if ($entry -and ($entry.PSObject.Properties.Name -contains "name")) {
+                        $names += [string]$entry.name
+                    }
+                }
+            }
+            else {
+                foreach ($property in @($json.PSObject.Properties)) {
+                    $names += [string]$property.Name
+                }
+            }
+
+            return [PSCustomObject]@{
+                Available = $true
+                Names     = @($names | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+            }
+        }
+        catch {
+            $this.LogWarning("pnpm outdated の取得に失敗しました。既存パッケージも更新を試みます: $($_.Exception.Message)")
+            return [PSCustomObject]@{ Available = $false; Names = @() }
+        }
+    }
+
     hidden [object] GetPackageProperty([object]$pkgEntry, [string]$propertyName) {
         if ($pkgEntry -is [string] -or -not $pkgEntry) { return $null }
         if ($pkgEntry -is [System.Collections.IDictionary] -and $pkgEntry.Contains($propertyName)) {
@@ -384,7 +503,13 @@ class PnpmHandler : SetupHandlerBase {
         try {
             $command = $postInstallCmd.command
             $arguments = @($postInstallCmd.args)
-            $timeoutSeconds = $this.GetCommandTimeoutSeconds($postInstallCmd, 600)
+            $timeoutSeconds = Get-PackageInstallTimeoutSecond
+            $environmentTimeout = 0
+            $hasEnvironmentOverride = [int]::TryParse($env:DOTFILES_INSTALL_TIMEOUT_SECONDS, [ref]$environmentTimeout) -and
+            $environmentTimeout -ge 0
+            if (-not $hasEnvironmentOverride) {
+                $timeoutSeconds = $this.GetCommandTimeoutSeconds($postInstallCmd, $timeoutSeconds)
+            }
             $displayCommand = (@($command) + $arguments) -join " "
             $this.Log("post-install 実行中: $displayCommand", "Gray")
 
@@ -504,7 +629,7 @@ class PnpmHandler : SetupHandlerBase {
     }
 
     hidden [int] GetVerifyTimeoutSeconds([object]$verifyCmd) {
-        return $this.GetCommandTimeoutSeconds($verifyCmd, 30)
+        return $this.GetCommandTimeoutSeconds($verifyCmd, 120)
     }
 
     hidden [int] GetCommandTimeoutSeconds([object]$commandSpec, [int]$defaultSeconds) {
@@ -553,18 +678,21 @@ class PnpmHandler : SetupHandlerBase {
             }
         }
 
-        # PNPM_HOME が確定済みならそのまま返す（pnpm >= 9 では PNPM_HOME = global bin）
-        # pnpm bin -g は PNPM_HOME が PATH にないとエラーを返すため、
-        # PATH 追加は AddPnpmBinToPath に一元化し、ここでは呼ばない
+        # pnpm >= 11 keeps global executables below PNPM_HOME/bin.
+        # Keep PNPM_HOME as the parent; do not create a nested bin/bin.
         if ($env:PNPM_HOME) {
-            return $env:PNPM_HOME
+            return Join-Path $env:PNPM_HOME 'bin'
         }
 
         # PNPM_HOME が未設定 → pnpm setup を実行
         $this.Log("PNPM_HOME が未設定です。pnpm setup を実行します...")
-        $null = Invoke-Pnpm -Arguments @("setup")
-        if ($LASTEXITCODE -ne 0) {
-            $this.LogWarning("pnpm setup に失敗しました")
+        $setupOutput = @(Invoke-Pnpm -Arguments @("setup"))
+        $setupExitCode = $LASTEXITCODE
+        foreach ($line in $setupOutput) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$line)) { $this.Log("pnpm setup: $line", 'Gray') }
+        }
+        if ($setupExitCode -ne 0) {
+            $this.LogWarning("pnpm setup exited with code $setupExitCode")
             return $null
         }
         $this.Log("pnpm setup が完了しました", "Green")
@@ -578,7 +706,8 @@ class PnpmHandler : SetupHandlerBase {
             $env:PNPM_HOME = Join-Path $env:LOCALAPPDATA "pnpm"
         }
 
-        return $env:PNPM_HOME
+        if (-not $env:PNPM_HOME) { return $null }
+        return Join-Path $env:PNPM_HOME 'bin'
     }
 
     hidden [void] AddPnpmBinToPath([string]$pnpmBinPath) {
@@ -589,10 +718,6 @@ class PnpmHandler : SetupHandlerBase {
             }
 
             $pathsToAdd = @($pnpmBinPath)
-            $childBinPath = Join-Path $pnpmBinPath "bin"
-            if ($pathsToAdd -notcontains $childBinPath) {
-                $pathsToAdd += $childBinPath
-            }
 
             foreach ($pathToAdd in $pathsToAdd) {
                 if (-not (Test-Path -LiteralPath $pathToAdd)) {
@@ -696,6 +821,10 @@ class PnpmHandler : SetupHandlerBase {
         $newPath = (@($pathToPrepend) + $items) -join ";"
         Set-UserEnvironmentPath -Path $newPath
 
+        $this.PrependProcessPath($pathToPrepend)
+    }
+
+    hidden [void] PrependProcessPath([string]$pathToPrepend) {
         $processItems = if ($env:PATH) { @($env:PATH -split ";" | Where-Object { $_ }) } else { @() }
         $processItems = @($processItems | Where-Object {
                 -not [System.StringComparer]::OrdinalIgnoreCase.Equals($_.TrimEnd("\"), $pathToPrepend.TrimEnd("\"))

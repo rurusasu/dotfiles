@@ -5,7 +5,7 @@
   windowsOnly,
 }:
 let
-  packageInstallTimeoutSeconds = 900;
+  packageInstallTimeoutSeconds = 3600;
   # Extract winget mappings (non-null only)
   wingetMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.winget or null) catalog);
   wingetFeatureMap = lib.filterAttrs (_: v: v != null) (
@@ -24,6 +24,6 @@ in
     ;
   inherit (windowsOnly) windowsOnlySupport windowsOnly;
 }
-// import ./node.nix
+// import ./node.nix { inherit packageInstallTimeoutSeconds; }
 // import ./windows-verification.nix { inherit packageInstallTimeoutSeconds; }
 // import ./windows-install.nix { inherit packageInstallTimeoutSeconds; }

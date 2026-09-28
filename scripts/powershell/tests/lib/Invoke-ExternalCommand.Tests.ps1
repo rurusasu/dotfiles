@@ -266,7 +266,7 @@ Describe 'Invoke-Winget' {
         }
     }
 
-    It 'should run winget through the shared 900-second timeout wrapper by default' {
+    It 'should run winget through the shared 3600-second timeout wrapper by default' {
         Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
         Remove-Item Env:\DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
         Mock Invoke-ExternalCommandWithTimeout {
@@ -280,8 +280,20 @@ Describe 'Invoke-Winget' {
         Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
             $Command -eq "winget" -and
             $Arguments -contains "example.package" -and
-            $TimeoutSeconds -eq 900
+            $TimeoutSeconds -eq 3600
         }
+    }
+
+    It 'should ignore negative install overrides while preserving explicit zero' -TestCases @(
+        @{ Shared = '-1'; Legacy = $null; Expected = 3600 }
+        @{ Shared = '-1'; Legacy = '73'; Expected = 73 }
+        @{ Shared = $null; Legacy = '-1'; Expected = 3600 }
+        @{ Shared = '0'; Legacy = '73'; Expected = 0 }
+    ) {
+        param($Shared, $Legacy, $Expected)
+        $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $Shared
+        $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = $Legacy
+        Get-PackageInstallTimeoutSecond -LegacyEnvironmentVariable 'DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS' | Should -Be $Expected
     }
 
     It 'should allow disabling the winget timeout for tests or debugging' {

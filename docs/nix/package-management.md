@@ -87,6 +87,27 @@ cp /tmp/winget-export/npm/packages.json windows/npm/packages.json
 cp /tmp/winget-export/pnpm/packages.json windows/pnpm/packages.json
 ```
 
+Windows の package install timeout は `packageInstallTimeoutSeconds = 3600`
+（秒）を共通値とし、WinGet manifest、direct installer、Playwright の Chromium
+install に使います。npm/pnpm/WinGet/WSL の runtime adapter も既定 3600 秒で、
+`DOTFILES_INSTALL_TIMEOUT_SECONDS` による上書きを維持します。
+direct installer でも環境変数を manifest の値より優先し、0 はダウンロードと
+外部プロセスのタイムアウトを無効にします。不正な環境変数値や負数は無視し、
+manifest の個別 timeout、未指定なら共通既定値を使います。
+起動検証の既定と WSL の検証は 120 秒に延長します。既存の長い個別 timeout は
+短縮せず維持し、catalog に明記された個別値を優先します
+（例: Go は共通 install timeout）。
+
+dsh と Gemini の `pnpmInstallArgs` は `--allow-build=!node-pty` を指定します。
+既存の `allowBuilds.node-pty: true` を明示的な拒否へ更新し、ほかの許可は維持します。
+Windows handler は選択済み manifest の拒否指定を集約し、検証済みパッケージの
+skip 判定より前に `pnpm approve-builds -g !node-pty` を一度実行します。
+このポリシー更新に失敗した場合は Apply を失敗として終了します。
+この否定形には [pnpm 12.4.0 以降](https://pnpm.io/cli/add#--allow-build) が必要です。
+Windows handler は既存 pnpm と bootstrap 後の実体のバージョンを検査します。
+12.4.0 未満や使用不能な pnpm は Apply で npm/Corepack による再セットアップを
+試み、必要なバージョンを準備できなければ失敗として報告します。
+
 provider coverage は次で確認できます。
 
 ```bash

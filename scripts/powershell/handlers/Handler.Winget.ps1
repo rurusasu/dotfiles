@@ -255,6 +255,7 @@ class WingetHandler : SetupHandlerBase {
             $skipped = 0
             $verified = 0
             $verifyFailed = 0
+            $preserved = 0
             $deferred = 0
             foreach ($pkg in $packages) {
                 $directInstallerCurrent = $pkg.DirectInstaller -and $this.TestDirectInstallerCurrent($pkg)
@@ -385,6 +386,10 @@ class WingetHandler : SetupHandlerBase {
                         $succeeded++
                         $this.Log("✓ $($pkg.Id) (direct fallback 成功、WinGet タイムアウトのため実行検証をスキップ)", "Yellow")
                     }
+                    elseif ($this.TryPreserveVerifiedPackage($pkg)) {
+                        $preserved++
+                        $this.LogWarning("⚠ $($pkg.Id) の更新がタイムアウトしましたが、既存の実行可能状態を維持しました (exit code: $($this.LastInstallExitCode))")
+                    }
                     else {
                         $failed++
                         $this.LogWarning("✗ $($pkg.Id) のインストールがタイムアウトしたため、実行検証をスキップしました")
@@ -419,6 +424,11 @@ class WingetHandler : SetupHandlerBase {
                         continue
                     }
 
+                    if ($this.TryPreserveVerifiedPackage($pkg)) {
+                        $preserved++
+                        $this.LogWarning("⚠ $($pkg.Id) の更新に失敗しましたが、既存の実行可能状態を維持しました (exit code: $($this.LastInstallExitCode))")
+                        continue
+                    }
                     $failed++
                     $this.LogWarning("✗ $($pkg.Id) のインストールに失敗しました (exit code: $($this.LastInstallExitCode))")
                     continue
@@ -456,6 +466,7 @@ class WingetHandler : SetupHandlerBase {
             if ($unchanged -gt 0) { $parts += "$unchanged 個変更なし" }
             if ($verifyFailed -gt 0) { $parts += "$verifyFailed 個検証失敗" }
             if ($failed -gt 0) { $parts += "$failed 個失敗" }
+            if ($preserved -gt 0) { $parts += "$preserved 個更新失敗（既存を維持）" }
             if ($verified -gt 0) { $parts += "$verified 個検証済み" }
             if ($deferred -gt 0) { $parts += "$deferred 個管理者フェーズ待ち" }
             $parts += "$skipped 個スキップ"
@@ -509,6 +520,17 @@ class WingetHandler : SetupHandlerBase {
             WasInstalled          = $wasInstalled
             WasVerified           = $wasVerified
         }
+    }
+
+    hidden [bool] TryPreserveVerifiedPackage([object]$pkg) {
+        if ($null -eq $pkg -or -not $pkg.WasVerified -or -not $pkg.VerifyCommand) {
+            return $false
+        }
+
+        Update-ProcessEnvironmentPath
+        $this.EnsurePortableLinkQuiet($pkg)
+        $this.EnsurePathEntriesQuiet($pkg)
+        return $this.TestPackageVerificationForPackage($pkg, $false)
     }
 
     hidden [bool] ShouldDeferWslVerificationToAdminInstall([object]$pkg, [SetupContext]$ctx) {
@@ -745,12 +767,13 @@ class WingetHandler : SetupHandlerBase {
 
             New-Item -ItemType Directory -Path $stagingPath -Force | Out-Null
             if ($archiveExtension -eq ".tar.gz") {
-                $extractOutput = @(
-                    Invoke-ExternalCommandWithTimeout `
-                        -Command "tar.exe" `
-                        -Arguments @("-xzf", $archivePath, "-C", $stagingPath) `
-                        -TimeoutSeconds $timeoutSeconds
-                )
+                $extractArguments = @("-xzf", $archivePath, "-C", $stagingPath)
+                $extractOutput = if ($timeoutSeconds -gt 0) {
+                    @(Invoke-ExternalCommandWithTimeout -Command "tar.exe" -Arguments $extractArguments -TimeoutSeconds $timeoutSeconds)
+                }
+                else {
+                    @(Invoke-NativeCommand -Command "tar.exe" -Arguments $extractArguments)
+                }
                 if ($LASTEXITCODE -ne 0) {
                     $extractDetails = ($extractOutput | ForEach-Object { [string]$_ }) -join "`n"
                     throw "directInstaller tar.gz extraction failed for $($pkg.Id): $extractDetails"
@@ -892,7 +915,13 @@ class WingetHandler : SetupHandlerBase {
     }
 
     hidden [int] GetDirectInstallerTimeoutSeconds([object]$directInstaller) {
-        $timeoutSeconds = 900
+        # The common override also takes precedence over generated direct
+        # installer metadata; zero disables both download and process limits.
+        $environmentTimeout = 0
+        if ([int]::TryParse($env:DOTFILES_INSTALL_TIMEOUT_SECONDS, [ref]$environmentTimeout) -and $environmentTimeout -ge 0) {
+            return Get-PackageInstallTimeoutSecond
+        }
+        $timeoutSeconds = Get-PackageInstallTimeoutSecond
         if ($directInstaller -is [hashtable] -and $directInstaller.ContainsKey("timeoutSeconds")) {
             $timeoutSeconds = [int]$directInstaller["timeoutSeconds"]
         }
@@ -901,7 +930,7 @@ class WingetHandler : SetupHandlerBase {
         }
 
         if ($timeoutSeconds -le 0) {
-            return 900
+            return Get-PackageInstallTimeoutSecond
         }
         return $timeoutSeconds
     }
@@ -909,10 +938,11 @@ class WingetHandler : SetupHandlerBase {
     hidden [int] GetInstallTimeoutSeconds([object]$pkg) {
         # A process-wide install override must be able to shorten or disable
         # the generated default for every package. Explicit per-package
-        # values remain the fallback when no override is present.
+        # values remain the fallback when no valid override is present.
+        $environmentTimeout = 0
         $hasEnvironmentOverride =
-        -not [string]::IsNullOrWhiteSpace($env:DOTFILES_INSTALL_TIMEOUT_SECONDS) -or
-        -not [string]::IsNullOrWhiteSpace($env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS)
+        ([int]::TryParse($env:DOTFILES_INSTALL_TIMEOUT_SECONDS, [ref]$environmentTimeout) -and $environmentTimeout -ge 0) -or
+        ([int]::TryParse($env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS, [ref]$environmentTimeout) -and $environmentTimeout -ge 0)
         if ($hasEnvironmentOverride) {
             return Get-PackageInstallTimeoutSecond -LegacyEnvironmentVariable "DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS"
         }
@@ -1570,7 +1600,7 @@ class WingetHandler : SetupHandlerBase {
             "-format", "json",
             "-utf8"
         )
-        $output = @(Invoke-VerifyCommand -Command $vswherePath -Arguments $arguments -TimeoutSeconds 30)
+        $output = @(Invoke-VerifyCommand -Command $vswherePath -Arguments $arguments -TimeoutSeconds 120)
         if ($LASTEXITCODE -ne 0) {
             $this.Log("vswhere が Visual Studio インスタンスを確認できませんでした (exit code: $LASTEXITCODE)", "Yellow")
             return $false
@@ -1703,7 +1733,7 @@ class WingetHandler : SetupHandlerBase {
     }
 
     hidden [int] GetVerifyTimeoutSeconds([object]$verifyCmd) {
-        $timeoutSeconds = 15
+        $timeoutSeconds = 120
         if ($verifyCmd -is [hashtable] -and $verifyCmd.ContainsKey("timeoutSeconds")) {
             $timeoutSeconds = [int]$verifyCmd["timeoutSeconds"]
         }
@@ -1712,7 +1742,7 @@ class WingetHandler : SetupHandlerBase {
         }
 
         if ($timeoutSeconds -le 0) {
-            return 15
+            return 120
         }
         return $timeoutSeconds
     }

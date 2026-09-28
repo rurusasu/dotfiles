@@ -68,6 +68,15 @@ class CiJobRoutingTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn("linux", self.selected(path, manifest=BOOTSTRAP))
 
+    def test_pnpm_permission_regression_selects_its_runtime_job(self) -> None:
+        for path in (
+            "tests/runtime/pnpm-build-permissions.mjs",
+            "tests/fixtures/pnpm-build-permissions/package/package.json",
+            "tests/fixtures/pnpm-build-permissions/package/probe.cjs",
+        ):
+            with self.subTest(path=path):
+                self.assertIn("package_catalog", self.selected(path))
+
     def test_powershell_extensions_select_lint_and_contracts(self) -> None:
         for suffix in ("ps1", "psm1", "psd1"):
             with self.subTest(suffix=suffix):

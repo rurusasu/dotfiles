@@ -1068,7 +1068,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.windows == 'true' }}
     runs-on: windows-2025
-    timeout-minutes: 90
+    timeout-minutes: 210
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -1148,9 +1148,9 @@ jobs:
 
       - name: Run install.cmd strict user phase
         shell: cmd
-        timeout-minutes: 70
+        timeout-minutes: 180
         env:
-          DOTFILES_INSTALL_TIMEOUT_SECONDS: "900"
+          DOTFILES_INSTALL_TIMEOUT_SECONDS: "3600"
           DOTFILES_E2E_POWERSHELL_VERSION: ${{ matrix.version }}
         run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts\powershell\ci\Invoke-WindowsInstallerE2E.ps1
 
