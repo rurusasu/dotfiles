@@ -255,6 +255,7 @@ class WingetHandler : SetupHandlerBase {
             $skipped = 0
             $verified = 0
             $verifyFailed = 0
+            $preserved = 0
             $deferred = 0
             foreach ($pkg in $packages) {
                 $directInstallerCurrent = $pkg.DirectInstaller -and $this.TestDirectInstallerCurrent($pkg)
@@ -385,6 +386,10 @@ class WingetHandler : SetupHandlerBase {
                         $succeeded++
                         $this.Log("✓ $($pkg.Id) (direct fallback 成功、WinGet タイムアウトのため実行検証をスキップ)", "Yellow")
                     }
+                    elseif ($this.TryPreserveVerifiedPackage($pkg)) {
+                        $preserved++
+                        $this.LogWarning("⚠ $($pkg.Id) の更新がタイムアウトしましたが、既存の実行可能状態を維持しました (exit code: $($this.LastInstallExitCode))")
+                    }
                     else {
                         $failed++
                         $this.LogWarning("✗ $($pkg.Id) のインストールがタイムアウトしたため、実行検証をスキップしました")
@@ -419,6 +424,11 @@ class WingetHandler : SetupHandlerBase {
                         continue
                     }
 
+                    if ($this.TryPreserveVerifiedPackage($pkg)) {
+                        $preserved++
+                        $this.LogWarning("⚠ $($pkg.Id) の更新に失敗しましたが、既存の実行可能状態を維持しました (exit code: $($this.LastInstallExitCode))")
+                        continue
+                    }
                     $failed++
                     $this.LogWarning("✗ $($pkg.Id) のインストールに失敗しました (exit code: $($this.LastInstallExitCode))")
                     continue
@@ -456,6 +466,7 @@ class WingetHandler : SetupHandlerBase {
             if ($unchanged -gt 0) { $parts += "$unchanged 個変更なし" }
             if ($verifyFailed -gt 0) { $parts += "$verifyFailed 個検証失敗" }
             if ($failed -gt 0) { $parts += "$failed 個失敗" }
+            if ($preserved -gt 0) { $parts += "$preserved 個更新失敗（既存を維持）" }
             if ($verified -gt 0) { $parts += "$verified 個検証済み" }
             if ($deferred -gt 0) { $parts += "$deferred 個管理者フェーズ待ち" }
             $parts += "$skipped 個スキップ"
@@ -509,6 +520,17 @@ class WingetHandler : SetupHandlerBase {
             WasInstalled          = $wasInstalled
             WasVerified           = $wasVerified
         }
+    }
+
+    hidden [bool] TryPreserveVerifiedPackage([object]$pkg) {
+        if ($null -eq $pkg -or -not $pkg.WasVerified -or -not $pkg.VerifyCommand) {
+            return $false
+        }
+
+        Update-ProcessEnvironmentPath
+        $this.EnsurePortableLinkQuiet($pkg)
+        $this.EnsurePathEntriesQuiet($pkg)
+        return $this.TestPackageVerificationForPackage($pkg, $false)
     }
 
     hidden [bool] ShouldDeferWslVerificationToAdminInstall([object]$pkg, [SetupContext]$ctx) {

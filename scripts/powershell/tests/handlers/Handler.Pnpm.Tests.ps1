@@ -443,6 +443,48 @@ Describe 'PnpmHandler' {
         }
     }
 
+    Context 'Apply - setup failure with a usable existing runtime' {
+        It 'should continue when pnpm setup fails but the existing runtime remains usable' {
+            $savedPnpmHome = $env:PNPM_HOME
+            $env:PNPM_HOME = ''
+            $existingPnpmPath = Join-Path $TestDrive 'existing-pnpm\pnpm.cmd'
+            New-Item -Path $existingPnpmPath -ItemType File -Force | Out-Null
+
+            Mock Get-ExternalCommand {
+                param($Name)
+                if ($Name -in @('pnpm.cmd', 'pnpm')) { return @{ Source = $existingPnpmPath } }
+                return $null
+            }
+            Mock Get-ExternalCommandPath { return $existingPnpmPath }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains 'setup') {
+                    $global:LASTEXITCODE = 1
+                    return 'ERR_PNPM_BAD_ENV_FOUND'
+                }
+                if ($Arguments -contains '--version') {
+                    $global:LASTEXITCODE = 0
+                    return '12.6.0'
+                }
+                $global:LASTEXITCODE = 0
+                return ''
+            }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent { return @{ globalPackages = @() } }
+            Mock Write-Host { }
+
+            try {
+                $result = $handler.Apply($ctx)
+
+                $result.Success | Should -BeTrue
+                $result.Message | Should -Match '空'
+            }
+            finally {
+                $env:PNPM_HOME = $savedPnpmHome
+            }
+        }
+    }
+
     BeforeEach {
         $script:handler = [PnpmHandler]::new()
         Mock Update-NpmGlobalCommandPath { }
@@ -739,7 +781,7 @@ Describe 'PnpmHandler' {
             { $handler.EnsurePnpmSetup() } | Should -Not -Throw
         }
 
-        It 'should report setup diagnostics and stop Apply before installing packages' {
+        It 'should report setup diagnostics but continue when the existing runtime remains usable' {
             $script:setupLogs = @()
             Mock Get-ExternalCommand { return @{ Source = 'C:\pnpm.cmd' } }
             Mock Write-Host { $script:setupLogs += [string]$Object }
@@ -756,10 +798,10 @@ Describe 'PnpmHandler' {
 
             $result = $handler.Apply($ctx)
 
-            $result.Success | Should -BeFalse
+            $result.Success | Should -BeTrue
             ($script:setupLogs -join "`n") | Should -Match 'ERR_PNPM_BAD_ENVIRONMENT setup failed'
             ($script:setupLogs -join "`n") | Should -Match 'exited with code 1'
-            Should -Invoke Invoke-Pnpm -Times 0 -ParameterFilter { $Arguments -contains 'add' }
+            Should -Invoke Invoke-Pnpm -Times 1 -ParameterFilter { $Arguments -contains 'add' }
         }
     }
 
@@ -1092,6 +1134,67 @@ Describe 'PnpmHandler' {
             $result.Success | Should -Be $true
             $result.Message | Should -Match "1 個インストール"
             Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "add" } -Times 1
+            Should -Invoke Invoke-VerifyCommand -Times 2
+        }
+    }
+
+    Context 'Apply - update failure with a verified existing package' {
+        BeforeEach {
+            $script:originalPnpmHome = $env:PNPM_HOME
+            $script:pnpmHome = Join-Path $TestDrive 'pnpm-home-preserve'
+            $script:pnpmBin = Join-Path $script:pnpmHome 'bin'
+            $script:globalRoot = Join-Path $TestDrive 'pnpm-global-preserve\node_modules'
+            New-Item -Path $script:pnpmBin -ItemType Directory -Force | Out-Null
+            New-Item -Path (Join-Path $script:globalRoot 'existing-pkg') -ItemType Directory -Force | Out-Null
+            $env:PNPM_HOME = $script:pnpmHome
+
+            Mock Get-ExternalCommand { return @{ Source = 'C:\pnpm.cmd' } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return @{ globalPackages = @(
+                    @{ name = 'existing-pkg'; verifyCommand = @{ command = 'existing'; args = @('--version') } }
+                ) }
+            }
+            Mock Invoke-Pnpm {
+                param($Arguments)
+                if ($Arguments -contains 'root') {
+                    $global:LASTEXITCODE = 0
+                    return $script:globalRoot
+                }
+                if ($Arguments -contains 'outdated') {
+                    $global:LASTEXITCODE = 0
+                    return '{"existing-pkg":{"current":"1.0.0","latest":"2.0.0"}}'
+                }
+                if ($Arguments -contains 'bin') {
+                    $global:LASTEXITCODE = 0
+                    return $script:pnpmBin
+                }
+                if ($Arguments -contains '--version') {
+                    $global:LASTEXITCODE = 0
+                    return '12.6.0'
+                }
+                if ($Arguments -contains 'add') {
+                    $global:LASTEXITCODE = 1
+                    return 'network failure'
+                }
+                $global:LASTEXITCODE = 0
+                return ''
+            }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return 'existing 1.0.0' }
+            Mock Get-UserEnvironmentPath { return $script:pnpmBin }
+            Mock Set-UserEnvironmentPath { }
+            Mock Write-Host { }
+        }
+
+        AfterEach {
+            $env:PNPM_HOME = $script:originalPnpmHome
+        }
+
+        It 'should preserve the existing package when its update fails' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $result.Message | Should -Match '1 個更新失敗（既存を維持）'
             Should -Invoke Invoke-VerifyCommand -Times 2
         }
     }

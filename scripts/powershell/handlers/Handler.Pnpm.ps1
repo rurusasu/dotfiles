@@ -240,7 +240,12 @@ class PnpmHandler : SetupHandlerBase {
             }
             $pnpmBinPath = $this.EnsurePnpmSetup()
             if (-not $pnpmBinPath) {
-                return $this.CreateFailureResult("pnpm setup に失敗しました。グローバル bin を準備できません")
+                if ($this.TestPnpmExecutable()) {
+                    $this.LogWarning("pnpm setup に失敗しましたが、既存の pnpm runtime は利用可能なため継続します")
+                }
+                else {
+                    return $this.CreateFailureResult("pnpm setup に失敗しました。グローバル bin を準備できません")
+                }
             }
             $this.AddPnpmBinToPath($pnpmBinPath)
             if ($this.BootstrapPnpmDirectory) {
@@ -300,6 +305,7 @@ class PnpmHandler : SetupHandlerBase {
             $succeeded = @()
             $verifyFailed = @()
             $postInstallFailed = @()
+            $preserved = @()
             $skipped = 0
             $verified = 0
 
@@ -327,6 +333,7 @@ class PnpmHandler : SetupHandlerBase {
                 $verifyCmd = $this.GetPackageProperty($pkgEntry, "verifyCommand")
                 $postInstallCmd = $this.GetPackageProperty($pkgEntry, "postInstallCommand")
                 $installArgs = $this.GetPackageStringArray($pkgEntry, "installArgs")
+                $wasVerified = $false
 
                 if ($this.IsPackageInstalled($pkgName, $globalRootForCheck)) {
                     if ($verifyCmd) {
@@ -340,6 +347,7 @@ class PnpmHandler : SetupHandlerBase {
 
                             $this.Log("検証済み。更新対象です: $pkgName", "Gray")
                             $verified++
+                            $wasVerified = $true
                         }
                         else {
                             $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
@@ -354,6 +362,11 @@ class PnpmHandler : SetupHandlerBase {
                 $pnpmExitCode = $this.InvokePnpmInstall(@("add", "-g", "--reporter=append-only", "--yes") + $installArgs + @($pkgSpec))
 
                 if ($pnpmExitCode -ne 0) {
+                    if ($wasVerified -and $this.TestPackageVerification($verifyCmd, $globalRootForCheck)) {
+                        $preserved += $pkgSpec
+                        $this.LogWarning("⚠ $pkgSpec の更新に失敗しましたが、既存の実行可能状態を維持しました (exit code: $pnpmExitCode)")
+                        continue
+                    }
                     $failed += $pkgSpec
                     $this.LogWarning("✗ $pkgSpec のインストールに失敗しました")
                     continue
@@ -392,6 +405,7 @@ class PnpmHandler : SetupHandlerBase {
             if ($postInstallFailed.Count -gt 0) { $parts += "$($postInstallFailed.Count) 個post-install失敗" }
             if ($verifyFailed.Count -gt 0) { $parts += "$($verifyFailed.Count) 個検証失敗" }
             if ($failed.Count -gt 0) { $parts += "$($failed.Count) 個失敗" }
+            if ($preserved.Count -gt 0) { $parts += "$($preserved.Count) 個更新失敗（既存を維持）" }
             if ($verified -gt 0) { $parts += "$verified 個検証済み" }
             $parts += "$skipped 個スキップ"
             $message = $parts -join ", "

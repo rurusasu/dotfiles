@@ -393,6 +393,36 @@ Describe 'NpmHandler' {
             $diagnostic | Should -Match 'npm config get logs-max'
             $diagnostic | Should -Match 'npm install -g --loglevel verbose pkg1'
         }
+
+        It 'should preserve an already verified package when its update fails' {
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(
+                        @{ name = '@openai/codex'; verifyCommand = @{ command = 'codex'; args = @('--version') } }
+                    )
+                }
+            }
+            Mock Invoke-Npm {
+                param($Arguments)
+                if ($Arguments -contains 'list') {
+                    $global:LASTEXITCODE = 0
+                    return '{"dependencies":{"@openai/codex":{}}}'
+                }
+                $global:LASTEXITCODE = 1
+                return 'npm error EBUSY'
+            }
+            Mock Invoke-VerifyCommand {
+                $global:LASTEXITCODE = 0
+                return 'codex 0.42.0'
+            }
+
+            $ctx.Options['NpmMode'] = 'import'
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $result.Message | Should -Match '1 個更新失敗（既存を維持）'
+            Should -Invoke Invoke-VerifyCommand -Times 2
+        }
     }
 
     Context 'Apply - list mode success' {
