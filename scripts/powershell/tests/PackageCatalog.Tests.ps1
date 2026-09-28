@@ -386,6 +386,14 @@ Describe 'Package catalog consistency' {
             @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Links'
         }
 
+        It 'should not approve the legacy node-pty build for global pnpm packages' {
+            $pnpm = Get-Content -LiteralPath $script:pnpmJsonPath -Raw | ConvertFrom-Json
+            $dsh = @($pnpm.globalPackages | Where-Object { $_.name -eq '@deepseek-ai/dsh' }) | Select-Object -First 1
+
+            $dsh | Should -Not -BeNullOrEmpty
+            @($dsh.installArgs) | Should -Not -Contain '--allow-build=node-pty'
+        }
+
         It 'should add the portable Bun executable directory before verification' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
@@ -484,8 +492,15 @@ Describe 'Package catalog consistency' {
 
             foreach ($package in @($npm.globalPackages) + @($pnpm.globalPackages)) {
                 [string]::IsNullOrWhiteSpace([string]$package.verifyCommand.command) | Should -BeFalse -Because "$($package.name) must identify its verification executable"
-                @($package.verifyCommand.args).Count | Should -BeGreaterThan 0 -Because "$($package.name) must execute a verification command"
-                @($package.verifyCommand.args | Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }).Count | Should -Be 0 -Because "$($package.name) verifier arguments must be concrete"
+                $verifyType = if ([string]::IsNullOrWhiteSpace([string]$package.verifyCommand.type)) { 'command' } else { [string]$package.verifyCommand.type }
+                if ($verifyType -eq 'commandExists') {
+                    @($package.verifyCommand.args | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count |
+                        Should -Be 0 -Because "$($package.name) command-existence verifier must not execute the command"
+                }
+                else {
+                    @($package.verifyCommand.args).Count | Should -BeGreaterThan 0 -Because "$($package.name) must execute a verification command"
+                    @($package.verifyCommand.args | Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }).Count | Should -Be 0 -Because "$($package.name) verifier arguments must be concrete"
+                }
             }
 
             (@($winGetOnlyPackages | Where-Object ciSkipInstall | ForEach-Object PackageIdentifier | Sort-Object) -join ',') |

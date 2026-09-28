@@ -334,8 +334,15 @@ exit
 
         foreach ($k in $keys) {
             $props = Get-RegistryValue -Path $k.PSPath
-            if ($props.DistributionName -and $props.DistributionName -ieq $distroName) {
-                $basePath = $props.BasePath -replace '\\\\', '\'
+            $distributionNameProperty = $props.PSObject.Properties['DistributionName']
+            $basePathProperty = $props.PSObject.Properties['BasePath']
+            if ($null -eq $distributionNameProperty -or $null -eq $basePathProperty) {
+                continue
+            }
+
+            $distributionName = [string]$distributionNameProperty.Value
+            if ($distributionName -and $distributionName -ieq $distroName) {
+                $basePath = [string]$basePathProperty.Value -replace '\\\\', '\'
                 return $basePath
             }
         }

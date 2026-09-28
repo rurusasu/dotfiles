@@ -20,7 +20,6 @@ in
         "--allow-build=@deepseek-ai/dsh-subprocess-local"
         "--allow-build=@google/genai"
         "--allow-build=koffi"
-        "--allow-build=node-pty"
         "--allow-build=protobufjs"
       ];
       verifyCommand = {

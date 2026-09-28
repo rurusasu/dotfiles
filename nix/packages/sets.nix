@@ -1536,7 +1536,7 @@ lib.mapAttrs (_: resolve) grouped
     };
     "@prisma/language-server" = {
       command = "prisma-language-server";
-      args = [ "--version" ];
+      type = "commandExists";
     };
     "@google/gemini-cli" = {
       command = "gemini";
@@ -1585,7 +1585,6 @@ lib.mapAttrs (_: resolve) grouped
       "--allow-build=@deepseek-ai/dsh-subprocess-local"
       "--allow-build=@google/genai"
       "--allow-build=koffi"
-      "--allow-build=node-pty"
       "--allow-build=protobufjs"
     ];
     "@google/gemini-cli" = [
