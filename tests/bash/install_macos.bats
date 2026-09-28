@@ -206,13 +206,14 @@ case "${1:-}" in
 		fi
 		;;
 	/usr/bin/env)
-		if [[ $# -eq 16 && ${2:-} == "NIX_CONFIG=extra-experimental-features = nix-command flakes" &&
+		if [[ $# -eq 17 && ${2:-} == "NIX_CONFIG=extra-experimental-features = nix-command flakes" &&
 			${3:-} == "DOTFILES_USER=$fixture_user" && ${4:-} == "DOTFILES_HOME=$HOME" &&
 			${5:-} == "DOTFILES_ROOT=$DOTFILES_ROOT" && ${6:-} == DOTFILES_WITH_OLLAMA=* &&
 			${7:-} == DOTFILES_WITH_DOCKER=* && ${8:-} == DOTFILES_WITH_HERMES=* &&
-			${9:-} == "$STUB_BIN/nix" && ${10:-} == run && ${11:-} == ".#darwin-rebuild" &&
-			${12:-} == -- && ${13:-} == switch && ${14:-} == --flake &&
-			${15:-} == ".#macos" && ${16:-} == --impure ]]; then
+			${9:-} == "$STUB_BIN/nix" && ${10:-} == --accept-flake-config &&
+			${11:-} == run && ${12:-} == ".#darwin-rebuild" && ${13:-} == -- &&
+			${14:-} == switch && ${15:-} == --flake && ${16:-} == ".#macos" &&
+			${17:-} == --impure ]]; then
 			exec "$@"
 		fi
 		;;
@@ -301,6 +302,10 @@ write_stub() {
 	local body="$2"
 	if [[ $name == nix ]]; then
 		body='
+if [[ ${1:-} == --accept-flake-config ]]; then
+	printf "nix accepted-flake-config\n" >>"$COMMAND_LOG"
+	shift
+fi
 if [[ ${1:-} == --extra-experimental-features ]]; then
   printf "nix %s\n" "$*" >>"$COMMAND_LOG"
   while [[ ${1:-} != --command ]]; do shift; done
@@ -394,6 +399,9 @@ printf "nix-installer %s\n" "$*" >>"$COMMAND_LOG"
 cat >"$STUB_BIN/nix" <<'"'"'NIX'"'"'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ ${1:-} == --accept-flake-config ]]; then
+  shift
+fi
 printf "nix %s\n" "$*" >>"$COMMAND_LOG"
 if [[ ${1:-} == --extra-experimental-features ]]; then
   while [[ ${1:-} != --command ]]; do shift; done
@@ -561,6 +569,7 @@ run_macos_installer() {
 
 	[ "$status" -eq 0 ]
 	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
+	[ "$(grep -Fc 'nix accepted-flake-config' "$COMMAND_LOG")" -eq 2 ]
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
 		"python3 scripts/python/update_darwin_packages.py --write --output darwin-package-update.json" \

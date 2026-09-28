@@ -608,7 +608,7 @@ apply_darwin_system() {
       "DOTFILES_WITH_OLLAMA=$DOTFILES_WITH_OLLAMA" \
       "DOTFILES_WITH_DOCKER=$DOTFILES_WITH_DOCKER" \
       "DOTFILES_WITH_HERMES=$DOTFILES_WITH_HERMES" \
-      "$nix_bin" run .#darwin-rebuild -- switch --flake .#macos --impure
+      "$nix_bin" --accept-flake-config run .#darwin-rebuild -- switch --flake .#macos --impure
   )
 
   export PATH="$DOCKER_APP/Contents/Resources/bin:/run/current-system/sw/bin:$USER_PROFILE_ROOT/$DOTFILES_USER/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
@@ -953,7 +953,7 @@ migrate_darwin_providers() {
 run_darwin_install_workflow() {
   # Bootstrap dependencies before Home Manager has installed Python and go-task.
   # Reuse the checkout's locked nixpkgs and the public update task.
-  nix --extra-experimental-features 'nix-command flakes' shell \
+  nix --accept-flake-config --extra-experimental-features 'nix-command flakes' shell \
     --inputs-from "$ROOT" nixpkgs#python3 nixpkgs#go-task \
     --command task --exit-code --dir "$ROOT" darwin:install
 }
