@@ -594,14 +594,15 @@ repair_homebrew_cask_link_directories() {
 apply_darwin_system() {
   export DOTFILES_USER="${SUDO_USER:-$USER}"
   export DOTFILES_HOME="$HOME"
-  local nix_bin
+  local nix_bin nix_config
   nix_bin="$(command -v nix)"
+  nix_config=$'extra-experimental-features = nix-command flakes\naccept-flake-config = true'
 
   dotfiles_log "Applying nix-darwin, nix-homebrew, and Home Manager..."
   (
     cd "$ROOT"
     sudo /usr/bin/env \
-      "NIX_CONFIG=extra-experimental-features = nix-command flakes" \
+      "NIX_CONFIG=$nix_config" \
       "DOTFILES_USER=$DOTFILES_USER" \
       "DOTFILES_HOME=$DOTFILES_HOME" \
       "DOTFILES_ROOT=$DOTFILES_ROOT" \

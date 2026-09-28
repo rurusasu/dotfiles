@@ -175,6 +175,8 @@ is_allowed_docker_cask_link() {
 	esac
 }
 fixture_user="${DOTFILES_USER:-${SUDO_USER:-$USER}}"
+expected_nix_config="NIX_CONFIG=extra-experimental-features = nix-command flakes
+accept-flake-config = true"
 fail_operation() {
 	[[ ${SUDO_FAIL_OPERATION:-} != "$1" ]] || exit "$SUDO_FAILURE_STATUS"
 }
@@ -206,7 +208,7 @@ case "${1:-}" in
 		fi
 		;;
 	/usr/bin/env)
-		if [[ $# -eq 17 && ${2:-} == "NIX_CONFIG=extra-experimental-features = nix-command flakes" &&
+		if [[ $# -eq 17 && ${2:-} == "$expected_nix_config" &&
 			${3:-} == "DOTFILES_USER=$fixture_user" && ${4:-} == "DOTFILES_HOME=$HOME" &&
 			${5:-} == "DOTFILES_ROOT=$DOTFILES_ROOT" && ${6:-} == DOTFILES_WITH_OLLAMA=* &&
 			${7:-} == DOTFILES_WITH_DOCKER=* && ${8:-} == DOTFILES_WITH_HERMES=* &&
