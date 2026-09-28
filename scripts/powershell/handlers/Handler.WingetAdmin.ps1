@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Administrator-only winget package handler.
 
