@@ -16,6 +16,12 @@
 - パッケージの公開入口: `nix/packages/sets.nix`（既存 API を保つ合成だけ）
 - 共通キー配列・設定生成関数・ユーザー設定: `nix/home/keybindings/`。host 配下には OS の service/有効化・競合解除を置く。純粋な関数を Home Manager module の imports に渡さない
 - flake wiring: `nix/flakes/`
+- nix-unit の値テスト: `nix/tests/unit/`
+- ビルド・実行テストの derivation: `nix/tests/build/`
+- テスト用の共有入力: `nix/tests/fixtures/`
+
+テストの登録は `nix/flakes/tests.nix`、配置・実行方法は [tests/README.md](tests/README.md) を参照する。
+flake の `checks` は nix-unit とビルドテストの公開入口であり、ディレクトリの分類名ではない。
 
 データ、provider 選択、配布 metadata、host 動作は変更理由が異なるため分離する。
 SSOT を巨大な 1 ファイルと解釈しない。詳細は [分割の理由と編集先](../docs/nix/package-management.md#分割の理由と編集先)。

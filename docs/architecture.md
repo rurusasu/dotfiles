@@ -42,7 +42,10 @@ dotfiles/
 │   ├── flakes/             # Flake inputs/outputs, treefmt
 │   ├── hosts/              # nix-darwin and NixOS hosts (native Linux, WSL)
 │   ├── modules/            # Custom NixOS modules (system-level)
-│   └── tests/              # NixOS VM acceptance
+│   └── tests/
+│       ├── unit/           # nix-unit: Nix expressions and configuration values
+│       ├── build/          # Build, runtime, artifact and NixOS VM checks
+│       └── fixtures/       # Shared test inputs
 ├── chezmoi/                # User dotfiles (shell/git/terminal/VS Code/LLM)
 ├── scripts/                # All scripts
 │   ├── sh/                 # Shell scripts (Linux/WSL)

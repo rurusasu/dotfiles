@@ -1,5 +1,7 @@
 # Nix Test Authority Implementation Plan
 
+> 過去の実装計画です。参照パスは現在の配置に更新していますが、当時の手順・件数・未完了マークは履歴です。現在の作業基準は [Nix テスト](../../../nix/tests/README.md) を参照してください。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make Nix the authoritative test layer for Nix configuration and Home Manager composition, standardize every host on a `default.nix` plus `configuration.nix` layout, move Darwin/WSL branches out of `common.nix`, and remove duplicate Nix assertions from Bats.
@@ -12,7 +14,7 @@
 
 ## Global Constraints
 
-- `nix/tests/home/` is authoritative for Home Manager Nix configuration tests.
+- `nix/tests/unit/home/` is authoritative for Home Manager Nix configuration tests.
 - Bats is limited to shell/installer/external-process/runtime contracts.
 - Tests must be deterministic and must not use secrets, network, activation, or external commands.
 - Preserve unrelated dirty files in the primary checkout.
@@ -27,8 +29,8 @@
 **Files:**
 
 - Modify: `nix/flakes/tests.nix`
-- Create: `nix/tests/home/platform-boundary.nix`
-- Create: `nix/tests/home/composition.nix`
+- Create: `nix/tests/unit/home/platform-boundary.nix`
+- Create: `nix/tests/unit/home/composition.nix`
 - Test: `nix flake check --all-systems --no-build --no-write-lock-file`
 
 **Interfaces:**
@@ -61,7 +63,7 @@
 - [ ] **Step 5: Commit the failing test stage**
 
   ```bash
-  git add nix/flakes/tests.nix nix/tests/home/platform-boundary.nix nix/tests/home/composition.nix
+  git add nix/flakes/tests.nix nix/tests/unit/home/platform-boundary.nix nix/tests/unit/home/composition.nix
   git commit -m "test(nix): define Home Manager ownership boundaries"
   ```
 
@@ -110,7 +112,7 @@
 - Modify: `nix/hosts/darwin/default.nix`
 - Create: `nix/hosts/darwin/configuration.nix`
 - Modify: `nix/flakes/darwin.nix`
-- Create or modify: `nix/tests/hosts/darwin-layout.nix`
+- Create or modify: `nix/tests/unit/hosts/darwin-layout.nix`
 - Modify: `nix/flakes/tests.nix`
 - Test: `nix build .#checks.x86_64-linux.nix-unit --no-write-lock-file`
 
@@ -156,7 +158,7 @@
 - [ ] **Step 6: Commit the Darwin host split**
 
   ```bash
-  git add nix/hosts/darwin nix/flakes/darwin.nix nix/tests/hosts nix/flakes/tests.nix
+  git add nix/hosts/darwin nix/flakes/darwin.nix nix/tests/unit/hosts nix/flakes/tests.nix
   git commit -m "refactor(nix): split Darwin host entry point"
   ```
 
@@ -167,8 +169,8 @@
 - Modify or delete: `tests/bash/home_layout.bats`
 - Modify: `tests/bash/flake_outputs.bats`
 - Modify: `tests/bash/macos_config.bats`
-- Modify: `nix/tests/home/composition.nix`
-- Modify: `nix/tests/home/README.md`
+- Modify: `nix/tests/unit/home/composition.nix`
+- Modify: `nix/tests/README.md`
 - Test: retained Bats contract files and Nix checks
 
 **Interfaces:**
@@ -186,7 +188,7 @@
 
 - [ ] **Step 3: Update test ownership documentation**
 
-  Rewrite `nix/tests/home/README.md`, `nix/README.md`, and `nix/home/README.md` so the exact Nix command is authoritative for Nix configuration. Document Bats only for its remaining contract scope.
+  Rewrite `nix/tests/README.md`, `nix/README.md`, and `nix/home/README.md` so the exact Nix command is authoritative for Nix configuration. Document Bats only for its remaining contract scope.
 
 - [ ] **Step 4: Add an ownership regression check**
 
@@ -207,7 +209,7 @@
 - Modify: `.github/workflows/ci-bootstrap.yml` if required
 - Modify: `.github/workflows/ci-contract.yml` if required
 - Modify: `tests/python/test_detect_ci_changes.py` and/or related contracts if routing changes
-- Modify: `nix/tests/home/README.md`
+- Modify: `nix/tests/README.md`
 - Test: repository routing and documentation checks
 
 **Interfaces:**
@@ -230,7 +232,7 @@
 - [ ] **Step 4: Commit the ownership contract**
 
   ```bash
-  git add AGENTS.md .github tests/python nix/tests/home/README.md
+  git add AGENTS.md .github tests/python nix/tests/README.md
   git commit -m "docs(ci): enforce Nix test ownership"
   ```
 

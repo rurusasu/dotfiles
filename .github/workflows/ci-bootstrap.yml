@@ -439,7 +439,7 @@ jobs:
       DOTFILES_GID: "1000"
       DOTFILES_GROUP: runner
       DOTFILES_SYSTEM: x86_64-linux
-      DOTFILES_NIXOS_HARDWARE_CONFIG: ${{ github.workspace }}/nix/tests/hardware-configuration.nix
+      DOTFILES_NIXOS_HARDWARE_CONFIG: ${{ github.workspace }}/nix/tests/fixtures/hardware-configuration.nix
       NIX_CONFIG: |
         experimental-features = nix-command flakes
         extra-substituters = https://cache.numtide.com

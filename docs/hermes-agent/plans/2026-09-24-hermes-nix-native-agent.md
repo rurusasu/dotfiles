@@ -31,9 +31,9 @@
 
 **Files:**
 
-- Create: `nix/tests/hermes-agent.nix`
+- Create: `nix/tests/unit/hermes-agent.nix`
 - Modify: `nix/flakes/tests.nix`
-- Modify: `nix/test-fixtures.nix` and Nix-unit contract assertions
+- Modify: `nix/tests/fixtures/packages.nix` and Nix-unit contract assertions
 
 - [x] Add nix-unit assertions for disabled, Linux/WSL, and macOS profile behavior.
 - [x] Register the test module in the authoritative nix-unit test set.

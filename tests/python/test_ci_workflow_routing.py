@@ -613,7 +613,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self,
     ) -> None:
         readme = (
-            REPOSITORY_ROOT / "nix" / "tests" / "home" / "README.md"
+            REPOSITORY_ROOT / "nix" / "tests" / "README.md"
         ).read_text(encoding="utf-8")
         workflow = self._named_workflow("ci-bootstrap.yml")
         nix_test = self._workflow_job(workflow, "nix-test")

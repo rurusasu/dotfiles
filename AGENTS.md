@@ -21,8 +21,9 @@
 
 ## テスト責務
 
-- Nix expression、Home Manager option、flake output、Nix package 選択のテストは `nix/tests/` に Nix 式で記載し、`nix-unit` / `nix flake check` を authoritative check とする。
-- Bats は shell、installer、外部コマンド、runtime/integration 契約に限定する。Nix option を `nix eval` するだけの Bats テストは追加しない。既存の `tests/bash/package_catalog.bats` 全体が例外なのではなく、`nix/tests/home/README.md` に分類した同ファイル内の catalog/Nix/source-shape assertion のみを一時例外として扱う。同READMEの runtime/artifact 契約7件は通常のBats契約として維持し、Nix-unitで置換しない。`tests/bash/nixos_wsl_postinstall.bats` の `nix eval` は、stubbed `nixos-rebuild` 境界内で選択 user と `--impure` 伝播を実 Nix eval で確認する runtime/integration assertion に限る。新しい例外は追加しない。
+- Nix expression、Home Manager option、flake output、Nix package 選択の値テストは `nix/tests/unit/` に nix-unit 形式で記載する。ビルド・実行テストの derivation は `nix/tests/build/`、共有入力は `nix/tests/fixtures/` に置く。
+- `nix/flakes/tests.nix` が単体テストとビルドテストを登録する。nix-unit も flake の `checks` 経由で実行する。`nix flake check --no-build` は評価確認であり、テスト実行の代わりにはならない。詳細は [Nix テスト](nix/tests/README.md)。
+- Bats は shell、installer、外部コマンド、runtime/integration 契約に限定する。Nix option を `nix eval` するだけの Bats テストは追加しない。`tests/bash/package_catalog.bats` の値・source-shape assertion は nix-unit へ移管済みで、残る契約は `nix/tests/README.md` の分類に従って維持する。`tests/bash/nixos_wsl_postinstall.bats` の `nix eval` は、stubbed `nixos-rebuild` 境界内で選択 user と `--impure` 伝播を確認する runtime/integration assertion に限る。
 
 ## フォーマット・テスト・実行時間の境界
 

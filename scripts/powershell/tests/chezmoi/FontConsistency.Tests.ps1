@@ -13,7 +13,7 @@
     - 旧フォント名 (Moralerspace) が dotfiles に残っていない
     - 新フォント family 名が editor/terminal 設定で一致している
     - Windows font installer が共通 appearance データのリリースを参照している
-    Nix のフォント選択と Home Manager への配布は nix/tests/font-consistency.nix で検証する。
+    Nix のフォント選択と Home Manager への配布は nix/tests/unit/font-consistency.nix で検証する。
 #>
 
 BeforeAll {

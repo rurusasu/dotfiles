@@ -10,11 +10,11 @@ selection の authoritative test layer を Nix に統一する。Bats は shell 
 
 現在は次の二つの test authority が並立している。
 
-1. `nix/tests/home/` の `nix-unit` は import path と source structure を検査する。
+1. `nix/tests/unit/home/` の `nix-unit` は import path と source structure を検査する。
 2. `tests/bash/flake_outputs.bats` と `tests/bash/macos_config.bats` は `nix eval` を呼び、Nix
    configuration の実効値を検査する。
 
-さらに `nix/tests/home/README.md` は static test と configuration evaluation を説明上は
+さらに `nix/tests/README.md` は static test と configuration evaluation を説明上は
 分けているが、Nix 設定の実効評価を Bats 側に残している。この分割が、Nix 設定変更時に
 Bats へテストを追加する誘因になっている。
 
@@ -69,7 +69,7 @@ Darwin の system option、activation、launchd、Homebrew、ユーザー、syst
 
 ## ドキュメントと CI
 
-- `nix/tests/home/README.md` に Nix-native test の authoritative command と範囲を記載する。
+- `nix/tests/README.md` に Nix-native test の authoritative command と範囲を記載する。
 - `nix/README.md` と `nix/home/README.md` は Nix configuration の検証先として Bats を案内しない。
 - CI routing は Nix test suite と Bats contract suite を別の責務として記録する。
 - 静的な ownership check を追加し、Home Manager Nix-only test が `tests/bash/` に再導入されることを検知する。

@@ -11,6 +11,9 @@
 | `nix/packages/sets.nix`   | 既存 consumer 向けの合成入口・公開 API                                         |
 | `nix/home/keybindings/`   | 共通 action/key、純粋な設定生成関数、Home Manager のユーザー設定               |
 | `nix/home/`               | Home Manager のユーザー環境、ユーザー systemd サービス、OS 固有設定            |
+| `nix/tests/unit/`         | nix-unit による Nix 式・実効設定値のテスト                                     |
+| `nix/tests/build/`        | ビルド・生成物比較・外部プロセス・VM テストの derivation                       |
+| `nix/tests/fixtures/`     | テスト用の共有入力・補助 module                                                |
 | `chezmoi/`                | dotfile、テンプレート、アプリ設定。Windows デスクトップ設定は Nix 生成物の配布 |
 
 - host / hardware 設定を `nix/home/` に置かない。
@@ -36,17 +39,21 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
 3. Home Manager の OS ファイルは `imports = [ ./common.nix ];` を維持する。`common.nix` から OS 固有ファイルを import せず、共通設定内の platform-scoped な分岐は最小限に保つ。
 4. パッケージ追加前に `nix/packages/catalog/` の該当カテゴリと各 OS への影響を確認する。`sets.nix` の公開 API は維持する。
 5. dotfile と秘密情報は `chezmoi/` と既存の secret 経路を使い、所有を重複させない。
-6. Nix 設定の変更は `nix flake check --all-systems --no-write-lock-file` と focused `nix-unit`
-   build で検証する。Bats は installer、shell、外部プロセス、runtime 契約に限って実行する。
+6. Nix 設定の変更は `nix flake check --all-systems --no-build --no-write-lock-file` で評価し、
+   対象 system の `nix-unit` と関連 build check を build して検証する。
+   Bats は installer、shell、外部プロセス、runtime 契約に限って実行する。
    package catalog の構造、provider metadata、Nix package 選択、source shape は
-   `nix/tests/packages/catalog.nix` の nix-unit が所有し、`tests/bash/package_catalog.bats` は
-   runtime/artifact の5ケースだけを保持する。`nixos_wsl_postinstall.bats` の `nix eval` は
+   `nix/tests/unit/package-catalog-*.nix` の nix-unit が所有し、`tests/bash/package_catalog.bats` は
+   [テスト分類](tests/README.md) に記載した runtime / artifact 契約を保持する。`nixos_wsl_postinstall.bats` の `nix eval` は
    stubbed `nixos-rebuild` 境界内で選択 user と `--impure` 伝播を実 Nix eval で確認する
    runtime/integration assertion に限る。
 
    Repository-owned custom derivations は `checks.*.custom-package-builds` を build して確認する。
    この check は chatgpt、Dia、Neovim、Orca の supported system だけを対象にし、
    upstream nixpkgs package 全体や privileged activation は実行しない。
+
+   テストの登録は `nix/flakes/tests.nix` が担当する。nix-unit も flake の `checks` 経由で実行する。
+   `--no-build` の成功はテスト実行の成功を意味しない。[配置と実行方法](tests/README.md) を参照する。
 
 ホストの標準レイアウトは `nix/hosts/<host>/default.nix` と
 `nix/hosts/<host>/configuration.nix` の組み合わせです。Darwin、native NixOS、NixOS-WSL
