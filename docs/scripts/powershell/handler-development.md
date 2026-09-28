@@ -12,7 +12,7 @@
 
 ## 新しいハンドラーの作成
 
-テストは `tests/Invoke-Tests.ps1` から実行する。個別テストの失敗数だけでなく、Pester の discovery / container / block 失敗も非ゼロ終了にする。`TestRunnerFailures.Tests.ps1` は「正常なテスト + 読み込めないテスト」を子プロセスで実行し、成功扱いにならないことを確認する。
+テストは `tests/Invoke-Tests.ps1` から実行する。個別テストの失敗数だけでなく、Pester の discovery / container / block 失敗も非ゼロ終了にする。`TestRunnerFailures.Tests.ps1` は「正常なテスト + 読み込めないテスト」を子プロセスで実行し、成功扱いにならないことを確認する。CI では同じ suite を Windows PowerShell 5.1 と PowerShell 7 で実行する。
 
 ### ステップ 1: ハンドラーファイルの作成
 
@@ -169,6 +169,25 @@ install.ps1 は 3 ステップでハンドラーを実行します:
 - `-AdminOnly:$true`: 管理者必須ハンドラーのみ実行
 - `-AdminOnly:$false`: 管理者不要ハンドラーのみ実行
 - 省略時: 全 Phase 2 ハンドラーを実行（後方互換）
+
+#### Phase 境界の integration 契約
+
+`Install.Entrypoint.Tests.ps1` は、実物の `install.ps1` → `install.user.ps1` →
+`install.admin.ps1 -AdminOnly:$false` の境界を一時ディレクトリで実行する。fixture は
+`SetupHandlerBase`、`SetupContext`、`SetupResult`、handler loader を本番ファイルから読み込み、
+副作用のない Phase 1 / Phase 2a handler と acceptance だけを提供する。
+
+この契約で、次を同時に確認する。
+
+- Phase 1 handler が適用される
+- 同じ installer 実行フローで Phase 2a handler が適用される
+- `CanApply([SetupContext]...)` の class identity / reload エラーが発生しない
+- acceptance 成功後にだけ `Setup Complete!` が出る
+
+handler 単体テストは `CanApply` / `Apply` の条件と副作用を検証し、phase integration テストは
+loader と script boundary を検証する。外部 runtime、UAC、Docker、WSL、ネットワーク、secret は
+この deterministic contract に入れず、`ci-bootstrap.yml` の外部 E2E で検証する。stub の phase
+script を成功させるだけのテストは、実 installer boundary の代替にしない。
 
 ## ハンドラー開発のチェックリスト
 
