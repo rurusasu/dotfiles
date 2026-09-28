@@ -94,3 +94,12 @@ jobs:
       - name: Verify pnpm packages.json is in sync
         shell: bash
         run: diff <(jq -S . /tmp/winget-export/pnpm/packages.json) <(jq -S . windows/pnpm/packages.json)
+
+      - name: Verify persisted pnpm build permissions
+        shell: bash
+        run: |
+          nix shell nixpkgs#nodejs --command bash -euo pipefail -c '
+            prefix="$RUNNER_TEMP/pnpm-permissions"
+            npm install --global --prefix "$prefix" --no-audit --no-fund pnpm@12.6.0
+            PNPM_TEST_EXECUTABLE="$prefix/bin/pnpm" node tests/runtime/pnpm-build-permissions.mjs
+          '

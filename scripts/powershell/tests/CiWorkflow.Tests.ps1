@@ -70,7 +70,10 @@ Describe 'CI workflow configuration' {
         $installerScript | Should -Match 'ForEach-Object'
         $installerScript | Should -Match '\$LASTEXITCODE'
         $installerScript | Should -Not -Match 'RedirectStandardOutput'
-        $workflow | Should -Match 'DOTFILES_INSTALL_TIMEOUT_SECONDS:\s*"900"'
+        $workflow | Should -Match 'DOTFILES_INSTALL_TIMEOUT_SECONDS:\s*"3600"'
+        $installerJob = [regex]::Match($workflow, '(?ms)^  windows-installer:\s*.*?(?=^  complete:)').Value
+        $installerJob | Should -Match '(?m)^    timeout-minutes:\s*210\s*$'
+        $installerJob | Should -Match '(?m)^        timeout-minutes:\s*180\s*$'
         $installerScript | Should -Match 'User Phase Complete!'
         $installerScript | Should -Match 'Get-Command -Name \$runtimeCommand -CommandType Application -ErrorAction Stop'
         $installerScript | Should -Match "DOTFILES_FORCE_WINDOWS_POWERSHELL = '1'"

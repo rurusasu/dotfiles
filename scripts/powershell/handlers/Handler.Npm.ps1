@@ -251,7 +251,7 @@ class NpmHandler : SetupHandlerBase {
                 return $timeoutSeconds
             }
         }
-        return 30
+        return 120
     }
 
     <#

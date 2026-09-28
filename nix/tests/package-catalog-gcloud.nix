@@ -15,7 +15,7 @@ in
       pathEntries = sets.wingetPathEntries."google-cloud-sdk";
     };
     expected = {
-      installTimeoutSeconds = 900;
+      installTimeoutSeconds = 3600;
       packageTimeoutOverrides = { };
       pathEntries = [
         "%ProgramFiles%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"

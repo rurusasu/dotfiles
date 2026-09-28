@@ -21,7 +21,7 @@ in
     expected = {
       windowsOnly = true;
       requiresAdmin = true;
-      installTimeoutSeconds = 900;
+      installTimeoutSeconds = 3600;
       verifyCommand = {
         type = "visualStudioInstanceVersion";
         command = "Microsoft.VisualStudio.Product.BuildTools";

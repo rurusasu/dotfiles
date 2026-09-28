@@ -181,14 +181,11 @@ function Get-PackageInstallTimeoutSecond {
     )
 
     # Shared install override > adapter-specific legacy override > default.
-    # A valid zero explicitly disables the timeout.
+    # A valid zero explicitly disables the timeout; negative values are invalid.
     $rawTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
     if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
         $parsed = 0
-        if ([int]::TryParse($rawTimeout, [ref]$parsed)) {
-            if ($parsed -le 0) {
-                return 0
-            }
+        if ([int]::TryParse($rawTimeout, [ref]$parsed) -and $parsed -ge 0) {
             return $parsed
         }
     }
@@ -197,16 +194,13 @@ function Get-PackageInstallTimeoutSecond {
         $rawTimeout = [System.Environment]::GetEnvironmentVariable($LegacyEnvironmentVariable)
         if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
             $parsed = 0
-            if ([int]::TryParse($rawTimeout, [ref]$parsed)) {
-                if ($parsed -le 0) {
-                    return 0
-                }
+            if ([int]::TryParse($rawTimeout, [ref]$parsed) -and $parsed -ge 0) {
                 return $parsed
             }
         }
     }
 
-    return 900
+    return 3600
 }
 
 <#
