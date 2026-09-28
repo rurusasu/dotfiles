@@ -1,15 +1,17 @@
 [CmdletBinding()]
-param([switch]$Check)
+param([switch]$Check, [switch]$DeferMissing)
 
 $ErrorActionPreference = 'Stop'
 
 function Resolve-OmarchyGlazeWMExecutable {
+    param([switch]$AllowMissing)
     $command = Get-Command glazewm.exe -ErrorAction SilentlyContinue
     if ($command) { return $command.Source }
     foreach ($relative in @('glzr.io/GlazeWM/glazewm.exe', 'GlazeWM/glazewm.exe')) {
         $candidate = Join-Path $env:ProgramFiles $relative
         if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
     }
+    if ($AllowMissing) { return $null }
     throw 'GlazeWM executable was not found. Run the Windows dotfiles installer (glzr-io.glazewm).'
 }
 
@@ -111,8 +113,24 @@ function Start-OmarchyGlazeWM {
     throw "GlazeWM did not become ready: $lastFailure"
 }
 
+function Initialize-OmarchyGlazeWM {
+    param(
+        [Parameter(Mandatory)][string]$ConfigPath,
+        [Parameter(Mandatory)][string]$StartupScript,
+        [switch]$DeferMissing
+    )
+    $executable = Resolve-OmarchyGlazeWMExecutable -AllowMissing:$DeferMissing
+    if (-not $executable) {
+        # Chezmoi runs before the elevated package phase on a fresh machine.
+        Test-OmarchyGlazeWMConfig -ConfigPath $ConfigPath
+        Set-OmarchyGlazeWMStartup -StartupScript $StartupScript
+        return 'Deferred until GlazeWM installation and interactive login'
+    }
+    Start-OmarchyGlazeWM -Executable $executable -ConfigPath $ConfigPath -StartupScript $StartupScript
+}
+
 if ($MyInvocation.InvocationName -ne '.') {
     $configPath = Join-Path $PSScriptRoot 'config.json'
     if ($Check) { Test-OmarchyGlazeWMConfig -ConfigPath $configPath }
-    else { Start-OmarchyGlazeWM -Executable (Resolve-OmarchyGlazeWMExecutable) -ConfigPath $configPath -StartupScript $PSCommandPath }
+    else { Initialize-OmarchyGlazeWM -ConfigPath $configPath -StartupScript $PSCommandPath -DeferMissing:$DeferMissing }
 }

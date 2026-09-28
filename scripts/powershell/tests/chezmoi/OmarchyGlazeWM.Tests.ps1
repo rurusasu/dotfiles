@@ -14,9 +14,10 @@ Describe 'Omarchy GlazeWM managed startup' {
         New-Item -ItemType File -Path $script:exe -Force | Out-Null
         $script:launches = @()
         $script:commands = @()
+        $script:startupScripts = @()
         Mock Get-OmarchyGlazeWMProcess { @() }
         Mock Test-OmarchyGlazeWMInteractiveSession { $true }
-        Mock Set-OmarchyGlazeWMStartup { }
+        Mock Set-OmarchyGlazeWMStartup { param($StartupScript) $script:startupScripts += $StartupScript }
         Mock Invoke-OmarchyGlazeWM { param($Arguments) $script:commands += , $Arguments; '{"success":true,"data":{"version":"3.9.1"}}' }
         Mock Start-Process { param($FilePath, $ArgumentList) $script:launches += @{ Path = $FilePath; Arguments = $ArgumentList }; [pscustomobject]@{ HasExited = $false } }
     }
@@ -50,6 +51,30 @@ Describe 'Omarchy GlazeWM managed startup' {
     It 'should fail clearly when the executable is missing' {
         { Start-OmarchyGlazeWM -Executable (Join-Path $TestDrive 'missing.exe') -ConfigPath $script:configPath -StartupScript $PSCommandPath } | Should -Throw '*not found*'
         $script:launches.Count | Should -Be 0
+    }
+
+    It 'should defer a missing pre-admin package and start normally after installation' {
+        Mock Resolve-OmarchyGlazeWMExecutable { param($AllowMissing) if (-not $AllowMissing) { throw 'GlazeWM executable was not found.' } }
+        Initialize-OmarchyGlazeWM -ConfigPath $script:configPath -StartupScript $PSCommandPath -DeferMissing | Should -Be 'Deferred until GlazeWM installation and interactive login'
+        $script:startupScripts | Should -Be @($PSCommandPath)
+        $script:launches.Count | Should -Be 0
+        $script:commands.Count | Should -Be 0
+        Mock Resolve-OmarchyGlazeWMExecutable { $script:exe }
+        Initialize-OmarchyGlazeWM -ConfigPath $script:configPath -StartupScript $PSCommandPath | Should -Be 'Started'
+        $script:launches.Count | Should -Be 1
+    }
+
+    It 'should keep missing packages fatal outside the explicit bootstrap defer path' {
+        Mock Resolve-OmarchyGlazeWMExecutable { param($AllowMissing) if (-not $AllowMissing) { throw 'GlazeWM executable was not found.' } }
+        { Initialize-OmarchyGlazeWM -ConfigPath $script:configPath -StartupScript $PSCommandPath } | Should -Throw '*not found*'
+        $script:startupScripts.Count | Should -Be 0
+    }
+
+    It 'should reject invalid config even while the package installation is deferred' {
+        Mock Resolve-OmarchyGlazeWMExecutable { $null }
+        '{"keybindings":[]}' | Set-Content -LiteralPath $script:configPath
+        { Initialize-OmarchyGlazeWM -ConfigPath $script:configPath -StartupScript $PSCommandPath -DeferMissing } | Should -Throw '*workspaces*'
+        $script:startupScripts.Count | Should -Be 0
     }
 
     It 'should deploy startup and defer window management outside an interactive desktop' {
