@@ -6,6 +6,13 @@
 }
 
 Describe 'NpmHandler' {
+    It 'should preserve longer npm verification overrides and default invalid values to 120 seconds' {
+        $timeoutHandler = [NpmHandler]::new()
+        $timeoutHandler.GetVerifyTimeoutSeconds(@{ command = 'tool'; timeoutSeconds = 600 }) | Should -Be 600
+        $timeoutHandler.GetVerifyTimeoutSeconds([pscustomobject]@{ command = 'tool'; timeoutSeconds = 600 }) | Should -Be 600
+        $timeoutHandler.GetVerifyTimeoutSeconds(@{ command = 'tool'; timeoutSeconds = 0 }) | Should -Be 120
+    }
+
     Context 'Invoke-Npm package install timeout routing' {
         BeforeEach {
             $script:originalInstallTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
@@ -27,7 +34,7 @@ Describe 'NpmHandler' {
             }
         }
 
-        It 'should invoke global installs through the shared 900-second timeout by default' {
+        It 'should invoke global installs through the shared 3600-second timeout by default' {
             Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
             Mock Invoke-ExternalCommandWithTimeout { $global:LASTEXITCODE = 0; return 'install ok' }
             Mock Invoke-NativeCommand { throw 'global install must use the timeout wrapper' }
@@ -36,7 +43,7 @@ Describe 'NpmHandler' {
 
             $result | Should -Contain 'install ok'
             Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
-                $Command -eq 'npm' -and $Arguments -contains 'example-package' -and $TimeoutSeconds -eq 900
+                $Command -eq 'npm' -and $Arguments -contains 'example-package' -and $TimeoutSeconds -eq 3600
             }
             Should -Invoke Invoke-NativeCommand -Times 0
         }
@@ -216,7 +223,7 @@ Describe 'NpmHandler' {
 
             $result.Success | Should -BeTrue
             Should -Invoke Invoke-VerifyCommand -Times 1 -ParameterFilter {
-                $Command -eq "tool-with-check" -and $TimeoutSeconds -eq 30
+                $Command -eq "tool-with-check" -and $TimeoutSeconds -eq 120
             }
         }
     }
@@ -496,7 +503,7 @@ Describe 'NpmHandler' {
                     $_.Command -eq $entry.Command -and ($_.Arguments -join "|") -eq ($entry.Arguments -join "|")
                 } | Should -HaveCount $expectedVerifyCount
             }
-            $script:npmVerifyCalls | Where-Object { $_.TimeoutSeconds -ne 30 } | Should -BeNullOrEmpty
+            $script:npmVerifyCalls | Where-Object { $_.TimeoutSeconds -ne 120 } | Should -BeNullOrEmpty
         }
 
         It 'should classify verification timeouts for the current manifest packages as failures' {
@@ -517,7 +524,7 @@ Describe 'NpmHandler' {
             $result.Success | Should -BeFalse
             $result.Message | Should -Match "3 個検証失敗"
             $script:npmInstallCalls.Count | Should -Be 3
-            $script:npmVerifyCalls | Where-Object { $_.TimeoutSeconds -ne 30 } | Should -BeNullOrEmpty
+            $script:npmVerifyCalls | Where-Object { $_.TimeoutSeconds -ne 120 } | Should -BeNullOrEmpty
         }
 
         It 'should retain diagnostics when the pinned agent-browser install fails' {

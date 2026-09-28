@@ -48,7 +48,7 @@ in
       verifier = {
         command = "go";
         args = [ "version" ];
-        timeoutSeconds = 900;
+        timeoutSeconds = 3600;
       };
       usesSharedTimeout = true;
     };

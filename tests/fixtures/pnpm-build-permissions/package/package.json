@@ -1,0 +1,10 @@
+{
+  "name": "node-pty",
+  "version": "0.0.1",
+  "bin": {
+    "permission-probe": "probe.cjs"
+  },
+  "scripts": {
+    "install": "node probe.cjs"
+  }
+}

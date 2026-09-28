@@ -745,12 +745,13 @@ class WingetHandler : SetupHandlerBase {
 
             New-Item -ItemType Directory -Path $stagingPath -Force | Out-Null
             if ($archiveExtension -eq ".tar.gz") {
-                $extractOutput = @(
-                    Invoke-ExternalCommandWithTimeout `
-                        -Command "tar.exe" `
-                        -Arguments @("-xzf", $archivePath, "-C", $stagingPath) `
-                        -TimeoutSeconds $timeoutSeconds
-                )
+                $extractArguments = @("-xzf", $archivePath, "-C", $stagingPath)
+                $extractOutput = if ($timeoutSeconds -gt 0) {
+                    @(Invoke-ExternalCommandWithTimeout -Command "tar.exe" -Arguments $extractArguments -TimeoutSeconds $timeoutSeconds)
+                }
+                else {
+                    @(Invoke-NativeCommand -Command "tar.exe" -Arguments $extractArguments)
+                }
                 if ($LASTEXITCODE -ne 0) {
                     $extractDetails = ($extractOutput | ForEach-Object { [string]$_ }) -join "`n"
                     throw "directInstaller tar.gz extraction failed for $($pkg.Id): $extractDetails"
@@ -892,7 +893,13 @@ class WingetHandler : SetupHandlerBase {
     }
 
     hidden [int] GetDirectInstallerTimeoutSeconds([object]$directInstaller) {
-        $timeoutSeconds = 900
+        # The common override also takes precedence over generated direct
+        # installer metadata; zero disables both download and process limits.
+        $environmentTimeout = 0
+        if ([int]::TryParse($env:DOTFILES_INSTALL_TIMEOUT_SECONDS, [ref]$environmentTimeout) -and $environmentTimeout -ge 0) {
+            return Get-PackageInstallTimeoutSecond
+        }
+        $timeoutSeconds = Get-PackageInstallTimeoutSecond
         if ($directInstaller -is [hashtable] -and $directInstaller.ContainsKey("timeoutSeconds")) {
             $timeoutSeconds = [int]$directInstaller["timeoutSeconds"]
         }
@@ -901,7 +908,7 @@ class WingetHandler : SetupHandlerBase {
         }
 
         if ($timeoutSeconds -le 0) {
-            return 900
+            return Get-PackageInstallTimeoutSecond
         }
         return $timeoutSeconds
     }
@@ -909,10 +916,11 @@ class WingetHandler : SetupHandlerBase {
     hidden [int] GetInstallTimeoutSeconds([object]$pkg) {
         # A process-wide install override must be able to shorten or disable
         # the generated default for every package. Explicit per-package
-        # values remain the fallback when no override is present.
+        # values remain the fallback when no valid override is present.
+        $environmentTimeout = 0
         $hasEnvironmentOverride =
-        -not [string]::IsNullOrWhiteSpace($env:DOTFILES_INSTALL_TIMEOUT_SECONDS) -or
-        -not [string]::IsNullOrWhiteSpace($env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS)
+        ([int]::TryParse($env:DOTFILES_INSTALL_TIMEOUT_SECONDS, [ref]$environmentTimeout) -and $environmentTimeout -ge 0) -or
+        ([int]::TryParse($env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS, [ref]$environmentTimeout) -and $environmentTimeout -ge 0)
         if ($hasEnvironmentOverride) {
             return Get-PackageInstallTimeoutSecond -LegacyEnvironmentVariable "DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS"
         }
@@ -1570,7 +1578,7 @@ class WingetHandler : SetupHandlerBase {
             "-format", "json",
             "-utf8"
         )
-        $output = @(Invoke-VerifyCommand -Command $vswherePath -Arguments $arguments -TimeoutSeconds 30)
+        $output = @(Invoke-VerifyCommand -Command $vswherePath -Arguments $arguments -TimeoutSeconds 120)
         if ($LASTEXITCODE -ne 0) {
             $this.Log("vswhere が Visual Studio インスタンスを確認できませんでした (exit code: $LASTEXITCODE)", "Yellow")
             return $false
@@ -1703,7 +1711,7 @@ class WingetHandler : SetupHandlerBase {
     }
 
     hidden [int] GetVerifyTimeoutSeconds([object]$verifyCmd) {
-        $timeoutSeconds = 15
+        $timeoutSeconds = 120
         if ($verifyCmd -is [hashtable] -and $verifyCmd.ContainsKey("timeoutSeconds")) {
             $timeoutSeconds = [int]$verifyCmd["timeoutSeconds"]
         }
@@ -1712,7 +1720,7 @@ class WingetHandler : SetupHandlerBase {
         }
 
         if ($timeoutSeconds -le 0) {
-            return 15
+            return 120
         }
         return $timeoutSeconds
     }

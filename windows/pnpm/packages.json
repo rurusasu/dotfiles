@@ -28,7 +28,8 @@
         "--allow-build=@deepseek-ai/dsh-subprocess-local",
         "--allow-build=@google/genai",
         "--allow-build=koffi",
-        "--allow-build=protobufjs"
+        "--allow-build=protobufjs",
+        "--allow-build=!node-pty"
       ],
       "name": "@deepseek-ai/dsh",
       "verifyCommand": {
@@ -50,7 +51,7 @@
       "postInstallCommand": {
         "args": ["install", "chromium"],
         "command": "playwright",
-        "timeoutSeconds": 600
+        "timeoutSeconds": 3600
       },
       "verifyCommand": {
         "args": ["--version"],
@@ -72,7 +73,7 @@
       }
     },
     {
-      "installArgs": ["--allow-build=@github/keytar"],
+      "installArgs": ["--allow-build=@github/keytar", "--allow-build=!node-pty"],
       "name": "@google/gemini-cli",
       "verifyCommand": {
         "args": ["--version"],

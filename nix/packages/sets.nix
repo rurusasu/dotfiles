@@ -1431,7 +1431,7 @@ let
 in
 let
   # Shared timeout for package adapters and their CLI verifiers.
-  packageInstallTimeoutSeconds = 900;
+  packageInstallTimeoutSeconds = 3600;
 in
 # Category-resolved package lists (auto-derived from catalog)
 lib.mapAttrs (_: resolve) grouped
@@ -1575,7 +1575,7 @@ lib.mapAttrs (_: resolve) grouped
         "install"
         "chromium"
       ];
-      timeoutSeconds = 600;
+      timeoutSeconds = packageInstallTimeoutSeconds;
     };
   };
 
@@ -1586,9 +1586,11 @@ lib.mapAttrs (_: resolve) grouped
       "--allow-build=@google/genai"
       "--allow-build=koffi"
       "--allow-build=protobufjs"
+      "--allow-build=!node-pty"
     ];
     "@google/gemini-cli" = [
       "--allow-build=@github/keytar"
+      "--allow-build=!node-pty"
     ];
   };
 
@@ -1828,7 +1830,7 @@ lib.mapAttrs (_: resolve) grouped
       sha256 = "ce4c17497b2f29712a99d3d53f028de28cd42e3bacb8589599e7f000e49b6405";
       destination = "%LOCALAPPDATA%\\Programs\\Bun";
       executable = "bun-windows-x64\\bun.exe";
-      timeoutSeconds = 900;
+      timeoutSeconds = packageInstallTimeoutSeconds;
     };
     chezmoi = {
       type = "archive";
@@ -1836,7 +1838,7 @@ lib.mapAttrs (_: resolve) grouped
       sha256 = "5c2038736c485d4e3eaad4ac06ea1fe3c4b63d4d51e470547bf12737c02f37f6";
       destination = "%LOCALAPPDATA%\\Programs\\chezmoi";
       executable = "chezmoi.exe";
-      timeoutSeconds = 900;
+      timeoutSeconds = packageInstallTimeoutSeconds;
     };
     direnv = {
       type = "file";
@@ -1844,7 +1846,7 @@ lib.mapAttrs (_: resolve) grouped
       sha256 = "d96fc8b7cf020c2d4c1dbbc2ccec5fd1cab05b51c491f02c8527a7fa6c50a1cd";
       destination = "%LOCALAPPDATA%\\Programs\\direnv";
       executable = "direnv.exe";
-      timeoutSeconds = 900;
+      timeoutSeconds = packageInstallTimeoutSeconds;
     };
     dprint = {
       type = "archive";
@@ -1852,7 +1854,7 @@ lib.mapAttrs (_: resolve) grouped
       sha256 = "1038af32fade7a79f9c3a690d9546bb17be13dd7b4568a3684692fdcb0a52a1d";
       destination = "%LOCALAPPDATA%\\Programs\\dprint";
       executable = "dprint.exe";
-      timeoutSeconds = 900;
+      timeoutSeconds = packageInstallTimeoutSeconds;
     };
     fd = {
       type = "archive";
@@ -1860,7 +1862,7 @@ lib.mapAttrs (_: resolve) grouped
       sha256 = "a227701b8551c35a9931d9f6da75503cf86d88e182d71fb849a70864c5d57cd7";
       destination = "%LOCALAPPDATA%\\Programs\\fd";
       executable = "fd-v10.5.0-x86_64-pc-windows-msvc\\fd.exe";
-      timeoutSeconds = 900;
+      timeoutSeconds = packageInstallTimeoutSeconds;
     };
     eza = {
       type = "archive";
@@ -1868,7 +1870,7 @@ lib.mapAttrs (_: resolve) grouped
       sha256 = "c830638c844a5b89d39ba662b5549903a71fa539018e813880f5b8afa77bac2e";
       destination = "%LOCALAPPDATA%\\Programs\\eza";
       executable = "eza.exe";
-      timeoutSeconds = 900;
+      timeoutSeconds = packageInstallTimeoutSeconds;
     };
   };
 
@@ -2042,7 +2044,7 @@ lib.mapAttrs (_: resolve) grouped
     "Microsoft.WSL" = {
       command = "wsl";
       args = [ "--version" ];
-      timeoutSeconds = 30;
+      timeoutSeconds = 120;
       recoveryStrategy = "wingetRepairThenReinstall";
     };
     "Oven-sh.Bun" = {

@@ -14,6 +14,107 @@
 }
 
 Describe 'WingetHandler' {
+    Context 'Timeout defaults and overrides' {
+        BeforeEach {
+            $script:originalDirectInstallTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
+            $script:originalLegacyInstallTimeout = $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS
+            Remove-Item Env:DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+            Remove-Item Env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+        }
+
+        AfterEach {
+            $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $script:originalDirectInstallTimeout
+            $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = $script:originalLegacyInstallTimeout
+        }
+
+        It 'should apply timeout <Expected> to direct download and extraction with override <Override> and metadata <Declared>' -TestCases @(
+            @{ Override = '0'; Declared = $null; Expected = 0 }
+            @{ Override = '0'; Declared = 3600; Expected = 0 }
+            @{ Override = '73'; Declared = 3600; Expected = 73 }
+            @{ Override = $null; Declared = 7200; Expected = 7200 }
+            @{ Override = 'invalid'; Declared = 7200; Expected = 7200 }
+            @{ Override = '2147483648'; Declared = 7200; Expected = 7200 }
+            @{ Override = '-1'; Declared = 7200; Expected = 7200 }
+        ) {
+            param($Override, $Declared, $Expected)
+            $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $Override
+            $script:downloadBudget = $null
+            $script:extractionBudget = $null
+            $script:extractionRoute = $null
+            Mock Invoke-WebRequest {
+                param($OutFile, $TimeoutSec, $ConnectionTimeoutSeconds)
+                $script:downloadBudget = if ($null -ne $ConnectionTimeoutSeconds) { $ConnectionTimeoutSeconds } else { $TimeoutSec }
+                Set-Content -LiteralPath $OutFile -Value 'download fixture'
+            }
+            Mock Get-FileHash { [pscustomobject]@{ Hash = ('ab' * 32).ToUpperInvariant() } }
+            Mock Invoke-NativeCommand {
+                param($Command, $Arguments)
+                $script:extractionRoute = $Command
+                Set-Content -LiteralPath (Join-Path $Arguments[3] 'tool.exe') -Value 'extracted tool'
+                $global:LASTEXITCODE = 0
+            }
+            Mock Invoke-ExternalCommandWithTimeout {
+                param($Command, $Arguments, $TimeoutSeconds)
+                $script:extractionRoute = $Command
+                $script:extractionBudget = $TimeoutSeconds
+                if ($TimeoutSeconds -eq 0) { throw 'zero must bypass the bounded process wrapper' }
+                Set-Content -LiteralPath (Join-Path $Arguments[3] 'tool.exe') -Value 'extracted tool'
+                $global:LASTEXITCODE = 0
+            }
+            $destination = Join-Path $TestDrive 'direct-timeout-install'
+            $installer = @{
+                type        = 'archive'
+                url         = 'https://example.invalid/tool.tar.gz'
+                sha256      = 'ab' * 32
+                destination = $destination
+                executable  = 'tool.exe'
+            }
+            if ($null -ne $Declared) { $installer.timeoutSeconds = $Declared }
+            $output = $handler.InvokeDirectInstaller([pscustomobject]@{ Id = 'example.tool'; DirectInstaller = $installer })
+            $global:LASTEXITCODE | Should -Be 0 -Because ($output -join '; ')
+            (Get-Content -LiteralPath (Join-Path $destination 'tool.exe') -Raw).Trim() | Should -Be 'extracted tool'
+            $script:downloadBudget | Should -Be $Expected
+            $script:extractionRoute | Should -Be 'tar.exe'
+            if ($Expected -eq 0) {
+                $script:extractionBudget | Should -BeNullOrEmpty
+            }
+            else {
+                $script:extractionBudget | Should -Be $Expected
+            }
+        }
+
+        It 'should resolve package metadata against valid shared and legacy overrides' -TestCases @(
+            @{ Shared = 'invalid'; Legacy = $null; Expected = 7200 }
+            @{ Shared = '-1'; Legacy = $null; Expected = 7200 }
+            @{ Shared = $null; Legacy = '-1'; Expected = 7200 }
+            @{ Shared = $null; Legacy = 'invalid'; Expected = 7200 }
+            @{ Shared = 'invalid'; Legacy = '73'; Expected = 73 }
+            @{ Shared = '-1'; Legacy = '73'; Expected = 73 }
+            @{ Shared = '0'; Legacy = '73'; Expected = 0 }
+            @{ Shared = '91'; Legacy = '73'; Expected = 91 }
+        ) {
+            param($Shared, $Legacy, $Expected)
+            $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $Shared
+            $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = $Legacy
+            $handler.GetInstallTimeoutSeconds([pscustomobject]@{ InstallTimeoutSeconds = 7200 }) | Should -Be $Expected
+        }
+
+        It 'should give startup commands 120 seconds and preserve explicit overrides' {
+            $timeoutHandler = [WingetHandler]::new()
+            $timeoutHandler.GetVerifyTimeoutSeconds(@{ command = 'tool' }) | Should -Be 120
+            $timeoutHandler.GetVerifyTimeoutSeconds(@{ command = 'tool'; timeoutSeconds = 0 }) | Should -Be 120
+            $timeoutHandler.GetVerifyTimeoutSeconds([pscustomobject]@{ command = 'tool'; timeoutSeconds = 600 }) | Should -Be 600
+        }
+
+        It 'should use the shared install budget for missing or invalid direct installer timeouts' {
+            Mock Get-PackageInstallTimeoutSecond { return 3600 }
+            $timeoutHandler = [WingetHandler]::new()
+            $timeoutHandler.GetDirectInstallerTimeoutSeconds(@{}) | Should -Be 3600
+            $timeoutHandler.GetDirectInstallerTimeoutSeconds(@{ timeoutSeconds = 0 }) | Should -Be 3600
+            $timeoutHandler.GetDirectInstallerTimeoutSeconds([pscustomobject]@{ timeoutSeconds = 7200 }) | Should -Be 7200
+        }
+    }
+
     BeforeEach {
         $script:origUserProfileForWingetTests = $env:USERPROFILE
         $script:origLocalAppDataForWingetTests = $env:LOCALAPPDATA

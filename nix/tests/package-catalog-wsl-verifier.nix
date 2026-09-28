@@ -21,7 +21,7 @@ in
     expected = {
       command = "wsl";
       args = [ "--version" ];
-      timeoutSeconds = 30;
+      timeoutSeconds = 120;
       recoveryStrategy = "wingetRepairThenReinstall";
     };
   };

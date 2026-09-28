@@ -93,22 +93,22 @@ Describe 'Package catalog consistency' {
 
             $package.verifyCommand.command | Should -Be 'wsl'
             @($package.verifyCommand.args) | Should -Contain '--version'
-            $package.verifyCommand.timeoutSeconds | Should -Be 30
+            $package.verifyCommand.timeoutSeconds | Should -Be 120
             $package.verifyCommand.recoveryStrategy | Should -Be 'wingetRepairThenReinstall'
         }
     }
 
     Context 'slow CLI verifier timeouts' {
-        It 'should give only GitHub CLI and Go longer execution verification windows' {
+        It 'should preserve package-scoped GitHub CLI, Go and WSL verification windows' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $gh = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'GitHub.cli') | Select-Object -First 1
             $go = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'GoLang.Go') | Select-Object -First 1
 
             $gh.verifyCommand.timeoutSeconds | Should -Be 60
-            $go.verifyCommand.timeoutSeconds | Should -Be 900
+            $go.verifyCommand.timeoutSeconds | Should -Be 3600
             (@($wingetSource.Packages | Where-Object { $_.verifyCommand.timeoutSeconds } | ForEach-Object { "$($_.PackageIdentifier):$($_.verifyCommand.timeoutSeconds)" } | Sort-Object) -join ',') |
-                Should -Be 'GitHub.cli:60,GoLang.Go:900,Microsoft.WSL:30' -Because 'verification timeouts must remain package-scoped'
+                Should -Be 'GitHub.cli:60,GoLang.Go:3600,Microsoft.WSL:120' -Because 'verification timeouts must remain package-scoped'
         }
     }
 
@@ -162,7 +162,7 @@ Describe 'Package catalog consistency' {
             $packages = @($json.Sources | ForEach-Object { @($_.Packages) })
 
             $packages.Count | Should -BeGreaterThan 0
-            @($packages | Where-Object { $_.installTimeoutSeconds -ne 900 }).Count | Should -Be 0
+            @($packages | Where-Object { $_.installTimeoutSeconds -ne 3600 }).Count | Should -Be 0
         }
     }
 

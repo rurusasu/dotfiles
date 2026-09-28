@@ -8,6 +8,23 @@ let
   };
 in
 {
+  testPlaywrightInstallUsesSharedBudget = {
+    expr = sets.pnpmPostInstall.playwright.timeoutSeconds;
+    expected = 3600;
+  };
+
+  testDirectInstallersUseSharedBudget = {
+    expr = builtins.mapAttrs (_: installer: installer.timeoutSeconds) sets.wingetDirectInstallers;
+    expected = {
+      bun = 3600;
+      chezmoi = 3600;
+      direnv = 3600;
+      dprint = 3600;
+      eza = 3600;
+      fd = 3600;
+    };
+  };
+
   testDeepSeekHarnessPnpmCatalog = {
     expr = {
       isGlobalPackage = builtins.elem "@deepseek-ai/dsh" sets.pnpmGlobal;
@@ -21,6 +38,7 @@ in
         "--allow-build=@google/genai"
         "--allow-build=koffi"
         "--allow-build=protobufjs"
+        "--allow-build=!node-pty"
       ];
       verifyCommand = {
         command = "dsh";
@@ -37,7 +55,10 @@ in
     };
     expected = {
       isGlobalPackage = true;
-      installArgs = [ "--allow-build=@github/keytar" ];
+      installArgs = [
+        "--allow-build=@github/keytar"
+        "--allow-build=!node-pty"
+      ];
       verifyCommand = {
         command = "gemini";
         args = [ "--version" ];
