@@ -679,10 +679,10 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Bash, Bats, GNU coreutils, Lua, and Task
+      - name: Install Bash, Bats, GNU coreutils, and Task
         run: |
           set -euo pipefail
-          brew install bash coreutils go-task lua
+          brew install bash coreutils go-task
           bats_version='1.13.0'
           bats_root="$RUNNER_TEMP/bats-core-$bats_version"
           bats_prefix="$RUNNER_TEMP/bats-prefix"
@@ -691,19 +691,15 @@ jobs:
           "$bats_root/install.sh" "$bats_prefix"
           echo "$bats_prefix/bin" >>"$GITHUB_PATH"
           "$bats_prefix/bin/bats" --version
-          command -v lua
-          command -v luac
           {
             echo "$(brew --prefix bash)/bin"
             echo "$(brew --prefix coreutils)/libexec/gnubin"
           } >> "$GITHUB_PATH"
 
-      - name: Run POSIX and Hammerspoon adapter contracts
+      - name: Run POSIX adapter contracts
         run: |
           set -euo pipefail
           env -u DOTFILES_SKIP_FLAKE_UPDATE -u DOTFILES_USER -u DOTFILES_HOME -u SUDO_USER bats --print-output-on-failure tests/bash
-          luac -p chezmoi/terminals/hammerspoon/init.lua
-          lua tests/lua/hammerspoon_terminal_prefix_test.lua
 
       - name: Build macOS declarative output
         run: |

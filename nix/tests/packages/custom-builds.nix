@@ -22,10 +22,6 @@ let
       path = buildPkgs.callPackage ../../packages/dia-browser { };
     }
     {
-      name = "hammerspoon";
-      path = buildPkgs.callPackage ../../packages/hammerspoon { };
-    }
-    {
       name = "orca-editor";
       path = buildPkgs.callPackage ../../packages/orca-editor { };
     }

@@ -5,7 +5,6 @@ let
     config.allowUnfree = true;
   };
   packages = {
-    hammerspoon = pkgs.callPackage ../packages/hammerspoon { };
     dia-browser = pkgs.callPackage ../packages/dia-browser { };
     orca-editor = pkgs.callPackage ../packages/orca-editor { };
   };
@@ -18,11 +17,6 @@ in
       platforms = package.meta.platforms;
     }) packages;
     expected = {
-      hammerspoon = {
-        dontFixup = true;
-        sourceUrl = "https://github.com/Hammerspoon/hammerspoon/releases/download/${packages.hammerspoon.version}/Hammerspoon-${packages.hammerspoon.version}.zip";
-        platforms = [ "aarch64-darwin" ];
-      };
       dia-browser = {
         dontFixup = true;
         sourceUrl = "https://releases.diabrowser.com/release/Dia-${packages.dia-browser.version}.zip";

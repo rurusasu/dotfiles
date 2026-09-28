@@ -2,12 +2,13 @@
 
 The filename intentionally stays outside unittest's default ``test*.py``
 pattern.  The Docker test stage invokes it explicitly because the host test
-environment does not include Hermes' bundled provider package.
+environment does not include the image's installed provider package.
 """
 
 from __future__ import annotations
 
 import asyncio
+import importlib.metadata
 import importlib.util
 import json
 import os
@@ -17,6 +18,9 @@ import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+import yaml
+from packaging.requirements import Requirement
 
 MODULE_PATH = Path("/workspace/docker/hermes-agent/hindsight_acceptance.py")
 SPEC = importlib.util.spec_from_file_location(
@@ -41,6 +45,24 @@ RUN_ID = "0123456789abcdef0123456789abcdef"
 
 
 class RealDiscoveredProviderGateTests(unittest.TestCase):
+    def test_installed_client_satisfies_the_real_providers_declared_dependencies(
+        self,
+    ) -> None:
+        manifest = Path("/opt/hermes/plugins/memory/hindsight/plugin.yaml")
+        dependencies = yaml.safe_load(manifest.read_text())["pip_dependencies"]
+        self.assertTrue(dependencies)
+        for specification in dependencies:
+            requirement = Requirement(specification)
+            if requirement.marker is not None and not requirement.marker.evaluate():
+                continue
+            with self.subTest(dependency=requirement.name):
+                self.assertIn(
+                    importlib.metadata.version(requirement.name),
+                    requirement.specifier,
+                    "Provider dependencies must be installed before discovery, "
+                    "without lazy runtime upgrades",
+                )
+
     def test_provider_async_bridge_runs_coroutines_and_closes_them_on_loop_failure(
         self,
     ) -> None:
@@ -146,7 +168,7 @@ class RealDiscoveredProviderGateTests(unittest.TestCase):
                     hermes_config_path = hermes_home / "config.yaml"
                     self.assertEqual(
                         hermes_config_path.read_text(encoding="utf-8"),
-                        "memory:\n  provider: hindsight\n",
+                        "memory:\n  provider: hindsight\nsecurity:\n  allow_lazy_installs: false\n",
                     )
                     config_path = hermes_home / "hindsight" / "config.json"
                     self.assertEqual(stat.S_IMODE(config_path.stat().st_mode), 0o600)

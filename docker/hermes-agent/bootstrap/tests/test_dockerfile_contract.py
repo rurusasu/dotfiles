@@ -62,6 +62,7 @@ class DockerfileContractTests(unittest.TestCase):
 
         self.assertIn(
             "uv pip install --python /opt/hermes/.venv/bin/python \\\n"
+            '      --exclude-newer-package "hindsight-client=0 days" \\\n'
             '      "hindsight-client==${HINDSIGHT_CLIENT_VERSION}" \\\n'
             "  && /opt/hermes/.venv/bin/python -c \\\n"
             '      "from importlib.metadata import version; assert '

@@ -12,9 +12,4 @@
     nixAttr = null;
     candidates = [ "orca-editor" ];
   };
-  hammerspoon = {
-    source = "custom";
-    nixAttr = null;
-    candidates = [ "hammerspoon" ];
-  };
 }

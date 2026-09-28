@@ -57,6 +57,7 @@
       // (import ../tests/home/composition.nix { inherit inputs; })
       // (import ../tests/home/rebuild-aliases.nix { inherit inputs; })
       // (import ../tests/ghostty.nix { inherit inputs; })
+      // (import ../tests/font-consistency.nix { inherit inputs; })
       // (import ../tests/darwin-omarchy-keybindings.nix { inherit inputs; })
       // (import ../tests/package-catalog-modularity.nix { inherit inputs; })
       // (import ../tests/keybindings.nix { inherit inputs; })

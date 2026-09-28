@@ -33,7 +33,7 @@ Docker profile では最後に runtime acceptance も実行します。途中で
 `.\install.cmd` を再実行してください。既存の optional profile を更新する場合も、
 初回と同じ profile 引数を指定します。リポジトリ自体の pull / merge は自動では行いません。
 
-- macOS: flake inputs と Orca・Dia・Hammerspoon の独自 Nix 定義を更新してから、
+- macOS: flake inputs と Orca・Dia の独自 Nix 定義を更新してから、
   nix-darwin / Home Manager と選択済み Homebrew パッケージを反映します。
 - Linux / NixOS: flake inputs を更新し、その OS の構成と Home Manager を反映します。
 - Windows: catalog 対象を既存の WinGet 等のハンドラーで install / upgrade します。

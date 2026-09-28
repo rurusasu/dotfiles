@@ -45,7 +45,7 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
    runtime/integration assertion に限る。
 
    Repository-owned custom derivations は `checks.*.custom-package-builds` を build して確認する。
-   この check は chatgpt、Dia、Hammerspoon、Neovim、Orca の supported system だけを対象にし、
+   この check は chatgpt、Dia、Neovim、Orca の supported system だけを対象にし、
    upstream nixpkgs package 全体や privileged activation は実行しない。
 
 ホストの標準レイアウトは `nix/hosts/<host>/default.nix` と

@@ -28,7 +28,6 @@ REGISTRY_PATH = ROOT / "nix" / "packages" / "darwin-provider-candidates.nix"
 DERIVATIONS = {
     "dia-browser": ROOT / "nix" / "packages" / "dia-browser" / "default.nix",
     "orca-editor": ROOT / "nix" / "packages" / "orca-editor" / "default.nix",
-    "hammerspoon": ROOT / "nix" / "packages" / "hammerspoon" / "default.nix",
 }
 
 
@@ -331,14 +330,6 @@ def promote_candidates(
     return results
 
 
-def _json_release(payload: bytes, *, arm64: bool = True) -> Release | None:
-    data = json.loads(payload.decode("utf-8"))
-    tag = str(data.get("tag_name", data.get("version", ""))).lstrip("v")
-    assets = data.get("assets", [])
-    urls = [asset.get("browser_download_url", "") for asset in assets]
-    return _choose_release(tag, urls, arm64=arm64)
-
-
 def _dia_release(payload: bytes) -> Release | None:
     root = ET.fromstring(payload)
     urls = [element.attrib.get("url", "") for element in root.iter()]
@@ -368,29 +359,12 @@ def _orca_release(payload: bytes) -> Release | None:
     return None
 
 
-def _choose_release(version: str, urls: list[str], *, arm64: bool) -> Release | None:
-    if not version:
-        return None
-    usable = [url for url in urls if re.search(r"\.(?:zip|dmg)(?:\?.*)?$", url, re.I)]
-    if arm64:
-        arm = [url for url in usable if re.search(r"arm64|aarch64|apple-silicon", url, re.I)]
-        if arm:
-            usable = arm
-    return Release(version, usable[0]) if usable else None
-
-
 PROFILES = {
     "dia-browser": PackageProfile(
         "dia-browser",
         "https://releases.diabrowser.com/BoostBrowser-updates.xml",
         DERIVATIONS["dia-browser"],
         _dia_release,
-    ),
-    "hammerspoon": PackageProfile(
-        "hammerspoon",
-        "https://api.github.com/repos/Hammerspoon/hammerspoon/releases/latest",
-        DERIVATIONS["hammerspoon"],
-        lambda payload: _json_release(payload, arm64=True),
     ),
     "orca-editor": PackageProfile(
         "orca-editor",
@@ -412,12 +386,6 @@ IDENTITIES = {
         "appName": "Orca.app",
         "bundleId": "com.stablyai.orca",
         "executable": "Orca",
-    },
-    "hammerspoon": {
-        "homepage": "https://www.hammerspoon.org/",
-        "appName": "Hammerspoon.app",
-        "bundleId": "org.hammerspoon.Hammerspoon",
-        "executable": "Hammerspoon",
     },
 }
 

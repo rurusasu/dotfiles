@@ -5,7 +5,7 @@ USER root
 ARG ARTICLE_COLLECTOR_VERSION=v0.6.17
 ARG GOOGLE_CALENDAR_MCP_VERSION=2.6.2
 ARG GOOGLE_GMAIL_MCP_VERSION=1.2.3
-ARG HINDSIGHT_CLIENT_VERSION=0.6.1
+ARG HINDSIGHT_CLIENT_VERSION=0.10.1
 ARG HERMES_LCM_VERSION=v0.20.0
 ARG HERMES_LCM_COMMIT=49e99a272d2d461e5c90732e7ef2bc20e96f0826
 
@@ -189,7 +189,9 @@ RUN apt-get update \
   && google-calendar-mcp --version \
   && npm list --global --depth=0 "@artymclabin/gmail-mcp@${GOOGLE_GMAIL_MCP_VERSION}" \
   && article-collector --help \
+  # The reviewed exact client pin must not inherit Hermes' 14-day release quarantine.
   && uv pip install --python /opt/hermes/.venv/bin/python \
+      --exclude-newer-package "hindsight-client=0 days" \
       "hindsight-client==${HINDSIGHT_CLIENT_VERSION}" \
   && /opt/hermes/.venv/bin/python -c \
       "from importlib.metadata import version; assert version('hindsight-client') == '${HINDSIGHT_CLIENT_VERSION}'" \
@@ -197,6 +199,9 @@ RUN apt-get update \
   && chmod 0755 /usr/local/bin/hermes-xapi-mcp \
   && chmod 0755 /usr/local/bin/hermes-bootstrap \
   && rm -rf /var/lib/apt/lists/*
+
+COPY hermes-agent/install_memory_provider.py /usr/local/lib/hermes-bootstrap/install_memory_provider.py
+RUN /opt/hermes/.venv/bin/python /usr/local/lib/hermes-bootstrap/install_memory_provider.py
 
 RUN PYTHONPATH=/usr/local/bin /opt/hermes/.venv/bin/python - <<'PY'
 from hindsight_acceptance import _resolved_provider
@@ -235,6 +240,7 @@ COPY hindsight/hindsight.env /workspace/docker/hindsight/hindsight.env
 COPY hermes-agent/bootstrap-manifest.yaml /workspace/docker/hermes-agent/bootstrap-manifest.yaml
 COPY hermes-agent/hermes-bootstrap /workspace/docker/hermes-agent/hermes-bootstrap
 COPY hermes-agent/hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py
+COPY hermes-agent/install_memory_provider.py /workspace/docker/hermes-agent/install_memory_provider.py
 COPY hermes-agent/gateway_convergence.py /workspace/docker/hermes-agent/gateway_convergence.py
 COPY hermes-agent/hermes_storage_seed.py /workspace/docker/hermes-agent/hermes_storage_seed.py
 COPY hermes-agent/hermes_storage_ownership.py /workspace/docker/hermes-agent/hermes_storage_ownership.py

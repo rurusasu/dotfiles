@@ -257,7 +257,8 @@ def _resolved_provider(
         config_dir.mkdir(mode=0o700)
         hermes_config_path = Path(home) / "config.yaml"
         hermes_config_path.write_text(
-            "memory:\n  provider: hindsight\n", encoding="utf-8"
+            "memory:\n  provider: hindsight\nsecurity:\n  allow_lazy_installs: false\n",
+            encoding="utf-8",
         )
         os.chmod(hermes_config_path, 0o600)
         config_path = config_dir / "config.json"

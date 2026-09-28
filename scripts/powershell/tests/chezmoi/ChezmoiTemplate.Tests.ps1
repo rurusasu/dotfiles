@@ -107,11 +107,10 @@ Describe 'chezmoi テンプレート バリデーション' {
     }
 
     Context 'Terminal config deployment' {
-        It 'should render Hammerspoon deployment only for Darwin and include its source hash' {
+        It 'should render native terminal configs with their change hashes on Darwin and Linux' {
             $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/terminals/run_onchange_deploy.sh.tmpl'
             $template = Get-Content -Encoding UTF8 -LiteralPath $templatePath -Raw
 
-            $template | Should -Match 'include "terminals/hammerspoon/init\.lua" \| sha256sum'
             $template | Should -Match 'includeTemplate "terminals/ghostty/config" \.?'
             $template | Should -Not -Match 'deploy_file "\$CHEZMOI_SOURCE/terminals/ghostty/config"'
 
@@ -119,15 +118,12 @@ Describe 'chezmoi テンプレート バリデーション' {
             $darwinRender.ExitCode | Should -Be 0 -Because $darwinRender.StandardError
             $darwinContent = $darwinRender.StandardOutput -replace "\r\n?", "`n"
             $ghosttyHash = (Get-FileHash -LiteralPath (Join-Path $script:chezmoiRoot 'terminals/ghostty/config') -Algorithm SHA256).Hash.ToLowerInvariant()
-            $darwinContent | Should -Match "(?m)^# hash: [0-9a-f]{64}${ghosttyHash}[0-9a-f]{64}$"
-            $darwinContent |
-                Should -Match 'deploy_file "\$CHEZMOI_SOURCE/terminals/hammerspoon/init\.lua" "\$HOME_DIR/\.hammerspoon/init\.lua"'
+            $darwinContent | Should -Match "(?m)^# hash: [0-9a-f]{64}${ghosttyHash}$"
 
             $linuxRender = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"linux"}}'
             $linuxRender.ExitCode | Should -Be 0 -Because $linuxRender.StandardError
             $linuxContent = $linuxRender.StandardOutput -replace "\r\n?", "`n"
             $linuxContent | Should -Match "(?m)^# hash: [0-9a-f]{64}${ghosttyHash}$"
-            $linuxContent | Should -Not -Match '\.hammerspoon/init\.lua'
         }
 
         It 'should deploy the managed AutoHotkey source on Windows and include its source hash' {

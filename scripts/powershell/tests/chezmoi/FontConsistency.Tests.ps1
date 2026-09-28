@@ -5,28 +5,20 @@
     フォント設定の一貫性検証テスト
 
 .DESCRIPTION
-    dotfiles 全体で使用する等幅フォントが editor/terminal/nix package で揃っていることを保証する。
+    dotfiles 全体で使用する等幅フォントが editor/terminal/Windows installer で揃っていることを保証する。
     過去 Moralerspace HWJPDOC -> UDEV Gothic JPDOC NF への移行で 9 ファイルの同時更新が必要だった経緯から、
     一部の箇所だけ取り残されて起こる文字崩れ (Nerd Font グリフ欠落・descender 切り) を防ぐ。
 
     検証内容:
     - 旧フォント名 (Moralerspace) が dotfiles に残っていない
     - 新フォント family 名が editor/terminal 設定で一致している
-    - nix package と Windows font installer の zip 名が同じバージョンを参照している
+    - Windows font installer が共通 appearance データのリリースを参照している
+    Nix のフォント選択と Home Manager への配布は nix/tests/font-consistency.nix で検証する。
 #>
-
-# It -ForEach は Discovery フェーズで評価されるため、そこで参照する定数は
-# BeforeDiscovery で設定する必要がある（BeforeAll は Run フェーズで遅すぎ、
-# StrictMode 下では「変数未設定」で Discovery が失敗する）。
-BeforeDiscovery {
-    $script:expectedFont = "UDEV Gothic NF"
-    $script:expectedNixPkg = "udev-gothic-nf"
-}
 
 BeforeAll {
     $script:repoRoot = Resolve-Path (Join-Path $PSScriptRoot "../../../..")
     $script:expectedFont = "UDEV Gothic NF"
-    $script:expectedNixPkg = "udev-gothic-nf"
     $script:legacyFontPattern = "Moralerspace"
 
     # フォント名を参照するべき設定ファイル一覧 (family 名そのもの)
@@ -35,9 +27,6 @@ BeforeAll {
         "chezmoi/terminals/windows-terminal/settings.json",
         "chezmoi/editors/cursor/settings.json"
     )
-
-    # nix package 参照箇所
-    $script:nixCatalog = "nix/packages/sets.nix"
 
     # Windows font installer template
     $script:windowsInstallerDir = "chezmoi/.chezmoiscripts/setup/fonts"
@@ -112,17 +101,6 @@ Describe 'フォント設定の一貫性' {
             $content = Get-Content -LiteralPath $full -Raw
             $content | Should -Match '\{\{\s*\.appearance\.font_family\s*\}\}' -Because (
                 "$Path が共通 appearance.font_family を参照していない。フォント統一が崩れている可能性。"
-            )
-        }
-    }
-
-    Context 'nix package カタログとフォント名の整合' {
-        It "nix catalog に '$script:expectedNixPkg' エントリが含まれること" {
-            $full = Join-Path $script:repoRoot $script:nixCatalog
-            $content = Get-Content -LiteralPath $full -Raw
-            $content | Should -Match ([regex]::Escape("pkgs.$script:expectedNixPkg")) -Because (
-                "$script:nixCatalog に pkgs.$script:expectedNixPkg 参照が無い。" +
-                " UDEV Gothic NF が NixOS 側にインストールされない。"
             )
         }
     }

@@ -1,11 +1,5 @@
 # Package identities and provider declarations for terminal.
-{
-  pkgs,
-  lib,
-  selectDarwinPackage,
-  darwinProviderCandidate,
-  ...
-}:
+{ pkgs, ... }:
 {
   ghostty = {
     pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.ghostty-bin else pkgs.ghostty;
@@ -78,41 +72,6 @@
       };
       linux.unsupported = "AeroSpace is only available on macOS";
       windows.unsupported = "AeroSpace is only available on macOS";
-    };
-  };
-
-  hammerspoon = {
-    pkg =
-      if pkgs.stdenv.hostPlatform.isDarwin then
-        selectDarwinPackage "hammerspoon" (pkgs.callPackage ../hammerspoon { })
-      else
-        null;
-    winget = null;
-    category = "terminal";
-    support = {
-      darwin = {
-        provider = "nix";
-        source = (darwinProviderCandidate "hammerspoon").source;
-        identity = {
-          homepage = "https://www.hammerspoon.org/";
-          appName = "Hammerspoon.app";
-          bundleId = "org.hammerspoon.Hammerspoon";
-          executable = "Hammerspoon";
-        };
-      }
-      // lib.optionalAttrs ((darwinProviderCandidate "hammerspoon").nixAttr != null) {
-        nixAttr = (darwinProviderCandidate "hammerspoon").nixAttr;
-      };
-      linux = {
-        unsupported = "Hammerspoon is only available on macOS";
-      };
-      windows = {
-        unsupported = "Hammerspoon is only available on macOS";
-      };
-    };
-    legacyDarwin = {
-      provider = "homebrew-cask";
-      name = "hammerspoon";
     };
   };
 

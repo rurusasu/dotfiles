@@ -267,18 +267,17 @@ in
     in
     {
       expr = {
-        hammerspoon = {
+        aerospace = {
           inTerminal = builtins.any (
-            package: (package.pname or null) == "hammerspoon"
+            package: (package.pname or null) == "aerospace"
           ) darwinPackageSets.sets.terminal;
           darwin = {
-            provider = report.hammerspoon.darwin.provider;
-            source = report.hammerspoon.darwin.source;
-            appName = report.hammerspoon.darwin.identity.appName;
-            legacyName = report.hammerspoon.legacyDarwin.name;
+            provider = report.aerospace.darwin.provider;
+            source = report.aerospace.darwin.source;
+            appName = report.aerospace.darwin.identity.appName;
           };
-          linuxUnsupported = report.hammerspoon.linux.unsupported;
-          windowsUnsupported = report.hammerspoon.windows.unsupported;
+          linuxUnsupported = report.aerospace.linux.unsupported;
+          windowsUnsupported = report.aerospace.windows.unsupported;
         };
         autohotkey = {
           wingetId = darwinPackageSets.sets.wingetMap.autohotkey;
@@ -292,16 +291,15 @@ in
         };
       };
       expected = {
-        hammerspoon = {
+        aerospace = {
           inTerminal = true;
           darwin = {
             provider = "nix";
-            source = "custom";
-            appName = "Hammerspoon.app";
-            legacyName = "hammerspoon";
+            source = "nixpkgs";
+            appName = "AeroSpace.app";
           };
-          linuxUnsupported = "Hammerspoon is only available on macOS";
-          windowsUnsupported = "Hammerspoon is only available on macOS";
+          linuxUnsupported = "AeroSpace is only available on macOS";
+          windowsUnsupported = "AeroSpace is only available on macOS";
         };
         autohotkey = {
           wingetId = "AutoHotkey.AutoHotkey";

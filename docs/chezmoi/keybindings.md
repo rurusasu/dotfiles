@@ -61,26 +61,18 @@ terminal Window Manager の共通 prefix は `Ctrl+Space`。prefix に続けて�
 
 target ごとの capability は次のとおり。非対応 suffix は別のキーへフォールバックせず no-op として消費する。
 
-| target           | Workspace                | Tab               | Pane                             | Session        |
-| ---------------- | ------------------------ | ----------------- | -------------------------------- | -------------- |
-| WezTerm          | 対応                     | 対応              | 対応                             | 対応           |
-| Terminal.app     | 非対応 (no-op)           | 対応              | `v` / `x` のみ対応、ほかは no-op | 非対応 (no-op) |
-| Windows Terminal | Workspace 非対応 (no-op) | 対応              | 対応                             | 非対応 (no-op) |
-| tmux             | 対応 (Workspace=Session) | 対応 (Tab=Window) | 対応                             | 対応           |
-| Herdr            | 対応                     | 対応              | 対応                             | 対応           |
+| target           | Workspace                | Tab               | Pane | Session        |
+| ---------------- | ------------------------ | ----------------- | ---- | -------------- |
+| WezTerm          | 対応                     | 対応              | 対応 | 対応           |
+| Windows Terminal | Workspace 非対応 (no-op) | 対応              | 対応 | 非対応 (no-op) |
+| tmux             | 対応 (Workspace=Session) | 対応 (Tab=Window) | 対応 | 対応           |
+| Herdr            | 対応                     | 対応              | 対応 | 対応           |
 
 - WezTerm は組み込み leader を使い、prefix timeout は1秒。
-- Terminal.app は Hammerspoon adapter が前面の `com.apple.Terminal` だけを対象にし、prefix timeout は1秒。Workspace、Session、上下分割 (`-`)、方向 pane focus (`h/j/k/l`) は no-op。
+- Terminal.app は共通 prefix の対象外とし、標準のキー操作を使用する。デスクトップ全体の Omarchy 配列は AeroSpace、ターミナル内の共通操作は WezTerm の組み込み leader が担当するため、Terminal.app 専用の常駐 adapter は導入しない。
 - Windows Terminal は AutoHotkey v2 adapter が前面の `WindowsTerminal.exe` だけを対象にし、prefix timeout は1秒。Workspace / Session は非対応で no-op。
 - tmux と Herdr は各アプリの native prefix/key table を使う。tmux では Workspace=Session、Tab=Window として扱う。
 - nested terminal では `Ctrl+Space Ctrl+Space` を押すと内側へ `Ctrl+Space` を1回だけ転送する。その後に共通 suffix を入力することで、内側の tmux/Herdr を操作できる。
-
-Hammerspoon の初回設定は次の順で行う。
-
-1. `open -a Hammerspoon` で Hammerspoon を一度起動する。
-2. macOS の「システム設定」→「プライバシーとセキュリティ」→「アクセシビリティ」で Hammerspoon を許可する。
-3. 許可後、Hammerspoon のメニューバーアイコンから `Reload Config` を実行する。
-4. Terminal.app を前面にして `Ctrl+Space n` で新規 tab が開くこと、Terminal.app 以外では同じ入力が捕捉されないことを確認する。
 
 Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢印` pane resize、macOS の `Command+Alt+H/L` window focus、Windows/Linux の `Alt+Shift+H/L` window focus と `Alt+Shift+矢印` pane resize、`Ctrl+Alt+W` pane zoom が該当する。WezTerm の `Shift+Enter` と Windows Terminal の `Shift+Enter` / `Ctrl+Enter` も複数行入力用として維持する。
 

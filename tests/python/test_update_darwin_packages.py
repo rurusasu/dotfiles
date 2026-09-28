@@ -237,19 +237,19 @@ class UpdateDarwinPackagesTests(unittest.TestCase):
     def test_only_explicit_attrs_are_evaluated(self) -> None:
         runner = self.updater.RecordingNixRunner()
         result = self.updater.evaluate_candidates(
-            {"hammerspoon": self.updater.Candidate("hammerspoon", "hammerspoon")},
+            {"dia-browser": self.updater.Candidate("dia-browser", "dia-browser")},
             runner,
         )
-        self.assertEqual(set(result), {"hammerspoon"})
-        self.assertEqual(runner.evaluated, ["hammerspoon"])
+        self.assertEqual(set(result), {"dia-browser"})
+        self.assertEqual(runner.evaluated, ["dia-browser"])
 
     def test_build_or_identity_failure_keeps_custom_source_and_reason(self) -> None:
         runner = self.updater.RecordingNixRunner(build_error="identity mismatch")
         current = self.updater.RegistryEntry(
-            source="custom", nix_attr=None, candidates=("hammerspoon",)
+            source="custom", nix_attr=None, candidates=("dia-browser",)
         )
         result = self.updater.try_promote(
-            "hammerspoon", current, "hammerspoon", runner
+            "dia-browser", current, "dia-browser", runner
         )
         self.assertEqual(result.entry, current)
         self.assertEqual(result.reason, "identity mismatch")
