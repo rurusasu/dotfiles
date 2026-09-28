@@ -1,4 +1,4 @@
-﻿BeforeAll {
+BeforeAll {
     Set-StrictMode -Version Latest
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
@@ -1415,6 +1415,54 @@ Describe 'WingetHandler' {
             Should -Invoke Get-AppxPackage -Times 1 -ParameterFilter {
                 $Name -eq "OpenAI.Codex"
             }
+        }
+    }
+
+    Context 'Apply - update failure with a verified existing package' {
+        BeforeEach {
+            Mock Get-ExternalCommand { return @{ Source = 'C:\winget.exe' } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [PSCustomObject]@{
+                    Sources = @(
+                        [PSCustomObject]@{
+                            SourceDetails = [PSCustomObject]@{ Name = 'winget' }
+                            Packages      = @(
+                                [PSCustomObject]@{
+                                    PackageIdentifier = 'Contoso.Tool'
+                                    verifyCommand     = [PSCustomObject]@{ command = 'contoso'; args = @('--version') }
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains 'list' -and $Arguments -notcontains '--id') {
+                    $global:LASTEXITCODE = 0
+                    return @('Name Id Version Source', '-------------------', 'Contoso Contoso.Tool 1.0.0 winget')
+                }
+                if ($Arguments -contains 'install') {
+                    $global:LASTEXITCODE = 1
+                    return @('Network error while downloading the update')
+                }
+                $global:LASTEXITCODE = 0
+                return @()
+            }
+            Mock Invoke-VerifyCommand {
+                $global:LASTEXITCODE = 0
+                return 'contoso 1.0.0'
+            }
+        }
+
+        It 'should preserve the existing application when the update fails' {
+            $ctx.Options['WingetMode'] = 'import'
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $result.Message | Should -Match '1 個更新失敗（既存を維持）'
+            Should -Invoke Invoke-VerifyCommand -Times 2
         }
     }
 
@@ -3404,7 +3452,7 @@ Describe 'WingetHandler' {
             $script:webRequestCalls | Should -Be 0
         }
 
-        It 'should keep installed Codex network failures visible without direct fallback' {
+        It 'should preserve installed Codex when its network update fails without direct fallback' {
             $script:codexDestination = Join-Path $TestDrive "CodexNetwork"
             New-Item -ItemType Directory -Path $script:codexDestination -Force | Out-Null
             New-Item -ItemType File -Path (Join-Path $script:codexDestination "codex.exe") -Force | Out-Null
@@ -3459,8 +3507,8 @@ Describe 'WingetHandler' {
             $ctx.Options["WingetMode"] = "import"
             $result = $handler.Apply($ctx)
 
-            $result.Success | Should -Be $false
-            $result.Message | Should -Match "1 個失敗"
+            $result.Success | Should -Be $true
+            $result.Message | Should -Match "1 個更新失敗（既存を維持）"
             $script:installCalls | Should -Be 1
             $script:webRequestCalls | Should -Be 0
             ($script:loggedMessages -join "`n") | Should -Match "network unreachable"

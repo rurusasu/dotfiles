@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     セットアップハンドラーの基底クラスとコンテキスト定義
 
@@ -612,7 +612,7 @@ function Get-SetupHandler {
     )
 
     $handlers = @()
-    $handlerFiles = Get-ChildItem -Path $HandlersPath -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
+    $handlerFiles = @(Get-ChildItem -Path $HandlersPath -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue | Sort-Object -Property Name)
 
     if ($handlerFiles.Count -eq 0) {
         Write-Warning "No handler files found in: $HandlersPath"

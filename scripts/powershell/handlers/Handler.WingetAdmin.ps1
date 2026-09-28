@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Administrator-only winget package handler.
 
@@ -45,8 +45,10 @@ class WingetAdminHandler : SetupHandlerBase {
 
             $installed = 0
             $unchanged = 0
+            $preserved = 0
             $failed = 0
             foreach ($pkg in $packages) {
+                $wasInstalled = $this.TestPackageInstalled($pkg)
                 $installArguments = @(
                     "install", "-e", "--id", $pkg.Id,
                     "--silent",
@@ -80,13 +82,18 @@ class WingetAdminHandler : SetupHandlerBase {
                 }
                 $installText = [string]::Join("`n", @($output))
                 $isAlreadyInstalledNoOp = $installText -match "already installed|既にインストールされています|No applicable update found|No available upgrade found|No newer package versions are available|利用可能なアップグレードが見つかりませんでした|新しいパッケージ バージョンはありません"
-                if ($isAlreadyInstalledNoOp) {
+                if ($isAlreadyInstalledNoOp -and $wasInstalled) {
                     $unchanged++
                 }
                 elseif ($exitCode -eq 0) {
                     $installed++
                 }
                 else {
+                    if ($wasInstalled -and $pkg.VerifyCommand -and $this.TestPackageVerificationForPackage($pkg, $false)) {
+                        $preserved++
+                        $this.LogWarning("⚠ $($pkg.Id) の更新に失敗しましたが、既存のアプリケーションを維持しました (exit code: $exitCode)")
+                        continue
+                    }
                     $failed++
                     $this.LogWarning("✗ $($pkg.Id) のインストールに失敗しました")
                 }
@@ -95,6 +102,7 @@ class WingetAdminHandler : SetupHandlerBase {
             $messageParts = @()
             if ($installed -gt 0) { $messageParts += "$installed 個インストール" }
             if ($unchanged -gt 0) { $messageParts += "$unchanged 個変更なし" }
+            if ($preserved -gt 0) { $messageParts += "$preserved 個更新失敗（既存を維持）" }
             $message = $messageParts -join ", "
             if ($failed -gt 0) {
                 $message += ", $failed 個失敗"
@@ -105,6 +113,27 @@ class WingetAdminHandler : SetupHandlerBase {
         catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
+    }
+
+    hidden [bool] TestPackageInstalled([object]$pkg) {
+        try {
+            $arguments = @("list", "-e", "--id", $pkg.Id, "--disable-interactivity")
+            if ($pkg.SourceName -eq "msstore" -or $pkg.SourceName -eq "winget") {
+                $arguments += @("--source", $pkg.SourceName)
+            }
+            $output = @(Invoke-Winget -Arguments $arguments)
+            if ($LASTEXITCODE -ne 0) { return $false }
+            $pattern = "(?i)(^|\s)$([regex]::Escape([string]$pkg.Id))(?=\s|$)"
+            return [bool](@($output | Where-Object { [string]$_ -match $pattern }).Count)
+        }
+        catch {
+            return $false
+        }
+    }
+
+    hidden [bool] TestPackageVerificationForPackage([object]$pkg, [bool]$quiet) {
+        $verifier = [WingetHandler]::new()
+        return $verifier.TestPackageVerificationForPackage($pkg, $quiet)
     }
 
     hidden [object[]] GetAdministratorPackages([SetupContext]$ctx) {
@@ -143,6 +172,7 @@ class WingetAdminHandler : SetupHandlerBase {
                     SourceName            = $sourceName
                     InstallArgs           = $installArgs
                     InstallTimeoutSeconds = $installTimeoutSeconds
+                    VerifyCommand        = if ($pkg.PSObject.Properties.Name -contains "verifyCommand") { $pkg.verifyCommand } else { $null }
                 }
             }
         }

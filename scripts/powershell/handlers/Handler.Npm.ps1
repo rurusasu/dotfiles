@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     npm グローバルパッケージ管理ハンドラー
 
@@ -119,17 +119,20 @@ class NpmHandler : SetupHandlerBase {
             $toInstall = @()
             $skipped = 0
             $verified = 0
+            $preserved = @()
             foreach ($pkg in $packages) {
                 # パッケージ名からバージョンを除去（@scope/name@version → @scope/name）
                 $pkgSpec = if ($pkg -is [string]) { $pkg } else { $pkg.name }
                 $pkgName = $pkgSpec -replace '@[\d\.]+$', ''
                 $verifyCmd = if ($pkg -is [string]) { $null } else { $pkg.verifyCommand }
+                $wasVerified = $false
 
                 if ($installed -contains $pkgName) {
                     if ($verifyCmd) {
                         if ($this.TestPackageVerification($verifyCmd)) {
                             $this.Log("検証済み。latest を確認します: $pkgName", "Gray")
                             $verified++
+                            $wasVerified = $true
                         }
                         else {
                             $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
@@ -143,6 +146,7 @@ class NpmHandler : SetupHandlerBase {
                 $toInstall += [PSCustomObject]@{
                     Spec          = $pkgSpec
                     VerifyCommand = $verifyCmd
+                    WasVerified   = $wasVerified
                 }
             }
 
@@ -164,7 +168,6 @@ class NpmHandler : SetupHandlerBase {
                 $installExitCode = [int]$LASTEXITCODE
 
                 if ($installExitCode -ne 0) {
-                    $failed += $pkg.Spec
                     $hasInstallOutput = $false
                     foreach ($line in $installOutput) {
                         if (-not [string]::IsNullOrWhiteSpace([string]$line)) {
@@ -173,6 +176,12 @@ class NpmHandler : SetupHandlerBase {
                         }
                     }
                     $this.LogWarning("npm install exited with code $installExitCode for $($pkg.Spec)")
+                    if ($pkg.WasVerified -and $this.TestPackageVerification($pkg.VerifyCommand)) {
+                        $preserved += $pkg.Spec
+                        $this.LogWarning("⚠ $($pkg.Spec) の更新に失敗しましたが、既存の実行可能状態を維持しました (exit code: $installExitCode)")
+                        continue
+                    }
+                    $failed += $pkg.Spec
                     if (-not $hasInstallOutput) {
                         $this.LogWarning("npm stdout/stderr は出力なしです。npm debug log を確認してください。")
                         $this.Log("ログ場所: npm config get logs-dir (未設定時は npm config get cache の _logs)", "Yellow")
@@ -201,6 +210,7 @@ class NpmHandler : SetupHandlerBase {
             if ($succeeded.Count -gt 0) { $parts += "$($succeeded.Count) 個インストール" }
             if ($verifyFailed.Count -gt 0) { $parts += "$($verifyFailed.Count) 個検証失敗" }
             if ($failed.Count -gt 0) { $parts += "$($failed.Count) 個失敗" }
+            if ($preserved.Count -gt 0) { $parts += "$($preserved.Count) 個更新失敗（既存を維持）" }
             if ($verified -gt 0) { $parts += "$verified 個検証済み" }
             $parts += "$skipped 個スキップ"
             $message = $parts -join ", "
