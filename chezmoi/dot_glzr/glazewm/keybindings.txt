@@ -1,0 +1,101 @@
+super+enter: terminal
+super+shift+enter: browser
+super+shift+b: browser
+super+shift+f: files
+super+shift+o: notes
+super+shift+a: ai
+super+shift+slash: passwords
+super+space: launcher
+super+alt+space: launcher
+super+k: help
+super+w: close
+super+q: close
+super+t: floating
+super+j: split
+super+f: fullscreen
+super+ctrl+f: tiled-fullscreen
+super+tab: workspace-next
+super+shift+tab: workspace-prev
+super+ctrl+tab: workspace-back
+super+ctrl+c: capture
+super+ctrl+q: calculator
+super+ctrl+t: activity
+super+ctrl+l: lock
+super+ctrl+v: clipboard
+super+ctrl+e: emoji
+super+ctrl+a: audio
+super+ctrl+b: bluetooth
+super+ctrl+d: display
+super+ctrl+w: network
+super+ctrl+p: power
+super+ctrl+alt+escape: passthrough
+super+1: workspace-1
+super+shift+1: move-workspace-1
+super+shift+alt+1: send-workspace-1
+super+2: workspace-2
+super+shift+2: move-workspace-2
+super+shift+alt+2: send-workspace-2
+super+3: workspace-3
+super+shift+3: move-workspace-3
+super+shift+alt+3: send-workspace-3
+super+4: workspace-4
+super+shift+4: move-workspace-4
+super+shift+alt+4: send-workspace-4
+super+5: workspace-5
+super+shift+5: move-workspace-5
+super+shift+alt+5: send-workspace-5
+super+6: workspace-6
+super+shift+6: move-workspace-6
+super+shift+alt+6: send-workspace-6
+super+7: workspace-7
+super+shift+7: move-workspace-7
+super+shift+alt+7: send-workspace-7
+super+8: workspace-8
+super+shift+8: move-workspace-8
+super+shift+alt+8: send-workspace-8
+super+9: workspace-9
+super+shift+9: move-workspace-9
+super+shift+alt+9: send-workspace-9
+super+0: workspace-10
+super+shift+0: move-workspace-10
+super+shift+alt+0: send-workspace-10
+super+left: focus-left
+super+down: focus-down
+super+up: focus-up
+super+right: focus-right
+super+minus: width-minus-100
+super+equal: width-plus-100
+super+shift+minus: height-minus-100
+super+shift+equal: height-plus-100
+super+alt+minus: width-minus-25
+super+alt+equal: width-plus-25
+super+shift+alt+minus: height-minus-25
+super+shift+alt+equal: height-plus-25
+super+ctrl+minus: width-minus-300
+super+ctrl+equal: width-plus-300
+super+shift+ctrl+minus: height-minus-300
+super+shift+ctrl+equal: height-plus-300
+
+Unsupported/native:
+group: GlazeWM does not provide grouped/tabbed containers.
+ungroup: GlazeWM does not provide grouped/tabbed containers.
+window-next: Windows handles Alt+Tab natively; no global binding is registered.
+window-prev: Windows handles Alt+Shift+Tab natively; no global binding is registered.
+monitor-next: GlazeWM requires an explicit monitor index; monitor cycling is not configured.
+monitor-prev: GlazeWM requires an explicit monitor index; monitor cycling is not configured.
+scratchpad: GlazeWM does not provide a hidden scratchpad workspace.
+scratchpad: GlazeWM does not provide a hidden scratchpad workspace.
+scratchpad-move: GlazeWM does not provide a hidden scratchpad workspace.
+scratchpad-move: GlazeWM does not provide a hidden scratchpad workspace.
+swap-left: GlazeWM directional move does not guarantee an exact window swap.
+move-monitor-left: GlazeWM moves whole workspaces between monitors; focused-window monitor moves are not configured.
+join-left: GlazeWM does not provide grouped/tabbed containers.
+swap-down: GlazeWM directional move does not guarantee an exact window swap.
+move-monitor-down: GlazeWM moves whole workspaces between monitors; focused-window monitor moves are not configured.
+join-down: GlazeWM does not provide grouped/tabbed containers.
+swap-up: GlazeWM directional move does not guarantee an exact window swap.
+move-monitor-up: GlazeWM moves whole workspaces between monitors; focused-window monitor moves are not configured.
+join-up: GlazeWM does not provide grouped/tabbed containers.
+swap-right: GlazeWM directional move does not guarantee an exact window swap.
+move-monitor-right: GlazeWM moves whole workspaces between monitors; focused-window monitor moves are not configured.
+join-right: GlazeWM does not provide grouped/tabbed containers.

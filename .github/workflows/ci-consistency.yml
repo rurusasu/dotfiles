@@ -61,6 +61,12 @@ jobs:
       - name: Build repository custom package derivations
         run: nix build .#checks.x86_64-linux.custom-package-builds --no-link
 
+      - name: Run workspace cycle runtime contracts
+        run: nix build .#checks.x86_64-linux.aerospace-workspace-cycle --no-link
+
+      - name: Verify generated Windows desktop keybindings are in sync
+        run: nix build .#checks.x86_64-linux.windows-keybindings-generated --no-link --print-build-logs
+
       - name: Install and verify Codex npm package
         run: |
           set -euo pipefail

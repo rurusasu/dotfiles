@@ -8,6 +8,8 @@ chezmoi によるユーザー設定管理の詳細ドキュメント。
 - [インストールと適用](./usage.md)
 - [ディレクトリ構造](./structure.md)
 - [キーバインド統一方針](./keybindings.md)
+- [Omarchy 配列の共通定義と OS 別実装](./omarchy.md)
+- [macOS のデスクトップキー・権限設定・回復](./omarchy-macos.md)
 - [Neovim の設定と検証](./neovim.md)
 - [Neovim 最新化調査・採否](./neovim-modernization-audit.md)
 - [シークレット管理](./secrets.md)

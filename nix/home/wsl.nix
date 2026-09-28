@@ -15,10 +15,13 @@ in
     ./hermes-agent.nix
   ];
 
-  home.packages = sets.allWithout [
-    "discord"
-    "ollama"
-  ];
+  home.packages = sets.allWithout (
+    sets.nativeDesktopPackageNames
+    ++ [
+      "discord"
+      "ollama"
+    ]
+  );
 
   # Exclude WSL mount paths from zoxide's database to avoid indexing
   # temporary runtime files under /mnt/wsl/ and /mnt/wslg/.

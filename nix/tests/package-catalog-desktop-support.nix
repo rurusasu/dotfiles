@@ -8,6 +8,39 @@ let
   };
 in
 {
+  testGlazeWMIsWindowsOnlyAndMachineInstalled = {
+    expr = {
+      windows = sets.supportReport.glazewm.windows;
+      unsupportedDarwin = sets.supportReport.glazewm.darwin ? unsupported;
+      unsupportedLinux = sets.supportReport.glazewm.linux ? unsupported;
+      id = sets.wingetMap.glazewm;
+      admin = sets.wingetRequiresAdmin.glazewm;
+      args = sets.wingetInstallArgs.glazewm;
+      verify = sets.wingetVerify.glazewm;
+      path = sets.wingetPathEntries.glazewm;
+    };
+    expected = {
+      windows = {
+        provider = "winget";
+        source = "winget";
+        identity = "glzr-io.glazewm";
+      };
+      unsupportedDarwin = true;
+      unsupportedLinux = true;
+      id = "glzr-io.glazewm";
+      admin = true;
+      args = [
+        "--scope"
+        "machine"
+      ];
+      verify = {
+        command = "glazewm";
+        args = [ "--version" ];
+      };
+      path = [ "%ProgramFiles%\\glzr.io\\GlazeWM" ];
+    };
+  };
+
   testGoogleChromePreservesWindowsProviderAndDarwinMigration = {
     expr = sets.supportReport.google-chrome;
     expected = {

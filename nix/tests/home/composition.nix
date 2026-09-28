@@ -83,6 +83,36 @@ let
     };
 in
 {
+  testHeadlessHomesDoNotEnableNativeCompositor = {
+    expr =
+      map
+        (home: {
+          enabled = home.config.wayland.windowManager.hyprland.enable;
+          desktopPackages = builtins.filter (
+            name:
+            builtins.elem name [
+              "hyprland"
+              "fuzzel"
+              "firefox"
+              "nautilus"
+            ]
+          ) (map (package: package.pname or package.name) home.config.home.packages);
+        })
+        [
+          linux
+          wsl
+        ];
+    expected = [
+      {
+        enabled = false;
+        desktopPackages = [ ];
+      }
+      {
+        enabled = false;
+        desktopPackages = [ ];
+      }
+    ];
+  };
   testCommonHomeModuleEvaluatesWithoutOSSpecialArgs = {
     expr = common.config.home.username;
     expected = "test-user";
@@ -143,10 +173,13 @@ in
       expectedCatalogDrvPaths = builtins.sort builtins.lessThan (
         pkgs.lib.unique (
           builtins.map (package: package.drvPath) (
-            sets.allWithout [
-              "discord"
-              "ollama"
-            ]
+            sets.allWithout (
+              sets.nativeDesktopPackageNames
+              ++ [
+                "discord"
+                "ollama"
+              ]
+            )
           )
         )
       );

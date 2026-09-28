@@ -1,6 +1,38 @@
 version: "3"
 
 tasks:
+  keybindings:export:
+    desc: Regenerate Windows desktop settings from shared Nix keybindings
+    platforms: [linux, darwin]
+    preconditions:
+      - sh: command -v nix
+        msg: Nix is required; run this task from macOS, Linux, or WSL
+    cmds:
+      - |-
+        set -eu
+        output="$(nix build .#windows-keybindings-export --no-link --print-out-paths --no-write-lock-file)"
+        find "$output" -type f -exec sh -eu -c '
+          output=$1
+          shift
+          for artifact do
+            target="chezmoi/${artifact#"$output"/}"
+            mkdir -p "$(dirname "$target")"
+            install -m644 "$artifact" "$target"
+          done
+        ' sh "$output" {} +
+
+  keybindings:check:
+    desc: Check that Windows desktop settings match the shared Nix source
+    platforms: [linux, darwin]
+    preconditions:
+      - sh: command -v nix
+        msg: Nix is required; run this task from macOS, Linux, or WSL
+    cmds:
+      - |-
+        set -eu
+        system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
+        nix build ".#checks.${system}.windows-keybindings-generated" --no-link --no-write-lock-file
+
   darwin:install:
     desc: Update custom packages then run the macOS activation adapter
     interactive: true

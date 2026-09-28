@@ -68,6 +68,27 @@
       "outputs": ["wsl", "windows", "contract", "package_catalog"]
     },
     {
+      "patterns": ["nix/checks/**"],
+      "outputs": ["linux", "darwin", "contract", "nix"]
+    },
+    {
+      "patterns": ["nix/home/keybindings/**"],
+      "outputs": [
+        "linux",
+        "darwin",
+        "windows",
+        "wsl",
+        "contract",
+        "nix",
+        "chezmoi",
+        "package_catalog"
+      ]
+    },
+    {
+      "patterns": ["nix/hosts/windows/**", "chezmoi/dot_glzr/**"],
+      "outputs": ["windows", "wsl", "contract", "nix", "chezmoi", "package_catalog"]
+    },
+    {
       "patterns": ["nix/home/common.nix"],
       "outputs": ["linux", "darwin", "wsl", "contract", "nix", "chezmoi"]
     },

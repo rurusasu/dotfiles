@@ -2,7 +2,27 @@
 
 ## Single Source of Truth
 
-`nix/packages/sets.nix` の catalog が全プラットフォームの package provider を一元管理します。Home Manager だけを SSOT とするのではなく、1 つの catalog から OS ごとの実装を導出します。
+`nix/packages/catalog/` が全プラットフォームの package と provider metadata の正本です。`nix/packages/sets.nix` は catalog、provider 選択、installer metadata を合成する公開入口であり、既存の consumer は引き続きこの入口を import します。
+
+## 分割の理由と編集先
+
+SSOT は「各定義を一度だけ持つ」ことであり、すべてを 1 ファイルに置くことではありません。変更理由の異なる package データ、provider 選択、配布 metadata、host の動作を分け、パッケージ追加が OS 設定や選択ロジックの変更に広がらない構成にします。
+
+| 編集先                                                                           | 責務・分割理由                                                                                      |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `catalog/{core,dev,terminal,editors,fonts,llm,desktop,system,k8s,infra,lsp}.nix` | カテゴリごとの package と OS 別 provider metadata。各 package は 1 ファイルだけで定義する           |
+| `catalog/context.nix`                                                            | カテゴリ間で共有する package 構築用の依存値                                                         |
+| `catalog/default.nix`, `catalog/merge.nix`                                       | カテゴリの合成と重複定義の検出。後勝ちで上書きしない                                                |
+| `providers/{common,normalize,selection,validation}.nix`                          | provider の共通処理、正規化、OS 別選択、coverage 検証。package データから分離する                   |
+| `install/{default,node,windows-install,windows-verification,windows-only}.nix`   | npm/pnpm 配布、Windows install/検証/専用アプリの metadata。provider 選択と installer 契約を区別する |
+| `sets.nix`                                                                       | 上記を合成し、従来の export API を維持する小さい入口                                                |
+| `<package>/default.nix`                                                          | custom derivation。既存パスを保ち、catalog から参照する                                             |
+| `nix/home/keybindings/`                                                          | 共通キー配置・設定生成・ユーザー設定。パッケージの配布定義へ混在させない                            |
+| `nix/hosts/`                                                                     | OS の service/有効化・競合解除。home 側の設定を消費し、キー配置を複製しない                         |
+
+ディレクトリはすべて `nix/packages/` 相対です（表内で `nix/` から始まる行を除く）。カテゴリは探索と編集の単位であり、OS ごとに同じ package を再定義しません。[共通のキー割り当て](../chezmoi/omarchy.md) も同じ考え方で home に一度だけ定義し、host module は OS 統合と有効化を担当する構成です。
+
+native desktop 用 package は `catalog/native-desktop.nix` に定義します。`sets.all` は全 feature を含むため、`installFeature` を付けるだけでは WSL/standalone への非混入を保証できません。`sets.nativeDesktopPackageNames` を使い headless Home Manager consumer で除外し、native host と選択された home module のみが `WithDesktop` で解決します。
 
 | Catalog output                      | Consumer                            | Platform                     |
 | ----------------------------------- | ----------------------------------- | ---------------------------- |
@@ -13,14 +33,14 @@
 | `supportReport`                     | `package-support-report` derivation | CI and review                |
 | `providerErrors`                    | flake check                         | all platforms                |
 
-Windows だけに存在する GUI や OS component は `windowsOnlySupport` に置き、macOS/Linux で対応しない理由を必ず記録します。クロスプラットフォームのツールを理由なしに Windows-only へ入れることはできません。
+Windows だけに存在する GUI や OS component は `install/windows-only.nix` の `windowsOnlySupport` に置き、macOS/Linux で対応しない理由を必ず記録します。クロスプラットフォームのツールを理由なしに Windows-only へ入れることはできません。
 
 macOS caskで`installFeature`を持つpackageは、installerが解決したprofileを
 `darwinCasksForInstallFeatures`へ渡した場合だけHomebrew Bundleへ含まれます。
 
 ## Provider の追加
 
-一般的な CLI は catalog に Nix package と Windows provider を記述します。実際の schema は既存 entry に合わせてください。
+一般的な CLI は `catalog/` の該当カテゴリに Nix package と Windows provider を記述します。実際の schema は既存 entry に合わせてください。選択条件や coverage 検証の変更だけを `providers/` に置きます。
 
 ```nix
 mypackage = {
@@ -74,7 +94,7 @@ nix build .#package-support-report
 cat result/package-support-report.json
 ```
 
-`package-support-report` は各 catalog entry の Windows、Darwin、Linux provider または unsupported reason を記録します。自動推測できない provider gap は `reviewedUnsupported` に package 名と理由を明示し、新規 entry の未検討 platform は `checks.*.package-provider-coverage` で失敗させます。consistency CI は生成 manifest drift も失敗にします。
+`package-support-report` は各 catalog entry の Windows、Darwin、Linux provider または unsupported reason を記録します。自動推測できない provider gap は `providers/normalize.nix` の `reviewedUnsupported` に package 名と理由を明示し、新規 entry の未検討 platform は `checks.*.package-provider-coverage` で失敗させます。consistency CI は生成 manifest drift も失敗にします。
 
 ## システム package と Home Manager の境界
 
@@ -95,7 +115,10 @@ Neovim は `nix/packages/neovim/default.nix` でパーサーと対応クエリ�
 
 | File                                 | Responsibility                           |
 | ------------------------------------ | ---------------------------------------- |
-| `nix/packages/sets.nix`              | provider catalog and derived sets        |
+| `nix/packages/catalog/`              | package と provider metadata の正本      |
+| `nix/packages/providers/`            | provider 選択、正規化、coverage 検証     |
+| `nix/packages/install/`              | installer と manifest 用 metadata        |
+| `nix/packages/sets.nix`              | 合成と既存 consumer 向けの公開 API       |
 | `nix/packages/support-report.nix`    | coverage report derivation               |
 | `nix/packages/winget.nix`            | generated Windows manifests              |
 | `nix/home/common.nix`                | shared Home Manager packages             |

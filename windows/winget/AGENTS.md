@@ -2,8 +2,8 @@
 
 ## 編集対象
 
-- SSOT は `nix/packages/sets.nix`。`packages.json` は `winget-export` の生成物。
-- 生成・反映方法は `docs/nix/package-management.md` を参照する。
+- package/provider の SSOT は `nix/packages/catalog/`。Windows 専用 metadata は `nix/packages/install/windows-only.nix`。`sets.nix` は公開入口、`packages.json` は `winget-export` の生成物。
+- データと installer 契約を分け、同じ package を再定義しない。分割理由・生成・反映方法は [パッケージ管理](../../docs/nix/package-management.md#分割の理由と編集先) を参照する。
 
 ## 実行コマンド
 

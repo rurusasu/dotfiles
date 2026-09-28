@@ -87,6 +87,7 @@
         winget-export = import ../packages/winget.nix {
           inherit pkgs lib;
         };
+        windows-keybindings-export = import ../hosts/windows/export.nix { inherit pkgs lib; };
         package-support-report = packageSupportReport;
       }
       // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin (

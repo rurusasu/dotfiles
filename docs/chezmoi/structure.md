@@ -32,7 +32,7 @@ dot_config/nvim/
 └── treesitter.json           # Nix と非 Nix の共通パーサー一覧
 ```
 
-パーサー／クエリの Nix 配布は `nix/packages/neovim/default.nix`、LSP のパッケージ配布は `nix/packages/sets.nix` にあります。運用・テストは [Neovim](./neovim.md) を参照してください。
+パーサー／クエリの Nix 配布は `nix/packages/neovim/default.nix`、LSP の package/provider 定義は `nix/packages/catalog/lsp.nix` にあります。`sets.nix` は公開入口です。設定と配布を分ける理由は [パッケージ管理](../nix/package-management.md#分割の理由と編集先)、運用・テストは [Neovim](./neovim.md) を参照してください。
 
 ## ファイル命名規則
 

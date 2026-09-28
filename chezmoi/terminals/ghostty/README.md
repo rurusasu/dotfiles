@@ -1,9 +1,13 @@
 # Ghostty (macOS / Linux)
 
 Ghostty is installed alongside WezTerm; neither the default terminal nor existing
-WezTerm settings are changed. Package selection lives in `nix/packages/sets.nix`:
+WezTerm settings are changed. Package metadata lives in `nix/packages/catalog/terminal.nix`
+and is exposed through `nix/packages/sets.nix`:
 macOS uses `ghostty-bin` (the signed application bundle), Linux uses `ghostty`.
 The macOS GUI belongs to the nix-darwin system package set, not Home Manager.
+Package data, provider selection, and host behavior have separate owners; this
+keeps each definition unique while preserving the consumer API. See the
+[package split rationale](../../../docs/nix/package-management.md#分割の理由と編集先).
 
 Apply packages using the repository's normal `./install.sh` workflow. Apply the
 shared terminal configuration with `task chezmoi`. It deploys `config` to

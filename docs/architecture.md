@@ -7,12 +7,15 @@
 **「OS ごとに 1 コマンドで同じ開発環境へ収束する」** を目標に、以下の原則で管理する。
 
 1. **Nix catalog がパッケージ provider の Single Source of Truth (SSOT)**
-   - 全ツールと OS ごとの provider は `nix/packages/sets.nix` に一元定義
+   - 全ツールと OS ごとの provider metadata は `nix/packages/catalog/` のカテゴリ別ファイルに一度だけ定義
+   - provider 選択は `providers/`、配布 metadata は `install/`、host の動作は `nix/hosts/` などに分離し、`sets.nix` は既存 API を維持する合成入口
+   - SSOT は単一定義を意味し、単一ファイルを意味しない。変更理由による境界は [分割の理由と編集先](./nix/package-management.md#分割の理由と編集先) を参照
    - Unix 系 CLI は Home Manager、macOS cask は nix-homebrew、Linux system package は NixOS/System Manager が消費
    - Windows は `nix build .#winget-export` で winget/npm/pnpm JSON を導出
 2. **chezmoi が設定ファイルの SSOT**
    - 全 OS 共通の dotfiles をテンプレートで管理
    - OS 固有の差分は `.chezmoiignore.tmpl` とテンプレート分岐で吸収
+   - デスクトップキー配列は例外として、共通 action/key・設定生成関数・ユーザー設定を `nix/home/keybindings/`、OS の service/有効化・競合解除を `nix/hosts/` に分ける。macOS/native NixOS の設定は Nix が所有し、Windows の GlazeWM 設定と補助スクリプトは Nix 生成物を chezmoi が配布する。Windows の適用時に Nix は不要（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
 3. **システム収束は OS に適した宣言レイヤーへ分離**
    - Windows: PowerShell handlers + winget
    - macOS: nix-darwin + nix-homebrew
@@ -28,13 +31,16 @@
 dotfiles/
 ├── nix/                    # Cross-platform declarative configuration
 │   ├── packages/
-│   │   ├── sets.nix        # ★ SSOT: package + provider catalog
+│   │   ├── catalog/        # ★ SSOT: category-scoped package/provider data
+│   │   ├── providers/      # Provider normalization, selection, validation
+│   │   ├── install/        # Installer/manifest metadata
+│   │   ├── sets.nix        # Stable public API and composition
 │   │   └── winget.nix      # winget/npm/pnpm JSON 生成 derivation
-│   ├── darwin/             # nix-darwin + nix-homebrew
 │   ├── system-manager/     # Ubuntu/Debian services and users
 │   ├── home/               # Shared Home Manager configuration
+│   │   └── keybindings/    # Shared keys and user settings
 │   ├── flakes/             # Flake inputs/outputs, treefmt
-│   ├── hosts/              # NixOS hosts (native Linux, WSL)
+│   ├── hosts/              # nix-darwin and NixOS hosts (native Linux, WSL)
 │   ├── modules/            # Custom NixOS modules (system-level)
 │   └── tests/              # NixOS VM acceptance
 ├── chezmoi/                # User dotfiles (shell/git/terminal/VS Code/LLM)
@@ -170,7 +176,9 @@ runtime-data policy are defined in [Local AI services onboarding and operations]
 ## パッケージ管理フロー
 
 ```
-nix/packages/sets.nix (SSOT)
+nix/packages/catalog/ (package/provider metadata の SSOT)
+  + providers/ (選択・検証) + install/ (配布 metadata)
+  → nix/packages/sets.nix (公開 API)
 ├── Home Manager ───────── macOS / NixOS / Ubuntu / Debian CLI
 ├── darwinCasksForInstallFeatures ── profile-filtered nix-homebrew casks
 ├── darwinBrews ────────── nix-homebrew formulas
@@ -182,17 +190,19 @@ nix/packages/sets.nix (SSOT)
 
 ### ツール追加手順
 
-1. `nix/packages/sets.nix` の `catalog` にエントリを追加:
+1. `nix/packages/catalog/` の該当カテゴリにエントリを追加:
    ```nix
    mypackage = { pkg = pkgs.mypackage; winget = "Publisher.Package"; category = "dev"; };
    ```
-   Set `winget = null` if there is no Windows equivalent.
+   Windows 相当がない場合は `winget = null` とし、provider coverage に未対応理由を明記する。
 2. `nix build .#winget-export` で winget/npm/pnpm JSON を再生成
 3. `nixos-rebuild switch` で Linux 反映、`winget import` で Windows 反映
 
 ### Windows 専用アプリの追加
 
-`nix/packages/sets.nix` の `windowsOnly` セクションに追加するだけ。
+`nix/packages/install/windows-only.nix` の `windowsOnly` と対応する
+`windowsOnlySupport` に追加し、macOS/Linux で対応しない理由を記録する。
+生成物の更新・検証は [パッケージ管理](./nix/package-management.md) に従う。
 
 ---
 

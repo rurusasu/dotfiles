@@ -25,6 +25,8 @@ let
     ++ lib.optionals withHermes [ "WithHermes" ];
 in
 {
+  imports = [ ./omarchy-keybindings.nix ];
+
   assertions = [
     {
       assertion = user != "";

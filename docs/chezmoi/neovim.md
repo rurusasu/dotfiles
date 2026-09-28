@@ -5,10 +5,13 @@
 最低 Neovim **0.12**。更新時は `nvim --version` と `:checkhealth vim.lsp` を確認します。動作確認済み版と採否の根拠は [最新化調査](./neovim-modernization-audit.md) に記録します。
 
 - 設定の正本: `chezmoi/dot_config/nvim/`
-- パッケージ/provider の正本: `nix/packages/sets.nix`
+- パッケージ/provider の正本: `nix/packages/catalog/editors.nix`、LSP は `catalog/lsp.nix`（公開入口は `nix/packages/sets.nix`）
 - Nix の Neovim wrapper: `nix/packages/neovim/default.nix`
 - 言語別設定差分: `after/lsp/*.lua`
 - パーサーの言語一覧: `treesitter.json`
+
+package データ、配布方式、エディタ設定を変更理由ごとに分けます。
+共通方針は [パッケージ管理の分割理由](../nix/package-management.md#分割の理由と編集先) を参照してください。
 
 設定は chezmoi が直接配置します。存在しない `chezmoi/editors/nvim` は編集しません。Windows も `%USERPROFILE%/.config/nvim` を共有し、PowerShell の `XDG_CONFIG_HOME` または `%LOCALAPPDATA%/nvim` junction を使います。実際の参照先は `:lua print(vim.fn.stdpath("config"))` で確認してください。
 

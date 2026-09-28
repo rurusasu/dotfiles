@@ -13,14 +13,14 @@ Windows、macOS、NixOS、Ubuntu、Debian を 1 コマンドで収束させる�
 
 ## 技術スタック
 
-| Category           | Technology                                         |
-| ------------------ | -------------------------------------------------- |
-| OS                 | Windows + NixOS-WSL, macOS, NixOS, Ubuntu, Debian  |
-| Package catalog    | Nix Flakes (`nix/packages/sets.nix`)               |
-| System convergence | winget handlers, nix-darwin, System Manager, NixOS |
-| User environment   | Home Manager + chezmoi                             |
-| Containers         | Docker Desktop / rootful Docker + Docker Compose   |
-| Formatter          | treefmt-nix                                        |
+| Category           | Technology                                                |
+| ------------------ | --------------------------------------------------------- |
+| OS                 | Windows + NixOS-WSL, macOS, NixOS, Ubuntu, Debian         |
+| Package catalog    | Nix Flakes (`nix/packages/catalog/`、公開入口 `sets.nix`) |
+| System convergence | winget handlers, nix-darwin, System Manager, NixOS        |
+| User environment   | Home Manager + chezmoi                                    |
+| Containers         | Docker Desktop / rootful Docker + Docker Compose          |
+| Formatter          | treefmt-nix                                               |
 
 ## クイックスタート
 
@@ -168,7 +168,11 @@ Nix catalog は各 OS の provider を定義し、OS の宣言レイヤーと Ho
 - macOS system: `nix/hosts/darwin/default.nix` が entrypoint、`configuration.nix` が system/cask/activation の実体
 - Ubuntu / Debian: `nix/system-manager/`
 - NixOS / WSL: `nix/hosts/<host>/default.nix` が entrypoint、`configuration.nix` が host 固有設定
-- パッケージ provider catalog: `nix/packages/sets.nix`
+- パッケージ provider catalog: `nix/packages/catalog/`、既存 consumer の公開入口: `nix/packages/sets.nix`
+
+package データ、provider 選択、installer metadata、host 動作を分け、各定義は一度だけ管理します。
+SSOT と巨大な 1 ファイルを同一視せず、変更理由ごとに編集先を決めます。
+詳細は [パッケージ管理の分割方針](./docs/nix/package-management.md#分割の理由と編集先) を参照してください。
 
 ## ディレクトリ構造
 
@@ -290,18 +294,18 @@ wsl --shutdown
 
 ## ターミナル設定
 
-詳細は [docs/chezmoi/structure.md](./docs/chezmoi/structure.md) を参照。
+設定の配置は [ディレクトリ構造](./docs/chezmoi/structure.md)、デスクトップとターミナルの操作範囲は [キーバインド統一方針](./docs/chezmoi/keybindings.md) を参照。
 
 ### Windows Terminal
 
-- 設定ソース: `chezmoi/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json`
-- キーバインド: `Ctrl+Alt+H` (水平分割), `Ctrl+Alt+V` (垂直分割), `Ctrl+Alt+X` (ペイン閉じる)
+- 設定ソース: `chezmoi/terminals/windows-terminal/settings.json`
+- 共通 prefix: `Ctrl+Space`（AutoHotkey adapter）。続けて `v` で左右分割、`-` で上下分割、`x` でペインを閉じる
 
 ### WezTerm
 
-- 設定ソース: `chezmoi/dot_config/wezterm/wezterm.lua`
+- 設定ソース: `chezmoi/terminals/wezterm/wezterm.lua`
 - Leader key: `Ctrl+Space`
-- キーバインド: `Ctrl+Alt+H` (水平分割), `Ctrl+Alt+V` (垂直分割), `Ctrl+Alt+X` (ペイン閉じる)
+- prefix に続けて `v` で左右分割、`-` で上下分割、`x` でペインを閉じる
 
 ## トラブルシューティング
 

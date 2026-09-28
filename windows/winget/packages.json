@@ -233,6 +233,17 @@
           }
         },
         {
+          "PackageIdentifier": "glzr-io.glazewm",
+          "installArgs": ["--scope", "machine"],
+          "installTimeoutSeconds": 900,
+          "pathEntries": ["%ProgramFiles%\\glzr.io\\GlazeWM"],
+          "requiresAdmin": true,
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "glazewm"
+          }
+        },
+        {
           "PackageIdentifier": "GoLang.Go",
           "installTimeoutSeconds": 900,
           "verifyCommand": {

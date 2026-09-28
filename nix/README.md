@@ -2,15 +2,28 @@
 
 ## 所有境界
 
-| パス                    | 所有範囲                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------ |
-| `nix/hosts/`            | system/host サービス、OS ユーザー、hardware、host 固有の NixOS/nix-darwin 設定 |
-| `nix/packages/sets.nix` | クロスプラットフォームのパッケージ集合（単一情報源）                           |
-| `nix/home/`             | Home Manager のユーザー環境、ユーザー systemd サービス、OS 固有設定            |
-| `chezmoi/`              | Nix で表現しない dotfile、テンプレート、アプリ設定                             |
+| パス                      | 所有範囲                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| `nix/hosts/`              | system/host サービス、OS ユーザー、hardware、host 固有の NixOS/nix-darwin 設定 |
+| `nix/packages/catalog/`   | カテゴリ別 package/provider metadata（各 package の単一情報源）                |
+| `nix/packages/providers/` | provider 選択・正規化・coverage 検証                                           |
+| `nix/packages/install/`   | installer/manifest 用 metadata                                                 |
+| `nix/packages/sets.nix`   | 既存 consumer 向けの合成入口・公開 API                                         |
+| `nix/home/keybindings/`   | 共通 action/key、純粋な設定生成関数、Home Manager のユーザー設定               |
+| `nix/home/`               | Home Manager のユーザー環境、ユーザー systemd サービス、OS 固有設定            |
+| `chezmoi/`                | dotfile、テンプレート、アプリ設定。Windows デスクトップ設定は Nix 生成物の配布 |
 
 - host / hardware 設定を `nix/home/` に置かない。
 - Home Manager と chezmoi で同じファイルを所有しない。
+
+パッケージデータ、選択ロジック、配布契約、host 動作は変更理由ごとに分割します。
+SSOT は「一度だけ定義する」ことであり、1 ファイルへの集約ではありません。
+詳細は [分割の理由と編集先](../docs/nix/package-management.md#分割の理由と編集先) を参照してください。
+キー配列は home のユーザー設定と hosts の OS 統合に分けます。Darwin は home の生成結果を
+nix-darwin のサービス設定へ渡し、native NixOS は host から Home Manager module を選択します。
+Windows は home の GlazeWM 設定生成関数を `nix/hosts/windows/` から呼び、生成済み成果物を
+chezmoi で配布します。Windows の適用時に Nix は不要です。WSL guest と standalone Linux へ
+Hyprland を自動導入しない設計です。[対応範囲・移行状況と検証](../docs/chezmoi/omarchy.md) を参照してください。
 
 秘密情報はリポジトリや Nix モジュールに書かない。既存の 1Password / chezmoi テンプレートまたは
 実行時環境変数を使い、秘密の値を Nix store に入れない。
@@ -21,7 +34,7 @@
 2. system、host サービス、ユーザー、hardware は `nix/hosts/<host>/configuration.nix` に追加する。
    各 host の `default.nix` は `configuration.nix` を import する entrypoint として維持する。
 3. Home Manager の OS ファイルは `imports = [ ./common.nix ];` を維持する。`common.nix` から OS 固有ファイルを import せず、共通設定内の platform-scoped な分岐は最小限に保つ。
-4. パッケージ追加前に `nix/packages/sets.nix` の所有範囲と各 OS への影響を確認する。
+4. パッケージ追加前に `nix/packages/catalog/` の該当カテゴリと各 OS への影響を確認する。`sets.nix` の公開 API は維持する。
 5. dotfile と秘密情報は `chezmoi/` と既存の secret 経路を使い、所有を重複させない。
 6. Nix 設定の変更は `nix flake check --all-systems --no-write-lock-file` と focused `nix-unit`
    build で検証する。Bats は installer、shell、外部プロセス、runtime 契約に限って実行する。

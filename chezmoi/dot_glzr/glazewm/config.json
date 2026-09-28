@@ -1,0 +1,283 @@
+{
+  "binding_modes": [],
+  "gaps": {
+    "inner_gap": "8px",
+    "outer_gap": { "bottom": "8px", "left": "8px", "right": "8px", "top": "8px" }
+  },
+  "general": {
+    "config_reload_commands": [],
+    "focus_follows_cursor": false,
+    "hide_method": "cloak",
+    "show_all_in_taskbar": false,
+    "shutdown_commands": [],
+    "startup_commands": [],
+    "toggle_workspace_on_refocus": false
+  },
+  "keybindings": [
+    {
+      "bindings": ["lwin+enter", "rwin+enter"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'terminal'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+shift+enter", "rwin+shift+enter"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'browser'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+shift+b", "rwin+shift+b"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'browser'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+shift+f", "rwin+shift+f"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'files'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+shift+o", "rwin+shift+o"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'notes'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+shift+a", "rwin+shift+a"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'ai'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+shift+oem_question", "rwin+shift+oem_question"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'passwords'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+space", "rwin+space"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'launcher'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+alt+space", "rwin+alt+space"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'launcher'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+k", "rwin+k"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'help'\""
+      ]
+    },
+    { "bindings": ["lwin+w", "rwin+w"], "commands": ["close"] },
+    { "bindings": ["lwin+q", "rwin+q"], "commands": ["close"] },
+    { "bindings": ["lwin+t", "rwin+t"], "commands": ["toggle-floating --centered"] },
+    { "bindings": ["lwin+j", "rwin+j"], "commands": ["toggle-tiling-direction"] },
+    { "bindings": ["lwin+f", "rwin+f"], "commands": ["toggle-fullscreen --maximized=false"] },
+    {
+      "bindings": ["lwin+control+f", "rwin+control+f"],
+      "commands": ["toggle-fullscreen --maximized=true"]
+    },
+    { "bindings": ["lwin+tab", "rwin+tab"], "commands": ["focus --next-workspace"] },
+    { "bindings": ["lwin+shift+tab", "rwin+shift+tab"], "commands": ["focus --prev-workspace"] },
+    {
+      "bindings": ["lwin+control+tab", "rwin+control+tab"],
+      "commands": ["focus --recent-workspace"]
+    },
+    {
+      "bindings": ["lwin+control+c", "rwin+control+c"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'capture'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+control+q", "rwin+control+q"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'calculator'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+control+t", "rwin+control+t"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'activity'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+control+l", "rwin+control+l"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'lock'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+control+v", "rwin+control+v"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'clipboard'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+control+e", "rwin+control+e"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'emoji'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+control+a", "rwin+control+a"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'audio'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+control+b", "rwin+control+b"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'bluetooth'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+control+d", "rwin+control+d"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'display'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+control+w", "rwin+control+w"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'network'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+control+p", "rwin+control+p"],
+      "commands": [
+        "shell-exec powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"& (Join-Path $env:USERPROFILE '.glzr/glazewm/actions.ps1') -Action 'power'\""
+      ]
+    },
+    {
+      "bindings": ["lwin+control+alt+escape", "rwin+control+alt+escape"],
+      "commands": ["wm-toggle-pause"]
+    },
+    { "bindings": ["lwin+1", "rwin+1"], "commands": ["focus --workspace 1"] },
+    {
+      "bindings": ["lwin+shift+1", "rwin+shift+1"],
+      "commands": ["move --workspace 1", "focus --workspace 1"]
+    },
+    { "bindings": ["lwin+shift+alt+1", "rwin+shift+alt+1"], "commands": ["move --workspace 1"] },
+    { "bindings": ["lwin+2", "rwin+2"], "commands": ["focus --workspace 2"] },
+    {
+      "bindings": ["lwin+shift+2", "rwin+shift+2"],
+      "commands": ["move --workspace 2", "focus --workspace 2"]
+    },
+    { "bindings": ["lwin+shift+alt+2", "rwin+shift+alt+2"], "commands": ["move --workspace 2"] },
+    { "bindings": ["lwin+3", "rwin+3"], "commands": ["focus --workspace 3"] },
+    {
+      "bindings": ["lwin+shift+3", "rwin+shift+3"],
+      "commands": ["move --workspace 3", "focus --workspace 3"]
+    },
+    { "bindings": ["lwin+shift+alt+3", "rwin+shift+alt+3"], "commands": ["move --workspace 3"] },
+    { "bindings": ["lwin+4", "rwin+4"], "commands": ["focus --workspace 4"] },
+    {
+      "bindings": ["lwin+shift+4", "rwin+shift+4"],
+      "commands": ["move --workspace 4", "focus --workspace 4"]
+    },
+    { "bindings": ["lwin+shift+alt+4", "rwin+shift+alt+4"], "commands": ["move --workspace 4"] },
+    { "bindings": ["lwin+5", "rwin+5"], "commands": ["focus --workspace 5"] },
+    {
+      "bindings": ["lwin+shift+5", "rwin+shift+5"],
+      "commands": ["move --workspace 5", "focus --workspace 5"]
+    },
+    { "bindings": ["lwin+shift+alt+5", "rwin+shift+alt+5"], "commands": ["move --workspace 5"] },
+    { "bindings": ["lwin+6", "rwin+6"], "commands": ["focus --workspace 6"] },
+    {
+      "bindings": ["lwin+shift+6", "rwin+shift+6"],
+      "commands": ["move --workspace 6", "focus --workspace 6"]
+    },
+    { "bindings": ["lwin+shift+alt+6", "rwin+shift+alt+6"], "commands": ["move --workspace 6"] },
+    { "bindings": ["lwin+7", "rwin+7"], "commands": ["focus --workspace 7"] },
+    {
+      "bindings": ["lwin+shift+7", "rwin+shift+7"],
+      "commands": ["move --workspace 7", "focus --workspace 7"]
+    },
+    { "bindings": ["lwin+shift+alt+7", "rwin+shift+alt+7"], "commands": ["move --workspace 7"] },
+    { "bindings": ["lwin+8", "rwin+8"], "commands": ["focus --workspace 8"] },
+    {
+      "bindings": ["lwin+shift+8", "rwin+shift+8"],
+      "commands": ["move --workspace 8", "focus --workspace 8"]
+    },
+    { "bindings": ["lwin+shift+alt+8", "rwin+shift+alt+8"], "commands": ["move --workspace 8"] },
+    { "bindings": ["lwin+9", "rwin+9"], "commands": ["focus --workspace 9"] },
+    {
+      "bindings": ["lwin+shift+9", "rwin+shift+9"],
+      "commands": ["move --workspace 9", "focus --workspace 9"]
+    },
+    { "bindings": ["lwin+shift+alt+9", "rwin+shift+alt+9"], "commands": ["move --workspace 9"] },
+    { "bindings": ["lwin+0", "rwin+0"], "commands": ["focus --workspace 10"] },
+    {
+      "bindings": ["lwin+shift+0", "rwin+shift+0"],
+      "commands": ["move --workspace 10", "focus --workspace 10"]
+    },
+    { "bindings": ["lwin+shift+alt+0", "rwin+shift+alt+0"], "commands": ["move --workspace 10"] },
+    { "bindings": ["lwin+left", "rwin+left"], "commands": ["focus --direction left"] },
+    { "bindings": ["lwin+down", "rwin+down"], "commands": ["focus --direction down"] },
+    { "bindings": ["lwin+up", "rwin+up"], "commands": ["focus --direction up"] },
+    { "bindings": ["lwin+right", "rwin+right"], "commands": ["focus --direction right"] },
+    { "bindings": ["lwin+oem_minus", "rwin+oem_minus"], "commands": ["resize --width -100px"] },
+    { "bindings": ["lwin+oem_plus", "rwin+oem_plus"], "commands": ["resize --width +100px"] },
+    {
+      "bindings": ["lwin+shift+oem_minus", "rwin+shift+oem_minus"],
+      "commands": ["resize --height -100px"]
+    },
+    {
+      "bindings": ["lwin+shift+oem_plus", "rwin+shift+oem_plus"],
+      "commands": ["resize --height +100px"]
+    },
+    {
+      "bindings": ["lwin+alt+oem_minus", "rwin+alt+oem_minus"],
+      "commands": ["resize --width -25px"]
+    },
+    {
+      "bindings": ["lwin+alt+oem_plus", "rwin+alt+oem_plus"],
+      "commands": ["resize --width +25px"]
+    },
+    {
+      "bindings": ["lwin+shift+alt+oem_minus", "rwin+shift+alt+oem_minus"],
+      "commands": ["resize --height -25px"]
+    },
+    {
+      "bindings": ["lwin+shift+alt+oem_plus", "rwin+shift+alt+oem_plus"],
+      "commands": ["resize --height +25px"]
+    },
+    {
+      "bindings": ["lwin+control+oem_minus", "rwin+control+oem_minus"],
+      "commands": ["resize --width -300px"]
+    },
+    {
+      "bindings": ["lwin+control+oem_plus", "rwin+control+oem_plus"],
+      "commands": ["resize --width +300px"]
+    },
+    {
+      "bindings": ["lwin+shift+control+oem_minus", "rwin+shift+control+oem_minus"],
+      "commands": ["resize --height -300px"]
+    },
+    {
+      "bindings": ["lwin+shift+control+oem_plus", "rwin+shift+control+oem_plus"],
+      "commands": ["resize --height +300px"]
+    }
+  ],
+  "window_behavior": { "initial_state": "tiling" },
+  "window_rules": [],
+  "workspaces": [
+    { "keep_alive": true, "name": "1" },
+    { "keep_alive": true, "name": "2" },
+    { "keep_alive": true, "name": "3" },
+    { "keep_alive": true, "name": "4" },
+    { "keep_alive": true, "name": "5" },
+    { "keep_alive": true, "name": "6" },
+    { "keep_alive": true, "name": "7" },
+    { "keep_alive": true, "name": "8" },
+    { "keep_alive": true, "name": "9" },
+    { "keep_alive": true, "name": "10" }
+  ]
+}
