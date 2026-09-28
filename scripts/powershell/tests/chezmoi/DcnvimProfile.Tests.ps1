@@ -294,18 +294,17 @@ Describe 'PowerShell codex profile wrapper' {
 }
 
 Describe 'PowerShell VS Code lightweight profile path' {
-    It 'should expose CLI wrappers before the VS Code lightweight return' {
+    It 'should expose CLI wrappers before the VS Code lightweight return without rebuilding PATH' {
         $returnIndex = $script:profileContent.IndexOf('if ($env:VSCODE_PID -or $env:VSCODE_INJECTION) { return }')
         ($returnIndex -ge 0) | Should -BeTrue
 
         $pathIndex = $script:profileContent.IndexOf('$env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine")')
         $codexAliasIndex = $script:profileContent.IndexOf('Set-Alias -Name codex -Value Invoke-CodexCli')
 
-        ($pathIndex -ge 0) | Should -BeTrue
+        ($pathIndex -ge 0) | Should -BeFalse
         ($codexAliasIndex -ge 0) | Should -BeTrue
         $script:profileContent | Should -Not -Match 'function claude'
 
-        $pathIndex | Should -BeLessThan $returnIndex
         $codexAliasIndex | Should -BeLessThan $returnIndex
     }
 }

@@ -19,10 +19,6 @@ if (-not $env:TEMP -or $env:TEMP -eq $env:USERPROFILE) { $env:TEMP = Join-Path $
 if (-not $env:TMP) { $env:TMP = $env:TEMP }
 if (-not $env:TERM -or $env:TERM -eq "dumb") { $env:TERM = "xterm-256color" }
 
-# Rebuild PATH from registry to ensure User PATH is available in elevated sessions.
-# Windows Terminal with "elevate: true" may not inherit User-scope PATH entries.
-$env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH", "User")
-
 # Tell snacks.nvim to use WezTerm's Kitty graphics protocol for image preview.
 $env:SNACKS_WEZTERM = "true"
 
