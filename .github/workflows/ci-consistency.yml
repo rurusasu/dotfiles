@@ -98,8 +98,8 @@ jobs:
       - name: Verify persisted pnpm build permissions
         shell: bash
         run: |
-          nix shell nixpkgs#nodejs --command bash -euo pipefail -c '
+          nix shell nixpkgs#nodejs --command bash -euo pipefail <<'PNPM_TEST'
             prefix="$RUNNER_TEMP/pnpm-permissions"
             npm install --global --prefix "$prefix" --no-audit --no-fund pnpm@12.6.0
             PNPM_TEST_EXECUTABLE="$prefix/bin/pnpm" node tests/runtime/pnpm-build-permissions.mjs
-          '
+          PNPM_TEST
