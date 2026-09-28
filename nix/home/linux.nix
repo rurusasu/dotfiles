@@ -15,7 +15,7 @@ in
     ./hermes-agent.nix
   ];
 
-  home.packages = sets.all;
+  home.packages = sets.allWithout sets.nativeDesktopPackageNames;
 
   programs.zsh.shellAliases = {
     nrs = "~/.dotfiles/install.sh";

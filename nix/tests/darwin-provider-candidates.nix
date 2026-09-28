@@ -10,12 +10,10 @@ in
     expected = {
       registryKeys = [
         "dia-browser"
-        "hammerspoon"
         "orca-editor"
       ];
       candidateValues = {
         dia-browser = [ "dia-browser" ];
-        hammerspoon = [ "hammerspoon" ];
         orca-editor = [ "orca-editor" ];
       };
     };

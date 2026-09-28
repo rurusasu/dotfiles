@@ -893,13 +893,13 @@ esac
         $workflow | Should -Match 'runs-on:\s+macos-15'
         $workflow | Should -Match "Install-Module -Name Pester -RequiredVersion '5\.6\.1'"
         $workflow | Should -Match '(?s)Invoke-Tests\.ps1.*?-MinimumCoverage 0'
-        $workflow | Should -Match 'brew install bash coreutils go-task lua'
+        $workflow | Should -Match 'brew install bash coreutils go-task'
         $workflow | Should -Match 'nix build \.\#darwinConfigurations\.macos\.system --impure --no-link'
         $workflow | Should -Match 'runtime=not-applicable-on-github-hosted-runner'
         $workflow | Should -Not -Match 'runs-on:\s*\[?self-hosted'
     }
 
-    It 'should run Hammerspoon syntax and behavioral contracts in the required macOS job' {
+    It 'should run POSIX adapter contracts in the required macOS job' {
         $workflowPath = Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml'
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
         $macosJob = [regex]::Match(
@@ -908,17 +908,14 @@ esac
         ).Value
 
         $macosJob | Should -Not -BeNullOrEmpty
-        $macosJob | Should -Match 'brew install bash coreutils go-task lua'
+        $macosJob | Should -Match 'brew install bash coreutils go-task'
         $macosJob | Should -Not -Match 'bash scripts/sh/.*wezterm.*nightly'
-        $macosJob | Should -Match 'command -v lua'
-        $macosJob | Should -Match 'command -v luac'
         $macosJob | Should -Match 'env -u DOTFILES_SKIP_FLAKE_UPDATE -u DOTFILES_USER'
-        $macosJob | Should -Match 'luac -p chezmoi/terminals/hammerspoon/init\.lua'
-        $macosJob | Should -Match 'lua tests/lua/hammerspoon_terminal_prefix_test\.lua'
+        $macosJob | Should -Match 'bats --print-output-on-failure tests/bash'
         $macosJob | Should -Not -Match 'continue-on-error:\s*true'
-        $macosJob | Should -Not -Match '(?:command -v (?:lua|luac).*(?:\|\| true)|if\s+command -v (?:lua|luac))'
-        $macosJob.IndexOf('brew install bash bats-core coreutils go-task lua') |
-            Should -BeLessThan $macosJob.IndexOf('luac -p chezmoi/terminals/hammerspoon/init.lua')
+        $macosJob.IndexOf('"$bats_prefix/bin/bats" --version') | Should -BeGreaterThan -1
+        $macosJob.IndexOf('"$bats_prefix/bin/bats" --version') |
+            Should -BeLessThan $macosJob.IndexOf('bats --print-output-on-failure tests/bash')
     }
 
     It 'should install chezmoi before every Windows job that runs chezmoi template tests' {

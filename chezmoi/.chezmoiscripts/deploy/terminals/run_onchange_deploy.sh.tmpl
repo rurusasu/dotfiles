@@ -1,23 +1,11 @@
 {{ if ne .chezmoi.os "windows" -}}
 #!/usr/bin/env bash
 # Deploy terminal configurations for Linux/macOS
-# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/ghostty/config" | sha256sum }}{{ if eq .chezmoi.os "darwin" }}{{ include "terminals/hammerspoon/init.lua" | sha256sum }}{{ end }}
+# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/ghostty/config" | sha256sum }}
 
 set -euo pipefail
 
-CHEZMOI_SOURCE="${CHEZMOI_SOURCE_DIR:-$HOME/.local/share/chezmoi}"
 HOME_DIR="${HOME:-/home/$(whoami)}"
-
-deploy_file() {
-  local src="$1"
-  local dst="$2"
-
-  if [[ -f "$src" ]]; then
-    mkdir -p "$(dirname "$dst")"
-    cp -f "$src" "$dst"
-    echo "Deployed: $dst"
-  fi
-}
 
 deploy_content() {
   local content="$1"
@@ -37,9 +25,6 @@ deploy_content "$(cat <<'EOF'
 {{ includeTemplate "terminals/ghostty/config" . }}
 EOF
 )" "${XDG_CONFIG_HOME:-$HOME_DIR/.config}/ghostty/config"
-{{ if eq .chezmoi.os "darwin" -}}
-deploy_file "$CHEZMOI_SOURCE/terminals/hammerspoon/init.lua" "$HOME_DIR/.hammerspoon/init.lua"
-{{ end -}}
 
 echo "Terminal configurations deployed."
 {{ end -}}

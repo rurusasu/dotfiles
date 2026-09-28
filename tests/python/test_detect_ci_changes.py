@@ -27,6 +27,11 @@ OUTPUTS = {
     "package_catalog",
 }
 CASES = {
+    "chezmoi/dot_glzr/glazewm/config.json": {"windows", "wsl", "contract", "nix", "chezmoi", "package_catalog"},
+    "nix/checks/aerospace-cycle.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/home/keybindings/bindings.nix": {"linux", "darwin", "windows", "wsl", "contract", "nix", "chezmoi", "package_catalog"},
+    "nix/home/keybindings/hyprland.nix": {"linux", "darwin", "windows", "wsl", "contract", "nix", "chezmoi", "package_catalog"},
+    "nix/hosts/windows/omarchy-keybindings.nix": {"windows", "wsl", "contract", "nix", "chezmoi", "package_catalog"},
     "nix/packages/sets.nix": {
         "linux",
         "darwin",
@@ -152,6 +157,10 @@ CASES = {
     },
 }
 BOOTSTRAP_CASES = {
+    "chezmoi/dot_glzr/glazewm/config.json": {"windows", "wsl", "contract"},
+    "nix/checks/aerospace-cycle.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/home/keybindings/bindings.nix": {"linux", "darwin", "windows", "wsl", "contract", "nix"},
+    "nix/hosts/windows/omarchy-keybindings.nix": {"windows", "wsl", "contract", "nix"},
     "windows/winget/packages.json": {"windows", "contract"},
     "nix/hosts/darwin/default.nix": {"darwin", "contract", "nix"},
     "nix/hosts/linux/configuration.nix": {"linux", "contract", "nix"},

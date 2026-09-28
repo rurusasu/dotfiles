@@ -14,7 +14,7 @@
 .\install.cmd
 ```
 
-chezmoi のパッケージは `nix/packages/sets.nix` の catalog で管理します。共通 Nix パッケージは `nix/home/common.nix` が利用し、Windows は生成済み winget manifest を使います。
+chezmoi のパッケージは `nix/packages/catalog/core.nix` で管理し、`nix/packages/sets.nix` を公開入口にします。共通 Nix パッケージは `nix/home/common.nix` が利用し、Windows は生成済み winget manifest を使います。配布と設定の変更理由を分ける方針は [パッケージ管理](../nix/package-management.md#分割の理由と編集先) を参照してください。
 
 ## クローン済み設定の更新
 

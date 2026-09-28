@@ -13,6 +13,7 @@ let
   gid = if isNumericId gidText then lib.toInt gidText else null;
 in
 {
+  imports = [ ./omarchy-keybindings.nix ];
   assertions = [
     {
       assertion = uidText == "" || isNumericId uidText;

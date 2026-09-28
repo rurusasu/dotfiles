@@ -23,6 +23,21 @@ INSTALL_NIX_ACTION = "cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb
 class CiWorkflowRoutingContractTests(unittest.TestCase):
     """Keep the lightweight CI workflow's trigger and tool contracts stable."""
 
+    def test_workspace_cycle_runtime_check_runs_in_local_and_hosted_nix_jobs(self) -> None:
+        taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
+        self.assertIn('.#checks.${system}.aerospace-workspace-cycle', taskfile)
+        consistency = self._named_workflow("ci-consistency.yml")
+        bootstrap = self._named_workflow("ci-bootstrap.yml")
+        self.assertIn('.#checks.x86_64-linux.aerospace-workspace-cycle', consistency)
+        for system in ("x86_64-linux", "aarch64-darwin"):
+            self.assertIn(f'.#checks.{system}.aerospace-workspace-cycle', bootstrap)
+
+    def test_generated_windows_keybindings_have_local_and_hosted_drift_checks(self) -> None:
+        consistency = self._named_workflow("ci-consistency.yml")
+        self.assertIn(".#checks.x86_64-linux.windows-keybindings-generated", consistency)
+        taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
+        self.assertIn("task: keybindings:check", taskfile)
+
     def _workflow(self) -> str:
         self.assertTrue(WORKFLOW_PATH.is_file(), f"missing workflow: {WORKFLOW_PATH}")
         return WORKFLOW_PATH.read_text(encoding="utf-8")

@@ -1,0 +1,5 @@
+{{ if eq .chezmoi.os "windows" -}}
+# hash: {{ include "dot_glzr/glazewm/config.json" | sha256sum }}{{ include "dot_glzr/glazewm/actions.ps1" | sha256sum }}{{ include "dot_glzr/glazewm/start-glazewm.ps1" | sha256sum }}{{ include "dot_glzr/glazewm/keybindings.txt" | sha256sum }}
+$ErrorActionPreference = 'Stop'
+& (Join-Path $env:USERPROFILE '.glzr/glazewm/start-glazewm.ps1') -DeferMissing
+{{ end -}}

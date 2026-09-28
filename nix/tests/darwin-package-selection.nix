@@ -35,13 +35,28 @@ let
     inherit (pkgs) lib;
     codexPackage = pkgs.hello;
   };
+  customFallbackSets = import ../packages/sets.nix {
+    inherit pkgs;
+    inherit (pkgs) lib;
+    catalogOverride = import ../packages/catalog/desktop.nix (
+      (import ../packages/catalog/context.nix { inherit pkgs; })
+      // {
+        inherit pkgs;
+        inherit (pkgs) lib;
+        selectDarwinPackage = _: customPackage: customPackage;
+        darwinProviderCandidate = _: {
+          source = "custom";
+          nixAttr = null;
+        };
+      }
+    );
+  };
   contains = package: packages: builtins.elem package packages;
   defaultSystem = sets.darwinSystemPackagesForInstallFeatures [ ];
   defaultHome = sets.darwinHomePackagesForInstallFeatures [ ];
   enabledSystem = sets.darwinSystemPackagesForInstallFeatures [ "WithGui" ];
   enabledHome = sets.darwinHomePackagesForInstallFeatures [ "WithGui" ];
   promotedDarwinGuiPackages = {
-    hammerspoon = pkgs.callPackage ../packages/hammerspoon { };
     diaBrowser = pkgs.callPackage ../packages/dia-browser { };
     orcaEditor = pkgs.callPackage ../packages/orca-editor { };
   };
@@ -86,10 +101,6 @@ in
       home = containsDerivation package (catalogSets.darwinHomePackagesForInstallFeatures [ ]);
     }) promotedDarwinGuiPackages;
     expected = {
-      hammerspoon = {
-        system = true;
-        home = false;
-      };
       diaBrowser = {
         system = true;
         home = false;
@@ -104,5 +115,35 @@ in
   testRaycastCatalogDerivationIsSelectedForDarwinSystem = {
     expr = containsDerivation pkgs.raycast (catalogSets.darwinSystemPackagesForInstallFeatures [ ]);
     expected = true;
+  };
+
+  testDarwinCustomProviderFallbacksResolveVendorDerivations = {
+    expr = map (package: package.drvPath) (
+      customFallbackSets.resolveForInstallFeatures
+        [ ]
+        [
+          "dia-browser"
+          "orca-editor"
+        ]
+    );
+    expected = [
+      promotedDarwinGuiPackages.diaBrowser.drvPath
+      promotedDarwinGuiPackages.orcaEditor.drvPath
+    ];
+  };
+
+  testDarwinTerminalGuiPackagesUseNativeWindowManagerAndTerminals = {
+    expr = builtins.sort builtins.lessThan (
+      map (package: package.pname) (
+        builtins.filter (package: containsDerivation package catalogSets.terminal) (
+          catalogSets.darwinSystemPackagesForInstallFeatures [ ]
+        )
+      )
+    );
+    expected = [
+      "aerospace"
+      "ghostty-bin"
+      "wezterm"
+    ];
   };
 }

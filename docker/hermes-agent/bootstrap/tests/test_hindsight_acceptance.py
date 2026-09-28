@@ -682,7 +682,10 @@ class HindsightAcceptanceTests(unittest.TestCase):
             timeout=300,
             provider_factory=world.factory,
         ) as (provider, bank):
-            self.assertEqual(provider.hermes_config, "memory:\n  provider: hindsight\n")
+            self.assertEqual(
+                provider.hermes_config,
+                "memory:\n  provider: hindsight\nsecurity:\n  allow_lazy_installs: false\n",
+            )
             self.assertEqual(
                 bank,
                 "test-hermes-default-0123456789abcdef0123456789abcdef",
@@ -709,9 +712,7 @@ class HindsightAcceptanceTests(unittest.TestCase):
                     provider_factory=lambda: None,
                     token_hex=TokenSource(),
                 )
-            self.assertEqual(
-                os.environ.get("HERMES_HOME"), "/tmp/original-hermes-home"
-            )
+            self.assertEqual(os.environ.get("HERMES_HOME"), "/tmp/original-hermes-home")
         finally:
             if original_home is None:
                 os.environ.pop("HERMES_HOME", None)

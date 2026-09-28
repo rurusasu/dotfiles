@@ -6,10 +6,14 @@ Codex CLI は Windows、WSL/NixOS、macOS のすべてで npm の
 `@openai/codex` を使用する。Nix の package catalog には CLI の derivation を
 登録せず、Nix は `nodejs`/`npm` を提供する責務に限定する。
 
-Windows は `windows/npm/packages.json` を `nix/packages/sets.nix` から生成し、
+Windows は `nix/packages/install/node.nix` の npm metadata を
+`nix/packages/sets.nix` 経由で `windows/npm/packages.json` に生成し、
 `Handler.Npm.ps1` がグローバルインストールと `codex --version` を検証する。
 Linux、WSL、macOS は `scripts/sh/codex-npm.sh` を使い、
 `$HOME/.local/npm` にユーザー権限でインストールする。
+
+Node の配布 metadata は package/provider 選択と変更理由が異なるため `install/` に分離します。
+責務境界は [パッケージ管理の分割方針](./package-management.md#分割の理由と編集先) を参照してください。
 
 Codex のデスクトップアプリは別製品であり、Microsoft Store の AppX
 `9PLM9XGG6VKS` として管理する。これは npm の Codex CLI とは統合しない。

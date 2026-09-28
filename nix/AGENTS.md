@@ -11,8 +11,15 @@
 - ホスト固有: `nix/hosts/`
 - 再利用モジュール: `nix/modules/`
 - Home Manager: `nix/home/`
-- パッケージ SSOT: `nix/packages/sets.nix`
+- パッケージ SSOT: `nix/packages/catalog/`（カテゴリ別に単一定義）
+- provider 選択・検証: `nix/packages/providers/`、installer metadata: `nix/packages/install/`
+- パッケージの公開入口: `nix/packages/sets.nix`（既存 API を保つ合成だけ）
+- 共通キー配列・設定生成関数・ユーザー設定: `nix/home/keybindings/`。host 配下には OS の service/有効化・競合解除を置く。純粋な関数を Home Manager module の imports に渡さない
 - flake wiring: `nix/flakes/`
+
+データ、provider 選択、配布 metadata、host 動作は変更理由が異なるため分離する。
+SSOT を巨大な 1 ファイルと解釈しない。詳細は [分割の理由と編集先](../docs/nix/package-management.md#分割の理由と編集先)。
+キー配列も同じ境界で分割する。native NixOS と WSL を同じデスクトップとして扱わない。詳細は [対応範囲](../docs/chezmoi/omarchy.md)。
 
 ## 実行
 

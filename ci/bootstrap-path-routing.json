@@ -90,6 +90,18 @@
       "outputs": ["linux"]
     },
     {
+      "patterns": ["nix/checks/**"],
+      "outputs": ["linux", "darwin"]
+    },
+    {
+      "patterns": ["nix/home/keybindings/**"],
+      "outputs": ["linux", "darwin", "windows", "wsl"]
+    },
+    {
+      "patterns": ["nix/hosts/windows/**", "chezmoi/dot_glzr/**"],
+      "outputs": ["windows", "wsl"]
+    },
+    {
       "patterns": ["nix/home/common.nix"],
       "outputs": ["linux", "darwin", "wsl"]
     },

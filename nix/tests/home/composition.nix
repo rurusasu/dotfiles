@@ -83,6 +83,36 @@ let
     };
 in
 {
+  testHeadlessHomesDoNotEnableNativeCompositor = {
+    expr =
+      map
+        (home: {
+          enabled = home.config.wayland.windowManager.hyprland.enable;
+          desktopPackages = builtins.filter (
+            name:
+            builtins.elem name [
+              "hyprland"
+              "fuzzel"
+              "firefox"
+              "nautilus"
+            ]
+          ) (map (package: package.pname or package.name) home.config.home.packages);
+        })
+        [
+          linux
+          wsl
+        ];
+    expected = [
+      {
+        enabled = false;
+        desktopPackages = [ ];
+      }
+      {
+        enabled = false;
+        desktopPackages = [ ];
+      }
+    ];
+  };
   testCommonHomeModuleEvaluatesWithoutOSSpecialArgs = {
     expr = common.config.home.username;
     expected = "test-user";
@@ -143,10 +173,13 @@ in
       expectedCatalogDrvPaths = builtins.sort builtins.lessThan (
         pkgs.lib.unique (
           builtins.map (package: package.drvPath) (
-            sets.allWithout [
-              "discord"
-              "ollama"
-            ]
+            sets.allWithout (
+              sets.nativeDesktopPackageNames
+              ++ [
+                "discord"
+                "ollama"
+              ]
+            )
           )
         )
       );
@@ -234,18 +267,17 @@ in
     in
     {
       expr = {
-        hammerspoon = {
+        aerospace = {
           inTerminal = builtins.any (
-            package: (package.pname or null) == "hammerspoon"
+            package: (package.pname or null) == "aerospace"
           ) darwinPackageSets.sets.terminal;
           darwin = {
-            provider = report.hammerspoon.darwin.provider;
-            source = report.hammerspoon.darwin.source;
-            appName = report.hammerspoon.darwin.identity.appName;
-            legacyName = report.hammerspoon.legacyDarwin.name;
+            provider = report.aerospace.darwin.provider;
+            source = report.aerospace.darwin.source;
+            appName = report.aerospace.darwin.identity.appName;
           };
-          linuxUnsupported = report.hammerspoon.linux.unsupported;
-          windowsUnsupported = report.hammerspoon.windows.unsupported;
+          linuxUnsupported = report.aerospace.linux.unsupported;
+          windowsUnsupported = report.aerospace.windows.unsupported;
         };
         autohotkey = {
           wingetId = darwinPackageSets.sets.wingetMap.autohotkey;
@@ -259,16 +291,15 @@ in
         };
       };
       expected = {
-        hammerspoon = {
+        aerospace = {
           inTerminal = true;
           darwin = {
             provider = "nix";
-            source = "custom";
-            appName = "Hammerspoon.app";
-            legacyName = "hammerspoon";
+            source = "nixpkgs";
+            appName = "AeroSpace.app";
           };
-          linuxUnsupported = "Hammerspoon is only available on macOS";
-          windowsUnsupported = "Hammerspoon is only available on macOS";
+          linuxUnsupported = "AeroSpace is only available on macOS";
+          windowsUnsupported = "AeroSpace is only available on macOS";
         };
         autohotkey = {
           wingetId = "AutoHotkey.AutoHotkey";

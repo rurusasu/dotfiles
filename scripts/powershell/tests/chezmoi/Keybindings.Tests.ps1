@@ -86,7 +86,6 @@ Describe '標準キーバインド方針' {
         $docs = Get-Content -Encoding UTF8 -LiteralPath $script:keybindingsDocsPath -Raw
         $expectations = [ordered]@{
             'Ctrl\+Space Ctrl\+Space'               = 'nested prefix should be documented'
-            'Hammerspoon.*com\.apple\.Terminal.*1秒' = 'Terminal.app adapter scope and timeout should be explicit'
             'AutoHotkey.*WindowsTerminal\.exe.*1秒'  = 'Windows Terminal adapter scope and timeout should be explicit'
             'tmux.*Workspace=Session.*Tab=Window'   = 'tmux capability aliases should be explicit'
         }
@@ -128,15 +127,6 @@ Describe '標準キーバインド方針' {
             @{
                 Target       = 'WezTerm'
                 Capabilities = [ordered]@{ Workspace = '対応'; Tab = '対応'; Pane = '対応'; Session = '対応' }
-            },
-            @{
-                Target       = 'Terminal.app'
-                Capabilities = [ordered]@{
-                    Workspace = '非対応 (no-op)'
-                    Tab       = '対応'
-                    Pane      = '`v` / `x` のみ対応、ほかは no-op'
-                    Session   = '非対応 (no-op)'
-                }
             },
             @{
                 Target       = 'Windows Terminal'
@@ -387,32 +377,6 @@ Describe '標準キーバインド方針' {
         $content | Should -Match '\{ key = "Backspace", mods = "LEADER", action = act\.SendKey\(\{ key = "Backspace" \}\) \}'
     }
 
-    It 'should provide the Terminal.app prefix adapter contract' {
-        $path = Join-Path $script:chezmoiRoot 'terminals/hammerspoon/init.lua'
-
-        Test-Path -LiteralPath $path -PathType Leaf | Should -BeTrue
-        $content = Get-Content -Encoding UTF8 -LiteralPath $path -Raw
-
-        $content | Should -Match 'com\.apple\.Terminal'
-        $content | Should -Match 'hs\.timer\.doAfter\(1\s*,'
-        $content | Should -Match 'send\(\{ "cmd" \}, "t"'
-        $content | Should -Match 'send\(\{ "cmd" \}, "w"'
-        $content | Should -Match 'send\(\{ "ctrl" \}, "tab"'
-        $content | Should -Match 'send\(\{ "ctrl", "shift" \}, "tab"'
-        $content | Should -Match 'send\(\{ "cmd" \}, "d"'
-        $content | Should -Match 'send\(\{ "cmd", "shift" \}, "d"'
-        $content | Should -Match 'hs\.eventtap\.keyStroke\(mods, key, 0\)'
-        $content | Should -Match 'string\.char\(0x19\)'
-        $content | Should -Match 'hasExactModifiers'
-        $content | Should -Match 'hs\.eventtap\.event\.newKeyEventSequence\(\{ "ctrl" \}, "space"\)'
-        $content | Should -Not -Match 'forwardingPrefix'
-        $content | Should -Not -Match 'hs\.timer\.doAfter\(0'
-        $content | Should -Match '(?s)frontmostApplication\(\).*?bundleID\(\) ~= terminalBundleId.*?resetPrefix\(\).*?return false'
-        $content | Should -Match '(?s)local action = nil.*?hasExactModifiers\(flags, noModifiers\).*?suffixActions\[key\].*?backTabCharacter.*?hasExactModifiers\(flags, shiftOnly\).*?suffixActions\.shift_tab.*?resetPrefix\(\)\s*if\s+action\s+then\s+action\(\)\s+end\s*return true'
-        $content | Should -Match 'hs\.accessibilityState\(\)'
-        $content | Should -Match '(?s)if hs\.accessibilityState\(\) then\s*terminalPrefixTap:start\(\)\s*else\s*hs\.alert\.show'
-        $content | Should -Match 'hs\.autoLaunch\(true\)'
-    }
 
     It 'Warp keybindings are no longer managed' {
         Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "terminals/warp/keybindings.yaml") | Should -BeFalse

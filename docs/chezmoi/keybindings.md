@@ -1,6 +1,6 @@
 # キーバインド統一方針
 
-`chezmoi` で管理する `shells` / `editors` / `terminals` のキー設計方針。
+Nix で管理するデスクトップ配列と、`chezmoi` で管理する `shells` / `editors` / `terminals` のキー設計方針。
 
 ## 目的
 
@@ -25,6 +25,22 @@
 
 ## 現在の適用状況
 
+### デスクトップ（Omarchy 配列）
+
+配置方針は `nix/home/keybindings/bindings.nix` に action とキーを一度だけ定義し、同じ home 配下で
+macOS の AeroSpace、native NixOS の Hyprland、Windows の GlazeWM の設定を生成する。
+`nix/hosts/` は OS のサービス・セッション有効化と競合解除に限定する。
+責務・未対応の操作は [共通定義と OS 別実装](./omarchy.md) を参照。
+WSL guest に Hyprland は導入しない。Windows は Windows キーを Super とし、GlazeWM で
+デスクトップ全体の操作を扱う。Nix 生成済み設定を chezmoi で配布するため、Windows の適用時に Nix は不要。
+
+macOS は nix-darwin の AeroSpace サービスで管理し、Super=Command とする。
+⌘F・⌘T・⌘S・⌘数字・⌘Tab などはデスクトップ操作がアプリ標準キーより優先する。
+配列、macOS での代替動作、初回権限設定と回復方法は
+[Omarchy macOS](./omarchy-macos.md) を参照。native NixOS は Super キーを使い、
+Hyprland セッションで動作する設定。Windows は [GlazeWM の運用と差異](./omarchy.md#windows-デスクトップの運用) を参照。
+これらはターミナル内の prefix 契約とは別の層であり、各 OS の実際のキー入力は未検証。
+
 ### Terminals
 
 terminal Window Manager の共通 prefix は `Ctrl+Space`。prefix に続けて、次の共通 suffix を入力する。
@@ -45,26 +61,18 @@ terminal Window Manager の共通 prefix は `Ctrl+Space`。prefix に続けて�
 
 target ごとの capability は次のとおり。非対応 suffix は別のキーへフォールバックせず no-op として消費する。
 
-| target           | Workspace                | Tab               | Pane                             | Session        |
-| ---------------- | ------------------------ | ----------------- | -------------------------------- | -------------- |
-| WezTerm          | 対応                     | 対応              | 対応                             | 対応           |
-| Terminal.app     | 非対応 (no-op)           | 対応              | `v` / `x` のみ対応、ほかは no-op | 非対応 (no-op) |
-| Windows Terminal | Workspace 非対応 (no-op) | 対応              | 対応                             | 非対応 (no-op) |
-| tmux             | 対応 (Workspace=Session) | 対応 (Tab=Window) | 対応                             | 対応           |
-| Herdr            | 対応                     | 対応              | 対応                             | 対応           |
+| target           | Workspace                | Tab               | Pane | Session        |
+| ---------------- | ------------------------ | ----------------- | ---- | -------------- |
+| WezTerm          | 対応                     | 対応              | 対応 | 対応           |
+| Windows Terminal | Workspace 非対応 (no-op) | 対応              | 対応 | 非対応 (no-op) |
+| tmux             | 対応 (Workspace=Session) | 対応 (Tab=Window) | 対応 | 対応           |
+| Herdr            | 対応                     | 対応              | 対応 | 対応           |
 
 - WezTerm は組み込み leader を使い、prefix timeout は1秒。
-- Terminal.app は Hammerspoon adapter が前面の `com.apple.Terminal` だけを対象にし、prefix timeout は1秒。Workspace、Session、上下分割 (`-`)、方向 pane focus (`h/j/k/l`) は no-op。
+- Terminal.app は共通 prefix の対象外とし、標準のキー操作を使用する。デスクトップ全体の Omarchy 配列は AeroSpace、ターミナル内の共通操作は WezTerm の組み込み leader が担当するため、Terminal.app 専用の常駐 adapter は導入しない。
 - Windows Terminal は AutoHotkey v2 adapter が前面の `WindowsTerminal.exe` だけを対象にし、prefix timeout は1秒。Workspace / Session は非対応で no-op。
 - tmux と Herdr は各アプリの native prefix/key table を使う。tmux では Workspace=Session、Tab=Window として扱う。
 - nested terminal では `Ctrl+Space Ctrl+Space` を押すと内側へ `Ctrl+Space` を1回だけ転送する。その後に共通 suffix を入力することで、内側の tmux/Herdr を操作できる。
-
-Hammerspoon の初回設定は次の順で行う。
-
-1. `open -a Hammerspoon` で Hammerspoon を一度起動する。
-2. macOS の「システム設定」→「プライバシーとセキュリティ」→「アクセシビリティ」で Hammerspoon を許可する。
-3. 許可後、Hammerspoon のメニューバーアイコンから `Reload Config` を実行する。
-4. Terminal.app を前面にして `Ctrl+Space n` で新規 tab が開くこと、Terminal.app 以外では同じ入力が捕捉されないことを確認する。
 
 Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢印` pane resize、macOS の `Command+Alt+H/L` window focus、Windows/Linux の `Alt+Shift+H/L` window focus と `Alt+Shift+矢印` pane resize、`Ctrl+Alt+W` pane zoom が該当する。WezTerm の `Shift+Enter` と Windows Terminal の `Shift+Enter` / `Ctrl+Enter` も複数行入力用として維持する。
 

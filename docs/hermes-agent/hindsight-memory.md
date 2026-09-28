@@ -9,6 +9,13 @@ Hindsight は Hermes から独立したホスト共通の永続メモリサー�
 `ollama-chat-default` と `ollama-embedding-default` を `local-ai-services` 経由で使い、
 MLflow だけが設定済み provider として native host Ollama に接続します。
 
+Docker 版 Hermes の memory provider はイメージの build 時に用意します。本体に
+同梱されている場合はそのまま使い、別配布の場合は同じ Hermes イメージの
+`plugin-catalog/hindsight.yaml` が指定する repository・commit・subdirectory から
+導入します。dotfiles 側で別の provider revision を重複管理せず、runtime の
+遅延インストールにも依存しません。build と受入テストでは実際の provider discovery
+を検証し、見つからない場合は失敗させます。
+
 Hindsight のイメージは
 `ghcr.io/vectorize-io/hindsight:0.9.1@sha256:a0e937366261b8a8f20ebcaf13758c689c381dcbbf01684e4375c2787c8c666d`
 に固定されています。API と UI はホストの loopback にのみ公開され、内蔵

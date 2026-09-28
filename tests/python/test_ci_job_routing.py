@@ -125,6 +125,10 @@ class CiJobRoutingTests(unittest.TestCase):
         for path in (
             "nix/tests/packages/catalog.nix",
             "nix/tests/packages/custom-builds.nix",
+            "nix/hosts/windows/omarchy-keybindings.nix",
+            "nix/home/keybindings/windows-actions.ps1",
+            "chezmoi/dot_glzr/glazewm/config.json",
+            "taskfiles/nix/taskfile.yml",
         ):
             with self.subTest(path=path):
                 self.assertIn("package_catalog", self.selected(path))
