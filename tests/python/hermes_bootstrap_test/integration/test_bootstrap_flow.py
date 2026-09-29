@@ -137,7 +137,7 @@ def source_config(key: str, value: str) -> str:
         "    connect_timeout: 300\n"
         "  calendar:\n"
         "    command: npx\n"
-        "    args: [--yes, --package, @cocal/google-calendar-mcp@2.6.2, google-calendar-mcp]\n"
+        '    args: [--yes, --package, "@cocal/google-calendar-mcp@2.6.2", google-calendar-mcp]\n'
         "    connect_timeout: 300\n"
         "    env:\n"
         "      GOOGLE_OAUTH_CREDENTIALS: /opt/data/google-calendar-mcp/gcp-oauth.keys.json\n"
@@ -497,6 +497,14 @@ class BootstrapFlowTests(unittest.TestCase):
                 *(f"  - {path}" for path in owned),
                 "",
             ]
+        )
+
+    def test_source_config_is_valid_yaml_with_a_quoted_npm_scope(self) -> None:
+        parsed = yaml.safe_load(source_config("root", "initial"))
+
+        self.assertEqual(
+            parsed["mcp_servers"]["calendar"]["args"],
+            ["--yes", "--package", "@cocal/google-calendar-mcp@2.6.2", "google-calendar-mcp"],
         )
 
     @staticmethod

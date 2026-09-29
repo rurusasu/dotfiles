@@ -270,7 +270,7 @@ class AppTests(unittest.TestCase):
             "    args:\n"
             "      - --yes\n"
             "      - --package\n"
-            "      - @cocal/google-calendar-mcp@2.6.2\n"
+            '      - "@cocal/google-calendar-mcp@2.6.2"\n'
             "      - google-calendar-mcp\n"
             "    connect_timeout: 300\n"
             "    env:\n"
@@ -281,7 +281,7 @@ class AppTests(unittest.TestCase):
             "    args:\n"
             "      - --yes\n"
             "      - --package\n"
-            "      - @artymclabin/gmail-mcp@1.2.3\n"
+            '      - "@artymclabin/gmail-mcp@1.2.3"\n'
             "      - gmail-mcp\n"
             "    connect_timeout: 300\n"
             "    env:\n"
@@ -2340,6 +2340,7 @@ class AppTests(unittest.TestCase):
     def test_runtime_config_targets_include_existing_unmanaged_profiles(self) -> None:
         from hermes_bootstrap import app
 
+        (self.root / "config.yaml").write_text("model: root\n", encoding="utf-8")
         managed = self.root / "profiles" / "rick"
         managed.mkdir(parents=True)
         (managed / "config.yaml").write_text("model: managed\n", encoding="utf-8")
@@ -2362,6 +2363,8 @@ class AppTests(unittest.TestCase):
         for scenario in ("symlink", "directory", "fifo", "hardlink"):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp).resolve() / "data"
+                root.mkdir()
+                (root / "config.yaml").write_text("model: root\n", encoding="utf-8")
                 profile = root / "profiles" / "personal-ops"
                 profile.mkdir(parents=True)
                 config = profile / "config.yaml"
@@ -2417,6 +2420,7 @@ class AppTests(unittest.TestCase):
     def test_installed_layout_validates_hindsight_before_environment_files(self) -> None:
         from hermes_bootstrap import app
 
+        self.write_valid_layout()
         events: list[str] = []
         with (
             mock.patch.object(app, "_require_safe_directory"),
