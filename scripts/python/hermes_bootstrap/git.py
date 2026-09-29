@@ -33,7 +33,7 @@ _MAX_GIT_DIRECT_WAIT_ATTEMPTS = 2
 _MAX_GIT_REAP_ATTEMPTS = 32
 _MAX_GIT_REAPS_PER_ATTEMPT = 64
 _PR_SET_CHILD_SUBREAPER = 36
-_GIT_EXECUTABLE = "/usr/bin/git"
+_GIT_EXECUTABLE = os.path.realpath(shutil.which("git") or "/usr/bin/git")
 _OBJECT_ID = re.compile(r"[0-9a-fA-F]{40,64}\Z")
 _GITHUB_OWNER_REPOSITORY_PATH = re.compile(
     r"/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"
@@ -345,7 +345,7 @@ def _run_git_bytes(
 
 
 def _trusted_git_executable(environment: dict[str, str]) -> str | None:
-    """Use only the root-owned Git executable installed in the pinned image."""
+    """Use only the root-owned Git executable resolved by the managed runtime."""
 
     del environment
     executable = Path(_GIT_EXECUTABLE)

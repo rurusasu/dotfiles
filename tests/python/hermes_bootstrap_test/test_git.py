@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import errno
+import shutil
 import signal
 import stat
 import subprocess
@@ -54,6 +55,12 @@ class GitStagingTests(unittest.TestCase):
         git("commit", "-m", "initial", cwd=self.checkout)
         git("branch", "-M", "main", cwd=self.checkout)
         git("push", "-u", "origin", "main", cwd=self.checkout)
+
+    def test_git_executable_uses_the_managed_runtime_path(self) -> None:
+        resolved_git = shutil.which("git")
+
+        self.assertIsNotNone(resolved_git)
+        self.assertEqual(git_module._GIT_EXECUTABLE, str(Path(resolved_git).resolve()))
 
     def source(
         self,
@@ -182,6 +189,7 @@ class GitStagingTests(unittest.TestCase):
         timeout = 0.1 if not output else git_module._GIT_TIMEOUT_SECONDS
         with (
             mock.patch.object(git_module, "_GIT_EXECUTABLE", str(fake_git)),
+            mock.patch.object(git_module, "_trusted_git_executable", return_value=str(fake_git)),
             mock.patch.object(git_module, "_GIT_TIMEOUT_SECONDS", timeout),
         ):
             if bytes_runner:
@@ -387,6 +395,7 @@ class GitStagingTests(unittest.TestCase):
 
         with (
             mock.patch.object(git_module, "_GIT_EXECUTABLE", str(fake_git)),
+            mock.patch.object(git_module, "_trusted_git_executable", return_value=str(fake_git)),
             mock.patch.dict(
                 os.environ,
                 {
@@ -434,7 +443,10 @@ class GitStagingTests(unittest.TestCase):
         fake_git.chmod(0o700)
         environment = {"PATH": str(bin_dir)}
 
-        with mock.patch.object(git_module, "_GIT_EXECUTABLE", str(fake_git)):
+        with (
+            mock.patch.object(git_module, "_GIT_EXECUTABLE", str(fake_git)),
+            mock.patch.object(git_module, "_trusted_git_executable", return_value=str(fake_git)),
+        ):
             self.assertEqual(
                 git_module._run_git_bytes(("status",), self.root, environment, max_output_bytes=64),
                 b"plain\0\xc3\xa9\0",
@@ -536,7 +548,10 @@ class GitStagingTests(unittest.TestCase):
         fake_git.chmod(0o700)
         environment = {"PATH": str(bin_dir), "HERMES_TEST_OUTPUT": str(payload)}
 
-        with mock.patch.object(git_module, "_GIT_EXECUTABLE", str(fake_git)):
+        with (
+            mock.patch.object(git_module, "_GIT_EXECUTABLE", str(fake_git)),
+            mock.patch.object(git_module, "_trusted_git_executable", return_value=str(fake_git)),
+        ):
             self.assertEqual(
                 git_module._run_git_bytes(("status",), self.root, environment, max_output_bytes=5000),
                 b"x" * 5000,

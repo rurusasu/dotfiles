@@ -39,6 +39,7 @@ from hermes_bootstrap.errors import (
 )
 from hermes_bootstrap.envfiles import GITHUB_KEYS, read_environment_values
 from hermes_bootstrap.git import StagedSource, stage_distribution
+import hermes_bootstrap.git as git_module
 from hermes_bootstrap.github import GitHubClient
 from hermes_bootstrap.hindsight import build_hindsight_config
 from hermes_bootstrap.manifest import load_manifest
@@ -679,7 +680,7 @@ class BootstrapFlowTests(unittest.TestCase):
                 if (
                     isinstance(command, (list, tuple))
                     and command
-                    and command[0] == "/usr/bin/git"
+                    and command[0] == git_module._GIT_EXECUTABLE
                 ):
                     expected_base["PATH"] = os.defpath
                 self.assertEqual(
@@ -694,7 +695,7 @@ class BootstrapFlowTests(unittest.TestCase):
                     and key != "HERMES_BOOTSTRAP_GITHUB_TOKEN"
                 }
                 self.assertEqual(unexpected, set())
-                if child_arguments[0] == "/usr/bin/git":
+                if child_arguments[0] == git_module._GIT_EXECUTABLE:
                     environment = self._redirect_git_transport(environment)
                     kwargs["env"] = environment
                 process = _REAL_POPEN(*args, **kwargs)  # type: ignore[arg-type]

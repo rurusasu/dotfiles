@@ -17,6 +17,7 @@ sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
 from hermes_bootstrap.github import GitAuth
 from hermes_bootstrap import profile_sync
+from hermes_bootstrap import git as git_module
 from hermes_bootstrap.models import BootstrapManifest, DistributionSource
 from hermes_bootstrap.payload import SecretRedactor
 from hermes_bootstrap.profile_snapshot import (
@@ -94,7 +95,7 @@ class ProfileSyncTests(unittest.TestCase):
             }
         )
         result = subprocess.run(
-            ("/usr/bin/git", *arguments),
+            (git_module._GIT_EXECUTABLE, *arguments),
             cwd=cwd,
             env=environment,
             check=True,
@@ -114,7 +115,7 @@ class ProfileSyncTests(unittest.TestCase):
             }
         )
         result = subprocess.run(
-            ("/usr/bin/git", *arguments),
+            (git_module._GIT_EXECUTABLE, *arguments),
             cwd=cwd,
             env=environment,
             check=True,
@@ -135,7 +136,7 @@ class ProfileSyncTests(unittest.TestCase):
             }
         )
         result = subprocess.run(
-            ("/usr/bin/git", *arguments),
+            (git_module._GIT_EXECUTABLE, *arguments),
             cwd=cwd,
             env=environment,
             input=input_bytes,

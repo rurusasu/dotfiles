@@ -919,7 +919,7 @@ dotfiles_hermes_bootstrap_manifest_path() {
   local compose_file="$1" compose_directory
 
   compose_directory="$(cd -- "$(dirname -- "$compose_file")" && pwd)" || return 1
-  printf '%s\n' "$compose_directory/../hermes-agent/bootstrap-manifest.yaml"
+  printf '%s\n' "$compose_directory/../../nix/home/hermes-agent/manifest.yaml"
 }
 
 dotfiles_hermes_bootstrap_manifest_sha256() {
