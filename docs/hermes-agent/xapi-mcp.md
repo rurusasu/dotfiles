@@ -1,20 +1,19 @@
 # Hermes X API MCP
 
-Hermes connects to X's official hosted MCP server through an isolated Compose
-service. The service runs the official `@xdevplatform/xurl` bridge and exposes
-it as Streamable HTTP inside the Compose network.
+Native Hermes connects to X's official hosted MCP server through an independent
+Compose sidecar. The sidecar runs the official `@xdevplatform/xurl` bridge and
+exposes Streamable HTTP on loopback only.
 
 ## Services
 
 ```text
 Hermes profile config
-  -> http://xapi-mcp:8080/mcp
+  -> http://127.0.0.1:8766/mcp
   -> xapi-mcp container
   -> xurl mcp https://api.x.com/mcp
 ```
 
-The `xapi-mcp` service uses the existing `hermes-browser` network and does not
-publish port 8080 to the host. Its OAuth cache is the host runtime directory
+The `xapi-mcp` service publishes port `8766` only on `127.0.0.1`. Its OAuth cache is the host runtime directory
 `${HERMES_DATA_DIR:-~/.hermes}/.xurl`, mounted at `/root/.xurl`.
 
 Every managed distribution must own `config.yaml`. During bootstrap, Hermes
@@ -23,7 +22,7 @@ installs this non-secret MCP entry into the staged runtime copy:
 ```yaml
 mcp_servers:
   xapi:
-    url: http://xapi-mcp:8080/mcp
+    url: http://127.0.0.1:8766/mcp
     connect_timeout: 300
 ```
 
@@ -100,36 +99,23 @@ exactly once more. A second failure stops before stack recreation and reports
 `task hermes:xapi:setup` as the recovery command. The TCP healthcheck is only a
 process/liveness signal and is not treated as proof that OAuth is valid.
 
-Start or recreate the stack through the atomic bootstrap task:
+Start or recreate the X API sidecar independently of the native Hermes gateway:
 
 ```bash
-task hermes:docker:up
+task hermes:xapi:restart
 task hermes:xapi:logs
 ```
-
-`task hermes:docker:up` first runs the transactional Hermes bootstrap, which
-reconciles Hindsight memory configuration for every managed profile, then
-builds and starts `xapi-mcp` and the Hermes stack. The explicit bootstrap
-task remains available for the same operation:
-
-```bash
-task hermes:docker:bootstrap
-```
-
-This path uses the same 1Password-backed credential and refresh-token wrapper
-as `task hermes:docker:up` on Unix and Windows, so no `X_API_CLIENT_*` values need to
-be exported before bootstrap.
 
 ## Verification
 
 Check the service and test the same MCP endpoint from each profile:
 
 ```bash
-docker compose -f docker/hermes-service/compose.yml ps xapi-mcp hermes
-docker exec hermes hermes -p rick mcp test xapi
-docker exec hermes hermes -p hoffman mcp test xapi
-docker exec hermes hermes -p risarisa mcp test xapi
-docker exec hermes hermes -p nancy mcp test xapi
+docker compose -f docker/hermes-service/compose.yml ps xapi-mcp
+hermes -p rick mcp test xapi
+hermes -p hoffman mcp test xapi
+hermes -p risarisa mcp test xapi
+hermes -p nancy mcp test xapi
 ```
 
 If authentication is missing, inspect `task hermes:xapi:logs` and rerun

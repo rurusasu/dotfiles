@@ -6,13 +6,10 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('auth', 'test')]
+    [ValidateSet('auth')]
     [string]$Action,
 
-    [Alias('Profile')]
-    [string]$HermesProfile = '',
-
-    [string]$ComposeFile = ''
+    [string]$HermesProfile = ''
 )
 
 Set-StrictMode -Version Latest
@@ -34,18 +31,6 @@ function Get-HermesGmailDataDir {
         [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
     }
     return [System.IO.Path]::GetFullPath((Join-Path $homePath '.hermes'))
-}
-
-function Get-HermesGmailComposeFile {
-    param([string]$Requested)
-    if (-not [string]::IsNullOrWhiteSpace($Requested)) {
-        return [System.IO.Path]::GetFullPath($Requested)
-    }
-    if (-not [string]::IsNullOrWhiteSpace($env:HERMES_COMPOSE_FILE)) {
-        return [System.IO.Path]::GetFullPath($env:HERMES_COMPOSE_FILE)
-    }
-    $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-    return Join-Path $root 'docker/hermes-service/compose.yml'
 }
 
 function Test-HermesGmailWindows {
@@ -195,34 +180,9 @@ function Get-HermesGmailSharedContext {
     }
 }
 
-function Get-HermesGmailProfileContext {
-    param(
-        [Parameter(Mandatory)][string]$ProfileName,
-        [Parameter(Mandatory)][string]$DataDir
-    )
-    if ($ProfileName -notmatch '^[a-z0-9][a-z0-9_-]*$') {
-        throw "Invalid Hermes profile: $ProfileName"
-    }
-    if ($ProfileName -eq 'default') {
-        $hostHome = $DataDir
-        $containerHome = '/opt/data'
-    }
-    else {
-        $hostHome = Join-Path (Join-Path $DataDir 'profiles') $ProfileName
-        $containerHome = "/opt/data/profiles/$ProfileName"
-    }
-    if (-not (Test-Path -LiteralPath $hostHome -PathType Container)) {
-        throw "Hermes profile is not installed: $ProfileName"
-    }
-    return [PSCustomObject]@{ ContainerHome = $containerHome }
-}
-
 try {
     $shared = Get-HermesGmailSharedContext
     if ($Action -eq 'auth') {
-        if (-not [string]::IsNullOrWhiteSpace($HermesProfile)) {
-            throw 'Gmail authentication is shared; do not specify a profile.'
-        }
         $oldOAuth = $env:GMAIL_OAUTH_PATH
         $oldCredentials = $env:GMAIL_CREDENTIALS_PATH
         try {
@@ -250,23 +210,7 @@ try {
         exit 0
     }
 
-    if ([string]::IsNullOrWhiteSpace($HermesProfile)) {
-        throw 'A Hermes profile is required for Gmail MCP testing.'
-    }
-    Set-HermesGmailPrivateAcl -Path $shared.Credentials -PathType File
-    if (-not (Test-HermesGmailPrivateFile -Path $shared.Credentials)) {
-        throw 'Shared Gmail OAuth credentials are missing or not private.'
-    }
-    $profileContext = Get-HermesGmailProfileContext `
-        -ProfileName $HermesProfile -DataDir $shared.DataDir
-    $arguments = @(
-        'compose', '-f', (Get-HermesGmailComposeFile -Requested $ComposeFile),
-        'run', '--rm', '--no-deps', '-T',
-        '-e', "HERMES_HOME=$($profileContext.ContainerHome)",
-        'hermes', 'hermes', 'mcp', 'test', 'gmail'
-    )
-    Invoke-Docker -Arguments $arguments | Out-Host
-    exit $global:LASTEXITCODE
+    throw 'Unsupported Hermes Gmail action.'
 }
 catch {
     [Console]::Error.WriteLine('Hermes Gmail MCP command failed.')

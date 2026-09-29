@@ -211,7 +211,10 @@
     },
     {
       "patterns": [
-        "docker/hermes-agent/**",
+        "scripts/python/hermes_bootstrap/**",
+        "tests/python/hermes_bootstrap_test/**",
+        "nix/home/hermes-agent/**",
+        "nix/home/hermes-agent.nix",
         "docker/hermes-service/**",
         "docker/hermes-browser/**",
         "docker/hermes-browser-mcp/**",

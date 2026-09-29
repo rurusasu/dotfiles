@@ -45,7 +45,7 @@ directory, which is intentionally outside this cross-platform bootstrap design.
 
 ## Engine Lock
 
-The canonical lock is `/opt/data/locks/bootstrap-engine.lock`. It is a
+The canonical lock is `${HERMES_HOME}/locks/bootstrap-engine.lock`. It is a
 nonblocking exclusive advisory lock with the same no-follow, regular-file,
 single-link, owner, mode, parent-identity, and redacted-error rules used by the
 existing repository and transaction locks.

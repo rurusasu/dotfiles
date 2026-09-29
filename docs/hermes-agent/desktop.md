@@ -13,20 +13,9 @@ Docker Compose gateway the owner of the Agent runtime. The standard Hermes
 setup does not start Docker, bootstrap a Docker gateway, or modify the existing
 `hermes-data` volume.
 
-## Legacy task names
-
-The gateway is no longer a Compose service. Existing Docker-prefixed task names
-remain as compatibility aliases, but they control the native Nix-managed
-gateway and do not start Docker:
-
-```bash
-task hermes:docker:up
-task hermes:docker:logs
-task hermes:docker:down
-```
-
-These aliases do not access or remove the old `hermes-data` volume. No volume
-migration or deletion is performed by the Nix setup.
+The old Docker gateway tasks and backend have been removed. The old named
+`hermes-data` volume is intentionally left untouched; Nix setup neither imports
+nor deletes its contents.
 
 The browser and MCP support containers remain separately available through
 their dedicated Compose tasks; they are not the Hermes Agent runtime.
@@ -42,9 +31,7 @@ task hermes:desktop
 ```
 
 The Desktop app's own backend/remote connection settings are separate from the
-native messaging gateway service. The Docker-only dashboard at
-`http://127.0.0.1:9119` is available only when the legacy Docker gateway is
-running; native Hermes setup does not publish that endpoint.
+native messaging gateway service. Nix setup does not publish a Docker dashboard.
 
 For the native CLI, use the Hermes command directly or pass arguments through
 the Taskfile:

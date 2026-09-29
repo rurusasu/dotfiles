@@ -400,7 +400,10 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
     def test_hermes_ci_routes_xapi_contract_and_platform_adapters(self) -> None:
         workflow = self._named_workflow("ci-hermes-bootstrap.yml")
         required_paths = (
-            "docker/hermes-agent/**",
+            "scripts/python/hermes_bootstrap/**",
+            "tests/python/hermes_bootstrap_test/**",
+            "nix/home/hermes-agent/**",
+            "nix/home/hermes-agent.nix",
             "docker/hermes-service/**",
             "docker/hermes-browser/**",
             "docker/hermes-browser-mcp/**",
@@ -420,6 +423,10 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "python3 -m unittest tests/python/test_xapi_image_contract.py -v",
             workflow,
         )
+        self.assertIn(
+            "nix build .#checks.x86_64-linux.hermes-bootstrap-tests",
+            workflow,
+        )
 
     def test_hermes_hook_and_task_run_xapi_image_contract(self) -> None:
         pre_commit = PRE_COMMIT_PATH.read_text(encoding="utf-8")
@@ -435,6 +442,9 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIsNotNone(match)
         pattern = match.group("pattern") if match is not None else ""
         for path in (
+            "scripts/python/hermes_bootstrap/app.py",
+            "tests/python/hermes_bootstrap_test/test_app.py",
+            "nix/home/hermes-agent.nix",
             "docker/hermes-xapi-mcp/Dockerfile",
             "docker/local-ai-services/compose.yml",
             "tests/python/test_xapi_image_contract.py",

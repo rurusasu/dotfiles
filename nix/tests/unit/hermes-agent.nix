@@ -60,6 +60,9 @@ let
   };
 
   hasPackage = needle: packages: builtins.any (item: item.drvPath == needle.drvPath) packages;
+  hasHermesBootstrap =
+    home: builtins.any (item: (item.pname or item.name) == "hermes-bootstrap") home;
+  hasNodejs = home: builtins.any (item: (item.pname or item.name) == "nodejs") home;
 in
 {
   testHermesFeatureDoesNotEnableDockerOrOllama = {
@@ -101,6 +104,29 @@ in
       featureFlag = "1";
       multiplexProfiles = true;
       serviceUsesInjectedPackage = true;
+    };
+  };
+
+  testNativeBootstrapIsNixManagedAndTargetsHermesHome = {
+    expr = {
+      installed = hasHermesBootstrap linux.config.home.packages;
+      nodeRuntimeInstalled = hasNodejs linux.config.home.packages;
+      availableToGateway = hasHermesBootstrap linux.config.services.hermes-agent.extraPackages;
+      nodeRuntimeAvailableToGateway = hasNodejs linux.config.services.hermes-agent.extraPackages;
+      plugins = map (plugin: plugin.name) linux.config.services.hermes-agent.extraPlugins;
+      manifest = import ../../home/hermes-agent/manifest.nix {
+        hermesHome = "/home/test-user/.hermes";
+      };
+    };
+    expected = {
+      installed = true;
+      nodeRuntimeInstalled = true;
+      availableToGateway = true;
+      nodeRuntimeAvailableToGateway = true;
+      plugins = [ "hermes-lcm" ];
+      manifest = builtins.replaceStrings [ "/opt/data" ] [ "/home/test-user/.hermes" ] (
+        builtins.readFile ../../home/hermes-agent/manifest.yaml
+      );
     };
   };
 

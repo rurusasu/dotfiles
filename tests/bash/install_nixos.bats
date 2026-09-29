@@ -23,9 +23,9 @@ setup() {
 	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ REPO_ROOT
 	export DOTFILES_SKIP_HERDR_INSTALL=1
 	if command -v sha256sum >/dev/null 2>&1; then
-		PLAN_MANIFEST_SHA256="$(sha256sum "$REPO_ROOT/docker/hermes-agent/bootstrap-manifest.yaml" | awk '{print $1}')"
+		PLAN_MANIFEST_SHA256="$(sha256sum "$REPO_ROOT/nix/home/hermes-agent/manifest.yaml" | awk '{print $1}')"
 	else
-		PLAN_MANIFEST_SHA256="$(shasum -a 256 "$REPO_ROOT/docker/hermes-agent/bootstrap-manifest.yaml" | awk '{print $1}')"
+		PLAN_MANIFEST_SHA256="$(shasum -a 256 "$REPO_ROOT/nix/home/hermes-agent/manifest.yaml" | awk '{print $1}')"
 	fi
 	export PLAN_MANIFEST_SHA256
 	export HERMES_SECRET_PLAN="$(valid_secret_plan)"

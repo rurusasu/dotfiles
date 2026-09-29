@@ -1,31 +1,6 @@
 name: hermes-service
 
 services:
-  hermes-bootstrap:
-    build:
-      context: ..
-      dockerfile: hermes-agent/Dockerfile
-    image: local/hermes-agent-gh:latest
-    profiles:
-      - bootstrap
-    entrypoint: /usr/local/bin/hermes-bootstrap
-    command: apply
-    user: "10000:10000"
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    env_file:
-      - path: ${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.op.env
-        required: false
-    volumes:
-      - type: volume
-        source: hermes-data
-        target: /opt/data
-    environment:
-      HERMES_HOME: /opt/data
-      HOME: /opt/data
-
   chromium:
     build:
       context: ../hermes-browser
@@ -58,6 +33,8 @@ services:
     image: local/hermes-browser-mcp:latest
     container_name: hermes-browser-mcp
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:8765:8080"
     command:
       - node_modules/.bin/mcp-proxy
       - --server
@@ -95,6 +72,8 @@ services:
     image: local/hermes-xapi-mcp:latest
     container_name: hermes-xapi-mcp
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:8766:8080"
     command:
       - node_modules/.bin/mcp-proxy
       - --server
@@ -128,7 +107,3 @@ networks:
   hermes-browser:
     name: hermes-browser
     driver: bridge
-
-volumes:
-  hermes-data:
-    name: ${HERMES_DATA_VOLUME:-hermes-data}

@@ -1,16 +1,12 @@
-# Legacy Docker Hermes Bootstrap Design
+# Hermes Bootstrap Design (Retired Docker Backend)
 
 ## Status
 
-This document describes the retained, explicit legacy Docker bootstrap. The
-standard Hermes CLI and gateway runtime is managed by the pinned Nix flake and
-Home Manager service on macOS and Linux/WSL; Windows routes `WithHermes`
-through its configured NixOS WSL distribution. The Windows installer no longer
-starts the Docker Hermes Agent. Docker bootstrap tasks remain opt-in for
-existing deployments and do not migrate or delete their volumes. The legacy
-implementation is split between this dotfiles repository, the
-remote-authoritative root distribution, and the configured named-profile
-remotes.
+This document is a historical design record. The Docker Hermes Agent backend,
+bootstrap service, and Docker-prefixed gateway tasks have been removed. Current
+operation is documented in [bootstrap.md](bootstrap.md) and
+[desktop.md](desktop.md). Independent browser, X API, and Hindsight sidecars
+remain separate services; existing Docker volumes are not deleted or imported.
 
 ## Problem
 
@@ -53,7 +49,7 @@ runtime configuration drift between operating systems.
 ## Runtime Layout
 
 ```text
-host ~/.hermes/                    container /opt/data/ (HERMES_HOME)
+host ~/.hermes/                    container ${HERMES_HOME}/ (HERMES_HOME)
 ├── .env                           root runtime secrets
 ├── config.yaml                    root declarative config
 ├── SOUL.md                        root declarative profile
@@ -72,9 +68,9 @@ host ~/.hermes/                    container /opt/data/ (HERMES_HOME)
 └── logs/
 ```
 
-`/opt/data` is a runtime root, not a Git checkout. Its profile homes are also
+`${HERMES_HOME}` is a runtime root, not a Git checkout. Its profile homes are also
 never Git repositories. The canonical shared path is
-`/opt/data/shared/lifelog`; `/opt/data/core/lifelog` is migration-only and is
+`${HERMES_HOME}/shared/lifelog`; `${HERMES_HOME}/core/lifelog` is migration-only and is
 absent after a successful apply.
 
 ## Source And Authority Matrix
@@ -98,7 +94,7 @@ README files, validators, tests, scripts, and every other allowlist-external
 path.
 
 The snapshot lives in bootstrap-owned private storage. No normal or dry-run
-operation checks out or clones into `/opt/data/profiles/<name>`, and no normal
+operation checks out or clones into `${HERMES_HOME}/profiles/<name>`, and no normal
 or dry-run operation changes local profile bytes or modes. A declared owned
 root without a publishable regular-file descendant is invalid; nested empty
 directories under a nonempty owned root are omitted because Git cannot
@@ -115,7 +111,7 @@ for RisaRisa.
 ## Bootstrap Components
 
 `docker/hermes-service/compose.yml` defines an explicitly invoked
-`hermes-bootstrap` service. It uses the gateway image and `/opt/data` bind
+`hermes-bootstrap` service. It uses the gateway image and `${HERMES_HOME}` bind
 mount, has no published ports, and is not part of normal `compose up`. Its
 command owns manifest and credential validation, profile snapshotting and
 publication, root and profile staging/apply, lifelog synchronization, `.env`
@@ -128,7 +124,7 @@ behavior. Secret values are never command arguments or persistent payload
 files.
 
 Every mutating bootstrap command cooperates through the canonical nonblocking
-`EngineLock` at `/opt/data/locks/bootstrap-engine.lock`. It starts before
+`EngineLock` at `${HERMES_HOME}/locks/bootstrap-engine.lock`. It starts before
 crash-journal recovery and remains held through transaction and scratch cleanup
 for `apply`, `sync-profiles`, and `sync-repository`; subordinate repository
 locks retain their repository-specific role. `secret-plan` and `validate` are
@@ -150,7 +146,7 @@ credential validation.
 
 The `openclaw/Google Calendar MCP` item supplies `oauth_credentials_json` and
 `tokens_json`. Bootstrap writes one shared credential set under
-`/opt/data/google-calendar-mcp` and installs the same stdio Calendar MCP entry in
+`${HERMES_HOME}/google-calendar-mcp` and installs the same stdio Calendar MCP entry in
 the root and every named profile. Calendar setup therefore has no dependency on
 Nancy or any other profile being synchronized first.
 
@@ -160,9 +156,9 @@ Lifelog is not an exact named-profile mirror. The manifest declares it as a
 normal read-write shared repository with `sync_owner: default`. Its owner runs
 `hermes-bootstrap sync-repository lifelog`, which uses the runtime token
 precedence, validates the canonical checkout, acquires
-`/opt/data/locks/repositories/lifelog.lock`, and performs the ordinary
+`${HERMES_HOME}/locks/repositories/lifelog.lock`, and performs the ordinary
 commit/rebase/push workflow. All profiles continue to use
-`/opt/data/shared/lifelog`.
+`${HERMES_HOME}/shared/lifelog`.
 
 ## Apply Sequence
 
@@ -222,7 +218,7 @@ Because profile publication spans independent repositories, a partial
 transaction. Completed pushes remain valid; repair the failed profile and retry
 it after checking the cleanup inventory. Profile snapshot, revalidation, Git
 staging, and askpass artifacts are private `/tmp` children rather than files in
-the `/opt/data` bind mount. Later successful dry-run/real commands do not
+the `${HERMES_HOME}` bind mount. Later successful dry-run/real commands do not
 replace required cleanup checks because they do not revisit old artifacts.
 
 Snapshot-preflight rejection is not a publication cleanup trigger because
@@ -230,7 +226,7 @@ publication has not started. If final cleanup fails, the CLI reports
 `could not clean bootstrap staging resources` and the operator must inspect
 `/tmp/.hermes-profile-snapshots-*`, `/tmp/.hermes-profile-sync-*`,
 `/tmp/askpass-*`, `/tmp/.hermes-bootstrap-*`, and private
-`/opt/data/shared/.hermes-repository-*` stages using the same full-window,
+`${HERMES_HOME}/shared/.hermes-repository-*` stages using the same full-window,
 mount-aware, atomic quarantine procedure.
 
 Dry-run is limited to preflight and diff inspection. It never pushes, so a

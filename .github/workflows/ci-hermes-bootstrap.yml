@@ -53,20 +53,22 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Verify provenance gate wiring
-        run: python3 docker/hermes-agent/bootstrap/tests/profile_sync_provenance_gate_contract.py
+        run: python3 tests/python/hermes_bootstrap_test/profile_sync_provenance_gate_contract.py
+
+      - name: Run native Hermes bootstrap tests
+        run: nix build .#checks.x86_64-linux.hermes-bootstrap-tests --no-link --print-build-logs
+
+      - name: Run native secret transport contract
+        run: nix shell nixpkgs#bats --command bats tests/bash/hermes_native_bootstrap.bats
 
       - name: Run X API image contract
         run: python3 -m unittest tests/python/test_xapi_image_contract.py -v
 
-      - name: Build the pinned container suite and storage integration image
-        run: docker buildx bake -f docker/hermes-agent/docker-bake.hcl
-
-      - name: Run the Hermes storage volume integration
-        run: docker/hermes-agent/tests/test_storage_volume_integration.sh
-
       - name: Run Hermes browser runtime contracts
         run: docker/hermes-browser/tests/test_runtime_contract.sh
-
-      - name: Run the gh wrapper security suite
-        run: docker/hermes-agent/bootstrap/tests/test_gh_wrapper.sh

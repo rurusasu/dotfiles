@@ -11,13 +11,13 @@ retain their separate ownership rules.
 
 The three managed content classes deliberately use different authority models:
 
-| Content        | Authoritative location                                     | Synchronization model                                                           |
-| -------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Named profile  | Existing `/opt/data/profiles/<name>` declarative allowlist | immutable local snapshot to configured remote, then exact commit through Hermes |
-| Root/default   | `rurusasu/hermes-profile-alfred`                           | remote distribution to local runtime                                            |
-| Shared lifelog | `/opt/data/shared/lifelog`                                 | normal locked read-write Git repository                                         |
+| Content        | Authoritative location                                          | Synchronization model                                                           |
+| -------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Named profile  | Existing `${HERMES_HOME}/profiles/<name>` declarative allowlist | immutable local snapshot to configured remote, then exact commit through Hermes |
+| Root/default   | `rurusasu/hermes-profile-alfred`                                | remote distribution to local runtime                                            |
+| Shared lifelog | `${HERMES_HOME}/shared/lifelog`                                 | normal locked read-write Git repository                                         |
 
-`docker/hermes-agent/bootstrap-manifest.yaml` currently declares six named
+`nix/home/hermes-agent/manifest.yaml` currently declares six named
 profiles: `rick`, `hoffman`, `risarisa`, `nancy`, `kuroda`, and `shiraishi`.
 The manifest is the configuration source for their name, remote, branch,
 optional pinned first-install commit, deletion safety limit, and target;
@@ -86,7 +86,7 @@ are deleted. A local deletion of an owned file deletes it remotely. No force
 push is used.
 
 All mutating operations use the canonical nonblocking `EngineLock` at
-`/opt/data/locks/bootstrap-engine.lock`. It serializes cooperating `apply`,
+`${HERMES_HOME}/locks/bootstrap-engine.lock`. It serializes cooperating `apply`,
 `sync-profiles`, and `sync-repository` invocations from before recovery or
 scratch creation through all cleanup; repository locks remain subordinate.
 
@@ -96,8 +96,8 @@ Run the aggregate command from the repository root. These are the supported
 dry-run and real forms:
 
 ```text
-docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles --dry-run
-docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles
+task hermes:profiles:sync -- --dry-run
+task hermes:profiles:sync
 ```
 
 The command processes every manifest profile in manifest order. `--dry-run`
@@ -293,10 +293,10 @@ ordinary locked read-write Git synchronization.
 Every profile publication failure is therefore a cleanup inventory trigger
 before retry or closure: its category could be `cleanup_failed`. Profile
 snapshot, revalidation, Git staging, and askpass artifacts are created beneath
-the container's private `/tmp` rather than the `/opt/data` bind mount. Inventory
+the container's private `/tmp` rather than the `${HERMES_HOME}` bind mount. Inventory
 `/tmp/.hermes-profile-snapshots-*`, `/tmp/.hermes-profile-sync-*`, and
 `/tmp/askpass-*`, plus private shared-repository stages under
-`/opt/data/shared/.hermes-repository-*`. If all guarded inventories are
+`${HERMES_HOME}/shared/.hermes-repository-*`. If all guarded inventories are
 reliably empty, continue ordinary push-failure recovery. A candidate or
 indeterminate check activates the full quiescent, mount-aware,
 atomic-quarantine procedure. Later successful dry-run/real results do not waive
@@ -307,7 +307,7 @@ and publication has not started. If final cleanup fails, the CLI reports
 `could not clean bootstrap staging resources`; inspect
 `/tmp/.hermes-profile-snapshots-*`, `/tmp/.hermes-profile-sync-*`,
 `/tmp/askpass-*`, `/tmp/.hermes-bootstrap-*`, and private
-`.hermes-repository-*` stages under `/opt/data/shared`. A candidate or
+`.hermes-repository-*` stages under `${HERMES_HOME}/shared`. A candidate or
 indeterminate determination activates the same full recovery procedure. An
 exact `profile snapshot rejected (cleanup_failed)` message means final outer
 scratch cleanup did not replace it and does not alone trigger these
@@ -398,9 +398,9 @@ Production acceptance is a dry run followed by a real aggregate run, with
 inspection that each remote tree contains only the two canonical control files
 and its local owned paths. Verify the profile homes are unchanged, then confirm
 a repeat real run is `unchanged` without creating commits. The direct
-`/opt/data` inventory for `.hermes-profile-snapshots-*`,
+`${HERMES_HOME}` inventory for `.hermes-profile-snapshots-*`,
 `.hermes-profile-sync-*`, `askpass-*`, `.hermes-bootstrap-*`, and
 `.hermes-profile-cleanup-quarantine-*`, together with the direct
-`/opt/data/shared` inventory for `.hermes-repository-*`, must also be empty,
+`${HERMES_HOME}/shared` inventory for `.hermes-repository-*`, must also be empty,
 with no candidate or descendant mount issue. Aggregate success does not waive
 the quiescent cleanup and quarantine evidence.

@@ -162,14 +162,13 @@ Discord, or GitHub fallback credentials. See
 [Hermes Bootstrap Operations](../hermes-agent/bootstrap.md) for the item and
 field-label contract.
 
-The host adapter streams each full item JSON object directly to
-`hermes-bootstrap`; only the container interprets or persists fields.
+The host adapter streams each full item JSON object directly to the Nix-managed
+`hermes-bootstrap` CLI; only the local bootstrap process interprets or persists fields.
 `GitHubUsedOpenClawPAT` is mandatory. Its `credential` field is written to the
 root and every managed Hermes profile `.env` as `GH_TOKEN`,
 `GITHUB_PERSONAL_ACCESS_TOKEN`, and `GITHUB_TOKEN`.
-`docker/hermes-agent/gh-wrapper.sh` resolves those keys for the active profile,
-falls back to root only when needed, and never creates a separate `gh`
-credential store.
+Profile-local repository operations consume those keys from the managed Hermes
+runtime environment and never create a separate `gh` credential store.
 
 Each profile item (`Master`, `Rick`, `Hoffman`, `RisaRisa`, `Nancy`, `Kuroda`,
 and `Shiraishi`)

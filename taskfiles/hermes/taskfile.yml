@@ -8,89 +8,67 @@ tasks:
       - task: hindsight:up
     cmds:
       - cmd: hermes setup
-        platforms: [linux, darwin]
+        platforms: [darwin]
       - cmd: '{{.WSL}}bash -lc "hermes setup"'
+        platforms: [linux, windows]
+      - task: hermes:sync
+
+  hermes:sync:
+    desc: Synchronize native Hermes profiles, secrets, and shared repositories
+    interactive: true
+    cmds:
+      - cmd: scripts/sh/hermes-bootstrap.sh apply && hermes gateway restart
+        platforms: [linux, darwin]
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && scripts/sh/hermes-bootstrap.sh apply && hermes gateway restart"'
         platforms: [windows]
 
-  hermes:docker:bootstrap:
-    desc: Compatibility alias for the Nix-managed Hermes activation
+  hermes:profiles:sync:
+    desc: Publish local Hermes profile allowlists and synchronize managed profiles
     cmds:
-      - task: hermes:bootstrap
+      - cmd: hermes-bootstrap sync-profiles {{range .CLI_ARGS_LIST}}{{. | shellQuote}} {{end}}
+        platforms: [linux, darwin]
+      - cmd: '{{.WSL}}bash -lc "hermes-bootstrap sync-profiles {{range .CLI_ARGS_LIST}}{{. | shellQuote}} {{end}}"'
+        platforms: [windows]
+
+  hermes:repository:sync:
+    desc: Synchronize the shared lifelog repository
+    cmds:
+      - cmd: hermes-bootstrap sync-repository lifelog
+        platforms: [linux, darwin]
+      - cmd: '{{.WSL}}bash -lc "hermes-bootstrap sync-repository lifelog"'
+        platforms: [windows]
 
   hermes:bootstrap:
     desc: Apply the Nix-managed Hermes Agent profile and gateway service
     cmds:
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && DOTFILES_WITH_HERMES=1 scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure"'
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && DOTFILES_WITH_HERMES=1 scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure && task hermes:sync"'
         platforms: [windows, linux]
-      - cmd: DOTFILES_WITH_OLLAMA=0 DOTFILES_WITH_DOCKER=0 DOTFILES_WITH_HERMES=1 DOTFILES_ROOT="{{.ROOT_DIR}}" task darwin:install
+      - cmd: DOTFILES_WITH_OLLAMA=0 DOTFILES_WITH_DOCKER=0 DOTFILES_WITH_HERMES=1 DOTFILES_ROOT="{{.ROOT_DIR}}" task darwin:install && task hermes:sync
         platforms: [darwin]
 
-  hermes:storage:inspect:
-    desc: Inspect the Docker-managed Hermes runtime data volume
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - cmd: bash -lc 'docker volume inspect "${HERMES_DATA_VOLUME:-hermes-data}"'
-        platforms: [linux, darwin]
-      - cmd: pwsh -NoProfile -Command '$name = if ([string]::IsNullOrWhiteSpace($env:HERMES_DATA_VOLUME)) { "hermes-data" } else { $env:HERMES_DATA_VOLUME }; docker volume inspect $name'
-        platforms: [windows]
-
   hermes:bootstrap:test:
-    desc: Run the Hermes bootstrap container, gh wrapper, and provenance suites
+    desc: Run native Hermes bootstrap Nix and shell contracts
     vars:
       PROVENANCE_URL: '{{.HERMES_HOME_PROVENANCE_URL | default "https://github.com/rurusasu/hermes-profile-alfred.git"}}'
     cmds:
+      - cmd: 'system="$(nix eval --raw --impure --expr ''builtins.currentSystem'')" && nix build ".#checks.${system}.nix-unit" --no-link && nix build ".#checks.${system}.hermes-bootstrap-tests" --no-link'
+        platforms: [linux, darwin]
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && system=$(nix eval --raw --impure --expr builtins.currentSystem) && nix build .#checks.$system.nix-unit --no-link && nix build .#checks.$system.hermes-bootstrap-tests --no-link"'
+        platforms: [windows]
       - cmd: python -m unittest tests/python/test_xapi_image_contract.py -v
         platforms: [windows]
       - cmd: python3 -m unittest tests/python/test_xapi_image_contract.py -v
         platforms: [linux, darwin]
-      - task: hermes:bootstrap:test:container
-        vars:
-          PROVENANCE_URL: "{{.PROVENANCE_URL}}"
-
-  hermes:bootstrap:test:container:
-    internal: true
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - docker buildx bake -f docker/hermes-agent/docker-bake.hcl
-      - cmd: docker/hermes-agent/tests/test_storage_volume_integration.sh
+      - cmd: bats tests/bash/hermes_native_bootstrap.bats
         platforms: [linux, darwin]
-      - docker/hermes-agent/bootstrap/tests/test_gh_wrapper.sh
-      - cmd: python docker/hermes-agent/bootstrap/tests/profile_sync_provenance_gate_contract.py
+      - cmd: python tests/python/hermes_bootstrap_test/profile_sync_provenance_gate_contract.py
         platforms: [windows]
-      - cmd: python3 docker/hermes-agent/bootstrap/tests/profile_sync_provenance_gate_contract.py
+      - cmd: python3 tests/python/hermes_bootstrap_test/profile_sync_provenance_gate_contract.py
         platforms: [linux, darwin]
-      - cmd: python docker/hermes-agent/bootstrap/tests/verify_profile_sync_provenance.py verify --dotfiles-repository . --source-url "{{.PROVENANCE_URL}}"
+      - cmd: python tests/python/hermes_bootstrap_test/verify_profile_sync_provenance.py verify --dotfiles-repository . --source-url "{{.PROVENANCE_URL}}"
         platforms: [windows]
-      - cmd: python3 docker/hermes-agent/bootstrap/tests/verify_profile_sync_provenance.py verify --dotfiles-repository . --source-url "{{.PROVENANCE_URL}}"
+      - cmd: python3 tests/python/hermes_bootstrap_test/verify_profile_sync_provenance.py verify --dotfiles-repository . --source-url "{{.PROVENANCE_URL}}"
         platforms: [linux, darwin]
-
-  hermes:bootstrap:config:
-    desc: Validate the Hermes bootstrap Compose configuration
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - docker compose -f docker/hermes-service/compose.yml config --quiet
-
-  hermes:memory:verify:
-    desc: Run the complete Hermes Hindsight live acceptance lifecycle
-    interactive: true
-    deps:
-      - task: mlflow:up
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-      - sh: test -f {{.HERMES_COMPOSE_FILE}}
-        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
-    cmds:
-      - cmd: scripts/sh/hermes-hindsight-verify.sh
-        platforms: [linux, darwin]
-      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-hindsight-verify.ps1
-        platforms: [windows]
 
   hermes:pull:
     desc: Rebuild the Hermes browser and MCP sidecar images
@@ -163,22 +141,18 @@ tasks:
     cmds:
       - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} bash scripts/sh/hermes-gmail.sh auth
         platforms: [linux, darwin]
-      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-gmail.ps1 -Action auth -ComposeFile "{{.HERMES_COMPOSE_FILE}}"
+      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-gmail.ps1 -Action auth
         platforms: [windows]
 
   hermes:gmail:test:
     desc: Test Gmail MCP for one authenticated Hermes profile
     preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-      - sh: test -f {{.HERMES_COMPOSE_FILE}}
-        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
       - sh: test -n "{{.PROFILE}}"
         msg: "Set PROFILE to an installed Hermes profile name."
     cmds:
-      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} bash scripts/sh/hermes-gmail.sh test "{{.PROFILE}}"
-        platforms: [linux, darwin]
-      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-gmail.ps1 -Action test -Profile "{{.PROFILE}}" -ComposeFile "{{.HERMES_COMPOSE_FILE}}"
+      - cmd: hermes -p {{.PROFILE | shellQuote}} mcp test gmail
+        platforms: [darwin, linux]
+      - cmd: '{{.WSL}}bash -lc "hermes -p {{.PROFILE | shellQuote}} mcp test gmail"'
         platforms: [windows]
 
   hermes:up:
@@ -281,26 +255,6 @@ tasks:
         platforms: [darwin, linux]
       - cmd: '{{.WSL}}bash -lc "hermes logs -f"'
         platforms: [windows]
-
-  hermes:docker:up:
-    desc: Compatibility alias for the Nix-managed Hermes gateway start
-    cmds:
-      - task: hermes:up
-
-  hermes:docker:down:
-    desc: Compatibility alias for the Nix-managed Hermes gateway stop
-    cmds:
-      - task: hermes:down
-
-  hermes:docker:restart:
-    desc: Compatibility alias for the Nix-managed Hermes gateway restart
-    cmds:
-      - task: hermes:restart
-
-  hermes:docker:logs:
-    desc: Compatibility alias for the native Hermes gateway logs
-    cmds:
-      - task: hermes:logs
 
   hermes:browser:pull:
     desc: Rebuild Hermes browser and Browser MCP Docker images
@@ -449,7 +403,7 @@ tasks:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} ps chromium browser-mcp xapi-mcp hermes-bootstrap
+      - docker compose -f {{.HERMES_COMPOSE_FILE}} ps chromium browser-mcp xapi-mcp
 
   hermes:upgrade:
     desc: Update the Hermes flake input and activate the Nix-managed Hermes Agent

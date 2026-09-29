@@ -1,10 +1,10 @@
 # Hermes Agent Home/Profile Layout
 
-The host Hermes directory is mounted at `/opt/data`, which is the runtime root
+The host Hermes directory is mounted at `${HERMES_HOME}`, which is the runtime root
 and `HERMES_HOME`. It is never a Git checkout.
 
 ```text
-host ~/.hermes/                    container /opt/data/
+host ~/.hermes/                    container ${HERMES_HOME}/
 ├── .env                           root runtime secrets
 ├── config.yaml                    root distribution-owned config
 ├── SOUL.md                        root distribution-owned profile
@@ -30,7 +30,7 @@ host ~/.hermes/                    container /opt/data/
 ## Ownership
 
 The root profile is displayed as **Alfred**; Hermes reserves its internal ID
-`default` and keeps its home at `/opt/data`. The former `career-ops`, `dev-lab`,
+`default` and keeps its home at `${HERMES_HOME}`. The former `career-ops`, `dev-lab`,
 and `personal-ops` profiles are now `clara`, `ada`, and `sophia` respectively.
 Their repositories are `hermes-profile-clara`, `hermes-profile-ada`, and
 `hermes-profile-sophia`. Existing sessions stay in the renamed profile homes.
@@ -53,7 +53,7 @@ The root Discord bot was renamed from Master to Alfred without changing its ID.
   allowlisted remote tree, stages that exact commit, and applies it through the
   official Hermes distribution API.
 - A named home is never a Git checkout. Do not run `git init`, clone, or
-  checkout in `/opt/data/profiles/<name>`; normal and dry-run sync leave local
+  checkout in `${HERMES_HOME}/profiles/<name>`; normal and dry-run sync leave local
   bytes and modes unchanged. Empty directories have no Git representation.
 - Only a truly absent named target is seeded from its configured remote for
   first install. An existing malformed target fails rather than falling back to
@@ -65,9 +65,9 @@ The root Discord bot was renamed from Master to Alfred without changing its ID.
   a normal read-write Git workflow, not named-profile exact mirroring, and every
   profile uses the same path.
 - `core/lifelog` is accepted only as a migration source and is absent after
-  bootstrap. Runtime configuration uses `/opt/data/shared/lifelog`.
+  bootstrap. Runtime configuration uses `${HERMES_HOME}/shared/lifelog`.
 - Bootstrap installs the shared X API MCP endpoint into every staged managed
-  distribution as `mcp_servers.xapi.url: http://xapi-mcp:8080/mcp` with
+  distribution as `mcp_servers.xapi.url: http://127.0.0.1:8766/mcp` with
   `connect_timeout: 300`. The endpoint is served by the separate Compose
   `xapi-mcp` container and uses the shared root `.xurl` OAuth cache.
 - Bootstrap transactionally manages `hindsight/config.json` in the root and in
@@ -85,8 +85,8 @@ Remote named-profile repositories are exact local projections: canonical
 Stale remote workflows, README files, validators, and other allowlist-external
 paths are deleted during a real sync.
 
-Do not run a second Hermes gateway container against this runtime root or a
-managed profile while the main Hermes container can see it. Root and named
+Do not run a second Hermes gateway process against this runtime root or a
+managed profile while the native Hermes gateway can see it. Root and named
 profile `.env` files are runtime-only, mode `0600`, and must never be
 committed.
 
