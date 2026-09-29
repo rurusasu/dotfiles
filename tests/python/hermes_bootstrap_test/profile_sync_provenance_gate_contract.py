@@ -24,7 +24,7 @@ class ProfileSyncProvenanceGateContractTests(unittest.TestCase):
         section = section.split("\n  hermes:", maxsplit=1)[0]
 
         for required in (
-            "nix build .#checks.nix-unit --no-link",
+            'nix build ".#checks.${system}.nix-unit" --no-link',
             "bats tests/bash/hermes_native_bootstrap.bats",
             "profile_sync_provenance_gate_contract.py",
             f"{VERIFIER} verify",
