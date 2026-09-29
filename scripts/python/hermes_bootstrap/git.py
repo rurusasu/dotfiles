@@ -349,7 +349,7 @@ def _run_git_bytes(
 
 
 def _trusted_git_executable(environment: dict[str, str]) -> str | None:
-    """Use only the root-owned Git executable resolved by the managed runtime."""
+    """Use only a root-owned or immutable Nix-store Git executable."""
 
     del environment
     executable = Path(_GIT_EXECUTABLE)
@@ -357,12 +357,20 @@ def _trusted_git_executable(environment: dict[str, str]) -> str | None:
         metadata = executable.lstat()
     except OSError:
         return None
-    if (
-        not executable.is_absolute()
-        or not stat.S_ISREG(metadata.st_mode)
-        or metadata.st_uid != 0
-        or stat.S_IMODE(metadata.st_mode) & 0o022
-    ):
+    store_relative: Path | None = None
+    try:
+        store_relative = executable.relative_to("/nix/store")
+    except ValueError:
+        pass
+    immutable_nix_git = (
+        store_relative is not None
+        and len(store_relative.parts) == 3
+        and "-git-" in store_relative.parts[0]
+        and store_relative.parts[1:] == ("bin", "git")
+        and stat.S_IMODE(metadata.st_mode) & 0o222 == 0
+    )
+    root_owned_git = metadata.st_uid == 0 and stat.S_IMODE(metadata.st_mode) & 0o022 == 0
+    if not executable.is_absolute() or not stat.S_ISREG(metadata.st_mode) or not (root_owned_git or immutable_nix_git):
         return None
     return str(executable)
 
