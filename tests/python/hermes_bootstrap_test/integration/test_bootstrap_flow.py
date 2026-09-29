@@ -110,7 +110,11 @@ PROFILE_ENV_KEYS = frozenset(
     }
 )
 DEFAULT_ENV_KEYS = PROFILE_ENV_KEYS | {"API_SERVER_KEY"}
-SAFE_PATH = "/usr/bin:/bin"
+_MANAGED_GIT_EXECUTABLE = os.environ.get("DOTFILES_HERMES_GIT_EXECUTABLE")
+SAFE_PATH = os.pathsep.join(
+    ([str(Path(_MANAGED_GIT_EXECUTABLE).parent)] if _MANAGED_GIT_EXECUTABLE else [])
+    + ["/usr/bin", "/bin"]
+)
 PROCESS_TIMEOUT_SECONDS = 15.0
 PROCESS_STOP_TIMEOUT_SECONDS = 2.0
 SERVER_STOP_TIMEOUT_SECONDS = 2.0
@@ -337,6 +341,15 @@ class FixtureGitHub:
 
 
 class BootstrapFlowTests(unittest.TestCase):
+    def test_minimal_fixture_environment_includes_managed_git_directory(self) -> None:
+        managed_git = os.environ.get("DOTFILES_HERMES_GIT_EXECUTABLE")
+        if managed_git is None:
+            self.skipTest("the managed Git executable is provided by Nix builds")
+
+        environment = _minimal_environment(Path("/nonexistent"))
+
+        self.assertIn(str(Path(managed_git).parent), environment["PATH"].split(os.pathsep))
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
