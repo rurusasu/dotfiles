@@ -252,7 +252,7 @@ class ProfileSnapshotTests(unittest.TestCase):
         replacement = home / ".env.EXAMPLE.replacement"
         replacement.write_bytes(b"SAFE=replacement\n")
         original_copy = profile_snapshot._copy_regular
-        baseline_fds = len(os.listdir("/proc/self/fd"))
+        baseline_fds = profile_snapshot._open_descriptor_count()
         replaced = False
 
         def replace_after_copy(*args: object, **kwargs: object) -> None:
@@ -277,7 +277,7 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertTrue(replaced)
         self.assertEqual(caught.exception.category, "invalid_local_profile")
         self.assertEqual(list(self.scratch.iterdir()), [])
-        self.assertEqual(len(os.listdir("/proc/self/fd")), baseline_fds)
+        self.assertEqual(profile_snapshot._open_descriptor_count(), baseline_fds)
 
     def test_mapped_env_template_rejects_replacement_before_source_open(
         self,
@@ -946,7 +946,7 @@ class ProfileSnapshotTests(unittest.TestCase):
         home = self.write_profile("rick", ["SOUL.md"])
         (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
         original_dup = os.dup
-        baseline_fds = len(os.listdir("/proc/self/fd"))
+        baseline_fds = profile_snapshot._open_descriptor_count()
         dup_calls = 0
         first_duplicate: int | None = None
         observed_fds = baseline_fds
@@ -972,7 +972,7 @@ class ProfileSnapshotTests(unittest.TestCase):
                         self.scratch,
                         allow_missing=False,
                     )
-            observed_fds = len(os.listdir("/proc/self/fd"))
+            observed_fds = profile_snapshot._open_descriptor_count()
             assert first_duplicate is not None
             try:
                 os.fstat(first_duplicate)
@@ -1018,7 +1018,7 @@ class ProfileSnapshotTests(unittest.TestCase):
                 scratch.mkdir(mode=0o700)
                 original_open_source = profile_snapshot._open_source_directory
                 original_create = profile_snapshot._create_output_directory
-                baseline_fds = len(os.listdir("/proc/self/fd"))
+                baseline_fds = profile_snapshot._open_descriptor_count()
                 opened_child: int | None = None
                 create_failures = 0
                 source_was_open = False
@@ -1069,7 +1069,7 @@ class ProfileSnapshotTests(unittest.TestCase):
                             allow_missing=False,
                         )
 
-                observed_fds = len(os.listdir("/proc/self/fd"))
+                observed_fds = profile_snapshot._open_descriptor_count()
                 child_still_open = False
                 assert opened_child is not None
                 try:
@@ -1103,7 +1103,7 @@ class ProfileSnapshotTests(unittest.TestCase):
 
         original_limits = resource.getrlimit(resource.RLIMIT_NOFILE)
         original_open = os.open
-        baseline_open = len(os.listdir("/proc/self/fd"))
+        baseline_open = profile_snapshot._open_descriptor_count()
         effective_limit = baseline_open + 80
         emfile_attempted = False
 
@@ -1115,7 +1115,7 @@ class ProfileSnapshotTests(unittest.TestCase):
             dir_fd: int | None = None,
         ) -> int:
             nonlocal emfile_attempted
-            if len(os.listdir("/proc/self/fd")) >= effective_limit:
+            if profile_snapshot._open_descriptor_count() >= effective_limit:
                 emfile_attempted = True
                 raise OSError(errno.EMFILE, "mock descriptor limit")
             return original_open(path, flags, mode, dir_fd=dir_fd)
@@ -1142,7 +1142,7 @@ class ProfileSnapshotTests(unittest.TestCase):
         self.assertFalse(emfile_attempted)
         self.assertEqual(caught.exception.category, "resource_limit")
         self.assertEqual(list(self.scratch.iterdir()), [])
-        self.assertEqual(len(os.listdir("/proc/self/fd")), baseline_open)
+        self.assertEqual(profile_snapshot._open_descriptor_count(), baseline_open)
         self.assertEqual(
             resource.getrlimit(resource.RLIMIT_NOFILE), original_limits
         )

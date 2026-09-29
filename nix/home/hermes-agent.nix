@@ -27,6 +27,7 @@ let
     text = ''
       export HERMES_HOME=${lib.escapeShellArg hermesHome}
       export HERMES_BOOTSTRAP_MANIFEST=${bootstrapManifest}
+      export DOTFILES_HERMES_GIT_EXECUTABLE=${pkgs.git}/bin/git
       export PYTHONPATH=${inputs.hermes-agent}:${../../scripts/python}
       exec ${bootstrapPython}/bin/python -m hermes_bootstrap "$@"
     '';
@@ -56,8 +57,16 @@ in
       hermesBootstrap
       pkgs.nodejs
     ];
-    hermesHomeFiles."bootstrap-manifest.yaml" = bootstrapManifest;
+    hermesHomeFiles = lib.optionalAttrs enabled {
+      "bootstrap-manifest.yaml" = bootstrapManifest;
+      "scripts/profile_sync.sh" = ../../scripts/sh/hermes-profile-sync.sh;
+    };
     extraPlugins = lib.optionals enabled [ hermesLcmPlugin ];
     settings.gateway.multiplex_profiles = true;
   };
+  home.activation.hermesProfileSyncWrapperExecutable = lib.mkIf enabled (
+    lib.hm.dag.entryAfter [ "hermesAgentSetup" ] ''
+      $DRY_RUN_CMD ${pkgs.coreutils}/bin/chmod 0700 ${lib.escapeShellArg "${hermesHome}/scripts/profile_sync.sh"}
+    ''
+  );
 }

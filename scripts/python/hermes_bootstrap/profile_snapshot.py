@@ -427,10 +427,12 @@ class _SensitiveStreamScanner:
 
 
 def _open_descriptor_count() -> int:
-    try:
-        return len(os.listdir("/proc/self/fd"))
-    except OSError:
-        raise _FdBudgetError from None
+    for descriptor_directory in ("/proc/self/fd", "/dev/fd"):
+        try:
+            return len(os.listdir(descriptor_directory))
+        except OSError:
+            continue
+    raise _FdBudgetError from None
 
 
 def prepare_profile_snapshots(

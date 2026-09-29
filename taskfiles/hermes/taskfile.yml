@@ -141,7 +141,7 @@ tasks:
     cmds:
       - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} bash scripts/sh/hermes-gmail.sh auth
         platforms: [linux, darwin]
-      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-gmail.ps1 -Action auth
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && task hermes:gmail:auth"'
         platforms: [windows]
 
   hermes:gmail:test:

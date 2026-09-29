@@ -485,7 +485,7 @@ class ProfileSyncFlowTests(unittest.TestCase):
             elif isinstance(value, TracebackType):
                 pending.extend((value.tb_frame, value.tb_next))
             elif isinstance(value, FrameType):
-                if "hermes_bootstrap" in value.f_code.co_filename:
+                if "hermes_bootstrap" in Path(value.f_code.co_filename).parts:
                     pending.extend(value.f_locals.values())
             elif isinstance(value, dict):
                 pending.extend((*value.keys(), *value.values()))

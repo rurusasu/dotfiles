@@ -33,7 +33,11 @@ _MAX_GIT_DIRECT_WAIT_ATTEMPTS = 2
 _MAX_GIT_REAP_ATTEMPTS = 32
 _MAX_GIT_REAPS_PER_ATTEMPT = 64
 _PR_SET_CHILD_SUBREAPER = 36
-_GIT_EXECUTABLE = os.path.realpath(shutil.which("git") or "/usr/bin/git")
+_GIT_EXECUTABLE = os.path.realpath(
+    os.environ.get("DOTFILES_HERMES_GIT_EXECUTABLE")
+    or shutil.which("git")
+    or "/usr/bin/git"
+)
 _OBJECT_ID = re.compile(r"[0-9a-fA-F]{40,64}\Z")
 _GITHUB_OWNER_REPOSITORY_PATH = re.compile(
     r"/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"

@@ -57,10 +57,14 @@ class GitStagingTests(unittest.TestCase):
         git("push", "-u", "origin", "main", cwd=self.checkout)
 
     def test_git_executable_uses_the_managed_runtime_path(self) -> None:
-        resolved_git = shutil.which("git")
+        resolved_git = os.environ.get("DOTFILES_HERMES_GIT_EXECUTABLE") or shutil.which("git")
 
         self.assertIsNotNone(resolved_git)
         self.assertEqual(git_module._GIT_EXECUTABLE, str(Path(resolved_git).resolve()))
+        self.assertEqual(
+            git_module._trusted_git_executable(os.environ.copy()),
+            git_module._GIT_EXECUTABLE,
+        )
 
     def source(
         self,
@@ -122,7 +126,7 @@ class GitStagingTests(unittest.TestCase):
             elif isinstance(value, TracebackType):
                 pending.extend((value.tb_frame, value.tb_next))
             elif isinstance(value, FrameType):
-                if "hermes_bootstrap" in value.f_code.co_filename:
+                if "hermes_bootstrap" in Path(value.f_code.co_filename).parts:
                     pending.extend(value.f_locals.values())
             elif isinstance(value, dict):
                 pending.extend((*value.keys(), *value.values()))

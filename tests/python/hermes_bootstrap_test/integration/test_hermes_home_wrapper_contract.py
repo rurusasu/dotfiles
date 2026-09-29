@@ -12,7 +12,8 @@ from pathlib import Path
 
 
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "hermes-home"
-WRAPPER = FIXTURE_ROOT / "profile_sync.sh"
+PINNED_WRAPPER = FIXTURE_ROOT / "profile_sync.sh"
+WRAPPER = Path(__file__).resolve().parents[4] / "scripts" / "sh" / "hermes-profile-sync.sh"
 PROVENANCE = FIXTURE_ROOT / "profile_sync.provenance.json"
 ENGINE = Path(os.environ.get("DOTFILES_HERMES_BOOTSTRAP_EXECUTABLE", "hermes-bootstrap"))
 MODE_CONTRACT_ERROR = "wrapper provenance mode contract failed"
@@ -55,8 +56,8 @@ class HermesHomeWrapperContractTests(unittest.TestCase):
                         label,
                     )
 
-    def test_exact_wrapper_routes_to_the_built_sync_profiles_cli(self) -> None:
-        wrapper_bytes = WRAPPER.read_bytes()
+    def test_pinned_upstream_wrapper_matches_its_provenance(self) -> None:
+        wrapper_bytes = PINNED_WRAPPER.read_bytes()
         provenance = json.loads(PROVENANCE.read_text(encoding="ascii"))
         blob = (
             f"blob {len(wrapper_bytes)}\0".encode("ascii")
@@ -78,15 +79,20 @@ class HermesHomeWrapperContractTests(unittest.TestCase):
                 "sha256": hashlib.sha256(wrapper_bytes).hexdigest(),
             },
         )
-        self.assertTrue(WRAPPER.stat().st_mode & 0o111)
+        self.assertTrue(PINNED_WRAPPER.stat().st_mode & 0o111)
+
+    def test_nix_managed_wrapper_routes_to_the_built_sync_profiles_cli(self) -> None:
         self.assertTrue(ENGINE.is_file())
         self.assertTrue(ENGINE.stat().st_mode & 0o111)
+        self.assertTrue(WRAPPER.is_file())
+        self.assertTrue(WRAPPER.stat().st_mode & 0o111)
 
         environment = {
             "HOME": "/nonexistent",
             "LANG": "C",
             "LC_ALL": "C",
             "PATH": "/usr/local/bin:/usr/bin:/bin",
+            "DOTFILES_HERMES_BOOTSTRAP_EXECUTABLE": str(ENGINE),
         }
         direct = self._run((str(ENGINE), "sync-profiles"), environment)
         wrapped = self._run((str(WRAPPER),), environment)

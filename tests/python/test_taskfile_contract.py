@@ -59,6 +59,13 @@ class TaskfileContractTests(unittest.TestCase):
         self.assertNotIn("docker/hermes-agent", test_task)
         self.assertNotIn("hermes:docker:bootstrap", self.taskfile)
 
+    def test_windows_gmail_auth_runs_in_the_wsl_hermes_home(self) -> None:
+        task = self._command_text("hermes:gmail:auth")
+
+        self.assertIn("{{.WSL}}bash -lc", task)
+        self.assertIn("task hermes:gmail:auth", task)
+        self.assertNotIn("scripts/powershell/hermes-gmail.ps1", task)
+
     def test_commit_runs_precommit_without_repeating_treefmt(self) -> None:
         commit = self._task_block("commit")
 

@@ -1,15 +1,14 @@
 ﻿<#
 .SYNOPSIS
-    Hermes 全プロフィールで共有する Gmail MCP OAuth と接続確認を実行する。
+    Hermes 全プロフィールで共有する Gmail MCP OAuth を実行する。
 #>
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
     [ValidateSet('auth')]
-    [string]$Action,
+    [string]$Action
 
-    [string]$HermesProfile = ''
 )
 
 Set-StrictMode -Version Latest
