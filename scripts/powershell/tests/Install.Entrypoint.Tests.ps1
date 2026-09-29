@@ -154,7 +154,7 @@ BeforeAll {
         foreach ($scriptName in 'install.ps1', 'install.user.ps1', 'install.admin.ps1') {
             Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\$scriptName") -Destination (Join-Path $scriptDir $scriptName)
         }
-        foreach ($library in 'WindowsEnvironment.ps1', 'InstallProfiles.ps1', 'SetupHandler.ps1', 'Invoke-ExternalCommand.ps1', 'HermesBootstrap.ps1') {
+        foreach ($library in 'WindowsEnvironment.ps1', 'InstallProfiles.ps1', 'SetupHandler.ps1', 'Invoke-ExternalCommand.ps1') {
             Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\lib\$library") -Destination (Join-Path $libDir $library)
         }
 
