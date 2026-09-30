@@ -351,6 +351,7 @@ class GitStagingTests(unittest.TestCase):
         git("checkout", "main", cwd=self.checkout)
         observed_extra_ref: list[int] = []
         observed_extra_object: list[int] = []
+        failed_commands: list[tuple[str, ...]] = []
         real_run = git_module._run_git
         real_environment = git_module._git_environment
 
@@ -368,6 +369,8 @@ class GitStagingTests(unittest.TestCase):
                 else arguments
             )
             output = real_run(test_arguments, cwd, environment)
+            if output is None:
+                failed_commands.append(arguments)
             if arguments == ("fetch", "--no-tags", "origin", "--", "main"):
                 observed_extra_ref.append(
                     subprocess.run(
@@ -399,7 +402,10 @@ class GitStagingTests(unittest.TestCase):
                 side_effect=allow_local_fixture_repositories,
             ),
         ):
-            stage_distribution(self.source(), self.workdir, auth())
+            try:
+                stage_distribution(self.source(), self.workdir, auth())
+            except RepositoryError:
+                self.fail(f"Git fixture commands failed: {failed_commands!r}")
 
         self.assertEqual(observed_extra_ref, [1])
         self.assertTrue(all(returncode != 0 for returncode in observed_extra_object))
