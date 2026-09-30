@@ -376,7 +376,13 @@ class GitStagingTests(unittest.TestCase):
             if arguments == ("fetch", "--no-tags", "origin", "--", "main"):
                 observed_extra_ref.append(
                     subprocess.run(
-                        ("git", "show-ref", "--verify", "--quiet", "refs/remotes/origin/extra"),
+                        (
+                            git_module._GIT_EXECUTABLE,
+                            "show-ref",
+                            "--verify",
+                            "--quiet",
+                            "refs/remotes/origin/extra",
+                        ),
                         cwd=cwd,
                         env=environment,
                         check=False,
@@ -386,7 +392,12 @@ class GitStagingTests(unittest.TestCase):
                 )
                 observed_extra_object.append(
                     subprocess.run(
-                        ("git", "cat-file", "-e", f"{extra_commit}^{{commit}}"),
+                        (
+                            git_module._GIT_EXECUTABLE,
+                            "cat-file",
+                            "-e",
+                            f"{extra_commit}^{{commit}}",
+                        ),
                         cwd=cwd,
                         env=environment,
                         check=False,
