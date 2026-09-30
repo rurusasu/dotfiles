@@ -76,16 +76,24 @@ wsl -d NixOS
 install.cmd
   -> scripts/powershell/install.ps1
   -> NixOS-WSL の latest release asset を GitHub API から取得
-  -> nixos.wsl が使える場合は wsl --install --from-file
+  -> nixos.wsl を選択し、wsl --install --from-file
      （WSL 2.4.4 未満または失敗時は wsl --import --version 2）
   -> scripts/sh/nixos-wsl-postinstall.sh
   -> nix flake update
   -> user-aware nixos-rebuild-with-user.sh switch --flake ...#nixos --impure
 ```
 
-release asset は通常 `nixos.wsl` を優先し、古い release 形式では
-`nixos-wsl.tar.gz` または `nixos-wsl-legacy.tar.gz` を使用します。既に同名の WSL
-ディストリビューションが登録されている場合は再インストールせず、既存の状態を使います。
+release asset は `nixos.wsl` のみを使用します。対応範囲は、このアセットを配布する現行
+`.wsl` 形式の release（`2411.6.0` 以降）です。公式 release の `2411.6.0`、`2505.7.0`、
+`2511.7.1`、`2605.7.2` で配布を確認しています。旧 tar.gz 形式の `2405.5.4` 以前は
+対応しません。対応外 tag や `nixos.wsl` が欠落した release を指定すると、対象 tag と
+必要なアセットを示すエラーで停止します。`nixos.aarch64.wsl` や checksum ファイルは
+選択しません。
+
+アセット形式の境界は公式の [2411.6.0 のアセット](https://github.com/nix-community/NixOS-WSL/releases/expanded_assets/2411.6.0)
+と [2405.5.4 のアセット](https://github.com/nix-community/NixOS-WSL/releases/expanded_assets/2405.5.4)
+で確認できます。既に同名の WSL ディストリビューションが登録されている場合は
+再インストールせず、既存の状態を使います。
 
 postinstall は `--user` がなければ UID 1000 の通常ユーザーを検出します。検出したユーザーの
 名前、home、UID、GID、primary group を NixOS、Home Manager、`wsl.defaultUser` に渡すため、
@@ -148,7 +156,11 @@ Windows 側 checkout に戻す場合だけ使用します。通常の初回 setu
 .\install.cmd -ForcePostInstall
 ```
 
-通常は `-ReleaseTag` を指定せず、NixOS-WSL の latest release を使用します。`InstallDir` は
+通常は `-ReleaseTag` を指定せず、NixOS-WSL の latest release を使用します。指定する場合は
+上記の対応範囲の tag を使用してください。`install.ps1` はこの値をユーザーフェーズへ渡し、
+handler が GitHub の `/releases/tags/<tag>` から取得します。CI の
+`scripts/powershell/ci/Invoke-NixosWslE2E.ps1` も `-ReleaseTag` を受け取れますが、
+`.github/workflows/ci-bootstrap.yml` は指定せず latest を検証します。`InstallDir` は
 新規インストール時に空のディレクトリである必要があります。`-ForcePostInstall` は既存 checkout
 を削除または上書きし得るため、通常は指定しないでください。必要な場合も、先に checkout と
 VHD/stateful data のバックアップを作成してください。
