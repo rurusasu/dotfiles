@@ -358,10 +358,9 @@ class GitStagingTests(unittest.TestCase):
             git_auth: GitAuth, askpass: Path
         ) -> dict[str, str]:
             environment = real_environment(git_auth, askpass)
-            index = int(environment["GIT_CONFIG_COUNT"])
-            environment[f"GIT_CONFIG_KEY_{index}"] = "protocol.file.allow"
-            environment[f"GIT_CONFIG_VALUE_{index}"] = "always"
-            environment["GIT_CONFIG_COUNT"] = str(index + 1)
+            # Git's test-only config transport is needed for the local bare repo;
+            # keep the override at command-line precedence in the Nix sandbox.
+            environment["GIT_CONFIG_PARAMETERS"] = "'protocol.file.allow'='always'"
             return environment
 
         def inspect(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> str | None:

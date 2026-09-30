@@ -31,6 +31,7 @@ pkgs.runCommand "hermes-bootstrap-tests"
     export DOTFILES_HERMES_MANAGED_WRAPPER="${managedWrapper}/bin/hermes-profile-sync"
     export DOTFILES_HERMES_GIT_EXECUTABLE="${pkgs.git}/bin/git"
     export PATH="${bootstrapCli}/bin:$PATH"
+    mkdir -p /tmp/hermes-test-home
     cd ${sourceRoot}
     ${testPython} -m unittest discover \
       -s tests/python/hermes_bootstrap_test \
