@@ -301,6 +301,27 @@ Invoke-WindowsE2EValidation -Name 'portable command PATH recovery' -Validation {
   -ManifestPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json')
 }
 
+Invoke-WindowsE2EValidation -Name 'WezTerm install PATH and version' -Validation {
+$weztermPackages = @(
+  $wingetSources | ForEach-Object { $_.Packages } |
+    Where-Object { $_.PackageIdentifier -match '^wez\.wezterm(?:\.nightly)?$' }
+)
+if ($weztermPackages.Count -ne 1) {
+  throw "Expected exactly one WezTerm package in the generated manifest; found $($weztermPackages.Count)"
+}
+$weztermCommand = Get-Command -Name 'wezterm' -CommandType Application -ErrorAction Stop |
+  Select-Object -First 1
+$weztermTimer = [System.Diagnostics.Stopwatch]::StartNew()
+$weztermVersionOutput = @(Invoke-VerifyCommand -Command 'wezterm' -Arguments @('--version') -TimeoutSeconds 120)
+$weztermVersionExitCode = $LASTEXITCODE
+$weztermTimer.Stop()
+$weztermVersionText = $weztermVersionOutput -join [Environment]::NewLine
+. (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WezTermInstallEvidence.ps1')
+Assert-WezTermInstallEvidence -Output $out -PackageId $weztermPackages[0].PackageIdentifier `
+  -VersionOutput $weztermVersionText -VersionExitCode $weztermVersionExitCode
+Write-Host "WEZTERM_E2E: runtime=$($PSVersionTable.PSVersion) package=$($weztermPackages[0].PackageIdentifier) executable=$($weztermCommand.Source) elapsedMs=$($weztermTimer.ElapsedMilliseconds) exitCode=$weztermVersionExitCode version=$weztermVersionText"
+}
+
 Invoke-WindowsE2EValidation -Name 'pnpm bootstrap' -Validation {
 $npmPrefixOutput = @(Invoke-Npm -Arguments @('prefix', '--global'))
 $npmPrefixExitCode = $LASTEXITCODE
@@ -492,10 +513,12 @@ $installerE2EScriptPath = Join-Path $env:RUNNER_TEMP "windows-installer-e2e-$exp
 [System.IO.File]::WriteAllText($installerE2EScriptPath, $installerE2EScript, [System.Text.Encoding]::Unicode)
 Write-Host "Running the complete Windows installer E2E under $expectedRuntime ($($runtimeExecutable.Source))"
 try {
+    Start-Transcript -Path (Join-Path $env:RUNNER_TEMP "windows-installer-$expectedRuntime.log") -Force | Out-Null
     & $runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File $installerE2EScriptPath
     $installerE2EExitCode = $LASTEXITCODE
 }
 finally {
+    Stop-Transcript -ErrorAction SilentlyContinue | Out-Null
     Remove-Item -LiteralPath $installerE2EScriptPath -Force -ErrorAction SilentlyContinue
 }
 if ($installerE2EExitCode -ne 0) {

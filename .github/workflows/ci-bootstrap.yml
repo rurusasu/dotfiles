@@ -1144,6 +1144,30 @@ jobs:
           DOTFILES_E2E_POWERSHELL_VERSION: ${{ matrix.version }}
         run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts\powershell\ci\Invoke-WindowsInstallerE2E.ps1
 
+      - name: Collect Windows installer diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          $diagnostics = Join-Path $env:RUNNER_TEMP 'windows-installer-diagnostics'
+          New-Item -ItemType Directory -Path $diagnostics -Force | Out-Null
+          $wingetLogs = Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir'
+          if (Test-Path -LiteralPath $wingetLogs) {
+            Copy-Item -Path (Join-Path $wingetLogs '*.log') -Destination $diagnostics -ErrorAction Continue
+          }
+          Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP 'windows-installer-*.log') -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $diagnostics
+          "tested_sha=$env:TESTED_SHA`nruntime=${{ matrix.version }}" |
+            Set-Content -LiteralPath (Join-Path $diagnostics 'attestation.txt')
+
+      - name: Upload Windows installer diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-installer-${{ matrix.version }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-installer-diagnostics
+          retention-days: 7
+          if-no-files-found: error
+
   complete:
     name: Bootstrap / Complete
     if: ${{ always() }}
