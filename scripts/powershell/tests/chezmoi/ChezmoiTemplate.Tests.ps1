@@ -934,15 +934,18 @@ Describe 'chezmoi テンプレート バリデーション' {
         It 'should bound runtime op reads with a timeout' {
             $windowsContent = Get-Content -Encoding UTF8 -LiteralPath $script:kaggleDeployWindows -Raw
             $linuxContent = Get-Content -Encoding UTF8 -LiteralPath $script:kaggleDeployLinux -Raw
+            $timeoutDataPath = Join-Path $script:repoRoot 'chezmoi/.chezmoidata/onepassword.json'
+            $timeoutData = Get-Content -Encoding UTF8 -LiteralPath $timeoutDataPath -Raw | ConvertFrom-Json
 
             $windowsContent | Should -Match '\$OpReadTimeoutSeconds' -Because "run_always scripts must not hang when 1Password app integration prompts or stalls"
-            $windowsContent | Should -Match '\$OpReadTimeoutSeconds = 60' -Because "1Password reads can exceed 20 seconds after app auth"
+            $windowsContent | Should -Match '\$OpReadTimeoutSeconds = \{\{\s*\.op_read_timeout_seconds\s*\}\}' -Because "Windows deploy should use the shared timeout data"
             $windowsContent | Should -Match 'WaitForExit\(\$timeoutMs\)' -Because "Windows op read should be bounded"
             $windowsContent | Should -Match 'Kill\(' -Because "timed-out Windows op reads should be terminated"
             $linuxContent | Should -Match 'OP_READ_TIMEOUT_SECONDS' -Because "run_always scripts must not hang when 1Password app integration prompts or stalls"
-            $linuxContent | Should -Match 'OP_READ_TIMEOUT_SECONDS=60' -Because "WSL op.exe reads can exceed 20 seconds after app auth"
+            $linuxContent | Should -Match 'OP_READ_TIMEOUT_SECONDS=\{\{\s*\.op_read_timeout_seconds\s*\}\}' -Because "Unix deploy should use the shared timeout data"
             $linuxContent | Should -Match 'timeout|gtimeout' -Because "Unix op read should be bounded"
             $linuxContent | Should -Match 'timed out after \$OP_READ_TIMEOUT_SECONDS seconds' -Because "timeout failures should be reported as non-fatal skips"
+            $timeoutData.op_read_timeout_seconds | Should -BeGreaterOrEqual 180
         }
     }
 

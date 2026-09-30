@@ -5,6 +5,17 @@
 Windows で `op` を非対話実行する場合は、`op read` / `op inject` / `op vault list`
 などに `--cache=false` を付ける。
 
+1Password desktop app integration の認可は Windows では `op.exe` のプロセス単位。
+子プロセスから複数回 `op` を呼ぶと、それぞれ別の認可要求になる。
+`op signin` を別の PowerShell プロセスで先に実行しても、その認可状態は後続の
+`chezmoi apply` に引き継がれない。
+
+そのため Windows の `task chezmoi` は、apply 前に Kaggle、SSH 公開鍵、MCP設定の
+任意secret参照を1回の `op inject` でまとめて取得し、`chezmoi apply` の子プロセスへ
+一時的に環境変数で渡す。batch取得が失敗した場合は任意secretをすべてスキップし、
+個別の `op read` を再試行せずにapplyを続行する。直接 `chezmoi apply` を実行した場合は、
+従来どおり必要なdeploy scriptが個別にsecretを取得する。
+
 今回の実測では、`op --debug vault list --format=json --account my.1password.com` は
 1Password app integration の `NmRequestAuthorization` と `NmRequestDelegatedSession`
 までは成功したが、その後に cache daemon へ接続しようとして timeout した。
@@ -61,9 +72,21 @@ shell 起動や deploy script で `op` を呼ぶ場合は、timeout を短くし
 
 目安:
 
-- shell startup fallback / runtime deploy read: 60 秒程度まで許容し、失敗時は warning で続行する。
+- shell startup fallback / runtime deploy read: 最大 180 秒まで待機し、失敗時は warning で続行する。
 - GUI launcher: 既定では `op` を呼ばない。`DOTFILES_GUI_EAGER_SECRET_LOAD=1` で opt-in した場合だけ、短めの timeout 後に token なし起動へ fallback する。
 - 必須 secret: timeout したら明示的に失敗させる。
+
+deploy script の `WaitForExit` が設定している 180 秒は、呼び出し側が `op` を待つ上限。
+`op` 自身が先に `context deadline exceeded` を返した場合は、この上限を延ばしても解消しない。
+その場合は 1Password desktop app のロック状態と CLI integration を確認し、次の読み取り専用コマンドで
+app integration / account 接続を診断する。
+
+```powershell
+op --cache=false --debug vault list --format=json --account my.1password.com
+```
+
+deploy の1Password read失敗は任意secretのskipとして処理し、chezmoi apply は続行する。
+CI はこのfallbackとtimeout設定を検証するが、実アカウントの応答時間は検証しない。
 
 ## `op run` について
 
