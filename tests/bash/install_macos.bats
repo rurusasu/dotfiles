@@ -123,6 +123,10 @@ printf "npm %s prefix=%s\n" "$*" "$prefix" >>"$COMMAND_LOG"
 printf "#!/usr/bin/env bash\nexit 0\n" >"$prefix/bin/codex"
 chmod +x "$prefix/bin/codex"
 '
+	# Activation prepends host/profile paths. Keep this offline boundary explicit
+	# and never let an inherited prefix redirect fixture writes outside TEST_HOME.
+	export DOTFILES_NPM_COMMAND="$STUB_BIN/npm"
+	export CODEX_NPM_PREFIX="$TEST_HOME/.local/npm"
 	write_stub migrate-darwin-provider 'printf "migrate-darwin-provider %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub brew '
 if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions &&
@@ -549,6 +553,42 @@ main "$@"
 
 run_macos_installer() {
 	run_macos_installer_for_host "$(/usr/bin/uname -s)" "$@"
+}
+
+@test "offline npm fixture survives the real installer PATH prepend" {
+	write_installed_stubs
+	export NPM_SENTINEL_MARKER="$BATS_TEST_TMPDIR/unexpected-npm-ran"
+	local prepended_bin="$FAKE_DOCKER_APP/Contents/Resources/bin"
+	mkdir -p "$prepended_bin"
+	write_stub unexpected-npm '
+printf "unexpected npm\n" >"$NPM_SENTINEL_MARKER"
+exit 47
+'
+	mv "$STUB_BIN/unexpected-npm" "$prepended_bin/npm"
+
+	# Removing only the explicit seam must select the harmless fixture sentinel,
+	# not npm from the host. Exercise the production PATH refresh itself.
+	run env -u DOTFILES_NPM_COMMAND bash -c '
+set -euo pipefail
+. "$INSTALLER"
+. "$MACOS_TEST_BOUNDARY"
+export DOTFILES_ROOT="$REPO_ROOT"
+apply_darwin_system
+[[ $(command -v npm) == "$FAKE_DOCKER_APP/Contents/Resources/bin/npm" ]]
+dotfiles_install_codex_npm
+'
+	[ "$status" -eq 47 ]
+	[ -f "$NPM_SENTINEL_MARKER" ]
+	rm "$NPM_SENTINEL_MARKER"
+	: >"$COMMAND_LOG"
+
+	run_macos_installer
+
+	[ "$status" -eq 0 ]
+	[ ! -e "$NPM_SENTINEL_MARKER" ]
+	grep -Fqx "npm install --global --no-audit --no-fund @openai/codex@latest prefix=$TEST_HOME/.local/npm" "$COMMAND_LOG"
+	[ -x "$TEST_HOME/.local/npm/bin/codex" ]
+	[ "${CODEX_NPM_PREFIX:-}" = "$TEST_HOME/.local/npm" ]
 }
 
 @test "extended ACL grant on Homebrew cask link parent stops before privileged mutation" {
