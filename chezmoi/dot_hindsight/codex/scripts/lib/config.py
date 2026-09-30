@@ -1,7 +1,7 @@
 """Configuration management for Hindsight Codex plugin.
 
-Loads settings from settings.json (plugin defaults) merged with environment
-variable overrides. Full config schema matching Openclaw's 30+ options.
+Loads built-in defaults, install settings.json, user codex.json, then
+environment variable overrides. Full config schema matching Openclaw's 30+ options.
 """
 
 import json
@@ -110,7 +110,7 @@ def _load_settings_file(path: str, config: dict) -> None:
 
 
 def load_config() -> dict:
-    """Load plugin configuration from settings.json + env overrides.
+    """Load plugin configuration from install/user files and env overrides.
 
     Loading order (later entries win):
       1. Built-in defaults
