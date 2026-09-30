@@ -357,14 +357,17 @@ class GitStagingTests(unittest.TestCase):
         def allow_local_fixture_repositories(
             git_auth: GitAuth, askpass: Path
         ) -> dict[str, str]:
-            environment = real_environment(git_auth, askpass)
-            # Git's test-only config transport is needed for the local bare repo;
-            # keep the override at command-line precedence in the Nix sandbox.
-            environment["GIT_CONFIG_PARAMETERS"] = "'protocol.file.allow'='always'"
-            return environment
+            return real_environment(git_auth, askpass)
 
         def inspect(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> str | None:
-            output = real_run(arguments, cwd, environment)
+            # Only this test fetches a local bare fixture; make its file transport
+            # exception explicit on the Git command rather than in inherited config.
+            test_arguments = (
+                ("-c", "protocol.file.allow=always", *arguments)
+                if arguments == ("fetch", "--no-tags", "origin", "--", "main")
+                else arguments
+            )
+            output = real_run(test_arguments, cwd, environment)
             if arguments == ("fetch", "--no-tags", "origin", "--", "main"):
                 observed_extra_ref.append(
                     subprocess.run(
