@@ -11,7 +11,7 @@ Describe 'Windows Gemini shim bootstrap' {
         New-Item -ItemType Directory -Path $script:testBin -Force | Out-Null
         $script:renderedScript = Join-Path $TestDrive 'ensure-gemini-shim.ps1'
         [System.IO.File]::WriteAllText($script:renderedScript, $source, [System.Text.UTF8Encoding]::new($false))
-        $script:pwshExe = Join-Path $PSHOME 'pwsh.exe'
+        $script:powerShellExe = (Get-Process -Id $PID).Path
     }
 
     It 'does not require pnpm root when the existing Gemini command is healthy' {
@@ -36,7 +36,7 @@ Describe 'Windows Gemini shim bootstrap' {
             $env:PATH = "$script:testBin;$env:SystemRoot\System32"
             $env:USERPROFILE = Join-Path $TestDrive 'user-home'
             $env:PNPM_TEST_MARKER = $pnpmMarker
-            $output = @(& $script:pwshExe -NoProfile -File $script:renderedScript 2>&1)
+            $output = @(& $script:powerShellExe -NoProfile -File $script:renderedScript 2>&1)
             $exitCode = $LASTEXITCODE
         }
         finally {
@@ -50,3 +50,4 @@ Describe 'Windows Gemini shim bootstrap' {
         Test-Path -LiteralPath $pnpmMarker | Should -BeFalse
     }
 }
+

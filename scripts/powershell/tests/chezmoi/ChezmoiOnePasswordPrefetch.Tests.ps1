@@ -7,6 +7,11 @@ BeforeAll {
 }
 
 Describe 'Windows chezmoi 1Password batch prefetch' {
+    It 'generates the same SHA-256 environment name on Windows PowerShell 5.1 and PowerShell 7' {
+        Get-ChezmoiSecretEnvironmentVariableName -Reference 'op://plane/item/credential' |
+            Should -Be 'DOTFILES_OP_PREFETCHED_REF_e85e731df7e699a26941fa4707ad8300ee085570d303caf15b7a9777134e6b5e'
+    }
+
     BeforeEach {
         $script:planeReference = 'op://plane/item/credential'
         $script:planeVariable = Get-ChezmoiSecretEnvironmentVariableName -Reference $script:planeReference
@@ -142,3 +147,4 @@ Describe 'Windows chezmoi 1Password batch prefetch' {
         $ssh | Should -Match 'DOTFILES_OP_PREFETCH_ENABLED'
     }
 }
+

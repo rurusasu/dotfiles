@@ -57,8 +57,14 @@ function Get-ChezmoiSecretEnvironmentVariableName {
     )
 
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($Reference)
-    $hash = [System.Security.Cryptography.SHA256]::HashData($bytes)
-    $suffix = [Convert]::ToHexString($hash).ToLowerInvariant()
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha256.ComputeHash($bytes)
+    }
+    finally {
+        $sha256.Dispose()
+    }
+    $suffix = [BitConverter]::ToString($hash).Replace('-', '').ToLowerInvariant()
     return "DOTFILES_OP_PREFETCHED_REF_$suffix"
 }
 
@@ -246,3 +252,4 @@ function Get-ChezmoiPrefetchResult {
         return [pscustomobject]@{ Success = $false; Secrets = @{} }
     }
 }
+
