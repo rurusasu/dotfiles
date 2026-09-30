@@ -12,6 +12,7 @@ tasks:
       - task: keybindings:check
       - |-
         system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
+        nix build ".#checks.${system}.powershell-formatter" --no-link --no-write-lock-file
         nix build ".#checks.${system}.nix-unit" --no-link --no-write-lock-file
         nix build ".#checks.${system}.custom-package-builds" --no-link --no-write-lock-file
         nix build ".#checks.${system}.aerospace-workspace-cycle" --no-link --no-write-lock-file
