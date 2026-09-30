@@ -24,14 +24,18 @@ SSOT は「各定義を一度だけ持つ」ことであり、すべてを 1 フ
 
 native desktop 用 package は `catalog/native-desktop.nix` に定義します。`sets.all` は全 feature を含むため、`installFeature` を付けるだけでは WSL/standalone への非混入を保証できません。`sets.nativeDesktopPackageNames` を使い headless Home Manager consumer で除外し、native host と選択された home module のみが `WithDesktop` で解決します。
 
-| Catalog output                      | Consumer                            | Platform                     |
-| ----------------------------------- | ----------------------------------- | ---------------------------- |
-| `all` / category sets               | `nix/home/common.nix`               | macOS、NixOS、Ubuntu、Debian |
-| `darwinCasksForInstallFeatures`     | nix-homebrew in nix-darwin          | macOS                        |
-| `linuxSystemModules`                | NixOS / System Manager modules      | Linux                        |
-| `wingetMap`, `npmMap`, `pnpmGlobal` | `nix/packages/winget.nix`           | Windows                      |
-| `supportReport`                     | `package-support-report` derivation | CI and review                |
-| `providerErrors`                    | flake check                         | all platforms                |
+| Catalog output                         | Consumer                            | Platform                                              |
+| -------------------------------------- | ----------------------------------- | ----------------------------------------------------- |
+| `darwinHomePackagesForInstallFeatures` | `nix/home/darwin.nix`               | macOS                                                 |
+| `allWithout`                           | `nix/home/linux.nix`                | native NixOS、standalone Linux（Ubuntu、Debian など） |
+| `allWithout`                           | `nix/home/wsl.nix`                  | NixOS-WSL                                             |
+| `darwinCasksForInstallFeatures`        | nix-homebrew in nix-darwin          | macOS                                                 |
+| `linuxSystemModules`                   | NixOS / System Manager modules      | Linux                                                 |
+| `wingetMap`, `npmMap`, `pnpmGlobal`    | `nix/packages/winget.nix`           | Windows                                               |
+| `supportReport`                        | `package-support-report` derivation | CI and review                                         |
+| `providerErrors`                       | flake check                         | all platforms                                         |
+
+Home Manager の package 選択と `home.packages` は各 OS の module が担当します。Darwin は install feature に応じて選択し、Linux は native desktop package を除外します。WSL は native desktop package に加えて Discord と Ollama を除外します。各 OS module が import する `nix/home/common.nix` は OS 非依存の共有設定を担当し、package 選択は行いません。
 
 Windows だけに存在する GUI や OS component は `install/windows-only.nix` の `windowsOnlySupport` に置き、macOS/Linux で対応しない理由を必ず記録します。クロスプラットフォームのツールを理由なしに Windows-only へ入れることはできません。
 
@@ -142,7 +146,10 @@ Neovim は `nix/packages/neovim/default.nix` でパーサーと対応クエリ�
 | `nix/packages/sets.nix`              | 合成と既存 consumer 向けの公開 API       |
 | `nix/packages/support-report.nix`    | coverage report derivation               |
 | `nix/packages/winget.nix`            | generated Windows manifests              |
-| `nix/home/common.nix`                | shared Home Manager packages             |
+| `nix/home/darwin.nix`                | macOS Home Manager package 選択と設定    |
+| `nix/home/linux.nix`                 | Linux Home Manager package 選択と設定    |
+| `nix/home/wsl.nix`                   | WSL Home Manager package 選択と設定      |
+| `nix/home/common.nix`                | OS 非依存の共有 Home Manager 設定        |
 | `nix/hosts/darwin/configuration.nix` | macOS system and casks                   |
 | `nix/system-manager/`                | Ubuntu/Debian system packages and Docker |
 | `nix/hosts/linux/`                   | native NixOS system packages and Docker  |
