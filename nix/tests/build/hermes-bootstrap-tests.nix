@@ -1,7 +1,12 @@
 { inputs, pkgs }:
 let
   hermesPackage = inputs.hermes-agent.packages.${pkgs.system}.default;
-  python = "${hermesPackage.hermesVenv}/bin/python3";
+  testPython = "${hermesPackage.hermesVenv}/bin/python3";
+  bootstrapPython = pkgs.python312.withPackages (pythonPackages: [
+    pythonPackages.httpx
+    pythonPackages.python-dotenv
+    pythonPackages.pyyaml
+  ]);
   sourceRoot = ../../..;
   managedWrapper = pkgs.writeShellScriptBin "hermes-profile-sync" (
     builtins.readFile ../../../scripts/sh/hermes-profile-sync.sh
@@ -13,7 +18,7 @@ let
     export HERMES_HOME=/tmp/hermes-test-home
     export HERMES_BOOTSTRAP_MANIFEST=${manifest}
     export PYTHONPATH=${inputs.hermes-agent}:${sourceRoot}/scripts/python
-    exec ${python} -m hermes_bootstrap "$@"
+    exec ${bootstrapPython}/bin/python3 ${sourceRoot}/scripts/python/hermes_bootstrap_cli.py "$@"
   '';
 in
 pkgs.runCommand "hermes-bootstrap-tests"
@@ -27,7 +32,7 @@ pkgs.runCommand "hermes-bootstrap-tests"
     export DOTFILES_HERMES_GIT_EXECUTABLE="${pkgs.git}/bin/git"
     export PATH="${bootstrapCli}/bin:$PATH"
     cd ${sourceRoot}
-    ${python} -m unittest discover \
+    ${testPython} -m unittest discover \
       -s tests/python/hermes_bootstrap_test \
       -p 'test_*.py' \
       -v

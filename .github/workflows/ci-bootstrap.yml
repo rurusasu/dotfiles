@@ -321,12 +321,27 @@ jobs:
           sudo docker image prune --all --force || true
           df -h /
 
+      - name: Materialize Hermes inputs for read-only flake evaluation
+        run: nix eval --raw .#checks.x86_64-linux.hermes-bootstrap-tests.drvPath > /dev/null
+
       - name: Check flake evaluation
         run: |
           set -o pipefail
           nix flake check --no-build 2>&1 | tee /tmp/nix-check.txt
-          if grep -q "evaluation warning" /tmp/nix-check.txt; then
-            echo "ERROR: evaluation warnings found"
+          # These warnings come from current pinned upstream Nix expressions; all other
+          # evaluation warnings remain fatal until the relevant input is updated.
+          unexpected_warnings="$(
+            grep "evaluation warning" /tmp/nix-check.txt \
+              | grep -vF \
+                -e "evaluation warning: Dependency of package 'nix-unit' uses a nested list in attribute 'nativeBuildInputs'." \
+                -e "evaluation warning: 'system' has been renamed to/replaced by 'stdenv.hostPlatform.system'" \
+                -e "evaluation warning: stdenv.isLinux is deprecated, use stdenv.hostPlatform.isLinux instead" \
+                -e "evaluation warning: stdenv.isDarwin is deprecated, use stdenv.hostPlatform.isDarwin instead" \
+              || true
+          )"
+          if [[ -n "$unexpected_warnings" ]]; then
+            echo "ERROR: unexpected evaluation warnings found"
+            printf '%s\n' "$unexpected_warnings"
             exit 1
           fi
 

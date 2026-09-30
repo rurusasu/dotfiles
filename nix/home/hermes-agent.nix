@@ -13,6 +13,7 @@ let
     import ./hermes-agent/manifest.nix { inherit hermesHome; }
   );
   bootstrapPython = pkgs.python312.withPackages (pythonPackages: [
+    pythonPackages.httpx
     pythonPackages.python-dotenv
     pythonPackages.pyyaml
   ]);
@@ -29,7 +30,7 @@ let
       export HERMES_BOOTSTRAP_MANIFEST=${bootstrapManifest}
       export DOTFILES_HERMES_GIT_EXECUTABLE=${pkgs.git}/bin/git
       export PYTHONPATH=${inputs.hermes-agent}:${../../scripts/python}
-      exec ${bootstrapPython}/bin/python -m hermes_bootstrap "$@"
+      exec ${bootstrapPython}/bin/python ${../../scripts/python/hermes_bootstrap_cli.py} "$@"
     '';
   };
   hermesLcmPlugin = pkgs.fetchFromGitHub {
