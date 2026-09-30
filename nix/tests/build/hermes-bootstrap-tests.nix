@@ -3,12 +3,9 @@ let
   hermesPackage = inputs.hermes-agent.packages.${pkgs.system}.default;
   python = "${hermesPackage.hermesVenv}/bin/python3";
   sourceRoot = ../../..;
-  managedWrapper = pkgs.writeTextFile {
-    name = "hermes-profile-sync.sh";
-    destination = "/bin/hermes-profile-sync.sh";
-    executable = true;
-    text = builtins.readFile ../../../scripts/sh/hermes-profile-sync.sh;
-  };
+  managedWrapper = pkgs.writeShellScriptBin "hermes-profile-sync" (
+    builtins.readFile ../../../scripts/sh/hermes-profile-sync.sh
+  );
   manifest = pkgs.writeText "hermes-bootstrap-test-manifest.yaml" (
     import ../../home/hermes-agent/manifest.nix { hermesHome = "/tmp/hermes-test-home"; }
   );
@@ -26,7 +23,7 @@ pkgs.runCommand "hermes-bootstrap-tests"
   ''
     export PYTHONPATH="${inputs.hermes-agent}:${sourceRoot}/scripts/python"
     export DOTFILES_HERMES_BOOTSTRAP_EXECUTABLE="${bootstrapCli}/bin/hermes-bootstrap"
-    export DOTFILES_HERMES_MANAGED_WRAPPER="${managedWrapper}/bin/hermes-profile-sync.sh"
+    export DOTFILES_HERMES_MANAGED_WRAPPER="${managedWrapper}/bin/hermes-profile-sync"
     export DOTFILES_HERMES_GIT_EXECUTABLE="${pkgs.git}/bin/git"
     export PATH="${bootstrapCli}/bin:$PATH"
     cd ${sourceRoot}
