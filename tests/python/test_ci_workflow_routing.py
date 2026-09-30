@@ -32,6 +32,20 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         for system in ("x86_64-linux", "aarch64-darwin"):
             self.assertIn(f'.#checks.{system}.aerospace-workspace-cycle', bootstrap)
 
+    def test_nix_read_only_check_materializes_hermes_test_inputs_first(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        nix_job = self._workflow_job(workflow, "nix-test")
+        materialize = nix_job.index("nix eval --raw .#checks.x86_64-linux.hermes-bootstrap-tests.drvPath")
+        check = nix_job.index("nix flake check --no-build")
+        self.assertLess(materialize, check)
+        for known_warning in (
+            "evaluation warning: Dependency of package 'nix-unit' uses a nested list in attribute 'nativeBuildInputs'.",
+            "evaluation warning: 'system' has been renamed to/replaced by 'stdenv.hostPlatform.system'",
+            "evaluation warning: stdenv.isLinux is deprecated, use stdenv.hostPlatform.isLinux instead",
+            "evaluation warning: stdenv.isDarwin is deprecated, use stdenv.hostPlatform.isDarwin instead",
+        ):
+            self.assertIn(known_warning, nix_job)
+
     def test_generated_windows_keybindings_have_local_and_hosted_drift_checks(self) -> None:
         consistency = self._named_workflow("ci-consistency.yml")
         self.assertIn(".#checks.x86_64-linux.windows-keybindings-generated", consistency)
@@ -400,7 +414,10 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
     def test_hermes_ci_routes_xapi_contract_and_platform_adapters(self) -> None:
         workflow = self._named_workflow("ci-hermes-bootstrap.yml")
         required_paths = (
-            "docker/hermes-agent/**",
+            "scripts/python/hermes_bootstrap/**",
+            "tests/python/hermes_bootstrap_test/**",
+            "nix/home/hermes-agent/**",
+            "nix/home/hermes-agent.nix",
             "docker/hermes-service/**",
             "docker/hermes-browser/**",
             "docker/hermes-browser-mcp/**",
@@ -420,6 +437,10 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "python3 -m unittest tests/python/test_xapi_image_contract.py -v",
             workflow,
         )
+        self.assertIn(
+            "nix build .#checks.x86_64-linux.hermes-bootstrap-tests",
+            workflow,
+        )
 
     def test_hermes_hook_and_task_run_xapi_image_contract(self) -> None:
         pre_commit = PRE_COMMIT_PATH.read_text(encoding="utf-8")
@@ -435,6 +456,9 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIsNotNone(match)
         pattern = match.group("pattern") if match is not None else ""
         for path in (
+            "scripts/python/hermes_bootstrap/app.py",
+            "tests/python/hermes_bootstrap_test/test_app.py",
+            "nix/home/hermes-agent.nix",
             "docker/hermes-xapi-mcp/Dockerfile",
             "docker/local-ai-services/compose.yml",
             "tests/python/test_xapi_image_contract.py",

@@ -33,14 +33,14 @@ setup() {
 	printf '0\n' >"$OLLAMA_READY_ATTEMPT_FILE"
 	printf '0\n' >"$HINDSIGHT_READY_ATTEMPT_FILE"
 	printf '0\n' >"$XAPI_TOKEN_ATTEMPT_FILE"
-	mkdir -p "$(dirname "$COMPOSE_FILE")" "$BATS_TEST_TMPDIR/docker/hermes-agent"
-	cp "$REPO_ROOT/docker/hermes-agent/bootstrap-manifest.yaml" \
-		"$BATS_TEST_TMPDIR/docker/hermes-agent/bootstrap-manifest.yaml"
+	mkdir -p "$(dirname "$COMPOSE_FILE")" "$BATS_TEST_TMPDIR/nix/home/hermes-agent"
+	cp "$REPO_ROOT/nix/home/hermes-agent/manifest.yaml" \
+		"$BATS_TEST_TMPDIR/nix/home/hermes-agent/manifest.yaml"
 	: >"$COMPOSE_FILE"
 	if command -v sha256sum >/dev/null 2>&1; then
-		PLAN_MANIFEST_SHA256="$(sha256sum "$REPO_ROOT/docker/hermes-agent/bootstrap-manifest.yaml" | awk '{print $1}')"
+		PLAN_MANIFEST_SHA256="$(sha256sum "$REPO_ROOT/nix/home/hermes-agent/manifest.yaml" | awk '{print $1}')"
 	else
-		PLAN_MANIFEST_SHA256="$(shasum -a 256 "$REPO_ROOT/docker/hermes-agent/bootstrap-manifest.yaml" | awk '{print $1}')"
+		PLAN_MANIFEST_SHA256="$(shasum -a 256 "$REPO_ROOT/nix/home/hermes-agent/manifest.yaml" | awk '{print $1}')"
 	fi
 	cat >"$BATS_TEST_TMPDIR/hindsight.env" <<'EOF'
 HINDSIGHT_API_LLM_MODEL=qwen3.6:35b

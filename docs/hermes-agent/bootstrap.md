@@ -2,18 +2,19 @@
 
 On macOS and Linux/WSL, the pinned `hermes-agent` flake and Home Manager module
 manage the Hermes CLI and native gateway service. On Windows, `WithHermes`
-selects that Nix-managed runtime in the configured NixOS WSL distribution; the
-Windows installer does not start a Docker Hermes Agent. This page documents the
-explicit legacy Docker Compose bootstrap, which remains available for operators
-who still need that stack. It is not part of the standard Hermes install path.
-The legacy bootstrap writes only the private Compose-side `.op.env`
-service-account file. Docker-managed Hermes config, profiles, repositories,
-and managed `.env` files remain in the Docker volume.
+selects that Nix-managed runtime in the configured NixOS WSL distribution. The
+Nix module also installs `hermes-bootstrap` and a manifest rooted at
+`~/.hermes`; `task hermes:sync` streams 1Password item data to that native
+transactional bootstrap and synchronizes profiles and shared repositories.
 
-The native service uses the host's `~/.hermes` directory. The Compose gateway
-and bootstrap instead use the Docker named volume `hermes-data` (or the volume
-selected by `HERMES_DATA_VOLUME`) at `/opt/data`. Enabling the native service
-does not migrate, modify, or remove an existing Docker volume or its state.
+Docker is not used for the Hermes Agent runtime or its bootstrap. Docker browser
+and MCP sidecars remain separate services. The old `hermes-data` volume is not
+automatically copied, modified, or removed; review the one-time migration below
+before moving any existing state into `~/.hermes`.
+
+The native service and bootstrap use the host's `~/.hermes` directory. Enabling
+the native service does not migrate, modify, or remove an existing Docker volume
+or its state.
 Moving data between these runtimes is an operator-led migration: take and
 verify an explicit backup first, then decide how to resolve path conflicts
 before copying anything. No automatic merge or winner is defined.
@@ -57,59 +58,42 @@ Hermes の組み込み 1Password 連携と `op` CLI の利用手順は、[Hermes
 
 ## Run Bootstrap
 
-Prerequisites are a running Docker daemon, Docker Compose, native Ollama, an
-authenticated 1Password CLI (`op`), access to the ten configured items, and
-access to the declared private GitHub repositories. The adapter pulls the
-configured models after it confirms the Ollama API. Unix
-requires native `bash`, `jq`, `curl`, `docker`, and `op`. The Unix adapter uses
-`curl` for bounded gateway readiness checks. Windows requires `pwsh`, Docker
-Desktop native `docker` and Compose plugin, and authenticated native `op.exe`;
-the focused adapter does not route these commands through WSL. Under WSL,
-Ollama runs on Windows and Docker reaches it through `host.docker.internal`; do
-not enable a second WSL Ollama service.
-
-For the explicit legacy Docker stack only, run:
+The native bootstrap requires the Nix-managed Hermes commands, `op`, `jq`, and
+access to the 1Password Service Account item and declared GitHub repositories.
+`WithHermes` installs Hermes, the native gateway, `hermes-bootstrap`, Node.js
+for the pinned Calendar/Gmail MCP launchers, and the manifest under
+`~/.hermes`. Windows runs the same flow inside the configured NixOS WSL
+distribution.
 
 ```text
-task hermes:docker:bootstrap
+task hermes:bootstrap  # activate Nix/Home Manager, then synchronize
+task hermes:sync       # re-apply secrets, profiles, and repositories
 ```
 
-On Unix, the task sources `scripts/sh/hermes-agent.sh` and invokes its Docker
-adapter with the canonical Compose file. On Windows, it runs
-`pwsh -NoProfile -File scripts/powershell/hermes-bootstrap.ps1`, a focused
-Docker Desktop adapter that does not require WSL, NixOS, or a completed Nix
-rebuild. Before building/bootstrap, both adapters validate Compose, verify the
-native Ollama API, pull the configured LLM and embedding models, create the
-Hindsight `pg0` and `cache` directories, start Hindsight, and require a healthy
-connected database. They then build `hermes`, `hermes-bootstrap`, and
-`xapi-mcp`, run the container bootstrap, and recreate the stack only after
-success. The final recreate is wrapped with the host X API credential adapter
-on both Unix and Windows, so `X_API_CLIENT_*` values are read from the
-configured 1Password item instead of being exported or stored locally. The
-standard installer paths and the separate legacy Docker path are:
+The native script reads the Service Account token into process memory, fetches
+the planned 1Password items, and streams the JSON payload directly to
+`hermes-bootstrap apply` over stdin. Secrets are not written to `.op.env`, a
+temporary file, or command arguments. The transactional apply synchronizes
+profile distributions and shared repositories, installs private credentials,
+and reconciles every managed Hermes profile before the gateway restarts.
+
+Browser and X API MCP remain optional Docker sidecars, published only on
+loopback for native Hermes. Hindsight remains a separate service. Neither is a
+Hermes Agent backend. No Docker Hermes gateway/bootstrap service or backend
+image is used.
+
+The standard installer paths are:
 
 ```text
-install.sh -> OS installer -> task hermes:bootstrap -> Nix/Home Manager CLI and native gateway
-install.cmd + WithHermes -> NixRebuild -> NixOS WSL Hermes profile and native gateway
-task hermes:docker:bootstrap -> legacy Docker adapters -> hermes-bootstrap container -> compose up
+install.sh -> OS installer -> task hermes:bootstrap -> Nix/Home Manager runtime + native sync
+install.cmd + WithHermes -> NixRebuild -> NixOS WSL runtime + native sync
 ```
 
 The Windows `HermesAgentHandler` verifies that a successful NixOS WSL rebuild
 took ownership. If WSL is absent or the rebuild failed, installation fails
-clearly instead of silently falling back to Docker. The legacy Docker tasks
-remain separate, and no existing Docker volume is deleted or automatically
-copied into `~/.hermes`.
-
-The installer accepts this repository's pinned flake cache configuration only
-for the individual NixOS rebuild invocation. The helper does not persist the
-flake's substituter or signing key into user or machine Nix configuration.
-
-`HermesAgentHandler` is Phase `2`, order `56`, and
-`RequiresAdmin = false`. It must stay in the user context so native `op.exe`
-can use 1Password desktop integration.
-
-`task hermes:docker:bootstrap` returns the selected focused adapter status; it neither
-runs the full-machine installer nor hides a nonzero result.
+instead of falling back to Docker. An old Docker volume is not copied, modified,
+or deleted automatically; follow the one-time migration instructions only if
+you explicitly need data from it.
 
 Hindsight の運用、バックアップ、復元、受入検証、privacy boundary は
 [Hermes Hindsight ローカルメモリ運用](./hindsight-memory.md)を参照してください。
@@ -117,18 +101,17 @@ Hindsight の運用、バックアップ、復元、受入検証、privacy bound
 ## Data Flow
 
 ```text
-host adapter
-  -> resolve the existing 1Password Service Account into private .op.env
-  -> request the non-secret secret plan
-  -> fetch ten full 1Password item JSON objects
-  -> stream header + ten item records + end as NDJSON
-  -> docker compose run --rm --no-deps -T hermes-bootstrap apply
-  -> load manifest and recover any crash journal
-  -> validate payload, credentials, and source access
-  -> validate existing local profiles, stage missing sources, and sync shared remotes
-  -> reconcile Hermes onepassword references in root and profile config.yaml files
-  -> transactional install under /opt/data
-  -> docker compose up -d --force-recreate only after success
+native host wrapper
+  -> read 1Password Service Account token without persisting it
+  -> request the manifest-derived secret plan
+  -> fetch the declared 1Password items
+  -> stream header + item records + end as NDJSON over stdin
+  -> hermes-bootstrap apply
+  -> recover any transaction journal and validate payload/source access
+  -> synchronize profile distributions and shared repositories
+  -> reconcile root/profile config, credentials, and managed environment
+  -> commit transaction under ~/.hermes
+  -> restart the Nix-managed native gateway
 ```
 
 Each item record embeds the full `op item get <title> --account
@@ -145,11 +128,11 @@ Required labels are `username` or `user name` and `password` for the dashboard;
 `DISCORD_ALLOWED_USERS`/`allowed_users`/`allowed users`/`allowFrom`/`allow_from`
 for each Discord item. The Calendar item requires `oauth_credentials_json` and
 `tokens_json`; bootstrap installs both as mode `0600` files in the shared
-`/opt/data/google-calendar-mcp` directory, independently of named-profile
+`${HERMES_HOME}/google-calendar-mcp` directory, independently of named-profile
 synchronization.
 
 Gmail reuses the Calendar OAuth client in the shared
-`/opt/data/google-gmail-mcp` directory. Its host-local `credentials.json` is
+`${HERMES_HOME}/google-gmail-mcp` directory. Its host-local `credentials.json` is
 preserved across bootstrap runs and shared by all profiles; it is not added to
 the 1Password item plan.
 
@@ -172,42 +155,33 @@ consumes only the `Discord` section for messaging.
 
 ## Runtime `gh` Authentication
 
-`docker/hermes-agent/gh-wrapper.sh` resolves credentials in this order:
+The native profile sync resolves repository credentials in this order:
 
 1. an existing `GH_TOKEN` process variable;
-2. `${HERMES_HOME}/.env` for the active root or named profile;
-3. `/opt/data/.env` as the shared root fallback.
+2. the active profile's `${HERMES_HOME}/.env`;
+3. the root `${HERMES_HOME}/.env` fallback.
 
-It maps `GITHUB_PERSONAL_ACCESS_TOKEN` or `GITHUB_TOKEN` to `GH_TOKEN` and then
-executes `/usr/bin/gh`. It does not run `gh auth login` or create a separate
-`hosts.yml`. If no token is available, rerun bootstrap after repairing the
-configured GitHub item. Hermes propagates the active profile's `HERMES_HOME`,
-so the same wrapper works for root and named profiles.
+The token is passed only to the scoped Git operation and is not written into
+Git configuration or a separate `hosts.yml`. If no token is available, rerun
+`task hermes:sync` after repairing the configured GitHub item.
 
 ## Sync Shared Lifelog
 
 Lifelog remains a normal read-write shared Git repository, not a named-profile
 exact mirror. The manifest assigns `sync_owner: default`; all profiles use the
-same canonical checkout at `/opt/data/shared/lifelog`.
+same canonical checkout at `${HERMES_HOME}/shared/lifelog`.
 
-The current owner operation is:
-
-```text
-hermes-bootstrap sync-repository lifelog
-```
-
-From the dotfiles repository, an operator may invoke the same command through
-Compose:
+The native owner operation is:
 
 ```text
-docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap sync-repository lifelog
+task hermes:repository:sync
 ```
 
 It resolves the token as process `GH_TOKEN`, then the safe active
-`${HERMES_HOME}/.env`, then `/opt/data/.env`. Env files are parsed as data and
+`${HERMES_HOME}/.env`, then `${HERMES_HOME}/.env`. Env files are parsed as data and
 never executed; unsafe, duplicate, symlinked, hard-linked, or special-file
 sources fail closed. The command validates the canonical repository, acquires
-`/opt/data/locks/repositories/lifelog.lock`, and runs the ordinary read-write
+`${HERMES_HOME}/locks/repositories/lifelog.lock`, and runs the ordinary read-write
 commit/rebase/push workflow. Its success JSON reports `status`, `name`,
 `commit`, and `pushed`.
 
@@ -222,12 +196,12 @@ run `sync-profiles` separately.
 Use the aggregate profile command before and after a local declarative repair:
 
 ```text
-docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles --dry-run
-docker compose -f docker/hermes-service/compose.yml run --rm --no-deps -T hermes-bootstrap sync-profiles
+task hermes:profiles:sync -- --dry-run
+task hermes:profiles:sync
 ```
 
 It processes every profile declared in
-`docker/hermes-agent/bootstrap-manifest.yaml` in manifest order. Do not replace
+`nix/home/hermes-agent/manifest.yaml` in manifest order. Do not replace
 these commands with a clone or checkout inside a profile home.
 
 For every existing valid named profile, the local `distribution.yaml` and
@@ -285,7 +259,7 @@ fails, no profile publication has occurred and bootstrap fails before
 shared-repository synchronization or local transaction mutation.
 
 `apply` holds the canonical nonblocking `EngineLock` at
-`/opt/data/locks/bootstrap-engine.lock` from before crash-journal recovery
+`${HERMES_HOME}/locks/bootstrap-engine.lock` from before crash-journal recovery
 through transaction and private-scratch cleanup. The same cooperative lock
 wraps `sync-profiles` and `sync-repository`; repository locks are subordinate
 to it. Read-only `secret-plan` and `validate` do not acquire it. Lock
@@ -326,7 +300,7 @@ Every cleanup failure requires the guarded profile and private
 shared-repository stage artifact inventories in the cleanup runbook before any
 retry or closure. Profile snapshot, revalidation, Git staging, and askpass
 artifacts are under the container's private `/tmp` (for example,
-`/tmp/.hermes-profile-sync-*`), not the `/opt/data` bind mount. The CLI-hidden
+`/tmp/.hermes-profile-sync-*`), not the `${HERMES_HOME}` bind mount. The CLI-hidden
 category could be `cleanup_failed`; neither an expected push diagnosis nor a
 later successful sync excludes that possibility.
 
@@ -345,7 +319,7 @@ cleanup trigger. Final outer cleanup can replace a snapshot-preflight,
 staging, transaction, validation, or other primary failure. Before retry or
 closure, inventory `/tmp/.hermes-profile-snapshots-*`,
 `/tmp/.hermes-profile-sync-*`, `/tmp/askpass-*`, and private
-`/opt/data/shared/.hermes-repository-*` stages. A candidate or indeterminate
+`${HERMES_HOME}/shared/.hermes-repository-*` stages. A candidate or indeterminate
 determination activates the same full-window quiescent quarantine procedure; a
 later successful command does not waive any inventory.
 
@@ -473,11 +447,11 @@ the suspected cause is an ordinary push failure.
    transaction or repository lock has an owner. Lock files may persist while
    unlocked. Do not re-enable any launcher until the final step; only the
    maintenance owner may run the controlled verification commands below.
-2. From a maintenance environment that sees the same `/opt/data` and `/tmp`
+2. From a maintenance environment that sees the same `${HERMES_HOME}` and `/tmp`
    mount namespaces, inventory only direct children whose complete names match
    `.hermes-profile-snapshots-*`, `.hermes-profile-sync-*`,
    `.hermes-bootstrap-*`, or `askpass-*` under canonical `/tmp`. Separately
-   inventory only direct children of canonical `/opt/data/shared` whose
+   inventory only direct children of canonical `${HERMES_HOME}/shared` whose
    complete names match `.hermes-repository-*`; `repositories.py` creates
    these private first-clone stages in the shared repository target's parent.
    Always inventory both groups, even when the public error names only one
@@ -489,7 +463,7 @@ the suspected cause is an ordinary push failure.
    be directly beneath `/tmp`, owned by the maintenance service UID/GID, and
    use the expected type, mode, link count, and prefix. A
    `.hermes-repository-*` candidate must meet the same directory, owner, and
-   mode checks directly under canonical `/opt/data/shared`. Any unexpected
+   mode checks directly under canonical `${HERMES_HOME}/shared`. Any unexpected
    path, descendant mount, type, owner, mode, link count, prefix, or location
    is an escalation, not a deletion candidate.
 4. Capture an authoritative mount inventory for that maintenance namespace,
@@ -515,7 +489,7 @@ the suspected cause is an ordinary push failure.
    old artifacts are not revisited.
 6. Create a unique `.hermes-profile-cleanup-quarantine-<incident-id>` directory
    in `/tmp` for `/tmp` candidates and a separate quarantine in the candidate's
-   `/opt/data/shared` parent for shared-repository candidates. Verify each is
+   `${HERMES_HOME}/shared` parent for shared-repository candidates. Verify each is
    owner-created, non-symlink, mode `0700`, contains no mountpoint, and has the
    same filesystem device as the candidates it receives. Revalidate each
    candidate immediately before moving it, then atomically rename each exact
@@ -530,7 +504,7 @@ the suspected cause is an ordinary push failure.
    pattern, or `find -delete`.
 8. While all ordinary launch paths remain disabled, require zero direct
    profile-scratch and outer-bootstrap names under `/tmp`, zero private
-   `.hermes-repository-*` stage names under `/opt/data/shared`, zero quarantine
+   `.hermes-repository-*` stage names under `${HERMES_HOME}/shared`, zero quarantine
    names, and no related mount issue. The maintenance owner then runs
    standalone dry-run and real `sync-profiles`, consumes both JSON reports
    completely, and requires both aggregates to exit `0` with the repaired
@@ -551,7 +525,7 @@ the incident.
 
 After manifest loading and before reading or validating a new secret payload,
 `apply` calls `Transaction.recover_if_needed` for journals under
-`/opt/data/.bootstrap/transactions/`. A single-writer transaction lock prevents
+`${HERMES_HOME}/.bootstrap/transactions/`. A single-writer transaction lock prevents
 two local applies from mutating managed paths concurrently. Recovery may restore
 or remove previously journaled managed paths; it is intentionally not covered
 by validation-before-new-write claims.
@@ -590,8 +564,8 @@ preserving each profile's runtime boundary.
 ## Repository Locks And Diagnostics
 
 Shared repository commands use
-`/opt/data/locks/repositories/<name>.lock`; profile publication uses
-`/opt/data/locks/repositories/profile-<name>.lock`. Lock acquisition is
+`${HERMES_HOME}/locks/repositories/<name>.lock`; profile publication uses
+`${HERMES_HOME}/locks/repositories/profile-<name>.lock`. Lock acquisition is
 nonblocking. For lifelog migration/publication, bootstrap reacquires the same
 repository lock and keeps it while publishing the verified working tree and
 removing the legacy path. After confirming the competing process has exited,
@@ -608,9 +582,9 @@ remote URLs.
 
 ## Migration And Conflicts
 
-- A legacy real checkout at `/opt/data/core/lifelog` is copied to private
+- A legacy real checkout at `${HERMES_HOME}/core/lifelog` is copied to private
   staging, validated, and transactionally published at
-  `/opt/data/shared/lifelog`. The legacy path is removed only after it has been
+  `${HERMES_HOME}/shared/lifelog`. The legacy path is removed only after it has been
   snapshotted.
 - An empty legacy directory or compatibility symlink from an older bootstrap is
   removed transactionally.
@@ -658,12 +632,12 @@ profiles.
 
 ## Source Validation Gate
 
-Changes under `docker/hermes-agent/`, or to `Taskfile.yml`,
+Changes under `scripts/python/hermes_bootstrap/`, `nix/home/hermes-agent/`, or to `Taskfile.yml`,
 `.pre-commit-config.yaml`, or the Hermes bootstrap workflow itself, run
 `task hermes:bootstrap:test` through the local `hermes-bootstrap-tests`
-pre-commit hook. Pull requests run the same pinned Docker stage and the `gh`
-wrapper security suite in the `Hermes Bootstrap Tests` workflow. Both paths
-also run the same host-side profile-sync provenance verifier. The verifier
+pre-commit hook. Pull requests run the Nix-backed Python suite, native secret
+transport contract, and sidecar contract in the `Hermes Bootstrap Tests`
+workflow. Both paths also run the same host-side profile-sync provenance verifier. The verifier
 fetches the validated `rurusasu/hermes-profile-alfred` commit into a temporary bare Git
 repository with blob filtering, then reads only the recorded source blob. It
 does not create a source worktree. GitHub Actions supplies the private
@@ -679,7 +653,7 @@ result serialization.
 The same source validation requires every root and managed profile distribution
 to own `config.yaml`. Bootstrap validates the Chrome MCP guardrails, then
 synthesizes the non-secret `mcp_servers.xapi` entry in the staged runtime copy
-with URL `http://xapi-mcp:8080/mcp` and `connect_timeout: 300`. The generated
+with URL `http://127.0.0.1:8766/mcp` and `connect_timeout: 300`. The generated
 entry is not written back to source repositories.
 
 Named-profile default branches are exact mirrors. A real sync deletes

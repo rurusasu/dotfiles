@@ -9,6 +9,7 @@
       ghostty-config = import ../tests/build/ghostty-config.nix { inherit pkgs; };
       custom-package-builds = import ../tests/build/custom-packages.nix { inherit pkgs; };
       neovim-native = import ../tests/build/neovim.nix { inherit pkgs; };
+      hermes-bootstrap-tests = import ../tests/build/hermes-bootstrap-tests.nix { inherit inputs pkgs; };
     }
     // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
       bootstrap-nixos-vm = import ../tests/build/bootstrap-nixos.nix { inherit inputs pkgs; };

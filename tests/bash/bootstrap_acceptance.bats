@@ -74,7 +74,7 @@ EOF
 		grep -Fq '"$VERIFY_ENVIRONMENT"' "$file"
 		! grep -q -- '--runtime' "$file"
 	done
-	grep -Fq 'docker/hermes-service/compose.yml' "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
+	grep -Fq '{{.HERMES_COMPOSE_FILE}}' "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
 }
 
 @test "NixOS bootstrap VM provides task before Hermes bootstrap" {
@@ -106,7 +106,7 @@ export PATH="$DOTFILES_ACCEPTANCE_REPO_ROOT/activated/bin:$PATH"
 [[ $(dotfiles_hermes_op_command) == "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/op" ]]
 cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bootstrap-compose.yml" \
 	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-service/compose.yml"
-test -x "$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-service/hermes-bootstrap-fixture.sh"
+test -f "$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-service/acceptance-health.json"
 cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/hindsight-health.json" \
 	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/local-ai-services/hindsight-health.json"
 cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/hindsight-compose.yml" \
@@ -135,35 +135,8 @@ EOF
 	[[ "$output" == "$FIXTURE_ROOT/bin/op" ]]
 }
 
-@test "acceptance runner builds the Hermes image used by storage seeding" {
-	grep -Fq 'docker build -t local/hermes-agent-gh:latest' "$RUNNER"
-	grep -Fq -- '-f "$REPO_ROOT/docker/hermes-agent/Dockerfile" "$REPO_ROOT/docker"' "$RUNNER"
-}
-
-@test "acceptance runner can use a preloaded offline storage seed image" {
-	grep -Fq 'DOTFILES_ACCEPTANCE_PRELOADED_STORAGE_SEED_IMAGE' "$RUNNER"
-}
-
-@test "NixOS offline Hermes fixture implements every storage entrypoint" {
-	nixos_test="$REPO_ROOT/nix/tests/build/bootstrap-nixos.nix"
-
-	grep -Fq 'hermes_storage_seed.py usr/local/bin/hermes-storage-seed' "$nixos_test"
-	grep -Fq 'hermes_storage_ownership.py usr/local/bin/hermes-storage-ownership' "$nixos_test"
-	grep -Fq 'chmod 0755 usr/local/bin/hermes-storage-seed' "$nixos_test"
-	grep -Fq 'chmod 0755 usr/local/bin/hermes-storage-ownership' "$nixos_test"
-}
-
-@test "acceptance secret plan matches the current bootstrap manifest digest" {
-	run bash -c 'set -o pipefail; . "$1/scripts/sh/hermes-agent.sh"; digest="$(dotfiles_hermes_bootstrap_manifest_sha256 "$1/docker/hermes-agent/bootstrap-manifest.yaml")" || exit 1; "$1/.github/e2e/hermes-bootstrap-fixture.sh" secret-plan | dotfiles_hermes_validate_secret_plan my.1password.com "$digest" >/dev/null' _ "$REPO_ROOT"
-	[ "$status" -eq 0 ]
-}
-
-@test "acceptance secret fixtures are deterministic and reject unapproved lookups" {
-	bootstrap="$FIXTURE_ROOT/hermes-bootstrap-fixture.sh"
+@test "acceptance OP fixtures reject unapproved lookups" {
 	op="$FIXTURE_ROOT/bin/op"
-
-	run bash -c ". '$REPO_ROOT/scripts/sh/hermes-agent.sh'; '$bootstrap' secret-plan | dotfiles_hermes_validate_secret_plan >/dev/null"
-	[ "$status" -eq 0 ]
 
 	run "$op" item get "GitHubUsedOpenClawPAT" \
 		--account my.1password.com --vault openclaw --format json
@@ -230,16 +203,15 @@ EOF
 @test "acceptance compose serves health from nginx and BusyBox document roots" {
 	compose="$FIXTURE_ROOT/bootstrap-compose.yml"
 
-	[ "$(grep -Fc 'exec /bin/httpd -f -p 80 -h /www' "$compose")" -ge 2 ]
-	[ "$(grep -Fc "exec nginx -g 'daemon off;'" "$compose")" -ge 2 ]
+	[ "$(grep -Fc 'exec /bin/httpd -f -p 80 -h /www' "$compose")" -ge 1 ]
+	[ "$(grep -Fc "exec nginx -g 'daemon off;'" "$compose")" -ge 1 ]
 	grep -Fq 'xapi-mcp:' "$compose"
 	grep -Fq '    working_dir: /' "$compose"
 	grep -Fq 'browser-mcp:' "$compose"
 	! grep -Eq '^[[:space:]]{2}hindsight:' "$compose"
 	grep -Fq 'name: local-ai-services' "$compose"
 	grep -Fq 'external: true' "$compose"
-	grep -Fq 'condition: service_started' "$compose"
-	grep -Fq './hermes-bootstrap-fixture.sh:/fixture/health:ro' "$compose"
+	grep -Fq './acceptance-health.json:/fixture/health:ro' "$compose"
 	grep -Fq 'cp /fixture/health /www/health' "$compose"
 	grep -Fq 'cp /fixture/health /www/api/health' "$compose"
 	grep -Fq 'cp /fixture/health /usr/share/nginx/html/health' "$compose"
@@ -300,13 +272,6 @@ EOF
 		  and (.integrity | startswith("sha256:"))
 	' "$lock" >/dev/null
 	[ "$(grep -c -- '--frozen-lockfile' "$workflow")" -ge 2 ]
-}
-
-@test "Hermes bootstrap gates include the gh wrapper security suite" {
-	wrapper='docker/hermes-agent/bootstrap/tests/test_gh_wrapper.sh'
-
-	grep -Fq "$wrapper" "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
-	grep -Fq "$wrapper" "$REPO_ROOT/.github/workflows/ci-hermes-bootstrap.yml"
 }
 
 @test "Hermes bootstrap CI watches the feature Taskfile" {

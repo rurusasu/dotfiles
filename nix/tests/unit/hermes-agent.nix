@@ -60,6 +60,9 @@ let
   };
 
   hasPackage = needle: packages: builtins.any (item: item.drvPath == needle.drvPath) packages;
+  hasHermesBootstrap =
+    home: builtins.any (item: (item.pname or item.name) == "hermes-bootstrap") home;
+  hasNodejs = home: builtins.any (item: (item.pname or item.name) == "nodejs") home;
 in
 {
   testHermesFeatureDoesNotEnableDockerOrOllama = {
@@ -76,12 +79,16 @@ in
       sessionVariable = builtins.hasAttr "HERMES_HOME" disabled.config.home.sessionVariables;
       featureFlag = disabled.config.home.sessionVariables.DOTFILES_WITH_HERMES;
       systemdService = builtins.hasAttr "hermes-agent" disabled.config.systemd.user.services;
+      profileSyncWrapper = builtins.hasAttr "scripts/profile_sync.sh" disabled.config.services.hermes-agent.hermesHomeFiles;
+      profileSyncActivation = builtins.hasAttr "hermesProfileSyncWrapperExecutable" disabled.config.home.activation;
     };
     expected = {
       package = false;
       sessionVariable = false;
       featureFlag = "0";
       systemdService = false;
+      profileSyncWrapper = false;
+      profileSyncActivation = false;
     };
   };
 
@@ -101,6 +108,33 @@ in
       featureFlag = "1";
       multiplexProfiles = true;
       serviceUsesInjectedPackage = true;
+    };
+  };
+
+  testNativeBootstrapIsNixManagedAndTargetsHermesHome = {
+    expr = {
+      installed = hasHermesBootstrap linux.config.home.packages;
+      nodeRuntimeInstalled = hasNodejs linux.config.home.packages;
+      availableToGateway = hasHermesBootstrap linux.config.services.hermes-agent.extraPackages;
+      nodeRuntimeAvailableToGateway = hasNodejs linux.config.services.hermes-agent.extraPackages;
+      profileSyncWrapper = builtins.hasAttr "scripts/profile_sync.sh" linux.config.services.hermes-agent.hermesHomeFiles;
+      profileSyncActivation = builtins.hasAttr "hermesProfileSyncWrapperExecutable" linux.config.home.activation;
+      plugins = map (plugin: plugin.name) linux.config.services.hermes-agent.extraPlugins;
+      manifest = import ../../home/hermes-agent/manifest.nix {
+        hermesHome = "/home/test-user/.hermes";
+      };
+    };
+    expected = {
+      installed = true;
+      nodeRuntimeInstalled = true;
+      availableToGateway = true;
+      nodeRuntimeAvailableToGateway = true;
+      profileSyncWrapper = true;
+      profileSyncActivation = true;
+      plugins = [ "hermes-lcm" ];
+      manifest = builtins.replaceStrings [ "/opt/data" ] [ "/home/test-user/.hermes" ] (
+        builtins.readFile ../../home/hermes-agent/manifest.yaml
+      );
     };
   };
 

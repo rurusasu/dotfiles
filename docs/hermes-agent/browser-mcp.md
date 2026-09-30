@@ -1,6 +1,6 @@
 # Hermes Browser MCP
 
-Hermes の browser MCP は host browser ではなく、Compose 内の専用 browser container と Browser MCP container だけを使う。browser は containerized だが、noVNC を通じて表示できる。
+Hermes の browser MCP は host browser ではなく、Compose 内の専用 browser sidecar を使う。Hermes本体はNix管理のnative serviceで、sidecarは独立して動作する。
 ホスト PC から browser session を見る場合は noVNC を使う。既定 URL は `http://127.0.0.1:6080` で、`HERMES_BROWSER_VIEW_PORT` により host 側 port だけ変更できる。CDP `9222` と Browser MCP `8080` は引き続き host に publish しない。
 host 側の Chrome/Chromium/Brave 実行ファイル、host CDP endpoint、host Node/npm/Python は使わない。
 
@@ -8,7 +8,7 @@ host 側の Chrome/Chromium/Brave 実行ファイル、host CDP endpoint、host 
 
 - `chromium`: 互換性のため service 名は維持しつつ、Xvfb 上の visible browser を container 内で起動する。AMD64 では Google Chrome、ARM64 では Debian Chromium を使う。CDP は Compose network 内だけに公開し、noVNC viewer だけを `127.0.0.1` に公開する。
 - `browser-mcp`: `chrome-devtools-mcp` を `mcp-proxy` 経由で Streamable HTTP MCP として公開する。MCP要求は120秒で打ち切り、ページ単位の操作はDevToolsのpage IDでルーティングする。Chrome DevTools MCPは1.6.0、MCP proxyは6.5.5に固定する。
-- `hermes`: `browser-mcp` service 名で Browser MCP に接続する。
+- native Hermes: `127.0.0.1:8765` の Browser MCP endpoint に接続する。
 
 Browser container は `ja_JP.UTF-8` locale と `--lang=ja` で起動し、Chrome/Chromium UI と日本語入力内容を表示できるようにする。長寿命の専用ブラウザでバックグラウンドページが凍結・破棄されると、CDPの `Runtime.enable` や `Accessibility.getFullAXTree` が停止してMCP全体のsnapshotがタイムアウトするため、背景Rendererの抑制とTabDiscardingを無効化する。
 noVNC viewer は通常の `Cmd/Ctrl+C`、`Cmd/Ctrl+X`、`Cmd/Ctrl+V` を browser 側のショートカットへ変換し、プレーンテキストの clipboard をホストと双方向に同期する。
@@ -21,11 +21,11 @@ agent:
     - browser
 mcp_servers:
   chrome:
-    url: http://browser-mcp:8080/mcp
+    url: http://127.0.0.1:8765/mcp
     connect_timeout: 120
 ```
 
-この URL は Compose network 内専用で、host に `8080` や `9222` を publish しない。
+この loopback URL は host 上の native Hermes から接続する。MCP は `127.0.0.1:8765` のみに公開し、CDP `9222` は host に公開しない。
 サーバー名は Hermes 組み込みの `browser` toolset と衝突しないよう `chrome` にする。
 全 managed profile は `agent.disabled_toolsets` で組み込みの `browser` toolset を
 無効化し、別の local browser session を選択できないようにする。固定した Hermes
@@ -34,7 +34,7 @@ runtime では `web_search` を `browser` toolset から除外して `web` tools
 
 ## Distribution source contract
 
-root distribution と `docker/hermes-agent/bootstrap-manifest.yaml` に宣言された
+root distribution と `nix/home/hermes-agent/manifest.yaml` に宣言された
 全 profile は、source repository の `config.yaml` で上記の
 `mcp_servers.chrome` と built-in `browser` の無効化を所有する。各 distribution
 manifest の `distribution_owned` は `config.yaml` を明示的に含める。他の MCP
@@ -63,11 +63,9 @@ container を更新・再作成しても、この directory は同じ `/data` �
 
 ## 起動
 
-`mcp_servers.chrome` は root/profile の source distribution が所有する。Bootstrap
-はその declarative config を適用するが、one-shot `hermes-bootstrap` service は
-`chromium` と `browser-mcp` に依存しない。Browser services も bootstrap の依存先
-ではない。Bootstrap 成功後の `compose up` で通常の stack は起動され、browser
-lifecycle task だけを後から独立して実行することもできる。
+`mcp_servers.chrome` は root/profile の source distribution が所有する。Nix側の
+profile sync はその宣言設定を反映する。Browser sidecar はHermes本体とは独立して
+起動・更新する。
 
 ```text
 task hermes:browser:pull
@@ -75,8 +73,8 @@ task hermes:browser:restart
 ```
 
 Browser が lifelog を参照する場合も canonical path は
-`/opt/data/shared/lifelog` である。migration-only の
-`/opt/data/core/lifelog` を runtime 設定へ追加しない。
+`${HERMES_HOME}/shared/lifelog` である。migration-only の
+`${HERMES_HOME}/core/lifelog` を runtime 設定へ追加しない。
 
 ## Runtime verification
 
@@ -84,11 +82,11 @@ Browser が lifelog を参照する場合も canonical path は
 確認する。
 
 ```text
-docker exec -e HERMES_HOME=/opt/data hermes hermes mcp test chrome
-docker exec -e HERMES_HOME=/opt/data/profiles/rick hermes hermes mcp test chrome
-docker exec -e HERMES_HOME=/opt/data/profiles/hoffman hermes hermes mcp test chrome
-docker exec -e HERMES_HOME=/opt/data/profiles/risarisa hermes hermes mcp test chrome
-docker exec -e HERMES_HOME=/opt/data/profiles/nancy hermes hermes mcp test chrome
+hermes mcp test chrome
+hermes -p rick mcp test chrome
+hermes -p hoffman mcp test chrome
+hermes -p risarisa mcp test chrome
+hermes -p nancy mcp test chrome
 ```
 
 全コマンドで接続が成功し、`navigate_page` と `take_snapshot` を含む同じ tool set

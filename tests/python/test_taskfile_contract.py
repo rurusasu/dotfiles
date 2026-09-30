@@ -13,22 +13,6 @@ HERMES_TASKFILE = REPOSITORY_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
 HERMES_AGENT = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-agent.sh"
 XAPI_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-xapi.sh"
 XAPI_WINDOWS_WRAPPER = REPOSITORY_ROOT / "scripts" / "powershell" / "hermes-xapi.ps1"
-HINDSIGHT_WRAPPER = REPOSITORY_ROOT / "scripts" / "sh" / "hermes-hindsight-verify.sh"
-HINDSIGHT_WINDOWS_WRAPPER = (
-    REPOSITORY_ROOT / "scripts" / "powershell" / "hermes-hindsight-verify.ps1"
-)
-HERMES_DOCKERFILE = REPOSITORY_ROOT / "docker" / "hermes-agent" / "Dockerfile"
-HINDSIGHT_ACCEPTANCE = (
-    REPOSITORY_ROOT / "docker" / "hermes-agent" / "hindsight_acceptance.py"
-)
-HINDSIGHT_REAL_PROVIDER_GATE = (
-    REPOSITORY_ROOT
-    / "docker"
-    / "hermes-agent"
-    / "bootstrap"
-    / "tests"
-    / "hindsight_real_provider_gate.py"
-)
 
 
 class TaskfileContractTests(unittest.TestCase):
@@ -67,27 +51,20 @@ class TaskfileContractTests(unittest.TestCase):
             self._command_text("hermes:xapi:logs"),
         )
 
-    def test_task_contracts_read_tasks_from_the_hermes_feature_taskfile(self) -> None:
-        self.assertIn(
-            "task: hermes:bootstrap",
-            self._command_text("hermes:docker:bootstrap"),
-        )
+    def test_native_bootstrap_tasks_do_not_require_docker_backend(self) -> None:
+        self.assertIn("scripts/sh/hermes-bootstrap.sh apply", self._task_block("hermes:sync"))
+        test_task = self._task_block("hermes:bootstrap:test")
+        self.assertIn(".#checks.${system}.nix-unit", test_task)
+        self.assertIn(".#checks.$system.nix-unit", test_task)
+        self.assertNotIn("docker/hermes-agent", test_task)
+        self.assertNotIn("hermes:docker:bootstrap", self.taskfile)
 
-    def test_bootstrap_is_a_compatibility_alias_for_nix_activation(self) -> None:
-        task = self._task_block("hermes:docker:bootstrap")
+    def test_windows_gmail_auth_runs_in_the_wsl_hermes_home(self) -> None:
+        task = self._command_text("hermes:gmail:auth")
 
-        self.assertIn("Compatibility alias", task)
-        self.assertIn("task: hermes:bootstrap", task)
-        self.assertNotIn("docker info", task)
-
-    def test_hermes_bootstrap_tests_use_one_bake_invocation(self) -> None:
-        task = self._task_block("hermes:bootstrap:test:container")
-
-        self.assertIn(
-            "docker buildx bake -f docker/hermes-agent/docker-bake.hcl", task
-        )
-        self.assertNotIn("docker build --target hermes-bootstrap-test", task)
-        self.assertNotIn("docker build --target hermes-bootstrap-runtime", task)
+        self.assertIn("{{.WSL}}bash -lc", task)
+        self.assertIn("task hermes:gmail:auth", task)
+        self.assertNotIn("scripts/powershell/hermes-gmail.ps1", task)
 
     def test_commit_runs_precommit_without_repeating_treefmt(self) -> None:
         commit = self._task_block("commit")
@@ -202,112 +179,6 @@ class TaskfileContractTests(unittest.TestCase):
         self.assertIn("jq -e -c", adapter)
         self.assertNotIn("jq -erce", adapter)
         self.assertNotIn("X_API_CLIENT_SECRET='", wrapper)
-
-    def test_hindsight_acceptance_task_delegates_to_both_platform_entrypoints(
-        self,
-    ) -> None:
-        task = self._task_block("hermes:memory:verify")
-
-        self.assertIn("task: mlflow:up", task)
-        self.assertIn("scripts/sh/hermes-hindsight-verify.sh", task)
-        self.assertIn("platforms: [linux, darwin]", task)
-        self.assertIn(
-            "pwsh -NoProfile -File scripts/powershell/hermes-hindsight-verify.ps1",
-            task,
-        )
-        self.assertIn("platforms: [windows]", task)
-        self.assertNotIn("hermes-hindsight-acceptance", task)
-
-    def test_hindsight_acceptance_wrappers_require_the_same_eleven_phases(self) -> None:
-        unix = HINDSIGHT_WRAPPER.read_text(encoding="utf-8")
-        windows = HINDSIGHT_WINDOWS_WRAPPER.read_text(encoding="utf-8")
-
-        unix_phases = (
-            "config --quiet",
-            "hindsight_up",
-            "hermes-hindsight-acceptance probe",
-            "hermes-hindsight-acceptance seed",
-            "restart hindsight",
-            "hermes-hindsight-acceptance verify",
-            "stop hindsight",
-            "hermes-hindsight-acceptance degraded",
-            "start hindsight",
-            "hermes-hindsight-acceptance cleanup",
-        )
-        windows_phases = (
-            "'config', '--quiet'",
-            "Invoke-HindsightServiceUp",
-            "'hermes-hindsight-acceptance', 'probe'",
-            "'hermes-hindsight-acceptance', 'seed'",
-            "'restart', 'hindsight'",
-            "'hermes-hindsight-acceptance', 'verify'",
-            "'stop', 'hindsight'",
-            "'hermes-hindsight-acceptance', 'degraded'",
-            "'start', 'hindsight'",
-            "'hermes-hindsight-acceptance', 'cleanup'",
-        )
-        self._assert_in_order(unix, unix_phases)
-        self._assert_in_order(windows, windows_phases)
-
-        profiles = "default,rick,hoffman,risarisa,nancy,kuroda,shiraishi"
-        normalized_unix = " ".join(unix.split())
-        for wrapper in (unix, windows):
-            self.assertIn(profiles, wrapper)
-            self.assertIn("HERMES_ALIVE", wrapper)
-            self.assertNotIn("--skip", wrapper.lower())
-            self.assertNotIn("|| true", wrapper)
-            self.assertNotIn("--profile default", wrapper)
-            self.assertNotIn("--profiles default\n", wrapper)
-        self.assertIn("--strict-probes 20", normalized_unix)
-        self.assertIn("--timeout 300", normalized_unix)
-        self.assertIn("'--strict-probes', '20'", windows)
-        self.assertIn("'--timeout', '300'", windows)
-
-    def test_hindsight_acceptance_image_uses_the_bundled_hermes_environment(
-        self,
-    ) -> None:
-        dockerfile = HERMES_DOCKERFILE.read_text(encoding="utf-8")
-        acceptance = HINDSIGHT_ACCEPTANCE.read_text(encoding="utf-8")
-
-        self.assertTrue(acceptance.startswith("#!/opt/hermes/.venv/bin/python\n"))
-        self.assertIn(
-            "COPY hermes-agent/hindsight_acceptance.py /usr/local/bin/hindsight_acceptance.py",
-            dockerfile,
-        )
-        self.assertIn(
-            "chmod 0755 /usr/local/bin/hindsight_acceptance.py",
-            dockerfile,
-        )
-        self.assertIn(
-            "ln -s /usr/local/bin/hindsight_acceptance.py /usr/local/bin/hermes-hindsight-acceptance",
-            dockerfile,
-        )
-        self.assertIn(
-            "COPY hermes-agent/hindsight_acceptance.py /workspace/docker/hermes-agent/hindsight_acceptance.py",
-            dockerfile,
-        )
-
-    def test_hindsight_test_stage_must_run_the_real_bundled_provider_gate(
-        self,
-    ) -> None:
-        dockerfile = HERMES_DOCKERFILE.read_text(encoding="utf-8")
-
-        self.assertTrue(
-            HINDSIGHT_REAL_PROVIDER_GATE.is_file(),
-            "real bundled Hindsight provider gate is missing",
-        )
-        gate = HINDSIGHT_REAL_PROVIDER_GATE.read_text(encoding="utf-8")
-        test_stage = dockerfile.split(
-            "FROM hermes-bootstrap-runtime AS hermes-bootstrap-test", maxsplit=1
-        )[1].split("FROM hermes-bootstrap-runtime", maxsplit=1)[0]
-
-        self.assertIn("COPY hermes-agent/bootstrap/tests", test_stage)
-        self.assertIn("-p 'hindsight_real_provider_gate.py'", test_stage)
-        self.assertIn("provider_factory=None", gate)
-        self.assertIn("acceptance._resolved_provider", gate)
-        self.assertIn("provider.system_prompt_block()", gate)
-        self.assertNotIn("FakeProvider", gate)
-        self.assertNotIn("skip", gate.lower())
 
     def _task_block(self, task_name: str) -> str:
         marker = f"  {task_name}:\n"

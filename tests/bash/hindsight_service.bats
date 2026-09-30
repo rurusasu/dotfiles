@@ -20,10 +20,10 @@ setup() {
 	grep -q 'external: true' "$HINDSIGHT_COMPOSE"
 }
 
-@test "Compose retains Hermes bootstrap and MCP sidecars but not the native gateway" {
+@test "Compose retains MCP sidecars but no Hermes backend" {
 	! grep -q '^  hindsight:$' "$HERMES_COMPOSE"
 	! grep -q '^  hermes:$' "$HERMES_COMPOSE"
-	grep -q '^  hermes-bootstrap:$' "$HERMES_COMPOSE"
+	! grep -q '^  hermes-bootstrap:$' "$HERMES_COMPOSE"
 	! grep -q 'local-ai-services' "$HERMES_COMPOSE"
 	! grep -q 'HERMES_DATA_DIR.*hindsight' "$HERMES_COMPOSE"
 }

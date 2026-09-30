@@ -109,7 +109,7 @@ class CiJobRoutingTests(unittest.TestCase):
     ) -> None:
         self.assertIn("templates", self.selected("chezmoi/.chezmoidata/packages.yaml"))
         self.assertIn("templates", self.selected("chezmoi/.chezmoitemplates/shared"))
-        self.assertIn("hermes", self.selected("docker/hermes-agent/Dockerfile"))
+        self.assertIn("hermes", self.selected("scripts/python/hermes_bootstrap/app.py"))
         self.assertIn("chezmoi_lint", self.selected("chezmoi/shells/bashrc"))
 
     def test_nix_catalog_keeps_cross_language_contracts(self) -> None:
@@ -168,7 +168,6 @@ class CiJobRoutingTests(unittest.TestCase):
             "README.md",
             "nix/home/README.md",
             "scripts/powershell/README.md",
-            "docker/hermes-agent/README.md",
             "chezmoi/README.md",
             "docs/mlflow/setup.md",
         ):
@@ -176,7 +175,7 @@ class CiJobRoutingTests(unittest.TestCase):
                 self.assertTrue(self.selected(path).issubset({"python", "bash"}))
                 self.assertEqual(self.selected(path, manifest=BOOTSTRAP), {"contract"})
         self.assertIn(
-            "hermes", self.selected("docker/hermes-agent/profiles/example/SOUL.md")
+            "hermes", self.selected("nix/home/hermes-agent/manifest.yaml")
         )
         self.assertIn("chezmoi_lint", self.selected("chezmoi/dot_codex/AGENTS.md"))
 

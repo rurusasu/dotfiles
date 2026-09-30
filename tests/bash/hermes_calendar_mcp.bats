@@ -14,15 +14,3 @@ setup() {
 	run grep -F '127.0.0.1:3500-3505:3500-3505' "$compose_file"
 	[ "$status" -eq 1 ]
 }
-
-@test "pins the stdio Google Calendar MCP in the Hermes image" {
-	run grep -F "ARG GOOGLE_CALENDAR_MCP_VERSION=2.6.2" \
-		"$REPO_ROOT/docker/hermes-agent/Dockerfile"
-
-	[ "$status" -eq 0 ]
-
-	run grep -F '"@cocal/google-calendar-mcp@${GOOGLE_CALENDAR_MCP_VERSION}"' \
-		"$REPO_ROOT/docker/hermes-agent/Dockerfile"
-
-	[ "$status" -eq 0 ]
-}

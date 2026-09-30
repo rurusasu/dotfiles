@@ -4,17 +4,14 @@
 
 Hindsight は Hermes から独立したホスト共通の永続メモリサービスです。Compose の
 `hindsight` サービスが埋め込み PostgreSQL、ローカル reranker、メモリ API を提供し、
-`local-ai-services` ネットワークを所有します。Hermes は external network として接続して
-`http://hindsight:8888` を使います。推論・埋め込みは MLflow Gateway の論理 endpoint
+`local-ai-services` ネットワークを所有します。native Hermes は loopback の
+`http://127.0.0.1:8888` を使います。推論・埋め込みは MLflow Gateway の論理 endpoint
 `ollama-chat-default` と `ollama-embedding-default` を `local-ai-services` 経由で使い、
 MLflow だけが設定済み provider として native host Ollama に接続します。
 
-Docker 版 Hermes の memory provider はイメージの build 時に用意します。本体に
-同梱されている場合はそのまま使い、別配布の場合は同じ Hermes イメージの
-`plugin-catalog/hindsight.yaml` が指定する repository・commit・subdirectory から
-導入します。dotfiles 側で別の provider revision を重複管理せず、runtime の
-遅延インストールにも依存しません。build と受入テストでは実際の provider discovery
-を検証し、見つからない場合は失敗させます。
+Hermes Agent は Nix flake の Home Manager module で管理し、Hindsight の
+profile 設定は native bootstrap が同期します。Docker は Hindsight/MLflow の
+独立 sidecar にだけ使用し、Hermes gateway backend には使用しません。
 
 Hindsight のイメージは
 `ghcr.io/vectorize-io/hindsight:0.9.1@sha256:a0e937366261b8a8f20ebcaf13758c689c381dcbbf01684e4375c2787c8c666d`
@@ -101,18 +98,8 @@ Hindsight の chat 推論は `local-ai-services` 上の MLflow Gateway
 task hindsight:up
 ```
 
-旧 Docker Hermes gateway を Hindsight 接続済みで起動・再作成する場合は、
-明示的な legacy task を使います。通常の `task hermes:up` は Nix/Home Manager の
-native service を操作し、Docker や Hindsight は起動しません。
-
-```text
-task hermes:docker:up
-```
-
-この task は独立した `hindsight:up` を準備した後、全 managed profile の
-Hindsight 設定を atomic bootstrap で reconcile し、その成功後に Hermes stack を
-起動します。`docker compose -f docker/hermes-service/compose.yml up` だけでは
-profile 設定の bootstrap は実行されません。
+Hermes 本体は `task hermes:up` で起動します。Hindsight は別サービスとして
+`task hindsight:up` で管理し、managed profile の設定は `task hermes:sync` で同期します。
 
 起動の成否はポートの listen だけで判断せず、`/health` の `status` が
 `healthy` かつ `database` が `connected` であることを確認します。
@@ -153,8 +140,8 @@ Hindsight の直近ログを追跡するには次を使います。
 task hindsight:logs
 ```
 
-Hermes Docker gateway 側の状態も同時に確認する場合は、
-`task hermes:docker:logs` を使います。
+Hermes native gateway 側の状態は `task hermes:profile:status PROFILE=rick` などで
+確認します。
 ログや API 応答に会話内容が含まれ得るため、共有時は内容を確認してください。
 
 ## Profile bank mapping
@@ -196,8 +183,8 @@ task hermes:memory:verify
 この検証は skip なしで Compose 構成確認、ホスト/モデル準備、Hindsight の
 ヘルス確認、20 件の strict probe、全 7 profile の bank 分離、Hindsight 再起動後の
 永続性確認、degraded mode、復旧、テスト用 bank の cleanup を順に実行します。
-成功時の evidence は `/opt/data/hindsight/acceptance.json`、実行中の state は
-`/opt/data/hindsight/acceptance-state.json` です。失敗時は診断のため failed-run
+成功時の evidence は `${HERMES_HOME}/hindsight/acceptance.json`、実行中の state は
+`${HERMES_HOME}/hindsight/acceptance-state.json` です。失敗時は診断のため failed-run
 bank と state を保存し、cleanup しません。保存済み state がある間は新しい seedを
 開始せず、前回runのbank IDを上書きしません。verify完了時のevidenceは`verified`
 であり、degraded mode完了時に`degraded`、Hermes healthとHindsight復旧確認後に
@@ -249,7 +236,7 @@ Hindsight の version upgrade は `latest` を使う通常運用ではありま�
 Compose contract test は次です。
 
 ```text
-python3 -m unittest discover -s docker/hermes-agent/bootstrap/tests -p 'test_*contract.py' -v
+task hermes:bootstrap:test
 ```
 
 database migration が必要な version では、backup を migration 前の必須 gate とします。

@@ -57,11 +57,9 @@ assert_no_profile_gateway_lifecycle() {
 	done
 }
 
-@test "legacy Docker-named stop task controls the native gateway without Docker" {
-	run task --dir "$REPO_ROOT" --dry --force hermes:docker:down
+@test "Hermes exposes no Docker backend compatibility tasks" {
+	run task --dir "$REPO_ROOT" --list-all
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"task: [hermes:down]"* ]]
-	[[ "$output" == *"hermes gateway stop"* ]]
-	[[ "$output" != *"docker compose"* ]]
+	[[ "$output" != *"hermes:docker:"* ]]
 }

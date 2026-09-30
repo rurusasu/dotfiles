@@ -9,7 +9,7 @@ setup() {
 	! grep -q 'task: hermes:bootstrap\|task: hermes:docker:bootstrap' "$REPO_ROOT/taskfiles/nix/taskfile.yml"
 }
 
-@test "Hermes gateway is managed by Nix rather than Docker Compose" {
+@test "Hermes gateway is managed by Nix and Compose has no Hermes backend" {
 	! grep -q '^  hermes:$' "$REPO_ROOT/docker/hermes-service/compose.yml"
-	grep -q '^  hermes-bootstrap:$' "$REPO_ROOT/docker/hermes-service/compose.yml"
+	! grep -q '^  hermes-bootstrap:$' "$REPO_ROOT/docker/hermes-service/compose.yml"
 }
