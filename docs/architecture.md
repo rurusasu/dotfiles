@@ -107,6 +107,12 @@ Python がない初期環境では従来の逐次表示を使用します。リ�
 | ユーザー設定            | chezmoi                 | shell、Git、terminal、editor の OS 差分をテンプレート化        |
 | 受入検証                | platform verifier       | runtime acceptance と drift を検出                             |
 
+macOS の Docker Desktop と CLI artifacts は公式 Homebrew `docker-desktop` Cask が所有します。
+installer は `/Applications/Docker.app` への正確なリンクだけを管理し、他の app や Nix store を
+指すリンク、既存ファイルとの衝突では停止します。旧 Nix Docker Desktop の自動停止・リンク移行は
+終了しています。新規 Cask 登録や欠けたリンクの修復時は、失敗に備えて現行リンクの状態を保持し、
+検証成功後に確定します。Docker volume とユーザーデータはこのリンク処理の対象外です。
+
 ## Hermes Runtime and Bootstrap Ownership
 
 On macOS and Linux/WSL, the pinned `hermes-agent` flake input and Home Manager
