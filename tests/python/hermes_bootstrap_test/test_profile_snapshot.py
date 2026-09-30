@@ -332,6 +332,15 @@ class ProfileSnapshotTests(unittest.TestCase):
                 home = self.write_profile(name, [".env.template"])
                 for installed_name in installed_names:
                     (home / installed_name).write_bytes(b"SAFE=value\n")
+                if len(installed_names) > 1 and (
+                    (home / installed_names[0]).stat().st_ino
+                    == (home / installed_names[1]).stat().st_ino
+                ):
+                    # Case-insensitive filesystems cannot contain both names.
+                    # Exercise the invalid on-disk spelling by a real rename.
+                    intermediate = home / "envcase-temporary"
+                    (home / installed_names[0]).rename(intermediate)
+                    intermediate.rename(home / installed_names[1])
                 scratch = self.root / f"envcase-scratch-{index}"
                 scratch.mkdir(mode=0o700)
 
@@ -1655,11 +1664,18 @@ class ProfileSnapshotTests(unittest.TestCase):
         (home / "assets").mkdir()
         (home / "assets" / "Avatar.png").write_bytes(b"one")
         (home / "assets" / "avatar.png").write_bytes(b"two")
+        if (home / "assets" / "Avatar.png").stat().st_ino == (home / "assets" / "avatar.png").stat().st_ino:
+            # APFS cannot store both aliases. Declared aliases still exercise
+            # rejection; case-sensitive filesystems retain the original
+            # directory-owned recursive child-collision regression above.
+            self.write_profile("rick", ["assets/Avatar.png", "assets/avatar.png"])
         with self.assertRaises(ProfileSnapshotError):
             prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
         self.assertFalse((self.scratch / "rick").exists())
 
         (home / "assets" / "avatar.png").unlink()
+        self.write_profile("rick", ["assets"])
+        (home / "assets" / "Avatar.png").write_bytes(b"one")
         replacement = self.root / "replacement.txt"
         replacement.write_text("replacement\n", encoding="utf-8")
         original_write = profile_snapshot._write_descriptor
@@ -1683,7 +1699,7 @@ class ProfileSnapshotTests(unittest.TestCase):
         home = self.write_profile("rick", ["Assets/a.txt", "assets/b.txt"])
         (home / "Assets").mkdir()
         (home / "Assets" / "a.txt").write_text("one\n", encoding="utf-8")
-        (home / "assets").mkdir()
+        (home / "assets").mkdir(exist_ok=True)
         (home / "assets" / "b.txt").write_text("two\n", encoding="utf-8")
         with self.assertRaises(ProfileSnapshotError) as caught:
             prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
@@ -2339,7 +2355,7 @@ class ProfileSnapshotTests(unittest.TestCase):
             nonlocal delete_calls, replaced, retained_name
             delete_calls += 1
             if not directory and not replaced:
-                source = profile_snapshot._descriptor_projection(parent_fd) / name
+                source = self.scratch / "rick" / name
                 source.rename(escaped_expected)
                 replacement.rename(source)
                 retained_name = name
@@ -2483,19 +2499,19 @@ class ProfileSnapshotTests(unittest.TestCase):
         ).encode("utf-8")
         replacement.write_bytes(replacement_bytes)
         replacement_inode = replacement.stat().st_ino
-        original_read = profile_snapshot.distributions._read_profile_manifest_at
+        original_read = profile_snapshot._read_snapshot_manifest_at
         calls: list[bool] = []
         replaced = False
 
-        def read_then_replace(root: Path, expected_name: str, *, require_sources: bool):
+        def read_then_replace(root: int, expected_name: str, *, require_sources: bool, files, directories):
             nonlocal replaced
             calls.append(require_sources)
-            result = original_read(root, expected_name, require_sources=require_sources)
-            os.replace(replacement, root / "distribution.yaml")
+            result = original_read(root, expected_name, require_sources=require_sources, files=files, directories=directories)
+            os.replace(replacement, self.scratch / expected_name / "distribution.yaml")
             replaced = True
             return result
 
-        with mock.patch.object(profile_snapshot.distributions, "_read_profile_manifest_at", side_effect=read_then_replace):
+        with mock.patch.object(profile_snapshot, "_read_snapshot_manifest_at", side_effect=read_then_replace):
             with self.assertRaises(ProfileSnapshotError) as caught:
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
         self.assertTrue(replaced)
@@ -2504,6 +2520,167 @@ class ProfileSnapshotTests(unittest.TestCase):
         retained = self.scratch / "rick" / "distribution.yaml"
         self.assertEqual(retained.stat().st_ino, replacement_inode)
         self.assertEqual(retained.read_bytes(), replacement_bytes)
+
+    def test_escaped_snapshot_is_rejected_before_hermes_schema_validation(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        escaped = self.root / "escaped-snapshot"
+        original_validate = profile_snapshot._validate_canonical_manifest
+        original_parser = profile_snapshot._read_snapshot_manifest_at
+        parser_roots: list[int] = []
+        moved = False
+
+        def move_before_validation(*args, **kwargs):
+            nonlocal moved
+            if not moved:
+                (self.scratch / "rick").rename(escaped)
+                (escaped / "SOUL.md").unlink()
+                (escaped / "SOUL.md").write_text("replacement must survive\n")
+                moved = True
+            return original_validate(*args, **kwargs)
+
+        def parser(root: int, expected_name: str, **kwargs):
+            parser_roots.append(root)
+            return original_parser(root, expected_name, **kwargs)
+
+        with (
+            mock.patch.object(profile_snapshot, "_validate_canonical_manifest", side_effect=move_before_validation),
+            mock.patch.object(profile_snapshot, "_read_snapshot_manifest_at", side_effect=parser),
+        ):
+            with self.assertRaises(ProfileSnapshotError):
+                prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertTrue(moved)
+        self.assertEqual(parser_roots, [])
+        self.assertEqual((escaped / "SOUL.md").read_text(), "replacement must survive\n")
+
+    def test_snapshot_fd_replacement_fails_closed_without_leaking_descriptors(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n")
+        replacement = self.root / "descriptor-file"
+        replacement.write_text("outside payload\n")
+        replacement_fd = os.open(replacement, os.O_RDONLY)
+        self.addCleanup(os.close, replacement_fd)
+        original_parser = profile_snapshot._read_snapshot_manifest_at
+        source_checks: list[bool] = []
+        baseline_fds = profile_snapshot._open_descriptor_count()
+
+        def swap_descriptor(root: int, expected_name: str, **kwargs):
+            source_checks.append(kwargs["require_sources"])
+            os.dup2(replacement_fd, root)
+            return original_parser(root, expected_name, **kwargs)
+
+        with mock.patch.object(profile_snapshot, "_read_snapshot_manifest_at", side_effect=swap_descriptor):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertEqual(source_checks, [True])
+        self.assertEqual(caught.exception.category, "cleanup_failed")
+        self.assertEqual((self.scratch / "rick" / "SOUL.md").read_text(), "safe\n")
+        self.assertEqual(replacement.read_text(), "outside payload\n")
+        self.assertEqual(profile_snapshot._open_descriptor_count(), baseline_fds)
+
+    def test_snapshot_source_symlink_is_rejected_and_retained(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"])
+        (home / "SOUL.md").write_text("safe\n")
+        outside = self.root / "outside-source"
+        outside.write_text("outside payload\n")
+        original_parser = profile_snapshot._read_snapshot_manifest_at
+        parsed_sources: list[bool] = []
+
+        def swap_source(root: int, expected_name: str, **kwargs):
+            path = self.scratch / expected_name / "SOUL.md"
+            path.unlink()
+            path.symlink_to(outside)
+            parsed_sources.append(kwargs["require_sources"])
+            return original_parser(root, expected_name, **kwargs)
+
+        with mock.patch.object(profile_snapshot, "_read_snapshot_manifest_at", side_effect=swap_source):
+            with self.assertRaises(ProfileSnapshotError) as caught:
+                prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertEqual(parsed_sources, [True])
+        self.assertEqual(caught.exception.category, "cleanup_failed")
+        self.assertTrue((self.scratch / "rick" / "SOUL.md").is_symlink())
+        self.assertEqual(outside.read_text(), "outside payload\n")
+
+    def test_raw_identity_values_are_rejected_before_hermes_coercion(self) -> None:
+        for index, (field, value) in enumerate((field, value)
+                for field in ("version", "hermes_requires")
+                for value in (None, 1, "", " ", " leading", "trailing ")):
+            with self.subTest(field=field, value=value):
+                name = f"rawidentity{index}"
+                home = self.write_profile(name, ["SOUL.md"], **{field: value})
+                (home / "SOUL.md").write_text("safe\n")
+                scratch = self.root / f"raw-identity-{index}"
+                scratch.mkdir(mode=0o700)
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    prepare_profile_snapshots(self.manifest(self.profile(name)), scratch, allow_missing=False)
+                self.assertEqual(caught.exception.category, "invalid_local_profile")
+                self.assertEqual(list(scratch.iterdir()), [])
+
+    def test_same_semantics_symlink_aba_never_reads_outside_snapshot(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"], description="approved")
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        saved = self.root / "saved-snapshot"
+        alternate = self.root / "alternate-snapshot"
+        original_parser = profile_snapshot._read_snapshot_manifest_at
+        original_read_text = Path.read_text
+        outside_reads: list[int] = []
+        swapped = False
+
+        def observe_read(path: Path, *args, **kwargs):
+            if path.name == "distribution.yaml" and path.parent.is_symlink():
+                outside_reads.append(path.stat().st_ino)
+            return original_read_text(path, *args, **kwargs)
+
+        def swap_during_parser(root: int, expected_name: str, **kwargs):
+            nonlocal swapped
+            current = self.scratch / "rick"
+            shutil.copytree(current, alternate)
+            (alternate / "SOUL.md").write_text("different source\n")
+            current.rename(saved)
+            current.symlink_to(alternate, target_is_directory=True)
+            swapped = True
+            try:
+                with mock.patch.object(Path, "read_text", side_effect=observe_read, autospec=True):
+                    return original_parser(root, expected_name, **kwargs)
+            finally:
+                current.unlink()
+                saved.rename(current)
+
+        with mock.patch.object(profile_snapshot, "_read_snapshot_manifest_at", side_effect=swap_during_parser):
+            prepared = prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+        self.assertTrue(swapped)
+        self.assertEqual(outside_reads, [])
+        self.assertEqual((prepared.snapshots[0].root / "SOUL.md").read_text(), "safe\n")
+        self.assertEqual((alternate / "SOUL.md").read_text(), "different source\n")
+
+    def test_transient_snapshot_root_swap_keeps_parser_semantics_attested(self) -> None:
+        home = self.write_profile("rick", ["SOUL.md"], description="approved")
+        (home / "SOUL.md").write_text("safe\n", encoding="utf-8")
+        saved = self.root / "saved-snapshot"
+        alternate = self.root / "alternate-snapshot"
+        original_parser = profile_snapshot._read_snapshot_manifest_at
+        source_checks: list[bool] = []
+
+        def swap_during_parser(root: int, expected_name: str, *, require_sources: bool, files, directories):
+            source_checks.append(require_sources)
+            current = self.scratch / "rick"
+            shutil.copytree(current, alternate)
+            payload = yaml.safe_load((alternate / "distribution.yaml").read_text())
+            payload["description"] = "unapproved"
+            (alternate / "distribution.yaml").write_text(yaml.safe_dump(payload))
+            current.rename(saved)
+            alternate.rename(current)
+            try:
+                return original_parser(root, expected_name, require_sources=require_sources, files=files, directories=directories)
+            finally:
+                current.rename(alternate)
+                saved.rename(current)
+
+        with mock.patch.object(profile_snapshot, "_read_snapshot_manifest_at", side_effect=swap_during_parser):
+            prepared = prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False)
+            self.assertIn(b"description: approved", prepared.snapshots[0].manifest_bytes)
+        self.assertEqual(source_checks, [True])
+        self.assertEqual((alternate / "SOUL.md").read_text(), "safe\n")
 
     def test_rejects_transient_hermes_manifest_semantic_mismatch(self) -> None:
         alternate_values: tuple[tuple[str, object], ...] = (
@@ -2525,7 +2702,9 @@ class ProfileSnapshotTests(unittest.TestCase):
             ),
             ("distribution_owned", ["SOUL.md", "assets/avatar.png"]),
         )
-        original_read = profile_snapshot.distributions._read_profile_manifest_at
+        original_read = profile_snapshot._read_snapshot_manifest_at
+        manifest_type = profile_snapshot.distributions.profile_distribution.DistributionManifest
+        original_from_dict = manifest_type.from_dict
 
         for index, (field, alternate_value) in enumerate(alternate_values):
             with self.subTest(field=field):
@@ -2573,14 +2752,21 @@ class ProfileSnapshotTests(unittest.TestCase):
                 alternate_replaced = False
                 canonical_inode_restored = False
                 parser_calls = 0
+                schema_calls = 0
                 require_sources_calls: list[bool] = []
 
-                def read_alternate_then_restore(
-                    root: Path, expected_name: str, *, require_sources: bool
-                ):
-                    nonlocal alternate_replaced, canonical_inode_restored, parser_calls, parser_returned
-                    parser_calls += 1
+                def validate_sources(root: int, expected_name: str, *, require_sources: bool, files, directories):
                     require_sources_calls.append(require_sources)
+                    return original_read(root, expected_name, require_sources=require_sources, files=files, directories=directories)
+
+                def parse_alternate_then_restore(raw):
+                    nonlocal alternate_replaced, canonical_inode_restored, parser_calls, parser_returned
+                    nonlocal schema_calls
+                    schema_calls += 1
+                    if schema_calls == 1:
+                        return original_from_dict(raw)
+                    parser_calls += 1
+                    root = scratch / name
                     manifest_path = root / "distribution.yaml"
                     canonical_inode = manifest_path.stat().st_ino
                     backup_path = root / f".canonical-{index}.yaml"
@@ -2590,12 +2776,10 @@ class ProfileSnapshotTests(unittest.TestCase):
                     os.replace(alternate_path, manifest_path)
                     alternate_replaced = manifest_path.read_bytes() == alternate
                     try:
-                        parser_name = (
-                            str(alternate_value) if field == "name" else expected_name
-                        )
-                        parsed = original_read(
-                            root, parser_name, require_sources=require_sources
-                        )
+                        # Exercise the supported Hermes pure schema boundary
+                        # with a divergent return, while restoring the retained
+                        # bytes/inode before final validation resumes.
+                        parsed = original_from_dict(yaml.safe_load(alternate))
                         parser_returned = True
                     finally:
                         os.replace(backup_path, manifest_path)
@@ -2604,10 +2788,9 @@ class ProfileSnapshotTests(unittest.TestCase):
                         )
                     return parsed
 
-                with mock.patch.object(
-                    profile_snapshot.distributions,
-                    "_read_profile_manifest_at",
-                    side_effect=read_alternate_then_restore,
+                with (
+                    mock.patch.object(profile_snapshot, "_read_snapshot_manifest_at", side_effect=validate_sources),
+                    mock.patch.object(manifest_type, "from_dict", side_effect=parse_alternate_then_restore),
                 ):
                     with self.assertRaises(ProfileSnapshotError) as caught:
                         prepare_profile_snapshots(

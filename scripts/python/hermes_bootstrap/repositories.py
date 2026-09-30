@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import stat
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,7 +46,7 @@ _ALLOWED_ENV_TEMPLATES = frozenset({".env.example"})
 _FORBIDDEN_DIRECTORIES = frozenset({"memories", "sessions", "logs", "cache", "caches", "generated", "runtime"})
 _RUNTIME_DATABASE_SUFFIXES = (".db", ".db-shm", ".db-wal")
 _ALLOWED_BLOB_MODES = frozenset({b"100644", b"100755"})
-_RENAME_NOREPLACE = 1
+_RENAME_NOREPLACE = 4 if sys.platform == "darwin" else 1
 _FORBIDDEN_GIT_METADATA = (
     Path("commondir"),
     Path("info/grafts"),
@@ -57,7 +58,7 @@ _FORBIDDEN_GIT_METADATA = (
 def _load_renameat2() -> Any | None:
     try:
         libc = ctypes.CDLL(None, use_errno=True)
-        function = libc.renameat2
+        function = libc.renameatx_np if sys.platform == "darwin" else libc.renameat2
         function.argtypes = (
             ctypes.c_int,
             ctypes.c_char_p,
@@ -77,6 +78,15 @@ _renameat2 = _load_renameat2()
 def _rename_noreplace(source_parent: int, source: str, target_parent: int, target: str) -> None:
     if _renameat2 is None:
         raise OSError(errno.ENOSYS, "atomic no-replace rename is unavailable")
+    # Darwin permits a same-entry rename even with RENAME_EXCL. This guard
+    # rejects aliases; the exclusive syscall still protects against new entries.
+    if sys.platform == "darwin":
+        try:
+            os.stat(target, dir_fd=target_parent, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            raise FileExistsError(errno.EEXIST, "atomic no-replace destination exists")
     ctypes.set_errno(0)
     result = _renameat2(
         source_parent,

@@ -7,6 +7,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  TESTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -27,6 +30,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
+          ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
       - name: Detect changed job targets
         id: detect
@@ -53,6 +57,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Install chezmoi
@@ -137,6 +142,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Check .tmpl files for BOM
@@ -174,6 +180,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Install chezmoi
@@ -236,6 +243,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Install chezmoi

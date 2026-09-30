@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import stat
+import sys
 import tempfile
 import uuid
 from collections.abc import Iterator
@@ -30,14 +31,14 @@ _BACKUP_ID = re.compile(r"backup-[0-9]{6}\Z")
 _RESERVATION_ID = re.compile(r"reservation-[0-9]{6}\Z")
 _RESERVATION_MARKER = ".bootstrap-reservation"
 _RESERVATION_TOKEN = re.compile(r"[0-9a-f]{32}\Z")
-_RENAME_NOREPLACE = 1
+_RENAME_NOREPLACE = 4 if sys.platform == "darwin" else 1
 _failpoint: Callable[[str], None] = lambda _name: None
 
 
 def _load_renameat2() -> Any | None:
     try:
         libc = ctypes.CDLL(None, use_errno=True)
-        function = libc.renameat2
+        function = libc.renameatx_np if sys.platform == "darwin" else libc.renameat2
         function.argtypes = (
             ctypes.c_int,
             ctypes.c_char_p,
@@ -1641,6 +1642,10 @@ def _rename_noreplace(
 ) -> None:
     if _renameat2 is None:
         raise OSError(errno.ENOSYS, "atomic no-replace rename is unavailable")
+    # RENAME_EXCL permits same-entry aliases on Darwin; retain the atomic
+    # exclusive operation after this compatibility guard for racing entries.
+    if sys.platform == "darwin" and _lexists_at(target_parent, target):
+        raise FileExistsError(errno.EEXIST, "atomic no-replace destination exists")
     ctypes.set_errno(0)
     result = _renameat2(
         source_parent,

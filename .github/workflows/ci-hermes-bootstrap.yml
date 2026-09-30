@@ -11,6 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  TESTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   changes:
     name: ci-hermes-bootstrap / Changes
@@ -24,6 +27,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ env.TESTED_SHA }}
           fetch-depth: 0
           persist-credentials: false
       - name: Detect changed job targets
@@ -51,6 +55,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
       - name: Install Nix
