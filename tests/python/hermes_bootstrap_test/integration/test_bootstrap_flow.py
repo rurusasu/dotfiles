@@ -152,7 +152,26 @@ def managed_source_config(
     assert isinstance(config, dict)
     mcp_servers = config["mcp_servers"]
     assert isinstance(mcp_servers, dict)
-    mcp_servers["gmail"] = GMAIL_CONFIGURATION
+    calendar = mcp_servers["calendar"]
+    assert isinstance(calendar, dict)
+    calendar["env"] = {
+        "GOOGLE_OAUTH_CREDENTIALS": str(
+            manifest.data_root / "google-calendar-mcp/gcp-oauth.keys.json"
+        ),
+        "GOOGLE_CALENDAR_MCP_TOKEN_PATH": str(
+            manifest.data_root / "google-calendar-mcp/tokens.json"
+        ),
+    }
+    gmail_configuration = json.loads(json.dumps(GMAIL_CONFIGURATION))
+    gmail_configuration["env"] = {
+        "GMAIL_OAUTH_PATH": str(
+            manifest.data_root / "google-gmail-mcp/gcp-oauth.keys.json"
+        ),
+        "GMAIL_CREDENTIALS_PATH": str(
+            manifest.data_root / "google-gmail-mcp/credentials.json"
+        ),
+    }
+    mcp_servers["gmail"] = gmail_configuration
     config["memory"] = {"provider": "hindsight"}
     config["context"] = {"engine": "lcm"}
     config["plugins"] = {"enabled": ["hermes-lcm"]}

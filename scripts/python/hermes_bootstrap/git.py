@@ -208,8 +208,8 @@ def _create_askpass(workdir: Path) -> Path:
             handle.write(
                 "#!/bin/sh\n"
                 "case \"${1-}\" in\n"
-                "  [Uu]sername*) exec printf '%s\\n' 'x-access-token' ;;\n"
-                "  *) exec printf '%s\\n' \"$HERMES_BOOTSTRAP_GITHUB_TOKEN\" ;;\n"
+                "  [Uu]sername*) printf '%s\\n' 'x-access-token' ;;\n"
+                "  *) printf '%s\\n' \"$HERMES_BOOTSTRAP_GITHUB_TOKEN\" ;;\n"
                 "esac\n"
             )
             handle.flush()

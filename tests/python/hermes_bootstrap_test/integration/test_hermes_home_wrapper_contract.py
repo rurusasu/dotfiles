@@ -13,7 +13,12 @@ from pathlib import Path
 
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "hermes-home"
 PINNED_WRAPPER = FIXTURE_ROOT / "profile_sync.sh"
-WRAPPER = Path(__file__).resolve().parents[4] / "scripts" / "sh" / "hermes-profile-sync.sh"
+WRAPPER = Path(
+    os.environ.get(
+        "DOTFILES_HERMES_MANAGED_WRAPPER",
+        str(Path(__file__).resolve().parents[4] / "scripts" / "sh" / "hermes-profile-sync.sh"),
+    )
+)
 PROVENANCE = FIXTURE_ROOT / "profile_sync.provenance.json"
 ENGINE = Path(os.environ.get("DOTFILES_HERMES_BOOTSTRAP_EXECUTABLE", "hermes-bootstrap"))
 MODE_CONTRACT_ERROR = "wrapper provenance mode contract failed"

@@ -20,6 +20,7 @@ pkgs.runCommand "hermes-bootstrap-tests"
   ''
     export PYTHONPATH="${inputs.hermes-agent}:${sourceRoot}/scripts/python"
     export DOTFILES_HERMES_BOOTSTRAP_EXECUTABLE="${bootstrapCli}/bin/hermes-bootstrap"
+    export DOTFILES_HERMES_MANAGED_WRAPPER="${../../../scripts/sh/hermes-profile-sync.sh}"
     export DOTFILES_HERMES_GIT_EXECUTABLE="${pkgs.git}/bin/git"
     export PATH="${bootstrapCli}/bin:$PATH"
     cd ${sourceRoot}

@@ -548,7 +548,13 @@ class GitStagingTests(unittest.TestCase):
         payload = self.root / "large-output"
         payload.write_bytes(b"x" * 5000)
         fake_git = bin_dir / "git"
-        fake_git.write_text("#!/bin/sh\nexec /bin/cat \"$HERMES_TEST_OUTPUT\"\n", encoding="utf-8")
+        fake_git.write_text(
+            f"#!{sys.executable}\n"
+            "from pathlib import Path\n"
+            "import os, sys\n"
+            "sys.stdout.buffer.write(Path(os.environ['HERMES_TEST_OUTPUT']).read_bytes())\n",
+            encoding="utf-8",
+        )
         fake_git.chmod(0o700)
         environment = {"PATH": str(bin_dir), "HERMES_TEST_OUTPUT": str(payload)}
 

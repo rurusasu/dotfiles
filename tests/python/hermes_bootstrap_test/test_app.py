@@ -1371,6 +1371,7 @@ class AppTests(unittest.TestCase):
                 return_value={"GH_TOKEN": "token"},
             ),
             mock.patch.object(app, "merge_env_file"),
+            mock.patch.object(app, "reconcile_chrome_configurations"),
             mock.patch.object(app, "_validate_installed_layout"),
         ):
             result = app.apply(Path("manifest.yaml"), io.StringIO("payload"))
