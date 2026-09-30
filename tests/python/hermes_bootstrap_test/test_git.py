@@ -45,6 +45,25 @@ class GitStagingTests(unittest.TestCase):
         self.remote = self.root / "source.git"
         self.checkout = self.root / "checkout"
         self.workdir = self.root / "work"
+        real_git_environment = git_module._git_environment
+
+        def allow_local_fixture_repositories(
+            git_auth: GitAuth, askpass: Path
+        ) -> dict[str, str]:
+            environment = real_git_environment(git_auth, askpass)
+            index = int(environment["GIT_CONFIG_COUNT"])
+            environment[f"GIT_CONFIG_KEY_{index}"] = "protocol.file.allow"
+            environment[f"GIT_CONFIG_VALUE_{index}"] = "always"
+            environment["GIT_CONFIG_COUNT"] = str(index + 1)
+            return environment
+
+        environment_patcher = mock.patch.object(
+            git_module,
+            "_git_environment",
+            side_effect=allow_local_fixture_repositories,
+        )
+        environment_patcher.start()
+        self.addCleanup(environment_patcher.stop)
         git("init", "--bare", str(self.remote))
         git("clone", str(self.remote), str(self.checkout))
         git("config", "user.name", "Bootstrap Test", cwd=self.checkout)

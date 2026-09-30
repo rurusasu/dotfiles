@@ -122,7 +122,8 @@ _REAL_POPEN = subprocess.Popen
 _CHILD_PROCESSES: list[subprocess.Popen[object]] = []
 
 
-def source_config(key: str, value: str) -> str:
+def source_config(key: str, value: str, data_root: Path | None = None) -> str:
+    root = data_root if data_root is not None else Path("/opt/data")
     return (
         f"{key}: {value}\n"
         "agent:\n"
@@ -140,28 +141,18 @@ def source_config(key: str, value: str) -> str:
         '    args: [--yes, --package, "@cocal/google-calendar-mcp@2.6.2", google-calendar-mcp]\n'
         "    connect_timeout: 300\n"
         "    env:\n"
-        "      GOOGLE_OAUTH_CREDENTIALS: /opt/data/google-calendar-mcp/gcp-oauth.keys.json\n"
-        "      GOOGLE_CALENDAR_MCP_TOKEN_PATH: /opt/data/google-calendar-mcp/tokens.json\n"
+        f"      GOOGLE_OAUTH_CREDENTIALS: {root / 'google-calendar-mcp/gcp-oauth.keys.json'}\n"
+        f"      GOOGLE_CALENDAR_MCP_TOKEN_PATH: {root / 'google-calendar-mcp/tokens.json'}\n"
     )
 
 
 def managed_source_config(
     manifest: BootstrapManifest, profile: str, key: str, value: str
 ) -> str:
-    config = yaml.safe_load(source_config(key, value))
+    config = yaml.safe_load(source_config(key, value, manifest.data_root))
     assert isinstance(config, dict)
     mcp_servers = config["mcp_servers"]
     assert isinstance(mcp_servers, dict)
-    calendar = mcp_servers["calendar"]
-    assert isinstance(calendar, dict)
-    calendar["env"] = {
-        "GOOGLE_OAUTH_CREDENTIALS": str(
-            manifest.data_root / "google-calendar-mcp/gcp-oauth.keys.json"
-        ),
-        "GOOGLE_CALENDAR_MCP_TOKEN_PATH": str(
-            manifest.data_root / "google-calendar-mcp/tokens.json"
-        ),
-    }
     gmail_configuration = json.loads(json.dumps(GMAIL_CONFIGURATION))
     gmail_configuration["env"] = {
         "GMAIL_OAUTH_PATH": str(
@@ -414,7 +405,7 @@ class BootstrapFlowTests(unittest.TestCase):
             "root",
             {
                 "root-distribution.yaml": self._root_manifest(["config.yaml", "retired.md"]),
-                "config.yaml": source_config("root", "initial"),
+                "config.yaml": source_config("root", "initial", self.data_root),
                 "retired.md": "retire me\n",
             },
         )
@@ -424,7 +415,9 @@ class BootstrapFlowTests(unittest.TestCase):
                 {
                     ".gitignore": self._profile_gitignore(),
                     "distribution.yaml": self._profile_manifest(profile),
-                    "config.yaml": source_config("profile", f"{profile}-initial"),
+                    "config.yaml": source_config(
+                        "profile", f"{profile}-initial", self.data_root
+                    ),
                     "SOUL.md": f"{profile} initial\n",
                 },
             )
@@ -493,7 +486,7 @@ class BootstrapFlowTests(unittest.TestCase):
                 {
                     "distribution.yaml": self._runtime_profile_manifest(profile),
                     "config.yaml": source_config(
-                        "profile", f"{profile}-initial"
+                        "profile", f"{profile}-initial", self.data_root
                     ),
                     "SOUL.md": f"{profile} initial\n",
                     "memories/runtime.txt": f"{profile} memory\n",
@@ -1129,13 +1122,13 @@ class BootstrapFlowTests(unittest.TestCase):
         self,
     ) -> None:
         root_config = (
-            source_config("root", "initial")
+            source_config("root", "initial", self.data_root)
             + "memory:\n"
             + "  provider: legacy-root\n"
             + "  source_policy: preserve-root\n"
         )
         profile_config = (
-            source_config("profile", "rick-initial")
+            source_config("profile", "rick-initial", self.data_root)
             + "memory:\n"
             + "  provider: legacy-profile\n"
             + "  source_policy: preserve-profile\n"
@@ -1196,7 +1189,9 @@ class BootstrapFlowTests(unittest.TestCase):
                 "distribution.yaml": self._runtime_profile_manifest(
                     "rick", "0.2.0"
                 ),
-                "config.yaml": source_config("profile", "rick-updated"),
+                "config.yaml": source_config(
+                    "profile", "rick-updated", self.data_root
+                ),
             },
         )
 
@@ -1424,7 +1419,9 @@ class BootstrapFlowTests(unittest.TestCase):
             future,
             {
                 "distribution.yaml": self._profile_manifest(future),
-                "config.yaml": source_config("profile", "future-invalid").replace(
+                "config.yaml": source_config(
+                    "profile", "future-invalid", self.data_root
+                ).replace(
                     "    connect_timeout: 120\n",
                     "    connect_timeout: 120.0\n",
                 ),
@@ -1488,7 +1485,9 @@ class BootstrapFlowTests(unittest.TestCase):
                 "distribution.yaml": self._profile_manifest(future).replace(
                     "- config.yaml\n", ""
                 ),
-                "config.yaml": source_config("profile", "future-valid"),
+                "config.yaml": source_config(
+                    "profile", "future-valid", self.data_root
+                ),
                 "SOUL.md": "future initial\n",
             },
         )
