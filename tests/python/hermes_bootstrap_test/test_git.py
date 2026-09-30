@@ -351,6 +351,7 @@ class GitStagingTests(unittest.TestCase):
         git("checkout", "main", cwd=self.checkout)
         observed_extra_ref: list[int] = []
         observed_extra_object: list[int] = []
+        observed_commands: list[tuple[str, ...]] = []
         failed_commands: list[tuple[str, ...]] = []
         real_run = git_module._run_git
         real_environment = git_module._git_environment
@@ -361,6 +362,7 @@ class GitStagingTests(unittest.TestCase):
             return real_environment(git_auth, askpass)
 
         def inspect(arguments: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> str | None:
+            observed_commands.append(arguments)
             # Only this test fetches a local bare fixture; make its file transport
             # exception explicit on the Git command rather than in inherited config.
             test_arguments = (
@@ -405,7 +407,11 @@ class GitStagingTests(unittest.TestCase):
             try:
                 stage_distribution(self.source(), self.workdir, auth())
             except RepositoryError:
-                self.fail(f"Git fixture commands failed: {failed_commands!r}")
+                self.fail(
+                    "Git fixture staging failed; "
+                    f"commands={observed_commands!r}; failed={failed_commands!r}; "
+                    f"observed_extra_ref={observed_extra_ref!r}"
+                )
 
         self.assertEqual(observed_extra_ref, [1])
         self.assertTrue(all(returncode != 0 for returncode in observed_extra_object))
