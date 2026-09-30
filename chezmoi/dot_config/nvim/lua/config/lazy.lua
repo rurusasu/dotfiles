@@ -23,6 +23,7 @@ end
 vim.opt.rtp:prepend(lazypath)
 
 require("lazy").setup("plugins", {
+    git = { timeout = 300 },
     defaults = { lazy = true },
     install = { colorscheme = { "catppuccin" } },
     checker = { enabled = false },

@@ -6,7 +6,7 @@ set -euo pipefail
 
 PERSONAL_ACCOUNT="{{ .op_account_personal }}"
 PERSONAL_PUBKEY_REF="op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key"
-OP_READ_TIMEOUT_SECONDS=60
+OP_READ_TIMEOUT_SECONDS={{ .op_read_timeout_seconds }}
 
 HOME_DIR="${HOME:-/home/$(whoami)}"
 

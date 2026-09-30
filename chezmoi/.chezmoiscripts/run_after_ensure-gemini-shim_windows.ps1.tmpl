@@ -1,24 +1,8 @@
 {{ if eq .chezmoi.os "windows" -}}
 $ErrorActionPreference = "Stop"
 
-# Resolve pnpm global root to find gemini-cli entrypoint
-$pnpmRoot = $null
-try {
-  $pnpmRoot = (& pnpm root -g 2>$null)
-  if ($pnpmRoot) { $pnpmRoot = $pnpmRoot.Trim() }
-} catch {}
-
-if (-not $pnpmRoot -or -not (Test-Path $pnpmRoot)) {
-  Write-Host "[gemini-shim] Skip: pnpm global root not found."
-  return
-}
-
-$entrypoint = Join-Path $pnpmRoot "@google\gemini-cli\dist\index.js"
-if (-not (Test-Path -LiteralPath $entrypoint -PathType Leaf)) {
-  Write-Host "[gemini-shim] Skip: Gemini CLI entrypoint not found."
-  return
-}
-
+# Check the command already on PATH before asking pnpm for its global root.
+# A healthy Gemini install needs no replacement shim, even if pnpm is unavailable.
 $isHealthy = $false
 try {
   $output = & gemini --version 2>$null
@@ -31,6 +15,24 @@ try {
 
 if ($isHealthy) {
   Write-Host "[gemini-shim] gemini command is healthy. No action needed."
+  return
+}
+
+# Resolve pnpm global root only when the existing Gemini command is broken.
+$pnpmRoot = $null
+try {
+  $pnpmRoot = (& pnpm root -g 2>$null)
+  if ($pnpmRoot) { $pnpmRoot = $pnpmRoot.Trim() }
+} catch {}
+
+if (-not $pnpmRoot -or -not (Test-Path $pnpmRoot)) {
+  Write-Host "[gemini-shim] Skip: pnpm global root not found and Gemini CLI is not healthy."
+  return
+}
+
+$entrypoint = Join-Path $pnpmRoot "@google\gemini-cli\dist\index.js"
+if (-not (Test-Path -LiteralPath $entrypoint -PathType Leaf)) {
+  Write-Host "[gemini-shim] Skip: Gemini CLI entrypoint not found."
   return
 }
 

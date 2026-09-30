@@ -26,8 +26,9 @@ tasks:
   chezmoi:
     desc: Apply chezmoi dotfiles (NixOS + Windows)
     cmds:
-      - cmd: wsl -d {{.DISTRO}} -- chezmoi apply --force
+      - cmd: pwsh -NoProfile -File scripts/powershell/Invoke-OptionalWslChezmoiApply.ps1 -Distro {{.DISTRO}}
         platforms: [windows]
-      - chezmoi apply --force
-      - cmd: cmd.exe /c "chezmoi apply --force"
+      - cmd: pwsh -NoProfile -File scripts/powershell/Invoke-ChezmoiApplyWithOnePasswordPrefetch.ps1
+        platforms: [windows]
+      - cmd: chezmoi apply --force
         platforms: [linux, darwin]

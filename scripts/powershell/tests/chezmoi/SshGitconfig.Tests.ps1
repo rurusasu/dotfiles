@@ -21,7 +21,7 @@ BeforeAll {
     $script:sshDeployPs1 = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_always_deploy.ps1.tmpl"
     $script:sshDeploySh = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_always_deploy.sh.tmpl"
     $script:chezmoiToml = Join-Path $script:chezmoiRoot ".chezmoi.toml.tmpl"
-    $script:renderData = '{"chezmoi":{"os":"windows"},"op_account_personal":"test-account"}'
+    $script:renderData = '{"chezmoi":{"os":"windows"},"op_account_personal":"test-account","op_read_timeout_seconds":180}'
 
     function Invoke-ChezmoiTemplateForTest {
         param([Parameter(Mandatory)][string]$Template, [Parameter(Mandatory)][string]$OverrideData)
@@ -216,10 +216,13 @@ Describe 'SSH deploy スクリプト' {
 
         It '1Password 実行時読み込みに timeout があること' {
             $script:ps1Content | Should -Match '\$OpReadTimeoutSeconds' -Because "run_always deploy should not hang when 1Password prompts or stalls"
-            $script:ps1Content | Should -Match '\$OpReadTimeoutSeconds = 60' -Because "1Password reads can exceed 20 seconds after app auth"
+            $script:ps1Content | Should -Match '\$OpReadTimeoutSeconds = \{\{\s*\.op_read_timeout_seconds\s*\}\}' -Because "Windows deploy should use the shared timeout data"
             $script:ps1Content | Should -Match 'WaitForExit\(\$timeoutMs\)' -Because "Windows op read should be bounded"
             $script:ps1Content | Should -Match 'Kill\(' -Because "timed-out Windows op reads should be terminated"
             $script:ps1Content | Should -Match 'timed out after \$OpReadTimeoutSeconds seconds' -Because "timeout should take the non-fatal skip path"
+            $timeoutDataPath = Join-Path $script:chezmoiRoot '.chezmoidata/onepassword.json'
+            $timeoutData = Get-Content -Encoding UTF8 -LiteralPath $timeoutDataPath -Raw | ConvertFrom-Json
+            $timeoutData.op_read_timeout_seconds | Should -BeGreaterOrEqual 180
         }
 
         It 'should 設定済みアカウントがCLIにない場合に復旧方法を表示すること' {
@@ -267,9 +270,12 @@ Describe 'SSH deploy スクリプト' {
 
         It '1Password 実行時読み込みに timeout があること' {
             $script:shContent | Should -Match 'OP_READ_TIMEOUT_SECONDS' -Because "run_always deploy should not hang when 1Password prompts or stalls"
-            $script:shContent | Should -Match 'OP_READ_TIMEOUT_SECONDS=60' -Because "WSL op.exe reads can exceed 20 seconds after app auth"
+            $script:shContent | Should -Match 'OP_READ_TIMEOUT_SECONDS=\{\{\s*\.op_read_timeout_seconds\s*\}\}' -Because "Unix deploy should use the shared timeout data"
             $script:shContent | Should -Match 'timeout|gtimeout' -Because "Unix op read should be bounded"
             $script:shContent | Should -Match 'timed out after \$OP_READ_TIMEOUT_SECONDS seconds' -Because "timeout should take the non-fatal skip path"
+            $timeoutDataPath = Join-Path $script:chezmoiRoot '.chezmoidata/onepassword.json'
+            $timeoutData = Get-Content -Encoding UTF8 -LiteralPath $timeoutDataPath -Raw | ConvertFrom-Json
+            $timeoutData.op_read_timeout_seconds | Should -BeGreaterOrEqual 180
         }
 
         It 'should 設定済みアカウントがCLIにない場合に復旧方法を表示すること' {

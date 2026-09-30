@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $HomeDir = $env:USERPROFILE
 $PersonalAccount = "{{ .op_account_personal }}"
 $PersonalPubkeyRef = "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key"
-$OpReadTimeoutSeconds = 60
+$OpReadTimeoutSeconds = {{ .op_read_timeout_seconds }}
 
 function Deploy-Content {
   param(
@@ -36,6 +36,14 @@ function Read-OpSecret {
     [string]$Account,
     [string]$Label
   )
+
+  if ($env:DOTFILES_OP_PREFETCH_ENABLED) {
+    if ($env:DOTFILES_OP_PREFETCHED_SSH_PUBLIC_KEY) {
+      return $env:DOTFILES_OP_PREFETCHED_SSH_PUBLIC_KEY
+    }
+    Write-Host "WARNING: 1Password batch read did not provide $Label"
+    return $null
+  }
 
   $opCmd = Get-OpCommand
   if (-not $opCmd) {

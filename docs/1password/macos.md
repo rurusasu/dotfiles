@@ -19,6 +19,8 @@ printf '%s\n' "$template" | op inject --account my.1password.com
 shell startup や deploy script では、prompt や app integration 待ちで止まらないように
 timeout を付ける。
 
+runtime deploy の secret read は最大 180 秒待ち、失敗した場合は warning / fallback に進む。
+
 macOS の標準環境に GNU `timeout` が無い場合は、`gtimeout` など環境に合わせた
 timeout 実装を使う。
 
