@@ -284,7 +284,10 @@ in
       armLinux = homeOutputs."aarch64-linux".modules;
     };
     expected = {
-      darwin = [ ../../home/darwin.nix ];
+      darwin = [
+        ../../home/darwin.nix
+        ../../home/standalone-darwin-fonts.nix
+      ];
       x86Linux = [ ../../home/linux.nix ];
       armLinux = [ ../../home/linux.nix ];
     };

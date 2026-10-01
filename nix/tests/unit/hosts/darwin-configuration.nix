@@ -14,8 +14,6 @@ let
       inherit system;
       specialArgs = {
         inherit inputs;
-        dotfilesUser = "test-user";
-        dotfilesHome = "/Users/test-user";
         dotfilesWithHermes = withHermes;
         dotfilesWithDocker = withDocker;
         dotfilesWithOllama = withOllama;
@@ -35,8 +33,8 @@ let
   dockerConfig = (mkDarwin { withDocker = true; }).config;
   hermesConfig = (mkDarwin { withHermes = true; }).config;
   ollamaConfig = (mkDarwin { withOllama = true; }).config;
-  defaultHome = defaultConfig.home-manager.users.test-user;
-  hermesHome = hermesConfig.home-manager.users.test-user;
+  defaultHome = defaultConfig.home-manager.users.rurusasu;
+  hermesHome = hermesConfig.home-manager.users.rurusasu;
 
   hasDarwinCask = name: config: builtins.any (cask: cask.name == name) config.homebrew.casks;
   packageNames =
@@ -47,16 +45,20 @@ let
   hasPackage = name: packages: builtins.any (package: package == name) packages;
 in
 {
-  testDarwinConfigurationAcceptsInjectedIdentity = {
+  testDarwinConfigurationUsesConfiguredIdentity = {
     expr = {
       primaryUser = defaultConfig.system.primaryUser;
-      systemHome = defaultConfig.users.users.test-user.home;
+      systemHome = defaultConfig.users.users.rurusasu.home;
       homeManagerHome = defaultHome.home.homeDirectory;
+      guestLogin = defaultConfig.system.defaults.loginwindow.GuestEnabled;
+      showFullName = defaultConfig.system.defaults.loginwindow.SHOWFULLNAME;
     };
     expected = {
-      primaryUser = "test-user";
-      systemHome = "/Users/test-user";
-      homeManagerHome = "/Users/test-user";
+      primaryUser = "rurusasu";
+      systemHome = "/Users/rurusasu";
+      homeManagerHome = "/Users/rurusasu";
+      guestLogin = false;
+      showFullName = false;
     };
   };
 
@@ -69,7 +71,10 @@ in
       github = builtins.any (name: builtins.match "^(gh|github-cli)($|[-.].*)" name != null) (
         packageNames defaultConfig
       );
-      homeManagerUser = builtins.hasAttr "test-user" defaultConfig.home-manager.users;
+      managedFont = builtins.any (
+        package: hasPrefix "udev-gothic-nf" (package.name or package.pname)
+      ) defaultConfig.fonts.packages;
+      homeManagerUser = builtins.hasAttr "rurusasu" defaultConfig.home-manager.users;
       noOptionalOllamaAgent = builtins.hasAttr "com-dotfiles-ollama" defaultConfig.launchd.user.agents;
     };
     expected = {
@@ -78,6 +83,7 @@ in
       raycast = true;
       weztermTerminfo = true;
       github = true;
+      managedFont = true;
       homeManagerUser = true;
       noOptionalOllamaAgent = false;
     };
@@ -120,14 +126,14 @@ in
     };
   };
 
-  testDarwinHomeManagerInstallsAndRegistersManagedFont = {
+  testDarwinHomeManagerLeavesSystemFontToNixDarwin = {
     expr = {
       fontPackage = builtins.any (name: hasPrefix "udev-gothic-nf" name) (homePackageNames defaultHome);
       fontActivation = builtins.hasAttr "installDotfilesFonts" defaultHome.home.activation;
     };
     expected = {
-      fontPackage = true;
-      fontActivation = true;
+      fontPackage = false;
+      fontActivation = false;
     };
   };
 
@@ -174,7 +180,7 @@ in
     };
     expected = {
       exists = true;
-      home = "/Users/test-user";
+      home = "/Users/rurusasu";
       runAtLoad = true;
       keepAlive = true;
     };
