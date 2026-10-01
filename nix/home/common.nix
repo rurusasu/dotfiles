@@ -15,7 +15,7 @@ in
 {
   home = {
     username = lib.mkDefault "rurusasu";
-    stateVersion = "26.05";
+    stateVersion = lib.mkDefault "26.05";
 
     sessionVariables = {
       # qmd (markdown search engine)
