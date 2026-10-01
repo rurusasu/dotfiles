@@ -32,7 +32,7 @@ in
     expected = expectedTartMinimal.drvPath;
   };
 
-  testTartCatalogUsesResolvedNixPackageAndRetainsDarwinMigrationMetadata = {
+  testTartCatalogUsesResolvedNixPackageAndIdentity = {
     expr = {
       resolvedPackage = sets.darwinPackages.tart.drvPath;
       provider = sets.supportReport.tart.darwin.provider;
@@ -40,7 +40,6 @@ in
       nixAttr = sets.supportReport.tart.darwin.nixAttr;
       identity = sets.supportReport.tart.darwin.identity;
       command = sets.supportReport.tart.darwin.identity.command;
-      legacyDarwin = sets.supportReport.tart.legacyDarwin;
     };
     expected = {
       resolvedPackage = pkgs.tart.drvPath;
@@ -53,10 +52,6 @@ in
         versionArgs = [ "--version" ];
       };
       command = "tart";
-      legacyDarwin = {
-        provider = "homebrew-formula";
-        name = "openai/tools/tart";
-      };
     };
   };
 }

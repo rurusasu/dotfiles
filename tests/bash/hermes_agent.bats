@@ -706,11 +706,11 @@ create_mocked_installer_fixture() {
 	cp "$REPO_ROOT/scripts/sh/install-common.sh" "$MOCK_REPO/scripts/sh/install-common.sh"
 	cp "$REPO_ROOT/scripts/sh/codex-npm.sh" "$MOCK_REPO/scripts/sh/codex-npm.sh"
 	cp "$REPO_ROOT/scripts/sh/install-display.sh" "$MOCK_REPO/scripts/sh/install-display.sh"
-	cat >"$MOCK_REPO/scripts/sh/migrate-darwin-provider.sh" <<'EOF'
+	cat >"$MOCK_REPO/scripts/sh/verify-darwin-packages.sh" <<'EOF'
 #!/usr/bin/env bash
-printf 'migrate-darwin-provider %s\n' "$*" >>"$COMMAND_LOG"
+printf 'verify-darwin-packages %s\n' "$*" >>"$COMMAND_LOG"
 EOF
-	chmod +x "$MOCK_REPO/scripts/sh/migrate-darwin-provider.sh"
+	chmod +x "$MOCK_REPO/scripts/sh/verify-darwin-packages.sh"
 	for installer in install-macos.sh install-linux.sh install-nixos.sh; do
 		cp "$REPO_ROOT/scripts/sh/$installer" "$MOCK_REPO/scripts/sh/$installer"
 	done

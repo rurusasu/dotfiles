@@ -32,7 +32,7 @@ OPEN_COMMAND="${DOTFILES_OPEN_COMMAND:-/usr/bin/open}"
 OLLAMA_API_URL="${DOTFILES_OLLAMA_API_URL:-http://127.0.0.1:11434/api/tags}"
 OLLAMA_WAIT_ATTEMPTS="${DOTFILES_OLLAMA_WAIT_ATTEMPTS:-60}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
-DARWIN_MIGRATION="${DOTFILES_DARWIN_MIGRATION:-$ROOT/scripts/sh/migrate-darwin-provider.sh}"
+DARWIN_VERIFICATION="${DOTFILES_DARWIN_VERIFICATION:-$ROOT/scripts/sh/verify-darwin-packages.sh}"
 readonly HOMEBREW_CASK_PARENT_DIR=/usr/local
 readonly HOMEBREW_CASK_BIN_DIR=/usr/local/bin
 readonly HOMEBREW_CASK_CLI_PLUGIN_DIR=/usr/local/cli-plugins
@@ -115,7 +115,7 @@ preflight() {
     "$ROOT/flake.nix"
     "$ROOT/chezmoi"
     "$VERIFY_ENVIRONMENT"
-    "$DARWIN_MIGRATION"
+    "$DARWIN_VERIFICATION"
   )
   if ((DOTFILES_WITH_DOCKER == 1)); then
     required_paths+=("$HINDSIGHT_COMPOSE_FILE")
@@ -939,18 +939,22 @@ apply_chezmoi() {
   chezmoi apply --force
 }
 
-migrate_darwin_providers() {
-  local -a migration_args=(--all)
+verify_darwin_providers() {
+  local -a verification_args=()
   if ((DOTFILES_WITH_OLLAMA == 1)); then
-    migration_args+=(--feature WithOllama)
+    verification_args+=(--feature WithOllama)
   fi
   if ((DOTFILES_WITH_DOCKER == 1)); then
-    migration_args+=(--feature WithDocker)
+    verification_args+=(--feature WithDocker)
   fi
   if ((DOTFILES_WITH_HERMES == 1)); then
-    migration_args+=(--feature WithHermes)
+    verification_args+=(--feature WithHermes)
   fi
-  "$DARWIN_MIGRATION" "${migration_args[@]}"
+  if ((${#verification_args[@]} > 0)); then
+    "$DARWIN_VERIFICATION" "${verification_args[@]}"
+  else
+    "$DARWIN_VERIFICATION"
+  fi
 }
 
 run_darwin_install_workflow() {
@@ -1010,8 +1014,8 @@ finish_macos_install() {
     dotfiles_step 'Finalizing Docker Desktop links' \
       'Finish the verified CLI link migration.' commit_docker_desktop_cask_links
   fi
-  dotfiles_step 'Migrating package providers' \
-    'Verify installed providers and finish package migrations.' migrate_darwin_providers
+  dotfiles_step 'Verifying macOS package providers' \
+    'Check the identities and versions of enabled Nix applications and commands.' verify_darwin_providers
   dotfiles_step 'Installing Herdr' \
     'Install or update Herdr unless explicitly skipped.' dotfiles_install_herdr
   dotfiles_step 'Applying user configuration' \

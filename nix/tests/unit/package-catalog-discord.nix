@@ -8,7 +8,7 @@ let
   };
 in
 {
-  testDiscordPreservesProvidersAndDarwinMigration = {
+  testDiscordPreservesProvidersAndDarwinIdentity = {
     expr = sets.supportReport.discord;
     expected = {
       installFeature = null;
@@ -33,10 +33,6 @@ in
           executable = "Discord";
         };
         nixAttr = "discord";
-      };
-      legacyDarwin = {
-        provider = "homebrew-cask";
-        name = "discord";
       };
     };
   };

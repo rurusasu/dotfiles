@@ -32,7 +32,6 @@ in
           systemModule
           ;
       };
-      legacyDarwin = support.legacyDarwin;
       defaultCaskExcluded = !(builtins.elem "docker-desktop" (sets.darwinCasksForInstallFeatures [ ]));
       dockerCaskSelected = builtins.elem "docker-desktop" (
         sets.darwinCasksForInstallFeatures [
@@ -60,7 +59,6 @@ in
         identity = "docker";
         systemModule = "docker";
       };
-      legacyDarwin = null;
       defaultCaskExcluded = true;
       dockerCaskSelected = true;
     };

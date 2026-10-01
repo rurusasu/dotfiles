@@ -8,7 +8,7 @@ let
   };
 in
 {
-  testDiaPreservesPlatformSupportIdentityAndLegacyCask = {
+  testDiaPreservesPlatformSupportIdentity = {
     expr = sets.supportReport.dia-browser;
     expected = {
       installFeature = null;
@@ -27,10 +27,6 @@ in
       };
       linux = {
         unsupported = "Vendor currently ships Dia for macOS only";
-      };
-      legacyDarwin = {
-        provider = "homebrew-cask";
-        name = "thebrowsercompany-dia";
       };
     };
   };

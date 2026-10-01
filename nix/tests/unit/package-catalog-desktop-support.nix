@@ -41,7 +41,7 @@ in
     };
   };
 
-  testGoogleChromePreservesWindowsProviderAndDarwinMigration = {
+  testGoogleChromePreservesWindowsProviderAndDarwinIdentity = {
     expr = sets.supportReport.google-chrome;
     expected = {
       installFeature = "WithHermes";
@@ -67,14 +67,10 @@ in
         identity = "google-chrome";
         nixAttr = "google-chrome";
       };
-      legacyDarwin = {
-        provider = "homebrew-cask";
-        name = "google-chrome";
-      };
     };
   };
 
-  testRaycastPreservesUnsupportedReasonsAndDarwinMigration = {
+  testRaycastPreservesUnsupportedReasonsAndDarwinIdentity = {
     expr = sets.supportReport.raycast;
     expected = {
       installFeature = null;
@@ -95,14 +91,10 @@ in
         };
         nixAttr = "raycast";
       };
-      legacyDarwin = {
-        provider = "homebrew-cask";
-        name = "raycast";
-      };
     };
   };
 
-  testTartPreservesAppleSiliconRequirementsAndDarwinMigration = {
+  testTartPreservesAppleSiliconRequirementsAndDarwinIdentity = {
     expr = sets.supportReport.tart;
     expected = {
       installFeature = null;
@@ -121,10 +113,6 @@ in
           versionArgs = [ "--version" ];
         };
         nixAttr = "tart";
-      };
-      legacyDarwin = {
-        provider = "homebrew-formula";
-        name = "openai/tools/tart";
       };
     };
   };

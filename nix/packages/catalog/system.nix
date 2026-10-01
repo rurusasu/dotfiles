@@ -22,10 +22,6 @@
         unsupported = "Tart requires Apple Silicon macOS";
       };
     };
-    legacyDarwin = {
-      provider = "homebrew-formula";
-      name = "openai/tools/tart";
-    };
   };
 
   docker-desktop = {

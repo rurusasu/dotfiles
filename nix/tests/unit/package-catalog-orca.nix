@@ -12,7 +12,6 @@ in
     expr = {
       orcaDarwinProvider = sets.supportReport.orca-editor.darwin.provider;
       orcaDarwinSource = sets.supportReport.orca-editor.darwin.source;
-      orcaLegacyDarwin = sets.supportReport.orca-editor.legacyDarwin;
       orcaIsDesktopPackage = builtins.elem sets.darwinPackages.orca-editor sets.desktop;
       orcaWingetId = sets.wingetMap.orca-editor;
       orcaInWindowsOnlyWinget = builtins.elem "StablyAI.Orca" sets.windowsOnly.winget;
@@ -28,10 +27,6 @@ in
     expected = {
       orcaDarwinProvider = "nix";
       orcaDarwinSource = "custom";
-      orcaLegacyDarwin = {
-        provider = "homebrew-cask";
-        name = "stablyai/orca/orca";
-      };
       orcaIsDesktopPackage = true;
       orcaWingetId = "StablyAI.Orca";
       orcaInWindowsOnlyWinget = false;
