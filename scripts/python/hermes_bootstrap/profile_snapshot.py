@@ -10,6 +10,7 @@ import re
 import resource
 import secrets
 import stat
+import sys
 from collections.abc import Iterator
 from contextlib import ExitStack
 from dataclasses import dataclass
@@ -38,7 +39,7 @@ _RUNTIME_KEYS = frozenset({"source", "installed_at"})
 _READ_CHUNK_BYTES = 64 * 1024
 _FD_OPERATION_HEADROOM = 32
 _FD_CONSERVATIVE_MARGIN = 32
-_RENAME_NOREPLACE = 1
+_RENAME_NOREPLACE = 4 if sys.platform == "darwin" else 1
 _PROFILE_NAME = re.compile(r"[a-z][a-z0-9-]*\Z")
 _PORTABLE_COMPONENT = re.compile(r"[A-Za-z0-9._-]+\Z")
 _PRIVATE_KEY_HEADERS = (
@@ -709,7 +710,12 @@ def _prepare_one(
                         "empty_owned_directory",
                     ) from None
                 directory_paths.add(owned_path)
-        _validate_canonical_manifest(output_fd, declaration, owned, manifest_bytes)
+        _validate_canonical_manifest(
+            output_fd, declaration, owned, manifest_bytes,
+            expected_root=output,
+            files=tuple(expected_files),
+            directories=tuple(expected_directories.values()),
+        )
         _verify_manifest_current(source_fd, manifest_stat)
         verify_absolute_directory(declaration.target, source_fd)
         entries.sort(key=lambda entry: entry.path.as_posix())
@@ -787,6 +793,10 @@ def _validate_canonical_manifest(
     declaration: DistributionSource,
     owned: tuple[PurePosixPath, ...],
     expected_bytes: bytes,
+    *,
+    files: tuple[_ExpectedFile, ...],
+    directories: tuple[_ExpectedDirectory, ...],
+    expected_root: Path | None = None,
 ) -> None:
     """Use Hermes on the exact bytes and copied sources that will be published."""
 
@@ -798,15 +808,22 @@ def _validate_canonical_manifest(
     )
     if not isinstance(expected_raw, dict):
         raise ValueError("manifest shape")
+    if _snapshot_manifest_owned(expected_raw, declaration.name) != owned:
+        raise ValueError("manifest ownership")
     expected_manifest = distributions.profile_distribution.DistributionManifest.from_dict(
         expected_raw
     )
-    projection = _descriptor_projection(root_fd)
-    parsed_manifest, parsed_owned = distributions._read_profile_manifest_at(
-        projection,
+    if expected_root is not None:
+        _verify_absolute_directory_nonblocking(expected_root, root_fd)
+    parsed_manifest, parsed_owned = _read_snapshot_manifest_at(
+        root_fd,
         declaration.name,
         require_sources=True,
+        files=files,
+        directories=directories,
     )
+    if expected_root is not None:
+        _verify_absolute_directory_nonblocking(expected_root, root_fd)
     if parsed_owned != owned:
         raise ValueError("manifest ownership")
     if _manifest_semantics(parsed_manifest, parsed_owned) != _manifest_semantics(
@@ -815,6 +832,56 @@ def _validate_canonical_manifest(
         raise ValueError("manifest semantics")
     if _read_regular(root_fd, "distribution.yaml")[0] != expected_bytes:
         raise ValueError("manifest changed")
+
+
+def _read_snapshot_manifest_at(
+    root_fd: int,
+    expected_name: str,
+    *,
+    require_sources: bool,
+    files: tuple[_ExpectedFile, ...],
+    directories: tuple[_ExpectedDirectory, ...],
+) -> tuple[object, tuple[PurePosixPath, ...]]:
+    """Use Hermes's pure schema API while all source reads remain fd-relative."""
+
+    if not require_sources:
+        raise ValueError("snapshot source validation required")
+    # This complete copied inventory includes the canonical manifest, every
+    # owned file/directory and its ancestors. The no-follow inode/hash walk
+    # strengthens require_sources' recursive regular-file/directory checks.
+    _verify_snapshot_tree(root_fd, files, directories)
+    content, _ = _read_regular(root_fd, "distribution.yaml")
+    raw = yaml.load(content.decode("utf-8"), Loader=distributions._UniqueKeyLoader)
+    owned = _snapshot_manifest_owned(raw, expected_name)
+    # Pinned Hermes read_manifest is safe_load + from_dict; the supported pure
+    # APIs preserve schema/version validation without a mutable pathname read.
+    manifest = distributions.profile_distribution.DistributionManifest.from_dict(raw)
+    if manifest.name != expected_name or any(
+        getattr(manifest, key, None) != raw[key]
+        for key in ("name", "version", "hermes_requires")
+    ):
+        raise ValueError("profile manifest identity mismatch")
+    if _normalize_owned(manifest.distribution_owned) != owned:
+        raise ValueError("profile manifest ownership mismatch")
+    distributions.profile_distribution.check_hermes_requires(
+        manifest.hermes_requires, distributions.HERMES_VERSION
+    )
+    _verify_snapshot_tree(root_fd, files, directories)
+    return manifest, owned
+
+
+def _snapshot_manifest_owned(raw: object, expected_name: str) -> tuple[PurePosixPath, ...]:
+    """Validate repository raw fields before Hermes's permissive coercions."""
+
+    if not isinstance(raw, dict) or any(not isinstance(key, str) for key in raw):
+        raise ValueError("profile manifest must be a mapping")
+    for key in ("name", "version", "hermes_requires"):
+        value = raw.get(key)
+        if not isinstance(value, str) or not value or value != value.strip():
+            raise ValueError("profile manifest identity invalid")
+    if raw["name"] != expected_name:
+        raise ValueError("profile manifest identity mismatch")
+    return _normalize_owned(raw.get("distribution_owned"))
 
 
 def _manifest_semantics(
@@ -1535,22 +1602,6 @@ def _verify_expected_directory_descriptor(
             raise ValueError("snapshot directory changed")
 
 
-def _descriptor_projection(descriptor: int) -> Path:
-    expected = os.fstat(descriptor)
-    for parent in (Path("/proc/self/fd"), Path("/dev/fd")):
-        candidate = parent / str(descriptor)
-        try:
-            current = candidate.stat()
-        except OSError:
-            continue
-        if stat.S_ISDIR(current.st_mode) and (current.st_dev, current.st_ino) == (
-            expected.st_dev,
-            expected.st_ino,
-        ):
-            return candidate
-    raise ValueError("descriptor projection unavailable")
-
-
 def _verify_prepared_snapshot(
     scratch_root: Path,
     scratch_fd: int,
@@ -2233,7 +2284,8 @@ def _rename_noreplace_at(
     destination_name: str,
 ) -> None:
     try:
-        renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
+        libc = ctypes.CDLL(None, use_errno=True)
+        renameat2 = libc.renameatx_np if sys.platform == "darwin" else libc.renameat2
     except (AttributeError, OSError):
         raise OSError(errno.ENOSYS, "atomic no-replace rename unavailable") from None
     renameat2.argtypes = (
@@ -2244,6 +2296,15 @@ def _rename_noreplace_at(
         ctypes.c_uint,
     )
     renameat2.restype = ctypes.c_int
+    # Darwin's exclusive rename can succeed for same-entry aliases. Reject
+    # existing entries, then use the atomic syscall to guard racing entries.
+    if sys.platform == "darwin":
+        try:
+            os.stat(destination_name, dir_fd=destination_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            raise FileExistsError(errno.EEXIST, "atomic no-replace destination exists")
     ctypes.set_errno(0)
     result = renameat2(
         source_fd,

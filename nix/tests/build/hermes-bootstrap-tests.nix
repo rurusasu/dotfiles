@@ -11,12 +11,12 @@ let
   managedWrapper = pkgs.writeShellScriptBin "hermes-profile-sync" (
     builtins.readFile ../../../scripts/sh/hermes-profile-sync.sh
   );
-  manifest = pkgs.writeText "hermes-bootstrap-test-manifest.yaml" (
-    import ../../home/hermes-agent/manifest.nix { hermesHome = "/tmp/hermes-test-home"; }
+  manifestTemplate = pkgs.writeText "hermes-bootstrap-test-manifest-template.yaml" (
+    import ../../home/hermes-agent/manifest.nix {
+      hermesHome = "/__hermes_bootstrap_test_home__";
+    }
   );
   bootstrapCli = pkgs.writeShellScriptBin "hermes-bootstrap" ''
-    export HERMES_HOME=/tmp/hermes-test-home
-    export HERMES_BOOTSTRAP_MANIFEST=${manifest}
     export PYTHONPATH=${inputs.hermes-agent}:${sourceRoot}/scripts/python
     exec ${bootstrapPython}/bin/python3 ${sourceRoot}/scripts/python/hermes_bootstrap_cli.py "$@"
   '';
@@ -27,13 +27,17 @@ pkgs.runCommand "hermes-bootstrap-tests"
   }
   ''
     export PYTHONPATH="${inputs.hermes-agent}:${sourceRoot}/scripts/python"
-    export DOTFILES_HERMES_BOOTSTRAP_EXECUTABLE="${bootstrapCli}/bin/hermes-bootstrap"
     export DOTFILES_HERMES_MANAGED_WRAPPER="${managedWrapper}/bin/hermes-profile-sync"
     export DOTFILES_HERMES_GIT_EXECUTABLE="${pkgs.git}/bin/git"
-    export PATH="${bootstrapCli}/bin:$PATH"
-    mkdir -p /tmp/hermes-test-home
     cd ${sourceRoot}
-    ${testPython} -m unittest discover \
+    # The launcher bakes a fresh canonical home and matching SSOT manifest,
+    # surviving the wrapper contract's deliberately minimal child environment.
+    ${testPython} tests/python/hermes_bootstrap_test/build_fixture.py \
+      --manifest-template ${manifestTemplate} \
+      --bootstrap-cli ${bootstrapCli}/bin/hermes-bootstrap \
+      --temporary-root "$TMPDIR" \
+      --shell ${pkgs.runtimeShell} \
+      -- ${testPython} -m unittest discover \
       -s tests/python/hermes_bootstrap_test \
       -p 'test_*.py' \
       -v
