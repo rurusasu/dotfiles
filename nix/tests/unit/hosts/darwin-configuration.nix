@@ -50,11 +50,15 @@ in
       primaryUser = defaultConfig.system.primaryUser;
       systemHome = defaultConfig.users.users.rurusasu.home;
       homeManagerHome = defaultHome.home.homeDirectory;
+      guestLogin = defaultConfig.system.defaults.loginwindow.GuestEnabled;
+      showFullName = defaultConfig.system.defaults.loginwindow.SHOWFULLNAME;
     };
     expected = {
       primaryUser = "rurusasu";
       systemHome = "/Users/rurusasu";
       homeManagerHome = "/Users/rurusasu";
+      guestLogin = false;
+      showFullName = false;
     };
   };
 

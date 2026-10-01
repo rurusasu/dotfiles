@@ -3,12 +3,14 @@
   lib,
   inputs,
   installFeatures ? [ ],
+  fontsManagedByNixDarwin ? false,
   ...
 }:
 let
   sets = import ../packages/sets.nix {
     inherit pkgs lib;
   };
+  managedFontPackage = pkgs.udev-gothic-nf;
 in
 {
   imports = [
@@ -20,10 +22,27 @@ in
   # output separately for shells and tools that resolve TERM=wezterm.
   home.packages = lib.unique (
     sets.darwinHomePackagesForInstallFeatures installFeatures
+    ++ lib.optionals (!fontsManagedByNixDarwin) [ managedFontPackage ]
     ++ [
       pkgs.coreutils
       pkgs.wezterm.terminfo
     ]
+  );
+
+  home.activation.installDotfilesFonts = lib.mkIf (!fontsManagedByNixDarwin) (
+    lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      fontTarget="$HOME/Library/Fonts"
+      fontSource="${managedFontPackage}/share/fonts"
+
+      run mkdir -p "$fontTarget"
+      if [ -d "$fontSource" ]; then
+        ${pkgs.findutils}/bin/find "$fontSource" -type f \( -name '*.ttf' -o -name '*.otf' \) -print |
+          while IFS= read -r fontPath; do
+            fontName="$(basename "$fontPath")"
+            run cp -f "$fontPath" "$fontTarget/$fontName"
+          done
+      fi
+    ''
   );
 
   home.sessionVariables = {

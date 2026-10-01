@@ -69,7 +69,7 @@
       NSAutomaticSpellingCorrectionEnabled = false;
     };
 
-    CustomUserPreferences.loginwindow = {
+    loginwindow = {
       # ゲストユーザーでのログインを無効にする。
       GuestEnabled = false;
       # ログイン画面にユーザー一覧を表示する。
