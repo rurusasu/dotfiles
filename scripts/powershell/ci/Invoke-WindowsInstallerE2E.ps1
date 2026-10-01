@@ -512,15 +512,28 @@ if ($validationErrors.Count -gt 0) {
 }
 '@
 $installerE2EScriptPath = Join-Path $env:RUNNER_TEMP "windows-installer-e2e-$expectedRuntime-$PID.ps1"
+$installerE2ELogPath = Join-Path $env:RUNNER_TEMP "windows-installer-$expectedRuntime.log"
 [System.IO.File]::WriteAllText($installerE2EScriptPath, $installerE2EScript, [System.Text.Encoding]::Unicode)
 Write-Host "Running the complete Windows installer E2E under $expectedRuntime ($($runtimeExecutable.Source))"
+$previousErrorActionPreference = $ErrorActionPreference
 try {
-    Start-Transcript -Path (Join-Path $env:RUNNER_TEMP "windows-installer-$expectedRuntime.log") -Force | Out-Null
-    & $runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File $installerE2EScriptPath
+    # Open the exact required sink before starting any installer child.
+    $prelaunchLog = [IO.File]::Open($installerE2ELogPath, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    $prelaunchLog.Dispose()
+    $ErrorActionPreference = 'Continue'
+    & $runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File $installerE2EScriptPath 2>&1 |
+        ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message }
+            else { [string]$_ }
+        } | Tee-Object -LiteralPath $installerE2ELogPath -ErrorAction Stop | Out-Host
     $installerE2EExitCode = $LASTEXITCODE
 }
+catch {
+    Write-Error ("Windows installer output capture/invocation failed: " + $_.Exception.Message) -ErrorAction Continue
+    exit 1
+}
 finally {
-    Stop-Transcript -ErrorAction SilentlyContinue | Out-Null
+    $ErrorActionPreference = $previousErrorActionPreference
     Remove-Item -LiteralPath $installerE2EScriptPath -Force -ErrorAction SilentlyContinue
 }
 if ($installerE2EExitCode -ne 0) {
