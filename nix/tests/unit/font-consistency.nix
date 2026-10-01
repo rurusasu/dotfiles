@@ -49,6 +49,8 @@ in
     in
     result
     // {
-      expected = result.expected // { homePackages = false; };
+      expected = result.expected // {
+        homePackages = false;
+      };
     };
 }
