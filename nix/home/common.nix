@@ -1,5 +1,4 @@
 # Shared Home Manager module for all platforms.
-# Uses builtins.getEnv to avoid hardcoding usernames in the repository.
 #
 # Used by:
 #   - nix/home/darwin.nix → nix-darwin Home Manager integration
@@ -11,17 +10,12 @@
   ...
 }:
 let
-  bootstrapUser = builtins.getEnv "DOTFILES_USER";
-  bootstrapHome = builtins.getEnv "DOTFILES_HOME";
-  user = if bootstrapUser != "" then bootstrapUser else builtins.getEnv "USER";
-  home = if bootstrapHome != "" then bootstrapHome else builtins.getEnv "HOME";
   fdOpts = "--hidden --follow --no-ignore-vcs --max-depth 10";
 in
 {
   home = {
-    username = lib.mkDefault (if user != "" then user else "unknown");
-    homeDirectory = lib.mkDefault (if home != "" then home else "/home/unknown");
-    stateVersion = "25.05";
+    username = lib.mkDefault "rurusasu";
+    stateVersion = "26.05";
 
     sessionVariables = {
       # qmd (markdown search engine)

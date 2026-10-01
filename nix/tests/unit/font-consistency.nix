@@ -43,5 +43,12 @@ in
 {
   testLinuxInstallsManagedFont = fontContract "x86_64-linux" ../../home/linux.nix;
   testWSLInstallsManagedFont = fontContract "x86_64-linux" ../../home/wsl.nix;
-  testDarwinInstallsManagedFont = fontContract "aarch64-darwin" ../../home/darwin.nix;
+  testDarwinHomeProfileDoesNotInstallManagedFont =
+    let
+      result = fontContract "aarch64-darwin" ../../home/darwin.nix;
+    in
+    result
+    // {
+      expected = result.expected // { homePackages = false; };
+    };
 }
