@@ -29,8 +29,8 @@ in
     ]
   );
 
-  home.activation.installDotfilesFonts = lib.mkIf (!fontsManagedByNixDarwin) (
-    lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+  home.activation = lib.mkIf (!fontsManagedByNixDarwin) {
+    installDotfilesFonts = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       fontTarget="$HOME/Library/Fonts"
       fontSource="${managedFontPackage}/share/fonts"
 
@@ -42,8 +42,8 @@ in
             run cp -f "$fontPath" "$fontTarget/$fontName"
           done
       fi
-    ''
-  );
+    '';
+  };
 
   home.sessionVariables = {
     # Homebrew's default is already 24 hours; keep that interval explicit
