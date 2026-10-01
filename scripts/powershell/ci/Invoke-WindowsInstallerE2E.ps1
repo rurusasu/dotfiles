@@ -302,8 +302,10 @@ Invoke-WindowsE2EValidation -Name 'portable command PATH recovery' -Validation {
 }
 
 Invoke-WindowsE2EValidation -Name 'WezTerm install PATH and version' -Validation {
+$weztermManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json') -Raw | ConvertFrom-Json
 $weztermPackages = @(
-  $wingetSources | ForEach-Object { $_.Packages } |
+  $weztermManifest.Sources | Where-Object { $_.SourceDetails.Name -in @('winget', 'msstore') } |
+    ForEach-Object { $_.Packages } |
     Where-Object { $_.PackageIdentifier -match '^wez\.wezterm(?:\.nightly)?$' }
 )
 if ($weztermPackages.Count -ne 1) {
