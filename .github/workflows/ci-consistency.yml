@@ -65,7 +65,7 @@ jobs:
         run: nix build .#checks.x86_64-linux.nix-unit --no-link
 
       - name: Show Nix-native package test failures
-        if: ${{ steps.nix-unit.outcome == 'failure' }}
+        if: ${{ always() && steps.nix-unit.outcome == 'failure' }}
         run: nix log "$(nix path-info --derivation .#checks.x86_64-linux.nix-unit)"
 
       - name: Build repository custom package derivations
