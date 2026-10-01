@@ -61,7 +61,12 @@ jobs:
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
 
       - name: Run Nix-native package tests
+        id: nix-unit
         run: nix build .#checks.x86_64-linux.nix-unit --no-link
+
+      - name: Show Nix-native package test failures
+        if: ${{ steps.nix-unit.outcome == 'failure' }}
+        run: nix log "$(nix path-info --derivation .#checks.x86_64-linux.nix-unit)"
 
       - name: Build repository custom package derivations
         run: nix build .#checks.x86_64-linux.custom-package-builds --no-link
