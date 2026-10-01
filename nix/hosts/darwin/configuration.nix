@@ -148,7 +148,6 @@ in
     };
     extraSpecialArgs = {
       inherit inputs installFeatures;
-      fontsManagedByNixDarwin = true;
     };
   };
 }
