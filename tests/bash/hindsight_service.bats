@@ -36,8 +36,8 @@ setup() {
 }
 
 @test "Hermes adapters do not start or prepare Hindsight" {
-	! grep -q 'dotfiles_hermes_hindsight_prepare_host' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-	! grep -q 'dotfiles_hermes_hindsight_start' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+	! grep -q 'dotfiles_hermes_hindsight_prepare_host' "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
+	! grep -q 'dotfiles_hermes_hindsight_start' "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
 	! grep -q 'Initialize-HermesHindsightHost' "$REPO_ROOT/scripts/powershell/handlers/Handler.HermesAgent.ps1"
 	! grep -q "@('up', '-d', 'hindsight')" "$REPO_ROOT/scripts/powershell/handlers/Handler.HermesAgent.ps1"
 }

@@ -16,8 +16,8 @@ Hermes setup historically had independent shell and PowerShell implementations:
 - Windows ran `scripts/powershell/handlers/Handler.HermesAgent.ps1`.
 
 The PowerShell handler now validates that NixOS WSL successfully took
-ownership; the explicit `task hermes:docker:bootstrap` path still invokes the
-legacy container adapters when deliberately requested.
+ownership. The former `task hermes:docker:bootstrap` task and container adapters
+have been removed; references below describe the retired design.
 
 The PowerShell handler provisions a GitHub token, while the shell implementation
 did not. The container `gh` wrapper originally only mapped an existing process

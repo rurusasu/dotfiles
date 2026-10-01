@@ -548,18 +548,11 @@ recovers any interrupted active journal before beginning new work. Remote
 profile or lifelog pushes completed before the transaction remain valid and are
 not reversed.
 
-The gateway API binds to `0.0.0.0:8642` inside the container, while Compose
-publishes it only on host loopback. Hermes refuses to start that API without the
-managed strong `API_SERVER_KEY`. This OpenAI-compatible endpoint is separate
-from the Desktop backend. Installer readiness is checked through the public
-`http://127.0.0.1:9119/api/health` endpoint because Desktop connects to the
-authenticated serve/dashboard backend on port `9119`.
-
-The Docker service enables `GATEWAY_MULTIPLEX_PROFILES=true`. Hermes therefore
-keeps the registered per-profile s6 slots stopped and serves all profiles from
-the root gateway with profile-scoped credentials, adapters, routes, and
-sessions. This avoids simultaneous cold starts exhausting Docker Desktop while
-preserving each profile's runtime boundary.
+Home Manager enables `gateway.multiplex_profiles` for the native user service.
+The root gateway serves managed profiles with profile-scoped credentials,
+adapters, routes, and sessions. Use `hermes gateway status` and
+`hermes -p <name> gateway status` to verify readiness. The retired Docker
+Dashboard/API ports and per-profile s6 services are not part of this flow.
 
 ## Repository Locks And Diagnostics
 
@@ -576,7 +569,7 @@ Git status, index, staged-path, and unpushed-history inspection is bounded to
 synchronization rejects credential artifacts, runtime state, databases, and
 nested Git repositories, while allowing ordinary knowledge filenames such as
 `authentication-guide.md` and the repository-root `.env.example`.
-Authenticated operations use root-owned `/usr/bin/git`, a short-lived
+Authenticated operations use root-owned Nix-managed Git, a short-lived
 `GIT_ASKPASS` file, and the system default `PATH`; credentials are not stored in
 remote URLs.
 
