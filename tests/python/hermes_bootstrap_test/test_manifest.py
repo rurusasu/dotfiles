@@ -24,7 +24,6 @@ from hermes_bootstrap.errors import (
     RollbackError,
     ValidationError,
 )
-import hermes_bootstrap.manifest as manifest_module
 from hermes_bootstrap.manifest import load_manifest
 
 
@@ -69,7 +68,6 @@ def manifest_data() -> dict[str, object]:
                 "source": "https://github.com/rurusasu/lifelog.git",
                 "ref": "main",
                 "target": "/opt/data/shared/lifelog",
-                "legacy_target": "/opt/data/core/lifelog",
                 "mode": "read-write",
                 "sync_owner": "default",
             }
@@ -153,7 +151,6 @@ class ManifestTests(unittest.TestCase):
         )
         self.assertEqual(discord_rick.profiles, ("rick",))
         self.assertEqual(manifest.shared_repositories[0].sync_owner, "default")
-        self.assertEqual(manifest.shared_repositories[0].legacy_target, Path("/opt/data/core/lifelog"))
         with self.assertRaises(FrozenInstanceError):
             manifest.schema_version = 2
 
@@ -168,7 +165,6 @@ class ManifestTests(unittest.TestCase):
             )
             for source in sources:
                 source["target"] = str(source["target"]).replace("/opt/data", str(home))
-            data["shared_repositories"][0]["legacy_target"] = str(home / "core/lifelog")
             data["data_root"] = str(home)
             manifest_path = Path(directory) / "manifest.yaml"
             manifest_path.write_text(json.dumps(data), encoding="utf-8")
@@ -258,53 +254,12 @@ class ManifestTests(unittest.TestCase):
 
                 self.assert_validation_error(data)
 
-    def test_legacy_target_cannot_equal_or_overlap_a_canonical_target(self) -> None:
-        for target in (
-            "/opt/data/profiles/rick",
-            "/opt/data/profiles",
-            "/opt/data/profiles/rick/legacy",
-        ):
-            with self.subTest(target=target):
+    def test_legacy_target_is_unsupported_even_when_null(self) -> None:
+        for value in (None, "/opt/data/core/lifelog"):
+            with self.subTest(value=value):
                 data = manifest_data()
-                data["shared_repositories"][0]["legacy_target"] = target
-
+                data["shared_repositories"][0]["legacy_target"] = value
                 self.assert_validation_error(data)
-
-    def test_legacy_target_cannot_equal_the_data_root(self) -> None:
-        data = manifest_data()
-        data["shared_repositories"][0]["legacy_target"] = "/opt/data"
-
-        self.assert_validation_error(data)
-
-    def test_legacy_targets_cannot_overlap_one_another(self) -> None:
-        data = manifest_data()
-        data["shared_repositories"].append(
-            {
-                "name": "notes",
-                "source": "https://github.com/rurusasu/notes.git",
-                "ref": "main",
-                "target": "/opt/data/shared/notes",
-                "legacy_target": "/opt/data/core/lifelog/archive",
-                "mode": "read-only",
-            }
-        )
-
-        self.assert_validation_error(data)
-
-    def test_managed_path_keeps_an_installed_compatibility_symlink_lexical(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            data_root = Path(directory)
-            canonical = data_root / "shared" / "lifelog"
-            canonical.mkdir(parents=True)
-            legacy = data_root / "core" / "lifelog"
-            legacy.parent.mkdir()
-            legacy.symlink_to("../shared/lifelog")
-
-            managed = manifest_module._managed_path(
-                str(legacy), "manifest.shared_repositories[0].legacy_target", data_root
-            )
-
-            self.assertEqual(managed, legacy)
 
     def test_read_write_repository_requires_sync_owner(self) -> None:
         data = manifest_data()

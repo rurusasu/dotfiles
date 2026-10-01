@@ -70,8 +70,9 @@ host ~/.hermes/                    container ${HERMES_HOME}/ (HERMES_HOME)
 
 `${HERMES_HOME}` is a runtime root, not a Git checkout. Its profile homes are also
 never Git repositories. The canonical shared path is
-`${HERMES_HOME}/shared/lifelog`; `${HERMES_HOME}/core/lifelog` is migration-only and is
-absent after a successful apply.
+`${HERMES_HOME}/shared/lifelog`. Old `${HERMES_HOME}/core/lifelog` checkouts are
+unmanaged and require [manual migration](bootstrap.md#shared-repository-layout-and-manual-migration)
+before bootstrap; manifests with `legacy_target` are unsupported.
 
 ## Source And Authority Matrix
 
