@@ -9,11 +9,14 @@ let
       withHermes ? false,
       withDocker ? false,
       withOllama ? false,
+      sudoUser ? "rurusasu",
+      currentUser ? "fallback-user",
     }:
     inputs.nix-darwin.lib.darwinSystem {
       inherit system;
       specialArgs = {
         inherit inputs;
+        inherit sudoUser currentUser;
         dotfilesWithHermes = withHermes;
         dotfilesWithDocker = withDocker;
         dotfilesWithOllama = withOllama;
@@ -33,6 +36,16 @@ let
   dockerConfig = (mkDarwin { withDocker = true; }).config;
   hermesConfig = (mkDarwin { withHermes = true; }).config;
   ollamaConfig = (mkDarwin { withOllama = true; }).config;
+  sudoUserConfig =
+    (mkDarwin {
+      sudoUser = "ktome1995";
+      currentUser = "root";
+    }).config;
+  currentUserFallbackConfig =
+    (mkDarwin {
+      sudoUser = "";
+      currentUser = "ktome1995";
+    }).config;
   defaultHome = defaultConfig.home-manager.users.rurusasu;
   hermesHome = hermesConfig.home-manager.users.rurusasu;
 
@@ -47,18 +60,35 @@ in
 {
   testDarwinConfigurationUsesConfiguredIdentity = {
     expr = {
-      primaryUser = defaultConfig.system.primaryUser;
-      systemHome = defaultConfig.users.users.rurusasu.home;
-      homeManagerHome = defaultHome.home.homeDirectory;
-      guestLogin = defaultConfig.system.defaults.loginwindow.GuestEnabled;
-      showFullName = defaultConfig.system.defaults.loginwindow.SHOWFULLNAME;
+      primaryUser = sudoUserConfig.system.primaryUser;
+      homebrewUser = sudoUserConfig.nix-homebrew.user;
+      systemHome = sudoUserConfig.users.users.ktome1995.home;
+      homeManagerHome = sudoUserConfig.home-manager.users.ktome1995.home.homeDirectory;
+      guestLogin = sudoUserConfig.system.defaults.loginwindow.GuestEnabled;
+      showFullName = sudoUserConfig.system.defaults.loginwindow.SHOWFULLNAME;
     };
     expected = {
-      primaryUser = "rurusasu";
-      systemHome = "/Users/rurusasu";
-      homeManagerHome = "/Users/rurusasu";
+      primaryUser = "ktome1995";
+      homebrewUser = "ktome1995";
+      systemHome = "/Users/ktome1995";
+      homeManagerHome = "/Users/ktome1995";
       guestLogin = false;
       showFullName = false;
+    };
+  };
+
+  testDarwinConfigurationFallsBackToCurrentUser = {
+    expr = {
+      primaryUser = currentUserFallbackConfig.system.primaryUser;
+      homebrewUser = currentUserFallbackConfig.nix-homebrew.user;
+      home = currentUserFallbackConfig.users.users.ktome1995.home;
+      homeManagerHome = currentUserFallbackConfig.home-manager.users.ktome1995.home.homeDirectory;
+    };
+    expected = {
+      primaryUser = "ktome1995";
+      homebrewUser = "ktome1995";
+      home = "/Users/ktome1995";
+      homeManagerHome = "/Users/ktome1995";
     };
   };
 

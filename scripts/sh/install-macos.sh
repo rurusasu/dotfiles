@@ -574,7 +574,7 @@ repair_and_verify_docker_desktop_cask() {
 }
 
 repair_homebrew_cask_link_directories() {
-  local directory user="${DOTFILES_USER:-${SUDO_USER:-$USER}}"
+  local directory user="${SUDO_USER:-$USER}"
   local directories=("$HOMEBREW_BIN_DIR" "$HOMEBREW_CLI_PLUGINS_DIR")
   [[ -n $user ]] || dotfiles_die "Unable to determine the Homebrew cask link directory owner."
 
@@ -594,9 +594,8 @@ repair_homebrew_cask_link_directories() {
 }
 
 apply_darwin_system() {
-  export DOTFILES_USER="${SUDO_USER:-$USER}"
-  export DOTFILES_HOME="$HOME"
-  local nix_bin nix_config
+  local nix_bin nix_config user="${SUDO_USER:-$USER}"
+  [[ -n $user ]] || dotfiles_die "Unable to determine the macOS user for nix-darwin activation."
   nix_bin="$(command -v nix)"
   nix_config=$'extra-experimental-features = nix-command flakes\naccept-flake-config = true'
 
@@ -605,16 +604,13 @@ apply_darwin_system() {
     cd "$ROOT"
     sudo /usr/bin/env \
       "NIX_CONFIG=$nix_config" \
-      "DOTFILES_USER=$DOTFILES_USER" \
-      "DOTFILES_HOME=$DOTFILES_HOME" \
-      "DOTFILES_ROOT=$DOTFILES_ROOT" \
       "DOTFILES_WITH_OLLAMA=$DOTFILES_WITH_OLLAMA" \
       "DOTFILES_WITH_DOCKER=$DOTFILES_WITH_DOCKER" \
       "DOTFILES_WITH_HERMES=$DOTFILES_WITH_HERMES" \
       "$nix_bin" --accept-flake-config run .#darwin-rebuild -- switch --flake .#macos --impure
   )
 
-  export PATH="$DOCKER_APP/Contents/Resources/bin:/run/current-system/sw/bin:$USER_PROFILE_ROOT/$DOTFILES_USER/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+  export PATH="$DOCKER_APP/Contents/Resources/bin:/run/current-system/sw/bin:$USER_PROFILE_ROOT/$user/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
   hash -r
 }
 
@@ -681,7 +677,8 @@ validate_homebrew_cask_link_directory() {
 }
 
 ensure_homebrew_cask_link_directory() {
-  local parent="$1" directory="$2"
+  local parent="$1" directory="$2" user="${SUDO_USER:-$USER}"
+  [[ -n $user ]] || dotfiles_die "Unable to determine the Homebrew cask link directory owner."
 
   validate_homebrew_cask_link_parent_directory "$parent"
   validate_homebrew_cask_link_directory "$parent" "$directory"
@@ -689,7 +686,7 @@ ensure_homebrew_cask_link_directory() {
   if [[ ! -e $directory ]]; then
     sudo /bin/mkdir -- "$directory"
   fi
-  sudo /usr/sbin/chown "$DOTFILES_USER:admin" "$directory"
+  sudo /usr/sbin/chown "$user:admin" "$directory"
   sudo /bin/chmod 0775 "$directory"
 }
 
