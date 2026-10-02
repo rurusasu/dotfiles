@@ -9,6 +9,8 @@ in
     inherit system;
     specialArgs = {
       inherit inputs;
+      sudoUser = builtins.getEnv "SUDO_USER";
+      currentUser = builtins.getEnv "USER";
       dotfilesWithHermes = builtins.getEnv "DOTFILES_WITH_HERMES" == "1";
       dotfilesWithDocker = builtins.getEnv "DOTFILES_WITH_DOCKER" == "1";
       dotfilesWithOllama = builtins.getEnv "DOTFILES_WITH_OLLAMA" == "1";

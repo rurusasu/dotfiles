@@ -5,10 +5,18 @@
   dotfilesWithHermes ? builtins.getEnv "DOTFILES_WITH_HERMES" == "1",
   dotfilesWithDocker ? builtins.getEnv "DOTFILES_WITH_DOCKER" == "1",
   dotfilesWithOllama ? builtins.getEnv "DOTFILES_WITH_OLLAMA" == "1",
+  sudoUser,
+  currentUser,
   ...
 }:
 let
-  user = "rurusasu";
+  user =
+    if sudoUser != "" then
+      sudoUser
+    else if currentUser != "" then
+      currentUser
+    else
+      throw "Unable to determine the macOS user: SUDO_USER and USER are both empty.";
   home = "/Users/${user}";
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
