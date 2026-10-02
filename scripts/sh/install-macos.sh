@@ -603,6 +603,7 @@ apply_darwin_system() {
   (
     cd "$ROOT"
     sudo /usr/bin/env \
+      "SUDO_USER=$user" \
       "NIX_CONFIG=$nix_config" \
       "DOTFILES_WITH_OLLAMA=$DOTFILES_WITH_OLLAMA" \
       "DOTFILES_WITH_DOCKER=$DOTFILES_WITH_DOCKER" \

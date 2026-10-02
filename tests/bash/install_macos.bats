@@ -219,12 +219,13 @@ case "${1:-}" in
 		fi
 		;;
 	/usr/bin/env)
-		if [[ $# -eq 14 && ${2:-} == "$expected_nix_config" &&
-			${3:-} == DOTFILES_WITH_OLLAMA=* && ${4:-} == DOTFILES_WITH_DOCKER=* &&
-			${5:-} == DOTFILES_WITH_HERMES=* && ${6:-} == "$STUB_BIN/nix" &&
-			${7:-} == --accept-flake-config && ${8:-} == run &&
-			${9:-} == ".#darwin-rebuild" && ${10:-} == -- && ${11:-} == switch &&
-			${12:-} == --flake && ${13:-} == ".#macos" && ${14:-} == --impure ]]; then
+		if [[ $# -eq 15 && ${2:-} == "SUDO_USER=$fixture_user" &&
+			${3:-} == "$expected_nix_config" && ${4:-} == DOTFILES_WITH_OLLAMA=* &&
+			${5:-} == DOTFILES_WITH_DOCKER=* && ${6:-} == DOTFILES_WITH_HERMES=* &&
+			${7:-} == "$STUB_BIN/nix" && ${8:-} == --accept-flake-config &&
+			${9:-} == run && ${10:-} == ".#darwin-rebuild" && ${11:-} == -- &&
+			${12:-} == switch && ${13:-} == --flake && ${14:-} == ".#macos" &&
+			${15:-} == --impure ]]; then
 			exec "$@"
 		fi
 		;;
@@ -1073,12 +1074,14 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	local runner_user="runner"
 	write_installed_stubs
 
+	export USER=root
 	export SUDO_USER="$runner_user"
 	export DOTFILES_USER="obsolete-override"
 	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	! grep -Fq '<DOTFILES_USER=' "$COMMAND_LOG"
+	grep -Fq "sudo </usr/bin/env> <SUDO_USER=$runner_user> <NIX_CONFIG=extra-experimental-features = nix-command flakes" "$COMMAND_LOG"
 	grep -Fqx "sudo </usr/sbin/chown> <$runner_user:admin> </usr/local/bin>" "$COMMAND_LOG"
 	grep -Fqx "sudo </usr/sbin/chown> <$runner_user:admin> </usr/local/cli-plugins>" "$COMMAND_LOG"
 }

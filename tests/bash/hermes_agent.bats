@@ -832,12 +832,13 @@ case "${1:-}" in
     fi
     ;;
   /usr/bin/env)
-    if [[ $# -eq 14 && ${2:-} == "$expected_nix_config" &&
-      ${3:-} == DOTFILES_WITH_OLLAMA=* && ${4:-} == DOTFILES_WITH_DOCKER=* &&
-      ${5:-} == DOTFILES_WITH_HERMES=* && ${6:-} == "${PATH%%:*}/nix" &&
-      ${7:-} == --accept-flake-config && ${8:-} == run &&
-      ${9:-} == .#darwin-rebuild && ${10:-} == -- && ${11:-} == switch &&
-      ${12:-} == --flake && ${13:-} == .#macos && ${14:-} == --impure ]]; then
+    if [[ $# -eq 15 && ${2:-} == "SUDO_USER=$fixture_user" &&
+      ${3:-} == "$expected_nix_config" && ${4:-} == DOTFILES_WITH_OLLAMA=* &&
+      ${5:-} == DOTFILES_WITH_DOCKER=* && ${6:-} == DOTFILES_WITH_HERMES=* &&
+      ${7:-} == "${PATH%%:*}/nix" && ${8:-} == --accept-flake-config &&
+      ${9:-} == run && ${10:-} == .#darwin-rebuild && ${11:-} == -- &&
+      ${12:-} == switch && ${13:-} == --flake && ${14:-} == .#macos &&
+      ${15:-} == --impure ]]; then
       exec "$@"
     fi
     ;;
@@ -1058,7 +1059,7 @@ EOF
 		if [[ $platform == macos ]]; then
 			grep -Fxq 'docker info' "$COMMAND_LOG"
 			grep -Fxq 'docker compose version' "$COMMAND_LOG"
-			grep -Fxq "sudo </usr/bin/env> <NIX_CONFIG=extra-experimental-features = nix-command flakes" "$COMMAND_LOG"
+			grep -Fxq "sudo </usr/bin/env> <SUDO_USER=test-user> <NIX_CONFIG=extra-experimental-features = nix-command flakes" "$COMMAND_LOG"
 			grep -Fxq "accept-flake-config = true> <DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=1> <$MOCK_BIN/nix> <--accept-flake-config> <run> <.#darwin-rebuild> <--> <switch> <--flake> <.#macos> <--impure>" "$COMMAND_LOG"
 			grep -Fqx 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/bin>' "$COMMAND_LOG"
 			grep -Fqx 'sudo </bin/chmod> <0775> </usr/local/bin>' "$COMMAND_LOG"
