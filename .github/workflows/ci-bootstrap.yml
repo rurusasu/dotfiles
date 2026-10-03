@@ -234,6 +234,11 @@ jobs:
     permissions:
       contents: read
       packages: read
+    env:
+      DOTFILES_USER: runner
+      DOTFILES_HOME: /home/runner
+      DOTFILES_UID: "1000"
+      DOTFILES_GID: "1000"
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

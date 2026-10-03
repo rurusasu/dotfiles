@@ -144,12 +144,23 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertNotIn("matrix:", job)
         self.assertNotIn("Install Nix", job)
         self.assertNotIn("Run Bash workflow contracts", self._workflow())
+        self.assertNotIn("DOTFILES_USER", job)
+        self.assertNotIn("DOTFILES_HOME", job)
         darwin = self._workflow_job(workflow, "darwin")
         self.assertNotIn("bats", darwin)
         self.assertNotIn("brew install", darwin)
         self.assertNotIn("attestation", darwin)
-        self.assertNotIn("DOTFILES_USER", workflow)
-        self.assertNotIn("DOTFILES_HOME", workflow)
+
+    def test_linux_build_provides_system_manager_identity(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        job = self._workflow_job(workflow, "linux-build")
+        for setting in (
+            "DOTFILES_USER: runner",
+            "DOTFILES_HOME: /home/runner",
+            'DOTFILES_UID: "1000"',
+            'DOTFILES_GID: "1000"',
+        ):
+            self.assertIn(setting, job)
 
     def test_runs_focused_actionlint_and_python_discovery(self) -> None:
         workflow = self._workflow()
