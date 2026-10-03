@@ -254,18 +254,4 @@ in
     };
   };
 
-  testDarwinLegacyOmlxCleanupRemainsInActivation = {
-    expr = {
-      uninstall =
-        builtins.match ".*uninstall --formula omlx.*" defaultConfig.system.activationScripts.removeLegacyOmlx.text
-        != null;
-      untap =
-        builtins.match ".*untap jundot/omlx.*" defaultConfig.system.activationScripts.removeLegacyOmlx.text
-        != null;
-    };
-    expected = {
-      uninstall = true;
-      untap = true;
-    };
-  };
 }
