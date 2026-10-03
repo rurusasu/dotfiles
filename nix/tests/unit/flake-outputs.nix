@@ -84,9 +84,11 @@ let
       outPath = nixpkgsFixture;
       lib.optionals = condition: values: if condition then values else [ ];
     };
-    workmux.packages.aarch64-darwin.default = "workmux";
-    workmux.packages.aarch64-linux.default = "workmux";
-    workmux.packages.x86_64-linux.default = "workmux";
+    workmux.packages = {
+      aarch64-darwin.default = "workmux";
+      aarch64-linux.default = "workmux";
+      x86_64-linux.default = "workmux";
+    };
     home-manager.lib.homeManagerConfiguration = args: args;
   };
   homeOutputs = (import ../../flakes/home.nix { inputs = homeInputs; }).flake.homeConfigurations;
@@ -286,11 +288,21 @@ in
     expected = {
       darwin = [
         ../../home/darwin.nix
+        ../../modules/lsp.nix
+        ../../modules/cursor
         ../../home/standalone-darwin-identity.nix
         ../../home/standalone-darwin-fonts.nix
       ];
-      x86Linux = [ ../../home/linux.nix ];
-      armLinux = [ ../../home/linux.nix ];
+      x86Linux = [
+        ../../home/linux.nix
+        ../../modules/lsp.nix
+        ../../modules/cursor
+      ];
+      armLinux = [
+        ../../home/linux.nix
+        ../../modules/lsp.nix
+        ../../modules/cursor
+      ];
     };
   };
 

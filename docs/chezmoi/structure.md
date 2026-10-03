@@ -6,7 +6,6 @@
 
 | 編集元                                                    | 内容・配置方式                                           |
 | --------------------------------------------------------- | -------------------------------------------------------- |
-| `dot_config/nvim/`                                        | Neovim。`~/.config/nvim` へ直接配置                      |
 | `dot_config/git/hooks/`                                   | Git hooks。直接配置                                      |
 | `dot_gitconfig.tmpl`、`dot_gitconfig-work.tmpl`           | Git 設定テンプレート。直接配置                           |
 | `dot_agents/`、`dot_codex/`、`dot_cursor/`、`dot_gemini/` | AI ツール設定。旧 `llms/` ではない                       |
@@ -19,20 +18,21 @@
 | `.chezmoiscripts/deploy/`                                 | カテゴリ別、OS 別の配置処理                              |
 | `.chezmoiscripts/run_onchange_install-*`                  | 宣言に基づくユーザーツール導入                           |
 
-Windows も Neovim の編集元は `dot_config/nvim/` です。起動時の実際の配置先は `:lua print(vim.fn.stdpath("config"))` で確認できます。
+Neovim は chezmoi の配布対象ではなく、Home Manager が管理します。
 
 ## Neovim の内部構造
 
 ```text
-dot_config/nvim/
-├── init.lua                  # 最低版確認と起動順序
-├── lua/config/               # options、keymaps、標準 LSP / 補完 / Tree-sitter
-├── lua/plugins/              # lazy.nvim の plugin specs
-├── after/lsp/                # 上流定義に重ねるサーバー別設定
-└── treesitter.json           # Nix と非 Nix の共通パーサー一覧
+nix/modules/nvim/
+├── default.nix               # Home Manager の設定・Lua の配置
+├── plugins.nix               # プラグインの導入・設定の呼び出し
+├── init.lua                  # エディタの基本設定・補助機能の読み込み
+└── lua/
+    ├── config/               # keymaps、共通 LSP・整形 / 補完 / Tree-sitter
+    └── plugins/              # プラグインごとの Lua 設定
 ```
 
-パーサー／クエリの Nix 配布は `nix/packages/neovim/default.nix`、LSP の package/provider 定義は `nix/packages/catalog/lsp.nix` にあります。`sets.nix` は公開入口です。設定と配布を分ける理由は [パッケージ管理](../nix/package-management.md#分割の理由と編集先)、運用・テストは [Neovim](./neovim.md) を参照してください。
+起動設定は `nix/modules/nvim/default.nix`、プラグインの導入と設定の呼び出しは `nix/modules/nvim/plugins.nix`、Lua 設定の本体は `nix/modules/nvim/lua/plugins/` にあります。Home Manager が `init.lua` を生成します。LSP サーバーの package/provider 定義は `nix/packages/catalog/lsp.nix`、`sets.nix` は公開入口です。運用・テストは [Neovim](./neovim.md) を参照してください。
 
 ## ファイル命名規則
 

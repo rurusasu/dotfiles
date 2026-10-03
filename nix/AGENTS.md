@@ -4,7 +4,7 @@
 
 - NixOS/WSL のシステム構成
 - flake-parts による出力定義
-- `nix profile` 向け package set
+- OS 構成へ統合するアプリと Home Manager 設定
 
 ## 編集先の目安
 
@@ -30,6 +30,5 @@ SSOT を巨大な 1 ファイルと解釈しない。詳細は [分割の理由�
 ## 実行
 
 ```bash
-nix profile install .#default
-sudo nixos-rebuild switch --flake .#nixos
+./install.sh
 ```

@@ -3,27 +3,6 @@
   "description": "pnpm global packages to install on Windows",
   "globalPackages": [
     {
-      "name": "bash-language-server",
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "bash-language-server"
-      }
-    },
-    {
-      "name": "yaml-language-server",
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "yaml-language-server"
-      }
-    },
-    {
-      "name": "@prisma/language-server",
-      "verifyCommand": {
-        "command": "prisma-language-server",
-        "type": "commandExists"
-      }
-    },
-    {
       "installArgs": [
         "--allow-build=@deepseek-ai/dsh-subprocess-local",
         "--allow-build=@google/genai",
@@ -56,20 +35,6 @@
       "verifyCommand": {
         "args": ["--version"],
         "command": "playwright"
-      }
-    },
-    {
-      "name": "typescript-language-server",
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "typescript-language-server"
-      }
-    },
-    {
-      "name": "typescript",
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "tsc"
       }
     },
     {

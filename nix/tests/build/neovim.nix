@@ -1,19 +1,47 @@
 # Native Neovim behavior and the Nix parser/query distribution contract.
-{ pkgs }:
+{ inputs, pkgs }:
 let
-  neovim = pkgs.callPackage ../../packages/neovim { };
+  neovim = import ../fixtures/neovim.nix { inherit inputs pkgs; };
 in
-pkgs.runCommand "neovim-native-check" { nativeBuildInputs = [ neovim ]; } ''
-  export XDG_CONFIG_HOME="$TMPDIR/config"
-  export XDG_DATA_HOME="$TMPDIR/data"
-  export XDG_STATE_HOME="$TMPDIR/state"
-  export XDG_CACHE_HOME="$TMPDIR/cache"
-  cd ${../../..}
-  nvim --headless -u NONE -i NONE -l tests/lua/nvim_modern_test.lua
-  nvim --headless -u NONE -i NONE -l tests/lua/nvim_markdown_test.lua
-  nvim --headless -u NONE -i NONE -l tests/lua/nvim_treesitter_test.lua
-  nvim --headless -u NONE -i NONE -l tests/lua/nvim_treesitter_installer_test.lua
-  DOTFILES_NVIM_LSPCONFIG=${pkgs.vimPlugins.nvim-lspconfig} \
-    nvim --headless -u NONE -i NONE -l tests/lua/nvim_typescript_test.lua
-  touch "$out"
-''
+pkgs.runCommand "neovim-native-check"
+  {
+    nativeBuildInputs = [
+      neovim.package
+      pkgs.git
+      pkgs.jq
+    ];
+  }
+  ''
+    export XDG_CONFIG_HOME="$TMPDIR/config"
+    export XDG_DATA_HOME="$TMPDIR/data"
+    export XDG_STATE_HOME="$TMPDIR/state"
+    export XDG_CACHE_HOME="$TMPDIR/cache"
+    mkdir -p "$XDG_DATA_HOME/nvim/site/pack"
+    ln -s ${neovim.plugins} "$XDG_DATA_HOME/nvim/site/pack/hm"
+    mkdir -p "$XDG_CONFIG_HOME/nvim"
+    ln -s ${neovim.lua} "$XDG_CONFIG_HOME/nvim/lua"
+    cd ${../../..}
+    nvim --headless -u NONE -i NONE -l tests/lua/nvim_modern_test.lua
+    nvim --headless -u NONE -i NONE -l tests/lua/nvim_treesitter_test.lua
+    nvim --headless -i NONE -u ${neovim.init} \
+      -c 'lua local ok, err = pcall(dofile, "tests/lua/nvim_markdown_test.lua"); if not ok then print(err); vim.cmd("cquit 1") end' \
+      -c 'qa!'
+    DOTFILES_NVIM_LSPCONFIG=${pkgs.vimPlugins.nvim-lspconfig} \
+      nvim --headless -u NONE -i NONE -l tests/lua/nvim_typescript_test.lua
+    # Remote 設定は JSON5 の既存キーを保持し、壊れたファイルは変更しない。
+    export HOME="$TMPDIR/home"
+    mkdir -p "$HOME/.cursor-server/data/Machine"
+    settings_file="$HOME/.cursor-server/data/Machine/settings.json"
+    printf '%s\n' '{ "unrelated": true, "nix.serverPath": "old", /* keep */ }' > "$settings_file"
+    ${neovim.cursorRemoteActivation}
+    jq -e '.unrelated == true and .["nix.serverPath"] == "nixd" and .["ruff.path"] == ["ruff"]' "$settings_file"
+    ${neovim.cursorRemoteActivation}
+    printf '%s\n' 'invalid JSON' > "$settings_file"
+    if ${neovim.cursorRemoteActivation}; then
+      echo 'Invalid Remote settings must fail without overwriting them' >&2
+      exit 1
+    fi
+    test "$(cat "$settings_file")" = 'invalid JSON'
+    echo 'Cursor Remote settings preserve unrelated keys and reject invalid input'
+    touch "$out"
+  ''

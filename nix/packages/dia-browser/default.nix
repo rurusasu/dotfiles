@@ -7,11 +7,11 @@
 
 stdenvNoCC.mkDerivation {
   pname = "dia-browser";
-  version = "1.49.1-87398";
+  version = "1.51.0-88065";
 
   src = fetchurl {
-    url = "https://releases.diabrowser.com/release/Dia-1.49.1-87398.zip";
-    hash = "sha256-a5sY+TplIMQODF27eS1jTapvFXKG+OK1nRWwEfcZqf4=";
+    url = "https://releases.diabrowser.com/release/Dia-1.51.0-88065.zip";
+    hash = "sha256-di5mn1P36GAs2tkfzS2PkikaLiRTRh6ojWBIvMzGKYo=";
   };
 
   nativeBuildInputs = [ unzip ];

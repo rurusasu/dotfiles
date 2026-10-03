@@ -3,13 +3,13 @@ let
   fixtures = import ../../fixtures/packages.nix { inherit inputs; };
   mkPkgs = system: fixtures.mkPkgs system;
 
-  baseModule =
-    { ... }:
-    {
-      home.username = "test-user";
-      home.homeDirectory = "/home/test-user";
-      home.stateVersion = "25.05";
+  baseModule = _: {
+    home = {
+      username = "test-user";
+      homeDirectory = "/home/test-user";
+      stateVersion = "25.05";
     };
+  };
 
   mkHome =
     {
@@ -30,7 +30,14 @@ let
       modules = [
         baseModule
         module
-      ];
+      ]
+      ++ ((import (
+        if pkgs.stdenv.hostPlatform.isDarwin then
+          ../../../modules/darwin/default.nix
+        else
+          ../../../modules/nixos/default.nix
+      ) { inherit pkgs inputs; }).home-manager.sharedModules or [ ]
+      );
     };
 
   common = mkHome {
@@ -71,18 +78,130 @@ let
           );
       sets = import ../../../packages/sets.nix {
         inherit pkgs;
-        lib = pkgs.lib;
+        inherit (pkgs) lib;
         codexPackage = pkgs.hello;
       };
       contains = package: packages: builtins.elem package packages;
     in
     {
       inherit sets;
-      obsidian = pkgs.obsidian;
-      contains = contains;
+      inherit (pkgs) obsidian;
+      inherit contains;
     };
 in
 {
+  testCursorLspUsesHomeManagerAndOrdinaryPath = {
+    expr =
+      builtins.map
+        (
+          home:
+          let
+            cursor = home.config.programs.cursor;
+            settings = cursor.profiles.default.userSettings or { };
+            keybindings = cursor.profiles.default.keybindings;
+            bindings =
+              if builtins.isPath keybindings then
+                builtins.fromJSON (builtins.readFile keybindings)
+              else
+                keybindings;
+          in
+          {
+            enabled = cursor.enable;
+            existingPackage = cursor.package == null;
+            nixServer = settings."nix.serverPath" or "";
+            formatter = settings."nix.serverSettings".nixd.formatting.command or [ ];
+            ruffPath = settings."ruff.path" or [ ];
+            gofumpt = settings.gopls."formatting.gofumpt" or false;
+            rustCheck = settings."rust-analyzer.check.command" or "";
+            theme = settings."workbench.colorTheme" or "";
+            editorSplitKey = builtins.any (
+              binding: binding.key == "ctrl+alt+\\" && binding.command == "workbench.action.splitEditorRight"
+            ) bindings;
+          }
+        )
+        [
+          linux
+          wsl
+          darwin
+        ];
+    expected = builtins.genList (_: {
+      enabled = true;
+      existingPackage = true;
+      nixServer = "nixd";
+      formatter = [ "nixfmt" ];
+      ruffPath = [ "ruff" ];
+      gofumpt = true;
+      rustCheck = "clippy";
+      theme = "Catppuccin Mocha";
+      editorSplitKey = true;
+    }) 3;
+  };
+
+  testNeovimHomeManagerOwnership = {
+    expr =
+      builtins.map
+        (
+          home:
+          let
+            cfg = home.config.programs.neovim;
+          in
+          {
+            enabled = cfg.enable;
+            sideloadInit = cfg.sideloadInitLua;
+            packageCopies = builtins.length (
+              builtins.filter (package: package.drvPath == cfg.finalPackage.drvPath) home.config.home.packages
+            );
+            basePackageInstalled = builtins.any (
+              package: package.drvPath == home.pkgs.neovim.drvPath
+            ) home.config.home.packages;
+            writesInit = home.config.xdg.configFile."nvim/init.lua".enable or false;
+            pluginData = home.config.xdg.dataFile."nvim/site/pack/hm".enable;
+            internalPackages = cfg.extraPackages == [ ];
+            serverDependencies =
+              builtins.all
+                (package: builtins.any (extra: extra.drvPath == package.drvPath) home.config.home.packages)
+                [
+                  home.pkgs.gopls
+                  home.pkgs.ruff
+                  home.pkgs.ty
+                  home.pkgs.lua-language-server
+                  home.pkgs.typescript-language-server
+                  home.pkgs.nixfmt
+                ];
+            remoteInstalled = builtins.any (
+              package: package.drvPath == home.pkgs.neovim-remote.drvPath
+            ) home.config.home.packages;
+            globalServerPackages = builtins.any (
+              package:
+              builtins.elem package.drvPath (
+                map (server: server.drvPath) [
+                  home.pkgs.nixd
+                  home.pkgs.gopls
+                  home.pkgs.ruff
+                ]
+              )
+            ) home.config.home.packages;
+          }
+        )
+        [
+          linux
+          wsl
+          darwin
+        ];
+    expected = builtins.genList (_: {
+      enabled = true;
+      sideloadInit = false;
+      packageCopies = 1;
+      basePackageInstalled = false;
+      writesInit = true;
+      pluginData = true;
+      internalPackages = true;
+      serverDependencies = true;
+      remoteInstalled = true;
+      globalServerPackages = true;
+    }) 3;
+  };
+
   testHeadlessHomesDoNotEnableNativeCompositor = {
     expr =
       map
@@ -159,7 +278,7 @@ in
       pkgs = mkPkgs "x86_64-linux";
       sets = import ../../../packages/sets.nix {
         inherit pkgs;
-        lib = pkgs.lib;
+        inherit (pkgs) lib;
         codexPackage = pkgs.hello;
       };
       catalogDrvPaths = builtins.map (package: package.drvPath) sets.all;
@@ -188,7 +307,7 @@ in
     in
     {
       expr = {
-        selectedCatalogDrvPaths = selectedCatalogDrvPaths;
+        inherit selectedCatalogDrvPaths;
         excludesDiscord = !(containsDrvPath pkgs.discord wsl.config.home.packages);
         excludesOllama = !(containsDrvPath pkgs.ollama wsl.config.home.packages);
       };

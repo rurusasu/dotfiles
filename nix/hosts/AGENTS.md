@@ -4,7 +4,7 @@
 
 - `<host>/default.nix`: host entrypoint。`configuration.nix` と host modules を import する
 - `<host>/configuration.nix`: system、service、user、cask、activation などのホスト固有設定
-- `<host>/fonts.nix`: 必要な host で分離する system font。Darwin の system font の所有者
+- `<host>/fonts.nix`: 必要な host で分離する system font。Darwin は `nix/modules/darwin/` が配布を担当する
 - `<host>/system.nix`: 必要な host で分離する OS-wide defaults。Darwin では timezone と defaults の反映 activation も所有する
 
 標準レイアウトは次のとおりです。
@@ -19,7 +19,7 @@ nix/hosts/<host>/
 
 Darwin も例外にせず、`nix/hosts/darwin/default.nix` を flake の entrypoint とし、実体は
 `nix/hosts/darwin/configuration.nix` と責務別 module に置く。host identity、サービス、Homebrew、
-統合固有の activation は `configuration.nix`、system font は `fonts.nix`、OS-wide defaults、
+統合固有の activation は `configuration.nix`、system font は `nix/modules/fonts.nix` の定義を `nix/modules/darwin/` から配布し、OS-wide defaults、
 timezone、defaults の反映 activation は `system.nix` が所有する。
 Darwin の `default.nix` は配線専用とし、必要な module を import する。system option を直接追加しない。
 

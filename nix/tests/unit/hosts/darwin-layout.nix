@@ -26,11 +26,11 @@ in
   testDarwinHostEntrypointImportsRequiredModules = {
     expr =
       let
-        imports = (import entrypoint { }).imports;
+        inherit ((import entrypoint { })) imports;
       in
       builtins.all (module: builtins.elem module imports) [
         configuration
-        ../../../hosts/darwin/fonts.nix
+        ../../../modules/darwin
         ../../../hosts/darwin/system.nix
       ];
     expected = true;
