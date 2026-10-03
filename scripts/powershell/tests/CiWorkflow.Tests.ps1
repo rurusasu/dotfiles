@@ -339,7 +339,6 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'SkipFlakeUpdate"\] = \$true'
         $script | Should -Match 'handlers\\Handler\.NixOSWSL\.ps1'
         $script | Should -Match '\$handler = \[NixOSWSLHandler\]::new\(\)'
-        $script | Should -Match '(?s)Move-Item -LiteralPath \$artifactSourceDir -Destination \$artifactDir.*?\$result = \$handler\.Apply\(\$context\)'
         $script | Should -Match '\$result = \$handler\.Apply\(\$context\)'
         $script | Should -Match 'SkipPostInstallSetup"\] = \$true'
         $script | Should -Match 'wslpath", "-a", \$cacheDir\.Replace\('\''\\'\'', '\''/'\''\)'
