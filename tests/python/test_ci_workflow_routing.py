@@ -32,12 +32,11 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
         self.assertIn('.#checks.${system}.powershell-formatter', taskfile)
         bootstrap = self._named_workflow("ci-bootstrap.yml")
-        for system, name in (("x86_64-linux", "nix-test"), ("aarch64-darwin", "darwin")):
+        for system, name in (("x86_64-linux", "linux-build"), ("aarch64-darwin", "darwin")):
             job = self._workflow_job(bootstrap, name)
-            self.assertIn(f'nix build .#checks.{system}.powershell-formatter', job)
-        linux = self._workflow_job(bootstrap, "nix-test")
-        self.assertRegex(linux, r'extra_nix_config:\s*\|\s*sandbox = true')
-        self.assertIn('nix config show sandbox', linux)
+            self.assertIn(f'.#checks.{system}.powershell-formatter', job)
+        tools = self._workflow_job(bootstrap, "ci-tools")
+        self.assertIn("check-bootstrap-ci-tools.sh --sandbox", tools)
 
     def test_workspace_cycle_runtime_check_runs_in_local_and_hosted_nix_jobs(self) -> None:
         taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
