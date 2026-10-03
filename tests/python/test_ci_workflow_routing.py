@@ -202,6 +202,14 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         wsl_job = self._workflow_job(workflow, "wsl")
         self.assertIn("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}", wsl_job)
         self.assertIn("WSLENV: GITHUB_TOKEN/u", wsl_job)
+
+    def test_linux_hardware_fixture_uses_the_container_workspace(self) -> None:
+        job = self._workflow_job(self._named_workflow("ci-bootstrap.yml"), "linux-build")
+        self.assertNotIn("${{ github.workspace }}/nix/tests/fixtures", job)
+        self.assertIn(
+            'export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"',
+            job,
+        )
     def test_bootstrap_detects_dependencies_without_push_path_filters(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
         push = workflow.split("  push:\n", 1)[1].split("  pull_request:\n", 1)[0]

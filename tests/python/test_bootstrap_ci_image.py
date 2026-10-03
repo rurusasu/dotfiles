@@ -28,8 +28,8 @@ class BootstrapCiImageTests(unittest.TestCase):
         self.assertIn('"docker/bootstrap-ci-tools/**"', push_paths)
 
     def test_authentication_uses_nix_config_home_and_keeps_tokens_private(self) -> None:
-        for use_xdg in (True, False):
-            with self.subTest(use_xdg=use_xdg), tempfile.TemporaryDirectory() as directory:
+        for use_xdg, wsl in ((True, False), (False, False), (True, True)):
+            with self.subTest(use_xdg=use_xdg, wsl=wsl), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 home = root / "passwd-home"
                 home.mkdir()
@@ -54,14 +54,18 @@ class BootstrapCiImageTests(unittest.TestCase):
                     FALLBACK_HOME=str(home),
                     EXPECTED_CONFIG=str(config),
                     GITHUB_TOKEN="fixture-token-not-a-real-secret",
+                    GITHUB_WORKSPACE=str(root / "checkout"),
+                    GIT_CONFIG_SYSTEM=str(root / "gitconfig"),
                     PATH=f"{tools}{os.pathsep}{os.environ['PATH']}",
                 )
                 if use_xdg:
                     environment["XDG_CONFIG_HOME"] = str(config)
+                if wsl:
+                    environment.pop("GITHUB_WORKSPACE")
                 script = ROOT / "scripts/sh/configure-bootstrap-ci-nix.sh"
                 for _ in range(2):
                     result = subprocess.run(
-                        ["bash", str(script)],
+                        ["bash", str(script), *(["--wsl"] if wsl else [])],
                         env=environment,
                         text=True,
                         capture_output=True,
@@ -74,6 +78,22 @@ class BootstrapCiImageTests(unittest.TestCase):
                 self.assertEqual(
                     (config / "nix/nix.conf").read_text().count(f"include {secret_file}"),
                     1,
+                )
+                if wsl:
+                    self.assertFalse(Path(environment["GIT_CONFIG_SYSTEM"]).exists())
+                    self.assertIn("max-jobs = 2", secret_file.read_text())
+                    continue
+                trusted_directories = subprocess.run(
+                    ["git", "config", "--system", "--get-all", "safe.directory"],
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(trusted_directories.returncode, 0)
+                self.assertEqual(
+                    trusted_directories.stdout.splitlines(),
+                    [environment["GITHUB_WORKSPACE"]],
                 )
 
     def run_step(

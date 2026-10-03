@@ -235,8 +235,6 @@ jobs:
     permissions:
       contents: read
       packages: read
-    env:
-      DOTFILES_NIXOS_HARDWARE_CONFIG: ${{ github.workspace }}/nix/tests/fixtures/hardware-configuration.nix
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -251,6 +249,7 @@ jobs:
 
       - name: Build Linux configurations and checks
         run: |
+          export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"
           nix build --impure --no-link --print-build-logs \
             .#nixosConfigurations.linux.config.system.build.toplevel \
             .#homeConfigurations.x86_64-linux.activationPackage \

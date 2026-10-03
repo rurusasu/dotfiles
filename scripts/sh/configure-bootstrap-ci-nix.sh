@@ -12,6 +12,14 @@ if [[ $GITHUB_TOKEN == *[[:space:]]* ]]; then
   exit 1
 fi
 
+# Git and Nix/libgit2 must trust the runner-owned checkout in this disposable
+# root container, including tests that reset HOME. Do not trust other paths.
+if [[ ${1:-} != --wsl ]]; then
+  : "${GITHUB_WORKSPACE:?CI checkout path is required}"
+  [[ $GITHUB_WORKSPACE == /* ]] || exit 64
+  git config --system --replace-all safe.directory "$GITHUB_WORKSPACE"
+fi
+
 config_home="${XDG_CONFIG_HOME:-}"
 if [[ -z $config_home ]]; then
   nix_home="$HOME"
