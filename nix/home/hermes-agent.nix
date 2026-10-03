@@ -45,15 +45,22 @@ in
   imports = [ inputs.hermes-agent.homeManagerModules.default ];
 
   programs.hermes-agent.enable = enabled;
-  home.sessionVariables.DOTFILES_WITH_HERMES = if enabled then "1" else "0";
-  home.packages = lib.optionals enabled [
-    hermesBootstrap
-    pkgs.nodejs
-  ];
+  home = {
+    sessionVariables.DOTFILES_WITH_HERMES = if enabled then "1" else "0";
+    packages = lib.optionals enabled [
+      hermesBootstrap
+      pkgs.nodejs
+    ];
+    activation.hermesProfileSyncWrapperExecutable = lib.mkIf enabled (
+      lib.hm.dag.entryAfter [ "hermesAgentSetup" ] ''
+        $DRY_RUN_CMD ${pkgs.coreutils}/bin/chmod 0700 ${lib.escapeShellArg "${hermesHome}/scripts/profile_sync.sh"}
+      ''
+    );
+  };
   services.hermes-agent = {
     enable = enabled;
     gateway.enable = enabled;
-    hermesHome = hermesHome;
+    inherit hermesHome;
     extraPackages = lib.optionals enabled [
       hermesBootstrap
       pkgs.nodejs
@@ -65,9 +72,4 @@ in
     extraPlugins = lib.optionals enabled [ hermesLcmPlugin ];
     settings.gateway.multiplex_profiles = true;
   };
-  home.activation.hermesProfileSyncWrapperExecutable = lib.mkIf enabled (
-    lib.hm.dag.entryAfter [ "hermesAgentSetup" ] ''
-      $DRY_RUN_CMD ${pkgs.coreutils}/bin/chmod 0700 ${lib.escapeShellArg "${hermesHome}/scripts/profile_sync.sh"}
-    ''
-  );
 }

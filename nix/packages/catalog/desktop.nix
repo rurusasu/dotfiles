@@ -142,7 +142,7 @@
       };
       darwin = {
         provider = "nix";
-        source = (darwinProviderCandidate "dia-browser").source;
+        inherit ((darwinProviderCandidate "dia-browser")) source;
         identity = {
           homepage = "https://www.diabrowser.com/";
           appName = "Dia.app";
@@ -151,7 +151,7 @@
         };
       }
       // lib.optionalAttrs ((darwinProviderCandidate "dia-browser").nixAttr != null) {
-        nixAttr = (darwinProviderCandidate "dia-browser").nixAttr;
+        inherit ((darwinProviderCandidate "dia-browser")) nixAttr;
       };
       linux = {
         unsupported = "Vendor currently ships Dia for macOS only";
@@ -190,7 +190,7 @@
     support = {
       darwin = {
         provider = "nix";
-        source = (darwinProviderCandidate "orca-editor").source;
+        inherit ((darwinProviderCandidate "orca-editor")) source;
         identity = {
           homepage = "https://onorca.dev/";
           appName = "Orca.app";
@@ -199,7 +199,7 @@
         };
       }
       // lib.optionalAttrs ((darwinProviderCandidate "orca-editor").nixAttr != null) {
-        nixAttr = (darwinProviderCandidate "orca-editor").nixAttr;
+        inherit ((darwinProviderCandidate "orca-editor")) nixAttr;
       };
       linux = {
         unsupported = "No reviewed Linux desktop package provider is selected";

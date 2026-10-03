@@ -92,7 +92,6 @@ def manifest(
                 root / "shared" / "lifelog",
                 "read-write",
                 "default",
-                root / "core" / "lifelog",
             ),
         ),
     )
@@ -1795,7 +1794,7 @@ class AppTests(unittest.TestCase):
 
         second = SharedRepository(
             "notes", "https://github.com/example/notes.git", "main",
-            self.root / "shared" / "notes", "read-only", None, None,
+            self.root / "shared" / "notes", "read-only", None,
         )
         configured = BootstrapManifest(
             self.manifest.schema_version, self.root, self.manifest.onepassword_items,
@@ -1844,10 +1843,9 @@ class AppTests(unittest.TestCase):
         repo = self.manifest.shared_repositories[0]
         repo.target.mkdir(parents=True)
         (repo.target / "canonical.txt").write_text("canonical\n", encoding="utf-8")
-        self.assertIsNotNone(repo.legacy_target)
-        assert repo.legacy_target is not None
-        repo.legacy_target.mkdir(parents=True)
-        (repo.legacy_target / "legacy.txt").write_text("legacy\n", encoding="utf-8")
+        legacy = self.root / "core" / "lifelog"
+        legacy.mkdir(parents=True)
+        (legacy / "legacy.txt").write_text("legacy\n", encoding="utf-8")
         private_directory = create_private_directory(
             repo.target.parent,
             prefix=".hermes-repository-",
@@ -1856,7 +1854,7 @@ class AppTests(unittest.TestCase):
         os.mkfifo(private / "retained-fifo")
         results = [
             (repo, RemoteSyncResult(repo.name, "a" * 40, False, repo.target)),
-            (repo, RemoteSyncResult(repo.name, "a" * 40, False, repo.legacy_target)),
+            (repo, RemoteSyncResult(repo.name, "a" * 40, False, legacy)),
             (
                 repo,
                 RemoteSyncResult(
@@ -1876,7 +1874,7 @@ class AppTests(unittest.TestCase):
             "canonical\n",
         )
         self.assertEqual(
-            (repo.legacy_target / "legacy.txt").read_text(encoding="utf-8"),
+            (legacy / "legacy.txt").read_text(encoding="utf-8"),
             "legacy\n",
         )
 
@@ -2284,25 +2282,20 @@ class AppTests(unittest.TestCase):
                     import shutil
 
                     shutil.rmtree(self.root / "shared")
-                legacy = self.manifest.shared_repositories[0].legacy_target
-                assert legacy is not None
-                if legacy.is_symlink():
-                    legacy.unlink()
                 self.write_repository_metadata(remote)
                 with self.assertRaises(ValidationError):
                     app._validate_repositories(self.manifest)
 
-    def test_repository_validation_rejects_a_remaining_legacy_path(self) -> None:
+    def test_repository_validation_leaves_an_unmanaged_old_path_untouched(self) -> None:
         from hermes_bootstrap import app
 
         self.write_repository_metadata(self.manifest.shared_repositories[0].source)
-        legacy = self.manifest.shared_repositories[0].legacy_target
-        assert legacy is not None
+        legacy = self.root / "core" / "lifelog"
         legacy.parent.mkdir(parents=True)
         legacy.symlink_to(os.path.relpath(self.manifest.shared_repositories[0].target, legacy.parent))
 
-        with self.assertRaises(ValidationError):
-            app._validate_repositories(self.manifest)
+        app._validate_repositories(self.manifest)
+        self.assertTrue(legacy.is_symlink())
 
     def test_installed_layout_validation_accepts_valid_owned_and_user_paths_without_network(self) -> None:
         from hermes_bootstrap import app

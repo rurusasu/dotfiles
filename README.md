@@ -98,8 +98,9 @@ Homebrew formula/cask を管理します。Home Manager と chezmoi も同じコ
 `--with-hermes` の macOS 構成では、Hermes Desktop は公式 Homebrew Cask
 `hermes-desktop` として nix-homebrew から導入され、Agent CLI と gateway は
 Nix/Home Manager が管理する native per-user service として起動します。
-Docker Compose の Agent/Dashboard は既存環境向けの明示的な legacy runtime であり、
-標準セットアップでは起動しません。Hermes の設定や runtime state は Nix store
+Docker Compose は Chromium / Browser MCP / X API MCP の sidecar を提供します。
+旧 Docker Agent / Dashboard とその bootstrap の実行経路は削除済みです。
+既存の Docker volume は変更せず、Hermes の設定や runtime state は Nix store
 に保存しません。
 
 詳細は [Hermes Desktop の運用](./docs/hermes-agent/desktop.md) を参照してください。
@@ -115,10 +116,15 @@ task tart:run
 
 `task tart:run` はホストの Hindsight を起動し、VM の起動後に GitHub `main` の
 commit hash を取得します。VM に最後に正常適用した hash と一致すれば何もせず、
-更新時だけ `~/.dotfiles` を更新して、git・chezmoi・Neovim・Codex と WezTerm、
-chezmoi 設定を適用します。適用に失敗した場合は hash を進めないため次回に再試行
+更新時だけ `~/.dotfiles` を更新して、通常の `install.sh` で macOS のアプリと
+OS・Home Manager・chezmoi 設定をまとめて適用します。Tart 専用の最小パッケージ
+集合やインストーラーは持ちません。適用に失敗した場合は hash を進めないため次回に再試行
 されます。SSH reverse forward により VM の Codex も
 `http://127.0.0.1:8888` の共有 Hindsight bank を利用します。
+
+既存 guest の旧専用 CLI profile は、OS 管理のコマンドを確認した後に移行します。
+旧 profile を指す管理済みリンクだけを削除し、通常ファイル・別のリンク・
+Nix store のパッケージ本体は削除しません。
 
 ```bash
 DOTFILES_TART_IMAGE=ghcr.io/cirruslabs/macos-tahoe-base:latest \

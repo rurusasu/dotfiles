@@ -20,7 +20,7 @@ Describe 'NixOSWSLHandler' {
         $script:handler = [NixOSWSLHandler]::new()
         $script:ctx = [SetupContext]::new("D:\dotfiles")
         $script:ctx.DistroName = "NixOS"
-        $script:ctx.InstallDir = "D:\WSL\NixOS"
+        $script:ctx.InstallDir = Join-Path $TestDrive "NixOS"
     }
 
     Context 'Constructor' {
@@ -146,6 +146,36 @@ Describe 'NixOSWSLHandler' {
     }
 
     Context 'Apply - error handling' {
+        It 'should return the unsupported release error before downloading or installing' {
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureWslReady -Value { } -Force
+            $ctx.Options["ReleaseTag"] = "2405.5.4"
+            $script:requestedTag = ""
+            $script:downloadCalled = $false
+            $script:installCalled = $false
+            Mock Invoke-RestMethodSafe {
+                param($Uri)
+                $script:requestedTag = $Uri
+                return @{ tag_name = "2405.5.4"; assets = @(@{ name = "nixos-wsl.tar.gz" }) }
+            }
+            $handler | Add-Member -MemberType ScriptMethod -Name DownloadAsset -Value {
+                $script:downloadCalled = $true
+                return "unused"
+            } -Force
+            $handler | Add-Member -MemberType ScriptMethod -Name InstallDistro -Value {
+                $script:installCalled = $true
+            } -Force
+            Mock Test-Path { return $false }
+            Mock Write-Host { }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match 'Release 2405.5.4.*nixos\.wsl'
+            $script:requestedTag | Should -Be 'https://api.github.com/repos/nix-community/NixOS-WSL/releases/tags/2405.5.4'
+            $script:downloadCalled | Should -Be $false
+            $script:installCalled | Should -Be $false
+        }
+
         It 'should return failure result when exception occurs' {
             $handler | Add-Member -MemberType ScriptMethod -Name EnsureWslReady -Value {
                 throw "WSL が有効化されていません"
@@ -304,25 +334,27 @@ Describe 'NixOSWSLHandler' {
         It 'should fetch specific tag when specified' {
             Mock Invoke-RestMethodSafe {
                 return @{
-                    tag_name = "v24.5.0"
+                    tag_name = "2605.7.2"
                     assets   = @()
                 }
             }
             Mock Write-Host { }
 
-            $null = $handler.GetRelease("v24.5.0")
+            $null = $handler.GetRelease("2605.7.2")
 
             Should -Invoke Invoke-RestMethodSafe -ParameterFilter {
-                $Uri -match "/releases/tags/v24.5.0"
+                $Uri -match "/releases/tags/2605.7.2"
             }
         }
     }
 
     Context 'SelectAsset' {
-        It 'should prefer nixos.wsl asset' {
+        It 'should select nixos.wsl instead of ARM or checksum assets' {
             $release = @{
-                assets = @(
-                    @{ name = "nixos-wsl.tar.gz" },
+                tag_name = "2605.7.2"
+                assets   = @(
+                    @{ name = "nixos.aarch64.wsl" },
+                    @{ name = "nixos.wsl.sha256" },
                     @{ name = "nixos.wsl" }
                 )
             }
@@ -333,32 +365,39 @@ Describe 'NixOSWSLHandler' {
             $result.name | Should -Be "nixos.wsl"
         }
 
-        It 'should select nixos-wsl.tar.gz when nixos.wsl is not available' {
+        It 'should reject a release containing only the old <assetName> asset' -ForEach @(
+            @{ tag = "2405.5.4"; assetName = "nixos-wsl.tar.gz" }
+            @{ tag = "2311.5.3"; assetName = "nixos-wsl-legacy.tar.gz" }
+        ) {
             $release = @{
-                assets = @(
-                    @{ name = "nixos-wsl.tar.gz" },
+                tag_name = $tag
+                assets   = @(
+                    @{ name = $assetName },
                     @{ name = "other.txt" }
                 )
             }
             Mock Write-Host { }
 
-            $result = $handler.SelectAsset($release)
-
-            $result.name | Should -Be "nixos-wsl.tar.gz"
+            { $handler.SelectAsset($release) } | Should -Throw "*Release $tag*nixos.wsl*2411.6.0*ReleaseTag*"
         }
 
-        It 'should throw exception when no asset is found' {
+        It 'should identify a current release missing nixos.wsl' -ForEach @(
+            @{ assets = @() }
+            @{ assets = @(@{ name = "nixos.aarch64.wsl" }, @{ name = "nixos.wsl.sha256" }) }
+        ) {
             $release = @{
-                tag_name = "v1.0.0"
-                assets   = @()
+                tag_name = "2605.7.2"
+                assets   = $assets
             }
 
-            { $handler.SelectAsset($release) } | Should -Throw "*利用可能なアーカイブが見つかりません*"
+            { $handler.SelectAsset($release) } | Should -Throw "*Release 2605.7.2*nixos.wsl*"
         }
     }
 
     Context 'DownloadAsset' {
         It 'should download asset' {
+            $previousTemp = $env:TEMP
+            $env:TEMP = $TestDrive
             $asset = @{
                 name                 = "nixos.wsl"
                 browser_download_url = "http://example.com/nixos.wsl"
@@ -366,7 +405,12 @@ Describe 'NixOSWSLHandler' {
             Mock Invoke-WebRequestSafe { }
             Mock Write-Host { }
 
-            $result = $handler.DownloadAsset($asset)
+            try {
+                $result = $handler.DownloadAsset($asset)
+            }
+            finally {
+                $env:TEMP = $previousTemp
+            }
 
             $result | Should -Match "nixos.wsl"
             Should -Invoke Invoke-WebRequestSafe -ParameterFilter {
@@ -411,7 +455,7 @@ Describe 'NixOSWSLHandler' {
             Should -Invoke Invoke-Wsl -ParameterFilter {
                 $Arguments -contains "--import-in-place" -and
                 $Arguments -contains "NixOS" -and
-                $Arguments -contains "D:\WSL\NixOS"
+                $Arguments -contains $ctx.InstallDir
             }
         }
 
@@ -714,7 +758,8 @@ Describe 'NixOSWSLHandler' {
             $script:execCmd | Should -Match '--skip-flake-update'
         }
 
-        It 'should fall back to /mnt/ path when wslpath call fails' {
+        It 'should fall back to /mnt/ path when wslpath call fails' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+            # [IO.Path]::GetPathRoot interprets drive letters only on Windows.
             $scriptFile = Join-Path $TestDrive "postinstall.sh"
             New-Item $scriptFile -ItemType File -Force | Out-Null
             $ctx.Options["PostInstallScript"] = $scriptFile

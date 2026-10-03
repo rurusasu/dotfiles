@@ -8,7 +8,7 @@ let
       ../../system-manager/docker.nix
     ];
   };
-  config = systemConfig.config;
+  inherit (systemConfig) config;
   dockerBuildx = config.nixpkgs.pkgs.docker-buildx;
 in
 {
@@ -16,9 +16,7 @@ in
     expr = {
       serviceEnabled = config.systemd.services.docker.enable;
       serviceRequiresSocket = builtins.elem "docker.socket" config.systemd.services.docker.requires;
-      serviceWantedBySystemManager = builtins.elem "system-manager.target" (
-        config.systemd.services.docker.wantedBy
-      );
+      serviceWantedBySystemManager = builtins.elem "system-manager.target" config.systemd.services.docker.wantedBy;
       socketEnabled = config.systemd.sockets.docker.enable;
       socketMode = config.systemd.sockets.docker.socketConfig.SocketMode;
       socketGroup = config.systemd.sockets.docker.socketConfig.SocketGroup;

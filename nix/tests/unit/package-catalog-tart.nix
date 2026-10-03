@@ -8,30 +8,11 @@ let
   codexPackage = pkgs.hello;
   sets = import ../../packages/sets.nix {
     pkgs = catalogPkgs;
-    lib = pkgs.lib;
+    inherit (pkgs) lib;
     inherit codexPackage;
-  };
-  expectedTartMinimal = pkgs.buildEnv {
-    name = "dotfiles-tart-minimal";
-    paths = sets.tartMinimal;
   };
 in
 {
-  testTartMinimalContainsOnlyRequestedCliPackages = {
-    expr = map pkgs.lib.getName sets.tartMinimal;
-    expected = [
-      "git"
-      "chezmoi"
-      "neovim"
-      "nodejs"
-    ];
-  };
-
-  testTartMinimalOutputIsBuiltFromResolvedPackageSet = {
-    expr = inputs.self.packages.${system}."tart-minimal".drvPath;
-    expected = expectedTartMinimal.drvPath;
-  };
-
   testTartCatalogUsesResolvedNixPackageAndIdentity = {
     expr = {
       resolvedPackage = sets.darwinPackages.tart.drvPath;

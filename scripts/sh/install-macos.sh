@@ -574,7 +574,7 @@ repair_and_verify_docker_desktop_cask() {
 }
 
 repair_homebrew_cask_link_directories() {
-  local directory user="${DOTFILES_USER:-${SUDO_USER:-$USER}}"
+  local directory user="${SUDO_USER:-$USER}"
   local directories=("$HOMEBREW_BIN_DIR" "$HOMEBREW_CLI_PLUGINS_DIR")
   [[ -n $user ]] || dotfiles_die "Unable to determine the Homebrew cask link directory owner."
 
@@ -594,9 +594,8 @@ repair_homebrew_cask_link_directories() {
 }
 
 apply_darwin_system() {
-  export DOTFILES_USER="${SUDO_USER:-$USER}"
-  export DOTFILES_HOME="$HOME"
-  local nix_bin nix_config
+  local nix_bin nix_config user="${SUDO_USER:-$USER}"
+  [[ -n $user ]] || dotfiles_die "Unable to determine the macOS user for nix-darwin activation."
   nix_bin="$(command -v nix)"
   nix_config=$'extra-experimental-features = nix-command flakes\naccept-flake-config = true'
 
@@ -604,18 +603,53 @@ apply_darwin_system() {
   (
     cd "$ROOT"
     sudo /usr/bin/env \
+      "SUDO_USER=$user" \
       "NIX_CONFIG=$nix_config" \
-      "DOTFILES_USER=$DOTFILES_USER" \
-      "DOTFILES_HOME=$DOTFILES_HOME" \
-      "DOTFILES_ROOT=$DOTFILES_ROOT" \
       "DOTFILES_WITH_OLLAMA=$DOTFILES_WITH_OLLAMA" \
       "DOTFILES_WITH_DOCKER=$DOTFILES_WITH_DOCKER" \
       "DOTFILES_WITH_HERMES=$DOTFILES_WITH_HERMES" \
       "$nix_bin" --accept-flake-config run .#darwin-rebuild -- switch --flake .#macos --impure
   )
 
-  export PATH="$DOCKER_APP/Contents/Resources/bin:/run/current-system/sw/bin:$USER_PROFILE_ROOT/$DOTFILES_USER/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+  export PATH="$DOCKER_APP/Contents/Resources/bin:/run/current-system/sw/bin:$USER_PROFILE_ROOT/$user/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
   hash -r
+}
+
+retire_tart_cli_profile() {
+  local user_home="$1" os_profile="$2"
+  local legacy_profile="$user_home/.local/state/dotfiles/tart-profile"
+  local directory command target
+  [[ -L $legacy_profile ]] || return 0
+  case "$(readlink "$legacy_profile")" in
+  /nix/store/*-dotfiles-tart-minimal) ;;
+  *) return 0 ;;
+  esac
+
+  for directory in \
+    "$user_home/.local" "$user_home/.local/bin" \
+    "$user_home/.local/state" "$user_home/.local/state/dotfiles"; do
+    [[ ! -L $directory ]] ||
+      dotfiles_die "Refusing legacy Tart migration through a symbolic directory: $directory"
+  done
+
+  # Validate every replacement before removing any managed link.
+  for command in git chezmoi nvim node npm; do
+    target="$user_home/.local/bin/$command"
+    if [[ -L $target && $(readlink "$target") == "$legacy_profile/bin/$command" ]]; then
+      [[ -x $os_profile/bin/$command ]] ||
+        dotfiles_die "OS-managed replacement is missing for legacy Tart command: $command"
+    fi
+  done
+  for command in git chezmoi nvim node npm; do
+    target="$user_home/.local/bin/$command"
+    if [[ -L $target && $(readlink "$target") == "$legacy_profile/bin/$command" ]]; then
+      rm -- "$target"
+    fi
+  done
+  # Unlink the retired GC root; never delete the referenced Nix store contents.
+  rm -- "$legacy_profile"
+  hash -r
+  dotfiles_log "Retired legacy Tart CLI profile links; Nix store contents were preserved."
 }
 
 homebrew_cask_link_parent_metadata() {
@@ -681,7 +715,8 @@ validate_homebrew_cask_link_directory() {
 }
 
 ensure_homebrew_cask_link_directory() {
-  local parent="$1" directory="$2"
+  local parent="$1" directory="$2" user="${SUDO_USER:-$USER}"
+  [[ -n $user ]] || dotfiles_die "Unable to determine the Homebrew cask link directory owner."
 
   validate_homebrew_cask_link_parent_directory "$parent"
   validate_homebrew_cask_link_directory "$parent" "$directory"
@@ -689,7 +724,7 @@ ensure_homebrew_cask_link_directory() {
   if [[ ! -e $directory ]]; then
     sudo /bin/mkdir -- "$directory"
   fi
-  sudo /usr/sbin/chown "$DOTFILES_USER:admin" "$directory"
+  sudo /usr/sbin/chown "$user:admin" "$directory"
   sudo /bin/chmod 0775 "$directory"
 }
 
@@ -1004,6 +1039,9 @@ finish_macos_install() {
     'Preserve an unmanaged WezTerm installation if one exists.' migrate_unmanaged_wezterm_install
   dotfiles_step 'Applying macOS packages and settings' \
     'Download or build packages, then activate nix-darwin, Homebrew, and Home Manager. sudo may request your password.' apply_darwin_system
+  dotfiles_step 'Retiring the legacy Tart CLI profile' \
+    'Remove only old managed links after OS-managed replacements are available.' \
+    retire_tart_cli_profile "$HOME" "$USER_PROFILE_ROOT/${SUDO_USER:-$USER}"
   dotfiles_step 'Installing Codex CLI from npm' \
     'Install the user-local npm package so Codex updates use npm.' dotfiles_install_codex_npm
   dotfiles_step 'Checking Homebrew directories' \

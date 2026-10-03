@@ -1,4 +1,4 @@
-"""Locked synchronization and local migration for shared Hermes repositories."""
+"""Locked synchronization and transactional publication for shared Hermes repositories."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .distributions import ChangeSet
-from .errors import MigrationError, RepositoryError
+from .errors import RepositoryError
 from .filesystem import (
     PrivateDirectory,
     create_private_directory,
@@ -148,12 +148,6 @@ class Transaction(Protocol):
 @dataclass(frozen=True)
 class _Failure:
     message: str
-
-
-@dataclass(frozen=True)
-class _MigrationFailure:
-    canonical: Path | None = None
-    legacy: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -299,12 +293,6 @@ def synchronize_remote(repo: SharedRepository, auth: GitAuth) -> RemoteSyncResul
     """Synchronize one declared repository without entering the local transaction."""
 
     result = _synchronize_remote_boundary(repo, auth)
-    if isinstance(result, _MigrationFailure):
-        message = f"shared repository data exists at {result.canonical} and {result.legacy}"
-        del result
-        del repo
-        del auth
-        raise MigrationError(message)
     if isinstance(result, _Failure):
         message = result.message
         del result
@@ -315,21 +303,9 @@ def synchronize_remote(repo: SharedRepository, auth: GitAuth) -> RemoteSyncResul
 
 
 def apply_shared_working_tree(repo: SharedRepository, result: RemoteSyncResult, tx: Transaction) -> ChangeSet:
-    """Move a synchronized checkout to its canonical path and remove the legacy target."""
+    """Publish a synchronized checkout at its declared target transactionally."""
 
     outcome = _apply_shared_working_tree_boundary(repo, result, tx)
-    if isinstance(outcome, _MigrationFailure):
-        if outcome.canonical is not None and outcome.legacy is not None:
-            message = f"shared repository data exists at {outcome.canonical} and {outcome.legacy}"
-            error_type: type[RepositoryError] | type[MigrationError] = MigrationError
-        else:
-            message = "could not migrate the shared repository working tree"
-            error_type = MigrationError
-        del outcome
-        del repo
-        del result
-        del tx
-        raise error_type(message)
     if isinstance(outcome, _Failure):
         message = outcome.message
         del outcome
@@ -359,7 +335,7 @@ def synchronize_named_repository(
 
 def _synchronize_remote_boundary(
     repo: SharedRepository, auth: GitAuth
-) -> RemoteSyncResult | _Failure | _MigrationFailure:
+) -> RemoteSyncResult | _Failure:
     stage: PrivateDirectory | None = None
     askpass: Path | None = None
     outcome: RemoteSyncResult | _Failure
@@ -371,8 +347,6 @@ def _synchronize_remote_boundary(
         with _RepositoryLock(lock_path, data_root) as repository_lock:
             repository_lock.require_held()
             working_tree = _selected_working_tree(repo)
-            if isinstance(working_tree, _MigrationFailure):
-                return working_tree
             if working_tree is None:
                 _ensure_safe_managed_directory(repo.target.parent, data_root)
                 stage = create_private_directory(
@@ -413,7 +387,7 @@ def _synchronize_remote_boundary(
 
 def _apply_shared_working_tree_boundary(
     repo: SharedRepository, result: RemoteSyncResult, tx: Transaction
-) -> ChangeSet | _Failure | _MigrationFailure:
+) -> ChangeSet | _Failure:
     try:
         data_root = _repository_data_root(repo)
         with _RepositoryLock(_lock_path(repo), data_root) as repository_lock:
@@ -427,63 +401,35 @@ def _apply_shared_working_tree_boundary(
 
 def _apply_shared_working_tree_locked(
     repo: SharedRepository, result: RemoteSyncResult, tx: Transaction
-) -> ChangeSet | _Failure | _MigrationFailure:
-    publication_copy: PrivateDirectory | None = None
+) -> ChangeSet | _Failure:
     try:
         _validate_result(repo, result)
         _require_safe_repository_parents(repo)
-        canonical_real = _real_data_state(repo.target, allow_legacy_link=False, repo=repo)
-        legacy_real = False
-        if repo.legacy_target is not None:
-            legacy_real = _real_data_state(repo.legacy_target, allow_legacy_link=True, repo=repo)
-        if canonical_real and legacy_real:
-            return _MigrationFailure(repo.target, repo.legacy_target)
+        canonical_real = _real_data_state(repo.target)
 
         working_tree = result.working_tree
         if working_tree is None:
             raise ValueError("missing synchronized checkout")
         _validate_working_tree(repo, repo.target if canonical_real else working_tree, result.commit)
         changed: list[Path] = []
-        migrated_legacy = False
         if not canonical_real:
             _ensure_parent_for_transaction(repo.target.parent, tx, changed)
             _snapshot(tx, repo.target)
-            migrated_legacy = repo.legacy_target is not None and working_tree == repo.legacy_target
-            publication_source = working_tree
-            if migrated_legacy:
-                publication_copy = _copy_working_tree_for_publication(repo, working_tree, result.commit)
-                publication_source = publication_copy.path
-            _require_same_filesystem(publication_source, repo.target.parent)
-            _move_verified_working_tree(repo, publication_source, result.commit)
-            if publication_copy is not None:
-                publication_copy.release()
-                if not publication_copy.is_released:
-                    raise ValueError("could not release private repository copy")
-                publication_copy = None
-            elif result.private_directory is not None:
+            _require_same_filesystem(working_tree, repo.target.parent)
+            _move_verified_working_tree(repo, working_tree, result.commit)
+            if result.private_directory is not None:
                 result.private_directory.release()
                 if not result.private_directory.is_released:
                     raise ValueError("could not release private repository stage")
             changed.append(repo.target)
         _validate_working_tree(repo, repo.target, result.commit)
-        if repo.legacy_target is not None:
-            _remove_legacy_target(repo, tx, changed, allow_populated=migrated_legacy)
         return ChangeSet(tuple(changed))
     except Exception:
-        if publication_copy is not None and not publication_copy.cleanup():
-            return _Failure("could not clean private repository resources")
         return _Failure("could not apply the shared repository working tree")
 
 
 def _validate_declaration(repo: SharedRepository, auth: GitAuth) -> None:
     data_root = repo.target.parent.parent if isinstance(repo, SharedRepository) else None
-    legacy_within_root = True
-    if isinstance(repo, SharedRepository) and repo.legacy_target is not None:
-        try:
-            legacy_relative = repo.legacy_target.relative_to(data_root)
-            legacy_within_root = bool(legacy_relative.parts) and ".." not in legacy_relative.parts
-        except (TypeError, ValueError):
-            legacy_within_root = False
     if (
         not isinstance(repo, SharedRepository)
         or _REPOSITORY_NAME.fullmatch(repo.name) is None
@@ -495,30 +441,17 @@ def _validate_declaration(repo: SharedRepository, auth: GitAuth) -> None:
         or repo.target.name != repo.name
         or repo.target.parent.name != "shared"
         or repo.target != data_root / "shared" / repo.name
-        or not legacy_within_root
         or (repo.mode == "read-write" and not repo.sync_owner)
     ):
         raise ValueError("invalid repository declaration")
-    if repo.legacy_target is not None and not repo.legacy_target.is_absolute():
-        raise ValueError("invalid legacy target")
 
 
 def _lock_path(repo: SharedRepository) -> Path:
     return repo.target.parent.parent / "locks" / "repositories" / f"{repo.name}.lock"
 
 
-def _selected_working_tree(repo: SharedRepository) -> Path | _MigrationFailure | None:
-    canonical = _real_data_state(repo.target, allow_legacy_link=False, repo=repo)
-    legacy = False
-    if repo.legacy_target is not None:
-        legacy = _real_data_state(repo.legacy_target, allow_legacy_link=True, repo=repo)
-    if canonical and legacy:
-        return _MigrationFailure(repo.target, repo.legacy_target)
-    if canonical:
-        return repo.target
-    if legacy:
-        return repo.legacy_target
-    return None
+def _selected_working_tree(repo: SharedRepository) -> Path | None:
+    return repo.target if _real_data_state(repo.target) else None
 
 
 def _initialize_checkout(repo: SharedRepository, checkout: Path, environment: dict[str, str]) -> None:
@@ -1075,8 +1008,6 @@ def _validate_result(repo: SharedRepository, result: RemoteSyncResult) -> None:
     ):
         raise ValueError("invalid synchronization result")
     allowed = {repo.target}
-    if repo.legacy_target is not None:
-        allowed.add(repo.legacy_target)
     if result.working_tree not in allowed:
         if (
             result.working_tree.parent != repo.target.parent
@@ -1164,30 +1095,6 @@ def _move_verified_working_tree(
         os.close(descriptor)
 
 
-def _copy_working_tree_for_publication(
-    repo: SharedRepository,
-    source: Path,
-    commit: str,
-) -> PrivateDirectory:
-    copy = create_private_directory(
-        repo.target.parent,
-        prefix=".hermes-repository-",
-    )
-    try:
-        shutil.copytree(
-            source,
-            copy.path,
-            symlinks=True,
-            dirs_exist_ok=True,
-        )
-        _validate_working_tree(repo, copy.path, commit)
-        return copy
-    except Exception:
-        if not copy.cleanup():
-            raise ValueError("could not clean private repository copy") from None
-        raise
-
-
 def _rollback_failed_move(source: Path, target: Path) -> None:
     if _lexists(source) or not _lexists(target):
         raise ValueError("could not roll back invalid working tree move")
@@ -1215,59 +1122,17 @@ def _identity_from_stat(value: os.stat_result) -> _PathIdentity:
     return _PathIdentity(value.st_dev, value.st_ino, stat.S_IFMT(value.st_mode))
 
 
-def _real_data_state(path: Path, *, allow_legacy_link: bool, repo: SharedRepository) -> bool:
+def _real_data_state(path: Path) -> bool:
     if not _lexists(path):
         return False
     mode = path.lstat().st_mode
     if stat.S_ISLNK(mode):
-        if allow_legacy_link and _is_correct_legacy_link(repo):
-            return False
         raise ValueError("unexpected symlink")
     if not stat.S_ISDIR(mode):
         raise ValueError("shared repository target is not a directory")
     with os.scandir(path) as entries:
         return next(entries, None) is not None
 
-
-def _remove_legacy_target(
-    repo: SharedRepository,
-    tx: Transaction,
-    changed: list[Path],
-    *,
-    allow_populated: bool,
-) -> None:
-    legacy = repo.legacy_target
-    if legacy is None:
-        return
-    if not _lexists(legacy):
-        return
-    mode = legacy.lstat().st_mode
-    if stat.S_ISLNK(mode):
-        if not _is_correct_legacy_link(repo):
-            raise ValueError("unexpected legacy target")
-    elif stat.S_ISDIR(mode):
-        with os.scandir(legacy) as entries:
-            if next(entries, None) is not None and not allow_populated:
-                raise ValueError("legacy target contains data")
-    else:
-        raise ValueError("unexpected legacy target")
-    _snapshot(tx, legacy)
-    if stat.S_ISDIR(mode):
-        if not _remove_private_tree(legacy):
-            raise ValueError("could not remove legacy repository")
-    else:
-        legacy.unlink()
-    changed.append(legacy)
-
-
-def _is_correct_legacy_link(repo: SharedRepository) -> bool:
-    legacy = repo.legacy_target
-    if legacy is None or not _lexists(legacy):
-        return False
-    try:
-        return stat.S_ISLNK(legacy.lstat().st_mode) and os.readlink(legacy) == os.path.relpath(repo.target, legacy.parent)
-    except OSError:
-        return False
 
 
 def _ensure_parent_for_transaction(path: Path, tx: Transaction, changed: list[Path]) -> None:
@@ -1316,15 +1181,11 @@ def _require_safe_repository_parents(repo: SharedRepository) -> None:
     data_root = _repository_data_root(repo)
     _ensure_safe_directory(data_root)
     _require_safe_managed_directory(repo.target.parent, data_root)
-    if repo.legacy_target is not None:
-        _require_safe_managed_directory(repo.legacy_target.parent, data_root)
 
 
 def _require_safe_checkout_location(repo: SharedRepository, checkout: Path) -> None:
     _require_safe_repository_parents(repo)
     allowed = {repo.target}
-    if repo.legacy_target is not None:
-        allowed.add(repo.legacy_target)
     staged = (
         checkout.parent == repo.target.parent
         and checkout.name.startswith(".hermes-repository-")
