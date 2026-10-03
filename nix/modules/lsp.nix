@@ -1,8 +1,8 @@
 { pkgs, ... }:
 {
-  # サーバー・整形ツールは Nix で導入し、Neovim の PATH に追加する。
-  # 起動対象と整形設定は lua/config/lsp.lua で管理する。
-  programs.neovim.extraPackages = with pkgs; [
+  # 全エディタから使えるよう、サーバー・整形ツールを通常の PATH に導入する。
+  # Neovim の詳細設定は nvim/lua/config/lsp.lua、Cursor は cursor/ が管理する。
+  home.packages = with pkgs; [
     # Nix
     nixd
     nixfmt

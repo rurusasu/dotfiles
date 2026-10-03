@@ -141,7 +141,7 @@ cat result/package-support-report.json
 
 同じ package を Home Manager と system layer の両方へ重複させるのは、system service が絶対 path を必要とする場合に限定します。
 
-Neovim 本体・プラグイン・LSP・整形ツールはカタログを介さず、`nix/modules/nvim/` の Home Manager 設定で直接管理します。LSP・整形ツールは `lsp.nix` の `programs.neovim.extraPackages` に宣言します。Tree-sitter の対象言語は `plugins.nix` の標準オプションに指定します。運用は [Neovim の運用](../chezmoi/neovim.md) を参照してください。
+Neovim 本体・プラグインはカタログを介さず、`nix/modules/nvim/` の Home Manager 設定で直接管理します。LSP・整形ツールは全エディタ共通の `nix/modules/lsp.nix` の `home.packages` に宣言し、通常の PATH に導入します。Cursor の LSP 設定は `nix/modules/cursor/` が管理し、Darwin／NixOS の共通 module が読み込みます。Tree-sitter の対象言語は `plugins.nix` の標準オプションに指定します。運用は [Neovim の運用](../chezmoi/neovim.md) を参照してください。
 
 ## 主なファイル
 

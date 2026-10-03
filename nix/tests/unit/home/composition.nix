@@ -30,7 +30,14 @@ let
       modules = [
         baseModule
         module
-      ];
+      ]
+      ++ ((import (
+        if pkgs.stdenv.hostPlatform.isDarwin then
+          ../../../modules/darwin/default.nix
+        else
+          ../../../modules/nixos/default.nix
+      ) { inherit pkgs inputs; }).home-manager.sharedModules or [ ]
+      );
     };
 
   common = mkHome {
@@ -83,6 +90,53 @@ let
     };
 in
 {
+  testCursorLspUsesHomeManagerAndOrdinaryPath = {
+    expr =
+      builtins.map
+        (
+          home:
+          let
+            cursor = home.config.programs.cursor;
+            settings = cursor.profiles.default.userSettings or { };
+            keybindings = cursor.profiles.default.keybindings;
+            bindings =
+              if builtins.isPath keybindings then
+                builtins.fromJSON (builtins.readFile keybindings)
+              else
+                keybindings;
+          in
+          {
+            enabled = cursor.enable;
+            existingPackage = cursor.package == null;
+            nixServer = settings."nix.serverPath" or "";
+            formatter = settings."nix.serverSettings".nixd.formatting.command or [ ];
+            ruffPath = settings."ruff.path" or [ ];
+            gofumpt = settings.gopls."formatting.gofumpt" or false;
+            rustCheck = settings."rust-analyzer.check.command" or "";
+            theme = settings."workbench.colorTheme" or "";
+            editorSplitKey = builtins.any (
+              binding: binding.key == "ctrl+alt+\\" && binding.command == "workbench.action.splitEditorRight"
+            ) bindings;
+          }
+        )
+        [
+          linux
+          wsl
+          darwin
+        ];
+    expected = builtins.genList (_: {
+      enabled = true;
+      existingPackage = true;
+      nixServer = "nixd";
+      formatter = [ "nixfmt" ];
+      ruffPath = [ "ruff" ];
+      gofumpt = true;
+      rustCheck = "clippy";
+      theme = "Catppuccin Mocha";
+      editorSplitKey = true;
+    }) 3;
+  };
+
   testNeovimHomeManagerOwnership = {
     expr =
       builtins.map
@@ -102,10 +156,11 @@ in
             ) home.config.home.packages;
             writesInit = home.config.xdg.configFile."nvim/init.lua".enable or false;
             pluginData = home.config.xdg.dataFile."nvim/site/pack/hm".enable;
+            internalPackages = cfg.extraPackages == [ ];
             serverDependencies =
-              builtins.all (package: builtins.any (extra: extra.drvPath == package.drvPath) cfg.extraPackages)
+              builtins.all
+                (package: builtins.any (extra: extra.drvPath == package.drvPath) home.config.home.packages)
                 [
-                  home.pkgs.nixd
                   home.pkgs.gopls
                   home.pkgs.ruff
                   home.pkgs.ty
@@ -140,9 +195,10 @@ in
       basePackageInstalled = false;
       writesInit = true;
       pluginData = true;
+      internalPackages = true;
       serverDependencies = true;
       remoteInstalled = true;
-      globalServerPackages = false;
+      globalServerPackages = true;
     }) 3;
   };
 

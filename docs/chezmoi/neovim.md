@@ -7,7 +7,7 @@
 - 基本設定: `nix/modules/nvim/init.lua`
 - 補助 Lua: `nix/modules/nvim/lua/`
 - Neovim 本体と補助コマンドの導入: `nix/modules/nvim/default.nix`
-- LSP・整形ツールの導入: `nix/modules/nvim/lsp.nix`
+- LSP・整形ツールの導入: `nix/modules/lsp.nix`
 - Home Manager の起動設定: `nix/modules/nvim/default.nix`
 - 共通 LSP 処理と整形設定: `nix/modules/nvim/lua/config/lsp.lua`
 - プラグインの導入と Tree-sitter の言語一覧: `nix/modules/nvim/plugins.nix`
@@ -16,7 +16,7 @@
 package データ、配布方式、エディタ設定を変更理由ごとに分けます。
 共通方針は [パッケージ管理の分割理由](../nix/package-management.md#分割の理由と編集先) を参照してください。
 
-Neovim 関連ソフトウェアはパッケージカタログを使わず、このモジュール内で Nixpkgs のパッケージを直接宣言します。LSP・整形ツールは `programs.neovim.extraPackages` が Neovim の PATH に追加します。Windows の winget / pnpm では配布しません。
+Neovim 関連ソフトウェアはパッケージカタログを使わず、Nixpkgs のパッケージを直接宣言します。共通の `nix/modules/lsp.nix` は `home.packages` を使い、Cursor などからも利用できる通常の PATH に LSP・整形ツールを導入します。Darwin／NixOS の `default.nix` が Home Manager に読み込ませます。Neovim の内部 PATH は追加しません。プラグインの実行依存も通常のユーザー環境へ導入します。Windows の winget / pnpm では配布しません。
 
 Neovim の設定とプラグインは Home Manager が管理し、chezmoi は配布しません。`default.nix` が `builtins.readFile ./init.lua` で基本設定を読み込み、プラグイン設定より先に実行します。実際の参照先は `:lua print(vim.fn.stdpath("config"))` で確認してください。非 Nix 環境向けの設定配布は行いません。
 

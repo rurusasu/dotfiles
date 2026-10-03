@@ -64,7 +64,11 @@ in
       let
         system = inputs.nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
-          modules = [ ../../modules/nixos ];
+          specialArgs = { inherit inputs; };
+          modules = [
+            inputs.home-manager.nixosModules.home-manager
+            ../../modules/nixos
+          ];
         };
       in
       {

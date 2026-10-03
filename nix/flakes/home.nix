@@ -35,6 +35,8 @@ let
         inherit (mkHome system) pkgs extraSpecialArgs;
         modules = [
           ../home/darwin.nix
+          ../modules/lsp.nix
+          ../modules/cursor
           ../home/standalone-darwin-identity.nix
           ../home/standalone-darwin-fonts.nix
         ];
@@ -43,7 +45,11 @@ let
     system:
     inputs.home-manager.lib.homeManagerConfiguration {
       inherit (mkHome system) pkgs extraSpecialArgs;
-      modules = [ ../home/linux.nix ];
+      modules = [
+        ../home/linux.nix
+        ../modules/lsp.nix
+        ../modules/cursor
+      ];
     };
 in
 {

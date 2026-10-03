@@ -13,6 +13,7 @@ let
 in
 {
   imports = [
+    ../modules/cursor/remote.nix
     ./nixos.nix
     ./common.nix
     ./hermes-agent.nix
