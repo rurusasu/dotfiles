@@ -615,6 +615,43 @@ apply_darwin_system() {
   hash -r
 }
 
+retire_tart_cli_profile() {
+  local user_home="$1" os_profile="$2"
+  local legacy_profile="$user_home/.local/state/dotfiles/tart-profile"
+  local directory command target
+  [[ -L $legacy_profile ]] || return 0
+  case "$(readlink "$legacy_profile")" in
+  /nix/store/*-dotfiles-tart-minimal) ;;
+  *) return 0 ;;
+  esac
+
+  for directory in \
+    "$user_home/.local" "$user_home/.local/bin" \
+    "$user_home/.local/state" "$user_home/.local/state/dotfiles"; do
+    [[ ! -L $directory ]] ||
+      dotfiles_die "Refusing legacy Tart migration through a symbolic directory: $directory"
+  done
+
+  # Validate every replacement before removing any managed link.
+  for command in git chezmoi nvim node npm; do
+    target="$user_home/.local/bin/$command"
+    if [[ -L $target && $(readlink "$target") == "$legacy_profile/bin/$command" ]]; then
+      [[ -x $os_profile/bin/$command ]] ||
+        dotfiles_die "OS-managed replacement is missing for legacy Tart command: $command"
+    fi
+  done
+  for command in git chezmoi nvim node npm; do
+    target="$user_home/.local/bin/$command"
+    if [[ -L $target && $(readlink "$target") == "$legacy_profile/bin/$command" ]]; then
+      rm -- "$target"
+    fi
+  done
+  # Unlink the retired GC root; never delete the referenced Nix store contents.
+  rm -- "$legacy_profile"
+  hash -r
+  dotfiles_log "Retired legacy Tart CLI profile links; Nix store contents were preserved."
+}
+
 homebrew_cask_link_parent_metadata() {
   /usr/bin/stat -f '%u %Lp' "$1"
 }
@@ -998,6 +1035,9 @@ finish_macos_install() {
     'Preserve an unmanaged WezTerm installation if one exists.' migrate_unmanaged_wezterm_install
   dotfiles_step 'Applying macOS packages and settings' \
     'Download or build packages, then activate nix-darwin, Homebrew, and Home Manager. sudo may request your password.' apply_darwin_system
+  dotfiles_step 'Retiring the legacy Tart CLI profile' \
+    'Remove only old managed links after OS-managed replacements are available.' \
+    retire_tart_cli_profile "$HOME" "$USER_PROFILE_ROOT/${SUDO_USER:-$USER}"
   dotfiles_step 'Installing Codex CLI from npm' \
     'Install the user-local npm package so Codex updates use npm.' dotfiles_install_codex_npm
   dotfiles_step 'Checking Homebrew directories' \

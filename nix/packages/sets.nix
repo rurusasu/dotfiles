@@ -31,8 +31,8 @@
 #   - windowsOnly        → packages with no nix equivalent (winget/msstore/npm/pnpm)
 #
 # Imported by:
-#   - nix/flakes/packages.nix → perSystem buildEnv outputs
-#   - nix/home/common.nix     → home.packages
+#   - nix/flakes/packages.nix → export and validation artifacts
+#   - nix/home/{linux,wsl,darwin}.nix → OS-managed home.packages
 #   - nix/packages/winget.nix → winget/npm/pnpm JSON generation
 {
   pkgs,

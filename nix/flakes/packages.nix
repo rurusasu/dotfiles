@@ -1,11 +1,6 @@
-# Package outputs for nix profile
-# Usage:
-#   nix profile install .#default   (core + dev + terminal)
-#   nix profile install .#minimal   (core only)
-#   nix profile install .#full      (everything, unfree allowed)
-#   nix profile install .#core      (individual set)
-#   nix profile install .#tart-minimal (Tart: git + chezmoi + neovim + Node.js)
-#   nix build .#winget-export       (generate Windows package JSON)
+# Export and validation artifacts only. Applications are installed through
+# the OS configurations and their Home Manager modules, not Nix profiles.
+# Usage: nix build .#winget-export (generate Windows package JSON)
 { inputs, ... }:
 {
   perSystem =
@@ -24,10 +19,6 @@
           config.allowUnfree = true;
         }).extend
           workmuxOverlay;
-      sets = import ../packages/sets.nix {
-        pkgs = pkgs.extend workmuxOverlay;
-        inherit lib;
-      };
       unfreeSets = import ../packages/sets.nix {
         pkgs = unfreePkgs;
         inherit lib;
@@ -39,50 +30,6 @@
     in
     {
       packages = {
-        # Main package sets
-        default = pkgs.buildEnv {
-          name = "dotfiles-default";
-          paths = sets.core ++ sets.dev ++ unfreeSets.terminal;
-        };
-        minimal = pkgs.buildEnv {
-          name = "dotfiles-minimal";
-          paths = sets.core;
-        };
-        tart-minimal = pkgs.buildEnv {
-          name = "dotfiles-tart-minimal";
-          paths = sets.tartMinimal;
-        };
-        full = pkgs.buildEnv {
-          name = "dotfiles-full";
-          paths = unfreeSets.all;
-        };
-
-        # Individual sets for selective install
-        core = pkgs.buildEnv {
-          name = "dotfiles-core";
-          paths = sets.core;
-        };
-        dev = pkgs.buildEnv {
-          name = "dotfiles-dev";
-          paths = sets.dev;
-        };
-        llm = pkgs.buildEnv {
-          name = "dotfiles-llm";
-          paths = unfreeSets.llm;
-        };
-        terminal = pkgs.buildEnv {
-          name = "dotfiles-terminal";
-          paths = unfreeSets.terminal;
-        };
-        editors = pkgs.buildEnv {
-          name = "dotfiles-editors";
-          paths = unfreeSets.editors;
-        };
-        fonts = pkgs.buildEnv {
-          name = "dotfiles-fonts";
-          paths = sets.fonts;
-        };
-
         # Windows package export
         winget-export = import ../packages/winget.nix {
           inherit pkgs lib;

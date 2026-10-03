@@ -115,10 +115,15 @@ task tart:run
 
 `task tart:run` はホストの Hindsight を起動し、VM の起動後に GitHub `main` の
 commit hash を取得します。VM に最後に正常適用した hash と一致すれば何もせず、
-更新時だけ `~/.dotfiles` を更新して、git・chezmoi・Neovim・Codex と WezTerm、
-chezmoi 設定を適用します。適用に失敗した場合は hash を進めないため次回に再試行
+更新時だけ `~/.dotfiles` を更新して、通常の `install.sh` で macOS のアプリと
+OS・Home Manager・chezmoi 設定をまとめて適用します。Tart 専用の最小パッケージ
+集合やインストーラーは持ちません。適用に失敗した場合は hash を進めないため次回に再試行
 されます。SSH reverse forward により VM の Codex も
 `http://127.0.0.1:8888` の共有 Hindsight bank を利用します。
+
+既存 guest の旧専用 CLI profile は、OS 管理のコマンドを確認した後に移行します。
+旧 profile を指す管理済みリンクだけを削除し、通常ファイル・別のリンク・
+Nix store のパッケージ本体は削除しません。
 
 ```bash
 DOTFILES_TART_IMAGE=ghcr.io/cirruslabs/macos-tahoe-base:latest \

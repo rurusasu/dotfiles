@@ -115,17 +115,16 @@ EOF
 	[[ "$output" != *"hermes:docker:bootstrap"* ]]
 }
 
-@test "nrs activates NixOS without bootstrapping a Docker Hermes gateway" {
+@test "nrs activates OS-managed packages without a separate Nix profile" {
 	command -v task >/dev/null || skip "go-task is unavailable"
 
 	run task --dir "$REPO_ROOT" --dry --force nrs
 
 	[ "$status" -eq 0 ]
 	rebuild_line="$(grep -n 'nix flake update && scripts/sh/nixos-rebuild-with-user.sh switch' <<<"$output" | cut -d: -f1)"
-	profile_line="$(grep -n "nix profile upgrade '.*'" <<<"$output" | cut -d: -f1)"
 	[ -n "$rebuild_line" ]
-	[ -n "$profile_line" ]
-	[ "$rebuild_line" -lt "$profile_line" ]
+	[[ "$output" == *"dotfiles_install_codex_npm"* ]]
+	[[ "$output" != *"nix profile"* ]]
 	[[ "$output" != *"hermes:docker:bootstrap"* ]]
 	[[ "$output" != *"docker compose"* ]]
 }

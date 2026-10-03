@@ -252,71 +252,64 @@ EOF
 	grep -Eq 'ssh -S .* -O exit admin@192\.0\.2\.10' "$launcher_log"
 }
 
-@test "guest installer exposes only the minimal Nix profile and WezTerm cask" {
-	installer="$REPO_ROOT/scripts/sh/install-tart-guest.sh"
-	bin="$BATS_TEST_TMPDIR/guest-bin"
-	store="$BATS_TEST_TMPDIR/store-profile"
-	second_store="$BATS_TEST_TMPDIR/store-profile-2"
-	guest_log="$BATS_TEST_TMPDIR/guest.log"
-	guest_repo="$BATS_TEST_TMPDIR/guest-repo"
-	mkdir -p "$bin" "$store/bin" "$second_store/bin" "$guest_repo/chezmoi" "$guest_repo/scripts/sh"
-	cp "$REPO_ROOT/scripts/sh/codex-npm.sh" "$guest_repo/scripts/sh/codex-npm.sh"
-	for command in git chezmoi nvim node npm; do
-		cat >"$store/bin/$command" <<EOF
-#!/usr/bin/env bash
-printf '$command %s\n' "\$*" >>"\$GUEST_LOG"
-if [[ $command == npm ]]; then
-		mkdir -p "\${NPM_CONFIG_PREFIX:-\$HOME/.local/npm}/bin"
-		printf '#!/usr/bin/env bash\nexit 0\n' >"\${NPM_CONFIG_PREFIX:-\$HOME/.local/npm}/bin/codex"
-		chmod +x "\${NPM_CONFIG_PREFIX:-\$HOME/.local/npm}/bin/codex"
-fi
-EOF
-		chmod +x "$store/bin/$command"
-		cp "$store/bin/$command" "$second_store/bin/$command"
-	done
-	cat >"$bin/nix" <<'EOF'
+create_guest_installer() {
+	cat >"$SEED_REPO/install.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'nix_config=%s args=%s\n' "${NIX_CONFIG:-}" "$*" >>"$GUEST_LOG"
-[[ ${1:-} == build ]]
-while (($#)); do
-  if [[ $1 == --out-link ]]; then
-    shift
-    ln -s "$GUEST_STORE" "$1"
-    exit 0
-  fi
-  shift
-done
-exit 2
+printf '%s\n' "$(cd -- "$(dirname -- "$0")" && pwd)" >>"$APPLY_LOG"
+[[ $# == 0 ]]
+[[ ${FAIL_APPLY:-0} != 1 ]]
 EOF
-	cat >"$bin/brew" <<'EOF'
-#!/usr/bin/env bash
-printf 'brew %s\n' "$*" >>"$GUEST_LOG"
-[[ ${1:-} == install ]]
-EOF
-	chmod +x "$bin/nix" "$bin/brew"
+	chmod +x "$SEED_REPO/install.sh"
+	git -C "$SEED_REPO" add install.sh
+	git -C "$SEED_REPO" commit -m installer >/dev/null
+	git -C "$SEED_REPO" push origin main >/dev/null
+}
 
+sync_with_os_installer() {
 	run env \
-		HOME="$BATS_TEST_TMPDIR/guest-home" \
-		PATH="$bin:$PATH" \
-		GUEST_LOG="$guest_log" \
-		GUEST_STORE="$second_store" \
-		"$installer" "$guest_repo"
+		DOTFILES_REPOSITORY_URL="$REMOTE_REPO" \
+		DOTFILES_REPOSITORY_REF=refs/heads/main \
+		DOTFILES_TART_CHECKOUT="$CHECKOUT" \
+		DOTFILES_TART_STATE_FILE="$STATE_FILE" \
+		DOTFILES_TART_APPLY_COMMAND= \
+		"$SYNC_SCRIPT"
+}
+
+@test "default guest sync applies the OS installer from the requested checkout" {
+	create_guest_installer
+	CHECKOUT="$TEST_HOME/checkout with spaces"
+	sync_with_os_installer
 
 	[ "$status" -eq 0 ]
-	[ "$(readlink "$BATS_TEST_TMPDIR/guest-home/.local/state/dotfiles/tart-profile")" = "$second_store" ]
-	[ -z "$(find "$store" -maxdepth 1 -name 'tart-profile.next.*' -print -quit)" ]
-	run env \
-		HOME="$BATS_TEST_TMPDIR/guest-home" \
-		PATH="$bin:$PATH" \
-		GUEST_LOG="$guest_log" \
-		GUEST_STORE="$store" \
-		"$installer" "$guest_repo"
+	[ "$(cat "$APPLY_LOG")" = "$CHECKOUT" ]
+	[ "$(cat "$STATE_FILE")" = "$(remote_head)" ]
+}
+
+@test "unchanged guest revision skips OS activation" {
+	create_guest_installer
+	sync_with_os_installer
+	[ "$status" -eq 0 ]
+	: >"$APPLY_LOG"
+
+	sync_with_os_installer
 
 	[ "$status" -eq 0 ]
-	grep -Fq "nix_config=extra-experimental-features = nix-command flakes args=build $guest_repo#tart-minimal --out-link" "$guest_log"
-	grep -Fxq 'brew install --cask wezterm@nightly' "$guest_log"
-	grep -Fxq "chezmoi init --source $guest_repo/chezmoi" "$guest_log"
-	grep -Fxq 'chezmoi apply --force' "$guest_log"
-	[ "$(find "$BATS_TEST_TMPDIR/guest-home/.local/bin" -type l | wc -l | tr -d ' ')" -eq 5 ]
+	[ ! -s "$APPLY_LOG" ]
+}
+
+@test "failed OS activation preserves the last successfully applied guest revision" {
+	create_guest_installer
+	sync_with_os_installer
+	[ "$status" -eq 0 ]
+	previous_hash="$(cat "$STATE_FILE")"
+	push_update broken
+	: >"$APPLY_LOG"
+	export FAIL_APPLY=1
+
+	sync_with_os_installer
+
+	[ "$status" -ne 0 ]
+	[ "$(cat "$APPLY_LOG")" = "$CHECKOUT" ]
+	[ "$(cat "$STATE_FILE")" = "$previous_hash" ]
 }

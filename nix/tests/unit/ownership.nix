@@ -183,7 +183,7 @@ in
     expected = {
       linuxConfig = 2;
       taskfileRouting = 10;
-      tartDotfilesSync = 11;
+      tartDotfilesSync = 13;
       packageCatalog = 9;
       tartVmInstaller = 8;
     };
