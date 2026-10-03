@@ -2,16 +2,28 @@
 
 from __future__ import annotations
 
-
 _REDACTED = "REDACTED"
 _PROFILES = ("rick", "hoffman", "risarisa", "nancy", "kuroda", "shiraishi")
 _STATUSES = ("changed", "unchanged", "failed")
 _CATEGORIES = (
-    "aggregate_preflight_blocked", "cleanup_failed", "credentials_unavailable",
-    "deletion_limit_exceeded", "dry_run", "empty_owned_directory",
-    "invalid_local_profile", "invalid_manifest", "invalid_profile_target",
-    "local_profile_changed", "lock_busy", "missing_profile", "published",
-    "push_race_exhausted", "push_rejected", "repository", "resource_limit", "unchanged",
+    "aggregate_preflight_blocked",
+    "cleanup_failed",
+    "credentials_unavailable",
+    "deletion_limit_exceeded",
+    "dry_run",
+    "empty_owned_directory",
+    "invalid_local_profile",
+    "invalid_manifest",
+    "invalid_profile_target",
+    "local_profile_changed",
+    "lock_busy",
+    "missing_profile",
+    "published",
+    "push_race_exhausted",
+    "push_rejected",
+    "repository",
+    "resource_limit",
+    "unchanged",
 )
 
 
@@ -35,7 +47,19 @@ def _allowed(value: object, choices: tuple[str, ...]) -> str:
 def initial_sync_summary(exit_code: object, payload: object) -> str:
     """Return fixed fixture fields; never render raw reports or write streams."""
 
-    code = str(exit_code) if type(exit_code) is int and 0 <= exit_code <= 8 else _REDACTED
+    return f"initial-sync {_sync_fields(exit_code, payload)}"
+
+
+def post_exception_group_summary(exit_code: object, payload: object) -> str:
+    """Describe only allowlisted fields after the fixture's ExceptionGroup checks."""
+
+    return f"post-exception-group {_sync_fields(exit_code, payload)}"
+
+
+def _sync_fields(exit_code: object, payload: object) -> str:
+    code = (
+        str(exit_code) if type(exit_code) is int and 0 <= exit_code <= 8 else _REDACTED
+    )
     report = _dictionary(payload)
     status = _allowed(report.get("status"), _STATUSES)
     values = {name: (_REDACTED, _REDACTED) for name in _PROFILES}
@@ -57,7 +81,6 @@ def initial_sync_summary(exit_code: object, payload: object) -> str:
             )
             seen.add(name)
     profiles = ";".join(
-        f"{name}={state}/{category}"
-        for name, (state, category) in values.items()
+        f"{name}={state}/{category}" for name, (state, category) in values.items()
     )
-    return f"initial-sync exit={code} status={status} profiles=[{profiles}]"
+    return f"exit={code} status={status} profiles=[{profiles}]"
