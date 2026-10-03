@@ -106,7 +106,7 @@ try {
                 'up' {
                     Invoke-HermesXApiDocker -Arguments @(
                         'compose', '-f', $resolvedComposeFile,
-                        'up', '-d', '--force-recreate'
+                        'up', '-d', '--force-recreate', 'chromium', 'browser-mcp', 'xapi-mcp'
                     )
                 }
             }

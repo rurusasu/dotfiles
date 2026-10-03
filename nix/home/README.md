@@ -16,7 +16,10 @@
 caller -> <os>.nix -> common.nix
 ```
 
-- caller は対象 OS のファイルだけを import する。
+- caller は共有する core module として対象 OS のファイルを import する。standalone 専用の
+  責務は caller が個別 module を組み合わせる。standalone Darwin では `darwin.nix` に加え、
+  font package と `$HOME/Library/Fonts` への activation を所有する `standalone-darwin-fonts.nix`
+  を読み込む。共有する `darwin.nix` に standalone 専用の font activation を置かない。
 - 各 OS ファイルは `./common.nix` を import する。
 - Neovim は `darwin.nix` と `nixos.nix` が `../modules/nvim` を import する。`linux.nix` と `wsl.nix` は `nixos.nix` を経由する。
 - `common.nix` から OS 固有ファイルを import しない。
@@ -44,6 +47,8 @@ flake 評価へ渡す。
   `nixos_wsl_postinstall.bats` の `nix eval` は、stubbed `nixos-rebuild` 境界内で選択 user と
   `--impure` 伝播を実 Nix eval で確認する runtime/integration assertion に限る。新しい例外は追加しない。
 
-ホストの system 設定は `nix/hosts/<host>/configuration.nix`、import の入口は同じディレクトリの
-`default.nix` が所有します。Home Manager の OS 差分は `nix/home/<os>.nix` に置き、host
-configuration と混在させません。
+ホストの system 設定は `nix/hosts/<host>/configuration.nix` と責務別 host module、import の入口は
+同じディレクトリの `default.nix` が所有します。Darwin の system font は `nix/modules/darwin/`、OS-wide
+defaults、timezone、defaults の反映 activation は `system.nix`、host identity、サービス、Homebrew、
+統合固有の activation は `configuration.nix` に置きます。共有する Home Manager の OS 差分は
+`nix/home/<os>.nix`、standalone 専用の責務は caller が組み合わせる個別 module に置きます。

@@ -23,6 +23,19 @@ in
     expected = true;
   };
 
+  testDarwinHostEntrypointImportsRequiredModules = {
+    expr =
+      let
+        imports = (import entrypoint { }).imports;
+      in
+      builtins.all (module: builtins.elem module imports) [
+        configuration
+        ../../../modules/darwin
+        ../../../hosts/darwin/system.nix
+      ];
+    expected = true;
+  };
+
   testDarwinFlakeConsumesHostDirectory = {
     expr =
       let

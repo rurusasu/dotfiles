@@ -44,7 +44,6 @@ class SharedRepository:
     target: Path
     mode: Literal["read-only", "read-write"]
     sync_owner: str | None
-    legacy_target: Path | None
     source_commit: str | None = None
 
 

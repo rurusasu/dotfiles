@@ -90,11 +90,6 @@ exec "$@"
 	write_stub task '
 printf "task %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
-  *" hermes:bootstrap "*)
-    source "$REPO_ROOT/scripts/sh/install-common.sh"
-    source "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-    dotfiles_hermes_start_stack docker "$REPO_ROOT/docker/hermes-service/compose.yml"
-    ;;
 esac
 '
 	write_stub op '

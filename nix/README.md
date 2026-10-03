@@ -33,9 +33,16 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
 
 ## 設定の配置
 
-1. OS 固有の Home Manager 設定は対象 OS の `nix/home/darwin.nix`、`linux.nix`、`wsl.nix` に追加する。
+1. 複数の構成経路で共有する OS 固有の Home Manager 設定は、core module の
+   `nix/home/darwin.nix`、`linux.nix`、`wsl.nix` に追加する。standalone 専用の責務は caller が
+   個別 module を組み合わせる。Darwin の standalone 用 font package と `$HOME/Library/Fonts` への
+   activation は `nix/home/standalone-darwin-fonts.nix` が所有する。
 2. system、host サービス、ユーザー、hardware は `nix/hosts/<host>/configuration.nix` に追加する。
-   各 host の `default.nix` は `configuration.nix` を import する entrypoint として維持する。
+   責務別に分離した host module がある場合は、その module に追加する。Darwin の system font は
+   `nix/modules/fonts.nix` の定義を `nix/modules/darwin/` から配布し、OS-wide defaults、timezone、defaults の反映 activation は
+   `nix/hosts/darwin/system.nix` が所有する。host identity、サービス、Homebrew、統合固有の
+   activation は `configuration.nix` に置く。各 host の `default.nix` は `configuration.nix` と
+   責務別 module を import する entrypoint として維持する。Darwin の `default.nix` は配線専用とする。
 3. Home Manager の OS ファイルは `imports = [ ./common.nix ];` を維持する。`common.nix` から OS 固有ファイルを import せず、共通設定内の platform-scoped な分岐は最小限に保つ。
 4. パッケージ追加前に `nix/packages/catalog/` の該当カテゴリと各 OS への影響を確認する。`sets.nix` の公開 API は維持する。
 5. dotfile と秘密情報は `chezmoi/` と既存の secret 経路を使い、所有を重複させない。
@@ -55,9 +62,10 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
    テストの登録は `nix/flakes/tests.nix` が担当する。nix-unit も flake の `checks` 経由で実行する。
    `--no-build` の成功はテスト実行の成功を意味しない。[配置と実行方法](tests/README.md) を参照する。
 
-ホストの標準レイアウトは `nix/hosts/<host>/default.nix` と
-`nix/hosts/<host>/configuration.nix` の組み合わせです。Darwin、native NixOS、NixOS-WSL
-はいずれもこの構成を使います。
+ホストの標準レイアウトでは `nix/hosts/<host>/default.nix` と
+`nix/hosts/<host>/configuration.nix` を必須の基本構成とし、必要に応じて `default.nix` が
+責務別 module を import します。Darwin、native NixOS、NixOS-WSL はいずれもこの構成を使い、
+Darwin ではフォント配布を `nix/modules/darwin/`、OS-wide defaults を `system.nix` に分離しています。
 
 ## Codex CLI
 

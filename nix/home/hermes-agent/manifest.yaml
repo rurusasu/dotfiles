@@ -145,6 +145,5 @@ shared_repositories:
     source: https://github.com/rurusasu/lifelog.git
     ref: main
     target: /opt/data/shared/lifelog
-    legacy_target: /opt/data/core/lifelog
     mode: read-write
     sync_owner: default
