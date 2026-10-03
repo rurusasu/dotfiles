@@ -2013,6 +2013,7 @@ EOF
 
 	run "$REAL_TIMEOUT" 4 bash -c '
 set -euo pipefail
+export DOCKER_PROBE_TIMEOUT_SECONDS=2
 . "$INSTALLER"
 ensure_docker_desktop_md5_compatibility() {
   :
