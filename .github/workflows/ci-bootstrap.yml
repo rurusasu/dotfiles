@@ -367,11 +367,13 @@ jobs:
         run: bash scripts/sh/configure-bootstrap-ci-nix.sh
 
       - name: Build both WSL system closures and export a local cache
+        id: wsl-cache
         shell: bash
         run: |
           set -euo pipefail
           cache_dir="$RUNNER_TEMP/wsl-nix-cache"
-          mkdir -p "$cache_dir"
+          artifact_dir="$RUNNER_TEMP/wsl-nix-cache-artifact"
+          mkdir -p "$cache_dir" "$artifact_dir"
 
           base_system="$(nix build \
             .#nixosConfigurations.nixos.config.system.build.toplevel \
@@ -379,19 +381,18 @@ jobs:
           hermes_system="$(DOTFILES_WITH_HERMES=1 nix build \
             .#nixosConfigurations.nixos.config.system.build.toplevel \
             --impure --no-link --print-out-paths)"
-          printf '%s\n%s\n' "$base_system" "$hermes_system" > "$RUNNER_TEMP/wsl-system-paths.txt"
+          printf '%s\n%s\n' "$base_system" "$hermes_system" > "$artifact_dir/wsl-system-paths.txt"
 
           nix copy --to "file://$cache_dir" "$base_system" "$hermes_system"
           du -sh "$cache_dir"
-          tar -cf "$RUNNER_TEMP/wsl-nix-cache.tar" -C "$cache_dir" .
+          tar -cf "$artifact_dir/wsl-nix-cache.tar" -C "$cache_dir" .
+          printf 'artifact-dir=%s\n' "$artifact_dir" >> "$GITHUB_OUTPUT"
 
       - name: Upload WSL Nix store cache
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: bootstrap-wsl-nix-cache-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/wsl-nix-cache.tar
-            ${{ runner.temp }}/wsl-system-paths.txt
+          path: ${{ steps.wsl-cache.outputs.artifact-dir }}
           if-no-files-found: error
           compression-level: 0
 
