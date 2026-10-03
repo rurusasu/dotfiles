@@ -154,5 +154,181 @@ class SyncFailureSummaryTests(unittest.TestCase):
         self.assertEqual(calls, ["initial"])
 
 
+class PostExceptionGroupConsumerTests(unittest.TestCase):
+    def test_real_later_subset_failure_has_safe_post_group_summary(self) -> None:
+        # Removing the final consumer's summary must lose stage/category evidence.
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from hermes_bootstrap import profile_sync
+        from integration.test_profile_sync_flow import ProfileSyncFlowTests
+
+        method = "test_secret_markers_are_absent_from_outputs_argv_and_retained_graphs"
+        case = ProfileSyncFlowTests(method)
+        case.profile_names = (
+            "rick",
+            "hoffman",
+            "risarisa",
+            "nancy",
+            "kuroda",
+            "shiraishi",
+        )
+        case.flow = SimpleNamespace(child_arguments=[])
+        payload = {
+            "status": "failed",
+            "message": SECRET,
+            "profiles": [
+                {
+                    "name": name,
+                    "status": "failed"
+                    if name in {"hoffman", "risarisa"}
+                    else "changed",
+                    "category": "cleanup_failed"
+                    if name in {"hoffman", "risarisa"}
+                    else "published",
+                    "message": SECRET,
+                    "paths": [SECRET],
+                    "commit": SECRET,
+                    "argv": [SECRET],
+                }
+                for name in case.profile_names
+            ],
+        }
+        before = copy.deepcopy(payload)
+        injected_groups = []
+
+        def controlled_sync():
+            snapshot = SimpleNamespace(declaration=SimpleNamespace(name="hoffman"))
+            try:
+                profile_sync._exact_tree_attempt(snapshot, None, {})
+            except ExceptionGroup as error:
+                injected_groups.append(type(error))
+                profile_sync._scrub_exception_graph(error)
+            else:
+                self.fail("the actual consumer did not inject its ExceptionGroup")
+            return 4, payload, "", ""
+
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with (
+            mock.patch.object(case, "_run_sync", side_effect=controlled_sync),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+            self.assertRaises(AssertionError) as raised,
+        ):
+            getattr(case, method)()
+        diagnostic = str(raised.exception)
+        self.assertIn("post-exception-group exit=4 status=failed", diagnostic)
+        self.assertIn("risarisa=failed/cleanup_failed", diagnostic)
+        self.assertNotIn(SECRET, diagnostic)
+        self.assertNotIn("retained-owned-secret-marker", diagnostic)
+        self.assertNotIn("fixture-token-only", diagnostic)
+        self.assertNotIn("planted-host-secret-marker", diagnostic)
+        self.assertEqual(injected_groups, [ExceptionGroup])
+        self.assertEqual(payload, before)
+        self.assertEqual((stdout.getvalue(), stderr.getvalue()), ("", ""))
+
+
+class PostExceptionGroupSummaryTests(unittest.TestCase):
+    def test_post_group_entrypoint_keeps_allowlist_type_bounds_and_noninterference(
+        self,
+    ) -> None:
+        # Untrusted fields/protocols must never reach either diagnostic renderer.
+        from sync_failure_summary import post_exception_group_summary
+
+        class UntrustedList(list):
+            def __len__(self):
+                raise AssertionError("untrusted list was inspected")
+
+        class Unrenderable:
+            def __str__(self):
+                raise AssertionError("prohibited object was rendered")
+
+            __repr__ = __str__
+
+            def __deepcopy__(self, _memo):
+                return self
+
+        valid = {
+            "status": "failed",
+            "profiles": [
+                {
+                    "name": "rick",
+                    "status": "failed",
+                    "category": "cleanup_failed",
+                    "message": SECRET,
+                    "exception": Unrenderable(),
+                    "traceback": SECRET,
+                    "stdout": SECRET,
+                    "stderr": SECRET,
+                    "notes": [SECRET],
+                },
+            ],
+        }
+        invalid = (
+            None,
+            [],
+            SECRET,
+            UntrustedDict(status="failed"),
+            {
+                "status": UntrustedString("failed"),
+                "profiles": [UntrustedDict(name="rick")],
+            },
+            {UntrustedString("profiles"): [{"name": "rick"}]},
+            {7: SECRET, "profiles": [{"name": "rick"}]},
+            {"profiles": UntrustedList([{"name": "rick"}])},
+            {"profiles": ()},
+            {"profiles": [None]},
+            {"profiles": [{"name": "rick", "status": [], "category": {}}]},
+            {"profiles": [{"name": UntrustedString("rick"), "status": "failed"}]},
+            {
+                "profiles": [
+                    {"name": SECRET, "status": "failed", "category": "cleanup_failed"}
+                ]
+            },
+            {"profiles": [{"name": "rick", "status": SECRET, "category": SECRET}]},
+            {
+                "profiles": [
+                    {"name": "rick", "status": "changed", "category": "published"},
+                    {"name": "rick", "status": "failed", "category": "cleanup_failed"},
+                ]
+            },
+            {"profiles": [{"name": "rick"}] * 10000},
+            {"status": SECRET * 10000, "profiles": [{"name": SECRET * 10000}]},
+            {SECRET + str(index): SECRET for index in range(10000)},
+        )
+        for payload in (valid, *invalid):
+            before = copy.deepcopy(payload)
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                summary = post_exception_group_summary(4, payload)
+            self.assertTrue(summary.startswith("post-exception-group exit=4 "))
+            self.assertLess(len(summary), 1024)
+            self.assertNotIn(SECRET, summary)
+            self.assertNotIn("\n", summary)
+            self.assertEqual((stdout.getvalue(), stderr.getvalue()), ("", ""))
+            self.assertEqual(payload, before)
+            if payload is valid:
+                self.assertIn("rick=failed/cleanup_failed", summary)
+            else:
+                self.assertIn("rick=REDACTED/REDACTED", summary)
+
+    def test_fixed_stage_preserves_exact_initial_output_and_exit_bounds(self) -> None:
+        from sync_failure_summary import post_exception_group_summary
+
+        fields = (
+            "exit=4 status=REDACTED profiles=[rick=REDACTED/REDACTED;"
+            "hoffman=REDACTED/REDACTED;risarisa=REDACTED/REDACTED;"
+            "nancy=REDACTED/REDACTED;kuroda=REDACTED/REDACTED;shiraishi=REDACTED/REDACTED]"
+        )
+        self.assertEqual(initial_sync_summary(4, {}), "initial-sync " + fields)
+        self.assertEqual(
+            post_exception_group_summary(4, {}), "post-exception-group " + fields
+        )
+        for code in (-1, 9, True, 4.0, UntrustedInt(4), 10**1000, SECRET):
+            self.assertIn("exit=REDACTED ", post_exception_group_summary(code, {}))
+        for code in (0, 4, 8):
+            self.assertIn(f"exit={code} ", post_exception_group_summary(code, {}))
+
+
 if __name__ == "__main__":
     unittest.main()

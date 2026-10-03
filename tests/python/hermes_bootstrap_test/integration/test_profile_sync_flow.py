@@ -19,7 +19,7 @@ from unittest import mock
 
 import yaml
 from hermes_cli import profile_distribution
-from sync_failure_summary import initial_sync_summary
+from sync_failure_summary import initial_sync_summary, post_exception_group_summary
 
 try:
     from . import test_bootstrap_flow as bootstrap_flow
@@ -1672,7 +1672,8 @@ class ProfileSyncFlowTests(unittest.TestCase):
         }
         self.assertTrue(
             set(self.profile_names[self.profile_names.index(failed_name) + 1 :])
-            <= attempted_names
+            <= attempted_names,
+            post_exception_group_summary(exit_code, payload),
         )
 
 
