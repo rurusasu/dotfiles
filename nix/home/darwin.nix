@@ -21,7 +21,7 @@ in
   # output separately for shells and tools that resolve TERM=wezterm.
   home = {
     packages = lib.unique (
-      (lib.remove pkgs.neovim (sets.darwinHomePackagesForInstallFeatures installFeatures))
+      (sets.darwinHomePackagesForInstallFeatures installFeatures)
       ++ [
         pkgs.coreutils
         pkgs.wezterm.terminfo

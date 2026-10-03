@@ -20,7 +20,7 @@ in
     ./hermes-agent.nix
   ];
 
-  home.packages = sets.allWithout (sets.nativeDesktopPackageNames ++ [ "neovim" ]) ++ fonts.packages;
+  home.packages = sets.allWithout sets.nativeDesktopPackageNames ++ fonts.packages;
   fonts.fontconfig = fonts.fontconfig;
 
   programs.zsh.shellAliases = {

@@ -102,6 +102,30 @@ in
             ) home.config.home.packages;
             writesInit = home.config.xdg.configFile."nvim/init.lua".enable or false;
             pluginData = home.config.xdg.dataFile."nvim/site/pack/hm".enable;
+            serverDependencies =
+              builtins.all (package: builtins.any (extra: extra.drvPath == package.drvPath) cfg.extraPackages)
+                [
+                  home.pkgs.nixd
+                  home.pkgs.gopls
+                  home.pkgs.ruff
+                  home.pkgs.ty
+                  home.pkgs.lua-language-server
+                  home.pkgs.typescript-language-server
+                  home.pkgs.nixfmt
+                ];
+            remoteInstalled = builtins.any (
+              package: package.drvPath == home.pkgs.neovim-remote.drvPath
+            ) home.config.home.packages;
+            globalServerPackages = builtins.any (
+              package:
+              builtins.elem package.drvPath (
+                map (server: server.drvPath) [
+                  home.pkgs.nixd
+                  home.pkgs.gopls
+                  home.pkgs.ruff
+                ]
+              )
+            ) home.config.home.packages;
           }
         )
         [
@@ -116,6 +140,9 @@ in
       basePackageInstalled = false;
       writesInit = true;
       pluginData = true;
+      serverDependencies = true;
+      remoteInstalled = true;
+      globalServerPackages = false;
     }) 3;
   };
 
@@ -213,7 +240,6 @@ in
               sets.nativeDesktopPackageNames
               ++ [
                 "discord"
-                "neovim"
                 "ollama"
               ]
             )

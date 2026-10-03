@@ -67,54 +67,34 @@ in
       };
     };
   };
-
-  testLuaLanguageServerUsesVersionVerifier = {
-    expr = {
-      packageId = sets.wingetMap.lua-language-server;
-      verifier = sets.wingetVerify.lua-language-server;
-    };
-    expected = {
-      packageId = "LuaLS.lua-language-server";
-      verifier = {
-        command = "lua-language-server";
-        args = [ "--version" ];
-      };
-    };
-  };
-
-  testStyLuaUsesVersionVerifier = {
-    expr = {
-      packageId = sets.wingetMap.stylua;
-      verifier = sets.wingetVerify.stylua;
-    };
-    expected = {
-      packageId = "JohnnyMorganz.StyLua";
-      verifier = {
-        command = "stylua";
-        args = [ "--version" ];
-      };
-    };
-  };
-
-  testRustAnalyzerUsesPortableExecutableVerifierAndLink = {
-    expr = {
-      packageId = sets.wingetMap.rust-analyzer;
-      verifier = sets.wingetVerify.rust-analyzer;
-      portableLink = sets.wingetPortableLinksById."Rustlang.rust-analyzer";
-      pathEntries = sets.wingetPathEntries."Rustlang.rust-analyzer";
-    };
-    expected = {
-      packageId = "Rustlang.rust-analyzer";
-      verifier = {
-        type = "portableLinkCommand";
-        command = "rust-analyzer.exe";
-        args = [ "--version" ];
-      };
-      portableLink = {
-        linkName = "rust-analyzer.exe";
-        targetPattern = "rust-analyzer.exe";
-      };
-      pathEntries = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
-    };
+  testNeovimSoftwareIsAbsentFromCatalogAndWindowsProviders = {
+    expr =
+      builtins.all
+        (
+          name:
+          !(builtins.hasAttr name sets.supportReport)
+          && !(builtins.hasAttr name sets.wingetMap)
+          && !(builtins.hasAttr name sets.wingetVerify)
+        )
+        [
+          "neovim"
+          "neovim-remote"
+          "nixd"
+          "ty"
+          "ruff"
+          "yaml-language-server"
+          "taplo"
+          "bash-language-server"
+          "lua-language-server"
+          "stylua"
+          "marksman"
+          "gopls"
+          "rust-analyzer"
+          "rustfmt"
+          "astro-language-server"
+          "oxlint"
+          "typescript-language-server"
+        ];
+    expected = true;
   };
 }

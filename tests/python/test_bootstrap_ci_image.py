@@ -28,8 +28,8 @@ class BootstrapCiImageTests(unittest.TestCase):
         self.assertIn('"docker/bootstrap-ci-tools/**"', push_paths)
 
     def test_authentication_uses_nix_config_home_and_keeps_tokens_private(self) -> None:
-        for use_xdg in (True, False):
-            with self.subTest(use_xdg=use_xdg), tempfile.TemporaryDirectory() as directory:
+        for use_xdg, owned_home in ((True, True), (True, False), (False, True), (False, False)):
+            with self.subTest(use_xdg=use_xdg, owned_home=owned_home), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 home = root / "passwd-home"
                 home.mkdir()
@@ -50,7 +50,7 @@ class BootstrapCiImageTests(unittest.TestCase):
                     if key not in ("XDG_CONFIG_HOME", "NIX_CONFIG", "NIX_USER_CONF_FILES")
                 }
                 environment.update(
-                    HOME=str(root / "missing-home"),
+                    HOME=str(home if owned_home else root / "missing-home"),
                     FALLBACK_HOME=str(home),
                     EXPECTED_CONFIG=str(config),
                     GITHUB_TOKEN="fixture-token-not-a-real-secret",

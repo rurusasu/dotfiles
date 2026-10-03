@@ -3,6 +3,7 @@
 ## 管理対象
 
 - `default.nix`: Home Manager の設定と Lua の配置
+- `lsp.nix`: LSP サーバー・整形ツールの Nix パッケージ
 - `init.lua`: エディタの基本設定・起動処理
 - `plugins.nix`: プラグインの導入・設定の呼び出し、Tree-sitter の言語一覧
 - `lua/plugins/*.lua`: プラグインごとの Lua 設定（`setup()` で適用）
@@ -12,6 +13,7 @@
 ## 変更ルール
 
 - 設定・プラグインは Home Manager が管理し、chezmoi で二重配布しない。
+- Neovim 本体・関連ソフトウェアはこのディレクトリに直接宣言し、パッケージカタログを参照しない。
 - plugin 追加時は起動速度への影響を確認し、キーマップ衝突を避ける。
 - 最低 Neovim 0.12。標準 LSP・補完・snippet・Tree-sitter API を使う。
 - サーバー定義は nvim-lspconfig の標準設定を使い、個人環境向けの差分を追加しない。

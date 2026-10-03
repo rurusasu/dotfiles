@@ -39,25 +39,9 @@
       "--override"
       "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart"
     ];
-    oxlint = [
-      "--scope"
-      "user"
-    ];
-    "oxc-project.oxlint" = [
-      "--scope"
-      "user"
-    ];
     powershell = [
       "--installer-type"
       "wix"
-    ];
-    rust-analyzer = [
-      "--scope"
-      "user"
-    ];
-    "Rustlang.rust-analyzer" = [
-      "--scope"
-      "user"
     ];
     fd = [
       "--scope"
@@ -156,14 +140,9 @@
     nodejs = [ "%ProgramFiles%\\nodejs" ];
     "Task.Task" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Task.Task*" ];
     "hadolint.hadolint" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\hadolint.hadolint*" ];
-    "Artempyanykh.Marksman" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Artempyanykh.Marksman*" ];
-    "astral-sh.ruff" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ruff*" ];
-    "JohnnyMorganz.StyLua" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\JohnnyMorganz.StyLua*" ];
-    "tamasfe.taplo" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tamasfe.taplo*" ];
     "tree-sitter.tree-sitter-cli" = [
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"
     ];
-    "astral-sh.ty" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ty*" ];
     "astral-sh.uv" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.uv*" ];
     _1password-cli = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*" ];
     "AgileBits.1Password.CLI" = [
@@ -182,8 +161,6 @@
       "%LOCALAPPDATA%\\Programs\\Bun\\bun-windows-x64"
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Oven-sh.Bun*\\bun-windows-x64"
     ];
-    oxlint = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
-    "oxc-project.oxlint" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
     chezmoi = [ "%LOCALAPPDATA%\\Programs\\chezmoi" ];
     direnv = [ "%LOCALAPPDATA%\\Programs\\direnv" ];
     "direnv.direnv" = [ "%LOCALAPPDATA%\\Programs\\direnv" ];
@@ -193,8 +170,6 @@
     "sharkdp.fd" = [ "%LOCALAPPDATA%\\Programs\\fd\\fd-v10.5.0-x86_64-pc-windows-msvc" ];
     eza = [ "%LOCALAPPDATA%\\Programs\\eza" ];
     "eza-community.eza" = [ "%LOCALAPPDATA%\\Programs\\eza" ];
-    rust-analyzer = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
-    "Rustlang.rust-analyzer" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links" ];
     poppler-utils = [
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"
     ];
@@ -203,19 +178,6 @@
   };
 
   # Portable winget packages whose package exe name does not match the command name.
-  wingetPortableLinksById = {
-    "Rustlang.rust-analyzer" = {
-      linkName = "rust-analyzer.exe";
-      targetPattern = "rust-analyzer.exe";
-    };
-    oxlint = {
-      linkName = "oxlint.exe";
-      targetPattern = "oxlint-*.exe";
-    };
-    "oxc-project.oxlint" = {
-      linkName = "oxlint.exe";
-      targetPattern = "oxlint-*.exe";
-    };
-  };
+  wingetPortableLinksById = { };
 
 }

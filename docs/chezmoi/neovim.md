@@ -6,7 +6,8 @@
 
 - 基本設定: `nix/modules/nvim/init.lua`
 - 補助 Lua: `nix/modules/nvim/lua/`
-- パッケージ/provider の正本: `nix/packages/catalog/editors.nix`、LSP は `catalog/lsp.nix`（公開入口は `nix/packages/sets.nix`）
+- Neovim 本体と補助コマンドの導入: `nix/modules/nvim/default.nix`
+- LSP・整形ツールの導入: `nix/modules/nvim/lsp.nix`
 - Home Manager の起動設定: `nix/modules/nvim/default.nix`
 - 共通 LSP 処理と整形設定: `nix/modules/nvim/lua/config/lsp.lua`
 - プラグインの導入と Tree-sitter の言語一覧: `nix/modules/nvim/plugins.nix`
@@ -14,6 +15,8 @@
 
 package データ、配布方式、エディタ設定を変更理由ごとに分けます。
 共通方針は [パッケージ管理の分割理由](../nix/package-management.md#分割の理由と編集先) を参照してください。
+
+Neovim 関連ソフトウェアはパッケージカタログを使わず、このモジュール内で Nixpkgs のパッケージを直接宣言します。LSP・整形ツールは `programs.neovim.extraPackages` が Neovim の PATH に追加します。Windows の winget / pnpm では配布しません。
 
 Neovim の設定とプラグインは Home Manager が管理し、chezmoi は配布しません。`default.nix` が `builtins.readFile ./init.lua` で基本設定を読み込み、プラグイン設定より先に実行します。実際の参照先は `:lua print(vim.fn.stdpath("config"))` で確認してください。非 Nix 環境向けの設定配布は行いません。
 
@@ -38,15 +41,15 @@ nvim-lspconfig の標準サーバー定義を使い、起動は `vim.lsp.config`
 | 対象                   | サーバー／実行ファイル     | 補足                                                         |
 | ---------------------- | -------------------------- | ------------------------------------------------------------ |
 | Nix                    | nixd                       | nixfmt による保存時整形                                      |
-| Go                     | gopls                      | Windows 自動 provider は未提供。未導入ならスキップ           |
+| Go                     | gopls                      | Nix で導入、gofumpt による整形                               |
 | Rust                   | rust-analyzer              | 標準設定、保存時整形                                         |
 | JS / TS                | tsc (TS7+) / ts_ls (TS5/6) | ネイティブ版優先、旧版の互換経路を維持                       |
 | JS / TS lint           | oxlint                     | 上流の project-local cmd、設定ファイル検出、Astro 対応を維持 |
-| YAML                   | yaml-language-server       | Nix / pnpm                                                   |
-| TOML                   | taplo                      | Nix / winget                                                 |
-| Shell                  | bash-language-server       | Nix / pnpm                                                   |
+| YAML                   | yaml-language-server       | Nix                                                          |
+| TOML                   | taplo                      | Nix                                                          |
+| Shell                  | bash-language-server       | Nix                                                          |
 | Lua                    | lua-language-server        | LuaJIT / vim globals                                         |
-| Markdown               | marksman                   | Nix / winget                                                 |
+| Markdown               | marksman                   | Nix                                                          |
 | Python lint/format     | ruff                       | hover は ty に任せる                                         |
 | Python type/completion | ty                         | ty.toml / pyproject.toml などを root とする                  |
 

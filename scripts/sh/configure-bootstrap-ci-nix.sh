@@ -22,11 +22,15 @@ if [[ ! -O $nix_home ]]; then
   }
 fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
-# Trust only this checkout in the home that Nix/libgit2 actually reads.
-git_config="$nix_home/.gitconfig"
-if ! git config --file "$git_config" --get-all safe.directory | grep -Fxq "$repo_root"; then
-  git config --file "$git_config" --add safe.directory "$repo_root"
-fi
+# Git/libgit2 can read the original HOME before Nix selects its fallback.
+# Trust only this checkout in both existing homes, without changing HOME.
+for git_home in "$nix_home" "$HOME"; do
+  [[ -d $git_home ]] || continue
+  git_config="$git_home/.gitconfig"
+  if ! git config --file "$git_config" --get-all safe.directory | grep -Fxq "$repo_root"; then
+    git config --file "$git_config" --add safe.directory "$repo_root"
+  fi
+done
 config_home="${XDG_CONFIG_HOME:-$nix_home/.config}"
 config_dir="$config_home/nix"
 config_file="$config_dir/bootstrap-ci.conf"

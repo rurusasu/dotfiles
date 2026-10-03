@@ -14,7 +14,7 @@ SSOT は「各定義を一度だけ持つ」ことであり、すべてを 1 フ
 
 | 編集先                                                                         | 責務・分割理由                                                                                      |
 | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `catalog/{core,dev,terminal,editors,llm,desktop,system,k8s,infra,lsp}.nix`     | カテゴリごとの package と OS 別 provider metadata。各 package は 1 ファイルだけで定義する           |
+| `catalog/{core,dev,terminal,editors,llm,desktop,system,k8s,infra}.nix`         | カテゴリごとの package と OS 別 provider metadata。各 package は 1 ファイルだけで定義する           |
 | `catalog/context.nix`                                                          | カテゴリ間で共有する package 構築用の依存値                                                         |
 | `catalog/default.nix`, `catalog/merge.nix`                                     | カテゴリの合成と重複定義の検出。後勝ちで上書きしない                                                |
 | `providers/{common,normalize,selection,validation}.nix`                        | provider の共通処理、正規化、OS 別選択、coverage 検証。package データから分離する                   |
@@ -141,7 +141,7 @@ cat result/package-support-report.json
 
 同じ package を Home Manager と system layer の両方へ重複させるのは、system service が絶対 path を必要とする場合に限定します。
 
-Neovim とプラグインは `nix/modules/nvim/` の Home Manager 設定で管理します。Tree-sitter の対象言語は `plugins.nix` の標準オプションに指定します。運用は [Neovim の運用](../chezmoi/neovim.md) を参照してください。pnpm 配布の LSP は `pnpmGlobal` と `support.windows` の `provider = "pnpm"` / `source = "npm"` / `identity` を合わせて宣言します。
+Neovim 本体・プラグイン・LSP・整形ツールはカタログを介さず、`nix/modules/nvim/` の Home Manager 設定で直接管理します。LSP・整形ツールは `lsp.nix` の `programs.neovim.extraPackages` に宣言します。Tree-sitter の対象言語は `plugins.nix` の標準オプションに指定します。運用は [Neovim の運用](../chezmoi/neovim.md) を参照してください。
 
 ## 主なファイル
 

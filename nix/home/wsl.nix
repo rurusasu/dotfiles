@@ -26,7 +26,6 @@ in
         sets.nativeDesktopPackageNames
         ++ [
           "discord"
-          "neovim"
           "ollama"
         ]
       )

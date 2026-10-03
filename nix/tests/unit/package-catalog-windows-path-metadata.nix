@@ -9,18 +9,9 @@ let
   verifierPackageRoots = {
     "Task.Task" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Task.Task*" ];
     "hadolint.hadolint" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\hadolint.hadolint*" ];
-    "Artempyanykh.Marksman" = [
-      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Artempyanykh.Marksman*"
-    ];
-    "astral-sh.ruff" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ruff*" ];
-    "JohnnyMorganz.StyLua" = [
-      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\JohnnyMorganz.StyLua*"
-    ];
-    "tamasfe.taplo" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tamasfe.taplo*" ];
     "tree-sitter.tree-sitter-cli" = [
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"
     ];
-    "astral-sh.ty" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ty*" ];
     "astral-sh.uv" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.uv*" ];
   };
 in
@@ -44,18 +35,9 @@ in
         nodejs = [ "%ProgramFiles%\\nodejs" ];
         "Task.Task" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Task.Task*" ];
         "hadolint.hadolint" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\hadolint.hadolint*" ];
-        "Artempyanykh.Marksman" = [
-          "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Artempyanykh.Marksman*"
-        ];
-        "astral-sh.ruff" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ruff*" ];
-        "JohnnyMorganz.StyLua" = [
-          "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\JohnnyMorganz.StyLua*"
-        ];
-        "tamasfe.taplo" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tamasfe.taplo*" ];
         "tree-sitter.tree-sitter-cli" = [
           "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"
         ];
-        "astral-sh.ty" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ty*" ];
         "astral-sh.uv" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.uv*" ];
         _1password-cli = [
           "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"
