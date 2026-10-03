@@ -175,19 +175,25 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                 '#!/bin/bash\n[[ "$*" == "passwd node" ]] || exit 64\n'
                 "printf '%s\\n' 'node:x:1000:1000::/home/node:/bin/bash'\n"
             )
+            identity = directory / "id"
+            identity.write_text(
+                '#!/bin/bash\n[[ "$*" == "-gn node" ]] || exit 64\n'
+                "printf '%s\\n' node\n"
+            )
             nix = directory / "nix"
             nix.write_text(
                 f"#!{sys.executable}\n"
                 "import json, os, sys\n"
                 "print(json.dumps({'argv': sys.argv[1:], 'identity': "
                 "{key: os.environ.get(key) for key in "
-                "('DOTFILES_USER', 'DOTFILES_HOME', 'DOTFILES_UID', 'DOTFILES_GID')}}))\n"
+                "('DOTFILES_USER', 'DOTFILES_HOME', 'DOTFILES_UID', 'DOTFILES_GID', 'DOTFILES_GROUP')}}))\n"
             )
             getent.chmod(0o755)
+            identity.chmod(0o755)
             nix.chmod(0o755)
             environment = dict(os.environ)
             environment.update(PATH=f"{directory}:{environment['PATH']}", GITHUB_WORKSPACE=temporary)
-            for variable in ("DOTFILES_USER", "DOTFILES_HOME", "DOTFILES_UID", "DOTFILES_GID"):
+            for variable in ("DOTFILES_USER", "DOTFILES_HOME", "DOTFILES_UID", "DOTFILES_GID", "DOTFILES_GROUP"):
                 environment.pop(variable, None)
             result = subprocess.run(
                 ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", textwrap.dedent(script.group("script"))],
@@ -205,8 +211,9 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "DOTFILES_HOME": "/home/node",
             "DOTFILES_UID": "1000",
             "DOTFILES_GID": "1000",
+            "DOTFILES_GROUP": "node",
         })
-        for variable in ("DOTFILES_USER", "DOTFILES_HOME", "DOTFILES_UID", "DOTFILES_GID"):
+        for variable in ("DOTFILES_USER", "DOTFILES_HOME", "DOTFILES_UID", "DOTFILES_GID", "DOTFILES_GROUP"):
             self.assertNotRegex(workflow, rf"(?m)^\s+{variable}:")
             self.assertNotIn(variable, workflow.replace(job, ""))
 
