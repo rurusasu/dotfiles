@@ -249,9 +249,14 @@ jobs:
 
       - name: Build Linux configurations and checks
         run: |
+          # System Manager validates an existing non-root account; use the image's account.
+          IFS=: read -r DOTFILES_USER _ DOTFILES_UID DOTFILES_GID _ DOTFILES_HOME _ < <(getent passwd node)
+          export DOTFILES_USER DOTFILES_UID DOTFILES_GID DOTFILES_HOME
           export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"
           nix build --impure --no-link --print-build-logs \
             .#nixosConfigurations.linux.config.system.build.toplevel \
+            .#systemConfigs.ubuntu \
+            .#systemConfigs.debian \
             .#homeConfigurations.x86_64-linux.activationPackage \
             .#package-support-report \
             .#checks.x86_64-linux.nix-unit \
