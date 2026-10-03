@@ -1,7 +1,15 @@
 BeforeAll {
     $script:sourceRoot = Split-Path -Parent $PSScriptRoot
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent $script:sourceRoot)
+    # These tests exercise the inline encoding policy; the Nix build check also
+    # executes its wrapper with the declared store module and an empty HOME.
+    $script:oldPssaModule = $env:DOTFILES_PSSA_MODULE
+    $module = Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -eq '1.22.0' | Select-Object -First 1
+    if (-not $module) { throw 'Preprovision PSScriptAnalyzer 1.22.0 before running formatter tests' }
+    $env:DOTFILES_PSSA_MODULE = Join-Path $module.ModuleBase 'PSScriptAnalyzer.psd1'
 }
+
+AfterAll { $env:DOTFILES_PSSA_MODULE = $script:oldPssaModule }
 
 Describe 'Windows PowerShell source encoding' {
     It 'should retain Unicode when files are read with an ANSI fallback' {

@@ -28,6 +28,16 @@ INSTALL_NIX_ACTION = "cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb
 class CiWorkflowRoutingContractTests(unittest.TestCase):
     """Keep the lightweight CI workflow's trigger and tool contracts stable."""
 
+    def test_powershell_formatter_regression_runs_in_local_and_native_ci_routes(self) -> None:
+        taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
+        self.assertIn('.#checks.${system}.powershell-formatter', taskfile)
+        bootstrap = self._named_workflow("ci-bootstrap.yml")
+        for system, name in (("x86_64-linux", "linux-build"), ("aarch64-darwin", "darwin")):
+            job = self._workflow_job(bootstrap, name)
+            self.assertIn(f'.#checks.{system}.powershell-formatter', job)
+        tools = self._workflow_job(bootstrap, "ci-tools")
+        self.assertIn("check-bootstrap-ci-tools.sh --sandbox", tools)
+
     def test_workspace_cycle_runtime_check_runs_in_local_and_hosted_nix_jobs(self) -> None:
         taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
         self.assertIn('.#checks.${system}.aerospace-workspace-cycle', taskfile)
