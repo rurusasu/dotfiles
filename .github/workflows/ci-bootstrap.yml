@@ -740,6 +740,9 @@ jobs:
           nix build .#checks.aarch64-darwin.neovim-native --no-link \
             --option extra-substituters "$NUMTIDE_CACHE" \
             --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY"
+          nix build .#checks.aarch64-darwin.standalone-darwin-home --no-link \
+            --option extra-substituters "$NUMTIDE_CACHE" \
+            --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY"
           nix build .#darwinConfigurations.macos.system --impure --no-link \
             --option extra-substituters "$NUMTIDE_CACHE" \
             --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY"
