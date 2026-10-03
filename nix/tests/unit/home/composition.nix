@@ -3,13 +3,13 @@ let
   fixtures = import ../../fixtures/packages.nix { inherit inputs; };
   mkPkgs = system: fixtures.mkPkgs system;
 
-  baseModule =
-    { ... }:
-    {
-      home.username = "test-user";
-      home.homeDirectory = "/home/test-user";
-      home.stateVersion = "25.05";
+  baseModule = _: {
+    home = {
+      username = "test-user";
+      homeDirectory = "/home/test-user";
+      stateVersion = "25.05";
     };
+  };
 
   mkHome =
     {
@@ -71,15 +71,15 @@ let
           );
       sets = import ../../../packages/sets.nix {
         inherit pkgs;
-        lib = pkgs.lib;
+        inherit (pkgs) lib;
         codexPackage = pkgs.hello;
       };
       contains = package: packages: builtins.elem package packages;
     in
     {
       inherit sets;
-      obsidian = pkgs.obsidian;
-      contains = contains;
+      inherit (pkgs) obsidian;
+      inherit contains;
     };
 in
 {
@@ -159,7 +159,7 @@ in
       pkgs = mkPkgs "x86_64-linux";
       sets = import ../../../packages/sets.nix {
         inherit pkgs;
-        lib = pkgs.lib;
+        inherit (pkgs) lib;
         codexPackage = pkgs.hello;
       };
       catalogDrvPaths = builtins.map (package: package.drvPath) sets.all;
@@ -188,7 +188,7 @@ in
     in
     {
       expr = {
-        selectedCatalogDrvPaths = selectedCatalogDrvPaths;
+        inherit selectedCatalogDrvPaths;
         excludesDiscord = !(containsDrvPath pkgs.discord wsl.config.home.packages);
         excludesOllama = !(containsDrvPath pkgs.ollama wsl.config.home.packages);
       };

@@ -42,6 +42,14 @@
   ],
   "rules": [
     {
+      "patterns": ["scripts/sh/configure-bootstrap-ci-nix.sh"],
+      "outputs": ["linux", "wsl", "nix"]
+    },
+    {
+      "patterns": ["docker/bootstrap-ci-tools/**"],
+      "outputs": ["linux", "wsl", "nix"]
+    },
+    {
       "patterns": [
         "flake.nix",
         "flake.lock",

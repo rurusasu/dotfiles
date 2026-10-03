@@ -113,7 +113,7 @@ in
     };
     expected = {
       enabled = true;
-      config = host.config;
+      inherit (host) config;
       scripts = true;
       accounted = builtins.length contract.bindings;
     };

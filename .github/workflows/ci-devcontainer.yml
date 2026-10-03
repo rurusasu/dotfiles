@@ -95,13 +95,6 @@ jobs:
             --workspace-folder . \
             -- bash .devcontainer/ci/smoke.sh
 
-      - name: bats unit tests
-        run: |
-          devcontainer exec \
-            --config .devcontainer/ci/devcontainer.json \
-            --workspace-folder . \
-            -- bash .devcontainer/ci/bats.sh
-
       - name: tmux + nvim headless E2E
         run: |
           devcontainer exec \
@@ -147,13 +140,6 @@ jobs:
             --config .devcontainer/ci/devcontainer.json \
             --workspace-folder . \
             -- bash .devcontainer/ci/smoke.sh
-
-      - name: bats unit tests
-        run: |
-          devcontainer exec \
-            --config .devcontainer/ci/devcontainer.json \
-            --workspace-folder . \
-            -- bash .devcontainer/ci/bats.sh
 
       - name: tmux + nvim headless E2E
         run: |

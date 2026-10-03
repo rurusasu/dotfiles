@@ -12,7 +12,7 @@ in
 {
   testDockerProviderMetadataAndFeatureSelectedCask = {
     expr = {
-      installFeature = support.installFeature;
+      inherit (support) installFeature;
       windows = {
         inherit (support.windows) provider source identity;
       };
@@ -32,7 +32,7 @@ in
           systemModule
           ;
       };
-      legacyDarwin = support.legacyDarwin;
+      inherit (support) legacyDarwin;
       defaultCaskExcluded = !(builtins.elem "docker-desktop" (sets.darwinCasksForInstallFeatures [ ]));
       dockerCaskSelected = builtins.elem "docker-desktop" (
         sets.darwinCasksForInstallFeatures [

@@ -17,10 +17,11 @@ let
         };
         modules = modules ++ [
           {
-            home.username = "test-user";
-            home.homeDirectory =
-              if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
-            home.stateVersion = "25.05";
+            home = {
+              username = "test-user";
+              homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
+              stateVersion = "25.05";
+            };
           }
         ];
       };

@@ -79,7 +79,7 @@
       // (import ../tests/unit/package-catalog-ollama-windows-policy.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-playwright-feature.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-required-provider-reasons.nix { inherit inputs; })
-      // (import ../tests/unit/package-catalog-tart-minimal.nix { inherit inputs; })
+      // (import ../tests/unit/package-catalog-tart.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-nodejs-selection.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-windows-only-selection.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-windows-only-support.nix { inherit inputs; })

@@ -93,7 +93,7 @@ in
   testSystemManagerInputFollowsRootNixpkgsLockNode = {
     expr =
       let
-        nodes = (builtins.fromJSON (builtins.readFile ../../../flake.lock)).nodes;
+        inherit ((builtins.fromJSON (builtins.readFile ../../../flake.lock))) nodes;
       in
       nodes ? nixpkgs
       && builtins.hasAttr "system-manager" nodes

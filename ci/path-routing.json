@@ -14,6 +14,14 @@
   ],
   "rules": [
     {
+      "patterns": ["scripts/sh/configure-bootstrap-ci-nix.sh"],
+      "outputs": ["linux", "wsl", "nix", "contract"]
+    },
+    {
+      "patterns": ["docker/bootstrap-ci-tools/**"],
+      "outputs": ["linux", "wsl", "nix", "contract"]
+    },
+    {
       "patterns": [
         "ci/path-routing.json",
         "scripts/python/detect_ci_changes.py",
@@ -269,7 +277,7 @@
     },
     {
       "patterns": ["tests/bash/install_macos.bats", "tests/bash/install_linux.bats"],
-      "outputs": ["contract", "devcontainer"]
+      "outputs": ["contract"]
     },
     {
       "patterns": [".github/workflows/codeql.yml"],

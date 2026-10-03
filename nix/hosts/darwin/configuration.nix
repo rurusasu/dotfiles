@@ -37,41 +37,43 @@ in
     primaryUser = user;
     stateVersion = 6;
     tools.darwin-uninstaller.enable = false;
-    activationScripts.globalZoomShortcut.text = ''
-      uid="$(id -u -- ${lib.escapeShellArg user})"
-      runAsUser() {
-        launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} -- "$@"
-      }
-
-      runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "Zoom" "@^m"
-      runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "拡大／縮小" "@^m"
-    '';
-    activationScripts.removeLegacyOmlx.text = ''
-      brew="/opt/homebrew/bin/brew"
-      if [ -x "$brew" ]; then
+    activationScripts = {
+      globalZoomShortcut.text = ''
         uid="$(id -u -- ${lib.escapeShellArg user})"
         runAsUser() {
-          launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} --set-home -- "$@"
+          launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} -- "$@"
         }
 
-        if runAsUser "$brew" list --formula --versions omlx >/dev/null 2>&1; then
-          runAsUser "$brew" uninstall --formula omlx
-        fi
-        if runAsUser "$brew" tap | ${lib.getExe pkgs.gnugrep} --fixed-strings --line-regexp --quiet "jundot/omlx"; then
-          runAsUser "$brew" untap jundot/omlx
-        fi
-      fi
-    '';
-    activationScripts.postActivation.text = lib.mkAfter (
-      lib.optionalString withHermes ''
-        uid="$(id -u -- ${lib.escapeShellArg user})"
-        runAsUser() {
-          launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} --set-home -- "$@"
-        }
+        runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "Zoom" "@^m"
+        runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "拡大／縮小" "@^m"
+      '';
+      removeLegacyOmlx.text = ''
+        brew="/opt/homebrew/bin/brew"
+        if [ -x "$brew" ]; then
+          uid="$(id -u -- ${lib.escapeShellArg user})"
+          runAsUser() {
+            launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} --set-home -- "$@"
+          }
 
-        runAsUser ${lib.getExe discordPackage.passthru.disableBreakingUpdates}
-      ''
-    );
+          if runAsUser "$brew" list --formula --versions omlx >/dev/null 2>&1; then
+            runAsUser "$brew" uninstall --formula omlx
+          fi
+          if runAsUser "$brew" tap | ${lib.getExe pkgs.gnugrep} --fixed-strings --line-regexp --quiet "jundot/omlx"; then
+            runAsUser "$brew" untap jundot/omlx
+          fi
+        fi
+      '';
+      postActivation.text = lib.mkAfter (
+        lib.optionalString withHermes ''
+          uid="$(id -u -- ${lib.escapeShellArg user})"
+          runAsUser() {
+            launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} --set-home -- "$@"
+          }
+
+          runAsUser ${lib.getExe discordPackage.passthru.disableBreakingUpdates}
+        ''
+      );
+    };
   };
 
   launchd.user.agents.com-dotfiles-ollama = lib.mkIf withOllama {
@@ -104,14 +106,16 @@ in
     };
   };
 
-  nix.settings.experimental-features = [
-    "nix-command"
-    "flakes"
-  ];
-  nix.settings.extra-substituters = [ "https://cache.numtide.com" ];
-  nix.settings.extra-trusted-public-keys = [
-    "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
-  ];
+  nix.settings = {
+    experimental-features = [
+      "nix-command"
+      "flakes"
+    ];
+    extra-substituters = [ "https://cache.numtide.com" ];
+    extra-trusted-public-keys = [
+      "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
+    ];
+  };
 
   # nix-darwin's generated documentation currently passes a removed
   # nixos-render-docs flag. Omit the optional manual artifacts and the

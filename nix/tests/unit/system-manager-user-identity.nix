@@ -24,7 +24,7 @@ let
     ];
   };
 
-  config = systemManagerConfig.config;
+  inherit (systemManagerConfig) config;
 in
 {
   testSystemManagerPreservesRequestedExistingUserIdentity = {

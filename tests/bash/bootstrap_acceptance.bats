@@ -7,31 +7,52 @@ setup() {
 	RUNTIME_STARTER="$FIXTURE_ROOT/start-bootstrap-runtime.sh"
 }
 
-@test "devcontainer installer contracts provision go-task before running Bats" {
+@test "shared Bash runner executes every suite and clears installer overrides" {
 	local stub_bin="$BATS_TEST_TMPDIR/bin"
 	export CONTRACT_COMMAND_LOG="$BATS_TEST_TMPDIR/commands"
 	mkdir -p "$stub_bin"
-	for command in apt-get nix bats; do
-		cat >"$stub_bin/$command" <<'EOF'
+	cat >"$stub_bin/bats" <<'EOF'
 #!/usr/bin/env bash
-printf '%s %s\n' "${0##*/}" "$*" >>"$CONTRACT_COMMAND_LOG"
+[[ ! -v DOTFILES_SKIP_FLAKE_UPDATE && ! -v DOTFILES_USER && ! -v DOTFILES_HOME && ! -v SUDO_USER ]] || exit 9
+printf '%s\n' "$@" >"$CONTRACT_COMMAND_LOG"
 EOF
-		chmod +x "$stub_bin/$command"
-	done
-	cd "$REPO_ROOT"
-	run env PATH="$stub_bin:$PATH" bash .devcontainer/ci/bats.sh
+	chmod +x "$stub_bin/bats"
+	cd "$BATS_TEST_TMPDIR"
+	run env PATH="$stub_bin:$PATH" DOTFILES_SKIP_FLAKE_UPDATE=1 DOTFILES_USER=runner DOTFILES_HOME=/tmp/runner SUDO_USER=runner \
+		bash "$REPO_ROOT/scripts/sh/run-bash-tests.sh"
 	[ "$status" -eq 0 ]
-	grep -Fxq 'apt-get install -y -qq --no-install-recommends bats jq python3 git' "$CONTRACT_COMMAND_LOG"
-	grep -Fxq 'nix --extra-experimental-features nix-command flakes shell --inputs-from path:. nixpkgs#go-task --command bats --print-output-on-failure tests/bash/install_linux.bats tests/bash/install_macos.bats' "$CONTRACT_COMMAND_LOG"
-	! grep -q '^bats ' "$CONTRACT_COMMAND_LOG"
+	[ "$(head -1 "$CONTRACT_COMMAND_LOG")" = --print-output-on-failure ]
+	local suite expected_count=1
+	for suite in "$REPO_ROOT"/tests/bash/*.bats; do
+		grep -Fxq "tests/bash/${suite##*/}" "$CONTRACT_COMMAND_LOG"
+		expected_count=$((expected_count + 1))
+	done
+	[ "$(wc -l <"$CONTRACT_COMMAND_LOG" | tr -d ' ')" -eq "$expected_count" ]
 }
 
-@test "destructive Linux E2E routes installers through the acceptance fixture" {
+@test "shared Bash runner propagates a failed suite" {
+	local stub_bin="$BATS_TEST_TMPDIR/bin"
+	mkdir -p "$stub_bin"
+	printf '#!/usr/bin/env bash\nexit 23\n' >"$stub_bin/bats"
+	chmod +x "$stub_bin/bats"
+	run env PATH="$stub_bin:$PATH" bash "$REPO_ROOT/scripts/sh/run-bash-tests.sh"
+	[ "$status" -eq 23 ]
+}
+
+@test "shared Bash runner rejects an empty suite directory" {
+	local fixture="$BATS_TEST_TMPDIR/empty-repo"
+	mkdir -p "$fixture/scripts/sh" "$fixture/tests/bash"
+	cp "$REPO_ROOT/scripts/sh/run-bash-tests.sh" "$fixture/scripts/sh/"
+	run bash "$fixture/scripts/sh/run-bash-tests.sh"
+	[ "$status" -eq 1 ]
+	[[ "$output" == *'No Bash test suites found'* ]]
+}
+
+@test "NixOS VM E2E routes installers through the acceptance fixture" {
 	workflow="$REPO_ROOT/.github/workflows/ci-bootstrap.yml"
 	nixos_test="$REPO_ROOT/nix/tests/build/bootstrap-nixos.nix"
 
-	[ "$(grep -c '.github/e2e/run-bootstrap-acceptance.sh' "$workflow")" -ge 3 ]
-	[ "$(grep -c '.github/e2e/start-bootstrap-runtime.sh' "$workflow")" -eq 2 ]
+	grep -Fq '.#checks.x86_64-linux.bootstrap-nixos-vm' "$workflow"
 	grep -q '.github/e2e/run-bootstrap-acceptance.sh' "$nixos_test"
 	[ "$(grep -c '.github/e2e/start-bootstrap-runtime.sh' "$nixos_test")" -eq 2 ]
 	! grep -Eq 'DOTFILES_HERMES_(DASHBOARD_AUTH|AGENT_SLACK_1PASSWORD)_ENABLED' \

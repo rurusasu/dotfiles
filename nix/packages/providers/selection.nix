@@ -106,7 +106,7 @@ let
     name: entry:
     let
       support = entry.support.darwin;
-      provider = support.provider;
+      inherit (support) provider;
     in
     if provider == "nix" then
       entry.pkg
@@ -114,8 +114,8 @@ let
       pkgs.writeText "darwin-${name}-provider.json" (
         builtins.toJSON {
           inherit provider;
-          source = support.source;
-          identity = support.identity;
+          inherit (support) source;
+          inherit (support) identity;
         }
       );
   darwinPackages = lib.mapAttrs darwinPackage (
@@ -137,16 +137,6 @@ let
 in
 lib.mapAttrs (_: resolve) grouped
 // {
-  # Tart guests intentionally receive only the requested CLI tools. WezTerm is
-  # installed as a macOS cask because its Nix package is unavailable on Darwin.
-  tartMinimal = resolve [
-    "git"
-    "chezmoi"
-    "neovim"
-    # Codex is installed from npm after the Nix profile is activated.
-    "nodejs"
-  ];
-
   # All packages (flat list)
   all = resolveForInstallFeatures null (lib.attrNames catalog);
   allForInstallFeatures =
