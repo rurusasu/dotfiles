@@ -846,10 +846,13 @@ class BootstrapFlowTests(unittest.TestCase):
                 for path in journals.iterdir()
                 if path.name != ".lock"
             )
-        self.assertEqual(sorted(leaks), [])
-        self.assertEqual(
-            self._snapshot_tree(self.profile_tmpdir, include_root=False),
-            self.profile_tmpdir_before,
+        self.assertFalse(bool(leaks), "temporary resource leak (details redacted)")
+        scratch_snapshot = self._snapshot_tree(
+            self.profile_tmpdir, include_root=False
+        )
+        self.assertTrue(
+            scratch_snapshot == self.profile_tmpdir_before,
+            "profile scratch cleanup mismatch (details redacted)",
         )
 
     def _assert_no_live_children(self) -> None:

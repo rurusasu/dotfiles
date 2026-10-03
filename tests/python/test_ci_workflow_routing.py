@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 import sys
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -148,8 +152,61 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertNotIn("bats", darwin)
         self.assertNotIn("brew install", darwin)
         self.assertNotIn("attestation", darwin)
-        self.assertNotIn("DOTFILES_USER", workflow)
-        self.assertNotIn("DOTFILES_HOME", workflow)
+        for section in (job, darwin):
+            self.assertNotIn("DOTFILES_USER", section)
+            self.assertNotIn("DOTFILES_HOME", section)
+
+    def test_linux_build_uses_image_identity_for_both_system_manager_outputs(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        job = self._workflow_job(workflow, "linux-build")
+        script = re.search(
+            r"(?m)^      - name: Build Linux configurations and checks\n"
+            r"        run: \|\n(?P<script>(?:          .*\n)+)",
+            job,
+        )
+        self.assertIsNotNone(script)
+        assert script is not None
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            getent = directory / "getent"
+            getent.write_text(
+                '#!/bin/bash\n[[ "$*" == "passwd node" ]] || exit 64\n'
+                "printf '%s\\n' 'node:x:1000:1000::/home/node:/bin/bash'\n"
+            )
+            nix = directory / "nix"
+            nix.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, sys\n"
+                "print(json.dumps({'argv': sys.argv[1:], 'identity': "
+                "{key: os.environ.get(key) for key in "
+                "('DOTFILES_USER', 'DOTFILES_HOME', 'DOTFILES_UID', 'DOTFILES_GID')}}))\n"
+            )
+            getent.chmod(0o755)
+            nix.chmod(0o755)
+            environment = dict(os.environ)
+            environment.update(PATH=f"{directory}:{environment['PATH']}", GITHUB_WORKSPACE=temporary)
+            for variable in ("DOTFILES_USER", "DOTFILES_HOME", "DOTFILES_UID", "DOTFILES_GID"):
+                environment.pop(variable, None)
+            result = subprocess.run(
+                ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", textwrap.dedent(script.group("script"))],
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        invocation = json.loads(result.stdout)
+        self.assertEqual(invocation["argv"][:2], ["build", "--impure"])
+        self.assertIn(".#systemConfigs.ubuntu", invocation["argv"])
+        self.assertIn(".#systemConfigs.debian", invocation["argv"])
+        self.assertEqual(invocation["identity"], {
+            "DOTFILES_USER": "node",
+            "DOTFILES_HOME": "/home/node",
+            "DOTFILES_UID": "1000",
+            "DOTFILES_GID": "1000",
+        })
+        for variable in ("DOTFILES_USER", "DOTFILES_HOME", "DOTFILES_UID", "DOTFILES_GID"):
+            self.assertNotRegex(workflow, rf"(?m)^\s+{variable}:")
+            self.assertNotIn(variable, workflow.replace(job, ""))
 
     def test_runs_focused_actionlint_and_python_discovery(self) -> None:
         workflow = self._workflow()
