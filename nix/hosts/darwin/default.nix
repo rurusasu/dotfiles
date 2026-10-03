@@ -1,4 +1,8 @@
 { ... }:
 {
-  imports = [ ./configuration.nix ];
+  imports = [
+    ./configuration.nix
+    ./fonts.nix
+    ./system.nix
+  ];
 }

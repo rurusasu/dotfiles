@@ -17,7 +17,7 @@ in
         dockerDarwinProvider = dockerSupport.darwin.provider;
         dockerLinuxProvider = dockerSupport.linux.provider;
       };
-      providerErrors = sets.providerErrors;
+      inherit (sets) providerErrors;
       darwinCasks = {
         isList = builtins.isList sets.darwinCasks;
         hasDockerDesktop = builtins.elem "docker-desktop" sets.darwinCasks;

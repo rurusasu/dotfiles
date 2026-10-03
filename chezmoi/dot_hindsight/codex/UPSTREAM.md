@@ -10,3 +10,16 @@ hooks file. Local connection and bank overrides live in ../codex.json.
 The vendored connection layer has a local `autoStartDaemon` switch so the
 dotfiles-managed shared Docker endpoint degrades without launching an embedded
 fallback service.
+
+The local retention contract keeps both `chunked` and `full-session` supported.
+The upstream-derived install settings retain their `full-session` default;
+dotfiles' `../codex.json` selects `chunked` with a one-hook cadence and one
+overlap turn. Local comments describe this active mode without the former
+`legacy` label. This is a documentation and contract-test clarification, not
+a retention migration: config precedence, payload selection and document ID
+generation are unchanged.
+
+See [Codex retention operation](../../../docs/hermes-agent/hindsight-memory.md#codex-retention)
+and `tests/python/test_hindsight_retain.py` in the dotfiles source repository
+for the mode/override contract. These source-repository paths are not available
+from the deployed `~/.hindsight/codex` directory.

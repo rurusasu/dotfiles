@@ -64,8 +64,11 @@ The root Discord bot was renamed from Master to Alfred without changing its ID.
   `hermes-bootstrap sync-repository lifelog` under the repository lock. This is
   a normal read-write Git workflow, not named-profile exact mirroring, and every
   profile uses the same path.
-- `core/lifelog` is accepted only as a migration source and is absent after
-  bootstrap. Runtime configuration uses `${HERMES_HOME}/shared/lifelog`.
+- `core/lifelog` is unmanaged; bootstrap neither migrates nor deletes it.
+  Reconcile and verify any old checkout using the
+  [manual migration procedure](bootstrap.md#shared-repository-layout-and-manual-migration)
+  before running bootstrap, preserving local changes and commits. Runtime
+  configuration uses `${HERMES_HOME}/shared/lifelog`.
 - Bootstrap installs the shared X API MCP endpoint into every staged managed
   distribution as `mcp_servers.xapi.url: http://127.0.0.1:8766/mcp` with
   `connect_timeout: 300`. The endpoint is served by the separate Compose

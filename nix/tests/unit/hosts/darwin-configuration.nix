@@ -9,13 +9,15 @@ let
       withHermes ? false,
       withDocker ? false,
       withOllama ? false,
+      sudoUser ? "rurusasu",
+      currentUser ? "fallback-user",
+      extraModules ? [ ],
     }:
     inputs.nix-darwin.lib.darwinSystem {
       inherit system;
       specialArgs = {
         inherit inputs;
-        dotfilesUser = "test-user";
-        dotfilesHome = "/Users/test-user";
+        inherit sudoUser currentUser;
         dotfilesWithHermes = withHermes;
         dotfilesWithDocker = withDocker;
         dotfilesWithOllama = withOllama;
@@ -28,15 +30,33 @@ let
           nixpkgs.overlays = [ workmuxOverlay ];
         }
         ../../../hosts/darwin
-      ];
+      ]
+      ++ extraModules;
     };
 
   defaultConfig = (mkDarwin { }).config;
   dockerConfig = (mkDarwin { withDocker = true; }).config;
   hermesConfig = (mkDarwin { withHermes = true; }).config;
   ollamaConfig = (mkDarwin { withOllama = true; }).config;
-  defaultHome = defaultConfig.home-manager.users.test-user;
-  hermesHome = hermesConfig.home-manager.users.test-user;
+  sudoUserConfig =
+    (mkDarwin {
+      sudoUser = "ktome1995";
+      currentUser = "root";
+    }).config;
+  currentUserFallbackConfig =
+    (mkDarwin {
+      sudoUser = "";
+      currentUser = "ktome1995";
+    }).config;
+  defaultHome = defaultConfig.home-manager.users.rurusasu;
+  nonstandardHomeConfig =
+    (mkDarwin {
+      sudoUser = "alice";
+      extraModules = [
+        { users.users.alice.home = inputs.nixpkgs.lib.mkForce "/Volumes/Home/alice"; }
+      ];
+    }).config;
+  hermesHome = hermesConfig.home-manager.users.rurusasu;
 
   hasDarwinCask = name: config: builtins.any (cask: cask.name == name) config.homebrew.casks;
   packageNames =
@@ -47,16 +67,49 @@ let
   hasPackage = name: packages: builtins.any (package: package == name) packages;
 in
 {
-  testDarwinConfigurationAcceptsInjectedIdentity = {
+  testDarwinConfigurationUsesConfiguredIdentity = {
     expr = {
-      primaryUser = defaultConfig.system.primaryUser;
-      systemHome = defaultConfig.users.users.test-user.home;
-      homeManagerHome = defaultHome.home.homeDirectory;
+      primaryUser = sudoUserConfig.system.primaryUser;
+      homebrewUser = sudoUserConfig.nix-homebrew.user;
+      systemHome = sudoUserConfig.users.users.ktome1995.home;
+      homeManagerHome = sudoUserConfig.home-manager.users.ktome1995.home.homeDirectory;
+      guestLogin = sudoUserConfig.system.defaults.loginwindow.GuestEnabled;
+      showFullName = sudoUserConfig.system.defaults.loginwindow.SHOWFULLNAME;
     };
     expected = {
-      primaryUser = "test-user";
-      systemHome = "/Users/test-user";
-      homeManagerHome = "/Users/test-user";
+      primaryUser = "ktome1995";
+      homebrewUser = "ktome1995";
+      systemHome = "/Users/ktome1995";
+      homeManagerHome = "/Users/ktome1995";
+      guestLogin = false;
+      showFullName = false;
+    };
+  };
+
+  testDarwinConfigurationFallsBackToCurrentUser = {
+    expr = {
+      primaryUser = currentUserFallbackConfig.system.primaryUser;
+      homebrewUser = currentUserFallbackConfig.nix-homebrew.user;
+      home = currentUserFallbackConfig.users.users.ktome1995.home;
+      homeManagerHome = currentUserFallbackConfig.home-manager.users.ktome1995.home.homeDirectory;
+    };
+    expected = {
+      primaryUser = "ktome1995";
+      homebrewUser = "ktome1995";
+      home = "/Users/ktome1995";
+      homeManagerHome = "/Users/ktome1995";
+    };
+  };
+
+  # A conventional /Users/<name> fallback cannot substitute for the host home.
+  testDarwinHomeManagerUsesNonstandardHostHome = {
+    expr = {
+      systemHome = nonstandardHomeConfig.users.users.alice.home;
+      homeManagerHome = nonstandardHomeConfig.home-manager.users.alice.home.homeDirectory;
+    };
+    expected = {
+      systemHome = "/Volumes/Home/alice";
+      homeManagerHome = "/Volumes/Home/alice";
     };
   };
 
@@ -69,7 +122,10 @@ in
       github = builtins.any (name: builtins.match "^(gh|github-cli)($|[-.].*)" name != null) (
         packageNames defaultConfig
       );
-      homeManagerUser = builtins.hasAttr "test-user" defaultConfig.home-manager.users;
+      managedFont = builtins.any (
+        package: hasPrefix "udev-gothic-nf" (package.name or package.pname)
+      ) defaultConfig.fonts.packages;
+      homeManagerUser = builtins.hasAttr "rurusasu" defaultConfig.home-manager.users;
       noOptionalOllamaAgent = builtins.hasAttr "com-dotfiles-ollama" defaultConfig.launchd.user.agents;
     };
     expected = {
@@ -78,6 +134,7 @@ in
       raycast = true;
       weztermTerminfo = true;
       github = true;
+      managedFont = true;
       homeManagerUser = true;
       noOptionalOllamaAgent = false;
     };
@@ -120,14 +177,14 @@ in
     };
   };
 
-  testDarwinHomeManagerInstallsAndRegistersManagedFont = {
+  testDarwinHomeManagerLeavesSystemFontToNixDarwin = {
     expr = {
       fontPackage = builtins.any (name: hasPrefix "udev-gothic-nf" name) (homePackageNames defaultHome);
       fontActivation = builtins.hasAttr "installDotfilesFonts" defaultHome.home.activation;
     };
     expected = {
-      fontPackage = true;
-      fontActivation = true;
+      fontPackage = false;
+      fontActivation = false;
     };
   };
 
@@ -174,7 +231,7 @@ in
     };
     expected = {
       exists = true;
-      home = "/Users/test-user";
+      home = "/Users/rurusasu";
       runAtLoad = true;
       keepAlive = true;
     };

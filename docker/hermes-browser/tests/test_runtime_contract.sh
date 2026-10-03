@@ -26,6 +26,8 @@ for expression in \
   fi
 done
 
+node --test "$repo_root/docker/hermes-browser/tests/test_clipboard_runtime.mjs"
+
 python3 - "$repo_root/docker/hermes-browser-mcp/package.json" "$repo_root/docker/hermes-browser-mcp/package-lock.json" <<'PY'
 import json
 import sys

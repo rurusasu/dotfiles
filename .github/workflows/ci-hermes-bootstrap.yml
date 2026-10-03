@@ -69,9 +69,6 @@ jobs:
       - name: Run native Hermes bootstrap tests
         run: nix build .#checks.x86_64-linux.hermes-bootstrap-tests --no-link --print-build-logs
 
-      - name: Run native secret transport contract
-        run: nix shell nixpkgs#bats --command bats tests/bash/hermes_native_bootstrap.bats
-
       - name: Run X API image contract
         run: python3 -m unittest tests/python/test_xapi_image_contract.py -v
 

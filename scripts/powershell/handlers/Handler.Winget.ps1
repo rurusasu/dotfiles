@@ -434,10 +434,14 @@ class WingetHandler : SetupHandlerBase {
                     continue
                 }
 
+                $pathTimer = [System.Diagnostics.Stopwatch]::StartNew()
+                $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=path status=started", "Gray")
                 Update-ProcessEnvironmentPath
 
                 $this.EnsurePortableLink($pkg)
                 $this.EnsurePathEntries($pkg)
+                $pathTimer.Stop()
+                $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=path status=completed elapsedMs=$($pathTimer.ElapsedMilliseconds)", "Gray")
 
                 if ($pkg.VerifyCommand -and $this.TestPackageVerificationForPackage($pkg, $false)) {
                     $succeeded++
@@ -629,17 +633,23 @@ class WingetHandler : SetupHandlerBase {
     hidden [object[]] InvokeWingetInstall([object]$pkg, [object[]]$installArgs) {
         $installTimeoutSeconds = $this.GetInstallTimeoutSeconds($pkg)
         $startedAt = [DateTime]::UtcNow
+        $installTimer = [System.Diagnostics.Stopwatch]::StartNew()
+        $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=install status=started timeoutSeconds=$installTimeoutSeconds utc=$($startedAt.ToString('o'))", "Gray")
         if ($installTimeoutSeconds -gt 0) {
             $output = @(Invoke-Winget -Arguments $installArgs -TimeoutSeconds $installTimeoutSeconds)
             $this.LastInstallExitCode = [int]$LASTEXITCODE
-            if ($this.LastInstallExitCode -eq 124) {
-                $diagnosis = $this.GetWingetTimeoutDiagnosis([string]$pkg.Id, $startedAt)
-                $this.Log("TIMEOUT_DIAGNOSTIC: $diagnosis", "Yellow")
-            }
-            return $output
         }
-        $output = @(Invoke-Winget -Arguments $installArgs)
-        $this.LastInstallExitCode = [int]$LASTEXITCODE
+        else {
+            $output = @(Invoke-Winget -Arguments $installArgs)
+            $this.LastInstallExitCode = [int]$LASTEXITCODE
+        }
+        $installTimer.Stop()
+        $exitCodeHex = [BitConverter]::ToUInt32([BitConverter]::GetBytes($this.LastInstallExitCode), 0).ToString('X8')
+        $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=install status=completed elapsedMs=$($installTimer.ElapsedMilliseconds) exitCode=$($this.LastInstallExitCode) exitCodeHex=$exitCodeHex", "Gray")
+        if ($this.LastInstallExitCode -eq 124) {
+            $diagnosis = $this.GetWingetTimeoutDiagnosis([string]$pkg.Id, $startedAt)
+            $this.Log("TIMEOUT_DIAGNOSTIC: $diagnosis", "Yellow")
+        }
         return $output
     }
 
@@ -1362,11 +1372,15 @@ class WingetHandler : SetupHandlerBase {
             $lastOutput = @()
             $lastExitCode = 1
             foreach ($commandPath in $commandPaths) {
+                $verifyTimer = [System.Diagnostics.Stopwatch]::StartNew()
+                $this.Log("PACKAGE_PHASE: command=$command phase=verify status=started executable=$commandPath timeoutSeconds=$timeoutSeconds", "Gray")
                 $lastOutput = @(Invoke-VerifyCommand -Command $commandPath -Arguments $arguments -TimeoutSeconds $timeoutSeconds)
-                if ($global:LASTEXITCODE -eq 0) {
+                $lastExitCode = [int]$global:LASTEXITCODE
+                $verifyTimer.Stop()
+                $this.Log("PACKAGE_PHASE: command=$command phase=verify status=completed elapsedMs=$($verifyTimer.ElapsedMilliseconds) exitCode=$lastExitCode", "Gray")
+                if ($lastExitCode -eq 0) {
                     return $true
                 }
-                $lastExitCode = [int]$global:LASTEXITCODE
             }
 
             $displayCommand = "$command $($arguments -join ' ')".Trim()

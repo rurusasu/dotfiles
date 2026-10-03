@@ -19,7 +19,7 @@ let
       ../../system-manager/default.nix
     ];
   };
-  config = systemManagerConfig.config;
+  inherit (systemManagerConfig) config;
 
   # Return the generated script as its Nix value so the bind contract can be
   # evaluated without building or starting the Ollama service.
