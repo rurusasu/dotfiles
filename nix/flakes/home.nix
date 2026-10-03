@@ -35,6 +35,7 @@ let
         inherit (mkHome system) pkgs extraSpecialArgs;
         modules = [
           ../home/darwin.nix
+          ../home/standalone-darwin-identity.nix
           ../home/standalone-darwin-fonts.nix
         ];
       };
