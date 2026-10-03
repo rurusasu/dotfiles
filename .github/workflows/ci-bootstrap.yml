@@ -328,7 +328,8 @@ jobs:
             .#checks.aarch64-darwin.custom-package-builds \
             .#checks.aarch64-darwin.aerospace-workspace-cycle \
             .#checks.aarch64-darwin.ghostty-config \
-            .#checks.aarch64-darwin.neovim-native
+            .#checks.aarch64-darwin.neovim-native \
+            .#checks.aarch64-darwin.standalone-darwin-home
 
   wsl-prebuild:
     name: Bootstrap / WSL / Prebuild

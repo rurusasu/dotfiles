@@ -106,7 +106,7 @@ let
     name: entry:
     let
       support = entry.support.darwin;
-      provider = support.provider;
+      inherit (support) provider;
     in
     if provider == "nix" then
       entry.pkg
@@ -114,8 +114,8 @@ let
       pkgs.writeText "darwin-${name}-provider.json" (
         builtins.toJSON {
           inherit provider;
-          source = support.source;
-          identity = support.identity;
+          inherit (support) source;
+          inherit (support) identity;
         }
       );
   darwinPackages = lib.mapAttrs darwinPackage (

@@ -9,72 +9,73 @@ let
   sets = import ../packages/sets.nix {
     inherit pkgs lib;
   };
-  fonts = (import ../modules/fonts.nix { inherit pkgs; }).fonts;
+  inherit ((import ../modules/fonts.nix { inherit pkgs; })) fonts;
 in
 {
-  home.homeDirectory = lib.mkDefault "/home/${config.home.username}";
-
   imports = [
     ./nixos.nix
     ./common.nix
     ./hermes-agent.nix
   ];
 
-  home.packages =
-    sets.allWithout (
-      sets.nativeDesktopPackageNames
-      ++ [
-        "discord"
-        "neovim"
-        "ollama"
-      ]
-    )
-    ++ fonts.packages;
   fonts.fontconfig = fonts.fontconfig;
+  home = {
+    homeDirectory = lib.mkDefault "/home/${config.home.username}";
+    packages =
+      sets.allWithout (
+        sets.nativeDesktopPackageNames
+        ++ [
+          "discord"
+          "neovim"
+          "ollama"
+        ]
+      )
+      ++ fonts.packages;
 
-  # Exclude WSL mount paths from zoxide's database to avoid indexing
-  # temporary runtime files under /mnt/wsl/ and /mnt/wslg/.
+    # Exclude WSL mount paths from zoxide's database to avoid indexing
+    # temporary runtime files under /mnt/wsl/ and /mnt/wslg/.
 
-  # Declaratively manage fcitx5 input method profile.
-  # fcitx5 overwrites this file on exit, so home-manager re-applies it on
-  # each activation (nrs). force = true is required to overwrite the file
-  # even when fcitx5 has already written its own copy.
-  home.file.".config/fcitx5/profile" = {
-    force = true;
-    text = ''
-      [Groups/0]
-      Name=Default
-      Default Layout=us
-      DefaultIM=mozc
+    # Declaratively manage fcitx5 input method profile.
+    # fcitx5 overwrites this file on exit, so home-manager re-applies it on
+    # each activation (nrs). force = true is required to overwrite the file
+    # even when fcitx5 has already written its own copy.
+    file.".config/fcitx5/profile" = {
+      force = true;
+      text = ''
+        [Groups/0]
+        Name=Default
+        Default Layout=us
+        DefaultIM=mozc
 
-      [Groups/0/Items/0]
-      Name=keyboard-us
-      Layout=
+        [Groups/0/Items/0]
+        Name=keyboard-us
+        Layout=
 
-      [Groups/0/Items/1]
-      Name=mozc
-      Layout=
+        [Groups/0/Items/1]
+        Name=mozc
+        Layout=
 
-      [GroupOrder]
-      0=Default
-    '';
-  };
+        [GroupOrder]
+        0=Default
+      '';
+    };
 
-  home.sessionVariables = {
-    _ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
-    BROWSER = "explorer.exe";
-    # fcitx5 GTK_IM_MODULE bridge for WSLg GUI applications.
-    GTK_IM_MODULE = "fcitx";
-    QT_IM_MODULE = "fcitx";
-    XMODIFIERS = "@im=fcitx";
-    # 1Password multi-account: chezmoi's [onepassword].command routes to
-    # op.exe under WSL (LIF-182), but Windows binaries inherit env vars
-    # from WSL only when WSLENV lists them. /u makes OP_ACCOUNT visible
-    # only when crossing WSL→Windows (not the other direction).
-    # Without this, op.exe fails with "multiple accounts found" because
-    # chezmoi templates call op signin without --account.
-    WSLENV = "OP_ACCOUNT/u";
-    OP_ACCOUNT = "EJLA3HRAVZBCXIQ7SRSFGQBTNU";
+    sessionVariables = {
+      _ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
+      BROWSER = "explorer.exe";
+      # fcitx5 GTK_IM_MODULE bridge for WSLg GUI applications.
+      GTK_IM_MODULE = "fcitx";
+      QT_IM_MODULE = "fcitx";
+      XMODIFIERS = "@im=fcitx";
+      # 1Password multi-account: chezmoi's [onepassword].command routes to
+      # op.exe under WSL (LIF-182), but Windows binaries inherit env vars
+      # from WSL only when WSLENV lists them. /u makes OP_ACCOUNT visible
+      # only when crossing WSL→Windows (not the other direction).
+      # Without this, op.exe fails with "multiple accounts found" because
+      # chezmoi templates call op signin without --account.
+      WSLENV = "OP_ACCOUNT/u";
+      OP_ACCOUNT = "EJLA3HRAVZBCXIQ7SRSFGQBTNU";
+    };
   };
 
   programs.zsh.shellAliases = {

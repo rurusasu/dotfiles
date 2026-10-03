@@ -9,9 +9,11 @@ let
     modules = [
       ../../modules/nvim
       {
-        home.username = "test-user";
-        home.homeDirectory = "/tmp/neovim-test-home";
-        home.stateVersion = "26.05";
+        home = {
+          username = "test-user";
+          homeDirectory = "/tmp/neovim-test-home";
+          stateVersion = "26.05";
+        };
       }
     ];
   };

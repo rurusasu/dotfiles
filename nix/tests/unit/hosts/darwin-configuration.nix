@@ -11,6 +11,7 @@ let
       withOllama ? false,
       sudoUser ? "rurusasu",
       currentUser ? "fallback-user",
+      extraModules ? [ ],
     }:
     inputs.nix-darwin.lib.darwinSystem {
       inherit system;
@@ -29,7 +30,8 @@ let
           nixpkgs.overlays = [ workmuxOverlay ];
         }
         ../../../hosts/darwin
-      ];
+      ]
+      ++ extraModules;
     };
 
   defaultConfig = (mkDarwin { }).config;
@@ -47,6 +49,13 @@ let
       currentUser = "ktome1995";
     }).config;
   defaultHome = defaultConfig.home-manager.users.rurusasu;
+  nonstandardHomeConfig =
+    (mkDarwin {
+      sudoUser = "alice";
+      extraModules = [
+        { users.users.alice.home = inputs.nixpkgs.lib.mkForce "/Volumes/Home/alice"; }
+      ];
+    }).config;
   hermesHome = hermesConfig.home-manager.users.rurusasu;
 
   hasDarwinCask = name: config: builtins.any (cask: cask.name == name) config.homebrew.casks;
@@ -89,6 +98,18 @@ in
       homebrewUser = "ktome1995";
       home = "/Users/ktome1995";
       homeManagerHome = "/Users/ktome1995";
+    };
+  };
+
+  # A conventional /Users/<name> fallback cannot substitute for the host home.
+  testDarwinHomeManagerUsesNonstandardHostHome = {
+    expr = {
+      systemHome = nonstandardHomeConfig.users.users.alice.home;
+      homeManagerHome = nonstandardHomeConfig.home-manager.users.alice.home.homeDirectory;
+    };
+    expected = {
+      systemHome = "/Volumes/Home/alice";
+      homeManagerHome = "/Volumes/Home/alice";
     };
   };
 

@@ -1,6 +1,6 @@
 { pkgs, lib, ... }:
 let
-  fonts = (import ../modules/fonts.nix { inherit pkgs; }).fonts;
+  inherit ((import ../modules/fonts.nix { inherit pkgs; })) fonts;
   fontFiles = lib.concatMapStringsSep "\n" (font: ''
     ${pkgs.findutils}/bin/find "${font}/share/fonts" -type f \( -name '*.ttf' -o -name '*.otf' \) -print |
       while IFS= read -r fontPath; do

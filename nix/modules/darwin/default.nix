@@ -1,6 +1,6 @@
 { pkgs, ... }:
 let
-  fonts = (import ../fonts.nix { inherit pkgs; }).fonts;
+  inherit ((import ../fonts.nix { inherit pkgs; })) fonts;
 in
 {
   # nix-darwin installs fonts; Home Manager configures fontconfig clients.

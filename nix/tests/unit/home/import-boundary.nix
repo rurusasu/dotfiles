@@ -52,7 +52,7 @@ let
           }
         else
           {
-            text = state.text;
+            inherit (state) text;
             inComment = builtins.head token == "/*";
           }
       )

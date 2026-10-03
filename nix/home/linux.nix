@@ -9,7 +9,7 @@ let
   sets = import ../packages/sets.nix {
     inherit pkgs lib;
   };
-  fonts = (import ../modules/fonts.nix { inherit pkgs; }).fonts;
+  inherit ((import ../modules/fonts.nix { inherit pkgs; })) fonts;
 in
 {
   home.homeDirectory = lib.mkDefault "/home/${config.home.username}";

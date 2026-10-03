@@ -12,7 +12,7 @@ in
 {
   testCodexUsesNpmOnEverySupportedPlatform = {
     expr = {
-      providerErrors = sets.providerErrors;
+      inherit (sets) providerErrors;
       nixPackageSelected = builtins.elem pkgs.hello sets.all;
       npmMapping = sets.npmMap.codex;
       npmVerify = sets.npmVerify.codex;

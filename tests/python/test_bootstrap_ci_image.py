@@ -75,6 +75,14 @@ class BootstrapCiImageTests(unittest.TestCase):
                     (config / "nix/nix.conf").read_text().count(f"include {secret_file}"),
                     1,
                 )
+                trusted_repositories = subprocess.run(
+                    ["git", "config", "--file", str(home / ".gitconfig"), "--get-all", "safe.directory"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(trusted_repositories.stdout.splitlines(), [str(ROOT)])
+                self.assertNotIn(environment["GITHUB_TOKEN"], (home / ".gitconfig").read_text())
 
     def run_step(
         self, name: str, *, docker_exit: int = 0, **environment: str
