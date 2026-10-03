@@ -75,8 +75,10 @@ hash 固定した Nix input として取得し、Nix store の module manifest �
 空の HOME でも同じ依存を使用します。`powershell-formatter` は未整形 fixture を整形し、
 CRLF・日本語の BOM と二度目の実行で byte / 更新時刻が変わらないことを検証します。
 通常の `task test:nix` と Linux/Darwin CI は `powershell-formatter` を個別に build しますが、
-全 checks の build とは範囲が異なります。Linux CI は installer の `extra_nix_config` で
-`sandbox = true` を設定し、formatter build 前に実効設定を表示して確認します。
+全 checks の build とは範囲が異なります。Linux CI は `docker/bootstrap-ci-tools/nix.conf` で
+`sandbox = true` を設定した tools image を使います。新しい image は公開前に
+`check-bootstrap-ci-tools.sh --sandbox` で sandbox 内の build を検証し、各 job は検証済みの
+image を immutable digest で再利用します。
 CI の format job は `nix fmt -- --fail-on-change` を実行し、`treefmt` derivation や
 `powershell-formatter` の build を代替しません。CI が host の PSGallery module を準備しても、
 Nix formatter は host module ではなく固定した store module を使います。
