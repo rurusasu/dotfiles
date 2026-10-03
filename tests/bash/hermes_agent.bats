@@ -6,16 +6,11 @@ setup() {
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	EDIT_CAPTURE="$BATS_TEST_TMPDIR/item-edit.json"
-	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
 	OP_TOKEN_CAPTURE="$BATS_TEST_TMPDIR/op-token.log"
 	READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ready-attempts"
 	OLLAMA_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ollama-ready-attempts"
 	HINDSIGHT_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/hindsight-ready-attempts"
 	XAPI_TOKEN_ATTEMPT_FILE="$BATS_TEST_TMPDIR/xapi-token-attempts"
-	VOLUME_SCHEMA_FILE="$BATS_TEST_TMPDIR/hermes-volume-schema"
-	VOLUME_TOKEN_FILE="$BATS_TEST_TMPDIR/hermes-volume-token"
-	VOLUME_READY_FILE="$BATS_TEST_TMPDIR/hermes-volume-ready"
-	LOCK_CREATE_ATTEMPT_FILE="$BATS_TEST_TMPDIR/hermes-lock-create-attempts"
 	COMPOSE_FILE="$BATS_TEST_TMPDIR/docker/hermes-service/compose file.yml"
 	REAL_JQ="$(command -v jq)"
 	REAL_PYTHON3="$(command -v python3)"
@@ -23,12 +18,7 @@ setup() {
 	SECRET_MARKER="adapter-secret-marker"
 	mkdir -p "$TEST_HOME/.hermes" "$STUB_BIN"
 	: >"$COMMAND_LOG"
-	: >"$PAYLOAD_CAPTURE"
 	: >"$OP_TOKEN_CAPTURE"
-	: >"$VOLUME_SCHEMA_FILE"
-	: >"$VOLUME_TOKEN_FILE"
-	: >"$VOLUME_READY_FILE"
-	printf '0\n' >"$LOCK_CREATE_ATTEMPT_FILE"
 	printf '0\n' >"$READY_ATTEMPT_FILE"
 	printf '0\n' >"$OLLAMA_READY_ATTEMPT_FILE"
 	printf '0\n' >"$HINDSIGHT_READY_ATTEMPT_FILE"
@@ -37,11 +27,6 @@ setup() {
 	cp "$REPO_ROOT/nix/home/hermes-agent/manifest.yaml" \
 		"$BATS_TEST_TMPDIR/nix/home/hermes-agent/manifest.yaml"
 	: >"$COMPOSE_FILE"
-	if command -v sha256sum >/dev/null 2>&1; then
-		PLAN_MANIFEST_SHA256="$(sha256sum "$REPO_ROOT/nix/home/hermes-agent/manifest.yaml" | awk '{print $1}')"
-	else
-		PLAN_MANIFEST_SHA256="$(shasum -a 256 "$REPO_ROOT/nix/home/hermes-agent/manifest.yaml" | awk '{print $1}')"
-	fi
 	cat >"$BATS_TEST_TMPDIR/hindsight.env" <<'EOF'
 HINDSIGHT_API_LLM_MODEL=qwen3.6:35b
 HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=qwen3-embedding:0.6b
@@ -52,35 +37,17 @@ EOF
 	unset OP_SERVICE_ACCOUNT_TOKEN
 	unset DOTFILES_HERMES_OLLAMA_EXECUTABLE DOTFILES_HERMES_CURL_EXECUTABLE OLLAMA_HOST
 	export HINDSIGHT_OLLAMA_URL=http://127.0.0.1:11434
-	export COMMAND_LOG EDIT_CAPTURE PAYLOAD_CAPTURE OP_TOKEN_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE XAPI_TOKEN_ATTEMPT_FILE VOLUME_SCHEMA_FILE VOLUME_TOKEN_FILE VOLUME_READY_FILE LOCK_CREATE_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER PLAN_MANIFEST_SHA256
+	export COMMAND_LOG EDIT_CAPTURE OP_TOKEN_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE XAPI_TOKEN_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
 	export DOTFILES_SKIP_HERDR_INSTALL=1
-	export PLAN_JSON="$(valid_secret_plan)"
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
 	export XAPI_OP_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"},{"label":"X_API_REFRESH_TOKEN","section":{"label":"Refresh Token"},"value":"xapi-refresh-token-marker"}]}'
 	export XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
-	export BOOTSTRAP_STATUS=0
 	export OP_FAIL_ITEM=""
 	export OP_EDIT_STATUS=0
 	export OP_DELAY_SECONDS=0
 	export OP_READ_TOKEN='service-account-token'
 	export OP_READ_DELAY_SECONDS=0
 	export OP_READ_COMPLETION_FILE=""
-	export BOOTSTRAP_EXIT_EARLY=0
-	export HERMES_RUNTIME_EXISTS=1
-	export HERMES_VOLUME_EXISTS=1
-	export HERMES_VOLUME_SCHEMA_LABEL=""
-	export HERMES_VOLUME_TOKEN_LABEL=""
-	export HERMES_VOLUME_READY=1
-	export HERMES_VOLUME_PROBE_STATUS=""
-	export HERMES_CREATE_RACE_TOKEN=""
-	export HERMES_LOCK_CREATE_STATUS=0
-	export HERMES_LOCK_CREATE_FAIL_ONCE=0
-	export HERMES_LOCK_STATE=""
-	export HERMES_LOCK_ID=1111111111111111111111111111111111111111111111111111111111111111
-	export HERMES_REPLACEMENT_LOCK_ID=2222222222222222222222222222222222222222222222222222222222222222
-	export HERMES_LOCK_RELEASE_STATUS=0
-	export HERMES_SEED_WRITES_MARKER=1
-	export HERMES_STORAGE_OWNERSHIP_STATUS=0
 	export API_READY_AFTER=1
 	export OLLAMA_READY_AFTER=1
 	export HINDSIGHT_API_DATABASE=connected
@@ -90,13 +57,10 @@ EOF
 	export HERMES_API_READY_ATTEMPTS=3
 	export HERMES_API_READY_DELAY_SECONDS=0
 	export HERMES_API_PROBE_TIMEOUT_SECONDS=1
-	export IMAGE_PRUNE_STATUS=0
-	export HERMES_GATEWAY_CONVERGENCE_STATUS=0
 	export XAPI_TOKEN_READY_AFTER=1
 	export XAPI_TOKEN_FAILURE_KIND=auth
 	export XAPI_TOKEN_FAILURE_STATUS=1
 	export XAPI_ROTATED_REFRESH_TOKEN=""
-	export DOTFILES_HERMES_STORAGE_HEARTBEAT_INTERVAL_SECONDS=0.01
 	export UP_STATUS=0
 
 	write_stub jq '
@@ -148,95 +112,8 @@ esac
 printf "docker" >>"$COMMAND_LOG"
 printf " <%s>" "$@" >>"$COMMAND_LOG"
 printf "\n" >>"$COMMAND_LOG"
-if [ "${1:-}" = "image" ] && [ "${2:-}" = "prune" ]; then
-	exit "$IMAGE_PRUNE_STATUS"
-fi
-if [ "${1:-}" = "volume" ]; then
-  case "${2:-}" in
-    inspect)
-	  if [[ ${HERMES_VOLUME_EXISTS:-1} != 1 && ! -s $VOLUME_SCHEMA_FILE && ! -s $VOLUME_TOKEN_FILE ]]; then
-	    exit 1
-	  fi
-	  case " $* " in
-	    *"com.rurusasu.dotfiles.hermes-storage.schema"*)
-	      if [[ -s $VOLUME_SCHEMA_FILE ]]; then cat "$VOLUME_SCHEMA_FILE"; else printf "%s\n" "${HERMES_VOLUME_SCHEMA_LABEL:-}"; fi
-	      ;;
-	    *"com.rurusasu.dotfiles.hermes-storage.init-token"*)
-	      if [[ -s $VOLUME_TOKEN_FILE ]]; then cat "$VOLUME_TOKEN_FILE"; else printf "%s\n" "${HERMES_VOLUME_TOKEN_LABEL:-}"; fi
-	      ;;
-	    *) printf "[{}]\n" ;;
-	  esac
-      ;;
-    create)
-	  token=""
-	  for argument in "$@"; do
-	    case "$argument" in
-	      com.rurusasu.dotfiles.hermes-storage.schema=*) printf "%s\n" "${argument#*=}" >"$VOLUME_SCHEMA_FILE" ;;
-	      com.rurusasu.dotfiles.hermes-storage.init-token=*) token="${argument#*=}" ;;
-	    esac
-	  done
-	  if [[ -n ${HERMES_CREATE_RACE_TOKEN:-} ]]; then token="$HERMES_CREATE_RACE_TOKEN"; fi
-	  if [[ -n $token ]]; then printf "%s\n" "$token" >"$VOLUME_TOKEN_FILE"; fi
-	  printf "0\n" >"$VOLUME_READY_FILE"
-      printf "hermes-data\n"
-      ;;
-    *)
-      exit 1
-      ;;
-  esac
-  exit 0
-fi
-if [ "${1:-}" = "run" ]; then
-	previous=""
-	for argument in "$@"; do
-	  if [[ $previous == --entrypoint && $argument == python ]]; then
-	    if [[ -n ${HERMES_VOLUME_PROBE_STATUS:-} ]]; then
-	      exit "$HERMES_VOLUME_PROBE_STATUS"
-	    fi
-	    if [[ -s $VOLUME_READY_FILE ]]; then
-	      ready="$(cat "$VOLUME_READY_FILE")"
-	    else
-	      ready="$HERMES_VOLUME_READY"
-	    fi
-	    exit "$((ready == 1 ? 0 : 3))"
-	  fi
-	  if [[ $previous == --entrypoint && $argument == /usr/local/bin/hermes-storage-seed ]]; then
-	    if [[ ${HERMES_STORAGE_SEED_STATUS:-0} == 0 && ${HERMES_SEED_WRITES_MARKER:-1} == 1 ]]; then
-	      printf "1\n" >"$VOLUME_READY_FILE"
-	    fi
-	    exit "${HERMES_STORAGE_SEED_STATUS:-0}"
-	  fi
-	  if [[ $previous == --entrypoint && $argument == /usr/local/bin/hermes-storage-ownership ]]; then
-	    exit "${HERMES_STORAGE_OWNERSHIP_STATUS:-0}"
-	  fi
-	  previous="$argument"
-	done
-  exit 1
-fi
-if [ "${1:-}" = "create" ]; then
-	attempt="$(cat "$LOCK_CREATE_ATTEMPT_FILE")"
-	attempt=$((attempt + 1))
-	printf "%s\n" "$attempt" >"$LOCK_CREATE_ATTEMPT_FILE"
-	if [[ ${HERMES_LOCK_CREATE_FAIL_ONCE:-0} == 1 && $attempt == 1 ]]; then exit 125; fi
-	if [[ ${HERMES_LOCK_CREATE_STATUS:-0} != 0 ]]; then exit "$HERMES_LOCK_CREATE_STATUS"; fi
-	if ((attempt > 1)); then printf "%s\n" "$HERMES_REPLACEMENT_LOCK_ID"; else printf "%s\n" "$HERMES_LOCK_ID"; fi
-	exit 0
-fi
-if [ "${1:-}" = "inspect" ]; then
-	if [[ -n ${HERMES_LOCK_STATE:-} ]]; then printf "%s\n" "$HERMES_LOCK_STATE"; exit 0; fi
-	exit 1
-fi
-if [ "${1:-}" = "start" ] && [[ "${2:-}" =~ ^[0-9a-f]{64}$ ]]; then
-	exit "${HERMES_LOCK_START_STATUS:-0}"
-fi
-if [ "${1:-}" = "rm" ] && [ "${2:-}" = "-f" ]; then
-	exit "${HERMES_LOCK_RELEASE_STATUS:-0}"
-fi
 if [ "${1:-}" != "compose" ]; then
 	exit 1
-fi
-if [[ ${1:-} == compose && ${2:-} == -f && ${3:-} == "$COMPOSE_FILE" && ${4:-} == exec && ${5:-} == -T && ${6:-} == hermes && ${7:-} == /usr/local/bin/hermes-gateway-converge && $# -eq 7 ]]; then
-	exit "$HERMES_GATEWAY_CONVERGENCE_STATUS"
 fi
 case " $* " in
   *" run --rm --no-deps --entrypoint /bin/sh xapi-mcp "*)
@@ -260,19 +137,6 @@ case " $* " in
 	;;
   *" up -d --force-recreate "*)
     exit "$UP_STATUS"
-    ;;
-  *" ps --all --services hermes "*)
-    if [[ $HERMES_RUNTIME_EXISTS == 1 ]]; then
-      printf "hermes\n"
-    fi
-    ;;
-  *" secret-plan "*) printf "%s\n" "$PLAN_JSON" ;;
-  *" apply "*)
-    if [[ $BOOTSTRAP_EXIT_EARLY == 1 ]]; then
-      exit "$BOOTSTRAP_STATUS"
-    fi
-    cat >"$PAYLOAD_CAPTURE"
-    exit "$BOOTSTRAP_STATUS"
     ;;
 esac
 '
@@ -345,231 +209,6 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 '
 }
 
-@test "initializes a missing Hermes Docker data volume before bootstrap" {
-	export HERMES_VOLUME_EXISTS=0
-
-	run_start_stack
-
-	[ "$status" -eq 0 ]
-	assert_log_order '<stop> <hermes>' '<volume> <inspect>' '<volume> <create>' '<create> <--name>' "<start> <$HERMES_LOCK_ID>" '<--entrypoint> </usr/local/bin/hermes-storage-seed>' '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' '<rm> <-f>' '<secret-plan>'
-	grep -Fq '<--label> <com.rurusasu.dotfiles.hermes-storage.schema=1>' "$COMMAND_LOG"
-	grep -Fq '<--label> <com.rurusasu.dotfiles.hermes-storage.init-token=' "$COMMAND_LOG"
-	grep -Fq '<create> <--name> <dotfiles-hermes-storage-' "$COMMAND_LOG"
-	grep -Fq '<--entrypoint> </usr/local/bin/hermes-storage-seed>' "$COMMAND_LOG"
-	grep -Fq '<--ready-token>' "$COMMAND_LOG"
-	grep -Fq '<--replace-incomplete>' "$COMMAND_LOG"
-}
-
-@test "keeps a failed managed volume incomplete for a safe retry" {
-	export HERMES_VOLUME_EXISTS=0
-	export HERMES_STORAGE_SEED_STATUS=42
-
-	run_start_stack
-
-	[ "$status" -eq 42 ]
-	[[ "$output" == *"will be safely replaced on retry"* ]]
-	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
-	assert_log_order '<stop> <hermes>' '<--entrypoint> </usr/local/bin/hermes-storage-seed>' "<compose> <-f> <$COMPOSE_FILE> <start>" '<http://127.0.0.1:9119/api/health>'
-	! grep -Fq '<volume> <rm>' "$COMMAND_LOG"
-	! grep -q '<secret-plan>' "$COMMAND_LOG"
-}
-
-@test "does not recover a runtime that did not exist before storage failure" {
-	export HERMES_VOLUME_EXISTS=0
-	export HERMES_STORAGE_SEED_STATUS=42
-	export HERMES_RUNTIME_EXISTS=0
-
-	run_start_stack
-
-	[ "$status" -eq 42 ]
-	! grep -Fq "<compose> <-f> <$COMPOSE_FILE> <start>" "$COMMAND_LOG"
-	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 0 ]
-}
-
-@test "does not seed or remove a volume won by a concurrent creator" {
-	export HERMES_VOLUME_EXISTS=0
-	export HERMES_CREATE_RACE_TOKEN=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-
-	run_start_stack
-
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"changed before its lock was acquired"* ]]
-	! grep -Fq '<--entrypoint> </usr/local/bin/hermes-storage-seed>' "$COMMAND_LOG"
-	! grep -Fq '<volume> <rm>' "$COMMAND_LOG"
-	! grep -q '<secret-plan>' "$COMMAND_LOG"
-}
-
-@test "safely replaces a managed incomplete volume while holding its lock" {
-	export HERMES_VOLUME_SCHEMA_LABEL=1
-	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-	export HERMES_VOLUME_READY=0
-
-	run_start_stack
-
-	[ "$status" -eq 0 ]
-	assert_log_order '<create> <--name>' "<start> <$HERMES_LOCK_ID>" '<--entrypoint> </usr/local/bin/hermes-storage-seed>' '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' '<rm> <-f>' '<secret-plan>'
-}
-
-@test "accepts a managed volume with the ready marker" {
-	export HERMES_VOLUME_SCHEMA_LABEL=1
-	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-	export HERMES_VOLUME_READY=1
-
-	run_start_stack
-
-	[ "$status" -eq 0 ]
-	grep -Fq '<--entrypoint> <python>' "$COMMAND_LOG"
-	! grep -Fq '<--entrypoint> </usr/local/bin/hermes-storage-seed>' "$COMMAND_LOG"
-	assert_log_order '<--entrypoint> <python>' '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' '<rm> <-f>' '<secret-plan>'
-	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
-}
-
-@test "converges managed volume ownership with a restricted one-shot container" {
-	export HERMES_VOLUME_SCHEMA_LABEL=1
-	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-	export HERMES_VOLUME_READY=1
-
-	run_start_stack
-
-	[ "$status" -eq 0 ]
-	ownership_command="$(grep -F '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' "$COMMAND_LOG")"
-	[[ $ownership_command == *'<run> <--rm> <--network> <none> <--read-only>'* ]]
-	[[ $ownership_command == *'<--cap-drop> <ALL> <--cap-add> <CHOWN> <--cap-add> <DAC_OVERRIDE>'* ]]
-	[[ $ownership_command == *'<--security-opt> <no-new-privileges:true> <--user> <0:0>'* ]]
-	[[ $ownership_command == *'<--mount> <type=volume,src=hermes-data,dst=/target>'* ]]
-	[[ $ownership_command == *'<--target> </target> <--uid> <10000> <--gid> <10000>'* ]]
-	[[ $ownership_command != *'type=bind'* ]]
-	without_first_mount="${ownership_command/<--mount>/}"
-	[[ $without_first_mount != "$ownership_command" ]]
-	[[ $without_first_mount != *'<--mount>'* ]]
-}
-
-@test "starts a running storage lease before ownership convergence can exceed the stale threshold" {
-	export HERMES_VOLUME_SCHEMA_LABEL=1
-	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-	export HERMES_VOLUME_READY=1
-
-	run_start_stack
-
-	[ "$status" -eq 0 ]
-	assert_log_order "<create> <--name>" "<start> <$HERMES_LOCK_ID>" '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' "<rm> <-f> <$HERMES_LOCK_ID>"
-}
-
-@test "stops before bootstrap and recreate when ownership convergence fails" {
-	export HERMES_VOLUME_SCHEMA_LABEL=1
-	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-	export HERMES_VOLUME_READY=1
-	export HERMES_STORAGE_OWNERSHIP_STATUS=42
-
-	run_start_stack
-
-	[ "$status" -eq 42 ]
-	[[ "$output" == *"ownership convergence failed with status 42"* ]]
-	assert_log_order '<--entrypoint> </usr/local/bin/hermes-storage-ownership>' '<rm> <-f>'
-	! grep -q '<secret-plan>' "$COMMAND_LOG"
-	! grep -Fq '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
-}
-
-@test "preserves a ready managed volume when its marker probe cannot run" {
-	export HERMES_VOLUME_SCHEMA_LABEL=1
-	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-	export HERMES_VOLUME_READY=1
-	export HERMES_VOLUME_PROBE_STATUS=125
-
-	run_start_stack
-
-	[ "$status" -eq 125 ]
-	[[ "$output" == *"ready marker probe failed with status 125"* ]]
-	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
-	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
-}
-
-@test "rejects a concurrent storage lock before marker or seed access" {
-	export HERMES_VOLUME_SCHEMA_LABEL=1
-	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-	export HERMES_LOCK_CREATE_STATUS=125
-	export HERMES_LOCK_STATE="$HERMES_LOCK_ID|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|running"
-
-	run_start_stack
-
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"already locked"* ]]
-	! grep -Fq '<--entrypoint> <python>' "$COMMAND_LOG"
-	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
-	! grep -q '<secret-plan>' "$COMMAND_LOG"
-}
-
-@test "reclaims an exited owned storage lock and retries atomically" {
-	export HERMES_VOLUME_SCHEMA_LABEL=1
-	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-	export HERMES_LOCK_CREATE_FAIL_ONCE=1
-	export HERMES_LOCK_STATE="$HERMES_LOCK_ID|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|exited"
-
-	run_start_stack
-
-	[ "$status" -eq 0 ]
-	[ "$(cat "$LOCK_CREATE_ATTEMPT_FILE")" -eq 2 ]
-	grep -Fq '<inspect> <--format>' "$COMMAND_LOG"
-	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
-	grep -Fq '<run> <--rm> <--entrypoint> <python>' "$COMMAND_LOG"
-}
-
-@test "reclaims an aged created lock by immutable ID" {
-	export HERMES_VOLUME_SCHEMA_LABEL=1
-	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-	export HERMES_LOCK_CREATE_FAIL_ONCE=1
-	export HERMES_LOCK_STATE="$HERMES_LOCK_ID|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|created"
-	export HERMES_VOLUME_READY=0
-
-	run_start_stack
-
-	[ "$status" -eq 0 ]
-	[ "$(cat "$LOCK_CREATE_ATTEMPT_FILE")" -eq 2 ]
-	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
-	grep -Fq "<start> <$HERMES_REPLACEMENT_LOCK_ID>" "$COMMAND_LOG"
-}
-
-@test "does not acquire or touch a replacement lock after losing stale ID removal" {
-	export HERMES_VOLUME_SCHEMA_LABEL=1
-	export HERMES_VOLUME_TOKEN_LABEL=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-	export HERMES_LOCK_CREATE_FAIL_ONCE=1
-	export HERMES_LOCK_STATE="$HERMES_LOCK_ID|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|0|exited"
-	export HERMES_LOCK_RELEASE_STATUS=17
-
-	run_start_stack
-
-	[ "$status" -eq 17 ]
-	[ "$(cat "$LOCK_CREATE_ATTEMPT_FILE")" -eq 1 ]
-	grep -Fq "<rm> <-f> <$HERMES_LOCK_ID>" "$COMMAND_LOG"
-	! grep -Fq "<$HERMES_REPLACEMENT_LOCK_ID>" "$COMMAND_LOG"
-	! grep -Fq '<start> <-a>' "$COMMAND_LOG"
-}
-
-@test "surfaces a lock release failure after seed failure without deleting the volume" {
-	export HERMES_VOLUME_EXISTS=0
-	export HERMES_STORAGE_SEED_STATUS=42
-	export HERMES_LOCK_RELEASE_STATUS=17
-
-	run_start_stack
-
-	[ "$status" -eq 17 ]
-	[[ "$output" == *"lock could not be released"* ]]
-	! grep -Fq '<volume> <rm>' "$COMMAND_LOG"
-	! grep -q '<secret-plan>' "$COMMAND_LOG"
-}
-
-@test "rejects a managed volume with a malformed initialization token before locking" {
-	export HERMES_VOLUME_SCHEMA_LABEL=1
-	export HERMES_VOLUME_TOKEN_LABEL=malformed
-
-	run_start_stack
-
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"invalid initialization token"* ]]
-	! grep -Fq '<create> <--name>' "$COMMAND_LOG"
-	! grep -q '<secret-plan>' "$COMMAND_LOG"
-}
-
 write_stub() {
 	local name="$1"
 	local body="$2"
@@ -581,52 +220,26 @@ EOF
 	chmod +x "$STUB_BIN/$name"
 }
 
-valid_secret_plan() {
-	cat <<'JSON' | "$REAL_JQ" --arg manifest_sha256 "$PLAN_MANIFEST_SHA256" '.manifest_sha256 = $manifest_sha256'
-{"schema_version":1,"manifest_sha256":"placeholder","items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]},{"canonical_name":"password","labels":["password"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"xai_grok","account":"my.1password.com","vault":"openclaw","item":"xAI-Grok-Twitter","fields":[{"canonical_name":"api_key","labels":["apikey"],"reference":"console/apikey","environment":["XAI_API_KEY"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]}]}
-JSON
-}
-
-@test "accepts the Google Calendar item from the service-account vault" {
-	local plan
-	plan="$(valid_secret_plan | jq -c '(.items[] | select(.key == "google_calendar") | .vault) = "openclaw"')"
-
-	run env PLAN_JSON="$plan" bash -c '
-set -euo pipefail
-. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-printf "%s\n" "$PLAN_JSON" | dotfiles_hermes_validate_secret_plan >/dev/null
-'
-
-	[ "$status" -eq 0 ]
-}
-
-run_start_stack() {
+run_restart_sidecar() {
 	local missing_command="${1:-}"
+	if [[ -z $missing_command ]]; then
+		run env HERMES_COMPOSE_FILE="$COMPOSE_FILE" bash "$REPO_ROOT/scripts/sh/hermes-xapi.sh" restart
+		return
+	fi
 	run env DOTFILES_TEST_MISSING_COMMAND="$missing_command" bash -c '
 set -euo pipefail
 . "$REPO_ROOT/scripts/sh/install-common.sh"
-. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+. "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
 if [[ -n ${DOTFILES_TEST_MISSING_COMMAND:-} ]]; then
   dotfiles_have() {
     [[ $1 != "$DOTFILES_TEST_MISSING_COMMAND" ]] && command -v "$1" >/dev/null 2>&1
   }
 fi
-dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
-'
-}
-
-run_start_stack_with_function_runner() {
-	run bash -c '
-set -euo pipefail
-. "$REPO_ROOT/scripts/sh/install-common.sh"
-. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-docker_command() {
-  printf "runner" >>"$COMMAND_LOG"
-  printf " <%s>" "$@" >>"$COMMAND_LOG"
-  printf "\n" >>"$COMMAND_LOG"
-  docker "$@"
-}
-dotfiles_hermes_start_stack docker_command "$COMPOSE_FILE"
+dotfiles_hermes_require_xapi_tools
+dotfiles_hermes_prepare_runtime_home
+dotfiles_hermes_ensure_xapi_auth docker "$COMPOSE_FILE"
+dotfiles_hermes_with_xapi_credentials_and_cache \
+  docker compose -f "$COMPOSE_FILE" up -d --force-recreate xapi-mcp
 '
 }
 
@@ -641,40 +254,9 @@ service_account_cache_inode() {
 
 assert_service_account_cache_rejected_after_timeout() {
 	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
-	run_start_stack
+	run_restart_sidecar
 	[ "$status" -ne 0 ]
 	! grep -q '<compose>' "$COMMAND_LOG"
-}
-
-assert_log_order() {
-	local previous=0
-	local pattern line
-	for pattern in "$@"; do
-		line="$(grep -n -m 1 -- "$pattern" "$COMMAND_LOG" | cut -d: -f1)"
-		[ -n "$line" ]
-		[ "$line" -gt "$previous" ]
-		previous="$line"
-	done
-}
-
-assert_log_order_fixed() {
-	local previous=0
-	local record line
-	for record in "$@"; do
-		line="$(grep -Fxn -m 1 -- "$record" "$COMMAND_LOG" | cut -d: -f1)"
-		[ -n "$line" ]
-		[ "$line" -gt "$previous" ]
-		previous="$line"
-	done
-}
-
-assert_plan_rejected_before_secret_lookup() {
-	: >"$COMMAND_LOG"
-	run_start_stack
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"secret plan is invalid"* ]]
-	! grep -q '^op' "$COMMAND_LOG"
-	! grep -q '<apply>' "$COMMAND_LOG"
 }
 
 write_fixture_stub() {
@@ -695,7 +277,7 @@ create_mocked_installer_fixture() {
 	MOCK_DOCKER_APP="$fixture_root/Docker.app"
 	MOCK_OLLAMA_APP="$fixture_root/Ollama.app"
 	mkdir -p "$MOCK_REPO/scripts/sh" "$MOCK_REPO/chezmoi" \
-		"$MOCK_REPO/docker/hermes-agent" "$MOCK_REPO/docker/hermes-service" \
+		"$MOCK_REPO/docker/hermes-service" \
 		"$MOCK_REPO/docker/hindsight" "$MOCK_REPO/docker/local-ai-services" \
 		"$MOCK_BIN" "$MOCK_OLLAMA_APP" "$MOCK_DOCKER_APP/Contents/MacOS" \
 		"$MOCK_DOCKER_APP/Contents/Resources/bin"
@@ -742,13 +324,6 @@ EOF
 		"$MOCK_REPO/docker/hermes-service/compose.yml" \
 		"$MOCK_REPO/docker/local-ai-services/compose.yml"
 
-	cat >"$MOCK_REPO/scripts/sh/hermes-agent.sh" <<'EOF'
-printf 'selected-installer=%s\n' "${DOTFILES_TEST_SELECTED_INSTALLER:-${BASH_SOURCE[1]}}" >>"$COMMAND_LOG"
-dotfiles_hermes_start_stack() {
-  printf 'adapter runner=%s compose=%s\n' "$1" "$2" >>"$COMMAND_LOG"
-  "$1" compose -f "$2" config --quiet
-}
-EOF
 	cat >"$MOCK_REPO/scripts/sh/verify-environment.sh" <<'EOF'
 #!/usr/bin/env bash
 printf 'verify-environment %s\n' "$*" >>"$COMMAND_LOG"
@@ -987,7 +562,7 @@ EOF
 	local installer contents
 	for installer in install-macos.sh install-linux.sh install-nixos.sh; do
 		contents="$REPO_ROOT/scripts/sh/$installer"
-		! grep -Fq 'hermes-agent.sh' "$contents"
+		! grep -Fq 'hermes-sidecar-common.sh' "$contents"
 		if [[ $installer == install-macos.sh ]]; then
 			grep -Fq 'dotfiles_run_task hermes:desktop:install' "$contents"
 			! grep -Fq 'hermes:bootstrap' "$contents"
@@ -1124,7 +699,7 @@ EOF
 	run bash -c '
 set -euo pipefail
 . "$REPO_ROOT/scripts/sh/install-common.sh"
-. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+. "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
 printf "%s\n%s\n" "$(dotfiles_hermes_data_dir)" "$(dotfiles_hermes_browser_data_dir)"
 dotfiles_hermes_prepare_runtime_home
 '
@@ -1136,13 +711,30 @@ dotfiles_hermes_prepare_runtime_home
 	[ -d "$TEST_HOME/custom-browser" ]
 }
 
+@test "X API up only recreates the current browser and MCP sidecars" {
+	run env HERMES_COMPOSE_FILE="$COMPOSE_FILE" bash "$REPO_ROOT/scripts/sh/hermes-xapi.sh" up
+
+	[ "$status" -eq 0 ]
+	grep -Fq '<up> <-d> <--force-recreate> <chromium> <browser-mcp> <xapi-mcp>' "$COMMAND_LOG"
+	! grep -q '<hermes>\|<hermes-bootstrap>\|<volume>' "$COMMAND_LOG"
+}
+
+@test "X API authentication forwards OAuth credentials to the sidecar" {
+	run env HERMES_COMPOSE_FILE="$COMPOSE_FILE" bash "$REPO_ROOT/scripts/sh/hermes-xapi.sh" auth
+
+	[ "$status" -eq 0 ]
+	grep -Fq '<xapi-mcp>' "$COMMAND_LOG"
+	grep -Fq 'xurl auth oauth2 --headless' "$COMMAND_LOG"
+	! grep -q 'xapi-client-secret-marker\|service-account-token' "$COMMAND_LOG"
+}
+
 @test "uses the Hermes data directory for the default browser directory" {
 	export HERMES_DATA_DIR="$TEST_HOME/custom-data"
 
 	run bash -c '
 set -euo pipefail
 . "$REPO_ROOT/scripts/sh/install-common.sh"
-. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+. "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
 dotfiles_hermes_browser_data_dir
 '
 
@@ -1158,7 +750,7 @@ dotfiles_hermes_browser_data_dir
 	run bash -c '
 set -euo pipefail
 . "$REPO_ROOT/scripts/sh/install-common.sh"
-. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+. "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
 dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIENT_ID" "$X_API_CLIENT_SECRET"'"'"'
 '
 
@@ -1172,7 +764,7 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 	run bash -c '
 set -euo pipefail
 . "$REPO_ROOT/scripts/sh/install-common.sh"
-. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+. "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
 dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIENT_ID" "$X_API_CLIENT_SECRET"'"'"'
 '
 
@@ -1192,7 +784,7 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 	run bash -c '
 set -euo pipefail
 . "$REPO_ROOT/scripts/sh/install-common.sh"
-. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+. "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
 dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIENT_ID" "$X_API_CLIENT_SECRET"'"'"'
 '
 
@@ -1205,7 +797,7 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 
 @test "syncs the X API refresh token into the local xurl cache before startup" {
 	local xapi_lookup_count last_xapi_lookup up_line
-	run_start_stack
+	run_restart_sidecar
 
 	[ "$status" -eq 0 ]
 	[ "$(stat -c '%a' "$HOME/.hermes/.xurl/auth.yml" 2>/dev/null || stat -f '%Lp' "$HOME/.hermes/.xurl/auth.yml")" = 600 ]
@@ -1215,21 +807,21 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
 	xapi_lookup_count="$(grep -c '<Hermes X API MCP>' "$COMMAND_LOG")"
 	[ "$xapi_lookup_count" -ge 2 ]
 	last_xapi_lookup="$(grep -n '<Hermes X API MCP>' "$COMMAND_LOG" | tail -n 1 | cut -d: -f1)"
-	up_line="$(grep -n '<up> <-d> <--force-recreate> <hermes> <chromium> <browser-mcp> <xapi-mcp>' "$COMMAND_LOG" | cut -d: -f1)"
+	up_line="$(grep -n '<up> <-d> <--force-recreate> <xapi-mcp>' "$COMMAND_LOG" | cut -d: -f1)"
 	[ "$last_xapi_lookup" -lt "$up_line" ]
 	! grep -q 'xapi-refresh-token-marker' "$COMMAND_LOG"
 	! grep -q '<item> <edit>' "$COMMAND_LOG"
 }
 
-@test "validates the X API token before recreating the Hermes stack" {
+@test "validates the X API token before recreating the X API sidecars" {
 	local probe_line up_line
 
-	run_start_stack
+	run_restart_sidecar
 
 	[ "$status" -eq 0 ]
 	[ "$(cat "$XAPI_TOKEN_ATTEMPT_FILE")" -eq 1 ]
 	probe_line="$(grep -n '<run> <--rm> <--no-deps> <--entrypoint> </bin/sh> <xapi-mcp>' "$COMMAND_LOG" | tail -n 1 | cut -d: -f1)"
-	up_line="$(grep -n '<up> <-d> <--force-recreate> <hermes> <chromium> <browser-mcp> <xapi-mcp>' "$COMMAND_LOG" | cut -d: -f1)"
+	up_line="$(grep -n '<up> <-d> <--force-recreate> <xapi-mcp>' "$COMMAND_LOG" | cut -d: -f1)"
 	[ -n "$probe_line" ]
 	[ "$probe_line" -lt "$up_line" ]
 }
@@ -1251,7 +843,7 @@ EOF
 	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
 	export XAPI_TOKEN_READY_AFTER=2
 
-	run_start_stack
+	run_restart_sidecar
 
 	[ "$status" -eq 0 ]
 	[ "$(cat "$XAPI_TOKEN_ATTEMPT_FILE")" -eq 2 ]
@@ -1262,7 +854,7 @@ EOF
 	! grep -q 'stale-refresh-token' "$COMMAND_LOG"
 }
 
-@test "stops before stack recreation when local and 1Password X API tokens are invalid" {
+@test "stops before sidecar recreation when local and 1Password X API tokens are invalid" {
 	mkdir -p "$HOME/.hermes/.xurl"
 	cat >"$HOME/.hermes/.xurl/auth.yml" <<'EOF'
 apps:
@@ -1277,7 +869,7 @@ EOF
 	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
 	export XAPI_TOKEN_READY_AFTER=99
 
-	run_start_stack
+	run_restart_sidecar
 
 	[ "$status" -ne 0 ]
 	[ "$(cat "$XAPI_TOKEN_ATTEMPT_FILE")" -eq 2 ]
@@ -1304,7 +896,7 @@ EOF
 	export XAPI_TOKEN_FAILURE_KIND=infrastructure
 	export XAPI_TOKEN_FAILURE_STATUS=125
 
-	run_start_stack
+	run_restart_sidecar
 
 	[ "$status" -eq 125 ]
 	[ "$(cat "$XAPI_TOKEN_ATTEMPT_FILE")" -eq 1 ]
@@ -1329,7 +921,7 @@ EOF
 	chmod 600 "$HOME/.hermes/.xurl/auth.yml"
 	export XAPI_ROTATED_REFRESH_TOKEN=rotated-refresh-token
 
-	run_start_stack
+	run_restart_sidecar
 
 	[ "$status" -eq 0 ]
 	jq -e '.fields[] | select(.label == "X_API_REFRESH_TOKEN") | .value == "rotated-refresh-token"' "$EDIT_CAPTURE" >/dev/null
@@ -1352,7 +944,7 @@ EOF
 	export XAPI_ROTATED_REFRESH_TOKEN=rotated-refresh-token
 	export OP_EDIT_STATUS=17
 
-	run_start_stack
+	run_restart_sidecar
 
 	[ "$status" -eq 17 ]
 	grep -q 'refresh_token: "rotated-refresh-token"' "$HOME/.hermes/.xurl/auth.yml"
@@ -1414,7 +1006,7 @@ EOF
 	chmod 600 "$HOME/.hermes/.op.env"
 	export OP_READ_COMPLETION_FILE="$BATS_TEST_TMPDIR/op-read-completed"
 	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
-	run_start_stack
+	run_restart_sidecar
 	[ "$status" -eq 0 ]
 	[[ "$output" != *"using existing Hermes service-account environment"* ]]
 	run grep -q '<read>' "$COMMAND_LOG"
@@ -1433,7 +1025,7 @@ EOF
 	chmod 600 "$HOME/.hermes/.op.env"
 	export OP_READ_TOKEN='unexpected-refresh-token'
 
-	run_start_stack
+	run_restart_sidecar
 
 	[ "$status" -eq 0 ]
 	bootstrap_output="$output"
@@ -1451,7 +1043,7 @@ EOF
 	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\n' >"$HOME/.hermes/.op.env"
 	chmod 644 "$HOME/.hermes/.op.env"
 	export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
-	run_start_stack
+	run_restart_sidecar
 	[ "$status" -ne 0 ]
 	! grep -q '^op' "$COMMAND_LOG"
 	! grep -q '<compose>' "$COMMAND_LOG"
@@ -1488,17 +1080,17 @@ EOF
 }
 
 @test "defaults invalid service-account read timeouts to twenty seconds" {
-	grep -Fq 'timeout_seconds="${DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS:-20}"' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-	grep -Fq '[[ $timeout_seconds =~ ^([1-9]|[1-9][0-9]|[12][0-9]{2}|300)$ ]] || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+	grep -Fq 'timeout_seconds="${DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS:-20}"' "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
+	grep -Fq '[[ $timeout_seconds =~ ^([1-9]|[1-9][0-9]|[12][0-9]{2}|300)$ ]] || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
 	export DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=invalid
-	run_start_stack
+	run_restart_sidecar
 	[ "$status" -eq 0 ]
 }
 
 @test "defaults service-account read timeouts above 300 seconds to twenty seconds" {
-	grep -Fq '[[ $timeout_seconds =~ ^([1-9]|[1-9][0-9]|[12][0-9]{2}|300)$ ]] || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+	grep -Fq '[[ $timeout_seconds =~ ^([1-9]|[1-9][0-9]|[12][0-9]{2}|300)$ ]] || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
 	export DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=301
-	run_start_stack
+	run_restart_sidecar
 	[ "$status" -eq 0 ]
 }
 
@@ -1507,7 +1099,7 @@ EOF
 	run bash -c '
 set -euo pipefail
 . "$REPO_ROOT/scripts/sh/install-common.sh"
-. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
+. "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
 dotfiles_hermes_service_account_read_timeout_seconds
 '
 	[ "$status" -eq 0 ]
@@ -1520,7 +1112,7 @@ dotfiles_hermes_service_account_read_timeout_seconds
 	ln "$HOME/.hermes/.op.env" "$HOME/.hermes/.op.env.previous"
 	export OP_READ_TOKEN='fresh-token'
 	export DOTFILES_HERMES_REFRESH_SERVICE_ACCOUNT=1
-	run_start_stack
+	run_restart_sidecar
 	[ "$status" -eq 0 ]
 	[ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=fresh-token' ]
 	[ "$(service_account_cache_mode)" = 600 ]
@@ -1539,7 +1131,8 @@ case "${1:-}" in
 esac
 '
 	export OP_READ_TOKEN='fresh-token'
-	run_start_stack
+	export DOTFILES_HERMES_REFRESH_SERVICE_ACCOUNT=1
+	run_restart_sidecar
 	status=$status
 	output=$output
 	[ "$status" -ne 0 ]
@@ -1549,7 +1142,7 @@ esac
 }
 
 @test "fails preflight before Compose when op is unavailable" {
-	run_start_stack op
+	run_restart_sidecar op
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"1Password CLI (op) is required"* ]]
@@ -1557,7 +1150,7 @@ esac
 }
 
 @test "fails preflight before Compose when jq is unavailable" {
-	run_start_stack jq
+	run_restart_sidecar jq
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"jq is required"* ]]
@@ -1565,260 +1158,9 @@ esac
 }
 
 @test "fails preflight before Compose when python3 is unavailable" {
-	run_start_stack python3
+	run_restart_sidecar python3
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"python3 is required"* ]]
 	[ ! -s "$COMMAND_LOG" ]
-}
-
-@test "rejects a secret plan with an unsupported schema before looking up items" {
-	export PLAN_JSON='{"schema_version":2,"items":[]}'
-
-	run_start_stack
-
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"secret plan is invalid"* ]]
-	grep -q 'secret-plan' "$COMMAND_LOG"
-	! grep -q '^op' "$COMMAND_LOG"
-	! grep -q ' apply ' "$COMMAND_LOG"
-	! grep -q ' up ' "$COMMAND_LOG"
-}
-
-@test "rejects a secret plan from a different bootstrap manifest" {
-	export PLAN_JSON="$(valid_secret_plan | jq -c '.manifest_sha256 = (\"0\" * 64)')"
-
-	run_start_stack
-
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"secret plan is invalid"* ]]
-	! grep -q '^op' "$COMMAND_LOG"
-	! grep -q ' apply ' "$COMMAND_LOG"
-}
-
-@test "rejects malformed duplicate and wrong-count secret plans before looking up items" {
-	export PLAN_JSON='{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[]}]}'
-	assert_plan_rejected_before_secret_lookup
-
-	export PLAN_JSON='{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]}]}'
-	assert_plan_rejected_before_secret_lookup
-
-	export PLAN_JSON='{"schema_version":1,"items":[]}'
-	assert_plan_rejected_before_secret_lookup
-}
-
-@test "rejects two valid secret-plan documents without looking up items or applying" {
-	valid_plan="$(valid_secret_plan)"
-	export PLAN_JSON="$valid_plan
-$valid_plan"
-
-	assert_plan_rejected_before_secret_lookup
-}
-
-@test "rejects a valid secret plan followed by garbage without looking up items or applying" {
-	export PLAN_JSON="$(valid_secret_plan)
-trailing-garbage"
-
-	assert_plan_rejected_before_secret_lookup
-}
-
-@test "propagates an op failure, closes the apply stream, and does not recreate services" {
-	export OP_FAIL_ITEM='Rick'
-	export BOOTSTRAP_STATUS=2
-
-	run_start_stack
-
-	[ "$status" -eq 1 ]
-	grep -q '<Rick>' "$COMMAND_LOG"
-	grep -q '<apply>' "$COMMAND_LOG"
-	! grep -q '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
-	! grep -q '"type":"end"' "$PAYLOAD_CAPTURE"
-	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
-		false
-	fi
-	[[ "$output" != *"$SECRET_MARKER"* ]]
-}
-
-@test "recovers the existing Hermes runtime while preserving bootstrap migration exit five" {
-	export BOOTSTRAP_STATUS=5
-
-	run_start_stack
-
-	[ "$status" -eq 5 ]
-	grep -q '<apply>' "$COMMAND_LOG"
-	assert_log_order '<ps> <--all> <--services> <hermes>' '<stop> <hermes>' '<apply>' '<start>' '<http://127.0.0.1:9119/api/health>'
-	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 1 ]
-	! grep -q '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
-	! grep -q '<Hermes X API MCP>' "$COMMAND_LOG"
-	! grep -q '<ps> <--all>$' "$COMMAND_LOG"
-	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
-	[[ "$output" != *"$SECRET_MARKER"* ]]
-}
-
-@test "preserves a typed bootstrap exit when the apply consumer closes stdin early" {
-	export BOOTSTRAP_STATUS=3
-	export BOOTSTRAP_EXIT_EARLY=1
-	export OP_DELAY_SECONDS=0.1
-
-	run_start_stack
-
-	[ "$status" -eq 3 ]
-	grep -q '<apply>' "$COMMAND_LOG"
-	assert_log_order '<ps> <--all> <--services> <hermes>' '<stop> <hermes>' '<apply>' '<start>' '<http://127.0.0.1:9119/api/health>'
-	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 1 ]
-	! grep -q '<up> <-d> <--force-recreate>' "$COMMAND_LOG"
-	! grep -q '<Hermes X API MCP>' "$COMMAND_LOG"
-	! grep -q '<ps> <--all>$' "$COMMAND_LOG"
-	[[ "$output" != *"$SECRET_MARKER"* ]]
-}
-
-@test "does not create a Hermes runtime after bootstrap failure when none existed" {
-	export BOOTSTRAP_STATUS=5
-	export HERMES_RUNTIME_EXISTS=0
-
-	run_start_stack
-
-	[ "$status" -eq 5 ]
-	grep -q '<ps> <--all> <--services> <hermes>' "$COMMAND_LOG"
-	grep -q '<ps> <--all>$' "$COMMAND_LOG"
-	! grep -q '<start>' "$COMMAND_LOG"
-	! grep -q '<up>' "$COMMAND_LOG"
-	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 0 ]
-}
-
-@test "recovers the existing Hermes runtime when recreated stack startup fails" {
-	export UP_STATUS=42
-
-	run_start_stack
-
-	[ "$status" -eq 42 ]
-	assert_log_order '<stop> <hermes>' '<apply>' '<up> <-d> <--force-recreate>' '<start>' '<http://127.0.0.1:9119/api/health>'
-}
-
-@test "does not expose secret payload records when the caller enables xtrace" {
-	run env DOTFILES_TEST_MISSING_COMMAND="" bash -x -c '
-set -euo pipefail
-. "$REPO_ROOT/scripts/sh/install-common.sh"
-. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-dotfiles_hermes_start_stack docker "$COMPOSE_FILE"
-'
-
-	[ "$status" -eq 0 ]
-	grep -q "$SECRET_MARKER" "$PAYLOAD_CAPTURE"
-	[[ "$output" != *"$SECRET_MARKER"* ]]
-	[[ "$output" != *'service-account-token'* ]]
-}
-
-@test "streams an ordered versioned payload and recreates services after success" {
-	run_start_stack
-
-	[ "$status" -eq 0 ]
-	assert_log_order '<config> <--quiet>' '<build> <--pull> <hermes> <hermes-bootstrap> <chromium> <xapi-mcp>' '<stop> <hermes>' '<secret-plan>' '<apply>' '<Hermes Agent Dashboard>' '<GitHubUsedOpenClawPAT>' '<Google Calendar MCP>' '<xAI-Grok-Twitter>' '<Master>' '<Rick>' '<Hoffman>' '<RisaRisa>' '<Nancy>' '<Kuroda>' '<Shiraishi>' '<Hermes X API MCP>' '<up> <-d> <--force-recreate> <hermes> <chromium> <browser-mcp> <xapi-mcp>' '<http://127.0.0.1:9119/api/health>' '<image> <prune> <--force>'
-	mapfile -t records < <("$REAL_JQ" -r '.type + ":" + (.key // "")' "$PAYLOAD_CAPTURE")
-	[ "${records[*]}" = 'header: item:dashboard item:github item:google_calendar item:xai_grok item:discord_default item:discord_rick item:discord_hoffman item:discord_risarisa item:discord_nancy item:discord_kuroda item:discord_shiraishi end:' ]
-	"$REAL_JQ" -e -c 'select(.type == "item") | .item.id == "item-id"' "$PAYLOAD_CAPTURE" >/dev/null
-	! grep -q "$SECRET_MARKER" "$COMMAND_LOG"
-	[[ "$output" != *"$SECRET_MARKER"* ]]
-}
-
-@test "waits for the Hermes API to become ready before reporting success" {
-	export API_READY_AFTER=3
-
-	run_start_stack
-
-	[ "$status" -eq 0 ]
-	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 3 ]
-	[ "$(grep -c '<http://127.0.0.1:9119/api/health>' "$COMMAND_LOG")" -eq 3 ]
-	grep -q '<http://127.0.0.1:9119/api/health>' "$COMMAND_LOG"
-	[ "$(grep -c '^sleep <0>$' "$COMMAND_LOG")" -eq 2 ]
-	assert_log_order '<up> <-d> <--force-recreate>' '<http://127.0.0.1:9119/api/health>' '<image> <prune> <--force>'
-	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
-		false
-	fi
-	[[ "$output" != *"$SECRET_MARKER"* ]]
-}
-
-@test "converges Hermes gateways after API readiness before pruning images" {
-	local api_ready convergence image_prune
-	api_ready='curl <--fail> <--silent> <--show-error> <--max-time> <1> <http://127.0.0.1:9119/api/health>'
-	convergence="docker <compose> <-f> <$COMPOSE_FILE> <exec> <-T> <hermes> </usr/local/bin/hermes-gateway-converge>"
-	image_prune='docker <image> <prune> <--force>'
-
-	run_start_stack
-
-	[ "$status" -eq 0 ]
-	grep -Fxq "$convergence" "$COMMAND_LOG"
-	assert_log_order_fixed "$api_ready" "$convergence" "$image_prune"
-}
-
-@test "returns the gateway convergence status with diagnostics without pruning images" {
-	local convergence diagnostics
-	convergence="docker <compose> <-f> <$COMPOSE_FILE> <exec> <-T> <hermes> </usr/local/bin/hermes-gateway-converge>"
-	diagnostics="docker <compose> <-f> <$COMPOSE_FILE> <ps> <--all>"
-	export HERMES_GATEWAY_CONVERGENCE_STATUS=47
-
-	run_start_stack
-
-	[ "$status" -eq 47 ]
-	assert_log_order_fixed "$convergence" "$diagnostics"
-	! grep -q '<image> <prune> <--force>' "$COMMAND_LOG"
-}
-
-@test "keeps successful Hermes activation when dangling image cleanup fails" {
-	export IMAGE_PRUNE_STATUS=1
-
-	run_start_stack
-
-	[ "$status" -eq 0 ]
-	grep -q '<image> <prune> <--force>' "$COMMAND_LOG"
-	[[ "$output" == *"Warning: unable to remove dangling Docker images."* ]]
-}
-
-@test "fails after bounded Hermes API readiness attempts with redacted diagnostics" {
-	export API_READY_AFTER=99
-	export HERMES_API_READY_ATTEMPTS=3
-
-	run_start_stack
-
-	[ "$status" -ne 0 ]
-	[ "$(cat "$READY_ATTEMPT_FILE")" -eq 3 ]
-	[ "$(grep -c '^sleep <0>$' "$COMMAND_LOG")" -eq 2 ]
-	grep -q '<ps> <--all>' "$COMMAND_LOG"
-	! grep -q '<image> <prune> <--force>' "$COMMAND_LOG"
-	[[ "$output" == *"Hermes Desktop backend did not become ready after 3 attempts."* ]]
-	if grep -q "$SECRET_MARKER" "$COMMAND_LOG"; then
-		false
-	fi
-	[[ "$output" != *"$SECRET_MARKER"* ]]
-}
-
-@test "forwards Docker calls through a function runner and retains host runtime paths" {
-	local convergence
-	convergence="runner <compose> <-f> <$COMPOSE_FILE> <exec> <-T> <hermes> </usr/local/bin/hermes-gateway-converge>"
-
-	run_start_stack_with_function_runner
-
-	[ "$status" -eq 0 ]
-	grep -q '^runner <compose> <-f> <' "$COMMAND_LOG"
-	grep -Fxq "$convergence" "$COMMAND_LOG"
-	[ -d "$TEST_HOME/.hermes/.xurl" ]
-	[ -d "$TEST_HOME/.hermes/.browser" ]
-}
-
-@test "removes host writers for dashboard messaging model profile and env content" {
-	run bash -c '
-set -euo pipefail
-. "$REPO_ROOT/scripts/sh/install-common.sh"
-. "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-for function_name in \
-  dotfiles_hermes_ensure_dashboard_auth \
-  dotfiles_hermes_ensure_slack_environment \
-  dotfiles_hermes_ensure_runtime_configuration \
-  dotfiles_hermes_write_dashboard_auth \
-  dotfiles_hermes_write_slack_environment; do
-  ! declare -F "$function_name" >/dev/null
-done
-'
-
-	[ "$status" -eq 0 ]
 }

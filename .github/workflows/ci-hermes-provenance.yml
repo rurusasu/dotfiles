@@ -13,7 +13,7 @@ on:
       - "docker/hermes-browser-mcp/**"
       - "docker/hermes-xapi-mcp/**"
       - "docker/local-ai-services/**"
-      - "scripts/sh/hermes-agent.sh"
+      - "scripts/sh/hermes-sidecar-common.sh"
       - "scripts/powershell/handlers/Handler.HermesAgent.ps1"
       - "tests/python/test_xapi_image_contract.py"
       - "taskfiles/hermes/taskfile.yml"

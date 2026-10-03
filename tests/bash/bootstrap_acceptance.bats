@@ -123,7 +123,7 @@ set -euo pipefail
 command -v op
 export PATH="$DOTFILES_ACCEPTANCE_REPO_ROOT/activated/bin:$PATH"
 . "$DOTFILES_ACCEPTANCE_REPO_ROOT/scripts/sh/install-common.sh"
-. "$DOTFILES_ACCEPTANCE_REPO_ROOT/scripts/sh/hermes-agent.sh"
+. "$DOTFILES_ACCEPTANCE_REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
 [[ $(dotfiles_hermes_op_command) == "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/op" ]]
 cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bootstrap-compose.yml" \
 	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-service/compose.yml"
@@ -144,7 +144,7 @@ EOF
 	chmod +x "$test_root/install.sh"
 	mkdir -p "$test_root/scripts/sh"
 	cp "$REPO_ROOT/scripts/sh/install-common.sh" "$test_root/scripts/sh/install-common.sh"
-	cp "$REPO_ROOT/scripts/sh/hermes-agent.sh" "$test_root/scripts/sh/hermes-agent.sh"
+	cp "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh" "$test_root/scripts/sh/hermes-sidecar-common.sh"
 
 	run env \
 		DOTFILES_ACCEPTANCE_REPO_ROOT="$test_root" \

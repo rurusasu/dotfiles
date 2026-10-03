@@ -115,30 +115,31 @@ Linux/WSL and launchd on macOS. On Windows, `WithHermes` is routed through the
 configured NixOS WSL distribution; the Windows installer no longer starts a
 Docker-managed Hermes Agent. Native state remains at `~/.hermes`.
 
-The explicit legacy Docker Compose stack has separate ownership. Its sidecars
-and manually invoked container bootstrap continue to use the Docker named volume `hermes-data` (or
-the name selected by `HERMES_DATA_VOLUME`) mounted at `/opt/data`, not a Git
-checkout. Root and named-profile homes are applied from source repositories,
-while live secrets, memories, sessions, logs, and browser state remain local
-runtime data. Enabling the native service does not migrate, modify, or remove
-the existing Docker volume or its state. Any operator-led migration requires a
-verified backup and an explicit policy for resolving conflicting paths before
-data is copied; no automatic merge or precedence is defined.
+`docker/hermes-service/compose.yml` provides only Chromium, Browser MCP, and
+X API MCP sidecars. Browser state is bind-mounted from `~/.hermes/.browser`
+(or `HERMES_BROWSER_DATA_DIR`); X API credentials use `~/.hermes/.xurl`
+(or `HERMES_DATA_DIR/.xurl`). These sidecars do not mount `hermes-data`.
+The retired Docker Agent, Dashboard, container bootstrap, and Docker CLI
+adapters have no supported execution path. Existing Docker volumes are left
+untouched. Root and named-profile homes are applied by native bootstrap from
+source repositories; secrets, memories, sessions, and logs remain local runtime
+data. An operator-led migration requires a verified backup and an explicit
+policy for resolving conflicting paths before data is copied.
 
-| Owner                  | Source                                                                                    | Responsibility                                                                                 |
-| ---------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Dotfiles               | [rurusasu/dotfiles](https://github.com/rurusasu/dotfiles)                                 | Compose wiring, Docker bootstrap, manifest, host adapters, operator Taskfile and documentation |
-| Nix + Home Manager     | `flake.nix`, `nix/home/hermes-agent.nix`                                                  | Pinned CLI package and native gateway user service on macOS and Linux/WSL                      |
-| Root distribution      | [rurusasu/hermes-profile-alfred](https://github.com/rurusasu/hermes-profile-alfred)       | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks    |
-| Rick distribution      | [rurusasu/hermes-profile-rick](https://github.com/rurusasu/hermes-profile-rick)           | Official `distribution.yaml` and Rick declarative content                                      |
-| Hoffman distribution   | [rurusasu/hermes-profile-hoffman](https://github.com/rurusasu/hermes-profile-hoffman)     | Official `distribution.yaml` and Hoffman declarative content                                   |
-| Risarisa distribution  | [rurusasu/hermes-profile-risarisa](https://github.com/rurusasu/hermes-profile-risarisa)   | Official `distribution.yaml` and Risarisa declarative content                                  |
-| Nancy distribution     | [rurusasu/hermes-profile-nancy](https://github.com/rurusasu/hermes-profile-nancy)         | Official `distribution.yaml` and Nancy declarative content                                     |
-| Kuroda distribution    | [rurusasu/hermes-profile-kuroda](https://github.com/rurusasu/hermes-profile-kuroda)       | Official `distribution.yaml` and Kuroda declarative content                                    |
-| Shiraishi distribution | [rurusasu/hermes-profile-shiraishi](https://github.com/rurusasu/hermes-profile-shiraishi) | Official `distribution.yaml` and Shiraishi declarative content                                 |
-| Shared data            | [rurusasu/lifelog](https://github.com/rurusasu/lifelog)                                   | The one locked read-write checkout at `/opt/data/shared/lifelog`                               |
+| Owner                  | Source                                                                                    | Responsibility                                                                                         |
+| ---------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Dotfiles               | [rurusasu/dotfiles](https://github.com/rurusasu/dotfiles)                                 | Sidecar Compose wiring, native bootstrap, manifest, host adapters, operator Taskfile and documentation |
+| Nix + Home Manager     | `flake.nix`, `nix/home/hermes-agent.nix`                                                  | Pinned CLI package and native gateway user service on macOS and Linux/WSL                              |
+| Root distribution      | [rurusasu/hermes-profile-alfred](https://github.com/rurusasu/hermes-profile-alfred)       | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks            |
+| Rick distribution      | [rurusasu/hermes-profile-rick](https://github.com/rurusasu/hermes-profile-rick)           | Official `distribution.yaml` and Rick declarative content                                              |
+| Hoffman distribution   | [rurusasu/hermes-profile-hoffman](https://github.com/rurusasu/hermes-profile-hoffman)     | Official `distribution.yaml` and Hoffman declarative content                                           |
+| Risarisa distribution  | [rurusasu/hermes-profile-risarisa](https://github.com/rurusasu/hermes-profile-risarisa)   | Official `distribution.yaml` and Risarisa declarative content                                          |
+| Nancy distribution     | [rurusasu/hermes-profile-nancy](https://github.com/rurusasu/hermes-profile-nancy)         | Official `distribution.yaml` and Nancy declarative content                                             |
+| Kuroda distribution    | [rurusasu/hermes-profile-kuroda](https://github.com/rurusasu/hermes-profile-kuroda)       | Official `distribution.yaml` and Kuroda declarative content                                            |
+| Shiraishi distribution | [rurusasu/hermes-profile-shiraishi](https://github.com/rurusasu/hermes-profile-shiraishi) | Official `distribution.yaml` and Shiraishi declarative content                                         |
+| Shared data            | [rurusasu/lifelog](https://github.com/rurusasu/lifelog)                                   | The one locked read-write checkout at `${HERMES_HOME}/shared/lifelog`                                  |
 
-`/opt/data/shared/lifelog` is canonical; `/opt/data/core/lifelog` is unmanaged.
+`${HERMES_HOME}/shared/lifelog` is canonical; `${HERMES_HOME}/core/lifelog` is unmanaged.
 Bootstrap neither migrates nor deletes the old checkout. If it contains data,
 follow the [manual migration procedure](hermes-agent/bootstrap.md#shared-repository-layout-and-manual-migration)
 before running bootstrap, verifying that the canonical checkout retains local
@@ -160,10 +161,10 @@ are published only on host loopback `127.0.0.1:8888` and `127.0.0.1:9999`, and
 its embedded PostgreSQL is not published. Native Nix Hermes does not require
 Docker, MLflow, Ollama, or Hindsight to install or run; Hindsight memory is an
 optional integration selected separately (`-WithHindsight` on Windows).
-The explicit legacy Docker Hermes stack and Hindsight use the shared
-`local-ai-services` bridge network. That Compose startup prepares the memory
-network and service first, but their Compose lifecycles remain independent. If
-Hindsight is unavailable, memory recall/retain may be unavailable while the
+Hindsight and MLflow use the `local-ai-services` bridge network. Hermes browser
+and MCP sidecars use their separate `hermes-browser` network; native Hermes
+connects through host loopback endpoints. Their lifecycles remain independent.
+If Hindsight is unavailable, memory recall/retain may be unavailable while the
 Hermes gateway continues running.
 
 The onboarding fields, approved connection modes, MLflow operator tasks, and
