@@ -29,9 +29,11 @@ let
       };
       modules = [
         {
-          home.username = "test-user";
-          home.homeDirectory = homeDirectory;
-          home.stateVersion = "25.05";
+          home = {
+            username = "test-user";
+            inherit homeDirectory;
+            stateVersion = "25.05";
+          };
           # The upstream module closes over inputs.self for its package
           # default. Pin its supported package option here so evaluation uses
           # this local derivation without forcing the upstream Python package.
@@ -139,9 +141,7 @@ in
   };
 
   testDarwinHermesLaunchAgentUsesInjectedPackage = {
-    expr = builtins.elem "${darwin.testPackage}/bin/hermes" (
-      darwin.config.launchd.agents.hermes-agent.config.ProgramArguments
-    );
+    expr = builtins.elem "${darwin.testPackage}/bin/hermes" darwin.config.launchd.agents.hermes-agent.config.ProgramArguments;
     expected = true;
   };
 

@@ -8,7 +8,7 @@ let
   codexPackage = pkgs.hello;
   sets = import ../../packages/sets.nix {
     pkgs = catalogPkgs;
-    lib = pkgs.lib;
+    inherit (pkgs) lib;
     inherit codexPackage;
   };
 in
