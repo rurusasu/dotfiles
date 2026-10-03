@@ -23,6 +23,19 @@ in
     expected = true;
   };
 
+  testDarwinHostEntrypointImportsRequiredModules = {
+    expr =
+      let
+        imports = (import entrypoint { }).imports;
+      in
+      builtins.all (module: builtins.elem module imports) [
+        configuration
+        ../../../hosts/darwin/fonts.nix
+        ../../../hosts/darwin/system.nix
+      ];
+    expected = true;
+  };
+
   testDarwinFlakeConsumesHostDirectory = {
     expr =
       let
