@@ -236,7 +236,7 @@ def _git_environment(auth: GitAuth, askpass: Path) -> dict[str, str]:
             "GIT_NO_REPLACE_OBJECTS": "1",
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_CONFIG_COUNT": "4",
+            "GIT_CONFIG_COUNT": "5",
             "GIT_CONFIG_KEY_0": "credential.helper",
             "GIT_CONFIG_VALUE_0": "",
             "GIT_CONFIG_KEY_1": "core.hooksPath",
@@ -245,6 +245,10 @@ def _git_environment(auth: GitAuth, askpass: Path) -> dict[str, str]:
             "GIT_CONFIG_VALUE_2": "false",
             "GIT_CONFIG_KEY_3": "protocol.ext.allow",
             "GIT_CONFIG_VALUE_3": "never",
+            # Detached maintenance can mutate private Git metadata while its
+            # owner validates and removes the temporary repository.
+            "GIT_CONFIG_KEY_4": "maintenance.auto",
+            "GIT_CONFIG_VALUE_4": "false",
             "HERMES_BOOTSTRAP_GITHUB_TOKEN": auth.token,
         }
     )

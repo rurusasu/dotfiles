@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import errno
+import json
 import shutil
 import signal
 import stat
@@ -19,6 +20,7 @@ BOOTSTRAP_ROOT = Path(__file__).resolve().parents[3] / "scripts" / "python"
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
 from hermes_bootstrap.errors import RepositoryError
+from hermes_bootstrap.filesystem import create_private_directory
 from hermes_bootstrap.git import StagedSource, assert_safe_distribution_tree, stage_distribution
 import hermes_bootstrap.git as git_module
 from hermes_bootstrap.github import GitAuth
@@ -670,6 +672,33 @@ class GitStagingTests(unittest.TestCase):
         self.assertEqual(unrelated.wait(), 0)
         self.assert_proc_entries_disappear(direct_pid_file, descendant_pid_file)
 
+    def test_fetch_does_not_start_maintenance_before_private_repository_cleanup(self) -> None:
+        private = create_private_directory(self.root, prefix="git-private-")
+        environment = git_module._git_environment(auth(), self.root / "askpass")
+        trace = self.root / "git-trace.json"
+        environment["GIT_TRACE2_EVENT"] = str(trace)
+
+        self.assertIsNotNone(git_module._run_git(("init", "--quiet"), private.path, environment))
+        self.assertIsNotNone(
+            git_module._run_git(
+                ("fetch", "--no-tags", str(self.remote), "refs/heads/main"),
+                private.path,
+                environment,
+            )
+        )
+        children = [
+            event["argv"]
+            for line in trace.read_text(encoding="utf-8").splitlines()
+            if (event := json.loads(line)).get("event") == "child_start"
+        ]
+        self.assertTrue(children, "the real Git fetch must record its transport child")
+        self.assertFalse(
+            any("maintenance" in command or "gc" in command for command in children),
+            children,
+        )
+        self.assertTrue(private.cleanup())
+        self.assertFalse(private.path.exists())
+
     def test_git_environment_strips_inherited_control_and_askpass_settings(self) -> None:
         askpass = self.root / "askpass"
         inherited = {
@@ -691,7 +720,7 @@ class GitStagingTests(unittest.TestCase):
         self.assertEqual(environment["GIT_NO_REPLACE_OBJECTS"], "1")
         self.assertEqual(environment["GIT_CONFIG_NOSYSTEM"], "1")
         self.assertEqual(environment["GIT_CONFIG_GLOBAL"], os.devnull)
-        self.assertEqual(environment["GIT_CONFIG_COUNT"], "4")
+        self.assertEqual(environment["GIT_CONFIG_COUNT"], "5")
         self.assertEqual(environment["GIT_CONFIG_KEY_0"], "credential.helper")
         self.assertEqual(environment["GIT_CONFIG_VALUE_0"], "")
         self.assertEqual(environment["GIT_CONFIG_KEY_1"], "core.hooksPath")
@@ -700,6 +729,8 @@ class GitStagingTests(unittest.TestCase):
         self.assertEqual(environment["GIT_CONFIG_VALUE_2"], "false")
         self.assertEqual(environment["GIT_CONFIG_KEY_3"], "protocol.ext.allow")
         self.assertEqual(environment["GIT_CONFIG_VALUE_3"], "never")
+        self.assertEqual(environment["GIT_CONFIG_KEY_4"], "maintenance.auto")
+        self.assertEqual(environment["GIT_CONFIG_VALUE_4"], "false")
         self.assertEqual(environment["HERMES_BOOTSTRAP_GITHUB_TOKEN"], "git-token-marker")
         for key, value in inherited.items():
             if key in {
