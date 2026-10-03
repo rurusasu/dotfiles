@@ -4,6 +4,9 @@
 
 - `host/`: 共通システム設定
 - `wsl/`: WSL 固有調整
+- `fonts.nix`: Darwin / NixOS 共通のフォントパッケージと fontconfig の既定フォント
+- `nvim/`: Darwin / NixOS の Home Manager に読み込む Neovim とプラグインの設定
+- `darwin/`, `nixos/`: OS 固有の option と共通 module の読み込み
 
 ## ルール
 

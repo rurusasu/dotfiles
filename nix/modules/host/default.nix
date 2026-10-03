@@ -19,6 +19,8 @@ let
   };
 in
 {
+  imports = [ ../nixos ];
+
   options.mySettings.wsl.dockerDesktopIntegration = mkOption {
     type = types.bool;
     default = false;
@@ -51,10 +53,6 @@ in
       };
 
       nixpkgs.config.allowUnfree = true;
-      fonts = {
-        fontconfig.enable = true;
-        packages = sets.fonts;
-      };
       programs.zsh.enable = true;
 
       programs.git = {

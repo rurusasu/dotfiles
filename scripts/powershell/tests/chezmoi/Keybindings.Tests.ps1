@@ -391,7 +391,7 @@ Describe '標準キーバインド方針' {
 
     It 'Unix/Linux/WSL の tmux と Neovim は Ctrl+H/J/K/L focus を維持すること' {
         $tmux = (Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "dot_tmux.conf") -Raw) -replace "\r\n?", "`n"
-        $nvim = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "dot_config/nvim/lua/config/keymaps.lua") -Raw
+        $nvim = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "../nix/modules/nvim/lua/config/keymaps.lua") -Raw
 
         $tmux | Should -Match '(?m)^set -g prefix C-Space$'
         $tmux | Should -Match '(?m)^bind C-Space send-prefix$'

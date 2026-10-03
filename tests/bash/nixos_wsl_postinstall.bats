@@ -14,6 +14,7 @@ setup() {
 	NIX_EVAL_CAPTURE="$BATS_TEST_TMPDIR/nix-eval.result"
 	DOTFILES_STATE_DIR="$BATS_TEST_TMPDIR/state"
 	REAL_NIX="$(command -v nix || true)"
+	REAL_GIT="$(command -v git)"
 
 	mkdir -p "$USER_HOME" "$STUB_BIN"
 	SYNC_SOURCE="$(cd "$SYNC_SOURCE" && pwd -P)"
@@ -133,7 +134,7 @@ fi
 }
 
 @test "NixOS WSL rebuild helper is executable for direct shell aliases" {
-  run git -C "$REPO_ROOT" ls-files --stage -- scripts/sh/nixos-rebuild-with-user.sh
+  run "$REAL_GIT" -C "$REPO_ROOT" ls-files --stage -- scripts/sh/nixos-rebuild-with-user.sh
   [ "$status" -eq 0 ]
   [[ "$output" =~ ^100755[[:space:]] ]]
 }

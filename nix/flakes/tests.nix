@@ -8,7 +8,7 @@
       aerospace-workspace-cycle = import ../tests/build/aerospace-cycle.nix { inherit pkgs; };
       ghostty-config = import ../tests/build/ghostty-config.nix { inherit pkgs; };
       custom-package-builds = import ../tests/build/custom-packages.nix { inherit pkgs; };
-      neovim-native = import ../tests/build/neovim.nix { inherit pkgs; };
+      neovim-native = import ../tests/build/neovim.nix { inherit inputs pkgs; };
       hermes-bootstrap-tests = import ../tests/build/hermes-bootstrap-tests.nix { inherit inputs pkgs; };
     }
     // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
@@ -73,7 +73,7 @@
       // (import ../tests/unit/package-catalog-ollama-windows-policy.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-playwright-feature.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-required-provider-reasons.nix { inherit inputs; })
-      // (import ../tests/unit/package-catalog-tart-minimal.nix { inherit inputs; })
+      // (import ../tests/unit/package-catalog-tart.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-nodejs-selection.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-windows-only-selection.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-windows-only-support.nix { inherit inputs; })

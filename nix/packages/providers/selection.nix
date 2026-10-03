@@ -65,9 +65,9 @@ let
   darwinHomePackagesForInstallFeatures =
     enabledFeatures:
     if pkgs.stdenv.hostPlatform.isDarwin then
-      resolveForInstallFeaturesWhere enabledFeatures (
-        entry: !isDarwinGuiNixPackage entry && entry.category != "fonts"
-      ) (lib.attrNames catalog)
+      resolveForInstallFeaturesWhere enabledFeatures (entry: !isDarwinGuiNixPackage entry) (
+        lib.attrNames catalog
+      )
     else
       [ ];
 
@@ -137,16 +137,6 @@ let
 in
 lib.mapAttrs (_: resolve) grouped
 // {
-  # Tart guests intentionally receive only the requested CLI tools. WezTerm is
-  # installed as a macOS cask because its Nix package is unavailable on Darwin.
-  tartMinimal = resolve [
-    "git"
-    "chezmoi"
-    "neovim"
-    # Codex is installed from npm after the Nix profile is activated.
-    "nodejs"
-  ];
-
   # All packages (flat list)
   all = resolveForInstallFeatures null (lib.attrNames catalog);
   allForInstallFeatures =

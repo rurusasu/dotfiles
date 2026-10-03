@@ -68,7 +68,7 @@ apply_checkout() {
     [[ -x $APPLY_COMMAND ]] || die "Apply command is not executable: $APPLY_COMMAND"
     "$APPLY_COMMAND" "$CHECKOUT"
   else
-    "$CHECKOUT/scripts/sh/install-tart-guest.sh" "$CHECKOUT"
+    "$CHECKOUT/install.sh"
   fi
 }
 

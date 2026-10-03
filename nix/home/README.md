@@ -2,12 +2,13 @@
 
 `nix/home/` はユーザー単位の Home Manager 設定です。
 
-| 入口         | 内容           |
-| ------------ | -------------- |
-| `darwin.nix` | macOS 固有設定 |
-| `linux.nix`  | Linux 固有設定 |
-| `wsl.nix`    | WSL 固有設定   |
-| `common.nix` | 共通設定       |
+| 入口         | 内容                                        |
+| ------------ | ------------------------------------------- |
+| `darwin.nix` | macOS 固有設定                              |
+| `linux.nix`  | Linux 固有設定                              |
+| `wsl.nix`    | WSL 固有設定                                |
+| `nixos.nix`  | native NixOS / WSL 共通の Home Manager 設定 |
+| `common.nix` | 共通設定                                    |
 
 ## import 方向
 
@@ -17,6 +18,7 @@ caller -> <os>.nix -> common.nix
 
 - caller は対象 OS のファイルだけを import する。
 - 各 OS ファイルは `./common.nix` を import する。
+- Neovim は `darwin.nix` と `nixos.nix` が `../modules/nvim` を import する。`linux.nix` と `wsl.nix` は `nixos.nix` を経由する。
 - `common.nix` から OS 固有ファイルを import しない。
 - `default.nix` と `users.nix` は作らない。入口と OS 依存方向を曖昧にするため。
 

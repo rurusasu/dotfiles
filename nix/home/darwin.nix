@@ -12,6 +12,7 @@ let
 in
 {
   imports = [
+    ../modules/nvim
     ./common.nix
     ./hermes-agent.nix
   ];
@@ -19,7 +20,7 @@ in
   # macOS installs the WezTerm GUI through Homebrew, so add its Nix terminfo
   # output separately for shells and tools that resolve TERM=wezterm.
   home.packages = lib.unique (
-    sets.darwinHomePackagesForInstallFeatures installFeatures
+    (lib.remove pkgs.neovim (sets.darwinHomePackagesForInstallFeatures installFeatures))
     ++ [
       pkgs.coreutils
       pkgs.wezterm.terminfo

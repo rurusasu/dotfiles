@@ -78,9 +78,10 @@ class NativeCiContractTests(unittest.TestCase):
         self.assertEqual(len(commands), 1)
         command = commands[0]
         self.assertEqual(
-            command[:3],
-            ["nix", "build", ".#checks.aarch64-darwin.hermes-bootstrap-tests"],
+            command[:2],
+            ["nix", "build"],
         )
+        self.assertEqual(command.count(".#checks.aarch64-darwin.hermes-bootstrap-tests"), 1)
         self.assertIn("--no-link", command)
         self.assertIn("--print-build-logs", command)
         options = [
@@ -109,26 +110,18 @@ class NativeCiContractTests(unittest.TestCase):
                     if ".#checks.aarch64-darwin.hermes-bootstrap-tests"
                     in step.get("run", "")
                 )
-                lines = step["run"].splitlines()
-                start = next(
-                    i
-                    for i, line in enumerate(lines)
-                    if ".#checks.aarch64-darwin.hermes-bootstrap-tests" in line
-                )
-                command = "\n".join(lines[start : start + 3])
+                command = step["run"]
                 if mutation == "duplicate":
-                    lines[start:start] = lines[start : start + 3]
+                    step["run"] = command + "\n" + command
                 else:
                     option = (
                         "extra-substituters"
                         if mutation == "substituter"
                         else "extra-trusted-public-keys"
                     )
-                    modified = command.replace(
+                    step["run"] = command.replace(
                         f"--option {option} ", "--removed-option "
                     )
-                    lines[start : start + 3] = modified.splitlines()
-                step["run"] = "\n".join(lines)
                 with mock.patch.object(self, "workflow", return_value=workflow):
                     with self.assertRaises(AssertionError):
                         self.test_existing_darwin_job_executes_native_hermes_check_with_its_cache()

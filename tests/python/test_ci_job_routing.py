@@ -59,6 +59,28 @@ class CiJobRoutingTests(unittest.TestCase):
     def test_bash_test_selects_contracts_without_container_builds(self) -> None:
         self.assertEqual(self.selected("tests/bash/example.bats"), {"python", "bash"})
 
+    def test_installer_bash_suites_do_not_start_devcontainer_e2e(self) -> None:
+        for path in ("tests/bash/install_linux.bats", "tests/bash/install_macos.bats"):
+            with self.subTest(path=path):
+                self.assertEqual(self.selected(path), {"python", "bash"})
+
+    def test_bootstrap_tools_image_changes_select_the_linux_consumers(self) -> None:
+        for path in (
+            "docker/bootstrap-ci-tools/Dockerfile",
+            "docker/bootstrap-ci-tools/check.sh",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    self.selected(path, manifest=BOOTSTRAP),
+                    {"linux", "wsl", "nix", "contract"},
+                )
+
+    def test_bootstrap_tools_documentation_does_not_start_image_builds(self) -> None:
+        self.assertEqual(
+            self.selected("docker/bootstrap-ci-tools/README.md", manifest=BOOTSTRAP),
+            {"contract"},
+        )
+
     def test_pnpm_global_runtime_test_routes_linux_bootstrap_e2e(self) -> None:
         for path in (
             "chezmoi/.chezmoiscripts/run_onchange_install-pnpm-global.sh.tmpl",
@@ -272,6 +294,43 @@ class CiJobRoutingTests(unittest.TestCase):
             ({"CHANGES_RESULT": "failure"}, 1),
             ({"LINUX_REQUIRED": "true"}, 1),
             ({"NIX_REQUIRED": "true"}, 1),
+            ({"BASH_REQUIRED": "true"}, 1),
+            ({"BASH_REQUIRED": "true", "BASH_RESULT": "failure"}, 1),
+            ({"BASH_REQUIRED": "true", "BASH_RESULT": "cancelled"}, 1),
+            ({"BASH_REQUIRED": "true", "BASH_RESULT": "success"}, 0),
+            ({"BASH_RESULT": "success"}, 1),
+            (
+                {
+                    "TOOLS_REQUIRED": "true",
+                    "TOOLS_RESULT": "success",
+                    "NIX_REQUIRED": "true",
+                    "NIX_RESULT": "success",
+                    "LINUX_BUILD_REQUIRED": "true",
+                    "LINUX_BUILD_RESULT": "success",
+                },
+                0,
+            ),
+            (
+                {
+                    "TOOLS_REQUIRED": "true",
+                    "TOOLS_RESULT": "success",
+                    "NIX_REQUIRED": "true",
+                    "NIX_RESULT": "failure",
+                    "LINUX_BUILD_REQUIRED": "true",
+                    "LINUX_BUILD_RESULT": "success",
+                },
+                1,
+            ),
+            (
+                {
+                    "TOOLS_REQUIRED": "true",
+                    "TOOLS_RESULT": "success",
+                    "NIX_REQUIRED": "true",
+                    "NIX_RESULT": "success",
+                    "LINUX_BUILD_REQUIRED": "true",
+                },
+                1,
+            ),
             ({"DARWIN_RESULT": "success"}, 1),
         ):
             with self.subTest(changes=changes):

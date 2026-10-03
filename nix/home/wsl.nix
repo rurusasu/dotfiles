@@ -9,22 +9,28 @@ let
   sets = import ../packages/sets.nix {
     inherit pkgs lib;
   };
+  fonts = (import ../modules/fonts.nix { inherit pkgs; }).fonts;
 in
 {
   home.homeDirectory = lib.mkDefault "/home/${config.home.username}";
 
   imports = [
+    ./nixos.nix
     ./common.nix
     ./hermes-agent.nix
   ];
 
-  home.packages = sets.allWithout (
-    sets.nativeDesktopPackageNames
-    ++ [
-      "discord"
-      "ollama"
-    ]
-  );
+  home.packages =
+    sets.allWithout (
+      sets.nativeDesktopPackageNames
+      ++ [
+        "discord"
+        "neovim"
+        "ollama"
+      ]
+    )
+    ++ fonts.packages;
+  fonts.fontconfig = fonts.fontconfig;
 
   # Exclude WSL mount paths from zoxide's database to avoid indexing
   # temporary runtime files under /mnt/wsl/ and /mnt/wslg/.

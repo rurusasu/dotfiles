@@ -83,6 +83,42 @@ let
     };
 in
 {
+  testNeovimHomeManagerOwnership = {
+    expr =
+      builtins.map
+        (
+          home:
+          let
+            cfg = home.config.programs.neovim;
+          in
+          {
+            enabled = cfg.enable;
+            sideloadInit = cfg.sideloadInitLua;
+            packageCopies = builtins.length (
+              builtins.filter (package: package.drvPath == cfg.finalPackage.drvPath) home.config.home.packages
+            );
+            basePackageInstalled = builtins.any (
+              package: package.drvPath == home.pkgs.neovim.drvPath
+            ) home.config.home.packages;
+            writesInit = home.config.xdg.configFile."nvim/init.lua".enable or false;
+            pluginData = home.config.xdg.dataFile."nvim/site/pack/hm".enable;
+          }
+        )
+        [
+          linux
+          wsl
+          darwin
+        ];
+    expected = builtins.genList (_: {
+      enabled = true;
+      sideloadInit = false;
+      packageCopies = 1;
+      basePackageInstalled = false;
+      writesInit = true;
+      pluginData = true;
+    }) 3;
+  };
+
   testHeadlessHomesDoNotEnableNativeCompositor = {
     expr =
       map
@@ -177,6 +213,7 @@ in
               sets.nativeDesktopPackageNames
               ++ [
                 "discord"
+                "neovim"
                 "ollama"
               ]
             )

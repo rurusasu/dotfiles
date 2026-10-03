@@ -1,12 +1,11 @@
 -- Uses already-installed upstream configs and real language servers, without lazy.nvim.
 -- DOTFILES_NVIM_LSPCONFIG selects an explicit checkout for CI or local testing.
-local root = vim.fn.getcwd() .. "/chezmoi/dot_config/nvim"
+local root = vim.fn.getcwd() .. "/nix/modules/nvim"
 local upstream = assert(vim.env.DOTFILES_NVIM_LSPCONFIG, "set DOTFILES_NVIM_LSPCONFIG")
 local ts_server = vim.env.DOTFILES_NVIM_TS_SERVER or "tsc"
 assert(ts_server == "tsc" or ts_server == "ts_ls")
 vim.opt.rtp:prepend(upstream)
 vim.opt.rtp:prepend(root)
-vim.opt.rtp:append(root .. "/after")
 vim.cmd("filetype plugin indent on")
 require("config.completion").setup()
 local lsp = require("config.lsp")

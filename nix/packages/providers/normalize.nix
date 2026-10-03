@@ -41,7 +41,6 @@ let
       "tmux"
       "treefmt"
       "trivy"
-      "udev-gothic-nf"
       "unzip"
       "workmux"
     ] (_: "No reviewed Windows package provider is selected");

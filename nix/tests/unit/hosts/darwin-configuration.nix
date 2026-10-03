@@ -160,10 +160,26 @@ in
     expr = {
       fontPackage = builtins.any (name: hasPrefix "udev-gothic-nf" name) (homePackageNames defaultHome);
       fontActivation = builtins.hasAttr "installDotfilesFonts" defaultHome.home.activation;
+      fontconfig = defaultHome.fonts.fontconfig.enable;
+      defaultFonts = {
+        inherit (defaultHome.fonts.fontconfig.defaultFonts)
+          monospace
+          sansSerif
+          serif
+          emoji
+          ;
+      };
     };
     expected = {
       fontPackage = false;
       fontActivation = false;
+      fontconfig = true;
+      defaultFonts = {
+        monospace = [ "UDEV Gothic NF" ];
+        sansSerif = [ "UDEV Gothic NF" ];
+        serif = [ "UDEV Gothic NF" ];
+        emoji = [ "Noto Color Emoji" ];
+      };
     };
   };
 

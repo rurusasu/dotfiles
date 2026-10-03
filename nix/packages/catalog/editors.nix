@@ -2,7 +2,7 @@
 { pkgs, ... }:
 {
   neovim = {
-    pkg = pkgs.callPackage ../neovim { };
+    pkg = pkgs.neovim;
     winget = "Neovim.Neovim";
     category = "editors";
   };
