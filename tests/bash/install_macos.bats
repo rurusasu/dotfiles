@@ -9,7 +9,6 @@ setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 	INSTALLER="$REPO_ROOT/scripts/sh/install-macos.sh"
 	COMMON_INSTALLER="$REPO_ROOT/scripts/sh/install-common.sh"
-	HERMES_INSTALLER="$REPO_ROOT/scripts/sh/hermes-agent.sh"
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
@@ -276,11 +275,6 @@ printf "task %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
   *" darwin:install "*) exec "$REAL_TASK" "$@" ;;
   *" hermes:desktop:install "*) exit "${HERMES_DESKTOP_INSTALL_STATUS:-0}" ;;
-  *" hermes:bootstrap "*)
-    source "$REPO_ROOT/scripts/sh/install-common.sh"
-    source "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-    dotfiles_hermes_start_stack docker "$REPO_ROOT/docker/hermes-service/compose.yml"
-    ;;
 esac
 '
 	export DOTFILES_TASK_COMMAND="$STUB_BIN/task"
@@ -1878,7 +1872,6 @@ printf "%s\n" "$DOCKER_APP"
 	cp "$COMMON_INSTALLER" "$HOME/.dotfiles/scripts/sh/install-common.sh"
 	cp "$REPO_ROOT/scripts/sh/codex-npm.sh" "$HOME/.dotfiles/scripts/sh/codex-npm.sh"
 	cp "$REPO_ROOT/scripts/sh/install-display.sh" "$HOME/.dotfiles/scripts/sh/install-display.sh"
-	cp "$HERMES_INSTALLER" "$HOME/.dotfiles/scripts/sh/hermes-agent.sh"
 	cp "$REPO_ROOT/Taskfile.yml" "$HOME/.dotfiles/Taskfile.yml"
 	cp -R "$REPO_ROOT/taskfiles" "$HOME/.dotfiles/taskfiles"
 	touch \

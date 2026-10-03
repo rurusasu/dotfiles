@@ -98,8 +98,9 @@ Homebrew formula/cask を管理します。Home Manager と chezmoi も同じコ
 `--with-hermes` の macOS 構成では、Hermes Desktop は公式 Homebrew Cask
 `hermes-desktop` として nix-homebrew から導入され、Agent CLI と gateway は
 Nix/Home Manager が管理する native per-user service として起動します。
-Docker Compose の Agent/Dashboard は既存環境向けの明示的な legacy runtime であり、
-標準セットアップでは起動しません。Hermes の設定や runtime state は Nix store
+Docker Compose は Chromium / Browser MCP / X API MCP の sidecar を提供します。
+旧 Docker Agent / Dashboard とその bootstrap の実行経路は削除済みです。
+既存の Docker volume は変更せず、Hermes の設定や runtime state は Nix store
 に保存しません。
 
 詳細は [Hermes Desktop の運用](./docs/hermes-agent/desktop.md) を参照してください。

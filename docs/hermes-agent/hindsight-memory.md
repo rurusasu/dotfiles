@@ -64,12 +64,40 @@ task hindsight:up
 `${HINDSIGHT_DATA_DIR:-~/.local/share/hindsight}/pg0` と `cache` を作成してから
 Hindsight だけを起動します。Hermes の起動・停止は行いません。
 
-旧構成の `${HERMES_DATA_DIR:-~/.hermes}/hindsight` が存在し、新しい保存先にまだ
-メモリがない場合、初回起動は旧 `hermes-hindsight` container を停止し、旧 `pg0` と
-`cache` を staging 経由で新しい保存先へコピーしてから旧 container を削除します。
-コピー元は rollback 用に残し、新保存先の marker により2回目以降は移行を
-繰り返しません。旧保存先と新保存先の両方にデータがある場合は自動上書きや併合を
-せず、起動前に明示的に失敗します。受入検証の state/evidence は移行対象外です。
+旧 Hermes Compose の `hermes-hindsight` と
+`${HERMES_DATA_DIR:-~/.hermes}/hindsight` を使う構成のサポートは終了しています。
+通常の起動は現行 `HINDSIGHT_DATA_DIR` だけを使用します。旧保存先のコピー、
+`.legacy-migration-source` marker の作成・参照、旧 container の停止・削除・
+障害時復旧は行いません。以前の marker が残っていても起動には影響せず、
+旧データや marker を自動削除しません。起動や API/DB readiness の確認が失敗した場合は
+現行 Hindsight の停止を試み、失敗を返します。現行データの退避・移動は行いません。
+
+## Manual migration from the retired Hermes service
+
+旧保存先にだけ記憶がある端末では、通常起動の前に管理者が手動移行します。
+現行データがすでにある場合は上書き・併合せず、使用する database を選び、
+両方を別々に backup してください。稼働中の database のファイルはコピーしません。
+
+1. 旧 container の mount から実際の保存先を確認します。
+   `docker container inspect hermes-hindsight --format '{{json .Mounts}}'` と
+   `HERMES_DATA_DIR`、`HINDSIGHT_DATA_DIR` の設定を照合し、両方が同じ保存先を
+   指していないことを確認します。旧 container が存在しない場合も旧保存先を確認します。
+2. 旧 container が稼働していれば `docker stop hermes-hindsight` を実行し、
+   現行側は `task hindsight:down` で停止します。ほかに同じ database を使う
+   container がないことを確認し、両方の writer が停止してから次へ進みます。
+3. このページの Backup / Restore と同じ境界で、旧保存先の `pg0` と `cache` だけを
+   所有者・アクセス制御を維持して backup します。復元先は空の現行保存先にし、
+   Bash では `cp -a`、Windows では所有者・ACL を保持できる backup/restore ツールで
+   この二つだけをコピーします。profile 設定や acceptance の state/evidence はコピー
+   しません。旧原本は残し、marker の新規作成は不要です。
+4. database を作成した Hindsight version と現行の固定 image の互換性を確認してから
+   `task hindsight:up` を実行します。`task hindsight:verify` で API/DB health を確認し、
+   既存 bank の記憶を読み取り確認します。必要に応じて
+   `task hermes:memory:verify` で persistence を含む受入検証も実行します。
+5. 確認後、停止済みの旧 container を `docker rm hermes-hindsight` で退役します。
+   `-v` や volume prune は使わず、旧原本と backup を保存します。移行失敗時は
+   現行サービスを停止して writer がないことを確認し、保存した backup と旧原本から
+   手動で復元・診断します。通常起動が旧サービスを再開することはありません。
 
 ## Model inventory
 
