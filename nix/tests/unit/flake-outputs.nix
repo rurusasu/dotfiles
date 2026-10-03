@@ -288,6 +288,7 @@ in
     expected = {
       darwin = [
         ../../home/darwin.nix
+        ../../home/standalone-darwin-identity.nix
         ../../home/standalone-darwin-fonts.nix
       ];
       x86Linux = [ ../../home/linux.nix ];

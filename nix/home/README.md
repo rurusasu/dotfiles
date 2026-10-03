@@ -23,9 +23,10 @@ caller -> <os>.nix -> common.nix
 - `common.nix` から OS 固有ファイルを import しない。
 - `default.nix` と `users.nix` は作らない。入口と OS 依存方向を曖昧にするため。
 
-standalone Home Manager のユーザー名は `rurusasu` を既定値とする。ホームディレクトリは OS 別ファイルで
-既定化する。nix-darwin / NixOS の Home Manager submodule は host の
-`users.users.<name>.home` を使う。
+standalone Home Manager のユーザー名は `rurusasu` を既定値とする。Darwin のホームディレクトリは
+`standalone-darwin-identity.nix` が実効ユーザー名から `/Users/<name>` を既定化し、明示指定で上書きできる。
+Linux / WSL のホームディレクトリは各 OS ファイルが既定化する。nix-darwin / NixOS の
+Home Manager submodule は host の `users.users.<name>.home` を使う。
 NixOS は `DOTFILES_USER` 未指定時に `nixos` を使う。WSL postinstall は `--user` で選択した
 ユーザーの `DOTFILES_USER` / `DOTFILES_HOME` / `DOTFILES_UID` / `DOTFILES_GID` /
 `DOTFILES_GROUP` を export し、`nixos-rebuild` を `--impure` 付きで実行する。これにより
