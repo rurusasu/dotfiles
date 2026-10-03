@@ -32,7 +32,7 @@ in
           systemModule
           ;
       };
-      inherit (support) legacyDarwin;
+      legacyDarwin = support.legacyDarwin or null;
       defaultCaskExcluded = !(builtins.elem "docker-desktop" (sets.darwinCasksForInstallFeatures [ ]));
       dockerCaskSelected = builtins.elem "docker-desktop" (
         sets.darwinCasksForInstallFeatures [

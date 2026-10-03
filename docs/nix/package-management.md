@@ -77,6 +77,45 @@ manifest 生成・provider 検証の出力はインストール集合と分け�
 
 macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Homebrew provider を反映します。通常の CLI と Neovim・WezTerm は Nix 側で管理し、cask/formula は catalog が明示する例外です。Nix パッケージの版は `flake.lock` に従います。
 
+### macOS の旧 provider サポート終了
+
+旧 Homebrew provider を検出し、Nix provider の検証後に uninstall する
+一度限りの自動移行は終了しました。通常インストールは現行 catalog の
+provider を反映し、切替済みの旧 Homebrew package を自動 uninstall しません。
+旧 provider の metadata と
+公開移行タスクも提供しません。既存 package やアプリのデータを整理する
+必要がある場合は、利用者が保存対象と現在使用している実体を確認してから
+個別に対応します。
+
+インストール済み provider の検証成功は、既に起動している GUI application の
+実体が切り替わったことを意味しません。切替完了を確認するときは、稼働中の
+実行ファイル・bundle path も確認します。旧 bundle が使われている場合は、
+利用者と作業の保存・再起動を調整してから現行 bundle への切替を確認します。
+旧 package の残存だけを理由に自動削除することはありません。
+
+2026-10-01 にこの作業端末を読み取り専用で確認しました。稼働中の
+nix-darwin generation にある移行対象の有効な 8 package は現行 verifier に
+成功し、`/Applications/Nix Apps` の 7 application は Info.plist と宣言済み
+実行ファイルが generation の実体と一致しました。Tart は Nix profile の
+実行ファイルでした。Google Chrome / Ollama の optional feature は無効でした。
+一方、稼働中の Orca は `/Applications/Orca.app` の旧 bundle で、Homebrew の
+cask receipt もこの path を指していました。検証済みの現行 Nix bundle は
+`/Applications/Nix Apps/Orca.app` に別途配置されています。この端末の Orca の
+稼働中 session の切替は未確認であり、残存 cask を未使用の重複とは扱いません。
+この変更では終了・再起動・削除を行いません。
+他端末の切替完了を保証する記録ではありません。
+
+通常インストールは activation 後に `verify-darwin-packages.sh` で現行の
+Nix application identity / CLI version を検証します。support report を一度
+生成し、同じ metadata と output path を再利用します。無効な feature は
+検証対象から外し、有効な package の欠落・identity/version 検証失敗は
+後続の設定反映前にエラーとします。output path の report は optional
+application をビルドする依存関係を持ちません。
+
+単体の Nix application identity / CLI version 検証は
+`task darwin:verify -- --support-json FILE --id ID --store-path PATH` で実行できます。
+通常インストールの環境検証と各 profile の feature gate は維持します。
+
 その他 Linux の `DOTFILES_ALLOW_USER_ONLY=1 ./install.sh` は Home Manager のみで、Docker や OS service は管理しません。
 
 macOS で Homebrew cask の適用に失敗する場合は、

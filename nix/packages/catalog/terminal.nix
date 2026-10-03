@@ -49,10 +49,6 @@
         nixAttr = "wezterm";
       };
     };
-    legacyDarwin = {
-      provider = "homebrew-cask";
-      name = "wezterm@nightly";
-    };
   };
 
   aerospace = {

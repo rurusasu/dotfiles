@@ -54,10 +54,6 @@ tasks:
     cmds:
       - "bash scripts/sh/verify-darwin-package.sh {{.CLI_ARGS}}"
 
-  darwin:migrate:
-    cmds:
-      - "bash scripts/sh/migrate-darwin-provider.sh {{.CLI_ARGS}}"
-
   darwin:update:check:
     desc: Check official feeds for Darwin package updates
     cmds:
