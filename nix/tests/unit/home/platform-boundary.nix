@@ -17,6 +17,7 @@ let
       pkgs = { };
       lib = { };
       inputs = { };
+      config.home.username = "test-user";
     }).imports or [ ];
   importsCommon = path: builtins.elem (../../../home/common.nix) (moduleImports path);
 in

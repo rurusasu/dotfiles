@@ -18,7 +18,7 @@ from types import FrameType, TracebackType
 from unittest import mock
 
 import hermes_bootstrap.repositories as repositories_module
-from hermes_bootstrap.errors import MigrationError, RepositoryError
+from hermes_bootstrap.errors import RepositoryError
 from hermes_bootstrap.git import _create_askpass
 from hermes_bootstrap.github import GitAuth
 from hermes_bootstrap.models import BootstrapManifest, SharedRepository
@@ -94,7 +94,7 @@ class RepositoryTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def repository(self, *, mode: str = "read-write", legacy: bool = True) -> SharedRepository:
+    def repository(self, *, mode: str = "read-write") -> SharedRepository:
         return SharedRepository(
             name="lifelog",
             source=str(self.remote),
@@ -102,7 +102,6 @@ class RepositoryTests(unittest.TestCase):
             target=self.data_root / "shared" / "lifelog",
             mode=mode,  # type: ignore[arg-type]
             sync_owner="default" if mode == "read-write" else None,
-            legacy_target=self.data_root / "core" / "lifelog" if legacy else None,
         )
 
     def clone(self, target: Path) -> None:
@@ -169,8 +168,8 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(transaction.moves, [])
         self.assertIn(repo.target, transaction.snapshots)
         self.assertNotIn(result.working_tree, transaction.snapshots)
-        self.assertNotIn(repo.legacy_target, transaction.snapshots)
-        self.assertFalse(os.path.lexists(repo.legacy_target))
+        self.assertNotIn(self.data_root / "core" / "lifelog", transaction.snapshots)
+        self.assertFalse(os.path.lexists(self.data_root / "core" / "lifelog"))
 
     def test_github_askpass_uses_token_username_for_username_prompt(self) -> None:
         askpass = _create_askpass(self.root)
@@ -231,7 +230,7 @@ class RepositoryTests(unittest.TestCase):
 
         self.assertFalse(owner.is_released)
         self.assertTrue(repo.target.is_dir())
-        self.assertFalse(os.path.lexists(repo.legacy_target))
+        self.assertFalse(os.path.lexists(self.data_root / "core" / "lifelog"))
         self.assertEqual((unrelated / "keep.txt").read_text(encoding="utf-8"), "keep\n")
         self.assert_hidden_in_bootstrap_error_graph(
             caught.exception,
@@ -243,7 +242,7 @@ class RepositoryTests(unittest.TestCase):
         tx.rollback()
 
         self.assertFalse(os.path.lexists(repo.target))
-        self.assertFalse(os.path.lexists(repo.legacy_target))
+        self.assertFalse(os.path.lexists(self.data_root / "core" / "lifelog"))
         self.assertEqual((unrelated / "keep.txt").read_text(encoding="utf-8"), "keep\n")
 
         retry = synchronize_remote(repo, self.auth)
@@ -252,7 +251,7 @@ class RepositoryTests(unittest.TestCase):
         retry_tx.commit()
 
         self.assertTrue(repo.target.is_dir())
-        self.assertFalse(os.path.lexists(repo.legacy_target))
+        self.assertFalse(os.path.lexists(self.data_root / "core" / "lifelog"))
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), retry.commit)
         self.assertEqual((unrelated / "keep.txt").read_text(encoding="utf-8"), "keep\n")
 
@@ -310,23 +309,6 @@ class RepositoryTests(unittest.TestCase):
         self.data_root.mkdir(parents=True)
         repo.target.parent.symlink_to(outside_shared, target_is_directory=True)
         (outside_checkout / "entry.md").write_text("outside\n", encoding="utf-8")
-
-        with self.assertRaises(RepositoryError) as caught:
-            synchronize_remote(repo, self.auth)
-
-        self.assertEqual(self.remote_head(), source_head)
-        self.assertEqual(run_git("rev-parse", "HEAD", cwd=outside_checkout), outside_head)
-        self.assert_hidden_in_bootstrap_error_graph(caught.exception, "fixture-token")
-
-    def test_rejects_an_existing_legacy_checkout_beneath_a_symlinked_parent(self) -> None:
-        repo = self.repository()
-        outside_core = self.root / "outside-core"
-        outside_checkout = outside_core / repo.name
-        self.clone(outside_checkout)
-        outside_head = run_git("rev-parse", "HEAD", cwd=outside_checkout)
-        source_head = self.remote_head()
-        self.data_root.mkdir(parents=True)
-        repo.legacy_target.parent.symlink_to(outside_core, target_is_directory=True)
 
         with self.assertRaises(RepositoryError) as caught:
             synchronize_remote(repo, self.auth)
@@ -1204,69 +1186,11 @@ class RepositoryTests(unittest.TestCase):
         for leftover in leftovers:
             shutil.rmtree(leftover)
 
-    def test_synchronize_rejects_two_real_paths_before_committing_or_pushing_canonical_changes(
-        self,
-    ) -> None:
+    def test_runtime_requires_canonical_checkout(self) -> None:
         repo = self.repository()
-        self.clone(repo.target)
-        self.clone(repo.legacy_target)
-        (repo.target / "local.md").write_text("local\n", encoding="utf-8")
-        canonical_head = run_git("rev-parse", "HEAD", cwd=repo.target)
-        canonical_status = run_git_bytes(
-            "status", "--porcelain=v1", "-z", "--untracked-files=all", cwd=repo.target
-        )
-        remote_head = self.remote_head()
-
-        with self.assertRaises(MigrationError):
-            synchronize_remote(repo, self.auth)
-
-        self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), canonical_head)
-        self.assertEqual(
-            run_git_bytes(
-                "status", "--porcelain=v1", "-z", "--untracked-files=all", cwd=repo.target
-            ),
-            canonical_status,
-        )
-        self.assertEqual(self.remote_head(), remote_head)
-
-    def test_apply_migrates_legacy_rejects_two_real_paths_and_is_idempotent(self) -> None:
-        repo = self.repository()
-        self.clone(repo.legacy_target)
-        result = synchronize_remote(repo, self.auth)
-        transaction = RecordingTransaction()
-        apply_shared_working_tree(repo, result, transaction)
-        self.assertTrue(repo.target.is_dir())
-        self.assertFalse(os.path.lexists(repo.legacy_target))
-        self.assertEqual(apply_shared_working_tree(repo, result, RecordingTransaction()).changed_paths, ())
-
-        self.clone(repo.legacy_target)
-        with self.assertRaises(MigrationError):
-            apply_shared_working_tree(repo, result, RecordingTransaction())
-
-    def test_apply_removes_an_old_compatibility_link_and_rollback_restores_it(self) -> None:
-        repo = self.repository()
-        self.clone(repo.target)
-        assert repo.legacy_target is not None
-        repo.legacy_target.parent.mkdir(parents=True)
-        repo.legacy_target.symlink_to("../shared/lifelog")
-        result = synchronize_remote(repo, self.auth)
-        tx = Transaction.begin(self.data_root)
-
-        changes = apply_shared_working_tree(repo, result, tx)
-
-        self.assertIn(repo.legacy_target, changes.changed_paths)
-        self.assertFalse(os.path.lexists(repo.legacy_target))
-        tx.rollback()
-        self.assertTrue(repo.legacy_target.is_symlink())
-        self.assertEqual(os.readlink(repo.legacy_target), "../shared/lifelog")
-
-    def test_apply_removes_empty_legacy_and_runtime_requires_canonical_checkout(self) -> None:
-        repo = self.repository()
-        repo.legacy_target.parent.mkdir(parents=True)
-        repo.legacy_target.mkdir()
         result = synchronize_remote(repo, self.auth)
         apply_shared_working_tree(repo, result, RecordingTransaction())
-        self.assertFalse(os.path.lexists(repo.legacy_target))
+        self.assertFalse(os.path.lexists(self.data_root / "core" / "lifelog"))
         manifest = BootstrapManifest(1, self.data_root, (), None, (), (repo,))  # type: ignore[arg-type]
         synced = synchronize_named_repository("lifelog", manifest, self.auth, require_canonical=True)
         self.assertEqual(synced.working_tree, repo.target)
@@ -1365,202 +1289,111 @@ class RepositoryTests(unittest.TestCase):
 
         self.assertIn(repo.target, changes.changed_paths)
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), result.commit)
-        self.assertFalse(os.path.lexists(repo.legacy_target))
+        self.assertFalse(os.path.lexists(self.data_root / "core" / "lifelog"))
 
-    def test_apply_rejects_a_legacy_checkout_modified_after_synchronization(self) -> None:
+    def test_apply_rejects_a_canonical_checkout_modified_after_synchronization(self) -> None:
         repo = self.repository()
-        assert repo.legacy_target is not None
-        self.clone(repo.legacy_target)
+        self.clone(repo.target)
         result = synchronize_remote(repo, self.auth)
-        (repo.legacy_target / "README.md").write_text("changed after sync\n", encoding="utf-8")
+        (repo.target / "README.md").write_text("changed after sync\n", encoding="utf-8")
 
         with self.assertRaises(RepositoryError):
             apply_shared_working_tree(repo, result, RecordingTransaction())
 
-        self.assertFalse(repo.target.exists())
+        self.assertTrue(repo.target.is_dir())
         self.assertEqual(
-            (repo.legacy_target / "README.md").read_text(encoding="utf-8"),
+            (repo.target / "README.md").read_text(encoding="utf-8"),
             "changed after sync\n",
         )
 
-    def test_apply_holds_the_repository_lock_through_legacy_publication(self) -> None:
+    def test_apply_holds_the_repository_lock_through_first_clone_publication(self) -> None:
         repo = self.repository()
-        assert repo.legacy_target is not None
-        self.clone(repo.legacy_target)
         result = synchronize_remote(repo, self.auth)
-        real_copy = repositories_module._copy_working_tree_for_publication
+        real_move = repositories_module._move_verified_working_tree
 
-        def assert_locked(source_repo: SharedRepository, source: Path, commit: str) -> Path:
+        def assert_locked(source_repo: SharedRepository, source: Path, commit: str) -> None:
             with self.assertRaises(repositories_module._LockBusy):
                 with repositories_module._RepositoryLock(
                     repositories_module._lock_path(repo),
                     self.data_root,
                 ):
                     pass
-            return real_copy(source_repo, source, commit)
+            real_move(source_repo, source, commit)
 
         with mock.patch.object(
             repositories_module,
-            "_copy_working_tree_for_publication",
+            "_move_verified_working_tree",
             side_effect=assert_locked,
         ):
             changes = apply_shared_working_tree(repo, result, RecordingTransaction())
 
         self.assertIn(repo.target, changes.changed_paths)
-        self.assertFalse(os.path.lexists(repo.legacy_target))
 
-    def test_legacy_publication_release_failure_rolls_back_and_can_retry(self) -> None:
+    def test_sync_and_apply_leave_unmanaged_old_checkout_untouched(self) -> None:
         repo = self.repository()
-        assert repo.legacy_target is not None
-        self.clone(repo.legacy_target)
-        run_git(
-            "config",
-            "--local",
-            "hermes.fixture-migration-id",
-            "release-failure-legacy",
-            cwd=repo.legacy_target,
-        )
-        unrelated = repo.target.parent / "unrelated"
-        unrelated.mkdir(parents=True)
-        (unrelated / "keep.txt").write_text("keep\n", encoding="utf-8")
+        old = self.data_root / "core" / "lifelog"
+        self.clone(old)
+        (old / "old-only.md").write_text("preserve local commit\n", encoding="utf-8")
+        run_git("add", "old-only.md", cwd=old)
+        run_git("commit", "-m", "old checkout only", cwd=old)
+        (old / "uncommitted.md").write_text("preserve local data\n", encoding="utf-8")
+        old_head = run_git("rev-parse", "HEAD", cwd=old)
+        old_status = run_git_bytes("status", "--porcelain=v1", "-z", cwd=old)
         result = synchronize_remote(repo, self.auth)
+        self.assertNotEqual(result.working_tree, old)
         tx = Transaction.begin(self.data_root)
-        real_copy = repositories_module._copy_working_tree_for_publication
-        real_close = repositories_module.PrivateDirectory._close_descriptors
-        publication_owner: repositories_module.PrivateDirectory | None = None
-        sensitive_marker = "release-close-sensitive-marker"
-
-        def capture_publication_copy(
-            source_repo: SharedRepository,
-            source: Path,
-            commit: str,
-        ) -> repositories_module.PrivateDirectory:
-            nonlocal publication_owner
-            publication_owner = real_copy(source_repo, source, commit)
-            return publication_owner
-
-        def fail_publication_close(
-            owner: repositories_module.PrivateDirectory,
-        ) -> None:
-            real_close(owner)
-            if owner is publication_owner:
-                raise OSError(sensitive_marker)
-
-        with (
-            mock.patch.object(
-                repositories_module,
-                "_copy_working_tree_for_publication",
-                side_effect=capture_publication_copy,
-            ),
-            mock.patch.object(
-                repositories_module.PrivateDirectory,
-                "_close_descriptors",
-                new=fail_publication_close,
-            ),
-        ):
-            with self.assertRaisesRegex(
-                RepositoryError,
-                "could not clean private repository resources",
-            ) as caught:
-                apply_shared_working_tree(repo, result, tx)
-
-        self.assertIsNotNone(publication_owner)
-        assert publication_owner is not None
-        self.assertFalse(publication_owner.is_released)
-        self.assertTrue(repo.target.is_dir())
-        self.assertTrue(repo.legacy_target.is_dir())
-        self.assertEqual((unrelated / "keep.txt").read_text(encoding="utf-8"), "keep\n")
-        self.assert_hidden_in_bootstrap_error_graph(
-            caught.exception,
-            sensitive_marker,
-            self.auth.token,
-            str(self.remote),
-        )
-
-        tx.rollback()
-
-        self.assertFalse(os.path.lexists(repo.target))
-        self.assertEqual(
-            run_git(
-                "config",
-                "--local",
-                "--get",
-                "hermes.fixture-migration-id",
-                cwd=repo.legacy_target,
-            ),
-            "release-failure-legacy",
-        )
-        self.assertEqual((unrelated / "keep.txt").read_text(encoding="utf-8"), "keep\n")
-
-        retry = synchronize_remote(repo, self.auth)
-        retry_tx = Transaction.begin(self.data_root)
-        apply_shared_working_tree(repo, retry, retry_tx)
-        retry_tx.commit()
-
-        self.assertTrue(repo.target.is_dir())
-        self.assertFalse(os.path.lexists(repo.legacy_target))
-        self.assertEqual(
-            run_git(
-                "config",
-                "--local",
-                "--get",
-                "hermes.fixture-migration-id",
-                cwd=repo.target,
-            ),
-            "release-failure-legacy",
-        )
-        self.assertEqual((unrelated / "keep.txt").read_text(encoding="utf-8"), "keep\n")
-
-    def test_real_legacy_migration_rolls_back_with_identity_and_can_retry(self) -> None:
-        repo = self.repository()
-        assert repo.legacy_target is not None
-        self.clone(repo.legacy_target)
-        run_git(
-            "config",
-            "--local",
-            "hermes.fixture-migration-id",
-            "legacy-checkout-only",
-            cwd=repo.legacy_target,
-        )
-        result = synchronize_remote(repo, self.auth)
-        tx = Transaction.begin(self.data_root)
-
         apply_shared_working_tree(repo, result, tx)
-        self.assertTrue(repo.target.is_dir())
-        self.assertFalse(os.path.lexists(repo.legacy_target))
         tx.rollback()
-
-        self.assertTrue(repo.legacy_target.is_dir())
-        self.assertFalse(repo.legacy_target.is_symlink())
-        self.assertEqual(
-            run_git(
-                "config",
-                "--local",
-                "--get",
-                "hermes.fixture-migration-id",
-                cwd=repo.legacy_target,
-            ),
-            "legacy-checkout-only",
-        )
-        self.assertFalse(os.path.lexists(repo.target))
-
+        self.assertFalse(repo.target.exists())
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=old), old_head)
+        self.assertEqual(run_git_bytes("status", "--porcelain=v1", "-z", cwd=old), old_status)
         retry = synchronize_remote(repo, self.auth)
         retry_tx = Transaction.begin(self.data_root)
         apply_shared_working_tree(repo, retry, retry_tx)
         retry_tx.commit()
-
         self.assertTrue(repo.target.is_dir())
-        self.assertFalse(os.path.lexists(repo.legacy_target))
-        self.assertEqual(
-            run_git(
-                "config",
-                "--local",
-                "--get",
-                "hermes.fixture-migration-id",
-                cwd=repo.target,
-            ),
-            "legacy-checkout-only",
-        )
+        self.assertEqual((old / "uncommitted.md").read_text(encoding="utf-8"), "preserve local data\n")
+
+    def test_apply_rejects_a_result_pointing_at_an_unmanaged_old_checkout(self) -> None:
+        repo = self.repository()
+        old = self.data_root / "core" / "lifelog"
+        self.clone(old)
+        old_head = run_git("rev-parse", "HEAD", cwd=old)
+        result = RemoteSyncResult(repo.name, old_head, False, old)
+        tx = RecordingTransaction()
+        with self.assertRaises(RepositoryError):
+            apply_shared_working_tree(repo, result, tx)
+        self.assertEqual(tx.snapshots, [])
+        self.assertFalse(repo.target.exists())
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=old), old_head)
+
+    def test_first_clone_release_failure_rolls_back_and_can_retry(self) -> None:
+        repo = self.repository()
+        result = synchronize_remote(repo, self.auth)
+        owner = result.private_directory
+        assert owner is not None
+        real_close = repositories_module.PrivateDirectory._close_descriptors
+
+        def fail_close(directory: repositories_module.PrivateDirectory) -> None:
+            real_close(directory)
+            if directory is owner:
+                raise OSError("release-close-sensitive-marker")
+
+        tx = Transaction.begin(self.data_root)
+        with mock.patch.object(repositories_module.PrivateDirectory, "_close_descriptors", new=fail_close):
+            with self.assertRaises(RepositoryError) as caught:
+                apply_shared_working_tree(repo, result, tx)
+        self.assert_hidden_in_bootstrap_error_graph(caught.exception, "release-close-sensitive-marker", self.auth.token)
+        self.assertTrue(repo.target.is_dir())
+        tx.rollback()
+        self.assertFalse(repo.target.exists())
+        self.assertFalse(owner.is_released)
+        self.assertFalse(owner.path.exists())
+        retry = synchronize_remote(repo, self.auth)
+        retry_tx = Transaction.begin(self.data_root)
+        apply_shared_working_tree(repo, retry, retry_tx)
+        retry_tx.commit()
+        self.assertEqual(run_git("rev-parse", "HEAD", cwd=repo.target), result.commit)
 
     def test_unknown_named_repository_is_rejected(self) -> None:
         repo = self.repository()

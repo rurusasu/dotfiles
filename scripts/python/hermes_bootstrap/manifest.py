@@ -127,7 +127,6 @@ def load_manifest(path: Path) -> BootstrapManifest:
         source.target for source in (*profiles, *repositories)
     )
     _validate_non_overlapping(canonical_targets, "canonical managed targets")
-    _validate_legacy_targets(repositories, canonical_targets, data_root)
 
     _unique((item.key for item in onepassword_items), "1Password item keys")
     _unique((item.item for item in onepassword_items), "1Password item names")
@@ -291,7 +290,7 @@ def _repository(value: object, context: str, data_root: Path) -> SharedRepositor
         repository,
         {"name", "source", "ref", "target", "mode"},
         context,
-        optional={"sync_owner", "legacy_target", "commit"},
+        optional={"sync_owner", "commit"},
     )
     name = _name(repository["name"], f"{context}.name")
     mode = _text(repository["mode"], f"{context}.mode")
@@ -306,12 +305,6 @@ def _repository(value: object, context: str, data_root: Path) -> SharedRepositor
     if mode == "read-write" and "commit" in repository:
         _invalid(f"{context}.commit is only valid for read-only repositories")
 
-    legacy_target = None
-    if "legacy_target" in repository and repository["legacy_target"] is not None:
-        legacy_target = _managed_path(
-            repository["legacy_target"], f"{context}.legacy_target", data_root
-        )
-
     return SharedRepository(
         name=name,
         source=_github_source(repository["source"], f"{context}.source"),
@@ -319,7 +312,6 @@ def _repository(value: object, context: str, data_root: Path) -> SharedRepositor
         target=_managed_path(repository["target"], f"{context}.target", data_root),
         mode=mode,
         sync_owner=sync_owner,
-        legacy_target=legacy_target,
         source_commit=(
             _commit(repository["commit"], f"{context}.commit")
             if "commit" in repository
@@ -340,26 +332,6 @@ def _validate_target_namespaces(
         if repository.target != data_root / "shared" / repository.name:
             _invalid(f"shared repository {repository.name!r} target must use its repository namespace")
 
-
-def _validate_legacy_targets(
-    repositories: Sequence[SharedRepository],
-    canonical_targets: Sequence[Path],
-    data_root: Path,
-) -> None:
-    legacy_targets: list[Path] = []
-    for repository in repositories:
-        target = repository.legacy_target
-        if target is None:
-            continue
-        if target == data_root:
-            _invalid(f"shared repository {repository.name!r} legacy_target cannot be the data root")
-        if any(_paths_overlap(target, canonical) for canonical in canonical_targets):
-            _invalid(
-                f"shared repository {repository.name!r} legacy_target overlaps a canonical target"
-            )
-        if any(_paths_overlap(target, existing) for existing in legacy_targets):
-            _invalid(f"shared repository {repository.name!r} legacy_target overlaps another legacy target")
-        legacy_targets.append(target)
 
 
 def _validate_non_overlapping(paths: Sequence[Path], context: str) -> None:

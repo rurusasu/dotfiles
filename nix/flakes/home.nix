@@ -33,7 +33,10 @@ let
     else
       inputs.home-manager.lib.homeManagerConfiguration {
         inherit (mkHome system) pkgs extraSpecialArgs;
-        modules = [ ../home/darwin.nix ];
+        modules = [
+          ../home/darwin.nix
+          ../home/standalone-darwin-fonts.nix
+        ];
       };
   mkLinuxHome =
     system:

@@ -6,7 +6,6 @@
   ...
 }:
 let
-  managedFontPackage = pkgs.udev-gothic-nf;
   sets = import ../packages/sets.nix {
     inherit pkgs lib;
   };
@@ -22,28 +21,10 @@ in
   home.packages = lib.unique (
     sets.darwinHomePackagesForInstallFeatures installFeatures
     ++ [
-      managedFontPackage
       pkgs.coreutils
       pkgs.wezterm.terminfo
     ]
   );
-
-  # Nix installs the font into the profile, but macOS GUI applications discover
-  # user fonts through ~/Library/Fonts. Keep the package declarative while
-  # registering its font files for native macOS applications as well.
-  home.activation.installDotfilesFonts = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    fontTarget="$HOME/Library/Fonts"
-    fontSource="${managedFontPackage}/share/fonts"
-
-    run mkdir -p "$fontTarget"
-    if [ -d "$fontSource" ]; then
-      ${pkgs.findutils}/bin/find "$fontSource" -type f \( -name '*.ttf' -o -name '*.otf' \) -print |
-        while IFS= read -r fontPath; do
-          fontName="$(basename "$fontPath")"
-          run cp -f "$fontPath" "$fontTarget/$fontName"
-        done
-    fi
-  '';
 
   home.sessionVariables = {
     # Homebrew's default is already 24 hours; keep that interval explicit

@@ -2,16 +2,22 @@
   pkgs,
   lib,
   inputs,
-  dotfilesUser ? builtins.getEnv "DOTFILES_USER",
-  dotfilesHome ? builtins.getEnv "DOTFILES_HOME",
   dotfilesWithHermes ? builtins.getEnv "DOTFILES_WITH_HERMES" == "1",
   dotfilesWithDocker ? builtins.getEnv "DOTFILES_WITH_DOCKER" == "1",
   dotfilesWithOllama ? builtins.getEnv "DOTFILES_WITH_OLLAMA" == "1",
+  sudoUser,
+  currentUser,
   ...
 }:
 let
-  user = dotfilesUser;
-  home = dotfilesHome;
+  user =
+    if sudoUser != "" then
+      sudoUser
+    else if currentUser != "" then
+      currentUser
+    else
+      throw "Unable to determine the macOS user: SUDO_USER and USER are both empty.";
+  home = "/Users/${user}";
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
   };
@@ -26,17 +32,6 @@ let
 in
 {
   imports = [ ./omarchy-keybindings.nix ];
-
-  assertions = [
-    {
-      assertion = user != "";
-      message = "DOTFILES_USER is required";
-    }
-    {
-      assertion = home != "";
-      message = "DOTFILES_HOME is required";
-    }
-  ];
 
   system = {
     primaryUser = user;
@@ -92,64 +87,6 @@ in
       };
       StandardOutPath = "${home}/Library/Logs/Ollama/ollama.log";
       StandardErrorPath = "${home}/Library/Logs/Ollama/ollama.error.log";
-    };
-  };
-
-  system.defaults.CustomUserPreferences."com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
-    "60" = {
-      enabled = false;
-      value = {
-        parameters = [
-          32
-          49
-          1048576
-        ];
-        type = "standard";
-      };
-    };
-    "61" = {
-      enabled = false;
-      value = {
-        parameters = [
-          32
-          49
-          1572864
-        ];
-        type = "standard";
-      };
-    };
-    "64" = {
-      enabled = false;
-      value = {
-        parameters = [
-          65535
-          49
-          1048576
-        ];
-        type = "standard";
-      };
-    };
-    "65" = {
-      enabled = false;
-      value = {
-        parameters = [
-          65535
-          49
-          1572864
-        ];
-        type = "standard";
-      };
-    };
-    "156" = {
-      enabled = false;
-      value = {
-        parameters = [
-          65535
-          49
-          393216
-        ];
-        type = "standard";
-      };
     };
   };
 

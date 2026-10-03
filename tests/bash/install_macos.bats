@@ -40,7 +40,7 @@ setup() {
 	export HOME="$TEST_HOME"
 	export USER="test-user"
 	export SUDO_USER="test-user"
-	export DOTFILES_USER="test-user"
+	unset DOTFILES_USER
 	export PATH="$STUB_BIN:/usr/bin:/bin"
 	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ REAL_TIMEOUT INSTALLER REPO_ROOT
 	export REAL_TASK REAL_PYTHON REAL_BASH
@@ -184,7 +184,7 @@ is_allowed_docker_cask_link() {
 	*) return 1 ;;
 	esac
 }
-fixture_user="${DOTFILES_USER:-${SUDO_USER:-$USER}}"
+fixture_user="${SUDO_USER:-$USER}"
 expected_nix_config="NIX_CONFIG=extra-experimental-features = nix-command flakes
 accept-flake-config = true"
 fail_operation() {
@@ -218,14 +218,13 @@ case "${1:-}" in
 		fi
 		;;
 	/usr/bin/env)
-		if [[ $# -eq 17 && ${2:-} == "$expected_nix_config" &&
-			${3:-} == "DOTFILES_USER=$fixture_user" && ${4:-} == "DOTFILES_HOME=$HOME" &&
-			${5:-} == "DOTFILES_ROOT=$DOTFILES_ROOT" && ${6:-} == DOTFILES_WITH_OLLAMA=* &&
-			${7:-} == DOTFILES_WITH_DOCKER=* && ${8:-} == DOTFILES_WITH_HERMES=* &&
-			${9:-} == "$STUB_BIN/nix" && ${10:-} == --accept-flake-config &&
-			${11:-} == run && ${12:-} == ".#darwin-rebuild" && ${13:-} == -- &&
-			${14:-} == switch && ${15:-} == --flake && ${16:-} == ".#macos" &&
-			${17:-} == --impure ]]; then
+		if [[ $# -eq 15 && ${2:-} == "SUDO_USER=$fixture_user" &&
+			${3:-} == "$expected_nix_config" && ${4:-} == DOTFILES_WITH_OLLAMA=* &&
+			${5:-} == DOTFILES_WITH_DOCKER=* && ${6:-} == DOTFILES_WITH_HERMES=* &&
+			${7:-} == "$STUB_BIN/nix" && ${8:-} == --accept-flake-config &&
+			${9:-} == run && ${10:-} == ".#darwin-rebuild" && ${11:-} == -- &&
+			${12:-} == switch && ${13:-} == --flake && ${14:-} == ".#macos" &&
+			${15:-} == --impure ]]; then
 			exec "$@"
 		fi
 		;;
@@ -526,7 +525,7 @@ homebrew_cask_link_parent_acl_state() {
 homebrew_cask_link_parent_is_immutable_to_caller() {
   [[ $TEST_HOMEBREW_PARENT_IMMUTABLE_TO_CALLER == 1 ]]
 }
-export DOTFILES_USER=test-user
+  export SUDO_USER=test-user
 ensure_homebrew_cask_link_directories_under_parent \
   "$TEST_HOMEBREW_CASK_PARENT_DIR" \
   "$TEST_HOMEBREW_CASK_BIN_DIR" \
@@ -1069,11 +1068,14 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	local runner_user="runner"
 	write_installed_stubs
 
+	export USER=root
 	export SUDO_USER="$runner_user"
-	export DOTFILES_USER="$runner_user"
+	export DOTFILES_USER="obsolete-override"
 	run_macos_installer
 
 	[ "$status" -eq 0 ]
+	! grep -Fq '<DOTFILES_USER=' "$COMMAND_LOG"
+	grep -Fq "sudo </usr/bin/env> <SUDO_USER=$runner_user> <NIX_CONFIG=extra-experimental-features = nix-command flakes" "$COMMAND_LOG"
 	grep -Fqx "sudo </usr/sbin/chown> <$runner_user:admin> </usr/local/bin>" "$COMMAND_LOG"
 	grep -Fqx "sudo </usr/sbin/chown> <$runner_user:admin> </usr/local/cli-plugins>" "$COMMAND_LOG"
 }

@@ -17,7 +17,9 @@ in
   };
 
   testDarwinHostEntrypointImportsConfiguration = {
-    expr = hasLine "imports[[:space:]]*=[[:space:]]*\\[[[:space:]]*\\./configuration\\.nix" entrypointText;
+    expr =
+      hasLine "imports[[:space:]]*=[[:space:]]*\\[" entrypointText
+      && hasLine "\\./configuration\\.nix" entrypointText;
     expected = true;
   };
 

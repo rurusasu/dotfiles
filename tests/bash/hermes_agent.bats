@@ -387,7 +387,7 @@ is_allowed_cask_target() {
     $1 == "${DOTFILES_HOMEBREW_BIN_DIR:-}" ||
     $1 == "${DOTFILES_HOMEBREW_CLI_PLUGINS_DIR:-}" ]]
 }
-fixture_user="${DOTFILES_USER:-${SUDO_USER:-$USER}}"
+fixture_user="${SUDO_USER:-$USER}"
 expected_nix_config="NIX_CONFIG=extra-experimental-features = nix-command flakes
 accept-flake-config = true"
 case "${1:-}" in
@@ -407,14 +407,13 @@ case "${1:-}" in
     fi
     ;;
   /usr/bin/env)
-    if [[ $# -eq 17 && ${2:-} == "$expected_nix_config" &&
-      ${3:-} == "DOTFILES_USER=$fixture_user" && ${4:-} == "DOTFILES_HOME=$HOME" &&
-      ${5:-} == "DOTFILES_ROOT=$DOTFILES_ROOT" && ${6:-} == DOTFILES_WITH_OLLAMA=* &&
-      ${7:-} == DOTFILES_WITH_DOCKER=* && ${8:-} == DOTFILES_WITH_HERMES=* &&
-      ${9:-} == "${PATH%%:*}/nix" && ${10:-} == --accept-flake-config &&
-      ${11:-} == run && ${12:-} == .#darwin-rebuild && ${13:-} == -- &&
-      ${14:-} == switch && ${15:-} == --flake && ${16:-} == .#macos &&
-      ${17:-} == --impure ]]; then
+    if [[ $# -eq 15 && ${2:-} == "SUDO_USER=$fixture_user" &&
+      ${3:-} == "$expected_nix_config" && ${4:-} == DOTFILES_WITH_OLLAMA=* &&
+      ${5:-} == DOTFILES_WITH_DOCKER=* && ${6:-} == DOTFILES_WITH_HERMES=* &&
+      ${7:-} == "${PATH%%:*}/nix" && ${8:-} == --accept-flake-config &&
+      ${9:-} == run && ${10:-} == .#darwin-rebuild && ${11:-} == -- &&
+      ${12:-} == switch && ${13:-} == --flake && ${14:-} == .#macos &&
+      ${15:-} == --impure ]]; then
       exec "$@"
     fi
     ;;
@@ -635,8 +634,8 @@ EOF
 		if [[ $platform == macos ]]; then
 			grep -Fxq 'docker info' "$COMMAND_LOG"
 			grep -Fxq 'docker compose version' "$COMMAND_LOG"
-			grep -Fxq "sudo </usr/bin/env> <NIX_CONFIG=extra-experimental-features = nix-command flakes" "$COMMAND_LOG"
-			grep -Fxq "accept-flake-config = true> <DOTFILES_USER=test-user> <DOTFILES_HOME=$TEST_HOME> <DOTFILES_ROOT=$MOCK_REPO> <DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=1> <$MOCK_BIN/nix> <--accept-flake-config> <run> <.#darwin-rebuild> <--> <switch> <--flake> <.#macos> <--impure>" "$COMMAND_LOG"
+			grep -Fxq "sudo </usr/bin/env> <SUDO_USER=test-user> <NIX_CONFIG=extra-experimental-features = nix-command flakes" "$COMMAND_LOG"
+			grep -Fxq "accept-flake-config = true> <DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=1> <$MOCK_BIN/nix> <--accept-flake-config> <run> <.#darwin-rebuild> <--> <switch> <--flake> <.#macos> <--impure>" "$COMMAND_LOG"
 			grep -Fqx 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/bin>' "$COMMAND_LOG"
 			grep -Fqx 'sudo </bin/chmod> <0775> </usr/local/bin>' "$COMMAND_LOG"
 			grep -Fqx 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/cli-plugins>' "$COMMAND_LOG"

@@ -139,9 +139,12 @@ policy for resolving conflicting paths before data is copied.
 | Shiraishi distribution | [rurusasu/hermes-profile-shiraishi](https://github.com/rurusasu/hermes-profile-shiraishi) | Official `distribution.yaml` and Shiraishi declarative content                                         |
 | Shared data            | [rurusasu/lifelog](https://github.com/rurusasu/lifelog)                                   | The one locked read-write checkout at `${HERMES_HOME}/shared/lifelog`                                  |
 
-`${HERMES_HOME}/core/lifelog` is migration-only and is absent after bootstrap;
-profile homes are never Git repositories. The default profile owns
-shared-lifelog synchronization through the common bootstrap command.
+`${HERMES_HOME}/shared/lifelog` is canonical; `${HERMES_HOME}/core/lifelog` is unmanaged.
+Bootstrap neither migrates nor deletes the old checkout. If it contains data,
+follow the [manual migration procedure](hermes-agent/bootstrap.md#shared-repository-layout-and-manual-migration)
+before running bootstrap, verifying that the canonical checkout retains local
+changes and commits. Profile homes are never Git repositories. The default
+profile owns shared-lifelog synchronization through the common bootstrap command.
 
 ## Local AI services and Hermes Hindsight
 

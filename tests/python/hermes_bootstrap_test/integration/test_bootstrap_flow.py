@@ -462,7 +462,6 @@ class BootstrapFlowTests(unittest.TestCase):
             replace(
                 repository,
                 target=self.data_root / "shared" / repository.name,
-                legacy_target=self.data_root / "core" / repository.name,
             )
             for repository in parsed.shared_repositories
         )
@@ -1238,136 +1237,22 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertFalse((self.data_root / "retired.md").exists())
         self.assertEqual((self.data_root / "cron" / "state" / "runtime.txt").read_text(encoding="utf-8"), "root cron state\n")
 
-    def test_legacy_lifelog_checkout_migrates_to_canonical_relative_link(self) -> None:
-        legacy = self.data_root / "core" / "lifelog"
-        legacy.parent.mkdir(parents=True)
-        run_git(
-            "clone",
-            "--no-hardlinks",
-            "--branch",
-            "main",
-            str(self.source_remotes["lifelog"]),
-            str(legacy),
-        )
-        lifelog_source = next(
-            repository.source
-            for repository in self.manifest.shared_repositories
-            if repository.name == "lifelog"
-        )
-        run_git("remote", "set-url", "origin", lifelog_source, cwd=legacy)
-        run_git("config", "user.name", "Fixture", cwd=legacy)
-        run_git("config", "user.email", "fixture@example.test", cwd=legacy)
-        run_git(
-            "config",
-            "--local",
-            "hermes.fixture-migration-id",
-            "legacy-checkout-only",
-            cwd=legacy,
-        )
-        legacy_head = run_git("rev-parse", "HEAD", cwd=legacy)
-        legacy_metadata = legacy.stat()
-        legacy_identity = (legacy_metadata.st_dev, legacy_metadata.st_ino)
+    def test_initial_shared_publication_rolls_back_after_a_later_failure(self) -> None:
+        canonical = self.data_root / "shared" / "lifelog"
+        remote_head = run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main")
 
+        def failpoint(name: str) -> None:
+            if name == "shared-apply:lifelog":
+                self.assertTrue((canonical / ".git").is_dir())
+                raise ApplyError("fixture failure after shared publication")
+
+        with self._patched_runtime(), mock.patch.object(app, "_failpoint", side_effect=failpoint):
+            with self.assertRaises(ApplyError):
+                app.apply(PRODUCTION_MANIFEST, self._payload())
+        self.assertFalse(canonical.exists())
+        self.assertEqual(run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main"), remote_head)
         self._initial_apply()
-
-        canonical = self.data_root / "shared" / "lifelog"
         self.assertTrue((canonical / ".git").is_dir())
-        canonical_metadata = canonical.stat()
-        self.assertNotEqual(
-            (canonical_metadata.st_dev, canonical_metadata.st_ino), legacy_identity
-        )
-        self.assertEqual(
-            run_git(
-                "config",
-                "--local",
-                "--get",
-                "hermes.fixture-migration-id",
-                cwd=canonical,
-            ),
-            "legacy-checkout-only",
-        )
-        self.assertEqual(run_git("rev-parse", "HEAD", cwd=canonical), legacy_head)
-        self.assertEqual((canonical / "README.md").read_text(encoding="utf-8"), "initial lifelog\n")
-        self.assertFalse(os.path.lexists(legacy))
-
-    def test_conflicting_real_lifelog_paths_return_exit_five_without_mutating_the_tree(self) -> None:
-        legacy = self.data_root / "core" / "lifelog"
-        canonical = self.data_root / "shared" / "lifelog"
-        for checkout in (legacy, canonical):
-            checkout.parent.mkdir(parents=True, exist_ok=True)
-            run_git(
-                "clone",
-                "--no-hardlinks",
-                "--branch",
-                "main",
-                str(self.source_remotes["lifelog"]),
-                str(checkout),
-            )
-        self._ensure_repository_lock()
-        before = self._snapshot_tree(self.data_root)
-        locks_before = self._snapshot_coordination_locks()
-        remote_before = run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main")
-        stdout = io.StringIO()
-        stderr = io.StringIO()
-
-        with self._patched_runtime():
-            sync_exit_code = cli.main(
-                [
-                    "sync-repository",
-                    "lifelog",
-                    "--manifest",
-                    str(PRODUCTION_MANIFEST),
-                ],
-                stdout=stdout,
-                stderr=stderr,
-                environ={"GH_TOKEN": FIXTURE_TOKEN},
-            )
-
-        self.assertEqual(sync_exit_code, 5)
-        self.assertEqual(stdout.getvalue(), "")
-        self._assert_no_protected_output(stderr.getvalue(), "failed sync output")
-        after_sync = self._snapshot_tree(self.data_root)
-        engine_lock = after_sync["locks/bootstrap-engine.lock"]
-        self.assertEqual(
-            (
-                engine_lock.kind,
-                engine_lock.mode,
-                engine_lock.links,
-                engine_lock.size,
-                engine_lock.payload,
-            ),
-            ("file", 0o600, 1, 0, b""),
-        )
-        before["locks"] = after_sync["locks"]
-        before["locks/bootstrap-engine.lock"] = engine_lock
-        self.assertEqual(
-            self._snapshot_tree_contract(after_sync),
-            self._snapshot_tree_contract(before),
-        )
-        self.assertEqual(
-            run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main"),
-            remote_before,
-        )
-        self.assertEqual(self._snapshot_coordination_locks(), locks_before)
-
-        stdout = io.StringIO()
-        stderr = io.StringIO()
-        with self._patched_runtime():
-            exit_code = cli.main(
-                ["apply", "--manifest", str(PRODUCTION_MANIFEST)],
-                stdin=self._payload(),
-                stdout=stdout,
-                stderr=stderr,
-            )
-
-        self.assertEqual(exit_code, 5)
-        self.assertEqual(stdout.getvalue(), "")
-        self._assert_no_protected_output(stderr.getvalue(), "failed apply output")
-        self.assertEqual(
-            self._snapshot_tree_contract(self._snapshot_tree(self.data_root)),
-            self._snapshot_tree_contract(before),
-        )
-        self.assertEqual(self._snapshot_coordination_locks(), locks_before)
 
     def test_lifelog_pushes_allowed_changes_and_rejects_forbidden_ones(self) -> None:
         self._initial_apply()
@@ -1661,9 +1546,7 @@ class BootstrapFlowTests(unittest.TestCase):
 
                     self.assertTrue(canonical.is_dir())
                     self.assertFalse(os.path.lexists(legacy))
-                    legacy.parent.mkdir(parents=True, exist_ok=True)
-                    canonical.rename(legacy)
-                    lifelog_change = legacy / f"rollback-{revision}.md"
+                    lifelog_change = canonical / f"rollback-{revision}.md"
                     lifelog_change.write_text(
                         f"remote change {revision}\n", encoding="utf-8"
                     )
@@ -1739,15 +1622,14 @@ class BootstrapFlowTests(unittest.TestCase):
                             f"{profile} environment lost unmanaged content",
                         )
 
-                    def assert_shared_repository_mutated() -> None:
-                        before = baseline_entry("core/lifelog")
+                    def assert_shared_repository_preserved() -> None:
+                        before = baseline_entry("shared/lifelog")
                         assert transaction_tree is not None
                         self.assertEqual(before.kind, "directory")
-                        self.assertNotIn("shared/lifelog", transaction_tree)
                         self.assertTrue(canonical.is_dir())
                         self.assertFalse(os.path.lexists(legacy))
                         metadata = canonical.stat()
-                        self.assertNotEqual(
+                        self.assertEqual(
                             (metadata.st_dev, metadata.st_ino),
                             (before.device, before.inode),
                         )
@@ -1759,7 +1641,7 @@ class BootstrapFlowTests(unittest.TestCase):
                                 f"profiles/{profile}/config.yaml",
                                 desired_profiles[profile],
                             )
-                        assert_shared_repository_mutated()
+                        assert_shared_repository_preserved()
                         for profile in env_paths:
                             assert_environment_mutated(profile)
 
@@ -1773,7 +1655,7 @@ class BootstrapFlowTests(unittest.TestCase):
                                 desired_profiles[profile],
                             )
                         elif name == "shared-apply:lifelog":
-                            assert_shared_repository_mutated()
+                            assert_shared_repository_preserved()
                         elif name.startswith("env-merge:"):
                             assert_environment_mutated(name.partition(":")[2])
                         else:
@@ -1831,12 +1713,11 @@ class BootstrapFlowTests(unittest.TestCase):
                             "transaction baseline environment was not stale",
                         )
                     self.assertEqual(
-                        baseline_entry("core/lifelog").kind, "directory"
+                        baseline_entry("shared/lifelog").kind, "directory"
                     )
-                    self.assertNotIn("shared/lifelog", transaction_tree)
                     self.assertEqual(
                         baseline_entry(
-                            f"core/lifelog/rollback-{revision}.md"
+                            f"shared/lifelog/rollback-{revision}.md"
                         ).payload,
                         f"remote change {revision}\n".encode("utf-8"),
                     )

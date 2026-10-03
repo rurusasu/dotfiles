@@ -172,6 +172,54 @@ bootstrap は root/default と manifest にある全 named profile の
 同じルートの `cache` にあります。これらのメモリデータは
 profile Git repository には含まれません。
 
+## Codex retention
+
+Codex hook の設定は次の順で読み込み、後の値が優先されます。設定ファイルの
+`null` は上書きせず、環境変数は対応する変数が存在するときに適用します。
+
+1. `scripts/lib/config.py` の組み込み既定値
+2. `~/.hindsight/codex/settings.json` の integration install 設定
+3. `~/.hindsight/codex.json` の dotfiles 管理 user 設定
+4. `HINDSIGHT_RETAIN_MODE` などの環境変数
+
+integration の既定値は `full-session` ですが、配布する user 設定は `chunked`、
+`retainEveryNTurns: 1`、`retainOverlapTurns: 1` です。chunked は現行の保存機能として
+維持します。`HINDSIGHT_RETAIN_MODE=full-session` を hook の実行環境に設定すると
+user 設定より優先されます。この変数を変更しても頻度・overlap 設定は変わりません。
+`retainEveryNTurns` と `retainOverlapTurns` に対応する環境変数はありません。
+`HINDSIGHT_AUTO_RETAIN=false` は自動保存を無効にします。
+
+| モード         | 送信範囲                                                     | document ID                   | 再送量                                                     |
+| -------------- | ------------------------------------------------------------ | ----------------------------- | ---------------------------------------------------------- |
+| `chunked`      | 直近 `retainEveryNTurns + retainOverlapTurns` ユーザーターン | `<session_id>-<milliseconds>` | 直近 window のみ。overlap 部分は次の document にも入る     |
+| `full-session` | 読み込めた session 履歴全体                                  | `<session_id>`                | 保存のたびに履歴全体を再送し、同じ ID で upsert を要求する |
+
+両モードとも `retainEveryNTurns` ごとに保存します。この cadence は transcript が
+空でない Stop hook の呼出し数であり、window の境界は user message です。
+履歴が window より短い場合は読み込めた全履歴を送信します。`full-session` では
+`retainOverlapTurns` を使いません。どちらも `retainRoles`、memory tag 除去、
+`retainToolCalls` による内容選択は共通で、ファイル内の全イベントをそのまま保存する
+という意味ではありません。両モードともファイル全体は読み込むため、chunked が
+抑えるのは API への送信範囲であり、ファイル読み込み量ではありません。
+
+たとえば毎回 user/assistant が 1 件ずつある 4 ターンでは、現行 chunked 設定の
+送信 window は `[1]`、`[1,2]`、`[2,3]`、`[3,4]` で、合計 14 メッセージです。
+full-session は `[1]`、`[1,2]`、`[1,2,3]`、`[1,2,3,4]` で、合計 20 メッセージを
+送信します。実際の bytes 数は各ターンの会話・tool 出力の長さによって変わります。
+
+chunk ID の suffix は既存の millisecond timestamp 方式であり、同一 session の
+保存が同じ millisecond に重なる場合の一意性は保証しません。モード変更時も既存の
+chunk document を削除・統合せず、新しい保存で使う ID と送信範囲だけが変わります。
+`session_id` metadata と session tag は両モードで共通です。保存は選択した cadence
+でのみ行い、API エラー時の retry や最後の未保存 window の session 終了時 flush は
+この hook にありません。
+
+この契約は `tests/python/test_hindsight_retain.py` で、配布設定と実際の config loader、
+transcript reader、window 切出し、cadence state を使い、外部 API へ渡す payload と
+document ID を検証します。live API の document 更新結果を検証するテストではありません。
+vendored source と local 差分の由来は
+[`UPSTREAM.md`](../../chezmoi/dot_hindsight/codex/UPSTREAM.md) に記録しています。
+
 ## Acceptance evidence
 
 完全なライブ受入検証は次の一つの入口で実行します。
