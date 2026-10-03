@@ -200,6 +200,12 @@ if (-not (Test-PathUnderRoot -Path $installFullPath -Roots @($tempRoot))) {
 }
 
 $createdDistro = $false
+$artifactStaged = $false
+$artifactSourceDir = Join-Path $tempRoot "wsl-nix-cache-artifact"
+# Keep the large prebuild artifact out of RUNNER_TEMP while the production
+# installer runs. Setup operations may clear temporary state; the sibling path
+# stays on the same volume so moving the multi-gigabyte artifact is inexpensive.
+$artifactDir = Join-Path (Split-Path -Parent $tempRoot) "$DistroName-wsl-nix-cache-artifact"
 
 try {
     Write-CiSection "Preflight"
@@ -218,6 +224,21 @@ try {
     try {
         Remove-TemporaryDistro -Name $DistroName
         Remove-InstallDirectory -Path $installFullPath
+    }
+    finally {
+        Complete-CiSection
+    }
+
+    Write-CiSection "Preserve WSL Prebuild Artifact"
+    try {
+        if (-not (Test-Path -LiteralPath $artifactSourceDir -PathType Container)) {
+            throw "WSL prebuild artifact directory is missing: $artifactSourceDir"
+        }
+        if (Test-Path -LiteralPath $artifactDir) {
+            throw "WSL prebuild artifact staging path already exists: $artifactDir"
+        }
+        Move-Item -LiteralPath $artifactSourceDir -Destination $artifactDir
+        $artifactStaged = $true
     }
     finally {
         Complete-CiSection
@@ -256,7 +277,6 @@ try {
 
     Write-CiSection "Import prebuilt NixOS and Hermes closures"
     try {
-        $artifactDir = Join-Path $env:RUNNER_TEMP "wsl-nix-cache-artifact"
         $cacheArchive = Join-Path $artifactDir "wsl-nix-cache.tar"
         $pathsFile = Join-Path $artifactDir "wsl-system-paths.txt"
         if (-not (Test-Path -LiteralPath $cacheArchive -PathType Leaf) -or
@@ -573,18 +593,25 @@ DOTFILES_HERMES_READINESS
     }
 }
 finally {
-    if ($createdDistro -and -not $KeepDistro) {
-        Write-CiSection "Cleanup"
-        try {
-            Remove-TemporaryDistro -Name $DistroName
-            Remove-InstallDirectory -Path $installFullPath
+    try {
+        if ($createdDistro -and -not $KeepDistro) {
+            Write-CiSection "Cleanup"
+            try {
+                Remove-TemporaryDistro -Name $DistroName
+                Remove-InstallDirectory -Path $installFullPath
+            }
+            finally {
+                Complete-CiSection
+            }
         }
-        finally {
-            Complete-CiSection
+        elseif ($KeepDistro) {
+            Write-Host "Keeping temporary distro for debugging: $DistroName"
+            Write-Host "InstallDir: $installFullPath"
         }
     }
-    elseif ($KeepDistro) {
-        Write-Host "Keeping temporary distro for debugging: $DistroName"
-        Write-Host "InstallDir: $installFullPath"
+    finally {
+        if ($artifactStaged -and (Test-Path -LiteralPath $artifactDir)) {
+            Remove-Item -LiteralPath $artifactDir -Recurse -Force
+        }
     }
 }
