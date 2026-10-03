@@ -27,6 +27,55 @@ class BootstrapCiImageTests(unittest.TestCase):
         push_paths = workflow.split("  push:\n", 1)[1].split("permissions:\n", 1)[0]
         self.assertIn('"docker/bootstrap-ci-tools/**"', push_paths)
 
+    def test_authentication_uses_nix_config_home_and_keeps_tokens_private(self) -> None:
+        for use_xdg in (True, False):
+            with self.subTest(use_xdg=use_xdg), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                home = root / "passwd-home"
+                home.mkdir()
+                config = root / "xdg" if use_xdg else home / ".config"
+                tools = root / "bin"
+                tools.mkdir()
+                commands = {
+                    "getent": '#!/bin/bash\nprintf "fixture:x:0:0:Fixture:%s:/bin/bash\\n" "$FALLBACK_HOME"\n',
+                    "nix": '#!/bin/bash\n[[ "$*" == "config show access-tokens" ]] || exit 64\ngrep "^access-tokens = " "$EXPECTED_CONFIG/nix/bootstrap-ci.conf" | cut -d= -f2-\n',
+                }
+                for name, content in commands.items():
+                    command = tools / name
+                    command.write_text(content)
+                    command.chmod(0o755)
+                environment = {
+                    key: value
+                    for key, value in os.environ.items()
+                    if key not in ("XDG_CONFIG_HOME", "NIX_CONFIG", "NIX_USER_CONF_FILES")
+                }
+                environment.update(
+                    HOME=str(root / "missing-home"),
+                    FALLBACK_HOME=str(home),
+                    EXPECTED_CONFIG=str(config),
+                    GITHUB_TOKEN="fixture-token-not-a-real-secret",
+                    PATH=f"{tools}{os.pathsep}{os.environ['PATH']}",
+                )
+                if use_xdg:
+                    environment["XDG_CONFIG_HOME"] = str(config)
+                script = ROOT / "scripts/sh/configure-bootstrap-ci-nix.sh"
+                for _ in range(2):
+                    result = subprocess.run(
+                        ["bash", str(script)],
+                        env=environment,
+                        text=True,
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertNotIn(environment["GITHUB_TOKEN"], result.stdout + result.stderr)
+                secret_file = config / "nix/bootstrap-ci.conf"
+                self.assertEqual(secret_file.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(
+                    (config / "nix/nix.conf").read_text().count(f"include {secret_file}"),
+                    1,
+                )
+
     def run_step(
         self, name: str, *, docker_exit: int = 0, **environment: str
     ) -> tuple[subprocess.CompletedProcess[str], str]:

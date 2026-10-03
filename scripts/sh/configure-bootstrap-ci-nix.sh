@@ -12,7 +12,20 @@ if [[ $GITHUB_TOKEN == *[[:space:]]* ]]; then
   exit 1
 fi
 
-config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/nix"
+config_home="${XDG_CONFIG_HOME:-}"
+if [[ -z $config_home ]]; then
+  nix_home="$HOME"
+  # Nix rejects the runner-owned HOME mount in root container jobs.
+  if [[ ! -O $nix_home ]]; then
+    nix_home=$(getent passwd "$(id -u)" | cut -d: -f6)
+    [[ $nix_home == /* ]] || {
+      echo "Cannot resolve the Nix user's home." >&2
+      exit 1
+    }
+  fi
+  config_home="$nix_home/.config"
+fi
+config_dir="$config_home/nix"
 config_file="$config_dir/bootstrap-ci.conf"
 umask 077
 mkdir -p "$config_dir"
@@ -35,4 +48,7 @@ if ! grep -Fxq "$include" "$config_dir/nix.conf"; then
 fi
 
 # Validate without printing credentials to the log.
-nix config show access-tokens | grep -E '^[[:space:]]*github\.com[[:space:]]*=[[:space:]]*[^[:space:]]+' >/dev/null
+if ! nix config show access-tokens | grep -E '^[[:space:]]*github\.com[[:space:]]*=[[:space:]]*[^[:space:]]+' >/dev/null; then
+  echo "Nix did not load the CI GitHub authentication configuration." >&2
+  exit 1
+fi
