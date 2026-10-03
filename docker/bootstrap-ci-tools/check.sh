@@ -9,7 +9,7 @@ elif [[ $# -ne 0 ]]; then
   exit 64
 fi
 
-for tool in bash bats chezmoi git git-lfs jq nix node python3 pwsh ruby statix tar task xz; do
+for tool in bash bats chezmoi git git-lfs jq nix node ps python3 pwsh ruby statix tar task xz; do
   if ! command -v "$tool" >/dev/null; then
     echo "Missing bootstrap CI tool: $tool" >&2
     exit 1

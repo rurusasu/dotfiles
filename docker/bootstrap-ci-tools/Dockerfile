@@ -33,6 +33,7 @@ RUN nix profile install --profile /opt/ci-tools --option sandbox false \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#go-task" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#jq" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#powershell" \
+      "github:NixOS/nixpkgs/${NIXPKGS_REV}#procps" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#python314" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#ruby" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#statix" \
