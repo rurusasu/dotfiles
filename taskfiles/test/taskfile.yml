@@ -32,4 +32,4 @@ tasks:
   test:bash:
     desc: Run classified Bats runtime and artifact contracts
     cmds:
-      - '{{if eq OS "darwin"}}sh -c ''export PATH=/opt/homebrew/bin:/opt/homebrew/sbin:$PATH; cd "$(cd {{.DOTFILES_PATH}} && pwd -P)" && bats tests/bash''{{else}}{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bats tests/bash"{{end}}'
+      - '{{if eq OS "darwin"}}sh -c ''export PATH=/opt/homebrew/bin:/opt/homebrew/sbin:$PATH; cd "$(cd {{.DOTFILES_PATH}} && pwd -P)" && bash scripts/sh/run-bash-tests.sh''{{else}}{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bash scripts/sh/run-bash-tests.sh"{{end}}'

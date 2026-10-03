@@ -21,6 +21,22 @@ in
     expected = false;
   };
 
+  testWeztermCommonWindowsInstallRemainsInCi = {
+    expr = {
+      ciSkipped = sets.wingetCiSkipInstall.wezterm or false;
+      pathEntries = sets.wingetPathEntries.wezterm;
+      verifier = sets.wingetVerify.wezterm;
+    };
+    expected = {
+      ciSkipped = false;
+      pathEntries = [ "%ProgramFiles%\\WezTerm" ];
+      verifier = {
+        command = "wezterm";
+        args = [ "--version" ];
+      };
+    };
+  };
+
   testTerminalWingetPackagesRemainInstallableDuringNormalRuns = {
     expr = {
       wingetMap = terminalWingetMap;

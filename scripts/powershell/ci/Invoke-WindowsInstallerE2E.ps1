@@ -301,6 +301,29 @@ Invoke-WindowsE2EValidation -Name 'portable command PATH recovery' -Validation {
   -ManifestPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json')
 }
 
+Invoke-WindowsE2EValidation -Name 'WezTerm install PATH and version' -Validation {
+$weztermManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json') -Raw | ConvertFrom-Json
+$weztermPackages = @(
+  $weztermManifest.Sources | Where-Object { $_.SourceDetails.Name -in @('winget', 'msstore') } |
+    ForEach-Object { $_.Packages } |
+    Where-Object { $_.PackageIdentifier -match '^wez\.wezterm(?:\.nightly)?$' }
+)
+if ($weztermPackages.Count -ne 1) {
+  throw "Expected exactly one WezTerm package in the generated manifest; found $($weztermPackages.Count)"
+}
+$weztermCommand = Get-Command -Name 'wezterm' -CommandType Application -ErrorAction Stop |
+  Select-Object -First 1
+$weztermTimer = [System.Diagnostics.Stopwatch]::StartNew()
+$weztermVersionOutput = @(Invoke-VerifyCommand -Command 'wezterm' -Arguments @('--version') -TimeoutSeconds 120)
+$weztermVersionExitCode = $LASTEXITCODE
+$weztermTimer.Stop()
+$weztermVersionText = $weztermVersionOutput -join [Environment]::NewLine
+. (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WezTermInstallEvidence.ps1')
+Assert-WezTermInstallEvidence -Output $out -PackageId $weztermPackages[0].PackageIdentifier `
+  -VersionOutput $weztermVersionText -VersionExitCode $weztermVersionExitCode
+Write-Host "WEZTERM_E2E: runtime=$($PSVersionTable.PSVersion) package=$($weztermPackages[0].PackageIdentifier) executable=$($weztermCommand.Source) elapsedMs=$($weztermTimer.ElapsedMilliseconds) exitCode=$weztermVersionExitCode version=$weztermVersionText"
+}
+
 Invoke-WindowsE2EValidation -Name 'pnpm bootstrap' -Validation {
 $npmPrefixOutput = @(Invoke-Npm -Arguments @('prefix', '--global'))
 $npmPrefixExitCode = $LASTEXITCODE
@@ -489,13 +512,28 @@ if ($validationErrors.Count -gt 0) {
 }
 '@
 $installerE2EScriptPath = Join-Path $env:RUNNER_TEMP "windows-installer-e2e-$expectedRuntime-$PID.ps1"
+$installerE2ELogPath = Join-Path $env:RUNNER_TEMP "windows-installer-$expectedRuntime.log"
 [System.IO.File]::WriteAllText($installerE2EScriptPath, $installerE2EScript, [System.Text.Encoding]::Unicode)
 Write-Host "Running the complete Windows installer E2E under $expectedRuntime ($($runtimeExecutable.Source))"
+$previousErrorActionPreference = $ErrorActionPreference
 try {
-    & $runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File $installerE2EScriptPath
+    # Open the exact required sink before starting any installer child.
+    $prelaunchLog = [IO.File]::Open($installerE2ELogPath, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    $prelaunchLog.Dispose()
+    $ErrorActionPreference = 'Continue'
+    & $runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File $installerE2EScriptPath 2>&1 |
+        ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message }
+            else { [string]$_ }
+        } | Tee-Object -LiteralPath $installerE2ELogPath -ErrorAction Stop | Out-Host
     $installerE2EExitCode = $LASTEXITCODE
 }
+catch {
+    Write-Error ("Windows installer output capture/invocation failed: " + $_.Exception.Message) -ErrorAction Continue
+    exit 1
+}
 finally {
+    $ErrorActionPreference = $previousErrorActionPreference
     Remove-Item -LiteralPath $installerE2EScriptPath -Force -ErrorAction SilentlyContinue
 }
 if ($installerE2EExitCode -ne 0) {

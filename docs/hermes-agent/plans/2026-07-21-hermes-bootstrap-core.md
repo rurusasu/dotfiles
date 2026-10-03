@@ -1,5 +1,10 @@
 # Hermes Container Bootstrap Core Implementation Plan
 
+Historical implementation plan. The old `legacy_target` schema and automatic
+`core/lifelog` migration described below were retired by issue #664. Use the
+[current layout and manual migration procedure](../bootstrap.md#shared-repository-layout-and-manual-migration)
+for existing installations.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement one containerized `hermes-bootstrap` command that validates credentials and sources, applies root and named-profile distributions, manages shared repositories and `.env` files transactionally, and supplies runtime `gh` authentication on every host OS.

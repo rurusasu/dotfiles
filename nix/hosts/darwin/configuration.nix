@@ -2,16 +2,22 @@
   pkgs,
   lib,
   inputs,
-  dotfilesUser ? builtins.getEnv "DOTFILES_USER",
-  dotfilesHome ? builtins.getEnv "DOTFILES_HOME",
   dotfilesWithHermes ? builtins.getEnv "DOTFILES_WITH_HERMES" == "1",
   dotfilesWithDocker ? builtins.getEnv "DOTFILES_WITH_DOCKER" == "1",
   dotfilesWithOllama ? builtins.getEnv "DOTFILES_WITH_OLLAMA" == "1",
+  sudoUser,
+  currentUser,
   ...
 }:
 let
-  user = dotfilesUser;
-  home = dotfilesHome;
+  user =
+    if sudoUser != "" then
+      sudoUser
+    else if currentUser != "" then
+      currentUser
+    else
+      throw "Unable to determine the macOS user: SUDO_USER and USER are both empty.";
+  home = "/Users/${user}";
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
   };
@@ -27,56 +33,47 @@ in
 {
   imports = [ ./omarchy-keybindings.nix ];
 
-  assertions = [
-    {
-      assertion = user != "";
-      message = "DOTFILES_USER is required";
-    }
-    {
-      assertion = home != "";
-      message = "DOTFILES_HOME is required";
-    }
-  ];
-
   system = {
     primaryUser = user;
     stateVersion = 6;
     tools.darwin-uninstaller.enable = false;
-    activationScripts.globalZoomShortcut.text = ''
-      uid="$(id -u -- ${lib.escapeShellArg user})"
-      runAsUser() {
-        launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} -- "$@"
-      }
-
-      runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "Zoom" "@^m"
-      runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "拡大／縮小" "@^m"
-    '';
-    activationScripts.removeLegacyOmlx.text = ''
-      brew="/opt/homebrew/bin/brew"
-      if [ -x "$brew" ]; then
+    activationScripts = {
+      globalZoomShortcut.text = ''
         uid="$(id -u -- ${lib.escapeShellArg user})"
         runAsUser() {
-          launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} --set-home -- "$@"
+          launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} -- "$@"
         }
 
-        if runAsUser "$brew" list --formula --versions omlx >/dev/null 2>&1; then
-          runAsUser "$brew" uninstall --formula omlx
-        fi
-        if runAsUser "$brew" tap | ${lib.getExe pkgs.gnugrep} --fixed-strings --line-regexp --quiet "jundot/omlx"; then
-          runAsUser "$brew" untap jundot/omlx
-        fi
-      fi
-    '';
-    activationScripts.postActivation.text = lib.mkAfter (
-      lib.optionalString withHermes ''
-        uid="$(id -u -- ${lib.escapeShellArg user})"
-        runAsUser() {
-          launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} --set-home -- "$@"
-        }
+        runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "Zoom" "@^m"
+        runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "拡大／縮小" "@^m"
+      '';
+      removeLegacyOmlx.text = ''
+        brew="/opt/homebrew/bin/brew"
+        if [ -x "$brew" ]; then
+          uid="$(id -u -- ${lib.escapeShellArg user})"
+          runAsUser() {
+            launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} --set-home -- "$@"
+          }
 
-        runAsUser ${lib.getExe discordPackage.passthru.disableBreakingUpdates}
-      ''
-    );
+          if runAsUser "$brew" list --formula --versions omlx >/dev/null 2>&1; then
+            runAsUser "$brew" uninstall --formula omlx
+          fi
+          if runAsUser "$brew" tap | ${lib.getExe pkgs.gnugrep} --fixed-strings --line-regexp --quiet "jundot/omlx"; then
+            runAsUser "$brew" untap jundot/omlx
+          fi
+        fi
+      '';
+      postActivation.text = lib.mkAfter (
+        lib.optionalString withHermes ''
+          uid="$(id -u -- ${lib.escapeShellArg user})"
+          runAsUser() {
+            launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} --set-home -- "$@"
+          }
+
+          runAsUser ${lib.getExe discordPackage.passthru.disableBreakingUpdates}
+        ''
+      );
+    };
   };
 
   launchd.user.agents.com-dotfiles-ollama = lib.mkIf withOllama {
@@ -95,64 +92,6 @@ in
     };
   };
 
-  system.defaults.CustomUserPreferences."com.apple.symbolichotkeys".AppleSymbolicHotKeys = {
-    "60" = {
-      enabled = false;
-      value = {
-        parameters = [
-          32
-          49
-          1048576
-        ];
-        type = "standard";
-      };
-    };
-    "61" = {
-      enabled = false;
-      value = {
-        parameters = [
-          32
-          49
-          1572864
-        ];
-        type = "standard";
-      };
-    };
-    "64" = {
-      enabled = false;
-      value = {
-        parameters = [
-          65535
-          49
-          1048576
-        ];
-        type = "standard";
-      };
-    };
-    "65" = {
-      enabled = false;
-      value = {
-        parameters = [
-          65535
-          49
-          1572864
-        ];
-        type = "standard";
-      };
-    };
-    "156" = {
-      enabled = false;
-      value = {
-        parameters = [
-          65535
-          49
-          393216
-        ];
-        type = "standard";
-      };
-    };
-  };
-
   launchd.user.agents.discord-module-staging = lib.mkIf withHermes {
     serviceConfig = {
       ProgramArguments = [
@@ -167,14 +106,16 @@ in
     };
   };
 
-  nix.settings.experimental-features = [
-    "nix-command"
-    "flakes"
-  ];
-  nix.settings.extra-substituters = [ "https://cache.numtide.com" ];
-  nix.settings.extra-trusted-public-keys = [
-    "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
-  ];
+  nix.settings = {
+    experimental-features = [
+      "nix-command"
+      "flakes"
+    ];
+    extra-substituters = [ "https://cache.numtide.com" ];
+    extra-trusted-public-keys = [
+      "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
+    ];
+  };
 
   # nix-darwin's generated documentation currently passes a removed
   # nixos-render-docs flag. Omit the optional manual artifacts and the

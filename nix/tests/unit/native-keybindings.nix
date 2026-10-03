@@ -11,9 +11,11 @@ let
         nixpkgs.pkgs = pkgs;
         home-manager.useGlobalPkgs = true;
         home-manager.users.test = {
-          home.username = "test";
-          home.homeDirectory = "/home/test";
-          home.stateVersion = "25.05";
+          home = {
+            username = "test";
+            homeDirectory = "/home/test";
+            stateVersion = "25.05";
+          };
         };
       }
     ];
@@ -51,7 +53,7 @@ in
       selectedPackages = map (package: package.pname) (
         sets.resolveForInstallFeatures [ "WithDesktop" ] [ "hyprland" "fuzzel" ]
       );
-      providerErrors = sets.providerErrors;
+      inherit (sets) providerErrors;
     };
     expected = {
       defaultPackages = [ ];

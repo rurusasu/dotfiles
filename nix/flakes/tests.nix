@@ -17,6 +17,11 @@
     }
     // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
       bootstrap-nixos-vm = import ../tests/build/bootstrap-nixos.nix { inherit inputs pkgs; };
+    }
+    // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
+      standalone-darwin-home = import ../tests/build/standalone-darwin-home.nix {
+        inherit inputs pkgs;
+      };
     };
     nix-unit.inputs = {
       inherit (inputs)
@@ -40,6 +45,7 @@
       (import ../tests/unit/home/import-boundary.nix)
       // (import ../tests/unit/home/platform-boundary.nix)
       // (import ../tests/unit/home/composition.nix { inherit inputs; })
+      // (import ../tests/unit/home/standalone-darwin-identity.nix { inherit inputs; })
       // (import ../tests/unit/home/rebuild-aliases.nix { inherit inputs; })
       // (import ../tests/unit/ghostty.nix { inherit inputs; })
       // (import ../tests/unit/font-consistency.nix { inherit inputs; })
@@ -77,7 +83,7 @@
       // (import ../tests/unit/package-catalog-ollama-windows-policy.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-playwright-feature.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-required-provider-reasons.nix { inherit inputs; })
-      // (import ../tests/unit/package-catalog-tart-minimal.nix { inherit inputs; })
+      // (import ../tests/unit/package-catalog-tart.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-nodejs-selection.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-windows-only-selection.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-windows-only-support.nix { inherit inputs; })
