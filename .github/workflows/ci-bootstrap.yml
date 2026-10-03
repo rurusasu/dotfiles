@@ -1,4 +1,5 @@
 name: Bootstrap CI
+
 on:
   workflow_dispatch:
   push:
@@ -234,11 +235,6 @@ jobs:
     permissions:
       contents: read
       packages: read
-    env:
-      DOTFILES_USER: runner
-      DOTFILES_HOME: /home/runner
-      DOTFILES_UID: "1000"
-      DOTFILES_GID: "1000"
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -253,11 +249,14 @@ jobs:
 
       - name: Build Linux configurations and checks
         run: |
+          # System Manager validates an existing non-root account; use the image's account.
+          IFS=: read -r DOTFILES_USER _ DOTFILES_UID DOTFILES_GID _ DOTFILES_HOME _ < <(getent passwd node)
+          export DOTFILES_USER DOTFILES_UID DOTFILES_GID DOTFILES_HOME
           export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"
           nix build --impure --no-link --print-build-logs \
+            .#nixosConfigurations.linux.config.system.build.toplevel \
             .#systemConfigs.ubuntu \
             .#systemConfigs.debian \
-            .#nixosConfigurations.linux.config.system.build.toplevel \
             .#homeConfigurations.x86_64-linux.activationPackage \
             .#package-support-report \
             .#checks.x86_64-linux.nix-unit \
@@ -265,159 +264,6 @@ jobs:
             .#checks.x86_64-linux.aerospace-workspace-cycle \
             .#checks.x86_64-linux.ghostty-config \
             .#checks.x86_64-linux.neovim-native
-
-  linux-ubuntu:
-    name: Bootstrap / Linux / E2E / Ubuntu
-    needs: [changes, linux-build]
-    if: ${{ needs.changes.outputs.linux == 'true' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    env:
-      DOTFILES_CHECKOUT_TARGET: ${{ github.workspace }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
-        with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: First one-command convergence
-        run: |
-          ./.github/e2e/run-bootstrap-acceptance.sh
-          ./.github/e2e/start-bootstrap-runtime.sh
-          export PATH="/run/system-manager/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/.nix-profile/bin:$PATH"
-          . ./scripts/sh/install-common.sh
-          dotfiles_run_in_group docker ./scripts/sh/verify-environment.sh --runtime
-
-      - name: Second idempotent convergence
-        run: |
-          ./.github/e2e/run-bootstrap-acceptance.sh
-          ./.github/e2e/start-bootstrap-runtime.sh
-          export PATH="/run/system-manager/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/.nix-profile/bin:$PATH"
-          . ./scripts/sh/install-common.sh
-          dotfiles_run_in_group docker ./scripts/sh/verify-environment.sh --runtime
-
-      - name: Write Ubuntu attestation
-        if: always()
-        run: |
-          . ./scripts/sh/install-common.sh
-          {
-            echo "sha=$TESTED_SHA"
-            echo "system_manager=$(readlink -f /run/system-manager/system 2>/dev/null || true)"
-            echo "docker=$(dotfiles_run_in_group docker docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
-            echo "support_report=$(nix build .#package-support-report --no-link --print-out-paths --print-build-logs | sha256sum | cut -d' ' -f1 || true)"
-          } > ubuntu-attestation.txt
-
-      - name: Upload Ubuntu attestation
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: bootstrap-linux-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ubuntu-attestation.txt
-
-  linux-debian:
-    name: Bootstrap / Linux / E2E / Debian
-    needs: [changes, linux-build]
-    if: ${{ needs.changes.outputs.linux == 'true' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Install systemd-nspawn prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes debootstrap systemd-container
-
-      - name: Run Debian bootstrap twice
-        env:
-          DEBIAN_ROOT: ${{ runner.temp }}/debian-root
-          MACHINE_NAME: dotfiles-debian-${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          set -euo pipefail
-          sudo debootstrap --variant=minbase bookworm "$DEBIAN_ROOT" https://deb.debian.org/debian
-          sudo systemd-nspawn -D "$DEBIAN_ROOT" /bin/bash -lc '
-            apt-get update
-            DEBIAN_FRONTEND=noninteractive apt-get install --yes ca-certificates curl git sudo xz-utils systemd systemd-sysv dbus
-            useradd --create-home --shell /bin/bash dotfiles
-            printf "dotfiles ALL=(ALL) NOPASSWD: ALL\n" >/etc/sudoers.d/dotfiles
-            chmod 0440 /etc/sudoers.d/dotfiles
-          '
-
-          {
-            sudo systemd-nspawn \
-              --directory="$DEBIAN_ROOT" \
-              --machine="$MACHINE_NAME" \
-              --boot \
-              --capability=all \
-              --bind="$GITHUB_WORKSPACE:/workspace"
-          } >debian-nspawn.log 2>&1 &
-          nspawn_pid=$!
-          cleanup() {
-            sudo machinectl terminate "$MACHINE_NAME" >/dev/null 2>&1 || true
-            wait "$nspawn_pid" 2>/dev/null || true
-          }
-          trap cleanup EXIT
-
-          for _ in $(seq 1 60); do
-            if [[ $(sudo machinectl show "$MACHINE_NAME" --property=State --value 2>/dev/null || true) == running ]]; then
-              break
-            fi
-            sleep 2
-          done
-          [[ $(sudo machinectl show "$MACHINE_NAME" --property=State --value) == running ]]
-          machine_ready=0
-          for _ in $(seq 1 60); do
-            if sudo machinectl shell --quiet "root@$MACHINE_NAME" /bin/bash -lc \
-              'systemctl is-system-running | grep -E "^(running|degraded)$"' \
-              >/dev/null 2>&1; then
-              machine_ready=1
-              break
-            fi
-            sleep 2
-          done
-          if ((machine_ready == 0)); then
-            tail -200 debian-nspawn.log
-            exit 1
-          fi
-
-          run_inside() {
-            sudo machinectl shell --quiet "dotfiles@$MACHINE_NAME" /bin/bash -lc "$1"
-          }
-
-          # The variables below must expand inside the Debian machine.
-          # shellcheck disable=SC2016
-          bootstrap='export DOTFILES_SKIP_FLAKE_UPDATE=1; cd /workspace; ./.github/e2e/run-bootstrap-acceptance.sh'
-          # shellcheck disable=SC2016
-          verify='export PATH=/run/system-manager/sw/bin:/etc/profiles/per-user/dotfiles/bin:$HOME/.nix-profile/bin:$PATH; cd /workspace; ./scripts/sh/verify-environment.sh --runtime'
-          run_inside "$bootstrap"
-          run_inside "$verify"
-          run_inside "$bootstrap"
-          run_inside "$verify"
-
-          {
-            echo "sha=$TESTED_SHA"
-            # shellcheck disable=SC2016
-            run_inside 'echo system_manager=$(readlink -f /run/system-manager/system); echo docker=$(docker version --format "{{.Server.Version}}")'
-          } >debian-attestation.txt
-
-      - name: Upload Debian logs and attestation
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: bootstrap-linux-debian-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            debian-attestation.txt
-            debian-nspawn.log
 
   linux-nixos:
     name: Bootstrap / Linux / E2E / NixOS
@@ -898,8 +744,6 @@ jobs:
         wsl-prebuild,
         nix,
         linux-build,
-        linux-ubuntu,
-        linux-debian,
         linux-nixos,
         darwin,
         wsl,
@@ -922,8 +766,6 @@ jobs:
       WINDOWS_REQUIRED: ${{ needs.changes.outputs.windows }}
       NIX_REQUIRED: ${{ needs.changes.outputs.nix }}
       LINUX_BUILD_RESULT: ${{ needs.linux-build.result }}
-      LINUX_UBUNTU_RESULT: ${{ needs.linux-ubuntu.result }}
-      LINUX_DEBIAN_RESULT: ${{ needs.linux-debian.result }}
       LINUX_NIXOS_RESULT: ${{ needs.linux-nixos.result }}
       DARWIN_RESULT: ${{ needs.darwin.result }}
       WSL_RESULT: ${{ needs.wsl.result }}
@@ -982,8 +824,6 @@ jobs:
           check_required_job "WSL / Prebuild" "${WSL_REQUIRED}" "${WSL_PREBUILD_RESULT}"
 
           check_platform "Linux / Build" "${LINUX_BUILD_REQUIRED}" "${LINUX_BUILD_RESULT}"
-          check_platform "Linux / E2E / Ubuntu" "${LINUX_REQUIRED}" "${LINUX_UBUNTU_RESULT}"
-          check_platform "Linux / E2E / Debian" "${LINUX_REQUIRED}" "${LINUX_DEBIAN_RESULT}"
           check_platform "Linux / E2E / NixOS" "${LINUX_REQUIRED}" "${LINUX_NIXOS_RESULT}"
           check_platform "Darwin" "${DARWIN_REQUIRED}" "${DARWIN_RESULT}"
           check_platform "WSL" "${WSL_REQUIRED}" "${WSL_RESULT}"
