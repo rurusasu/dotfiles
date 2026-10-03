@@ -305,6 +305,13 @@ try {
         if ([string]::IsNullOrWhiteSpace($postInstallWslPath)) {
             throw "Could not resolve WSL post-install script path: $postInstallPath"
         }
+        $ciNixConfigWslPath = $postInstallWslPath -replace '/[^/]+$', '/configure-bootstrap-ci-nix.sh'
+        foreach ($ciUser in @("root", "nixos")) {
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", $ciUser, "--",
+                "bash", "-lc", "bash '$ciNixConfigWslPath' --wsl"
+            ) -TimeoutSeconds 60 | Out-Null
+        }
         Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "root", "--",
             "bash", "-lc", "bash '$postInstallWslPath' --sync-mode repo --sync-back none --state-version 25.05 --skip-flake-update"
@@ -318,11 +325,9 @@ try {
     Write-CiSection "Verify authenticated Nix configuration reaches WSL"
     try {
         $authNixConfigCheck = @'
-set -o pipefail
-case "${NIX_CONFIG:-}" in
-  *"access-tokens = github.com="*) echo "GitHub access-token config is available inside WSL." ;;
-  *) echo "NIX_CONFIG is missing the GitHub access-token configuration inside WSL." >&2; exit 1 ;;
-esac
+set -euo pipefail
+nix config show access-tokens | grep -E '^[[:space:]]*github\.com[[:space:]]*=[[:space:]]*[^[:space:]]+' >/dev/null
+echo "GitHub access-token config is available inside WSL."
 if nix config show | grep max-jobs | grep 2 && nix config show | grep cores | grep 1; then
   echo "Nix builder limits are max-jobs=2 and cores=1."
 else
@@ -335,7 +340,7 @@ fi
             "-d", $DistroName, "-u", "root", "--",
             "bash", "-lc", $authNixConfigCheck
         ) -TimeoutSeconds 60 | Out-Null
-        Write-Host "CI_ASSERTION: NIX_CONFIG GitHub access-token setting is available inside WSL."
+        Write-Host "CI_ASSERTION: GitHub access-token setting is loaded from a Nix configuration file inside WSL."
     }
     finally {
         Complete-CiSection

@@ -72,6 +72,14 @@ Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -Mini
 
 Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-bootstrap.yml` のLinux jobsがUbuntu、Debian、NixOSで検証し、Windows/macOS実機固有のruntimeは、Docker profile を選択した installer 末尾の acceptance が失敗を返します。
 
+## WezTerm の実インストール証跡
+
+`ci-bootstrap.yml` の既存 Windows installer jobs は PS5.1 / PS7 の両方で共通 `WingetHandler` を実行し、インストール → PATH 反映 → `wezterm --version` の成功を順序付きで検証します。続けて新しい外部 process で PATH 上の `wezterm --version` を実行し、終了コードとバージョン出力を要求します。追加のインストール job や WezTerm 専用 installer はありません。
+
+共通 handler の `PACKAGE_PHASE` は install、path、verify の開始・完了と経過ミリ秒を記録します。install は WinGet の終了コードを decimal / hexadecimal で、verify は実コマンドの終了コードを記録します。install の時間にはパッケージ取得と native installer の両方が含まれます。詳細な取得・hash・native installer 境界は `windows-installer-*` artifact の WinGet diagnostic logs で確認します。開始ログだけ残っている場合、完了を確認できたとは扱いません。
+
+Windows の catalog は PR #633 の変更により stable の `wez.wezterm` を使用し、CI 除外も削除済みです。nightly へ戻したり `--ignore-security-hash` を追加したりしません。Issue #637 の過去ログは DeliveryOptimization の取得開始までしか記録していないため、その実行の原因を timeout や hash mismatch と断定できません。artifact は失敗時にも保存され、対象 SHA、runtime、installer transcript、WinGet diagnostic logs を含みます。
+
 ## Windows environment acceptance
 
 Unit testsだけでなく、`install.cmd` の最後に [Test-Environment.ps1](../../../scripts/powershell/Test-Environment.ps1) を実行します。`Setup Complete!` は acceptance が成功した後にだけ表示されます。

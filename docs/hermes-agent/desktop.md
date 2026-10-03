@@ -19,6 +19,8 @@ nor deletes its contents.
 
 The browser and MCP support containers remain separately available through
 their dedicated Compose tasks; they are not the Hermes Agent runtime.
+The [retired Docker runtime inventory](retired-docker-runtime.md) records the
+removed adapters and the helpers retained by the current sidecars.
 
 ## Desktop installation and launch
 

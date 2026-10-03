@@ -72,6 +72,13 @@ Ubuntu / Debian:  ./install.sh
 - Ubuntu/Debian は System Manager が Home Manager と system package/service を適用します。
 - NixOS は NixOS generation に Home Manager と system module を統合します。
 
+アプリと OS 設定はこの OS 別構成を唯一の通常インストール入口とします。
+`full`、`minimal`、カテゴリ別などの独立した Nix profile 用パッケージ集合は
+公開しません。Tart の macOS guest も通常の `install.sh` を使います。
+CI は OS configuration を build することで、その構成に含まれるアプリも検証します。
+standalone Home Manager は上記の OS 統合を使えない環境向けに維持し、
+manifest 生成・provider 検証の出力はインストール集合と分けて公開します。
+
 macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Homebrew provider を反映します。通常の CLI と Neovim・WezTerm は Nix 側で管理し、cask/formula は catalog が明示する例外です。Nix パッケージの版は `flake.lock` に従います。
 
 その他 Linux の `DOTFILES_ALLOW_USER_ONLY=1 ./install.sh` は Home Manager のみで、Docker や OS service は管理しません。

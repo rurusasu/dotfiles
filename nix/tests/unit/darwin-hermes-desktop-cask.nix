@@ -12,7 +12,7 @@ in
 {
   testHermesDesktopCaskSupportMetadataAndDefaultExclusion = {
     expr = {
-      installFeature = hermesSupport.installFeature;
+      inherit (hermesSupport) installFeature;
       darwinSupport = hermesSupport.darwin;
       excludedFromDefaultCasks =
         !(builtins.elem "hermes-desktop" (sets.darwinCasksForInstallFeatures [ ]));

@@ -228,15 +228,12 @@ class NixOSWSLHandler : SetupHandlerBase {
         リリースから適切なアセットを選択
     #>
     hidden [object] SelectAsset([object]$release) {
-        $priority = @("nixos.wsl", "nixos-wsl.tar.gz", "nixos-wsl-legacy.tar.gz")
-        foreach ($name in $priority) {
-            $asset = $release.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
-            if ($asset) {
-                $this.Log("アセットを選択: $name")
-                return $asset
-            }
+        $asset = $release.assets | Where-Object { $_.name -eq "nixos.wsl" } | Select-Object -First 1
+        if ($asset) {
+            $this.Log("アセットを選択: nixos.wsl")
+            return $asset
         }
-        throw "Release $($release.tag_name) に利用可能なアーカイブが見つかりません。"
+        throw "Release $($release.tag_name) に必要なアセット nixos.wsl が見つかりません。この installer は現行 .wsl 形式のリリース（2411.6.0 以降）のみ対応しています。ReleaseTag を外して latest を使うか、nixos.wsl を配布する tag を指定してください。"
     }
 
     <#
