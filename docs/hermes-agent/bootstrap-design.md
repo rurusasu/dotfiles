@@ -16,8 +16,8 @@ Hermes setup historically had independent shell and PowerShell implementations:
 - Windows ran `scripts/powershell/handlers/Handler.HermesAgent.ps1`.
 
 The PowerShell handler now validates that NixOS WSL successfully took
-ownership; the explicit `task hermes:docker:bootstrap` path still invokes the
-legacy container adapters when deliberately requested.
+ownership. The former `task hermes:docker:bootstrap` task and container adapters
+have been removed; references below describe the retired design.
 
 The PowerShell handler provisions a GitHub token, while the shell implementation
 did not. The container `gh` wrapper originally only mapped an existing process
@@ -70,8 +70,9 @@ host ~/.hermes/                    container ${HERMES_HOME}/ (HERMES_HOME)
 
 `${HERMES_HOME}` is a runtime root, not a Git checkout. Its profile homes are also
 never Git repositories. The canonical shared path is
-`${HERMES_HOME}/shared/lifelog`; `${HERMES_HOME}/core/lifelog` is migration-only and is
-absent after a successful apply.
+`${HERMES_HOME}/shared/lifelog`. Old `${HERMES_HOME}/core/lifelog` checkouts are
+unmanaged and require [manual migration](bootstrap.md#shared-repository-layout-and-manual-migration)
+before bootstrap; manifests with `legacy_target` are unsupported.
 
 ## Source And Authority Matrix
 

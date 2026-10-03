@@ -24,6 +24,7 @@ on:
       - "docker/mlflow/**"
       - "docker/local-ai-services/**"
       - "docker/hermes-service/**"
+      - "docker/bootstrap-ci-tools/**"
       - "docs/mlflow/**"
       - "taskfiles/mlflow/**"
 
@@ -62,32 +63,14 @@ jobs:
           python-version: "3.14"
 
       - name: Install Nix
-        if: ${{ steps.detect.outputs.python == 'true' || steps.detect.outputs.bash == 'true' }}
+        if: ${{ steps.detect.outputs.python == 'true' }}
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
 
       - name: Install go-task
-        if: ${{ steps.detect.outputs.python == 'true' || steps.detect.outputs.bash == 'true' }}
+        if: ${{ steps.detect.outputs.python == 'true' }}
         run: |
           nix profile install nixpkgs#go-task
           task --version
-
-      - name: Install Bats
-        if: ${{ steps.detect.outputs.bash == 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          nix profile install nixpkgs#chezmoi
-          echo "$HOME/.nix-profile/bin" >> "$GITHUB_PATH"
-          export PATH="$HOME/.nix-profile/bin:$PATH"
-          chezmoi --version
-          bats_version='1.13.0'
-          bats_root="$RUNNER_TEMP/bats-core-$bats_version"
-          bats_prefix="$RUNNER_TEMP/bats-prefix"
-          curl -fsSL "https://github.com/bats-core/bats-core/archive/refs/tags/v$bats_version.tar.gz" |
-            tar -xz -C "$RUNNER_TEMP"
-          "$bats_root/install.sh" "$bats_prefix"
-          echo "$bats_prefix/bin" >> "$GITHUB_PATH"
-          "$bats_prefix/bin/bats" --version
 
       - name: Run Python workflow contracts
         if: ${{ steps.detect.outputs.python == 'true' }}
@@ -96,28 +79,6 @@ jobs:
       - name: Run MLflow gateway contracts
         if: ${{ steps.detect.outputs.python == 'true' }}
         run: python -m unittest docker/mlflow/tests/test_configure.py -v
-
-      - name: Run Bash workflow contracts
-        if: ${{ steps.detect.outputs.bash == 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          bats_files=(tests/bash/*.bats)
-          safe_bats_files=()
-          for bats_file in "${bats_files[@]}"; do
-            case "${bats_file}" in
-              tests/bash/install_macos.bats|tests/bash/install_linux.bats)
-                continue
-                ;;
-              *)
-                safe_bats_files+=("${bats_file}")
-                ;;
-            esac
-          done
-          bats_files=("${safe_bats_files[@]}")
-          ((${#bats_files[@]} > 0))
-          bats --print-output-on-failure "${bats_files[@]}"
 
       - name: Run actionlint
         if: ${{ steps.detect.outputs.actionlint == 'true' }}

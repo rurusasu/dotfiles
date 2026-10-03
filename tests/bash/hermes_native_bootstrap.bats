@@ -9,9 +9,12 @@ setup() {
   export HERMES_HOME="$TEST_HOME/.hermes"
   export HERMES_BOOTSTRAP_MANIFEST="$HERMES_HOME/bootstrap-manifest.yaml"
   export SECRET_CAPTURE="$BATS_TEST_TMPDIR/secret-payload.jsonl"
+  export REAL_JQ="$(command -v jq)"
   export PATH="$STUB_BIN:/usr/bin:/bin"
   mkdir -p "$HERMES_HOME" "$STUB_BIN"
   : >"$HERMES_BOOTSTRAP_MANIFEST"
+
+  write_stub jq 'exec "$REAL_JQ" "$@"'
 
   write_stub hermes-bootstrap '
 case "${1:-}" in

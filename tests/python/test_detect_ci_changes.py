@@ -374,14 +374,14 @@ class DetectCiChangesTests(unittest.TestCase):
             {"contract"},
         )
 
-    def test_special_bats_paths_enable_contract_and_devcontainer(self) -> None:
+    def test_installer_bats_paths_enable_contract_without_devcontainer(self) -> None:
         special_paths = ("tests/bash/install_macos.bats", "tests/bash/install_linux.bats")
         for path in special_paths:
             with self.subTest(path=path):
                 result = self.detector.route_paths([path], MANIFEST_PATH)
                 self.assertEqual(
                     {name for name, enabled in result.items() if enabled},
-                    {"contract", "devcontainer"},
+                    {"contract"},
                 )
 
         manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))

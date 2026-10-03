@@ -7,7 +7,7 @@ the conversation into Hindsight memory for future recall.
 Flow:
   1. Read hook input from stdin (session_id, transcript_path, cwd)
   2. Read conversation transcript from transcript_path
-  3. Apply chunked retention logic (retainEveryNTurns + overlap window)
+  3. Apply cadence and select a chunk window or full session
   4. Resolve API URL (external, existing local, or auto-start daemon)
   5. Derive bank ID and ensure mission
   6. Format transcript (strip memory tags, filter roles)
@@ -64,7 +64,8 @@ def main():
 
     debug_log(config, f"Read {len(all_messages)} messages from transcript")
 
-    # Retention mode: full session (default) or chunked (legacy)
+    # Both modes are supported. The integration defaults to full-session;
+    # dotfiles' user config selects chunked and may be overridden by the env.
     retain_mode = config.get("retainMode", "full-session")
     retain_every_n = max(1, config.get("retainEveryNTurns", 1))
     retain_full_window = False
@@ -122,8 +123,8 @@ def main():
     bank_id = derive_bank_id(hook_input, config)
     ensure_bank_mission(client, bank_id, config, debug_fn=_dbg)
 
-    # Document ID: use session_id so the same session always upserts.
-    # In chunked mode, append timestamp to create distinct documents per chunk.
+    # Full-session requests reuse session_id for upserts. Chunked requests
+    # append a millisecond timestamp to keep previous windows as documents.
     if retain_mode == "chunked":
         document_id = f"{session_id}-{int(time.time() * 1000)}"
     else:

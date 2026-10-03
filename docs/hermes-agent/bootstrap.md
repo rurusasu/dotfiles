@@ -548,27 +548,19 @@ recovers any interrupted active journal before beginning new work. Remote
 profile or lifelog pushes completed before the transaction remain valid and are
 not reversed.
 
-The gateway API binds to `0.0.0.0:8642` inside the container, while Compose
-publishes it only on host loopback. Hermes refuses to start that API without the
-managed strong `API_SERVER_KEY`. This OpenAI-compatible endpoint is separate
-from the Desktop backend. Installer readiness is checked through the public
-`http://127.0.0.1:9119/api/health` endpoint because Desktop connects to the
-authenticated serve/dashboard backend on port `9119`.
-
-The Docker service enables `GATEWAY_MULTIPLEX_PROFILES=true`. Hermes therefore
-keeps the registered per-profile s6 slots stopped and serves all profiles from
-the root gateway with profile-scoped credentials, adapters, routes, and
-sessions. This avoids simultaneous cold starts exhausting Docker Desktop while
-preserving each profile's runtime boundary.
+Home Manager enables `gateway.multiplex_profiles` for the native user service.
+The root gateway serves managed profiles with profile-scoped credentials,
+adapters, routes, and sessions. Use `hermes gateway status` and
+`hermes -p <name> gateway status` to verify readiness. The retired Docker
+Dashboard/API ports and per-profile s6 services are not part of this flow.
 
 ## Repository Locks And Diagnostics
 
 Shared repository commands use
 `${HERMES_HOME}/locks/repositories/<name>.lock`; profile publication uses
 `${HERMES_HOME}/locks/repositories/profile-<name>.lock`. Lock acquisition is
-nonblocking. For lifelog migration/publication, bootstrap reacquires the same
-repository lock and keeps it while publishing the verified working tree and
-removing the legacy path. After confirming the competing process has exited,
+nonblocking. For lifelog publication, bootstrap reacquires the same repository
+lock and keeps it while publishing the verified working tree. After confirming the competing process has exited,
 rerun the same command.
 
 Git status, index, staged-path, and unpushed-history inspection is bounded to
@@ -576,21 +568,46 @@ Git status, index, staged-path, and unpushed-history inspection is bounded to
 synchronization rejects credential artifacts, runtime state, databases, and
 nested Git repositories, while allowing ordinary knowledge filenames such as
 `authentication-guide.md` and the repository-root `.env.example`.
-Authenticated operations use root-owned `/usr/bin/git`, a short-lived
+Authenticated operations use root-owned Nix-managed Git, a short-lived
 `GIT_ASKPASS` file, and the system default `PATH`; credentials are not stored in
 remote URLs.
 
-## Migration And Conflicts
+## Shared Repository Layout And Manual Migration
 
-- A legacy real checkout at `${HERMES_HOME}/core/lifelog` is copied to private
-  staging, validated, and transactionally published at
-  `${HERMES_HOME}/shared/lifelog`. The legacy path is removed only after it has been
-  snapshotted.
-- An empty legacy directory or compatibility symlink from an older bootstrap is
-  removed transactionally.
-- If both old and canonical lifelog paths contain real data, bootstrap exits
-  `5`. It does not merge, delete, or choose between them; reconcile or back up
-  one path explicitly, then rerun.
+Shared repositories use only `${HERMES_HOME}/shared/<name>`; lifelog uses
+`${HERMES_HOME}/shared/lifelog`. Manifest schema version 1 remains current, but
+the former `legacy_target` key is unsupported, even when its value is null.
+An old manifest is rejected with validation exit code `8` before bootstrap
+changes managed paths. Remove that key after migrating the checkout manually.
+
+Bootstrap does not inspect, synchronize, move, or remove
+`${HERMES_HOME}/core/lifelog`, including old compatibility links and empty
+directories. An old checkout can contain changes or commits unavailable from
+origin; migrate it before running bootstrap, which otherwise clones from origin
+at the canonical target.
+
+For manual migration, stop the gateway and any bootstrap or lifelog sync
+processes. Back up both paths and inspect each real checkout with `git status`,
+`git remote get-url origin`, and `git log --all --not --remotes`; verify the
+expected origin and retain uncommitted files and local commits. If only the old
+path has a real checkout and the canonical path is absent, move the entire
+checkout (including `.git`) to `${HERMES_HOME}/shared/lifelog` and verify that
+the status, HEAD, origin, and local commits match the backup. If both paths have
+data, reconcile their changes and history manually before choosing the canonical
+checkout; bootstrap no longer detects or resolves that old-layout collision.
+Treat an empty canonical directory or a compatibility symlink separately and
+preserve it until its identity and contents are understood. Never overwrite a
+checkout or delete repository data as part of this procedure. Remove
+`legacy_target` from the manifest, run bootstrap, and restart the gateway after
+validation succeeds.
+
+Existing canonical checkouts still undergo origin validation, locked remote
+synchronization, conflict detection, and validation before transactional
+publication. First-clone publication is rolled back when a later local apply
+fails; a completed remote push remains outside that rollback boundary.
+
+## Apply Conflicts
+
 - Existing root files are replaced only when declared by
   `root-distribution.yaml`. Existing named profiles follow the local-authority
   rules above and are never repaired by forced remote replacement.
@@ -607,7 +624,7 @@ remote URLs.
 | `2`  | Invalid command arguments, payload, or managed env input                   | Correct input; no Compose restart                                                                                                                                                       |
 | `3`  | Missing, invalid, or unauthorized credential                               | Repair 1Password or GitHub access                                                                                                                                                       |
 | `4`  | Repository access, identity, lock, profile preflight, or sync failure      | Repair the reported repository/profile state                                                                                                                                            |
-| `5`  | Migration conflict                                                         | Reconcile the named old/new paths manually                                                                                                                                              |
+| `5`  | Retired migration status (reserved for compatibility)                      | Current bootstrap does not emit this for old-layout conflicts; follow the manual migration procedure before apply                                                                       |
 | `6`  | Apply, cleanup, or unexpected command failure                              | Inspect safe diagnostics and rerun                                                                                                                                                      |
 | `7`  | Rollback failure                                                           | Preserve the journal and inspect managed paths before retrying                                                                                                                          |
 | `8`  | Manifest, staged Chrome source-contract, or final layout validation failed | Repair the manifest, owning root/profile source, or final layout; for an existing local-authoritative profile, repair local declarative config and rerun the documented sync/apply flow |

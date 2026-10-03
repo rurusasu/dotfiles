@@ -82,12 +82,6 @@ chmod +x "$prefix/bin/codex"
 	write_stub task '
 printf "task %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
-  *" hermes:bootstrap "*)
-    export PATH="$STUB_BIN:$PATH"
-    source "$REPO_ROOT/scripts/sh/install-common.sh"
-    source "$REPO_ROOT/scripts/sh/hermes-agent.sh"
-    dotfiles_hermes_start_stack docker "$REPO_ROOT/docker/hermes-service/compose.yml"
-    ;;
 esac
 '
 	export DOTFILES_TASK_COMMAND="$STUB_BIN/task"

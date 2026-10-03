@@ -3,234 +3,144 @@
 BeforeAll {
     $script:entrypoint = Join-Path $PSScriptRoot '../hindsight.ps1'
     . $script:entrypoint
-    $script:originalHermesDataDir = $env:HERMES_DATA_DIR
-    $script:originalUserProfile = $env:USERPROFILE
+    $script:originalEnvironment = @{}
+    foreach ($name in @('HERMES_DATA_DIR', 'USERPROFILE', 'HINDSIGHT_DATA_DIR', 'HINDSIGHT_ENV_FILE', 'HINDSIGHT_API_READY_ATTEMPTS', 'HINDSIGHT_API_READY_DELAY_SECONDS')) {
+        $script:originalEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
+    }
 }
 
 AfterAll {
-    $env:HERMES_DATA_DIR = $script:originalHermesDataDir
-    $env:USERPROFILE = $script:originalUserProfile
-}
-
-Describe 'Independent Hindsight data migration' {
-    BeforeEach {
-        $script:calls = [System.Collections.Generic.List[string]]::new()
-        $script:legacyContainerExists = $true
-        $script:legacyContainerRunning = $true
-        $env:USERPROFILE = Join-Path $TestDrive 'home'
-        $env:HERMES_DATA_DIR = Join-Path $TestDrive 'hermes'
-        $legacyDir = Join-Path $env:HERMES_DATA_DIR 'hindsight'
-        $script:dataDir = Join-Path $env:USERPROFILE '.local/share/hindsight'
-        Remove-Item -LiteralPath $env:HERMES_DATA_DIR, $env:USERPROFILE -Recurse -Force -ErrorAction SilentlyContinue
-        New-Item -ItemType Directory -Path (Join-Path $legacyDir 'pg0'), (Join-Path $legacyDir 'cache') -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $legacyDir 'pg0/memory') -Value 'retained-memory'
-        Set-Content -LiteralPath (Join-Path $legacyDir 'cache/model') -Value 'reranker-cache'
-
-        Mock Invoke-HindsightCommand {
-            $script:calls.Add("$Command $($Arguments -join ' ')")
-            if ($Arguments[0] -eq 'rm' -and $Arguments[1] -eq 'hermes-hindsight') {
-                $script:legacyContainerExists = $false
-            }
-            if ($Arguments[0] -eq 'start' -and $Arguments[1] -eq 'hermes-hindsight') {
-                $script:legacyContainerExists = $true
-                $script:legacyContainerRunning = $true
-            }
-            if ($Arguments[0] -eq 'stop' -and $Arguments[1] -eq 'hermes-hindsight') {
-                $script:legacyContainerRunning = $false
-            }
-            $isInspect = $Arguments[0] -eq 'container' -and $Arguments[1] -eq 'inspect'
-            $exitCode = if ($isInspect -and
-                ($Arguments[-1] -ne 'hermes-hindsight' -or -not $script:legacyContainerExists)) { 1 } else { 0 }
-            $output = if ($Arguments[0] -eq 'container' -and $Arguments[2] -eq '--format') {
-                @($script:legacyContainerRunning.ToString().ToLowerInvariant())
-            } else { @() }
-            [PSCustomObject]@{ ExitCode = $exitCode; Output = $output }
-        }
-    }
-
-    It 'should copy legacy memory atomically and keep the database quiescent until replacement' {
-        Move-HindsightLegacyData -DataDir $script:dataDir
-
-        (Get-Content -LiteralPath (Join-Path $script:dataDir 'pg0/memory') -Raw).Trim() | Should -Be 'retained-memory'
-        (Get-Content -LiteralPath (Join-Path $script:dataDir 'cache/model') -Raw).Trim() | Should -Be 'reranker-cache'
-        (Get-Content -LiteralPath (Join-Path $legacyDir 'pg0/memory') -Raw).Trim() | Should -Be 'retained-memory'
-        (Get-Content -LiteralPath (Join-Path $script:dataDir '.legacy-migration-source') -Raw).Trim() | Should -Be $legacyDir
-        $script:calls | Should -Contain 'docker container inspect --format {{.State.Running}} hermes-hindsight'
-        $script:calls | Should -Contain 'docker stop hermes-hindsight'
-        $script:calls | Should -Not -Contain 'docker start hermes-hindsight'
-        $script:calls | Should -Not -Contain 'docker rm hermes-hindsight'
-
-        $script:calls.Clear()
-        Move-HindsightLegacyData -DataDir $script:dataDir
-        $script:calls.Count | Should -Be 0
-    }
-
-    It 'should write the migration marker without a PowerShell 7-only Set-Content encoding' {
-        Mock Set-Content { throw 'Set-Content utf8NoBOM is unavailable in Windows PowerShell 5.1' }
-
-        Move-HindsightLegacyData -DataDir $script:dataDir
-
-        (Get-Content -LiteralPath (Join-Path $script:dataDir '.legacy-migration-source') -Raw).Trim() | Should -Be $legacyDir
-    }
-
-    It 'should restart the legacy container when migration fails after stopping it' {
-        Mock Copy-Item { throw 'simulated copy failure' }
-
-        { Move-HindsightLegacyData -DataDir $script:dataDir } | Should -Throw '*Unable to copy legacy Hindsight data*'
-
-        $script:calls | Should -Contain 'docker stop hermes-hindsight'
-        $script:calls | Should -Contain 'docker start hermes-hindsight'
-        $script:calls | Should -Not -Contain 'docker rm hermes-hindsight'
-        (Get-Content -LiteralPath (Join-Path $legacyDir 'pg0/memory') -Raw).Trim() | Should -Be 'retained-memory'
-    }
-
-    It 'should preserve a previously stopped legacy container when migration fails' {
-        $script:legacyContainerRunning = $false
-        Mock Copy-Item { throw 'simulated copy failure' }
-
-        { Move-HindsightLegacyData -DataDir $script:dataDir } | Should -Throw '*Unable to copy legacy Hindsight data*'
-
-        $script:calls | Should -Not -Contain 'docker stop hermes-hindsight'
-        $script:calls | Should -Not -Contain 'docker start hermes-hindsight'
-    }
-
-    It 'should honor a completed marker without retiring the legacy service during preparation' {
-        Move-HindsightLegacyData -DataDir $script:dataDir
-
-        $script:calls.Clear()
-        Move-HindsightLegacyData -DataDir $script:dataDir
-
-        $script:calls.Count | Should -Be 0
-    }
-
-    It 'should refuse to overwrite an independent memory database' {
-        New-Item -ItemType Directory -Path (Join-Path $script:dataDir 'pg0') -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $script:dataDir 'pg0/memory') -Value 'current-memory'
-
-        { Move-HindsightLegacyData -DataDir $script:dataDir } | Should -Throw '*both contain data*'
-
-        (Get-Content -LiteralPath (Join-Path $script:dataDir 'pg0/memory') -Raw).Trim() | Should -Be 'current-memory'
-        $script:calls.Count | Should -Be 0
+    foreach ($name in $script:originalEnvironment.Keys) {
+        [Environment]::SetEnvironmentVariable($name, $script:originalEnvironment[$name])
     }
 }
 
-Describe 'Independent Hindsight startup cutover' {
+Describe 'Independent Hindsight runtime' {
     BeforeEach {
         $script:calls = [System.Collections.Generic.List[string]]::new()
         $script:waitShouldFail = $false
         $script:pullShouldFail = $false
-        $script:legacyContainerRunning = $true
-        $env:USERPROFILE = Join-Path $TestDrive 'startup-home'
-        $env:HERMES_DATA_DIR = Join-Path $TestDrive 'startup-hermes'
+        $script:upShouldFail = $false
+        $script:stopShouldFail = $false
+        $env:USERPROFILE = Join-Path $TestDrive 'home'
+        $env:HERMES_DATA_DIR = Join-Path $TestDrive 'hermes'
+        $env:HINDSIGHT_DATA_DIR = Join-Path $TestDrive 'current'
+        $env:HINDSIGHT_ENV_FILE = ''
+        $script:dataDir = $env:HINDSIGHT_DATA_DIR
+        $script:legacyDir = Join-Path $env:HERMES_DATA_DIR 'hindsight'
         $composeDir = Join-Path $TestDrive 'compose'
         $script:composeFile = Join-Path $composeDir 'compose.yml'
+        Remove-Item -LiteralPath $script:dataDir, $env:HERMES_DATA_DIR -Recurse -Force -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Path $composeDir, $env:USERPROFILE -Force | Out-Null
         Set-Content -LiteralPath $script:composeFile -Value 'services: {}'
         Set-Content -LiteralPath (Join-Path $composeDir 'hindsight.env') -Value @(
-            'HINDSIGHT_API_LLM_MODEL=ollama-chat-default'
-            'HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=ollama-embedding-default'
             'HINDSIGHT_OLLAMA_LLM_MODEL=qwen3.6:35b'
             'HINDSIGHT_OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b'
         )
 
-        Mock Move-HindsightLegacyData {
-            $script:calls.Add($(if ($ValidateOnly) { 'migrate validate' } else { 'migrate' }))
-        }
         Mock Wait-HindsightApi {
             $script:calls.Add('wait')
             if ($script:waitShouldFail) { throw 'simulated readiness failure' }
         }
         Mock Invoke-HindsightCommand {
             $script:calls.Add("$Command $($Arguments -join ' ')")
-            if ($script:pullShouldFail -and $Command -eq 'ollama' -and $Arguments[0] -eq 'pull') {
-                throw 'simulated model pull failure'
-            }
-            if ($Arguments[0] -eq 'stop' -and $Arguments[1] -eq 'hermes-hindsight') {
-                $script:legacyContainerRunning = $false
-            }
-            if ($Arguments[0] -eq 'start' -and $Arguments[1] -eq 'hermes-hindsight') {
-                $script:legacyContainerRunning = $true
-            }
-            $output = if ($Arguments[0] -eq 'container' -and $Arguments[2] -eq '--format') {
-                @($script:legacyContainerRunning.ToString().ToLowerInvariant())
-            } else { @() }
-            [PSCustomObject]@{ ExitCode = 0; Output = $output }
+            if ($script:pullShouldFail -and $Command -eq 'ollama') { throw 'simulated model pull failure' }
+            if ($script:upShouldFail -and $Arguments -contains 'up') { throw 'simulated startup failure' }
+            $exitCode = if ($script:stopShouldFail -and $Arguments -contains 'stop') { 46 } else { 0 }
+            [PSCustomObject]@{ ExitCode = $exitCode; Output = @() }
         }
     }
 
-    It 'should retire the legacy container only after the replacement is healthy' {
+    It 'should prepare models and image before starting and checking readiness' {
         Invoke-HindsightMain -RequestedAction up -RequestedComposeFile $script:composeFile
 
-        $validateIndex = $script:calls.IndexOf('migrate validate')
-        $pullIndex = $script:calls.IndexOf('ollama pull qwen3-embedding:0.6b')
-        $imagePullIndex = $script:calls.IndexOf("docker compose -f $script:composeFile pull hindsight")
-        $migrateIndex = $script:calls.IndexOf('migrate')
-        $stopIndex = $script:calls.IndexOf('docker stop hermes-hindsight')
+        $script:calls | Should -Contain 'ollama pull qwen3.6:35b'
+        $script:calls | Should -Contain 'ollama pull qwen3-embedding:0.6b'
+        $imageIndex = $script:calls.IndexOf("docker compose -f $script:composeFile pull hindsight")
         $upIndex = $script:calls.IndexOf("docker compose -f $script:composeFile up -d --force-recreate --remove-orphans hindsight")
-        $waitIndex = $script:calls.IndexOf('wait')
-        $retireIndex = $script:calls.IndexOf('docker rm hermes-hindsight')
-        $validateIndex | Should -BeLessThan $pullIndex
-        $pullIndex | Should -BeLessThan $imagePullIndex
-        $imagePullIndex | Should -BeLessThan $migrateIndex
-        $migrateIndex | Should -BeLessThan $stopIndex
-        $stopIndex | Should -BeLessThan $upIndex
-        $upIndex | Should -BeLessThan $waitIndex
-        $waitIndex | Should -BeLessThan $retireIndex
-        $script:calls | Should -Not -Contain 'ollama pull ollama-chat-default'
-        $script:calls | Should -Not -Contain 'ollama pull ollama-embedding-default'
+        $script:calls.IndexOf('ollama pull qwen3-embedding:0.6b') | Should -BeLessThan $imageIndex
+        $imageIndex | Should -BeLessThan $upIndex
+        $upIndex | Should -BeLessThan $script:calls.IndexOf('wait')
+        Test-Path -LiteralPath (Join-Path $script:dataDir 'pg0') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $script:dataDir 'cache') | Should -BeTrue
     }
 
-    It 'should leave legacy data running when model preparation fails' {
+    It 'should use current memory while leaving leftover Hermes data untouched' {
+        New-Item -ItemType Directory -Path (Join-Path $script:legacyDir 'pg0'), (Join-Path $script:dataDir 'pg0') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:legacyDir 'pg0/memory') -Value 'legacy-memory'
+        Set-Content -LiteralPath (Join-Path $script:dataDir 'pg0/memory') -Value 'current-memory'
+
+        Invoke-HindsightMain -RequestedAction up -RequestedComposeFile $script:composeFile
+
+        (Get-Content -LiteralPath (Join-Path $script:dataDir 'pg0/memory') -Raw).Trim() | Should -Be 'current-memory'
+        (Get-Content -LiteralPath (Join-Path $script:legacyDir 'pg0/memory') -Raw).Trim() | Should -Be 'legacy-memory'
+        Test-Path -LiteralPath (Join-Path $script:dataDir '.legacy-migration-source') | Should -BeFalse
+        @($script:calls | Where-Object { $_ -like '*hermes-hindsight*' }).Count | Should -Be 0
+    }
+
+    It 'should stop the current service after readiness failure and preserve its memory and old marker' {
+        New-Item -ItemType Directory -Path (Join-Path $script:dataDir 'pg0') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:dataDir 'pg0/memory') -Value 'current-memory'
+        Set-Content -LiteralPath (Join-Path $script:dataDir '.legacy-migration-source') -Value $script:legacyDir
+        $script:waitShouldFail = $true
+
+        { Invoke-HindsightMain -RequestedAction up -RequestedComposeFile $script:composeFile } |
+            Should -Throw '*simulated readiness failure*'
+
+        $script:calls | Should -Contain "docker compose -f $script:composeFile stop hindsight"
+        (Get-Content -LiteralPath (Join-Path $script:dataDir 'pg0/memory') -Raw).Trim() | Should -Be 'current-memory'
+        (Get-Content -LiteralPath (Join-Path $script:dataDir '.legacy-migration-source') -Raw).Trim() | Should -Be $script:legacyDir
+        @($script:calls | Where-Object { $_ -like '*hermes-hindsight*' }).Count | Should -Be 0
+    }
+
+    It 'should stop the current service after compose startup failure' {
+        $script:upShouldFail = $true
+
+        { Invoke-HindsightMain -RequestedAction up -RequestedComposeFile $script:composeFile } |
+            Should -Throw '*simulated startup failure*'
+
+        $script:calls | Should -Contain "docker compose -f $script:composeFile stop hindsight"
+    }
+
+    It 'should report cleanup failure along with the original readiness failure' {
+        $script:waitShouldFail = $true
+        $script:stopShouldFail = $true
+
+        { Invoke-HindsightMain -RequestedAction up -RequestedComposeFile $script:composeFile } |
+            Should -Throw '*simulated readiness failure*failed to stop*'
+    }
+
+    It 'should avoid startup and cleanup when model preparation fails' {
         $script:pullShouldFail = $true
 
         { Invoke-HindsightMain -RequestedAction up -RequestedComposeFile $script:composeFile } |
             Should -Throw '*simulated model pull failure*'
 
-        $script:calls | Should -Contain 'migrate validate'
-        $script:calls | Should -Not -Contain 'migrate'
-        $script:calls | Should -Not -Contain 'docker stop hermes-hindsight'
+        @($script:calls | Where-Object { $_ -like '* up *' -or $_ -like '* stop *' }).Count | Should -Be 0
     }
 
-    It 'should restore the legacy container when replacement readiness fails' {
-        $script:waitShouldFail = $true
+    It 'should verify readiness without preparing models or starting the service' {
+        Invoke-HindsightMain -RequestedAction verify -RequestedComposeFile $script:composeFile
 
-        { Invoke-HindsightMain -RequestedAction up -RequestedComposeFile $script:composeFile } |
-            Should -Throw '*simulated readiness failure*'
+        $script:calls.Count | Should -Be 2
+        $script:calls | Should -Contain "docker compose -f $script:composeFile config --quiet"
+        $script:calls | Should -Contain 'wait'
+    }
+}
 
-        $script:calls | Should -Contain "docker compose -f $script:composeFile stop hindsight"
-        $script:calls | Should -Contain 'docker start hermes-hindsight'
-        $script:calls | Should -Not -Contain 'docker rm hermes-hindsight'
+Describe 'Hindsight API health' {
+    BeforeEach {
+        $env:HINDSIGHT_API_READY_ATTEMPTS = '1'
+        $env:HINDSIGHT_API_READY_DELAY_SECONDS = '0'
     }
 
-    It 'should quarantine the migrated snapshot before restoring the legacy container' {
-        $dataDir = Join-Path $env:USERPROFILE '.local/share/hindsight'
-        $legacyDir = [System.IO.Path]::GetFullPath((Join-Path $env:HERMES_DATA_DIR 'hindsight'))
-        New-Item -ItemType Directory -Path (Join-Path $dataDir 'pg0') -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $dataDir 'pg0/memory') -Value 'before-restoration'
-        Set-Content -LiteralPath (Join-Path $dataDir '.legacy-migration-source') -Value $legacyDir
-        $script:waitShouldFail = $true
-
-        { Invoke-HindsightMain -RequestedAction up -RequestedComposeFile $script:composeFile } |
-            Should -Throw '*simulated readiness failure*'
-
-        Test-Path -LiteralPath $dataDir | Should -BeFalse
-        $quarantine = @(Get-ChildItem -LiteralPath (Split-Path -Parent $dataDir) -Directory |
-                Where-Object Name -Like 'hindsight.failed-cutover.*')
-        $quarantine.Count | Should -Be 1
-        (Get-Content -LiteralPath (Join-Path $quarantine[0].FullName 'pg0/memory') -Raw).Trim() |
-            Should -Be 'before-restoration'
-        $script:calls | Should -Contain 'docker start hermes-hindsight'
+    It 'should accept a healthy API with a connected database' {
+        Mock Invoke-RestMethod { [PSCustomObject]@{ status = 'healthy'; database = 'connected' } }
+        { Wait-HindsightApi } | Should -Not -Throw
     }
 
-    It 'should preserve a previously stopped legacy container when replacement readiness fails' {
-        $script:legacyContainerRunning = $false
-        $script:waitShouldFail = $true
-
-        { Invoke-HindsightMain -RequestedAction up -RequestedComposeFile $script:composeFile } |
-            Should -Throw '*simulated readiness failure*'
-
-        $script:calls | Should -Contain "docker compose -f $script:composeFile stop hindsight"
-        $script:calls | Should -Not -Contain 'docker start hermes-hindsight'
-        $script:calls | Should -Not -Contain 'docker rm hermes-hindsight'
+    It 'should reject a healthy API with a disconnected database' {
+        Mock Invoke-RestMethod { [PSCustomObject]@{ status = 'healthy'; database = 'disconnected' } }
+        { Wait-HindsightApi } | Should -Throw '*did not become ready*'
     }
 }

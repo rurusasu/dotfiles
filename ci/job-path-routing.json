@@ -234,8 +234,6 @@
         "install.sh",
         "scripts/sh/dcnvim.sh",
         "chezmoi/dot_config/devcontainer/**",
-        "tests/bash/install_linux.bats",
-        "tests/bash/install_macos.bats",
         ".github/workflows/ci-devcontainer.yml",
         "scripts/sh/install-macos.sh"
       ],

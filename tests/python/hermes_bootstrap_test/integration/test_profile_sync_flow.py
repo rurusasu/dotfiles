@@ -19,6 +19,7 @@ from unittest import mock
 
 import yaml
 from hermes_cli import profile_distribution
+from sync_failure_summary import initial_sync_summary, post_exception_group_summary
 
 try:
     from . import test_bootstrap_flow as bootstrap_flow
@@ -837,8 +838,10 @@ class ProfileSyncFlowTests(unittest.TestCase):
     def test_one_race_retries_once_and_a_second_race_returns_exit_four(
         self,
     ) -> None:
-        initial_code, _payload, _stdout, _stderr = self._run_sync()
-        self.assertEqual(initial_code, 0)
+        initial_code, initial_payload, _stdout, _stderr = self._run_sync()
+        self.assertEqual(
+            initial_code, 0, initial_sync_summary(initial_code, initial_payload)
+        )
         race_name = self.profile_names[0]
         race_remote = self._source(race_name).source
         self._write_local_revision(race_name, 3)
@@ -1669,7 +1672,8 @@ class ProfileSyncFlowTests(unittest.TestCase):
         }
         self.assertTrue(
             set(self.profile_names[self.profile_names.index(failed_name) + 1 :])
-            <= attempted_names
+            <= attempted_names,
+            post_exception_group_summary(exit_code, payload),
         )
 
 

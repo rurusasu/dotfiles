@@ -7,7 +7,7 @@ let hostPasteTarget;
 let hostPasteAttempt = 0;
 let hostPasteHandledAttempt = 0;
 let hostClipboardWritePending = false;
-let legacyHostCopyInProgress = false;
+let documentCopyInProgress = false;
 let hostPastePrimeReleaseTimer;
 
 const HOST_CLIPBOARD_READ_FALLBACK_DELAY_MS = 100;
@@ -186,12 +186,14 @@ function decodeVncClipboardText(text) {
   }
 }
 
-function copyTextWithDocument(text) {
+function copyTextWithDocumentFallback(text) {
   const textarea = document.createElement("textarea");
   textarea.value = text;
   textarea.style.position = "fixed";
   textarea.style.opacity = "0";
-  legacyHostCopyInProgress = true;
+  // execCommand dispatches a synchronous copy event. Let that event perform
+  // the document copy instead of starting another remote clipboard transfer.
+  documentCopyInProgress = true;
 
   try {
     document.body.append(textarea);
@@ -199,18 +201,18 @@ function copyTextWithDocument(text) {
     document.execCommand("copy");
   } finally {
     textarea.remove();
-    legacyHostCopyInProgress = false;
+    documentCopyInProgress = false;
     UI.rfb.focus();
   }
 }
 
 function writeHostClipboard(text) {
   if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).catch(() => copyTextWithDocument(text));
+    navigator.clipboard.writeText(text).catch(() => copyTextWithDocumentFallback(text));
     return;
   }
 
-  copyTextWithDocument(text);
+  copyTextWithDocumentFallback(text);
 }
 
 function receiveRemoteClipboard(event) {
@@ -248,7 +250,7 @@ function beginRemoteClipboardTransfer(code) {
 }
 
 function handleRemoteClipboardCommand(event, code) {
-  if (!UI.rfb || legacyHostCopyInProgress || isClipboardPanelTarget(event.target)) {
+  if (!UI.rfb || documentCopyInProgress || isClipboardPanelTarget(event.target)) {
     return;
   }
 
