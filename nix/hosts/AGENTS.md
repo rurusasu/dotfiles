@@ -2,9 +2,10 @@
 
 ## 構成
 
-- `<host>/default.nix`: host の entrypoint。`configuration.nix` と host modules を import する
+- `<host>/default.nix`: 配線専用の host entrypoint。`configuration.nix` と host modules を import する
 - `<host>/configuration.nix`: system、service、user、cask、activation などのホスト固有設定
-- `<host>/system.nix`: 必要な host で分離する OS-wide defaults
+- `<host>/fonts.nix`: 必要な host で分離する system font。Darwin の system font の所有者
+- `<host>/system.nix`: 必要な host で分離する OS-wide defaults。Darwin では timezone と defaults の反映 activation も所有する
 
 標準レイアウトは次のとおりです。
 
@@ -12,12 +13,15 @@
 nix/hosts/<host>/
 ├── default.nix
 ├── configuration.nix
+├── fonts.nix (optional)
 └── system.nix (optional)
 ```
 
 Darwin も例外にせず、`nix/hosts/darwin/default.nix` を flake の entrypoint とし、実体は
-`nix/hosts/darwin/configuration.nix` と分離した OS-wide defaults の `system.nix` に置く。
-`default.nix` に system option を直接追加しない。
+`nix/hosts/darwin/configuration.nix` と責務別 module に置く。host identity、サービス、Homebrew、
+統合固有の activation は `configuration.nix`、system font は `fonts.nix`、OS-wide defaults、
+timezone、defaults の反映 activation は `system.nix` が所有する。
+`default.nix` は必要な module を import し、system option を直接追加しない。
 
 `hardware-configuration.nix` は全 host に必要な標準ファイルではない。native NixOS の実機では、
 マシンごとの `/etc/nixos/hardware-configuration.nix` を `DOTFILES_NIXOS_HARDWARE_CONFIG` 経由で
