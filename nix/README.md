@@ -42,7 +42,7 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
    `nix/hosts/darwin/fonts.nix`、OS-wide defaults、timezone、defaults の反映 activation は
    `nix/hosts/darwin/system.nix` が所有する。host identity、サービス、Homebrew、統合固有の
    activation は `configuration.nix` に置く。各 host の `default.nix` は `configuration.nix` と
-   責務別 module を import する配線専用の entrypoint として維持する。
+   責務別 module を import する entrypoint として維持する。Darwin の `default.nix` は配線専用とする。
 3. Home Manager の OS ファイルは `imports = [ ./common.nix ];` を維持する。`common.nix` から OS 固有ファイルを import せず、共通設定内の platform-scoped な分岐は最小限に保つ。
 4. パッケージ追加前に `nix/packages/catalog/` の該当カテゴリと各 OS への影響を確認する。`sets.nix` の公開 API は維持する。
 5. dotfile と秘密情報は `chezmoi/` と既存の secret 経路を使い、所有を重複させない。
