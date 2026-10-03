@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 import sys
+import tarfile
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -31,20 +36,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn('.#checks.x86_64-linux.aerospace-workspace-cycle', consistency)
         for system in ("x86_64-linux", "aarch64-darwin"):
             self.assertIn(f'.#checks.{system}.aerospace-workspace-cycle', bootstrap)
-
-    def test_nix_read_only_check_materializes_hermes_test_inputs_first(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
-        nix_job = self._workflow_job(workflow, "nix-test")
-        materialize = nix_job.index("nix eval --raw .#checks.x86_64-linux.hermes-bootstrap-tests.drvPath")
-        check = nix_job.index("nix flake check --no-build")
-        self.assertLess(materialize, check)
-        for known_warning in (
-            "evaluation warning: Dependency of package 'nix-unit' uses a nested list in attribute 'nativeBuildInputs'.",
-            "evaluation warning: 'system' has been renamed to/replaced by 'stdenv.hostPlatform.system'",
-            "evaluation warning: stdenv.isLinux is deprecated, use stdenv.hostPlatform.isLinux instead",
-            "evaluation warning: stdenv.isDarwin is deprecated, use stdenv.hostPlatform.isDarwin instead",
-        ):
-            self.assertIn(known_warning, nix_job)
 
     def test_generated_windows_keybindings_have_local_and_hosted_drift_checks(self) -> None:
         consistency = self._named_workflow("ci-consistency.yml")
@@ -148,32 +139,133 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertGreater(contract_position, install_position)
         self.assertIn("task --version", workflow[install_position:contract_position])
 
-    def test_installs_bats_1_13_0_and_owns_every_safe_bats_file(self) -> None:
-        workflow = self._workflow()
-        self.assertIn("bats_version='1.13.0'", workflow)
-        self.assertIn(
-            "https://github.com/bats-core/bats-core/archive/refs/tags/v$bats_version.tar.gz",
-            workflow,
+    def test_bash_contracts_have_one_preinstalled_linux_owner(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        job = self._workflow_job(workflow, "bash-test")
+        self.assertIn("runs-on: ubuntu-24.04", job)
+        self.assertIn("container:", job)
+        self.assertIn("bash scripts/sh/run-bash-tests.sh", job)
+        self.assertIn("needs.changes.outputs.bash == 'true'", job)
+        self.assertNotIn("matrix:", job)
+        self.assertNotIn("Install Nix", job)
+        self.assertNotIn("Run Bash workflow contracts", self._workflow())
+        self.assertNotIn("DOTFILES_USER", job)
+        self.assertNotIn("DOTFILES_HOME", job)
+        darwin = self._workflow_job(workflow, "darwin")
+        self.assertNotIn("bats", darwin)
+        self.assertNotIn("brew install", darwin)
+        self.assertNotIn("attestation", darwin)
+        for section in (job, darwin):
+            self.assertNotIn("DOTFILES_USER", section)
+            self.assertNotIn("DOTFILES_HOME", section)
+
+    def test_linux_build_uses_image_identity_for_both_system_manager_outputs(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        job = self._workflow_job(workflow, "linux-build")
+        script = re.search(
+            r"(?m)^      - name: Build Linux configurations and checks\n"
+            r"        run: \|\n(?P<script>(?:          .*\n)+)",
+            job,
         )
-        self.assertIn("shopt -s nullglob", workflow)
-        self.assertIn("bats_files=(tests/bash/*.bats)", workflow)
-        self.assertIn("tests/bash/install_macos.bats", workflow)
-        self.assertIn("tests/bash/install_linux.bats", workflow)
-        self.assertIn('bats --print-output-on-failure "${bats_files[@]}"', workflow)
-        all_bats_files = {path.name for path in (REPOSITORY_ROOT / "tests" / "bash").glob("*.bats")}
-        excluded_bats_files = {"install_macos.bats", "install_linux.bats"}
-        exclusion_case = re.search(
-            r"(?ms)case \"\$\{bats_file\}\" in(?P<case>.*?)^\s*esac$",
-            workflow,
-        )
-        self.assertIsNotNone(exclusion_case)
-        case_body = exclusion_case.group("case") if exclusion_case is not None else ""
-        self.assertEqual(
-            set(re.findall(r"tests/bash/([^|)]+\.bats)", case_body)),
-            excluded_bats_files,
-        )
-        self.assertIn("ci_routing.bats", all_bats_files - excluded_bats_files)
-        self.assertGreater(len(all_bats_files - excluded_bats_files), 0)
+        self.assertIsNotNone(script)
+        assert script is not None
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            getent = directory / "getent"
+            getent.write_text(
+                '#!/bin/bash\n[[ "$*" == "passwd node" ]] || exit 64\n'
+                "printf '%s\\n' 'node:x:1000:1000::/home/node:/bin/bash'\n"
+            )
+            identity = directory / "id"
+            identity.write_text(
+                '#!/bin/bash\n[[ "$*" == "-gn node" ]] || exit 64\n'
+                "printf '%s\\n' node\n"
+            )
+            nix = directory / "nix"
+            nix.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, sys\n"
+                "print(json.dumps({'argv': sys.argv[1:], 'identity': "
+                "{key: os.environ.get(key) for key in "
+                "('DOTFILES_USER', 'DOTFILES_HOME', 'DOTFILES_UID', 'DOTFILES_GID', 'DOTFILES_GROUP')}}))\n"
+            )
+            getent.chmod(0o755)
+            identity.chmod(0o755)
+            nix.chmod(0o755)
+            environment = dict(os.environ)
+            environment.update(PATH=f"{directory}:{environment['PATH']}", GITHUB_WORKSPACE=temporary)
+            for variable in ("DOTFILES_USER", "DOTFILES_HOME", "DOTFILES_UID", "DOTFILES_GID", "DOTFILES_GROUP"):
+                environment.pop(variable, None)
+            result = subprocess.run(
+                ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", textwrap.dedent(script.group("script"))],
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        invocation = json.loads(result.stdout)
+        self.assertEqual(invocation["argv"][:2], ["build", "--impure"])
+        self.assertIn(".#systemConfigs.ubuntu", invocation["argv"])
+        self.assertIn(".#systemConfigs.debian", invocation["argv"])
+        self.assertEqual(invocation["identity"], {
+            "DOTFILES_USER": "node",
+            "DOTFILES_HOME": "/home/node",
+            "DOTFILES_UID": "1000",
+            "DOTFILES_GID": "1000",
+            "DOTFILES_GROUP": "node",
+        })
+        for variable in ("DOTFILES_USER", "DOTFILES_HOME", "DOTFILES_UID", "DOTFILES_GID", "DOTFILES_GROUP"):
+            self.assertNotRegex(workflow, rf"(?m)^\s+{variable}:")
+            self.assertNotIn(variable, workflow.replace(job, ""))
+
+    def test_wsl_prebuild_exports_a_directory_with_both_consumer_files(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        job = self._workflow_job(workflow, "wsl-prebuild")
+        script = re.search(r"(?m)^        run: \|\n(?P<script>(?:          [^\n]*\n|\n)+)", job)
+        self.assertIsNotNone(script)
+        assert script is not None
+        expected_paths = [f"/nix/store/{'a' * 32}-base", f"/nix/store/{'b' * 32}-hermes"]
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            runner_temp = directory / "container runner temp"
+            runner_temp.mkdir()
+            output = directory / "step-output"
+            nix = directory / "nix"
+            nix.write_text(
+                f"#!{sys.executable}\n"
+                "import os, pathlib, sys\n"
+                f"paths = {expected_paths!r}\n"
+                "if sys.argv[1] == 'build':\n"
+                "    assert '.#nixosConfigurations.nixos.config.system.build.toplevel' in sys.argv\n"
+                "    print(paths[bool(os.environ.get('DOTFILES_WITH_HERMES'))])\n"
+                "elif sys.argv[1:3] == ['copy', '--to']:\n"
+                "    assert sys.argv[4:] == paths\n"
+                "    pathlib.Path(sys.argv[3].removeprefix('file://'), 'cache-entry').write_text('cache')\n"
+                "else:\n"
+                "    raise SystemExit(64)\n"
+            )
+            nix.chmod(0o755)
+            environment = dict(os.environ)
+            environment.update(PATH=f"{directory}:{environment['PATH']}", RUNNER_TEMP=str(runner_temp), GITHUB_OUTPUT=str(output))
+            environment.pop("DOTFILES_WITH_HERMES", None)
+            subprocess.run(
+                ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", textwrap.dedent(script.group("script"))],
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertTrue(output.is_file(), "prebuild must export its actual container artifact directory")
+            outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
+            artifact = Path(outputs["artifact-dir"])
+            self.assertTrue(artifact.is_relative_to(runner_temp))
+            self.assertEqual(sorted(path.name for path in artifact.iterdir()), ["wsl-nix-cache.tar", "wsl-system-paths.txt"])
+            self.assertEqual((artifact / "wsl-system-paths.txt").read_text().splitlines(), expected_paths)
+            with tarfile.open(artifact / "wsl-nix-cache.tar") as archive:
+                self.assertIn("./cache-entry", archive.getnames())
+        self.assertIn("id: wsl-cache", job)
+        self.assertIn("path: ${{ steps.wsl-cache.outputs.artifact-dir }}", job)
+        self.assertNotIn("${{ runner.temp }}", job)
 
     def test_runs_focused_actionlint_and_python_discovery(self) -> None:
         workflow = self._workflow()
@@ -214,37 +306,35 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
     def test_nix_build_jobs_use_authenticated_github_fetches(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
-        for job_name in ("nix-test", "linux-build"):
+        for job_name in ("nix", "linux-build", "wsl-prebuild"):
             with self.subTest(job=job_name):
                 job = self._workflow_job(workflow, job_name)
-                self.assertIn("NIX_CONFIG: |", job)
+                self.assertIn("run: bash scripts/sh/configure-bootstrap-ci-nix.sh", job)
                 self.assertIn(
-                    "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}",
+                    "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
                     job,
                 )
 
         wsl_job = self._workflow_job(workflow, "wsl")
-        self.assertIn("NIX_CONFIG: |", wsl_job)
-        self.assertIn(
-            "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}",
-            wsl_job,
-        )
-        self.assertIn("WSLENV: GITHUB_TOKEN/u:NIX_CONFIG/u", wsl_job)
-    def test_bootstrap_workflow_watches_nix_validation_paths(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
-        for event in ("push",):
-            paths = self._trigger_paths(workflow, event)
-            self.assertIn('"scripts/sh/**"', paths)
-            self.assertIn('".github/e2e/**"', paths)
-            self.assertIn('"docker/hindsight/**"', paths)
-            self.assertIn('"docker/local-ai-services/**"', paths)
-            self.assertIn('"docker/mlflow/**"', paths)
-            self.assertIn('"docs/mlflow/**"', paths)
+        self.assertIn("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}", wsl_job)
+        self.assertIn("WSLENV: GITHUB_TOKEN/u", wsl_job)
 
-    def test_bootstrap_push_watches_pnpm_global_runtime_bats(self) -> None:
+    def test_linux_hardware_fixture_uses_the_container_workspace(self) -> None:
+        job = self._workflow_job(self._named_workflow("ci-bootstrap.yml"), "linux-build")
+        self.assertNotIn("${{ github.workspace }}/nix/tests/fixtures", job)
+        self.assertIn(
+            'export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"',
+            job,
+        )
+    def test_bootstrap_detects_dependencies_without_push_path_filters(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
-        paths = self._trigger_paths(workflow, "push")
-        self.assertIn('"tests/bash/pnpm_global_runtime.bats"', paths)
+        push = workflow.split("  push:\n", 1)[1].split("  pull_request:\n", 1)[0]
+        self.assertIn("branches: [main]", push)
+        self.assertNotIn("paths:", push)
+        changes = self._workflow_job(workflow, "changes")
+        self.assertIn("manifest: ci/bootstrap-path-routing.json", changes)
+        self.assertIn("manifest: ci/job-path-routing.json", changes)
+
 
     def test_contract_workflow_runs_the_dedicated_mlflow_gateway_tests(self) -> None:
         workflow = self._workflow()
@@ -264,31 +354,22 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("nix: ${{ steps.detect.outputs.nix }}", changes)
 
         for job_name, output in (
-            ("nix-lint", "nix"),
-            ("nix-format", "nix"),
-            ("nix-test", "nix"),
+            ("nix", "nix"),
             ("windows-installer", "windows"),
         ):
             job = self._workflow_job(workflow, job_name)
             self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
 
-        self.assertIn("Bootstrap / Nix / Lint", workflow)
-        self.assertIn("Bootstrap / Format / Style", workflow)
-        self.assertIn("Bootstrap / Test / Nix outputs", workflow)
+        self.assertIn("Bootstrap / Nix", workflow)
         self.assertIn("Bootstrap / Windows / Installer", workflow)
 
         complete = self._workflow_job(workflow, "complete")
         self.assertIn("NIX_REQUIRED", complete)
         self.assertIn("WINDOWS_INSTALLER_RESULT", complete)
-        self.assertIn("nix-lint", complete)
-        self.assertIn("nix-format", complete)
-        self.assertIn("nix-test", complete)
+        self.assertIn("NIX_RESULT: ${{ needs.nix.result }}", complete)
         self.assertIn("windows-installer", complete)
         self.assertIn("check_required_job", complete)
 
-        for event in ("push",):
-            paths = self._trigger_paths(workflow, event)
-            self.assertIn('"scripts/powershell/handlers/**"', paths)
 
     def test_legacy_nix_and_winget_workflows_are_removed(self) -> None:
         for name in ("ci-nix.yml", "ci-winget.yml"):
@@ -483,67 +564,14 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
         return json.loads(result.stdout)
 
-    def test_devcontainer_ci_owns_only_the_two_excluded_bats_files(self) -> None:
-        contract_workflow = self._workflow()
-        bats_script = DEVCONTAINER_BATS_PATH.read_text(encoding="utf-8")
-
-        devcontainer_paths = {
-            "tests/bash/install_linux.bats",
-            "tests/bash/install_macos.bats",
-        }
-        all_bats_paths = {
-            path.relative_to(REPOSITORY_ROOT).as_posix()
-            for path in (REPOSITORY_ROOT / "tests" / "bash").glob("*.bats")
-        }
-        exclusion_case = re.search(
-            r'(?ms)case "\$\{bats_file\}" in(?P<case>.*?)^\s*esac$',
-            contract_workflow,
-        )
-        self.assertIsNotNone(exclusion_case)
-        case_body = exclusion_case.group("case") if exclusion_case is not None else ""
-        contract_excluded = {
-            f"tests/bash/{name}"
-            for name in re.findall(r"tests/bash/([^|)]+\.bats)", case_body)
-        }
-        contract_owned = all_bats_paths - contract_excluded
-
-        active_bats_lines = [
-            line.strip()
-            for line in bats_script.splitlines()
-            if line.strip().startswith("--command bats ")
-        ]
-        self.assertEqual(len(active_bats_lines), 1)
-        self.assertEqual(
-            active_bats_lines[0],
-            '--command bats --print-output-on-failure "${owned_bats_files[@]}"',
-        )
-        owned_array = re.search(r"(?ms)^owned_bats_files=\((.*?)^\)", bats_script)
-        self.assertIsNotNone(owned_array)
-        declared_paths = owned_array.group(1).split() if owned_array is not None else []
-        self.assertEqual(set(declared_paths), devcontainer_paths)
-        self.assertEqual(len(declared_paths), len(devcontainer_paths))
-
-        self.assertEqual(contract_excluded, devcontainer_paths)
-        self.assertTrue(devcontainer_paths.isdisjoint(contract_owned))
-        self.assertEqual(devcontainer_paths | contract_owned, all_bats_paths)
-        for owned_path in devcontainer_paths:
-            self.assertTrue((REPOSITORY_ROOT / owned_path).is_file(), owned_path)
-
+    def test_bash_suites_no_longer_have_devcontainer_ownership(self) -> None:
+        self.assertFalse(DEVCONTAINER_BATS_PATH.exists())
+        self.assertNotIn(".devcontainer/ci/bats.sh", self._named_workflow("ci-devcontainer.yml"))
         paths = self._job_patterns("devcontainer")
         self.assertIn("scripts/sh/dcnvim.sh", paths)
-        self.assertIn("tests/bash/install_macos.bats", paths)
-        self.assertIn("tests/bash/install_linux.bats", paths)
+        self.assertNotIn("tests/bash/install_macos.bats", paths)
+        self.assertNotIn("tests/bash/install_linux.bats", paths)
         self.assertNotIn("tests/bash/**", paths)
-
-        contract_push_paths = self._trigger_paths(contract_workflow, "push")
-        for path in (
-            '"bootstrap.sh"',
-            '"install.sh"',
-            '"scripts/sh/install-macos.sh"',
-            '"scripts/sh/dcnvim.sh"',
-            '".devcontainer/**"',
-        ):
-            self.assertIn(path, contract_push_paths)
 
     def test_hermes_ci_routes_xapi_contract_and_platform_adapters(self) -> None:
         workflow = self._named_workflow("ci-hermes-bootstrap.yml")
@@ -623,8 +651,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
         for marker in (
             "Bootstrap / Linux / Build",
-            "Bootstrap / Linux / E2E / Ubuntu",
-            "Bootstrap / Linux / E2E / Debian",
             "Bootstrap / Linux / E2E / NixOS",
             "Bootstrap / Darwin",
             "Bootstrap / WSL / Prebuild",
@@ -640,17 +666,22 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             ("windows", "windows"),
         ):
             job = self._workflow_job(workflow, job_name)
-            self.assertIn("needs: changes", job)
+            expected_needs = (
+                "needs: [changes, ci-tools]"
+                if job_name == "linux-build"
+                else "needs: changes"
+            )
+            self.assertIn(expected_needs, job)
             self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
 
         wsl_prebuild = self._workflow_job(workflow, "wsl-prebuild")
-        self.assertIn("needs: changes", wsl_prebuild)
+        self.assertIn("needs: [changes, ci-tools]", wsl_prebuild)
         self.assertIn("needs.changes.outputs.wsl == 'true'", wsl_prebuild)
         self.assertIn("ref: ${{ env.TESTED_SHA }}", wsl_prebuild)
         wsl = self._workflow_job(workflow, "wsl")
         self.assertIn("needs: [changes, wsl-prebuild]", wsl)
 
-        for job_name in ("linux-ubuntu", "linux-debian", "linux-nixos"):
+        for job_name in ("linux-nixos",):
             job = self._workflow_job(workflow, job_name)
             self.assertIn("needs: [changes, linux-build]", job)
             self.assertIn("needs.changes.outputs.linux == 'true'", job)
@@ -662,10 +693,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
     def test_unified_bootstrap_workflow_fails_closed_for_selected_platforms(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
 
-        for event in ("push",):
-            paths = self._trigger_paths(workflow, event)
-            self.assertIn('      - "Taskfile.yml"', paths)
-            self.assertIn('      - "taskfiles/**"', paths)
 
         changes = self._workflow_job(workflow, "changes")
         self.assertIn("platforms:", changes)
@@ -681,8 +708,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
         for job_name in (
             "linux-build",
-            "linux-ubuntu",
-            "linux-debian",
             "linux-nixos",
             "darwin",
             "wsl-prebuild",
@@ -732,8 +757,10 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "-OutputFile chezmoi-test-results.xml"
         )
         for alternate_invocation in (
-            "      - run: >-\n"
-            "          Invoke-Pester -Path .\\tests\\CHEZMOI",
+            (
+                "      - run: >-\n"
+                "          Invoke-Pester -Path .\\tests\\CHEZMOI"
+            ),
             "      - run: Invoke-Pester -Path ./tests/chezmoi",
         ):
             mutated_workflow = workflow.replace(
@@ -774,7 +801,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             REPOSITORY_ROOT / "nix" / "tests" / "README.md"
         ).read_text(encoding="utf-8")
         workflow = self._named_workflow("ci-bootstrap.yml")
-        nix_test = self._workflow_job(workflow, "nix-test")
+        nix_test = self._workflow_job(workflow, "linux-build")
         darwin = self._workflow_job(workflow, "darwin")
         normalized_readme = " ".join(readme.split())
 
@@ -802,23 +829,15 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn(f"`{runner}`", readme)
             self.assertIn(f"runs-on: {runner}", job)
 
-        for command, job in (
-            ("nix flake check --no-build", nix_test),
-            ("nix build .#checks.x86_64-linux.nix-unit --no-link", nix_test),
-            (
-                "nix build .#checks.x86_64-linux.custom-package-builds --no-link",
-                nix_test,
-            ),
-            ("nix build .#checks.aarch64-darwin.nix-unit --no-link", darwin),
-            (
-                "nix build .#checks.aarch64-darwin.custom-package-builds --no-link",
-                darwin,
-            ),
+        for target, job in (
+            (".#checks.x86_64-linux.nix-unit", nix_test),
+            (".#checks.x86_64-linux.custom-package-builds", nix_test),
+            (".#checks.aarch64-darwin.nix-unit", darwin),
+            (".#checks.aarch64-darwin.custom-package-builds", darwin),
         ):
-            self.assertIn(command, readme)
-            self.assertIn(command, job)
+            self.assertIn(target, readme)
+            self.assertIn(target, job)
 
 
 if __name__ == "__main__":
     unittest.main()
-

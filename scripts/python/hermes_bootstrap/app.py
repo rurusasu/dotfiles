@@ -587,7 +587,7 @@ def _cleanup_apply_resources(
         success = scratch.cleanup() and success
     for repo, result in results:
         tree = result.working_tree
-        if tree is None or tree == repo.target or tree == repo.legacy_target:
+        if tree is None or tree == repo.target:
             continue
         # synchronize_remote only returns a private first-clone outside the canonical target.
         if not repo.target.is_relative_to(data_root):
@@ -782,8 +782,6 @@ def _validate_repositories(manifest: BootstrapManifest) -> None:
         if remote is None or not _same_remote_identity(repo.source, remote):
             raise ValidationError("installed shared repository is invalid")
         _git_head(git)
-        if repo.legacy_target is not None and os.path.lexists(repo.legacy_target):
-            raise ValidationError("deprecated shared repository path remains")
 
 
 def _validate_env_file(path: Path, required: frozenset[str]) -> None:

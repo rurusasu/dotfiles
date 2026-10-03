@@ -1,4 +1,5 @@
 {
+  config,
   pkgs,
   lib,
   inputs,
@@ -10,6 +11,8 @@ let
   };
 in
 {
+  home.homeDirectory = lib.mkDefault "/home/${config.home.username}";
+
   imports = [
     ./common.nix
     ./hermes-agent.nix

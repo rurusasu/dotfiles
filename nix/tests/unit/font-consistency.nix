@@ -2,7 +2,7 @@
 let
   fixtures = import ../fixtures/packages.nix { inherit inputs; };
   fontContract =
-    system: module:
+    system: modules:
     let
       pkgs = fixtures.mkPkgs system;
       sets = import ../../packages/sets.nix {
@@ -15,13 +15,13 @@ let
           inherit inputs;
           installFeatures = [ ];
         };
-        modules = [
-          module
+        modules = modules ++ [
           {
-            home.username = "test-user";
-            home.homeDirectory =
-              if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
-            home.stateVersion = "25.05";
+            home = {
+              username = "test-user";
+              homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
+              stateVersion = "25.05";
+            };
           }
         ];
       };
@@ -41,7 +41,19 @@ let
     };
 in
 {
-  testLinuxInstallsManagedFont = fontContract "x86_64-linux" ../../home/linux.nix;
-  testWSLInstallsManagedFont = fontContract "x86_64-linux" ../../home/wsl.nix;
-  testDarwinInstallsManagedFont = fontContract "aarch64-darwin" ../../home/darwin.nix;
+  testLinuxInstallsManagedFont = fontContract "x86_64-linux" [ ../../home/linux.nix ];
+  testWSLInstallsManagedFont = fontContract "x86_64-linux" [ ../../home/wsl.nix ];
+  testStandaloneDarwinHomeProfileInstallsManagedFont =
+    let
+      result = fontContract "aarch64-darwin" [
+        ../../home/darwin.nix
+        ../../home/standalone-darwin-fonts.nix
+      ];
+    in
+    result
+    // {
+      expected = result.expected // {
+        homePackages = true;
+      };
+    };
 }

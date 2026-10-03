@@ -283,7 +283,7 @@ script を成功させるだけのテストは、実 installer boundary の代�
 | VscodeServer | [Handler.VscodeServer.ps1](../../../scripts/powershell/handlers/Handler.VscodeServer.ps1) | [Handler.VscodeServer.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.VscodeServer.Tests.ps1) | VS Code Server 管理    |
 | NixOSWSL     | [Handler.NixOSWSL.ps1](../../../scripts/powershell/handlers/Handler.NixOSWSL.ps1)         | [Handler.NixOSWSL.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.NixOSWSL.Tests.ps1)         | NixOS-WSL インストール |
 | NixRebuild   | [Handler.NixRebuild.ps1](../../../scripts/powershell/handlers/Handler.NixRebuild.ps1)     | [Handler.NixRebuild.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.NixRebuild.Tests.ps1)     | NixOS 設定適用         |
-| HermesAgent  | [Handler.HermesAgent.ps1](../../../scripts/powershell/handlers/Handler.HermesAgent.ps1)   | [Handler.HermesAgent.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1)   | Docker コンテナ起動    |
+| HermesAgent  | [Handler.HermesAgent.ps1](../../../scripts/powershell/handlers/Handler.HermesAgent.ps1)   | [Handler.HermesAgent.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1)   | NixOS WSL 検証         |
 
 ### 関連ドキュメント
 

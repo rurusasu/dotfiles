@@ -14,6 +14,51 @@
 }
 
 Describe 'WingetHandler' {
+    Context 'Package phase diagnostics' {
+        BeforeEach {
+            $script:phaseLogs = [System.Collections.Generic.List[string]]::new()
+            Mock Write-Host { param($Object) $script:phaseLogs.Add([string]$Object) }
+            $script:phaseHandler = [WingetHandler]::new()
+            $script:phasePackage = [pscustomobject]@{
+                Id = 'wez.wezterm'
+                InstallTimeoutSeconds = 30
+                PathEntries = @()
+                VerifyCommand = [pscustomobject]@{ command = 'wezterm'; args = @('--version') }
+            }
+        }
+
+        It 'should retain native install output and exit <ExitCode> in elapsed phase evidence' -TestCases @(
+            @{ ExitCode = 0 }
+            @{ ExitCode = -1978335189 }
+            @{ ExitCode = 124 }
+        ) {
+            param($ExitCode)
+            $script:phaseExitCode = $ExitCode
+            Mock Invoke-Winget { $global:LASTEXITCODE = $script:phaseExitCode; 'native installer evidence' }
+            $script:phasePackage.Id = 'Diagnostic.Fixture'
+            $output = @($script:phaseHandler.InvokeWingetInstall($script:phasePackage, @('install', '--id', 'Diagnostic.Fixture')))
+
+            $output | Should -Be @('native installer evidence')
+            $script:phaseHandler.LastInstallExitCode | Should -Be $ExitCode
+            ($script:phaseLogs -join "`n") | Should -Match 'PACKAGE_PHASE: package=Diagnostic\.Fixture phase=install status=started'
+            ($script:phaseLogs -join "`n") | Should -Match "PACKAGE_PHASE: package=Diagnostic\.Fixture phase=install status=completed elapsedMs=\d+ exitCode=$ExitCode"
+        }
+
+        It 'should record the actual version command exit without accepting a failed verifier' -TestCases @(
+            @{ ExitCode = 0; Expected = $true }
+            @{ ExitCode = 7; Expected = $false }
+        ) {
+            param($ExitCode, $Expected)
+            $script:phaseExitCode = $ExitCode
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = $script:phaseExitCode; 'wezterm fixture' }
+            $verified = $script:phaseHandler.TestPackageVerificationForPackage($script:phasePackage, $false)
+
+            $verified | Should -Be $Expected
+            ($script:phaseLogs -join "`n") | Should -Match 'PACKAGE_PHASE: command=wezterm phase=verify status=started'
+            ($script:phaseLogs -join "`n") | Should -Match "PACKAGE_PHASE: command=wezterm phase=verify status=completed elapsedMs=\d+ exitCode=$ExitCode"
+        }
+    }
+
     Context 'Timeout defaults and overrides' {
         BeforeEach {
             $script:originalDirectInstallTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
