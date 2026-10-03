@@ -16,6 +16,14 @@ Hermes profile config
 The `xapi-mcp` service publishes port `8766` only on `127.0.0.1`. Its OAuth cache is the host runtime directory
 `${HERMES_DATA_DIR:-~/.hermes}/.xurl`, mounted at `/root/.xurl`.
 
+The shell lifecycle adapter loads `scripts/sh/hermes-sidecar-common.sh` for
+host paths, the private 1Password service-account cache, OAuth credentials,
+token validation, and refresh-token synchronization. It does not load or start
+the retired Docker Agent/Dashboard. Windows uses `lib/HermesXApi.ps1` through
+the matching PowerShell entrypoint. Both adapters preserve the local cache on
+infrastructure failures and keep successfully rotated tokens if 1Password
+synchronization fails.
+
 Every managed distribution must own `config.yaml`. During bootstrap, Hermes
 installs this non-secret MCP entry into the staged runtime copy:
 
