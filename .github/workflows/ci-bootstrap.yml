@@ -260,6 +260,7 @@ jobs:
             .#systemConfigs.debian \
             .#homeConfigurations.x86_64-linux.activationPackage \
             .#package-support-report \
+            .#checks.x86_64-linux.powershell-formatter \
             .#checks.x86_64-linux.nix-unit \
             .#checks.x86_64-linux.custom-package-builds \
             .#checks.x86_64-linux.aerospace-workspace-cycle \
@@ -328,6 +329,7 @@ jobs:
             --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY" \
             .#darwinConfigurations.macos.system \
             .#package-support-report \
+            .#checks.aarch64-darwin.powershell-formatter \
             .#checks.aarch64-darwin.nix-unit \
             .#checks.aarch64-darwin.hermes-bootstrap-tests \
             .#checks.aarch64-darwin.custom-package-builds \

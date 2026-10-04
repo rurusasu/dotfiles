@@ -1,5 +1,6 @@
 { inputs }:
 let
+  lib = inputs.nixpkgs.lib;
   system = "aarch64-darwin";
   workmux = import ../../../flakes/lib/workmux.nix { inherit inputs; };
   workmuxOverlay = workmux.mkOverlay (_: inputs.workmux.packages.${system}.default);
@@ -38,6 +39,12 @@ let
   dockerConfig = (mkDarwin { withDocker = true; }).config;
   hermesConfig = (mkDarwin { withHermes = true; }).config;
   ollamaConfig = (mkDarwin { withOllama = true; }).config;
+  profiles = {
+    default = defaultConfig;
+    ollama = ollamaConfig;
+    docker = dockerConfig;
+    hermes = hermesConfig;
+  };
   sudoUserConfig =
     (mkDarwin {
       sudoUser = "ktome1995";
@@ -254,4 +261,32 @@ in
     };
   };
 
+  testDarwinLegacyOmlxCleanupDefinitionIsAbsent = {
+    expr = lib.mapAttrs (
+      _: config: builtins.hasAttr "removeLegacyOmlx" config.system.activationScripts
+    ) profiles;
+    expected = {
+      default = false;
+      ollama = false;
+      docker = false;
+      hermes = false;
+    };
+  };
+
+  # Check every evaluated fragment so renaming or moving the old commands cannot
+  # restore the cleanup through another activation hook.
+  testDarwinActivationScriptsDoNotReferenceLegacyOmlx = {
+    expr = lib.mapAttrs (
+      _: config:
+      builtins.filter (
+        name: lib.hasInfix "omlx" config.system.activationScripts.${name}.text
+      ) (builtins.attrNames config.system.activationScripts)
+    ) profiles;
+    expected = {
+      default = [ ];
+      ollama = [ ];
+      docker = [ ];
+      hermes = [ ];
+    };
+  };
 }
