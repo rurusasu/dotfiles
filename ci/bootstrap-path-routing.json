@@ -219,6 +219,7 @@
     },
     {
       "patterns": [
+        "scripts/python/hermes_bootstrap_cli.py",
         "scripts/python/hermes_bootstrap/**",
         "tests/python/hermes_bootstrap_test/**",
         "nix/home/hermes-agent/**",

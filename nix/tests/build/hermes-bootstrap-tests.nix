@@ -1,12 +1,13 @@
 { inputs, pkgs }:
 let
-  hermesPackage = inputs.hermes-agent.packages.${pkgs.system}.default;
-  testPython = "${hermesPackage.hermesVenv}/bin/python3";
   bootstrapPython = pkgs.python312.withPackages (pythonPackages: [
     pythonPackages.httpx
     pythonPackages.python-dotenv
     pythonPackages.pyyaml
   ]);
+  # Test the bootstrap's real dependency environment, not Hermes' optional
+  # audio/ML stack. The pinned upstream source still supplies its actual APIs.
+  testPython = "${bootstrapPython}/bin/python3";
   sourceRoot = ../../..;
   managedWrapper = pkgs.writeShellScriptBin "hermes-profile-sync" (
     builtins.readFile ../../../scripts/sh/hermes-profile-sync.sh

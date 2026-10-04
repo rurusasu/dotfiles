@@ -7,6 +7,16 @@ Nix module also installs `hermes-bootstrap` and a manifest rooted at
 `~/.hermes`; `task hermes:sync` streams 1Password item data to that native
 transactional bootstrap and synchronizes profiles and shared repositories.
 
+The runtime uses the official upstream `packages.<system>.default` output with
+the complete dependency graph from that pinned Hermes revision. Its nixpkgs,
+flake-parts, and Home Manager inputs do not follow this repository's inputs;
+runtime dependencies are not overridden or replaced with a reduced variant.
+The consuming Home Manager module still manages our service and profile settings.
+This follows the [official Nix setup](https://hermes-agent.nousresearch.com/docs/getting-started/nix-setup).
+An unchanged derivation can reuse a matching binary from a configured trusted
+cache, but a Nix flake is not a guarantee that every pinned output is cached.
+Missing binaries still require a source build; no new cache is implicitly trusted.
+
 Docker is not used for the Hermes Agent runtime or its bootstrap. Docker browser
 and MCP sidecars remain separate services. The old `hermes-data` volume is not
 automatically copied, modified, or removed; review the one-time migration below
@@ -648,6 +658,15 @@ the same aggregate command and must remain local-to-remote for existing named
 profiles.
 
 ## Source Validation Gate
+
+`hermes-bootstrap-tests` uses the bootstrap CLI's Python dependencies and the
+actual pinned upstream Python source. It does not need the full voice/ML runtime
+to exercise profile synchronization, secret handling, or native filesystem tests.
+Linux and Darwin retain their native bootstrap tests. The separate
+`hermes-runtime` check realizes the unmodified official full package on Darwin
+when Hermes sources, dependency pins, flake wiring, or its CI contracts change;
+manual Bootstrap CI runs select it too. Linux/WSL retains its full-feature system
+build. Package realization is not a host activation or a live gateway test.
 
 Changes under `scripts/python/hermes_bootstrap/`, `nix/home/hermes-agent/`, or to `Taskfile.yml`,
 `.pre-commit-config.yaml`, or the Hermes bootstrap workflow itself, run

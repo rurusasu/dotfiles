@@ -51,11 +51,12 @@ jobs:
     outputs:
       bash: ${{ steps.contracts.outputs.bash }}
       linux: ${{ steps.detect.outputs.linux }}
-      darwin: ${{ steps.detect.outputs.darwin }}
+      darwin: ${{ steps.detect.outputs.darwin == 'true' || steps.contracts.outputs.hermes == 'true' }}
+      hermes: ${{ steps.contracts.outputs.hermes }}
       wsl: ${{ steps.detect.outputs.wsl }}
       windows: ${{ steps.detect.outputs.windows }}
       nix: ${{ steps.detect.outputs.nix }}
-      platforms: ${{ steps.detect.outputs.linux == 'true' || steps.detect.outputs.darwin == 'true' || steps.detect.outputs.wsl == 'true' || steps.detect.outputs.windows == 'true' }}
+      platforms: ${{ steps.detect.outputs.linux == 'true' || steps.detect.outputs.darwin == 'true' || steps.detect.outputs.wsl == 'true' || steps.detect.outputs.windows == 'true' || steps.contracts.outputs.hermes == 'true' }}
 
   ci-tools:
     needs: changes
@@ -270,7 +271,7 @@ jobs:
 
   linux-nixos:
     name: Bootstrap / Linux / E2E / NixOS
-    needs: [changes, linux-build]
+    needs: changes
     if: ${{ needs.changes.outputs.linux == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -339,6 +340,14 @@ jobs:
             .#checks.aarch64-darwin.ghostty-config \
             .#checks.aarch64-darwin.neovim-native \
             .#checks.aarch64-darwin.standalone-darwin-home
+
+      - name: Build official Hermes runtime
+        if: ${{ needs.changes.outputs.hermes == 'true' }}
+        run: |
+          nix build --no-link --no-write-lock-file --print-build-logs \
+            --option extra-substituters "$NUMTIDE_CACHE" \
+            --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY" \
+            .#checks.aarch64-darwin.hermes-runtime
 
   wsl-prebuild:
     name: Bootstrap / WSL / Prebuild

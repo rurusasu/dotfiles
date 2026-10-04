@@ -193,6 +193,13 @@
     },
     {
       "patterns": [
+        "flake.nix",
+        "flake.lock",
+        "nix/flakes/**",
+        "nix/overlays/**",
+        "nix/tests/build/hermes-*.nix",
+        "scripts/python/hermes_bootstrap_cli.py",
+        ".github/workflows/ci-bootstrap.yml",
         "scripts/python/hermes_bootstrap/**",
         "tests/python/hermes_bootstrap_test/**",
         "nix/home/hermes-agent/**",

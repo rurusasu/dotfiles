@@ -51,12 +51,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     hermes-agent = {
+      # Keep the upstream package and its complete locked dependency graph intact.
+      # Following this repository's nixpkgs changes derivations and cache identities.
       url = "github:NousResearch/hermes-agent/d337b736aa1e8ebecfab043842d13e4a2d2f48a3";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-        flake-parts.follows = "flake-parts";
-        home-manager.follows = "home-manager";
-      };
     };
   };
 

@@ -28,6 +28,53 @@ INSTALL_NIX_ACTION = "cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb
 class CiWorkflowRoutingContractTests(unittest.TestCase):
     """Keep the lightweight CI workflow's trigger and tool contracts stable."""
 
+    def test_nixos_vm_runs_independently_but_remains_required(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        vm = self._workflow_job(workflow, "linux-nixos")
+        self.assertRegex(vm, r"(?m)^    needs: changes$")
+        self.assertIn(".#checks.x86_64-linux.bootstrap-nixos-vm", vm)
+        complete = self._workflow_job(workflow, "complete")
+        self.assertIn("linux-nixos,", complete)
+        self.assertIn('${{ needs.linux-nixos.result }}', complete)
+        self.assertIn('"${LINUX_REQUIRED}" "${LINUX_NIXOS_RESULT}"', complete)
+
+    def test_hermes_full_runtime_is_separate_from_native_bootstrap_tests(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        changes = self._workflow_job(workflow, "changes")
+        self.assertIn("hermes: ${{ steps.contracts.outputs.hermes }}", changes)
+        self.assertIn("steps.detect.outputs.darwin == 'true' || steps.contracts.outputs.hermes == 'true'", changes)
+        darwin = self._workflow_job(workflow, "darwin")
+        self.assertRegex(
+            darwin,
+            r"(?s)name: Build official Hermes runtime.*?"
+            r"if: \$\{\{ needs.changes.outputs.hermes == 'true' \}\}.*?"
+            r"\.\#checks\.aarch64-darwin\.hermes-runtime",
+        )
+        self.assertIn(".#checks.aarch64-darwin.hermes-bootstrap-tests", darwin)
+
+    def test_local_nix_checks_share_one_build_invocation(self) -> None:
+        taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
+        block = taskfile.split("  test:nix:\n", 1)[1].split("  test:powershell:\n", 1)[0]
+        self.assertEqual(block.count("nix build "), 1)
+        for check in (
+            "powershell-formatter", "nix-unit", "custom-package-builds",
+            "aerospace-workspace-cycle", "darwin-default-shell", "neovim-native", "ghostty-config",
+        ):
+            self.assertIn(f'.#checks.${{system}}.{check}', block)
+        self.assertIn("--no-write-lock-file", block)
+
+    def test_consistency_nix_checks_share_one_logged_build(self) -> None:
+        workflow = self._named_workflow("ci-consistency.yml")
+        commands = workflow.replace("\\\n", " ").splitlines()
+        check_commands = [line for line in commands if "nix build " in line and ".#checks." in line]
+        self.assertEqual(len(check_commands), 1)
+        for check in (
+            "nix-unit", "custom-package-builds", "aerospace-workspace-cycle",
+            "windows-keybindings-generated",
+        ):
+            self.assertIn(f".#checks.x86_64-linux.{check}", check_commands[0])
+        self.assertIn("--print-build-logs", check_commands[0])
+
     def test_powershell_formatter_regression_runs_in_local_and_native_ci_routes(self) -> None:
         taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
         self.assertIn('.#checks.${system}.powershell-formatter', taskfile)
@@ -482,11 +529,15 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
         self.assertIn("name: Bootstrap CI", workflow)
         self.assertIn("manifest: ci/bootstrap-path-routing.json", workflow)
-        for output in ("linux", "darwin", "wsl", "windows"):
+        for output in ("linux", "wsl", "windows"):
             self.assertRegex(
                 workflow,
                 rf"(?m)^\s+{output}: \$\{{\{{ steps\.detect\.outputs\.{output} \}}\}}$",
             )
+        self.assertIn(
+            "darwin: ${{ steps.detect.outputs.darwin == 'true' || steps.contracts.outputs.hermes == 'true' }}",
+            workflow,
+        )
 
         for marker in (
             "Bootstrap / Linux / Build",
@@ -522,7 +573,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
         for job_name in ("linux-nixos",):
             job = self._workflow_job(workflow, job_name)
-            self.assertIn("needs: [changes, linux-build]", job)
+            self.assertIn("needs: changes", job)
             self.assertIn("needs.changes.outputs.linux == 'true'", job)
 
         complete = self._workflow_job(workflow, "complete")

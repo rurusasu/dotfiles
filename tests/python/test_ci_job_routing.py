@@ -56,6 +56,27 @@ class CiJobRoutingTests(unittest.TestCase):
             {"contract"},
         )
 
+    def test_hermes_dependencies_and_entrypoint_select_native_checks(self) -> None:
+        for path in (
+            "flake.nix",
+            "flake.lock",
+            "nix/flakes/tests.nix",
+            "nix/flakes/lib/hosts.nix",
+            "nix/overlays/hermes.nix",
+            "nix/tests/build/hermes-bootstrap-tests.nix",
+            "nix/tests/build/hermes-runtime.nix",
+            "nix/home/hermes-agent.nix",
+            "scripts/python/hermes_bootstrap_cli.py",
+            ".github/workflows/ci-bootstrap.yml",
+        ):
+            with self.subTest(path=path):
+                self.assertIn("hermes", self.selected(path))
+
+    def test_unrelated_shell_changes_do_not_select_hermes_runtime(self) -> None:
+        for path in ("nix/home/zsh.nix", "chezmoi/shells/bashrc"):
+            with self.subTest(path=path):
+                self.assertNotIn("hermes", self.selected(path))
+
     def test_bash_test_selects_contracts_without_container_builds(self) -> None:
         self.assertEqual(self.selected("tests/bash/example.bats"), {"python", "bash"})
 

@@ -12,13 +12,14 @@ tasks:
       - task: keybindings:check
       - |-
         system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
-        nix build ".#checks.${system}.powershell-formatter" --no-link --no-write-lock-file
-        nix build ".#checks.${system}.nix-unit" --no-link --no-write-lock-file
-        nix build ".#checks.${system}.custom-package-builds" --no-link --no-write-lock-file
-        nix build ".#checks.${system}.aerospace-workspace-cycle" --no-link --no-write-lock-file
-        nix build ".#checks.${system}.darwin-default-shell" --no-link --no-write-lock-file
-        nix build ".#checks.${system}.neovim-native" --no-link --no-write-lock-file
-        nix build ".#checks.${system}.ghostty-config" --no-link --no-write-lock-file
+        nix build ".#checks.${system}.powershell-formatter" \
+          ".#checks.${system}.nix-unit" \
+          ".#checks.${system}.custom-package-builds" \
+          ".#checks.${system}.aerospace-workspace-cycle" \
+          ".#checks.${system}.darwin-default-shell" \
+          ".#checks.${system}.neovim-native" \
+          ".#checks.${system}.ghostty-config" \
+          --no-link --no-write-lock-file
 
   test:powershell:
     desc: Run PowerShell tests
