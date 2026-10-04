@@ -26,6 +26,11 @@
     nix-unit.inputs = {
       # Full Darwin activation evaluation needs this nested input in the sandbox.
       "nix-homebrew/brew-src" = inputs.nix-homebrew.inputs.brew-src;
+      # Hermes activation also evaluates its locked package input closure.
+      "hermes-agent/pyproject-nix" = inputs.hermes-agent.inputs.pyproject-nix;
+      "hermes-agent/uv2nix" = inputs.hermes-agent.inputs.uv2nix;
+      "hermes-agent/pyproject-build-systems" = inputs.hermes-agent.inputs.pyproject-build-systems;
+      "hermes-agent/npm-lockfile-fix" = inputs.hermes-agent.inputs.npm-lockfile-fix;
       inherit (inputs)
         flake-parts
         home-manager
