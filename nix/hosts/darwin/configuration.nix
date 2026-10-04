@@ -21,6 +21,25 @@ let
   # /run/current-system is updated after postActivation, so use the realized
   # store executable even on the first nix-darwin activation.
   loginShell = lib.getExe pkgs.zsh;
+  # Native users.users.<name>.shell only updates knownUsers. Keep the existing
+  # admin account macOS-owned and converge just its local shell property.
+  defaultShellActivation = ''
+    (
+      set -eu
+      user=${lib.escapeShellArg user}
+      target=${lib.escapeShellArg loginShell}
+      test -x "$target"
+      uid="$(/usr/bin/id -u "$user")"
+      test "$uid" -gt 0
+      ${pkgs.gnugrep}/bin/grep -Fxq -- "$target" /etc/shells
+      current="$(/usr/bin/dscl . -read "/Users/$user" UserShell)"
+      if [ "$current" != "UserShell: $target" ]; then
+        /usr/bin/dscl . -change "/Users/$user" UserShell "''${current#UserShell: }" "$target"
+        current="$(/usr/bin/dscl . -read "/Users/$user" UserShell)"
+        test "$current" = "UserShell: $target"
+      fi
+    )
+  '';
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
   };
@@ -41,6 +60,7 @@ in
     stateVersion = 6;
     tools.darwin-uninstaller.enable = false;
     activationScripts = {
+      defaultUserShell.text = defaultShellActivation;
       globalZoomShortcut.text = ''
         uid="$(id -u -- ${lib.escapeShellArg user})"
         runAsUser() {
@@ -51,9 +71,7 @@ in
         runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "拡大／縮小" "@^m"
       '';
       postActivation.text = lib.mkAfter (
-        ''
-          ${pkgs.bash}/bin/bash ${./set-default-shell.sh} ${lib.escapeShellArg user} ${lib.escapeShellArg loginShell}
-        ''
+        defaultShellActivation
         + lib.optionalString withHermes ''
           uid="$(id -u -- ${lib.escapeShellArg user})"
           runAsUser() {
@@ -140,7 +158,7 @@ in
   environment.shells = [ loginShell ];
 
   # Existing admin accounts must not be added to users.knownUsers. Only the
-  # login-shell property is converged by the activation helper above.
+  # login-shell property is converged by the Nix activation above.
   users.users.${user} = {
     inherit home;
     shell = loginShell;

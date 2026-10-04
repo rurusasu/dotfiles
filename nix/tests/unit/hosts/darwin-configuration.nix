@@ -56,6 +56,8 @@ let
       currentUser = "ktome1995";
     }).config;
   defaultHome = defaultConfig.home-manager.users.rurusasu;
+  defaultShellActivation = defaultConfig.system.activationScripts.defaultUserShell.text;
+  defaultPostActivation = defaultConfig.system.activationScripts.postActivation.text;
   nonstandardHomeConfig =
     (mkDarwin {
       sudoUser = "alice";
@@ -80,6 +82,7 @@ in
       shell = defaultConfig.users.users.rurusasu.shell;
       installed = builtins.elem (mkDarwin { }).pkgs.zsh defaultConfig.environment.systemPackages;
       registered = builtins.elem defaultConfig.users.users.rurusasu.shell defaultConfig.environment.shells;
+      activationWired = lib.hasInfix defaultShellActivation defaultPostActivation;
       ownsAdminAccount = builtins.elem "rurusasu" defaultConfig.users.knownUsers;
     };
     expected = {
@@ -87,6 +90,7 @@ in
       shell = lib.getExe (mkDarwin { }).pkgs.zsh;
       installed = true;
       registered = true;
+      activationWired = true;
       ownsAdminAccount = false;
     };
   };

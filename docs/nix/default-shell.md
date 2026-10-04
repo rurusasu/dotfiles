@@ -8,6 +8,12 @@ Nix が zsh を含む構成を取得・ビルドしてから activation を実�
 先に用意されます。NixOS はユーザーの `shell` option、macOS は既存のローカルアカウントの
 `UserShell` だけを更新します。既に同じシェルなら変更せず、実行ファイル・登録・ユーザーの
 確認に失敗した場合は切り替えません。macOS は変更後も設定値を読み直します。
+設定はすべて Nix 内で管理し、独立した shell script は配布しません。
+
+macOS の `users.users.<name>.shell` は `users.knownUsers` に属するアカウントだけを更新します。
+既存の管理者アカウントをそのリストへ追加しないよう upstream が注意しているため、
+この構成では標準 option で zsh の導入・登録・選択を宣言し、既存アカウントの反映だけを
+`configuration.nix` の短い activation で補います。
 
 反映は通常の `nrs` / `install.sh` の実行後、新しいログインセッションから有効になります。
 既存のシェルセッションは切り替わりません。ターミナルに独自の起動コマンドを指定している
@@ -30,6 +36,7 @@ Nix が zsh を含む構成を取得・ビルドしてから activation を実�
 
 `nix build .#checks.<system>.nix-unit --no-link --no-write-lock-file` が各 host の
 zsh 有効化・インストール・対象ユーザーへの選択を検証します。
-`python3 -m unittest discover -s tests/python -p test_darwin_default_shell.py -v` は
-隔離したコマンド境界で、対象ユーザー、導入前の拒否、冪等性、失敗伝播、変更後の読み直しを検証します。
+`nix build .#checks.<system>.darwin-default-shell --no-link --no-write-lock-file` は
+実際に Nix が生成する activation を隔離したコマンド境界で実行し、対象ユーザー、導入前の拒否、
+冪等性、失敗伝播、変更後の読み直しを検証します。`task test:nix` と Linux/macOS CI に含まれます。
 このテストは実機のアカウントを変更しません。
