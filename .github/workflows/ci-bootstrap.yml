@@ -264,6 +264,7 @@ jobs:
             .#checks.x86_64-linux.nix-unit \
             .#checks.x86_64-linux.custom-package-builds \
             .#checks.x86_64-linux.aerospace-workspace-cycle \
+            .#checks.x86_64-linux.darwin-default-shell \
             .#checks.x86_64-linux.ghostty-config \
             .#checks.x86_64-linux.neovim-native
 
@@ -334,6 +335,7 @@ jobs:
             .#checks.aarch64-darwin.hermes-bootstrap-tests \
             .#checks.aarch64-darwin.custom-package-builds \
             .#checks.aarch64-darwin.aerospace-workspace-cycle \
+            .#checks.aarch64-darwin.darwin-default-shell \
             .#checks.aarch64-darwin.ghostty-config \
             .#checks.aarch64-darwin.neovim-native \
             .#checks.aarch64-darwin.standalone-darwin-home
