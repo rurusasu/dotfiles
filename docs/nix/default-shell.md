@@ -4,39 +4,35 @@
 ターミナルアプリ自体は変更しません。Windows の設定と、standalone Home Manager /
 Ubuntu・Debian の System Manager は対象外です。
 
-Nix が zsh を含む構成を取得・ビルドしてから activation を実行するため、zsh が未導入でも
-先に用意されます。NixOS はユーザーの `shell` option、macOS は既存のローカルアカウントの
-`UserShell` だけを更新します。既に同じシェルなら変更せず、実行ファイル・登録・ユーザーの
-確認に失敗した場合は切り替えません。macOS は変更後も設定値を読み直します。
+macOS は OS 付属の `/bin/zsh` を使い、インストール処理や `/etc/shells` の管理を追加しません。
+既存の Home Manager / nix-darwin によるパッケージ・ユーザー設定はそのままです。
+NixOS / WSL は共有 system module が zsh を取得・ビルドしてからユーザーの `shell` option を反映します。
+
+macOS は既存ローカルアカウントの `UserShell` だけを更新します。既に `/bin/zsh` なら変更せず、
+実行ファイル・登録・対象ユーザーの確認に失敗した場合は切り替えません。変更後も設定値を読み直します。
+OS 付属の `/bin/zsh` が予期せず欠けている場合は安全に停止し、別のシェルを自動導入しません。
 設定はすべて Nix 内で管理し、独立した shell script は配布しません。
 
 macOS の `users.users.<name>.shell` は `users.knownUsers` に属するアカウントだけを更新します。
 既存の管理者アカウントをそのリストへ追加しないよう upstream が注意しているため、
-この構成では標準 option で zsh の導入・登録・選択を宣言し、既存アカウントの反映だけを
+この構成では標準 option で `/bin/zsh` の選択を宣言し、既存アカウントの反映だけを
 `configuration.nix` の短い activation で補います。
 
 反映は通常の `nrs` / `install.sh` の実行後、新しいログインセッションから有効になります。
 既存のシェルセッションは切り替わりません。ターミナルに独自の起動コマンドを指定している
 場合、その設定がログインシェルより優先されます。
 
-## macOS の既存設定と復旧
+## macOS の既存設定
 
 - 管理者アカウントを `users.knownUsers` に追加しません。UID、グループ、パスワードを変更しません。
-- `/etc/shells` に独自の内容がある場合、nix-darwin は既存ファイル保護により反映を停止することがあります。
-  既存エントリーを確認し、必要なシェルを Nix 設定へ移してから再実行してください。自動上書きはしません。
-- macOS のログインシェルは具体的な Nix store の zsh を参照します。この変更より前の generation
-  へ rollback しても Directory Services の値は元に戻りません。rollback・generation 削除・GC の
-  前に、対象ユーザーで `chsh -s /bin/zsh` を実行して macOS 標準シェルへ戻してください。
-  rollback 後は現在のシェルが `/etc/shells` から外れ、通常の `chsh` が拒否する場合があります。
-  その場合は利用可能な管理者セッションから、対象のローカルユーザー名を明示して
-  `sudo /usr/bin/chsh -l /Local/Default -s /bin/zsh <target-user>` で復旧してください。
-  または、対象の zsh を含む generation を保持してこの構成を再反映します。
+- `/etc/shells` は読み取りによる確認だけを行い、既存エントリーを変更しません。
+- `/bin/zsh` は OS のファイルなので、Nix generation の削除・GC でログインシェルが消えることはありません。
 
 ## テスト
 
-`nix build .#checks.<system>.nix-unit --no-link --no-write-lock-file` が各 host の
-zsh 有効化・インストール・対象ユーザーへの選択を検証します。
+`nix build .#checks.<system>.nix-unit --no-link --no-write-lock-file` が NixOS / WSL の
+zsh 導入・選択と、macOS の `/bin/zsh` 選択・activation 配線を検証します。
 `nix build .#checks.<system>.darwin-default-shell --no-link --no-write-lock-file` は
-実際に Nix が生成する activation を隔離したコマンド境界で実行し、対象ユーザー、導入前の拒否、
+実際に Nix が生成する activation を隔離したコマンド境界で実行し、対象ユーザー、実行ファイル欠損時の拒否、
 冪等性、失敗伝播、変更後の読み直しを検証します。`task test:nix` と Linux/macOS CI に含まれます。
 このテストは実機のアカウントを変更しません。

@@ -18,9 +18,8 @@ let
     else
       throw "Unable to determine the macOS user: SUDO_USER and USER are both empty.";
   home = "/Users/${user}";
-  # /run/current-system is updated after postActivation, so use the realized
-  # store executable even on the first nix-darwin activation.
-  loginShell = lib.getExe pkgs.zsh;
+  # macOS supplies zsh; do not add installation or /etc/shells management.
+  loginShell = "/bin/zsh";
   # Native users.users.<name>.shell only updates knownUsers. Keep the existing
   # admin account macOS-owned and converge just its local shell property.
   defaultShellActivation = ''
@@ -31,7 +30,7 @@ let
       test -x "$target"
       uid="$(/usr/bin/id -u "$user")"
       test "$uid" -gt 0
-      ${pkgs.gnugrep}/bin/grep -Fxq -- "$target" /etc/shells
+      /usr/bin/grep -Fxq -- "$target" /etc/shells
       current="$(/usr/bin/dscl . -read "/Users/$user" UserShell)"
       if [ "$current" != "UserShell: $target" ]; then
         /usr/bin/dscl . -change "/Users/$user" UserShell "''${current#UserShell: }" "$target"
@@ -153,9 +152,6 @@ in
       };
     };
   };
-
-  programs.zsh.enable = true;
-  environment.shells = [ loginShell ];
 
   # Existing admin accounts must not be added to users.knownUsers. Only the
   # login-shell property is converged by the Nix activation above.

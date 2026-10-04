@@ -61,13 +61,13 @@ let
   '';
 
   # Execute the production Nix text, replacing only macOS command/file
-  # boundaries. No real account or host /etc/shells is read or modified.
+  # boundaries, including its built-in /bin/zsh. No real account or host
+  # /etc/shells is read or modified.
   activationFor =
     name: zsh:
     let
       host = import ../../hosts/darwin/configuration.nix {
-        pkgs = pkgs // { inherit zsh; };
-        inherit lib;
+        inherit pkgs lib;
         inputs = { };
         sudoUser = "test-user";
         currentUser = "root";
@@ -78,8 +78,14 @@ let
     in
     pkgs.writeText "darwin-default-shell-${name}" (
       lib.replaceStrings
-        [ "/usr/bin/id" "/usr/bin/dscl" "/etc/shells" ]
-        [ "${idDouble}/bin/id" "${dsclDouble}/bin/dscl" "$TEST_STATE/shells" ]
+        [ "/bin/zsh" "/usr/bin/id" "/usr/bin/dscl" "/usr/bin/grep" "/etc/shells" ]
+        [
+          (lib.getExe zsh)
+          "${idDouble}/bin/id"
+          "${dsclDouble}/bin/dscl"
+          "${pkgs.gnugrep}/bin/grep"
+          "$TEST_STATE/shells"
+        ]
         host.system.activationScripts.defaultUserShell.text
     );
   installedActivation = activationFor "installed" installedZsh;
@@ -157,6 +163,7 @@ pkgs.runCommand "darwin-default-shell-tests" { nativeBuildInputs = [ pkgs.coreut
   assert_other_users_unchanged
   pass
 
+  # Missing or non-executable built-in zsh must only cause a safe rejection.
   reset_state missing-shell
   printf '%s\n' ${lib.escapeShellArg (lib.getExe missingZsh)} > "$TEST_STATE/shells"
   run_activation ${missingActivation} failure

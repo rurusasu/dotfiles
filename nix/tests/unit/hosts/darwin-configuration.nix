@@ -57,6 +57,8 @@ let
     }).config;
   defaultHome = defaultConfig.home-manager.users.rurusasu;
   defaultShellActivation = defaultConfig.system.activationScripts.defaultUserShell.text;
+  # Regex patterns cannot carry store context; this assertion only inspects text.
+  activationText = builtins.unsafeDiscardStringContext defaultShellActivation;
   defaultPostActivation = defaultConfig.system.activationScripts.postActivation.text;
   nonstandardHomeConfig =
     (mkDarwin {
@@ -76,20 +78,18 @@ let
   hasPackage = name: packages: builtins.any (package: package == name) packages;
 in
 {
-  testDarwinInstallsAndRegistersManagedUserZsh = {
+  testDarwinUsesBuiltInZshWithoutOwningTheShellRegistry = {
     expr = {
       enabled = defaultConfig.programs.zsh.enable;
       shell = defaultConfig.users.users.rurusasu.shell;
-      installed = builtins.elem (mkDarwin { }).pkgs.zsh defaultConfig.environment.systemPackages;
-      registered = builtins.elem defaultConfig.users.users.rurusasu.shell defaultConfig.environment.shells;
-      activationWired = lib.hasInfix defaultShellActivation defaultPostActivation;
+      ownsShellRegistry = builtins.hasAttr "shells" defaultConfig.environment.etc;
+      activationWired = lib.hasInfix activationText defaultPostActivation;
       ownsAdminAccount = builtins.elem "rurusasu" defaultConfig.users.knownUsers;
     };
     expected = {
       enabled = true;
-      shell = lib.getExe (mkDarwin { }).pkgs.zsh;
-      installed = true;
-      registered = true;
+      shell = "/bin/zsh";
+      ownsShellRegistry = false;
       activationWired = true;
       ownsAdminAccount = false;
     };
@@ -103,8 +103,8 @@ in
       ownsRoot = builtins.elem "root" sudoUserConfig.users.knownUsers;
     };
     expected = {
-      sudoUserShell = lib.getExe (mkDarwin { }).pkgs.zsh;
-      fallbackUserShell = lib.getExe (mkDarwin { }).pkgs.zsh;
+      sudoUserShell = "/bin/zsh";
+      fallbackUserShell = "/bin/zsh";
       nonstandardHome = "/Volumes/Home/alice";
       ownsRoot = false;
     };
