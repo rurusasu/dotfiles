@@ -50,10 +50,6 @@
         nixAttr = "ollama";
       };
     };
-    legacyDarwin = {
-      provider = "homebrew-cask";
-      name = "ollama-app";
-    };
   };
 
   workmux = {

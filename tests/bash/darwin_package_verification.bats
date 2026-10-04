@@ -3,7 +3,6 @@
 setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
 	VERIFIER="$REPO_ROOT/scripts/sh/verify-darwin-package.sh"
-	MIGRATOR="$REPO_ROOT/scripts/sh/migrate-darwin-provider.sh"
 	BASH_32="/bin/bash"
 	TEST_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
@@ -36,8 +35,7 @@ setup() {
         "executable": "Test App"
       }
     },
-    "installFeature": null,
-    "legacyDarwin": null
+    "installFeature": null
   },
   "test-command": {
     "darwin": {
@@ -49,8 +47,7 @@ setup() {
         "versionArgs": ["version", "--json"]
       }
     },
-    "installFeature": null,
-    "legacyDarwin": null
+    "installFeature": null
   },
   "nix-adhoc-app": {
     "darwin": {
@@ -63,8 +60,7 @@ setup() {
         "executable": "Test App"
       }
     },
-    "installFeature": null,
-    "legacyDarwin": null
+    "installFeature": null
   },
   "_1password-cli": {
     "darwin": {
@@ -76,8 +72,7 @@ setup() {
         "versionArgs": ["--version"]
       }
     },
-    "installFeature": null,
-    "legacyDarwin": null
+    "installFeature": null
   },
   "traversal-app-name": {
     "darwin": {
@@ -90,8 +85,7 @@ setup() {
         "executable": "Outside"
       }
     },
-    "installFeature": null,
-    "legacyDarwin": null
+    "installFeature": null
   },
   "traversal-app-executable": {
     "darwin": {
@@ -104,8 +98,7 @@ setup() {
         "executable": "../Outside"
       }
     },
-    "installFeature": null,
-    "legacyDarwin": null
+    "installFeature": null
   },
   "traversal-command": {
     "darwin": {
@@ -117,57 +110,7 @@ setup() {
         "versionArgs": ["--version"]
       }
     },
-    "installFeature": null,
-    "legacyDarwin": null
-  },
-  "legacy-app": {
-    "darwin": {
-      "provider": "nix",
-      "source": "nixpkgs",
-      "nixAttr": "legacy-app",
-      "identity": {
-        "appName": "Test App.app",
-        "bundleId": "com.example.test-app",
-        "executable": "Test App"
-      }
-    },
-    "installFeature": "WithHermes",
-    "legacyDarwin": {
-      "provider": "homebrew-cask",
-      "name": "legacy-app"
-    }
-  },
-  "legacy-option": {
-    "darwin": {
-      "provider": "nix",
-      "source": "nixpkgs",
-      "nixAttr": "legacy-option",
-      "identity": {
-        "command": "test-command",
-        "versionArgs": ["version"]
-      }
-    },
-    "installFeature": null,
-    "legacyDarwin": {
-      "provider": "homebrew-cask",
-      "name": "--zap"
-    }
-  },
-  "legacy-formula": {
-    "darwin": {
-      "provider": "nix",
-      "source": "nixpkgs",
-      "nixAttr": "legacy-formula",
-      "identity": {
-        "command": "test-command",
-        "versionArgs": ["version"]
-      }
-    },
-    "installFeature": null,
-    "legacyDarwin": {
-      "provider": "homebrew-formula",
-      "name": "owner/tools/legacy-formula"
-    }
+    "installFeature": null
   },
   "flat-only-app": {
     "darwin": {
@@ -179,12 +122,10 @@ setup() {
       "bundleId": "com.example.test-app",
       "executable": "Test App"
     },
-    "installFeature": null,
-    "legacyDarwin": null
+    "installFeature": null
   }
 }
 JSON
-	printf '["legacy-app"]\n' >"$SUPPORT_REPORT/darwin-packages.json"
 
 	write_stub jq 'exec "$REAL_JQ" "$@"'
 	write_stub plistbuddy '
@@ -203,26 +144,9 @@ fi
 '
 	write_stub spctl 'log_command spctl "$@"'
 	write_stub open 'log_command open "$@"'
-	write_stub brew '
-log_command brew "$@"
-if [[ ${1:-} == list ]]; then
-  exit "${BREW_LIST_STATUS:-0}"
-fi
-'
-	write_stub verify '
-log_command verify "$@"
-exit "${VERIFY_STATUS:-0}"
-'
-	write_stub nix '
-log_command nix "$@"
-case " $* " in
-  *" .#package-support-report "*) printf "%s\n" "$SUPPORT_REPORT" ;;
-  *" .#darwin-legacy-app "*) printf "%s\n" "$STORE_PATH" ;;
-  *) exit 2 ;;
-esac
-'
 	write_stub test-command 'log_command test-command "$@"'
 	cp "$TEST_BIN/test-command" "$STORE_PATH/bin/test-command"
+	cp "$TEST_BIN/test-command" "$STORE_PATH/bin/op"
 
 	export COMMAND_LOG REAL_JQ SUPPORT_REPORT STORE_PATH
 	export DOTFILES_JQ_COMMAND="$TEST_BIN/jq"
@@ -230,9 +154,6 @@ esac
 	export DOTFILES_CODESIGN_COMMAND="$TEST_BIN/codesign"
 	export DOTFILES_SPCTL_COMMAND="$TEST_BIN/spctl"
 	export DOTFILES_OPEN_COMMAND="$TEST_BIN/open"
-	export DOTFILES_NIX_COMMAND="$TEST_BIN/nix"
-	export DOTFILES_BREW_COMMAND="$TEST_BIN/brew"
-	export DOTFILES_DARWIN_VERIFY_COMMAND="$TEST_BIN/verify"
 	export CODESIGN_ADHOC=0
 }
 
@@ -319,10 +240,11 @@ assert_log_order() {
 }
 
 @test "catalog IDs may start with an underscore" {
-	run "$BASH_32" "$MIGRATOR" --id _1password-cli
+	run "$BASH_32" "$VERIFIER" --support-json "$SUPPORT_JSON" --id _1password-cli --store-path "$STORE_PATH"
 
 	[ "$status" -eq 0 ]
 	[[ "$output" != *"invalid catalog ID"* ]]
+	grep -Fqx 'test-command <--version>' "$COMMAND_LOG"
 }
 
 @test "flat-only verification metadata is rejected instead of bypassing nested identity" {
@@ -367,72 +289,4 @@ assert_log_order() {
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"command must be a single path component"* ]]
 	[ ! -s "$COMMAND_LOG" ]
-}
-
-@test "verification failure leaves the legacy cask installed" {
-	export VERIFY_STATUS=42
-
-	run "$BASH_32" "$MIGRATOR" --id legacy-app --feature WithHermes
-
-	[ "$status" -eq 42 ]
-	assert_log_order \
-		"nix <build> <.#package-support-report> <--no-link> <--print-out-paths>" \
-		"nix <build> <.#darwin-legacy-app> <--no-link> <--print-out-paths>" \
-		"verify <--support-json> <$SUPPORT_JSON> <--id> <legacy-app> <--store-path> <$STORE_PATH>"
-	! grep -q '^brew <uninstall>' "$COMMAND_LOG"
-}
-
-@test "successful verification removes the legacy cask without zap" {
-	run "$BASH_32" "$MIGRATOR" --id legacy-app --feature WithHermes
-
-	[ "$status" -eq 0 ]
-	assert_log_order \
-		"brew <list> <--cask> <--versions> <legacy-app>" \
-		"verify <--support-json> <$SUPPORT_JSON> <--id> <legacy-app> <--store-path> <$STORE_PATH>" \
-		"brew <uninstall> <--cask> <legacy-app>"
-	! grep -q -- '--zap' "$COMMAND_LOG"
-}
-
-@test "missing legacy cask is an idempotent no-op before package realization" {
-	export BREW_LIST_STATUS=1
-
-	run "$BASH_32" "$MIGRATOR" --id legacy-app --feature WithHermes
-
-	[ "$status" -eq 0 ]
-	grep -Fqx "brew <list> <--cask> <--versions> <legacy-app>" "$COMMAND_LOG"
-	! grep -q 'darwin-legacy-app' "$COMMAND_LOG"
-	! grep -q '^verify ' "$COMMAND_LOG"
-	! grep -q '^brew <uninstall>' "$COMMAND_LOG"
-}
-
-@test "missing legacy formula uses the formula installed check and exits cleanly" {
-	export BREW_LIST_STATUS=1
-
-	run "$BASH_32" "$MIGRATOR" --id legacy-formula
-
-	[ "$status" -eq 0 ]
-	grep -Fqx "brew <list> <--formula> <--versions> <owner/tools/legacy-formula>" "$COMMAND_LOG"
-	! grep -q 'darwin-legacy-formula' "$COMMAND_LOG"
-	! grep -q '^verify ' "$COMMAND_LOG"
-	! grep -q '^brew <uninstall>' "$COMMAND_LOG"
-}
-
-@test "disabled install feature skips both package build and legacy removal" {
-	run "$BASH_32" "$MIGRATOR" --all
-
-	[ "$status" -eq 0 ]
-	grep -Fqx "nix <build> <.#package-support-report> <--no-link> <--print-out-paths>" "$COMMAND_LOG"
-	! grep -q 'darwin-legacy-app' "$COMMAND_LOG"
-	! grep -q '^verify ' "$COMMAND_LOG"
-	! grep -q '^brew ' "$COMMAND_LOG"
-}
-
-@test "legacy Homebrew token rejects option-like zap value before build or removal" {
-	run "$BASH_32" "$MIGRATOR" --id legacy-option
-
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"invalid legacy Homebrew token for legacy-option: --zap"* ]]
-	! grep -q 'darwin-legacy-option' "$COMMAND_LOG"
-	! grep -q '^verify ' "$COMMAND_LOG"
-	! grep -q '^brew ' "$COMMAND_LOG"
 }

@@ -19,6 +19,16 @@ let
   };
 in
 {
+  testSupportReportPublishesOnlyCurrentProviderMetadata = {
+    expr = builtins.attrNames sets.supportReport.base;
+    expected = [
+      "darwin"
+      "installFeature"
+      "linux"
+      "windows"
+    ];
+  };
+
   testPackageCatalogMergesDisjointOwners = {
     expr = merge {
       core.alpha.category = "core";

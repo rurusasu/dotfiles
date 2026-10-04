@@ -47,10 +47,6 @@
         unsupported = "The Windows Store app is intentionally excluded from this package catalog";
       };
     };
-    legacyDarwin = {
-      provider = "homebrew-cask";
-      name = "chatgpt";
-    };
   };
 
   steam = {
@@ -94,10 +90,6 @@
         nixAttr = "discord";
       };
     };
-    legacyDarwin = {
-      provider = "homebrew-cask";
-      name = "discord";
-    };
   };
 
   _1password-gui = {
@@ -116,10 +108,6 @@
           executable = "1Password";
         };
       };
-    };
-    legacyDarwin = {
-      provider = "homebrew-cask";
-      name = "1password";
     };
   };
 
@@ -169,10 +157,6 @@
         unsupported = "Vendor currently ships Dia for macOS only";
       };
     };
-    legacyDarwin = {
-      provider = "homebrew-cask";
-      name = "thebrowsercompany-dia";
-    };
   };
 
   google-chrome = {
@@ -192,10 +176,6 @@
           executable = "Google Chrome";
         };
       };
-    };
-    legacyDarwin = {
-      provider = "homebrew-cask";
-      name = "google-chrome";
     };
   };
 
@@ -225,10 +205,6 @@
         unsupported = "No reviewed Linux desktop package provider is selected";
       };
     };
-    legacyDarwin = {
-      provider = "homebrew-cask";
-      name = "stablyai/orca/orca";
-    };
   };
 
   raycast = {
@@ -252,10 +228,6 @@
       linux = {
         unsupported = "Vendor does not publish a Linux build";
       };
-    };
-    legacyDarwin = {
-      provider = "homebrew-cask";
-      name = "raycast";
     };
   };
 }

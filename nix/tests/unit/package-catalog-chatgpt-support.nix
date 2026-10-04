@@ -32,7 +32,6 @@ in
       darwin = sets.supportReport.chatgpt.darwin;
       linux = sets.supportReport.chatgpt.linux;
       windows = sets.supportReport.chatgpt.windows;
-      legacyDarwin = sets.supportReport.chatgpt.legacyDarwin;
     };
     expected = {
       darwin = {
@@ -54,10 +53,6 @@ in
       };
       windows = {
         unsupported = "The Windows Store app is intentionally excluded from this package catalog";
-      };
-      legacyDarwin = {
-        provider = "homebrew-cask";
-        name = "chatgpt";
       };
     };
   };

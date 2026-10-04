@@ -65,7 +65,6 @@ setup() {
 	export DOTFILES_LAUNCHCTL_COMMAND="$STUB_BIN/launchctl"
 	export DOTFILES_OPEN_COMMAND="$STUB_BIN/open"
 	export DOTFILES_ACCEPT_DOCKER_LICENSE=1
-	export DOTFILES_DARWIN_MIGRATION="$STUB_BIN/migrate-darwin-provider"
 	export DOTFILES_DOCKER_SETUP_MARKER="$TEST_HOME/.config/dotfiles/docker-desktop-installed"
 	export DOTFILES_NIX_PROFILE_SCRIPT="$FAKE_NIX_PROFILE"
 	export DOTFILES_BASHRC_PATH="$FAKE_BASHRC"
@@ -78,6 +77,7 @@ setup() {
 	export DOTFILES_OLLAMA_WAIT_ATTEMPTS=2
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
 	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
+	export DOTFILES_DARWIN_VERIFICATION="$STUB_BIN/verify-darwin-packages"
 	export DOTFILES_HERMES_OLLAMA_EXECUTABLE="$STUB_BIN/ollama"
 	export DOTFILES_HERMES_CURL_EXECUTABLE="$STUB_BIN/curl"
 	export DOTFILES_HOMEBREW_CASK_BIN_DIR="$BATS_TEST_TMPDIR/untrusted/bin"
@@ -104,6 +104,7 @@ esac
 exit 2
 '
 	write_stub nc 'exit 0'
+	write_stub verify-darwin-packages 'printf "verify-darwin-packages %s\n" "$*" >>"$COMMAND_LOG"; exit "${DARWIN_VERIFY_STATUS:-0}"'
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
 case "$*" in
@@ -124,7 +125,6 @@ chmod +x "$prefix/bin/codex"
 	# and never let an inherited prefix redirect fixture writes outside TEST_HOME.
 	export DOTFILES_NPM_COMMAND="$STUB_BIN/npm"
 	export CODEX_NPM_PREFIX="$TEST_HOME/.local/npm"
-	write_stub migrate-darwin-provider 'printf "migrate-darwin-provider %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub brew '
 if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions &&
 	${4:-} == docker-desktop && -f $FAKE_DOCKER_CASK_STATE ]]; then
@@ -605,14 +605,24 @@ dotfiles_install_codex_npm
 		"nix flake update --flake $REPO_ROOT" \
 		"python3 scripts/python/update_darwin_packages.py --write --output darwin-package-update.json" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"migrate-darwin-provider --all" \
+		"verify-darwin-packages " \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"verify-environment compose= args="
 	! grep -q '^launchctl kickstart' "$COMMAND_LOG"
 	! grep -q '/api/tags' "$COMMAND_LOG"
 	! grep -q '^docker ' "$COMMAND_LOG"
+	! grep -q '^brew uninstall' "$COMMAND_LOG"
 	! grep -q '^task .*\(hindsight:up\|hermes:bootstrap\)' "$COMMAND_LOG"
+}
+
+@test "postinstall provider verification failure stops before user configuration" {
+	write_installed_stubs
+	export DARWIN_VERIFY_STATUS=42
+	run_macos_installer
+	[ "$status" -eq 42 ]
+	[[ "$output" == *"[FAILED] Verifying macOS package providers (exit 42)"* ]]
+	! grep -q '^chezmoi ' "$COMMAND_LOG"
 }
 
 @test "package update failure prevents macOS activation" {
@@ -647,6 +657,8 @@ exit 37
 	run_macos_installer
 	[ "$status" -eq 0 ]
 	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=1>' "$COMMAND_LOG"
+	grep -Fxq 'verify-darwin-packages --feature WithOllama --feature WithDocker --feature WithHermes' "$COMMAND_LOG"
+	! grep -qE '^docker |^launchctl kickstart|/api/tags' "$COMMAND_LOG"
 }
 
 @test "pinned installer mode skips both flake and custom package updates" {
@@ -709,7 +721,7 @@ exit 0
 	[ "$status" -eq 0 ]
 	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
 	assert_log_order \
-		"migrate-darwin-provider --all --feature WithOllama" \
+		"verify-darwin-packages --feature WithOllama" \
 		"chezmoi apply --force" \
 		"launchctl kickstart -k gui/$(id -u)/com-dotfiles-ollama" \
 		"verify-environment compose= args="
@@ -737,7 +749,7 @@ exit 0
 	[ "$status" -eq 0 ]
 	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
 	assert_log_order \
-		"migrate-darwin-provider --all --feature WithOllama --feature WithDocker" \
+		"verify-darwin-packages --feature WithOllama --feature WithDocker" \
 		"chezmoi apply --force" \
 		"launchctl kickstart -k gui/$(id -u)/com-dotfiles-ollama" \
 		"docker info" \
@@ -773,12 +785,12 @@ exit 1
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"migrate-darwin-provider --all --feature WithHermes" \
+		"verify-darwin-packages --feature WithOllama --feature WithDocker --feature WithHermes" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"task --dir $REPO_ROOT hermes:desktop:install" \
 		"verify-environment compose= args="
-	! grep -q '^docker compose' "$COMMAND_LOG"
+	! grep -qE '^docker |^launchctl kickstart|/api/tags' "$COMMAND_LOG"
 	! grep -q '^task .*hermes:docker:' "$COMMAND_LOG"
 	! grep -q '^op ' "$COMMAND_LOG"
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
@@ -1564,7 +1576,7 @@ exit 1
 	[ ! -L "$FAKE_HOMEBREW_BIN_DIR/docker-compose" ]
 }
 
-@test "installed Docker cask repairs links before a later provider migration failure" {
+@test "installed Docker cask repairs links before a later chezmoi failure" {
 	write_installed_stubs
 	export DOCKER_CASK_STATE="$BATS_TEST_TMPDIR/docker-cask-installed"
 	touch "$DOCKER_CASK_STATE"
@@ -1582,8 +1594,8 @@ fi
 exit 1
 '
 	write_stub nix 'printf "nix %s\n" "$*" >>"$COMMAND_LOG"'
-	write_stub migrate-darwin-provider '
-printf "migrate-darwin-provider %s\n" "$*" >>"$COMMAND_LOG"
+	write_stub chezmoi '
+printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"
 exit 61
 '
 
@@ -1599,7 +1611,7 @@ exit 61
 	assert_log_order \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
 		"brew reinstall --cask docker-desktop" \
-		"migrate-darwin-provider --all --feature WithOllama --feature WithDocker"
+		"chezmoi init --source $REPO_ROOT/chezmoi"
 }
 
 @test "already-managed Docker cask rerun preserves exact official links without reinstall" {
@@ -2042,6 +2054,7 @@ EOF
 
 	run "$REAL_TIMEOUT" 4 bash -c '
 set -euo pipefail
+export DOCKER_PROBE_TIMEOUT_SECONDS=2
 . "$INSTALLER"
 ensure_docker_desktop_md5_compatibility() {
   :

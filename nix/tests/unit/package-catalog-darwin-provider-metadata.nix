@@ -8,7 +8,7 @@ let
   };
 in
 {
-  testWezTermDarwinMigrationMetadata = {
+  testWezTermDarwinProviderMetadata = {
     expr = sets.supportReport.wezterm;
     expected = {
       darwin = {
@@ -34,14 +34,10 @@ in
         identity = "wez.wezterm";
       };
       installFeature = null;
-      legacyDarwin = {
-        provider = "homebrew-cask";
-        name = "wezterm@nightly";
-      };
     };
   };
 
-  testOllamaDarwinMigrationMetadata = {
+  testOllamaDarwinProviderMetadata = {
     expr = sets.supportReport.ollama;
     expected = {
       darwin = {
@@ -66,10 +62,6 @@ in
         identity = "Ollama.Ollama";
       };
       installFeature = "WithOllama";
-      legacyDarwin = {
-        provider = "homebrew-cask";
-        name = "ollama-app";
-      };
     };
   };
 }
