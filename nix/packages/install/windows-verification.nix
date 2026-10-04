@@ -53,10 +53,6 @@
       command = "starship";
       args = [ "--version" ];
     };
-    neovim = {
-      command = "nvim";
-      args = [ "--version" ];
-    };
     nodejs = {
       command = "node";
       args = [ "--version" ];
@@ -106,45 +102,12 @@
       command = "wezterm";
       args = [ "--version" ];
     };
-    ty = {
-      command = "ty";
-      args = [ "--version" ];
-    };
-    ruff = {
-      command = "ruff";
-      args = [ "--version" ];
-    };
-    taplo = {
-      command = "taplo";
-      args = [ "--version" ];
-    };
-    lua-language-server = {
-      command = "lua-language-server";
-      args = [ "--version" ];
-    };
-    marksman = {
-      command = "marksman";
-      args = [ "--version" ];
-    };
     tree-sitter = {
       command = "tree-sitter";
       args = [ "--version" ];
     };
-    stylua = {
-      command = "stylua";
-      args = [ "--version" ];
-    };
-    rust-analyzer = {
-      type = "portableLinkCommand";
-      command = "rust-analyzer.exe";
-      args = [ "--version" ];
-    };
     ollama = {
       command = "ollama";
-      args = [ "--version" ];
-    };
-    oxlint = {
-      command = "oxlint";
       args = [ "--version" ];
     };
     google-cloud-sdk = {

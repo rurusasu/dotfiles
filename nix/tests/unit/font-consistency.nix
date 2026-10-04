@@ -29,18 +29,68 @@ let
     in
     {
       expr = {
-        fontBundle = containsFont sets.fonts;
         allPackages = containsFont sets.all;
         homePackages = containsFont home.config.home.packages;
+        emojiPackage = builtins.any (
+          package: package.drvPath == pkgs.noto-fonts-color-emoji.drvPath
+        ) home.config.home.packages;
+        fontconfig = home.config.fonts.fontconfig.enable;
+        defaultFonts = {
+          inherit (home.config.fonts.fontconfig.defaultFonts)
+            monospace
+            sansSerif
+            serif
+            emoji
+            ;
+        };
       };
       expected = {
-        fontBundle = true;
-        allPackages = true;
+        allPackages = false;
         homePackages = true;
+        emojiPackage = true;
+        fontconfig = true;
+        defaultFonts = {
+          monospace = [ "UDEV Gothic NF" ];
+          sansSerif = [ "UDEV Gothic NF" ];
+          serif = [ "UDEV Gothic NF" ];
+          emoji = [ "Noto Color Emoji" ];
+        };
       };
     };
 in
 {
+  testNixOSConfiguresManagedDefaultFonts = {
+    expr =
+      let
+        system = inputs.nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = { inherit inputs; };
+          modules = [
+            inputs.home-manager.nixosModules.home-manager
+            ../../modules/nixos
+          ];
+        };
+      in
+      {
+        fontDir = system.config.fonts.fontDir.enable;
+        fontconfig = system.config.fonts.fontconfig.enable;
+        inherit (system.config.fonts.fontconfig.defaultFonts)
+          monospace
+          sansSerif
+          serif
+          emoji
+          ;
+      };
+    expected = {
+      fontDir = true;
+      fontconfig = true;
+      monospace = [ "UDEV Gothic NF" ];
+      sansSerif = [ "UDEV Gothic NF" ];
+      serif = [ "UDEV Gothic NF" ];
+      emoji = [ "Noto Color Emoji" ];
+    };
+  };
+
   testLinuxInstallsManagedFont = fontContract "x86_64-linux" [ ../../home/linux.nix ];
   testWSLInstallsManagedFont = fontContract "x86_64-linux" [ ../../home/wsl.nix ];
   testStandaloneDarwinHomeProfileInstallsManagedFont =

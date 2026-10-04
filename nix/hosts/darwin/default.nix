@@ -2,7 +2,7 @@
 {
   imports = [
     ./configuration.nix
-    ./fonts.nix
+    ../../modules/darwin
     ./system.nix
   ];
 }

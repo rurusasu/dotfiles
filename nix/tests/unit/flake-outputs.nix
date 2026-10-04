@@ -288,11 +288,21 @@ in
     expected = {
       darwin = [
         ../../home/darwin.nix
+        ../../modules/lsp.nix
+        ../../modules/cursor
         ../../home/standalone-darwin-identity.nix
         ../../home/standalone-darwin-fonts.nix
       ];
-      x86Linux = [ ../../home/linux.nix ];
-      armLinux = [ ../../home/linux.nix ];
+      x86Linux = [
+        ../../home/linux.nix
+        ../../modules/lsp.nix
+        ../../modules/cursor
+      ];
+      armLinux = [
+        ../../home/linux.nix
+        ../../modules/lsp.nix
+        ../../modules/cursor
+      ];
     };
   };
 

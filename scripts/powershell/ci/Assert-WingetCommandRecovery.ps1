@@ -6,7 +6,7 @@ param(
     [ValidateNotNullOrEmpty()]
     [string[]]$PackageId = @(
         'junegunn.fzf', 'x-motemen.ghq', 'jqlang.jq',
-        'JesseDuffield.lazygit', 'LuaLS.lua-language-server'
+        'JesseDuffield.lazygit', 'BurntSushi.ripgrep.MSVC'
     )
 )
 

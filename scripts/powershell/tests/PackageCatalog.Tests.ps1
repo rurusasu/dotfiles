@@ -180,12 +180,7 @@ Describe 'Package catalog consistency' {
             $expectedRoots = @{
                 'Task.Task'                   = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Task.Task*'
                 'hadolint.hadolint'           = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\hadolint.hadolint*'
-                'Artempyanykh.Marksman'       = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Artempyanykh.Marksman*'
-                'astral-sh.ruff'              = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.ruff*'
-                'JohnnyMorganz.StyLua'        = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\JohnnyMorganz.StyLua*'
-                'tamasfe.taplo'               = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\tamasfe.taplo*'
                 'tree-sitter.tree-sitter-cli' = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\tree-sitter.tree-sitter-cli*'
-                'astral-sh.ty'                = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.ty*'
                 'astral-sh.uv'                = '%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*'
             }
 
@@ -196,11 +191,11 @@ Describe 'Package catalog consistency' {
             }
         }
 
-        It 'should generate the WinGet Links directory for the oxlint portable command' {
+        It 'should keep Nix-managed oxlint out of the Windows manifest' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $oxlint = @($winget.Sources | ForEach-Object { $_.Packages } | Where-Object PackageIdentifier -EQ 'oxc-project.oxlint') | Select-Object -First 1
 
-            @($oxlint.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Links'
+            $oxlint | Should -BeNullOrEmpty
         }
 
         It 'should generate the Node.js installation directory into winget packages.json' {
@@ -249,24 +244,16 @@ Describe 'Package catalog consistency' {
     }
 
     Context 'StyLua package' {
-        It 'should generate Lua Language Server with command verification' {
+        It 'should keep Nix-managed Lua Language Server out of the Windows manifest' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'LuaLS.lua-language-server' }) | Select-Object -First 1
-
-            $package | Should -Not -BeNullOrEmpty
-            $package.verifyCommand.command | Should -Be 'lua-language-server'
-            @($package.verifyCommand.args) | Should -Contain '--version'
+            $packages = @($json.Sources | ForEach-Object { $_.Packages })
+            @($packages | Where-Object PackageIdentifier -EQ 'LuaLS.lua-language-server').Count | Should -Be 0
         }
 
-        It 'should generate StyLua with command verification' {
+        It 'should keep Nix-managed StyLua out of the Windows manifest' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'JohnnyMorganz.StyLua' }) | Select-Object -First 1
-
-            $package | Should -Not -BeNullOrEmpty
-            $package.verifyCommand.command | Should -Be 'stylua'
-            @($package.verifyCommand.args) | Should -Contain '--version'
+            $packages = @($json.Sources | ForEach-Object { $_.Packages })
+            @($packages | Where-Object PackageIdentifier -EQ 'JohnnyMorganz.StyLua').Count | Should -Be 0
         }
     }
 
@@ -372,18 +359,17 @@ Describe 'Package catalog consistency' {
             }
         }
 
-        It 'should generate a portable rust-analyzer verifier and link' {
+        It 'should keep Neovim and its language tools out of non-Nix manifests' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'Rustlang.rust-analyzer') | Select-Object -First 1
-
-            $package | Should -Not -BeNullOrEmpty
-            $package.verifyCommand.type | Should -Be 'portableLinkCommand'
-            $package.verifyCommand.command | Should -Be 'rust-analyzer.exe'
-            @($package.verifyCommand.args) | Should -Be @('--version')
-            $package.portableLink.linkName | Should -Be 'rust-analyzer.exe'
-            $package.portableLink.targetPattern | Should -Be 'rust-analyzer.exe'
-            @($package.pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Links'
+            $ids = @($winget.Sources | ForEach-Object { $_.Packages } | ForEach-Object PackageIdentifier)
+            @('Neovim.Neovim', 'Rustlang.rust-analyzer', 'astral-sh.ruff', 'astral-sh.ty', 'Artempyanykh.Marksman', 'tamasfe.taplo') | ForEach-Object {
+                $ids | Should -Not -Contain $_
+            }
+            $pnpm = Get-Content -LiteralPath $script:pnpmJsonPath -Raw | ConvertFrom-Json
+            $names = @($pnpm.globalPackages | ForEach-Object name)
+            @('bash-language-server', 'yaml-language-server', '@prisma/language-server', 'typescript-language-server', 'typescript') | ForEach-Object {
+                $names | Should -Not -Contain $_
+            }
         }
 
         It 'should not approve the legacy node-pty build for global pnpm packages' {
@@ -474,7 +460,6 @@ Describe 'Package catalog consistency' {
                 'Microsoft.PowerToys'                    = @{ type = 'windowsInstalledProduct'; command = 'Microsoft PowerToys' }
                 'Microsoft.VCRedist.2015+.x64'           = @{ type = 'windowsInstalledProduct'; command = 'Microsoft Visual C++ 2015-2022 Redistributable (x64)' }
                 'Microsoft.VisualStudio.2022.BuildTools' = @{ type = 'visualStudioInstanceVersion'; command = 'Microsoft.VisualStudio.Product.BuildTools' }
-                'Rustlang.rust-analyzer'                 = @{ type = 'portableLinkCommand'; command = 'rust-analyzer.exe' }
             }
             $supportedTypes = @('command', 'commandExists', 'appxPackage', 'appxLaunchTarget', 'portableLinkCommand', 'windowsInstalledProduct', 'visualStudioInstanceVersion')
 

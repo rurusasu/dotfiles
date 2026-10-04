@@ -1,18 +1,6 @@
 # Package identities and provider declarations for editors.
 { pkgs, ... }:
 {
-  neovim = {
-    pkg = pkgs.callPackage ../neovim { };
-    winget = "Neovim.Neovim";
-    category = "editors";
-  };
-
-  neovim-remote = {
-    pkg = pkgs.neovim-remote;
-    winget = null;
-    category = "editors";
-  };
-
   obsidian = {
     pkg = pkgs.obsidian;
     winget = "Obsidian.Obsidian";

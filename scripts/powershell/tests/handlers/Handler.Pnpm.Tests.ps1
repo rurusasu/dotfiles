@@ -2043,13 +2043,14 @@ Describe 'PnpmHandler' {
     }
 
     Context 'Apply - Windows pnpm manifest contracts' {
-        It 'should verify the Prisma language server by command existence instead of starting its stdio server' {
+        It 'should omit the removed native Windows language packages from the manifest' {
             $manifest = Get-JsonContent -Path (Join-Path $script:projectRoot "windows\pnpm\packages.json")
-            $prismaEntry = $manifest.globalPackages | Where-Object name -EQ "@prisma/language-server"
-
-            $prismaEntry.verifyCommand.type | Should -Be "commandExists"
-            $prismaEntry.verifyCommand.command | Should -Be "prisma-language-server"
-            $prismaEntry.verifyCommand.args | Should -BeNullOrEmpty
+            foreach ($packageName in @(
+                    "bash-language-server", "yaml-language-server", "@prisma/language-server",
+                    "typescript-language-server", "typescript"
+                )) {
+                $manifest.globalPackages.name | Should -Not -Contain $packageName
+            }
         }
 
         It 'should verify Gemini by executing the installed CLI without probing an optional module' {
@@ -2176,14 +2177,9 @@ Describe 'PnpmHandler' {
 
         It 'should install and verify every manifest package, including feature-gated entries, with declared options' {
             $expected = @(
-                @{ Spec = "bash-language-server"; Command = "bash-language-server"; Arguments = @("--version") }
-                @{ Spec = "yaml-language-server"; Command = "yaml-language-server"; Arguments = @("--version") }
-                @{ Spec = "@prisma/language-server"; Command = "prisma-language-server"; Arguments = @(); Type = "commandExists" }
                 @{ Spec = "@deepseek-ai/dsh"; Command = "dsh"; Arguments = @("--version") }
                 @{ Spec = "@playwright/cli@0.1.21"; Command = "playwright-cli"; Arguments = @("--version") }
                 @{ Spec = "playwright@1.63.0"; Command = "playwright"; Arguments = @("--version") }
-                @{ Spec = "typescript-language-server"; Command = "typescript-language-server"; Arguments = @("--version") }
-                @{ Spec = "typescript"; Command = "tsc"; Arguments = @("--version") }
                 @{ Spec = "@google/gemini-cli"; Command = "gemini"; Arguments = @("--version") }
             )
             $manifest = Get-JsonContent -Path (Join-Path $script:projectRoot "windows\pnpm\packages.json")
@@ -2194,13 +2190,10 @@ Describe 'PnpmHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeTrue
-            $script:pnpmAddCalls.Count | Should -Be 9
+            $script:pnpmAddCalls.Count | Should -Be 4
             (@($script:pnpmAddCalls | ForEach-Object { $_[-1] } | Sort-Object) -join "|") |
                 Should -Be ((@($expected | ForEach-Object { $_.Spec } | Sort-Object) -join "|"))
             foreach ($entry in $expected) {
-                if ($entry.Type -eq "commandExists") {
-                    continue
-                }
                 $script:pnpmVerifyCalls | Where-Object {
                     $_.Command -eq $entry.Command -and ($_.Arguments -join "|") -eq ($entry.Arguments -join "|")
                 } | Should -HaveCount 1
@@ -2233,22 +2226,17 @@ Describe 'PnpmHandler' {
             $geminiEntry.verifyCommand.moduleSmokeTest | Should -BeNullOrEmpty
         }
 
-        It 'should skip every installed manifest package that is verified and up to date' {
+        It 'should update outdated DSH and rerun the mandatory Playwright post-install while skipping current packages' {
             $installedPackagePaths = @(
-                "bash-language-server"
-                "yaml-language-server"
-                "@prisma\language-server"
                 "@deepseek-ai\dsh"
                 "@playwright\cli"
                 "playwright"
-                "typescript-language-server"
-                "typescript"
                 "@google\gemini-cli"
             )
             foreach ($relativePath in $installedPackagePaths) {
                 New-Item -Path (Join-Path $script:pnpmRoot $relativePath) -ItemType Directory -Force | Out-Null
             }
-            $script:outdatedJson = '{"bash-language-server":{"current":"5.8.0","latest":"5.8.1"}}'
+            $script:outdatedJson = '{"@deepseek-ai/dsh":{"current":"0.1.0","latest":"0.2.0"}}'
             $ctx.Options["WithHermes"] = $true
 
             $result = $handler.Apply($ctx)
@@ -2257,22 +2245,27 @@ Describe 'PnpmHandler' {
             $script:pnpmPolicyCalls | Should -HaveCount 1
             $script:pnpmPolicyCalls[0] | Should -Be @('approve-builds', '-g', '!node-pty')
             $script:pnpmAddCalls.Count | Should -Be 2
+            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "@deepseek-ai/dsh"
             $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "playwright@1.63.0"
-            foreach ($command in @(
-                    "bash-language-server", "yaml-language-server",
-                    "dsh", "playwright-cli", "playwright", "typescript-language-server", "tsc", "gemini"
-                )) {
+            foreach ($command in @("dsh", "playwright-cli", "playwright", "gemini")) {
                 $script:pnpmVerifyCalls | Where-Object {
                     $_.Command -eq $command -and ($_.Arguments -join "|") -eq "--version"
-                } | Should -HaveCount $(if ($command -in @("bash-language-server", "playwright")) { 2 } else { 1 })
+                } | Should -HaveCount $(if ($command -in @("dsh", "playwright")) { 2 } else { 1 })
             }
+            $postInstallCalls = @($script:pnpmVerifyCalls | Where-Object {
+                    $_.Command -eq "playwright" -and ($_.Arguments -join "|") -eq "install|chromium"
+                })
+            $postInstallCalls | Should -HaveCount 1
+            $postInstallCalls[0].TimeoutSeconds | Should -Be 3600
         }
 
         It 'should omit both Hermes packages when WithHermes is disabled' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeTrue
-            $script:pnpmAddCalls.Count | Should -Be 7
+            $script:pnpmAddCalls.Count | Should -Be 2
+            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "@deepseek-ai/dsh"
+            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "@google/gemini-cli"
             $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Not -Contain "@playwright/cli@0.1.21"
             $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Not -Contain "playwright@1.63.0"
             $script:pnpmVerifyCalls | Where-Object { $_.Command -in @("playwright-cli", "playwright") } | Should -BeNullOrEmpty
@@ -2303,13 +2296,13 @@ Describe 'PnpmHandler' {
         }
 
         It 'should classify a manifest package verification timeout as a verification failure' {
-            $script:verifyExitCodeByCommand["bash-language-server --version"] = 124
+            $script:verifyExitCodeByCommand["dsh --version"] = 124
 
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeFalse
             $result.Message | Should -Match "1 個検証失敗"
-            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "bash-language-server"
+            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "@deepseek-ai/dsh"
         }
 
         It 'should classify the manifest Playwright post-install failure and stop before version verification' {

@@ -183,7 +183,7 @@ exit [int]$env:DOTFILES_CAPTURE_FIXTURE_EXIT
                 # Missing observation is an explicit failed consumer outcome,
                 # not a setup error or an invented native/cleanup result.
                 [pscustomobject]@{ nativeExit = $null; parentVersion = $null; restoredPreference = $null
-                    childAliveAtCleanup = $null; childFileRemoved = $null 
+                    childAliveAtCleanup = $null; childFileRemoved = $null
                 }
             }
             $childStarted = Test-Path -LiteralPath (Join-Path $caseRoot 'child-pid.txt')

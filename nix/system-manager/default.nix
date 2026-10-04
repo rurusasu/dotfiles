@@ -66,6 +66,10 @@ in
   };
 
   home-manager = {
+    sharedModules = [
+      ../modules/lsp.nix
+      ../modules/cursor
+    ];
     useGlobalPkgs = true;
     useUserPackages = true;
     backupFileExtension = "hm-backup";

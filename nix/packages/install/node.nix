@@ -20,14 +20,9 @@
 
   # Cross-platform pnpm global packages
   pnpmGlobal = [
-    "bash-language-server"
-    "yaml-language-server"
-    "@prisma/language-server"
     "@deepseek-ai/dsh"
     "@playwright/cli@0.1.21"
     "playwright@1.63.0"
-    "typescript-language-server"
-    "typescript"
   ];
 
   pnpmInstallFeature = {
@@ -38,28 +33,8 @@
   # Post-install verification commands for pnpm packages.
   # Keys match globalPackages entries. Packages not listed skip verification.
   pnpmVerify = {
-    "bash-language-server" = {
-      command = "bash-language-server";
-      args = [ "--version" ];
-    };
-    "yaml-language-server" = {
-      command = "yaml-language-server";
-      args = [ "--version" ];
-    };
-    "@prisma/language-server" = {
-      command = "prisma-language-server";
-      type = "commandExists";
-    };
     "@google/gemini-cli" = {
       command = "gemini";
-      args = [ "--version" ];
-    };
-    "typescript-language-server" = {
-      command = "typescript-language-server";
-      args = [ "--version" ];
-    };
-    "typescript" = {
-      command = "tsc";
       args = [ "--version" ];
     };
     "@deepseek-ai/dsh" = {

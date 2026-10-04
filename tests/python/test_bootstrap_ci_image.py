@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import os
 import re
 import subprocess
@@ -28,8 +29,8 @@ class BootstrapCiImageTests(unittest.TestCase):
         self.assertIn('"docker/bootstrap-ci-tools/**"', push_paths)
 
     def test_authentication_uses_nix_config_home_and_keeps_tokens_private(self) -> None:
-        for use_xdg, wsl in ((True, False), (False, False), (True, True)):
-            with self.subTest(use_xdg=use_xdg, wsl=wsl), tempfile.TemporaryDirectory() as directory:
+        for use_xdg, wsl, owned_home in itertools.product((True, False), repeat=3):
+            with self.subTest(use_xdg=use_xdg, wsl=wsl, owned_home=owned_home), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 home = root / "passwd-home"
                 home.mkdir()
@@ -50,7 +51,7 @@ class BootstrapCiImageTests(unittest.TestCase):
                     if key not in ("XDG_CONFIG_HOME", "NIX_CONFIG", "NIX_USER_CONF_FILES")
                 }
                 environment.update(
-                    HOME=str(root / "missing-home"),
+                    HOME=str(home if owned_home else root / "missing-home"),
                     FALLBACK_HOME=str(home),
                     EXPECTED_CONFIG=str(config),
                     GITHUB_TOKEN="fixture-token-not-a-real-secret",
@@ -91,6 +92,7 @@ class BootstrapCiImageTests(unittest.TestCase):
                     check=False,
                 )
                 self.assertEqual(trusted_directories.returncode, 0)
+                self.assertNotIn(environment["GITHUB_TOKEN"], Path(environment["GIT_CONFIG_SYSTEM"]).read_text())
                 self.assertEqual(
                     trusted_directories.stdout.splitlines(),
                     [environment["GITHUB_WORKSPACE"]],

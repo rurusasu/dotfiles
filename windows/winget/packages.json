@@ -327,31 +327,6 @@
           }
         },
         {
-          "PackageIdentifier": "LuaLS.lua-language-server",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "lua-language-server"
-          }
-        },
-        {
-          "PackageIdentifier": "Artempyanykh.Marksman",
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Artempyanykh.Marksman*"],
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "marksman"
-          }
-        },
-        {
-          "PackageIdentifier": "Neovim.Neovim",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "nvim"
-          }
-        },
-        {
           "PackageIdentifier": "OpenJS.NodeJS.LTS",
           "installTimeoutSeconds": 3600,
           "pathEntries": ["%ProgramFiles%\\nodejs"],
@@ -399,20 +374,6 @@
           }
         },
         {
-          "PackageIdentifier": "oxc-project.oxlint",
-          "installArgs": ["--scope", "user"],
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
-          "portableLink": {
-            "linkName": "oxlint.exe",
-            "targetPattern": "oxlint-*.exe"
-          },
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "oxlint"
-          }
-        },
-        {
           "PackageIdentifier": "oschwartz10612.Poppler",
           "installTimeoutSeconds": 3600,
           "pathEntries": [
@@ -441,30 +402,6 @@
           }
         },
         {
-          "PackageIdentifier": "astral-sh.ruff",
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ruff*"],
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "ruff"
-          }
-        },
-        {
-          "PackageIdentifier": "Rustlang.rust-analyzer",
-          "installArgs": ["--scope", "user"],
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
-          "portableLink": {
-            "linkName": "rust-analyzer.exe",
-            "targetPattern": "rust-analyzer.exe"
-          },
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "rust-analyzer.exe",
-            "type": "portableLinkCommand"
-          }
-        },
-        {
           "PackageIdentifier": "Rustlang.Rustup",
           "installTimeoutSeconds": 3600,
           "pathEntries": ["%USERPROFILE%\\.cargo\\bin"],
@@ -482,24 +419,6 @@
           }
         },
         {
-          "PackageIdentifier": "JohnnyMorganz.StyLua",
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\JohnnyMorganz.StyLua*"],
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "stylua"
-          }
-        },
-        {
-          "PackageIdentifier": "tamasfe.taplo",
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tamasfe.taplo*"],
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "taplo"
-          }
-        },
-        {
           "PackageIdentifier": "tree-sitter.tree-sitter-cli",
           "installTimeoutSeconds": 3600,
           "pathEntries": [
@@ -508,15 +427,6 @@
           "verifyCommand": {
             "args": ["--version"],
             "command": "tree-sitter"
-          }
-        },
-        {
-          "PackageIdentifier": "astral-sh.ty",
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.ty*"],
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "ty"
           }
         },
         {

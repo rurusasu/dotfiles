@@ -2,12 +2,13 @@
 
 `nix/home/` はユーザー単位の Home Manager 設定です。
 
-| 入口         | 内容           |
-| ------------ | -------------- |
-| `darwin.nix` | macOS 固有設定 |
-| `linux.nix`  | Linux 固有設定 |
-| `wsl.nix`    | WSL 固有設定   |
-| `common.nix` | 共通設定       |
+| 入口         | 内容                                        |
+| ------------ | ------------------------------------------- |
+| `darwin.nix` | macOS 固有設定                              |
+| `linux.nix`  | Linux 固有設定                              |
+| `wsl.nix`    | WSL 固有設定                                |
+| `nixos.nix`  | native NixOS / WSL 共通の Home Manager 設定 |
+| `common.nix` | 共通設定                                    |
 
 ## import 方向
 
@@ -20,6 +21,7 @@ caller -> <os>.nix -> common.nix
   font package と `$HOME/Library/Fonts` への activation を所有する `standalone-darwin-fonts.nix`
   を読み込む。共有する `darwin.nix` に standalone 専用の font activation を置かない。
 - 各 OS ファイルは `./common.nix` を import する。
+- Neovim は `darwin.nix` と `nixos.nix` が `../modules/nvim` を import する。`linux.nix` と `wsl.nix` は `nixos.nix` を経由する。
 - `common.nix` から OS 固有ファイルを import しない。
 - `default.nix` と `users.nix` は作らない。入口と OS 依存方向を曖昧にするため。
 
@@ -47,7 +49,7 @@ flake 評価へ渡す。
   `--impure` 伝播を実 Nix eval で確認する runtime/integration assertion に限る。新しい例外は追加しない。
 
 ホストの system 設定は `nix/hosts/<host>/configuration.nix` と責務別 host module、import の入口は
-同じディレクトリの `default.nix` が所有します。Darwin の system font は `fonts.nix`、OS-wide
+同じディレクトリの `default.nix` が所有します。Darwin の system font は `nix/modules/darwin/`、OS-wide
 defaults、timezone、defaults の反映 activation は `system.nix`、host identity、サービス、Homebrew、
 統合固有の activation は `configuration.nix` に置きます。共有する Home Manager の OS 差分は
 `nix/home/<os>.nix`、standalone 専用の責務は caller が組み合わせる個別 module に置きます。

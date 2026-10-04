@@ -2,23 +2,27 @@
 
 ## Single Source of Truth
 
-`nix/packages/catalog/` が全プラットフォームの package と provider metadata の正本です。`nix/packages/sets.nix` は catalog、provider 選択、installer metadata を合成する公開入口であり、既存の consumer は引き続きこの入口を import します。
+`nix/packages/catalog/` が全プラットフォームのアプリ・CLI の package と provider metadata の正本です。`nix/packages/sets.nix` は catalog、provider 選択、installer metadata を合成する公開入口であり、既存の consumer は引き続きこの入口を import します。
+
+フォントパッケージと fontconfig 設定は `nix/modules/fonts.nix` の `fonts.packages` / `fonts.fontconfig` に一度だけ定義します。Darwin / NixOS のシステム構成はそれぞれ `nix/modules/darwin/default.nix` / `nix/modules/nixos/default.nix` を読み込み、OS 固有の option と配線はこの入口に記載します。NixOS は共通 module を import し、NixOS 専用の `fonts.fontDir.enable` を設定します。Darwin は `fonts.packages` を nix-darwin に、`fonts.fontconfig` を `home-manager.sharedModules` に渡します。Linux / WSL と standalone Darwin の Home Manager は各 entrypoint から共通定義を直接参照します。
+
+共通の `fonts.fontconfig.defaultFonts` は `monospace` / `sansSerif` / `serif` を `UDEV Gothic NF`、`emoji` を `Noto Color Emoji` に設定します。Darwin での既定フォント設定は fontconfig を使うアプリに適用され、macOS 標準 UI / CoreText の既定フォントは変更しません。
 
 ## 分割の理由と編集先
 
 SSOT は「各定義を一度だけ持つ」ことであり、すべてを 1 ファイルに置くことではありません。変更理由の異なる package データ、provider 選択、配布 metadata、host の動作を分け、パッケージ追加が OS 設定や選択ロジックの変更に広がらない構成にします。
 
-| 編集先                                                                           | 責務・分割理由                                                                                      |
-| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `catalog/{core,dev,terminal,editors,fonts,llm,desktop,system,k8s,infra,lsp}.nix` | カテゴリごとの package と OS 別 provider metadata。各 package は 1 ファイルだけで定義する           |
-| `catalog/context.nix`                                                            | カテゴリ間で共有する package 構築用の依存値                                                         |
-| `catalog/default.nix`, `catalog/merge.nix`                                       | カテゴリの合成と重複定義の検出。後勝ちで上書きしない                                                |
-| `providers/{common,normalize,selection,validation}.nix`                          | provider の共通処理、正規化、OS 別選択、coverage 検証。package データから分離する                   |
-| `install/{default,node,windows-install,windows-verification,windows-only}.nix`   | npm/pnpm 配布、Windows install/検証/専用アプリの metadata。provider 選択と installer 契約を区別する |
-| `sets.nix`                                                                       | 上記を合成し、従来の export API を維持する小さい入口                                                |
-| `<package>/default.nix`                                                          | custom derivation。既存パスを保ち、catalog から参照する                                             |
-| `nix/home/keybindings/`                                                          | 共通キー配置・設定生成・ユーザー設定。パッケージの配布定義へ混在させない                            |
-| `nix/hosts/`                                                                     | OS の service/有効化・競合解除。home 側の設定を消費し、キー配置を複製しない                         |
+| 編集先                                                                         | 責務・分割理由                                                                                      |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `catalog/{core,dev,terminal,editors,llm,desktop,system,k8s,infra}.nix`         | カテゴリごとの package と OS 別 provider metadata。各 package は 1 ファイルだけで定義する           |
+| `catalog/context.nix`                                                          | カテゴリ間で共有する package 構築用の依存値                                                         |
+| `catalog/default.nix`, `catalog/merge.nix`                                     | カテゴリの合成と重複定義の検出。後勝ちで上書きしない                                                |
+| `providers/{common,normalize,selection,validation}.nix`                        | provider の共通処理、正規化、OS 別選択、coverage 検証。package データから分離する                   |
+| `install/{default,node,windows-install,windows-verification,windows-only}.nix` | npm/pnpm 配布、Windows install/検証/専用アプリの metadata。provider 選択と installer 契約を区別する |
+| `sets.nix`                                                                     | 上記を合成し、従来の export API を維持する小さい入口                                                |
+| `<package>/default.nix`                                                        | custom derivation。既存パスを保ち、catalog から参照する                                             |
+| `nix/home/keybindings/`                                                        | 共通キー配置・設定生成・ユーザー設定。パッケージの配布定義へ混在させない                            |
+| `nix/hosts/`                                                                   | OS の service/有効化・競合解除。home 側の設定を消費し、キー配置を複製しない                         |
 
 ディレクトリはすべて `nix/packages/` 相対です（表内で `nix/` から始まる行を除く）。カテゴリは探索と編集の単位であり、OS ごとに同じ package を再定義しません。[共通のキー割り当て](../chezmoi/omarchy.md) も同じ考え方で home に一度だけ定義し、host module は OS 統合と有効化を担当する構成です。
 
@@ -183,7 +187,7 @@ cat result/package-support-report.json
 
 同じ package を Home Manager と system layer の両方へ重複させるのは、system service が絶対 path を必要とする場合に限定します。
 
-Neovim は `nix/packages/neovim/default.nix` でパーサーと対応クエリを同梱します。設定と対象言語は [Neovim の運用](../chezmoi/neovim.md) を参照してください。pnpm 配布の LSP は `pnpmGlobal` と `support.windows` の `provider = "pnpm"` / `source = "npm"` / `identity` を合わせて宣言します。
+Neovim 本体・プラグインはカタログを介さず、`nix/modules/nvim/` の Home Manager 設定で直接管理します。LSP・整形ツールは全エディタ共通の `nix/modules/lsp.nix` の `home.packages` に宣言し、通常の PATH に導入します。Cursor の LSP 設定は `nix/modules/cursor/` が管理し、Darwin／NixOS の共通 module が読み込みます。Tree-sitter の対象言語は `plugins.nix` の標準オプションに指定します。運用は [Neovim の運用](../chezmoi/neovim.md) を参照してください。
 
 ## 主なファイル
 

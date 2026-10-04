@@ -12,6 +12,7 @@ let
 in
 {
   imports = [
+    ../modules/nvim
     ./common.nix
     ./hermes-agent.nix
   ];
@@ -20,7 +21,7 @@ in
   # output separately for shells and tools that resolve TERM=wezterm.
   home = {
     packages = lib.unique (
-      sets.darwinHomePackagesForInstallFeatures installFeatures
+      (sets.darwinHomePackagesForInstallFeatures installFeatures)
       ++ [
         pkgs.coreutils
         pkgs.wezterm.terminfo

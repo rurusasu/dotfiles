@@ -65,9 +65,9 @@ let
   darwinHomePackagesForInstallFeatures =
     enabledFeatures:
     if pkgs.stdenv.hostPlatform.isDarwin then
-      resolveForInstallFeaturesWhere enabledFeatures (
-        entry: !isDarwinGuiNixPackage entry && entry.category != "fonts"
-      ) (lib.attrNames catalog)
+      resolveForInstallFeaturesWhere enabledFeatures (entry: !isDarwinGuiNixPackage entry) (
+        lib.attrNames catalog
+      )
     else
       [ ];
 

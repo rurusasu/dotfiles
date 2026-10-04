@@ -2,13 +2,11 @@
 
 BeforeAll {
     $script:repoRoot = Join-Path $PSScriptRoot "../../../.."
-    $script:optionsPath = Join-Path $script:repoRoot "chezmoi/dot_config/nvim/lua/config/options.lua"
-    $script:lspPath = Join-Path $script:repoRoot "chezmoi/dot_config/nvim/lua/config/lsp.lua"
-    $script:nixdPath = Join-Path $script:repoRoot "chezmoi/dot_config/nvim/after/lsp/nixd.lua"
+    $script:optionsPath = Join-Path $script:repoRoot "nix/modules/nvim/init.lua"
+    $script:lspPath = Join-Path $script:repoRoot "nix/modules/nvim/lua/config/lsp.lua"
     $script:nixLspProxyPath = Join-Path $script:repoRoot "chezmoi/dot_local/bin/executable_nix-lsp-wsl-proxy.mjs"
     $script:optionsContent = Get-Content -LiteralPath $script:optionsPath -Raw
     $script:lspContent = Get-Content -LiteralPath $script:lspPath -Raw
-    $script:nixdContent = Get-Content -LiteralPath $script:nixdPath -Raw
     $script:nixLspProxyContent = if (Test-Path -LiteralPath $script:nixLspProxyPath -PathType Leaf) {
         Get-Content -LiteralPath $script:nixLspProxyPath -Raw
     }
@@ -26,15 +24,6 @@ Describe 'Neovim shell configuration' {
         $script:optionsContent | Should -Match 'opt\.shellcmdflag = '
         $script:optionsContent | Should -Match 'opt\.shellquote = ""'
         $script:optionsContent | Should -Match 'opt\.shellxquote = ""'
-    }
-
-    It 'should use the WSL nixd proxy for Nix files on Windows' {
-        $script:nixdContent | Should -Match 'vim\.fn\.has\("win32"\) == 1'
-        $script:nixdContent | Should -Match '\{ "node", vim\.fn\.expand\("~/\.local/bin/nix-lsp-wsl-proxy\.mjs"\) \}'
-        $script:nixdContent | Should -Match 'or \{ "nixd" \}'
-        $script:lspContent | Should -Match 'vim\.lsp\.enable\(name\)'
-        $script:lspContent | Should -Match 'vim\.fn\.executable\("wsl.exe"\) == 1'
-        $script:lspContent | Should -Not -Match 'nil_ls'
     }
 
     It 'should include a Windows-to-WSL nixd proxy with URI translation' {

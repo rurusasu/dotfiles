@@ -39,7 +39,7 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
    activation は `nix/home/standalone-darwin-fonts.nix` が所有する。
 2. system、host サービス、ユーザー、hardware は `nix/hosts/<host>/configuration.nix` に追加する。
    責務別に分離した host module がある場合は、その module に追加する。Darwin の system font は
-   `nix/hosts/darwin/fonts.nix`、OS-wide defaults、timezone、defaults の反映 activation は
+   `nix/modules/fonts.nix` の定義を `nix/modules/darwin/` から配布し、OS-wide defaults、timezone、defaults の反映 activation は
    `nix/hosts/darwin/system.nix` が所有する。host identity、サービス、Homebrew、統合固有の
    activation は `configuration.nix` に置く。各 host の `default.nix` は `configuration.nix` と
    責務別 module を import する entrypoint として維持する。Darwin の `default.nix` は配線専用とする。
@@ -65,7 +65,7 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
 ホストの標準レイアウトでは `nix/hosts/<host>/default.nix` と
 `nix/hosts/<host>/configuration.nix` を必須の基本構成とし、必要に応じて `default.nix` が
 責務別 module を import します。Darwin、native NixOS、NixOS-WSL はいずれもこの構成を使い、
-Darwin では `fonts.nix` と `system.nix` を分離しています。
+Darwin ではフォント配布を `nix/modules/darwin/`、OS-wide defaults を `system.nix` に分離しています。
 
 ## Codex CLI
 

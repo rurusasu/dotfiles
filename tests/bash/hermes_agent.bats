@@ -220,6 +220,7 @@ EOF
 	chmod +x "$STUB_BIN/$name"
 }
 
+
 run_restart_sidecar() {
 	local missing_command="${1:-}"
 	if [[ -z $missing_command ]]; then
