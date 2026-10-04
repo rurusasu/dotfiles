@@ -313,7 +313,7 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'runs-on:\s+windows-2025'
         $jobTimeout | Should -BeGreaterOrEqual (($rebuildTimeoutSeconds * $rebuildBudgetCount / 60) + 60) -Because 'the job must allow each independent rebuild timeout plus one hour for WSL setup and verification'
         $rebuildBudgetCount | Should -Be 2 -Because 'the E2E performs a post-install switch and a separate Hermes-enabled switch'
-        $workflow | Should -Match 'wsl-prebuild:[\s\S]*?DOTFILES_WITH_HERMES=1 nix build[\s\S]*?nix copy --to "file://\$cache_dir"[\s\S]*?Upload WSL Nix store cache'
+        $workflow | Should -Match 'wsl-prebuild:[\s\S]*?DOTFILES_WITH_HERMES=1 nix build[\s\S]*?nix copy --to "file://\$cache_dir\?compression=zstd"[\s\S]*?Upload WSL Nix store cache'
         $workflow | Should -Match 'wsl:[\s\S]*?needs: \[changes, wsl-prebuild\][\s\S]*?Download prebuilt WSL Nix store cache'
         $workflow | Should -Match 'actions/download-artifact@[0-9a-f]{40}'
         $workflow | Should -Match 'WSL_PREBUILD_RESULT: \$\{\{ needs\.wsl-prebuild\.result \}\}'
