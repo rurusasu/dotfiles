@@ -67,6 +67,7 @@ in
 
   home-manager = {
     sharedModules = [
+      ../modules/shells/zsh
       ../modules/lsp.nix
       ../modules/terminals/ghostty/defaults.nix
       ../modules/nixos/ghostty.nix
