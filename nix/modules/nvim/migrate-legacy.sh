@@ -14,7 +14,7 @@ relative=$2
 store=$3
 [[ $mode == check || $mode == apply ]] || fail "unknown mode: $mode"
 case "/$relative/" in
-  *'/../'* | *'/./'* | *'//'*) fail "unsafe config directory: $relative" ;;
+*'/../'* | *'/./'* | *'//'*) fail "unsafe config directory: $relative" ;;
 esac
 [[ $relative != /* && -n $relative ]] || fail 'config directory must be home-relative'
 home=${HOME:?}

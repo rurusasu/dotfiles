@@ -21,11 +21,11 @@ new_home() {
 legacy_config() {
   mkdir -p "$XDG_CONFIG_HOME/nvim/lua/config" \
     "$XDG_CONFIG_HOME/nvim/after/lsp" "$XDG_CONFIG_HOME/nvim/after/ftplugin"
-  printf '%s\n' '-- personal init' > "$XDG_CONFIG_HOME/nvim/init.lua"
+  printf '%s\n' '-- personal init' >"$XDG_CONFIG_HOME/nvim/init.lua"
   chmod 600 "$XDG_CONFIG_HOME/nvim/init.lua"
-  printf '%s\n' 'return 42' > "$XDG_CONFIG_HOME/nvim/lua/config/personal.lua"
-  printf '%s\n' 'return { custom = true }' > "$XDG_CONFIG_HOME/nvim/after/lsp/nixd.lua"
-  printf '%s\n' '-- keep unrelated after content' > "$XDG_CONFIG_HOME/nvim/after/ftplugin/lua.lua"
+  printf '%s\n' 'return 42' >"$XDG_CONFIG_HOME/nvim/lua/config/personal.lua"
+  printf '%s\n' 'return { custom = true }' >"$XDG_CONFIG_HOME/nvim/after/lsp/nixd.lua"
+  printf '%s\n' '-- keep unrelated after content' >"$XDG_CONFIG_HOME/nvim/after/ftplugin/lua.lua"
 }
 
 snapshot_home() {
@@ -67,9 +67,9 @@ nvim --headless -i NONE -c 'lua assert(vim.fn.stdpath("config") == os.getenv("XD
 new_home collision
 legacy_config
 mkdir "$XDG_CONFIG_HOME/nvim/after/lsp.pre-home-manager"
-printf '%s\n' 'older backup' > "$XDG_CONFIG_HOME/nvim/after/lsp.pre-home-manager/keep"
+printf '%s\n' 'older backup' >"$XDG_CONFIG_HOME/nvim/after/lsp.pre-home-manager/keep"
 before=$(snapshot_home)
-if "$activation" "$generation" apply > "$suite/collision.log" 2>&1; then
+if "$activation" "$generation" apply >"$suite/collision.log" 2>&1; then
   echo 'Expected the evaluated activation to reject the backup collision' >&2
   exit 1
 fi
@@ -85,7 +85,7 @@ for kind in foreign dangling; do
   fi
   ln -s "$target" "$XDG_CONFIG_HOME/nvim/lua"
   before=$(snapshot_home)
-  if "$activation" "$generation" apply > "$suite/$kind.log" 2>&1; then
+  if "$activation" "$generation" apply >"$suite/$kind.log" 2>&1; then
     echo "Expected the evaluated activation to reject the $kind symlink" >&2
     exit 1
   fi

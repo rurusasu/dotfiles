@@ -240,9 +240,11 @@ class NeovimMigrationTests(unittest.TestCase):
         commands.mkdir()
         real_mv = shutil.which("mv")
         self.assertIsNotNone(real_mv)
+        bash = shutil.which("bash")
+        self.assertIsNotNone(bash)
         wrapper = commands / "mv"
         wrapper.write_text(
-            '#!/usr/bin/env bash\n'
+            f'#!{bash}\n'
             'destination="${!#}"\n'
             'mkdir "$destination"\n'
             'printf "keep me" > "$destination/sentinel"\n'
@@ -251,6 +253,10 @@ class NeovimMigrationTests(unittest.TestCase):
         wrapper.chmod(0o755)
         result = self.invoke("apply", PATH=f"{commands}:{os.environ['PATH']}")
         self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertRegex(
+            result.stderr,
+            r"Neovim migration: (source remains after backup; refusing to link|could not preserve):",
+        )
         self.assertTrue((self.config / "init.lua").is_file())
         self.assertTrue((self.config / "lua/config/personal.lua").is_file())
         self.assertEqual((self.config / ("init.lua" + SUFFIX) / "sentinel").read_text(), "keep me")

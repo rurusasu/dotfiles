@@ -11,7 +11,7 @@ let
     export PATH=${lib.makeBinPath [ pkgs.coreutils ]}:"$PATH"
     ${builtins.readFile ./migrate-legacy.sh}
   '';
-  migrationArgs = ''${lib.escapeShellArg nvimDirectory} ${lib.escapeShellArg builtins.storeDir}'';
+  migrationArgs = "${lib.escapeShellArg nvimDirectory} ${lib.escapeShellArg builtins.storeDir}";
 in
 {
   # プラグインの導入と設定を専用モジュールにまとめる。

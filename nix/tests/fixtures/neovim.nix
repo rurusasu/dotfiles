@@ -57,20 +57,18 @@ in
     fi
     # Driver v1 owns profile updates; these tests exercise file activation only.
     hmDriverVersion=1
-    ${pkgs.lib.concatMapStringsSep "\n" (
-      entry: ''
-        ${pkgs.lib.optionalString (entry.name == "writeBoundary") ''
-          if [[ $phase == check ]]; then
-            exit 0
-          fi
-        ''}
-        ${pkgs.lib.optionalString (entry.name == "linkGeneration") ''
-          if [[ $phase == dry-run-local ]]; then
-            exit 0
-          fi
-        ''}
-        ${entry.data}
-      ''
-    ) fileActivation.result}
+    ${pkgs.lib.concatMapStringsSep "\n" (entry: ''
+      ${pkgs.lib.optionalString (entry.name == "writeBoundary") ''
+        if [[ $phase == check ]]; then
+          exit 0
+        fi
+      ''}
+      ${pkgs.lib.optionalString (entry.name == "linkGeneration") ''
+        if [[ $phase == dry-run-local ]]; then
+          exit 0
+        fi
+      ''}
+      ${entry.data}
+    '') fileActivation.result}
   '';
 }
