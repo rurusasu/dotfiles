@@ -11,7 +11,7 @@
 - パッケージと OS 別 provider metadata の SSOT: `nix/packages/catalog/`（カテゴリごとに一度だけ定義）
 - provider 選択・検証: `nix/packages/providers/`、installer metadata: `nix/packages/install/`
 - `nix/packages/sets.nix` は既存 export を維持する合成入口。データ・選択・配布・host 動作の変更理由を分離する。詳細は [パッケージ管理](docs/nix/package-management.md#分割の理由と編集先)。
-- 共通 Nix パッケージの利用側: `nix/home/common.nix`
+- Home Manager パッケージの選択・利用側: `nix/home/darwin.nix`、`linux.nix`、`wsl.nix`。`common.nix` は OS 非依存の共有設定を担当する。
 - デスクトップの共通キー配列・ユーザー設定: `nix/home/keybindings/`。OS の service/有効化・競合解除は `nix/hosts/<host>/` が担当する。純粋な設定生成関数と Home Manager module を区別する（[責務と対応範囲・移行状況](docs/chezmoi/omarchy.md)）。
 - Windows manifest: `windows/{winget,npm,pnpm}/packages.json`（`winget-export` の生成物）
 - ユーザー設定: 原則 `chezmoi/` 以下。Nix 管理のデスクトップキー設定は `nix/home/keybindings/` に置き、同じ設定を二重配布しない。

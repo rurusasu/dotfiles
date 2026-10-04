@@ -118,7 +118,6 @@ let
       entry.support
       // {
         installFeature = entry.installFeature or null;
-        legacyDarwin = entry.legacyDarwin or null;
       }
     ) catalog
     // lib.mapAttrs (
@@ -126,7 +125,6 @@ let
       support
       // {
         installFeature = null;
-        legacyDarwin = null;
       }
     ) windowsOnlySupport;
 in

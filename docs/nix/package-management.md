@@ -28,14 +28,18 @@ SSOT は「各定義を一度だけ持つ」ことであり、すべてを 1 フ
 
 native desktop 用 package は `catalog/native-desktop.nix` に定義します。`sets.all` は全 feature を含むため、`installFeature` を付けるだけでは WSL/standalone への非混入を保証できません。`sets.nativeDesktopPackageNames` を使い headless Home Manager consumer で除外し、native host と選択された home module のみが `WithDesktop` で解決します。
 
-| Catalog output                      | Consumer                            | Platform                     |
-| ----------------------------------- | ----------------------------------- | ---------------------------- |
-| `all` / category sets               | `nix/home/common.nix`               | macOS、NixOS、Ubuntu、Debian |
-| `darwinCasksForInstallFeatures`     | nix-homebrew in nix-darwin          | macOS                        |
-| `linuxSystemModules`                | NixOS / System Manager modules      | Linux                        |
-| `wingetMap`, `npmMap`, `pnpmGlobal` | `nix/packages/winget.nix`           | Windows                      |
-| `supportReport`                     | `package-support-report` derivation | CI and review                |
-| `providerErrors`                    | flake check                         | all platforms                |
+| Catalog output                         | Consumer                            | Platform                                              |
+| -------------------------------------- | ----------------------------------- | ----------------------------------------------------- |
+| `darwinHomePackagesForInstallFeatures` | `nix/home/darwin.nix`               | macOS                                                 |
+| `allWithout`                           | `nix/home/linux.nix`                | native NixOS、standalone Linux（Ubuntu、Debian など） |
+| `allWithout`                           | `nix/home/wsl.nix`                  | NixOS-WSL                                             |
+| `darwinCasksForInstallFeatures`        | nix-homebrew in nix-darwin          | macOS                                                 |
+| `linuxSystemModules`                   | NixOS / System Manager modules      | Linux                                                 |
+| `wingetMap`, `npmMap`, `pnpmGlobal`    | `nix/packages/winget.nix`           | Windows                                               |
+| `supportReport`                        | `package-support-report` derivation | CI and review                                         |
+| `providerErrors`                       | flake check                         | all platforms                                         |
+
+Home Manager の package 選択と `home.packages` は各 OS の module が担当します。Darwin は install feature に応じて選択し、Linux は native desktop package を除外します。WSL は native desktop package に加えて Discord と Ollama を除外します。各 OS module が import する `nix/home/common.nix` は OS 非依存の共有設定を担当し、package 選択は行いません。
 
 Windows だけに存在する GUI や OS component は `install/windows-only.nix` の `windowsOnlySupport` に置き、macOS/Linux で対応しない理由を必ず記録します。クロスプラットフォームのツールを理由なしに Windows-only へ入れることはできません。
 
@@ -80,6 +84,48 @@ standalone Home Manager は上記の OS 統合を使えない環境向けに維�
 manifest 生成・provider 検証の出力はインストール集合と分けて公開します。
 
 macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Homebrew provider を反映します。通常の CLI と Neovim・WezTerm は Nix 側で管理し、cask/formula は catalog が明示する例外です。Nix パッケージの版は `flake.lock` に従います。
+
+### macOS の旧 provider サポート終了
+
+旧 Homebrew provider を検出し、Nix provider の検証後に uninstall する
+一度限りの自動移行は終了しました。通常インストールは現行 catalog の
+provider を反映し、切替済みの旧 Homebrew package を自動 uninstall しません。
+旧 provider の metadata と移行処理は提供しません。公開コマンド
+`task darwin:migrate` は互換性のため残しますが、終了の案内だけを表示します。
+旧引数は評価せず無視し、移行・検証・package やデータの変更は行いません。
+現行 provider を個別に検証する `task darwin:verify` は引き続き利用できます。
+既存 package やアプリのデータを整理する
+必要がある場合は、利用者が保存対象と現在使用している実体を確認してから
+個別に対応します。
+
+インストール済み provider の検証成功は、既に起動している GUI application の
+実体が切り替わったことを意味しません。切替完了を確認するときは、稼働中の
+実行ファイル・bundle path も確認します。旧 bundle が使われている場合は、
+利用者と作業の保存・再起動を調整してから現行 bundle への切替を確認します。
+旧 package の残存だけを理由に自動削除することはありません。
+
+2026-10-01 にこの作業端末を読み取り専用で確認しました。稼働中の
+nix-darwin generation にある移行対象の有効な 8 package は現行 verifier に
+成功し、`/Applications/Nix Apps` の 7 application は Info.plist と宣言済み
+実行ファイルが generation の実体と一致しました。Tart は Nix profile の
+実行ファイルでした。Google Chrome / Ollama の optional feature は無効でした。
+一方、稼働中の Orca は `/Applications/Orca.app` の旧 bundle で、Homebrew の
+cask receipt もこの path を指していました。検証済みの現行 Nix bundle は
+`/Applications/Nix Apps/Orca.app` に別途配置されています。この端末の Orca の
+稼働中 session の切替は未確認であり、残存 cask を未使用の重複とは扱いません。
+この変更では終了・再起動・削除を行いません。
+他端末の切替完了を保証する記録ではありません。
+
+通常インストールは activation 後に `verify-darwin-packages.sh` で現行の
+Nix application identity / CLI version を検証します。support report を一度
+生成し、同じ metadata と output path を再利用します。無効な feature は
+検証対象から外し、有効な package の欠落・identity/version 検証失敗は
+後続の設定反映前にエラーとします。output path の report は optional
+application をビルドする依存関係を持ちません。
+
+単体の Nix application identity / CLI version 検証は
+`task darwin:verify -- --support-json FILE --id ID --store-path PATH` で実行できます。
+通常インストールの環境検証と各 profile の feature gate は維持します。
 
 その他 Linux の `DOTFILES_ALLOW_USER_ONLY=1 ./install.sh` は Home Manager のみで、Docker や OS service は管理しません。
 
@@ -153,7 +199,10 @@ Neovim 本体・プラグインはカタログを介さず、`nix/modules/nvim/`
 | `nix/packages/sets.nix`              | 合成と既存 consumer 向けの公開 API       |
 | `nix/packages/support-report.nix`    | coverage report derivation               |
 | `nix/packages/winget.nix`            | generated Windows manifests              |
-| `nix/home/common.nix`                | shared Home Manager packages             |
+| `nix/home/darwin.nix`                | macOS Home Manager package 選択と設定    |
+| `nix/home/linux.nix`                 | Linux Home Manager package 選択と設定    |
+| `nix/home/wsl.nix`                   | WSL Home Manager package 選択と設定      |
+| `nix/home/common.nix`                | OS 非依存の共有 Home Manager 設定        |
 | `nix/hosts/darwin/configuration.nix` | macOS system and casks                   |
 | `nix/system-manager/`                | Ubuntu/Debian system packages and Docker |
 | `nix/hosts/linux/`                   | native NixOS system packages and Docker  |

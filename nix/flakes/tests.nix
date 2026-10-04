@@ -24,6 +24,13 @@
       };
     };
     nix-unit.inputs = {
+      # Full Darwin activation evaluation needs this nested input in the sandbox.
+      "nix-homebrew/brew-src" = inputs.nix-homebrew.inputs.brew-src;
+      # Hermes activation also evaluates its locked package input closure.
+      "hermes-agent/pyproject-nix" = inputs.hermes-agent.inputs.pyproject-nix;
+      "hermes-agent/uv2nix" = inputs.hermes-agent.inputs.uv2nix;
+      "hermes-agent/pyproject-build-systems" = inputs.hermes-agent.inputs.pyproject-build-systems;
+      "hermes-agent/npm-lockfile-fix" = inputs.hermes-agent.inputs.npm-lockfile-fix;
       inherit (inputs)
         flake-parts
         home-manager
@@ -71,7 +78,8 @@
       // (import ../tests/unit/package-catalog-validation-fixtures.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-claude-tableplus-absence.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-desktop-support.nix { inherit inputs; })
-      // (import ../tests/unit/package-catalog-darwin-migration-metadata.nix { inherit inputs; })
+      // (import ../tests/unit/package-catalog-darwin-provider-metadata.nix { inherit inputs; })
+      // (import ../tests/unit/package-catalog-darwin-verification-paths.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-dia-orca-arc-support.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-chatgpt-support.nix { inherit inputs; })
       // (import ../tests/unit/package-catalog-docker.nix { inherit inputs; })
