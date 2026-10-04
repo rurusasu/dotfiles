@@ -24,6 +24,8 @@
       };
     };
     nix-unit.inputs = {
+      # Full Darwin activation evaluation needs this nested input in the sandbox.
+      "nix-homebrew/brew-src" = inputs.nix-homebrew.inputs.brew-src;
       inherit (inputs)
         flake-parts
         home-manager
