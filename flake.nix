@@ -46,10 +46,6 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    workmux = {
-      url = "github:raine/workmux";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     hermes-agent = {
       url = "github:NousResearch/hermes-agent/d337b736aa1e8ebecfab043842d13e4a2d2f48a3";
       inputs = {

@@ -84,11 +84,6 @@ let
       outPath = nixpkgsFixture;
       lib.optionals = condition: values: if condition then values else [ ];
     };
-    workmux.packages = {
-      aarch64-darwin.default = "workmux";
-      aarch64-linux.default = "workmux";
-      x86_64-linux.default = "workmux";
-    };
     home-manager.lib.homeManagerConfiguration = args: args;
   };
   homeOutputs = (import ../../flakes/home.nix { inputs = homeInputs; }).flake.homeConfigurations;

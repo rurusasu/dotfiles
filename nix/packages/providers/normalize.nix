@@ -37,7 +37,6 @@ let
       "treefmt"
       "trivy"
       "unzip"
-      "workmux"
     ] (_: "No reviewed Windows package provider is selected");
     darwin = { };
     linux = { };

@@ -44,7 +44,6 @@
         system-manager
         systems
         treefmt-nix
-        workmux
         ;
     };
 

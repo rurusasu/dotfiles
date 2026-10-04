@@ -1,11 +1,8 @@
 { inputs }:
 let
   system = "x86_64-linux";
-  workmux = import ../../flakes/lib/workmux.nix { inherit inputs; };
-  workmuxOverlay = workmux.mkOverlay (_: inputs.workmux.packages.${system}.default);
 
   systemManagerConfig = inputs.system-manager.lib.makeSystemConfig {
-    overlays = [ workmuxOverlay ];
     specialArgs = {
       inherit inputs;
       dotfilesUser = "test-user";

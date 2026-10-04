@@ -2,8 +2,6 @@
 let
   lib = inputs.nixpkgs.lib;
   system = "aarch64-darwin";
-  workmux = import ../../../flakes/lib/workmux.nix { inherit inputs; };
-  workmuxOverlay = workmux.mkOverlay (_: inputs.workmux.packages.${system}.default);
 
   mkDarwin =
     {
@@ -28,7 +26,6 @@ let
         inputs.home-manager.darwinModules.home-manager
         {
           nixpkgs.config.allowUnfree = true;
-          nixpkgs.overlays = [ workmuxOverlay ];
         }
         ../../../hosts/darwin
       ]
