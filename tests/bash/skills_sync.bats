@@ -10,7 +10,7 @@ setup() {
 	awk '
 		NR == 1 || $0 == "{{ end -}}" { next }
 		/^source_agent=/ { print "source_agent=\"agents\""; next }
-		/^target_agents=/ { print "target_agents=(\"codex\" \"gemini\" \"cursor\")"; next }
+		/^target_agents=/ { print "target_agents=(\"codex\" \"gemini\")"; next }
 		{ print }
 	' "$REPO_ROOT/chezmoi/.chezmoiscripts/run_after_sync-agent-skills_linux.sh.tmpl" >"$SYNC_SCRIPT"
 	chmod +x "$SYNC_SCRIPT"

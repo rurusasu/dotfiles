@@ -37,20 +37,5 @@ pkgs.runCommand "neovim-native-check"
       -c 'qa!'
     DOTFILES_NVIM_LSPCONFIG=${pkgs.vimPlugins.nvim-lspconfig} \
       nvim --headless -u NONE -i NONE -l tests/lua/nvim_typescript_test.lua
-    # Remote 設定は JSON5 の既存キーを保持し、壊れたファイルは変更しない。
-    export HOME="$TMPDIR/home"
-    mkdir -p "$HOME/.cursor-server/data/Machine"
-    settings_file="$HOME/.cursor-server/data/Machine/settings.json"
-    printf '%s\n' '{ "unrelated": true, "nix.serverPath": "old", /* keep */ }' > "$settings_file"
-    ${neovim.cursorRemoteActivation}
-    jq -e '.unrelated == true and .["nix.serverPath"] == "nixd" and .["ruff.path"] == ["ruff"]' "$settings_file"
-    ${neovim.cursorRemoteActivation}
-    printf '%s\n' 'invalid JSON' > "$settings_file"
-    if ${neovim.cursorRemoteActivation}; then
-      echo 'Invalid Remote settings must fail without overwriting them' >&2
-      exit 1
-    fi
-    test "$(cat "$settings_file")" = 'invalid JSON'
-    echo 'Cursor Remote settings preserve unrelated keys and reject invalid input'
     touch "$out"
   ''

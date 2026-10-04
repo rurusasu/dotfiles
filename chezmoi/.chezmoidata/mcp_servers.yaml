@@ -9,7 +9,6 @@ mcp_toolkit:
   server_name: MCP_DOCKER
   supports:
     - codex
-    - cursor
     - gemini
     - windsurf
   secrets:
@@ -48,7 +47,6 @@ mcp_servers:
     url: "http://127.0.0.1:8888/mcp/codex-shared/"
     supports:
       - codex
-      - cursor
       - gemini
       - windsurf
 
@@ -66,7 +64,6 @@ mcp_servers:
     op_env:
       PLANE_API_KEY: "op://hxgiw3ekjzktxf7hiyf5lyb4hi/fzhjphxau3ila6wlelo5y4ehhe/credential"
     supports:
-      - cursor
       - gemini
       - windsurf
 
@@ -81,7 +78,6 @@ mcp_servers:
     # package in Codex startup, so keep it out of Codex auto-start.
     supports:
       - windsurf
-      - cursor
       - gemini
 
   # Kaggle - Official remote MCP (competitions, datasets, notebooks, models, benchmarks)
@@ -96,6 +92,5 @@ mcp_servers:
     startup_timeout_sec: 30
     # Keep OAuth/API-key remote startup out of Codex by default.
     supports:
-      - cursor
       - gemini
       - windsurf

@@ -4,7 +4,6 @@ secret/
 git/
 cli/
 terminals/
-editors/
 github/
 ssh/
 
@@ -24,6 +23,10 @@ README.md
 .chezmoiscripts/**/*_linux.sh
 {{ end }}
 {{ if ne .chezmoi.os "windows" }}
+# Native terminal configuration belongs to Home Manager.
+.config/ghostty/
+.config/wezterm/
+.local/bin/wezterm-launch.cmd
 .chezmoiscripts/**/*_windows.ps1
 .glzr/
 {{ end }}

@@ -33,7 +33,7 @@ derivation を再利用し、`treefmt` は formatter module が公開します�
 
 Unix の `task test` は `task test:nix` を呼びます。生成キー設定の整合性検査に続いて、
 現在の system の powershell-formatter、nix-unit、custom-package-builds、aerospace-workspace-cycle、
-darwin-default-shell、neovim-native、ghostty-config を一つの `nix build` にまとめます。同じ flake の評価を7回繰り返しません。
+neovim-native、ghostty-config を一つの `nix build` にまとめます。同じ flake の評価を6回繰り返しません。
 Windows の `task test` は PowerShell テストを実行します。
 
 ```bash

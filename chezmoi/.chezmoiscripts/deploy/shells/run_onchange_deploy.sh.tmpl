@@ -1,8 +1,8 @@
 {{ if ne .chezmoi.os "windows" -}}
 #!/usr/bin/env bash
 # Deploy shell configurations for Linux/macOS
-# zshrc is managed by Home Manager (programs.zsh) on all HM-managed platforms.
-# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "dot_config/shell/secret.sh" | sha256sum }}{{ include "dot_config/shell/secrets.env" | sha256sum }}{{ include "dot_config/shell/secrets-work.env" | sha256sum }}
+# Bash and zsh startup files are managed by Home Manager on Unix.
+# hash: {{ include "dot_config/shell/secret.sh" | sha256sum }}{{ include "dot_config/shell/secrets.env" | sha256sum }}{{ include "dot_config/shell/secrets-work.env" | sha256sum }}
 
 set -euo pipefail
 
@@ -23,9 +23,7 @@ deploy_file() {
 
 echo "Deploying shell configurations..."
 
-deploy_file "$CHEZMOI_SOURCE/shells/bashrc" "$HOME_DIR/.bashrc"
-deploy_file "$CHEZMOI_SOURCE/shells/profile" "$HOME_DIR/.profile"
-# zshrc intentionally omitted: managed by Home Manager (programs.zsh) on all
+# Shell startup files are managed by Home Manager on all
 # HM-managed platforms (NixOS/WSL, macOS via nix-darwin, standalone Linux).
 
 # 1Password-managed secret loader

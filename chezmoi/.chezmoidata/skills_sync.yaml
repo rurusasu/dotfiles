@@ -6,11 +6,9 @@
 # Sync targets:
 # - ~/.codex/skills
 # - ~/.gemini/skills
-# - ~/.cursor/skills
 skills_sync:
   source_agent: agents
   target_agents:
     - codex
     - gemini
-    - cursor
   mode: symlink

@@ -18,27 +18,6 @@ let
     else
       throw "Unable to determine the macOS user: SUDO_USER and USER are both empty.";
   home = "/Users/${user}";
-  # macOS supplies zsh; do not add installation or /etc/shells management.
-  loginShell = "/bin/zsh";
-  # Native users.users.<name>.shell only updates knownUsers. Keep the existing
-  # admin account macOS-owned and converge just its local shell property.
-  defaultShellActivation = ''
-    (
-      set -eu
-      user=${lib.escapeShellArg user}
-      target=${lib.escapeShellArg loginShell}
-      test -x "$target"
-      uid="$(/usr/bin/id -u "$user")"
-      test "$uid" -gt 0
-      /usr/bin/grep -Fxq -- "$target" /etc/shells
-      current="$(/usr/bin/dscl . -read "/Users/$user" UserShell)"
-      if [ "$current" != "UserShell: $target" ]; then
-        /usr/bin/dscl . -change "/Users/$user" UserShell "''${current#UserShell: }" "$target"
-        current="$(/usr/bin/dscl . -read "/Users/$user" UserShell)"
-        test "$current" = "UserShell: $target"
-      fi
-    )
-  '';
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
   };
@@ -59,7 +38,6 @@ in
     stateVersion = 6;
     tools.darwin-uninstaller.enable = false;
     activationScripts = {
-      defaultUserShell.text = defaultShellActivation;
       globalZoomShortcut.text = ''
         uid="$(id -u -- ${lib.escapeShellArg user})"
         runAsUser() {
@@ -70,8 +48,7 @@ in
         runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "拡大／縮小" "@^m"
       '';
       postActivation.text = lib.mkAfter (
-        defaultShellActivation
-        + lib.optionalString withHermes ''
+        lib.optionalString withHermes ''
           uid="$(id -u -- ${lib.escapeShellArg user})"
           runAsUser() {
             launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} --set-home -- "$@"
@@ -153,12 +130,7 @@ in
     };
   };
 
-  # Existing admin accounts must not be added to users.knownUsers. Only the
-  # login-shell property is converged by the Nix activation above.
-  users.users.${user} = {
-    inherit home;
-    shell = loginShell;
-  };
+  users.users.${user}.home = home;
 
   environment.systemPackages =
     sets.darwinSystemPackagesForInstallFeatures installFeatures ++ sets.hostPackages;

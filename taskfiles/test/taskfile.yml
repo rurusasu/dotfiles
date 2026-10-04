@@ -16,7 +16,6 @@ tasks:
           ".#checks.${system}.nix-unit" \
           ".#checks.${system}.custom-package-builds" \
           ".#checks.${system}.aerospace-workspace-cycle" \
-          ".#checks.${system}.darwin-default-shell" \
           ".#checks.${system}.neovim-native" \
           ".#checks.${system}.ghostty-config" \
           --no-link --no-write-lock-file

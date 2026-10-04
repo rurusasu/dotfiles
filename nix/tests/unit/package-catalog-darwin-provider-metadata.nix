@@ -12,18 +12,10 @@ in
     expr = sets.supportReport.wezterm;
     expected = {
       darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "wezterm";
-        identity = {
-          appName = "WezTerm.app";
-        };
+        unsupported = "WezTerm is managed by Home Manager";
       };
       linux = {
-        provider = "nix";
-        source = "nixpkgs";
-        identity = "wezterm";
-        nixAttr = "wezterm";
+        unsupported = "WezTerm is managed by Home Manager";
       };
       windows = {
         provider = "winget";

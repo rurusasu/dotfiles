@@ -56,11 +56,13 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
         block = taskfile.split("  test:nix:\n", 1)[1].split("  test:powershell:\n", 1)[0]
         self.assertEqual(block.count("nix build "), 1)
-        for check in (
-            "powershell-formatter", "nix-unit", "custom-package-builds",
-            "aerospace-workspace-cycle", "darwin-default-shell", "neovim-native", "ghostty-config",
-        ):
-            self.assertIn(f'.#checks.${{system}}.{check}', block)
+        self.assertCountEqual(
+            re.findall(r"\.\#checks\.\$\{system\}\.([a-z-]+)", block),
+            (
+                "powershell-formatter", "nix-unit", "custom-package-builds",
+                "aerospace-workspace-cycle", "neovim-native", "ghostty-config",
+            ),
+        )
         self.assertIn("--no-write-lock-file", block)
 
     def test_consistency_nix_checks_share_one_logged_build(self) -> None:
@@ -337,51 +339,65 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertNotRegex(workflow, rf"(?m)^\s+{variable}:")
             self.assertNotIn(variable, workflow.replace(job, ""))
 
-    def test_wsl_prebuild_exports_a_directory_with_both_consumer_files(self) -> None:
+    def test_wsl_prebuild_exports_zstd_cache_and_fails_closed(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
         job = self._workflow_job(workflow, "wsl-prebuild")
         script = re.search(r"(?m)^        run: \|\n(?P<script>(?:          [^\n]*\n|\n)+)", job)
         self.assertIsNotNone(script)
         assert script is not None
         expected_paths = [f"/nix/store/{'a' * 32}-base", f"/nix/store/{'b' * 32}-hermes"]
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            runner_temp = directory / "container runner temp"
-            runner_temp.mkdir()
-            output = directory / "step-output"
-            nix = directory / "nix"
-            nix.write_text(
-                f"#!{sys.executable}\n"
-                "import os, pathlib, sys\n"
-                f"paths = {expected_paths!r}\n"
-                "if sys.argv[1] == 'build':\n"
-                "    assert '.#nixosConfigurations.nixos.config.system.build.toplevel' in sys.argv\n"
-                "    print(paths[bool(os.environ.get('DOTFILES_WITH_HERMES'))])\n"
-                "elif sys.argv[1:3] == ['copy', '--to']:\n"
-                "    assert sys.argv[4:] == paths\n"
-                "    pathlib.Path(sys.argv[3].removeprefix('file://'), 'cache-entry').write_text('cache')\n"
-                "else:\n"
-                "    raise SystemExit(64)\n"
-            )
-            nix.chmod(0o755)
-            environment = dict(os.environ)
-            environment.update(PATH=f"{directory}:{environment['PATH']}", RUNNER_TEMP=str(runner_temp), GITHUB_OUTPUT=str(output))
-            environment.pop("DOTFILES_WITH_HERMES", None)
-            subprocess.run(
-                ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", textwrap.dedent(script.group("script"))],
-                env=environment,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            self.assertTrue(output.is_file(), "prebuild must export its actual container artifact directory")
-            outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
-            artifact = Path(outputs["artifact-dir"])
-            self.assertTrue(artifact.is_relative_to(runner_temp))
-            self.assertEqual(sorted(path.name for path in artifact.iterdir()), ["wsl-nix-cache.tar", "wsl-system-paths.txt"])
-            self.assertEqual((artifact / "wsl-system-paths.txt").read_text().splitlines(), expected_paths)
-            with tarfile.open(artifact / "wsl-nix-cache.tar") as archive:
-                self.assertIn("./cache-entry", archive.getnames())
+        for copy_exit in (0, 47):
+            with self.subTest(copy_exit=copy_exit), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                runner_temp = directory / "container runner temp"
+                runner_temp.mkdir()
+                output = directory / "step-output"
+                output.touch()
+                nix = directory / "nix"
+                nix.write_text(
+                    f"#!{sys.executable}\n"
+                    "import os, pathlib, sys\n"
+                    "from urllib.parse import urlsplit, parse_qs\n"
+                    f"paths = {expected_paths!r}\n"
+                    "if sys.argv[1:] == ['--version']:\n"
+                    "    print('nix boundary double')\n"
+                    "elif sys.argv[1] == 'build':\n"
+                    "    assert '.#nixosConfigurations.nixos.config.system.build.toplevel' in sys.argv\n"
+                    "    print(paths[bool(os.environ.get('DOTFILES_WITH_HERMES'))])\n"
+                    "elif sys.argv[1:3] == ['copy', '--to']:\n"
+                    "    assert sys.argv[4:] == paths\n"
+                    "    target = urlsplit(sys.argv[3])\n"
+                    "    assert target.scheme == 'file' and not target.netloc\n"
+                    "    assert parse_qs(target.query) == {'compression': ['zstd']}\n"
+                    "    if os.environ['COPY_EXIT'] != '0': raise SystemExit(int(os.environ['COPY_EXIT']))\n"
+                    "    pathlib.Path(target.path, 'cache-entry').write_text('cache')\n"
+                    "else:\n"
+                    "    raise SystemExit(64)\n"
+                )
+                nix.chmod(0o755)
+                environment = dict(os.environ)
+                environment.update(PATH=f"{directory}:{environment['PATH']}", RUNNER_TEMP=str(runner_temp), GITHUB_OUTPUT=str(output), COPY_EXIT=str(copy_exit))
+                environment.pop("DOTFILES_WITH_HERMES", None)
+                result = subprocess.run(
+                    ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", textwrap.dedent(script.group("script"))],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, copy_exit, result.stdout + result.stderr)
+                if copy_exit:
+                    self.assertEqual(output.read_text(), "", "failed exports must not publish an artifact path")
+                    self.assertFalse((runner_temp / "wsl-nix-cache-artifact/wsl-nix-cache.tar").exists())
+                    continue
+                self.assertTrue(output.is_file(), "prebuild must export its actual container artifact directory")
+                outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
+                artifact = Path(outputs["artifact-dir"])
+                self.assertTrue(artifact.is_relative_to(runner_temp))
+                self.assertEqual(sorted(path.name for path in artifact.iterdir()), ["wsl-nix-cache.tar", "wsl-system-paths.txt"])
+                self.assertEqual((artifact / "wsl-system-paths.txt").read_text().splitlines(), expected_paths)
+                with tarfile.open(artifact / "wsl-nix-cache.tar") as archive:
+                    self.assertIn("./cache-entry", archive.getnames())
         self.assertIn("id: wsl-cache", job)
         self.assertIn("path: ${{ steps.wsl-cache.outputs.artifact-dir }}", job)
         self.assertNotIn("${{ runner.temp }}", job)

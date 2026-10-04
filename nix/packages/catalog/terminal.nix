@@ -1,47 +1,13 @@
 # Package identities and provider declarations for terminal.
 { pkgs, ... }:
 {
-  ghostty = {
-    pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.ghostty-bin else pkgs.ghostty;
-    category = "terminal";
-    support = {
-      windows.unsupported = "Ghostty is configured only for macOS and Linux";
-      darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "ghostty-bin";
-        identity = {
-          appName = "Ghostty.app";
-        };
-      };
-      linux = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "ghostty";
-        identity = "ghostty";
-      };
-    };
-  };
-
+  # Unix installation and configuration belong to the Home Manager module.
   wezterm = {
-    pkg = pkgs.wezterm;
     winget = "wez.wezterm";
     category = "terminal";
     support = {
-      darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "wezterm";
-        identity = {
-          appName = "WezTerm.app";
-        };
-      };
-      linux = {
-        provider = "nix";
-        source = "nixpkgs";
-        identity = "wezterm";
-        nixAttr = "wezterm";
-      };
+      darwin.unsupported = "WezTerm is managed by Home Manager";
+      linux.unsupported = "WezTerm is managed by Home Manager";
     };
   };
 

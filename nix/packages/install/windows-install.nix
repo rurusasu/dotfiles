@@ -174,7 +174,6 @@
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"
     ];
     rustup = [ "%USERPROFILE%\\.cargo\\bin" ];
-    wezterm = [ "%ProgramFiles%\\WezTerm" ];
   };
 
   # Portable winget packages whose package exe name does not match the command name.

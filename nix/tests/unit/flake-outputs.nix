@@ -281,27 +281,34 @@ in
 
   testStandaloneHomeOutputsUseCanonicalOsModules = {
     expr = {
-      darwin = homeOutputs."aarch64-darwin".modules;
-      x86Linux = homeOutputs."x86_64-linux".modules;
-      armLinux = homeOutputs."aarch64-linux".modules;
+      darwin = map toString homeOutputs."aarch64-darwin".modules;
+      x86Linux = map toString homeOutputs."x86_64-linux".modules;
+      armLinux = map toString homeOutputs."aarch64-linux".modules;
     };
     expected = {
       darwin = [
-        ../../home/darwin.nix
-        ../../modules/lsp.nix
-        ../../modules/cursor
-        ../../home/standalone-darwin-identity.nix
-        ../../home/standalone-darwin-fonts.nix
+        (toString ../../home/darwin.nix)
+        (toString ../../modules/lsp.nix)
+        (toString ../../modules/terminals/ghostty/defaults.nix)
+        (toString ../../modules/darwin/ghostty.nix)
+        (toString ../../modules/terminals/wezterm/defaults.nix)
+        (toString ../../modules/darwin/wezterm.nix)
+        (toString ../../home/standalone-darwin-identity.nix)
+        (toString ../../home/standalone-darwin-fonts.nix)
       ];
       x86Linux = [
-        ../../home/linux.nix
-        ../../modules/lsp.nix
-        ../../modules/cursor
+        (toString ../../home/linux.nix)
+        (toString ../../modules/lsp.nix)
+        (toString ../../modules/terminals/ghostty/defaults.nix)
+        (toString ../../modules/nixos/ghostty.nix)
+        (toString ../../modules/terminals/wezterm/defaults.nix)
       ];
       armLinux = [
-        ../../home/linux.nix
-        ../../modules/lsp.nix
-        ../../modules/cursor
+        (toString ../../home/linux.nix)
+        (toString ../../modules/lsp.nix)
+        (toString ../../modules/terminals/ghostty/defaults.nix)
+        (toString ../../modules/nixos/ghostty.nix)
+        (toString ../../modules/terminals/wezterm/defaults.nix)
       ];
     };
   };

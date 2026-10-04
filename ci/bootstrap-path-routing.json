@@ -125,10 +125,6 @@
       "outputs": ["wsl"]
     },
     {
-      "patterns": ["nix/modules/host/**"],
-      "outputs": ["linux", "wsl"]
-    },
-    {
       "patterns": [
         "nix/home/darwin.nix",
         "nix/hosts/darwin/**",
@@ -211,6 +207,7 @@
         "chezmoi/shells/bashrc",
         "chezmoi/shells/profile",
         "chezmoi/terminals/wezterm/**",
+        "nix/modules/terminals/**",
         "chezmoi/editors/**",
         "chezmoi/cli/**",
         "chezmoi/dot_config/**",

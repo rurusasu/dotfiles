@@ -33,7 +33,6 @@ $SecretRefs = [ordered]@{
 }
 $ToolkitClients = @(
     "codex",
-    "cursor",
     "gemini"
 )
 

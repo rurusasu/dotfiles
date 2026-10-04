@@ -1,64 +1,40 @@
 #!/usr/bin/env bats
-
 setup() {
-  REPO_ROOT="${GHOSTTY_TEST_REPO_ROOT:-$(cd "$BATS_TEST_DIRNAME/../.." && pwd)}"
-  command -v chezmoi >/dev/null || skip "chezmoi required; also exercised by the ghostty-config Nix check"
-  mkdir -p "$BATS_TEST_TMPDIR/home"
+	REPO_ROOT="${GHOSTTY_TEST_REPO_ROOT:-$(cd "$BATS_TEST_DIRNAME/../.." && pwd)}"
+	mkdir -p "$BATS_TEST_TMPDIR/home"
+	export HOME="$BATS_TEST_TMPDIR/home"
 }
-
-render() {
-  chezmoi --config /dev/null --config-format toml --source "$REPO_ROOT/chezmoi" \
-    --destination "$BATS_TEST_TMPDIR/home" \
-    --cache "$BATS_TEST_TMPDIR/cache" \
-    --persistent-state "$BATS_TEST_TMPDIR/state.boltdb" \
-    --override-data "{\"chezmoi\":{\"os\":\"$1\"}}" \
-    execute-template --file "$REPO_ROOT/chezmoi/.chezmoiscripts/deploy/terminals/run_onchange_deploy.sh.tmpl"
+@test "chezmoi has no Unix terminal deployment and no Ghostty source" {
+	[ ! -e "$REPO_ROOT/chezmoi/.chezmoiscripts/deploy/terminals/run_onchange_deploy.sh.tmpl" ]
+	[ ! -e "$REPO_ROOT/chezmoi/terminals/ghostty/config" ]
 }
-
-render_ghostty() {
-  chezmoi --config /dev/null --config-format toml --source "$REPO_ROOT/chezmoi" \
-    --destination "$BATS_TEST_TMPDIR/home" \
-    --cache "$BATS_TEST_TMPDIR/cache" \
-    --persistent-state "$BATS_TEST_TMPDIR/state.boltdb" \
-    --override-data "{\"chezmoi\":{\"os\":\"$1\"}}" \
-    execute-template --file "$REPO_ROOT/chezmoi/terminals/ghostty/config"
+@test "Windows deploy template reads rendered WezTerm Lua only on Windows" {
+	for os in linux darwin windows; do
+		rendered=$(chezmoi --config /dev/null --config-format toml --source "$REPO_ROOT/chezmoi" \
+			--destination "$HOME" --cache "$BATS_TEST_TMPDIR/cache" --persistent-state "$BATS_TEST_TMPDIR/state.boltdb" \
+			--override-data "{\"chezmoi\":{\"os\":\"$os\"}}" execute-template \
+			--file "$REPO_ROOT/chezmoi/.chezmoiscripts/deploy/terminals/run_onchange_deploy.ps1.tmpl")
+		if [[ $os == windows ]]; then
+			[[ $rendered == *'local wezterm = require("wezterm")'* ]]
+			[[ $rendered == *'Deploy-Content $WezTermConfig'* ]]
+			[[ $rendered != *'{{ .appearance.'* ]]
+		else
+			[ -z "$rendered" ]
+		fi
+	done
 }
-
-@test "terminal deployment installs Ghostty alongside WezTerm on macOS and Linux" {
-  for os in darwin linux; do
-    test_home="$BATS_TEST_TMPDIR/$os"
-    mkdir -p "$test_home"
-    rendered="$(render "$os")"
-    run env HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" CHEZMOI_SOURCE_DIR="$REPO_ROOT/chezmoi" bash -c "$rendered"
-    [ "$status" -eq 0 ]
-    [ -f "$test_home/.config/ghostty/config" ]
-    expected="$BATS_TEST_TMPDIR/$os-ghostty-config"
-    render_ghostty "$os" > "$expected"
-    cmp "$expected" "$test_home/.config/ghostty/config"
-    expected="$BATS_TEST_TMPDIR/$os-wezterm-config"
-    chezmoi --config /dev/null --config-format toml --source "$REPO_ROOT/chezmoi" \
-      --destination "$test_home" \
-      --cache "$BATS_TEST_TMPDIR/cache" \
-      --persistent-state "$BATS_TEST_TMPDIR/state.boltdb" \
-      --override-data "{\"chezmoi\":{\"os\":\"$os\"}}" \
-      execute-template --file "$REPO_ROOT/chezmoi/terminals/wezterm/wezterm.lua" > "$expected"
-    cmp "$expected" "$test_home/.config/wezterm/wezterm.lua"
-    run env HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" CHEZMOI_SOURCE_DIR="$REPO_ROOT/chezmoi" bash -c "$rendered"
-    [ "$status" -eq 0 ]
-  done
-}
-
-@test "Ghostty deployment does not run on Windows" {
-  rendered="$(render windows)"
-  [ -z "$rendered" ]
-}
-
-@test "Ghostty deployment respects XDG_CONFIG_HOME" {
-  rendered="$(render linux)"
-  run env HOME="$BATS_TEST_TMPDIR/home" XDG_CONFIG_HOME="$BATS_TEST_TMPDIR/custom config" CHEZMOI_SOURCE_DIR="$REPO_ROOT/chezmoi" bash -c "$rendered"
-  [ "$status" -eq 0 ]
-  expected="$BATS_TEST_TMPDIR/ghostty-config"
-  render_ghostty linux > "$expected"
-  cmp "$expected" "$BATS_TEST_TMPDIR/custom config/ghostty/config"
-  [ ! -e "$BATS_TEST_TMPDIR/home/.config/ghostty/config" ]
+@test "chezmoi excludes the Windows WezTerm launcher on Unix" {
+	for os in linux darwin windows; do
+		ignored=$(chezmoi --config /dev/null --config-format toml --source "$REPO_ROOT/chezmoi" \
+			--destination "$HOME" --cache "$BATS_TEST_TMPDIR/cache" --persistent-state "$BATS_TEST_TMPDIR/state.boltdb" \
+			--override-data "{\"chezmoi\":{\"os\":\"$os\"}}" execute-template \
+			--file "$REPO_ROOT/chezmoi/.chezmoiignore.tmpl")
+		if [[ $os == windows ]]; then
+			[[ $ignored != *'.local/bin/wezterm-launch.cmd'* ]]
+		else
+			[[ $ignored == *'.local/bin/wezterm-launch.cmd'* ]]
+			[[ $ignored == *'.config/wezterm/'* ]]
+			[[ $ignored == *'.config/ghostty/'* ]]
+		fi
+	done
 }
