@@ -25,7 +25,7 @@ EOF
 }
 
 @test "darwin migrate remains a public listed compatibility command" {
-	run "$REAL_TASK" --dir "$REPO_ROOT" --list
+	run "$REAL_TASK" --color=false --dir "$REPO_ROOT" --list
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"darwin:migrate:"* ]]
 	[[ "$output" == *"Deprecated"* ]]
