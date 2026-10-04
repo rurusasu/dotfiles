@@ -215,8 +215,6 @@
         "scripts/powershell/handlers/Handler.HermesAgent.ps1",
         "scripts/powershell/lib/Hermes*.ps1",
         "tests/python/test_xapi_image_contract.py",
-        ".github/workflows/ci-hermes-bootstrap.yml",
-        ".github/workflows/ci-hermes-provenance.yml",
         "taskfiles/hermes/taskfile.yml",
         ".pre-commit-config.yaml",
         "Taskfile.yml"

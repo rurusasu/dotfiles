@@ -668,23 +668,22 @@ when Hermes sources, dependency pins, flake wiring, or its CI contracts change;
 manual Bootstrap CI runs select it too. Linux/WSL retains its full-feature system
 build. Package realization is not a host activation or a live gateway test.
 
-Changes under `scripts/python/hermes_bootstrap/`, `nix/home/hermes-agent/`, or to `Taskfile.yml`,
-`.pre-commit-config.yaml`, or the Hermes bootstrap workflow itself, run
+Changes to Hermes sources, task wiring, and CI contracts run
 `task hermes:bootstrap:test` through the local `hermes-bootstrap-tests`
-pre-commit hook. Pull requests run the Nix-backed Python suite, native secret
-transport contract, and sidecar contract in the `Hermes Bootstrap Tests`
-workflow. Both paths also run the same host-side profile-sync provenance verifier. The verifier
-fetches the validated `rurusasu/hermes-profile-alfred` commit into a temporary bare Git
-repository with blob filtering, then reads only the recorded source blob. It
-does not create a source worktree. GitHub Actions supplies the private
-repository's `HERMES_HOME_READ_TOKEN` secret with read-only Contents access;
-local runs use the authenticated GitHub CLI keyring. The provenance commit
-must already exist on the remote. The verifier requires a clean tracked
-fixture, exact bytes, Git blob IDs, SHA-256, and committed tree mode `100755`.
-Task 5 integration
-coverage is the publication gate for aggregate preflight, exact-tree deletion,
-local immutability, missing-only bootstrap install, continuation, retry, and
-result serialization.
+pre-commit hook. The task runs the Nix unit and native Python checks, native
+Bats contracts, and the XAPI image contract. Pull requests run the native
+bootstrap suite on Linux and Darwin, native secret transport, and sidecar
+contracts through the shared `Bootstrap CI` workflow.
+
+Native integration tests exercise the current Nix-managed
+`scripts/sh/hermes-profile-sync.sh` wrapper against the built bootstrap CLI.
+They require executable commands, matching exit status and output for
+`sync-profiles`, and isolated engine locks for independent build fixtures.
+The historical pinned wrapper fixture and its private-repository provenance
+fetch are no longer part of this gate. Integration coverage remains the
+publication gate for aggregate preflight, exact-tree deletion, local
+immutability, missing-only bootstrap install, continuation, retry, and result
+serialization.
 
 The same source validation requires every root and managed profile distribution
 to own `config.yaml`. Bootstrap validates the Chrome MCP guardrails, then
@@ -700,7 +699,7 @@ by a repository-local `fast`/`full` or GitHub Actions validator contract.
 Their replacement is:
 
 - runtime aggregate snapshot preflight and `sync-profiles` result handling;
-- dotfiles engine pre-commit and `Hermes Bootstrap Tests` GitHub Actions; and
+- dotfiles engine pre-commit and shared `Bootstrap CI` GitHub Actions; and
 - the pinned unit/integration gate `task hermes:bootstrap:test`.
 
 The scoped [Distribution Validation](distribution-validation-design.md)

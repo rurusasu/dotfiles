@@ -1,23 +1,4 @@
-﻿BeforeDiscovery {
-    # ファイルごとのケースを Discovery で確定し、解析は Run で一度だけ行う。
-    $projectRoot = Split-Path -Parent $PSScriptRoot
-    $sourceCases = @(
-        Get-ChildItem -Path "$projectRoot\lib" -Filter "*.ps1" -ErrorAction SilentlyContinue
-        Get-ChildItem -Path "$projectRoot\handlers" -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
-    ) | ForEach-Object {
-        $relativePath = "$($_.Directory.Name)\$($_.Name)"
-        @{
-            RelativePath = $relativePath
-            # この 2 ファイルは従来どおり TypeNotFound も失敗にする。
-            IgnoreTypeNotFound = $relativePath -notin @(
-                'lib\SetupHandler.ps1'
-                'lib\Invoke-ExternalCommand.ps1'
-            )
-        }
-    }
-}
-
-BeforeAll {
+﻿BeforeAll {
     $projectRoot = Split-Path -Parent $PSScriptRoot
     $settingsPath = Join-Path $projectRoot "PSScriptAnalyzerSettings.psd1"
 
@@ -39,7 +20,7 @@ BeforeAll {
         throw "PSScriptAnalyzer 1.22.0 のインポートに失敗しました: $($_.Exception.Message)"
     }
 
-    # Run フェーズ用に再収集（BeforeDiscovery で収集済みの変数はフェーズをまたいで引き継がれない）
+    # Run フェーズでも対象の存在を確認し、Discovery 時にケースがゼロでも失敗させる。
     $sourceFiles = @(
         Get-ChildItem -Path "$projectRoot\lib" -Filter "*.ps1" -ErrorAction SilentlyContinue
         Get-ChildItem -Path "$projectRoot\handlers" -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
@@ -58,7 +39,23 @@ BeforeAll {
 
 Describe 'PSScriptAnalyzer - 静的解析' {
     Context 'ソースファイルのコード品質' {
-        It 'should have no Error/Warning in <RelativePath>' -ForEach $sourceCases {
+        # ファイルごとのケースを Discovery で確定し、解析は Run で一度だけ行う。
+        It 'should have no Error/Warning in <RelativePath>' -ForEach @(
+            @(
+                Get-ChildItem -Path "$((Split-Path -Parent $PSScriptRoot))\lib" -Filter "*.ps1" -ErrorAction SilentlyContinue
+                Get-ChildItem -Path "$((Split-Path -Parent $PSScriptRoot))\handlers" -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue
+            ) | ForEach-Object {
+                $relativePath = "$($_.Directory.Name)\$($_.Name)"
+                @{
+                    RelativePath = $relativePath
+                    # この 2 ファイルは従来どおり TypeNotFound も失敗にする。
+                    IgnoreTypeNotFound = $relativePath -notin @(
+                        'lib\SetupHandler.ps1'
+                        'lib\Invoke-ExternalCommand.ps1'
+                    )
+                }
+            }
+        ) {
             $results = @(Invoke-ScriptAnalyzer -Path (Join-Path $projectRoot $RelativePath) -Settings $settingsPath -Severity Error, Warning -ErrorAction Stop)
             if ($IgnoreTypeNotFound) {
                 # TypeNotFound を除外（using module の制限）

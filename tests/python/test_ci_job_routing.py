@@ -33,7 +33,7 @@ JOBS = {
         "macos": "devcontainer",
         "windows": "devcontainer",
     },
-    "ci-hermes-bootstrap.yml": {"hermes-bootstrap-tests": "hermes"},
+    "ci-bootstrap.yml": {"hermes-bootstrap-tests": "hermes"},
 }
 
 
@@ -326,6 +326,12 @@ class CiJobRoutingTests(unittest.TestCase):
             ({"BASH_REQUIRED": "true", "BASH_RESULT": "cancelled"}, 1),
             ({"BASH_REQUIRED": "true", "BASH_RESULT": "success"}, 0),
             ({"BASH_RESULT": "success"}, 1),
+            ({"HERMES_REQUIRED": "true"}, 1),
+            ({"HERMES_REQUIRED": "true", "HERMES_RESULT": ""}, 1),
+            ({"HERMES_REQUIRED": "true", "HERMES_RESULT": "failure"}, 1),
+            ({"HERMES_REQUIRED": "true", "HERMES_RESULT": "cancelled"}, 1),
+            ({"HERMES_REQUIRED": "true", "HERMES_RESULT": "success"}, 0),
+            ({"HERMES_RESULT": "success"}, 1),
             (
                 {
                     "TOOLS_REQUIRED": "true",

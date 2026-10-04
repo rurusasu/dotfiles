@@ -48,8 +48,6 @@ tasks:
 
   hermes:bootstrap:test:
     desc: Run native Hermes bootstrap Nix and shell contracts
-    vars:
-      PROVENANCE_URL: '{{.HERMES_HOME_PROVENANCE_URL | default "https://github.com/rurusasu/hermes-profile-alfred.git"}}'
     cmds:
       - cmd: 'system="$(nix eval --raw --impure --expr ''builtins.currentSystem'')" && nix build ".#checks.${system}.nix-unit" --no-link && nix build ".#checks.${system}.hermes-bootstrap-tests" --no-link'
         platforms: [linux, darwin]
@@ -60,14 +58,6 @@ tasks:
       - cmd: python3 -m unittest tests/python/test_xapi_image_contract.py -v
         platforms: [linux, darwin]
       - cmd: bats tests/bash/hermes_native_bootstrap.bats
-        platforms: [linux, darwin]
-      - cmd: python tests/python/hermes_bootstrap_test/profile_sync_provenance_gate_contract.py
-        platforms: [windows]
-      - cmd: python3 tests/python/hermes_bootstrap_test/profile_sync_provenance_gate_contract.py
-        platforms: [linux, darwin]
-      - cmd: python tests/python/hermes_bootstrap_test/verify_profile_sync_provenance.py verify --dotfiles-repository . --source-url "{{.PROVENANCE_URL}}"
-        platforms: [windows]
-      - cmd: python3 tests/python/hermes_bootstrap_test/verify_profile_sync_provenance.py verify --dotfiles-repository . --source-url "{{.PROVENANCE_URL}}"
         platforms: [linux, darwin]
 
   hermes:pull:

@@ -176,6 +176,39 @@ jobs:
       - name: Run Bash tests
         run: bash scripts/sh/run-bash-tests.sh
 
+  hermes-bootstrap-tests:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.hermes == 'true') }}
+    name: Hermes Bootstrap Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run native Hermes bootstrap tests
+        run: nix build .#checks.x86_64-linux.hermes-bootstrap-tests --no-link --print-build-logs
+
+      - name: Run X API image contract
+        run: python3 -m unittest tests/python/test_xapi_image_contract.py -v
+
+      - name: Run Hermes browser runtime contracts
+        run: docker/hermes-browser/tests/test_runtime_contract.sh
+
   nix:
     name: Bootstrap / Nix / Lint and format
     needs: [changes, ci-tools]
@@ -769,6 +802,7 @@ jobs:
         changes,
         ci-tools,
         bash-test,
+        hermes-bootstrap-tests,
         wsl-prebuild,
         nix,
         linux-build,
@@ -786,6 +820,8 @@ jobs:
       TOOLS_RESULT: ${{ needs.ci-tools.result }}
       BASH_REQUIRED: ${{ needs.changes.outputs.bash }}
       BASH_RESULT: ${{ needs.bash-test.result }}
+      HERMES_REQUIRED: ${{ needs.changes.outputs.hermes }}
+      HERMES_RESULT: ${{ needs.hermes-bootstrap-tests.result }}
       PLATFORM_REQUIRED: ${{ needs.changes.outputs.platforms }}
       LINUX_REQUIRED: ${{ needs.changes.outputs.linux }}
       LINUX_BUILD_REQUIRED: ${{ needs.changes.outputs.linux == 'true' || needs.changes.outputs.nix == 'true' }}
@@ -847,6 +883,7 @@ jobs:
 
           check_required_job "Tools image" "${TOOLS_REQUIRED}" "${TOOLS_RESULT}"
           check_required_job "Bash tests" "${BASH_REQUIRED}" "${BASH_RESULT}"
+          check_required_job "Hermes bootstrap tests" "${HERMES_REQUIRED}" "${HERMES_RESULT}"
           check_required_job "Nix" "${NIX_REQUIRED}" "${NIX_RESULT}"
           check_required_job "Windows / Installer" "${WINDOWS_REQUIRED}" "${WINDOWS_INSTALLER_RESULT}"
           check_required_job "WSL / Prebuild" "${WSL_REQUIRED}" "${WSL_PREBUILD_RESULT}"

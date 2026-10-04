@@ -296,7 +296,7 @@ EOF
 }
 
 @test "Hermes bootstrap CI watches the feature Taskfile" {
-	workflow="$REPO_ROOT/.github/workflows/ci-hermes-bootstrap.yml"
+	workflow="$REPO_ROOT/.github/workflows/ci-bootstrap.yml"
 	pre_commit="$REPO_ROOT/.pre-commit-config.yaml"
 
 	grep -Fq 'manifest: ci/job-path-routing.json' "$workflow"

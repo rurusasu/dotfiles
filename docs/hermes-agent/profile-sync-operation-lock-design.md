@@ -139,29 +139,26 @@ Cleanup ownership has explicit terminal states:
 - `failed`: repeated cleanup continues to return failure and never masks the
   unresolved artifact.
 
-## Cross-Repository Publication Gate
+## Current Wrapper Integration Gate
 
-The committed dotfiles fixture for `scripts/profile_sync.sh` must match the
-committed `hermes-home` source by bytes, Git blob ID, SHA-256, and Git tree mode
-`100755`.
+The current integration gate validates the Nix-managed
+`scripts/sh/hermes-profile-sync.sh` wrapper against the built native bootstrap
+CLI. It requires executable commands, identical `sync-profiles` exit status
+and output, and isolated engine locks for independent build fixtures. Home
+Manager installs this wrapper; the historical cross-repository wrapper fixture
+and provenance verifier are no longer part of publication validation.
 
-The host-side verifier is part of `task hermes:bootstrap:test`, so the local
-pre-commit hook runs it against the real sibling `hermes-home` Git worktree.
-The hook is triggered by changes to `docker/hermes-agent/`, `Taskfile.yml`,
-`.pre-commit-config.yaml`, or the Hermes bootstrap workflow. GitHub Actions
-checks out `rurusasu/hermes-profile-alfred` at the validated provenance commit and runs
-the same verifier before the pinned container suite. The private checkout uses
-the `HERMES_HOME_READ_TOKEN` repository secret, provisioned with read-only
-Contents access; the pinned source commit must already exist on that remote.
+`task hermes:bootstrap:test` runs the Nix unit and native Python checks, native
+Bats contracts, and the XAPI image contract. The local `hermes-bootstrap-tests`
+pre-commit hook selects this task for changes to Hermes sources, task wiring,
+and CI contracts. The shared `Bootstrap CI` workflow runs the native bootstrap
+suite on Linux and Darwin, native secret transport, and sidecar contracts.
 
-The publication procedure still reruns this gate twice:
-
-1. before the dotfiles pull request is published; and
-2. again immediately before the `hermes-home` pull request is published, after
-   the dotfiles pull request has merged.
-
-A mismatch blocks publication and requires an intentional fixture and
-provenance update.
+For an ordered change spanning dotfiles and `hermes-home`, rerun the current
+gate before publishing the dotfiles pull request and again before publishing
+the `hermes-home` pull request after the dotfiles change has merged. A failing
+current contract blocks publication. Passing this gate does not establish
+that a host has activated the native deployment or completed migration.
 
 ## Verification
 
@@ -184,8 +181,8 @@ Tests must prove:
   `released` state;
 - declared empty owned roots remain invalid, while nested empty directories are
   omitted from the Git projection because Git cannot represent them; and
-- the host-side provenance gate rejects dirty, untracked, mismatched, or
-  non-`100755` source and fixture state.
+- the current managed wrapper preserves the built CLI's exit status and output,
+  while independent build fixtures do not share engine locks.
 
 The complete bootstrap suite and repository pre-commit hooks must pass before
 publication. After the ordered merges, production acceptance still requires a

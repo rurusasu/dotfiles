@@ -522,7 +522,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertNotIn("tests/bash/**", paths)
 
     def test_hermes_ci_routes_xapi_contract_and_platform_adapters(self) -> None:
-        workflow = self._named_workflow("ci-hermes-bootstrap.yml")
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        hermes = self._workflow_job(workflow, "hermes-bootstrap-tests")
         required_paths = (
             "scripts/python/hermes_bootstrap/**",
             "tests/python/hermes_bootstrap_test/**",
@@ -537,7 +538,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "scripts/sh/hermes-*.sh",
             "scripts/powershell/handlers/Handler.HermesAgent.ps1",
             "tests/python/test_xapi_image_contract.py",
-            ".github/workflows/ci-hermes-provenance.yml",
+            ".github/workflows/ci-bootstrap.yml",
         )
 
         paths = self._job_patterns("hermes")
@@ -549,8 +550,15 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
         self.assertIn(
             "nix build .#checks.x86_64-linux.hermes-bootstrap-tests",
-            workflow,
+            hermes,
         )
+        self.assertIn("docker/hermes-browser/tests/test_runtime_contract.sh", hermes)
+        self.assertNotIn("docker build", hermes)
+        complete = self._workflow_job(workflow, "complete")
+        self.assertIn("hermes-bootstrap-tests,", complete)
+        self.assertIn("HERMES_REQUIRED: ${{ needs.changes.outputs.hermes }}", complete)
+        self.assertIn("HERMES_RESULT: ${{ needs.hermes-bootstrap-tests.result }}", complete)
+        self.assertIn('"${HERMES_REQUIRED}" "${HERMES_RESULT}"', complete)
 
     def test_hermes_hook_and_task_run_xapi_image_contract(self) -> None:
         pre_commit = PRE_COMMIT_PATH.read_text(encoding="utf-8")
@@ -567,6 +575,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         pattern = match.group("pattern") if match is not None else ""
         for path in (
             "scripts/python/hermes_bootstrap/app.py",
+            "scripts/python/hermes_bootstrap_cli.py",
+            ".github/workflows/ci-bootstrap.yml",
             "tests/python/hermes_bootstrap_test/test_app.py",
             "nix/home/hermes-agent.nix",
             "docker/hermes-xapi-mcp/Dockerfile",
@@ -576,7 +586,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIsNotNone(re.fullmatch(pattern, path))
 
         task = taskfile.split("  hermes:bootstrap:test:\n", maxsplit=1)[1]
-        task = task.split("\n  hermes:bootstrap:config:\n", maxsplit=1)[0]
+        task = re.split(r"\n  [a-z][^\n]*:\n", task, maxsplit=1)[0]
         self.assertIn(
             "python3 -m unittest tests/python/test_xapi_image_contract.py -v",
             task,
@@ -585,6 +595,12 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "python -m unittest tests/python/test_xapi_image_contract.py -v",
             task,
         )
+        self.assertIn('nix build ".#checks.${system}.hermes-bootstrap-tests"', task)
+        self.assertIn("nix build .#checks.$system.hermes-bootstrap-tests", task)
+        self.assertIn('nix build ".#checks.${system}.nix-unit"', task)
+        self.assertIn("nix build .#checks.$system.nix-unit", task)
+        self.assertIn("bats tests/bash/hermes_native_bootstrap.bats", task)
+        self.assertNotIn("docker build", task)
 
     def test_unified_bootstrap_workflow_routes_all_platforms(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")

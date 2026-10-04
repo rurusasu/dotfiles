@@ -787,13 +787,17 @@ esac
         $workflow | Should -Not -Match 'runs-on:\s*\[?self-hosted'
     }
 
-    It 'should keep Bash test preparation out of the Darwin build job' {
+    It 'should keep the full Bash suite out of the Darwin build job' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
         $macosJob = [regex]::Match($workflow, '(?ms)^  darwin:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)').Value
         $macosJob | Should -Not -BeNullOrEmpty
-        $macosJob | Should -Not -Match 'bats|brew install'
+        $macosJob | Should -Not -Match 'scripts/sh/run-bash-tests\.sh|brew install'
         $macosJob | Should -Match 'Install Nix'
         $macosJob | Should -Match 'darwinConfigurations\.macos\.system'
+        # The native artifact subset belongs on Darwin; behavioral checks live in Python.
+        $macosJob | Should -Match 'suite=tests/bash/package_catalog\.bats'
+        $macosJob | Should -Match ([regex]::Escape("filter='^Darwin (Raycast artifact|Discord keeps)'"))
+        $macosJob | Should -Match ([regex]::Escape('[[ "$(bats --count --filter "$filter" "$suite")" -eq 2 ]]'))
     }
 
     It 'should install chezmoi before every Windows job that runs chezmoi template tests' {
