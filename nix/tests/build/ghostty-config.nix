@@ -4,7 +4,7 @@ let
   settings =
     (import (terminals + "/wezterm/defaults.nix") {
       inherit pkgs;
-      lib = pkgs.lib;
+      inherit (pkgs) lib;
     }).programs.wezterm.settings;
 
 in

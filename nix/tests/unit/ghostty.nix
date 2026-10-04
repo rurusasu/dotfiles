@@ -8,7 +8,7 @@ let
       wezterm =
         (import ../../modules/terminals/wezterm/defaults.nix {
           inherit pkgs;
-          lib = pkgs.lib;
+          inherit (pkgs) lib;
         }).programs.wezterm;
       sets = import ../../packages/sets.nix {
         inherit pkgs;
@@ -20,10 +20,11 @@ let
           ../../modules/terminals/ghostty/defaults.nix
           ../../modules/terminals/wezterm/defaults.nix
           {
-            home.username = "test-user";
-            home.homeDirectory =
-              if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
-            home.stateVersion = "25.05";
+            home = {
+              username = "test-user";
+              homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
+              stateVersion = "25.05";
+            };
             programs.zsh.enable = true;
             programs.bash.enable = true;
             xdg.configHome =

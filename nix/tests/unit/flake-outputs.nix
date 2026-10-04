@@ -281,9 +281,9 @@ in
 
   testStandaloneHomeOutputsUseCanonicalOsModules = {
     expr = {
-      darwin = map (module: toString module) homeOutputs."aarch64-darwin".modules;
-      x86Linux = map (module: toString module) homeOutputs."x86_64-linux".modules;
-      armLinux = map (module: toString module) homeOutputs."aarch64-linux".modules;
+      darwin = map toString homeOutputs."aarch64-darwin".modules;
+      x86Linux = map toString homeOutputs."x86_64-linux".modules;
+      armLinux = map toString homeOutputs."aarch64-linux".modules;
     };
     expected = {
       darwin = [
