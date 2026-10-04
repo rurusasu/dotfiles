@@ -116,6 +116,7 @@
       // (import ../tests/unit/host-package-github-cli.nix { inherit inputs; })
       // (import ../tests/unit/hosts/darwin-layout.nix)
       // (import ../tests/unit/hosts/darwin-configuration.nix { inherit inputs; })
+      // (import ../tests/unit/hosts/linux-configuration.nix { inherit inputs; })
       // (import ../tests/unit/hosts/wsl-configuration.nix { inherit inputs; })
       // (import ../tests/unit/flake-outputs.nix)
       // (import ../tests/unit/ownership.nix { inherit inputs; });

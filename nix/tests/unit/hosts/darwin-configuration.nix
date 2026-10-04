@@ -74,6 +74,39 @@ let
   hasPackage = name: packages: builtins.any (package: package == name) packages;
 in
 {
+  testDarwinInstallsAndRegistersManagedUserZsh = {
+    expr = {
+      enabled = defaultConfig.programs.zsh.enable;
+      shell = defaultConfig.users.users.rurusasu.shell;
+      installed = builtins.elem (mkDarwin { }).pkgs.zsh defaultConfig.environment.systemPackages;
+      registered =
+        builtins.elem defaultConfig.users.users.rurusasu.shell defaultConfig.environment.shells;
+      ownsAdminAccount = builtins.elem "rurusasu" defaultConfig.users.knownUsers;
+    };
+    expected = {
+      enabled = true;
+      shell = lib.getExe (mkDarwin { }).pkgs.zsh;
+      installed = true;
+      registered = true;
+      ownsAdminAccount = false;
+    };
+  };
+
+  testDarwinDefaultShellFollowsSelectedUser = {
+    expr = {
+      sudoUserShell = sudoUserConfig.users.users.ktome1995.shell;
+      fallbackUserShell = currentUserFallbackConfig.users.users.ktome1995.shell;
+      nonstandardHome = nonstandardHomeConfig.users.users.alice.home;
+      ownsRoot = builtins.elem "root" sudoUserConfig.users.knownUsers;
+    };
+    expected = {
+      sudoUserShell = lib.getExe (mkDarwin { }).pkgs.zsh;
+      fallbackUserShell = lib.getExe (mkDarwin { }).pkgs.zsh;
+      nonstandardHome = "/Volumes/Home/alice";
+      ownsRoot = false;
+    };
+  };
+
   testDarwinConfigurationUsesConfiguredIdentity = {
     expr = {
       primaryUser = sudoUserConfig.system.primaryUser;

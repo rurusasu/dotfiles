@@ -18,6 +18,9 @@ let
     else
       throw "Unable to determine the macOS user: SUDO_USER and USER are both empty.";
   home = "/Users/${user}";
+  # /run/current-system is updated after postActivation, so use the realized
+  # store executable even on the first nix-darwin activation.
+  loginShell = lib.getExe pkgs.zsh;
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
   };
@@ -48,7 +51,10 @@ in
         runAsUser /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "拡大／縮小" "@^m"
       '';
       postActivation.text = lib.mkAfter (
-        lib.optionalString withHermes ''
+        ''
+          ${pkgs.bash}/bin/bash ${./set-default-shell.sh} ${lib.escapeShellArg user} ${lib.escapeShellArg loginShell}
+        ''
+        + lib.optionalString withHermes ''
           uid="$(id -u -- ${lib.escapeShellArg user})"
           runAsUser() {
             launchctl asuser "$uid" sudo --user=${lib.escapeShellArg user} --set-home -- "$@"
@@ -130,7 +136,15 @@ in
     };
   };
 
-  users.users.${user}.home = home;
+  programs.zsh.enable = true;
+  environment.shells = [ loginShell ];
+
+  # Existing admin accounts must not be added to users.knownUsers. Only the
+  # login-shell property is converged by the activation helper above.
+  users.users.${user} = {
+    inherit home;
+    shell = loginShell;
+  };
 
   environment.systemPackages =
     sets.darwinSystemPackagesForInstallFeatures installFeatures ++ sets.hostPackages;
