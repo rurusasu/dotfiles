@@ -79,8 +79,7 @@ in
       enabled = defaultConfig.programs.zsh.enable;
       shell = defaultConfig.users.users.rurusasu.shell;
       installed = builtins.elem (mkDarwin { }).pkgs.zsh defaultConfig.environment.systemPackages;
-      registered =
-        builtins.elem defaultConfig.users.users.rurusasu.shell defaultConfig.environment.shells;
+      registered = builtins.elem defaultConfig.users.users.rurusasu.shell defaultConfig.environment.shells;
       ownsAdminAccount = builtins.elem "rurusasu" defaultConfig.users.knownUsers;
     };
     expected = {
