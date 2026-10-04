@@ -77,6 +77,12 @@ class CiJobRoutingTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertNotIn("hermes", self.selected(path))
 
+    def test_darwin_artifact_cases_select_the_native_mac_owner(self) -> None:
+        self.assertIn(
+            "darwin",
+            self.selected("tests/bash/package_catalog.bats", manifest=BOOTSTRAP),
+        )
+
     def test_bash_test_selects_contracts_without_container_builds(self) -> None:
         self.assertEqual(self.selected("tests/bash/example.bats"), {"python", "bash"})
 

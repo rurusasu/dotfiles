@@ -133,7 +133,8 @@
         "nix/home/darwin.nix",
         "nix/hosts/darwin/**",
         "scripts/sh/install-macos.sh",
-        "tests/bash/install_macos.bats"
+        "tests/bash/install_macos.bats",
+        "tests/bash/package_catalog.bats"
       ],
       "outputs": ["darwin"]
     },

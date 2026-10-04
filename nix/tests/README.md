@@ -120,6 +120,12 @@ CIのexport checkはWinget/npm/pnpm JSON全体を生成してcommitted filesとJ
 |    5 | `Darwin Raycast artifact has the declared identity and trusted signature`   | built app identity, codesign, Gatekeeper                                         |
 |    6 | `Darwin Discord keeps staged modules outside its signed application bundle` | built layout, launcher path, app identity and signatures                         |
 
+上記の Darwin artifact 2件は `Bootstrap / Darwin` の native runner が限定実行します。
+Linux Bats での codesign 不在による skip は、この2件の成功として扱いません。
+Mac の専用 step は Nix・codesign・plutil・spctl と対象2件の存在を確認し、欠落・失敗を伝播します。
+既存の artifact assertion を再利用し、Bats 全体を Mac で重複実行しません。
+package_catalog.bats の変更も native Darwin job を起動します。
+
 ### 現行テストの所有境界
 
 `unit/ownership.nix` は現在のファイル一覧から、再帰的な unit/build 登録の完全一致、

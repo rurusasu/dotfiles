@@ -209,12 +209,74 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertNotIn("DOTFILES_USER", job)
         self.assertNotIn("DOTFILES_HOME", job)
         darwin = self._workflow_job(workflow, "darwin")
-        self.assertNotIn("bats", darwin)
+        self.assertNotIn("scripts/sh/run-bash-tests.sh", darwin)
         self.assertNotIn("brew install", darwin)
         self.assertNotIn("attestation", darwin)
         for section in (job, darwin):
             self.assertNotIn("DOTFILES_USER", section)
             self.assertNotIn("DOTFILES_HOME", section)
+
+    def test_darwin_artifact_gate_is_narrow_and_fail_closed(self) -> None:
+        darwin = self._workflow_job(self._named_workflow("ci-bootstrap.yml"), "darwin")
+        step = re.search(
+            r"(?ms)^      - name: Verify native Darwin application artifacts\n"
+            r"        run: \|\n(?P<script>.*?)(?=^      - name:|\Z)",
+            darwin,
+        )
+        self.assertIsNotNone(step)
+        assert step is not None
+        self.assertLess(step.start(), darwin.index("name: Build official Hermes runtime"))
+        script = textwrap.dedent(step.group("script"))
+        self.assertIn("--inputs-from . --no-write-lock-file nixpkgs#bats", script)
+        self.assertNotIn("--override-input", script)
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            calls = directory / "calls"
+            nix = directory / "nix"
+            nix.write_text(
+                f"#!{sys.executable}\nimport os, sys\n"
+                "assert sys.argv[1:6] == ['shell', '--inputs-from', '.', '--no-write-lock-file', 'nixpkgs#bats']\n"
+                "args = sys.argv[sys.argv.index('--command') + 1:]\n"
+                "os.execvp(args[0], args)\n"
+            )
+            bats = directory / "bats"
+            bats.write_text(
+                f"#!{sys.executable}\nimport json, os, sys\nfrom pathlib import Path\n"
+                "assert sys.argv[-1] == 'tests/bash/package_catalog.bats'\n"
+                "assert sys.argv[sys.argv.index('--filter') + 1] == '^Darwin (Raycast artifact|Discord keeps)'\n"
+                "if '--count' in sys.argv: print(os.environ['TEST_COUNT'])\n"
+                "else:\n"
+                "    Path(os.environ['CALLS']).write_text(json.dumps(sys.argv[1:]))\n"
+                "    sys.exit(int(os.environ['TEST_EXIT']))\n"
+            )
+            for executable in (nix, bats):
+                executable.chmod(0o755)
+            (directory / "bash").symlink_to("/bin/bash")
+            for tool in ("codesign", "plutil", "spctl"):
+                (directory / tool).write_text("#!/bin/sh\nexit 0\n")
+                (directory / tool).chmod(0o755)
+            environment = dict(os.environ, PATH=str(directory), CALLS=str(calls))
+            for count, exit_code, succeeds in (("2", "0", True), ("0", "0", False), ("1", "0", False), ("2", "42", False)):
+                with self.subTest(count=count, exit_code=exit_code):
+                    calls.unlink(missing_ok=True)
+                    result = subprocess.run(
+                        ["bash", "-euo", "pipefail", "-c", script],
+                        env=environment | {"TEST_COUNT": count, "TEST_EXIT": exit_code},
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(result.returncode == 0, succeeds, result.stderr)
+                    self.assertEqual(calls.exists(), count == "2")
+            (directory / "codesign").unlink()
+            calls.unlink(missing_ok=True)
+            result = subprocess.run(
+                ["bash", "-euo", "pipefail", "-c", script],
+                env=environment | {"TEST_COUNT": "2", "TEST_EXIT": "0"},
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(calls.exists())
 
     def test_linux_build_uses_image_identity_for_both_system_manager_outputs(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")

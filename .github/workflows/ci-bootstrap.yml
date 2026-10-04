@@ -341,6 +341,18 @@ jobs:
             .#checks.aarch64-darwin.neovim-native \
             .#checks.aarch64-darwin.standalone-darwin-home
 
+      - name: Verify native Darwin application artifacts
+        run: |
+          nix shell --inputs-from . --no-write-lock-file nixpkgs#bats --command bash -euo pipefail <<'BATS'
+            for tool in nix codesign plutil spctl; do
+              command -v "$tool" >/dev/null || { echo "Required Darwin artifact tool is missing: $tool" >&2; exit 1; }
+            done
+            filter='^Darwin (Raycast artifact|Discord keeps)'
+            suite=tests/bash/package_catalog.bats
+            [[ "$(bats --count --filter "$filter" "$suite")" -eq 2 ]]
+            bats --print-output-on-failure --filter "$filter" "$suite"
+          BATS
+
       - name: Build official Hermes runtime
         if: ${{ needs.changes.outputs.hermes == 'true' }}
         run: |
