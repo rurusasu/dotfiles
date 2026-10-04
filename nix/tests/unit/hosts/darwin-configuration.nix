@@ -278,9 +278,14 @@ in
   testDarwinActivationScriptsDoNotReferenceLegacyOmlx = {
     expr = lib.mapAttrs (
       _: config:
-      builtins.filter (name: lib.hasInfix "omlx" config.system.activationScripts.${name}.text) (
-        builtins.attrNames config.system.activationScripts
-      )
+      builtins.filter (
+        name:
+        let
+          text = config.system.activationScripts.${name}.text;
+        in
+        # Avoid an unbounded regex over large generated activation scripts.
+        builtins.replaceStrings [ "omlx" ] [ "" ] text != text
+      ) (builtins.attrNames config.system.activationScripts)
     ) profiles;
     expected = {
       default = [ ];
