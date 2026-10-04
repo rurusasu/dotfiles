@@ -3,6 +3,8 @@ let
   inherit ((import ../fonts.nix { inherit pkgs; })) fonts;
 in
 {
+  programs.zsh.enable = true;
+
   # nix-darwin installs fonts; Home Manager configures fontconfig clients.
   fonts.packages = fonts.packages;
   home-manager.sharedModules = [
