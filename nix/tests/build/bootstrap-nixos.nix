@@ -58,6 +58,8 @@ pkgs.testers.runNixOSTest {
         ../fixtures/hardware-configuration.nix
       ];
 
+      programs.zsh.enable = true;
+
       home-manager = {
         useGlobalPkgs = true;
         useUserPackages = true;

@@ -10,6 +10,7 @@ let
       };
       modules = [
         inputs.nixos-wsl.nixosModules.wsl
+        ../../../modules/nixos
         ../../../hosts/wsl
       ];
     };
@@ -18,6 +19,19 @@ let
   hermesConfig = (mkWsl true).config;
 in
 {
+  testWslInstallsZshBeforeSelectingItAsLoginShell = {
+    expr = {
+      enabled = defaultConfig.programs.zsh.enable;
+      selected = defaultConfig.users.users.nixos.shell == (mkWsl false).pkgs.zsh;
+      installed = builtins.elem (mkWsl false).pkgs.zsh defaultConfig.environment.systemPackages;
+    };
+    expected = {
+      enabled = true;
+      selected = true;
+      installed = true;
+    };
+  };
+
   testWslHermesFeatureEnablesUserLinger = {
     expr = hermesConfig.users.users.nixos.linger;
     expected = true;

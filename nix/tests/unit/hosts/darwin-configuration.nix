@@ -56,6 +56,10 @@ let
       currentUser = "ktome1995";
     }).config;
   defaultHome = defaultConfig.home-manager.users.rurusasu;
+  defaultShellActivation = defaultConfig.system.activationScripts.defaultUserShell.text;
+  # Regex patterns cannot carry store context; this assertion only inspects text.
+  activationText = builtins.unsafeDiscardStringContext defaultShellActivation;
+  defaultPostActivation = defaultConfig.system.activationScripts.postActivation.text;
   nonstandardHomeConfig =
     (mkDarwin {
       sudoUser = "alice";
@@ -74,11 +78,27 @@ let
   hasPackage = name: packages: builtins.any (package: package == name) packages;
 in
 {
+  testDarwinUsesBuiltInZshWithoutOwningTheShellRegistry = {
+    expr = {
+      shell = defaultConfig.users.users.rurusasu.shell;
+      ownsShellRegistry = builtins.hasAttr "shells" defaultConfig.environment.etc;
+      activationWired = lib.hasInfix activationText defaultPostActivation;
+      ownsAdminAccount = builtins.elem "rurusasu" defaultConfig.users.knownUsers;
+    };
+    expected = {
+      shell = "/bin/zsh";
+      ownsShellRegistry = false;
+      activationWired = true;
+      ownsAdminAccount = false;
+    };
+  };
+
   testDarwinConfigurationUsesConfiguredIdentity = {
     expr = {
       primaryUser = sudoUserConfig.system.primaryUser;
       homebrewUser = sudoUserConfig.nix-homebrew.user;
       systemHome = sudoUserConfig.users.users.ktome1995.home;
+      shell = sudoUserConfig.users.users.ktome1995.shell;
       homeManagerHome = sudoUserConfig.home-manager.users.ktome1995.home.homeDirectory;
       guestLogin = sudoUserConfig.system.defaults.loginwindow.GuestEnabled;
       showFullName = sudoUserConfig.system.defaults.loginwindow.SHOWFULLNAME;
@@ -87,6 +107,7 @@ in
       primaryUser = "ktome1995";
       homebrewUser = "ktome1995";
       systemHome = "/Users/ktome1995";
+      shell = "/bin/zsh";
       homeManagerHome = "/Users/ktome1995";
       guestLogin = false;
       showFullName = false;
@@ -98,12 +119,14 @@ in
       primaryUser = currentUserFallbackConfig.system.primaryUser;
       homebrewUser = currentUserFallbackConfig.nix-homebrew.user;
       home = currentUserFallbackConfig.users.users.ktome1995.home;
+      shell = currentUserFallbackConfig.users.users.ktome1995.shell;
       homeManagerHome = currentUserFallbackConfig.home-manager.users.ktome1995.home.homeDirectory;
     };
     expected = {
       primaryUser = "ktome1995";
       homebrewUser = "ktome1995";
       home = "/Users/ktome1995";
+      shell = "/bin/zsh";
       homeManagerHome = "/Users/ktome1995";
     };
   };
