@@ -11,10 +11,7 @@
         source = "nixpkgs";
         nixAttr = "ghostty-bin";
         identity = {
-          homepage = "https://ghostty.org/";
           appName = "Ghostty.app";
-          bundleId = "com.mitchellh.ghostty";
-          executable = "ghostty";
         };
       };
       linux = {
@@ -36,10 +33,7 @@
         source = "nixpkgs";
         nixAttr = "wezterm";
         identity = {
-          homepage = "https://wezterm.org/";
           appName = "WezTerm.app";
-          bundleId = "com.github.wez.wezterm";
-          executable = "wezterm-gui";
         };
       };
       linux = {
@@ -60,10 +54,7 @@
         source = "nixpkgs";
         nixAttr = "aerospace";
         identity = {
-          homepage = "https://github.com/nikitabobko/AeroSpace";
           appName = "AeroSpace.app";
-          bundleId = "bobko.aerospace";
-          executable = "aerospace";
         };
       };
       linux.unsupported = "AeroSpace is only available on macOS";

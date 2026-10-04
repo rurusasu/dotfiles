@@ -1,6 +1,6 @@
 # Explicitly reviewed nixpkgs candidates for custom Darwin packages.
 # Keep this registry deliberately small: an entry is promoted only after the
-# updater has evaluated, built, and identity-checked the candidate.
+# updater has evaluated and built the candidate.
 {
   dia-browser = {
     source = "custom";

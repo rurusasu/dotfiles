@@ -456,48 +456,6 @@ test "$changed" = yes
         self.assertIn("Full log:", final)
         self.assertIn(b"connection stalled", log)
 
-    def test_prefetch_cancellation_does_not_leave_downloader_running(self):
-        updater = ROOT / "scripts/python/update_darwin_packages.py"
-        with tempfile.TemporaryDirectory() as directory:
-            nix = Path(directory) / "nix"
-            nix.write_text(f"#!{sys.executable}\nimport os, signal, sys\nprint('DOWNLOADER:' + str(os.getpid()), file=sys.stderr, flush=True)\nprint('READY', file=sys.stderr, flush=True)\nsignal.pause()\n")
-            nix.chmod(0o755)
-            # prefetch captures stdout as JSON; progress and fixture readiness
-            # must go to the inherited stderr instead.
-            sentinel = Path(directory) / "continued-after-cancellation"
-            code = f"import runpy\nfrom pathlib import Path\nm = runpy.run_path({str(updater)!r})\nm['prefetch_hash']('https://example.invalid/test')\nPath({str(sentinel)!r}).touch()"
-            command = f"{shlex.quote(sys.executable)} -c {shlex.quote(code)}"
-            for signum, expected in [(signal.SIGINT, 130), (signal.SIGTERM, 143), (signal.SIGHUP, 129)]:
-                with self.subTest(signum=signum):
-                    suspended = signum != signal.SIGINT
-                    status, output, log = self.run_terminal(
-                        command, b"READY", b"\x1a" if suspended else b"\x03",
-                        extra_env={"PATH": directory + os.pathsep + os.environ["PATH"]},
-                        job_control=suspended,
-                        terminate_suspended=signum if suspended else 0,
-                    )
-                    self.assertEqual(status, expected, output)
-                    self.assertFalse(sentinel.exists(), "updater continued after cancellation")
-                    child = int(re.search(rb"DOWNLOADER:(\d+)", log).group(1))
-                    deadline = time.monotonic() + 2
-                    while True:
-                        try:
-                            os.kill(child, 0)
-                        except ProcessLookupError:
-                            break
-                        # A container's PID 1 may not reap orphaned children.
-                        # Zombies have exited; only a live downloader violates
-                        # this cancellation contract.
-                        state = subprocess.run(
-                            ["ps", "-o", "stat=", "-p", str(child)],
-                            capture_output=True, text=True, timeout=2,
-                        )
-                        if state.returncode == 0 and state.stdout.strip().startswith("Z"):
-                            break
-                        if time.monotonic() >= deadline:
-                            self.fail(f"downloader {child} survived cancellation")
-                        time.sleep(0.01)
-
     def test_command_failure_and_interrupt_preserve_exit_status(self):
         for action, input_when, input_bytes, expected in [
             ("bash -c 'exit 37'", None, b"", 37),

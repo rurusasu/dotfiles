@@ -19,10 +19,7 @@ in
         provider = "nix";
         source = "custom";
         identity = {
-          homepage = "https://www.diabrowser.com/";
           appName = "Dia.app";
-          bundleId = "company.thebrowser.dia";
-          executable = "Dia";
         };
       };
       linux = {
@@ -31,13 +28,10 @@ in
     };
   };
 
-  testOrcaPreservesFullDarwinApplicationIdentity = {
+  testOrcaPreservesDarwinApplicationName = {
     expr = sets.supportReport.orca-editor.darwin.identity;
     expected = {
-      homepage = "https://onorca.dev/";
       appName = "Orca.app";
-      bundleId = "com.stablyai.orca";
-      executable = "Orca";
     };
   };
 

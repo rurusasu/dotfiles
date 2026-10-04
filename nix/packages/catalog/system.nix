@@ -12,11 +12,7 @@
         provider = "nix";
         source = "nixpkgs";
         nixAttr = "tart";
-        identity = {
-          homepage = "https://tart.run/";
-          command = "tart";
-          versionArgs = [ "--version" ];
-        };
+        identity = "tart";
       };
       linux = {
         unsupported = "Tart requires Apple Silicon macOS";

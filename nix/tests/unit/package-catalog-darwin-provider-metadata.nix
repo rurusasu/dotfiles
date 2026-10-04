@@ -16,10 +16,7 @@ in
         source = "nixpkgs";
         nixAttr = "wezterm";
         identity = {
-          homepage = "https://wezterm.org/";
           appName = "WezTerm.app";
-          bundleId = "com.github.wez.wezterm";
-          executable = "wezterm-gui";
         };
       };
       linux = {
@@ -44,11 +41,7 @@ in
         provider = "nix";
         source = "nixpkgs";
         nixAttr = "ollama";
-        identity = {
-          homepage = "https://ollama.com/";
-          command = "ollama";
-          versionArgs = [ "--version" ];
-        };
+        identity = "ollama";
       };
       linux = {
         provider = "nix";

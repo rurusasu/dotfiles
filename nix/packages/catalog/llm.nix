@@ -37,11 +37,7 @@
         provider = "nix";
         source = "nixpkgs";
         nixAttr = "ollama";
-        identity = {
-          homepage = "https://ollama.com/";
-          command = "ollama";
-          versionArgs = [ "--version" ];
-        };
+        identity = "ollama";
       };
       linux = {
         provider = "nix";

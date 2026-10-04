@@ -37,15 +37,15 @@ fi
 if [[ $command_name == "docker" ]]; then
 	case "$*" in
 		*" config --format json")
-			printf '{"services":{"api":{},"dashboard":{},"browser":{},"hermes-bootstrap":{"profiles":["bootstrap"]}}}\n'
+			printf '{"services":{"chromium":{},"browser-mcp":{},"xapi-mcp":{},"diagnostic-fixture":{"profiles":["diagnostics"]}}}\n'
 			;;
 		*" ps --status running --services")
 			if [[ -n ${COMPOSE_RUNNING_MISMATCH:-} ]]; then
-				printf 'api\ndashboard\n'
+				printf 'chromium\nbrowser-mcp\n'
 			else
-				printf 'api\ndashboard\nbrowser\n'
-				if [[ ",${COMPOSE_PROFILES:-}," == *,bootstrap,* && -z ${COMPOSE_OMIT_PROFILE_SERVICE:-} ]]; then
-					printf 'hermes-bootstrap\n'
+				printf 'chromium\nbrowser-mcp\nxapi-mcp\n'
+				if [[ ",${COMPOSE_PROFILES:-}," == *,diagnostics,* && -z ${COMPOSE_OMIT_PROFILE_SERVICE:-} ]]; then
+					printf 'diagnostic-fixture\n'
 				fi
 			fi
 			;;
@@ -75,7 +75,7 @@ EOF
 }
 
 @test "runtime verification includes explicitly enabled Compose profiles" {
-	export COMPOSE_PROFILES=bootstrap
+	export COMPOSE_PROFILES=diagnostics
 
 	run "$VERIFIER" --runtime
 
@@ -84,14 +84,14 @@ EOF
 }
 
 @test "runtime verification requires services from explicitly enabled profiles" {
-	export COMPOSE_PROFILES=bootstrap
+	export COMPOSE_PROFILES=diagnostics
 	export COMPOSE_OMIT_PROFILE_SERVICE=1
 
 	run "$VERIFIER" --runtime
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Expected Compose services:"* ]]
-	[[ "$output" == *"hermes-bootstrap"* ]]
+	[[ "$output" == *"diagnostic-fixture"* ]]
 }
 
 @test "chezmoi drift fails verification" {

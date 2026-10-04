@@ -27,10 +27,7 @@ in
         provider = "nix";
         source = "nixpkgs";
         identity = {
-          homepage = "https://discord.com/";
           appName = "Discord.app";
-          bundleId = "com.hnc.Discord";
-          executable = "Discord";
         };
         nixAttr = "discord";
       };
