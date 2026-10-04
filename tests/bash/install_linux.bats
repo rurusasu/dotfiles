@@ -7,33 +7,20 @@ setup() {
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
-	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
 	FAKE_NIX_PROFILE="$BATS_TEST_TMPDIR/nix-daemon.sh"
 	FAKE_SYSTEMD_DIR="$BATS_TEST_TMPDIR/systemd/system"
 	OS_RELEASE="$BATS_TEST_TMPDIR/os-release"
 	REAL_JQ="$(command -v jq)"
 	mkdir -p "$TEST_HOME" "$STUB_BIN" "$FAKE_SYSTEMD_DIR"
 	: >"$COMMAND_LOG"
-	: >"$PAYLOAD_CAPTURE"
 	: >"$FAKE_NIX_PROFILE"
 	printf 'ID=ubuntu\n' >"$OS_RELEASE"
 
 	export HOME="$TEST_HOME"
 	export USER="test-user"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ REPO_ROOT
+	export COMMAND_LOG STUB_BIN REAL_JQ REPO_ROOT
 	export DOTFILES_SKIP_HERDR_INSTALL=1
-	if command -v sha256sum >/dev/null 2>&1; then
-		PLAN_MANIFEST_SHA256="$(sha256sum "$REPO_ROOT/nix/home/hermes-agent/manifest.yaml" | awk '{print $1}')"
-	else
-		PLAN_MANIFEST_SHA256="$(shasum -a 256 "$REPO_ROOT/nix/home/hermes-agent/manifest.yaml" | awk '{print $1}')"
-	fi
-	export PLAN_MANIFEST_SHA256
-	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
-	export HERMES_ITEM_JSON='{"id":"fixture-item","fields":[]}'
-	export HERMES_XAPI_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"},{"label":"X_API_REFRESH_TOKEN","section":{"label":"Refresh Token"},"value":"xapi-refresh-token-marker"}]}'
-	export HERMES_XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
-	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_NIX_PROFILE_SCRIPT="$FAKE_NIX_PROFILE"
 	export DOTFILES_SYSTEMD_DIR="$FAKE_SYSTEMD_DIR"
 	export DOTFILES_OS_RELEASE_FILE="$OS_RELEASE"
@@ -92,25 +79,11 @@ printf "task %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
 esac
 '
-	write_stub op '
-printf "op %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${3:-}" = "Hermes X API MCP" ]; then
-	printf "%s\n" "$HERMES_XAPI_ITEM_JSON"
-elif [ "${3:-}" = "Hermes X API MCP OAuth" ]; then
-	printf "%s\n" "$HERMES_XAPI_OAUTH_ITEM_JSON"
-else
-	printf "%s\n" "$HERMES_ITEM_JSON"
-fi
-'
 write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
   *" info "*) [[ ${DOCKER_ENGINE_RUNNING:-0} == 1 ]] ;;
-  *" compose -f "*" stop hermes"*) [[ ${DOCKER_ENGINE_RUNNING:-0} == 1 ]] ;;
   *" network inspect bridge --format "*) printf "172.17.0.1\n" ;;
-  *" ps --all --services hermes "*) printf "hermes\n" ;;
-  *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
-  *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
 esac
 '
 	write_stub verify-environment 'printf "verify-environment %s\n" "$*" >>"$COMMAND_LOG"'
@@ -128,11 +101,6 @@ exec bash -c "$3"
 '
 }
 
-valid_secret_plan() {
-	cat <<'JSON' | "$REAL_JQ" --arg manifest_sha256 "$PLAN_MANIFEST_SHA256" '.manifest_sha256 = $manifest_sha256 | .items = .items[0:3] + [{key:"xai_grok",account:"my.1password.com",vault:"openclaw",item:"xAI-Grok-Twitter",fields:[{canonical_name:"api_key",reference:"console/apikey",labels:["apikey"],environment:["XAI_API_KEY"]}]}] + .items[3:]'
-{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]}]}
-JSON
-}
 
 write_stub() {
 	local name="$1"
@@ -252,17 +220,6 @@ fi
 	[ "$status" -eq 0 ]
 	grep -q '^nix_config=experimental-features = nix-command flakes$' "$COMMAND_LOG"
 	grep -q '^access-tokens = github.com=test-github-token args=flake update --flake' "$COMMAND_LOG"
-}
-
-@test "Linux native Hermes setup does not invoke the legacy Docker bootstrap" {
-	write_nix_stub
-	export HERMES_BOOTSTRAP_STATUS=45
-
-	run "$INSTALLER"
-
-	[ "$status" -eq 0 ]
-	! grep -q 'hermes:bootstrap\|hermes-bootstrap' "$COMMAND_LOG"
-	grep -q '^verify-environment --nix-only$' "$COMMAND_LOG"
 }
 
 @test "Linux Nix activation does not target a Docker Hermes gateway" {

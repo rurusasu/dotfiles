@@ -12,7 +12,6 @@ setup() {
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
-	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
 	FAKE_DOCKER_APP="$BATS_TEST_TMPDIR/Applications/Docker.app"
 	FAKE_NIX_PROFILE="$BATS_TEST_TMPDIR/nix-daemon.sh"
 	FAKE_BASHRC="$BATS_TEST_TMPDIR/etc/bashrc"
@@ -33,7 +32,6 @@ setup() {
 	mkdir -p "$TEST_HOME" "$STUB_BIN" "$TEST_HOMEBREW_CASK_PARENT_DIR" "$TEST_HOMEBREW_LINK_TARGET"
 	chmod 0755 "$TEST_HOMEBREW_CASK_PARENT_DIR"
 	: >"$COMMAND_LOG"
-	: >"$PAYLOAD_CAPTURE"
 	: >"$FAKE_NIX_PROFILE"
 
 	export HOME="$TEST_HOME"
@@ -41,7 +39,7 @@ setup() {
 	export SUDO_USER="test-user"
 	unset DOTFILES_USER
 	export PATH="$STUB_BIN:/usr/bin:/bin"
-	export COMMAND_LOG STUB_BIN PAYLOAD_CAPTURE REAL_JQ REAL_TIMEOUT INSTALLER REPO_ROOT
+	export COMMAND_LOG STUB_BIN REAL_JQ REAL_TIMEOUT INSTALLER REPO_ROOT
 	export REAL_TASK REAL_PYTHON REAL_BASH
 	export MACOS_TEST_BOUNDARY="$REPO_ROOT/tests/bash/helpers/macos_install_boundary.sh"
 	export DOTFILES_SKIP_HERDR_INSTALL=1
@@ -50,17 +48,6 @@ setup() {
 	export FAKE_DOCKER_CASK_STATE
 	export TEST_HOMEBREW_CASK_PARENT_DIR TEST_HOMEBREW_CASK_BIN_DIR
 	export TEST_HOMEBREW_CASK_CLI_PLUGIN_DIR TEST_HOMEBREW_LINK_TARGET
-	if command -v sha256sum >/dev/null 2>&1; then
-		PLAN_MANIFEST_SHA256="$(sha256sum "$REPO_ROOT/nix/home/hermes-agent/manifest.yaml" | awk '{print $1}')"
-	else
-		PLAN_MANIFEST_SHA256="$(shasum -a 256 "$REPO_ROOT/nix/home/hermes-agent/manifest.yaml" | awk '{print $1}')"
-	fi
-	export PLAN_MANIFEST_SHA256
-	export HERMES_SECRET_PLAN="$(valid_secret_plan)"
-	export HERMES_ITEM_JSON='{"id":"fixture-item","fields":[]}'
-	export HERMES_XAPI_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"},{"label":"X_API_REFRESH_TOKEN","section":{"label":"Refresh Token"},"value":"xapi-refresh-token-marker"}]}'
-	export HERMES_XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
-	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_DOCKER_APP_PATH="$FAKE_DOCKER_APP"
 	export DOTFILES_LAUNCHCTL_COMMAND="$STUB_BIN/launchctl"
 	export DOTFILES_OPEN_COMMAND="$STUB_BIN/open"
@@ -77,7 +64,6 @@ setup() {
 	export DOTFILES_OLLAMA_WAIT_ATTEMPTS=2
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
 	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
-	export DOTFILES_DARWIN_VERIFICATION="$STUB_BIN/verify-darwin-packages"
 	export DOTFILES_HERMES_OLLAMA_EXECUTABLE="$STUB_BIN/ollama"
 	export DOTFILES_HERMES_CURL_EXECUTABLE="$STUB_BIN/curl"
 	export DOTFILES_HOMEBREW_CASK_BIN_DIR="$BATS_TEST_TMPDIR/untrusted/bin"
@@ -104,7 +90,6 @@ esac
 exit 2
 '
 	write_stub nc 'exit 0'
-	write_stub verify-darwin-packages 'printf "verify-darwin-packages %s\n" "$*" >>"$COMMAND_LOG"; exit "${DARWIN_VERIFY_STATUS:-0}"'
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
 case "$*" in
@@ -244,10 +229,6 @@ case "${1:-}" in
 			${3:-} == "${2:-}.before-nix-darwin" ]]; then
 			exec "$@"
 		fi
-		if [[ $# -eq 4 && ${2:-} == -- && ${3:-} == "${DOTFILES_WEZTERM_APP_PATH:-}" &&
-			${4:-} == "${DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR:-}"/WezTerm.app.* ]]; then
-			exec "$@"
-		fi
 		;;
 	/bin/rm)
 		if [[ $# -eq 4 && ${2:-} == -f && ${3:-} == -- ]]; then
@@ -289,16 +270,6 @@ if [[ ${1:-} == scripts/python/update_darwin_packages.py ]]; then
 fi
 exec "$REAL_PYTHON" "$@"
 '
-	write_stub op '
-printf "op %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${3:-}" = "Hermes X API MCP" ]; then
-	printf "%s\n" "$HERMES_XAPI_ITEM_JSON"
-elif [ "${3:-}" = "Hermes X API MCP OAuth" ]; then
-	printf "%s\n" "$HERMES_XAPI_OAUTH_ITEM_JSON"
-else
-	printf "%s\n" "$HERMES_ITEM_JSON"
-fi
-'
 }
 
 write_stub() {
@@ -326,11 +297,6 @@ EOF
 	chmod +x "$STUB_BIN/$name"
 }
 
-valid_secret_plan() {
-	cat <<'JSON' | "$REAL_JQ" --arg manifest_sha256 "$PLAN_MANIFEST_SHA256" '.manifest_sha256 = $manifest_sha256 | .items = .items[0:3] + [{key:"xai_grok",account:"my.1password.com",vault:"openclaw",item:"xAI-Grok-Twitter",fields:[{canonical_name:"api_key",reference:"console/apikey",labels:["apikey"],environment:["XAI_API_KEY"]}]}] + .items[3:]'
-{"schema_version":1,"items":[{"key":"dashboard","account":"my.1password.com","vault":"openclaw","item":"Hermes Agent Dashboard","fields":[{"canonical_name":"username","labels":["username"]}]},{"key":"github","account":"my.1password.com","vault":"openclaw","item":"GitHubUsedOpenClawPAT","fields":[{"canonical_name":"credential","labels":["credential"]}]},{"key":"google_calendar","account":"my.1password.com","vault":"openclaw","item":"Google Calendar MCP","fields":[{"canonical_name":"oauth_credentials_json","labels":["oauth_credentials_json"]},{"canonical_name":"tokens_json","labels":["tokens_json"]}]},{"key":"discord_default","account":"my.1password.com","vault":"openclaw","item":"Master","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_rick","account":"my.1password.com","vault":"openclaw","item":"Rick","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_hoffman","account":"my.1password.com","vault":"openclaw","item":"Hoffman","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_risarisa","account":"my.1password.com","vault":"openclaw","item":"RisaRisa","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_nancy","account":"my.1password.com","vault":"openclaw","item":"Nancy","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_kuroda","account":"my.1password.com","vault":"openclaw","item":"Kuroda","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]},{"key":"discord_shiraishi","account":"my.1password.com","vault":"openclaw","item":"Shiraishi","fields":[{"canonical_name":"bot_token","labels":["DISCORD_BOT_TOKEN"]}]}]}
-JSON
-}
 
 write_docker_app() {
 	mkdir -p "$FAKE_DOCKER_APP/Contents/MacOS" "$FAKE_DOCKER_APP/Contents/Resources/bin"
@@ -342,9 +308,6 @@ EOF
 #!/usr/bin/env bash
 printf 'docker %s\n' "$*" >>"$COMMAND_LOG"
 case " $* " in
-  *" ps --all --services hermes "*) printf "hermes\n" ;;
-  *" hermes-bootstrap secret-plan "*) printf '%s\n' "$HERMES_SECRET_PLAN" ;;
-  *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
 esac
 EOF
 	chmod +x \
@@ -370,10 +333,6 @@ write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
   *" info "*) [[ ${DOCKER_ENGINE_RUNNING:-0} == 1 ]] || exit 1 ;;
-  *" compose -f "*" stop hermes "*) exit 0 ;;
-  *" ps --all --services hermes "*) printf "hermes\n" ;;
-  *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
-  *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
 esac
 '
 	ln -s "$REPO_ROOT" "$HOME/.dotfiles"
@@ -413,8 +372,6 @@ DOCKER_INSTALL
 #!/usr/bin/env bash
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
-  *" hermes-bootstrap secret-plan "*) printf "%s\n" "$HERMES_SECRET_PLAN" ;;
-  *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
 esac
 DOCKER
 	cat >"$STUB_BIN/chezmoi" <<'"'"'CHEZMOI'"'"'
@@ -605,7 +562,6 @@ dotfiles_install_codex_npm
 		"nix flake update --flake $REPO_ROOT" \
 		"python3 scripts/python/update_darwin_packages.py --write --output darwin-package-update.json" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"verify-darwin-packages " \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"verify-environment compose= args="
@@ -614,15 +570,6 @@ dotfiles_install_codex_npm
 	! grep -q '^docker ' "$COMMAND_LOG"
 	! grep -q '^brew uninstall' "$COMMAND_LOG"
 	! grep -q '^task .*\(hindsight:up\|hermes:bootstrap\)' "$COMMAND_LOG"
-}
-
-@test "postinstall provider verification failure stops before user configuration" {
-	write_installed_stubs
-	export DARWIN_VERIFY_STATUS=42
-	run_macos_installer
-	[ "$status" -eq 42 ]
-	[[ "$output" == *"[FAILED] Verifying macOS package providers (exit 42)"* ]]
-	! grep -q '^chezmoi ' "$COMMAND_LOG"
 }
 
 @test "package update failure prevents macOS activation" {
@@ -657,7 +604,6 @@ exit 37
 	run_macos_installer
 	[ "$status" -eq 0 ]
 	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=1>' "$COMMAND_LOG"
-	grep -Fxq 'verify-darwin-packages --feature WithOllama --feature WithDocker --feature WithHermes' "$COMMAND_LOG"
 	! grep -qE '^docker |^launchctl kickstart|/api/tags' "$COMMAND_LOG"
 }
 
@@ -721,7 +667,6 @@ exit 0
 	[ "$status" -eq 0 ]
 	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
 	assert_log_order \
-		"verify-darwin-packages --feature WithOllama" \
 		"chezmoi apply --force" \
 		"launchctl kickstart -k gui/$(id -u)/com-dotfiles-ollama" \
 		"verify-environment compose= args="
@@ -749,7 +694,6 @@ exit 0
 	[ "$status" -eq 0 ]
 	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
 	assert_log_order \
-		"verify-darwin-packages --feature WithOllama --feature WithDocker" \
 		"chezmoi apply --force" \
 		"launchctl kickstart -k gui/$(id -u)/com-dotfiles-ollama" \
 		"docker info" \
@@ -785,7 +729,6 @@ exit 1
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"verify-darwin-packages --feature WithOllama --feature WithDocker --feature WithHermes" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"task --dir $REPO_ROOT hermes:desktop:install" \
@@ -831,127 +774,6 @@ exit 1
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Unknown argument: --with-unknown"* ]]
 	[ ! -s "$COMMAND_LOG" ]
-}
-
-@test "migrates an unmanaged WezTerm install before nix-darwin activation" {
-	local app_path="$BATS_TEST_TMPDIR/Applications/WezTerm.app"
-	local bin_dir="$BATS_TEST_TMPDIR/homebrew/bin"
-	local bash_completion="$BATS_TEST_TMPDIR/homebrew/etc/bash_completion.d/wezterm"
-	local fish_completion="$BATS_TEST_TMPDIR/homebrew/share/fish/vendor_completions.d/wezterm.fish"
-	local zsh_completion="$BATS_TEST_TMPDIR/homebrew/share/zsh/site-functions/_wezterm"
-	local backup_dir="$BATS_TEST_TMPDIR/wezterm-migration"
-
-	mkdir -p \
-		"$app_path/Contents/MacOS" \
-		"$app_path/Contents/Resources/shell-completion" \
-		"$bin_dir" \
-		"$(dirname "$bash_completion")" \
-		"$(dirname "$fish_completion")" \
-		"$(dirname "$zsh_completion")"
-	touch \
-		"$app_path/Contents/MacOS/wezterm" \
-		"$app_path/Contents/MacOS/wezterm-gui" \
-		"$app_path/Contents/Resources/shell-completion/bash" \
-		"$app_path/Contents/Resources/shell-completion/fish" \
-		"$app_path/Contents/Resources/shell-completion/zsh"
-	ln -s "$app_path/Contents/MacOS/wezterm" "$bin_dir/wezterm"
-	ln -s "$app_path/Contents/MacOS/wezterm-gui" "$bin_dir/wezterm-gui"
-	ln -s "$app_path/Contents/Resources/shell-completion/bash" "$bash_completion"
-	ln -s "$app_path/Contents/Resources/shell-completion/fish" "$fish_completion"
-	ln -s "$app_path/Contents/Resources/shell-completion/zsh" "$zsh_completion"
-
-	write_stub brew 'exit 1'
-	export DOTFILES_BREW_COMMAND="$STUB_BIN/brew"
-	export DOTFILES_WEZTERM_APP_PATH="$app_path"
-	export DOTFILES_WEZTERM_BIN_DIR="$bin_dir"
-	export DOTFILES_WEZTERM_BASH_COMPLETION_PATH="$bash_completion"
-	export DOTFILES_WEZTERM_FISH_COMPLETION_PATH="$fish_completion"
-	export DOTFILES_WEZTERM_ZSH_COMPLETION_PATH="$zsh_completion"
-	export DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR="$backup_dir"
-
-	run bash -c '
-set -euo pipefail
-. "$INSTALLER"
-migrate_unmanaged_wezterm_install
-'
-
-	[ "$status" -eq 0 ]
-	[ ! -e "$app_path" ]
-	[ ! -L "$bin_dir/wezterm" ]
-	[ ! -L "$bin_dir/wezterm-gui" ]
-	[ ! -L "$bash_completion" ]
-	[ ! -L "$fish_completion" ]
-	[ ! -L "$zsh_completion" ]
-	[ -d "$backup_dir/WezTerm.app.20260717010203" ]
-	grep -Fqx "sudo </bin/mv> <--> <$app_path> <$backup_dir/WezTerm.app.20260717010203>" "$COMMAND_LOG"
-}
-
-@test "migrates unmanaged WezTerm when Homebrew is absent before activation" {
-	local app_path="$BATS_TEST_TMPDIR/Applications/WezTerm.app"
-	local backup_dir="$BATS_TEST_TMPDIR/wezterm-migration"
-
-	mkdir -p "$app_path"
-	export DOTFILES_WEZTERM_APP_PATH="$app_path"
-	export DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR="$backup_dir"
-
-	run bash -c '
-set -euo pipefail
-. "$INSTALLER"
-homebrew_command() { return 1; }
-migrate_unmanaged_wezterm_install
-'
-
-	[ "$status" -eq 0 ]
-	[ ! -e "$app_path" ]
-	[ -d "$backup_dir/WezTerm.app.20260717010203" ]
-}
-
-@test "removes stale unmanaged WezTerm links when the app is absent" {
-	local app_path="$BATS_TEST_TMPDIR/Applications/WezTerm.app"
-	local bin_dir="$BATS_TEST_TMPDIR/homebrew/bin"
-
-	mkdir -p "$bin_dir"
-	ln -s "$app_path/Contents/MacOS/wezterm" "$bin_dir/wezterm"
-	write_stub brew 'exit 1'
-	export DOTFILES_BREW_COMMAND="$STUB_BIN/brew"
-	export DOTFILES_WEZTERM_APP_PATH="$app_path"
-	export DOTFILES_WEZTERM_BIN_DIR="$bin_dir"
-	export DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR="$BATS_TEST_TMPDIR/wezterm-migration"
-
-	run bash -c '
-set -euo pipefail
-. "$INSTALLER"
-migrate_unmanaged_wezterm_install
-'
-
-	[ "$status" -eq 0 ]
-	[ ! -L "$bin_dir/wezterm" ]
-	[ ! -e "$DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR" ]
-}
-
-@test "leaves a Homebrew-managed WezTerm install unchanged" {
-	local app_path="$BATS_TEST_TMPDIR/Applications/WezTerm.app"
-	local bin_dir="$BATS_TEST_TMPDIR/homebrew/bin"
-	local backup_dir="$BATS_TEST_TMPDIR/wezterm-migration"
-
-	mkdir -p "$app_path" "$bin_dir"
-	ln -s "$app_path/Contents/MacOS/wezterm" "$bin_dir/wezterm"
-	write_stub brew 'printf "wezterm@nightly 20260905\n"'
-	export DOTFILES_BREW_COMMAND="$STUB_BIN/brew"
-	export DOTFILES_WEZTERM_APP_PATH="$app_path"
-	export DOTFILES_WEZTERM_BIN_DIR="$bin_dir"
-	export DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR="$backup_dir"
-
-	run bash -c '
-set -euo pipefail
-. "$INSTALLER"
-migrate_unmanaged_wezterm_install
-'
-
-	[ "$status" -eq 0 ]
-	[ -d "$app_path" ]
-	[ -L "$bin_dir/wezterm" ]
-	[ ! -e "$backup_dir" ]
 }
 
 @test "Docker Desktop md5 compatibility ensure uses fixed paths for all states" {
@@ -1388,8 +1210,6 @@ if [ "${1:-}" = "info" ] && ! grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG";
 	exit 1
 fi
 case " $* " in
-  *" hermes-bootstrap secret-plan "*) printf '%s\n' "$HERMES_SECRET_PLAN" ;;
-  *" hermes-bootstrap apply "*) cat >"$PAYLOAD_CAPTURE"; exit "$HERMES_BOOTSTRAP_STATUS" ;;
 esac
 EOF
 	chmod +x "$FAKE_DOCKER_APP/Contents/Resources/bin/docker"

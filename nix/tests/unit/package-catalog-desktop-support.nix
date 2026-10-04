@@ -54,10 +54,7 @@ in
         provider = "nix";
         source = "nixpkgs";
         identity = {
-          homepage = "https://www.google.com/chrome/";
           appName = "Google Chrome.app";
-          bundleId = "com.google.Chrome";
-          executable = "Google Chrome";
         };
         nixAttr = "google-chrome";
       };
@@ -84,10 +81,7 @@ in
         provider = "nix";
         source = "nixpkgs";
         identity = {
-          homepage = "https://raycast.com/";
           appName = "Raycast.app";
-          bundleId = "com.raycast.macos";
-          executable = "Raycast";
         };
         nixAttr = "raycast";
       };
@@ -107,11 +101,7 @@ in
       darwin = {
         provider = "nix";
         source = "nixpkgs";
-        identity = {
-          homepage = "https://tart.run/";
-          command = "tart";
-          versionArgs = [ "--version" ];
-        };
+        identity = "tart";
         nixAttr = "tart";
       };
     };

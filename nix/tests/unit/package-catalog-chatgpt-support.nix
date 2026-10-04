@@ -39,10 +39,7 @@ in
         source = "nixpkgs";
         nixAttr = "chatgpt";
         identity = {
-          homepage = "https://openai.com/chatgpt/desktop/";
           appName = "ChatGPT.app";
-          bundleId = "com.openai.codex";
-          executable = "ChatGPT";
         };
       };
       linux = {

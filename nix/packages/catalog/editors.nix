@@ -11,10 +11,7 @@
         source = "nixpkgs";
         nixAttr = "obsidian";
         identity = {
-          homepage = "https://obsidian.md/";
           appName = "Obsidian.app";
-          bundleId = "md.obsidian";
-          executable = "Obsidian";
         };
       };
       linux = {

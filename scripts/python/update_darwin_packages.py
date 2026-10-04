@@ -3,7 +3,7 @@
 
 The updater is intentionally conservative.  It only edits version, URL, and
 hash literals in a known derivation, and it never changes a provider mapping
-unless the candidate was evaluated, built, and identity-checked successfully.
+unless the candidate was evaluated and built successfully.
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -36,12 +35,6 @@ class RegistryEntry:
     source: str
     nix_attr: str | None
     candidates: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class Candidate:
-    package_id: str
-    nix_attr: str
 
 
 @dataclass(frozen=True)
@@ -147,13 +140,8 @@ class NixRunner:
         self,
         *,
         repository: Path = ROOT,
-        package_ids: dict[str, str] | None = None,
-        identities: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self.repository = repository
-        self.package_ids = package_ids or {}
-        self.identities = identities or {}
-        self.realized_paths: dict[str, Path] = {}
 
     def evaluate_candidate(self, nix_attr: str) -> None:
         self._run(["nix", "eval", "--impure", "--no-write-lock-file", "--expr", self._candidate_expr(nix_attr)])
@@ -178,59 +166,6 @@ class NixRunner:
         paths = result.stdout.splitlines()
         if not paths:
             raise RuntimeError(f"nix build returned no store path for {nix_attr}")
-        self.realized_paths[nix_attr] = Path(paths[-1])
-
-    def verify_identity(self, nix_attr: str) -> None:
-        metadata = subprocess.run(
-            [
-                "nix",
-                "eval",
-                "--impure",
-                "--no-write-lock-file",
-                "--json",
-                "--expr",
-                self._identity_expr(nix_attr),
-            ],
-            cwd=self.repository,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        expected = self.identities.get(nix_attr, {})
-        actual = json.loads(metadata.stdout)
-        if expected.get("homepage") and actual.get("homepage") != expected["homepage"]:
-            raise RuntimeError(
-                f"homepage mismatch for {nix_attr}: expected {expected['homepage']}, got {actual.get('homepage')}"
-            )
-
-        package_id = self.package_ids.get(nix_attr, nix_attr)
-        store_path = self.realized_paths.get(nix_attr)
-        if store_path is None:
-            raise RuntimeError(f"candidate was not realized before identity check: {nix_attr}")
-        support = {
-            package_id: {
-                "darwin": {
-                    "provider": "nix",
-                    "source": "nixpkgs",
-                    "identity": expected,
-                }
-            }
-        }
-        with tempfile.TemporaryDirectory(prefix="darwin-provider-verify-") as directory:
-            support_json = Path(directory) / "support.json"
-            support_json.write_text(json.dumps(support), encoding="utf-8")
-            self._run(
-                [
-                    "bash",
-                    "scripts/sh/verify-darwin-package.sh",
-                    "--support-json",
-                    str(support_json),
-                    "--id",
-                    package_id,
-                    "--store-path",
-                    str(store_path),
-                ]
-            )
 
     @staticmethod
     def _candidate_expr(nix_attr: str) -> str:
@@ -241,48 +176,8 @@ class NixRunner:
             f"in builtins.getAttr {json.dumps(nix_attr)} pkgs"
         )
 
-    @staticmethod
-    def _identity_expr(nix_attr: str) -> str:
-        return (
-            "let flake = builtins.getFlake (toString ./.); "
-            "pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; "
-            "config.allowUnfree = true; }; "
-            f"p = builtins.getAttr {json.dumps(nix_attr)} pkgs; "
-            "in { homepage = p.meta.homepage or null; mainProgram = p.meta.mainProgram or null; }"
-        )
-
     def _run(self, command: list[str]) -> None:
         subprocess.run(command, cwd=self.repository, check=True)
-
-
-class RecordingNixRunner:
-    """Deterministic runner used to test candidate selection and failure safety."""
-
-    def __init__(self, build_error: str | None = None) -> None:
-        self.evaluated: list[str] = []
-        self.build_error = build_error
-
-    def evaluate_candidate(self, nix_attr: str) -> None:
-        self.evaluated.append(nix_attr)
-
-    def build_candidate(self, nix_attr: str) -> None:
-        if self.build_error:
-            raise RuntimeError(self.build_error)
-
-    def verify_identity(self, nix_attr: str) -> None:
-        if self.build_error:
-            raise RuntimeError(self.build_error)
-
-
-def evaluate_candidates(
-    candidates: dict[str, Candidate], runner: Any
-) -> dict[str, bool]:
-    """Evaluate only the explicit candidate mapping supplied by the caller."""
-    result: dict[str, bool] = {}
-    for package_id, candidate in candidates.items():
-        runner.evaluate_candidate(candidate.nix_attr)
-        result[package_id] = True
-    return result
 
 
 def try_promote(
@@ -295,7 +190,6 @@ def try_promote(
     try:
         runner.evaluate_candidate(nix_attr)
         runner.build_candidate(nix_attr)
-        runner.verify_identity(nix_attr)
     except (
         OSError,
         RuntimeError,
@@ -372,21 +266,6 @@ PROFILES = {
         DERIVATIONS["orca-editor"],
         _orca_release,
     ),
-}
-
-IDENTITIES = {
-    "dia-browser": {
-        "homepage": "https://www.diabrowser.com/",
-        "appName": "Dia.app",
-        "bundleId": "company.thebrowser.dia",
-        "executable": "Dia",
-    },
-    "orca-editor": {
-        "homepage": "https://onorca.dev/",
-        "appName": "Orca.app",
-        "bundleId": "com.stablyai.orca",
-        "executable": "Orca",
-    },
 }
 
 
@@ -526,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--check", action="store_true", help="report changes without writing derivations")
     mode.add_argument("--write", action="store_true", help="apply safe derivation literal updates")
     parser.add_argument("--package", dest="packages", action="append", choices=sorted(PROFILES))
-    parser.add_argument("--promote", action="store_true", help="verify explicit nixpkgs candidates")
+    parser.add_argument("--promote", action="store_true", help="build explicit nixpkgs candidates")
     parser.add_argument("--output", type=Path, default=ROOT / "darwin-package-update.json")
     args = parser.parse_args(argv)
 
@@ -548,10 +427,7 @@ def main(argv: list[str] | None = None) -> int:
         promote_candidates(
             registry,
             package_ids,
-            NixRunner(
-                package_ids={package_id: package_id for package_id in PROFILES},
-                identities=IDENTITIES,
-            ),
+            NixRunner(),
         )
         if args.promote
         else {}

@@ -20,19 +20,13 @@ in
       source = sets.supportReport.tart.darwin.source;
       nixAttr = sets.supportReport.tart.darwin.nixAttr;
       identity = sets.supportReport.tart.darwin.identity;
-      command = sets.supportReport.tart.darwin.identity.command;
     };
     expected = {
       resolvedPackage = pkgs.tart.drvPath;
       provider = "nix";
       source = "nixpkgs";
       nixAttr = "tart";
-      identity = {
-        homepage = "https://tart.run/";
-        command = "tart";
-        versionArgs = [ "--version" ];
-      };
-      command = "tart";
+      identity = "tart";
     };
   };
 }

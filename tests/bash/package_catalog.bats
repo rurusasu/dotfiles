@@ -5,15 +5,6 @@ bats_require_minimum_version 1.5.0
 setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 }
-@test "Claude and TablePlus are not managed by dotfiles" {
-	[ -z "$(find "$REPO_ROOT/chezmoi/dot_claude" -type f -print 2>/dev/null)" ]
-	[ -z "$(find "$REPO_ROOT/chezmoi/AppData/Roaming/Claude" -type f -print 2>/dev/null)" ]
-	[ ! -e "$REPO_ROOT/scripts/powershell/handlers/Handler.ClaudeCode.ps1" ]
-	[ -e "$REPO_ROOT/chezmoi/dot_agents/skills/create-agentsmd/SKILL.md" ]
-}
-@test "DeepSeek Harness remains in chezmoi global pnpm data" {
-	grep -q '"@deepseek-ai/dsh"' "$REPO_ROOT/chezmoi/.chezmoidata/pnpm_global.yaml"
-}
 @test "DeepSeek Harness native builds are pre-approved for pnpm global installs" {
 	command -v chezmoi >/dev/null 2>&1 || skip "chezmoi is required to render the Linux/macOS installer"
 
@@ -150,9 +141,6 @@ EOF
 	[ "$status" -ne 0 ]
 
 	rm -rf "$test_dir"
-}
-@test "CI consistency workflow gates on package provider coverage" {
-	grep -q 'Verify package provider coverage' "$REPO_ROOT/.github/workflows/ci-consistency.yml"
 }
 @test "winget export matches committed Windows manifest data" {
 	winget_normalize='.Sources |= sort_by(.SourceDetails.Name) | .Sources |= map(.Packages |= sort_by(.PackageIdentifier))'

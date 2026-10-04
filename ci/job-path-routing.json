@@ -270,7 +270,6 @@
         "windows/pnpm/packages.json",
         "tests/runtime/pnpm-build-permissions.mjs",
         "tests/fixtures/pnpm-build-permissions/**",
-        "scripts/python/update_darwin_packages.py",
         ".github/workflows/ci-consistency.yml"
       ],
       "outputs": ["package_catalog"]

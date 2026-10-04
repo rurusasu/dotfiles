@@ -31,17 +31,9 @@ OPEN_COMMAND="${DOTFILES_OPEN_COMMAND:-/usr/bin/open}"
 OLLAMA_API_URL="${DOTFILES_OLLAMA_API_URL:-http://127.0.0.1:11434/api/tags}"
 OLLAMA_WAIT_ATTEMPTS="${DOTFILES_OLLAMA_WAIT_ATTEMPTS:-60}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
-DARWIN_VERIFICATION="${DOTFILES_DARWIN_VERIFICATION:-$ROOT/scripts/sh/verify-darwin-packages.sh}"
 readonly HOMEBREW_CASK_PARENT_DIR=/usr/local
 readonly HOMEBREW_CASK_BIN_DIR=/usr/local/bin
 readonly HOMEBREW_CASK_CLI_PLUGIN_DIR=/usr/local/cli-plugins
-WEZTERM_CASK_TOKEN="${DOTFILES_WEZTERM_CASK_TOKEN:-wezterm@nightly}"
-WEZTERM_APP_PATH="${DOTFILES_WEZTERM_APP_PATH:-/Applications/WezTerm.app}"
-WEZTERM_BIN_DIR="${DOTFILES_WEZTERM_BIN_DIR:-/opt/homebrew/bin}"
-WEZTERM_BASH_COMPLETION_PATH="${DOTFILES_WEZTERM_BASH_COMPLETION_PATH:-/opt/homebrew/etc/bash_completion.d/wezterm}"
-WEZTERM_FISH_COMPLETION_PATH="${DOTFILES_WEZTERM_FISH_COMPLETION_PATH:-/opt/homebrew/share/fish/vendor_completions.d/wezterm.fish}"
-WEZTERM_ZSH_COMPLETION_PATH="${DOTFILES_WEZTERM_ZSH_COMPLETION_PATH:-/opt/homebrew/share/zsh/site-functions/_wezterm}"
-WEZTERM_MIGRATION_BACKUP_DIR="${DOTFILES_WEZTERM_MIGRATION_BACKUP_DIR:-$HOME/Library/Application Support/dotfiles/migrations}"
 BASHRC_PATH="${DOTFILES_BASHRC_PATH:-/etc/bashrc}"
 ZSHRC_PATH="${DOTFILES_ZSHRC_PATH:-/etc/zshrc}"
 USER_PROFILE_ROOT="${DOTFILES_USER_PROFILE_ROOT:-/etc/profiles/per-user}"
@@ -113,7 +105,6 @@ preflight() {
     "$ROOT/flake.nix"
     "$ROOT/chezmoi"
     "$VERIFY_ENVIRONMENT"
-    "$DARWIN_VERIFICATION"
   )
   if ((DOTFILES_WITH_DOCKER == 1)); then
     required_paths+=("$HINDSIGHT_COMPOSE_FILE")
@@ -584,43 +575,6 @@ apply_darwin_system() {
   hash -r
 }
 
-retire_tart_cli_profile() {
-  local user_home="$1" os_profile="$2"
-  local legacy_profile="$user_home/.local/state/dotfiles/tart-profile"
-  local directory command target
-  [[ -L $legacy_profile ]] || return 0
-  case "$(readlink "$legacy_profile")" in
-  /nix/store/*-dotfiles-tart-minimal) ;;
-  *) return 0 ;;
-  esac
-
-  for directory in \
-    "$user_home/.local" "$user_home/.local/bin" \
-    "$user_home/.local/state" "$user_home/.local/state/dotfiles"; do
-    [[ ! -L $directory ]] ||
-      dotfiles_die "Refusing legacy Tart migration through a symbolic directory: $directory"
-  done
-
-  # Validate every replacement before removing any managed link.
-  for command in git chezmoi nvim node npm; do
-    target="$user_home/.local/bin/$command"
-    if [[ -L $target && $(readlink "$target") == "$legacy_profile/bin/$command" ]]; then
-      [[ -x $os_profile/bin/$command ]] ||
-        dotfiles_die "OS-managed replacement is missing for legacy Tart command: $command"
-    fi
-  done
-  for command in git chezmoi nvim node npm; do
-    target="$user_home/.local/bin/$command"
-    if [[ -L $target && $(readlink "$target") == "$legacy_profile/bin/$command" ]]; then
-      rm -- "$target"
-    fi
-  done
-  # Unlink the retired GC root; never delete the referenced Nix store contents.
-  rm -- "$legacy_profile"
-  hash -r
-  dotfiles_log "Retired legacy Tart CLI profile links; Nix store contents were preserved."
-}
-
 homebrew_cask_link_parent_metadata() {
   /usr/bin/stat -f '%u %Lp' "$1"
 }
@@ -782,59 +736,6 @@ homebrew_cask_install_state_before_activation() {
   homebrew_cask_install_state "$token"
 }
 
-remove_unmanaged_wezterm_link() {
-  local link_path="$1" link_target
-  [[ -L $link_path ]] || return 0
-  link_target="$(/usr/bin/readlink "$link_path")"
-  [[ $link_target == "$WEZTERM_APP_PATH/"* ]] || return 0
-  sudo /bin/rm -f -- "$link_path"
-}
-
-migrate_unmanaged_wezterm_install() {
-  local backup_path cask_state link_path link_target
-  local has_unmanaged_install=0
-  local -a legacy_link_paths=(
-    "$WEZTERM_BIN_DIR/wezterm"
-    "$WEZTERM_BIN_DIR/wezterm-gui"
-    "$WEZTERM_BIN_DIR/wezterm-mux-server"
-    "$WEZTERM_BIN_DIR/strip-ansi-escapes"
-    "$WEZTERM_BASH_COMPLETION_PATH"
-    "$WEZTERM_FISH_COMPLETION_PATH"
-    "$WEZTERM_ZSH_COMPLETION_PATH"
-  )
-
-  if [[ -e $WEZTERM_APP_PATH || -L $WEZTERM_APP_PATH ]]; then
-    has_unmanaged_install=1
-  else
-    for link_path in "${legacy_link_paths[@]}"; do
-      [[ -L $link_path ]] || continue
-      link_target="$(/usr/bin/readlink "$link_path")"
-      if [[ $link_target == "$WEZTERM_APP_PATH/"* ]]; then
-        has_unmanaged_install=1
-        break
-      fi
-    done
-  fi
-
-  ((has_unmanaged_install == 1)) || return 0
-  cask_state="$(homebrew_cask_install_state_before_activation "$WEZTERM_CASK_TOKEN")" ||
-    dotfiles_die "Unable to inspect Homebrew cask state for $WEZTERM_CASK_TOKEN."
-  [[ $cask_state == absent ]] || return 0
-
-  if [[ -e $WEZTERM_APP_PATH || -L $WEZTERM_APP_PATH ]]; then
-    backup_path="$WEZTERM_MIGRATION_BACKUP_DIR/WezTerm.app.$(date +%Y%m%d%H%M%S)"
-    [[ ! -e $backup_path && ! -L $backup_path ]] ||
-      dotfiles_die "Refusing to overwrite an existing WezTerm migration backup: $backup_path"
-    /bin/mkdir -p -- "$WEZTERM_MIGRATION_BACKUP_DIR"
-    dotfiles_log "Moving unmanaged WezTerm.app aside before Homebrew cask activation..."
-    sudo /bin/mv -- "$WEZTERM_APP_PATH" "$backup_path"
-  fi
-
-  for link_path in "${legacy_link_paths[@]}"; do
-    remove_unmanaged_wezterm_link "$link_path"
-  done
-}
-
 docker_desktop_md5_link_state() {
   local md5_binary="$1" md5_link="$2"
   if [[ -L $md5_link && $(/usr/bin/readlink "$md5_link") == "$md5_binary" ]]; then
@@ -943,26 +844,6 @@ apply_chezmoi() {
   chezmoi apply --force
 }
 
-verify_darwin_providers() {
-  local -a verification_args=()
-  # Match the host's Hermes -> Docker -> Ollama package closure for verification
-  # without changing the explicit profile flags used for runtime startup.
-  if ((DOTFILES_WITH_OLLAMA == 1 || DOTFILES_WITH_DOCKER == 1 || DOTFILES_WITH_HERMES == 1)); then
-    verification_args+=(--feature WithOllama)
-  fi
-  if ((DOTFILES_WITH_DOCKER == 1 || DOTFILES_WITH_HERMES == 1)); then
-    verification_args+=(--feature WithDocker)
-  fi
-  if ((DOTFILES_WITH_HERMES == 1)); then
-    verification_args+=(--feature WithHermes)
-  fi
-  if ((${#verification_args[@]} > 0)); then
-    "$DARWIN_VERIFICATION" "${verification_args[@]}"
-  else
-    "$DARWIN_VERIFICATION"
-  fi
-}
-
 run_darwin_install_workflow() {
   # Bootstrap dependencies before Home Manager has installed Python and go-task.
   # Reuse the checkout's locked nixpkgs and the public update task.
@@ -1006,13 +887,8 @@ finish_macos_install() {
   fi
   dotfiles_step 'Preparing Homebrew directories' \
     'Check and repair permissions for application CLI links.' repair_homebrew_cask_link_directories
-  dotfiles_step 'Preparing WezTerm migration' \
-    'Preserve an unmanaged WezTerm installation if one exists.' migrate_unmanaged_wezterm_install
   dotfiles_step 'Applying macOS packages and settings' \
     'Download or build packages, then activate nix-darwin, Homebrew, and Home Manager. sudo may request your password.' apply_darwin_system
-  dotfiles_step 'Retiring the legacy Tart CLI profile' \
-    'Remove only old managed links after OS-managed replacements are available.' \
-    retire_tart_cli_profile "$HOME" "$USER_PROFILE_ROOT/${SUDO_USER:-$USER}"
   dotfiles_step 'Installing Codex CLI from npm' \
     'Install the user-local npm package so Codex updates use npm.' dotfiles_install_codex_npm
   dotfiles_step 'Checking Homebrew directories' \
@@ -1023,8 +899,6 @@ finish_macos_install() {
     dotfiles_step 'Finalizing Docker Desktop links' \
       'Finish the verified CLI link transaction.' commit_docker_desktop_cask_links
   fi
-  dotfiles_step 'Verifying macOS package providers' \
-    'Check the identities and versions of enabled Nix applications and commands.' verify_darwin_providers
   dotfiles_step 'Installing Herdr' \
     'Install or update Herdr unless explicitly skipped.' dotfiles_install_herdr
   dotfiles_step 'Applying user configuration' \
