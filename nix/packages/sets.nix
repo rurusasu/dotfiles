@@ -32,7 +32,9 @@
 #
 # Imported by:
 #   - nix/flakes/packages.nix → export and validation artifacts
-#   - nix/home/{linux,wsl,darwin}.nix → OS-managed home.packages
+#   - nix/home/darwin.nix     → feature-selected home.packages on macOS
+#   - nix/home/linux.nix      → home.packages with native desktop packages excluded
+#   - nix/home/wsl.nix        → home.packages with native desktop packages, Discord, and Ollama excluded
 #   - nix/packages/winget.nix → winget/npm/pnpm JSON generation
 {
   pkgs,
