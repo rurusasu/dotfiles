@@ -2,7 +2,8 @@
 
 ## 編集対象
 
-- `wezterm.lua` -> `~/.config/wezterm/wezterm.lua`
+- `wezterm.lua` は Windows 専用の設定。直接編集し、chezmoi で配布する
+- macOS・NixOS・WSL の設定は `nix/modules/terminals/wezterm/defaults.nix` と `wezterm.lua` が管理する
 
 ## 変更ルール
 

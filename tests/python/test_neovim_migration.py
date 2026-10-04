@@ -39,7 +39,7 @@ class NeovimMigrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.home = self.root / "home with spaces"
         self.home.mkdir()
         self.relative = ".config/nvim"

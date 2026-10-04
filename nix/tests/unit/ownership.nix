@@ -152,7 +152,7 @@ in
 
   testPackageCatalogHasClassifiedTestCount = {
     expr = builtins.length packageCatalogTests;
-    expected = 9;
+    expected = 6;
   };
 
   testPackageCatalogPesterHasExpectedItCount = {
@@ -184,7 +184,7 @@ in
       linuxConfig = 2;
       taskfileRouting = 10;
       tartDotfilesSync = 13;
-      packageCatalog = 9;
+      packageCatalog = 6;
       tartVmInstaller = 8;
     };
   };

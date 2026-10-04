@@ -19,7 +19,6 @@ BeforeAll {
 
     $script:toolkitClients = @(
         "codex",
-        "cursor",
         "gemini"
     )
 
@@ -33,7 +32,6 @@ BeforeAll {
 
     $script:clientTemplates = @(
         "dot_codex/config.toml.tmpl",
-        "dot_cursor/cli-config.json.tmpl",
         "dot_gemini/settings.json.tmpl",
         "dot_codeium/windsurf/mcp_config.json.tmpl"
     ) | ForEach-Object { Join-Path $script:chezmoiRoot $_ }
@@ -63,7 +61,7 @@ Describe 'Docker MCP Toolkit shared profile' {
     It 'keeps Hindsight as a direct local HTTP server' {
         $script:mcpData | Should -Match '(?m)^\s+- name:\s*hindsight\s*$'
         $script:mcpData | Should -Match 'http://127\.0\.0\.1:8888/mcp/codex-shared/'
-        $script:mcpData | Should -Match '(?ms)- name:\s*hindsight.*?supports:\s*\n(?:\s+- \w+\s*\n){4}'
+        $script:mcpData | Should -Match '(?ms)- name:\s*hindsight.*?supports:\s*\n(?:\s+- \w+\s*\n){3}'
     }
 }
 

@@ -1,4 +1,9 @@
-{ config, pkgs, ... }:
+{
+  config,
+  pkgs,
+  inputs,
+  ...
+}:
 
 let
   configuredUser = builtins.getEnv "DOTFILES_USER";
@@ -6,6 +11,15 @@ let
 in
 
 {
+  imports = [
+    inputs.home-manager.nixosModules.home-manager
+  ];
+  home-manager.sharedModules = [
+    ../nixos/ghostty.nix
+    ../terminals/ghostty/defaults.nix
+    ../terminals/wezterm/defaults.nix
+  ];
+
   environment = {
     systemPackages = with pkgs; [
       coreutils

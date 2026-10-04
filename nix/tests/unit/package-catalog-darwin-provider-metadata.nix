@@ -12,21 +12,10 @@ in
     expr = sets.supportReport.wezterm;
     expected = {
       darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "wezterm";
-        identity = {
-          homepage = "https://wezterm.org/";
-          appName = "WezTerm.app";
-          bundleId = "com.github.wez.wezterm";
-          executable = "wezterm-gui";
-        };
+        unsupported = "WezTerm is managed by Home Manager";
       };
       linux = {
-        provider = "nix";
-        source = "nixpkgs";
-        identity = "wezterm";
-        nixAttr = "wezterm";
+        unsupported = "WezTerm is managed by Home Manager";
       };
       windows = {
         provider = "winget";
@@ -44,11 +33,7 @@ in
         provider = "nix";
         source = "nixpkgs";
         nixAttr = "ollama";
-        identity = {
-          homepage = "https://ollama.com/";
-          command = "ollama";
-          versionArgs = [ "--version" ];
-        };
+        identity = "ollama";
       };
       linux = {
         provider = "nix";

@@ -60,7 +60,7 @@ let
     inherit (common) supports platformKey;
   };
   installation = import ./install {
-    inherit lib windowsOnly;
+    inherit pkgs lib windowsOnly;
     inherit (normalized) catalog;
   };
 in

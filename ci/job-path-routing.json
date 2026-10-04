@@ -260,6 +260,7 @@
         "nix/lib/**/*.nix",
         "nix/home/**/*.nix",
         "nix/home/keybindings/**",
+        "nix/modules/terminals/**",
         "nix/hosts/windows/**",
         "chezmoi/dot_glzr/**",
         "taskfiles/nix/**",
@@ -270,7 +271,6 @@
         "windows/pnpm/packages.json",
         "tests/runtime/pnpm-build-permissions.mjs",
         "tests/fixtures/pnpm-build-permissions/**",
-        "scripts/python/update_darwin_packages.py",
         ".github/workflows/ci-consistency.yml"
       ],
       "outputs": ["package_catalog"]

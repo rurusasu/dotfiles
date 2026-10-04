@@ -47,7 +47,7 @@
       "outputs": ["linux", "darwin", "wsl", "contract", "nix"]
     },
     {
-      "patterns": ["nix/packages/**"],
+      "patterns": ["nix/packages/**", "nix/modules/terminals/**"],
       "outputs": [
         "linux",
         "darwin",
@@ -62,14 +62,6 @@
     {
       "patterns": ["windows/winget/packages.json", "windows/npm/packages.json"],
       "outputs": ["windows", "contract", "package_catalog"]
-    },
-    {
-      "patterns": [
-        "scripts/python/update_darwin_packages.py",
-        "tests/python/test_update_darwin_packages.py",
-        ".github/workflows/update-darwin-packages.yml"
-      ],
-      "outputs": ["darwin", "contract", "nix", "package_catalog"]
     },
     {
       "patterns": ["windows/pnpm/packages.json"],
@@ -103,6 +95,7 @@
     {
       "patterns": [
         "nix/home/linux.nix",
+        "nix/modules/nixos/**",
         "nix/hosts/linux/**",
         "nix/system-manager/**",
         "nix/tests/**"
@@ -118,16 +111,12 @@
       "outputs": ["wsl", "contract", "nix"]
     },
     {
-      "patterns": ["nix/home/darwin.nix", "nix/hosts/darwin/**"],
+      "patterns": ["nix/home/darwin.nix", "nix/hosts/darwin/**", "nix/modules/darwin/**"],
       "outputs": ["darwin", "contract", "nix"]
     },
     {
       "patterns": ["nix/README.md", "nix/home/README.md"],
       "outputs": ["linux", "darwin", "wsl", "contract", "nix"]
-    },
-    {
-      "patterns": ["nix/modules/host/**"],
-      "outputs": ["linux", "wsl", "contract", "nix"]
     },
     {
       "patterns": ["scripts/sh/dcnvim.sh"],

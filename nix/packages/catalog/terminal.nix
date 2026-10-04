@@ -1,53 +1,13 @@
 # Package identities and provider declarations for terminal.
 { pkgs, ... }:
 {
-  ghostty = {
-    pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.ghostty-bin else pkgs.ghostty;
-    category = "terminal";
-    support = {
-      windows.unsupported = "Ghostty is configured only for macOS and Linux";
-      darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "ghostty-bin";
-        identity = {
-          homepage = "https://ghostty.org/";
-          appName = "Ghostty.app";
-          bundleId = "com.mitchellh.ghostty";
-          executable = "ghostty";
-        };
-      };
-      linux = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "ghostty";
-        identity = "ghostty";
-      };
-    };
-  };
-
+  # Unix installation and configuration belong to the Home Manager module.
   wezterm = {
-    pkg = pkgs.wezterm;
     winget = "wez.wezterm";
     category = "terminal";
     support = {
-      darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "wezterm";
-        identity = {
-          homepage = "https://wezterm.org/";
-          appName = "WezTerm.app";
-          bundleId = "com.github.wez.wezterm";
-          executable = "wezterm-gui";
-        };
-      };
-      linux = {
-        provider = "nix";
-        source = "nixpkgs";
-        identity = "wezterm";
-        nixAttr = "wezterm";
-      };
+      darwin.unsupported = "WezTerm is managed by Home Manager";
+      linux.unsupported = "WezTerm is managed by Home Manager";
     };
   };
 
@@ -60,10 +20,7 @@
         source = "nixpkgs";
         nixAttr = "aerospace";
         identity = {
-          homepage = "https://github.com/nikitabobko/AeroSpace";
           appName = "AeroSpace.app";
-          bundleId = "bobko.aerospace";
-          executable = "aerospace";
         };
       };
       linux.unsupported = "AeroSpace is only available on macOS";

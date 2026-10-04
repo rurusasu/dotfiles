@@ -24,8 +24,7 @@ BeforeAll {
     # フォント名を参照するべき設定ファイル一覧 (family 名そのもの)
     $script:fontConsumers = @(
         "chezmoi/terminals/wezterm/wezterm.lua",
-        "chezmoi/terminals/windows-terminal/settings.json",
-        "chezmoi/editors/cursor/settings.json"
+        "chezmoi/terminals/windows-terminal/settings.json"
     )
 
     # Windows font installer template
@@ -49,10 +48,7 @@ Describe 'フォント設定の一貫性' {
 
         It 'should make every terminal and editor consumer read the shared appearance data' {
             $consumers = @(
-                "chezmoi/terminals/wezterm/wezterm.lua",
-                "chezmoi/terminals/windows-terminal/settings.json",
-                "chezmoi/terminals/ghostty/config",
-                "chezmoi/editors/cursor/settings.json"
+                "chezmoi/terminals/windows-terminal/settings.json"
             )
             foreach ($relativePath in $consumers) {
                 $content = Get-Content -LiteralPath (Join-Path $script:repoRoot $relativePath) -Raw
@@ -62,6 +58,16 @@ Describe 'フォント設定の一貫性' {
 
             $windowsTerminal = Get-Content -LiteralPath (Join-Path $script:repoRoot 'chezmoi/terminals/windows-terminal/settings.json') -Raw
             $windowsTerminal | Should -Match '"size"\s*:\s*\{\{\s*\.appearance\.font_size\s*\}\}'
+        }
+    }
+
+    Context 'Windows WezTerm settings' {
+        It 'should configure the Windows terminal appearance' {
+            $content = Get-Content -LiteralPath (Join-Path $script:repoRoot 'chezmoi/terminals/wezterm/wezterm.lua') -Raw
+            $content | Should -Match ([regex]::Escape('wezterm.font("UDEV Gothic NF")'))
+            $content | Should -Match ([regex]::Escape('["color_scheme"] = "Catppuccin Mocha"'))
+            $content | Should -Match '\["font_size"\]\s*=\s*10'
+            $content | Should -Not -Match '\{\{\s*\.appearance'
         }
     }
 
@@ -90,9 +96,7 @@ Describe 'フォント設定の一貫性' {
 
     Context '新フォント family 名の整合' {
         It 'editor/terminal 設定すべてが共通 appearance の family を参照すること' -ForEach @(
-            @{ Path = "chezmoi/terminals/wezterm/wezterm.lua" }
             @{ Path = "chezmoi/terminals/windows-terminal/settings.json" }
-            @{ Path = "chezmoi/editors/cursor/settings.json" }
         ) {
             param($Path)
             $full = Join-Path $script:repoRoot $Path

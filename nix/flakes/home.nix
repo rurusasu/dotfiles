@@ -36,7 +36,10 @@ let
         modules = [
           ../home/darwin.nix
           ../modules/lsp.nix
-          ../modules/cursor
+          ../modules/terminals/ghostty/defaults.nix
+          ../modules/darwin/ghostty.nix
+          ../modules/terminals/wezterm/defaults.nix
+          ../modules/darwin/wezterm.nix
           ../home/standalone-darwin-identity.nix
           ../home/standalone-darwin-fonts.nix
         ];
@@ -48,7 +51,9 @@ let
       modules = [
         ../home/linux.nix
         ../modules/lsp.nix
-        ../modules/cursor
+        ../modules/terminals/ghostty/defaults.nix
+        ../modules/nixos/ghostty.nix
+        ../modules/terminals/wezterm/defaults.nix
       ];
     };
 in

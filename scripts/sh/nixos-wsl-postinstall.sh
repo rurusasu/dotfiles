@@ -287,7 +287,7 @@ if [[ ! -f $HOST_DEFAULT_PATH ]]; then
 { config, inputs, pkgs, ... }:
 {
   imports = [
-    ../../modules/host
+    ../../modules/nixos
     ../../modules/wsl
     ../../profiles/hosts/k3s
     ./configuration.nix

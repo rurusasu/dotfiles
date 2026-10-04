@@ -1,6 +1,5 @@
 { inputs }:
 let
-  system = "x86_64-linux";
   systemManagerModule = import ../../flakes/system-manager.nix { inherit inputs; };
   systemConfigs = import ../../flakes/lib/system-manager-configs.nix {
     inherit inputs;
@@ -11,17 +10,6 @@ let
     dotfilesGroup = "test-primary";
   };
   moduleSystemConfigs = systemManagerModule.flake.systemConfigs;
-  workmux = import ../../flakes/lib/workmux.nix { inherit inputs; };
-  workmuxOverlay = workmux.mkOverlay (target: inputs.workmux.packages.${target}.default);
-  nixos = inputs.nixpkgs.lib.nixosSystem {
-    inherit system;
-    specialArgs = { inherit inputs; };
-    modules = [
-      { nixpkgs.overlays = [ workmuxOverlay ]; }
-      ../../modules/host/default.nix
-    ];
-  };
-
   supportsDistro =
     distro: config:
     let
@@ -122,8 +110,4 @@ in
     };
   };
 
-  testNixOSInstallsGitHubCliAtSystemLevel = {
-    expr = includesHostPackages nixos.config nixos.pkgs;
-    expected = true;
-  };
 }

@@ -90,42 +90,14 @@ macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Hom
 旧 Homebrew provider を検出し、Nix provider の検証後に uninstall する
 一度限りの自動移行は終了しました。通常インストールは現行 catalog の
 provider を反映し、切替済みの旧 Homebrew package を自動 uninstall しません。
-旧 provider の metadata と移行処理は提供しません。公開コマンド
-`task darwin:migrate` は互換性のため残しますが、終了の案内だけを表示します。
-旧引数は評価せず無視し、移行・検証・package やデータの変更は行いません。
-現行 provider を個別に検証する `task darwin:verify` は引き続き利用できます。
+旧 provider の metadata、移行処理、互換コマンドは提供しません。
 既存 package やアプリのデータを整理する
 必要がある場合は、利用者が保存対象と現在使用している実体を確認してから
 個別に対応します。
 
-インストール済み provider の検証成功は、既に起動している GUI application の
-実体が切り替わったことを意味しません。切替完了を確認するときは、稼働中の
-実行ファイル・bundle path も確認します。旧 bundle が使われている場合は、
-利用者と作業の保存・再起動を調整してから現行 bundle への切替を確認します。
-旧 package の残存だけを理由に自動削除することはありません。
-
-2026-10-01 にこの作業端末を読み取り専用で確認しました。稼働中の
-nix-darwin generation にある移行対象の有効な 8 package は現行 verifier に
-成功し、`/Applications/Nix Apps` の 7 application は Info.plist と宣言済み
-実行ファイルが generation の実体と一致しました。Tart は Nix profile の
-実行ファイルでした。Google Chrome / Ollama の optional feature は無効でした。
-一方、稼働中の Orca は `/Applications/Orca.app` の旧 bundle で、Homebrew の
-cask receipt もこの path を指していました。検証済みの現行 Nix bundle は
-`/Applications/Nix Apps/Orca.app` に別途配置されています。この端末の Orca の
-稼働中 session の切替は未確認であり、残存 cask を未使用の重複とは扱いません。
-この変更では終了・再起動・削除を行いません。
-他端末の切替完了を保証する記録ではありません。
-
-通常インストールは activation 後に `verify-darwin-packages.sh` で現行の
-Nix application identity / CLI version を検証します。support report を一度
-生成し、同じ metadata と output path を再利用します。無効な feature は
-検証対象から外し、有効な package の欠落・identity/version 検証失敗は
-後続の設定反映前にエラーとします。output path の report は optional
-application をビルドする依存関係を持ちません。
-
-単体の Nix application identity / CLI version 検証は
-`task darwin:verify -- --support-json FILE --id ID --store-path PATH` で実行できます。
-通常インストールの環境検証と各 profile の feature gate は維持します。
+通常インストールは Nix のビルド・activation、ユーザー設定の反映、環境の動作確認を行います。
+application identity、署名、CLI version を catalog の期待値と比較する provider 検証は廃止しました。
+パッケージ更新時のダウンロード hash 確認と Nix candidate の評価・ビルドは維持します。
 
 その他 Linux の `DOTFILES_ALLOW_USER_ONLY=1 ./install.sh` は Home Manager のみで、Docker や OS service は管理しません。
 
@@ -187,7 +159,7 @@ cat result/package-support-report.json
 
 同じ package を Home Manager と system layer の両方へ重複させるのは、system service が絶対 path を必要とする場合に限定します。
 
-Neovim 本体・プラグインはカタログを介さず、`nix/modules/nvim/` の Home Manager 設定で直接管理します。LSP・整形ツールは全エディタ共通の `nix/modules/lsp.nix` の `home.packages` に宣言し、通常の PATH に導入します。Cursor の LSP 設定は `nix/modules/cursor/` が管理し、Darwin／NixOS の共通 module が読み込みます。Tree-sitter の対象言語は `plugins.nix` の標準オプションに指定します。運用は [Neovim の運用](../chezmoi/neovim.md) を参照してください。
+Neovim 本体・プラグインはカタログを介さず、`nix/modules/nvim/` の Home Manager 設定で直接管理します。LSP・整形ツールは全エディタ共通の `nix/modules/lsp.nix` の `home.packages` に宣言し、通常の PATH に導入します。Tree-sitter の対象言語は `plugins.nix` の標準オプションに指定します。運用は [Neovim の運用](../chezmoi/neovim.md) を参照してください。
 
 ## 主なファイル
 
@@ -211,3 +183,10 @@ Neovim 本体・プラグインはカタログを介さず、`nix/modules/nvim/`
 各 host は `nix/hosts/<host>/default.nix` を entrypoint、`configuration.nix` を実体とする分割を
 標準とします。Darwin の system package、cask、activation を変更する場合は
 `nix/hosts/darwin/configuration.nix` を編集し、`default.nix` は import 配線だけに保ちます。
+
+### Terminal module ownership
+
+Ghostty / WezTerm は [`nix/modules/terminals/`](../../nix/modules/terminals/README.md) の各 `defaults.nix` に package と設定を直接宣言します。
+OS module の `home-manager.sharedModules` が terminal module を読み込みます。
+catalog には Windows の WezTerm winget ID を残します。
+Windows の設定配布は chezmoi、macOS・NixOS・WSL は Home Manager が担当します。

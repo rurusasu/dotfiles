@@ -31,10 +31,7 @@
         source = "nixpkgs";
         nixAttr = "chatgpt";
         identity = {
-          homepage = "https://openai.com/chatgpt/desktop/";
           appName = "ChatGPT.app";
-          bundleId = "com.openai.codex";
-          executable = "ChatGPT";
         };
       };
       linux = {
@@ -77,10 +74,7 @@
         source = "nixpkgs";
         nixAttr = "discord";
         identity = {
-          homepage = "https://discord.com/";
           appName = "Discord.app";
-          bundleId = "com.hnc.Discord";
-          executable = "Discord";
         };
       };
       linux = {
@@ -102,10 +96,7 @@
         source = "nixpkgs";
         nixAttr = "_1password-gui";
         identity = {
-          homepage = "https://1password.com/";
           appName = "1Password.app";
-          bundleId = "com.1password.1password";
-          executable = "1Password";
         };
       };
     };
@@ -144,10 +135,7 @@
         provider = "nix";
         inherit ((darwinProviderCandidate "dia-browser")) source;
         identity = {
-          homepage = "https://www.diabrowser.com/";
           appName = "Dia.app";
-          bundleId = "company.thebrowser.dia";
-          executable = "Dia";
         };
       }
       // lib.optionalAttrs ((darwinProviderCandidate "dia-browser").nixAttr != null) {
@@ -170,10 +158,7 @@
         source = "nixpkgs";
         nixAttr = "google-chrome";
         identity = {
-          homepage = "https://www.google.com/chrome/";
           appName = "Google Chrome.app";
-          bundleId = "com.google.Chrome";
-          executable = "Google Chrome";
         };
       };
     };
@@ -192,10 +177,7 @@
         provider = "nix";
         inherit ((darwinProviderCandidate "orca-editor")) source;
         identity = {
-          homepage = "https://onorca.dev/";
           appName = "Orca.app";
-          bundleId = "com.stablyai.orca";
-          executable = "Orca";
         };
       }
       // lib.optionalAttrs ((darwinProviderCandidate "orca-editor").nixAttr != null) {
@@ -219,10 +201,7 @@
         source = "nixpkgs";
         nixAttr = "raycast";
         identity = {
-          homepage = "https://raycast.com/";
           appName = "Raycast.app";
-          bundleId = "com.raycast.macos";
-          executable = "Raycast";
         };
       };
       linux = {

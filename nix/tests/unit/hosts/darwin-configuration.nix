@@ -125,7 +125,9 @@ in
       homebrew = defaultConfig.homebrew.enable;
       nixHomebrew = defaultConfig.nix-homebrew.enable;
       raycast = builtins.any (name: hasPrefix "raycast" name) (packageNames defaultConfig);
-      weztermTerminfo = builtins.match ".*pkgs[.]wezterm[.]terminfo.*" darwinHomeSource != null;
+      weztermTerminfo = builtins.any (
+        package: toString package == toString defaultHome.programs.wezterm.package.terminfo
+      ) defaultHome.home.packages;
       github = builtins.any (name: builtins.match "^(gh|github-cli)($|[-.].*)" name != null) (
         packageNames defaultConfig
       );

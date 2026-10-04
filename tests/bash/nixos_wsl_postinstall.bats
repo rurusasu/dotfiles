@@ -17,6 +17,7 @@ setup() {
 	REAL_GIT="$(command -v git)"
 
 	mkdir -p "$USER_HOME" "$STUB_BIN"
+	ln -s "$BASH" "$STUB_BIN/bash"
 	SYNC_SOURCE="$(cd "$SYNC_SOURCE" && pwd -P)"
 	: >"$COMMAND_LOG"
 	: >"$NIXOS_ARGV_CAPTURE"
@@ -70,7 +71,7 @@ exec "$@"
 	write_stub chown '
 printf "chown %s\n" "$*" >>"$COMMAND_LOG"
 '
-write_stub npm '
+	write_stub npm '
 prefix="${NPM_CONFIG_PREFIX:-$HOME/.local/npm}"
 mkdir -p "$prefix/bin"
 printf "npm %s prefix=%s\n" "$*" "$prefix" >>"$COMMAND_LOG"
@@ -94,7 +95,7 @@ if [[ $SYSTEMD_RUN_HAS_OUTPUT == 1 ]]; then
   printf "     --output=MODE  Set log output format\n"
 fi
 '
-write_stub nixos-rebuild '
+	write_stub nixos-rebuild '
 printf "%s\n" "$@" >"$NIXOS_ARGV_CAPTURE"
 printf "%s" "${NIX_CONFIG:-}" >"$NIX_CONFIG_CAPTURE"
 printf "nixos-rebuild user=%s home=%s uid=%s gid=%s group=%s\n" \
@@ -163,10 +164,10 @@ fi
 }
 
 @test "NixOS WSL rebuild helper is executable for direct shell aliases" {
-  # CI の別ユーザー所有 checkout を、隔離 HOME から読み込む場合も確認する。
-  run env GIT_TEST_ASSUME_DIFFERENT_OWNER=true "$REAL_GIT" -c "safe.directory=$REPO_ROOT" -C "$REPO_ROOT" ls-files --stage -- scripts/sh/nixos-rebuild-with-user.sh
-  [ "$status" -eq 0 ]
-  [[ "$output" =~ ^100755[[:space:]] ]]
+	# CI の別ユーザー所有 checkout を、隔離 HOME から読み込む場合も確認する。
+	run env GIT_TEST_ASSUME_DIFFERENT_OWNER=true "$REAL_GIT" -c "safe.directory=$REPO_ROOT" -C "$REPO_ROOT" ls-files --stage -- scripts/sh/nixos-rebuild-with-user.sh
+	[ "$status" -eq 0 ]
+	[[ "$output" =~ ^100755[[:space:]] ]]
 }
 
 write_stub() {

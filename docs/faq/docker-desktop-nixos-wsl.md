@@ -39,7 +39,7 @@ NixOS-WSL はファイルシステムが Nix store（read-only）をベースに
 Docker Desktop の WSL 統合を使わずに、Docker ソケットを直接マウントする:
 
 ```nix
-# nix/modules/host/default.nix
+# nix/modules/wsl/default.nix
 virtualisation.docker.enable = true;
 ```
 

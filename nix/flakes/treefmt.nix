@@ -85,7 +85,6 @@
           # JSON only after chezmoi expansion and are validated by Chezmoi CI.
           oxfmt = {
             excludes = [
-              "chezmoi/editors/cursor/settings.json"
               "chezmoi/terminals/windows-terminal/settings.json"
             ];
           };

@@ -7,7 +7,7 @@ setup() {
 }
 
 @test "WezTerm provides Darwin terminfo before spawning shells" {
-	local config="$REPO_ROOT/chezmoi/terminals/wezterm/wezterm.lua"
+	local config="$REPO_ROOT/nix/modules/terminals/wezterm/wezterm.lua"
 
 	run grep -F 'config.set_environment_variables.TERMINFO_DIRS' "$config"
 	[ "$status" -eq 0 ]
@@ -18,7 +18,7 @@ setup() {
 }
 
 @test "WezTerm sends DEL for macOS Backspace while IME remains enabled" {
-	local config="$REPO_ROOT/chezmoi/terminals/wezterm/wezterm.lua"
+	local config="$REPO_ROOT/nix/modules/terminals/wezterm/wezterm.lua"
 	grep -Fq 'config.use_ime = true' "$config"
 	grep -Fq 'if is_macos then' "$config"
 	grep -Fq 'action = act.SendString("\x7f")' "$config"

@@ -50,16 +50,6 @@ tasks:
     cmds:
       - task: darwin:update
 
-  darwin:verify:
-    cmds:
-      - "bash scripts/sh/verify-darwin-package.sh {{.CLI_ARGS}}"
-
-  darwin:migrate:
-    desc: Deprecated compatibility command; automatic provider migration is retired
-    cmds:
-      - |-
-        printf '%s\n' 'Automatic Darwin provider migration has been retired.' 'No packages or data were changed.'
-
   darwin:update:check:
     desc: Check official feeds for Darwin package updates
     cmds:
@@ -76,12 +66,12 @@ tasks:
         python3 scripts/python/update_darwin_packages.py --write --output darwin-package-update.json'
 
   darwin:promote:
-    desc: Verify and promote explicit nixpkgs Darwin candidates
+    desc: Build and promote explicit nixpkgs Darwin candidates
     cmds:
       - "python3 scripts/python/update_darwin_packages.py --write --promote --output darwin-package-update.json"
 
   darwin:update:promote:
-    desc: Update custom Darwin packages and verify provider promotions in one report
+    desc: Update custom Darwin packages and build provider candidates in one report
     cmds:
       - "python3 scripts/python/update_darwin_packages.py --write --promote --output darwin-package-update.json"
 

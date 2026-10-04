@@ -16,7 +16,7 @@
 package データ、配布方式、エディタ設定を変更理由ごとに分けます。
 共通方針は [パッケージ管理の分割理由](../nix/package-management.md#分割の理由と編集先) を参照してください。
 
-Neovim 関連ソフトウェアはパッケージカタログを使わず、Nixpkgs のパッケージを直接宣言します。共通の `nix/modules/lsp.nix` は `home.packages` を使い、Cursor などからも利用できる通常の PATH に LSP・整形ツールを導入します。Darwin／NixOS の `default.nix` が Home Manager に読み込ませます。Neovim の内部 PATH は追加しません。プラグインの実行依存も通常のユーザー環境へ導入します。Windows の winget / pnpm では配布しません。
+Neovim 関連ソフトウェアはパッケージカタログを使わず、Nixpkgs のパッケージを直接宣言します。共通の `nix/modules/lsp.nix` は `home.packages` を使い、通常の PATH に LSP・整形ツールを導入します。Darwin／NixOS の `default.nix` が Home Manager に読み込ませます。Neovim の内部 PATH は追加しません。プラグインの実行依存も通常のユーザー環境へ導入します。Windows の winget / pnpm では配布しません。
 
 Neovim の設定とプラグインは Home Manager が管理し、chezmoi は配布しません。`default.nix` が `builtins.readFile ./init.lua` で基本設定を読み込み、プラグイン設定より先に実行します。実際の参照先は `:lua print(vim.fn.stdpath("config"))` で確認してください。非 Nix 環境向けの設定配布は行いません。
 

@@ -5,7 +5,7 @@
 }:
 {
   # 全エディタから使えるよう、サーバー・整形ツールを通常の PATH に導入する。
-  # Neovim の詳細設定は nvim/lua/config/lsp.lua、Cursor は cursor/ が管理する。
+  # Neovim の詳細設定は nvim/lua/config/lsp.luaが管理する。
   home.packages = with pkgs; [
     # Nix
     nixd
