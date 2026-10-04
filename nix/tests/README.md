@@ -32,7 +32,7 @@ derivation を再利用し、`treefmt` は formatter module が公開します�
 ## 実行
 
 Unix の `task test` は `task test:nix` を呼びます。生成キー設定の整合性検査に続いて、
-現在の system の nix-unit、custom-package-builds、aerospace-workspace-cycle、
+現在の system の powershell-formatter、nix-unit、custom-package-builds、aerospace-workspace-cycle、
 neovim-native、ghostty-config を個別に build します。Windows の `task test` は PowerShell テストを実行します。
 
 ```bash
@@ -47,13 +47,20 @@ nix build .#checks.aarch64-darwin.nix-unit --no-link --no-write-lock-file
 
 # CI と同じ単体テスト・独自 package build の個別実行例（各対象の builder が必要）
 nix build .#checks.x86_64-linux.nix-unit --no-link --no-write-lock-file
+nix build .#checks.x86_64-linux.powershell-formatter --no-link --no-write-lock-file
 nix build .#checks.x86_64-linux.custom-package-builds --no-link --no-write-lock-file
 nix build .#checks.aarch64-darwin.custom-package-builds --no-link --no-write-lock-file
 
 # ビルド・実行テストを指定する例
 nix build .#checks.aarch64-darwin.aerospace-workspace-cycle --no-link --no-write-lock-file
 
-# 現在の system の checks 全体を build
+# PowerShell formatter を空 HOME・ダウンロード禁止で実行し、BOM/CRLF/冪等性を確認
+nix build .#checks.aarch64-darwin.powershell-formatter --no-link --no-write-lock-file
+
+# repository 全体の format gate（対象 system の builder が必要）
+nix build .#checks.aarch64-darwin.treefmt --no-link --no-write-lock-file
+
+# 現在の system の checks 全体を build（Linux では NixOS VM も含む）
 nix flake check --no-write-lock-file
 
 # Linux builder で NixOS VM のテストを実行
@@ -62,6 +69,19 @@ nix build .#checks.x86_64-linux.bootstrap-nixos-vm --no-link --no-write-lock-fil
 
 `nix flake check --no-build` は評価確認です。nix-unit assertion や実行テストの成功は、
 対象 check の build 結果で確認します。Nix が既存の成功済み出力を再利用する場合もあります。
+`powershell-formatter` と `treefmt` は、公式 PSScriptAnalyzer 1.22.0 release archive を
+hash 固定した Nix input として取得し、Nix store の module manifest を直接 import します。
+依存 input の取得は build に先行し、formatter の実行中に `Install-Module` を呼びません。
+空の HOME でも同じ依存を使用します。`powershell-formatter` は未整形 fixture を整形し、
+CRLF・日本語の BOM と二度目の実行で byte / 更新時刻が変わらないことを検証します。
+通常の `task test:nix` と Linux/Darwin CI は `powershell-formatter` を個別に build しますが、
+全 checks の build とは範囲が異なります。Linux CI は `docker/bootstrap-ci-tools/nix.conf` で
+`sandbox = true` を設定した tools image を使います。新しい image は公開前に
+`check-bootstrap-ci-tools.sh --sandbox` で sandbox 内の build を検証し、各 job は検証済みの
+image を immutable digest で再利用します。
+CI の format job は `nix fmt -- --fail-on-change` を実行し、`treefmt` derivation や
+`powershell-formatter` の build を代替しません。CI が host の PSGallery module を準備しても、
+Nix formatter は host module ではなく固定した store module を使います。
 `activationPackage` を checks に登録すれば Home Manager の構成ビルドも検証できますが、
 それ自体は activation の実行や、設定値を比較する nix-unit テストを意味しません。
 
