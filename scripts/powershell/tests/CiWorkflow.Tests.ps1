@@ -46,7 +46,7 @@ Describe 'CI workflow configuration' {
         $treefmtToml | Should -Match 'RequiredVersion 1\.22\.0'
         $treefmtToml | Should -Match 'Import-Module PSScriptAnalyzer -RequiredVersion 1\.22\.0'
         $treefmtNix | Should -Match 'RequiredVersion 1\.22\.0'
-        $treefmtNix | Should -Match 'Import-Module PSScriptAnalyzer -RequiredVersion 1\.22\.0'
+        $treefmtNix | Should -Match 'Import-Module \$env:DOTFILES_PSSA_MODULE -RequiredVersion 1\.22\.0'
     }
 
     It 'should harden Windows PSScriptAnalyzer install against cache and gallery issues' {
