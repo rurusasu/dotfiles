@@ -422,6 +422,23 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             2,
         )
         self.assertNotIn("npm install -g @devcontainers/cli", devcontainer)
+        macos = self._workflow_job(devcontainer, "macos")
+        self.assertRegex(
+            macos,
+            r"(?m)^\s*uses: docker/setup-buildx-action@[0-9a-f]{40}(?:\s+#.*)?\s*$",
+        )
+        buildx = macos.split("      - name: Set up Docker Buildx\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        self.assertIn("driver: docker", buildx)
+        self.assertIn("cache-binary: false", buildx)
+        self.assertLess(macos.index("name: Set up Docker\n"), macos.index("name: Set up Docker Buildx"))
+        self.assertLess(macos.index("name: Set up Docker Buildx"), macos.index("name: Start devcontainer"))
+        startup = macos.split("      - name: Start devcontainer\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        self.assertIn('DOCKER_BUILDKIT: "1"', startup)
+        self.assertIn("--frozen-lockfile", startup)
 
     def test_nix_build_jobs_use_authenticated_github_fetches(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
