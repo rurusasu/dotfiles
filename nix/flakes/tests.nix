@@ -1,6 +1,6 @@
 { inputs, ... }:
 {
-  perSystem = { pkgs, ... }: {
+  perSystem = { pkgs, config, ... }: {
     checks = {
       windows-keybindings-generated = import ../tests/build/windows-keybindings-generated.nix {
         inherit pkgs;
@@ -10,6 +10,10 @@
       custom-package-builds = import ../tests/build/custom-packages.nix { inherit pkgs; };
       neovim-native = import ../tests/build/neovim.nix { inherit inputs pkgs; };
       hermes-bootstrap-tests = import ../tests/build/hermes-bootstrap-tests.nix { inherit inputs pkgs; };
+      powershell-formatter = import ../tests/build/powershell-formatter.nix {
+        inherit pkgs;
+        formatter = config.treefmt.settings.formatter.powershell;
+      };
     }
     // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
       bootstrap-nixos-vm = import ../tests/build/bootstrap-nixos.nix { inherit inputs pkgs; };

@@ -34,8 +34,6 @@ Nix sandbox は有効で、Nix のビルドを行う job container は `--privil
 `scripts/sh/configure-bootstrap-ci-nix.sh` が実行ユーザーの専用設定ファイルへ
 権限 600 で保存します。token をイメージに含めたり、ログへ出力したりしません。
 WSL でも同じスクリプトで root / nixos の両方を設定し、builder の並列数制限を維持します。
-runner の HOME が別ユーザー所有の場合は Nix が使う passwd の home を解決し、
-元の HOME と passwd home の Git 設定で現在の checkout だけを `safe.directory` に登録します。
 
 `nix` ジョブは lint と format の確認だけを行い、失敗をそのままジョブへ反映します。
 アプリを含む OS 構成と設定テストは Linux / Darwin の各 build job に集約します。

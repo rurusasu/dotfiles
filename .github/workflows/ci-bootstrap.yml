@@ -235,8 +235,6 @@ jobs:
     permissions:
       contents: read
       packages: read
-    env:
-      DOTFILES_NIXOS_HARDWARE_CONFIG: ${{ github.workspace }}/nix/tests/fixtures/hardware-configuration.nix
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -251,10 +249,18 @@ jobs:
 
       - name: Build Linux configurations and checks
         run: |
+          # System Manager validates an existing non-root account; use the image's account.
+          IFS=: read -r DOTFILES_USER _ DOTFILES_UID DOTFILES_GID _ DOTFILES_HOME _ < <(getent passwd node)
+          DOTFILES_GROUP="$(id -gn "$DOTFILES_USER")"
+          export DOTFILES_USER DOTFILES_UID DOTFILES_GID DOTFILES_HOME DOTFILES_GROUP
+          export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"
           nix build --impure --no-link --print-build-logs \
             .#nixosConfigurations.linux.config.system.build.toplevel \
+            .#systemConfigs.ubuntu \
+            .#systemConfigs.debian \
             .#homeConfigurations.x86_64-linux.activationPackage \
             .#package-support-report \
+            .#checks.x86_64-linux.powershell-formatter \
             .#checks.x86_64-linux.nix-unit \
             .#checks.x86_64-linux.custom-package-builds \
             .#checks.x86_64-linux.aerospace-workspace-cycle \
@@ -323,6 +329,7 @@ jobs:
             --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY" \
             .#darwinConfigurations.macos.system \
             .#package-support-report \
+            .#checks.aarch64-darwin.powershell-formatter \
             .#checks.aarch64-darwin.nix-unit \
             .#checks.aarch64-darwin.hermes-bootstrap-tests \
             .#checks.aarch64-darwin.custom-package-builds \
@@ -362,11 +369,13 @@ jobs:
         run: bash scripts/sh/configure-bootstrap-ci-nix.sh
 
       - name: Build both WSL system closures and export a local cache
+        id: wsl-cache
         shell: bash
         run: |
           set -euo pipefail
           cache_dir="$RUNNER_TEMP/wsl-nix-cache"
-          mkdir -p "$cache_dir"
+          artifact_dir="$RUNNER_TEMP/wsl-nix-cache-artifact"
+          mkdir -p "$cache_dir" "$artifact_dir"
 
           base_system="$(nix build \
             .#nixosConfigurations.nixos.config.system.build.toplevel \
@@ -374,19 +383,18 @@ jobs:
           hermes_system="$(DOTFILES_WITH_HERMES=1 nix build \
             .#nixosConfigurations.nixos.config.system.build.toplevel \
             --impure --no-link --print-out-paths)"
-          printf '%s\n%s\n' "$base_system" "$hermes_system" > "$RUNNER_TEMP/wsl-system-paths.txt"
+          printf '%s\n%s\n' "$base_system" "$hermes_system" > "$artifact_dir/wsl-system-paths.txt"
 
           nix copy --to "file://$cache_dir" "$base_system" "$hermes_system"
           du -sh "$cache_dir"
-          tar -cf "$RUNNER_TEMP/wsl-nix-cache.tar" -C "$cache_dir" .
+          tar -cf "$artifact_dir/wsl-nix-cache.tar" -C "$cache_dir" .
+          printf 'artifact-dir=%s\n' "$artifact_dir" >> "$GITHUB_OUTPUT"
 
       - name: Upload WSL Nix store cache
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: bootstrap-wsl-nix-cache-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/wsl-nix-cache.tar
-            ${{ runner.temp }}/wsl-system-paths.txt
+          path: ${{ steps.wsl-cache.outputs.artifact-dir }}
           if-no-files-found: error
           compression-level: 0
 

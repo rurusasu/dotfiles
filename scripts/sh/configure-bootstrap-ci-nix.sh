@@ -12,26 +12,27 @@ if [[ $GITHUB_TOKEN == *[[:space:]]* ]]; then
   exit 1
 fi
 
-nix_home="$HOME"
-# Nix rejects the runner-owned HOME mount in root container jobs.
-if [[ ! -O $nix_home ]]; then
-  nix_home=$(getent passwd "$(id -u)" | cut -d: -f6)
-  [[ $nix_home == /* ]] || {
-    echo "Cannot resolve the Nix user's home." >&2
-    exit 1
-  }
+# Git and Nix/libgit2 must trust the runner-owned checkout in this disposable
+# root container, including tests that reset HOME. Do not trust other paths.
+if [[ ${1:-} != --wsl ]]; then
+  : "${GITHUB_WORKSPACE:?CI checkout path is required}"
+  [[ $GITHUB_WORKSPACE == /* ]] || exit 64
+  git config --system --replace-all safe.directory "$GITHUB_WORKSPACE"
 fi
-repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
-# Git/libgit2 can read the original HOME before Nix selects its fallback.
-# Trust only this checkout in both existing homes, without changing HOME.
-for git_home in "$nix_home" "$HOME"; do
-  [[ -d $git_home ]] || continue
-  git_config="$git_home/.gitconfig"
-  if ! git config --file "$git_config" --get-all safe.directory | grep -Fxq "$repo_root"; then
-    git config --file "$git_config" --add safe.directory "$repo_root"
+
+config_home="${XDG_CONFIG_HOME:-}"
+if [[ -z $config_home ]]; then
+  nix_home="$HOME"
+  # Nix rejects the runner-owned HOME mount in root container jobs.
+  if [[ ! -O $nix_home ]]; then
+    nix_home=$(getent passwd "$(id -u)" | cut -d: -f6)
+    [[ $nix_home == /* ]] || {
+      echo "Cannot resolve the Nix user's home." >&2
+      exit 1
+    }
   fi
-done
-config_home="${XDG_CONFIG_HOME:-$nix_home/.config}"
+  config_home="$nix_home/.config"
+fi
 config_dir="$config_home/nix"
 config_file="$config_dir/bootstrap-ci.conf"
 umask 077
@@ -39,6 +40,7 @@ mkdir -p "$config_dir"
 {
   printf 'access-tokens = github.com=%s\n' "$GITHUB_TOKEN"
   if [[ ${1:-} == --wsl ]]; then
+    repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
     # Keep container-only store ownership and sandbox settings out of NixOS.
     grep -E '^(experimental-features|extra-substituters|extra-trusted-public-keys) = ' \
       "$repo_root/docker/bootstrap-ci-tools/nix.conf"

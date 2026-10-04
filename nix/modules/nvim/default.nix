@@ -4,6 +4,15 @@
   pkgs,
   ...
 }:
+let
+  # Use exactly the home-relative target HM will link, including custom XDG homes.
+  nvimDirectory = builtins.dirOf config.xdg.configFile."nvim/lua".target;
+  migrateLegacy = pkgs.writeShellScript "migrate-neovim-legacy" ''
+    export PATH=${lib.makeBinPath [ pkgs.coreutils ]}:"$PATH"
+    ${builtins.readFile ./migrate-legacy.sh}
+  '';
+  migrationArgs = ''${lib.escapeShellArg nvimDirectory} ${lib.escapeShellArg builtins.storeDir}'';
+in
 {
   # プラグインの導入と設定を専用モジュールにまとめる。
   imports = [
@@ -34,6 +43,35 @@
     ) config.programs.neovim.plugins
   )).runtimeDeps;
 
-  # 補助 Lua も Home Manager が配置する。
-  xdg.configFile."nvim/lua".source = ./lua;
+  # force は checkLinkTargets を通すためだけに限定する。書き換え前に必ず
+  # 全対象を検査・退避し、既存設定をバックアップなしで上書きしない。
+  xdg.configFile = {
+    "nvim/init.lua".force = true;
+    "nvim/lua" = {
+      source = ./lua;
+      force = true;
+    };
+  };
+
+  assertions = [
+    {
+      assertion = config.home.fileActivator == "legacy";
+      message = "The Neovim legacy migration requires Home Manager's legacy file activator.";
+    }
+    {
+      assertion =
+        config.xdg.configFile."nvim/init.lua".target == "${nvimDirectory}/init.lua"
+        && config.xdg.configFile."nvim/lua".target == "${nvimDirectory}/lua";
+      message = "Neovim's forced init.lua and lua targets must share the migration directory.";
+    }
+  ];
+
+  home.activation = {
+    checkNeovimLegacyConfig = lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
+      ${migrateLegacy} check ${migrationArgs} || exit 1
+    '';
+    migrateNeovimLegacyConfig = lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ] ''
+      run ${migrateLegacy} apply ${migrationArgs} || exit 1
+    '';
+  };
 }

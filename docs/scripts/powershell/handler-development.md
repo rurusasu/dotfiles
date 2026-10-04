@@ -8,7 +8,8 @@
 - `CanApply` が false の場合も、判定理由とスキップをログに表示する。検証に失敗した場合はコマンド・終了コード・出力を残す。
 - PATH 修復の回帰テストは `tests/lib/WindowsSetupPath.Tests.ps1`。実際のコマンド探索と子プロセスでの検証を使い、外部インストールと永続設定変更はモックする。Windows 以外では明示的にスキップする。
 - WinGet のコマンドリンクが欠落し `pathEntries` の明示設定もない場合は、対象 ID の WinGet パッケージディレクトリ内だけで検証コマンドと同名の exe を探す。候補が1件の場合に実体ディレクトリを PATH に追加し、DLL やデータファイルとの位置関係を保つ。候補が複数なら自動選択しない。
-- Windows Installer CI は PS7 / PS5.1 の両方で `ci/Assert-WingetCommandRecovery.ps1` を実行する。今回欠落した5パッケージについて PATH を最小限にした状態で復旧・実行し、runner の既存ツールによる偽陽性を防ぐ。対象なし・実体なし・検証失敗はエラーにする。検証専用の `EnsureProcessPathEntries` は永続 PATH を変更しない。
+- Windows Installer CI は PS7 / PS5.1 の両方で `ci/Assert-WingetCommandRecovery.ps1` を実行する。既定対象は実 manifest に残る `junegunn.fzf`、`x-motemen.ghq`、`jqlang.jq`、`JesseDuffield.lazygit`、`BurntSushi.ripgrep.MSVC` の5パッケージ（`fzf`、`ghq`、`jq`、`lazygit`、`rg`）。いずれも明示的な `pathEntries` に依存せず、PATH を最小限にした状態でパッケージ配下の入れ子ディレクトリから実体を探索し、`--version` で復旧・実行を検証する。runner の既存ツールによる偽陽性を防ぎ、対象なし・実体なし・複数候補・検証失敗はエラーにする。検証専用の `EnsureProcessPathEntries` は永続 PATH を変更せず、終了時には呼び出し元の PATH を復元する。
+- `tests/ci/Assert-WingetCommandRecovery.Tests.ps1` は、既定対象と実 manifest の ID・検証コマンド・`pathEntries` 不在の整合性を確認する。native Windows の言語サーバーを削除しても、残存する portable CLI の復旧検証は維持する。
 
 ## 新しいハンドラーの作成
 

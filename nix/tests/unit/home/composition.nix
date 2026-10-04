@@ -137,6 +137,64 @@ in
     }) 3;
   };
 
+  testRustToolsOutrankRetainedRustupAcrossHomes = {
+    expr = map (
+      home:
+      let
+        packages = home.config.home.packages;
+        copies = target: builtins.filter (package: package.drvPath == target.drvPath) packages;
+        priority = target: (builtins.head (copies target)).meta.priority or 5;
+      in
+      {
+        rustupCopies = builtins.length (copies home.pkgs.rustup);
+        analyzerCopies = builtins.length (copies home.pkgs.rust-analyzer);
+        formatterCopies = builtins.length (copies home.pkgs.rustfmt);
+        analyzerWins = priority home.pkgs.rust-analyzer < priority home.pkgs.rustup;
+        formatterWins = priority home.pkgs.rustfmt < priority home.pkgs.rustup;
+      }
+    ) [
+      linux
+      wsl
+      darwin
+    ];
+    expected = builtins.genList (_: {
+      rustupCopies = 1;
+      analyzerCopies = 1;
+      formatterCopies = 1;
+      analyzerWins = true;
+      formatterWins = true;
+    }) 3;
+  };
+
+  testNeovimMigrationGuardsForcedLinksBeforeWriting = {
+    expr = map (
+      home:
+      let
+        activation = home.config.home.activation;
+      in
+      {
+        legacyActivator = home.config.home.fileActivator;
+        initForced = home.config.xdg.configFile."nvim/init.lua".force;
+        luaForced = home.config.xdg.configFile."nvim/lua".force;
+        preflightBeforeLinks = builtins.elem "checkLinkTargets" activation.checkNeovimLegacyConfig.before;
+        migrationAfterBoundary = builtins.elem "writeBoundary" activation.migrateNeovimLegacyConfig.after;
+        migrationBeforeLinks = builtins.elem "linkGeneration" activation.migrateNeovimLegacyConfig.before;
+      }
+    ) [
+      linux
+      wsl
+      darwin
+    ];
+    expected = builtins.genList (_: {
+      legacyActivator = "legacy";
+      initForced = true;
+      luaForced = true;
+      preflightBeforeLinks = true;
+      migrationAfterBoundary = true;
+      migrationBeforeLinks = true;
+    }) 3;
+  };
+
   testNeovimHomeManagerOwnership = {
     expr =
       builtins.map

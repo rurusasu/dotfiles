@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 import sys
+import tarfile
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -22,6 +27,16 @@ INSTALL_NIX_ACTION = "cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb
 
 class CiWorkflowRoutingContractTests(unittest.TestCase):
     """Keep the lightweight CI workflow's trigger and tool contracts stable."""
+
+    def test_powershell_formatter_regression_runs_in_local_and_native_ci_routes(self) -> None:
+        taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
+        self.assertIn('.#checks.${system}.powershell-formatter', taskfile)
+        bootstrap = self._named_workflow("ci-bootstrap.yml")
+        for system, name in (("x86_64-linux", "linux-build"), ("aarch64-darwin", "darwin")):
+            job = self._workflow_job(bootstrap, name)
+            self.assertIn(f'.#checks.{system}.powershell-formatter', job)
+        tools = self._workflow_job(bootstrap, "ci-tools")
+        self.assertIn("check-bootstrap-ci-tools.sh --sandbox", tools)
 
     def test_workspace_cycle_runtime_check_runs_in_local_and_hosted_nix_jobs(self) -> None:
         taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
@@ -144,12 +159,123 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertNotIn("matrix:", job)
         self.assertNotIn("Install Nix", job)
         self.assertNotIn("Run Bash workflow contracts", self._workflow())
+        self.assertNotIn("DOTFILES_USER", job)
+        self.assertNotIn("DOTFILES_HOME", job)
         darwin = self._workflow_job(workflow, "darwin")
         self.assertNotIn("bats", darwin)
         self.assertNotIn("brew install", darwin)
         self.assertNotIn("attestation", darwin)
-        self.assertNotIn("DOTFILES_USER", workflow)
-        self.assertNotIn("DOTFILES_HOME", workflow)
+        for section in (job, darwin):
+            self.assertNotIn("DOTFILES_USER", section)
+            self.assertNotIn("DOTFILES_HOME", section)
+
+    def test_linux_build_uses_image_identity_for_both_system_manager_outputs(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        job = self._workflow_job(workflow, "linux-build")
+        script = re.search(
+            r"(?m)^      - name: Build Linux configurations and checks\n"
+            r"        run: \|\n(?P<script>(?:          .*\n)+)",
+            job,
+        )
+        self.assertIsNotNone(script)
+        assert script is not None
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            getent = directory / "getent"
+            getent.write_text(
+                '#!/bin/bash\n[[ "$*" == "passwd node" ]] || exit 64\n'
+                "printf '%s\\n' 'node:x:1000:1000::/home/node:/bin/bash'\n"
+            )
+            identity = directory / "id"
+            identity.write_text(
+                '#!/bin/bash\n[[ "$*" == "-gn node" ]] || exit 64\n'
+                "printf '%s\\n' node\n"
+            )
+            nix = directory / "nix"
+            nix.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, sys\n"
+                "print(json.dumps({'argv': sys.argv[1:], 'identity': "
+                "{key: os.environ.get(key) for key in "
+                "('DOTFILES_USER', 'DOTFILES_HOME', 'DOTFILES_UID', 'DOTFILES_GID', 'DOTFILES_GROUP')}}))\n"
+            )
+            getent.chmod(0o755)
+            identity.chmod(0o755)
+            nix.chmod(0o755)
+            environment = dict(os.environ)
+            environment.update(PATH=f"{directory}:{environment['PATH']}", GITHUB_WORKSPACE=temporary)
+            for variable in ("DOTFILES_USER", "DOTFILES_HOME", "DOTFILES_UID", "DOTFILES_GID", "DOTFILES_GROUP"):
+                environment.pop(variable, None)
+            result = subprocess.run(
+                ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", textwrap.dedent(script.group("script"))],
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        invocation = json.loads(result.stdout)
+        self.assertEqual(invocation["argv"][:2], ["build", "--impure"])
+        self.assertIn(".#systemConfigs.ubuntu", invocation["argv"])
+        self.assertIn(".#systemConfigs.debian", invocation["argv"])
+        self.assertEqual(invocation["identity"], {
+            "DOTFILES_USER": "node",
+            "DOTFILES_HOME": "/home/node",
+            "DOTFILES_UID": "1000",
+            "DOTFILES_GID": "1000",
+            "DOTFILES_GROUP": "node",
+        })
+        for variable in ("DOTFILES_USER", "DOTFILES_HOME", "DOTFILES_UID", "DOTFILES_GID", "DOTFILES_GROUP"):
+            self.assertNotRegex(workflow, rf"(?m)^\s+{variable}:")
+            self.assertNotIn(variable, workflow.replace(job, ""))
+
+    def test_wsl_prebuild_exports_a_directory_with_both_consumer_files(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        job = self._workflow_job(workflow, "wsl-prebuild")
+        script = re.search(r"(?m)^        run: \|\n(?P<script>(?:          [^\n]*\n|\n)+)", job)
+        self.assertIsNotNone(script)
+        assert script is not None
+        expected_paths = [f"/nix/store/{'a' * 32}-base", f"/nix/store/{'b' * 32}-hermes"]
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            runner_temp = directory / "container runner temp"
+            runner_temp.mkdir()
+            output = directory / "step-output"
+            nix = directory / "nix"
+            nix.write_text(
+                f"#!{sys.executable}\n"
+                "import os, pathlib, sys\n"
+                f"paths = {expected_paths!r}\n"
+                "if sys.argv[1] == 'build':\n"
+                "    assert '.#nixosConfigurations.nixos.config.system.build.toplevel' in sys.argv\n"
+                "    print(paths[bool(os.environ.get('DOTFILES_WITH_HERMES'))])\n"
+                "elif sys.argv[1:3] == ['copy', '--to']:\n"
+                "    assert sys.argv[4:] == paths\n"
+                "    pathlib.Path(sys.argv[3].removeprefix('file://'), 'cache-entry').write_text('cache')\n"
+                "else:\n"
+                "    raise SystemExit(64)\n"
+            )
+            nix.chmod(0o755)
+            environment = dict(os.environ)
+            environment.update(PATH=f"{directory}:{environment['PATH']}", RUNNER_TEMP=str(runner_temp), GITHUB_OUTPUT=str(output))
+            environment.pop("DOTFILES_WITH_HERMES", None)
+            subprocess.run(
+                ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", textwrap.dedent(script.group("script"))],
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertTrue(output.is_file(), "prebuild must export its actual container artifact directory")
+            outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
+            artifact = Path(outputs["artifact-dir"])
+            self.assertTrue(artifact.is_relative_to(runner_temp))
+            self.assertEqual(sorted(path.name for path in artifact.iterdir()), ["wsl-nix-cache.tar", "wsl-system-paths.txt"])
+            self.assertEqual((artifact / "wsl-system-paths.txt").read_text().splitlines(), expected_paths)
+            with tarfile.open(artifact / "wsl-nix-cache.tar") as archive:
+                self.assertIn("./cache-entry", archive.getnames())
+        self.assertIn("id: wsl-cache", job)
+        self.assertIn("path: ${{ steps.wsl-cache.outputs.artifact-dir }}", job)
+        self.assertNotIn("${{ runner.temp }}", job)
 
     def test_runs_focused_actionlint_and_python_discovery(self) -> None:
         workflow = self._workflow()
@@ -203,6 +329,13 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}", wsl_job)
         self.assertIn("WSLENV: GITHUB_TOKEN/u", wsl_job)
 
+    def test_linux_hardware_fixture_uses_the_container_workspace(self) -> None:
+        job = self._workflow_job(self._named_workflow("ci-bootstrap.yml"), "linux-build")
+        self.assertNotIn("${{ github.workspace }}/nix/tests/fixtures", job)
+        self.assertIn(
+            'export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"',
+            job,
+        )
     def test_bootstrap_detects_dependencies_without_push_path_filters(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
         push = workflow.split("  push:\n", 1)[1].split("  pull_request:\n", 1)[0]
@@ -211,6 +344,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         changes = self._workflow_job(workflow, "changes")
         self.assertIn("manifest: ci/bootstrap-path-routing.json", changes)
         self.assertIn("manifest: ci/job-path-routing.json", changes)
+
 
     def test_contract_workflow_runs_the_dedicated_mlflow_gateway_tests(self) -> None:
         workflow = self._workflow()
@@ -275,6 +409,140 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         complete = self._workflow_job(workflow, "complete")
         self.assertIn("if: ${{ always() }}", complete)
         self.assertIn("needs:", complete)
+
+    def _scoped_workflow_mapping(self, lines: list[str], indent: int) -> dict:
+        """Read this job's plain scalar mappings; reject other YAML forms."""
+        mapping = {}
+        levels = [(indent, mapping)]
+        for line in lines:
+            if not line.strip():
+                continue
+            field = re.fullmatch(r"( *)([A-Za-z][A-Za-z0-9_-]*):(?: (.+))?", line)
+            self.assertIsNotNone(field, f"unsupported scoped workflow field: {line}")
+            spaces, key, value = field.groups()
+            while len(spaces) < levels[-1][0] and len(levels) > 1:
+                levels.pop()
+            self.assertEqual(len(spaces), levels[-1][0], f"unexpected indent: {line}")
+            current = levels[-1][1]
+            self.assertNotIn(key, current, f"duplicate scoped workflow field: {key}")
+            if value is None:
+                current[key] = {}
+                levels.append((len(spaces) + 2, current[key]))
+            else:
+                self.assertFalse(
+                    value != value.strip()
+                    or value.startswith(("'", '"', "|", ">", "[", "{", "&", "*", "!"))
+                    or re.search(r"\s#", value),
+                    f"unsupported scoped workflow scalar: {line}",
+                )
+                current[key] = value
+        return mapping
+
+    def _darwin_validate_job(self, workflow: str) -> dict:
+        self.assertEqual(len(re.findall(r"(?m)^  validate:\s*$", workflow)), 1)
+        job = self._workflow_job(workflow, "validate")
+        fields, separator, steps = job.partition("    steps:\n")
+        self.assertTrue(separator, "missing validate steps")
+        validate = self._scoped_workflow_mapping(fields.splitlines(), 4)
+        step_blocks = re.split(r"(?m)^      - ", steps)
+        self.assertFalse(step_blocks[0].strip(), "unexpected validate steps content")
+        validate["steps"] = [
+            self._scoped_workflow_mapping(
+                ("        " + block).splitlines(), 8
+            )
+            for block in step_blocks[1:]
+        ]
+        return validate
+
+    def _assert_darwin_validate_event_head(self, workflow: str) -> None:
+        validate = self._darwin_validate_job(workflow)
+        checkouts = [
+            step for step in validate["steps"]
+            if step.get("uses", "").startswith("actions/checkout@")
+        ]
+        self.assertEqual(len(checkouts), 1, "validate must have one source checkout")
+        checkout = checkouts[0]
+        inputs = checkout.get("with", {})
+        self.assertIn("ref", inputs, "validate checkout must explicitly pin its ref")
+        self.assertEqual(inputs["ref"], "${{ env.TESTED_SHA }}")
+        self.assertEqual(
+            validate.get("env"),
+            {
+                "GH_TOKEN": "${{ github.token }}",
+                "TESTED_SHA": "${{ github.event_name == 'pull_request' && "
+                "github.event.pull_request.head.sha || github.sha }}",
+            },
+        )
+        self.assertNotIn("TESTED_SHA", checkout.get("env", {}))
+        self.assertEqual(checkout["uses"], CHECKOUT_ACTION)
+        self.assertEqual(inputs.get("persist-credentials"), "false")
+        self.assertEqual(validate.get("permissions"), {"contents": "read"})
+        self.assertEqual(
+            validate.get("if"),
+            "github.event_name == 'push' || github.event_name == 'pull_request'",
+        )
+
+    def test_darwin_validate_checkout_pins_the_immutable_event_head(self) -> None:
+        self._assert_darwin_validate_event_head(
+            self._named_workflow("update-darwin-packages.yml")
+        )
+
+    def test_darwin_validate_rejects_missing_mutable_or_ambiguous_head_pins(self) -> None:
+        workflow = self._named_workflow("update-darwin-packages.yml")
+        self._assert_darwin_validate_event_head(workflow)
+        ref = "          ref: ${{ env.TESTED_SHA }}\n"
+        tested_sha = (
+            "      TESTED_SHA: ${{ github.event_name == 'pull_request' && "
+            "github.event.pull_request.head.sha || github.sha }}\n"
+        )
+        checkout = (
+            "      - name: Checkout repository\n"
+            f"        uses: {CHECKOUT_ACTION}\n"
+            "        with:\n"
+            f"{ref}"
+            "          persist-credentials: false\n"
+        )
+        mutations = (
+            ("missing ref", ref, ""),
+            ("merge SHA for PR", ref, "          ref: ${{ github.sha }}\n"),
+            ("mutable branch", ref, "          ref: main\n"),
+            ("mutable PR branch", ref, "          ref: ${{ github.head_ref }}\n"),
+            ("wrong env reference", ref, "          ref: ${{ env.OTHER_SHA }}\n"),
+            ("missing job env", tested_sha, ""),
+            (
+                "wrong env expression", tested_sha,
+                "      TESTED_SHA: ${{ github.sha }}\n",
+            ),
+            (
+                "mutable env expression", tested_sha,
+                tested_sha.replace("head.sha", "head.ref"),
+            ),
+            ("duplicate checkout", checkout, checkout + "\n" + checkout),
+            (
+                "duplicate checkout with extra scalar whitespace",
+                "      - name: Install Nix\n",
+                "      - name: Hidden mutable checkout\n"
+                f"        uses:  {CHECKOUT_ACTION}\n"
+                "        with:\n"
+                "          ref: main\n\n"
+                "      - name: Install Nix\n",
+            ),
+            ("duplicate ref", ref, ref + ref),
+            ("duplicate env key", tested_sha, tested_sha + tested_sha),
+            (
+                "checkout shadows job env", checkout,
+                checkout + "        env:\n          TESTED_SHA: main\n",
+            ),
+            ("commented scalar", ref, ref.rstrip() + " # hidden alternate ref\n"),
+            ("quoted scalar", ref, "          ref: '${{ env.TESTED_SHA }}'\n"),
+        )
+        for name, before, after in mutations:
+            with self.subTest(mutation=name):
+                self.assertIn(before, workflow)
+                mutated = workflow.replace(before, after, 1)
+                self.assertNotEqual(mutated, workflow)
+                with self.assertRaises(AssertionError):
+                    self._assert_darwin_validate_event_head(mutated)
 
     def test_darwin_update_paths_route_to_darwin_nix_contract_and_catalog(self) -> None:
         for path in (
@@ -583,4 +851,3 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
