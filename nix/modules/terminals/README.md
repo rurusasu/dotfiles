@@ -5,7 +5,7 @@ theme/size は各 `defaults.nix` に直接定義します。WezTerm のフォン
 
 - `nix/modules/{darwin,nixos,wsl}/default.nix` の `home-manager.sharedModules` から直接読み込みます。
 - standalone Home Manager も同じ `defaults.nix` を読み込みます。
-- 両 terminal の Bash / zsh integration は Home Manager で有効化します。Unix の Bash / zsh 起動設定は `nix/home/common.nix` が管理し、chezmoi の Unix adapter は上書きしません。
+- 両 terminal の Bash / zsh integration は Home Manager で有効化します。Unix の Bash 起動設定は `nix/home/common.nix`、zsh は `nix/modules/shells/zsh/default.nix` が管理し、chezmoi の Unix adapter は上書きしません。
 - Linux の Ghostty systemd / D-Bus 連携は `nix/modules/nixos/ghostty.nix` で有効化します。
 - macOS の Ghostty package は `nix/modules/darwin/ghostty.nix` で指定し、Linux は Home Manager の既定 package を使います。
 - Darwin の WezTerm terminfo と `TERMINFO_DIRS` は `nix/modules/darwin/wezterm.nix` が管理します。

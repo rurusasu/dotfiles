@@ -15,6 +15,7 @@
 
   # WSL の per-user profile にも言語サーバーを公開する。
   home-manager.sharedModules = [
+    ../shells/zsh
     ./ghostty.nix
     ../terminals/ghostty/defaults.nix
     ../terminals/wezterm/defaults.nix

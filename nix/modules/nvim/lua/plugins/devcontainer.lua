@@ -2,6 +2,9 @@
 local M = {}
 
 function M.setup()
+    -- ログの保存先は初回起動時にも用意する。
+    vim.fn.mkdir(vim.fn.stdpath("cache"), "p")
+
     local opts = {
         dotfiles_repository = "https://github.com/rurusasu/dotfiles",
         dotfiles_branch = "main",

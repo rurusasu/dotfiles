@@ -165,6 +165,7 @@ vim.api.nvim_create_autocmd("VimLeave", {
 })
 
 -- 補助機能は同じ Nix モジュール配下の Lua ファイルから読み込む。
+require("colorscheme")
 require("config.autocmds").setup()
 require("config.keymaps")
 require("config.osc7").setup()

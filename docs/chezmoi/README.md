@@ -36,7 +36,7 @@ chezmoi はユーザーレベルの dotfiles（設定ファイル）を管理し
 | ---------------------- | -------------------------------------------------- |
 | パッケージインストール | Nix (macOS/Linux/WSL)、catalog の Windows provider |
 | ユーザー設定           | Chezmoi                                            |
-| シェル統合             | zshrc (chezmoi でデプロイ)                         |
+| シェル統合             | Unix は Home Manager、Windows は chezmoi           |
 
 ## クイックスタート
 

@@ -7,6 +7,7 @@
 - `lsp.nix`: 全エディタ共通の言語サーバー・整形ツール。通常の PATH に導入する
 - `nvim/`: Darwin / NixOS の Home Manager に読み込む Neovim とプラグインの設定
 - `terminals/`: Ghostty / WezTerm の Home Manager 設定。各 `defaults.nix` を OS module の `sharedModules` から直接読み込む
+- `shells/zsh/`: zsh の導入と共通設定。`default.nix` を OS module の `sharedModules` と standalone Home Manager から読み込む
 - `darwin/`, `nixos/`: OS 固有の option と共通 module の読み込み
 
 ## ルール

@@ -10,7 +10,7 @@ BeforeAll {
     $script:codexLoginPreflight = Join-Path $script:chezmoiRoot "dot_local/bin/executable_stop-stale-codex-login.ps1"
     $script:orcaLaunch = Join-Path $script:chezmoiRoot "dot_local/bin/executable_orca-launch.cmd"
     $script:bashrcPath = Join-Path $script:chezmoiRoot "shells/bashrc"
-    $script:commonNixPath = Join-Path $script:repoRoot "nix/home/common.nix"
+    $script:commonNixPath = Join-Path $script:repoRoot "nix/modules/shells/zsh/default.nix"
 }
 
 AfterAll {
@@ -414,7 +414,7 @@ Describe 'GitHub token switching templates' {
     }
 
     It 'Home Manager zsh init が gh token switching helper を読み込むこと' {
-        $commonNixPath = Join-Path $script:repoRoot "nix/home/common.nix"
+        $commonNixPath = Join-Path $script:repoRoot "nix/modules/shells/zsh/default.nix"
         $content = Get-Content -LiteralPath $commonNixPath -Raw
 
         $content | Should -Match 'gh-token-switch\.sh'
