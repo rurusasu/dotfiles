@@ -10,12 +10,10 @@
       ...
     }:
     let
-      unfreePkgs = (
-        import pkgs.path {
-          system = pkgs.stdenv.hostPlatform.system;
-          config.allowUnfree = true;
-        }
-      );
+      unfreePkgs = import pkgs.path {
+        system = pkgs.stdenv.hostPlatform.system;
+        config.allowUnfree = true;
+      };
       unfreeSets = import ../packages/sets.nix {
         pkgs = unfreePkgs;
         inherit lib;
