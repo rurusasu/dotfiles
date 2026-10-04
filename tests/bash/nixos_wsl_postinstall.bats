@@ -27,6 +27,10 @@ setup() {
 	export PATH="$STUB_BIN:/usr/bin:/bin"
 	export COMMAND_LOG NIXOS_ARGV_CAPTURE NIX_CONFIG_CAPTURE NIX_EVAL_CAPTURE REAL_NIX REPO_ROOT USER_HOME SYNC_SOURCE DOTFILES_STATE_DIR
 	export DOTFILES_SKIP_HERDR_INSTALL=1
+	export SYSTEMD_RUN_HAS_OUTPUT=1
+	export SYSTEMD_RUN_HELP_STATUS=0
+	export NIXOS_REBUILD_STATUS=0
+	export NIXOS_REBUILD_CHECK_SYSTEMD=0
 
 	write_stub id '
 case "$*" in
@@ -76,6 +80,20 @@ chmod +x "$prefix/bin/codex"
 	write_stub sudo '
 exec "$@"
 '
+	write_stub systemd-run '
+if [[ ${1:-} != --help ]]; then
+  echo "Unexpected systemd-run invocation in postinstall test: $*" >&2
+  exit 2
+fi
+if [[ $SYSTEMD_RUN_HELP_STATUS != 0 ]]; then
+  echo "systemd-run help failed" >&2
+  exit "$SYSTEMD_RUN_HELP_STATUS"
+fi
+printf "systemd-run [OPTIONS...] COMMAND\n"
+if [[ $SYSTEMD_RUN_HAS_OUTPUT == 1 ]]; then
+  printf "     --output=MODE  Set log output format\n"
+fi
+'
 write_stub nixos-rebuild '
 printf "%s\n" "$@" >"$NIXOS_ARGV_CAPTURE"
 printf "%s" "${NIX_CONFIG:-}" >"$NIX_CONFIG_CAPTURE"
@@ -83,6 +101,17 @@ printf "nixos-rebuild user=%s home=%s uid=%s gid=%s group=%s\n" \
   "${DOTFILES_USER:-}" "${DOTFILES_HOME:-}" "${DOTFILES_UID:-}" \
   "${DOTFILES_GID:-}" "${DOTFILES_GROUP:-}" >>"$COMMAND_LOG"
 printf "nixos-rebuild hermes=%s\n" "${DOTFILES_WITH_HERMES:-}" >>"$COMMAND_LOG"
+
+# Model the external boundary from the release rootfs: without --fast it
+# re-execs the target rebuild, whose --output=cat needs systemd >= 261.
+if [[ $NIXOS_REBUILD_CHECK_SYSTEMD == 1 && $SYSTEMD_RUN_HAS_OUTPUT == 0 && " $* " != *" --fast "* ]]; then
+  echo "systemd-run: unrecognized option --output=cat" >&2
+  exit 1
+fi
+if [[ $NIXOS_REBUILD_STATUS != 0 ]]; then
+  echo "nixos-rebuild activation failed" >&2
+  exit "$NIXOS_REBUILD_STATUS"
+fi
 
 if [[ -n ${REAL_NIX:-} ]]; then
   nix_eval_args=()
@@ -178,6 +207,98 @@ EOF
 	if [[ -n $REAL_NIX ]]; then
 		[ "$(<"$NIX_EVAL_CAPTURE")" = ok ]
 	fi
+}
+
+run_postinstall() {
+	run bash "$INSTALLER" \
+		--user alice \
+		--sync-mode link \
+		--sync-source "$SYNC_SOURCE" \
+		--repo-dir "$BATS_TEST_TMPDIR/repo" \
+		--sync-back none \
+		--state-version 26.05 \
+		--skip-flake-update
+}
+
+@test "postinstall keeps the release rebuild for an older systemd rootfs" {
+	export SYSTEMD_RUN_HAS_OUTPUT=0 NIXOS_REBUILD_CHECK_SYSTEMD=1
+	REAL_NIX= run_postinstall
+
+	[ "$status" -eq 0 ]
+	expected_args=(switch --flake "path:$SYNC_SOURCE#nixos" --impure --fast)
+	mapfile -t actual_args <"$NIXOS_ARGV_CAPTURE"
+	[ "${#actual_args[@]}" -eq "${#expected_args[@]}" ]
+	for index in "${!expected_args[@]}"; do
+		[ "${actual_args[$index]}" = "${expected_args[$index]}" ]
+	done
+	grep -Fqx "nixos-rebuild user=alice home=$USER_HOME uid=4242 gid=4343 group=alicegrp" "$COMMAND_LOG"
+	[ "$(cat "$DOTFILES_STATE_DIR/system-state-version")" = 26.05 ]
+	[[ "$output" == *"Post-install setup completed."* ]]
+}
+
+@test "postinstall retains normal rebuild re-execution on modern systemd" {
+	REAL_NIX= run_postinstall
+
+	[ "$status" -eq 0 ]
+	! grep -Fxq -- --fast "$NIXOS_ARGV_CAPTURE"
+	! grep -Fxq -- --no-reexec "$NIXOS_ARGV_CAPTURE"
+	[[ "$output" == *"Post-install setup completed."* ]]
+}
+
+@test "postinstall drops bootstrap compatibility after the rootfs is upgraded" {
+	export SYSTEMD_RUN_HAS_OUTPUT=0 NIXOS_REBUILD_CHECK_SYSTEMD=1
+	REAL_NIX= run_postinstall
+	[ "$status" -eq 0 ]
+	grep -Fxq -- --fast "$NIXOS_ARGV_CAPTURE"
+
+	export SYSTEMD_RUN_HAS_OUTPUT=1
+	REAL_NIX= run_postinstall
+	[ "$status" -eq 0 ]
+	! grep -Fxq -- --fast "$NIXOS_ARGV_CAPTURE"
+	! grep -Fxq -- --no-reexec "$NIXOS_ARGV_CAPTURE"
+	[ "$(grep -c '^nixos-rebuild user=' "$COMMAND_LOG")" -eq 2 ]
+	[[ "$output" == *"Post-install setup completed."* ]]
+}
+
+@test "postinstall propagates old-rootfs activation failures without recording success" {
+	export SYSTEMD_RUN_HAS_OUTPUT=0 NIXOS_REBUILD_CHECK_SYSTEMD=1 NIXOS_REBUILD_STATUS=42
+	REAL_NIX= run_postinstall
+
+	[ "$status" -eq 42 ]
+	grep -Fxq -- --fast "$NIXOS_ARGV_CAPTURE"
+	[[ "$output" == *"nixos-rebuild activation failed"* ]]
+	[[ "$output" != *"Post-install setup completed."* ]]
+	[ ! -e "$DOTFILES_STATE_DIR/system-state-version" ]
+	! grep -Fq 'npm install' "$COMMAND_LOG"
+}
+
+@test "postinstall does not treat a failed systemd probe as an older rootfs" {
+	export SYSTEMD_RUN_HELP_STATUS=37
+	REAL_NIX= run_postinstall
+
+	[ "$status" -eq 37 ]
+	[[ "$output" == *"systemd-run help failed"* ]]
+	! grep -q '^nixos-rebuild ' "$COMMAND_LOG"
+	[ ! -e "$DOTFILES_STATE_DIR/system-state-version" ]
+	[[ "$output" != *"Post-install setup completed."* ]]
+}
+
+@test "normal user rebuilds do not inherit postinstall compatibility" {
+	export SYSTEMD_RUN_HAS_OUTPUT=0 SYSTEMD_RUN_HELP_STATUS=37
+	run env \
+		DOTFILES_USER=alice \
+		DOTFILES_HOME="$USER_HOME" \
+		DOTFILES_UID=4242 \
+		DOTFILES_GID=4343 \
+		DOTFILES_GROUP=alicegrp \
+		DOTFILES_WITH_HERMES=1 \
+		REAL_NIX= \
+		bash "$REBUILD_WRAPPER" switch --flake . --impure
+
+	[ "$status" -eq 0 ]
+	! grep -Fxq -- --fast "$NIXOS_ARGV_CAPTURE"
+	! grep -Fxq -- --no-reexec "$NIXOS_ARGV_CAPTURE"
+	grep -Fqx 'nixos-rebuild hermes=1' "$COMMAND_LOG"
 }
 
 @test "NixOS rebuild wrapper accepts the pinned flake cache only when explicitly requested" {
