@@ -159,7 +159,7 @@ cat result/package-support-report.json
 
 同じ package を Home Manager と system layer の両方へ重複させるのは、system service が絶対 path を必要とする場合に限定します。
 
-Neovim 本体・プラグインはカタログを介さず、`nix/modules/nvim/` の Home Manager 設定で直接管理します。LSP・整形ツールは全エディタ共通の `nix/modules/lsp.nix` の `home.packages` に宣言し、通常の PATH に導入します。Cursor の LSP 設定は `nix/modules/cursor/` が管理し、Darwin／NixOS の共通 module が読み込みます。Tree-sitter の対象言語は `plugins.nix` の標準オプションに指定します。運用は [Neovim の運用](../chezmoi/neovim.md) を参照してください。
+Neovim 本体・プラグインはカタログを介さず、`nix/modules/nvim/` の Home Manager 設定で直接管理します。LSP・整形ツールは全エディタ共通の `nix/modules/lsp.nix` の `home.packages` に宣言し、通常の PATH に導入します。Tree-sitter の対象言語は `plugins.nix` の標準オプションに指定します。運用は [Neovim の運用](../chezmoi/neovim.md) を参照してください。
 
 ## 主なファイル
 
@@ -183,3 +183,10 @@ Neovim 本体・プラグインはカタログを介さず、`nix/modules/nvim/`
 各 host は `nix/hosts/<host>/default.nix` を entrypoint、`configuration.nix` を実体とする分割を
 標準とします。Darwin の system package、cask、activation を変更する場合は
 `nix/hosts/darwin/configuration.nix` を編集し、`default.nix` は import 配線だけに保ちます。
+
+### Terminal module ownership
+
+Ghostty / WezTerm は [`nix/modules/terminals/`](../../nix/modules/terminals/README.md) の各 `defaults.nix` に package と設定を直接宣言します。
+OS module の `home-manager.sharedModules` が terminal module を読み込みます。
+catalog には Windows の WezTerm winget ID を残します。
+Windows の設定配布は chezmoi、macOS・NixOS・WSL は Home Manager が担当します。

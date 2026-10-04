@@ -68,7 +68,9 @@ in
   home-manager = {
     sharedModules = [
       ../modules/lsp.nix
-      ../modules/cursor
+      ../modules/terminals/ghostty/defaults.nix
+      ../modules/nixos/ghostty.nix
+      ../modules/terminals/wezterm/defaults.nix
     ];
     useGlobalPkgs = true;
     useUserPackages = true;

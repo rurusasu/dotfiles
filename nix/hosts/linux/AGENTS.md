@@ -12,6 +12,6 @@
 ## ルール
 
 - Linux 固有設定のみ置く。
-- 共通設定は `nix/modules/host` に集約する。
+- OS 共通の module 読み込みは `nix/modules/nixos` に置く。
 - 共通キー割り当ては `nix/home/keybindings/bindings.nix`、Lua 変換は `hyprland-renderer.nix`、Home Manager 設定は `hyprland.nix` に置く。native host からのみ module を読み込み、standalone でも使う `nix/home/linux.nix` には無条件 import を追加しない。
 - Hyprland/fuzzel の desktop package は native host が明示選択する。WSL/standalone の共通 package set へ追加しない。分割理由・対応範囲は [Omarchy 配列](../../../docs/chezmoi/omarchy.md) を参照する。

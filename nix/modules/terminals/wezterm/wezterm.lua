@@ -1,10 +1,7 @@
 local wezterm = require("wezterm")
 local act = wezterm.action
-local config = {
-    ["color_scheme"] = "Catppuccin Mocha",
-    ["font"] = (wezterm.font("UDEV Gothic NF")),
-    ["font_size"] = 10,
-}
+local config = wezterm.config_builder()
+config.font = wezterm.font("UDEV Gothic NF")
 
 -- Window focus: h=left, l=right
 -- Same-process: WezTerm native. Cross-process: Win32 SetForegroundWindow via PowerShell.

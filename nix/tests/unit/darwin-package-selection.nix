@@ -142,8 +142,6 @@ in
     );
     expected = [
       "aerospace"
-      "ghostty-bin"
-      "wezterm"
     ];
   };
 }

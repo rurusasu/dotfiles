@@ -260,6 +260,7 @@
         "nix/lib/**/*.nix",
         "nix/home/**/*.nix",
         "nix/home/keybindings/**",
+        "nix/modules/terminals/**",
         "nix/hosts/windows/**",
         "chezmoi/dot_glzr/**",
         "taskfiles/nix/**",

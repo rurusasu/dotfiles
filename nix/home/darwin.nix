@@ -17,14 +17,11 @@ in
     ./hermes-agent.nix
   ];
 
-  # macOS installs the WezTerm GUI through Homebrew, so add its Nix terminfo
-  # output separately for shells and tools that resolve TERM=wezterm.
   home = {
     packages = lib.unique (
       (sets.darwinHomePackagesForInstallFeatures installFeatures)
       ++ [
         pkgs.coreutils
-        pkgs.wezterm.terminfo
       ]
     );
 
@@ -41,16 +38,6 @@ in
       "/opt/homebrew/sbin"
     ];
   };
-
-  # A long-lived GUI process can inherit Home Manager's session sentinel
-  # without retaining the variables that were set alongside it. Restore
-  # WezTerm's Darwin terminfo path in .zshenv so interactive shells can
-  # initialize zsh/terminfo even in that state.
-  programs.zsh.envExtra = ''
-    if [[ "''${TERM-}" == wezterm && -d "/etc/profiles/per-user/''${USER}/share/terminfo" ]]; then
-      export TERMINFO_DIRS="/etc/profiles/per-user/''${USER}/share/terminfo''${TERMINFO_DIRS:+:$TERMINFO_DIRS}:/usr/share/terminfo"
-    fi
-  '';
 
   programs.zsh.shellAliases = {
     nrs = "~/.dotfiles/install.sh";

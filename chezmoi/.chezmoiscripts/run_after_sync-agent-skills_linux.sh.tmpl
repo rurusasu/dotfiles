@@ -1,6 +1,6 @@
 {{ if ne .chezmoi.os "windows" -}}
 #!/usr/bin/env bash
-# Sync shared agent skills to Codex/Gemini/Cursor after apply.
+# Sync shared agent skills to Codex/Gemini after apply.
 set -euo pipefail
 
 home_dir="${HOME:-/home/$(whoami)}"

@@ -10,7 +10,7 @@ let
       };
       modules = [
         inputs.nixos-wsl.nixosModules.wsl
-        ../../../modules/host
+        ../../../modules/nixos
         ../../../hosts/wsl
       ];
     };

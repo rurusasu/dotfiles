@@ -9,7 +9,7 @@
 ## 変更先の目安
 
 - `dot_*`: `~/.<name>/` へ直接展開
-- `shells/`, `cli/`, `terminals/`, `editors/`, `github/`, `ssh/`, `secret/`: `.chezmoiscripts` 経由で展開
+- `shells/`, `cli/`, `terminals/`, `github/`, `ssh/`, `secret/`: `.chezmoiscripts` 経由で展開
 
 ## 変更時の必須確認
 

@@ -42,7 +42,7 @@ function Deploy-Content {
 Write-Host "Deploying terminal configurations..."
 
 $WezTermConfig = @'
-{{ includeTemplate "terminals/wezterm/wezterm.lua" . }}
+{{ include "terminals/wezterm/wezterm.lua" }}
 '@
 Deploy-Content $WezTermConfig "$HomeDir\.config\wezterm\wezterm.lua"
 Deploy-File "$ChezmoiSource\terminals\windows-terminal\terminal-keybindings.ahk" "$env:APPDATA\dotfiles\terminal-keybindings.ahk"

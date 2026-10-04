@@ -4,19 +4,18 @@
 
 `dot_*` の直接配置と、カテゴリ別ディレクトリからスクリプトで配置する方式を併用しています。すべての設定が deploy スクリプト経由というわけではありません。除外条件は `.chezmoiignore` と `.chezmoiignore.tmpl`、実行内容は `.chezmoiscripts/` を確認します。
 
-| 編集元                                                    | 内容・配置方式                                           |
-| --------------------------------------------------------- | -------------------------------------------------------- |
-| `dot_config/git/hooks/`                                   | Git hooks。直接配置                                      |
-| `dot_gitconfig.tmpl`、`dot_gitconfig-work.tmpl`           | Git 設定テンプレート。直接配置                           |
-| `dot_agents/`、`dot_codex/`、`dot_cursor/`、`dot_gemini/` | AI ツール設定。旧 `llms/` ではない                       |
-| `shells/`                                                 | bash / zsh / PowerShell / profile。deploy adapter が配置 |
-| `cli/`                                                    | fd、ripgrep、starship、ghq、zoxide など                  |
-| `terminals/`                                              | WezTerm、Windows Terminal など                           |
-| `editors/`                                                | Cursor。Neovim は含まない                                |
-| `github/`                                                 | GitHub テンプレートなど                                  |
-| `ssh/`                                                    | SSH 設定テンプレート                                     |
-| `.chezmoiscripts/deploy/`                                 | カテゴリ別、OS 別の配置処理                              |
-| `.chezmoiscripts/run_onchange_install-*`                  | 宣言に基づくユーザーツール導入                           |
+| 編集元                                          | 内容・配置方式                                           |
+| ----------------------------------------------- | -------------------------------------------------------- |
+| `dot_config/git/hooks/`                         | Git hooks。直接配置                                      |
+| `dot_gitconfig.tmpl`、`dot_gitconfig-work.tmpl` | Git 設定テンプレート。直接配置                           |
+| `dot_agents/`、`dot_codex/`、`dot_gemini/`      | AI ツール設定。旧 `llms/` ではない                       |
+| `shells/`                                       | bash / zsh / PowerShell / profile。deploy adapter が配置 |
+| `cli/`                                          | fd、ripgrep、starship、ghq、zoxide など                  |
+| `terminals/`                                    | WezTerm、Windows Terminal など                           |
+| `github/`                                       | GitHub テンプレートなど                                  |
+| `ssh/`                                          | SSH 設定テンプレート                                     |
+| `.chezmoiscripts/deploy/`                       | カテゴリ別、OS 別の配置処理                              |
+| `.chezmoiscripts/run_onchange_install-*`        | 宣言に基づくユーザーツール導入                           |
 
 Neovim は chezmoi の配布対象ではなく、Home Manager が管理します。
 

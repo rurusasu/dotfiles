@@ -107,23 +107,15 @@ Describe 'chezmoi テンプレート バリデーション' {
     }
 
     Context 'Terminal config deployment' {
-        It 'should render native terminal configs with their change hashes on Darwin and Linux' {
-            $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/terminals/run_onchange_deploy.sh.tmpl'
-            $template = Get-Content -Encoding UTF8 -LiteralPath $templatePath -Raw
-
-            $template | Should -Match 'includeTemplate "terminals/ghostty/config" \.?'
-            $template | Should -Not -Match 'deploy_file "\$CHEZMOI_SOURCE/terminals/ghostty/config"'
-
-            $darwinRender = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"darwin"}}'
-            $darwinRender.ExitCode | Should -Be 0 -Because $darwinRender.StandardError
-            $darwinContent = $darwinRender.StandardOutput -replace "\r\n?", "`n"
-            $ghosttyHash = (Get-FileHash -LiteralPath (Join-Path $script:chezmoiRoot 'terminals/ghostty/config') -Algorithm SHA256).Hash.ToLowerInvariant()
-            $darwinContent | Should -Match "(?m)^# hash: [0-9a-f]{64}${ghosttyHash}$"
-
-            $linuxRender = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"linux"}}'
-            $linuxRender.ExitCode | Should -Be 0 -Because $linuxRender.StandardError
-            $linuxContent = $linuxRender.StandardOutput -replace "\r\n?", "`n"
-            $linuxContent | Should -Match "(?m)^# hash: [0-9a-f]{64}${ghosttyHash}$"
+        It 'should leave Unix terminal settings to Home Manager' {
+            Test-Path -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/terminals/run_onchange_deploy.sh.tmpl') | Should -BeFalse
+            Test-Path -LiteralPath (Join-Path $script:chezmoiRoot 'terminals/ghostty/config') | Should -BeFalse
+            $template = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/terminals/run_onchange_deploy.ps1.tmpl') -Raw
+            foreach ($os in @('darwin', 'linux')) {
+                $result = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData ('{"chezmoi":{"os":"' + $os + '"}}')
+                $result.ExitCode | Should -Be 0 -Because $result.StandardError
+                $result.StandardOutput.Trim() | Should -BeNullOrEmpty
+            }
         }
 
         It 'should deploy the managed AutoHotkey source on Windows and include its source hash' {
@@ -353,7 +345,6 @@ Describe 'chezmoi テンプレート バリデーション' {
             $script:mcpClientTemplates = @(
                 "dot_codeium/windsurf/mcp_config.json.tmpl",
                 "dot_codex/config.toml.tmpl",
-                "dot_cursor/cli-config.json.tmpl",
                 "dot_gemini/settings.json.tmpl"
             ) | ForEach-Object { Join-Path $script:chezmoiRoot $_ }
         }
@@ -960,6 +951,13 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'should remove retired editor and AI configuration' {
             foreach ($relativePath in @(
+                    "editors/cursor/AGENTS.md",
+                    "editors/cursor/extensions.json",
+                    "editors/cursor/keybindings.json",
+                    "editors/cursor/settings.json",
+                    ".chezmoiscripts/deploy/editors/run_onchange_deploy.ps1.tmpl",
+                    ".chezmoiscripts/sync/editors/run_onchange_sync.sh.tmpl",
+                    ".chezmoiscripts/sync/editors/run_onchange_sync.ps1.tmpl",
                     "editors/vscode/AGENTS.md",
                     "editors/vscode/extensions.json",
                     "editors/vscode/keybindings.json",
@@ -977,8 +975,6 @@ Describe 'chezmoi テンプレート バリデーション' {
                 Test-Path -LiteralPath (Join-Path $script:chezmoiRoot $relativePath) | Should -BeFalse -Because "$relativePath is retired"
             }
 
-            $cursorExtensions = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "editors/cursor/extensions.json") -Raw
-            $cursorExtensions | Should -Not -Match '(?i)github\.copilot'
 
             $codexConfig = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl") -Raw
             $codexConfig | Should -Not -Match '(?i)copilot-instructions\.md'

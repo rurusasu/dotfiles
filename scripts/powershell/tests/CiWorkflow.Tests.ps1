@@ -276,7 +276,6 @@ Describe 'CI workflow configuration' {
     It 'should configure the Hermes binary cache for system builds' {
         $flake = Get-Content -LiteralPath (Join-Path $script:repoRoot "flake.nix") -Raw
         $postInstall = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
-        $hostModule = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/modules/host/default.nix") -Raw
         $bootstrapWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
 
         $flake | Should -Match 'extra-substituters\s*=\s*\[\s*"https://cache\.numtide\.com"'
@@ -287,10 +286,6 @@ Describe 'CI workflow configuration' {
         $postInstall | Should -Match 'https://hermes-agent\.cachix\.org'
         $postInstall | Should -Match 'extra-trusted-public-keys = niks3\.numtide\.com-1:'
         $postInstall | Should -Match 'hermes-agent\.cachix\.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU='
-        $hostModule | Should -Match 'extra-substituters\s*=\s*\[\s*"https://cache\.numtide\.com"'
-        $hostModule | Should -Match 'https://hermes-agent\.cachix\.org'
-        $hostModule | Should -Match 'extra-trusted-public-keys\s*=\s*\[\s*"niks3\.numtide\.com-1:'
-        $hostModule | Should -Match 'hermes-agent\.cachix\.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU='
         $bootstrapWorkflow | Should -Match 'Build macOS packages, configuration, and tests[\s\S]*?nix build --impure --no-link --print-build-logs[\s\S]*?--option extra-substituters "\$NUMTIDE_CACHE"[\s\S]*?\.#darwinConfigurations\.macos\.system'
         $bootstrapWorkflow | Should -Match 'NUMTIDE_CACHE_KEY:\s*niks3\.numtide\.com-1:'
     }

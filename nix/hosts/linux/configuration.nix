@@ -32,7 +32,7 @@ in
     groups.${primaryGroup} = lib.optionalAttrs (gid != null) { inherit gid; };
     users.${user} = {
       isNormalUser = true;
-      # The shared host module enables and installs zsh before user activation.
+      # The NixOS module enables and installs zsh before user activation.
       shell = pkgs.zsh;
       inherit home;
       createHome = true;

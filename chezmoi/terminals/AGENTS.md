@@ -2,7 +2,7 @@
 
 ## 管理対象
 
-- `wezterm/wezterm.lua`
+- `wezterm/wezterm.lua`: Windows 専用設定
 - `windows-terminal/settings.json`
 
 ## ルール

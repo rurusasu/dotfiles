@@ -78,7 +78,6 @@ Describe '標準キーバインド方針' {
     It 'docs は editor と Unix/Vim 系の標準レイヤーを明示すること' {
         $docs = Get-Content -Encoding UTF8 -LiteralPath $script:keybindingsDocsPath -Raw
 
-        $docs | Should -Match 'Alt\+H/J/K/L' -Because "other GUI editors should keep Alt focus"
         $docs | Should -Match 'Ctrl\+H/J/K/L' -Because "Unix/Vim/tmux focus should keep the standard Ctrl+H/J/K/L layer"
     }
 
@@ -373,20 +372,6 @@ Describe '標準キーバインド方針' {
 
     It 'Warp keybindings are no longer managed' {
         Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "terminals/warp/keybindings.yaml") | Should -BeFalse
-    }
-
-    It 'Cursor は Alt focus, Alt+Shift move に揃えること' {
-        $bindings = Get-JsonContent "chezmoi/editors/cursor/keybindings.json"
-
-        Assert-KeyCommand $bindings "alt+h" "workbench.action.focusLeftGroup"
-        Assert-KeyCommand $bindings "alt+j" "workbench.action.focusBelowGroup"
-        Assert-KeyCommand $bindings "alt+k" "workbench.action.focusAboveGroup"
-        Assert-KeyCommand $bindings "alt+l" "workbench.action.focusRightGroup"
-
-        Assert-KeyCommand $bindings "alt+shift+h" "workbench.action.moveActiveEditorGroupLeft"
-        Assert-KeyCommand $bindings "alt+shift+j" "workbench.action.moveActiveEditorGroupDown"
-        Assert-KeyCommand $bindings "alt+shift+k" "workbench.action.moveActiveEditorGroupUp"
-        Assert-KeyCommand $bindings "alt+shift+l" "workbench.action.moveActiveEditorGroupRight"
     }
 
     It 'Unix/Linux/WSL の tmux と Neovim は Ctrl+H/J/K/L focus を維持すること' {

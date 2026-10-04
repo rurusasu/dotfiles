@@ -1,7 +1,7 @@
 { ... }:
 {
   imports = [
-    ../../modules/host
+    ../../modules/nixos
     ./configuration.nix
   ];
 }

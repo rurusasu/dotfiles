@@ -37,7 +37,11 @@ let
         else
           ../../../modules/nixos/default.nix
       ) { inherit pkgs inputs; }).home-manager.sharedModules or [ ]
-      );
+      )
+      ++ [
+        ../../../modules/terminals/ghostty/defaults.nix
+        ../../../modules/terminals/wezterm/defaults.nix
+      ];
     };
 
   common = mkHome {
@@ -90,50 +94,47 @@ let
     };
 in
 {
-  testCursorLspUsesHomeManagerAndOrdinaryPath = {
+  testTerminalShellIntegrationsAreGeneratedAcrossHomes = {
     expr =
-      builtins.map
-        (
-          home:
-          let
-            cursor = home.config.programs.cursor;
-            settings = cursor.profiles.default.userSettings or { };
-            keybindings = cursor.profiles.default.keybindings;
-            bindings =
-              if builtins.isPath keybindings then
-                builtins.fromJSON (builtins.readFile keybindings)
-              else
-                keybindings;
-          in
-          {
-            enabled = cursor.enable;
-            existingPackage = cursor.package == null;
-            nixServer = settings."nix.serverPath" or "";
-            formatter = settings."nix.serverSettings".nixd.formatting.command or [ ];
-            ruffPath = settings."ruff.path" or [ ];
-            gofumpt = settings.gopls."formatting.gofumpt" or false;
-            rustCheck = settings."rust-analyzer.check.command" or "";
-            theme = settings."workbench.colorTheme" or "";
-            editorSplitKey = builtins.any (
-              binding: binding.key == "ctrl+alt+\\" && binding.command == "workbench.action.splitEditorRight"
-            ) bindings;
-          }
-        )
+      map
+        (home: {
+          bashEnabled = home.config.programs.bash.enable;
+          bashAliases = home.pkgs.lib.hasInfix "alias ll=" home.config.programs.bash.initExtra;
+          bashGhostty = home.pkgs.lib.hasInfix "shell-integration/bash/ghostty.bash" home.config.programs.bash.initExtra;
+          bashWezterm = home.pkgs.lib.hasInfix "/etc/profile.d/wezterm.sh" home.config.programs.bash.initExtra;
+          zshGhostty = home.pkgs.lib.hasInfix "shell-integration/zsh/ghostty-integration" home.config.programs.zsh.initContent;
+          zshWezterm = home.pkgs.lib.hasInfix "/etc/profile.d/wezterm.sh" home.config.programs.zsh.initContent;
+        })
         [
           linux
           wsl
           darwin
         ];
     expected = builtins.genList (_: {
-      enabled = true;
-      existingPackage = true;
-      nixServer = "nixd";
-      formatter = [ "nixfmt" ];
-      ruffPath = [ "ruff" ];
-      gofumpt = true;
-      rustCheck = "clippy";
-      theme = "Catppuccin Mocha";
-      editorSplitKey = true;
+      bashEnabled = true;
+      bashAliases = true;
+      bashGhostty = true;
+      bashWezterm = true;
+      zshGhostty = true;
+      zshWezterm = true;
+    }) 3;
+  };
+
+  testCursorSettingsAreNotManagedByHomeManager = {
+    expr =
+      map
+        (home: {
+          enabled = home.config.programs.cursor.enable;
+          remoteActivation = home.config.home.activation ? cursorRemoteSettings;
+        })
+        [
+          linux
+          wsl
+          darwin
+        ];
+    expected = builtins.genList (_: {
+      enabled = false;
+      remoteActivation = false;
     }) 3;
   };
 

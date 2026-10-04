@@ -6,7 +6,6 @@
         inherit pkgs;
       };
       aerospace-workspace-cycle = import ../tests/build/aerospace-cycle.nix { inherit pkgs; };
-      darwin-default-shell = import ../tests/build/darwin-default-shell.nix { inherit pkgs; };
       ghostty-config = import ../tests/build/ghostty-config.nix { inherit pkgs; };
       custom-package-builds = import ../tests/build/custom-packages.nix { inherit pkgs; };
       neovim-native = import ../tests/build/neovim.nix { inherit inputs pkgs; };

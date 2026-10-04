@@ -56,10 +56,6 @@ let
       currentUser = "ktome1995";
     }).config;
   defaultHome = defaultConfig.home-manager.users.rurusasu;
-  defaultShellActivation = defaultConfig.system.activationScripts.defaultUserShell.text;
-  # Regex patterns cannot carry store context; this assertion only inspects text.
-  activationText = builtins.unsafeDiscardStringContext defaultShellActivation;
-  defaultPostActivation = defaultConfig.system.activationScripts.postActivation.text;
   nonstandardHomeConfig =
     (mkDarwin {
       sudoUser = "alice";
@@ -78,17 +74,15 @@ let
   hasPackage = name: packages: builtins.any (package: package == name) packages;
 in
 {
-  testDarwinUsesBuiltInZshWithoutOwningTheShellRegistry = {
+  testDarwinConfiguresZshWithoutChangingAccountShell = {
     expr = {
-      shell = defaultConfig.users.users.rurusasu.shell;
-      ownsShellRegistry = builtins.hasAttr "shells" defaultConfig.environment.etc;
-      activationWired = lib.hasInfix activationText defaultPostActivation;
+      enabled = defaultConfig.programs.zsh.enable;
+      customActivation = builtins.hasAttr "defaultUserShell" defaultConfig.system.activationScripts;
       ownsAdminAccount = builtins.elem "rurusasu" defaultConfig.users.knownUsers;
     };
     expected = {
-      shell = "/bin/zsh";
-      ownsShellRegistry = false;
-      activationWired = true;
+      enabled = true;
+      customActivation = false;
       ownsAdminAccount = false;
     };
   };
@@ -98,7 +92,6 @@ in
       primaryUser = sudoUserConfig.system.primaryUser;
       homebrewUser = sudoUserConfig.nix-homebrew.user;
       systemHome = sudoUserConfig.users.users.ktome1995.home;
-      shell = sudoUserConfig.users.users.ktome1995.shell;
       homeManagerHome = sudoUserConfig.home-manager.users.ktome1995.home.homeDirectory;
       guestLogin = sudoUserConfig.system.defaults.loginwindow.GuestEnabled;
       showFullName = sudoUserConfig.system.defaults.loginwindow.SHOWFULLNAME;
@@ -107,7 +100,6 @@ in
       primaryUser = "ktome1995";
       homebrewUser = "ktome1995";
       systemHome = "/Users/ktome1995";
-      shell = "/bin/zsh";
       homeManagerHome = "/Users/ktome1995";
       guestLogin = false;
       showFullName = false;
@@ -119,14 +111,12 @@ in
       primaryUser = currentUserFallbackConfig.system.primaryUser;
       homebrewUser = currentUserFallbackConfig.nix-homebrew.user;
       home = currentUserFallbackConfig.users.users.ktome1995.home;
-      shell = currentUserFallbackConfig.users.users.ktome1995.shell;
       homeManagerHome = currentUserFallbackConfig.home-manager.users.ktome1995.home.homeDirectory;
     };
     expected = {
       primaryUser = "ktome1995";
       homebrewUser = "ktome1995";
       home = "/Users/ktome1995";
-      shell = "/bin/zsh";
       homeManagerHome = "/Users/ktome1995";
     };
   };
@@ -148,7 +138,9 @@ in
       homebrew = defaultConfig.homebrew.enable;
       nixHomebrew = defaultConfig.nix-homebrew.enable;
       raycast = builtins.any (name: hasPrefix "raycast" name) (packageNames defaultConfig);
-      weztermTerminfo = builtins.match ".*pkgs[.]wezterm[.]terminfo.*" darwinHomeSource != null;
+      weztermTerminfo = builtins.any (
+        package: toString package == toString defaultHome.programs.wezterm.package.terminfo
+      ) defaultHome.home.packages;
       github = builtins.any (name: builtins.match "^(gh|github-cli)($|[-.].*)" name != null) (
         packageNames defaultConfig
       );

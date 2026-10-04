@@ -56,7 +56,7 @@ in
         { nixpkgs.hostPlatform = system; }
         hostPath
         { nixpkgs.overlays = overlays; }
-        ../../modules/host
+        ../../modules/nixos
       ]
       ++ (
         if homeModulePath != null then

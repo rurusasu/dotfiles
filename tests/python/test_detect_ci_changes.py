@@ -27,18 +27,87 @@ OUTPUTS = {
     "package_catalog",
 }
 CASES = {
-    "chezmoi/dot_glzr/glazewm/config.json": {"windows", "wsl", "contract", "nix", "chezmoi", "package_catalog"},
+    "nix/modules/terminals/ghostty/defaults.nix": {
+        "linux",
+        "darwin",
+        "wsl",
+        "windows",
+        "contract",
+        "nix",
+        "chezmoi",
+        "package_catalog",
+    },
+    "nix/modules/terminals/wezterm/wezterm.lua": {
+        "linux",
+        "darwin",
+        "wsl",
+        "windows",
+        "contract",
+        "nix",
+        "chezmoi",
+        "package_catalog",
+    },
+    "chezmoi/dot_glzr/glazewm/config.json": {
+        "windows",
+        "wsl",
+        "contract",
+        "nix",
+        "chezmoi",
+        "package_catalog",
+    },
     "nix/tests/build/aerospace-cycle.nix": {"linux", "darwin", "contract", "nix"},
     "nix/tests/build/neovim.nix": {"linux", "darwin", "contract", "nix"},
     "nix/tests/build/ghostty-config.nix": {"linux", "darwin", "contract", "nix"},
-    "nix/tests/build/windows-keybindings-generated.nix": {"linux", "darwin", "contract", "nix"},
-    "nix/tests/build/custom-packages.nix": {"linux", "darwin", "contract", "nix", "package_catalog"},
+    "nix/tests/build/windows-keybindings-generated.nix": {
+        "linux",
+        "darwin",
+        "contract",
+        "nix",
+    },
+    "nix/tests/build/custom-packages.nix": {
+        "linux",
+        "darwin",
+        "contract",
+        "nix",
+        "package_catalog",
+    },
     "nix/tests/fixtures/packages.nix": {"linux", "darwin", "contract", "nix"},
     "nix/tests/fixtures/hardware-configuration.nix": {"linux", "contract", "nix"},
-    "nix/tests/unit/package-catalog-modularity.nix": {"linux", "darwin", "contract", "nix", "package_catalog"},
-    "nix/home/keybindings/bindings.nix": {"linux", "darwin", "windows", "wsl", "contract", "nix", "chezmoi", "package_catalog"},
-    "nix/home/keybindings/hyprland.nix": {"linux", "darwin", "windows", "wsl", "contract", "nix", "chezmoi", "package_catalog"},
-    "nix/hosts/windows/omarchy-keybindings.nix": {"windows", "wsl", "contract", "nix", "chezmoi", "package_catalog"},
+    "nix/tests/unit/package-catalog-modularity.nix": {
+        "linux",
+        "darwin",
+        "contract",
+        "nix",
+        "package_catalog",
+    },
+    "nix/home/keybindings/bindings.nix": {
+        "linux",
+        "darwin",
+        "windows",
+        "wsl",
+        "contract",
+        "nix",
+        "chezmoi",
+        "package_catalog",
+    },
+    "nix/home/keybindings/hyprland.nix": {
+        "linux",
+        "darwin",
+        "windows",
+        "wsl",
+        "contract",
+        "nix",
+        "chezmoi",
+        "package_catalog",
+    },
+    "nix/hosts/windows/omarchy-keybindings.nix": {
+        "windows",
+        "wsl",
+        "contract",
+        "nix",
+        "chezmoi",
+        "package_catalog",
+    },
     "nix/packages/sets.nix": {
         "linux",
         "darwin",
@@ -164,15 +233,43 @@ CASES = {
     },
 }
 BOOTSTRAP_CASES = {
+    "nix/modules/terminals/ghostty/defaults.nix": {
+        "linux",
+        "darwin",
+        "wsl",
+        "windows",
+        "contract",
+        "nix",
+    },
+    "nix/modules/terminals/wezterm/wezterm.lua": {
+        "linux",
+        "darwin",
+        "wsl",
+        "windows",
+        "contract",
+        "nix",
+    },
     "chezmoi/dot_glzr/glazewm/config.json": {"windows", "wsl", "contract"},
     "nix/tests/build/aerospace-cycle.nix": {"linux", "darwin", "contract", "nix"},
     "nix/tests/build/neovim.nix": {"linux", "darwin", "contract", "nix"},
     "nix/tests/build/ghostty-config.nix": {"linux", "darwin", "contract", "nix"},
-    "nix/tests/build/windows-keybindings-generated.nix": {"linux", "darwin", "contract", "nix"},
+    "nix/tests/build/windows-keybindings-generated.nix": {
+        "linux",
+        "darwin",
+        "contract",
+        "nix",
+    },
     "nix/tests/build/custom-packages.nix": {"linux", "darwin", "contract", "nix"},
     "nix/tests/fixtures/packages.nix": {"linux", "darwin", "contract", "nix"},
     "nix/tests/fixtures/hardware-configuration.nix": {"linux", "contract", "nix"},
-    "nix/home/keybindings/bindings.nix": {"linux", "darwin", "windows", "wsl", "contract", "nix"},
+    "nix/home/keybindings/bindings.nix": {
+        "linux",
+        "darwin",
+        "windows",
+        "wsl",
+        "contract",
+        "nix",
+    },
     "nix/hosts/windows/omarchy-keybindings.nix": {"windows", "wsl", "contract", "nix"},
     "windows/winget/packages.json": {"windows", "contract"},
     "nix/hosts/darwin/default.nix": {"darwin", "contract", "nix"},
@@ -375,7 +472,10 @@ class DetectCiChangesTests(unittest.TestCase):
         )
 
     def test_installer_bats_paths_enable_contract_without_devcontainer(self) -> None:
-        special_paths = ("tests/bash/install_macos.bats", "tests/bash/install_linux.bats")
+        special_paths = (
+            "tests/bash/install_macos.bats",
+            "tests/bash/install_linux.bats",
+        )
         for path in special_paths:
             with self.subTest(path=path):
                 result = self.detector.route_paths([path], MANIFEST_PATH)
@@ -393,7 +493,9 @@ class DetectCiChangesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_manifest = Path(temporary_directory) / "routing.json"
             temporary_manifest.write_text(json.dumps(manifest), encoding="utf-8")
-            mutated_result = self.detector.route_paths([special_paths[0]], temporary_manifest)
+            mutated_result = self.detector.route_paths(
+                [special_paths[0]], temporary_manifest
+            )
 
         self.assertFalse(mutated_result["devcontainer"])
 
@@ -458,7 +560,10 @@ class DetectCiChangesTests(unittest.TestCase):
 
     def test_unsafe_manifest_patterns_fail_closed_for_the_api_and_cli(self) -> None:
         for pattern in ("", "/absolute/path", "scripts\\sh\\bad", "scripts/../bad"):
-            with self.subTest(pattern=pattern), tempfile.TemporaryDirectory() as temporary_directory:
+            with (
+                self.subTest(pattern=pattern),
+                tempfile.TemporaryDirectory() as temporary_directory,
+            ):
                 manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
                 manifest["rules"][0]["patterns"] = [pattern]
                 temporary_manifest = Path(temporary_directory) / "routing.json"
@@ -467,7 +572,9 @@ class DetectCiChangesTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.detector.route_paths(["README.md"], temporary_manifest)
 
-                completed = self._run_cli("--manifest", str(temporary_manifest), "--all")
+                completed = self._run_cli(
+                    "--manifest", str(temporary_manifest), "--all"
+                )
                 self.assertEqual(completed.returncode, 2)
                 self.assertIn("error:", completed.stderr)
 
@@ -492,7 +599,9 @@ class DetectCiChangesTests(unittest.TestCase):
         completed = self._run_cli("--manifest", str(MANIFEST_PATH), "--all")
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertEqual(json.loads(completed.stdout), dict.fromkeys(sorted(OUTPUTS), True))
+        self.assertEqual(
+            json.loads(completed.stdout), dict.fromkeys(sorted(OUTPUTS), True)
+        )
 
     def test_github_output_contains_lowercase_booleans(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

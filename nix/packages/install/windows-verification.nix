@@ -98,10 +98,6 @@
       command = "pdftoppm";
       args = [ "-v" ];
     };
-    wezterm = {
-      command = "wezterm";
-      args = [ "--version" ];
-    };
     tree-sitter = {
       command = "tree-sitter";
       args = [ "--version" ];
