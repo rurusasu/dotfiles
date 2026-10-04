@@ -1,4 +1,4 @@
-# ~/.bashrc managed by chezmoi
+# Bash configuration: Home Manager on Unix, chezmoi on Windows
 
 # User-local npm globals (Codex in devcontainers)
 if [ -d "$HOME/.local/npm/bin" ]; then

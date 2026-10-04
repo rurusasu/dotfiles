@@ -2,12 +2,15 @@
 
 ## 管理対象
 
-- `bashrc`, `profile`（Linux/macOS 向け）
+- `bashrc`（Unix の Home Manager と Windows の chezmoi で使用）
+- `profile`（Windows 向け）
 - `Microsoft.PowerShell_profile.ps1`（Windows 向け）
 
-> **zshrc は Home Manager が管理する。** `programs.zsh` を使う全 HM 管理プラットフォーム
-> （NixOS/WSL、macOS via nix-darwin、standalone Linux）では `nix/home/common.nix` の
-> `programs.zsh` が SSOT。chezmoi は zshrc をデプロイしない。
+> **Unix の Bash / zsh 起動ファイルは Home Manager が管理する。**
+> NixOS/WSL、macOS via nix-darwin、standalone Linux では `nix/home/common.nix` が
+> `.bashrc`、`.bash_profile`、`.profile`、zsh 設定を生成する。
+> Unix の chezmoi adapter はこれらをデプロイしない。
+> Bash の alias / widget はここにある `bashrc` を Home Manager が読み込む。
 
 ## 変更ルール
 

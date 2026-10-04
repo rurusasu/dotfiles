@@ -94,6 +94,32 @@ let
     };
 in
 {
+  testTerminalShellIntegrationsAreGeneratedAcrossHomes = {
+    expr =
+      map
+        (home: {
+          bashEnabled = home.config.programs.bash.enable;
+          bashAliases = home.pkgs.lib.hasInfix "alias ll=" home.config.programs.bash.initExtra;
+          bashGhostty = home.pkgs.lib.hasInfix "shell-integration/bash/ghostty.bash" home.config.programs.bash.initExtra;
+          bashWezterm = home.pkgs.lib.hasInfix "/etc/profile.d/wezterm.sh" home.config.programs.bash.initExtra;
+          zshGhostty = home.pkgs.lib.hasInfix "shell-integration/zsh/ghostty-integration" home.config.programs.zsh.initContent;
+          zshWezterm = home.pkgs.lib.hasInfix "/etc/profile.d/wezterm.sh" home.config.programs.zsh.initContent;
+        })
+        [
+          linux
+          wsl
+          darwin
+        ];
+    expected = builtins.genList (_: {
+      bashEnabled = true;
+      bashAliases = true;
+      bashGhostty = true;
+      bashWezterm = true;
+      zshGhostty = true;
+      zshWezterm = true;
+    }) 3;
+  };
+
   testCursorSettingsAreNotManagedByHomeManager = {
     expr =
       map
