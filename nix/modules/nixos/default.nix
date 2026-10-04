@@ -5,6 +5,10 @@
     inputs.home-manager.nixosModules.home-manager
   ];
 
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
   nixpkgs.config.allowUnfree = true;
   programs.zsh.enable = true;
   fonts.fontDir.enable = true;

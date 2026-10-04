@@ -39,6 +39,29 @@ let
     includesHostPackages config config.nixpkgs.pkgs;
 in
 {
+  testNixOSModuleKeepsRequiredNixAndLoginOptions = {
+    expr =
+      let
+        module = import ../../modules/nixos/default.nix {
+          inherit inputs;
+          pkgs = null;
+        };
+      in
+      {
+        experimentalFeatures = module.nix.settings.experimental-features;
+        allowUnfree = module.nixpkgs.config.allowUnfree;
+        zshEnabled = module.programs.zsh.enable;
+      };
+    expected = {
+      experimentalFeatures = [
+        "nix-command"
+        "flakes"
+      ];
+      allowUnfree = true;
+      zshEnabled = true;
+    };
+  };
+
   testSystemManagerExposesUbuntuAndDebianConfigs = {
     expr =
       builtins.hasAttr "ubuntu" moduleSystemConfigs && builtins.hasAttr "debian" moduleSystemConfigs;
