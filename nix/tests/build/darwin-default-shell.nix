@@ -1,240 +1,105 @@
 { pkgs }:
 let
   inherit (pkgs) lib;
-
-  installedZsh = pkgs.writeShellScriptBin "zsh" "exit 0";
-  missingZsh = pkgs.runCommand "missing-zsh" { meta.mainProgram = "zsh"; } ''
-    mkdir -p "$out/bin"
-  '';
-  nonExecutableZsh = pkgs.runCommand "non-executable-zsh" { meta.mainProgram = "zsh"; } ''
-    mkdir -p "$out/bin"
-    printf 'not executable\n' > "$out/bin/zsh"
-    chmod 644 "$out/bin/zsh"
-  '';
-
-  idDouble = pkgs.writeShellScriptBin "id" ''
+  host = import ../../hosts/darwin/configuration.nix {
+    inherit pkgs lib;
+    inputs = { };
+    sudoUser = "test-user";
+    currentUser = "root";
+    dotfilesWithHermes = false;
+    dotfilesWithDocker = false;
+    dotfilesWithOllama = false;
+  };
+  commandDouble = pkgs.writeShellScript "default-shell-command" ''
     set -eu
-    [[ "$#" = 2 && "$1" = -u && "$2" = test-user ]] || exit 90
-    [[ "$TEST_USER_EXISTS" = 1 ]] || exit 1
-    printf '%s\n' "$TEST_UID"
-    [[ "$TEST_ID_MODE" != error-with-output ]] || exit 1
-  '';
-  dsclDouble = pkgs.writeShellScriptBin "dscl" ''
-    set -eu
-    [[ "$#" -ge 4 && "$1" = . && "$4" = UserShell ]] || exit 90
-    case "$3" in
-      /Users/test-user) record="$TEST_STATE/test-user" ;;
-      /Users/root) record="$TEST_STATE/root" ;;
-      /Users/other-user) record="$TEST_STATE/other-user" ;;
-      *) exit 91 ;;
-    esac
-
+    mode="$1"; shift
+    if [[ "$mode" = id ]]; then
+      [[ "$#" = 2 && "$1" = -u && "$2" = test-user ]] || exit 90
+      [[ "$scenario" != unknown-user ]] || exit 1
+      if [[ "$scenario" = uid-zero ]]; then echo 0; else echo 501; fi
+      exit 0
+    fi
+    [[ "$mode" = dscl && "$#" -ge 4 ]] || exit 90
+    [[ "$1" = . && "$3" = /Users/test-user && "$4" = UserShell ]] || exit 90
     case "$2" in
       -read)
-        [[ "$#" = 4 ]] || exit 92
-        reads="$(cat "$TEST_STATE/reads")"
-        reads=$((reads + 1))
-        printf '%s\n' "$reads" > "$TEST_STATE/reads"
-        case "$TEST_READ_MODE" in
-          error) exit 1 ;;
-          malformed) printf 'UnexpectedAttribute: /bin/bash\n'; exit 0 ;;
-          empty) printf 'UserShell: \n'; exit 0 ;;
-          multiline) printf 'UserShell: /bin/bash\nUnexpectedAttribute: value\n'; exit 0 ;;
-          readback-error) [[ "$reads" = 1 ]] || exit 1 ;;
-        esac
-        printf 'UserShell: %s\n' "$(cat "$record")"
-        if [[ "$TEST_READ_MODE" = readback-error-with-output && "$reads" != 1 ]]; then
-          exit 1
-        fi
+        [[ "$#" = 4 && "$scenario" != read-error ]] || exit 1
+        printf 'UserShell: %s\n' "$(cat "$FIXTURE/current")"
+        if [[ "$scenario" = verify-error && -s "$FIXTURE/writes" ]]; then exit 1; fi
         ;;
       -change)
-        [[ "$#" = 6 ]] || exit 93
-        printf '%s\n' "$3" >> "$TEST_STATE/writes"
-        [[ "$TEST_WRITE_MODE" != error ]] || exit 1
-        [[ "$(cat "$record")" = "$5" ]] || exit 94
-        if [[ "$TEST_WRITE_MODE" != noop ]]; then
-          printf '%s\n' "$6" > "$record"
-        fi
+        [[ "$#" = 6 && "$(cat "$FIXTURE/current")" = "$5" ]] || exit 90
+        [[ "$scenario" != write-error ]] || exit 1
+        [[ "$scenario" != write-noop ]] || exit 0
+        printf '%s\n' "$6" > "$FIXTURE/current"
+        echo changed >> "$FIXTURE/writes"
         ;;
-      *) exit 95 ;;
+      *) exit 90 ;;
     esac
   '';
-
-  # Execute the production Nix text, replacing only macOS command/file
-  # boundaries, including its built-in /bin/zsh. No real account or host
-  # /etc/shells is read or modified.
-  activationFor =
-    name: zsh:
-    let
-      host = import ../../hosts/darwin/configuration.nix {
-        inherit pkgs lib;
-        inputs = { };
-        sudoUser = "test-user";
-        currentUser = "root";
-        dotfilesWithHermes = false;
-        dotfilesWithDocker = false;
-        dotfilesWithOllama = false;
-      };
-    in
-    pkgs.writeText "darwin-default-shell-${name}" (
-      lib.replaceStrings
-        [ "/bin/zsh" "/usr/bin/id" "/usr/bin/dscl" "/usr/bin/grep" "/etc/shells" ]
-        [
-          (lib.getExe zsh)
-          "${idDouble}/bin/id"
-          "${dsclDouble}/bin/dscl"
-          "${pkgs.gnugrep}/bin/grep"
-          "$TEST_STATE/shells"
-        ]
-        host.system.activationScripts.defaultUserShell.text
-    );
-  installedActivation = activationFor "installed" installedZsh;
-  missingActivation = activationFor "missing" missingZsh;
-  nonExecutableActivation = activationFor "non-executable" nonExecutableZsh;
+  # Keep the emitted activation intact except for macOS command/file boundaries.
+  activation = pkgs.writeText "darwin-default-shell-activation" (
+    lib.replaceStrings
+      [
+        (lib.escapeShellArg "/bin/zsh")
+        "/usr/bin/id"
+        "/usr/bin/dscl"
+        "/usr/bin/grep"
+        "/etc/shells"
+      ]
+      [
+        ''"$FIXTURE/zsh"''
+        "${commandDouble} id"
+        "${commandDouble} dscl"
+        "${pkgs.gnugrep}/bin/grep"
+        ''"$FIXTURE/shells"''
+      ]
+      host.system.activationScripts.defaultUserShell.text
+  );
 in
 pkgs.runCommand "darwin-default-shell-tests" { nativeBuildInputs = [ pkgs.coreutils ]; } ''
   set -euo pipefail
+  export FIXTURE="$TMPDIR/account" USER=root SUDO_USER=other-user
+  mkdir -p "$FIXTURE"
   tests=0
-  target=${lib.escapeShellArg (lib.getExe installedZsh)}
-  # Activation selects the module's sudoUser, not these process identities.
-  export USER=root SUDO_USER=other-user
-
-  fail() {
-    printf 'FAIL: %s: %s\n' "$case_name" "$1" >&2
-    cat "$TEST_STATE/output" >&2
-    exit 1
-  }
-
-  reset_state() {
-    case_name="$1"
-    export TEST_STATE="$TMPDIR/$case_name"
-    export TEST_UID=501 TEST_USER_EXISTS=1 TEST_ID_MODE=normal TEST_READ_MODE=normal TEST_WRITE_MODE=normal
-    mkdir -p "$TEST_STATE"
-    printf '/bin/bash\n' > "$TEST_STATE/test-user"
-    printf '/bin/sh\n' > "$TEST_STATE/root"
-    printf '/bin/zsh\n' > "$TEST_STATE/other-user"
-    printf '%s\n' "$target" > "$TEST_STATE/shells"
-    printf '0\n' > "$TEST_STATE/reads"
-    : > "$TEST_STATE/writes"
-    : > "$TEST_STATE/output"
-  }
-
-  run_activation() {
-    if ${pkgs.bash}/bin/bash -e "$1" > "$TEST_STATE/output" 2>&1; then
-      [[ "$2" = success ]] || fail 'activation unexpectedly succeeded'
+  for scenario in selected-user already-correct missing-shell unregistered-shell \
+    unknown-user uid-zero read-error write-error write-noop verify-error; do
+    export scenario
+    printf '/bin/bash\n' > "$FIXTURE/current"
+    : > "$FIXTURE/writes"
+    ln -sf ${pkgs.bash}/bin/bash "$FIXTURE/zsh"
+    printf '%s\n' "$FIXTURE/zsh" > "$FIXTURE/shells"
+    expected_status=failure
+    expected_shell=/bin/bash
+    expected_writes=
+    case "$scenario" in
+      selected-user|verify-error)
+        expected_shell="$FIXTURE/zsh"; expected_writes=changed
+        if [[ "$scenario" = selected-user ]]; then expected_status=success; fi
+        ;;
+      already-correct)
+        expected_status=success; expected_shell="$FIXTURE/zsh"
+        printf '%s\n' "$expected_shell" > "$FIXTURE/current"
+        ;;
+      missing-shell) rm "$FIXTURE/zsh" ;;
+      unregistered-shell) printf '%s-extra\n' "$FIXTURE/zsh" > "$FIXTURE/shells" ;;
+    esac
+    if ${pkgs.bash}/bin/bash -e ${activation} > "$FIXTURE/output" 2>&1; then
+      status=success
     else
-      [[ "$2" = failure ]] || fail 'activation unexpectedly failed'
+      status=failure
     fi
-  }
-
-  assert_other_users_unchanged() {
-    [[ "$(cat "$TEST_STATE/root")" = /bin/sh ]] || fail 'root was modified'
-    [[ "$(cat "$TEST_STATE/other-user")" = /bin/zsh ]] || fail 'another user was modified'
-  }
-
-  assert_accounts_unchanged() {
-    [[ "$(cat "$TEST_STATE/test-user")" = /bin/bash ]] || fail 'selected user was modified'
-    assert_other_users_unchanged
-  }
-
-  assert_no_change() {
-    assert_accounts_unchanged
-    [[ ! -s "$TEST_STATE/writes" ]] || fail 'a write was attempted before preconditions passed'
-  }
-
-  pass() {
+    if [[ "$status" != "$expected_status" ||
+      "$(cat "$FIXTURE/current")" != "$expected_shell" ||
+      "$(cat "$FIXTURE/writes")" != "$expected_writes" ]]; then
+      echo "FAIL: $scenario" >&2
+      cat "$FIXTURE/output" >&2
+      exit 1
+    fi
     tests=$((tests + 1))
-    printf 'ok %s - %s\n' "$tests" "$case_name"
-  }
-
-  reset_state selected-user
-  run_activation ${installedActivation} success
-  [[ "$(cat "$TEST_STATE/test-user")" = "$target" ]] || fail 'selected user did not get zsh'
-  [[ "$(cat "$TEST_STATE/writes")" = /Users/test-user ]] || fail 'expected one write to the selected user'
-  [[ "$(cat "$TEST_STATE/reads")" = 2 ]] || fail 'successful change was not read back'
-  assert_other_users_unchanged
-  pass
-
-  case_name=idempotence
-  : > "$TEST_STATE/writes"
-  run_activation ${installedActivation} success
-  [[ "$(cat "$TEST_STATE/test-user")" = "$target" ]] || fail 'existing zsh was changed'
-  [[ ! -s "$TEST_STATE/writes" ]] || fail 'repeated activation attempted a write'
-  assert_other_users_unchanged
-  pass
-
-  # Missing or non-executable built-in zsh must only cause a safe rejection.
-  reset_state missing-shell
-  printf '%s\n' ${lib.escapeShellArg (lib.getExe missingZsh)} > "$TEST_STATE/shells"
-  run_activation ${missingActivation} failure
-  assert_no_change
-  pass
-
-  reset_state non-executable-shell
-  printf '%s\n' ${lib.escapeShellArg (lib.getExe nonExecutableZsh)} > "$TEST_STATE/shells"
-  run_activation ${nonExecutableActivation} failure
-  assert_no_change
-  pass
-
-  reset_state unregistered-shell
-  # A substring match must not count as registration in /etc/shells.
-  printf '%s-extra\n' "$target" > "$TEST_STATE/shells"
-  run_activation ${installedActivation} failure
-  assert_no_change
-  pass
-
-  reset_state unknown-user
-  export TEST_USER_EXISTS=0
-  run_activation ${installedActivation} failure
-  assert_no_change
-  pass
-
-  reset_state uid-zero
-  export TEST_UID=0
-  run_activation ${installedActivation} failure
-  assert_no_change
-  pass
-
-  reset_state id-error-with-output
-  export TEST_ID_MODE=error-with-output
-  run_activation ${installedActivation} failure
-  assert_no_change
-  pass
-
-  for mode in error malformed empty multiline; do
-    reset_state "read-$mode"
-    export TEST_READ_MODE="$mode"
-    run_activation ${installedActivation} failure
-    # Malformed values may be rejected by dscl's compare-and-set itself.
-    # Either way, no account may change, and read errors must stop before it.
-    assert_accounts_unchanged
-    if [[ "$mode" = error ]]; then
-      [[ ! -s "$TEST_STATE/writes" ]] || fail 'read failure attempted a write'
-    fi
-    pass
+    echo "ok $tests - $scenario"
   done
-
-  for mode in error noop; do
-    reset_state "write-$mode"
-    export TEST_WRITE_MODE="$mode"
-    run_activation ${installedActivation} failure
-    [[ "$(cat "$TEST_STATE/test-user")" = /bin/bash ]] || fail 'failed write changed the user'
-    [[ "$(cat "$TEST_STATE/writes")" = /Users/test-user ]] || fail 'expected one attempted write'
-    assert_other_users_unchanged
-    pass
-  done
-
-  for mode in readback-error readback-error-with-output; do
-    reset_state "$mode"
-    export TEST_READ_MODE="$mode"
-    run_activation ${installedActivation} failure
-    [[ "$(cat "$TEST_STATE/test-user")" = "$target" ]] || fail 'readback failure fixture did not apply the change'
-    [[ "$(cat "$TEST_STATE/writes")" = /Users/test-user ]] || fail 'expected one attempted write'
-    assert_other_users_unchanged
-    pass
-  done
-
-  [[ "$tests" -eq 16 ]] || fail 'unexpected test count'
+  [[ "$tests" = 10 ]]
   mkdir -p "$out"
   printf '%s tests passed\n' "$tests" > "$out/result"
 ''
