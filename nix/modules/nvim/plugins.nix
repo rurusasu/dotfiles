@@ -54,12 +54,6 @@ in
     ))
     # ファイル一覧と Markdown 表示で使うアイコンを導入する。
     pkgs.vimPlugins.nvim-web-devicons
-    # 配色を共通の Catppuccin テーマに合わせる。
-    {
-      plugin = pkgs.vimPlugins.catppuccin-nvim;
-      type = "lua";
-      config = ''require("plugins.catppuccin").setup()'';
-    }
     # ディレクトリをバッファとして編集し、分割表示と隠しファイルに対応する。
     {
       plugin = pkgs.vimPlugins.oil-nvim;

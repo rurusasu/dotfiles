@@ -35,6 +35,7 @@ let
         inherit (mkHome system) pkgs extraSpecialArgs;
         modules = [
           ../home/darwin.nix
+          ../modules/shells/zsh
           ../modules/lsp.nix
           ../modules/terminals/ghostty/defaults.nix
           ../modules/darwin/ghostty.nix
@@ -50,6 +51,7 @@ let
       inherit (mkHome system) pkgs extraSpecialArgs;
       modules = [
         ../home/linux.nix
+        ../modules/shells/zsh
         ../modules/lsp.nix
         ../modules/terminals/ghostty/defaults.nix
         ../modules/nixos/ghostty.nix

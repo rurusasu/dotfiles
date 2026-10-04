@@ -288,6 +288,7 @@ in
     expected = {
       darwin = [
         (toString ../../home/darwin.nix)
+        (toString ../../modules/shells/zsh)
         (toString ../../modules/lsp.nix)
         (toString ../../modules/terminals/ghostty/defaults.nix)
         (toString ../../modules/darwin/ghostty.nix)
@@ -298,6 +299,7 @@ in
       ];
       x86Linux = [
         (toString ../../home/linux.nix)
+        (toString ../../modules/shells/zsh)
         (toString ../../modules/lsp.nix)
         (toString ../../modules/terminals/ghostty/defaults.nix)
         (toString ../../modules/nixos/ghostty.nix)
@@ -305,6 +307,7 @@ in
       ];
       armLinux = [
         (toString ../../home/linux.nix)
+        (toString ../../modules/shells/zsh)
         (toString ../../modules/lsp.nix)
         (toString ../../modules/terminals/ghostty/defaults.nix)
         (toString ../../modules/nixos/ghostty.nix)

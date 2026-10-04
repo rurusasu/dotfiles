@@ -8,6 +8,7 @@ in
   # nix-darwin installs fonts; Home Manager configures fontconfig clients.
   fonts.packages = fonts.packages;
   home-manager.sharedModules = [
+    ../shells/zsh
     ./ghostty.nix
     ./wezterm.nix
     ../terminals/ghostty/defaults.nix

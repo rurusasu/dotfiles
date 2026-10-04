@@ -15,6 +15,7 @@ in
     inputs.home-manager.nixosModules.home-manager
   ];
   home-manager.sharedModules = [
+    ../shells/zsh
     ../nixos/ghostty.nix
     ../terminals/ghostty/defaults.nix
     ../terminals/wezterm/defaults.nix
