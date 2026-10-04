@@ -286,11 +286,54 @@ class CiJobRoutingTests(unittest.TestCase):
                     )[1]
                     self.assertRegex(body, r"needs: (changes|\[changes, lint\])")
                     self.assertIn(f"needs.changes.outputs.{output} == 'true'", body)
-                    self.assertIn(
-                        "always() && (needs.changes.result != 'success'", body
-                    )
+                    if filename == "ci-devcontainer.yml":
+                        self.assertIn(
+                            "needs.changes.result != 'success' || (!cancelled() &&", body
+                        )
+                    else:
+                        self.assertIn(
+                            "always() && (needs.changes.result != 'success'", body
+                        )
                     self.assertIn("name: Verify change detection", body)
                     self.assertIn("run: exit 1", body)
+
+    def test_devcontainer_cancellation_stops_work_but_keeps_detection_fail_closed(
+        self,
+    ) -> None:
+        workflow = (ROOT / ".github/workflows/ci-devcontainer.yml").read_text()
+        for job in JOBS["ci-devcontainer.yml"]:
+            body = re.search(rf"(?ms)^  {job}:\n(.*?)(?=^  [\w-]+:\n|\Z)", workflow)[1]
+            expression = re.search(r"(?m)^    if: \$\{\{ (.*?) \}\}$", body)[1]
+            # This predicate uses only boolean operators and string equality,
+            # shared with Bash. Evaluate its actual operands, not a copied rule.
+            expression = expression.replace("needs.changes.result", '"$CHANGES_RESULT"')
+            expression = expression.replace(
+                "needs.changes.outputs.devcontainer", '"$SELECTED"'
+            )
+            expression = expression.replace("!cancelled()", '"$CANCELLED" != "true"')
+            expression = expression.replace("cancelled()", '"$CANCELLED" == "true"')
+            expression = expression.replace("always()", '"true" == "true"')
+            for status in ("success", "failure", "cancelled", "skipped", ""):
+                for selected in ("true", "false"):
+                    for cancelled in ("true", "false"):
+                        with self.subTest(
+                            job=job, status=status, selected=selected, cancelled=cancelled
+                        ):
+                            result = subprocess.run(
+                                ["bash", "-c", f"[[ {expression} ]]"],
+                                env=os.environ | {
+                                    "CHANGES_RESULT": status,
+                                    "SELECTED": selected,
+                                    "CANCELLED": cancelled,
+                                },
+                                capture_output=True,
+                                text=True,
+                                check=False,
+                            )
+                            run = status != "success" or (
+                                selected == "true" and cancelled == "false"
+                            )
+                            self.assertEqual(result.returncode, 0 if run else 1, result.stderr)
 
     def test_bootstrap_always_reports_on_pull_requests(self) -> None:
         workflow = (ROOT / ".github/workflows/ci-bootstrap.yml").read_text()

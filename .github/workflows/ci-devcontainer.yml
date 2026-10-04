@@ -40,8 +40,9 @@ jobs:
           manifest: ci/job-path-routing.json
 
   linux-nix:
+    # Fail detector errors closed, but let obsolete selected work be cancelled.
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.devcontainer == 'true') }}
+    if: ${{ needs.changes.result != 'success' || (!cancelled() && needs.changes.outputs.devcontainer == 'true') }}
     name: E2E (Linux + Nix CLI)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -104,7 +105,7 @@ jobs:
 
   macos:
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.devcontainer == 'true') }}
+    if: ${{ needs.changes.result != 'success' || (!cancelled() && needs.changes.outputs.devcontainer == 'true') }}
     name: E2E (macOS)
     runs-on: macos-15-intel
     timeout-minutes: 90
@@ -150,7 +151,7 @@ jobs:
 
   windows:
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.devcontainer == 'true') }}
+    if: ${{ needs.changes.result != 'success' || (!cancelled() && needs.changes.outputs.devcontainer == 'true') }}
     # Full devcontainer E2E requires Linux containers, which GitHub-hosted
     # Windows runners do not support (no Docker Desktop, no WSL2 Ubuntu
     # pre-installed). This job validates the devcontainer configuration and
