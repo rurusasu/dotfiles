@@ -3,7 +3,8 @@ let
   fixtures = import ../fixtures/packages.nix { inherit inputs; };
   repositoryLock = builtins.fromJSON (builtins.readFile ../../../flake.lock);
   upstreamLock = builtins.fromJSON (builtins.readFile "${inputs.hermes-agent}/flake.lock");
-  hermesNode = repositoryLock.nodes.${repositoryLock.nodes.${repositoryLock.root}.inputs.hermes-agent};
+  hermesNode =
+    repositoryLock.nodes.${repositoryLock.nodes.${repositoryLock.root}.inputs.hermes-agent};
   upstreamInputs = upstreamLock.nodes.${upstreamLock.root}.inputs;
 
   mkTestHome =
