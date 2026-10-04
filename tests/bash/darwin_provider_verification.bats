@@ -41,6 +41,64 @@ write_stub() {
 	chmod +x "$BIN/$1"
 }
 
+run_install_provider_boundary() {
+	# Keep the real profile resolution, post-activation ordering and both
+	# verifiers. Replace unrelated host mutations at their function boundaries.
+	run /bin/bash -c '
+		source "$1/scripts/sh/install-macos.sh"
+		shift
+		preserve_shell_rc_for_nix_darwin() { :; }
+		repair_homebrew_cask_link_directories() { :; }
+		migrate_unmanaged_wezterm_install() { :; }
+		apply_darwin_system() { :; }
+		retire_tart_cli_profile() { :; }
+		dotfiles_install_codex_npm() { :; }
+		ensure_homebrew_cask_link_directories() { :; }
+		dotfiles_install_herdr() { :; }
+		apply_chezmoi() { printf "chezmoi\n" >>"$COMMAND_LOG"; }
+		dotfiles_run_task() { printf "task %s\n" "$*" >>"$COMMAND_LOG"; }
+		setup_ollama_runtime() { printf "ollama-start\n" >>"$COMMAND_LOG"; }
+		setup_docker_runtime() { printf "docker-start\n" >>"$COMMAND_LOG"; }
+		resolve_install_profile "$@"
+		printf "profile %s %s %s\n" "$DOTFILES_WITH_OLLAMA" "$DOTFILES_WITH_DOCKER" "$DOTFILES_WITH_HERMES" >>"$COMMAND_LOG"
+		finish_macos_install
+	' bash "$REPO_ROOT" "$@"
+}
+
+prepare_install_provider_boundary() {
+	# An installed Hermes provider exists; the implied Ollama provider does not.
+	export HOME="$BATS_TEST_TMPDIR/home" USER=test-user SUDO_USER=test-user
+	mkdir -p "$HOME"
+	jq '. + {ollama: {darwin: {provider: "nix", identity: {command: "ollama", versionArgs: ["--version"]}}, installFeature: "WithOllama"}}' "$REPORT/support.json" >"$REPORT/support.tmp"
+	mv "$REPORT/support.tmp" "$REPORT/support.json"
+	jq --arg store "$STORE" --arg absent "$BATS_TEST_TMPDIR/absent-ollama" '.optional = $store | .ollama = $absent' "$REPORT/darwin-paths.json" >"$REPORT/paths.tmp"
+	mv "$REPORT/paths.tmp" "$REPORT/darwin-paths.json"
+	write_stub verify-environment 'printf "environment\n" >>"$COMMAND_LOG"'
+	export DOTFILES_VERIFY_ENVIRONMENT="$BIN/verify-environment"
+	export DOTFILES_DARWIN_VERIFICATION="$WORKFLOW"
+	export DOTFILES_WITH_OLLAMA=0 DOTFILES_WITH_DOCKER=0 DOTFILES_WITH_HERMES=0
+}
+
+@test "Hermes-only install verifies implied Ollama before chezmoi and Hermes Desktop" {
+	prepare_install_provider_boundary
+	run_install_provider_boundary --with-hermes
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"realized store path is unavailable"* ]]
+	[[ "$output" == *"absent-ollama"* ]]
+	grep -Fxq 'profile 0 0 1' "$COMMAND_LOG"
+	! grep -qE '^(chezmoi|task |ollama-start|docker-start|environment)' "$COMMAND_LOG"
+}
+
+@test "default install ignores missing disabled optional providers" {
+	prepare_install_provider_boundary
+	run_install_provider_boundary
+	[ "$status" -eq 0 ]
+	grep -Fxq 'profile 0 0 0' "$COMMAND_LOG"
+	grep -Fxq chezmoi "$COMMAND_LOG"
+	grep -Fxq environment "$COMMAND_LOG"
+	! grep -qE '^(task |ollama-start|docker-start)' "$COMMAND_LOG"
+}
+
 @test "current provider verification batches metadata and checks active app and command identities" {
 	run /bin/bash "$WORKFLOW"
 	[ "$status" -eq 0 ]

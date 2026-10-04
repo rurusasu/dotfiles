@@ -82,8 +82,11 @@ macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Hom
 旧 Homebrew provider を検出し、Nix provider の検証後に uninstall する
 一度限りの自動移行は終了しました。通常インストールは現行 catalog の
 provider を反映し、切替済みの旧 Homebrew package を自動 uninstall しません。
-旧 provider の metadata と
-公開移行タスクも提供しません。既存 package やアプリのデータを整理する
+旧 provider の metadata と移行処理は提供しません。公開コマンド
+`task darwin:migrate` は互換性のため残しますが、終了の案内だけを表示します。
+旧引数は評価せず無視し、移行・検証・package やデータの変更は行いません。
+現行 provider を個別に検証する `task darwin:verify` は引き続き利用できます。
+既存 package やアプリのデータを整理する
 必要がある場合は、利用者が保存対象と現在使用している実体を確認してから
 個別に対応します。
 

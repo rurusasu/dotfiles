@@ -20,7 +20,6 @@ export OP_BIOMETRIC_UNLOCK_ENABLED
 
 HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/local-ai-services/compose.yml"
 DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
-LEGACY_DOCKER_APP="${DOTFILES_LEGACY_DOCKER_APP_PATH:-/Applications/Nix Apps/Docker.app}"
 DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/docker-desktop-installed}"
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
 DOCKER_PROBE_TIMEOUT_SECONDS="${DOTFILES_DOCKER_PROBE_TIMEOUT_SECONDS:-5}"
@@ -60,7 +59,6 @@ DOCKER_CASK_LINK_BACKUP_PATHS=()
 DOCKER_CASK_LINK_ORIGINAL_STATES=()
 DOCKER_CASK_LINK_ORIGINAL_TARGETS=()
 DOCKER_CASK_LINK_CURRENT_TARGETS=()
-DOCKER_CASK_LINK_LEGACY_TARGETS=()
 
 usage() {
   cat <<'EOF'
@@ -184,30 +182,24 @@ preserve_shell_rc_for_nix_darwin() {
 }
 
 stop_existing_docker_desktop() {
-  local app docker_cli
-  for app in "$LEGACY_DOCKER_APP" "$DOCKER_APP"; do
-    docker_cli="$app/Contents/Resources/bin/docker"
-    [[ -x $docker_cli ]] || continue
-    if ! pgrep -x com.docker.backend >/dev/null 2>&1 &&
-      ! pgrep -x "Docker Desktop" >/dev/null 2>&1; then
-      return 0
-    fi
-
-    dotfiles_log "Stopping Docker Desktop before declarative cask activation..."
-    "$docker_cli" desktop stop --timeout 120
+  local docker_cli="$DOCKER_APP/Contents/Resources/bin/docker"
+  [[ -x $docker_cli ]] || return 0
+  if ! pgrep -x com.docker.backend >/dev/null 2>&1 &&
+    ! pgrep -x "Docker Desktop" >/dev/null 2>&1; then
     return 0
-  done
+  fi
+
+  dotfiles_log "Stopping Docker Desktop before declarative cask activation..."
+  "$docker_cli" desktop stop --timeout 120
 }
 
 docker_desktop_link_state() {
-  local link_path="$1" current_target="$2" legacy_target="$3" link_target
+  local link_path="$1" current_target="$2" link_target
 
   if [[ -L $link_path ]]; then
     link_target="$(/usr/bin/readlink "$link_path")"
     if [[ $link_target == "$current_target" ]]; then
       printf 'current-cask\n'
-    elif [[ $link_target == "$legacy_target" ]]; then
-      printf 'legacy\n'
     else
       printf 'conflicting\n'
     fi
@@ -220,7 +212,7 @@ docker_desktop_link_state() {
 
 rollback_docker_desktop_cask_links() {
   local exit_status="${1:-1}" index link_path backup_path original_state original_target
-  local current_target legacy_target state replacement_target rollback_failed=0
+  local current_target state replacement_target rollback_failed=0
 
   dotfiles_display_exit "$exit_status"
   trap - EXIT
@@ -234,15 +226,14 @@ rollback_docker_desktop_cask_links() {
     original_state="${DOCKER_CASK_LINK_ORIGINAL_STATES[$index]}"
     original_target="${DOCKER_CASK_LINK_ORIGINAL_TARGETS[$index]}"
     current_target="${DOCKER_CASK_LINK_CURRENT_TARGETS[$index]}"
-    legacy_target="${DOCKER_CASK_LINK_LEGACY_TARGETS[$index]}"
 
     if [[ $original_state == missing ]]; then
-      state="$(docker_desktop_link_state "$link_path" "$current_target" "$legacy_target")"
+      state="$(docker_desktop_link_state "$link_path" "$current_target")"
       case "$state" in
       missing) ;;
-      current-cask | legacy)
+      current-cask)
         replacement_target="$(/usr/bin/readlink "$link_path" 2>/dev/null)"
-        if [[ $replacement_target != "$current_target" && $replacement_target != "$legacy_target" ]]; then
+        if [[ $replacement_target != "$current_target" ]]; then
           printf 'Refusing to remove unexpected Docker Desktop rollback target: %s\n' "$link_path" >&2
           rollback_failed=1
           continue
@@ -280,12 +271,12 @@ rollback_docker_desktop_cask_links() {
       continue
     fi
 
-    state="$(docker_desktop_link_state "$link_path" "$current_target" "$legacy_target")"
+    state="$(docker_desktop_link_state "$link_path" "$current_target")"
     case "$state" in
     missing) ;;
-    current-cask | legacy)
+    current-cask)
       replacement_target="$(/usr/bin/readlink "$link_path" 2>/dev/null)"
-      if [[ $replacement_target != "$current_target" && $replacement_target != "$legacy_target" ]]; then
+      if [[ $replacement_target != "$current_target" ]]; then
         printf 'Refusing to remove unexpected Docker Desktop rollback target: %s\n' "$link_path" >&2
         rollback_failed=1
         continue
@@ -340,11 +331,10 @@ commit_docker_desktop_cask_links() {
   DOCKER_CASK_LINK_ORIGINAL_STATES=()
   DOCKER_CASK_LINK_ORIGINAL_TARGETS=()
   DOCKER_CASK_LINK_CURRENT_TARGETS=()
-  DOCKER_CASK_LINK_LEGACY_TARGETS=()
 }
 
 prepare_docker_desktop_cask_links() {
-  local backup_path cask_state current_target legacy_target link_path original_state original_target
+  local backup_path cask_state current_target link_path original_state original_target
   local state suffix index links_to_remove_count=0 missing_links_count=0 transaction_count=0
   local -a links_to_remove missing_links
   local -a required_paths=(
@@ -375,19 +365,13 @@ prepare_docker_desktop_cask_links() {
     suffix="${required_suffixes[$index]}"
     state="$(docker_desktop_link_state \
       "$link_path" \
-      "$DOCKER_APP/Contents/Resources$suffix" \
-      "$LEGACY_DOCKER_APP/Contents/Resources$suffix")"
+      "$DOCKER_APP/Contents/Resources$suffix")"
     case "$state" in
     current-cask)
       if [[ $cask_state == absent ]]; then
         links_to_remove[links_to_remove_count]="$link_path"
         ((links_to_remove_count += 1))
       fi
-      ;;
-    legacy)
-      links_to_remove[links_to_remove_count]="$link_path"
-      ((links_to_remove_count += 1))
-      [[ $cask_state == absent ]] || DOCKER_CASK_REPAIR_REQUIRED=1
       ;;
     missing)
       [[ $cask_state == absent ]] || DOCKER_CASK_REPAIR_REQUIRED=1
@@ -401,19 +385,13 @@ prepare_docker_desktop_cask_links() {
 
   state="$(docker_desktop_link_state \
     "$optional_kubectl" \
-    "$DOCKER_APP/Contents/Resources/bin/kubectl" \
-    "$LEGACY_DOCKER_APP/Contents/Resources/bin/kubectl")"
+    "$DOCKER_APP/Contents/Resources/bin/kubectl")"
   case "$state" in
   current-cask)
     if [[ $cask_state == absent ]]; then
       links_to_remove[links_to_remove_count]="$optional_kubectl"
       ((links_to_remove_count += 1))
     fi
-    ;;
-  legacy)
-    links_to_remove[links_to_remove_count]="$optional_kubectl"
-    ((links_to_remove_count += 1))
-    [[ $cask_state == absent ]] || DOCKER_CASK_REPAIR_REQUIRED=1
     ;;
   missing)
     missing_links[missing_links_count]="$optional_kubectl"
@@ -425,10 +403,9 @@ prepare_docker_desktop_cask_links() {
 
   state="$(docker_desktop_link_state \
     "$obsolete_compose" \
-    "$DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" \
-    "$LEGACY_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose")"
+    "$DOCKER_APP/Contents/Resources/cli-plugins/docker-compose")"
   case "$state" in
-  current-cask | legacy)
+  current-cask)
     links_to_remove[links_to_remove_count]="$obsolete_compose"
     ((links_to_remove_count += 1))
     ;;
@@ -467,19 +444,15 @@ prepare_docker_desktop_cask_links() {
     case "$link_path" in
     "$HOMEBREW_CLI_PLUGINS_DIR/docker-compose")
       current_target="$DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
-      legacy_target="$LEGACY_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
       ;;
     "$HOMEBREW_BIN_DIR/docker-compose")
       current_target="$DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
-      legacy_target="$LEGACY_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
       ;;
     "$HOMEBREW_BIN_DIR/kubectl" | "$HOMEBREW_BIN_DIR/kubectl.docker")
       current_target="$DOCKER_APP/Contents/Resources/bin/kubectl"
-      legacy_target="$LEGACY_DOCKER_APP/Contents/Resources/bin/kubectl"
       ;;
     *)
       current_target="$DOCKER_APP/Contents/Resources/bin$suffix"
-      legacy_target="$LEGACY_DOCKER_APP/Contents/Resources/bin$suffix"
       ;;
     esac
     DOCKER_CASK_LINK_PATHS[index]="$link_path"
@@ -487,7 +460,6 @@ prepare_docker_desktop_cask_links() {
     DOCKER_CASK_LINK_ORIGINAL_STATES[index]="$original_state"
     DOCKER_CASK_LINK_ORIGINAL_TARGETS[index]="$original_target"
     DOCKER_CASK_LINK_CURRENT_TARGETS[index]="$current_target"
-    DOCKER_CASK_LINK_LEGACY_TARGETS[index]="$legacy_target"
   done
 
   ((transaction_count > 0)) || return 0
@@ -534,8 +506,7 @@ verify_docker_desktop_cask_links() {
     suffix="${required_suffixes[$index]}"
     state="$(docker_desktop_link_state \
       "$link_path" \
-      "$DOCKER_APP/Contents/Resources$suffix" \
-      "$LEGACY_DOCKER_APP/Contents/Resources$suffix")"
+      "$DOCKER_APP/Contents/Resources$suffix")"
     [[ $state == current-cask ]] ||
       dotfiles_die "Docker Desktop cask link did not converge: $link_path ($state)"
   done
@@ -543,19 +514,17 @@ verify_docker_desktop_cask_links() {
   link_path="$HOMEBREW_BIN_DIR/docker-compose"
   state="$(docker_desktop_link_state \
     "$link_path" \
-    "$DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" \
-    "$LEGACY_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose")"
+    "$DOCKER_APP/Contents/Resources/cli-plugins/docker-compose")"
   [[ $state == missing ]] ||
     dotfiles_die "Obsolete Docker Desktop link remains after activation: $link_path ($state)"
 
   link_path="$HOMEBREW_BIN_DIR/kubectl"
   state="$(docker_desktop_link_state \
     "$link_path" \
-    "$DOCKER_APP/Contents/Resources/bin/kubectl" \
-    "$LEGACY_DOCKER_APP/Contents/Resources/bin/kubectl")"
+    "$DOCKER_APP/Contents/Resources/bin/kubectl")"
   case "$state" in
   current-cask | missing) ;;
-  legacy | conflicting) dotfiles_die "Docker Desktop optional cask link did not converge: $link_path ($state)" ;;
+  conflicting) dotfiles_die "Docker Desktop optional cask link did not converge: $link_path ($state)" ;;
   *) dotfiles_die "Unable to classify Docker Desktop link: $link_path" ;;
   esac
 }
@@ -976,10 +945,12 @@ apply_chezmoi() {
 
 verify_darwin_providers() {
   local -a verification_args=()
-  if ((DOTFILES_WITH_OLLAMA == 1)); then
+  # Match the host's Hermes -> Docker -> Ollama package closure for verification
+  # without changing the explicit profile flags used for runtime startup.
+  if ((DOTFILES_WITH_OLLAMA == 1 || DOTFILES_WITH_DOCKER == 1 || DOTFILES_WITH_HERMES == 1)); then
     verification_args+=(--feature WithOllama)
   fi
-  if ((DOTFILES_WITH_DOCKER == 1)); then
+  if ((DOTFILES_WITH_DOCKER == 1 || DOTFILES_WITH_HERMES == 1)); then
     verification_args+=(--feature WithDocker)
   fi
   if ((DOTFILES_WITH_HERMES == 1)); then
@@ -1050,7 +1021,7 @@ finish_macos_install() {
     dotfiles_step 'Verifying Docker Desktop installation' \
       'Repair application artifacts if needed and verify the installed cask.' repair_and_verify_docker_desktop_cask
     dotfiles_step 'Finalizing Docker Desktop links' \
-      'Finish the verified CLI link migration.' commit_docker_desktop_cask_links
+      'Finish the verified CLI link transaction.' commit_docker_desktop_cask_links
   fi
   dotfiles_step 'Verifying macOS package providers' \
     'Check the identities and versions of enabled Nix applications and commands.' verify_darwin_providers

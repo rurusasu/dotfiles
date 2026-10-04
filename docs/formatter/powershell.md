@@ -84,7 +84,13 @@ function Get-Something {
 
 ### Nix (推奨)
 
-PowerShell 自体をインストール（PSScriptAnalyzer は PowerShell Gallery から取得）:
+この repository の `nix fmt` / `checks.<system>.treefmt` は、PowerShell と
+PSScriptAnalyzer 1.22.0 を宣言済みの依存として使用します。
+[`nix/packages/psscriptanalyzer/default.nix`](../../nix/packages/psscriptanalyzer/default.nix) が
+公式 release archive の SHA-256 を固定し、formatter は store の manifest を直接 import します。
+HOME の module cache に依存せず、整形中の PowerShell Gallery download はありません。
+
+PowerShell 自体を単独で使う場合:
 
 ```bash
 # nix profile (flakes)
@@ -97,11 +103,17 @@ nix-env -iA nixpkgs.powershell
 nix run nixpkgs#powershell -- -c "Write-Host 'Hello'"
 ```
 
-### PSScriptAnalyzer のインストール
+### standalone treefmt の事前準備
+
+`.treefmt.toml` を直接使う `treefmt` には、PowerShell の module search path に
+PSScriptAnalyzer **1.22.0** を事前に用意してください。未導入・異なる version のみの環境では
+import error で失敗し、自動 download は行いません。次は明示的な setup 操作であり、
+formatter の実行には含まれません。
 
 ```powershell
 # PowerShell Gallery からインストール
-Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force
+Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force
+Import-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Force
 ```
 
 ## 使用方法

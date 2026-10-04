@@ -14,7 +14,6 @@ setup() {
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	PAYLOAD_CAPTURE="$BATS_TEST_TMPDIR/payload.ndjson"
 	FAKE_DOCKER_APP="$BATS_TEST_TMPDIR/Applications/Docker.app"
-	FAKE_LEGACY_DOCKER_APP="$BATS_TEST_TMPDIR/Nix Apps/Docker.app"
 	FAKE_NIX_PROFILE="$BATS_TEST_TMPDIR/nix-daemon.sh"
 	FAKE_BASHRC="$BATS_TEST_TMPDIR/etc/bashrc"
 	FAKE_ZSHRC="$BATS_TEST_TMPDIR/etc/zshrc"
@@ -46,7 +45,7 @@ setup() {
 	export REAL_TASK REAL_PYTHON REAL_BASH
 	export MACOS_TEST_BOUNDARY="$REPO_ROOT/tests/bash/helpers/macos_install_boundary.sh"
 	export DOTFILES_SKIP_HERDR_INSTALL=1
-	export FAKE_BASHRC FAKE_ZSHRC FAKE_DOCKER_APP FAKE_LEGACY_DOCKER_APP
+	export FAKE_BASHRC FAKE_ZSHRC FAKE_DOCKER_APP
 	export FAKE_HOMEBREW_BIN_DIR FAKE_HOMEBREW_CLI_PLUGINS_DIR
 	export FAKE_DOCKER_CASK_STATE
 	export TEST_HOMEBREW_CASK_PARENT_DIR TEST_HOMEBREW_CASK_BIN_DIR
@@ -63,7 +62,6 @@ setup() {
 	export HERMES_XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
 	export HERMES_BOOTSTRAP_STATUS=0
 	export DOTFILES_DOCKER_APP_PATH="$FAKE_DOCKER_APP"
-	export DOTFILES_LEGACY_DOCKER_APP_PATH="$FAKE_LEGACY_DOCKER_APP"
 	export DOTFILES_LAUNCHCTL_COMMAND="$STUB_BIN/launchctl"
 	export DOTFILES_OPEN_COMMAND="$STUB_BIN/open"
 	export DOTFILES_ACCEPT_DOCKER_LICENSE=1
@@ -352,15 +350,6 @@ EOF
 	chmod +x \
 		"$FAKE_DOCKER_APP/Contents/MacOS/install" \
 		"$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
-}
-
-write_legacy_docker_app() {
-	mkdir -p "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin"
-	cat >"$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
-#!/usr/bin/env bash
-printf 'legacy-docker %s\n' "$*" >>"$COMMAND_LOG"
-EOF
-	chmod +x "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker"
 }
 
 write_installed_stubs() {
@@ -668,6 +657,8 @@ exit 37
 	run_macos_installer
 	[ "$status" -eq 0 ]
 	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=1>' "$COMMAND_LOG"
+	grep -Fxq 'verify-darwin-packages --feature WithOllama --feature WithDocker --feature WithHermes' "$COMMAND_LOG"
+	! grep -qE '^docker |^launchctl kickstart|/api/tags' "$COMMAND_LOG"
 }
 
 @test "pinned installer mode skips both flake and custom package updates" {
@@ -794,12 +785,12 @@ exit 1
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"verify-darwin-packages --feature WithHermes" \
+		"verify-darwin-packages --feature WithOllama --feature WithDocker --feature WithHermes" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"task --dir $REPO_ROOT hermes:desktop:install" \
 		"verify-environment compose= args="
-	! grep -q '^docker compose' "$COMMAND_LOG"
+	! grep -qE '^docker |^launchctl kickstart|/api/tags' "$COMMAND_LOG"
 	! grep -q '^task .*hermes:docker:' "$COMMAND_LOG"
 	! grep -q '^op ' "$COMMAND_LOG"
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
@@ -1370,6 +1361,24 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	! grep -q '^nix run .#darwin-rebuild -- switch' "$COMMAND_LOG"
 }
 
+@test "Docker link inspection recognizes only the exact current cask target" {
+	local link="$FAKE_HOMEBREW_BIN_DIR/docker"
+	local target="$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
+	local scenario expected
+	mkdir -p "$FAKE_HOMEBREW_BIN_DIR"
+	for scenario in missing current foreign; do
+		rm -f "$link"
+		case "$scenario" in
+		missing) expected=missing ;;
+		current) ln -s "$target" "$link"; expected=current-cask ;;
+		foreign) ln -s "$TEST_HOMEBREW_LINK_TARGET/docker" "$link"; expected=conflicting ;;
+		esac
+		run bash -c '. "$INSTALLER"; docker_desktop_link_state "$1" "$2"' _ "$link" "$target"
+		[ "$status" -eq 0 ]
+		[ "$output" = "$expected" ]
+	done
+}
+
 @test "running Docker Desktop is stopped when its engine is unavailable" {
 	write_installed_stubs
 	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
@@ -1394,34 +1403,10 @@ EOF
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
 
-@test "legacy Nix Docker Desktop is stopped before Homebrew cask activation" {
-	write_installed_stubs
-	export FAKE_HOMEBREW_DOCKER_APP="$BATS_TEST_TMPDIR/Homebrew Docker.app"
-	cp -R "$FAKE_DOCKER_APP" "$FAKE_HOMEBREW_DOCKER_APP"
-	rm -rf "$FAKE_DOCKER_APP"
-	write_legacy_docker_app
-	write_stub nix '
-printf "nix %s\n" "$*" >>"$COMMAND_LOG"
-if [ "${1:-}" = "run" ]; then
-	mkdir -p "$(dirname "$FAKE_DOCKER_APP")"
-	cp -R "$FAKE_HOMEBREW_DOCKER_APP" "$FAKE_DOCKER_APP"
-	"$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"
-fi
-'
-
-	run_macos_installer --with-docker
-
-	[ "$status" -eq 0 ]
-	assert_log_order \
-		"legacy-docker desktop stop --timeout 120" \
-		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
-}
-
 @test "nix-darwin activation failure restores staged Docker cask links" {
 	write_installed_stubs
-	write_legacy_docker_app
 	local docker_link="$FAKE_HOMEBREW_BIN_DIR/docker"
-	local docker_target="$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker"
+	local docker_target="$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 	local compose_link="$FAKE_HOMEBREW_BIN_DIR/docker-compose"
 	local compose_target="$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
 	mkdir -p "$(dirname "$compose_target")"
@@ -1482,9 +1467,8 @@ fi
 
 @test "nix-darwin activation failure restores staged links and removes partially created missing links" {
 	write_installed_stubs
-	write_legacy_docker_app
 	local docker_link="$FAKE_HOMEBREW_BIN_DIR/docker"
-	local docker_target="$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker"
+	local docker_target="$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 	local credential_link="$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop"
 	local credential_target="$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop"
 	local compose_link="$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
@@ -1515,7 +1499,7 @@ fi
 	[ ! -L "$docker_link.dotfiles-cask-migration-backup" ]
 }
 
-@test "successful Docker migration replaces stale links with exact official cask artifacts" {
+@test "new Docker cask registration stages unmanaged current links and creates official artifacts" {
 	write_installed_stubs
 	local -a links=(
 		"$FAKE_HOMEBREW_BIN_DIR/docker"
@@ -1530,11 +1514,11 @@ fi
 	local -a targets=(
 		"$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 		"$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
-		"$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop"
+		"$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop"
 		"$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-ecr-login"
-		"$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker-credential-osxkeychain"
+		"$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-osxkeychain"
 		"$FAKE_DOCKER_APP/Contents/Resources/bin/kubectl"
-		"$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/kubectl"
+		"$FAKE_DOCKER_APP/Contents/Resources/bin/kubectl"
 		"$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
 	)
 	local index
@@ -1558,14 +1542,12 @@ fi
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
 
-@test "installed Docker cask repairs missing and legacy required links" {
+@test "installed Docker cask repairs missing required links and removes obsolete current compose link" {
 	write_installed_stubs
-	write_legacy_docker_app
 	export DOCKER_CASK_STATE="$BATS_TEST_TMPDIR/docker-cask-installed"
 	touch "$DOCKER_CASK_STATE"
-	ln -s "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker" "$FAKE_HOMEBREW_BIN_DIR/docker"
 	ln -s "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop" "$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop"
-	ln -s "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" "$FAKE_HOMEBREW_BIN_DIR/docker-compose"
+	ln -s "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" "$FAKE_HOMEBREW_BIN_DIR/docker-compose"
 	write_stub brew '
 if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions &&
 	${4:-} == docker-desktop && -f $DOCKER_CASK_STATE ]]; then
@@ -1596,10 +1578,8 @@ exit 1
 
 @test "installed Docker cask repairs links before a later chezmoi failure" {
 	write_installed_stubs
-	write_legacy_docker_app
 	export DOCKER_CASK_STATE="$BATS_TEST_TMPDIR/docker-cask-installed"
 	touch "$DOCKER_CASK_STATE"
-	ln -s "$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker" "$FAKE_HOMEBREW_BIN_DIR/docker"
 	write_stub brew '
 if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions &&
 	${4:-} == docker-desktop && -f $DOCKER_CASK_STATE ]]; then
@@ -1653,16 +1633,75 @@ exit 1
 
 	[ "$status" -eq 0 ]
 	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-ecr-login")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-ecr-login" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-osxkeychain")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-osxkeychain" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/kubectl.docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/kubectl" ]
 	[ "$(readlink "$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose")" = "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" ]
+	[ ! -L "$FAKE_HOMEBREW_BIN_DIR/docker-compose" ]
 	! grep -q '^sudo </bin/rm>' "$COMMAND_LOG"
+	! grep -q '^sudo </bin/mv>' "$COMMAND_LOG"
 	! grep -q '^brew reinstall ' "$COMMAND_LOG"
+}
+
+@test "failed Docker cask repair preserves current links and restores obsolete compose link" {
+	write_installed_stubs
+	touch "$FAKE_DOCKER_CASK_STATE"
+	local docker_link="$FAKE_HOMEBREW_BIN_DIR/docker"
+	local docker_target="$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
+	local compose_link="$FAKE_HOMEBREW_BIN_DIR/docker-compose"
+	local compose_target="$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose"
+	local credential_link="$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop"
+	ln -s "$docker_target" "$docker_link"
+	ln -s "$compose_target" "$compose_link"
+	write_stub nix 'printf "nix %s\n" "$*" >>"$COMMAND_LOG"'
+	write_stub brew '
+if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions && ${4:-} == docker-desktop ]]; then
+	printf "docker-desktop 4.89.0\n"
+	exit 0
+fi
+if [[ ${1:-} == reinstall && ${2:-} == --cask && ${3:-} == docker-desktop ]]; then
+	ln -s "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop" "$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop"
+	exit 43
+fi
+exit 1
+'
+
+	run_macos_installer --with-docker
+
+	[ "$status" -eq 43 ]
+	[ "$(readlink "$docker_link")" = "$docker_target" ]
+	[ "$(readlink "$compose_link")" = "$compose_target" ]
+	[ ! -e "$credential_link" ]
+	[ ! -L "$credential_link" ]
+	[ ! -L "$compose_link.dotfiles-cask-migration-backup" ]
+	! grep -q '^migrate-darwin-provider ' "$COMMAND_LOG"
+}
+
+@test "Docker rollback preserves a foreign replacement created during failed activation" {
+	write_installed_stubs
+	local docker_link="$FAKE_HOMEBREW_BIN_DIR/docker"
+	local foreign_target="$TEST_HOMEBREW_LINK_TARGET/docker"
+	write_stub nix '
+printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [[ ${1:-} == run ]]; then
+	ln -s "$TEST_HOMEBREW_LINK_TARGET/docker" "$FAKE_HOMEBREW_BIN_DIR/docker"
+	exit 42
+fi
+'
+
+	run_macos_installer --with-docker
+
+	[ "$status" -eq 42 ]
+	[ "$(readlink "$docker_link")" = "$foreign_target" ]
+	[[ "$output" == *"Refusing to remove Docker Desktop rollback conflict: $docker_link"* ]]
 }
 
 @test "Docker cask inspection error aborts before any link mutation" {
 	write_installed_stubs
-	local legacy_link="$FAKE_HOMEBREW_BIN_DIR/docker"
-	local legacy_target="$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker"
-	ln -s "$legacy_target" "$legacy_link"
+	local current_link="$FAKE_HOMEBREW_BIN_DIR/docker"
+	local current_target="$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
+	ln -s "$current_target" "$current_link"
 	write_stub brew '
 if [[ ${1:-} == list && ${2:-} == --cask && ${3:-} == --versions && ${4:-} == docker-desktop ]]; then
 	printf "registry unavailable\n" >&2
@@ -1675,7 +1714,7 @@ exit 1
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Unable to inspect Homebrew cask state for docker-desktop"* ]]
-	[ "$(readlink "$legacy_link")" = "$legacy_target" ]
+	[ "$(readlink "$current_link")" = "$current_target" ]
 	! grep -q '^sudo </bin/rm>' "$COMMAND_LOG"
 	! grep -q 'nix run .#darwin-rebuild -- switch' "$COMMAND_LOG"
 }
@@ -1728,11 +1767,11 @@ exit 1
 	done
 }
 
-@test "late Docker Desktop link conflict preserves earlier valid stale links" {
+@test "late Docker Desktop link conflict preserves earlier valid current links" {
 	write_installed_stubs
 	local first_link="$FAKE_HOMEBREW_BIN_DIR/docker"
 	local last_link="$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose"
-	local first_target="$FAKE_LEGACY_DOCKER_APP/Contents/Resources/bin/docker"
+	local first_target="$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 	local last_target="$TEST_HOMEBREW_LINK_TARGET/docker-compose"
 	ln -s "$first_target" "$first_link"
 	ln -s "$last_target" "$last_link"
@@ -1828,6 +1867,13 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	run_macos_installer --with-docker
 
 	[ "$status" -eq 0 ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-desktop")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-desktop" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-ecr-login")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-ecr-login" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker-credential-osxkeychain")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker-credential-osxkeychain" ]
+	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/kubectl.docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/kubectl" ]
+	[ "$(readlink "$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose")" = "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" ]
+	[ ! -L "$FAKE_HOMEBREW_BIN_DIR/docker-compose" ]
 	assert_log_order \
 		"nix-installer --daemon" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
