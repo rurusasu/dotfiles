@@ -464,7 +464,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $shellFiles = @(
                 Join-Path $script:chezmoiRoot "shells/bashrc"
                 Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1"
-                Join-Path $script:repoRoot "nix/modules/shells/zsh/default.nix"
+                Join-Path $script:repoRoot "nix/modules/shells/zsh/aliases.zsh"
             )
 
             foreach ($path in $shellFiles) {
@@ -476,7 +476,7 @@ Describe 'chezmoi テンプレート バリデーション' {
         It 'should keep zoxide interactive jump on Alt+Q across shells and terminals' {
             $bashrc = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "shells/zoxide.bash") -Raw
             $powershellProfile = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1") -Raw
-            $homeManagerZsh = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot "nix/home/zoxide.nix") -Raw
+            $homeManagerZsh = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot "nix/home/zoxide.zsh") -Raw
             $wezterm = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "terminals/wezterm/wezterm.lua") -Raw
 
             $bashrc | Should -Match 'bind -x ''"\\eq": __zoxide_zi_widget'''

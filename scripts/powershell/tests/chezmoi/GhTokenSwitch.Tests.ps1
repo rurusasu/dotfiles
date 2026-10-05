@@ -10,7 +10,7 @@ BeforeAll {
     $script:codexLoginPreflight = Join-Path $script:chezmoiRoot "dot_local/bin/executable_stop-stale-codex-login.ps1"
     $script:orcaLaunch = Join-Path $script:chezmoiRoot "dot_local/bin/executable_orca-launch.cmd"
     $script:bashrcPath = Join-Path $script:chezmoiRoot "shells/bashrc"
-    $script:commonNixPath = Join-Path $script:repoRoot "nix/modules/shells/zsh/default.nix"
+    $script:zshFunctionsPath = Join-Path $script:repoRoot "nix/modules/shells/zsh/functions.zsh"
 }
 
 AfterAll {
@@ -414,8 +414,7 @@ Describe 'GitHub token switching templates' {
     }
 
     It 'Home Manager zsh init が gh token switching helper を読み込むこと' {
-        $commonNixPath = Join-Path $script:repoRoot "nix/modules/shells/zsh/default.nix"
-        $content = Get-Content -LiteralPath $commonNixPath -Raw
+        $content = Get-Content -LiteralPath $script:zshFunctionsPath -Raw
 
         $content | Should -Match 'gh-token-switch\.sh'
     }
@@ -572,9 +571,9 @@ Describe 'GitHub token switching templates' {
 
     It 'bash と zsh の codex wrapper が呼び出し時だけ secret loader を force すること' {
         $bashrc = Get-Content -LiteralPath $script:bashrcPath -Raw
-        $commonNix = Get-Content -LiteralPath $script:commonNixPath -Raw
+        $zshFunctions = Get-Content -LiteralPath $script:zshFunctionsPath -Raw
 
-        foreach ($content in @($bashrc, $commonNix)) {
+        foreach ($content in @($bashrc, $zshFunctions)) {
             $content | Should -Match 'codex\(\)' -Because 'codex should be the explicit point where GitHub MCP secrets are loaded'
             $content | Should -Match 'DOTFILES_FORCE_SECRET_LOAD'
             $content | Should -Match '\.config/shell/secret\.sh'
