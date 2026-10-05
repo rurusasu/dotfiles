@@ -12,7 +12,7 @@ let
   bootstrapManifest = pkgs.writeText "hermes-bootstrap-manifest.yaml" (
     import ./hermes-agent/manifest.nix { inherit hermesHome; }
   );
-  bootstrapPython = pkgs.python312.withPackages (pythonPackages: [
+  bootstrapPython = pkgs.python3.withPackages (pythonPackages: [
     pythonPackages.httpx
     pythonPackages.python-dotenv
     pythonPackages.pyyaml

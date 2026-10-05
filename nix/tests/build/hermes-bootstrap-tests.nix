@@ -2,7 +2,7 @@
 let
   hermesPackage = inputs.hermes-agent.packages.${pkgs.system}.default;
   testPython = "${hermesPackage.hermesVenv}/bin/python3";
-  bootstrapPython = pkgs.python312.withPackages (pythonPackages: [
+  bootstrapPython = pkgs.python3.withPackages (pythonPackages: [
     pythonPackages.httpx
     pythonPackages.python-dotenv
     pythonPackages.pyyaml
