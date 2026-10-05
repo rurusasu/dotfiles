@@ -5,132 +5,32 @@ setup() {
 	PATHS_FILE="$BATS_TEST_TMPDIR/changed-paths.txt"
 }
 
-assert_routing() {
-	local path="$1"
-	local expected="$2"
+# Routing combinations are covered in tests/python/test_detect_ci_changes.py.
+# Keep these smoke tests focused on the executable CLI and JSON output contract.
+assert_enabled_outputs() {
+	python3 -c '
+import json
+import sys
 
-	printf '%s\n' "$path" >"$PATHS_FILE"
-	run python3 "$REPO_ROOT/scripts/python/detect_ci_changes.py" --paths-file "$PATHS_FILE"
-	[ "$status" -eq 0 ]
-	[ "$output" = "$expected" ]
+outputs = json.loads(sys.argv[1])
+assert isinstance(outputs, dict), outputs
+assert all(type(enabled) is bool for enabled in outputs.values()), outputs
+assert {name for name, enabled in outputs.items() if enabled} == set(sys.argv[2:]), outputs
+' "$output" "$@"
 }
 
-assert_bootstrap_routing() {
-	local path="$1"
-	local expected="$2"
+@test "CI routing CLI reads paths with the default manifest and emits JSON" {
+	printf '%s\n' "scripts/sh/install-linux.sh" >"$PATHS_FILE"
+	run python3 "$REPO_ROOT/scripts/python/detect_ci_changes.py" --paths-file "$PATHS_FILE"
+	[ "$status" -eq 0 ]
+	assert_enabled_outputs contract linux
+}
 
-	printf '%s\n' "$path" >"$PATHS_FILE"
+@test "CI routing CLI reads paths with an explicit bootstrap manifest and emits JSON" {
+	printf '%s\n' "windows/winget/packages.json" >"$PATHS_FILE"
 	run python3 "$REPO_ROOT/scripts/python/detect_ci_changes.py" \
 		--manifest "$REPO_ROOT/ci/bootstrap-path-routing.json" \
 		--paths-file "$PATHS_FILE"
 	[ "$status" -eq 0 ]
-	[ "$output" = "$expected" ]
-}
-
-@test "Linux-only paths enable only Linux and contract checks" {
-	assert_routing \
-		"scripts/sh/install-linux.sh" \
-		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": true, "nix": false, "package_catalog": false, "windows": false, "wsl": false}'
-}
-
-@test "Darwin-only paths enable only Darwin and contract checks" {
-	assert_routing \
-		"scripts/sh/install-macos.sh" \
-		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": false, "nix": false, "package_catalog": false, "windows": false, "wsl": false}'
-}
-
-@test "WSL and Windows paths enable both platform checks" {
-	assert_routing \
-		"scripts/sh/nixos-wsl-postinstall.sh" \
-		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": false, "nix": true, "package_catalog": false, "windows": true, "wsl": true}'
-}
-
-@test "shared package paths enable every platform package contract" {
-	assert_routing \
-		"nix/packages/sets.nix" \
-		'{"chezmoi": true, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": true, "nix": true, "package_catalog": true, "windows": true, "wsl": true}'
-}
-
-@test "flat Linux Home Manager module paths enable Linux checks" {
-	assert_routing \
-		"nix/home/linux.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": true, "nix": true, "package_catalog": false, "windows": false, "wsl": false}'
-}
-
-@test "flat WSL Home Manager module paths enable WSL checks" {
-	assert_routing \
-		"nix/home/wsl.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": false, "nix": true, "package_catalog": false, "windows": false, "wsl": true}'
-}
-
-@test "flat Darwin Home Manager module paths enable Darwin checks" {
-	assert_routing \
-		"nix/home/darwin.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": false, "nix": true, "package_catalog": false, "windows": false, "wsl": false}'
-}
-
-@test "Home Manager layout documentation enables every Unix check" {
-	assert_routing \
-		"nix/home/README.md" \
-		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": true, "nix": true, "package_catalog": false, "windows": false, "wsl": true}'
-}
-
-@test "bootstrap Windows-only paths enable only Windows" {
-	assert_bootstrap_routing \
-		"windows/winget/packages.json" \
-		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": false, "nix": false, "package_catalog": false, "windows": true, "wsl": false}'
-}
-
-@test "bootstrap Darwin-only paths enable only Darwin" {
-	assert_bootstrap_routing \
-		"nix/hosts/darwin/default.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": false, "nix": true, "package_catalog": false, "windows": false, "wsl": false}'
-}
-
-@test "bootstrap Linux-only paths enable only Linux" {
-	assert_bootstrap_routing \
-		"nix/hosts/linux/configuration.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": true, "nix": true, "package_catalog": false, "windows": false, "wsl": false}'
-}
-
-@test "bootstrap flat Linux Home Manager module paths enable only Linux" {
-	assert_bootstrap_routing \
-		"nix/home/linux.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": true, "nix": true, "package_catalog": false, "windows": false, "wsl": false}'
-}
-
-@test "bootstrap installer changes enable Linux and Darwin" {
-	assert_bootstrap_routing \
-		"install.sh" \
-		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": true, "nix": false, "package_catalog": false, "windows": false, "wsl": false}'
-}
-
-@test "bootstrap WSL-only paths enable only WSL" {
-	assert_bootstrap_routing \
-		"nix/hosts/wsl/configuration.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": false, "nix": true, "package_catalog": false, "windows": false, "wsl": true}'
-}
-
-@test "bootstrap flat WSL Home Manager module paths enable only WSL" {
-	assert_bootstrap_routing \
-		"nix/home/wsl.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": false, "nix": true, "package_catalog": false, "windows": false, "wsl": true}'
-}
-
-@test "bootstrap flat Darwin Home Manager module paths enable only Darwin" {
-	assert_bootstrap_routing \
-		"nix/home/darwin.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": false, "nix": true, "package_catalog": false, "windows": false, "wsl": false}'
-}
-
-@test "bootstrap Home Manager layout documentation skips runtime checks" {
-	assert_bootstrap_routing \
-		"nix/home/README.md" \
-		'{"chezmoi": false, "contract": true, "darwin": false, "devcontainer": false, "hermes": false, "linux": false, "nix": false, "package_catalog": false, "windows": false, "wsl": false}'
-}
-
-@test "bootstrap shared paths enable every platform" {
-	assert_bootstrap_routing \
-		"nix/packages/sets.nix" \
-		'{"chezmoi": false, "contract": true, "darwin": true, "devcontainer": false, "hermes": false, "linux": true, "nix": true, "package_catalog": false, "windows": true, "wsl": true}'
+	assert_enabled_outputs contract windows
 }

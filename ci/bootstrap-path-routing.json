@@ -129,7 +129,8 @@
         "nix/home/darwin.nix",
         "nix/hosts/darwin/**",
         "scripts/sh/install-macos.sh",
-        "tests/bash/install_macos.bats"
+        "tests/bash/install_macos.bats",
+        "tests/bash/package_catalog.bats"
       ],
       "outputs": ["darwin"]
     },
@@ -216,6 +217,7 @@
     },
     {
       "patterns": [
+        "scripts/python/hermes_bootstrap_cli.py",
         "scripts/python/hermes_bootstrap/**",
         "tests/python/hermes_bootstrap_test/**",
         "nix/home/hermes-agent/**",

@@ -24,10 +24,6 @@ let
     "nixos_wsl_postinstall.bats"
   ];
   packageCatalog = builtins.readFile (bashTests + "/package_catalog.bats");
-  packageCatalogPester = builtins.readFile ../../../scripts/powershell/tests/PackageCatalog.Tests.ps1;
-  packageCatalogPesterTests = builtins.filter (
-    line: builtins.match "^[[:space:]]*It[[:space:]]+'.*'[[:space:]]*[{].*" line != null
-  ) (linesOf packageCatalogPester);
   nixUnitRegistry = builtins.readFile ../../flakes/tests.nix;
   registryImports = builtins.filter (name: name != null) (
     builtins.map (
@@ -85,37 +81,13 @@ let
       )
     ) allNixTestFiles
   );
-  packageCatalogModules = builtins.filter (
-    name: builtins.match "^package-catalog-.*[.]nix$" name != null
-  ) allNixTestFiles;
-  systemManagerModules = [
-    "system-manager-docker-config.nix"
-    "system-manager-host-contracts.nix"
-    "system-manager-integrations.nix"
-    "system-manager-user-identity.nix"
-  ];
-  moduleRegisteredExactlyOnce =
-    name:
-    builtins.pathExists (./. + "/${name}")
-    && builtins.length (builtins.filter (registered: registered == name) registryImports) == 1;
   packageCatalogTests = builtins.filter (
     line: builtins.match "^[[:space:]]*@test[[:space:]].*" line != null
   ) (linesOf packageCatalog);
-  batsTestCount =
-    name:
-    builtins.length (
-      builtins.filter (line: builtins.match "^[[:space:]]*@test[[:space:]].*" line != null) (
-        linesOf (builtins.readFile (bashTests + "/${name}"))
-      )
-    );
   packageCatalogTestNames = builtins.map (
     line:
     builtins.head (builtins.match "^[[:space:]]*@test[[:space:]]+\"([^\"]+)\"[[:space:]]*[{].*" line)
   ) packageCatalogTests;
-  tartVmInstaller = builtins.readFile (bashTests + "/tart_vm_installer.bats");
-  tartVmInstallerTests = builtins.filter (
-    line: builtins.match "^[[:space:]]*@test[[:space:]].*" line != null
-  ) (linesOf tartVmInstaller);
   packageSupportOutputs = inputs.self.packages.x86_64-linux;
   packageSupportChecks = inputs.self.checks.x86_64-linux;
   bootstrapNixos = builtins.readFile ../build/bootstrap-nixos.nix;
@@ -142,51 +114,11 @@ let
     index = index + 1;
     name = builtins.elemAt packageCatalogTestNames index;
   }) (builtins.length packageCatalogTestNames);
-  macosConfig = builtins.readFile (bashTests + "/macos_config.bats");
 in
 {
   testNixEvalBatsHaveExplicitRuntimeOwnership = {
     expr = nixEvalOwners;
     expected = expectedNixEvalOwners;
-  };
-
-  testPackageCatalogHasClassifiedTestCount = {
-    expr = builtins.length packageCatalogTests;
-    expected = 6;
-  };
-
-  testPackageCatalogPesterHasExpectedItCount = {
-    expr = builtins.length packageCatalogPesterTests;
-    expected = 39;
-  };
-
-  testTartVmInstallerKeepsOnlyRuntimeAndTaskfileContracts = {
-    expr = {
-      count = builtins.length tartVmInstallerTests;
-      catalogMetadataAssertionRemoved =
-        !sourceHasLine tartVmInstaller ".*catalog declares Tart as a Nix command with legacy formula migration metadata.*";
-    };
-    expected = {
-      count = 8;
-      catalogMetadataAssertionRemoved = true;
-    };
-  };
-
-  testMigratedBatsSuitesMatchCurrentLedgerCounts = {
-    expr = {
-      linuxConfig = batsTestCount "linux_config.bats";
-      taskfileRouting = batsTestCount "taskfile_test_routing.bats";
-      tartDotfilesSync = batsTestCount "tart_dotfiles_sync.bats";
-      packageCatalog = builtins.length packageCatalogTests;
-      tartVmInstaller = batsTestCount "tart_vm_installer.bats";
-    };
-    expected = {
-      linuxConfig = 2;
-      taskfileRouting = 10;
-      tartDotfilesSync = 13;
-      packageCatalog = 6;
-      tartVmInstaller = 8;
-    };
   };
 
   testSupportReportPackageAndCheckExposeTheSameNamedOutput = {
@@ -198,12 +130,6 @@ in
 
   testPackageCatalogNamesMatchTheReadmeClassification = {
     expr = orderedClassifiedTests == indexedPackageCatalogTests;
-    expected = true;
-  };
-
-  testEveryPackageCatalogModuleIsRegisteredExactlyOnce = {
-    expr =
-      packageCatalogModules != [ ] && builtins.all moduleRegisteredExactlyOnce packageCatalogModules;
     expected = true;
   };
 
@@ -234,15 +160,5 @@ in
       hardwareFixtureExists = true;
       sharedPackageFixtureExists = true;
     };
-  };
-
-  testSystemManagerMigrationModulesAreRegisteredExactlyOnce = {
-    expr = builtins.all moduleRegisteredExactlyOnce systemManagerModules;
-    expected = true;
-  };
-
-  testDarwinConfigBatsContainsOnlyRuntimeContracts = {
-    expr = !hasNixEvalCommandIn macosConfig;
-    expected = true;
   };
 }

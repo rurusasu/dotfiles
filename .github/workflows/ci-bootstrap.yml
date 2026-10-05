@@ -51,11 +51,12 @@ jobs:
     outputs:
       bash: ${{ steps.contracts.outputs.bash }}
       linux: ${{ steps.detect.outputs.linux }}
-      darwin: ${{ steps.detect.outputs.darwin }}
+      darwin: ${{ steps.detect.outputs.darwin == 'true' || steps.contracts.outputs.hermes == 'true' }}
+      hermes: ${{ steps.contracts.outputs.hermes }}
       wsl: ${{ steps.detect.outputs.wsl }}
       windows: ${{ steps.detect.outputs.windows }}
       nix: ${{ steps.detect.outputs.nix }}
-      platforms: ${{ steps.detect.outputs.linux == 'true' || steps.detect.outputs.darwin == 'true' || steps.detect.outputs.wsl == 'true' || steps.detect.outputs.windows == 'true' }}
+      platforms: ${{ steps.detect.outputs.linux == 'true' || steps.detect.outputs.darwin == 'true' || steps.detect.outputs.wsl == 'true' || steps.detect.outputs.windows == 'true' || steps.contracts.outputs.hermes == 'true' }}
 
   ci-tools:
     needs: changes
@@ -175,6 +176,39 @@ jobs:
       - name: Run Bash tests
         run: bash scripts/sh/run-bash-tests.sh
 
+  hermes-bootstrap-tests:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.hermes == 'true') }}
+    name: Hermes Bootstrap Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run native Hermes bootstrap tests
+        run: nix build .#checks.x86_64-linux.hermes-bootstrap-tests --no-link --print-build-logs
+
+      - name: Run X API image contract
+        run: python3 -m unittest tests/python/test_xapi_image_contract.py -v
+
+      - name: Run Hermes browser runtime contracts
+        run: docker/hermes-browser/tests/test_runtime_contract.sh
+
   nix:
     name: Bootstrap / Nix / Lint and format
     needs: [changes, ci-tools]
@@ -269,7 +303,7 @@ jobs:
 
   linux-nixos:
     name: Bootstrap / Linux / E2E / NixOS
-    needs: [changes, linux-build]
+    needs: changes
     if: ${{ needs.changes.outputs.linux == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -338,6 +372,26 @@ jobs:
             .#checks.aarch64-darwin.neovim-native \
             .#checks.aarch64-darwin.standalone-darwin-home
 
+      - name: Verify native Darwin application artifacts
+        run: |
+          nix shell --inputs-from . --no-write-lock-file nixpkgs#bats --command bash -euo pipefail <<'BATS'
+            for tool in nix codesign plutil spctl; do
+              command -v "$tool" >/dev/null || { echo "Required Darwin artifact tool is missing: $tool" >&2; exit 1; }
+            done
+            filter='^Darwin (Raycast artifact|Discord keeps)'
+            suite=tests/bash/package_catalog.bats
+            [[ "$(bats --count --filter "$filter" "$suite")" -eq 2 ]]
+            bats --print-output-on-failure --filter "$filter" "$suite"
+          BATS
+
+      - name: Build official Hermes runtime
+        if: ${{ needs.changes.outputs.hermes == 'true' }}
+        run: |
+          nix build --no-link --no-write-lock-file --print-build-logs \
+            --option extra-substituters "$NUMTIDE_CACHE" \
+            --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY" \
+            .#checks.aarch64-darwin.hermes-runtime
+
   wsl-prebuild:
     name: Bootstrap / WSL / Prebuild
     needs: [changes, ci-tools]
@@ -385,8 +439,12 @@ jobs:
             --impure --no-link --print-out-paths)"
           printf '%s\n%s\n' "$base_system" "$hermes_system" > "$artifact_dir/wsl-system-paths.txt"
 
-          nix copy --to "file://$cache_dir" "$base_system" "$hermes_system"
+          # This same-run transport cache favors fast compression over archival size.
+          echo "::group::Export WSL Nix cache (zstd)"
+          nix --version
+          nix copy --to "file://$cache_dir?compression=zstd" "$base_system" "$hermes_system"
           du -sh "$cache_dir"
+          echo "::endgroup::"
           tar -cf "$artifact_dir/wsl-nix-cache.tar" -C "$cache_dir" .
           printf 'artifact-dir=%s\n' "$artifact_dir" >> "$GITHUB_OUTPUT"
 
@@ -746,6 +804,7 @@ jobs:
         changes,
         ci-tools,
         bash-test,
+        hermes-bootstrap-tests,
         wsl-prebuild,
         nix,
         linux-build,
@@ -763,6 +822,8 @@ jobs:
       TOOLS_RESULT: ${{ needs.ci-tools.result }}
       BASH_REQUIRED: ${{ needs.changes.outputs.bash }}
       BASH_RESULT: ${{ needs.bash-test.result }}
+      HERMES_REQUIRED: ${{ needs.changes.outputs.hermes }}
+      HERMES_RESULT: ${{ needs.hermes-bootstrap-tests.result }}
       PLATFORM_REQUIRED: ${{ needs.changes.outputs.platforms }}
       LINUX_REQUIRED: ${{ needs.changes.outputs.linux }}
       LINUX_BUILD_REQUIRED: ${{ needs.changes.outputs.linux == 'true' || needs.changes.outputs.nix == 'true' }}
@@ -824,6 +885,7 @@ jobs:
 
           check_required_job "Tools image" "${TOOLS_REQUIRED}" "${TOOLS_RESULT}"
           check_required_job "Bash tests" "${BASH_REQUIRED}" "${BASH_RESULT}"
+          check_required_job "Hermes bootstrap tests" "${HERMES_REQUIRED}" "${HERMES_RESULT}"
           check_required_job "Nix" "${NIX_REQUIRED}" "${NIX_RESULT}"
           check_required_job "Windows / Installer" "${WINDOWS_REQUIRED}" "${WINDOWS_INSTALLER_RESULT}"
           check_required_job "WSL / Prebuild" "${WSL_REQUIRED}" "${WSL_PREBUILD_RESULT}"

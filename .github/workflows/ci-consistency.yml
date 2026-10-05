@@ -60,22 +60,13 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
 
-      - name: Run Nix-native package tests
-        id: nix-unit
-        run: nix build .#checks.x86_64-linux.nix-unit --no-link
-
-      - name: Show Nix-native package test failures
-        if: ${{ always() && steps.nix-unit.outcome == 'failure' }}
-        run: nix log "$(nix path-info --derivation .#checks.x86_64-linux.nix-unit)"
-
-      - name: Build repository custom package derivations
-        run: nix build .#checks.x86_64-linux.custom-package-builds --no-link
-
-      - name: Run workspace cycle runtime contracts
-        run: nix build .#checks.x86_64-linux.aerospace-workspace-cycle --no-link
-
-      - name: Verify generated Windows desktop keybindings are in sync
-        run: nix build .#checks.x86_64-linux.windows-keybindings-generated --no-link --print-build-logs
+      - name: Build Nix configuration and runtime checks
+        run: |
+          nix build --no-link --no-write-lock-file --print-build-logs \
+            .#checks.x86_64-linux.nix-unit \
+            .#checks.x86_64-linux.custom-package-builds \
+            .#checks.x86_64-linux.aerospace-workspace-cycle \
+            .#checks.x86_64-linux.windows-keybindings-generated
 
       - name: Install and verify Codex npm package
         run: |

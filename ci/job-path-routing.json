@@ -193,6 +193,13 @@
     },
     {
       "patterns": [
+        "flake.nix",
+        "flake.lock",
+        "nix/flakes/**",
+        "nix/overlays/**",
+        "nix/tests/build/hermes-*.nix",
+        "scripts/python/hermes_bootstrap_cli.py",
+        ".github/workflows/ci-bootstrap.yml",
         "scripts/python/hermes_bootstrap/**",
         "tests/python/hermes_bootstrap_test/**",
         "nix/home/hermes-agent/**",
@@ -208,8 +215,6 @@
         "scripts/powershell/handlers/Handler.HermesAgent.ps1",
         "scripts/powershell/lib/Hermes*.ps1",
         "tests/python/test_xapi_image_contract.py",
-        ".github/workflows/ci-hermes-bootstrap.yml",
-        ".github/workflows/ci-hermes-provenance.yml",
         "taskfiles/hermes/taskfile.yml",
         ".pre-commit-config.yaml",
         "Taskfile.yml"

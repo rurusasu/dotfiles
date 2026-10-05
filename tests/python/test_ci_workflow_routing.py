@@ -28,6 +28,55 @@ INSTALL_NIX_ACTION = "cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb
 class CiWorkflowRoutingContractTests(unittest.TestCase):
     """Keep the lightweight CI workflow's trigger and tool contracts stable."""
 
+    def test_nixos_vm_runs_independently_but_remains_required(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        vm = self._workflow_job(workflow, "linux-nixos")
+        self.assertRegex(vm, r"(?m)^    needs: changes$")
+        self.assertIn(".#checks.x86_64-linux.bootstrap-nixos-vm", vm)
+        complete = self._workflow_job(workflow, "complete")
+        self.assertIn("linux-nixos,", complete)
+        self.assertIn('${{ needs.linux-nixos.result }}', complete)
+        self.assertIn('"${LINUX_REQUIRED}" "${LINUX_NIXOS_RESULT}"', complete)
+
+    def test_hermes_full_runtime_is_separate_from_native_bootstrap_tests(self) -> None:
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        changes = self._workflow_job(workflow, "changes")
+        self.assertIn("hermes: ${{ steps.contracts.outputs.hermes }}", changes)
+        self.assertIn("steps.detect.outputs.darwin == 'true' || steps.contracts.outputs.hermes == 'true'", changes)
+        darwin = self._workflow_job(workflow, "darwin")
+        self.assertRegex(
+            darwin,
+            r"(?s)name: Build official Hermes runtime.*?"
+            r"if: \$\{\{ needs.changes.outputs.hermes == 'true' \}\}.*?"
+            r"\.\#checks\.aarch64-darwin\.hermes-runtime",
+        )
+        self.assertIn(".#checks.aarch64-darwin.hermes-bootstrap-tests", darwin)
+
+    def test_local_nix_checks_share_one_build_invocation(self) -> None:
+        taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
+        block = taskfile.split("  test:nix:\n", 1)[1].split("  test:powershell:\n", 1)[0]
+        self.assertEqual(block.count("nix build "), 1)
+        self.assertCountEqual(
+            re.findall(r"\.\#checks\.\$\{system\}\.([a-z-]+)", block),
+            (
+                "powershell-formatter", "nix-unit", "custom-package-builds",
+                "aerospace-workspace-cycle", "neovim-native", "ghostty-config",
+            ),
+        )
+        self.assertIn("--no-write-lock-file", block)
+
+    def test_consistency_nix_checks_share_one_logged_build(self) -> None:
+        workflow = self._named_workflow("ci-consistency.yml")
+        commands = workflow.replace("\\\n", " ").splitlines()
+        check_commands = [line for line in commands if "nix build " in line and ".#checks." in line]
+        self.assertEqual(len(check_commands), 1)
+        for check in (
+            "nix-unit", "custom-package-builds", "aerospace-workspace-cycle",
+            "windows-keybindings-generated",
+        ):
+            self.assertIn(f".#checks.x86_64-linux.{check}", check_commands[0])
+        self.assertIn("--print-build-logs", check_commands[0])
+
     def test_powershell_formatter_regression_runs_in_local_and_native_ci_routes(self) -> None:
         taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
         self.assertIn('.#checks.${system}.powershell-formatter', taskfile)
@@ -162,12 +211,74 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertNotIn("DOTFILES_USER", job)
         self.assertNotIn("DOTFILES_HOME", job)
         darwin = self._workflow_job(workflow, "darwin")
-        self.assertNotIn("bats", darwin)
+        self.assertNotIn("scripts/sh/run-bash-tests.sh", darwin)
         self.assertNotIn("brew install", darwin)
         self.assertNotIn("attestation", darwin)
         for section in (job, darwin):
             self.assertNotIn("DOTFILES_USER", section)
             self.assertNotIn("DOTFILES_HOME", section)
+
+    def test_darwin_artifact_gate_is_narrow_and_fail_closed(self) -> None:
+        darwin = self._workflow_job(self._named_workflow("ci-bootstrap.yml"), "darwin")
+        step = re.search(
+            r"(?ms)^      - name: Verify native Darwin application artifacts\n"
+            r"        run: \|\n(?P<script>.*?)(?=^      - name:|\Z)",
+            darwin,
+        )
+        self.assertIsNotNone(step)
+        assert step is not None
+        self.assertLess(step.start(), darwin.index("name: Build official Hermes runtime"))
+        script = textwrap.dedent(step.group("script"))
+        self.assertIn("--inputs-from . --no-write-lock-file nixpkgs#bats", script)
+        self.assertNotIn("--override-input", script)
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            calls = directory / "calls"
+            nix = directory / "nix"
+            nix.write_text(
+                f"#!{sys.executable}\nimport os, sys\n"
+                "assert sys.argv[1:6] == ['shell', '--inputs-from', '.', '--no-write-lock-file', 'nixpkgs#bats']\n"
+                "args = sys.argv[sys.argv.index('--command') + 1:]\n"
+                "os.execvp(args[0], args)\n"
+            )
+            bats = directory / "bats"
+            bats.write_text(
+                f"#!{sys.executable}\nimport json, os, sys\nfrom pathlib import Path\n"
+                "assert sys.argv[-1] == 'tests/bash/package_catalog.bats'\n"
+                "assert sys.argv[sys.argv.index('--filter') + 1] == '^Darwin (Raycast artifact|Discord keeps)'\n"
+                "if '--count' in sys.argv: print(os.environ['TEST_COUNT'])\n"
+                "else:\n"
+                "    Path(os.environ['CALLS']).write_text(json.dumps(sys.argv[1:]))\n"
+                "    sys.exit(int(os.environ['TEST_EXIT']))\n"
+            )
+            for executable in (nix, bats):
+                executable.chmod(0o755)
+            (directory / "bash").symlink_to("/bin/bash")
+            for tool in ("codesign", "plutil", "spctl"):
+                (directory / tool).write_text("#!/bin/sh\nexit 0\n")
+                (directory / tool).chmod(0o755)
+            environment = dict(os.environ, PATH=str(directory), CALLS=str(calls))
+            for count, exit_code, succeeds in (("2", "0", True), ("0", "0", False), ("1", "0", False), ("2", "42", False)):
+                with self.subTest(count=count, exit_code=exit_code):
+                    calls.unlink(missing_ok=True)
+                    result = subprocess.run(
+                        ["bash", "-euo", "pipefail", "-c", script],
+                        env=environment | {"TEST_COUNT": count, "TEST_EXIT": exit_code},
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(result.returncode == 0, succeeds, result.stderr)
+                    self.assertEqual(calls.exists(), count == "2")
+            (directory / "codesign").unlink()
+            calls.unlink(missing_ok=True)
+            result = subprocess.run(
+                ["bash", "-euo", "pipefail", "-c", script],
+                env=environment | {"TEST_COUNT": "2", "TEST_EXIT": "0"},
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(calls.exists())
 
     def test_linux_build_uses_image_identity_for_both_system_manager_outputs(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
@@ -228,51 +339,65 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertNotRegex(workflow, rf"(?m)^\s+{variable}:")
             self.assertNotIn(variable, workflow.replace(job, ""))
 
-    def test_wsl_prebuild_exports_a_directory_with_both_consumer_files(self) -> None:
+    def test_wsl_prebuild_exports_zstd_cache_and_fails_closed(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
         job = self._workflow_job(workflow, "wsl-prebuild")
         script = re.search(r"(?m)^        run: \|\n(?P<script>(?:          [^\n]*\n|\n)+)", job)
         self.assertIsNotNone(script)
         assert script is not None
         expected_paths = [f"/nix/store/{'a' * 32}-base", f"/nix/store/{'b' * 32}-hermes"]
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            runner_temp = directory / "container runner temp"
-            runner_temp.mkdir()
-            output = directory / "step-output"
-            nix = directory / "nix"
-            nix.write_text(
-                f"#!{sys.executable}\n"
-                "import os, pathlib, sys\n"
-                f"paths = {expected_paths!r}\n"
-                "if sys.argv[1] == 'build':\n"
-                "    assert '.#nixosConfigurations.nixos.config.system.build.toplevel' in sys.argv\n"
-                "    print(paths[bool(os.environ.get('DOTFILES_WITH_HERMES'))])\n"
-                "elif sys.argv[1:3] == ['copy', '--to']:\n"
-                "    assert sys.argv[4:] == paths\n"
-                "    pathlib.Path(sys.argv[3].removeprefix('file://'), 'cache-entry').write_text('cache')\n"
-                "else:\n"
-                "    raise SystemExit(64)\n"
-            )
-            nix.chmod(0o755)
-            environment = dict(os.environ)
-            environment.update(PATH=f"{directory}:{environment['PATH']}", RUNNER_TEMP=str(runner_temp), GITHUB_OUTPUT=str(output))
-            environment.pop("DOTFILES_WITH_HERMES", None)
-            subprocess.run(
-                ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", textwrap.dedent(script.group("script"))],
-                env=environment,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            self.assertTrue(output.is_file(), "prebuild must export its actual container artifact directory")
-            outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
-            artifact = Path(outputs["artifact-dir"])
-            self.assertTrue(artifact.is_relative_to(runner_temp))
-            self.assertEqual(sorted(path.name for path in artifact.iterdir()), ["wsl-nix-cache.tar", "wsl-system-paths.txt"])
-            self.assertEqual((artifact / "wsl-system-paths.txt").read_text().splitlines(), expected_paths)
-            with tarfile.open(artifact / "wsl-nix-cache.tar") as archive:
-                self.assertIn("./cache-entry", archive.getnames())
+        for copy_exit in (0, 47):
+            with self.subTest(copy_exit=copy_exit), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                runner_temp = directory / "container runner temp"
+                runner_temp.mkdir()
+                output = directory / "step-output"
+                output.touch()
+                nix = directory / "nix"
+                nix.write_text(
+                    f"#!{sys.executable}\n"
+                    "import os, pathlib, sys\n"
+                    "from urllib.parse import urlsplit, parse_qs\n"
+                    f"paths = {expected_paths!r}\n"
+                    "if sys.argv[1:] == ['--version']:\n"
+                    "    print('nix boundary double')\n"
+                    "elif sys.argv[1] == 'build':\n"
+                    "    assert '.#nixosConfigurations.nixos.config.system.build.toplevel' in sys.argv\n"
+                    "    print(paths[bool(os.environ.get('DOTFILES_WITH_HERMES'))])\n"
+                    "elif sys.argv[1:3] == ['copy', '--to']:\n"
+                    "    assert sys.argv[4:] == paths\n"
+                    "    target = urlsplit(sys.argv[3])\n"
+                    "    assert target.scheme == 'file' and not target.netloc\n"
+                    "    assert parse_qs(target.query) == {'compression': ['zstd']}\n"
+                    "    if os.environ['COPY_EXIT'] != '0': raise SystemExit(int(os.environ['COPY_EXIT']))\n"
+                    "    pathlib.Path(target.path, 'cache-entry').write_text('cache')\n"
+                    "else:\n"
+                    "    raise SystemExit(64)\n"
+                )
+                nix.chmod(0o755)
+                environment = dict(os.environ)
+                environment.update(PATH=f"{directory}:{environment['PATH']}", RUNNER_TEMP=str(runner_temp), GITHUB_OUTPUT=str(output), COPY_EXIT=str(copy_exit))
+                environment.pop("DOTFILES_WITH_HERMES", None)
+                result = subprocess.run(
+                    ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", textwrap.dedent(script.group("script"))],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, copy_exit, result.stdout + result.stderr)
+                if copy_exit:
+                    self.assertEqual(output.read_text(), "", "failed exports must not publish an artifact path")
+                    self.assertFalse((runner_temp / "wsl-nix-cache-artifact/wsl-nix-cache.tar").exists())
+                    continue
+                self.assertTrue(output.is_file(), "prebuild must export its actual container artifact directory")
+                outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
+                artifact = Path(outputs["artifact-dir"])
+                self.assertTrue(artifact.is_relative_to(runner_temp))
+                self.assertEqual(sorted(path.name for path in artifact.iterdir()), ["wsl-nix-cache.tar", "wsl-system-paths.txt"])
+                self.assertEqual((artifact / "wsl-system-paths.txt").read_text().splitlines(), expected_paths)
+                with tarfile.open(artifact / "wsl-nix-cache.tar") as archive:
+                    self.assertIn("./cache-entry", archive.getnames())
         self.assertIn("id: wsl-cache", job)
         self.assertIn("path: ${{ steps.wsl-cache.outputs.artifact-dir }}", job)
         self.assertNotIn("${{ runner.temp }}", job)
@@ -313,6 +438,23 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             2,
         )
         self.assertNotIn("npm install -g @devcontainers/cli", devcontainer)
+        macos = self._workflow_job(devcontainer, "macos")
+        self.assertRegex(
+            macos,
+            r"(?m)^\s*uses: docker/setup-buildx-action@[0-9a-f]{40}(?:\s+#.*)?\s*$",
+        )
+        buildx = macos.split("      - name: Set up Docker Buildx\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        self.assertIn("driver: docker", buildx)
+        self.assertIn("cache-binary: false", buildx)
+        self.assertLess(macos.index("name: Set up Docker\n"), macos.index("name: Set up Docker Buildx"))
+        self.assertLess(macos.index("name: Set up Docker Buildx"), macos.index("name: Start devcontainer"))
+        startup = macos.split("      - name: Start devcontainer\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        self.assertIn('DOCKER_BUILDKIT: "1"', startup)
+        self.assertIn("--frozen-lockfile", startup)
 
     def test_nix_build_jobs_use_authenticated_github_fetches(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
@@ -413,7 +555,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertNotIn("tests/bash/**", paths)
 
     def test_hermes_ci_routes_xapi_contract_and_platform_adapters(self) -> None:
-        workflow = self._named_workflow("ci-hermes-bootstrap.yml")
+        workflow = self._named_workflow("ci-bootstrap.yml")
+        hermes = self._workflow_job(workflow, "hermes-bootstrap-tests")
         required_paths = (
             "scripts/python/hermes_bootstrap/**",
             "tests/python/hermes_bootstrap_test/**",
@@ -428,7 +571,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "scripts/sh/hermes-*.sh",
             "scripts/powershell/handlers/Handler.HermesAgent.ps1",
             "tests/python/test_xapi_image_contract.py",
-            ".github/workflows/ci-hermes-provenance.yml",
+            ".github/workflows/ci-bootstrap.yml",
         )
 
         paths = self._job_patterns("hermes")
@@ -440,8 +583,15 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
         self.assertIn(
             "nix build .#checks.x86_64-linux.hermes-bootstrap-tests",
-            workflow,
+            hermes,
         )
+        self.assertIn("docker/hermes-browser/tests/test_runtime_contract.sh", hermes)
+        self.assertNotIn("docker build", hermes)
+        complete = self._workflow_job(workflow, "complete")
+        self.assertIn("hermes-bootstrap-tests,", complete)
+        self.assertIn("HERMES_REQUIRED: ${{ needs.changes.outputs.hermes }}", complete)
+        self.assertIn("HERMES_RESULT: ${{ needs.hermes-bootstrap-tests.result }}", complete)
+        self.assertIn('"${HERMES_REQUIRED}" "${HERMES_RESULT}"', complete)
 
     def test_hermes_hook_and_task_run_xapi_image_contract(self) -> None:
         pre_commit = PRE_COMMIT_PATH.read_text(encoding="utf-8")
@@ -458,6 +608,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         pattern = match.group("pattern") if match is not None else ""
         for path in (
             "scripts/python/hermes_bootstrap/app.py",
+            "scripts/python/hermes_bootstrap_cli.py",
+            ".github/workflows/ci-bootstrap.yml",
             "tests/python/hermes_bootstrap_test/test_app.py",
             "nix/home/hermes-agent.nix",
             "docker/hermes-xapi-mcp/Dockerfile",
@@ -467,7 +619,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIsNotNone(re.fullmatch(pattern, path))
 
         task = taskfile.split("  hermes:bootstrap:test:\n", maxsplit=1)[1]
-        task = task.split("\n  hermes:bootstrap:config:\n", maxsplit=1)[0]
+        task = re.split(r"\n  [a-z][^\n]*:\n", task, maxsplit=1)[0]
         self.assertIn(
             "python3 -m unittest tests/python/test_xapi_image_contract.py -v",
             task,
@@ -476,17 +628,27 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "python -m unittest tests/python/test_xapi_image_contract.py -v",
             task,
         )
+        self.assertIn('nix build ".#checks.${system}.hermes-bootstrap-tests"', task)
+        self.assertIn("nix build .#checks.$system.hermes-bootstrap-tests", task)
+        self.assertIn('nix build ".#checks.${system}.nix-unit"', task)
+        self.assertIn("nix build .#checks.$system.nix-unit", task)
+        self.assertIn("bats tests/bash/hermes_native_bootstrap.bats", task)
+        self.assertNotIn("docker build", task)
 
     def test_unified_bootstrap_workflow_routes_all_platforms(self) -> None:
         workflow = self._named_workflow("ci-bootstrap.yml")
 
         self.assertIn("name: Bootstrap CI", workflow)
         self.assertIn("manifest: ci/bootstrap-path-routing.json", workflow)
-        for output in ("linux", "darwin", "wsl", "windows"):
+        for output in ("linux", "wsl", "windows"):
             self.assertRegex(
                 workflow,
                 rf"(?m)^\s+{output}: \$\{{\{{ steps\.detect\.outputs\.{output} \}}\}}$",
             )
+        self.assertIn(
+            "darwin: ${{ steps.detect.outputs.darwin == 'true' || steps.contracts.outputs.hermes == 'true' }}",
+            workflow,
+        )
 
         for marker in (
             "Bootstrap / Linux / Build",
@@ -522,7 +684,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
         for job_name in ("linux-nixos",):
             job = self._workflow_job(workflow, job_name)
-            self.assertIn("needs: [changes, linux-build]", job)
+            self.assertIn("needs: changes", job)
             self.assertIn("needs.changes.outputs.linux == 'true'", job)
 
         complete = self._workflow_job(workflow, "complete")
