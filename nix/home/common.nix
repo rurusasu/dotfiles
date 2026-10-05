@@ -9,10 +9,9 @@
   lib,
   ...
 }:
-let
-  fdOpts = "--hidden --follow --no-ignore-vcs --max-depth 10";
-in
 {
+  imports = [ ../modules/fzf.nix ];
+
   home = {
     username = lib.mkDefault "rurusasu";
     stateVersion = lib.mkDefault "26.05";
@@ -21,10 +20,6 @@ in
       # qmd (markdown search engine)
       QMD_EMBED_MODEL = "hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf";
       QMD_RERANK_MODEL = "hf:giladgd/Qwen3-Reranker-4B-GGUF:Q8_0";
-      # fzf
-      FZF_DEFAULT_COMMAND = "fd ${fdOpts} --absolute-path --type f . .";
-      FZF_ALT_C_COMMAND = "fd ${fdOpts} --absolute-path --type d . .";
-      FZF_DEFAULT_OPTS = "--height=40% --layout=reverse --border --prompt='> '";
       # pnpm global bin directory
       PNPM_HOME = "$HOME/.local/share/pnpm";
     };

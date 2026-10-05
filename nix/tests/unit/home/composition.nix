@@ -88,6 +88,40 @@ let
     };
 in
 {
+  testFzfIsInstalledOnceWithSharedDefaultsAcrossHomes = {
+    expr =
+      map
+        (home: {
+          enabled = home.config.programs.fzf.enable;
+          packageCopies = builtins.length (
+            builtins.filter (
+              package: package.drvPath == home.config.programs.fzf.package.drvPath
+            ) home.config.home.packages
+          );
+          defaultCommand = home.config.home.sessionVariables.FZF_DEFAULT_COMMAND or null;
+          fileWidgetCommand = home.config.home.sessionVariables.FZF_CTRL_T_COMMAND or null;
+          changeDirWidgetCommand = home.config.home.sessionVariables.FZF_ALT_C_COMMAND or null;
+          defaultOptions = home.config.home.sessionVariables.FZF_DEFAULT_OPTS or null;
+          bashIntegration = home.config.programs.fzf.enableBashIntegration;
+          zshIntegration = home.config.programs.fzf.enableZshIntegration;
+        })
+        [
+          linux
+          wsl
+          darwin
+        ];
+    expected = builtins.genList (_: {
+      enabled = true;
+      packageCopies = 1;
+      defaultCommand = "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type f . .";
+      fileWidgetCommand = "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type f . .";
+      changeDirWidgetCommand = "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type d . .";
+      defaultOptions = "--height=40% --layout=reverse --border --prompt=> ";
+      bashIntegration = false;
+      zshIntegration = false;
+    }) 3;
+  };
+
   testTerminalShellIntegrationsAreGeneratedAcrossHomes = {
     expr =
       map
