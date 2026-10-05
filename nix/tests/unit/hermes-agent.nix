@@ -1,6 +1,11 @@
 { inputs }:
 let
   fixtures = import ../fixtures/packages.nix { inherit inputs; };
+  repositoryLock = builtins.fromJSON (builtins.readFile ../../../flake.lock);
+  upstreamLock = builtins.fromJSON (builtins.readFile "${inputs.hermes-agent}/flake.lock");
+  hermesNode =
+    repositoryLock.nodes.${repositoryLock.nodes.${repositoryLock.root}.inputs.hermes-agent};
+  upstreamInputs = upstreamLock.nodes.${upstreamLock.root}.inputs;
 
   mkTestHome =
     {
@@ -67,6 +72,39 @@ let
   hasNodejs = home: builtins.any (item: (item.pname or item.name) == "nodejs") home;
 in
 {
+  testHermesRuntimeUsesOfficialDependencyPins = {
+    expr = builtins.all (
+      name:
+      let
+        binding = hermesNode.inputs.${name};
+        upstreamNode = upstreamLock.nodes.${upstreamInputs.${name}};
+        expectedEdges = builtins.mapAttrs (
+          _: edge: if builtins.isList edge then [ "hermes-agent" ] ++ edge else hermesNode.inputs.${edge}
+        ) (upstreamNode.inputs or { });
+      in
+      builtins.isString binding
+      && repositoryLock.nodes.${binding}.locked == upstreamNode.locked
+      && repositoryLock.nodes.${binding}.original == upstreamNode.original
+      && (repositoryLock.nodes.${binding}.inputs or { }) == expectedEdges
+    ) (builtins.attrNames upstreamInputs);
+    expected = true;
+  };
+
+  testHermesServicesPreserveTheOfficialRuntimeDependencies = {
+    expr = {
+      linuxPythonPackages = linux.config.services.hermes-agent.extraPythonPackages;
+      linuxDependencyGroups = linux.config.services.hermes-agent.extraDependencyGroups;
+      darwinPythonPackages = darwin.config.services.hermes-agent.extraPythonPackages;
+      darwinDependencyGroups = darwin.config.services.hermes-agent.extraDependencyGroups;
+    };
+    expected = {
+      linuxPythonPackages = [ ];
+      linuxDependencyGroups = [ ];
+      darwinPythonPackages = [ ];
+      darwinDependencyGroups = [ ];
+    };
+  };
+
   testHermesFeatureDoesNotEnableDockerOrOllama = {
     expr = import ../../flakes/lib/install-features.nix {
       lib = inputs.nixpkgs.lib;

@@ -126,12 +126,6 @@
         $installerJob | Should -Not -Match 'onePasswordPackageSearchPath|pnpm resolved outside the npm global prefix'
     }
 
-    It 'does not retain temporary formatter artifact steps' {
-        $workflow = $script:workflowLines -join "`n"
-        $workflow | Should -Not -Match 'Generate canonical formatter patch for local review'
-        $workflow | Should -Not -Match 'Upload canonical formatter output for local review'
-    }
-
     It 'seeds and verifies removal of ChatGPT Classic in the installer E2E' {
         $installerE2E = $script:installerE2E
         $installerE2E | Should -Match 'winget install --id 9NT1R1C2HH7J'

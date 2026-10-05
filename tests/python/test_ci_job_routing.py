@@ -33,7 +33,7 @@ JOBS = {
         "macos": "devcontainer",
         "windows": "devcontainer",
     },
-    "ci-hermes-bootstrap.yml": {"hermes-bootstrap-tests": "hermes"},
+    "ci-bootstrap.yml": {"hermes-bootstrap-tests": "hermes"},
 }
 
 
@@ -54,6 +54,33 @@ class CiJobRoutingTests(unittest.TestCase):
         self.assertEqual(
             self.selected("tests/python/test_example.py", manifest=BOOTSTRAP),
             {"contract"},
+        )
+
+    def test_hermes_dependencies_and_entrypoint_select_native_checks(self) -> None:
+        for path in (
+            "flake.nix",
+            "flake.lock",
+            "nix/flakes/tests.nix",
+            "nix/flakes/lib/hosts.nix",
+            "nix/overlays/hermes.nix",
+            "nix/tests/build/hermes-bootstrap-tests.nix",
+            "nix/tests/build/hermes-runtime.nix",
+            "nix/home/hermes-agent.nix",
+            "scripts/python/hermes_bootstrap_cli.py",
+            ".github/workflows/ci-bootstrap.yml",
+        ):
+            with self.subTest(path=path):
+                self.assertIn("hermes", self.selected(path))
+
+    def test_unrelated_shell_changes_do_not_select_hermes_runtime(self) -> None:
+        for path in ("nix/home/zsh.nix", "chezmoi/shells/bashrc"):
+            with self.subTest(path=path):
+                self.assertNotIn("hermes", self.selected(path))
+
+    def test_darwin_artifact_cases_select_the_native_mac_owner(self) -> None:
+        self.assertIn(
+            "darwin",
+            self.selected("tests/bash/package_catalog.bats", manifest=BOOTSTRAP),
         )
 
     def test_bash_test_selects_contracts_without_container_builds(self) -> None:
@@ -259,11 +286,54 @@ class CiJobRoutingTests(unittest.TestCase):
                     )[1]
                     self.assertRegex(body, r"needs: (changes|\[changes, lint\])")
                     self.assertIn(f"needs.changes.outputs.{output} == 'true'", body)
-                    self.assertIn(
-                        "always() && (needs.changes.result != 'success'", body
-                    )
+                    if filename == "ci-devcontainer.yml":
+                        self.assertIn(
+                            "needs.changes.result != 'success' || (!cancelled() &&", body
+                        )
+                    else:
+                        self.assertIn(
+                            "always() && (needs.changes.result != 'success'", body
+                        )
                     self.assertIn("name: Verify change detection", body)
                     self.assertIn("run: exit 1", body)
+
+    def test_devcontainer_cancellation_stops_work_but_keeps_detection_fail_closed(
+        self,
+    ) -> None:
+        workflow = (ROOT / ".github/workflows/ci-devcontainer.yml").read_text()
+        for job in JOBS["ci-devcontainer.yml"]:
+            body = re.search(rf"(?ms)^  {job}:\n(.*?)(?=^  [\w-]+:\n|\Z)", workflow)[1]
+            expression = re.search(r"(?m)^    if: \$\{\{ (.*?) \}\}$", body)[1]
+            # This predicate uses only boolean operators and string equality,
+            # shared with Bash. Evaluate its actual operands, not a copied rule.
+            expression = expression.replace("needs.changes.result", '"$CHANGES_RESULT"')
+            expression = expression.replace(
+                "needs.changes.outputs.devcontainer", '"$SELECTED"'
+            )
+            expression = expression.replace("!cancelled()", '"$CANCELLED" != "true"')
+            expression = expression.replace("cancelled()", '"$CANCELLED" == "true"')
+            expression = expression.replace("always()", '"true" == "true"')
+            for status in ("success", "failure", "cancelled", "skipped", ""):
+                for selected in ("true", "false"):
+                    for cancelled in ("true", "false"):
+                        with self.subTest(
+                            job=job, status=status, selected=selected, cancelled=cancelled
+                        ):
+                            result = subprocess.run(
+                                ["bash", "-c", f"[[ {expression} ]]"],
+                                env=os.environ | {
+                                    "CHANGES_RESULT": status,
+                                    "SELECTED": selected,
+                                    "CANCELLED": cancelled,
+                                },
+                                capture_output=True,
+                                text=True,
+                                check=False,
+                            )
+                            run = status != "success" or (
+                                selected == "true" and cancelled == "false"
+                            )
+                            self.assertEqual(result.returncode, 0 if run else 1, result.stderr)
 
     def test_bootstrap_always_reports_on_pull_requests(self) -> None:
         workflow = (ROOT / ".github/workflows/ci-bootstrap.yml").read_text()
@@ -299,6 +369,12 @@ class CiJobRoutingTests(unittest.TestCase):
             ({"BASH_REQUIRED": "true", "BASH_RESULT": "cancelled"}, 1),
             ({"BASH_REQUIRED": "true", "BASH_RESULT": "success"}, 0),
             ({"BASH_RESULT": "success"}, 1),
+            ({"HERMES_REQUIRED": "true"}, 1),
+            ({"HERMES_REQUIRED": "true", "HERMES_RESULT": ""}, 1),
+            ({"HERMES_REQUIRED": "true", "HERMES_RESULT": "failure"}, 1),
+            ({"HERMES_REQUIRED": "true", "HERMES_RESULT": "cancelled"}, 1),
+            ({"HERMES_REQUIRED": "true", "HERMES_RESULT": "success"}, 0),
+            ({"HERMES_RESULT": "success"}, 1),
             (
                 {
                     "TOOLS_REQUIRED": "true",

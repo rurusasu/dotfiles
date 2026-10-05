@@ -10,6 +10,7 @@
       custom-package-builds = import ../tests/build/custom-packages.nix { inherit pkgs; };
       neovim-native = import ../tests/build/neovim.nix { inherit inputs pkgs; };
       hermes-bootstrap-tests = import ../tests/build/hermes-bootstrap-tests.nix { inherit inputs pkgs; };
+      hermes-runtime = import ../tests/build/hermes-runtime.nix { inherit inputs pkgs; };
       powershell-formatter = import ../tests/build/powershell-formatter.nix {
         inherit pkgs;
         formatter = config.treefmt.settings.formatter.powershell;
@@ -27,6 +28,9 @@
       # Full Darwin activation evaluation needs this nested input in the sandbox.
       "nix-homebrew/brew-src" = inputs.nix-homebrew.inputs.brew-src;
       # Hermes activation also evaluates its locked package input closure.
+      "hermes-agent/nixpkgs" = inputs.hermes-agent.inputs.nixpkgs;
+      "hermes-agent/flake-parts" = inputs.hermes-agent.inputs.flake-parts;
+      "hermes-agent/home-manager" = inputs.hermes-agent.inputs.home-manager;
       "hermes-agent/pyproject-nix" = inputs.hermes-agent.inputs.pyproject-nix;
       "hermes-agent/uv2nix" = inputs.hermes-agent.inputs.uv2nix;
       "hermes-agent/pyproject-build-systems" = inputs.hermes-agent.inputs.pyproject-build-systems;

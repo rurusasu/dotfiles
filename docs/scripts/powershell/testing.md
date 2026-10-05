@@ -2,6 +2,12 @@
 
 Issue #652 で installer の phase 境界を見直し、PowerShell 5.1 / 7 の通常 Pester matrix を authoritative な PowerShell test lane とする。
 
+PSScriptAnalyzer の Pester 検査は各 library/handler を一度だけ解析し、Error と Warning を検査します。
+`SetupHandler.ps1` と `Invoke-ExternalCommand.ps1` は TypeNotFound も失敗とし、他の対象だけで既存の除外を維持します。
+対象ゼロ・必須 library の欠落・解析の実行エラーを成功扱いしません。
+coverage smoke と管理者 entrypoint の子プロセスは現在の PowerShell 実行ファイルを使用し、
+PowerShell 5.1 / 7 の両方でそれぞれの実行境界を確認します。
+
 ## Pester v5 の強制使用
 
 ### テストランナー

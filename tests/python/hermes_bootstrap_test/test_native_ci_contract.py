@@ -23,7 +23,6 @@ class NativeCiContractTests(unittest.TestCase):
             "ci-devcontainer.yml",
             "codeql.yml",
             "ci-bootstrap.yml",
-            "ci-hermes-bootstrap.yml",
             "ci-contract.yml",
         ):
             with self.subTest(workflow=name):
@@ -46,7 +45,7 @@ class NativeCiContractTests(unittest.TestCase):
                         self.assertEqual(step.get("with", {}).get("ref"), expected_ref)
 
     def test_hermes_detection_and_runtime_use_the_event_head(self) -> None:
-        workflow = self.workflow("ci-hermes-bootstrap.yml")
+        workflow = self.workflow("ci-bootstrap.yml")
         self.assertEqual(
             workflow.get("env", {}).get("TESTED_SHA"),
             "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",

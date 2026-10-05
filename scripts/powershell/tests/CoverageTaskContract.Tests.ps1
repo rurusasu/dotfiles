@@ -44,15 +44,8 @@ Describe 'coverage smoke' {
 }
 '@ | Set-Content -LiteralPath $smokePath -Encoding UTF8
 
-        $shell = Get-Command pwsh -ErrorAction SilentlyContinue
-        if ($null -eq $shell) {
-            $shell = Get-Command powershell.exe -ErrorAction SilentlyContinue
-        }
-        if ($null -eq $shell) {
-            Set-ItResult -Skipped -Because 'No compatible PowerShell executable is installed on this host'
-            return
-        }
-        $shellPath = if ($shell.Source) { $shell.Source } else { $shell.Path }
+        # Keep the smoke test on the current CI matrix runtime, including Windows PowerShell 5.1.
+        $shellPath = (Get-Process -Id $PID).Path
         $runnerPath = Join-Path $script:repoRoot 'scripts/powershell/tests/Invoke-Tests.ps1'
         $childArguments = @(
             '-NoProfile'

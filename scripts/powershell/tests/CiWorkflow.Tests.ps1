@@ -313,7 +313,7 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'runs-on:\s+windows-2025'
         $jobTimeout | Should -BeGreaterOrEqual (($rebuildTimeoutSeconds * $rebuildBudgetCount / 60) + 60) -Because 'the job must allow each independent rebuild timeout plus one hour for WSL setup and verification'
         $rebuildBudgetCount | Should -Be 2 -Because 'the E2E performs a post-install switch and a separate Hermes-enabled switch'
-        $workflow | Should -Match 'wsl-prebuild:[\s\S]*?DOTFILES_WITH_HERMES=1 nix build[\s\S]*?nix copy --to "file://\$cache_dir"[\s\S]*?Upload WSL Nix store cache'
+        $workflow | Should -Match 'wsl-prebuild:[\s\S]*?DOTFILES_WITH_HERMES=1 nix build[\s\S]*?nix copy --to "file://\$cache_dir\?compression=zstd"[\s\S]*?Upload WSL Nix store cache'
         $workflow | Should -Match 'wsl:[\s\S]*?needs: \[changes, wsl-prebuild\][\s\S]*?Download prebuilt WSL Nix store cache'
         $workflow | Should -Match 'actions/download-artifact@[0-9a-f]{40}'
         $workflow | Should -Match 'WSL_PREBUILD_RESULT: \$\{\{ needs\.wsl-prebuild\.result \}\}'
@@ -337,6 +337,7 @@ Describe 'CI workflow configuration' {
         $script | Should -Match '\$result = \$handler\.Apply\(\$context\)'
         $script | Should -Match 'SkipPostInstallSetup"\] = \$true'
         $script | Should -Match 'wslpath", "-a", \$cacheDir\.Replace\('\''\\'\'', '\''/'\''\)'
+        $script | Should -Match 'nix --version && nix --extra-experimental-features'
         $script | Should -Match "nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from 'file://"
         $script | Should -Match 'CI_ASSERTION: imported base and Hermes system closures'
         $script | Should -Match 'bash ''\$postInstallWslPath'' --sync-mode repo --sync-back none --state-version 25\.05 --skip-flake-update'
@@ -782,13 +783,17 @@ esac
         $workflow | Should -Not -Match 'runs-on:\s*\[?self-hosted'
     }
 
-    It 'should keep Bash test preparation out of the Darwin build job' {
+    It 'should keep the full Bash suite out of the Darwin build job' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
         $macosJob = [regex]::Match($workflow, '(?ms)^  darwin:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)').Value
         $macosJob | Should -Not -BeNullOrEmpty
-        $macosJob | Should -Not -Match 'bats|brew install'
+        $macosJob | Should -Not -Match 'scripts/sh/run-bash-tests\.sh|brew install'
         $macosJob | Should -Match 'Install Nix'
         $macosJob | Should -Match 'darwinConfigurations\.macos\.system'
+        # The native artifact subset belongs on Darwin; behavioral checks live in Python.
+        $macosJob | Should -Match 'suite=tests/bash/package_catalog\.bats'
+        $macosJob | Should -Match ([regex]::Escape("filter='^Darwin (Raycast artifact|Discord keeps)'"))
+        $macosJob | Should -Match ([regex]::Escape('[[ "$(bats --count --filter "$filter" "$suite")" -eq 2 ]]'))
     }
 
     It 'should install chezmoi before every Windows job that runs chezmoi template tests' {
