@@ -18,7 +18,7 @@ in
       "--height=40%"
       "--layout=reverse"
       "--border"
-      "--prompt='> '"
+      "--prompt=> "
     ];
     fileWidget.command = fileCommand;
     changeDirWidget.command = directoryCommand;

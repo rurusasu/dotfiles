@@ -116,7 +116,7 @@ in
       defaultCommand = "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type f . .";
       fileWidgetCommand = "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type f . .";
       changeDirWidgetCommand = "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type d . .";
-      defaultOptions = "--height=40% --layout=reverse --border --prompt='> '";
+      defaultOptions = "--height=40% --layout=reverse --border --prompt=> ";
       bashIntegration = false;
       zshIntegration = false;
     }) 3;
