@@ -88,7 +88,7 @@ let
     };
 in
 {
-  testFzfHasSingleInstallationAcrossHomes = {
+  testFzfIsInstalledOnceWithSharedDefaultsAcrossHomes = {
     expr =
       map
         (home: {
@@ -98,8 +98,12 @@ in
               package: package.drvPath == home.config.programs.fzf.package.drvPath
             ) home.config.home.packages
           );
-          standardBashIntegration = home.config.programs.fzf.enableBashIntegration;
-          standardZshIntegration = home.config.programs.fzf.enableZshIntegration;
+          defaultCommand = home.config.home.sessionVariables.FZF_DEFAULT_COMMAND or null;
+          fileWidgetCommand = home.config.home.sessionVariables.FZF_CTRL_T_COMMAND or null;
+          changeDirWidgetCommand = home.config.home.sessionVariables.FZF_ALT_C_COMMAND or null;
+          defaultOptions = home.config.home.sessionVariables.FZF_DEFAULT_OPTS or null;
+          bashIntegration = home.config.programs.fzf.enableBashIntegration;
+          zshIntegration = home.config.programs.fzf.enableZshIntegration;
         })
         [
           linux
@@ -109,8 +113,12 @@ in
     expected = builtins.genList (_: {
       enabled = true;
       packageCopies = 1;
-      standardBashIntegration = false;
-      standardZshIntegration = false;
+      defaultCommand = "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type f . .";
+      fileWidgetCommand = "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type f . .";
+      changeDirWidgetCommand = "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type d . .";
+      defaultOptions = "--height=40% --layout=reverse --border --prompt=> ";
+      bashIntegration = false;
+      zshIntegration = false;
     }) 3;
   };
 

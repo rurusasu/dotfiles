@@ -17,7 +17,7 @@ in
         "--height=40%"
         "--layout=reverse"
         "--border"
-        "--prompt='> '"
+        "--prompt=> "
       ];
     };
 
