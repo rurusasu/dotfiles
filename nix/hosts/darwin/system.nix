@@ -57,8 +57,8 @@
     NSGlobalDomain = {
       # アプリ全体でファイルの拡張子を常に表示する。
       AppleShowAllExtensions = true;
-      # ナチュラルスクロールを無効にし、従来のスクロール方向にする。
-      "com.apple.swipescrolldirection" = false;
+      # 2本指で上にスワイプするとページの下へ進む（ナチュラルスクロール）。
+      "com.apple.swipescrolldirection" = true;
       # ダークモードを有効にする。
       AppleInterfaceStyle = "Dark";
       # 入力時の自動大文字化、自動置換、スペル修正を無効にする。

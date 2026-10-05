@@ -161,9 +161,9 @@ cat result/package-support-report.json
 
 Neovim 本体・プラグインはカタログを介さず、`nix/modules/nvim/` の Home Manager 設定で直接管理します。LSP・整形ツールは全エディタ共通の `nix/modules/lsp.nix` の `home.packages` に宣言し、通常の PATH に導入します。Tree-sitter の対象言語は `plugins.nix` の標準オプションに指定します。運用は [Neovim の運用](../chezmoi/neovim.md) を参照してください。
 
-zoxide の Unix 向け導入は `nix/modules/zoxide.nix`、Bash / Zsh の初期化と Alt+Q（macOS では Option+Q）は `nix/home/zoxide.nix` に配置し、`nix/home/common.nix` から読み込みます。WSL の除外ディレクトリは `nix/home/wsl.nix` が管理します。カタログには Windows の winget 配布情報を残します。chezmoi の zoxide 設定は Windows のみが配布し、Windows の Bash には `chezmoi/shells/zoxide.bash` を `.bashrc` に追記します。
+zoxide の Unix 向け導入は `nix/modules/zoxide.nix`、Bash / Zsh の初期化と Alt+Q（macOS では Option+Q）は `nix/home/zoxide.nix` に配置し、`nix/home/common.nix` から読み込みます。WSL の除外ディレクトリは `nix/home/wsl.nix` が管理します。zoxide はパッケージカタログから外し、Windows の winget 配布情報は `nix/packages/install/windows-only.nix`、導入後の検証は `windows-verification.nix` が管理します。chezmoi の zoxide 設定は Windows のみが配布し、Windows の Bash には `chezmoi/shells/zoxide.bash` を `.bashrc` に追記します。
 
-fzf の Unix 向け導入は `nix/modules/fzf.nix`、検索条件と Alt+D/T/R（macOS では Option+D/T/R）は `nix/home/fzf.nix` に配置します。標準のシェル連携は無効にして既存のカスタムキー設定を維持します。Windows の winget 情報はカタログに残し、Windows の Bash 設定は `chezmoi/shells/fzf.bash` を `.bashrc` に追記します。
+fzf の Unix 向け導入は `nix/modules/fzf.nix`、検索条件と Alt+D/T/R（macOS では Option+D/T/R）は `nix/home/fzf.nix` に配置します。標準のシェル連携は無効にして既存のカスタムキー設定を維持します。fzf もパッケージカタログから外し、Windows の winget 配布情報と導入後の検証は `nix/packages/install/` が管理します。Windows の Bash 設定は `chezmoi/shells/fzf.bash` を `.bashrc` に追記します。
 
 ## 主なファイル
 

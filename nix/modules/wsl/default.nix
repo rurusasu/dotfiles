@@ -134,13 +134,6 @@ in
   # instance competing for the org.freedesktop.secrets D-Bus name.
   security.pam.services.login.enableGnomeKeyring = true;
 
-  # XDG desktop portal: provides color-scheme and other settings queries via D-Bus.
-  xdg.portal = {
-    enable = true;
-    extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
-    config.common.default = "*";
-  };
-
   # Native dockerd. Kind node containers use regular runc at the docker level;
   # GPU access inside kind nodes is handled via CDI (see k8s/kind/cluster.yaml).
   # Windows can reach the socket via: DOCKER_HOST=unix:///wsl.localhost/NixOS/var/run/docker.sock
