@@ -13,8 +13,9 @@
       "NO_BEEP"
       "NUMERIC_GLOB_SORT"
     ];
-    # zsh-autocomplete が compinit を実行するため、重複初期化を避ける。
-    enableCompletion = false;
+    # 補完パッケージは維持し、compinit は zsh-autocomplete に任せる。
+    enableCompletion = true;
+    completionInit = "";
     plugins = [
       {
         name = "zsh-autocomplete";
