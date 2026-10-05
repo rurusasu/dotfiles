@@ -1,9 +1,25 @@
-{ pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+let
+  legacyHistoryDirectory =
+    if config.programs.zsh.dotDir == null then
+      config.home.homeDirectory
+    else if lib.hasPrefix "/" config.programs.zsh.dotDir then
+      config.programs.zsh.dotDir
+    else
+      "${config.home.homeDirectory}/${config.programs.zsh.dotDir}";
+  historyPath = lib.escapeShellArg config.programs.zsh.history.path;
+in
 {
   # ── Shell: zsh ────────────────────────────────────────────────────────
   programs.zsh = {
     enable = true;
     package = pkgs.zsh;
+    history.path = "${config.xdg.stateHome}/zsh/history";
 
     shellAliases = {
       find = "fd";
@@ -119,4 +135,16 @@
       [[ -f "$HOME/.config/shell/gh-token-switch.sh" ]] && source "$HOME/.config/shell/gh-token-switch.sh"
     '';
   };
+
+  # Keep existing history and never overwrite a history file at the new path.
+  home.activation.migrateZshHistory = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    if [ ! -e ${historyPath} ] && [ ! -L ${historyPath} ]; then
+      for legacyHistory in ${lib.escapeShellArg "${legacyHistoryDirectory}/.zsh_history"} ${lib.escapeShellArg "${config.home.homeDirectory}/.zsh_history"}; do
+        if [ -f "$legacyHistory" ]; then
+          run ${pkgs.coreutils}/bin/install -D -m 600 -- "$legacyHistory" ${historyPath}
+          break
+        fi
+      done
+    fi
+  '';
 }
