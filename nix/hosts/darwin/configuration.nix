@@ -141,6 +141,7 @@ in
     backupFileExtension = "hm-backup";
     users.${user} = {
       imports = [ ../../home/darwin.nix ];
+      xdg.enable = true;
     };
     extraSpecialArgs = {
       inherit inputs installFeatures;
