@@ -14,13 +14,10 @@ let
     inherit (inputs.nixpkgs) lib;
     withOllama = builtins.getEnv "DOTFILES_WITH_OLLAMA" == "1";
   };
-  Workmux = import ./lib/workmux.nix { inherit inputs; };
-  workmuxOverlay = Workmux.mkOverlay (system: inputs.workmux.packages.${system}.default);
   mkHome = system: {
     pkgs = import inputs.nixpkgs {
       inherit system;
       config.allowUnfree = true;
-      overlays = [ workmuxOverlay ];
     };
     extraSpecialArgs = {
       inherit inputs installFeatures;

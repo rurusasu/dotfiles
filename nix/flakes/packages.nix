@@ -7,18 +7,13 @@
     {
       pkgs,
       lib,
-      inputs',
       ...
     }:
     let
-      Workmux = import ./lib/workmux.nix { inherit inputs; };
-      workmuxOverlay = Workmux.mkOverlay (_: inputs'.workmux.packages.default);
-      unfreePkgs =
-        (import pkgs.path {
-          system = pkgs.stdenv.hostPlatform.system;
-          config.allowUnfree = true;
-        }).extend
-          workmuxOverlay;
+      unfreePkgs = import pkgs.path {
+        system = pkgs.stdenv.hostPlatform.system;
+        config.allowUnfree = true;
+      };
       unfreeSets = import ../packages/sets.nix {
         pkgs = unfreePkgs;
         inherit lib;

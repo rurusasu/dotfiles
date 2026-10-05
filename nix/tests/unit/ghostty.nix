@@ -55,8 +55,10 @@ let
       weztermHomeCopies = copies wezterm.package;
       ghosttyConfig =
         home.config.programs.ghostty.enable
+        && home.config.programs.ghostty.settings == { }
         &&
-          home.config.programs.ghostty.settings == builtins.mapAttrs (_: value: [ value ]) ghostty.settings;
+          builtins.readFile home.config.xdg.configFile."ghostty/config".source
+          == builtins.readFile ../../modules/terminals/ghostty/config.ghostty;
       weztermConfig =
         home.config.programs.wezterm.enable
         && home.config.programs.wezterm.extraConfig == wezterm.extraConfig

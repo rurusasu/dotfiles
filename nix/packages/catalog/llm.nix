@@ -48,9 +48,4 @@
     };
   };
 
-  workmux = {
-    pkg = pkgs.workmux;
-    winget = null;
-    category = "llm";
-  };
 }

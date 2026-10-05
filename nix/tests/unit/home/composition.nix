@@ -70,16 +70,10 @@ let
   darwinPackageSets =
     let
       system = "aarch64-darwin";
-      pkgs =
-        (import inputs.nixpkgs {
-          inherit system;
-          config.allowUnfree = true;
-        }).extend
-          (
-            _: _: {
-              workmux = inputs.workmux.packages.${system}.default;
-            }
-          );
+      pkgs = import inputs.nixpkgs {
+        inherit system;
+        config.allowUnfree = true;
+      };
       sets = import ../../../packages/sets.nix {
         inherit pkgs;
         inherit (pkgs) lib;
