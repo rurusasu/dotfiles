@@ -60,39 +60,7 @@ in
     '';
 
     zsh.initContent = ''
-      # Alt+D (Option+D on macOS): fzf directory search and cd
-      __fzf_cd_widget() {
-        local dir
-        dir="$(fd ${fdOpts} --absolute-path -t d . . | fzf)" && cd "$dir"
-        zle reset-prompt
-      }
-      zle -N __fzf_cd_widget
-      bindkey '^[d' __fzf_cd_widget
-
-      # Alt+T (Option+T on macOS): fzf file search and insert path
-      __fzf_file_widget() {
-        local selected
-        selected="$(fd ${fdOpts} --absolute-path . . | fzf)"
-        if [[ -n "$selected" ]]; then
-          LBUFFER="$LBUFFER$selected"
-        fi
-        zle reset-prompt
-      }
-      zle -N __fzf_file_widget
-      bindkey '^[t' __fzf_file_widget
-
-      # Alt+R (Option+R on macOS): fzf command history search
-      __fzf_history_widget() {
-        local selected
-        selected="$(fc -ln 1 | fzf --tac)"
-        if [[ -n "$selected" ]]; then
-          BUFFER="$selected"
-          CURSOR=$#BUFFER
-        fi
-        zle reset-prompt
-      }
-      zle -N __fzf_history_widget
-      bindkey '^[r' __fzf_history_widget
+      source ${./fzf.zsh} ${fdOpts}
     '';
   };
 }

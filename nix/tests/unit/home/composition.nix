@@ -349,8 +349,10 @@ in
   };
 
   testLinuxHomeModuleRetainsSharedShellConfiguration = {
-    expr = linux.config.programs.zsh.shellAliases.l;
-    expected = "eza -lhaT --level=2 --icons=auto --hyperlink -F --group-directories-first --color=auto";
+    expr = builtins.elem "source ${../../../modules/shells/zsh/aliases.zsh}" (
+      inputs.nixpkgs.lib.splitString "\n" linux.config.programs.zsh.initContent
+    );
+    expected = true;
   };
 
   testNRShellAliasUsesPlatformInstallCommand = {
