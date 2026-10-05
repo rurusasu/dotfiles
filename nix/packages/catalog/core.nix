@@ -62,9 +62,13 @@
   };
 
   fzf = {
-    pkg = pkgs.fzf;
     winget = "junegunn.fzf";
     category = "core";
+    # Unix installation and shell defaults belong to modules/fzf.nix.
+    support = {
+      darwin.unsupported = "fzf is managed by Home Manager";
+      linux.unsupported = "fzf is managed by Home Manager";
+    };
   };
 
   direnv = {

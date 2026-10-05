@@ -3,6 +3,7 @@
 ## 管理対象
 
 - `wsl/`: WSL 固有調整
+- `fzf.nix`: fzf のパッケージ導入と共通既定値。Bash/Zsh の独自 widget は各シェル設定が担当する
 - `fonts.nix`: Darwin / NixOS 共通のフォントパッケージと fontconfig の既定フォント
 - `lsp.nix`: 全エディタ共通の言語サーバー・整形ツール。通常の PATH に導入する
 - `nvim/`: Darwin / NixOS の Home Manager に読み込む Neovim とプラグインの設定
