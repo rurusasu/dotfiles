@@ -12,6 +12,13 @@
       path = "${config.xdg.stateHome}/zsh/history";
       size = 10000;
       save = 10000;
+      append = true;
+      share = true;
+      extended = true;
+      ignoreDups = true;
+      ignoreSpace = true;
+      saveNoDups = true;
+      expireDuplicatesFirst = true;
     };
 
     shellAliases = {
