@@ -34,7 +34,7 @@ Home Manager の activation は、既存の `init.lua`、`lua/`、`after/lsp/` �
 
 `nvim-treesitter.withPlugins` に対象言語を指定し、Home Manager の `programs.neovim.plugins` に直接登録します。独自の wrapper や環境変数は使用しません。パーサーと対応クエリのビルド・導入は標準の Nixpkgs / Home Manager の処理に任せます。
 
-Home Manager が `init.lua` を生成し、基本設定の後に `plugins.nix` の順序で各 `lua/plugins/*.lua` の `setup()` を呼び出します。LSP は共通設定の `lua/config/lsp.lua` を直接呼び出します。lazy.nvim による遅延読み込みと更新は使用しません。プラグインは Nix の再反映で更新します。
+Home Manager が `init.lua` を生成し、基本設定の後に `plugins.nix` の順序で `require("plugins.<name>")` により各 `lua/plugins/*.lua` を読み込みます。各ファイルは公式例に沿ってプラグイン自身の `setup()` とキー登録を直接実行します。設定を適用するだけの `local M` / `M.setup()` は使いません。LSP は関数を公開する共通モジュール `lua/config/lsp.lua` の `setup()` を呼び出します。lazy.nvim による遅延読み込みと更新は使用しません。プラグインは Nix の再反映で更新します。
 
 Nix は継承先のクエリ（ecma、jsx、html_tags など）も閉包に含めます。「プラグインコードをロードしない」と「Nix store に nvim-treesitter 由来のパッケージが一切存在しない」は別です。ファイルタイプ `sh` / `javascriptreact` / `typescriptreact` は対応する grammar に明示登録します。
 
@@ -100,7 +100,7 @@ nvim-cmp、cmp source 群、LuaSnip、friendly-snippets は使用しません。
 
 ## 画像・ターミナル
 
-Snacks は端末の画像対応を自動判定します。PDF は既存の Poppler 経路を保持し、外部プロセスは `vim.system` で終了コード・10秒上限を確認します。ただし変換待ちは同期なので、大きな PDF の UI 停止を完全には解消していません。
+Snacks は端末の画像対応を自動判定します。PDF は公式の [`picker.preview` と `picker.config`](https://github.com/folke/snacks.nvim/blob/main/docs/picker.md#️-config) で Poppler の変換処理を指定し、通常のファイル表示とソース別の専用プレビューを維持します。`VimEnter` での内部関数の差し替えは行いません。外部プロセスは `vim.system` で終了コード・10秒上限を確認します。ただし変換待ちは同期なので、大きな PDF の UI 停止を完全には解消していません。
 
 Windows のカスタム floating terminal、Oil のドライブ一覧互換処理は維持します。0.12 更新だけを理由に、実機での根拠なく既存 workaround を撤去しません。
 

@@ -88,6 +88,133 @@ let
     };
 in
 {
+  testFzfHasSingleInstallationAndCustomWidgetsAcrossHomes = {
+    expr =
+      map
+        (home: {
+          enabled = home.config.programs.fzf.enable;
+          packageCopies = builtins.length (
+            builtins.filter (
+              package: package.drvPath == home.config.programs.fzf.package.drvPath
+            ) home.config.home.packages
+          );
+          standardBashIntegration = home.config.programs.fzf.enableBashIntegration;
+          standardZshIntegration = home.config.programs.fzf.enableZshIntegration;
+          commands = map (name: home.config.home.sessionVariables.${name}) [
+            "FZF_DEFAULT_COMMAND"
+            "FZF_CTRL_T_COMMAND"
+            "FZF_ALT_C_COMMAND"
+            "FZF_DEFAULT_OPTS"
+          ];
+          bashWidgets =
+            map
+              (
+                key:
+                builtins.length (
+                  builtins.filter (line: home.pkgs.lib.hasInfix "bind -x '\"\\e${key}\": __fzf_" line) (
+                    home.pkgs.lib.splitString "\n" home.config.programs.bash.initExtra
+                  )
+                )
+              )
+              [
+                "d"
+                "t"
+                "r"
+              ];
+          zshWidgets =
+            map
+              (
+                key:
+                builtins.length (
+                  builtins.filter (line: home.pkgs.lib.hasInfix "bindkey '^[${key}' __fzf_" line) (
+                    home.pkgs.lib.splitString "\n" home.config.programs.zsh.initContent
+                  )
+                )
+              )
+              [
+                "d"
+                "t"
+                "r"
+              ];
+        })
+        [
+          linux
+          wsl
+          darwin
+        ];
+    expected = builtins.genList (_: {
+      enabled = true;
+      packageCopies = 1;
+      standardBashIntegration = false;
+      standardZshIntegration = false;
+      commands = [
+        "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type f . ."
+        "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type f . ."
+        "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type d . ."
+        "--height=40% --layout=reverse --border --prompt='> '"
+      ];
+      bashWidgets = [
+        1
+        1
+        1
+      ];
+      zshWidgets = [
+        1
+        1
+        1
+      ];
+    }) 3;
+  };
+
+  testZoxideExclusionsAreLimitedToWSL = {
+    expr = map (home: home.config.home.sessionVariables ? _ZO_EXCLUDE_DIRS) [
+      common
+      linux
+      wsl
+      darwin
+    ];
+    expected = [
+      false
+      false
+      true
+      false
+    ];
+  };
+
+  testZoxideIsInstalledOnceWithShellIntegrationsAcrossHomes = {
+    expr =
+      map
+        (home: {
+          enabled = home.config.programs.zoxide.enable;
+          packageCopies = builtins.length (
+            builtins.filter (
+              package: package.drvPath == home.config.programs.zoxide.package.drvPath
+            ) home.config.home.packages
+          );
+          bashInitCopies = builtins.length (
+            builtins.filter (line: home.pkgs.lib.hasInfix "zoxide init bash" line) (
+              home.pkgs.lib.splitString "\n" home.config.programs.bash.initExtra
+            )
+          );
+          zshIntegration = home.config.programs.zoxide.enableZshIntegration;
+          bashWidget = home.pkgs.lib.hasInfix "bind -x '\"\\eq\": __zoxide_zi_widget'" home.config.programs.bash.initExtra;
+          zshWidget = home.pkgs.lib.hasInfix "bindkey '^[q' __zoxide_zi_widget" home.config.programs.zsh.initContent;
+        })
+        [
+          linux
+          wsl
+          darwin
+        ];
+    expected = builtins.genList (_: {
+      enabled = true;
+      packageCopies = 1;
+      bashInitCopies = 1;
+      zshIntegration = true;
+      bashWidget = true;
+      zshWidget = true;
+    }) 3;
+  };
+
   testTerminalShellIntegrationsAreGeneratedAcrossHomes = {
     expr =
       map

@@ -9,6 +9,8 @@
 | `wsl.nix`    | WSL 固有設定                                |
 | `nixos.nix`  | native NixOS / WSL 共通の Home Manager 設定 |
 | `common.nix` | 共通設定                                    |
+| `zoxide.nix` | zoxide の Bash / Zsh 連携と Alt+Q           |
+| `fzf.nix`    | fzf の検索条件と Bash / Zsh の Alt+D/T/R    |
 
 ## import 方向
 
@@ -16,17 +18,19 @@
 caller -> <os>.nix -> common.nix
 ```
 
-- caller は共有する core module として対象 OS のファイルを import する。standalone 専用の
-  責務は caller が個別 module を組み合わせる。standalone Darwin では `darwin.nix` に加え、
-  font package と `$HOME/Library/Fonts` への activation を所有する `standalone-darwin-fonts.nix`
-  を読み込む。共有する `darwin.nix` に standalone 専用の font activation を置かない。
+- caller は共有する core module として対象 OS のファイルを import する。
+  Darwin のユーザー・フォント設定は `darwin.nix` に集約する。standalone ではフォントを
+  `home.packages` に追加し、Home Manager 標準機能で `$HOME/Library/Fonts/HomeManager` に配布する。
+  nix-darwin 統合ではシステム側がフォントを導入し、Home Manager は fontconfig 設定を担当する。
 - 各 OS ファイルは `./common.nix` を import する。
+- `common.nix` は `../modules/zoxide.nix` でパッケージを導入し、`./zoxide.nix` でシェル初期化・キー設定を読み込む。WSL の除外ディレクトリは `wsl.nix` に置く。
+- fzf も `../modules/fzf.nix` で導入し、`./fzf.nix` で検索条件・キー設定を読み込む。
 - Neovim は `darwin.nix` と `nixos.nix` が `../modules/nvim` を import する。`linux.nix` と `wsl.nix` は `nixos.nix` を経由する。
 - `common.nix` から OS 固有ファイルを import しない。
 - `default.nix` と `users.nix` は作らない。入口と OS 依存方向を曖昧にするため。
 
 standalone Home Manager のユーザー名は `rurusasu` を既定値とする。Darwin のホームディレクトリは
-`standalone-darwin-identity.nix` が実効ユーザー名から `/Users/<name>` を既定化し、明示指定で上書きできる。
+`darwin.nix` が実効ユーザー名から `/Users/<name>` を既定化し、明示指定で上書きできる。
 Linux / WSL のホームディレクトリは各 OS ファイルが既定化する。nix-darwin / NixOS の
 Home Manager submodule は host の `users.users.<name>.home` を使う。
 NixOS は `DOTFILES_USER` 未指定時に `nixos` を使う。WSL postinstall は `--user` で選択した

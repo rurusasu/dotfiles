@@ -1,7 +1,4 @@
 { pkgs, ... }:
-let
-  fdOpts = "--hidden --follow --no-ignore-vcs --max-depth 10";
-in
 {
   # ── Shell: zsh ────────────────────────────────────────────────────────
   programs.zsh = {
@@ -70,49 +67,6 @@ in
         printf '\033[?1000l\033[?1002l\033[?1003l\033[?1006l' 2>/dev/null
       }
       add-zsh-hook precmd __disable_mouse_reporting
-
-      # Alt+Q: zoxide interactive (history-based directory jump)
-      __zoxide_zi_widget() {
-        local result
-        result="$(zoxide query -i)" && cd "$result"
-        zle reset-prompt
-      }
-      zle -N __zoxide_zi_widget
-      bindkey '^[q' __zoxide_zi_widget
-
-      # Alt+D: fzf directory search and cd
-      __fzf_cd_widget() {
-        local dir
-        dir="$(fd ${fdOpts} --absolute-path -t d . . | fzf)" && cd "$dir"
-        zle reset-prompt
-      }
-      zle -N __fzf_cd_widget
-      bindkey '^[d' __fzf_cd_widget
-
-      # Alt+T: fzf file search and insert path
-      __fzf_file_widget() {
-        local selected
-        selected="$(fd ${fdOpts} --absolute-path . . | fzf)"
-        if [[ -n "$selected" ]]; then
-          LBUFFER="$LBUFFER$selected"
-        fi
-        zle reset-prompt
-      }
-      zle -N __fzf_file_widget
-      bindkey '^[t' __fzf_file_widget
-
-      # Alt+R: fzf command history search
-      __fzf_history_widget() {
-        local selected
-        selected="$(fc -ln 1 | fzf --tac)"
-        if [[ -n "$selected" ]]; then
-          BUFFER="$selected"
-          CURSOR=$#BUFFER
-        fi
-        zle reset-prompt
-      }
-      zle -N __fzf_history_widget
-      bindkey '^[r' __fzf_history_widget
 
       ${builtins.readFile ../../../../scripts/sh/dcnvim.sh}
 

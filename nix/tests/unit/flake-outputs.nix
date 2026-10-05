@@ -289,8 +289,6 @@ in
         (toString ../../modules/darwin/ghostty.nix)
         (toString ../../modules/terminals/wezterm/defaults.nix)
         (toString ../../modules/darwin/wezterm.nix)
-        (toString ../../home/standalone-darwin-identity.nix)
-        (toString ../../home/standalone-darwin-fonts.nix)
       ];
       x86Linux = [
         (toString ../../home/linux.nix)

@@ -3,6 +3,8 @@
 ## 管理対象
 
 - `bashrc`（Unix の Home Manager と Windows の chezmoi で使用）
+- `zoxide.bash`（Windows の `.bashrc` にのみ追記）
+- `fzf.bash`（Windows の `.bashrc` にのみ追記）
 - `profile`（Windows 向け）
 - `Microsoft.PowerShell_profile.ps1`（Windows 向け）
 
@@ -12,6 +14,8 @@
 > `nix/modules/shells/zsh/default.nix` が zsh の導入・共通設定を管理する。
 > Unix の chezmoi adapter はこれらをデプロイしない。
 > Bash の alias / widget はここにある `bashrc` を Home Manager が読み込む。
+> zoxide の初期化・Alt+Q は Unix では `nix/home/zoxide.nix`、Windows では `zoxide.bash` が担当する。
+> fzf の検索条件・Alt+D/T/R は Unix では `nix/home/fzf.nix`、Windows では `fzf.bash` が担当する。
 
 ## 変更ルール
 

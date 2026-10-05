@@ -56,15 +56,23 @@
   };
 
   zoxide = {
-    pkg = pkgs.zoxide;
     winget = "ajeetdsouza.zoxide";
     category = "core";
+    # Unix installation belongs to modules/zoxide.nix; user settings to home/.
+    support = {
+      darwin.unsupported = "Zoxide is managed by Home Manager";
+      linux.unsupported = "Zoxide is managed by Home Manager";
+    };
   };
 
   fzf = {
-    pkg = pkgs.fzf;
     winget = "junegunn.fzf";
     category = "core";
+    # Unix installation belongs to modules/fzf.nix; user settings to home/.
+    support = {
+      darwin.unsupported = "Fzf is managed by Home Manager";
+      linux.unsupported = "Fzf is managed by Home Manager";
+    };
   };
 
   direnv = {

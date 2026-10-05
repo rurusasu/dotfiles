@@ -93,17 +93,25 @@ in
 
   testLinuxInstallsManagedFont = fontContract "x86_64-linux" [ ../../home/linux.nix ];
   testWSLInstallsManagedFont = fontContract "x86_64-linux" [ ../../home/wsl.nix ];
-  testStandaloneDarwinHomeProfileInstallsManagedFont =
-    let
-      result = fontContract "aarch64-darwin" [
-        ../../home/darwin.nix
-        ../../home/standalone-darwin-fonts.nix
-      ];
-    in
-    result
-    // {
-      expected = result.expected // {
-        homePackages = true;
+  testStandaloneDarwinHomeProfileInstallsManagedFont = fontContract "aarch64-darwin" [
+    ../../home/darwin.nix
+  ];
+
+  testStandaloneDarwinUsesHomeManagerFontInstallation = {
+    expr =
+      let
+        home = inputs.self.homeConfigurations.aarch64-darwin.config;
+        fontCopy = home.home.file."Library/Fonts/.home-manager-fonts-version".onChange;
+      in
+      {
+        customActivation = home.home.activation ? installDotfilesFonts;
+        nativeFontCopy = inputs.nixpkgs.lib.hasInfix "/Library/Fonts/HomeManager" fontCopy;
+        copiesRealFiles = inputs.nixpkgs.lib.hasInfix "rsync" fontCopy;
       };
+    expected = {
+      customActivation = false;
+      nativeFontCopy = true;
+      copiesRealFiles = true;
     };
+  };
 }

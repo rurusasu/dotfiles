@@ -15,6 +15,7 @@ pkgs.runCommand "neovim-native-check"
       pkgs.jq
       pkgs.python3
       pkgs.gettext
+      pkgs.poppler-utils
     ];
   }
   ''
@@ -32,6 +33,7 @@ pkgs.runCommand "neovim-native-check"
     bash tests/bash/neovim_home_manager_activation.sh ${customXdgNeovim.fileActivation} ${customXdgNeovim.homeFiles} '.custom config'
     nvim --headless -u NONE -i NONE -l tests/lua/nvim_modern_test.lua
     nvim --headless -u NONE -i NONE -l tests/lua/nvim_treesitter_test.lua
+    nvim --headless -u NONE -i NONE -l tests/lua/nvim_snacks_test.lua
     nvim --headless -i NONE -u ${neovim.init} \
       -c 'lua local ok, err = pcall(dofile, "tests/lua/nvim_markdown_test.lua"); if not ok then print(err); vim.cmd("cquit 1") end' \
       -c 'qa!'

@@ -5,7 +5,7 @@ in
 {
   programs.zsh.enable = true;
 
-  # nix-darwin installs fonts; Home Manager configures fontconfig clients.
+  # nix-darwin installs fonts; nix/home/darwin.nix configures fontconfig clients.
   fonts.packages = fonts.packages;
   home-manager.sharedModules = [
     ../shells/zsh
@@ -15,6 +15,5 @@ in
     ../terminals/wezterm/defaults.nix
     # Neovim が利用する言語サーバーをユーザー環境へ導入する。
     ../lsp.nix
-    { fonts.fontconfig = fonts.fontconfig; }
   ];
 }
