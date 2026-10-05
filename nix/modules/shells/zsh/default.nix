@@ -8,6 +8,20 @@
   programs.zsh = {
     enable = true;
     package = pkgs.zsh;
+    setOptions = [
+      "AUTO_CD"
+      "NO_BEEP"
+      "NUMERIC_GLOB_SORT"
+    ];
+    # zsh-autocomplete が compinit を実行するため、重複初期化を避ける。
+    enableCompletion = false;
+    plugins = [
+      {
+        name = "zsh-autocomplete";
+        src = pkgs.zsh-autocomplete;
+        file = "share/zsh-autocomplete/zsh-autocomplete.plugin.zsh";
+      }
+    ];
     history = {
       path = "${config.xdg.stateHome}/zsh/history";
       size = 10000;

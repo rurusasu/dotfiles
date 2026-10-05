@@ -10,7 +10,11 @@
     "flakes"
   ];
   nixpkgs.config.allowUnfree = true;
-  programs.zsh.enable = true;
+  programs.zsh = {
+    enable = true;
+    # Home Manager の zsh-autocomplete に補完初期化を任せる。
+    enableGlobalCompInit = false;
+  };
   fonts.fontDir.enable = true;
 
   # WSL の per-user profile にも言語サーバーを公開する。
