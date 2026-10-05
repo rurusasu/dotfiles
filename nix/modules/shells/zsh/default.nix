@@ -8,7 +8,11 @@
   programs.zsh = {
     enable = true;
     package = pkgs.zsh;
-    history.path = "${config.xdg.stateHome}/zsh/history";
+    history = {
+      path = "${config.xdg.stateHome}/zsh/history";
+      size = 10000;
+      save = 10000;
+    };
 
     shellAliases = {
       find = "fd";
