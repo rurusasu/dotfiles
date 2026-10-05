@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy shell configurations for Windows
-# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "shells/Microsoft.PowerShell_profile.ps1" | sha256sum }}{{ include "dot_config/shell/secret.sh" | sha256sum }}{{ include "dot_config/shell/secret.ps1" | sha256sum }}{{ include "dot_config/shell/secrets.env" | sha256sum }}{{ include "dot_config/shell/secrets-work.env" | sha256sum }}{{ include "dot_local/bin/executable_op-run-gui-launch.ps1" | sha256sum }}{{ include "dot_local/bin/executable_wezterm-launch.cmd" | sha256sum }}{{ include "dot_local/bin/executable_orca-launch.cmd" | sha256sum }}{{ include "dot_local/bin/executable_codex.cmd" | sha256sum }}{{ include "dot_local/bin/executable_stop-stale-codex-login.ps1" | sha256sum }}
+# hash: {{ include "shells/bashrc" | sha256sum }}{{ include "shells/zoxide.bash" | sha256sum }}{{ include "shells/fzf.bash" | sha256sum }}{{ include "shells/profile" | sha256sum }}{{ include "shells/Microsoft.PowerShell_profile.ps1" | sha256sum }}{{ include "dot_config/shell/secret.sh" | sha256sum }}{{ include "dot_config/shell/secret.ps1" | sha256sum }}{{ include "dot_config/shell/secrets.env" | sha256sum }}{{ include "dot_config/shell/secrets-work.env" | sha256sum }}{{ include "dot_local/bin/executable_op-run-gui-launch.ps1" | sha256sum }}{{ include "dot_local/bin/executable_wezterm-launch.cmd" | sha256sum }}{{ include "dot_local/bin/executable_orca-launch.cmd" | sha256sum }}{{ include "dot_local/bin/executable_codex.cmd" | sha256sum }}{{ include "dot_local/bin/executable_stop-stale-codex-login.ps1" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
@@ -30,6 +30,11 @@ function Deploy-File {
 Write-Host "Deploying shell configurations..."
 
 Deploy-File "$ChezmoiSource\shells\bashrc" "$HomeDir\.bashrc"
+# zoxide is deployed only to Windows Bash; Unix uses Home Manager.
+$zoxideBash = Get-Content -Encoding UTF8 -LiteralPath "$ChezmoiSource\shells\zoxide.bash" -Raw
+Add-Content -Encoding UTF8 -LiteralPath "$HomeDir\.bashrc" -Value $zoxideBash -NoNewline
+$fzfBash = Get-Content -Encoding UTF8 -LiteralPath "$ChezmoiSource\shells\fzf.bash" -Raw
+Add-Content -Encoding UTF8 -LiteralPath "$HomeDir\.bashrc" -Value $fzfBash -NoNewline
 Deploy-File "$ChezmoiSource\shells\profile" "$HomeDir\.profile"
 
 # PowerShell profiles (PowerShell 7 and Windows PowerShell 5.1)

@@ -3,9 +3,10 @@
 ## 管理対象
 
 - `wsl/`: WSL 固有調整
-- `fzf.nix`: fzf のパッケージ導入と共通既定値。Bash/Zsh の独自 widget は各シェル設定が担当する
 - `fonts.nix`: Darwin / NixOS 共通のフォントパッケージと fontconfig の既定フォント
 - `lsp.nix`: 全エディタ共通の言語サーバー・整形ツール。通常の PATH に導入する
+- `zoxide.nix`: zoxide のパッケージ導入。シェル初期化・キー設定は `nix/home/zoxide.nix`、WSL 固有設定は `nix/home/wsl.nix` が担当する
+- `fzf.nix`: fzf のパッケージ導入。検索条件・Bash / Zsh のキー設定は `nix/home/fzf.nix` が担当する
 - `nvim/`: Darwin / NixOS の Home Manager に読み込む Neovim とプラグインの設定
 - `terminals/`: Ghostty / WezTerm の Home Manager 設定。各 `defaults.nix` を OS module の `sharedModules` から直接読み込む
 - `shells/zsh/`: zsh の導入と共通設定。`default.nix` を OS module の `sharedModules` と standalone Home Manager から読み込む

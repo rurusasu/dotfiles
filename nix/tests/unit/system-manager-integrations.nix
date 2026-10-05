@@ -38,13 +38,15 @@ in
       homeManagerUserConfigured = builtins.hasAttr "test-user" config.home-manager.users;
       nixEnabled = config.nix.enable;
       zshEnabled = config.home-manager.users.test-user.programs.zsh.enable;
-      zshFindAlias = config.home-manager.users.test-user.programs.zsh.shellAliases.find;
+      zshAliasesLoaded = builtins.elem "source ${../../modules/shells/zsh/aliases.zsh}" (
+        inputs.nixpkgs.lib.splitString "\n" config.home-manager.users.test-user.programs.zsh.initContent
+      );
     };
     expected = {
       homeManagerUserConfigured = true;
       nixEnabled = true;
       zshEnabled = true;
-      zshFindAlias = "fd";
+      zshAliasesLoaded = true;
     };
   };
 

@@ -31,9 +31,6 @@ in
       )
       ++ fonts.packages;
 
-    # Exclude WSL mount paths from zoxide's database to avoid indexing
-    # temporary runtime files under /mnt/wsl/ and /mnt/wslg/.
-
     # Declaratively manage fcitx5 input method profile.
     # fcitx5 overwrites this file on exit, so home-manager re-applies it on
     # each activation (nrs). force = true is required to overwrite the file
@@ -60,6 +57,7 @@ in
     };
 
     sessionVariables = {
+      # Avoid recording temporary runtime directories in zoxide's database.
       _ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
       BROWSER = "explorer.exe";
       # fcitx5 GTK_IM_MODULE bridge for WSLg GUI applications.

@@ -10,7 +10,12 @@
   ...
 }:
 {
-  imports = [ ../modules/fzf.nix ];
+  imports = [
+    ../modules/fzf.nix
+    ../modules/zoxide.nix
+    ./fzf.nix
+    ./zoxide.nix
+  ];
 
   home = {
     username = lib.mkDefault "rurusasu";
@@ -69,15 +74,8 @@
 
     # ── Prompt ────────────────────────────────────────────────────────────
     starship.enable = true;
-    # The preserved Bash configuration initializes these integrations once.
+    # The preserved Bash configuration initializes Starship once.
     starship.enableBashIntegration = false;
-
-    # ── Directory navigation ───────────────────────────────────────────────
-    zoxide = {
-      enable = true;
-      enableBashIntegration = false;
-      enableZshIntegration = true;
-    };
 
     # ── direnv ─────────────────────────────────────────────────────────────
     direnv = {

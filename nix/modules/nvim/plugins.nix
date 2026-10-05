@@ -58,49 +58,49 @@ in
     {
       plugin = pkgs.vimPlugins.oil-nvim;
       type = "lua";
-      config = ''require("plugins.oil").setup()'';
+      config = ''require("plugins.oil")'';
     }
     # Git の変更箇所を行番号横に表示する。
     {
       plugin = pkgs.vimPlugins.gitsigns-nvim;
       type = "lua";
-      config = ''require("plugins.gitsigns").setup()'';
+      config = ''require("plugins.gitsigns")'';
     }
     # 編集モードに応じてカーソル行の色を変える。
     {
       plugin = modes;
       type = "lua";
-      config = ''require("plugins.modes").setup()'';
+      config = ''require("plugins.modes")'';
     }
     # キー操作の候補を表示する。
     {
       plugin = pkgs.vimPlugins.which-key-nvim;
       type = "lua";
-      config = ''require("plugins.which_key").setup()'';
+      config = ''require("plugins.which_key")'';
     }
     # 括弧を補完し、Enter は標準補完のキー設定に任せる。
     {
       plugin = pkgs.vimPlugins.nvim-autopairs;
       type = "lua";
-      config = ''require("plugins.autopairs").setup()'';
+      config = ''require("plugins.autopairs")'';
     }
     # 括弧や引用符の追加・変更・削除を行う。
     {
       plugin = pkgs.vimPlugins.nvim-surround;
       type = "lua";
-      config = ''require("plugins.surround").setup()'';
+      config = ''require("plugins.surround")'';
     }
     # インデントの深さをガイド線で表示する。
     {
       plugin = pkgs.vimPlugins.indent-blankline-nvim;
       type = "lua";
-      config = ''require("plugins.indent_blankline").setup()'';
+      config = ''require("plugins.indent_blankline")'';
     }
     # 挿入・ターミナルモードで jk を押すと通常モードに戻る。
     {
       plugin = pkgs.vimPlugins.better-escape-nvim;
       type = "lua";
-      config = ''require("plugins.better_escape").setup()'';
+      config = ''require("plugins.better_escape")'';
     }
     # Neovim のウインドウと tmux のペインを共通キーで移動する。
     pkgs.vimPlugins.vim-tmux-navigator
@@ -108,13 +108,13 @@ in
     {
       plugin = devcontainer;
       type = "lua";
-      config = ''require("plugins.devcontainer").setup()'';
+      config = ''require("plugins.devcontainer")'';
     }
     # 各ウインドウにファイル名・アイコン・診断件数を表示する。
     {
       plugin = pkgs.vimPlugins.incline-nvim;
       type = "lua";
-      config = ''require("plugins.incline").setup()'';
+      config = ''require("plugins.incline")'';
     }
     # 上流の LSP 定義を使い、共通のサーバー設定を適用する。
     {
@@ -126,19 +126,19 @@ in
     {
       plugin = pkgs.vimPlugins.snacks-nvim;
       type = "lua";
-      config = ''require("plugins.snacks").setup()'';
+      config = ''require("plugins.snacks")'';
     }
     # AI CLI の操作キーとターミナルの配置・サイズ変更を設定する。
     {
       plugin = pkgs.vimPlugins.sidekick-nvim;
       type = "lua";
-      config = ''require("plugins.sidekick").setup()'';
+      config = ''require("plugins.sidekick")'';
     }
     # Markdown を表示用に整形し、切り替えキーを設定する。
     {
       plugin = pkgs.vimPlugins.render-markdown-nvim;
       type = "lua";
-      config = ''require("plugins.markdown").setup()'';
+      config = ''require("plugins.markdown")'';
     }
   ];
 }

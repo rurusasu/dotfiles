@@ -1,4 +1,5 @@
 {
+  config,
   pkgs,
   lib,
   inputs,
@@ -9,6 +10,7 @@ let
   sets = import ../packages/sets.nix {
     inherit pkgs lib;
   };
+  inherit ((import ../modules/fonts.nix { inherit pkgs; })) fonts;
 in
 {
   imports = [
@@ -18,11 +20,17 @@ in
   ];
 
   home = {
+    # System integration supplies the host home with higher priority.
+    homeDirectory = lib.mkDefault "/Users/${config.home.username}";
+
     packages = lib.unique (
       (sets.darwinHomePackagesForInstallFeatures installFeatures)
       ++ [
         pkgs.coreutils
       ]
+      # nix-darwin installs system fonts; standalone uses Home Manager's
+      # native Darwin font copying from home.packages.
+      ++ lib.optionals (!config.submoduleSupport.enable) fonts.packages
     );
 
     sessionVariables = {
@@ -38,6 +46,8 @@ in
       "/opt/homebrew/sbin"
     ];
   };
+
+  fonts.fontconfig = fonts.fontconfig;
 
   programs.zsh.shellAliases = {
     nrs = "~/.dotfiles/install.sh";

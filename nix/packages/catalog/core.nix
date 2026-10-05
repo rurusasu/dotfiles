@@ -55,22 +55,6 @@
     category = "core";
   };
 
-  zoxide = {
-    pkg = pkgs.zoxide;
-    winget = "ajeetdsouza.zoxide";
-    category = "core";
-  };
-
-  fzf = {
-    winget = "junegunn.fzf";
-    category = "core";
-    # Unix installation and shell defaults belong to modules/fzf.nix.
-    support = {
-      darwin.unsupported = "fzf is managed by Home Manager";
-      linux.unsupported = "fzf is managed by Home Manager";
-    };
-  };
-
   direnv = {
     pkg = pkgs.direnv;
     winget = "direnv.direnv";

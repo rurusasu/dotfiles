@@ -5,7 +5,7 @@
 # NixOS-WSL specific options are documented on the NixOS-WSL repository:
 # https://github.com/nix-community/NixOS-WSL
 
-_:
+{ pkgs, ... }:
 
 let
   configuredUser = builtins.getEnv "DOTFILES_USER";
@@ -21,6 +21,13 @@ in
 
   wsl.enable = true;
   wsl.defaultUser = user;
+
+  # XDG desktop portal: provides color-scheme and other settings queries via D-Bus.
+  xdg.portal = {
+    enable = true;
+    extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
+    config.common.default = "*";
+  };
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions

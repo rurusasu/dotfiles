@@ -4,7 +4,7 @@
 
 `nix/packages/catalog/` が全プラットフォームのアプリ・CLI の package と provider metadata の正本です。`nix/packages/sets.nix` は catalog、provider 選択、installer metadata を合成する公開入口であり、既存の consumer は引き続きこの入口を import します。
 
-フォントパッケージと fontconfig 設定は `nix/modules/fonts.nix` の `fonts.packages` / `fonts.fontconfig` に一度だけ定義します。Darwin / NixOS のシステム構成はそれぞれ `nix/modules/darwin/default.nix` / `nix/modules/nixos/default.nix` を読み込み、OS 固有の option と配線はこの入口に記載します。NixOS は共通 module を import し、NixOS 専用の `fonts.fontDir.enable` を設定します。Darwin は `fonts.packages` を nix-darwin に、`fonts.fontconfig` を `home-manager.sharedModules` に渡します。Linux / WSL と standalone Darwin の Home Manager は各 entrypoint から共通定義を直接参照します。
+フォントパッケージと fontconfig 設定は `nix/modules/fonts.nix` の `fonts.packages` / `fonts.fontconfig` に一度だけ定義します。Darwin / NixOS のシステム構成はそれぞれ `nix/modules/darwin/default.nix` / `nix/modules/nixos/default.nix` を読み込み、OS 固有の option と配線はこの入口に記載します。NixOS は共通 module を import し、NixOS 専用の `fonts.fontDir.enable` を設定します。Darwin は `fonts.packages` を nix-darwin に渡し、`nix/home/darwin.nix` が `fonts.fontconfig` を設定します。Linux / WSL と standalone Darwin の Home Manager は各 entrypoint から共通定義を直接参照します。standalone Darwin のフォント配布は Home Manager 標準機能を使います。
 
 共通の `fonts.fontconfig.defaultFonts` は `monospace` / `sansSerif` / `serif` を `UDEV Gothic NF`、`emoji` を `Noto Color Emoji` に設定します。Darwin での既定フォント設定は fontconfig を使うアプリに適用され、macOS 標準 UI / CoreText の既定フォントは変更しません。
 
@@ -160,6 +160,10 @@ cat result/package-support-report.json
 同じ package を Home Manager と system layer の両方へ重複させるのは、system service が絶対 path を必要とする場合に限定します。
 
 Neovim 本体・プラグインはカタログを介さず、`nix/modules/nvim/` の Home Manager 設定で直接管理します。LSP・整形ツールは全エディタ共通の `nix/modules/lsp.nix` の `home.packages` に宣言し、通常の PATH に導入します。Tree-sitter の対象言語は `plugins.nix` の標準オプションに指定します。運用は [Neovim の運用](../chezmoi/neovim.md) を参照してください。
+
+zoxide の Unix 向け導入は `nix/modules/zoxide.nix`、Bash / Zsh の初期化と Alt+Q（macOS では Option+Q）は `nix/home/zoxide.nix` に配置し、`nix/home/common.nix` から読み込みます。WSL の除外ディレクトリは `nix/home/wsl.nix` が管理します。zoxide はパッケージカタログから外し、Windows の winget 配布情報は `nix/packages/install/windows-only.nix`、導入後の検証は `windows-verification.nix` が管理します。chezmoi の zoxide 設定は Windows のみが配布し、Windows の Bash には `chezmoi/shells/zoxide.bash` を `.bashrc` に追記します。
+
+fzf の Unix 向け導入は `nix/modules/fzf.nix`、検索条件と Alt+D/T/R（macOS では Option+D/T/R）は `nix/home/fzf.nix` に配置します。標準のシェル連携は無効にして既存のカスタムキー設定を維持します。fzf もパッケージカタログから外し、Windows の winget 配布情報と導入後の検証は `nix/packages/install/` が管理します。Windows の Bash 設定は `chezmoi/shells/fzf.bash` を `.bashrc` に追記します。
 
 ## 主なファイル
 

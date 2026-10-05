@@ -38,8 +38,6 @@ let
           ../modules/darwin/ghostty.nix
           ../modules/terminals/wezterm/defaults.nix
           ../modules/darwin/wezterm.nix
-          ../home/standalone-darwin-identity.nix
-          ../home/standalone-darwin-fonts.nix
         ];
       };
   mkLinuxHome =

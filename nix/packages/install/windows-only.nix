@@ -15,6 +15,12 @@ let
   };
 
   windowsOnlySupport = {
+    "ajeetdsouza.zoxide" =
+      mkWindowsOnlySupport "winget" "ajeetdsouza.zoxide"
+        "Unix installation is owned by the zoxide Home Manager module";
+    "junegunn.fzf" =
+      mkWindowsOnlySupport "winget" "junegunn.fzf"
+        "Unix installation is owned by the fzf Home Manager module";
     "Microsoft.PowerToys" =
       mkWindowsOnlySupport "winget" "Microsoft.PowerToys"
         "Windows system utility";
@@ -34,9 +40,11 @@ let
 in
 {
   inherit windowsOnlySupport;
-  # Windows-only packages (no nix equivalent)
+  # Windows adapter packages without a shared catalog entry.
   windowsOnly = {
     winget = [
+      "ajeetdsouza.zoxide"
+      "junegunn.fzf"
       "Microsoft.PowerToys"
       "Microsoft.VCRedist.2015+.x64"
       "Microsoft.VisualStudio.2022.BuildTools"

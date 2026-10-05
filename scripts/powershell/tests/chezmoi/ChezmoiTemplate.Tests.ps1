@@ -399,6 +399,59 @@ Describe 'chezmoi テンプレート バリデーション' {
     }
 
     Context 'Shell keybindings' {
+        It 'should deploy zoxide environment configuration only on Windows' {
+            $unixTemplate = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/cli/run_onchange_deploy.sh.tmpl') -Raw
+            foreach ($os in @('linux', 'darwin')) {
+                $data = @{ chezmoi = @{ os = $os } } | ConvertTo-Json -Compress
+                $rendered = Invoke-ChezmoiTemplateForTest -Template $unixTemplate -OverrideData $data
+                $rendered.ExitCode | Should -Be 0 -Because $rendered.StandardError
+                $rendered.StandardOutput | Should -Not -Match 'zoxide'
+            }
+
+            $windowsTemplate = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/cli/run_onchange_deploy.ps1.tmpl') -Raw
+            $rendered = Invoke-ChezmoiTemplateForTest -Template $windowsTemplate -OverrideData '{"chezmoi":{"os":"windows"}}'
+            $rendered.ExitCode | Should -Be 0 -Because $rendered.StandardError
+            $rendered.StandardOutput | Should -Match 'Deploy-File .*cli\\zoxide\\env.*\.config\\zoxide\\env'
+        }
+
+        It 'should install Windows Bash zoxide and fzf widgets once across repeated deployment' {
+            $source = Join-Path $TestDrive 'source'
+            $destination = Join-Path $TestDrive 'home'
+            New-Item -ItemType Directory -Path (Join-Path $source 'shells'), $destination -Force | Out-Null
+            # Only Bash inputs are present, so other profile and secret targets are untouched.
+            foreach ($name in @('bashrc', 'zoxide.bash', 'fzf.bash')) {
+                Copy-Item -LiteralPath (Join-Path $script:chezmoiRoot "shells/$name") -Destination (Join-Path $source "shells/$name")
+            }
+            $template = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/shells/run_onchange_deploy.ps1.tmpl') -Raw
+            $rendered = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"windows"}}'
+            $rendered.ExitCode | Should -Be 0 -Because $rendered.StandardError
+            $previousSource = $env:CHEZMOI_SOURCE_DIR
+            $previousProfile = $env:USERPROFILE
+            try {
+                $env:CHEZMOI_SOURCE_DIR = $source
+                $env:USERPROFILE = $destination
+                $deploy = [scriptblock]::Create($rendered.StandardOutput)
+                & $deploy
+                & $deploy
+                $bashrc = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $destination '.bashrc') -Raw
+                $expected = (Get-Content -Encoding UTF8 -LiteralPath (Join-Path $source 'shells/bashrc') -Raw) +
+                (Get-Content -Encoding UTF8 -LiteralPath (Join-Path $source 'shells/zoxide.bash') -Raw) +
+                (Get-Content -Encoding UTF8 -LiteralPath (Join-Path $source 'shells/fzf.bash') -Raw)
+                $bashrc | Should -BeExactly $expected
+                [regex]::Matches($bashrc, 'zoxide init bash').Count | Should -Be 1
+                [regex]::Matches($bashrc, 'bind -x ''"\\eq": __zoxide_zi_widget''').Count | Should -Be 1
+                [regex]::Matches($bashrc, 'export FZF_DEFAULT_COMMAND=').Count | Should -Be 1
+                foreach ($key in @('d', 't', 'r')) {
+                    [regex]::Matches($bashrc, ('bind -x ''"\\e{0}": __fzf_' -f $key)).Count | Should -Be 1
+                }
+                $bashrc | Should -Match 'alias ll='
+            }
+            finally {
+                $env:CHEZMOI_SOURCE_DIR = $previousSource
+                $env:USERPROFILE = $previousProfile
+            }
+        }
+
         It 'should source bashrc from profile for interactive login bash' {
             $profileContent = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "shells/profile") -Raw
 
@@ -411,7 +464,7 @@ Describe 'chezmoi テンプレート バリデーション' {
             $shellFiles = @(
                 Join-Path $script:chezmoiRoot "shells/bashrc"
                 Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1"
-                Join-Path $script:repoRoot "nix/modules/shells/zsh/default.nix"
+                Join-Path $script:repoRoot "nix/modules/shells/zsh/aliases.zsh"
             )
 
             foreach ($path in $shellFiles) {
@@ -421,9 +474,9 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
 
         It 'should keep zoxide interactive jump on Alt+Q across shells and terminals' {
-            $bashrc = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "shells/bashrc") -Raw
+            $bashrc = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "shells/zoxide.bash") -Raw
             $powershellProfile = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1") -Raw
-            $homeManagerZsh = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot "nix/modules/shells/zsh/default.nix") -Raw
+            $homeManagerZsh = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot "nix/home/zoxide.zsh") -Raw
             $wezterm = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "terminals/wezterm/wezterm.lua") -Raw
 
             $bashrc | Should -Match 'bind -x ''"\\eq": __zoxide_zi_widget'''

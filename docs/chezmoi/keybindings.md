@@ -87,6 +87,7 @@ Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢
   - `Ctrl+Z`: undo
   - `Ctrl+Y`: normal/visual は redo、insert は補完候補の確定
   - `-`: Oil エクスプローラ、`Space+e`: 診断表示
+  - Oil 内: `Enter` で開く、`Ctrl+S` で縦分割、`Ctrl+H` で横分割、`Ctrl+T` で新規タブ、`Esc` で閉じる、`g.` で隠しファイル切替、`Ctrl+L` で再読み込み（Oil 内では window 移動より優先）
   - `gc/gcc`: 標準コメント、`grr/grn/gra/gri/grt`: 標準 LSP 操作
   - `Ctrl+X Ctrl+O`: LSP 補完、`Ctrl+X Ctrl+F`: パス補完、`Ctrl+N/P`: バッファ補完
   - `Tab/Shift+Tab`: 補完選択／snippet 移動、`Enter`: 選択候補の確定（未選択なら改行）

@@ -1,7 +1,7 @@
 {{ if ne .chezmoi.os "windows" -}}
 #!/usr/bin/env bash
 # Deploy CLI tool configurations for Linux/macOS
-# hash: {{ include "cli/starship/starship.toml" | sha256sum }}{{ include "cli/fd/ignore" | sha256sum }}{{ include "cli/ripgrep/config" | sha256sum }}{{ include "cli/ghq/config" | sha256sum }}{{ include "cli/zoxide/env" | sha256sum }}
+# hash: {{ include "cli/starship/starship.toml" | sha256sum }}{{ include "cli/fd/ignore" | sha256sum }}{{ include "cli/ripgrep/config" | sha256sum }}{{ include "cli/ghq/config" | sha256sum }}
 
 set -euo pipefail
 
@@ -25,7 +25,6 @@ deploy_file "$CHEZMOI_SOURCE/cli/starship/starship.toml" "$HOME_DIR/.config/star
 deploy_file "$CHEZMOI_SOURCE/cli/fd/ignore" "$HOME_DIR/.config/fd/ignore"
 deploy_file "$CHEZMOI_SOURCE/cli/ripgrep/config" "$HOME_DIR/.config/ripgrep/config"
 deploy_file "$CHEZMOI_SOURCE/cli/ghq/config" "$HOME_DIR/.config/ghq/config"
-deploy_file "$CHEZMOI_SOURCE/cli/zoxide/env" "$HOME_DIR/.config/zoxide/env"
 
 echo "CLI tool configurations deployed."
 {{ end -}}

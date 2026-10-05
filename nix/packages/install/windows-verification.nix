@@ -37,14 +37,6 @@
       command = "eza";
       args = [ "--version" ];
     };
-    zoxide = {
-      command = "zoxide";
-      args = [ "--version" ];
-    };
-    fzf = {
-      command = "fzf";
-      args = [ "--version" ];
-    };
     direnv = {
       command = "direnv";
       args = [ "--version" ];
@@ -115,6 +107,14 @@
   # Post-install verification commands for Windows-only winget packages.
   # Keys match PackageIdentifier values because these packages have no catalog attr.
   wingetVerifyById = {
+    "ajeetdsouza.zoxide" = {
+      command = "zoxide";
+      args = [ "--version" ];
+    };
+    "junegunn.fzf" = {
+      command = "fzf";
+      args = [ "--version" ];
+    };
     "AgileBits.1Password" = {
       type = "windowsInstalledProduct";
       command = "AgileBits.1Password";

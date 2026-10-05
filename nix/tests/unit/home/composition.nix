@@ -122,6 +122,32 @@ in
     }) 3;
   };
 
+  testZoxideIsInstalledOnceWithShellIntegrationsAcrossHomes = {
+    expr =
+      map
+        (home: {
+          enabled = home.config.programs.zoxide.enable;
+          packageCopies = builtins.length (
+            builtins.filter (
+              package: package.drvPath == home.config.programs.zoxide.package.drvPath
+            ) home.config.home.packages
+          );
+          bashIntegration = home.config.programs.zoxide.enableBashIntegration;
+          zshIntegration = home.config.programs.zoxide.enableZshIntegration;
+        })
+        [
+          linux
+          wsl
+          darwin
+        ];
+    expected = builtins.genList (_: {
+      enabled = true;
+      packageCopies = 1;
+      bashIntegration = true;
+      zshIntegration = true;
+    }) 3;
+  };
+
   testTerminalShellIntegrationsAreGeneratedAcrossHomes = {
     expr =
       map
@@ -331,8 +357,10 @@ in
   };
 
   testLinuxHomeModuleRetainsSharedShellConfiguration = {
-    expr = linux.config.programs.zsh.shellAliases.l;
-    expected = "eza -lhaT --level=2 --icons=auto --hyperlink -F --group-directories-first --color=auto";
+    expr = builtins.elem "source ${../../../modules/shells/zsh/aliases.zsh}" (
+      inputs.nixpkgs.lib.splitString "\n" linux.config.programs.zsh.initContent
+    );
+    expected = true;
   };
 
   testNRShellAliasUsesPlatformInstallCommand = {

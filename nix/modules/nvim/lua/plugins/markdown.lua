@@ -1,22 +1,15 @@
--- プラグインの設定は Home Manager の起動処理から呼び出す。
-local M = {}
+require("render-markdown").setup()
 
-function M.setup()
-    local opts = {}
+local keys = {
+    {
+        "<leader>mp",
+        function()
+            require("render-markdown").toggle()
+        end,
+        desc = "Toggle Markdown rendering",
+    },
+}
 
-    require("render-markdown").setup(opts)
-
-    for _, key in ipairs({
-        {
-            "<leader>mp",
-            function()
-                require("render-markdown").toggle()
-            end,
-            desc = "Toggle Markdown rendering",
-        },
-    }) do
-        vim.keymap.set(key.mode or "n", key[1], key[2], { desc = key.desc })
-    end
+for _, key in ipairs(keys) do
+    vim.keymap.set(key.mode or "n", key[1], key[2], { desc = key.desc })
 end
-
-return M
