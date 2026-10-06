@@ -5,9 +5,9 @@ in
 {
   programs = {
     fzf = {
-      # Keep the custom Alt+D/T/R widgets without adding standard Ctrl bindings.
+      # Bash keeps custom widgets; Zsh uses standard Ctrl+T/R and Alt+C bindings.
       enableBashIntegration = false;
-      enableZshIntegration = false;
+      enableZshIntegration = true;
       enableFishIntegration = false;
       enableNushellIntegration = false;
       defaultCommand = "fd ${fdOpts} --absolute-path --type f . .";
@@ -57,10 +57,6 @@ in
         fi
       }
       bind -x '"\er": __fzf_history_widget'
-    '';
-
-    zsh.initContent = ''
-      source ${./fzf.zsh} ${fdOpts}
     '';
   };
 }

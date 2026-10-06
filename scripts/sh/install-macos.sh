@@ -126,8 +126,8 @@ ensure_command_line_tools() {
 ensure_nix() {
   dotfiles_load_nix
   if ! dotfiles_have nix; then
-    dotfiles_log "Installing Nix in multi-user daemon mode..."
-    curl -fsSL https://nixos.org/nix/install | sh -s -- --daemon
+    dotfiles_log "Installing Lix in multi-user daemon mode..."
+    curl -fsSL https://install.lix.systems/lix | sh -s -- install --no-confirm
     dotfiles_load_nix
   fi
 

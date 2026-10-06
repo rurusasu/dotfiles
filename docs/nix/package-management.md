@@ -163,7 +163,7 @@ Neovim 本体・プラグインはカタログを介さず、`nix/modules/nvim/`
 
 zoxide の Unix 向け導入は `nix/modules/zoxide.nix`、Bash / Zsh の初期化と Alt+Q（macOS では Option+Q）は `nix/home/zoxide.nix` に配置し、`nix/home/common.nix` から読み込みます。WSL の除外ディレクトリは `nix/home/wsl.nix` が管理します。zoxide はパッケージカタログから外し、Windows の winget 配布情報は `nix/packages/install/windows-only.nix`、導入後の検証は `windows-verification.nix` が管理します。chezmoi の zoxide 設定は Windows のみが配布し、Windows の Bash には `chezmoi/shells/zoxide.bash` を `.bashrc` に追記します。
 
-fzf の Unix 向け導入は `nix/modules/fzf.nix`、検索条件と Alt+D/T/R（macOS では Option+D/T/R）は `nix/home/fzf.nix` に配置します。標準のシェル連携は無効にして既存のカスタムキー設定を維持します。fzf もパッケージカタログから外し、Windows の winget 配布情報と導入後の検証は `nix/packages/install/` が管理します。Windows の Bash 設定は `chezmoi/shells/fzf.bash` を `.bashrc` に追記します。
+fzf の Unix 向け導入は `nix/modules/fzf.nix`、検索条件とシェル連携は `nix/home/fzf.nix` に配置します。zsh は標準 integration の Ctrl+T/R・Alt+C（macOS では Option+C）を使い、Bash は独自の Alt+D/T/R を維持します。fzf もパッケージカタログから外し、Windows の winget 配布情報と導入後の検証は `nix/packages/install/` が管理します。Windows の Bash 設定は `chezmoi/shells/fzf.bash` を `.bashrc` に追記します。
 
 ## 主なファイル
 
