@@ -58,9 +58,5 @@ in
       }
       bind -x '"\er": __fzf_history_widget'
     '';
-
-    zsh.initContent = ''
-      source ${./fzf.zsh} ${fdOpts}
-    '';
   };
 }
