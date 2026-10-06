@@ -118,7 +118,7 @@ in
       changeDirWidgetCommand = "fd --hidden --follow --no-ignore-vcs --max-depth 10 --absolute-path --type d . .";
       defaultOptions = "--height=40% --layout=reverse --border --prompt=> ";
       bashIntegration = false;
-      zshIntegration = false;
+      zshIntegration = true;
     }) 3;
   };
 

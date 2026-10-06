@@ -91,7 +91,9 @@ editor 同期が完了してから起動します。
 ./install.sh --with-hermes # native Hermes CLI/gateway + Hermes Desktop + Chrome + Discord
 ```
 
-Nix installer と nix-darwin がシステムを収束させ、nix-homebrew が選択した
+macOS の初回導入には Lix installer を使い、nix-darwin の `nix.package` も
+`pkgs.lixPackageSets.stable.lix` に統一します。既存の Nix 環境は nix-darwin の反映で
+Lix に切り替わります。nix-darwin がシステムを収束させ、nix-homebrew が選択した
 Homebrew formula/cask を管理します。Home Manager と chezmoi も同じコマンド内で
 適用します。macOS では WSL や NixOS を導入しません。
 

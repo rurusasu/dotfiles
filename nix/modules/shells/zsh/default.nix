@@ -8,6 +8,7 @@
   programs.zsh = {
     enable = true;
     package = pkgs.zsh;
+    dotDir = "${config.xdg.configHome}/zsh";
     setOptions = [
       "AUTO_CD"
       "NO_BEEP"

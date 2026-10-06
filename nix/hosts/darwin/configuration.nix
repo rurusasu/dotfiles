@@ -90,6 +90,9 @@ in
     };
   };
 
+  # Keep the daemon and CLI on Lix after bootstrapping with the Lix installer.
+  nix.package = pkgs.lixPackageSets.stable.lix;
+
   nix.settings = {
     experimental-features = [
       "nix-command"

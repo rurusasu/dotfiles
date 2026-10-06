@@ -347,7 +347,7 @@ case "$*" in
 	*"/api/tags"*) printf "%s\n" "{\"models\":[{\"name\":\"qwen3.6:35b\"},{\"name\":\"qwen3-embedding:0.6b\"}]}"; exit 0 ;;
 	*"127.0.0.1:8888/health"*) printf "%s\n" "{\"status\":\"healthy\",\"database\":\"connected\"}"; exit 0 ;;
 	*/health*) exit 0 ;;
-	*nixos.org/nix/install*)
+	*install.lix.systems/lix*)
 		cat <<'"'"'SCRIPT'"'"'
 printf "nix-installer %s\n" "$*" >>"$COMMAND_LOG"
 cat >"$STUB_BIN/nix" <<'"'"'NIX'"'"'
@@ -1668,11 +1668,11 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	grep -Fqx "sudo </bin/mkdir> <--> <$FAKE_HOMEBREW_BIN_DIR>" "$COMMAND_LOG"
 	grep -Fqx "sudo </bin/mkdir> <--> <$FAKE_HOMEBREW_CLI_PLUGINS_DIR>" "$COMMAND_LOG"
 	assert_log_order \
-		"nix-installer --daemon" \
+		"nix-installer install --no-confirm" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"task --dir $REPO_ROOT hermes:desktop:install"
-	[ "$(grep -c 'nix-installer --daemon' "$COMMAND_LOG")" -eq 1 ]
+	[ "$(grep -c 'nix-installer install --no-confirm' "$COMMAND_LOG")" -eq 1 ]
 	! grep -q 'raw.githubusercontent.com/Homebrew/install' "$COMMAND_LOG"
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
 	! grep -q '^docker-install ' "$COMMAND_LOG"
@@ -1695,7 +1695,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	[ "$(readlink "$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose")" = "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" ]
 	[ ! -L "$FAKE_HOMEBREW_BIN_DIR/docker-compose" ]
 	assert_log_order \
-		"nix-installer --daemon" \
+		"nix-installer install --no-confirm" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
 		"docker-install --accept-license --user=test-user"
 	[[ "$output" != *"Homebrew command is unavailable"* ]]
@@ -1710,7 +1710,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 
 	[ "$status" -eq 0 ]
 	assert_log_order \
-		"nix-installer --daemon" \
+		"nix-installer install --no-confirm" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure"
 }
 
