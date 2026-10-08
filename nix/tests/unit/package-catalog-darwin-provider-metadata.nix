@@ -26,27 +26,4 @@ in
     };
   };
 
-  testOllamaDarwinProviderMetadata = {
-    expr = sets.supportReport.ollama;
-    expected = {
-      darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "ollama";
-        identity = "ollama";
-      };
-      linux = {
-        provider = "nix";
-        source = "nixpkgs";
-        identity = "ollama";
-        nixAttr = "ollama";
-      };
-      windows = {
-        provider = "winget";
-        source = "winget";
-        identity = "Ollama.Ollama";
-      };
-      installFeature = "WithOllama";
-    };
-  };
 }

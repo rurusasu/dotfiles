@@ -22,7 +22,7 @@ Neovim は chezmoi の配布対象ではなく、Home Manager が管理します
 ## Neovim の内部構造
 
 ```text
-nix/modules/nvim/
+nix/modules/editors/nvim/
 ├── default.nix               # Home Manager の設定・Lua の配置
 ├── plugins.nix               # プラグインの導入・設定の呼び出し
 ├── init.lua                  # エディタの基本設定・補助機能の読み込み
@@ -31,7 +31,7 @@ nix/modules/nvim/
     └── plugins/              # プラグインごとの Lua 設定
 ```
 
-起動設定は `nix/modules/nvim/default.nix`、プラグインの導入と設定の呼び出しは `nix/modules/nvim/plugins.nix`、Lua 設定の本体は `nix/modules/nvim/lua/plugins/` にあります。Home Manager が `init.lua` を生成します。LSP サーバーの package/provider 定義は `nix/packages/catalog/lsp.nix`、`sets.nix` は公開入口です。運用・テストは [Neovim](./neovim.md) を参照してください。
+起動設定は `nix/modules/editors/nvim/default.nix`、プラグインの導入と設定の呼び出しは `nix/modules/editors/nvim/plugins.nix`、Lua 設定の本体は `nix/modules/editors/nvim/lua/plugins/` にあります。Home Manager が `init.lua` を生成します。LSP サーバーの package/provider 定義は `nix/packages/catalog/lsp.nix`、`sets.nix` は公開入口です。運用・テストは [Neovim](./neovim.md) を参照してください。
 
 ## ファイル命名規則
 

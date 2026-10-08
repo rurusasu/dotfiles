@@ -4,9 +4,7 @@
 
 .DESCRIPTION
     Creates the shared local-ai-services network and reconciles the MLflow
-    container to the compose definition. The explicit WithMLflow option is
-    resolved before this handler runs, so Hindsight and Hermes can depend on
-    the same network and gateway.
+    container to the compose definition.
 #>
 
 $libPath = Split-Path -Parent $PSScriptRoot
@@ -26,10 +24,6 @@ class MLflowHandler : SetupHandlerBase {
     }
 
     [bool] CanApply([SetupContext]$ctx) {
-        if (-not $this.IsTruthy($ctx.GetOption('WithMLflow', $false))) {
-            $this.Log('MLflow setup is disabled by option.', 'Gray')
-            return $false
-        }
         if (-not (Get-Command -Name 'docker' -ErrorAction SilentlyContinue)) {
             $this.Log('docker command was not found.', 'Gray')
             return $false
@@ -62,15 +56,6 @@ class MLflowHandler : SetupHandlerBase {
             $start = $this.InvokeCompose($composeFile, @('up', '-d', '--force-recreate', '--remove-orphans', '--wait', 'mlflow'))
             if (-not $start.Success) {
                 return $this.CreateFailureResult("MLflow startup failed: $($start.Message)")
-            }
-
-            $configure = $this.InvokeCompose($composeFile, @(
-                    'exec', '-T', 'mlflow', 'python', '/opt/mlflow/configure.py',
-                    '--base-url', 'http://127.0.0.1:5000',
-                    '--manifest', '/opt/mlflow/endpoints.yml'
-                ))
-            if (-not $configure.Success) {
-                return $this.CreateFailureResult("MLflow endpoint configuration failed: $($configure.Message)")
             }
 
             return $this.CreateSuccessResult('MLflow Gateway started at http://127.0.0.1:5000')
@@ -112,12 +97,7 @@ class MLflowHandler : SetupHandlerBase {
     }
 
     hidden [string] GetComposeFilePath([SetupContext]$ctx) {
-        return Join-Path $ctx.DotfilesPath 'docker\mlflow\compose.yml'
+        return Join-Path $ctx.DotfilesPath 'docker\local-ai-services\compose.yml'
     }
 
-    hidden [bool] IsTruthy([object]$value) {
-        if ($null -eq $value) { return $false }
-        if ($value -is [bool]) { return [bool]$value }
-        return ([string]$value).Trim() -match '^(1|true|yes|on)$'
-    }
 }

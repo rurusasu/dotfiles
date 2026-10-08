@@ -431,11 +431,10 @@ class NixRebuildHandler : SetupHandlerBase {
 
             # 実ユーザーの identity を wrapper に渡して nixos-rebuild switch を実行する。
             # 2>&1 で stderr も捕捉しエラー詳細をログに残す。
-            $withHermes = if ($this.IsTruthy($ctx.GetOption("WithHermes", $false))) { "1" } else { "0" }
             # This repository pins its binary-cache URL and signing key in flake.nix.
             # Accept that checked-in flake config only for this rebuild invocation;
             # do not persist trust in the user's or machine's Nix configuration.
-            $rebuildCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && DOTFILES_USER=$($this.QuoteShellArg($this.NixOsUser)) DOTFILES_HOME=$($this.QuoteShellArg($this.NixOsHome)) DOTFILES_WITH_HERMES=$withHermes DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure 2>&1"
+            $rebuildCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && DOTFILES_USER=$($this.QuoteShellArg($this.NixOsUser)) DOTFILES_HOME=$($this.QuoteShellArg($this.NixOsHome)) DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure 2>&1"
             $nixRebuildTimeoutSeconds = [int]$ctx.GetOption("NixRebuildTimeoutSeconds", 5400)
             $output = Invoke-Wsl -TimeoutSeconds $nixRebuildTimeoutSeconds -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", $rebuildCommand)
             $nixosExitCode = $LASTEXITCODE

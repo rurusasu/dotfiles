@@ -3,7 +3,6 @@
 lib.genAttrs [ "hyprland" "fuzzel" "firefox" "nautilus" ] (name: {
   pkg = if pkgs.stdenv.hostPlatform.isLinux then pkgs.${name} else null;
   category = "native-desktop";
-  installFeature = "WithDesktop";
   support = {
     linux = {
       provider = "nix";

@@ -37,12 +37,6 @@
     category = "dev";
   };
 
-  ghq = {
-    pkg = pkgs.ghq;
-    winget = "x-motemen.ghq";
-    category = "dev";
-  };
-
   gwq = {
     pkg = pkgs.gwq;
     winget = null;
@@ -55,22 +49,10 @@
     category = "dev";
   };
 
-  pnpm = {
-    pkg = pkgs.pnpm;
-    winget = null;
-    category = "dev";
-  };
-
   devcontainer = {
     pkg = pkgs.devcontainer;
     winget = null;
     npm = "@devcontainers/cli";
-    category = "dev";
-  };
-
-  lazygit = {
-    pkg = pkgs.lazygit;
-    winget = "JesseDuffield.lazygit";
     category = "dev";
   };
 

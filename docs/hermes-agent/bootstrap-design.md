@@ -5,7 +5,7 @@
 This document is a historical design record. The Docker Hermes Agent backend,
 bootstrap service, and Docker-prefixed gateway tasks have been removed. Current
 operation is documented in [bootstrap.md](bootstrap.md) and
-[desktop.md](desktop.md). Independent browser, X API, and Hindsight sidecars
+[desktop.md](desktop.md). Independent browser and X API sidecars
 remain separate services; existing Docker volumes are not deleted or imported.
 
 ## Problem

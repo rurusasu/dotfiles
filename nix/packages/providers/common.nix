@@ -14,7 +14,6 @@ let
       msstore = "msstore";
       npm = "npm";
       pnpm = "npm";
-      "system-manager" = "nixpkgs";
     }
     .${provider} or null;
 

@@ -17,7 +17,7 @@
 ## 設定ファイル
 
 - treefmt 設定: [.treefmt.toml](../../.treefmt.toml)
-- Nix 統合: [nix/flakes/treefmt.nix](../../nix/flakes/treefmt.nix)
+- Nix 統合: [nix/formatter.nix](../../nix/formatter.nix)
 
 詳細: [treefmt 設定](./treefmt.md)
 

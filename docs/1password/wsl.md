@@ -53,7 +53,9 @@ WSL では Windows の `op-ssh-sign.exe` をそのまま使うと payload や Li
   program = ~/.local/bin/op-ssh-sign-wsl
 ```
 
-SSH Agent socket は Linux 側のパスを使う。
+この Nix 構成の native `ssh` は WSL 内の Linux 版 1Password の agent socket を使う。`nix/modules/1password/ssh.nix` が `IdentityAgent` と `SSH_AUTH_SOCK` を同じパスに設定する。Windows の `op.exe` への CLI 連携や署名 wrapper は、この Linux socket を Windows agent に接続する仕組みではない。
+
+Windows 版 1Password の agent を SSH 認証にも使う場合、[公式の WSL 連携](https://developer.1password.com/docs/ssh/integrations/wsl/)は Windows OpenSSH の `ssh.exe` を使う。既存の native `ssh` 経路を無断で置き換えず、この構成では Linux 版 agent の経路を維持する。
 
 ```sshconfig
 Host *

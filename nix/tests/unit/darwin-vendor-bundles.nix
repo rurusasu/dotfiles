@@ -6,7 +6,7 @@ let
   };
   packages = {
     dia-browser = pkgs.callPackage ../../packages/dia-browser { };
-    orca-editor = pkgs.callPackage ../../packages/orca-editor { };
+    orca-editor = pkgs.callPackage ../../modules/editors/orca/package.nix { };
   };
 in
 {

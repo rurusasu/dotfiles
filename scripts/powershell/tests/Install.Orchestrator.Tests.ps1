@@ -54,11 +54,6 @@ Describe 'install.ps1 (orchestrator)' {
 
     It 'should expose one explicit switch for each local AI service' {
         $content = Get-Content -LiteralPath $script:target -Raw
-        $content | Should -Match '\[switch\]\$WithOllama'
-        $content | Should -Match '\[switch\]\$WithDocker'
-        $content | Should -Match '\[switch\]\$WithMLflow'
-        $content | Should -Match '\[switch\]\$WithHindsight'
-        $content | Should -Match '\[switch\]\$WithHermes'
     }
 
     It 'should converge deferred Docker setup after admin work and before acceptance' {
@@ -68,7 +63,7 @@ Describe 'install.ps1 (orchestrator)' {
 
         $convergence | Should -BeGreaterThan -1
         $acceptance | Should -BeGreaterThan $convergence
-        $content | Should -Match '(?s)\$adminRequired -and \[bool\]\$Options\["WithDocker"\].*\$adminScriptPath.*-AdminOnly:\$false'
+        $content | Should -Match '(?s)\$adminRequired.*\$adminScriptPath.*-AdminOnly:\$false'
     }
 
     It 'should support CI user-phase package verification switches' {

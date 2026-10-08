@@ -18,21 +18,16 @@ class NativeCiContractTests(unittest.TestCase):
     def test_selected_source_validation_checkouts_use_the_event_head(self) -> None:
         for name in (
             "ci-chezmoi.yml",
-            "ci-powershell.yml",
-            "ci-consistency.yml",
-            "ci-devcontainer.yml",
+            "ci-other.yml",
+            "ci-nix.yml",
             "codeql.yml",
-            "ci-bootstrap.yml",
-            "ci-contract.yml",
         ):
             with self.subTest(workflow=name):
                 workflow = self.workflow(name)
                 head_expression = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
                 tested_sha = workflow.get("env", {}).get("TESTED_SHA")
-                expected_ref = head_expression
-                if name != "ci-contract.yml":
-                    self.assertEqual(tested_sha, head_expression)
-                    expected_ref = "${{ env.TESTED_SHA }}"
+                self.assertEqual(tested_sha, head_expression)
+                expected_ref = "${{ env.TESTED_SHA }}"
                 checkouts = [
                     (job_name, step)
                     for job_name, job in workflow["jobs"].items()
@@ -45,7 +40,7 @@ class NativeCiContractTests(unittest.TestCase):
                         self.assertEqual(step.get("with", {}).get("ref"), expected_ref)
 
     def test_hermes_detection_and_runtime_use_the_event_head(self) -> None:
-        workflow = self.workflow("ci-bootstrap.yml")
+        workflow = self.workflow("ci-nix.yml")
         self.assertEqual(
             workflow.get("env", {}).get("TESTED_SHA"),
             "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
@@ -65,7 +60,7 @@ class NativeCiContractTests(unittest.TestCase):
     def test_existing_darwin_job_executes_native_hermes_check_with_its_cache(
         self,
     ) -> None:
-        workflow = self.workflow("ci-bootstrap.yml")
+        workflow = self.workflow("ci-nix.yml")
         darwin = workflow["jobs"]["darwin"]
         commands = [
             shlex.split(command)
@@ -80,7 +75,9 @@ class NativeCiContractTests(unittest.TestCase):
             command[:2],
             ["nix", "build"],
         )
-        self.assertEqual(command.count(".#checks.aarch64-darwin.hermes-bootstrap-tests"), 1)
+        self.assertEqual(
+            command.count(".#checks.aarch64-darwin.hermes-bootstrap-tests"), 1
+        )
         self.assertIn("--no-link", command)
         self.assertIn("--print-build-logs", command)
         options = [
@@ -99,7 +96,7 @@ class NativeCiContractTests(unittest.TestCase):
     def test_native_hermes_gate_rejects_its_missing_cache_or_duplicate_build(
         self,
     ) -> None:
-        original = self.workflow("ci-bootstrap.yml")
+        original = self.workflow("ci-nix.yml")
         for mutation in ("substituter", "key", "duplicate"):
             with self.subTest(mutation=mutation):
                 workflow = deepcopy(original)
@@ -121,6 +118,8 @@ class NativeCiContractTests(unittest.TestCase):
                     step["run"] = command.replace(
                         f"--option {option} ", "--removed-option "
                     )
-                with mock.patch.object(self, "workflow", return_value=workflow):
-                    with self.assertRaises(AssertionError):
-                        self.test_existing_darwin_job_executes_native_hermes_check_with_its_cache()
+                with (
+                    mock.patch.object(self, "workflow", return_value=workflow),
+                    self.assertRaises(AssertionError),
+                ):
+                    self.test_existing_darwin_job_executes_native_hermes_check_with_its_cache()

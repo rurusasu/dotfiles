@@ -6,14 +6,20 @@ let
     inherit (pkgs) lib;
     codexPackage = pkgs.hello;
   };
+  orcaModule = import ../../modules/editors/orca { inherit pkgs; };
+  orcaPackage = pkgs.callPackage ../../modules/editors/orca/package.nix { };
 in
 {
-  testOrcaDarwinProviderAndWingetMetadata = {
+  testOrcaHomeManagerModuleAndWingetMetadata = {
     expr = {
-      orcaDarwinProvider = sets.supportReport.orca-editor.darwin.provider;
-      orcaDarwinSource = sets.supportReport.orca-editor.darwin.source;
-      orcaIsDesktopPackage = builtins.elem sets.darwinPackages.orca-editor sets.desktop;
-      orcaWingetId = sets.wingetMap.orca-editor;
+      orcaModulePackages = map (package: package.drvPath) orcaModule.home.packages;
+      orcaCommonImportsModule =
+        builtins.elem ../../modules/editors/orca
+          (import ../../home/common.nix {
+            config = { };
+            inherit (pkgs) lib;
+          }).imports;
+      orcaWindowsProvider = sets.supportReport."StablyAI.Orca".windows.provider;
       orcaInWindowsOnlyWinget = builtins.elem "StablyAI.Orca" sets.windowsOnly.winget;
       orcaCiSkipInstall = sets.wingetCiSkipInstall."StablyAI.Orca" or false;
       pythonResolvedInNix = builtins.elem pkgs.python3 sets.all;
@@ -25,11 +31,10 @@ in
       uvWingetId = sets.wingetMap.uv;
     };
     expected = {
-      orcaDarwinProvider = "nix";
-      orcaDarwinSource = "custom";
-      orcaIsDesktopPackage = true;
-      orcaWingetId = "StablyAI.Orca";
-      orcaInWindowsOnlyWinget = false;
+      orcaModulePackages = [ orcaPackage.drvPath ];
+      orcaCommonImportsModule = true;
+      orcaWindowsProvider = "winget";
+      orcaInWindowsOnlyWinget = true;
       orcaCiSkipInstall = true;
       pythonResolvedInNix = true;
       pythonHasWingetMapping = false;
@@ -37,5 +42,37 @@ in
       uvResolvedInNix = true;
       uvWingetId = "astral-sh.uv";
     };
+  };
+  testOrcaLinuxHomeManagerPackages = {
+    expr =
+      map
+        (
+          system:
+          let
+            linuxPkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
+            package = builtins.head (import ../../modules/editors/orca { pkgs = linuxPkgs; }).home.packages;
+          in
+          {
+            inherit system;
+            inherit (package) pname version;
+            mainProgram = package.meta.mainProgram;
+          }
+        )
+        [
+          "x86_64-linux"
+          "aarch64-linux"
+        ];
+    expected =
+      map
+        (system: {
+          inherit system;
+          pname = "orca-editor";
+          inherit (orcaPackage) version;
+          mainProgram = "orca-ide";
+        })
+        [
+          "x86_64-linux"
+          "aarch64-linux"
+        ];
   };
 }

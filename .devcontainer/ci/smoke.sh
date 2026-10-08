@@ -14,6 +14,5 @@ check() {
 echo "=== Smoke test ==="
 check nvim --version
 check nvim --headless -u NONE -i NONE -c 'lua if vim.fn.has("nvim-0.12") == 0 then vim.cmd.cquit(1) end' -c qa
-check tmux -V
 check chezmoi --version
 echo "=== Smoke test passed ==="

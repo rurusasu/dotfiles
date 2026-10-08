@@ -1,3 +1,4 @@
+{ inputs }:
 let
   lock = builtins.fromJSON (builtins.readFile ../../../flake.lock);
   rootInputs = lock.nodes.${lock.root}.inputs;
@@ -12,11 +13,6 @@ let
       name = "nix-homebrew";
       owner = "zhaofengli";
       repo = "nix-homebrew";
-    }
-    {
-      name = "system-manager";
-      owner = "numtide";
-      repo = "system-manager";
     }
   ];
 
@@ -39,12 +35,11 @@ let
       isDarwin,
       isLinux,
     }:
-    (import ../../flakes/apps.nix {
+    (import ../../hosts {
       inputs = {
         nix-darwin.packages.${system}.darwin-rebuild.executable = "darwin-rebuild";
-        system-manager.packages.${system}.default.executable = "system-manager";
       };
-    }).perSystem
+    }).mkApps
       {
         inherit system;
         pkgs.stdenv.hostPlatform = {
@@ -86,9 +81,9 @@ let
     };
     home-manager.lib.homeManagerConfiguration = args: args;
   };
-  homeOutputs = (import ../../flakes/home.nix { inputs = homeInputs; }).flake.homeConfigurations;
+  homeOutputs = (import ../../hosts/configurations.nix { inputs = homeInputs; }).homeConfigurations;
 
-  treefmtModule = (import ../../flakes/treefmt.nix { config = { }; }).perSystem {
+  treefmtModule = (import ../../formatter.nix { config = { }; }).perSystem {
     config.treefmt.build = {
       devShell.nativeBuildInputs = [ ];
       wrapper = "treefmt-wrapper";
@@ -112,7 +107,7 @@ let
 
   # Capture constructor arguments to assert generated wiring without claiming
   # evaluation of the complete NixOS module graph.
-  hostLib = import ../../flakes/lib/hosts.nix {
+  hostLib = import ../../hosts/default.nix {
     inputs = {
       nixpkgs.lib = {
         nixosSystem = args: args;
@@ -123,13 +118,11 @@ let
   };
   wslNixosArguments = {
     system = "x86_64-linux";
-    hostPath = ../../hosts/wsl;
-    siteLib = { };
-    homeModulePath = ../../home/wsl.nix;
+    hostPath = ../../hosts/x86_64-linux/wsl;
+    homeModulePath = ../../hosts/x86_64-linux/wsl/home.nix;
     configuredUser = "nixos";
   };
   nixosArguments = hostLib.mkNixos wslNixosArguments;
-  hermesNixosArguments = hostLib.mkNixos (wslNixosArguments // { withHermes = true; });
   customUserNixosArguments = hostLib.mkNixos (wslNixosArguments // { configuredUser = "alice"; });
   findHomeManagerModule =
     arguments:
@@ -137,7 +130,6 @@ let
       builtins.filter (module: builtins.isAttrs module && module ? "home-manager") arguments.modules
     );
   homeManagerModule = findHomeManagerModule nixosArguments;
-  hermesHomeManagerModule = findHomeManagerModule hermesNixosArguments;
   customUserHomeManagerModule = findHomeManagerModule customUserNixosArguments;
   defaultHomeManagerUser = homeManagerModule."home-manager".users.nixos;
   customHomeManagerUser = customUserHomeManagerModule."home-manager".users.alice;
@@ -155,18 +147,29 @@ let
     requestedSystem = "aarch64-linux";
   };
 
-  systemsFixture = builtins.toFile "supported-systems-fixture.nix" ''
-    [
-      "aarch64-darwin"
-      "x86_64-darwin"
-      "x86_64-linux"
-      "aarch64-linux"
-    ]
-  '';
-  supportedSystems = (import ../../flakes/systems.nix { inputs.systems = systemsFixture; }).systems;
+  supportedSystems = builtins.attrNames inputs.self.checks;
 
 in
 {
+  testFlakeHasNoIntermediateLibOrFlakesDirectories = {
+    expr = {
+      oldLib = builtins.pathExists ../../lib;
+      oldFlakes = builtins.pathExists ../../flakes;
+      hostConstruction = builtins.pathExists ../../hosts/default.nix;
+      registryPresent = builtins.pathExists ../default.nix;
+      packageOutputs = builtins.pathExists ../../packages/outputs.nix;
+      formatter = builtins.pathExists ../../formatter.nix;
+    };
+    expected = {
+      oldLib = false;
+      oldFlakes = false;
+      hostConstruction = true;
+      registryPresent = true;
+      packageOutputs = true;
+      formatter = true;
+    };
+  };
+
   testFlakeLockPinsPlatformInputs = {
     expr = builtins.map inspectLockedInput platformInputs;
     expected = [
@@ -188,26 +191,15 @@ in
         hasLockedRevision = true;
         hasNarHash = true;
       }
-      {
-        type = "github";
-        owner = "numtide";
-        repo = "system-manager";
-        rootInputIsPresent = true;
-        sourceMatches = true;
-        hasLockedRevision = true;
-        hasNarHash = true;
-      }
     ];
   };
 
   testFlakeLockPlatformInputsFollowRootNixpkgs = {
     expr = {
       darwin = lock.nodes.${rootInputs."nix-darwin"}.inputs.nixpkgs;
-      systemManager = lock.nodes.${rootInputs."system-manager"}.inputs.nixpkgs;
     };
     expected = {
       darwin = [ "nixpkgs" ];
-      systemManager = [ "nixpkgs" ];
     };
   };
 
@@ -219,16 +211,12 @@ in
   testRunnerAppsEvaluateForTheirSupportedPlatforms = {
     expr = {
       darwin = darwinApps.apps.darwin-rebuild.program;
-      linux = linuxApps.apps.system-manager.program;
-      darwinOmitsLinuxRunner = !(darwinApps.apps ? system-manager);
-      linuxOmitsDarwinRunner = !(linuxApps.apps ? darwin-rebuild);
+      linux = linuxApps.apps;
       unsupportedPlatformHasNoRunnerApps = unsupportedApps.apps == { };
     };
     expected = {
       darwin = "darwin-rebuild";
-      linux = "system-manager/system-manager";
-      darwinOmitsLinuxRunner = true;
-      linuxOmitsDarwinRunner = true;
+      linux = { };
       unsupportedPlatformHasNoRunnerApps = true;
     };
   };
@@ -255,22 +243,26 @@ in
       nativeLinux = hostSpecsWithHardware.linux;
       defaultNativeLinuxSystem = hostSpecsWithHardware.linux.system;
       requestedNativeLinuxSystem = hostSpecsWithRequestedSystem.linux.system;
+      requestedNativeLinuxHost = hostSpecsWithRequestedSystem.linux.hostPath;
+      requestedNativeLinuxHome = hostSpecsWithRequestedSystem.linux.homeModulePath;
     };
     expected = {
       wsl = {
         system = "x86_64-linux";
-        hostPath = ../../hosts/wsl;
-        homeModulePath = ../../home/wsl.nix;
+        hostPath = ../../hosts/x86_64-linux/wsl;
+        homeModulePath = ../../hosts/x86_64-linux/wsl/home.nix;
       };
       nativeLinuxOmittedWithoutHardware = true;
       nativeLinux = {
         system = "x86_64-linux";
-        hostPath = ../../hosts/linux;
-        homeModulePath = ../../home/linux.nix;
+        hostPath = ../../hosts/x86_64-linux/nixos;
+        homeModulePath = ../../hosts/x86_64-linux/home.nix;
         hardwareConfig = "/etc/nixos/hardware-configuration.nix";
       };
       defaultNativeLinuxSystem = "x86_64-linux";
       requestedNativeLinuxSystem = "aarch64-linux";
+      requestedNativeLinuxHost = ../../hosts/aarch64-linux/nixos;
+      requestedNativeLinuxHome = ../../hosts/aarch64-linux/home.nix;
     };
   };
 
@@ -282,28 +274,28 @@ in
     };
     expected = {
       darwin = [
-        (toString ../../home/darwin.nix)
+        (toString ../../hosts/aarch64-darwin/home.nix)
         (toString ../../modules/shells/zsh)
         (toString ../../modules/lsp.nix)
         (toString ../../modules/terminals/ghostty/defaults.nix)
-        (toString ../../modules/darwin/ghostty.nix)
+        (toString ../../hosts/aarch64-darwin/ghostty.nix)
         (toString ../../modules/terminals/wezterm/defaults.nix)
-        (toString ../../modules/darwin/wezterm.nix)
+        (toString ../../hosts/aarch64-darwin/wezterm.nix)
       ];
       x86Linux = [
-        (toString ../../home/linux.nix)
+        (toString ../../hosts/x86_64-linux/home.nix)
         (toString ../../modules/shells/zsh)
         (toString ../../modules/lsp.nix)
         (toString ../../modules/terminals/ghostty/defaults.nix)
-        (toString ../../modules/nixos/ghostty.nix)
+        (toString ../../hosts/shared/linux-ghostty.nix)
         (toString ../../modules/terminals/wezterm/defaults.nix)
       ];
       armLinux = [
-        (toString ../../home/linux.nix)
+        (toString ../../hosts/aarch64-linux/home.nix)
         (toString ../../modules/shells/zsh)
         (toString ../../modules/lsp.nix)
         (toString ../../modules/terminals/ghostty/defaults.nix)
-        (toString ../../modules/nixos/ghostty.nix)
+        (toString ../../hosts/shared/linux-ghostty.nix)
         (toString ../../modules/terminals/wezterm/defaults.nix)
       ];
     };
@@ -317,21 +309,10 @@ in
       usesUserPackages = homeManagerModule."home-manager".useUserPackages;
     };
     expected = {
-      user = [ ../../home/wsl.nix ];
+      user = [ ../../hosts/x86_64-linux/wsl/home.nix ];
       selectedUser = [ "nixos" ];
       usesGlobalPackages = true;
       usesUserPackages = true;
-    };
-  };
-
-  testNixOSHermesFeaturePropagatesToHostAndHomeManager = {
-    expr = {
-      hostArgument = hermesNixosArguments.specialArgs.dotfilesWithHermes;
-      homeManagerFeature = hermesHomeManagerModule."home-manager".extraSpecialArgs.installFeatures;
-    };
-    expected = {
-      hostArgument = true;
-      homeManagerFeature = [ "WithHermes" ];
     };
   };
 
@@ -341,7 +322,7 @@ in
       configuredUserList = builtins.attrNames customUserHomeManagerModule."home-manager".users;
     };
     expected = {
-      configuredUserModule = [ ../../home/wsl.nix ];
+      configuredUserModule = [ ../../hosts/x86_64-linux/wsl/home.nix ];
       configuredUserList = [ "alice" ];
     };
   };
@@ -350,8 +331,8 @@ in
     expr = supportedSystems;
     expected = [
       "aarch64-darwin"
-      "x86_64-linux"
       "aarch64-linux"
+      "x86_64-linux"
     ];
   };
 }

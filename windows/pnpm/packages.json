@@ -15,35 +15,6 @@
         "args": ["--version"],
         "command": "dsh"
       }
-    },
-    {
-      "installFeature": "WithHermes",
-      "name": "@playwright/cli@0.1.21",
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "playwright-cli"
-      }
-    },
-    {
-      "installFeature": "WithHermes",
-      "name": "playwright@1.63.0",
-      "postInstallCommand": {
-        "args": ["install", "chromium"],
-        "command": "playwright",
-        "timeoutSeconds": 3600
-      },
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "playwright"
-      }
-    },
-    {
-      "installArgs": ["--allow-build=@github/keytar", "--allow-build=!node-pty"],
-      "name": "@google/gemini-cli",
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "gemini"
-      }
     }
   ]
 }

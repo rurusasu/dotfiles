@@ -3,7 +3,7 @@
 共通のキー割り当てを `nix/home/keybindings/bindings.nix` に置き、
 `nix/home/keybindings/aerospace.nix` の純粋な関数で AeroSpace の設定へ変換する。
 アプリ選択・起動コマンドは同ディレクトリの `darwin-commands.nix` が所有する。
-`nix/hosts/darwin/omarchy-keybindings.nix` はサービス、macOS の既存ショートカットとの競合、
+`nix/hosts/aarch64-darwin/omarchy-keybindings.nix` はサービス、macOS の既存ショートカットとの競合、
 OS 固有の有効化を担当する。home 側の生成結果を通常の Nix import で受け取り、
 nix-darwin の `services.aerospace` へ渡す。Home Manager 側で同じサービスを管理しない。
 nix-darwin の `services.aerospace` が設定ファイルを

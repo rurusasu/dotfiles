@@ -2,7 +2,7 @@
 
 ## Runtime ownership
 
-The normal macOS `./install.sh --with-hermes` and NixOS `task nrs` flows install
+The normal macOS `./install.sh` and NixOS `task nrs` flows install
 and activate Hermes Agent through the Nix/Home Manager configuration. The
 gateway is a native per-user service: systemd on Linux and launchd on macOS.
 Use `task hermes:up`, `task hermes:down`, `task hermes:restart`, and

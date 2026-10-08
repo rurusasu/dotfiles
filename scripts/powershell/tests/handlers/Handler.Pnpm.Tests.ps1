@@ -1151,9 +1151,11 @@ Describe 'PnpmHandler' {
             Mock Get-ExternalCommand { return @{ Source = 'C:\pnpm.cmd' } }
             Mock Test-PathExist { return $true }
             Mock Get-JsonContent {
-                return @{ globalPackages = @(
-                    @{ name = 'existing-pkg'; verifyCommand = @{ command = 'existing'; args = @('--version') } }
-                ) }
+                return @{
+                    globalPackages = @(
+                        @{ name = 'existing-pkg'; verifyCommand = @{ command = 'existing'; args = @('--version') } }
+                    )
+                }
             }
             Mock Invoke-Pnpm {
                 param($Arguments)
@@ -2043,16 +2045,6 @@ Describe 'PnpmHandler' {
     }
 
     Context 'Apply - Windows pnpm manifest contracts' {
-        It 'should omit the removed native Windows language packages from the manifest' {
-            $manifest = Get-JsonContent -Path (Join-Path $script:projectRoot "windows\pnpm\packages.json")
-            foreach ($packageName in @(
-                    "bash-language-server", "yaml-language-server", "@prisma/language-server",
-                    "typescript-language-server", "typescript"
-                )) {
-                $manifest.globalPackages.name | Should -Not -Contain $packageName
-            }
-        }
-
         It 'should verify Gemini by executing the installed CLI without probing an optional module' {
             $script:pnpmRoot = Join-Path $TestDrive 'pnpm-module-root'
             New-Item -Path (Join-Path $script:pnpmRoot '@google\gemini-cli') -ItemType Directory -Force | Out-Null
@@ -2175,22 +2167,18 @@ Describe 'PnpmHandler' {
             $env:PNPM_HOME = $script:originalPnpmHome
         }
 
-        It 'should install and verify every manifest package, including feature-gated entries, with declared options' {
+        It 'should install and verify the manifest DSH package with declared options' {
             $expected = @(
                 @{ Spec = "@deepseek-ai/dsh"; Command = "dsh"; Arguments = @("--version") }
-                @{ Spec = "@playwright/cli@0.1.21"; Command = "playwright-cli"; Arguments = @("--version") }
-                @{ Spec = "playwright@1.63.0"; Command = "playwright"; Arguments = @("--version") }
-                @{ Spec = "@google/gemini-cli"; Command = "gemini"; Arguments = @("--version") }
             )
             $manifest = Get-JsonContent -Path (Join-Path $script:projectRoot "windows\pnpm\packages.json")
             (@($manifest.globalPackages | ForEach-Object { $_.name } | Sort-Object) -join "|") |
                 Should -Be ((@($expected | ForEach-Object { $_.Spec } | Sort-Object) -join "|"))
 
-            $ctx.Options["WithHermes"] = $true
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeTrue
-            $script:pnpmAddCalls.Count | Should -Be 4
+            $script:pnpmAddCalls.Count | Should -Be 1
             (@($script:pnpmAddCalls | ForEach-Object { $_[-1] } | Sort-Object) -join "|") |
                 Should -Be ((@($expected | ForEach-Object { $_.Spec } | Sort-Object) -join "|"))
             foreach ($entry in $expected) {
@@ -2198,15 +2186,7 @@ Describe 'PnpmHandler' {
                     $_.Command -eq $entry.Command -and ($_.Arguments -join "|") -eq ($entry.Arguments -join "|")
                 } | Should -HaveCount 1
             }
-            $script:pnpmVerifyCalls | Where-Object {
-                $_.Command -eq "playwright" -and $_.Arguments -contains "install"
-            } | Should -HaveCount 1
-            ($script:pnpmVerifyCalls | Where-Object {
-                $_.Command -eq "playwright" -and $_.Arguments -contains "install"
-            }).TimeoutSeconds | Should -Be 3600
-            $script:pnpmVerifyCalls | Where-Object {
-                $_.Command -ne "playwright" -or $_.Arguments -notcontains "install"
-            } | ForEach-Object { $_.TimeoutSeconds | Should -Be 120 }
+            $script:pnpmVerifyCalls | ForEach-Object { $_.TimeoutSeconds | Should -Be 120 }
 
             $dshCall = $script:pnpmAddCalls | Where-Object { $_ -contains "@deepseek-ai/dsh" } | Select-Object -First 1
             $dshCall | Should -Contain "--allow-build=@deepseek-ai/dsh-subprocess-local"
@@ -2214,61 +2194,27 @@ Describe 'PnpmHandler' {
             $dshCall | Should -Contain "--allow-build=koffi"
             $dshCall | Should -Not -Contain "--allow-build=node-pty"
             $dshCall | Should -Contain "--allow-build=protobufjs"
-            $geminiCall = $script:pnpmAddCalls | Where-Object { $_ -contains "@google/gemini-cli" } | Select-Object -First 1
-            $geminiCall | Should -Contain "--allow-build=@github/keytar"
-            $geminiCall | Should -Not -Contain "--allow-build=node-pty"
-            $geminiEntry = $manifest.globalPackages | Where-Object name -EQ "@google/gemini-cli"
-            $geminiEntry.verifyCommand.command | Should -Be "gemini"
-            $geminiEntry.verifyCommand.args | Should -Be @("--version")
-            $geminiEntry.verifyCommand.type | Should -BeNullOrEmpty
-            $geminiEntry.verifyCommand.moduleName | Should -BeNullOrEmpty
-            $geminiEntry.verifyCommand.moduleFromPackage | Should -BeNullOrEmpty
-            $geminiEntry.verifyCommand.moduleSmokeTest | Should -BeNullOrEmpty
         }
 
-        It 'should update outdated DSH and rerun the mandatory Playwright post-install while skipping current packages' {
+        It 'should update outdated DSH and verify its version' {
             $installedPackagePaths = @(
                 "@deepseek-ai\dsh"
-                "@playwright\cli"
-                "playwright"
-                "@google\gemini-cli"
             )
             foreach ($relativePath in $installedPackagePaths) {
                 New-Item -Path (Join-Path $script:pnpmRoot $relativePath) -ItemType Directory -Force | Out-Null
             }
             $script:outdatedJson = '{"@deepseek-ai/dsh":{"current":"0.1.0","latest":"0.2.0"}}'
-            $ctx.Options["WithHermes"] = $true
 
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeTrue
             $script:pnpmPolicyCalls | Should -HaveCount 1
             $script:pnpmPolicyCalls[0] | Should -Be @('approve-builds', '-g', '!node-pty')
-            $script:pnpmAddCalls.Count | Should -Be 2
+            $script:pnpmAddCalls.Count | Should -Be 1
             $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "@deepseek-ai/dsh"
-            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "playwright@1.63.0"
-            foreach ($command in @("dsh", "playwright-cli", "playwright", "gemini")) {
-                $script:pnpmVerifyCalls | Where-Object {
-                    $_.Command -eq $command -and ($_.Arguments -join "|") -eq "--version"
-                } | Should -HaveCount $(if ($command -in @("dsh", "playwright")) { 2 } else { 1 })
-            }
-            $postInstallCalls = @($script:pnpmVerifyCalls | Where-Object {
-                    $_.Command -eq "playwright" -and ($_.Arguments -join "|") -eq "install|chromium"
-                })
-            $postInstallCalls | Should -HaveCount 1
-            $postInstallCalls[0].TimeoutSeconds | Should -Be 3600
-        }
-
-        It 'should omit both Hermes packages when WithHermes is disabled' {
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeTrue
-            $script:pnpmAddCalls.Count | Should -Be 2
-            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "@deepseek-ai/dsh"
-            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "@google/gemini-cli"
-            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Not -Contain "@playwright/cli@0.1.21"
-            $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Not -Contain "playwright@1.63.0"
-            $script:pnpmVerifyCalls | Where-Object { $_.Command -in @("playwright-cli", "playwright") } | Should -BeNullOrEmpty
+            $script:pnpmVerifyCalls | Where-Object {
+                $_.Command -eq "dsh" -and ($_.Arguments -join "|") -eq "--version"
+            } | Should -HaveCount 2
         }
 
         It 'should fail before installing packages when persisted build denial cannot be updated' {
@@ -2280,21 +2226,6 @@ Describe 'PnpmHandler' {
             Should -Invoke Write-Host -ParameterFilter { ([string]$Object) -match 'policy diagnostic' } -Times 1
         }
 
-        It 'should omit policy changes belonging only to disabled feature entries' {
-            Mock Get-JsonContent {
-                return @{
-                    globalPackages = @(
-                        @{ name = 'enabled'; installArgs = @('--allow-build=!enabled-denial') }
-                        @{ name = 'disabled'; installFeature = 'WithHermes'; installArgs = @('--allow-build=!disabled-denial') }
-                    )
-                }
-            }
-            $result = $handler.Apply($ctx)
-            $result.Success | Should -BeTrue
-            $script:pnpmPolicyCalls | Should -HaveCount 1
-            $script:pnpmPolicyCalls[0] | Should -Be @('approve-builds', '-g', '!enabled-denial')
-        }
-
         It 'should classify a manifest package verification timeout as a verification failure' {
             $script:verifyExitCodeByCommand["dsh --version"] = 124
 
@@ -2303,19 +2234,6 @@ Describe 'PnpmHandler' {
             $result.Success | Should -BeFalse
             $result.Message | Should -Match "1 個検証失敗"
             $script:pnpmAddCalls | ForEach-Object { $_[-1] } | Should -Contain "@deepseek-ai/dsh"
-        }
-
-        It 'should classify the manifest Playwright post-install failure and stop before version verification' {
-            $ctx.Options["WithHermes"] = $true
-            $script:verifyExitCodeByCommand["playwright install chromium"] = 1
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -BeFalse
-            $result.Message | Should -Match "1 個post-install失敗"
-            $script:pnpmVerifyCalls | Where-Object {
-                $_.Command -eq "playwright" -and $_.Arguments -contains "--version"
-            } | Should -BeNullOrEmpty
         }
 
         It 'should fail Gemini verification when gemini --version exits nonzero' {

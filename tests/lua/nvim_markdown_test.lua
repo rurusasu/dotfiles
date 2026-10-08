@@ -34,6 +34,12 @@ local marp_key = vim.fn.maparg("<leader>marp", "n", false, true)
 assert(marp_key.desc == "Toggle Marp preview", "<leader>marp must remain the Marp preview mapping")
 assert(vim.fn.maparg("<leader>ff", "n") ~= "", "file picker mapping must remain available")
 assert(vim.fn.maparg("<leader>as", "n") ~= "", "Sidekick mapping must remain available")
+for _, direction in ipairs({ "h", "j", "k", "l" }) do
+    local key = "<C-" .. direction .. ">"
+    assert(vim.fn.maparg(key, "n") == "<C-W>" .. direction, "normal navigation must use native windows")
+    local terminal_key = vim.fn.maparg(key, "t")
+    assert(terminal_key:sub(-6) == "<C-W>" .. direction, "terminal navigation must use native windows")
+end
 assert(vim.fn.exists(":DevcontainerUp") == 2, "Devcontainer commands must be configured")
 
 vim.api.nvim_buf_set_lines(0, 0, -1, false, { "# Heading", "", "```python", "answer = 42", "```" })

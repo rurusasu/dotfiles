@@ -1,6 +1,6 @@
 BeforeAll {
     $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..\..')).Path
-    $script:unixConfig = Join-Path $script:repoRoot 'chezmoi/dot_config/herdr/config.toml'
+    $script:unixConfig = Join-Path $script:repoRoot 'nix/modules/herdr/config.toml'
     $script:windowsConfig = Join-Path $script:repoRoot 'chezmoi/AppData/Roaming/herdr/config.toml'
 }
 

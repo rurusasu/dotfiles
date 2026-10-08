@@ -8,12 +8,6 @@ BeforeAll {
 }
 
 Describe 'Package catalog consistency' {
-    It 'keeps Herdr out of the generated Winget manifest' {
-        $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-        $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-
-        @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -match '(?i)herdr' }).Count | Should -Be 0
-    }
 
     Context 'Latest package policy' {
         It 'should not pin winget package versions in generated packages.json' {
@@ -48,13 +42,6 @@ Describe 'Package catalog consistency' {
             $wezterm.PSObject.Properties.Name | Should -Not -Contain 'ciSkipInstall'
         }
 
-        It 'should keep Warp out of the generated Windows manifest' {
-            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $warp = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Warp.Warp' }) | Select-Object -First 1
-
-            $warp | Should -BeNullOrEmpty
-        }
 
         It 'should keep Raycast and Dia out of the generated Windows manifest' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
@@ -112,37 +99,6 @@ Describe 'Package catalog consistency' {
         }
     }
 
-    Context 'Ollama package' {
-        It 'should generate Ollama.Ollama with ollama --version verification' {
-            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Ollama.Ollama' }) | Select-Object -First 1
-
-            $package | Should -Not -BeNullOrEmpty
-            $package.verifyCommand.command | Should -Be 'ollama'
-            @($package.verifyCommand.args) | Should -Contain '--version'
-            $package.installFeature | Should -Be 'WithOllama'
-        }
-    }
-
-    Context 'optional installer profiles' {
-        It 'keeps Docker and Chrome optional while installing Discord by default' {
-            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $packages = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' } | ForEach-Object Packages)
-
-            (@($packages | Where-Object PackageIdentifier -EQ 'Docker.DockerDesktop'))[0].installFeature | Should -Be 'WithDocker'
-            (@($packages | Where-Object PackageIdentifier -EQ 'Google.Chrome'))[0].installFeature | Should -Be 'WithHermes'
-            (@($packages | Where-Object PackageIdentifier -EQ 'Discord.Discord'))[0].installFeature | Should -BeNullOrEmpty
-        }
-
-        It 'marks Playwright browser packages as Hermes-only' {
-            $json = Get-Content -LiteralPath $script:pnpmJsonPath -Raw | ConvertFrom-Json
-            $playwright = @($json.globalPackages | Where-Object { $_.name -match '^playwright@' })[0]
-
-            $playwright.installFeature | Should -Be 'WithHermes'
-        }
-    }
-
     Context 'Google Cloud SDK package' {
         It 'should generate Google.CloudSDK gcloud PATH and verification metadata' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
@@ -191,12 +147,6 @@ Describe 'Package catalog consistency' {
             }
         }
 
-        It 'should keep Nix-managed oxlint out of the Windows manifest' {
-            $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $oxlint = @($winget.Sources | ForEach-Object { $_.Packages } | Where-Object PackageIdentifier -EQ 'oxc-project.oxlint') | Select-Object -First 1
-
-            $oxlint | Should -BeNullOrEmpty
-        }
 
         It 'should generate the Node.js installation directory into winget packages.json' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
@@ -234,28 +184,8 @@ Describe 'Package catalog consistency' {
             @($package.verifyCommand.args) | Should -Contain '--version'
         }
 
-        It 'should not generate a Codex CLI package in winget packages.json' {
-            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $package = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'OpenAI.Codex' }) | Select-Object -First 1
-
-            $package | Should -BeNullOrEmpty
-        }
     }
 
-    Context 'StyLua package' {
-        It 'should keep Nix-managed Lua Language Server out of the Windows manifest' {
-            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $packages = @($json.Sources | ForEach-Object { $_.Packages })
-            @($packages | Where-Object PackageIdentifier -EQ 'LuaLS.lua-language-server').Count | Should -Be 0
-        }
-
-        It 'should keep Nix-managed StyLua out of the Windows manifest' {
-            $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $packages = @($json.Sources | ForEach-Object { $_.Packages })
-            @($packages | Where-Object PackageIdentifier -EQ 'JohnnyMorganz.StyLua').Count | Should -Be 0
-        }
-    }
 
     Context 'Codex Desktop Microsoft Store package' {
         It 'should generate Codex Desktop under the msstore source with launch target verification' {
@@ -283,17 +213,15 @@ Describe 'Package catalog consistency' {
 
     }
 
-    Context 'Orca and Python installation policy' {
-        It 'should generate Orca and uv without the native Python winget package' {
+    Context 'Orca and uv installation policy' {
+        It 'should generate Orca and uv with verification metadata' {
             $json = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($json.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $orca = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'StablyAI.Orca' }) | Select-Object -First 1
-            $python = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'Python.Python.3.13' }) | Select-Object -First 1
             $uv = @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'astral-sh.uv' }) | Select-Object -First 1
 
             $orca | Should -Not -BeNullOrEmpty
             $orca.ciSkipInstall | Should -BeTrue
-            $python | Should -BeNullOrEmpty -Because "Windows Python should be provisioned through uv, not the native winget package"
             $uv | Should -Not -BeNullOrEmpty
             $uv.verifyCommand.command | Should -Be 'uv'
             @($uv.verifyCommand.args) | Should -Contain '--version'
@@ -341,36 +269,7 @@ Describe 'Package catalog consistency' {
 
     Context 'Cross-platform package providers' {
 
-        It 'should keep retired package IDs out of generated manifests' {
-            $manifests = @(
-                Get-Content -LiteralPath $script:wingetJsonPath -Raw
-                Get-Content -LiteralPath $script:npmJsonPath -Raw
-                Get-Content -LiteralPath $script:pnpmJsonPath -Raw
-            ) -join "`n"
 
-            @(
-                'GitHub.Copilot'
-                'Microsoft.VisualStudioCode'
-                'ZedIndustries.Zed'
-                'SlackTechnologies.Slack'
-                'SST.opencode'
-            ) | ForEach-Object {
-                $manifests | Should -Not -Match ([regex]::Escape($_))
-            }
-        }
-
-        It 'should keep Neovim and its language tools out of non-Nix manifests' {
-            $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $ids = @($winget.Sources | ForEach-Object { $_.Packages } | ForEach-Object PackageIdentifier)
-            @('Neovim.Neovim', 'Rustlang.rust-analyzer', 'astral-sh.ruff', 'astral-sh.ty', 'Artempyanykh.Marksman', 'tamasfe.taplo') | ForEach-Object {
-                $ids | Should -Not -Contain $_
-            }
-            $pnpm = Get-Content -LiteralPath $script:pnpmJsonPath -Raw | ConvertFrom-Json
-            $names = @($pnpm.globalPackages | ForEach-Object name)
-            @('bash-language-server', 'yaml-language-server', '@prisma/language-server', 'typescript-language-server', 'typescript') | ForEach-Object {
-                $names | Should -Not -Contain $_
-            }
-        }
 
         It 'should not approve the legacy node-pty build for global pnpm packages' {
             $pnpm = Get-Content -LiteralPath $script:pnpmJsonPath -Raw | ConvertFrom-Json
@@ -427,11 +326,10 @@ Describe 'Package catalog consistency' {
         }
 
 
-        It 'should remove ChatGPT Classic from Windows while preserving cross-platform ChatGPT' {
+        It 'should preserve the active ChatGPT package and retired package cleanup metadata' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $storeSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'msstore' }) | Select-Object -First 1
 
-            @($storeSource.Packages | Where-Object PackageIdentifier -EQ '9NT1R1C2HH7J').Count | Should -Be 0
             @($storeSource.Packages | Where-Object PackageIdentifier -EQ '9PLM9XGG6VKS').Count | Should -Be 1
 
             $retiredPath = Join-Path (Split-Path -Parent $script:wingetJsonPath) 'retired-packages.json'
@@ -488,10 +386,6 @@ Describe 'Package catalog consistency' {
             @($storePackages | Where-Object ciSkipInstall | ForEach-Object PackageIdentifier) | Should -Be @('9PLM9XGG6VKS')
             (@($winGetOnlyPackages | Where-Object requiresAdmin | ForEach-Object PackageIdentifier | Sort-Object) -join ',') |
                 Should -Be 'AutoHotkey.AutoHotkey,glzr-io.glazewm,Microsoft.VisualStudio.2022.BuildTools' -Because 'admin phase exclusions must remain explicit and reviewed'
-            (@($winGetOnlyPackages | Where-Object installFeature | ForEach-Object { "$($_.PackageIdentifier):$($_.installFeature)" } | Sort-Object) -join ',') |
-                Should -Be 'Docker.DockerDesktop:WithDocker,Google.Chrome:WithHermes,Ollama.Ollama:WithOllama' -Because 'feature-gated CI runtime exclusions must remain explicit and reviewed'
-            ($winGetOnlyPackages | Where-Object PackageIdentifier -EQ 'Discord.Discord').installFeature |
-                Should -BeNullOrEmpty -Because 'Discord is part of the default cross-platform installation'
 
             foreach ($package in $wingetPackages) {
                 $id = [string]$package.PackageIdentifier

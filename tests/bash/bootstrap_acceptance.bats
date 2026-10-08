@@ -49,7 +49,7 @@ EOF
 }
 
 @test "NixOS VM E2E routes installers through the acceptance fixture" {
-	workflow="$REPO_ROOT/.github/workflows/ci-bootstrap.yml"
+	workflow="$REPO_ROOT/.github/workflows/ci-nix.yml"
 	nixos_test="$REPO_ROOT/nix/tests/build/bootstrap-nixos.nix"
 
 	grep -Fq '.#checks.x86_64-linux.bootstrap-nixos-vm' "$workflow"
@@ -88,13 +88,13 @@ EOF
 }
 
 @test "production Linux installers leave Docker Hermes bootstrap out of native setup" {
-	for installer in install-linux.sh install-nixos.sh; do
+	for installer in install-home-manager.sh install-nixos.sh; do
 		file="$REPO_ROOT/scripts/sh/$installer"
 		! grep -Fq 'hermes:bootstrap' "$file"
 		! grep -Fq 'docker/hermes-service/compose.yml' "$file"
-		grep -Fq '"$VERIFY_ENVIRONMENT"' "$file"
 		! grep -q -- '--runtime' "$file"
 	done
+	grep -Fq '"$VERIFY_ENVIRONMENT"' "$REPO_ROOT/scripts/sh/install-nixos.sh"
 	grep -Fq '{{.HERMES_COMPOSE_FILE}}' "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
 }
 
@@ -128,16 +128,6 @@ export PATH="$DOTFILES_ACCEPTANCE_REPO_ROOT/activated/bin:$PATH"
 cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bootstrap-compose.yml" \
 	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-service/compose.yml"
 test -f "$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/hermes-service/acceptance-health.json"
-cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/hindsight-health.json" \
-	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/local-ai-services/hindsight-health.json"
-cmp "$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/hindsight-compose.yml" \
-	"$DOTFILES_ACCEPTANCE_REPO_ROOT/docker/local-ai-services/compose.yml"
-[ "${DOTFILES_ACCEPTANCE_SKIP_MLFLOW:-}" = 1 ]
-test -x "$DOTFILES_ACCEPTANCE_REAL_CURL"
-test "$DOTFILES_HERMES_OLLAMA_EXECUTABLE" = \
-	"$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/ollama"
-test "$DOTFILES_HINDSIGHT_OLLAMA_EXECUTABLE" = \
-	"$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/ollama"
 test "$DOTFILES_HERMES_CURL_EXECUTABLE" = \
 	"$DOTFILES_ACCEPTANCE_FIXTURE_ROOT/bin/curl"
 EOF
@@ -229,7 +219,6 @@ EOF
 	grep -Fq 'xapi-mcp:' "$compose"
 	grep -Fq '    working_dir: /' "$compose"
 	grep -Fq 'browser-mcp:' "$compose"
-	! grep -Eq '^[[:space:]]{2}hindsight:' "$compose"
 	grep -Fq 'name: local-ai-services' "$compose"
 	grep -Fq 'external: true' "$compose"
 	grep -Fq './acceptance-health.json:/fixture/health:ro' "$compose"
@@ -247,37 +236,10 @@ EOF
 	[ "$status" -ne 0 ]
 }
 
-@test "offline acceptance exercises Hindsight with deterministic Ollama fixtures" {
-	compose="$FIXTURE_ROOT/hindsight-compose.yml"
-	ollama="$FIXTURE_ROOT/bin/ollama"
-	curl="$FIXTURE_ROOT/bin/curl"
-
-	grep -Fq 'hindsight:' "$compose"
-	grep -Fq '127.0.0.1:8888:80' "$compose"
-	grep -Fq './hindsight-health.json:/usr/share/nginx/html/health:ro' "$compose"
-	grep -Fq './hindsight-health.json:/www/health:ro' "$compose"
-	test -x "$ollama"
-	test -x "$curl"
-
-	run "$ollama" pull qwen3.6:35b
-	[ "$status" -eq 0 ]
-	run "$ollama" pull qwen3-embedding:0.6b
-	[ "$status" -eq 0 ]
-	run "$ollama" pull unsupported-model
-	[ "$status" -ne 0 ]
-
-	run env DOTFILES_ACCEPTANCE_REAL_CURL=/usr/bin/false \
-		"$curl" --fail --silent http://127.0.0.1:11434/api/tags
-	[ "$status" -eq 0 ]
-	printf '%s\n' "$output" | jq -e '
-		.models | map(.name) == ["qwen3.6:35b", "qwen3-embedding:0.6b"]
-	' >/dev/null
-}
-
 @test "CI devcontainer pins Nix for the unskipped POSIX suite" {
 	config="$REPO_ROOT/.devcontainer/ci/devcontainer.json"
 	lock="$REPO_ROOT/.devcontainer/ci/devcontainer-lock.json"
-	workflow="$REPO_ROOT/.github/workflows/ci-devcontainer.yml"
+	workflow="$REPO_ROOT/.github/workflows/ci-other.yml"
 	feature='ghcr.io/devcontainers/features/nix:1.3.1'
 
 	jq -e --arg feature "$feature" '
@@ -292,17 +254,14 @@ EOF
 		  and (.resolved | startswith("ghcr.io/devcontainers/features/nix@sha256:"))
 		  and (.integrity | startswith("sha256:"))
 	' "$lock" >/dev/null
-	[ "$(grep -c -- '--frozen-lockfile' "$workflow")" -ge 2 ]
+	[ "$(grep -c -- '--frozen-lockfile' "$workflow")" -eq 1 ]
 }
 
-@test "Hermes bootstrap CI watches the feature Taskfile" {
-	workflow="$REPO_ROOT/.github/workflows/ci-bootstrap.yml"
+@test "Hermes bootstrap CI keeps the feature Taskfile contract" {
+	workflow="$REPO_ROOT/.github/workflows/ci-nix.yml"
 	pre_commit="$REPO_ROOT/.pre-commit-config.yaml"
 
-	grep -Fq 'manifest: ci/job-path-routing.json' "$workflow"
-	run python3 "$REPO_ROOT/scripts/python/detect_ci_changes.py" \
-		--manifest "$REPO_ROOT/ci/job-path-routing.json" --paths-file - <<<"taskfiles/hermes/taskfile.yml"
-	[ "$status" -eq 0 ]
-	[[ "$output" == *'"hermes": true'* ]]
+	grep -Fq 'uses: ./.github/actions/detect-ci-changes' "$workflow"
+	grep -Fq 'needs.changes.outputs.nix' "$workflow"
 	grep -Eq 'taskfiles/hermes/taskfile\\.yml' "$pre_commit"
 }

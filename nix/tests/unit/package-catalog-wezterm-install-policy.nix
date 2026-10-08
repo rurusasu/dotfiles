@@ -8,7 +8,6 @@ let
   };
   terminalWingetPackages = {
     autohotkey = "AutoHotkey.AutoHotkey";
-    starship = "Starship.Starship";
     wezterm = "wez.wezterm";
   };
   terminalWingetMap = builtins.intersectAttrs terminalWingetPackages sets.wingetMap;

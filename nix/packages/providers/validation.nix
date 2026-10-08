@@ -52,14 +52,6 @@ let
         "source"
         "identity"
       ]
-    else if provider == "system-manager" then
-      [
-        "provider"
-        "source"
-        "identity"
-        "nixAttr"
-        "systemModule"
-      ]
     else
       [
         "provider"
@@ -89,10 +81,7 @@ let
             ) "${prefix}homebrew-cask provider requires cask"
             ++ lib.optional (
               provider == "homebrew-formula" && !hasValue (platformData.formula or null)
-            ) "${prefix}homebrew-formula provider requires formula"
-            ++ lib.optional (
-              provider == "system-manager" && !hasValue (platformData.systemModule or null)
-            ) "${prefix}system-manager provider requires systemModule";
+            ) "${prefix}homebrew-formula provider requires formula";
         in
         lib.optional (
           provider == null && (unsupported == null || unsupported == "")

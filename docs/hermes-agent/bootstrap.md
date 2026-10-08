@@ -1,8 +1,7 @@
 # Hermes Bootstrap Operations
 
 On macOS and Linux/WSL, the pinned `hermes-agent` flake and Home Manager module
-manage the Hermes CLI and native gateway service. On Windows, `WithHermes`
-selects that Nix-managed runtime in the configured NixOS WSL distribution. The
+manage the Hermes CLI and native gateway service. On Windows, the installer applies that Nix-managed runtime in the configured NixOS WSL distribution. The
 Nix module also installs `hermes-bootstrap` and a manifest rooted at
 `~/.hermes`; `task hermes:sync` streams 1Password item data to that native
 transactional bootstrap and synchronizes profiles and shared repositories.
@@ -70,7 +69,7 @@ Hermes の組み込み 1Password 連携と `op` CLI の利用手順は、[Hermes
 
 The native bootstrap requires the Nix-managed Hermes commands, `op`, `jq`, and
 access to the 1Password Service Account item and declared GitHub repositories.
-`WithHermes` installs Hermes, the native gateway, `hermes-bootstrap`, Node.js
+Home Manager installs Hermes, the native gateway, `hermes-bootstrap`, Node.js
 for the pinned Calendar/Gmail MCP launchers, and the manifest under
 `~/.hermes`. Windows runs the same flow inside the configured NixOS WSL
 distribution.
@@ -88,15 +87,14 @@ profile distributions and shared repositories, installs private credentials,
 and reconciles every managed Hermes profile before the gateway restarts.
 
 Browser and X API MCP remain optional Docker sidecars, published only on
-loopback for native Hermes. Hindsight remains a separate service. Neither is a
-Hermes Agent backend. No Docker Hermes gateway/bootstrap service or backend
+loopback for native Hermes. They are not a Hermes Agent backend. No Docker Hermes gateway/bootstrap service or backend
 image is used.
 
 The standard installer paths are:
 
 ```text
 install.sh -> OS installer -> task hermes:bootstrap -> Nix/Home Manager runtime + native sync
-install.cmd + WithHermes -> NixRebuild -> NixOS WSL runtime + native sync
+install.cmd -> NixRebuild -> NixOS WSL runtime + native sync
 ```
 
 The Windows `HermesAgentHandler` verifies that a successful NixOS WSL rebuild
@@ -104,9 +102,6 @@ took ownership. If WSL is absent or the rebuild failed, installation fails
 instead of falling back to Docker. An old Docker volume is not copied, modified,
 or deleted automatically; follow the one-time migration instructions only if
 you explicitly need data from it.
-
-Hindsight の運用、バックアップ、復元、受入検証、privacy boundary は
-[Hermes Hindsight ローカルメモリ運用](./hindsight-memory.md)を参照してください。
 
 ## Data Flow
 
@@ -211,7 +206,7 @@ task hermes:profiles:sync
 ```
 
 It processes every profile declared in
-`nix/home/hermes-agent/manifest.yaml` in manifest order. Do not replace
+`nix/modules/hermes-agent/manifest.yaml` in manifest order. Do not replace
 these commands with a clone or checkout inside a profile home.
 
 For every existing valid named profile, the local `distribution.yaml` and

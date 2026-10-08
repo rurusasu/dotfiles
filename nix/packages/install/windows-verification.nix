@@ -12,10 +12,6 @@
       command = "chezmoi";
       args = [ "--version" ];
     };
-    git = {
-      command = "git";
-      args = [ "--version" ];
-    };
     gh = {
       command = "gh";
       args = [ "--version" ];
@@ -25,24 +21,12 @@
       command = "fd";
       args = [ "--version" ];
     };
-    ripgrep = {
-      command = "rg";
-      args = [ "--version" ];
-    };
     jq = {
       command = "jq";
       args = [ "--version" ];
     };
-    eza = {
-      command = "eza";
-      args = [ "--version" ];
-    };
     direnv = {
       command = "direnv";
-      args = [ "--version" ];
-    };
-    starship = {
-      command = "starship";
       args = [ "--version" ];
     };
     nodejs = {
@@ -51,10 +35,6 @@
     };
     uv = {
       command = "uv";
-      args = [ "--version" ];
-    };
-    _1password-cli = {
-      command = "op";
       args = [ "--version" ];
     };
     powershell = {
@@ -74,14 +54,6 @@
       command = "rustup";
       args = [ "--version" ];
     };
-    ghq = {
-      command = "ghq";
-      args = [ "--version" ];
-    };
-    lazygit = {
-      command = "lazygit";
-      args = [ "--version" ];
-    };
     imagemagick = {
       command = "magick";
       args = [ "--version" ];
@@ -94,10 +66,6 @@
       command = "tree-sitter";
       args = [ "--version" ];
     };
-    ollama = {
-      command = "ollama";
-      args = [ "--version" ];
-    };
     google-cloud-sdk = {
       command = "gcloud";
       args = [ "version" ];
@@ -107,6 +75,14 @@
   # Post-install verification commands for Windows-only winget packages.
   # Keys match PackageIdentifier values because these packages have no catalog attr.
   wingetVerifyById = {
+    "BurntSushi.ripgrep.MSVC" = {
+      command = "rg";
+      args = [ "--version" ];
+    };
+    "eza-community.eza" = {
+      command = "eza";
+      args = [ "--version" ];
+    };
     "ajeetdsouza.zoxide" = {
       command = "zoxide";
       args = [ "--version" ];
@@ -114,22 +90,6 @@
     "junegunn.fzf" = {
       command = "fzf";
       args = [ "--version" ];
-    };
-    "AgileBits.1Password" = {
-      type = "windowsInstalledProduct";
-      command = "AgileBits.1Password";
-      appxPackage = {
-        name = "AgileBits.1Password";
-        packageFamilyName = "Agilebits.1Password_amwd9z03whsfe";
-        executable = "1Password.exe";
-      };
-      uninstallEntry = {
-        displayName = "1Password";
-        executablePaths = [
-          "%ProgramFiles%\\1Password\\1Password.exe"
-          "%LOCALAPPDATA%\\1Password\\app\\*\\1Password.exe"
-        ];
-      };
     };
     "TheBrowserCompany.Arc" = {
       type = "appxLaunchTarget";
@@ -143,16 +103,6 @@
         productCodes = [ "AutoHotkey" ];
         displayName = "AutoHotkey";
         executablePaths = [ "%ProgramFiles%\\AutoHotkey\\v2\\AutoHotkey.exe" ];
-      };
-    };
-    "Discord.Discord" = {
-      type = "windowsInstalledProduct";
-      command = "Discord";
-      uninstallEntry = {
-        productCodes = [ "Discord" ];
-        displayName = "Discord";
-        publisher = "Discord Inc.";
-        executablePaths = [ "%LOCALAPPDATA%\\Discord\\app-*\\Discord.exe" ];
       };
     };
     "Docker.DockerDesktop" = {

@@ -25,16 +25,15 @@ setup() {
 }
 @test "chezmoi excludes the Windows WezTerm launcher on Unix" {
 	for os in linux darwin windows; do
-		ignored=$(chezmoi --config /dev/null --config-format toml --source "$REPO_ROOT/chezmoi" \
+		managed=$(chezmoi --config /dev/null --config-format toml --source "$REPO_ROOT/chezmoi" \
 			--destination "$HOME" --cache "$BATS_TEST_TMPDIR/cache" --persistent-state "$BATS_TEST_TMPDIR/state.boltdb" \
-			--override-data "{\"chezmoi\":{\"os\":\"$os\"}}" execute-template \
-			--file "$REPO_ROOT/chezmoi/.chezmoiignore.tmpl")
+			--override-data "{\"chezmoi\":{\"os\":\"$os\"}}" managed --include files --path-style relative)
 		if [[ $os == windows ]]; then
-			[[ $ignored != *'.local/bin/wezterm-launch.cmd'* ]]
+			[[ $managed == *'.local/bin/wezterm-launch.cmd'* ]]
 		else
-			[[ $ignored == *'.local/bin/wezterm-launch.cmd'* ]]
-			[[ $ignored == *'.config/wezterm/'* ]]
-			[[ $ignored == *'.config/ghostty/'* ]]
+			[[ $managed != *'.local/bin/wezterm-launch.cmd'* ]]
+			[[ $managed != *'.config/wezterm/'* ]]
+			[[ $managed != *'.config/ghostty/'* ]]
 		fi
 	done
 }

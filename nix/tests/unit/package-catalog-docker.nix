@@ -10,7 +10,7 @@ let
   support = sets.supportReport.docker-desktop;
 in
 {
-  testDockerProviderMetadataAndFeatureSelectedCask = {
+  testDockerProviderMetadataAndCask = {
     expr = {
       inherit (support) installFeature;
       windows = {
@@ -24,25 +24,12 @@ in
           cask
           ;
       };
-      linux = {
-        inherit (support.linux)
-          provider
-          source
-          identity
-          systemModule
-          ;
-      };
+      inherit (support) linux;
       legacyDarwin = support.legacyDarwin or null;
-      defaultCaskExcluded = !(builtins.elem "docker-desktop" (sets.darwinCasksForInstallFeatures [ ]));
-      dockerCaskSelected = builtins.elem "docker-desktop" (
-        sets.darwinCasksForInstallFeatures [
-          "WithOllama"
-          "WithDocker"
-        ]
-      );
+      included = builtins.elem "docker-desktop" sets.darwinCasks;
     };
     expected = {
-      installFeature = "WithDocker";
+      installFeature = null;
       windows = {
         provider = "winget";
         source = "winget";
@@ -55,14 +42,10 @@ in
         cask = "docker-desktop";
       };
       linux = {
-        provider = "system-manager";
-        source = "nixpkgs";
-        identity = "docker";
-        systemModule = "docker";
+        unsupported = "Docker Desktop is not selected on Linux; NixOS manages the Docker engine through virtualisation.docker";
       };
       legacyDarwin = null;
-      defaultCaskExcluded = true;
-      dockerCaskSelected = true;
+      included = true;
     };
   };
 }

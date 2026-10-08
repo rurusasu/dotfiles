@@ -11,8 +11,8 @@
 - パッケージと OS 別 provider metadata の SSOT: `nix/packages/catalog/`（カテゴリごとに一度だけ定義）
 - provider 選択・検証: `nix/packages/providers/`、installer metadata: `nix/packages/install/`
 - `nix/packages/sets.nix` は既存 export を維持する合成入口。データ・選択・配布・host 動作の変更理由を分離する。詳細は [パッケージ管理](docs/nix/package-management.md#分割の理由と編集先)。
-- Home Manager パッケージの選択・利用側: `nix/home/darwin.nix`、`linux.nix`、`wsl.nix`。`common.nix` は OS 非依存の共有設定を担当する。
-- デスクトップの共通キー配列・ユーザー設定: `nix/home/keybindings/`。OS の service/有効化・競合解除は `nix/hosts/<host>/` が担当する。純粋な設定生成関数と Home Manager module を区別する（[責務と対応範囲・移行状況](docs/chezmoi/omarchy.md)）。
+- Home Manager パッケージの選択・OS 固有設定: `nix/hosts/<system>/<environment>/home.nix`。`nix/home/common.nix` は OS 非依存の共有設定を担当する。
+- デスクトップの共通キー配列・ユーザー設定: `nix/home/keybindings/`。OS の service/有効化・競合解除は `nix/hosts/<system>/<environment>/` が担当する。純粋な設定生成関数と Home Manager module を区別する（[責務と対応範囲・移行状況](docs/chezmoi/omarchy.md)）。
 - Windows manifest: `windows/{winget,npm,pnpm}/packages.json`（`winget-export` の生成物）
 - ユーザー設定: 原則 `chezmoi/` 以下。Nix 管理のデスクトップキー設定は `nix/home/keybindings/` に置き、同じ設定を二重配布しない。
 - Windows 実行ロジック: `scripts/powershell/`
@@ -22,7 +22,7 @@
 ## テスト責務
 
 - Nix expression、Home Manager option、flake output、Nix package 選択の値テストは `nix/tests/unit/` に nix-unit 形式で記載する。ビルド・実行テストの derivation は `nix/tests/build/`、共有入力は `nix/tests/fixtures/` に置く。
-- `nix/flakes/tests.nix` が単体テストとビルドテストを登録する。nix-unit も flake の `checks` 経由で実行する。`nix flake check --no-build` は評価確認であり、テスト実行の代わりにはならない。詳細は [Nix テスト](nix/tests/README.md)。
+- `nix/tests/default.nix` が単体テストとビルドテストを登録する。nix-unit も flake の `checks` 経由で実行する。`nix flake check --no-build` は評価確認であり、テスト実行の代わりにはならない。詳細は [Nix テスト](nix/tests/README.md)。
 - Bats は shell、installer、外部コマンド、runtime/integration 契約に限定する。Nix option を `nix eval` するだけの Bats テストは追加しない。`tests/bash/package_catalog.bats` の値・source-shape assertion は nix-unit へ移管済みで、残る契約は `nix/tests/README.md` の分類に従って維持する。`tests/bash/nixos_wsl_postinstall.bats` の `nix eval` は、stubbed `nixos-rebuild` 境界内で選択 user と `--impure` 伝播を確認する runtime/integration assertion に限る。
 
 ## フォーマット・テスト・実行時間の境界

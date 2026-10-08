@@ -58,11 +58,6 @@ Describe 'Docker MCP Toolkit shared profile' {
         }
     }
 
-    It 'keeps Hindsight as a direct local HTTP server' {
-        $script:mcpData | Should -Match '(?m)^\s+- name:\s*hindsight\s*$'
-        $script:mcpData | Should -Match 'http://127\.0\.0\.1:8888/mcp/codex-shared/'
-        $script:mcpData | Should -Match '(?ms)- name:\s*hindsight.*?supports:\s*\n(?:\s+- \w+\s*\n){3}'
-    }
 }
 
 Describe 'MCP Docker gateway client templates' {
@@ -91,12 +86,6 @@ Describe 'MCP Toolkit convergence adapters' {
         $windows | Should -Not -Match 'function Pull-Profile'
         $windows | Should -Not -Match 'function Sync-Secrets'
         $windows | Should -Not -Match 'function Connect-Clients'
-    }
-
-    It 'keeps direct Hindsight in the project MCP config' {
-        $projectConfig = Get-Content -LiteralPath (Join-Path $script:repoRoot ".mcp.json") -Raw
-        $projectConfig | Should -Match '"hindsight"'
-        $projectConfig | Should -Match 'http://127\.0\.0\.1:8888/mcp/codex-shared/'
     }
 
     It 'uses the same profile and catalog refs on Unix and Windows' {

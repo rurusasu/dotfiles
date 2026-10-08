@@ -36,7 +36,7 @@
 `chcp 65001` や `$OutputEncoding` では、このファイル読み込みの問題は解消しません。
 
 [`.treefmt.toml`](../../.treefmt.toml) と
-[`nix/flakes/treefmt.nix`](../../nix/flakes/treefmt.nix) は本文が変わらない場合も
+[`nix/formatter.nix`](../../nix/formatter.nix) は本文が変わらない場合も
 必要な BOM を補い、既存 BOM を維持します。ASCII のみのファイルには必須ではありません。
 `chezmoi/` テンプレートには BOM を追加しません。
 
@@ -133,7 +133,7 @@ Invoke-ScriptAnalyzer -Path "." -Recurse -Settings "PSScriptAnalyzerSettings.psd
 
 ## treefmt 設定
 
-`.treefmt.toml` と `nix/flakes/treefmt.nix` の PowerShell 定義を同時に更新します。
+`.treefmt.toml` と `nix/formatter.nix` の PowerShell 定義を同時に更新します。
 PSScriptAnalyzer は 1.22.0 に固定し、対象は `.ps1`、`.psm1`、`.psd1` です。
 formatter は UTF-8 として読み、CRLF に正規化してから、対象パス・非 ASCII 文字・
 既存 BOM をもとに出力形式を決めます。本文の差分だけでなく BOM 不足も書き込み条件です。

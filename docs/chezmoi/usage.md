@@ -37,7 +37,7 @@ chezmoi --source "$PWD/chezmoi" apply
 
 - `dot_config/git/` などの `dot_*` は chezmoi が直接配置します。
 - `terminals/` などのカテゴリ別ファイルは `.chezmoiscripts/deploy/` の adapter が配置します。
-- Neovim の設定は `nix/modules/nvim/` に置き、Home Manager が管理します。
+- Neovim の設定は `nix/modules/editors/nvim/` に置き、Home Manager が管理します。
 - WezTerm は Windows 用の `chezmoi/terminals/wezterm/wezterm.lua` を直接編集します。macOS・NixOS・WSL は `nix/modules/terminals/wezterm/` の設定を Home Manager が配布します。
 
 詳細は [ディレクトリ構造](./structure.md)、[Neovim](./neovim.md) を参照してください。実機反映後は対象アプリを再起動し、配置済みファイル・実際のキーバインドも確認します。

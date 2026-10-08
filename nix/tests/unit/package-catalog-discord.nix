@@ -8,8 +8,8 @@ let
   };
 in
 {
-  testDiscordPreservesProvidersAndDarwinIdentity = {
-    expr = sets.supportReport.discord;
+  testDiscordPreservesWindowsModuleDistribution = {
+    expr = sets.supportReport."Discord.Discord";
     expected = {
       installFeature = null;
       windows = {
@@ -17,20 +17,8 @@ in
         source = "winget";
         identity = "Discord.Discord";
       };
-      linux = {
-        provider = "nix";
-        source = "nixpkgs";
-        identity = "discord";
-        nixAttr = "discord";
-      };
-      darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        identity = {
-          appName = "Discord.app";
-        };
-        nixAttr = "discord";
-      };
+      linux.unsupported = "Unix installation is owned by the Discord Home Manager module";
+      darwin.unsupported = "Unix installation is owned by the Discord Home Manager module";
     };
   };
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -14,91 +15,108 @@ import unittest
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci-contract.yml"
+WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci-other.yml"
 WORKFLOWS_DIRECTORY = WORKFLOW_PATH.parent
 PRE_COMMIT_PATH = REPOSITORY_ROOT / ".pre-commit-config.yaml"
 DEVCONTAINER_BATS_PATH = REPOSITORY_ROOT / ".devcontainer" / "ci" / "bats.sh"
 HERMES_TASKFILE_PATH = REPOSITORY_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
 CHEZMOI_WORKFLOW = "ci-chezmoi.yml"
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
-SETUP_PYTHON_ACTION = "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
-INSTALL_NIX_ACTION = "cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24"
+SETUP_PYTHON_ACTION = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
+INSTALL_NIX_ACTION = (
+    "cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24"
+)
 
 
 class CiWorkflowRoutingContractTests(unittest.TestCase):
     """Keep the lightweight CI workflow's trigger and tool contracts stable."""
 
     def test_nixos_vm_runs_independently_but_remains_required(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
+        workflow = self._named_workflow("ci-nix.yml")
         vm = self._workflow_job(workflow, "linux-nixos")
         self.assertRegex(vm, r"(?m)^    needs: changes$")
         self.assertIn(".#checks.x86_64-linux.bootstrap-nixos-vm", vm)
         complete = self._workflow_job(workflow, "complete")
         self.assertIn("linux-nixos,", complete)
-        self.assertIn('${{ needs.linux-nixos.result }}', complete)
+        self.assertIn("${{ needs.linux-nixos.result }}", complete)
         self.assertIn('"${LINUX_REQUIRED}" "${LINUX_NIXOS_RESULT}"', complete)
 
     def test_hermes_full_runtime_is_separate_from_native_bootstrap_tests(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
-        changes = self._workflow_job(workflow, "changes")
-        self.assertIn("hermes: ${{ steps.contracts.outputs.hermes }}", changes)
-        self.assertIn("steps.detect.outputs.darwin == 'true' || steps.contracts.outputs.hermes == 'true'", changes)
+        workflow = self._named_workflow("ci-nix.yml")
         darwin = self._workflow_job(workflow, "darwin")
-        self.assertRegex(
-            darwin,
-            r"(?s)name: Build official Hermes runtime.*?"
-            r"if: \$\{\{ needs.changes.outputs.hermes == 'true' \}\}.*?"
-            r"\.\#checks\.aarch64-darwin\.hermes-runtime",
-        )
+        self.assertIn("name: Build official Hermes runtime", darwin)
+        self.assertIn("needs.changes.outputs.nix == 'true'", darwin)
+        self.assertIn(".#checks.aarch64-darwin.hermes-runtime", darwin)
         self.assertIn(".#checks.aarch64-darwin.hermes-bootstrap-tests", darwin)
 
     def test_local_nix_checks_share_one_build_invocation(self) -> None:
         taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
-        block = taskfile.split("  test:nix:\n", 1)[1].split("  test:powershell:\n", 1)[0]
+        block = taskfile.split("  test:nix:\n", 1)[1].split("  test:powershell:\n", 1)[
+            0
+        ]
         self.assertEqual(block.count("nix build "), 1)
         self.assertCountEqual(
             re.findall(r"\.\#checks\.\$\{system\}\.([a-z-]+)", block),
             (
-                "powershell-formatter", "nix-unit", "custom-package-builds",
-                "aerospace-workspace-cycle", "neovim-native", "ghostty-config",
+                "powershell-formatter",
+                "nix-unit",
+                "custom-package-builds",
+                "aerospace-workspace-cycle",
+                "neovim-native",
+                "ghostty-config",
             ),
         )
         self.assertIn("--no-write-lock-file", block)
 
     def test_consistency_nix_checks_share_one_logged_build(self) -> None:
-        workflow = self._named_workflow("ci-consistency.yml")
+        workflow = self._workflow_job(self._named_workflow("ci-nix.yml"), "check")
         commands = workflow.replace("\\\n", " ").splitlines()
-        check_commands = [line for line in commands if "nix build " in line and ".#checks." in line]
+        check_commands = [
+            line for line in commands if "nix build " in line and ".#checks." in line
+        ]
         self.assertEqual(len(check_commands), 1)
         for check in (
-            "nix-unit", "custom-package-builds", "aerospace-workspace-cycle",
+            "nix-unit",
+            "custom-package-builds",
+            "aerospace-workspace-cycle",
             "windows-keybindings-generated",
         ):
             self.assertIn(f".#checks.x86_64-linux.{check}", check_commands[0])
         self.assertIn("--print-build-logs", check_commands[0])
 
-    def test_powershell_formatter_regression_runs_in_local_and_native_ci_routes(self) -> None:
+    def test_powershell_formatter_regression_runs_in_local_and_native_ci_routes(
+        self,
+    ) -> None:
         taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
-        self.assertIn('.#checks.${system}.powershell-formatter', taskfile)
-        bootstrap = self._named_workflow("ci-bootstrap.yml")
-        for system, name in (("x86_64-linux", "linux-build"), ("aarch64-darwin", "darwin")):
+        self.assertIn(".#checks.${system}.powershell-formatter", taskfile)
+        bootstrap = self._named_workflow("ci-nix.yml")
+        for system, name in (
+            ("x86_64-linux", "linux-build"),
+            ("aarch64-darwin", "darwin"),
+        ):
             job = self._workflow_job(bootstrap, name)
-            self.assertIn(f'.#checks.{system}.powershell-formatter', job)
+            self.assertIn(f".#checks.{system}.powershell-formatter", job)
         tools = self._workflow_job(bootstrap, "ci-tools")
         self.assertIn("check-bootstrap-ci-tools.sh --sandbox", tools)
 
-    def test_workspace_cycle_runtime_check_runs_in_local_and_hosted_nix_jobs(self) -> None:
+    def test_workspace_cycle_runtime_check_runs_in_local_and_hosted_nix_jobs(
+        self,
+    ) -> None:
         taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
-        self.assertIn('.#checks.${system}.aerospace-workspace-cycle', taskfile)
-        consistency = self._named_workflow("ci-consistency.yml")
-        bootstrap = self._named_workflow("ci-bootstrap.yml")
-        self.assertIn('.#checks.x86_64-linux.aerospace-workspace-cycle', consistency)
+        self.assertIn(".#checks.${system}.aerospace-workspace-cycle", taskfile)
+        consistency = self._named_workflow("ci-nix.yml")
+        bootstrap = self._named_workflow("ci-nix.yml")
+        self.assertIn(".#checks.x86_64-linux.aerospace-workspace-cycle", consistency)
         for system in ("x86_64-linux", "aarch64-darwin"):
-            self.assertIn(f'.#checks.{system}.aerospace-workspace-cycle', bootstrap)
+            self.assertIn(f".#checks.{system}.aerospace-workspace-cycle", bootstrap)
 
-    def test_generated_windows_keybindings_have_local_and_hosted_drift_checks(self) -> None:
-        consistency = self._named_workflow("ci-consistency.yml")
-        self.assertIn(".#checks.x86_64-linux.windows-keybindings-generated", consistency)
+    def test_generated_windows_keybindings_have_local_and_hosted_drift_checks(
+        self,
+    ) -> None:
+        consistency = self._named_workflow("ci-nix.yml")
+        self.assertIn(
+            ".#checks.x86_64-linux.windows-keybindings-generated", consistency
+        )
         taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
         self.assertIn("task: keybindings:check", taskfile)
 
@@ -129,21 +147,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertEqual(normalized_workflow.count("tests/chezmoi"), 1)
         self.assertEqual(normalized_lint.count("tests/chezmoi"), 1)
 
-    def _trigger_paths(self, workflow: str, event: str) -> str:
-        match = re.search(
-            rf"(?ms)^  {re.escape(event)}:\n"
-            r"\s+branches: \[main\]\n"
-            r"\s+paths:\n(?P<paths>.*?)(?=^  (?:push|pull_request):|^concurrency:|^permissions:)",
-            workflow,
-        )
-        self.assertIsNotNone(match, f"missing {event} path filter")
-        return match.group("paths") if match is not None else ""
-
-    def _job_patterns(self, output: str) -> list[str]:
-        manifest = json.loads((REPOSITORY_ROOT / "ci/job-path-routing.json").read_text())
-        return [pattern for rule in manifest["rules"] if output in rule["outputs"]
-                for pattern in rule["patterns"]]
-
     def test_pull_requests_to_main_always_run_ci_contract(self) -> None:
         workflow = self._workflow()
         self.assertIn("name: CI Contract", workflow)
@@ -151,36 +154,15 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             workflow,
             r"(?ms)^\s*pull_request:\n\s*branches: \[main\]\n(?!\s*paths:)",
         )
-        self.assertRegex(workflow, r"(?m)^\s+ci-contract:\n\s+name: CI Contract$")
+        self.assertRegex(workflow, r"(?m)^\s+name: CI Contract$")
 
-    def test_push_watches_routing_infrastructure_and_contract_tests(self) -> None:
+    def test_push_always_reports_and_manual_runs_are_supported(self) -> None:
         workflow = self._workflow()
-        push_match = re.search(
-            r"(?ms)^  push:\n(?P<section>.*?)(?=^permissions:)", workflow
-        )
-        self.assertIsNotNone(push_match)
-        push_section = push_match.group("section") if push_match is not None else ""
-        for path in (
-            "ci/path-routing.json",
-            "ci/bootstrap-path-routing.json",
-            "scripts/python/detect_ci_changes.py",
-            ".github/actions/detect-ci-changes/**",
-            ".github/workflows/**",
-            "tests/bash/**",
-            "tests/python/**",
-            "nix/**/*.md",
-            "docs/mlflow/**",
-            "taskfiles/mlflow/**",
-        ):
-            self.assertIn(path, push_section)
-
-    def test_change_detector_action_accepts_a_manifest_path(self) -> None:
-        action_path = REPOSITORY_ROOT / ".github" / "actions" / "detect-ci-changes" / "action.yml"
-        action = action_path.read_text(encoding="utf-8")
-
-        self.assertIn("  manifest:\n", action)
-        self.assertIn("default: ci/path-routing.json", action)
-        self.assertIn('--manifest "${MANIFEST_PATH}"', action)
+        triggers = workflow.split("env:", 1)[0]
+        self.assertIn("workflow_dispatch:", triggers)
+        self.assertIn("push:", triggers)
+        self.assertIn("branches: [main]", triggers)
+        self.assertNotIn("paths:", triggers)
 
     def test_pins_checkout_python_and_nix_setup(self) -> None:
         workflow = self._workflow()
@@ -192,19 +174,21 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
     def test_installs_go_task_before_running_taskfile_contracts(self) -> None:
         workflow = self._workflow()
         install_position = workflow.find("nix profile install nixpkgs#go-task")
-        contract_position = workflow.find("python -m unittest discover -s tests/python -v")
+        contract_position = workflow.find(
+            "python -m unittest discover -s tests/python -v"
+        )
 
         self.assertGreaterEqual(install_position, 0)
         self.assertGreater(contract_position, install_position)
         self.assertIn("task --version", workflow[install_position:contract_position])
 
     def test_bash_contracts_have_one_preinstalled_linux_owner(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
+        workflow = self._named_workflow("ci-nix.yml")
         job = self._workflow_job(workflow, "bash-test")
         self.assertIn("runs-on: ubuntu-24.04", job)
         self.assertIn("container:", job)
         self.assertIn("bash scripts/sh/run-bash-tests.sh", job)
-        self.assertIn("needs.changes.outputs.bash == 'true'", job)
+        self.assertIn("needs.changes.outputs.other == 'true'", job)
         self.assertNotIn("matrix:", job)
         self.assertNotIn("Install Nix", job)
         self.assertNotIn("Run Bash workflow contracts", self._workflow())
@@ -214,12 +198,13 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertNotIn("scripts/sh/run-bash-tests.sh", darwin)
         self.assertNotIn("brew install", darwin)
         self.assertNotIn("attestation", darwin)
+        self.assertNotRegex(job, r"continue-on-error:\s*true")
         for section in (job, darwin):
             self.assertNotIn("DOTFILES_USER", section)
             self.assertNotIn("DOTFILES_HOME", section)
 
     def test_darwin_artifact_gate_is_narrow_and_fail_closed(self) -> None:
-        darwin = self._workflow_job(self._named_workflow("ci-bootstrap.yml"), "darwin")
+        darwin = self._workflow_job(self._named_workflow("ci-nix.yml"), "darwin")
         step = re.search(
             r"(?ms)^      - name: Verify native Darwin application artifacts\n"
             r"        run: \|\n(?P<script>.*?)(?=^      - name:|\Z)",
@@ -227,7 +212,9 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
         self.assertIsNotNone(step)
         assert step is not None
-        self.assertLess(step.start(), darwin.index("name: Build official Hermes runtime"))
+        self.assertLess(
+            step.start(), darwin.index("name: Build official Hermes runtime")
+        )
         script = textwrap.dedent(step.group("script"))
         self.assertIn("--inputs-from . --no-write-lock-file nixpkgs#bats", script)
         self.assertNotIn("--override-input", script)
@@ -253,12 +240,20 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             )
             for executable in (nix, bats):
                 executable.chmod(0o755)
-            (directory / "bash").symlink_to("/bin/bash")
+            bash = shutil.which("bash")
+            if bash is None:
+                self.fail("bash is required for workflow runtime tests")
+            (directory / "bash").symlink_to(bash)
             for tool in ("codesign", "plutil", "spctl"):
                 (directory / tool).write_text("#!/bin/sh\nexit 0\n")
                 (directory / tool).chmod(0o755)
             environment = dict(os.environ, PATH=str(directory), CALLS=str(calls))
-            for count, exit_code, succeeds in (("2", "0", True), ("0", "0", False), ("1", "0", False), ("2", "42", False)):
+            for count, exit_code, succeeds in (
+                ("2", "0", True),
+                ("0", "0", False),
+                ("1", "0", False),
+                ("2", "42", False),
+            ):
                 with self.subTest(count=count, exit_code=exit_code):
                     calls.unlink(missing_ok=True)
                     result = subprocess.run(
@@ -266,6 +261,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                         env=environment | {"TEST_COUNT": count, "TEST_EXIT": exit_code},
                         capture_output=True,
                         text=True,
+                        check=False,
                     )
                     self.assertEqual(result.returncode == 0, succeeds, result.stderr)
                     self.assertEqual(calls.exists(), count == "2")
@@ -276,12 +272,15 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                 env=environment | {"TEST_COUNT": "2", "TEST_EXIT": "0"},
                 capture_output=True,
                 text=True,
+                check=False,
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(calls.exists())
 
-    def test_linux_build_uses_image_identity_for_both_system_manager_outputs(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
+    def test_linux_build_uses_image_identity_for_home_manager(
+        self,
+    ) -> None:
+        workflow = self._named_workflow("ci-nix.yml")
         job = self._workflow_job(workflow, "linux-build")
         script = re.search(
             r"(?m)^      - name: Build Linux configurations and checks\n"
@@ -297,28 +296,36 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                 '#!/bin/bash\n[[ "$*" == "passwd node" ]] || exit 64\n'
                 "printf '%s\\n' 'node:x:1000:1000::/home/node:/bin/bash'\n"
             )
-            identity = directory / "id"
-            identity.write_text(
-                '#!/bin/bash\n[[ "$*" == "-gn node" ]] || exit 64\n'
-                "printf '%s\\n' node\n"
-            )
             nix = directory / "nix"
             nix.write_text(
                 f"#!{sys.executable}\n"
                 "import json, os, sys\n"
                 "print(json.dumps({'argv': sys.argv[1:], 'identity': "
                 "{key: os.environ.get(key) for key in "
-                "('DOTFILES_USER', 'DOTFILES_HOME', 'DOTFILES_UID', 'DOTFILES_GID', 'DOTFILES_GROUP')}}))\n"
+                "('DOTFILES_USER', 'DOTFILES_HOME')}}))\n"
             )
             getent.chmod(0o755)
-            identity.chmod(0o755)
             nix.chmod(0o755)
             environment = dict(os.environ)
-            environment.update(PATH=f"{directory}:{environment['PATH']}", GITHUB_WORKSPACE=temporary)
-            for variable in ("DOTFILES_USER", "DOTFILES_HOME", "DOTFILES_UID", "DOTFILES_GID", "DOTFILES_GROUP"):
+            environment.update(
+                PATH=f"{directory}:{environment['PATH']}", GITHUB_WORKSPACE=temporary
+            )
+            for variable in (
+                "DOTFILES_USER",
+                "DOTFILES_HOME",
+            ):
                 environment.pop(variable, None)
             result = subprocess.run(
-                ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", textwrap.dedent(script.group("script"))],
+                [
+                    "bash",
+                    "--noprofile",
+                    "--norc",
+                    "-e",
+                    "-o",
+                    "pipefail",
+                    "-c",
+                    textwrap.dedent(script.group("script")),
+                ],
                 env=environment,
                 capture_output=True,
                 text=True,
@@ -326,28 +333,41 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             )
         invocation = json.loads(result.stdout)
         self.assertEqual(invocation["argv"][:2], ["build", "--impure"])
-        self.assertIn(".#systemConfigs.ubuntu", invocation["argv"])
-        self.assertIn(".#systemConfigs.debian", invocation["argv"])
-        self.assertEqual(invocation["identity"], {
-            "DOTFILES_USER": "node",
-            "DOTFILES_HOME": "/home/node",
-            "DOTFILES_UID": "1000",
-            "DOTFILES_GID": "1000",
-            "DOTFILES_GROUP": "node",
-        })
-        for variable in ("DOTFILES_USER", "DOTFILES_HOME", "DOTFILES_UID", "DOTFILES_GID", "DOTFILES_GROUP"):
+        self.assertIn(".#nixosConfigurations.linux.config.system.build.toplevel", invocation["argv"])
+        self.assertIn(".#homeConfigurations.x86_64-linux.activationPackage", invocation["argv"])
+        self.assertEqual(
+            invocation["identity"],
+            {
+                "DOTFILES_USER": "node",
+                "DOTFILES_HOME": "/home/node",
+            },
+        )
+        for variable in (
+            "DOTFILES_USER",
+            "DOTFILES_HOME",
+            "DOTFILES_UID",
+            "DOTFILES_GID",
+            "DOTFILES_GROUP",
+        ):
             self.assertNotRegex(workflow, rf"(?m)^\s+{variable}:")
             self.assertNotIn(variable, workflow.replace(job, ""))
 
     def test_wsl_prebuild_exports_zstd_cache_and_fails_closed(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
+        workflow = self._named_workflow("ci-nix.yml")
         job = self._workflow_job(workflow, "wsl-prebuild")
-        script = re.search(r"(?m)^        run: \|\n(?P<script>(?:          [^\n]*\n|\n)+)", job)
+        script = re.search(
+            r"(?m)^        run: \|\n(?P<script>(?:          [^\n]*\n|\n)+)", job
+        )
         self.assertIsNotNone(script)
         assert script is not None
-        expected_paths = [f"/nix/store/{'a' * 32}-base", f"/nix/store/{'b' * 32}-hermes"]
+        expected_paths = [
+            f"/nix/store/{'b' * 32}-hermes",
+        ]
         for copy_exit in (0, 47):
-            with self.subTest(copy_exit=copy_exit), tempfile.TemporaryDirectory() as temporary:
+            with (
+                self.subTest(copy_exit=copy_exit),
+                tempfile.TemporaryDirectory() as temporary,
+            ):
                 directory = Path(temporary)
                 runner_temp = directory / "container runner temp"
                 runner_temp.mkdir()
@@ -363,7 +383,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                     "    print('nix boundary double')\n"
                     "elif sys.argv[1] == 'build':\n"
                     "    assert '.#nixosConfigurations.nixos.config.system.build.toplevel' in sys.argv\n"
-                    "    print(paths[bool(os.environ.get('DOTFILES_WITH_HERMES'))])\n"
+                    "    print(paths[0])\n"
                     "elif sys.argv[1:3] == ['copy', '--to']:\n"
                     "    assert sys.argv[4:] == paths\n"
                     "    target = urlsplit(sys.argv[3])\n"
@@ -376,26 +396,60 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                 )
                 nix.chmod(0o755)
                 environment = dict(os.environ)
-                environment.update(PATH=f"{directory}:{environment['PATH']}", RUNNER_TEMP=str(runner_temp), GITHUB_OUTPUT=str(output), COPY_EXIT=str(copy_exit))
-                environment.pop("DOTFILES_WITH_HERMES", None)
+                environment.update(
+                    PATH=f"{directory}:{environment['PATH']}",
+                    RUNNER_TEMP=str(runner_temp),
+                    GITHUB_OUTPUT=str(output),
+                    COPY_EXIT=str(copy_exit),
+                )
                 result = subprocess.run(
-                    ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", textwrap.dedent(script.group("script"))],
+                    [
+                        "bash",
+                        "--noprofile",
+                        "--norc",
+                        "-e",
+                        "-o",
+                        "pipefail",
+                        "-c",
+                        textwrap.dedent(script.group("script")),
+                    ],
                     env=environment,
                     capture_output=True,
                     text=True,
                     check=False,
                 )
-                self.assertEqual(result.returncode, copy_exit, result.stdout + result.stderr)
+                self.assertEqual(
+                    result.returncode, copy_exit, result.stdout + result.stderr
+                )
                 if copy_exit:
-                    self.assertEqual(output.read_text(), "", "failed exports must not publish an artifact path")
-                    self.assertFalse((runner_temp / "wsl-nix-cache-artifact/wsl-nix-cache.tar").exists())
+                    self.assertEqual(
+                        output.read_text(),
+                        "",
+                        "failed exports must not publish an artifact path",
+                    )
+                    self.assertFalse(
+                        (
+                            runner_temp / "wsl-nix-cache-artifact/wsl-nix-cache.tar"
+                        ).exists()
+                    )
                     continue
-                self.assertTrue(output.is_file(), "prebuild must export its actual container artifact directory")
-                outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
+                self.assertTrue(
+                    output.is_file(),
+                    "prebuild must export its actual container artifact directory",
+                )
+                outputs = dict(
+                    line.split("=", 1) for line in output.read_text().splitlines()
+                )
                 artifact = Path(outputs["artifact-dir"])
                 self.assertTrue(artifact.is_relative_to(runner_temp))
-                self.assertEqual(sorted(path.name for path in artifact.iterdir()), ["wsl-nix-cache.tar", "wsl-system-paths.txt"])
-                self.assertEqual((artifact / "wsl-system-paths.txt").read_text().splitlines(), expected_paths)
+                self.assertEqual(
+                    sorted(path.name for path in artifact.iterdir()),
+                    ["wsl-nix-cache.tar", "wsl-system-paths.txt"],
+                )
+                self.assertEqual(
+                    (artifact / "wsl-system-paths.txt").read_text().splitlines(),
+                    expected_paths,
+                )
                 with tarfile.open(artifact / "wsl-nix-cache.tar") as archive:
                     self.assertIn("./cache-entry", archive.getnames())
         self.assertIn("id: wsl-cache", job)
@@ -426,38 +480,24 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         codeql = self._named_workflow("codeql.yml")
         self.assertEqual(codeql.count('      - ".github/actions/**"'), 2)
 
-        devcontainer = self._named_workflow("ci-devcontainer.yml")
-        self.assertRegex(
-            devcontainer,
-            r"(?m)^\s*uses: docker/setup-docker-action@[0-9a-f]{40}(?:\s+#.*)?\s*$",
-        )
+        devcontainer = self._named_workflow("ci-other.yml")
+        self.assertNotRegex(devcontainer, r"(?m)^  macos:$")
+        self.assertNotRegex(devcontainer, r"runs-on:\s+macos-")
         self.assertEqual(
             devcontainer.count(
                 "npm install --global --no-audit --no-fund @devcontainers/cli@0.88.0"
             ),
-            2,
+            1,
         )
         self.assertNotIn("npm install -g @devcontainers/cli", devcontainer)
-        macos = self._workflow_job(devcontainer, "macos")
-        self.assertRegex(
-            macos,
-            r"(?m)^\s*uses: docker/setup-buildx-action@[0-9a-f]{40}(?:\s+#.*)?\s*$",
-        )
-        buildx = macos.split("      - name: Set up Docker Buildx\n", 1)[1].split(
-            "\n      - name:", 1
-        )[0]
-        self.assertIn("driver: docker", buildx)
-        self.assertIn("cache-binary: false", buildx)
-        self.assertLess(macos.index("name: Set up Docker\n"), macos.index("name: Set up Docker Buildx"))
-        self.assertLess(macos.index("name: Set up Docker Buildx"), macos.index("name: Start devcontainer"))
-        startup = macos.split("      - name: Start devcontainer\n", 1)[1].split(
-            "\n      - name:", 1
-        )[0]
-        self.assertIn('DOCKER_BUILDKIT: "1"', startup)
-        self.assertIn("--frozen-lockfile", startup)
+        linux = self._workflow_job(devcontainer, "linux-nix")
+        self.assertIn("nix profile install 'nixpkgs#devcontainer'", linux)
+        self.assertIn("--frozen-lockfile", linux)
+        windows = self._workflow_job(devcontainer, "windows")
+        self.assertIn("@devcontainers/cli@0.88.0", windows)
 
     def test_nix_build_jobs_use_authenticated_github_fetches(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
+        workflow = self._named_workflow("ci-nix.yml")
         for job_name in ("nix", "linux-build", "wsl-prebuild"):
             with self.subTest(job=job_name):
                 job = self._workflow_job(workflow, job_name)
@@ -472,42 +512,36 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("WSLENV: GITHUB_TOKEN/u", wsl_job)
 
     def test_linux_hardware_fixture_uses_the_container_workspace(self) -> None:
-        job = self._workflow_job(self._named_workflow("ci-bootstrap.yml"), "linux-build")
+        job = self._workflow_job(self._named_workflow("ci-nix.yml"), "linux-build")
         self.assertNotIn("${{ github.workspace }}/nix/tests/fixtures", job)
         self.assertIn(
             'export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"',
             job,
         )
-    def test_bootstrap_detects_dependencies_without_push_path_filters(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
-        push = workflow.split("  push:\n", 1)[1].split("  pull_request:\n", 1)[0]
-        self.assertIn("branches: [main]", push)
-        self.assertNotIn("paths:", push)
+
+    def test_bootstrap_detects_dependencies_once_without_push_path_filters(
+        self,
+    ) -> None:
+        workflow = self._named_workflow("ci-nix.yml")
+        triggers = workflow.split("concurrency:", 1)[0]
+        self.assertNotIn("paths:", triggers)
         changes = self._workflow_job(workflow, "changes")
-        self.assertIn("manifest: ci/bootstrap-path-routing.json", changes)
-        self.assertIn("manifest: ci/job-path-routing.json", changes)
-
-
-    def test_contract_workflow_runs_the_dedicated_mlflow_gateway_tests(self) -> None:
-        workflow = self._workflow()
-        push_paths = self._trigger_paths(workflow, "push")
-
-        self.assertIn('"docker/mlflow/**"', push_paths)
-        self.assertIn('"docker/local-ai-services/**"', push_paths)
-        self.assertIn(
-            "python -m unittest docker/mlflow/tests/test_configure.py -v",
-            workflow,
-        )
+        self.assertEqual(changes.count("uses: ./.github/actions/detect-ci-changes"), 1)
+        self.assertNotIn("manifest:", changes)
+        for category in ("nix", "chezmoi", "other"):
+            self.assertIn(
+                f"{category}: ${{{{ steps.detect.outputs.{category} }}}}", changes
+            )
 
     def test_bootstrap_workflow_integrates_nix_and_winget_validation(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
+        workflow = self._named_workflow("ci-nix.yml")
 
         changes = self._workflow_job(workflow, "changes")
         self.assertIn("nix: ${{ steps.detect.outputs.nix }}", changes)
 
         for job_name, output in (
             ("nix", "nix"),
-            ("windows-installer", "windows"),
+            ("windows-installer", "chezmoi"),
         ):
             job = self._workflow_job(workflow, job_name)
             self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
@@ -522,75 +556,40 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("windows-installer", complete)
         self.assertIn("check_required_job", complete)
 
-
-    def test_legacy_nix_and_winget_workflows_are_removed(self) -> None:
-        for name in ("ci-nix.yml", "ci-winget.yml"):
+    def test_replaced_workflows_are_removed(self) -> None:
+        for name in (
+            "ci-bootstrap.yml",
+            "ci-consistency.yml",
+            "ci-powershell.yml",
+            "ci-devcontainer.yml",
+            "ci-contract.yml",
+            "ci-winget.yml",
+        ):
             self.assertFalse((WORKFLOWS_DIRECTORY / name).exists(), name)
-
-    def _route(self, path: str) -> dict[str, bool]:
-        import json
-        import subprocess
-
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(REPOSITORY_ROOT / "scripts/python/detect_ci_changes.py"),
-                "--paths-file",
-                "-",
-            ],
-            input=path + "\n",
-            text=True,
-            capture_output=True,
-            check=True,
-        )
-        return json.loads(result.stdout)
 
     def test_bash_suites_no_longer_have_devcontainer_ownership(self) -> None:
         self.assertFalse(DEVCONTAINER_BATS_PATH.exists())
-        self.assertNotIn(".devcontainer/ci/bats.sh", self._named_workflow("ci-devcontainer.yml"))
-        paths = self._job_patterns("devcontainer")
-        self.assertIn("scripts/sh/dcnvim.sh", paths)
-        self.assertNotIn("tests/bash/install_macos.bats", paths)
-        self.assertNotIn("tests/bash/install_linux.bats", paths)
-        self.assertNotIn("tests/bash/**", paths)
+        workflow = self._named_workflow("ci-other.yml")
+        for job in ("linux-nix", "windows"):
+            self.assertNotIn(
+                "scripts/sh/run-bash-tests.sh", self._workflow_job(workflow, job)
+            )
+        self.assertNotIn(".devcontainer/ci/bats.sh", workflow)
 
-    def test_hermes_ci_routes_xapi_contract_and_platform_adapters(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
+    def test_hermes_ci_keeps_xapi_and_browser_runtime_contracts(self) -> None:
+        workflow = self._named_workflow("ci-nix.yml")
         hermes = self._workflow_job(workflow, "hermes-bootstrap-tests")
-        required_paths = (
-            "scripts/python/hermes_bootstrap/**",
-            "tests/python/hermes_bootstrap_test/**",
-            "nix/home/hermes-agent/**",
-            "nix/home/hermes-agent.nix",
-            "docker/hermes-service/**",
-            "docker/hermes-browser/**",
-            "docker/hermes-browser-mcp/**",
-            "docker/hermes-xapi-mcp/**",
-            "docker/hindsight/**",
-            "docker/local-ai-services/**",
-            "scripts/sh/hermes-*.sh",
-            "scripts/powershell/handlers/Handler.HermesAgent.ps1",
-            "tests/python/test_xapi_image_contract.py",
-            ".github/workflows/ci-bootstrap.yml",
-        )
-
-        paths = self._job_patterns("hermes")
-        for required_path in required_paths:
-            self.assertIn(required_path, paths)
         self.assertIn(
-            "python3 -m unittest tests/python/test_xapi_image_contract.py -v",
-            workflow,
+            "python3 -m unittest tests/python/test_xapi_image_contract.py -v", hermes
         )
-        self.assertIn(
-            "nix build .#checks.x86_64-linux.hermes-bootstrap-tests",
-            hermes,
-        )
+        self.assertIn("nix build .#checks.x86_64-linux.hermes-bootstrap-tests", hermes)
         self.assertIn("docker/hermes-browser/tests/test_runtime_contract.sh", hermes)
         self.assertNotIn("docker build", hermes)
         complete = self._workflow_job(workflow, "complete")
         self.assertIn("hermes-bootstrap-tests,", complete)
-        self.assertIn("HERMES_REQUIRED: ${{ needs.changes.outputs.hermes }}", complete)
-        self.assertIn("HERMES_RESULT: ${{ needs.hermes-bootstrap-tests.result }}", complete)
+        self.assertIn(
+            "HERMES_RESULT: ${{ needs.hermes-bootstrap-tests.result }}", complete
+        )
         self.assertIn('"${HERMES_REQUIRED}" "${HERMES_RESULT}"', complete)
 
     def test_hermes_hook_and_task_run_xapi_image_contract(self) -> None:
@@ -609,9 +608,9 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         for path in (
             "scripts/python/hermes_bootstrap/app.py",
             "scripts/python/hermes_bootstrap_cli.py",
-            ".github/workflows/ci-bootstrap.yml",
+            ".github/workflows/ci-nix.yml",
             "tests/python/hermes_bootstrap_test/test_app.py",
-            "nix/home/hermes-agent.nix",
+            "nix/modules/hermes-agent/default.nix",
             "docker/hermes-xapi-mcp/Dockerfile",
             "docker/local-ai-services/compose.yml",
             "tests/python/test_xapi_image_contract.py",
@@ -635,68 +634,33 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("bats tests/bash/hermes_native_bootstrap.bats", task)
         self.assertNotIn("docker build", task)
 
-    def test_unified_bootstrap_workflow_routes_all_platforms(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
-
+    def test_unified_bootstrap_workflow_keeps_all_platform_jobs(self) -> None:
+        workflow = self._named_workflow("ci-nix.yml")
+        for job in (
+            "nix",
+            "linux-build",
+            "linux-nixos",
+            "darwin",
+            "wsl-prebuild",
+            "wsl",
+            "windows",
+            "windows-installer",
+            "check",
+            "complete",
+        ):
+            self._workflow_job(workflow, job)
         self.assertIn("name: Bootstrap CI", workflow)
-        self.assertIn("manifest: ci/bootstrap-path-routing.json", workflow)
-        for output in ("linux", "wsl", "windows"):
-            self.assertRegex(
-                workflow,
-                rf"(?m)^\s+{output}: \$\{{\{{ steps\.detect\.outputs\.{output} \}}\}}$",
-            )
-        self.assertIn(
-            "darwin: ${{ steps.detect.outputs.darwin == 'true' || steps.contracts.outputs.hermes == 'true' }}",
-            workflow,
-        )
+        self.assertIn("runs-on: macos-15", self._workflow_job(workflow, "darwin"))
+        self.assertNotIn("macos-13", workflow)
 
-        for marker in (
-            "Bootstrap / Linux / Build",
-            "Bootstrap / Linux / E2E / NixOS",
-            "Bootstrap / Darwin",
-            "Bootstrap / WSL / Prebuild",
-            "Bootstrap / WSL",
-            "Bootstrap / Windows",
-            "Bootstrap / Complete",
-        ):
-            self.assertIn(marker, workflow)
-
-        for job_name, output in (
-            ("linux-build", "linux"),
-            ("darwin", "darwin"),
-            ("windows", "windows"),
-        ):
-            job = self._workflow_job(workflow, job_name)
-            expected_needs = (
-                "needs: [changes, ci-tools]"
-                if job_name == "linux-build"
-                else "needs: changes"
-            )
-            self.assertIn(expected_needs, job)
-            self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
-
-        wsl_prebuild = self._workflow_job(workflow, "wsl-prebuild")
-        self.assertIn("needs: [changes, ci-tools]", wsl_prebuild)
-        self.assertIn("needs.changes.outputs.wsl == 'true'", wsl_prebuild)
-        self.assertIn("ref: ${{ env.TESTED_SHA }}", wsl_prebuild)
-        wsl = self._workflow_job(workflow, "wsl")
-        self.assertIn("needs: [changes, wsl-prebuild]", wsl)
-
-        for job_name in ("linux-nixos",):
-            job = self._workflow_job(workflow, job_name)
-            self.assertIn("needs: changes", job)
-            self.assertIn("needs.changes.outputs.linux == 'true'", job)
-
-        complete = self._workflow_job(workflow, "complete")
-        self.assertIn("if: ${{ always() }}", complete)
-        self.assertNotIn("success|skipped", complete)
-
-    def test_unified_bootstrap_workflow_fails_closed_for_selected_platforms(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
-
+    def test_unified_bootstrap_workflow_fails_closed_for_selected_platforms(
+        self,
+    ) -> None:
+        workflow = self._named_workflow("ci-nix.yml")
 
         changes = self._workflow_job(workflow, "changes")
-        self.assertIn("platforms:", changes)
+        for category in ("nix", "chezmoi", "other"):
+            self.assertIn(f"{category}:", changes)
 
         complete = self._workflow_job(workflow, "complete")
         self.assertIn("PLATFORM_REQUIRED", complete)
@@ -704,7 +668,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("WSL_REQUIRED", complete)
         self.assertIn("WSL_PREBUILD_RESULT", complete)
         self.assertIn('check_required_job "WSL / Prebuild"', complete)
-        self.assertIn("check_platform", complete)
+        self.assertNotIn("check_platform", complete)
         self.assertNotIn("success|skipped", complete)
 
         for job_name in (
@@ -719,7 +683,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn("ref: ${{ env.TESTED_SHA }}", job)
 
     def test_bootstrap_checks_out_the_pull_request_head_sha(self) -> None:
-        workflow = self._named_workflow("ci-bootstrap.yml")
+        workflow = self._named_workflow("ci-nix.yml")
 
         self.assertIn(
             "group: bootstrap-${{ github.workflow }}-${{ github.ref }}",
@@ -758,10 +722,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "-OutputFile chezmoi-test-results.xml"
         )
         for alternate_invocation in (
-            (
-                "      - run: >-\n"
-                "          Invoke-Pester -Path .\\tests\\CHEZMOI"
-            ),
+            ("      - run: >-\n          Invoke-Pester -Path .\\tests\\CHEZMOI"),
             "      - run: Invoke-Pester -Path ./tests/chezmoi",
         ):
             mutated_workflow = workflow.replace(
@@ -782,7 +743,9 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             (op_guard, "Render guard (op unauthenticated)"),
         ):
             self.assertRegex(job, rf"(?m)^    name: {re.escape(required_name)}$")
-        self.assertRegex(font_install, r"(?m)^    name: Font install smoke \(Windows\)$")
+        self.assertRegex(
+            font_install, r"(?m)^    name: Font install smoke \(Windows\)$"
+        )
 
         self.assertRegex(
             lint,
@@ -794,15 +757,14 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             r"          path: scripts/powershell/chezmoi-test-results\.xml$",
         )
 
-
     def test_home_readme_distinguishes_supported_systems_from_ci_build_routes(
         self,
     ) -> None:
-        readme = (
-            REPOSITORY_ROOT / "nix" / "tests" / "README.md"
-        ).read_text(encoding="utf-8")
-        workflow = self._named_workflow("ci-bootstrap.yml")
-        nix_test = self._workflow_job(workflow, "linux-build")
+        readme = (REPOSITORY_ROOT / "nix" / "tests" / "README.md").read_text(
+            encoding="utf-8"
+        )
+        workflow = self._named_workflow("ci-nix.yml")
+        nix_test = self._workflow_job(workflow, "check")
         darwin = self._workflow_job(workflow, "darwin")
         normalized_readme = " ".join(readme.split())
 
@@ -824,7 +786,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
 
         for runner, job in (
-            ("ubuntu-24.04", nix_test),
+            ("ubuntu-24.04", self._workflow_job(workflow, "linux-build")),
             ("macos-15", darwin),
         ):
             self.assertIn(f"`{runner}`", readme)

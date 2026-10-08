@@ -41,16 +41,6 @@ mcp_toolkit:
       ref: "catalog://mcp/docker-mcp-catalog/tavily"
 
 mcp_servers:
-  # Hindsight is a local HTTP MCP service. Docker MCP Gateway rejects local
-  # HTTP remotes, so keep this direct entry shared across every client.
-  - name: hindsight
-    url: "http://127.0.0.1:8888/mcp/codex-shared/"
-    supports:
-      - codex
-      - gemini
-      - windsurf
-
-  # Plane - Local self-hosted project management
   - name: plane
     command: uvx
     args:

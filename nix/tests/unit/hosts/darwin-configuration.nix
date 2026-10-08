@@ -1,13 +1,9 @@
 { inputs }:
 let
-  lib = inputs.nixpkgs.lib;
   system = "aarch64-darwin";
 
   mkDarwin =
     {
-      withHermes ? false,
-      withDocker ? false,
-      withOllama ? false,
       sudoUser ? "rurusasu",
       currentUser ? "fallback-user",
       extraModules ? [ ],
@@ -17,9 +13,6 @@ let
       specialArgs = {
         inherit inputs;
         inherit sudoUser currentUser;
-        dotfilesWithHermes = withHermes;
-        dotfilesWithDocker = withDocker;
-        dotfilesWithOllama = withOllama;
       };
       modules = [
         inputs.nix-homebrew.darwinModules.nix-homebrew
@@ -27,21 +20,12 @@ let
         {
           nixpkgs.config.allowUnfree = true;
         }
-        ../../../hosts/darwin
+        ../../../hosts/aarch64-darwin
       ]
       ++ extraModules;
     };
 
   defaultConfig = (mkDarwin { }).config;
-  dockerConfig = (mkDarwin { withDocker = true; }).config;
-  hermesConfig = (mkDarwin { withHermes = true; }).config;
-  ollamaConfig = (mkDarwin { withOllama = true; }).config;
-  profiles = {
-    default = defaultConfig;
-    ollama = ollamaConfig;
-    docker = dockerConfig;
-    hermes = hermesConfig;
-  };
   sudoUserConfig =
     (mkDarwin {
       sudoUser = "ktome1995";
@@ -60,17 +44,21 @@ let
         { users.users.alice.home = inputs.nixpkgs.lib.mkForce "/Volumes/Home/alice"; }
       ];
     }).config;
-  hermesHome = hermesConfig.home-manager.users.rurusasu;
 
   hasDarwinCask = name: config: builtins.any (cask: cask.name == name) config.homebrew.casks;
   packageNames =
     config: builtins.map (package: package.name or package.pname) config.environment.systemPackages;
   homePackageNames = home: builtins.map (package: package.name or package.pname) home.home.packages;
-  darwinHomeSource = builtins.readFile ../../../home/darwin.nix;
   hasPrefix = prefix: value: builtins.match "${prefix}.*" value != null;
-  hasPackage = name: packages: builtins.any (package: package == name) packages;
 in
 {
+  testOrcaModuleInstallsEditorOnceInDarwinHomeProfile = {
+    expr = map (package: package.pname) (
+      builtins.filter (package: (package.pname or "") == "orca-editor") defaultHome.home.packages
+    );
+    expected = [ "orca-editor" ];
+  };
+
   testDarwinConfiguresZshWithoutChangingAccountShell = {
     expr = {
       enabled = defaultConfig.programs.zsh.enable;
@@ -132,6 +120,13 @@ in
 
   testDarwinConfigurationKeepsSystemIntegrations = {
     expr = {
+      onePasswordDesktopCopies = builtins.length (
+        builtins.filter (
+          package: (package.pname or "") == "1password"
+        ) defaultConfig.environment.systemPackages
+      );
+      agentEnvironment = defaultConfig.launchd.user.envVariables.SSH_AUTH_SOCK;
+      gpgSshAgentEnabled = defaultConfig.programs.gnupg.agent.enableSSHSupport;
       homebrew = defaultConfig.homebrew.enable;
       nixHomebrew = defaultConfig.nix-homebrew.enable;
       raycast = builtins.any (name: hasPrefix "raycast" name) (packageNames defaultConfig);
@@ -145,9 +140,11 @@ in
         package: hasPrefix "udev-gothic-nf" (package.name or package.pname)
       ) defaultConfig.fonts.packages;
       homeManagerUser = builtins.hasAttr "rurusasu" defaultConfig.home-manager.users;
-      noOptionalOllamaAgent = builtins.hasAttr "com-dotfiles-ollama" defaultConfig.launchd.user.agents;
     };
     expected = {
+      onePasswordDesktopCopies = 1;
+      agentEnvironment = "/Users/rurusasu/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock";
+      gpgSshAgentEnabled = false;
       homebrew = true;
       nixHomebrew = true;
       raycast = true;
@@ -155,7 +152,6 @@ in
       github = true;
       managedFont = true;
       homeManagerUser = true;
-      noOptionalOllamaAgent = false;
     };
   };
 
@@ -163,14 +159,12 @@ in
     expr = {
       chrome = hasDarwinCask "google-chrome" defaultConfig;
       discord = hasDarwinCask "discord" defaultConfig;
-      ollama = hasDarwinCask "ollama-app" defaultConfig;
       docker = hasDarwinCask "docker-desktop" defaultConfig;
     };
     expected = {
       chrome = false;
       discord = false;
-      ollama = false;
-      docker = false;
+      docker = true;
     };
   };
 
@@ -223,52 +217,22 @@ in
     };
   };
 
-  testDarwinHermesProfileUsesExpectedProviders = {
+  testDarwinHermesUsesExpectedProviders = {
     expr = {
-      hermesCask = hasDarwinCask "hermes-desktop" hermesConfig;
-      dockerCask = hasDarwinCask "docker-desktop" hermesConfig;
+      hermesCask = hasDarwinCask "hermes-desktop" defaultConfig;
+      dockerCask = hasDarwinCask "docker-desktop" defaultConfig;
       chromeSystemPackage = builtins.any (name: hasPrefix "google-chrome" name) (
-        packageNames hermesConfig
+        packageNames defaultConfig
       );
-      discordSystemPackage = builtins.any (name: hasPrefix "discord" name) (packageNames hermesConfig);
-      discordAgent = builtins.hasAttr "discord-module-staging" hermesConfig.launchd.user.agents;
+      discordHomePackage = builtins.any (name: hasPrefix "discord" name) (homePackageNames defaultHome);
+      discordAgent = builtins.hasAttr "discord-module-staging" defaultHome.launchd.agents;
     };
     expected = {
       hermesCask = true;
       dockerCask = true;
       chromeSystemPackage = true;
-      discordSystemPackage = true;
+      discordHomePackage = true;
       discordAgent = true;
-    };
-  };
-
-  testDarwinDockerProfileUsesHomebrewCask = {
-    expr = {
-      dockerCask = hasDarwinCask "docker-desktop" dockerConfig;
-      ollamaCask = hasDarwinCask "ollama-app" dockerConfig;
-      chromeCask = hasDarwinCask "google-chrome" dockerConfig;
-      discordCask = hasDarwinCask "discord" dockerConfig;
-    };
-    expected = {
-      dockerCask = true;
-      ollamaCask = false;
-      chromeCask = false;
-      discordCask = false;
-    };
-  };
-
-  testDarwinOllamaProfileUsesNativeLaunchAgent = {
-    expr = {
-      exists = builtins.hasAttr "com-dotfiles-ollama" ollamaConfig.launchd.user.agents;
-      home = ollamaConfig.launchd.user.agents.com-dotfiles-ollama.serviceConfig.EnvironmentVariables.HOME;
-      runAtLoad = ollamaConfig.launchd.user.agents.com-dotfiles-ollama.serviceConfig.RunAtLoad;
-      keepAlive = ollamaConfig.launchd.user.agents.com-dotfiles-ollama.serviceConfig.KeepAlive;
-    };
-    expected = {
-      exists = true;
-      home = "/Users/rurusasu";
-      runAtLoad = true;
-      keepAlive = true;
     };
   };
 
@@ -277,6 +241,7 @@ in
       greedyCasks = defaultConfig.homebrew.greedyCasks;
       autoUpdate = defaultConfig.homebrew.onActivation.autoUpdate;
       upgrade = defaultConfig.homebrew.onActivation.upgrade;
+      cleanup = defaultConfig.homebrew.onActivation.cleanup;
       interval = defaultConfig.homebrew.onActivation.extraEnv.HOMEBREW_AUTO_UPDATE_SECS;
       hints = defaultConfig.homebrew.onActivation.extraEnv.HOMEBREW_NO_ENV_HINTS;
     };
@@ -284,42 +249,33 @@ in
       greedyCasks = true;
       autoUpdate = true;
       upgrade = true;
+      cleanup = "zap";
       interval = "86400";
       hints = "1";
     };
   };
 
-  testDarwinLegacyOmlxCleanupDefinitionIsAbsent = {
-    expr = lib.mapAttrs (
-      _: config: builtins.hasAttr "removeLegacyOmlx" config.system.activationScripts
-    ) profiles;
+  testDarwinRunsWeeklySystemGarbageCollection = {
+    expr = {
+      automatic = defaultConfig.nix.gc.automatic;
+      interval = map (interval: {
+        inherit (interval) Weekday Hour Minute;
+      }) defaultConfig.launchd.daemons.nix-gc.serviceConfig.StartCalendarInterval;
+      options = defaultConfig.nix.gc.options;
+      userGc = defaultConfig.home-manager.users.rurusasu.nix.gc.automatic;
+    };
     expected = {
-      default = false;
-      ollama = false;
-      docker = false;
-      hermes = false;
+      automatic = true;
+      interval = [
+        {
+          Weekday = 7;
+          Hour = 3;
+          Minute = 15;
+        }
+      ];
+      options = "--delete-old";
+      userGc = false;
     };
   };
 
-  # Check every evaluated fragment so renaming or moving the old commands cannot
-  # restore the cleanup through another activation hook.
-  testDarwinActivationScriptsDoNotReferenceLegacyOmlx = {
-    expr = lib.mapAttrs (
-      _: config:
-      builtins.filter (
-        name:
-        let
-          text = config.system.activationScripts.${name}.text;
-        in
-        # Avoid an unbounded regex over large generated activation scripts.
-        builtins.replaceStrings [ "omlx" ] [ "" ] text != text
-      ) (builtins.attrNames config.system.activationScripts)
-    ) profiles;
-    expected = {
-      default = [ ];
-      ollama = [ ];
-      docker = [ ];
-      hermes = [ ];
-    };
-  };
 }

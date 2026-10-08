@@ -8,13 +8,8 @@ tasks:
         platforms: [darwin]
 
   tart:run:
-    desc: Start Tart, sync the latest dotfiles, and share host Hindsight
+    desc: Start Tart and sync the latest dotfiles
     cmds:
-      - cmd: |
-          if ! task hindsight:up; then
-            printf '%s\n' 'tart-run: continuing without shared Hindsight; Docker, Ollama, or Hindsight is unavailable.' >&2
-          fi
-        platforms: [darwin]
       - cmd: ./scripts/sh/run-tart-vm.sh
         platforms: [darwin]
 
@@ -24,7 +19,7 @@ tasks:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1
 
   chezmoi:
-    desc: Apply chezmoi dotfiles (NixOS + Windows)
+    desc: Apply Codex/Claude settings on Unix and dotfiles on Windows
     cmds:
       - cmd: pwsh -NoProfile -File scripts/powershell/Invoke-OptionalWslChezmoiApply.ps1 -Distro {{.DISTRO}}
         platforms: [windows]

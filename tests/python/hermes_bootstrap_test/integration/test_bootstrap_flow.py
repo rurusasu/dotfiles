@@ -41,7 +41,6 @@ from hermes_bootstrap.envfiles import GITHUB_KEYS, read_environment_values
 from hermes_bootstrap.git import StagedSource, stage_distribution
 import hermes_bootstrap.git as git_module
 from hermes_bootstrap.github import GitHubClient
-from hermes_bootstrap.hindsight import build_hindsight_config
 from hermes_bootstrap.manifest import load_manifest
 from hermes_bootstrap.models import BootstrapManifest, DistributionSource, SharedRepository
 from hermes_bootstrap.onepassword import build_onepassword_config
@@ -52,7 +51,7 @@ FIXTURE_TOKEN = "fixture-token-only"
 API_URL_ENV = "HERMES_BOOTSTRAP_GITHUB_API_URL"
 HOST_SECRET_ENV = "HERMES_BOOTSTRAP_TEST_HOST_SECRET"
 HOST_SECRET_VALUE = "planted-host-secret-marker"
-PRODUCTION_MANIFEST = REPOSITORY_ROOT / "nix/home/hermes-agent/manifest.yaml"
+PRODUCTION_MANIFEST = REPOSITORY_ROOT / "nix/modules/hermes-agent/manifest.yaml"
 PRODUCTION_PROFILES = load_manifest(PRODUCTION_MANIFEST).profiles
 PROFILE_NAMES = tuple(source.name for source in PRODUCTION_PROFILES)
 PROFILE_IDENTITIES = {
@@ -163,7 +162,6 @@ def managed_source_config(
         ),
     }
     mcp_servers["gmail"] = gmail_configuration
-    config["memory"] = {"provider": "hindsight"}
     config["context"] = {"engine": "lcm"}
     config["plugins"] = {"enabled": ["hermes-lcm"]}
     managed = build_onepassword_config(manifest, profile)
@@ -892,7 +890,6 @@ class BootstrapFlowTests(unittest.TestCase):
                     self.data_root / "profiles" / profile
                 ).items()
                 if path not in {".env", "config.yaml"}
-                and not path.startswith("hindsight")
             }
             for profile in PROFILE_NAMES
         }
@@ -916,35 +913,12 @@ class BootstrapFlowTests(unittest.TestCase):
                     path: (entry.kind, entry.mode, entry.payload)
                     for path, entry in self._snapshot_tree(target).items()
                     if path not in {".env", "config.yaml"}
-                    and not path.startswith("hindsight")
                 },
                 profiles_before[profile],
             )
-            self.assertEqual(
-                json.loads(
-                    (target / "hindsight" / "config.json").read_text(
-                        encoding="utf-8"
-                    )
-                ),
-                build_hindsight_config(),
-            )
-            self.assertEqual(self._mode(target / "hindsight"), 0o700)
-            self.assertEqual(self._mode(target / "hindsight" / "config.json"), 0o600)
             self.assertEqual((target / "memories" / "runtime.txt").read_text(encoding="utf-8"), f"{profile} memory\n")
             self.assertEqual(self._mode(target / ".env"), 0o600)
         self.assertEqual((self.data_root / "memories" / "root.txt").read_text(encoding="utf-8"), "root memory\n")
-        self.assertEqual(
-            json.loads(
-                (self.data_root / "hindsight" / "config.json").read_text(
-                    encoding="utf-8"
-                )
-            ),
-            build_hindsight_config(),
-        )
-        self.assertEqual(self._mode(self.data_root / "hindsight"), 0o700)
-        self.assertEqual(
-            self._mode(self.data_root / "hindsight" / "config.json"), 0o600
-        )
         self.assertEqual(self._mode(self.data_root / ".env"), 0o600)
         lifelog = self.data_root / "shared" / "lifelog"
         legacy = self.data_root / "core" / "lifelog"
@@ -1161,7 +1135,7 @@ class BootstrapFlowTests(unittest.TestCase):
         for name, path in paths.items():
             with self.subTest(name=name):
                 config = yaml.safe_load(path.read_text(encoding="utf-8"))
-                self.assertEqual(config["memory"]["provider"], "hindsight")
+                self.assertEqual(config["memory"]["provider"], f"legacy-{name}")
                 self.assertEqual(
                     config["memory"]["source_policy"],
                     f"preserve-{name}",

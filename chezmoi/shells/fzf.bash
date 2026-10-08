@@ -1,4 +1,4 @@
-# Windows Bash configuration; Unix uses nix/home/fzf.nix.
+# Windows Bash configuration; Unix uses nix/home/shells/plugins/fzf.nix.
 
 # fd/fzf defaults (mirrors Nix defaults)
 FD_DEFAULT_OPTS="--hidden --follow --no-ignore-vcs --max-depth 10"

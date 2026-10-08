@@ -33,7 +33,7 @@ timeout 180s op read "op://Private/Example/credential" --account my.1password.co
 
 ## SSH / Git
 
-Linux の SSH agent socket は次を使う。
+`nix/modules/1password/ssh.nix` が Linux デスクトップ版の SSH agent socket を `IdentityAgent` と `SSH_AUTH_SOCK` に設定する。実際のホームディレクトリから絶対パスを生成し、Bash の独自 agent 起動で上書きしない。
 
 ```sshconfig
 Host *

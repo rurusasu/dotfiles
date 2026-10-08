@@ -36,7 +36,6 @@ BeforeAll {
         $manifest = Get-Content -LiteralPath (Join-Path $repositoryRoot 'windows/winget/packages.json') -Raw | ConvertFrom-Json
         $eligibleIds = @($manifest.Sources | ForEach-Object { $_.Packages } | Where-Object {
                 -not $_.PSObject.Properties['requiresAdmin'].Value -and
-                -not $_.PSObject.Properties['installFeature'].Value -and
                 -not $_.PSObject.Properties['skipInstall'].Value
             } | ForEach-Object PackageIdentifier | Sort-Object -Unique)
         $output = @('Total: 1 | Success: 1 | Failure: 0') + @(

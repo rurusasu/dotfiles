@@ -30,4 +30,4 @@ repos:
         language: system
         pass_filenames: false
         require_serial: true
-        files: '^(scripts/python/hermes_bootstrap/.*|scripts/python/hermes_bootstrap_cli\.py|tests/python/hermes_bootstrap_test/.*|nix/home/hermes-agent(\.nix|/.*)?|docker/hermes-service/.*|docker/hermes-xapi-mcp/.*|docker/hindsight/.*|docker/local-ai-services/.*|scripts/sh/hermes-.*\.sh|scripts/powershell/hermes-.*\.ps1|scripts/powershell/handlers/Handler\.HermesAgent\.ps1|tests/python/test_xapi_image_contract\.py|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|\.pre-commit-config\.yaml|\.github/workflows/ci-bootstrap\.yml)$'
+        files: '^(scripts/python/hermes_bootstrap/.*|scripts/python/hermes_bootstrap_cli\.py|tests/python/hermes_bootstrap_test/.*|nix/modules/hermes-agent/.*|docker/hermes-service/.*|docker/hermes-xapi-mcp/.*|docker/local-ai-services/.*|scripts/sh/hermes-.*\.sh|scripts/powershell/hermes-.*\.ps1|scripts/powershell/handlers/Handler\.HermesAgent\.ps1|tests/python/test_xapi_image_contract\.py|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|\.pre-commit-config\.yaml|\.github/workflows/ci-nix\.yml)$'

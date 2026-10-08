@@ -24,11 +24,10 @@ in
       }
       // verifierPackageRoots
       // {
-        _1password-cli = sets.wingetPathEntries._1password-cli;
         "AgileBits.1Password.CLI" = sets.wingetPathEntries."AgileBits.1Password.CLI";
       };
       onePasswordPortableLinkAliasAbsent =
-        !(builtins.hasAttr "_1password-cli" sets.wingetPortableLinksById);
+        !(builtins.hasAttr "AgileBits.1Password.CLI" sets.wingetPortableLinksById);
     };
     expected = {
       wingetPathEntries = {
@@ -39,9 +38,6 @@ in
           "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"
         ];
         "astral-sh.uv" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.uv*" ];
-        _1password-cli = [
-          "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"
-        ];
         "AgileBits.1Password.CLI" = [
           "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"
         ];

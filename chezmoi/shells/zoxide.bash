@@ -1,4 +1,4 @@
-# Windows Bash integration; Unix uses nix/home/zoxide.nix.
+# Windows Bash integration; Unix uses nix/home/shells/plugins/zoxide.nix.
 export _ZO_EXCLUDE_DIRS="/mnt/wsl/*:/mnt/wslg/*"
 
 if command -v zoxide >/dev/null 2>&1; then

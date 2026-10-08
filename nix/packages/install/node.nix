@@ -1,5 +1,4 @@
 # npm/pnpm global package and adapter metadata.
-{ packageInstallTimeoutSeconds }:
 {
   # Post-install verification commands for npm packages.
   # Keys match catalog attr names from npmMap.
@@ -18,53 +17,21 @@
     };
   };
 
-  # Cross-platform pnpm global packages
+  # Windows pnpm global packages. Unix DSH is owned by its Home Manager module.
   pnpmGlobal = [
     "@deepseek-ai/dsh"
-    "@playwright/cli@0.1.21"
-    "playwright@1.63.0"
   ];
-
-  pnpmInstallFeature = {
-    "@playwright/cli" = "WithHermes";
-    playwright = "WithHermes";
-  };
 
   # Post-install verification commands for pnpm packages.
   # Keys match globalPackages entries. Packages not listed skip verification.
   pnpmVerify = {
-    "@google/gemini-cli" = {
-      command = "gemini";
-      args = [ "--version" ];
-    };
     "@deepseek-ai/dsh" = {
       command = "dsh";
       args = [ "--version" ];
     };
-    "@playwright/cli" = {
-      command = "playwright-cli";
-      args = [ "--version" ];
-    };
-    "playwright" = {
-      command = "playwright";
-      args = [ "--version" ];
-    };
   };
 
-  # Post-install commands for pnpm packages.
-  # Playwright keeps browser binaries outside node_modules by default
-  # (%LOCALAPPDATA%/ms-playwright on Windows); this ensures the pnpm-managed
-  # CLI also provisions the Chromium runtime used by automation scripts.
-  pnpmPostInstall = {
-    "playwright" = {
-      command = "playwright";
-      args = [
-        "install"
-        "chromium"
-      ];
-      timeoutSeconds = packageInstallTimeoutSeconds;
-    };
-  };
+  pnpmPostInstall = { };
 
   # Extra pnpm install arguments for packages that need approved native builds.
   pnpmInstallArgs = {
@@ -73,10 +40,6 @@
       "--allow-build=@google/genai"
       "--allow-build=koffi"
       "--allow-build=protobufjs"
-      "--allow-build=!node-pty"
-    ];
-    "@google/gemini-cli" = [
-      "--allow-build=@github/keytar"
       "--allow-build=!node-pty"
     ];
   };

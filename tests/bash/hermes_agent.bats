@@ -8,8 +8,6 @@ setup() {
 	EDIT_CAPTURE="$BATS_TEST_TMPDIR/item-edit.json"
 	OP_TOKEN_CAPTURE="$BATS_TEST_TMPDIR/op-token.log"
 	READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ready-attempts"
-	OLLAMA_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ollama-ready-attempts"
-	HINDSIGHT_READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/hindsight-ready-attempts"
 	XAPI_TOKEN_ATTEMPT_FILE="$BATS_TEST_TMPDIR/xapi-token-attempts"
 	COMPOSE_FILE="$BATS_TEST_TMPDIR/docker/hermes-service/compose file.yml"
 	REAL_JQ="$(command -v jq)"
@@ -20,25 +18,16 @@ setup() {
 	: >"$COMMAND_LOG"
 	: >"$OP_TOKEN_CAPTURE"
 	printf '0\n' >"$READY_ATTEMPT_FILE"
-	printf '0\n' >"$OLLAMA_READY_ATTEMPT_FILE"
-	printf '0\n' >"$HINDSIGHT_READY_ATTEMPT_FILE"
 	printf '0\n' >"$XAPI_TOKEN_ATTEMPT_FILE"
-	mkdir -p "$(dirname "$COMPOSE_FILE")" "$BATS_TEST_TMPDIR/nix/home/hermes-agent"
-	cp "$REPO_ROOT/nix/home/hermes-agent/manifest.yaml" \
-		"$BATS_TEST_TMPDIR/nix/home/hermes-agent/manifest.yaml"
+	mkdir -p "$(dirname "$COMPOSE_FILE")" "$BATS_TEST_TMPDIR/nix/modules/hermes-agent"
+	cp "$REPO_ROOT/nix/modules/hermes-agent/manifest.yaml" \
+		"$BATS_TEST_TMPDIR/nix/modules/hermes-agent/manifest.yaml"
 	: >"$COMPOSE_FILE"
-	cat >"$BATS_TEST_TMPDIR/hindsight.env" <<'EOF'
-HINDSIGHT_API_LLM_MODEL=qwen3.6:35b
-HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=qwen3-embedding:0.6b
-EOF
 
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
 	unset DOTFILES_USER SUDO_USER
 	unset OP_SERVICE_ACCOUNT_TOKEN
-	unset DOTFILES_HERMES_OLLAMA_EXECUTABLE DOTFILES_HERMES_CURL_EXECUTABLE OLLAMA_HOST
-	export HINDSIGHT_OLLAMA_URL=http://127.0.0.1:11434
-	export COMMAND_LOG EDIT_CAPTURE OP_TOKEN_CAPTURE READY_ATTEMPT_FILE OLLAMA_READY_ATTEMPT_FILE HINDSIGHT_READY_ATTEMPT_FILE XAPI_TOKEN_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
-	export DOTFILES_SKIP_HERDR_INSTALL=1
+	export COMMAND_LOG EDIT_CAPTURE OP_TOKEN_CAPTURE READY_ATTEMPT_FILE XAPI_TOKEN_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
 	export XAPI_OP_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"},{"label":"X_API_REFRESH_TOKEN","section":{"label":"Refresh Token"},"value":"xapi-refresh-token-marker"}]}'
 	export XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
@@ -49,11 +38,6 @@ EOF
 	export OP_READ_DELAY_SECONDS=0
 	export OP_READ_COMPLETION_FILE=""
 	export API_READY_AFTER=1
-	export OLLAMA_READY_AFTER=1
-	export HINDSIGHT_API_DATABASE=connected
-	export HINDSIGHT_API_READY_AFTER=1
-	export OLLAMA_PULL_FAILURE=""
-	export OLLAMA_PULL_TIMEOUT_STATUS=0
 	export HERMES_API_READY_ATTEMPTS=3
 	export HERMES_API_READY_DELAY_SECONDS=0
 	export HERMES_API_PROBE_TIMEOUT_SECONDS=1
@@ -141,37 +125,6 @@ case " $* " in
 esac
 '
 	write_stub curl '
-case " $* " in
-  *"/api/version "*)
-    attempt="$(cat "$OLLAMA_READY_ATTEMPT_FILE")"
-    attempt=$((attempt + 1))
-    printf "%s\n" "$attempt" >"$OLLAMA_READY_ATTEMPT_FILE"
-    printf "curl" >>"$COMMAND_LOG"
-    printf " <%s>" "$@" >>"$COMMAND_LOG"
-    printf "\n" >>"$COMMAND_LOG"
-    if ((attempt < OLLAMA_READY_AFTER)); then exit 22; fi
-    printf "{\"version\":\"0.1\"}\n"
-    exit 0
-    ;;
-  *"/api/tags "*)
-    printf "curl" >>"$COMMAND_LOG"
-    printf " <%s>" "$@" >>"$COMMAND_LOG"
-    printf "\n" >>"$COMMAND_LOG"
-    printf "{\"models\":[{\"name\":\"qwen3.6:35b\"},{\"name\":\"qwen3-embedding:0.6b\"}]}\n"
-    exit 0
-    ;;
-  *"127.0.0.1:8888/health "*)
-		attempt="$(cat "$HINDSIGHT_READY_ATTEMPT_FILE")"
-		attempt=$((attempt + 1))
-		printf "%s\n" "$attempt" >"$HINDSIGHT_READY_ATTEMPT_FILE"
-    printf "curl" >>"$COMMAND_LOG"
-    printf " <%s>" "$@" >>"$COMMAND_LOG"
-    printf "\n" >>"$COMMAND_LOG"
-		if ((attempt < HINDSIGHT_API_READY_AFTER)); then exit 22; fi
-    printf "{\"status\":\"healthy\",\"database\":\"%s\"}\n" "$HINDSIGHT_API_DATABASE"
-    exit 0
-    ;;
-esac
 attempt="$(cat "$READY_ATTEMPT_FILE")"
 attempt=$((attempt + 1))
 printf "%s\n" "$attempt" >"$READY_ATTEMPT_FILE"
@@ -182,12 +135,6 @@ if ((attempt < API_READY_AFTER)); then
 	exit 22
 fi
 '
-	write_stub ollama '
-printf "ollama" >>"$COMMAND_LOG"
-printf " <%s>" "$@" >>"$COMMAND_LOG"
-printf "\n" >>"$COMMAND_LOG"
-if [[ ${1:-} == pull && ${2:-} == "$OLLAMA_PULL_FAILURE" ]]; then exit 42; fi
-'
 	write_stub timeout '
 if [[ ${1:-} == --version ]]; then
 	printf "timeout (GNU coreutils) 9.0\n"
@@ -196,9 +143,6 @@ fi
 printf "timeout" >>"$COMMAND_LOG"
 printf " <%s>" "$@" >>"$COMMAND_LOG"
 printf "\n" >>"$COMMAND_LOG"
-if [[ ${OLLAMA_PULL_TIMEOUT_STATUS:-0} != 0 ]]; then
-	exit "$OLLAMA_PULL_TIMEOUT_STATUS"
-fi
 [[ ${1:-} == --foreground ]] && shift
 [[ ${1:-} == --kill-after=30 ]] && shift
 shift
@@ -219,7 +163,6 @@ $body
 EOF
 	chmod +x "$STUB_BIN/$name"
 }
-
 
 run_restart_sidecar() {
 	local missing_command="${1:-}"
@@ -276,11 +219,10 @@ create_mocked_installer_fixture() {
 	MOCK_REPO="$fixture_root/installer-repo"
 	MOCK_BIN="$fixture_root/installer-bin"
 	MOCK_DOCKER_APP="$fixture_root/Docker.app"
-	MOCK_OLLAMA_APP="$fixture_root/Ollama.app"
 	mkdir -p "$MOCK_REPO/scripts/sh" "$MOCK_REPO/chezmoi" \
 		"$MOCK_REPO/docker/hermes-service" \
-		"$MOCK_REPO/docker/hindsight" "$MOCK_REPO/docker/local-ai-services" \
-		"$MOCK_BIN" "$MOCK_OLLAMA_APP" "$MOCK_DOCKER_APP/Contents/MacOS" \
+		"$MOCK_REPO/docker/local-ai-services" \
+		"$MOCK_BIN" "$MOCK_DOCKER_APP/Contents/MacOS" \
 		"$MOCK_DOCKER_APP/Contents/Resources/bin"
 	MOCK_REPO="$(cd "$MOCK_REPO" && pwd -P)"
 	cp "$REPO_ROOT/install.sh" "$MOCK_REPO/install.sh"
@@ -289,7 +231,7 @@ create_mocked_installer_fixture() {
 	cp "$REPO_ROOT/scripts/sh/install-common.sh" "$MOCK_REPO/scripts/sh/install-common.sh"
 	cp "$REPO_ROOT/scripts/sh/codex-npm.sh" "$MOCK_REPO/scripts/sh/codex-npm.sh"
 	cp "$REPO_ROOT/scripts/sh/install-display.sh" "$MOCK_REPO/scripts/sh/install-display.sh"
-	for installer in install-macos.sh install-linux.sh install-nixos.sh; do
+	for installer in install-macos.sh install-home-manager.sh install-nixos.sh; do
 		cp "$REPO_ROOT/scripts/sh/$installer" "$MOCK_REPO/scripts/sh/$installer"
 	done
 	mv "$MOCK_REPO/scripts/sh/install-macos.sh" \
@@ -371,10 +313,19 @@ if [[ ${1:-} == --extra-experimental-features ]]; then
 fi
 if [[ $* == *"builtins.currentSystem"* ]]; then
   printf "x86_64-linux"
+elif [[ $* == *homeConfigurations*activationPackage* ]]; then
+  printf "%s/home-manager-generation\\n" "$MOCK_REPO"
 fi
 '
+	mkdir -p "$MOCK_REPO/home-manager-generation"
+	cat >"$MOCK_REPO/home-manager-generation/activate" <<'EOF'
+#!/usr/bin/env bash
+printf 'home-manager-activate\n' >>"$COMMAND_LOG"
+EOF
+	chmod +x "$MOCK_REPO/home-manager-generation/activate"
+	export MOCK_REPO
 	write_fixture_stub nixos-rebuild 'printf "unexpected nixos-rebuild\\n" >>"$COMMAND_LOG"; exit 99'
-write_fixture_stub sudo '
+	write_fixture_stub sudo '
 printf "sudo" >>"$COMMAND_LOG"
 printf " <%s>" "$@" >>"$COMMAND_LOG"
 printf "\\n" >>"$COMMAND_LOG"
@@ -403,13 +354,12 @@ case "${1:-}" in
     fi
     ;;
   /usr/bin/env)
-    if [[ $# -eq 15 && ${2:-} == "SUDO_USER=$fixture_user" &&
-      ${3:-} == "$expected_nix_config" && ${4:-} == DOTFILES_WITH_OLLAMA=* &&
-      ${5:-} == DOTFILES_WITH_DOCKER=* && ${6:-} == DOTFILES_WITH_HERMES=* &&
-      ${7:-} == "${PATH%%:*}/nix" && ${8:-} == --accept-flake-config &&
-      ${9:-} == run && ${10:-} == .#darwin-rebuild && ${11:-} == -- &&
-      ${12:-} == switch && ${13:-} == --flake && ${14:-} == .#macos &&
-      ${15:-} == --impure ]]; then
+    if [[ $# -eq 12 && ${2:-} == "SUDO_USER=$fixture_user" &&
+      ${3:-} == "$expected_nix_config" &&
+      ${4:-} == "${PATH%%:*}/nix" && ${5:-} == --accept-flake-config &&
+      ${6:-} == run && ${7:-} == .#darwin-rebuild && ${8:-} == -- &&
+      ${9:-} == switch && ${10:-} == --flake && ${11:-} == .#macos &&
+      ${12:-} == --impure ]]; then
       exec "$@"
     fi
     ;;
@@ -437,7 +387,6 @@ printf "#!/usr/bin/env bash\\nexit 0\\n" >"$prefix/bin/codex"
 chmod +x "$prefix/bin/codex"
 '
 	write_fixture_stub curl 'printf "curl %s\\n" "$*" >>"$COMMAND_LOG"'
-	write_fixture_stub ollama 'printf "ollama %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub launchctl 'printf "launchctl %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub open 'printf "open %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub docker 'printf "docker %s\\n" "$*" >>"$COMMAND_LOG"'
@@ -512,7 +461,7 @@ EOF
 	linux)
 		rm -f "$marker"
 		export MOCK_UNAME_S=Linux MOCK_UNAME_M=x86_64
-		MOCK_SELECTED_INSTALLER=install-linux.sh
+		MOCK_SELECTED_INSTALLER=install-home-manager.sh
 		;;
 	nixos)
 		touch "$marker"
@@ -533,7 +482,6 @@ EOF
 		DOTFILES_NIX_PROFILE_SCRIPT="$fixture_root/nix-daemon.sh" \
 		DOTFILES_DOCKER_APP_PATH="$MOCK_DOCKER_APP" \
 		DOTFILES_BREW_COMMAND="$MOCK_BIN/brew" \
-		DOTFILES_OLLAMA_APP_PATH="$MOCK_OLLAMA_APP" \
 		DOTFILES_LAUNCHCTL_COMMAND="$MOCK_BIN/launchctl" \
 		DOTFILES_ACCEPT_DOCKER_LICENSE=1 \
 		DOTFILES_OPEN_COMMAND="$MOCK_BIN/open" \
@@ -556,7 +504,7 @@ EOF
 
 @test "Unix installers do not hand off native Hermes to the Docker bootstrap" {
 	local installer contents
-	for installer in install-macos.sh install-linux.sh install-nixos.sh; do
+	for installer in install-macos.sh install-home-manager.sh install-nixos.sh; do
 		contents="$REPO_ROOT/scripts/sh/$installer"
 		! grep -Fq 'hermes-sidecar-common.sh' "$contents"
 		if [[ $installer == install-macos.sh ]]; then
@@ -578,7 +526,6 @@ EOF
 		in_task { print }
 	' "$REPO_ROOT/taskfiles/hermes/taskfile.yml")"
 
-	[[ "$bootstrap_task" == *'DOTFILES_WITH_HERMES=1'* ]]
 	[[ "$bootstrap_task" == *'nixos-rebuild-with-user.sh switch --flake . --impure'* ]]
 	[[ "$bootstrap_task" == *'task darwin:install'* ]]
 	[[ "$bootstrap_task" != *'hermes:docker:bootstrap'* ]]
@@ -600,7 +547,7 @@ EOF
 	for platform in macos linux nixos; do
 		: >"$COMMAND_LOG"
 		if [[ $platform == macos ]]; then
-			run_mocked_installer "$platform" --with-docker --with-hermes
+			run_mocked_installer "$platform"
 		else
 			run_mocked_installer "$platform"
 		fi
@@ -612,7 +559,7 @@ EOF
 		if [[ $platform == macos ]]; then
 			task_line="task --dir $MOCK_REPO hermes:desktop:install"
 		else
-		task_line=""
+			task_line=""
 		fi
 		apply_line="$(grep -n -m 1 '^chezmoi apply --force$' "$COMMAND_LOG" | cut -d: -f1)"
 		[ -n "$apply_line" ]
@@ -622,22 +569,26 @@ EOF
 			[ "$task_line_number" -gt "$apply_line" ]
 		else
 			! grep -q 'hermes:bootstrap\|docker compose.*hermes' "$COMMAND_LOG"
-			verify_line="$(grep -n -m 1 '^verify-environment ' "$COMMAND_LOG" | cut -d: -f1)"
-			[ -n "$verify_line" ]
-			[ "$verify_line" -gt "$apply_line" ]
+			if [[ $platform == nixos ]]; then
+				verify_line="$(grep -n -m 1 '^verify-environment ' "$COMMAND_LOG" | cut -d: -f1)"
+				[ -n "$verify_line" ]
+				[ "$verify_line" -gt "$apply_line" ]
+			else
+				grep -Fxq 'home-manager-activate' "$COMMAND_LOG"
+			fi
 		fi
 		! grep -q '^unexpected nixos-rebuild$' "$COMMAND_LOG"
 		if [[ $platform == macos ]]; then
 			grep -Fxq 'docker info' "$COMMAND_LOG"
 			grep -Fxq 'docker compose version' "$COMMAND_LOG"
 			grep -Fxq "sudo </usr/bin/env> <SUDO_USER=test-user> <NIX_CONFIG=extra-experimental-features = nix-command flakes" "$COMMAND_LOG"
-			grep -Fxq "accept-flake-config = true> <DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=1> <$MOCK_BIN/nix> <--accept-flake-config> <run> <.#darwin-rebuild> <--> <switch> <--flake> <.#macos> <--impure>" "$COMMAND_LOG"
+			grep -Fxq "accept-flake-config = true> <$MOCK_BIN/nix> <--accept-flake-config> <run> <.#darwin-rebuild> <--> <switch> <--flake> <.#macos> <--impure>" "$COMMAND_LOG"
 			grep -Fqx 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/bin>' "$COMMAND_LOG"
 			grep -Fqx 'sudo </bin/chmod> <0775> </usr/local/bin>' "$COMMAND_LOG"
 			grep -Fqx 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/cli-plugins>' "$COMMAND_LOG"
 			grep -Fqx 'sudo </bin/chmod> <0775> </usr/local/cli-plugins>' "$COMMAND_LOG"
 			grep -Fqx "sudo <$MOCK_DOCKER_APP/Contents/MacOS/install> <--accept-license> <--user=test-user>" "$COMMAND_LOG"
-				expected_sudo_count=10
+			expected_sudo_count=10
 			for target in /usr/local/bin /usr/local/cli-plugins; do
 				if [[ ! -e $target ]]; then
 					grep -Fqx "sudo </bin/mkdir> <--> <$target>" "$COMMAND_LOG"

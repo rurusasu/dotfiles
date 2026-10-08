@@ -7,7 +7,7 @@ setup() {
 @test "README documents all bootstrap entrypoints and reruns" {
 	grep -q 'install.cmd' "$REPO_ROOT/README.md"
 	[ "$(grep -c './install.sh' "$REPO_ROOT/README.md")" -ge 2 ]
-	grep -q 'DOTFILES_ALLOW_USER_ONLY=1' "$REPO_ROOT/README.md"
+	grep -q 'Home Manager' "$REPO_ROOT/README.md"
 	grep -Eqi 're-run|rerun|再実行' "$REPO_ROOT/README.md"
 	grep -q 'GitHub-hosted' "$REPO_ROOT/README.md"
 	! grep -q 'self-hosted-bootstrap-runners.md' "$REPO_ROOT/README.md"
@@ -15,7 +15,7 @@ setup() {
 
 @test "operational docs require only hosted bootstrap CI" {
 	[ ! -e "$REPO_ROOT/docs/ci/self-hosted-bootstrap-runners.md" ]
-	grep -q 'ci-bootstrap.yml' "$REPO_ROOT/docs/architecture.md"
+	grep -q 'ci-nix.yml' "$REPO_ROOT/docs/architecture.md"
 	grep -q 'Bootstrap CI' "$REPO_ROOT/docs/scripts/powershell/testing.md"
 	for file in \
 		"$REPO_ROOT/README.md" \
@@ -27,7 +27,7 @@ setup() {
 
 @test "architecture documents the four declarative layers" {
 	grep -q 'nix-darwin' "$REPO_ROOT/docs/architecture.md"
-	grep -q 'System Manager' "$REPO_ROOT/docs/architecture.md"
+	grep -q 'Home Manager' "$REPO_ROOT/docs/architecture.md"
 	grep -q 'NixOS' "$REPO_ROOT/docs/architecture.md"
 	grep -q 'winget' "$REPO_ROOT/docs/architecture.md"
 	grep -q 'runtime acceptance' "$REPO_ROOT/docs/architecture.md"

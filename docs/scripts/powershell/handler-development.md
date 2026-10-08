@@ -187,7 +187,7 @@ install.ps1 は 3 ステップでハンドラーを実行します:
 
 handler 単体テストは `CanApply` / `Apply` の条件と副作用を検証し、phase integration テストは
 loader と script boundary を検証する。外部 runtime、UAC、Docker、WSL、ネットワーク、secret は
-この deterministic contract に入れず、`ci-bootstrap.yml` の外部 E2E で検証する。stub の phase
+この deterministic contract に入れず、`ci-nix.yml` の外部 E2E で検証する。stub の phase
 script を成功させるだけのテストは、実 installer boundary の代替にしない。
 
 ## ハンドラー開発のチェックリスト

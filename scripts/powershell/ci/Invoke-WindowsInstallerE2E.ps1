@@ -229,10 +229,7 @@ foreach ($package in $npmManifest.globalPackages) {
   $requiredPackageManagerMarkers += "[Npm] ✓ $($package.name)"
 }
 foreach ($package in $pnpmManifest.globalPackages) {
-  $installFeature = $package.PSObject.Properties['installFeature']
-  if ($null -eq $installFeature -or [string]::IsNullOrWhiteSpace([string]$installFeature.Value)) {
-    $requiredPackageManagerMarkers += "[Pnpm] ✓ $($package.name)"
-  }
+  $requiredPackageManagerMarkers += "[Pnpm] ✓ $($package.name)"
 }
 Assert-WindowsInstallerSuccess `
   -Output $out `
@@ -273,7 +270,7 @@ if ($wingetSources.Count -eq 0) {
 }
 
 # CI-skipped packages are still verify-only obligations. Include every
-# source the user phase applies, and omit only admin, feature-gated, or
+# source the user phase applies, and omit only admin or
 # explicitly skipped packages.
 $expectedWindowsPackageIds = @(
   $wingetSources |
@@ -281,10 +278,8 @@ $expectedWindowsPackageIds = @(
     Where-Object {
       $properties = $_.PSObject.Properties
       $requiresAdmin = $properties['requiresAdmin']
-      $installFeature = $properties['installFeature']
       $skipInstall = $properties['skipInstall']
       ($null -eq $requiresAdmin -or -not [bool]$requiresAdmin.Value) -and
-      ($null -eq $installFeature -or [string]::IsNullOrWhiteSpace([string]$installFeature.Value)) -and
       ($null -eq $skipInstall -or -not [bool]$skipInstall.Value)
     } |
     ForEach-Object { [string]$_.PackageIdentifier } |

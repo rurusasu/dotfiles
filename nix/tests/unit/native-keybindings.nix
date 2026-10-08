@@ -6,7 +6,7 @@ let
     system = "x86_64-linux";
     modules = [
       inputs.home-manager.nixosModules.home-manager
-      ../../hosts/linux/configuration.nix
+      ../../hosts/shared/nixos/configuration.nix
       {
         nixpkgs.pkgs = pkgs;
         home-manager.useGlobalPkgs = true;
@@ -45,18 +45,17 @@ in
       systemOwnsCompositor = true;
     };
   };
-  testNativeDesktopProviderIsOptIn = {
+  testNativeDesktopProviderResolvesSelectedPackages = {
     expr = {
-      defaultPackages = map (package: package.pname) (
-        sets.resolveForInstallFeatures [ ] [ "hyprland" "fuzzel" ]
-      );
       selectedPackages = map (package: package.pname) (
-        sets.resolveForInstallFeatures [ "WithDesktop" ] [ "hyprland" "fuzzel" ]
+        sets.resolve [
+          "hyprland"
+          "fuzzel"
+        ]
       );
       inherit (sets) providerErrors;
     };
     expected = {
-      defaultPackages = [ ];
       selectedPackages = [
         "hyprland"
         "fuzzel"

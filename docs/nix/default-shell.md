@@ -6,7 +6,7 @@ NixOS / NixOS-WSL は、対象ユーザーのログインシェルに zsh を設
 
 macOS は `programs.zsh.enable` と Home Manager で zsh の設定を管理します。
 既存アカウントのログインシェルを変更する独自 activation は実行しません。
-Windows と standalone Home Manager / System Manager のログインシェルは変更しません。
+Windows と standalone Home Manager のログインシェルは変更しません。
 
 ## 検証
 

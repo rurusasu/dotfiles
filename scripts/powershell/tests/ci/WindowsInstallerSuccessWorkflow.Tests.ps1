@@ -1,6 +1,6 @@
 ﻿Describe 'Windows installer success workflow contract' {
     BeforeAll {
-        $workflowPath = Join-Path $PSScriptRoot '../../../../.github/workflows/ci-bootstrap.yml'
+        $workflowPath = Join-Path $PSScriptRoot '../../../../.github/workflows/ci-nix.yml'
         $script:workflowLines = @(Get-Content -LiteralPath $workflowPath -Encoding UTF8)
         $script:workflow = $script:workflowLines -join "`n"
         $installerE2EPath = Join-Path $PSScriptRoot '../../ci/Invoke-WindowsInstallerE2E.ps1'
@@ -12,14 +12,12 @@
         $script:installerE2E | Should -Match 'Assert-WindowsInstallerSuccess'
         $script:installerE2E | Should -Match '\-RequiredOutputMarkers\s+\$requiredPackageManagerMarkers'
     }
-    It 'requires success evidence for every un-gated npm and pnpm manifest package' {
+    It 'requires success evidence for every npm and pnpm manifest package' {
         $workflow = $script:installerE2E
         $workflow | Should -Match '\$npmManifest\s*=\s*Get-Content'
         $workflow | Should -Match '\$pnpmManifest\s*=\s*Get-Content'
         $workflow | Should -Match '\[Npm\] \u2713 \$\(\$package\.name\)'
         $workflow | Should -Match '\[Pnpm\] \u2713 \$\(\$package\.name\)'
-        $workflow | Should -Match '\$package\.PSObject\.Properties\[''installFeature''\]'
-        $workflow | Should -Not -Match '\[string\]\$package\.installFeature'
     }
 
     It 'builds pnpm package evidence safely when optional metadata is absent under StrictMode' {
@@ -27,19 +25,11 @@
         $manifestPath = Join-Path $PSScriptRoot '../../../../windows/pnpm/packages.json'
         $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
         $packages = @($manifest.globalPackages)
-        $packagesWithoutFeatureMetadata = @(
-            $packages | Where-Object { $null -eq $_.PSObject.Properties['installFeature'] }
-        )
-
-        $packagesWithoutFeatureMetadata.Count | Should -BeGreaterThan 0
 
         $successMarker = [string][char]0x2713
         $markers = @()
         foreach ($package in $packages) {
-            $installFeature = $package.PSObject.Properties['installFeature']
-            if ($null -eq $installFeature -or [string]::IsNullOrWhiteSpace([string]$installFeature.Value)) {
-                $markers += "[Pnpm] $successMarker $($package.name)"
-            }
+            $markers += "[Pnpm] $successMarker $($package.name)"
         }
 
         $markers.Count | Should -BeGreaterThan 0
@@ -54,7 +44,6 @@
 
         $expectedPackageBlock | Should -Not -Be ''
         $expectedPackageBlock | Should -Match '\$requiresAdmin'
-        $expectedPackageBlock | Should -Match '\$installFeature'
         $expectedPackageBlock | Should -Match '\$skipInstall'
         $expectedPackageBlock | Should -Not -Match 'ciSkipInstall'
 

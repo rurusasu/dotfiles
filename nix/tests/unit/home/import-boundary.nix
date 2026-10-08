@@ -77,22 +77,26 @@ let
     ) != null;
 
   entryModules = [
-    ../../../home/darwin.nix
-    ../../../home/linux.nix
-    ../../../home/wsl.nix
+    ../../../hosts/aarch64-darwin/home.nix
+    ../../../hosts/shared/linux-home.nix
+    ../../../hosts/x86_64-linux/wsl/home.nix
   ];
 
   homeLayout = {
     required = [
       ../../../home/README.md
       ../../../home/common.nix
-      ../../../home/darwin.nix
-      ../../../home/linux.nix
-      ../../../home/wsl.nix
+      ../../../hosts/aarch64-darwin/home.nix
+      ../../../hosts/shared/linux-home.nix
+      ../../../hosts/x86_64-linux/wsl/home.nix
     ];
     removed = [
       ../../../home/default.nix
       ../../../home/users
+      ../../../home/darwin.nix
+      ../../../home/linux.nix
+      ../../../home/wsl.nix
+      ../../../home/nixos.nix
     ];
   };
 
@@ -101,11 +105,11 @@ let
   );
 
   externalDirectImports = builtins.filter (
-    path: containsImport "common" (builtins.readFile path)
+    path: !(builtins.elem path entryModules) && containsImport "common" (builtins.readFile path)
   ) externalNixFiles;
 in
 {
-  testHomeManagerUsesCanonicalFlatOSModuleLayout = {
+  testHomeManagerUsesHostOwnedOSModuleLayout = {
     expr = {
       required = builtins.map builtins.pathExists homeLayout.required;
       removed = builtins.map builtins.pathExists homeLayout.removed;
@@ -119,6 +123,10 @@ in
         true
       ];
       removed = [
+        false
+        false
+        false
+        false
         false
         false
       ];
@@ -147,7 +155,7 @@ in
     ];
   };
 
-  testExternalCallersDoNotImportCommon = {
+  testOnlyHostHomeModulesImportCommonOutsideHome = {
     expr = externalDirectImports;
     expected = [ ];
   };

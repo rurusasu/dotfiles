@@ -172,7 +172,7 @@ push_update() {
 	[ "$(cat "$STATE_FILE")" = "$previous_hash" ]
 }
 
-@test "Tart run task attempts Hindsight non-fatally and uses the managed launcher" {
+@test "Tart run task uses the managed launcher" {
 	taskfile="$REPO_ROOT/taskfiles/install/taskfile.yml"
 
 	run awk '
@@ -182,21 +182,18 @@ push_update() {
 	' "$taskfile"
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *'if ! task hindsight:up'* ]]
-	[[ "$output" == *'continuing without shared Hindsight'* ]]
 	[[ "$output" == *'scripts/sh/run-tart-vm.sh'* ]]
 }
 
-@test "Tart launcher keeps a reverse Hindsight tunnel and runs guest sync" {
+@test "Tart launcher keeps an SSH control connection and runs guest sync" {
 	launcher="$REPO_ROOT/scripts/sh/run-tart-vm.sh"
 
-	grep -q -- '-R.*8888.*127.0.0.1' "$launcher"
 	grep -q 'sync-tart-dotfiles.sh' "$launcher"
 	grep -q 'DOTFILES_RUNTIME=%q' "$launcher"
 	grep -q 'DOTFILES_REPOSITORY_URL=%q' "$launcher"
 }
 
-@test "Tart launcher establishes one persistent tunnel and streams the sync script" {
+@test "Tart launcher establishes one persistent SSH control connection and streams the sync script" {
 	launcher="$REPO_ROOT/scripts/sh/run-tart-vm.sh"
 	bin="$BATS_TEST_TMPDIR/launcher-bin"
 	launcher_log="$BATS_TEST_TMPDIR/launcher.log"
@@ -247,7 +244,7 @@ EOF
 
 	[ "$status" -eq 0 ]
 	[ "$(cat "$BATS_TEST_TMPDIR/ssh-attempts")" -eq 3 ]
-	grep -Eq 'ssh .* -M .* -f -N -R 127\.0\.0\.1:8888:127\.0\.0\.1:8888 admin@192\.0\.2\.10' "$launcher_log"
+	grep -Eq 'ssh .* -M .* -f -N admin@192\.0\.2\.10' "$launcher_log"
 	grep -Eq "ssh .* -S .* admin@192\.0\.2\.10 DOTFILES_RUNTIME=tart DOTFILES_REPOSITORY_URL=https://example.invalid/dotfiles.git DOTFILES_REPOSITORY_REF=feature/review-fix bash -s" "$launcher_log"
 	grep -Eq 'ssh -S .* -O exit admin@192\.0\.2\.10' "$launcher_log"
 }

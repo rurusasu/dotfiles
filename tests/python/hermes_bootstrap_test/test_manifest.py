@@ -27,7 +27,7 @@ from hermes_bootstrap.errors import (
 from hermes_bootstrap.manifest import load_manifest
 
 
-APPROVED_MANIFEST = REPOSITORY_ROOT / "nix/home/hermes-agent/manifest.yaml"
+APPROVED_MANIFEST = REPOSITORY_ROOT / "nix/modules/hermes-agent/manifest.yaml"
 
 
 def manifest_data() -> dict[str, object]:

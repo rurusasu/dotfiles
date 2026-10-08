@@ -24,12 +24,12 @@ let
     "nixos_wsl_postinstall.bats"
   ];
   packageCatalog = builtins.readFile (bashTests + "/package_catalog.bats");
-  nixUnitRegistry = builtins.readFile ../../flakes/tests.nix;
+  nixUnitRegistry = builtins.readFile ../default.nix;
   registryImports = builtins.filter (name: name != null) (
     builtins.map (
       line:
       let
-        match = builtins.match "^[[:space:]]*(nix-unit[.]tests[[:space:]]*=[[:space:]]*)?(//[[:space:]]*)?[(]import[[:space:]]+[.][.]/tests/unit/([^ )]+).*" line;
+        match = builtins.match "^[[:space:]]*(nix-unit[.]tests[[:space:]]*=[[:space:]]*)?(//[[:space:]]*)?[(]import[[:space:]]+[.]/unit/([^ )]+).*" line;
       in
       if match == null then null else builtins.elemAt match 2
     ) (linesOf nixUnitRegistry)
@@ -62,7 +62,7 @@ let
     builtins.map (
       line:
       let
-        match = builtins.match ".*= import [.][.]/tests/build/([^ ]+).*" line;
+        match = builtins.match ".*= import [.]/build/([^ ]+).*" line;
       in
       if match == null then null else builtins.head match
     ) (linesOf nixUnitRegistry)

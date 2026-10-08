@@ -12,76 +12,23 @@ import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 COMPOSE_FILE = REPOSITORY_ROOT / "docker/hermes-service/compose.yml"
-HINDSIGHT_COMPOSE_FILE = REPOSITORY_ROOT / "docker/local-ai-services/compose.yml"
-HINDSIGHT_ENV_FILE = REPOSITORY_ROOT / "docker/hindsight/hindsight.env"
-HINDSIGHT_SHELL_SCRIPT = REPOSITORY_ROOT / "scripts/sh/hindsight.sh"
-HINDSIGHT_POWERSHELL_SCRIPT = REPOSITORY_ROOT / "scripts/powershell/hindsight.ps1"
 RESOLVED_CONFIG_ENV = "HERMES_BOOTSTRAP_COMPOSE_CONFIG_JSON"
 XURL_BIND = {
     "type": "bind",
     "source": "${HERMES_DATA_DIR:-${USERPROFILE:-${HOME}}/.hermes}/.xurl",
     "target": "/root/.xurl",
 }
-HINDSIGHT_IMAGE = (
-    "ghcr.io/vectorize-io/hindsight:0.9.1@"
-    "sha256:a0e937366261b8a8f20ebcaf13758c689c381dcbbf01684e4375c2787c8c666d"
-)
-HINDSIGHT_ENVIRONMENT = {
-    "HINDSIGHT_API_LLM_PROVIDER": "ollama",
-    "HINDSIGHT_API_LLM_BASE_URL": "http://mlflow:5000/gateway/mlflow/v1",
-    "HINDSIGHT_API_LLM_MODEL": "ollama-chat-default",
-    "HINDSIGHT_API_LLM_REASONING_EFFORT": "none",
-    "HINDSIGHT_API_LLM_OLLAMA_NUM_CTX": "32768",
-    "HINDSIGHT_API_LLM_STRICT_SCHEMA": "true",
-    "HINDSIGHT_API_LLM_STRICT_SCHEMA_RETAIN": "true",
-    "HINDSIGHT_API_LLM_STRICT_SCHEMA_REFLECT": "true",
-    "HINDSIGHT_API_LLM_STRICT_SCHEMA_CONSOLIDATION": "true",
-    "HINDSIGHT_API_LLM_MAX_CONCURRENT": "1",
-    "HINDSIGHT_API_LLM_TIMEOUT": "300",
-    "HINDSIGHT_API_FAIL_ON_EXTRACTION_ERRORS": "true",
-    "HINDSIGHT_API_RETAIN_WALL_TIMEOUT": "300",
-    "HINDSIGHT_API_ENABLE_DRY_RUN_EXTRACT": "true",
-    "HINDSIGHT_API_EMBEDDINGS_PROVIDER": "openai",
-    "HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL": "http://mlflow:5000/gateway/openai/v1",
-    "HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY": "ollama",
-    "HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL": "ollama-embedding-default",
-    "HINDSIGHT_OLLAMA_LLM_MODEL": "qwen3.6:35b",
-    "HINDSIGHT_OLLAMA_EMBEDDING_MODEL": "qwen3-embedding:0.6b",
-    "HINDSIGHT_API_RERANKER_PROVIDER": "local",
-    "HINDSIGHT_API_RERANKER_LOCAL_MODEL": "BAAI/bge-reranker-v2-m3",
-    "HINDSIGHT_API_RERANKER_LOCAL_FORCE_CPU": "true",
-    "HINDSIGHT_API_ENABLE_RERANKING": "true",
-}
-HINDSIGHT_PG_BIND = {
-    "type": "bind",
-    "source": "${HINDSIGHT_DATA_DIR:-${USERPROFILE:-${HOME}}/.local/share/hindsight}/pg0",
-    "target": "/home/hindsight/.pg0",
-}
-HINDSIGHT_CACHE_BIND = {
-    "type": "bind",
-    "source": "${HINDSIGHT_DATA_DIR:-${USERPROFILE:-${HOME}}/.local/share/hindsight}/cache",
-    "target": "/home/hindsight/.cache",
-}
-HINDSIGHT_HEALTHCHECK = (
-    "python -c \"import json,urllib.request; d=json.load(urllib.request.urlopen("
-    "'http://127.0.0.1:8888/health', timeout=5)); raise SystemExit(0 if "
-    "d.get('status') == 'healthy' and d.get('database') == 'connected' else 1)\""
-)
+
 EXPECTED_TCP_HEALTHCHECK = (
     "node -e \"const net=require('node:net');const s=net.connect("
     "{host:'127.0.0.1',port:8080},()=>{s.end();process.exit(0)});"
     "s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),3000);\""
 )
 
-
 class ComposeContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.compose = yaml.safe_load(COMPOSE_FILE.read_text(encoding="utf-8"))
         self.services = self.compose["services"]
-        self.hindsight_compose = yaml.safe_load(
-            HINDSIGHT_COMPOSE_FILE.read_text(encoding="utf-8")
-        )
-        self.hindsight_services = self.hindsight_compose["services"]
 
     def test_nix_managed_gateway_is_not_a_compose_service(self) -> None:
         self.assertNotIn("hermes", self.services)
@@ -90,97 +37,10 @@ class ComposeContractTests(unittest.TestCase):
         self.assertIn("browser-mcp", self.services)
         self.assertIn("xapi-mcp", self.services)
 
-    def test_hindsight_is_a_pinned_multi_arch_private_memory_runtime(self) -> None:
-        self.assertNotIn("hindsight", self.services)
-        hindsight = self.hindsight_services.get("hindsight")
-        self.assertIsNotNone(hindsight)
-        assert hindsight is not None
-
-        self.assertEqual(hindsight["image"], HINDSIGHT_IMAGE)
-        self.assertNotIn("platform", hindsight)
-        self.assertEqual(hindsight["container_name"], "local-ai-services-hindsight")
-        self.assertEqual(hindsight["restart"], "unless-stopped")
-        self.assertEqual(
-            hindsight["env_file"], [{"path": "../hindsight/hindsight.env", "required": True}],
-        )
-        self.assertNotIn("extra_hosts", hindsight)
-        self.assertEqual(
-            hindsight["ports"],
-            [
-                "127.0.0.1:${HINDSIGHT_API_PORT:-8888}:8888",
-                "127.0.0.1:${HINDSIGHT_UI_PORT:-9999}:9999",
-            ],
-        )
-        self.assertFalse(any("5432" in port for port in hindsight["ports"]))
-        self.assertEqual(
-            hindsight["volumes"], [HINDSIGHT_PG_BIND, HINDSIGHT_CACHE_BIND],
-        )
-        self.assertEqual(hindsight["shm_size"], "1g")
-        self.assertEqual(
-            hindsight["networks"],
-            {"local-ai-services": {"aliases": ["hindsight"]}},
-        )
-
-        mlflow = self.hindsight_services.get("mlflow")
-        self.assertIsNotNone(mlflow)
-        assert mlflow is not None
-        self.assertEqual(mlflow["container_name"], "local-ai-services-mlflow")
-        self.assertEqual(mlflow["networks"], ["local-ai-services"])
-
-    def test_hindsight_readiness_requires_a_healthy_connected_database(self) -> None:
-        hindsight = self.hindsight_services.get("hindsight")
-        self.assertIsNotNone(hindsight)
-        assert hindsight is not None
-
-        self.assertEqual(
-            hindsight["healthcheck"],
-            {
-                "test": ["CMD-SHELL", HINDSIGHT_HEALTHCHECK],
-                "interval": "10s",
-                "timeout": "10s",
-                "retries": 30,
-                "start_period": "60s",
-            },
-        )
-
     def test_hermes_support_services_keep_their_compose_networks(self) -> None:
         self.assertEqual(self.services["xapi-mcp"]["networks"], ["hermes-browser"])
         self.assertEqual(self.services["browser-mcp"]["networks"], ["hermes-browser"])
-        self.assertEqual(
-            self.hindsight_compose["networks"]["local-ai-services"],
-            {"name": "local-ai-services", "external": True},
-        )
         self.assertNotIn("dotfiles-memory", str(self.compose))
-        self.assertNotIn("dotfiles-memory", str(self.hindsight_compose))
-
-    def test_hindsight_environment_is_the_exact_non_secret_model_runtime_contract(self) -> None:
-        environment = {}
-        for line in HINDSIGHT_ENV_FILE.read_text(encoding="utf-8").splitlines():
-            if line:
-                key, value = line.split("=", 1)
-                environment[key] = value
-
-        self.assertEqual(environment, HINDSIGHT_ENVIRONMENT)
-
-    def test_hindsight_preparation_uses_native_ollama_models(self) -> None:
-        if not HINDSIGHT_SHELL_SCRIPT.is_file() or not HINDSIGHT_POWERSHELL_SCRIPT.is_file():
-            self.skipTest("Hindsight preparation scripts are outside the bootstrap test context")
-        shell_source = HINDSIGHT_SHELL_SCRIPT.read_text(encoding="utf-8")
-        powershell_source = HINDSIGHT_POWERSHELL_SCRIPT.read_text(encoding="utf-8")
-
-        self.assertIn("HINDSIGHT_OLLAMA_LLM_MODEL", shell_source)
-        self.assertIn("HINDSIGHT_OLLAMA_EMBEDDING_MODEL", shell_source)
-        self.assertNotIn(
-            'hindsight_env_value "$compose_file" HINDSIGHT_API_LLM_MODEL', shell_source
-        )
-        self.assertNotIn(
-            'hindsight_env_value "$compose_file" HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL',
-            shell_source,
-        )
-        self.assertIn("HINDSIGHT_OLLAMA_LLM_MODEL", powershell_source)
-        self.assertIn("HINDSIGHT_OLLAMA_EMBEDDING_MODEL", powershell_source)
-        self.assertNotIn("HINDSIGHT_API_LLM_MODEL", powershell_source)
-        self.assertNotIn("HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL", powershell_source)
 
     def test_browser_mcp_and_novnc_share_the_compose_chromium_process(self) -> None:
         chromium = self.services["chromium"]

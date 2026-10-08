@@ -2,7 +2,8 @@
 
 ## 編集対象
 
-- `config` -> `~/.config/ripgrep/config`
+- `config` -> Windows の `~/.config/ripgrep/config`
+- Unix の設定は `nix/home/shells/plugins/ripgrep.nix` の `programs.ripgrep.arguments` が管理する。
 
 ## 変更ルール
 

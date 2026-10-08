@@ -42,7 +42,6 @@ setup() {
 	export COMMAND_LOG STUB_BIN REAL_JQ REAL_TIMEOUT INSTALLER REPO_ROOT
 	export REAL_TASK REAL_PYTHON REAL_BASH
 	export MACOS_TEST_BOUNDARY="$REPO_ROOT/tests/bash/helpers/macos_install_boundary.sh"
-	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export FAKE_BASHRC FAKE_ZSHRC FAKE_DOCKER_APP
 	export FAKE_HOMEBREW_BIN_DIR FAKE_HOMEBREW_CLI_PLUGINS_DIR
 	export FAKE_DOCKER_CASK_STATE
@@ -61,10 +60,8 @@ setup() {
 	export DOTFILES_HOMEBREW_CLI_PLUGINS_DIR="$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 	export DOTFILES_DOCKER_WAIT_ATTEMPTS=2
 	export DOTFILES_DOCKER_PROBE_TIMEOUT_SECONDS=1
-	export DOTFILES_OLLAMA_WAIT_ATTEMPTS=2
 	export DOTFILES_WAIT_SLEEP_SECONDS=0
 	export DOTFILES_VERIFY_ENVIRONMENT="$STUB_BIN/verify-environment"
-	export DOTFILES_HERMES_OLLAMA_EXECUTABLE="$STUB_BIN/ollama"
 	export DOTFILES_HERMES_CURL_EXECUTABLE="$STUB_BIN/curl"
 	export DOTFILES_HOMEBREW_CASK_BIN_DIR="$BATS_TEST_TMPDIR/untrusted/bin"
 	export DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR="$BATS_TEST_TMPDIR/untrusted/cli-plugins"
@@ -92,10 +89,6 @@ exit 2
 	write_stub nc 'exit 0'
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
-case "$*" in
-	*"/api/tags"*) printf "%s\n" "{\"models\":[{\"name\":\"qwen3.6:35b\"},{\"name\":\"qwen3-embedding:0.6b\"}]}" ;;
-  *"127.0.0.1:8888/health"*) printf "%s\n" "{\"status\":\"healthy\",\"database\":\"connected\"}" ;;
-esac
 exit 0
 '
 	write_stub open 'printf "open %s\n" "$*" >>"$COMMAND_LOG"'
@@ -119,7 +112,6 @@ fi
 exit 1
 '
 	export DOTFILES_BREW_COMMAND="$STUB_BIN/brew"
-	write_stub ollama 'printf "ollama %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub pgrep '
 printf "pgrep %s\n" "$*" >>"$COMMAND_LOG"
 exit 0
@@ -201,13 +193,12 @@ case "${1:-}" in
 		fi
 		;;
 	/usr/bin/env)
-		if [[ $# -eq 15 && ${2:-} == "SUDO_USER=$fixture_user" &&
-			${3:-} == "$expected_nix_config" && ${4:-} == DOTFILES_WITH_OLLAMA=* &&
-			${5:-} == DOTFILES_WITH_DOCKER=* && ${6:-} == DOTFILES_WITH_HERMES=* &&
-			${7:-} == "$STUB_BIN/nix" && ${8:-} == --accept-flake-config &&
-			${9:-} == run && ${10:-} == ".#darwin-rebuild" && ${11:-} == -- &&
-			${12:-} == switch && ${13:-} == --flake && ${14:-} == ".#macos" &&
-			${15:-} == --impure ]]; then
+		if [[ $# -eq 12 && ${2:-} == "SUDO_USER=$fixture_user" &&
+			${3:-} == "$expected_nix_config" &&
+			${4:-} == "$STUB_BIN/nix" && ${5:-} == --accept-flake-config &&
+			${6:-} == run && ${7:-} == ".#darwin-rebuild" && ${8:-} == -- &&
+			${9:-} == switch && ${10:-} == --flake && ${11:-} == ".#macos" &&
+			${12:-} == --impure ]]; then
 			exec "$@"
 		fi
 		;;
@@ -297,7 +288,6 @@ EOF
 	chmod +x "$STUB_BIN/$name"
 }
 
-
 write_docker_app() {
 	mkdir -p "$FAKE_DOCKER_APP/Contents/MacOS" "$FAKE_DOCKER_APP/Contents/Resources/bin"
 	cat >"$FAKE_DOCKER_APP/Contents/MacOS/install" <<'EOF'
@@ -307,8 +297,6 @@ EOF
 	cat >"$FAKE_DOCKER_APP/Contents/Resources/bin/docker" <<'EOF'
 #!/usr/bin/env bash
 printf 'docker %s\n' "$*" >>"$COMMAND_LOG"
-case " $* " in
-esac
 EOF
 	chmod +x \
 		"$FAKE_DOCKER_APP/Contents/MacOS/install" \
@@ -323,13 +311,13 @@ write_installed_stubs() {
 
 	write_stub nix '
 printf "nix %s\n" "$*" >>"$COMMAND_LOG"
-if [[ ${1:-} == run && ${DOTFILES_WITH_DOCKER:-0} == 1 ]]; then
+if [[ ${1:-} == run ]]; then
 	"$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"
 fi
 '
 	write_stub chezmoi 'printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"'
 	write_stub launchctl 'printf "launchctl %s\n" "$*" >>"$COMMAND_LOG"'
-write_stub docker '
+	write_stub docker '
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
 case " $* " in
   *" info "*) [[ ${DOCKER_ENGINE_RUNNING:-0} == 1 ]] || exit 1 ;;
@@ -343,9 +331,6 @@ write_fresh_install_stubs() {
 	write_stub curl '
 printf "curl %s\n" "$*" >>"$COMMAND_LOG"
 case "$*" in
-	*"/api/tags"*) exit 0 ;;
-	*"/api/tags"*) printf "%s\n" "{\"models\":[{\"name\":\"qwen3.6:35b\"},{\"name\":\"qwen3-embedding:0.6b\"}]}"; exit 0 ;;
-	*"127.0.0.1:8888/health"*) printf "%s\n" "{\"status\":\"healthy\",\"database\":\"connected\"}"; exit 0 ;;
 	*/health*) exit 0 ;;
 	*install.lix.systems/lix*)
 		cat <<'"'"'SCRIPT'"'"'
@@ -371,17 +356,11 @@ DOCKER_INSTALL
 		cat >"$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin/docker" <<'"'"'DOCKER'"'"'
 #!/usr/bin/env bash
 printf "docker %s\n" "$*" >>"$COMMAND_LOG"
-case " $* " in
-esac
 DOCKER
 	cat >"$STUB_BIN/chezmoi" <<'"'"'CHEZMOI'"'"'
 #!/usr/bin/env bash
 printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"
 CHEZMOI
-	cat >"$STUB_BIN/ollama" <<'OLLAMA'
-#!/usr/bin/env bash
-printf "ollama %s\n" "$*" >>"$COMMAND_LOG"
-OLLAMA
 	cat >"$STUB_BIN/launchctl" <<'LAUNCHCTL'
 #!/usr/bin/env bash
 printf "launchctl %s\n" "$*" >>"$COMMAND_LOG"
@@ -390,7 +369,6 @@ LAUNCHCTL
 			"$DOTFILES_DOCKER_APP_PATH/Contents/MacOS/install" \
 			"$DOTFILES_DOCKER_APP_PATH/Contents/Resources/bin/docker" \
 			"$STUB_BIN/chezmoi" \
-			"$STUB_BIN/ollama" \
 			"$STUB_BIN/launchctl"
 	"$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"
 	fi
@@ -550,13 +528,12 @@ dotfiles_install_codex_npm
 	assert_no_homebrew_cask_link_mutations
 }
 
-@test "default profile applies core configuration without optional runtimes" {
+@test "default installation applies core configuration and managed runtimes" {
 	write_installed_stubs
 
 	run_macos_installer
 
 	[ "$status" -eq 0 ]
-	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
 	[ "$(grep -Fc 'nix accepted-flake-config' "$COMMAND_LOG")" -eq 2 ]
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
@@ -565,11 +542,7 @@ dotfiles_install_codex_npm
 		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"chezmoi apply --force" \
 		"verify-environment compose= args="
-	! grep -q '^launchctl kickstart' "$COMMAND_LOG"
-	! grep -q '/api/tags' "$COMMAND_LOG"
-	! grep -q '^docker ' "$COMMAND_LOG"
 	! grep -q '^brew uninstall' "$COMMAND_LOG"
-	! grep -q '^task .*\(hindsight:up\|hermes:bootstrap\)' "$COMMAND_LOG"
 }
 
 @test "package update failure prevents macOS activation" {
@@ -598,15 +571,6 @@ exit 37
 	! grep -q 'nix shell\|darwin-rebuild' "$COMMAND_LOG"
 }
 
-@test "public install preserves the inherited Hermes feature for subsequent rebuilds" {
-	write_installed_stubs
-	export DOTFILES_WITH_HERMES=1
-	run_macos_installer
-	[ "$status" -eq 0 ]
-	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=1>' "$COMMAND_LOG"
-	! grep -qE '^docker |^launchctl kickstart|/api/tags' "$COMMAND_LOG"
-}
-
 @test "pinned installer mode skips both flake and custom package updates" {
 	write_installed_stubs
 	export DOTFILES_SKIP_FLAKE_UPDATE=1
@@ -623,6 +587,7 @@ exit 37
 	write_stub nix '
 	env | grep -Eq "^GIT_CONFIG_(COUNT|KEY_[0-9]+|VALUE_[0-9]+)=" && exit 43
 printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [[ ${1:-} == run ]]; then "$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"; fi
 '
 	export GIT_CONFIG_COUNT=2
 	unset GIT_CONFIG_KEY_0 GIT_CONFIG_KEY_1
@@ -639,6 +604,7 @@ printf "nix %s\n" "$*" >>"$COMMAND_LOG"
 	write_stub nix '
 env | grep -Eq "^GIT_CONFIG_(COUNT|KEY_[0-9]+|VALUE_[0-9]+)=" && exit 43
 printf "nix %s\n" "$*" >>"$COMMAND_LOG"
+if [[ ${1:-} == run ]]; then "$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"; fi
 '
 	export GIT_CONFIG_COUNT=1
 	export GIT_CONFIG_KEY_0=''
@@ -649,83 +615,12 @@ printf "nix %s\n" "$*" >>"$COMMAND_LOG"
 	[ "$status" -eq 0 ]
 }
 
-@test "WithOllama starts its API after chezmoi without starting Docker" {
+@test "installation activates the native Nix gateway and Docker" {
 	write_installed_stubs
-	write_stub launchctl 'printf "launchctl %s\\n" "$*" >>"$COMMAND_LOG"'
-	write_stub curl '
-printf "curl %s\\n" "$*" >>"$COMMAND_LOG"
-if [[ "$*" == *"/api/tags"* ]]; then
-		count="$(grep -Fc "/api/tags" "$COMMAND_LOG" || true)"
-		[ "$count" -gt 1 ] || exit 1
-		printf "%s\\n" "{\"models\":[]}"
-fi
-exit 0
-'
 
-	run_macos_installer --with-ollama
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
-	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
-	assert_log_order \
-		"chezmoi apply --force" \
-		"launchctl kickstart -k gui/$(id -u)/com-dotfiles-ollama" \
-		"verify-environment compose= args="
-	[ "$(grep -Fc 'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:11434/api/tags' "$COMMAND_LOG")" -eq 2 ]
-	[ "$(grep -nF "launchctl kickstart -k gui/$(id -u)/com-dotfiles-ollama" "$COMMAND_LOG" | cut -d: -f1)" -lt \
-		"$(grep -nF 'curl --fail --silent --show-error --max-time 2 http://127.0.0.1:11434/api/tags' "$COMMAND_LOG" | tail -1 | cut -d: -f1)" ]
-	! grep -q '^docker ' "$COMMAND_LOG"
-}
-
-@test "WithDocker includes Ollama and starts only independent Hindsight after chezmoi" {
-	write_installed_stubs
-	write_stub launchctl 'printf "launchctl %s\\n" "$*" >>"$COMMAND_LOG"'
-	write_stub curl '
-printf "curl %s\\n" "$*" >>"$COMMAND_LOG"
-if [[ "$*" == *"/api/tags"* ]]; then
-		count="$(grep -Fc "/api/tags" "$COMMAND_LOG" || true)"
-		[ "$count" -gt 1 ] || exit 1
-		printf "%s\\n" "{\"models\":[]}"
-fi
-exit 0
-'
-
-	run_macos_installer --with-docker
-
-	[ "$status" -eq 0 ]
-	grep -Fq '<DOTFILES_WITH_OLLAMA=1> <DOTFILES_WITH_DOCKER=1> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
-	assert_log_order \
-		"chezmoi apply --force" \
-		"launchctl kickstart -k gui/$(id -u)/com-dotfiles-ollama" \
-		"docker info" \
-		"task --dir $REPO_ROOT hindsight:up" \
-		"verify-environment compose=$REPO_ROOT/docker/local-ai-services/compose.yml args=--runtime"
-	! grep -q 'task .*hermes:bootstrap' "$COMMAND_LOG"
-}
-
-@test "Ollama readiness timeout stops before Docker startup" {
-	write_installed_stubs
-	write_stub launchctl 'printf "launchctl %s\\n" "$*" >>"$COMMAND_LOG"'
-	write_stub curl '
-printf "curl %s\n" "$*" >>"$COMMAND_LOG"
-exit 1
-'
-
-	run_macos_installer --with-docker
-
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"Timed out waiting for Ollama API after 2 attempts."* ]]
-	grep -Fq "launchctl kickstart -k gui/$(id -u)/com-dotfiles-ollama" "$COMMAND_LOG"
-	! grep -q '^docker info$' "$COMMAND_LOG"
-	! grep -q 'task .*hindsight:up' "$COMMAND_LOG"
-}
-
-@test "WithHermes activates the native Nix gateway without starting Docker" {
-	write_installed_stubs
-
-	run_macos_installer --with-hermes
-
-	[ "$status" -eq 0 ]
-	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=1>' "$COMMAND_LOG"
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
@@ -733,7 +628,6 @@ exit 1
 		"chezmoi apply --force" \
 		"task --dir $REPO_ROOT hermes:desktop:install" \
 		"verify-environment compose= args="
-	! grep -qE '^docker |^launchctl kickstart|/api/tags' "$COMMAND_LOG"
 	! grep -q '^task .*hermes:docker:' "$COMMAND_LOG"
 	! grep -q '^op ' "$COMMAND_LOG"
 	! grep -q 'brew install --cask' "$COMMAND_LOG"
@@ -741,29 +635,22 @@ exit 1
 	! grep -q 'docker-install' "$COMMAND_LOG"
 }
 
-@test "WithHermes Nix activation does not target a Docker gateway" {
+@test "native Nix activation preserves unrelated Docker services" {
 	write_installed_stubs
 	export DOCKER_ENGINE_RUNNING=1
 
-	run_macos_installer --with-hermes
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	activation_line="$(grep -nF 'nix run .#darwin-rebuild -- switch --flake .#macos --impure' "$COMMAND_LOG" | cut -d: -f1)"
 	[ -n "$activation_line" ]
 	! grep -q 'docker compose .* hermes' "$COMMAND_LOG"
-	! grep -qE '^docker compose .* (stop|restart|rm|down) (chromium|browser-mcp|xapi-mcp)' "$COMMAND_LOG"
-	! grep -qE '^docker (volume rm|image prune)' "$COMMAND_LOG"
 }
 
-@test "WithHermes help documents the native Home Manager gateway" {
+@test "help documents the standard installation" {
 	run "$INSTALLER" --help
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"--with-ollama"* ]]
-	[[ "$output" == *"--with-docker"* ]]
-	[[ "$output" == *"--with-hermes"* ]]
-	[[ "$output" == *"native Hermes Agent/Desktop"* ]]
-	[[ "$output" == *"Home Manager"* ]]
 }
 
 @test "unknown install profile stops before mutation" {
@@ -836,7 +723,6 @@ setup_docker_runtime
 	[[ "$output" == *"Docker Desktop md5 compatibility path conflicts with existing entry: /usr/local/bin/md5"* ]]
 	! grep -q '^sudo ' "$COMMAND_LOG"
 	! grep -q '^docker-install ' "$COMMAND_LOG"
-	! grep -q '^docker desktop start ' "$COMMAND_LOG"
 }
 
 @test "Docker Desktop md5 compatibility link state rejects a regular file without replacing it" {
@@ -910,7 +796,6 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	run_macos_installer
 
 	[ "$status" -eq 0 ]
-	grep -Fq '<DOTFILES_WITH_OLLAMA=0> <DOTFILES_WITH_DOCKER=0> <DOTFILES_WITH_HERMES=0>' "$COMMAND_LOG"
 	! grep -Fq "$DOTFILES_HOMEBREW_CASK_BIN_DIR" "$COMMAND_LOG"
 	! grep -Fq "$DOTFILES_HOMEBREW_CASK_CLI_PLUGIN_DIR" "$COMMAND_LOG"
 	[ "$(grep -Fxc 'sudo </usr/sbin/chown> <test-user:admin> </usr/local/bin>' "$COMMAND_LOG")" -eq 1 ]
@@ -1077,12 +962,11 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 	write_installed_stubs
 	export HERMES_DESKTOP_INSTALL_STATUS=45
 
-	run_macos_installer --with-hermes
+	run_macos_installer
 
 	[ "$status" -eq 45 ]
 	grep -Fq "task --dir $REPO_ROOT hermes:desktop:install" "$COMMAND_LOG"
 	! grep -q 'hermes-bootstrap apply' "$COMMAND_LOG"
-	! grep -q '^docker compose .*hermes' "$COMMAND_LOG"
 	! grep -q '^verify-environment ' "$COMMAND_LOG"
 }
 
@@ -1192,8 +1076,14 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 		rm -f "$link"
 		case "$scenario" in
 		missing) expected=missing ;;
-		current) ln -s "$target" "$link"; expected=current-cask ;;
-		foreign) ln -s "$TEST_HOMEBREW_LINK_TARGET/docker" "$link"; expected=conflicting ;;
+		current)
+			ln -s "$target" "$link"
+			expected=current-cask
+			;;
+		foreign)
+			ln -s "$TEST_HOMEBREW_LINK_TARGET/docker" "$link"
+			expected=conflicting
+			;;
 		esac
 		run bash -c '. "$INSTALLER"; docker_desktop_link_state "$1" "$2"' _ "$link" "$target"
 		[ "$status" -eq 0 ]
@@ -1209,12 +1099,10 @@ printf 'docker %s\n' "$*" >>"$COMMAND_LOG"
 if [ "${1:-}" = "info" ] && ! grep -q 'nix run .#darwin-rebuild' "$COMMAND_LOG"; then
 	exit 1
 fi
-case " $* " in
-esac
 EOF
 	chmod +x "$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	assert_log_order \
@@ -1242,7 +1130,7 @@ if [[ ${1:-} == run ]]; then
 fi
 '
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -eq 42 ]
 	[ "$(/usr/bin/readlink "$docker_link")" = "$docker_target" ]
@@ -1276,7 +1164,7 @@ if [[ ${1:-} == run ]]; then
 fi
 '
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -eq 42 ]
 	for link_path in "${managed_links[@]}"; do
@@ -1306,7 +1194,7 @@ if [[ ${1:-} == run ]]; then
 fi
 '
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -eq 42 ]
 	[ "$(/usr/bin/readlink "$docker_link")" = "$docker_target" ]
@@ -1346,7 +1234,7 @@ fi
 		ln -s "${targets[$index]}" "${links[$index]}"
 	done
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
@@ -1382,7 +1270,7 @@ fi
 exit 1
 '
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	grep -Fqx 'brew reinstall --cask docker-desktop' "$COMMAND_LOG"
@@ -1419,7 +1307,7 @@ printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"
 exit 61
 '
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -eq 61 ]
 	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
@@ -1449,7 +1337,7 @@ fi
 exit 1
 '
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
@@ -1487,7 +1375,7 @@ fi
 exit 1
 '
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -eq 43 ]
 	[ "$(readlink "$docker_link")" = "$docker_target" ]
@@ -1510,7 +1398,7 @@ if [[ ${1:-} == run ]]; then
 fi
 '
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -eq 42 ]
 	[ "$(readlink "$docker_link")" = "$foreign_target" ]
@@ -1530,7 +1418,7 @@ fi
 exit 1
 '
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Unable to inspect Homebrew cask state for docker-desktop"* ]]
@@ -1555,7 +1443,7 @@ fi
 exit 1
 '
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Refusing to replace Docker Desktop link conflict: $conflict"* ]]
@@ -1578,7 +1466,7 @@ exit 1
 		ln -s "$target" "$conflict"
 		: >"$COMMAND_LOG"
 
-		run_macos_installer --with-docker
+		run_macos_installer
 
 		[ "$status" -ne 0 ]
 		[[ "$output" == *"Refusing to replace Docker Desktop link conflict: $conflict"* ]]
@@ -1596,7 +1484,7 @@ exit 1
 	ln -s "$first_target" "$first_link"
 	ln -s "$last_target" "$last_link"
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Refusing to replace Docker Desktop link conflict: $last_link"* ]]
@@ -1618,7 +1506,7 @@ exit 1
 		esac
 		: >"$COMMAND_LOG"
 
-		run_macos_installer --with-docker
+		run_macos_installer
 
 		[ "$status" -ne 0 ]
 		[[ "$output" == *"Refusing to replace Docker Desktop link conflict: $conflict"* ]]
@@ -1655,14 +1543,13 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 
 	[ "$status" -eq 42 ]
 	! grep -q '^chezmoi ' "$COMMAND_LOG"
-	! grep -q '^docker compose ' "$COMMAND_LOG"
 }
 
 @test "fresh Hermes install provisions Nix then delegates apps to nix-darwin and the native desktop installer" {
 	write_fresh_install_stubs
 	rmdir "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 
-	run_macos_installer --with-hermes
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	grep -Fqx "sudo </bin/mkdir> <--> <$FAKE_HOMEBREW_BIN_DIR>" "$COMMAND_LOG"
@@ -1684,7 +1571,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	export DOTFILES_TEST_HOMEBREW_UNAVAILABLE=1
 	rmdir "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	[ "$(readlink "$FAKE_HOMEBREW_BIN_DIR/docker")" = "$FAKE_DOCKER_APP/Contents/Resources/bin/docker" ]
@@ -1706,7 +1593,7 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	export DOTFILES_TEST_HOMEBREW_UNAVAILABLE=1
 	rmdir "$FAKE_HOMEBREW_BIN_DIR" "$FAKE_HOMEBREW_CLI_PLUGINS_DIR"
 
-	run_macos_installer --with-hermes
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	assert_log_order \
@@ -1799,7 +1686,7 @@ esac
 EOF
 	chmod +x "$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -eq 0 ]
 	grep -Fqx "open $FAKE_DOCKER_APP" "$COMMAND_LOG"
@@ -1821,7 +1708,7 @@ exit 0
 EOF
 	chmod +x "$FAKE_DOCKER_APP/Contents/Resources/bin/docker"
 
-	run_macos_installer --with-docker
+	run_macos_installer
 
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"Timed out waiting for Docker Desktop engine after 2 attempts."* ]]

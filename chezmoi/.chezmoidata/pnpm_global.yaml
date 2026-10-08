@@ -1,8 +1,0 @@
-# Cross-platform pnpm global packages
-# SSOT: nix/packages/sets.nix (pnpmGlobal)
-# Windows: PnpmHandler が windows/pnpm/packages.json から一括インストール
-# Linux/macOS: chezmoi run_onchange スクリプトがこのリストからインストール
-pnpm_global_packages:
-  - "@deepseek-ai/dsh"
-  - "@playwright/cli"
-  - "playwright"

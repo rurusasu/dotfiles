@@ -27,7 +27,6 @@ setup() {
 	export HOME="$TEST_HOME"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
 	export COMMAND_LOG NIXOS_ARGV_CAPTURE NIX_CONFIG_CAPTURE NIX_EVAL_CAPTURE REAL_NIX REPO_ROOT USER_HOME SYNC_SOURCE DOTFILES_STATE_DIR
-	export DOTFILES_SKIP_HERDR_INSTALL=1
 	export SYSTEMD_RUN_HAS_OUTPUT=1
 	export SYSTEMD_RUN_HELP_STATUS=0
 	export NIXOS_REBUILD_STATUS=0
@@ -101,7 +100,7 @@ printf "%s" "${NIX_CONFIG:-}" >"$NIX_CONFIG_CAPTURE"
 printf "nixos-rebuild user=%s home=%s uid=%s gid=%s group=%s\n" \
   "${DOTFILES_USER:-}" "${DOTFILES_HOME:-}" "${DOTFILES_UID:-}" \
   "${DOTFILES_GID:-}" "${DOTFILES_GROUP:-}" >>"$COMMAND_LOG"
-printf "nixos-rebuild hermes=%s\n" "${DOTFILES_WITH_HERMES:-}" >>"$COMMAND_LOG"
+printf "nixos-rebuild invoked\n" >>"$COMMAND_LOG"
 
 # Model the external boundary from the release rootfs: without --fast it
 # re-execs the target rebuild, whose --output=cat needs systemd >= 261.
@@ -292,14 +291,12 @@ run_postinstall() {
 		DOTFILES_UID=4242 \
 		DOTFILES_GID=4343 \
 		DOTFILES_GROUP=alicegrp \
-		DOTFILES_WITH_HERMES=1 \
 		REAL_NIX= \
 		bash "$REBUILD_WRAPPER" switch --flake . --impure
 
 	[ "$status" -eq 0 ]
 	! grep -Fxq -- --fast "$NIXOS_ARGV_CAPTURE"
 	! grep -Fxq -- --no-reexec "$NIXOS_ARGV_CAPTURE"
-	grep -Fqx 'nixos-rebuild hermes=1' "$COMMAND_LOG"
 }
 
 @test "NixOS rebuild wrapper accepts the pinned flake cache only when explicitly requested" {
@@ -310,7 +307,6 @@ run_postinstall() {
 		DOTFILES_UID=4242 \
 		DOTFILES_GID=4343 \
 		DOTFILES_GROUP=alicegrp \
-		DOTFILES_WITH_HERMES=1 \
 		DOTFILES_ACCEPT_FLAKE_CONFIG=1 \
 		DOTFILES_STATE_DIR="$DOTFILES_STATE_DIR" \
 		REAL_NIX= \
@@ -329,7 +325,6 @@ run_postinstall() {
 		DOTFILES_UID=4242 \
 		DOTFILES_GID=4343 \
 		DOTFILES_GROUP=alicegrp \
-		DOTFILES_WITH_HERMES=1 \
 		DOTFILES_ACCEPT_FLAKE_CONFIG=1 \
 		DOTFILES_STATE_DIR="$DOTFILES_STATE_DIR" \
 		REAL_NIX= \
@@ -370,52 +365,4 @@ run_postinstall() {
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"cannot use --sync-back repo with --sync-mode nix"* ]]
 	[ -f "$SYNC_SOURCE/flake.nix" ]
-}
-
-@test "NixOS rebuild wrapper preserves the Hermes feature through its environment boundary" {
-	run env \
-		PATH="$STUB_BIN:/usr/bin:/bin" \
-		DOTFILES_USER=alice \
-		DOTFILES_HOME="$USER_HOME" \
-		DOTFILES_UID=4242 \
-		DOTFILES_GID=4343 \
-		DOTFILES_GROUP=alicegrp \
-		DOTFILES_WITH_HERMES=1 \
-		DOTFILES_STATE_DIR="$DOTFILES_STATE_DIR" \
-		REAL_NIX= \
-		bash "$REBUILD_WRAPPER" switch --flake . --impure
-
-	[ "$status" -eq 0 ]
-	grep -Fqx 'nixos-rebuild hermes=1' "$COMMAND_LOG"
-}
-
-@test "NixOS rebuild wrapper defaults Hermes to disabled" {
-	run env \
-		PATH="$STUB_BIN:/usr/bin:/bin" \
-		DOTFILES_USER=alice \
-		DOTFILES_HOME="$USER_HOME" \
-		DOTFILES_UID=4242 \
-		DOTFILES_GID=4343 \
-		DOTFILES_GROUP=alicegrp \
-		DOTFILES_STATE_DIR="$DOTFILES_STATE_DIR" \
-		REAL_NIX= \
-		bash "$REBUILD_WRAPPER" switch --flake . --impure
-
-	[ "$status" -eq 0 ]
-	grep -Fqx 'nixos-rebuild hermes=0' "$COMMAND_LOG"
-	! grep -Fq 'accept-flake-config = true' "$NIX_CONFIG_CAPTURE"
-}
-
-@test "NixOS rebuild wrapper rejects an invalid Hermes feature value" {
-	run env \
-		PATH="$STUB_BIN:/usr/bin:/bin" \
-		DOTFILES_USER=alice \
-		DOTFILES_HOME="$USER_HOME" \
-		DOTFILES_WITH_HERMES='1; touch /tmp/unsafe' \
-		DOTFILES_STATE_DIR="$DOTFILES_STATE_DIR" \
-		bash "$REBUILD_WRAPPER" switch --flake . --impure
-
-	[ "$status" -ne 0 ]
-	[[ "$output" == *'Invalid DOTFILES_WITH_HERMES'* ]]
-	! grep -q '^nixos-rebuild ' "$COMMAND_LOG"
 }

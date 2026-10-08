@@ -7,12 +7,6 @@
     category = "core";
   };
 
-  git = {
-    pkg = pkgs.git;
-    winget = "Git.Git";
-    category = "core";
-  };
-
   gh = {
     pkg = pkgs.gh;
     winget = "GitHub.cli";
@@ -25,18 +19,6 @@
     category = "core";
   };
 
-  ripgrep = {
-    pkg = pkgs.ripgrep;
-    winget = "BurntSushi.ripgrep.MSVC";
-    category = "core";
-  };
-
-  bat = {
-    pkg = pkgs.bat;
-    winget = null;
-    category = "core";
-  };
-
   jq = {
     pkg = pkgs.jq;
     winget = "jqlang.jq";
@@ -46,12 +28,6 @@
   netcat = {
     pkg = pkgs.netcat;
     winget = null;
-    category = "core";
-  };
-
-  eza = {
-    pkg = pkgs.eza;
-    winget = "eza-community.eza";
     category = "core";
   };
 

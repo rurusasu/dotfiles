@@ -18,18 +18,13 @@ export OP_BIOMETRIC_UNLOCK_ENABLED
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-display.sh"
 
-HINDSIGHT_COMPOSE_FILE="$DOTFILES_ROOT/docker/local-ai-services/compose.yml"
 DOCKER_APP="${DOTFILES_DOCKER_APP_PATH:-/Applications/Docker.app}"
 DOCKER_SETUP_MARKER="${DOTFILES_DOCKER_SETUP_MARKER:-$HOME/.config/dotfiles/docker-desktop-installed}"
 DOCKER_WAIT_ATTEMPTS="${DOTFILES_DOCKER_WAIT_ATTEMPTS:-120}"
 DOCKER_PROBE_TIMEOUT_SECONDS="${DOTFILES_DOCKER_PROBE_TIMEOUT_SECONDS:-5}"
 DOTFILES_ACCEPT_DOCKER_LICENSE="${DOTFILES_ACCEPT_DOCKER_LICENSE:-0}"
 DOCKER_CASK_TOKEN="${DOTFILES_DOCKER_CASK_TOKEN:-docker-desktop}"
-OLLAMA_COMMAND="${DOTFILES_OLLAMA_COMMAND:-ollama}"
-LAUNCHCTL_COMMAND="${DOTFILES_LAUNCHCTL_COMMAND:-/bin/launchctl}"
 OPEN_COMMAND="${DOTFILES_OPEN_COMMAND:-/usr/bin/open}"
-OLLAMA_API_URL="${DOTFILES_OLLAMA_API_URL:-http://127.0.0.1:11434/api/tags}"
-OLLAMA_WAIT_ATTEMPTS="${DOTFILES_OLLAMA_WAIT_ATTEMPTS:-60}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 readonly HOMEBREW_CASK_PARENT_DIR=/usr/local
 readonly HOMEBREW_CASK_BIN_DIR=/usr/local/bin
@@ -39,9 +34,6 @@ ZSHRC_PATH="${DOTFILES_ZSHRC_PATH:-/etc/zshrc}"
 USER_PROFILE_ROOT="${DOTFILES_USER_PROFILE_ROOT:-/etc/profiles/per-user}"
 HOMEBREW_BIN_DIR="${DOTFILES_HOMEBREW_BIN_DIR:-/usr/local/bin}"
 HOMEBREW_CLI_PLUGINS_DIR="${DOTFILES_HOMEBREW_CLI_PLUGINS_DIR:-/usr/local/cli-plugins}"
-DOTFILES_WITH_OLLAMA="${DOTFILES_WITH_OLLAMA:-0}"
-DOTFILES_WITH_DOCKER="${DOTFILES_WITH_DOCKER:-0}"
-DOTFILES_WITH_HERMES="${DOTFILES_WITH_HERMES:-0}"
 DOCKER_CASK_REPAIR_REQUIRED=0
 DOCKER_CASK_LINK_TRANSACTION_ACTIVE=0
 DOCKER_CASK_LINK_TRANSACTION_COUNT=0
@@ -54,26 +46,15 @@ DOCKER_CASK_LINK_CURRENT_TARGETS=()
 
 usage() {
   cat <<'EOF'
-Usage: ./install.sh [--with-ollama | --with-docker | --with-hermes]
+Usage: ./install.sh [--help]
 
-  --with-ollama  Install and update Ollama.
-  --with-docker  Include Ollama, Docker Desktop, and independent Hindsight.
-  --with-hermes  Include native Hermes Agent/Desktop and its Home Manager
-                  gateway service.
+Install the declared macOS packages, native Hermes gateway, and Docker Desktop.
 EOF
 }
 
-resolve_install_profile() {
-  # The public entrypoint selects profiles only through explicit CLI flags.
-  # A sourced activation adapter retains the already-resolved environment.
-  DOTFILES_WITH_OLLAMA="${DOTFILES_WITH_OLLAMA:-0}"
-  DOTFILES_WITH_DOCKER="${DOTFILES_WITH_DOCKER:-0}"
-  DOTFILES_WITH_HERMES="${DOTFILES_WITH_HERMES:-0}"
+parse_arguments() {
   while (($# > 0)); do
     case "$1" in
-    --with-ollama) DOTFILES_WITH_OLLAMA=1 ;;
-    --with-docker) DOTFILES_WITH_DOCKER=1 ;;
-    --with-hermes) DOTFILES_WITH_HERMES=1 ;;
     -h | --help)
       usage
       exit 0
@@ -82,11 +63,6 @@ resolve_install_profile() {
     esac
     shift
   done
-
-  if ((DOTFILES_WITH_DOCKER == 1)); then
-    DOTFILES_WITH_OLLAMA=1
-  fi
-  export DOTFILES_WITH_OLLAMA DOTFILES_WITH_DOCKER DOTFILES_WITH_HERMES
 }
 
 preflight() {
@@ -106,9 +82,6 @@ preflight() {
     "$ROOT/chezmoi"
     "$VERIFY_ENVIRONMENT"
   )
-  if ((DOTFILES_WITH_DOCKER == 1)); then
-    required_paths+=("$HINDSIGHT_COMPOSE_FILE")
-  fi
   for required in "${required_paths[@]}"; do
     [[ -e $required ]] || dotfiles_die "Required repository path is missing: $required"
   done
@@ -565,9 +538,6 @@ apply_darwin_system() {
     sudo /usr/bin/env \
       "SUDO_USER=$user" \
       "NIX_CONFIG=$nix_config" \
-      "DOTFILES_WITH_OLLAMA=$DOTFILES_WITH_OLLAMA" \
-      "DOTFILES_WITH_DOCKER=$DOTFILES_WITH_DOCKER" \
-      "DOTFILES_WITH_HERMES=$DOTFILES_WITH_HERMES" \
       "$nix_bin" --accept-flake-config run .#darwin-rebuild -- switch --flake .#macos --impure
   )
 
@@ -820,24 +790,6 @@ raise SystemExit(result.returncode)
 PY
 }
 
-ollama_api_is_ready() {
-  curl --fail --silent --show-error --max-time 2 "$OLLAMA_API_URL" >/dev/null
-}
-
-setup_ollama_runtime() {
-  dotfiles_have "$OLLAMA_COMMAND" || dotfiles_die "Ollama is unavailable after nix-darwin activation."
-  [[ -x $LAUNCHCTL_COMMAND ]] || dotfiles_die "macOS launchctl is unavailable: $LAUNCHCTL_COMMAND"
-  dotfiles_have curl || dotfiles_die "curl is required to verify Ollama."
-
-  if ollama_api_is_ready; then
-    return 0
-  fi
-
-  dotfiles_log "Starting Ollama..."
-  "$LAUNCHCTL_COMMAND" kickstart -k "gui/$(id -u)/com-dotfiles-ollama"
-  dotfiles_wait_for "$OLLAMA_WAIT_ATTEMPTS" "Ollama API" ollama_api_is_ready
-}
-
 apply_chezmoi() {
   dotfiles_have chezmoi || dotfiles_die "chezmoi is unavailable after nix-darwin activation."
   chezmoi init --source "$ROOT/chezmoi"
@@ -855,9 +807,9 @@ run_darwin_install_workflow() {
 main() {
   dotfiles_display_init
   dotfiles_sanitize_incomplete_git_config_environment
-  resolve_install_profile "$@"
+  parse_arguments "$@"
   dotfiles_step 'Checking installation prerequisites' \
-    'Validate this Mac and the selected installation profile.' preflight
+    'Validate this Mac and the declared installation.' preflight
   dotfiles_step 'Preparing Apple command line tools' \
     'Check the developer tools required to install packages.' ensure_command_line_tools
   dotfiles_step 'Preparing Nix' \
@@ -879,12 +831,10 @@ finish_macos_install() {
   dotfiles_display_init
   dotfiles_step 'Preparing shell configuration' \
     'Preserve existing shell startup files before activation.' preserve_shell_rc_for_nix_darwin
-  if ((DOTFILES_WITH_DOCKER == 1)); then
-    dotfiles_step 'Stopping Docker Desktop' \
-      'Stop Docker Desktop before updating its installation.' stop_existing_docker_desktop
-    dotfiles_step 'Preparing Docker Desktop links' \
-      'Preserve existing CLI links for recovery if activation fails.' prepare_docker_desktop_cask_links
-  fi
+  dotfiles_step 'Stopping Docker Desktop' \
+    'Stop Docker Desktop before updating its installation.' stop_existing_docker_desktop
+  dotfiles_step 'Preparing Docker Desktop links' \
+    'Preserve existing CLI links for recovery if activation fails.' prepare_docker_desktop_cask_links
   dotfiles_step 'Preparing Homebrew directories' \
     'Check and repair permissions for application CLI links.' repair_homebrew_cask_link_directories
   dotfiles_step 'Applying macOS packages and settings' \
@@ -893,35 +843,18 @@ finish_macos_install() {
     'Install the user-local npm package so Codex updates use npm.' dotfiles_install_codex_npm
   dotfiles_step 'Checking Homebrew directories' \
     'Verify application CLI link directories after activation.' ensure_homebrew_cask_link_directories
-  if ((DOTFILES_WITH_DOCKER == 1)); then
-    dotfiles_step 'Verifying Docker Desktop installation' \
-      'Repair application artifacts if needed and verify the installed cask.' repair_and_verify_docker_desktop_cask
-    dotfiles_step 'Finalizing Docker Desktop links' \
-      'Finish the verified CLI link transaction.' commit_docker_desktop_cask_links
-  fi
-  dotfiles_step 'Installing Herdr' \
-    'Install or update Herdr unless explicitly skipped.' dotfiles_install_herdr
+  dotfiles_step 'Verifying Docker Desktop installation' \
+    'Repair application artifacts if needed and verify the installed cask.' repair_and_verify_docker_desktop_cask
+  dotfiles_step 'Finalizing Docker Desktop links' \
+    'Finish the verified CLI link transaction.' commit_docker_desktop_cask_links
   dotfiles_step 'Applying user configuration' \
     'Apply chezmoi-managed dotfiles; authentication may be requested.' apply_chezmoi
-  if ((DOTFILES_WITH_HERMES == 1)); then
-    dotfiles_step 'Installing Hermes Desktop' \
-      'Install or update the native desktop application.' dotfiles_run_task hermes:desktop:install
-  fi
-  if ((DOTFILES_WITH_OLLAMA == 1)); then
-    dotfiles_step 'Starting Ollama' \
-      'Start the local model service and wait for readiness.' setup_ollama_runtime
-  fi
-  if ((DOTFILES_WITH_DOCKER == 1)); then
-    dotfiles_step 'Starting Docker' \
-      'Start Docker Desktop and wait for its engine.' setup_docker_runtime
-    dotfiles_step 'Starting Hindsight services' \
-      'Prepare and start the independent local memory services.' dotfiles_run_task hindsight:up
-    DOTFILES_COMPOSE_FILE="$HINDSIGHT_COMPOSE_FILE" dotfiles_step 'Verifying the installed environment' \
-      'Check the local services and required tools.' "$VERIFY_ENVIRONMENT" --runtime
-  else
-    dotfiles_step 'Verifying the installed environment' \
-      'Check required tools and installed configuration.' "$VERIFY_ENVIRONMENT"
-  fi
+  dotfiles_step 'Installing Hermes Desktop' \
+    'Install or update the native desktop application.' dotfiles_run_task hermes:desktop:install
+  dotfiles_step 'Starting Docker' \
+    'Start Docker Desktop and wait for its engine.' setup_docker_runtime
+  dotfiles_step 'Verifying the installed environment' \
+    'Check required tools and installed configuration.' "$VERIFY_ENVIRONMENT"
   dotfiles_log "macOS setup complete."
 }
 

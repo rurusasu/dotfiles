@@ -10,16 +10,16 @@
    - 全ツールと OS ごとの provider metadata は `nix/packages/catalog/` のカテゴリ別ファイルに一度だけ定義
    - provider 選択は `providers/`、配布 metadata は `install/`、host の動作は `nix/hosts/` などに分離し、`sets.nix` は既存 API を維持する合成入口
    - SSOT は単一定義を意味し、単一ファイルを意味しない。変更理由による境界は [分割の理由と編集先](./nix/package-management.md#分割の理由と編集先) を参照
-   - Unix 系 CLI は Home Manager、macOS cask は nix-homebrew、Linux system package は NixOS/System Manager が消費
+   - Unix 系 CLI は Home Manager、macOS cask は nix-homebrew、Linux system package は NixOS が消費
    - Windows は `nix build .#winget-export` で winget/npm/pnpm JSON を導出
-2. **chezmoi が設定ファイルの SSOT**
-   - 全 OS 共通の dotfiles をテンプレートで管理
-   - OS 固有の差分は `.chezmoiignore.tmpl` とテンプレート分岐で吸収
+2. **ユーザー設定は Unix と Windows の責務を分離**
+   - Unix の shell、Git、terminal、editor は Home Manager が管理
+   - chezmoi は Windows の設定と全 OS の `.codex/` / `.claude/` のみを配布し、Unix 向け展開スクリプトを持たない
    - デスクトップキー配列は例外として、共通 action/key・設定生成関数・ユーザー設定を `nix/home/keybindings/`、OS の service/有効化・競合解除を `nix/hosts/` に分ける。macOS/native NixOS の設定は Nix が所有し、Windows の GlazeWM 設定と補助スクリプトは Nix 生成物を chezmoi が配布する。Windows の適用時に Nix は不要（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
 3. **システム収束は OS に適した宣言レイヤーへ分離**
    - Windows: PowerShell handlers + winget
    - macOS: nix-darwin + nix-homebrew
-   - Ubuntu/Debian: System Manager
+   - 非 NixOS Linux: standalone Home Manager（ユーザー環境のみ、OS service は管理しない）
    - NixOS/WSL: NixOS module
 4. **Full support は runtime acceptance までを契約に含める**
    - 必須 CLI と chezmoi drift を確認し、Docker profile では Docker、Compose、hello-world も確認
@@ -36,11 +36,10 @@ dotfiles/
 │   │   ├── install/        # Installer/manifest metadata
 │   │   ├── sets.nix        # Stable public API and composition
 │   │   └── winget.nix      # winget/npm/pnpm JSON 生成 derivation
-│   ├── system-manager/     # Ubuntu/Debian services and users
 │   ├── home/               # Shared Home Manager configuration
 │   │   └── keybindings/    # Shared keys and user settings
-│   ├── flakes/             # Flake inputs/outputs, treefmt
-│   ├── hosts/              # nix-darwin and NixOS hosts (native Linux, WSL)
+│   ├── formatter.nix       # treefmt-nix and formatter dependencies
+│   ├── hosts/              # OS-specific system and Home Manager configuration
 │   ├── modules/            # Custom NixOS modules (system-level)
 │   └── tests/
 │       ├── unit/           # nix-unit: Nix expressions and configuration values
@@ -65,15 +64,16 @@ dotfiles/
 
 ## セットアップフロー
 
-| Platform      | Entrypoint                                | System layer                             | User layer             | Runtime                                                        |
-| ------------- | ----------------------------------------- | ---------------------------------------- | ---------------------- | -------------------------------------------------------------- |
-| Windows       | `install.cmd`                             | PowerShell handlers, winget, NixOS-WSL   | Home Manager + chezmoi | Docker Desktop                                                 |
-| macOS ARM64   | `./install.sh`                            | nix-darwin + nix-homebrew                | Home Manager + chezmoi | optional profile: Ollama / Docker Desktop / Hindsight / Hermes |
-| Ubuntu/Debian | `./install.sh`                            | System Manager                           | Home Manager + chezmoi | rootful Docker                                                 |
-| NixOS         | `./install.sh`                            | NixOS generation + host hardware profile | Home Manager + chezmoi | rootful Docker                                                 |
-| Other Linux   | `DOTFILES_ALLOW_USER_ONLY=1 ./install.sh` | none                                     | Home Manager only      | not managed                                                    |
+| Platform    | Entrypoint     | System layer                             | User layer             | Runtime                        |
+| ----------- | -------------- | ---------------------------------------- | ---------------------- | ------------------------------ |
+| Windows     | `install.cmd`  | PowerShell handlers, winget, NixOS-WSL   | Home Manager + chezmoi | Docker Desktop                 |
+| macOS ARM64 | `./install.sh` | nix-darwin + nix-homebrew                | Home Manager + chezmoi | Docker Desktop / native Hermes |
+| Other Linux | `./install.sh` | none                                     | Home Manager + chezmoi | not managed                    |
+| NixOS       | `./install.sh` | NixOS generation + host hardware profile | Home Manager + chezmoi | rootful Docker                 |
 
-Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → chezmoi → Compose → runtime acceptance` です。macOS の `Compose → runtime acceptance` は `--with-docker` または `--with-hermes` を指定した場合だけ実行します。失敗時はその phase で停止し、同じ入口を再実行します。
+Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → chezmoi → Compose → runtime acceptance` です。macOS では Docker Desktop と native Hermes の宣言済み構成を適用します。失敗時はその phase で停止し、同じ入口を再実行します。
+
+非 NixOS Linux は `Nix/bootstrap → Home Manager → chezmoi` のみを実行します。
 
 macOS の `./install.sh` は英語の `[RUNNING]` 見出しと説明、完了時の
 `[DONE]`、失敗時の `[FAILED]` と終了コードを表示します。毎回の flake 更新は
@@ -96,16 +96,22 @@ Python がない初期環境では従来の逐次表示を使用します。リ�
 
 ## 役割分担
 
-| 役割                    | ツール                  | 説明                                                           |
-| ----------------------- | ----------------------- | -------------------------------------------------------------- |
-| Provider 定義 (SSOT)    | Nix catalog             | package、winget、npm、Darwin cask、Linux module を一元定義     |
-| Unix ユーザーパッケージ | Home Manager            | macOS、NixOS、Ubuntu、Debian で共通の `home.packages`          |
-| Windows パッケージ      | winget/npm/pnpm         | catalog から生成した JSON を handlers が適用                   |
-| macOS システム          | nix-darwin/nix-homebrew | Homebrew、Docker Desktop、Home Manager を 1 generation で適用  |
-| Ubuntu/Debian システム  | System Manager          | user identity、Nix、Docker service/socket、Home Manager を適用 |
-| NixOS システム          | NixOS module            | native/WSL host、Docker、Home Manager を generation に統合     |
-| ユーザー設定            | chezmoi                 | shell、Git、terminal、editor の OS 差分をテンプレート化        |
-| 受入検証                | platform verifier       | runtime acceptance と drift を検出                             |
+構成登録は `nix/hosts/configurations.nix` に集約し、`flake.nix` から読み込みます。
+ホストは system 名で分類し、同じ system 内の native NixOS と WSL は `nixos/` と `wsl/` に分けます。
+Darwin は `nix/hosts/aarch64-darwin/`、Linux は `nix/hosts/{x86_64-linux,aarch64-linux}/` に置きます。
+Linux の共通設定は `nix/hosts/shared/linux-home.nix` と `shared/nixos/` に置き、CPU ごとに複製しません。
+OS 固有の Home Manager 設定とパッケージ選択は `hosts/` が所有し、OS 非依存のユーザー設定は `nix/home/` に残します。
+
+| 役割                    | ツール                  | 説明                                                          |
+| ----------------------- | ----------------------- | ------------------------------------------------------------- |
+| Provider 定義 (SSOT)    | Nix catalog             | package、winget、npm、Darwin cask を一元定義                  |
+| Unix ユーザーパッケージ | Home Manager            | macOS、NixOS、Ubuntu、Debian で共通の `home.packages`         |
+| Windows パッケージ      | winget/npm/pnpm         | catalog から生成した JSON を handlers が適用                  |
+| macOS システム          | nix-darwin/nix-homebrew | Homebrew、Docker Desktop、Home Manager を 1 generation で適用 |
+| NixOS システム          | NixOS module            | native/WSL host、Docker、Home Manager を generation に統合    |
+| Unix ユーザー設定       | Home Manager            | shell、Git、terminal、editor の設定を宣言                     |
+| Windows / AI 設定       | chezmoi                 | Windows の設定と全 OS の `.codex/` / `.claude/` を配布        |
+| 受入検証                | platform verifier       | runtime acceptance と drift を検出                            |
 
 macOS の Docker Desktop と CLI artifacts は公式 Homebrew `docker-desktop` Cask が所有します。
 installer は `/Applications/Docker.app` への正確なリンクだけを管理し、他の app や Nix store を
@@ -117,7 +123,7 @@ installer は `/Applications/Docker.app` への正確なリンクだけを管理
 
 On macOS and Linux/WSL, the pinned `hermes-agent` flake input and Home Manager
 module manage the Hermes CLI and gateway as a native user service: systemd on
-Linux/WSL and launchd on macOS. On Windows, `WithHermes` is routed through the
+Linux/WSL and launchd on macOS. On Windows, Hermes is managed through the
 configured NixOS WSL distribution; the Windows installer no longer starts a
 Docker-managed Hermes Agent. Native state remains at `~/.hermes`.
 
@@ -135,7 +141,7 @@ policy for resolving conflicting paths before data is copied.
 | Owner                  | Source                                                                                    | Responsibility                                                                                         |
 | ---------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Dotfiles               | [rurusasu/dotfiles](https://github.com/rurusasu/dotfiles)                                 | Sidecar Compose wiring, native bootstrap, manifest, host adapters, operator Taskfile and documentation |
-| Nix + Home Manager     | `flake.nix`, `nix/home/hermes-agent.nix`                                                  | Pinned CLI package and native gateway user service on macOS and Linux/WSL                              |
+| Nix + Home Manager     | `flake.nix`, `nix/modules/hermes-agent/default.nix`                                       | Pinned CLI package and native gateway user service on macOS and Linux/WSL                              |
 | Root distribution      | [rurusasu/hermes-profile-alfred](https://github.com/rurusasu/hermes-profile-alfred)       | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks            |
 | Rick distribution      | [rurusasu/hermes-profile-rick](https://github.com/rurusasu/hermes-profile-rick)           | Official `distribution.yaml` and Rick declarative content                                              |
 | Hoffman distribution   | [rurusasu/hermes-profile-hoffman](https://github.com/rurusasu/hermes-profile-hoffman)     | Official `distribution.yaml` and Hoffman declarative content                                           |
@@ -152,39 +158,13 @@ before running bootstrap, verifying that the canonical checkout retains local
 changes and commits. Profile homes are never Git repositories. The default
 profile owns shared-lifelog synchronization through the common bootstrap command.
 
-## Local AI services and Hermes Hindsight
+## Local MLflow service
 
-MLflow is the local inference and trace boundary for Hindsight and future
-Docker AI services. Hindsight uses the stable logical endpoints
-`ollama-chat-default` and `ollama-embedding-default` over the external
-`local-ai-services` network. Only MLflow contacts native host Ollama for the
-configured provider. Hindsight's direct model pulls and Ollama readiness
-probes remain host-native model-management operations and are not inference
-traces.
-
-Hindsight remains an independent local-only memory provider. Its API and UI
-are published only on host loopback `127.0.0.1:8888` and `127.0.0.1:9999`, and
-its embedded PostgreSQL is not published. Native Nix Hermes does not require
-Docker, MLflow, Ollama, or Hindsight to install or run; Hindsight memory is an
-optional integration selected separately (`-WithHindsight` on Windows).
-Hindsight and MLflow use the `local-ai-services` bridge network. Hermes browser
-and MCP sidecars use their separate `hermes-browser` network; native Hermes
-connects through host loopback endpoints. Their lifecycles remain independent.
-If Hindsight is unavailable, memory recall/retain may be unavailable while the
-Hermes gateway continues running.
-
-The onboarding fields, approved connection modes, MLflow operator tasks, and
-runtime-data policy are defined in [Local AI services onboarding and operations](./mlflow/local-ai-services.md).
-
-| 所有者                                               | 永続化対象                           | Git との境界                                                          |
-| ---------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------- |
-| `${HINDSIGHT_DATA_DIR}/pg0`                          | Hindsight embedded PostgreSQL        | local runtime data、profile repository には含めない                   |
-| `${HINDSIGHT_DATA_DIR}/cache`                        | local reranker cache                 | local runtime data、profile repository には含めない                   |
-| `$HERMES_HOME/hindsight/config.json`                 | root/default provider configuration  | bootstrap が transactionally 管理し、profile Git content には含めない |
-| `$HERMES_HOME/profiles/<name>/hindsight/config.json` | named-profile provider configuration | bootstrap が transactionally 管理し、profile Git content には含めない |
-
-モデル、固定 version/digest、WSL 境界、運用・復元・upgrade gate は
-[Hermes Hindsight ローカルメモリ運用](./hermes-agent/hindsight-memory.md)を参照してください。
+`docker/local-ai-services/compose.yml` manages the pinned MLflow tracking server.
+`task mlflow:up` starts it; `task mlflow:verify` checks its HTTP health endpoint.
+Persistent state remains under `MLFLOW_DATA_DIR` (default: `~/.local/share/mlflow`).
+The `local-ai-services` bridge network is independent of the Hermes browser and
+MCP sidecars. No inference provider or model download is configured here.
 
 ## パッケージ管理フロー
 
@@ -193,9 +173,8 @@ nix/packages/catalog/ (package/provider metadata の SSOT)
   + providers/ (選択・検証) + install/ (配布 metadata)
   → nix/packages/sets.nix (公開 API)
 ├── Home Manager ───────── macOS / NixOS / Ubuntu / Debian CLI
-├── darwinCasksForInstallFeatures ── profile-filtered nix-homebrew casks
+├── darwinCasks ── declarative nix-homebrew casks
 ├── darwinBrews ────────── nix-homebrew formulas
-├── linuxSystemModules ─── NixOS / System Manager packages and services
 ├── wingetMap + npmMap ─── generated Windows manifests
 ├── supportReport ──────── per-OS provider/unsupported evidence
 └── providerErrors ─────── CI failure when coverage is missing
@@ -293,12 +272,11 @@ $vhdPath = $context.SharedData["VhdPath"]
 | 21    | 2     | Yes   | VhdManager      | [Handler.VhdManager.ps1](../scripts/powershell/handlers/Handler.VhdManager.ps1)           | WSL VHD サイズ拡張                                |
 | 40    | 2     | No    | VscodeServer    | [Handler.VscodeServer.ps1](../scripts/powershell/handlers/Handler.VscodeServer.ps1)       | VS Code Server キャッシュクリア                   |
 | 55    | 2     | No    | NixRebuild      | [Handler.NixRebuild.ps1](../scripts/powershell/handlers/Handler.NixRebuild.ps1)           | nixos-rebuild switch の実行                       |
-| 55    | 2     | No    | Hindsight       | [Handler.Hindsight.ps1](../scripts/powershell/handlers/Handler.Hindsight.ps1)             | 独立HindsightをHermesより先に起動                 |
 | 56    | 2     | No    | HermesAgent     | [Handler.HermesAgent.ps1](../scripts/powershell/handlers/Handler.HermesAgent.ps1)         | NixOS WSL の Hermes native service 適用結果を検証 |
 | 57    | 2     | No    | Plane           | [Handler.Plane.ps1](../scripts/powershell/handlers/Handler.Plane.ps1)                     | Plane Docker Compose セットアップ                 |
 | 58    | 2     | No    | PlaneGithubSync | [Handler.PlaneGithubSync.ps1](../scripts/powershell/handlers/Handler.PlaneGithubSync.ps1) | Plane / GitHub Issues 同期タスク登録              |
 
-**重要**: Order は依存関係を優先して設定する。Docker だけで完結するハンドラーは Docker の後、NixOS に依存するハンドラーは NixOSWSL/NixRebuild の後に置く。Hindsight は独立した optional Docker service であり、Nix/Home Manager 管理の native Hermes Agent とは別に扱う。
+**重要**: Order は依存関係を優先して設定する。Docker だけで完結するハンドラーは Docker の後、NixOS に依存するハンドラーは NixOSWSL/NixRebuild の後に置く。MLflow は独立した Docker service であり、Nix/Home Manager 管理の native Hermes Agent とは別に扱う。
 
 ### ハンドラー実行フロー
 
@@ -371,19 +349,31 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 
 検証は「静的契約 → build → 破壊的 convergence → runtime acceptance」の順で強くなります。
 
-| Workflow             | Runner                     | Guarantee                                                                                                                           |
-| -------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `ci-consistency.yml` | hosted Linux               | catalog から生成した winget/npm/pnpm JSON の一致                                                                                    |
-| `ci-powershell.yml`  | hosted Windows             | handlers、entrypoint、Windows acceptance の Pester                                                                                  |
-| `ci-bootstrap.yml`   | hosted Linux/macOS/Windows | Statix、treefmt、flake/package smoke、Linux/Darwin/WSL/Windows の platform-routed build、Windows installer、E2E、contract aggregate |
+| Workflow         | Runner                     | Guarantee                                                                      |
+| ---------------- | -------------------------- | ------------------------------------------------------------------------------ |
+| `ci-nix.yml`     | hosted Linux/macOS/Windows | Nix lint・format・build・catalog 整合性と OS 別 installer / runtime E2E        |
+| `ci-chezmoi.yml` | hosted Windows/Linux       | Windows 設定の Pester、template BOM、font installer、未認証 op の render guard |
+| `ci-other.yml`   | hosted Linux/Windows       | Python・MLflow・actionlint、PowerShell lint / Pester、devcontainer E2E         |
 
-`ci-bootstrap.yml` は変更パスから Linux、Darwin、WSL、Windows の実行対象を個別に選択します。WSL job は一時 NixOS-WSL 環境で Hermes の native Nix/Home Manager switch を適用し、既存 `~/.hermes` state の保持、CLI 起動、user service の再起動と active 状態を smoke test します。Docker Desktop の実機適用と nix-darwin switch は runner の OS 制約により CI では実行せず、one-command installer 末尾の local acceptance が判定します。詳細は [WSL Hermes E2E](../scripts/powershell/ci/Invoke-NixosWslE2E.ps1) を参照してください。
+通常 CI はこの3本に集約します。`codeql.yml` は独立した Actions セキュリティ検査として維持します。
+選別ルールは `.github/actions/detect-ci-changes/action.yml` の Bash に直接定義し、外部 manifest と専用 Python detector は持ちません。
+Git の差分を `nix`・`chezmoi`・`other` の3つのフラグに分類し、workflow の `if` で実行条件を定義します。
+Nix 設定は Nix、Windows の chezmoi 設定は chezmoi、共通 installer・scripts・Taskfile・Docker・workflow・テストは全分類を選択します。
+catalog と共有キー設定は Windows の生成物にも影響するため、Nix と chezmoi を両方選択します。
+通常の docs / README / AGENTS はスキップしますが、配布対象の agent 設定などの Markdown はその所属分類で検証します。
+分類は排他的ではなく、複数変更の和集合を実行します。言語・OS 別の細かな最適化は行わず、分類内の検証をまとめて実行します。
 
-言語・用途別のジョブは `ci/job-path-routing.json` で選択します。`.ps1` / `.psm1` / `.psd1` は PowerShell 検証、`.tmpl` はテンプレート検証、workflow YAML は actionlint、パッケージ定義は catalog 整合性検証に接続します。契約テストは別言語の設定も読むため、拡張子に加えて Taskfile、Nix、chezmoi、Docker の依存パスも判定します。変更が複数なら対象の和集合を実行し、削除・移動元のパスも検証対象に残します。
+各検証ジョブの名前・OS runner・実際の runtime assertion を維持します。Changes ジョブは各 workflow に一つだけ置きます。
+workflow は常時起動し、対象外の検証ジョブだけを `if` でスキップします。検出失敗はチェック失敗とし、手動実行は全分類を有効にします。
+PR は merge-base からの差分を使い、削除・移動元も含めます。NUL 区切りでファイル名を扱い、push のゼロ base SHA では empty tree と比較します。
+`ci-nix.yml` の `complete` は必要な build / E2E の success と、対象外ジョブの skipped を確認します。
+Linux の nix-unit・custom-package-builds・workspace-cycle は catalog の `check` ジョブに集約し、`linux-build` からの二重ビルド参照をなくします。
 
-各 workflow の既存チェック名を維持し、対象外ジョブは `if` でスキップします。変更検出失敗はチェック失敗として扱い、手動実行は全対象を検証します。`ci/bootstrap-path-routing.json` は説明用 README / docs の変更を OS 結合テストから除外しますが、配布される agent の Markdown 設定や未分類の runtime パスには保守的な判定を残します。GitHub の必須チェック設定を変更する必要はありません。
+WSL job は一時 NixOS-WSL 環境で native Nix/Home Manager switch、既存 `~/.hermes` state の保持、CLI 起動、user service の再起動と active 状態を検証します。
+Docker Desktop の実機適用と nix-darwin switch は runner の OS 制約により実行せず、installer 末尾の local acceptance が判定します。
+詳細は [WSL Hermes E2E](../scripts/powershell/ci/Invoke-NixosWslE2E.ps1) を参照してください。
 
-Ubuntu、Debian、NixOS の hosted Linux job は 1 周目で clean bootstrap、2 周目で idempotency を検証し、各周回の後に runtime acceptance を実行します。pull request では hosted contract、declarative build、Linux runtime E2E の全checkが成功し、approval待ちやqueued jobがないことをmerge条件にします。
+NixOS の hosted VM job は installer の再実行と Docker・Compose の runtime acceptance を検証します。非 NixOS Linux は standalone Home Manager の build と installer の mocked contract が対象です。pull request では hosted contract、declarative build、Linux runtime E2E の全checkが成功し、approval待ちやqueued jobがないことをmerge条件にします。
 
 ---
 
@@ -398,4 +388,3 @@ Ubuntu、Debian、NixOS の hosted Linux job は 1 周目で clean bootstrap、2
 - [Hermes installer integration plan](./hermes-agent/plans/2026-07-21-hermes-bootstrap-integration.md)
 - [Hermes distribution repositories plan](./hermes-agent/plans/2026-07-21-hermes-distributions.md)
 - [Hermes bootstrap operations](./hermes-agent/bootstrap.md)
-- [Hermes Hindsight ローカルメモリ運用](./hermes-agent/hindsight-memory.md)

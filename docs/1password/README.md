@@ -3,6 +3,14 @@
 このリポジトリでは、実シークレットは 1Password に置き、dotfiles には
 `op://...` 参照、非秘密設定、取得手順だけを置く。
 
+## Nix の管理場所
+
+CLI とデスクトップ版の導入、Windows の WinGet 配布・検証情報は `nix/modules/1password/` にまとめる。既存の nixpkgs バイナリを利用し、パッケージカタログには登録しない。macOS デスクトップ版はシステム、CLI と Linux デスクトップ版は Home Manager が管理する。`ssh.nix` が公式 SSH agent socket の `IdentityAgent` と `SSH_AUTH_SOCK` を設定する。Git 署名 / WSL interop の OS 固有設定は `nix/hosts/` に残す。
+
+SSH agent は CLI 単体ではなくデスクトップ版が提供する。初回のサインイン・ロック解除と Settings > Developer > Use the SSH Agent の有効化は、[1Password 公式手順](https://developer.1password.com/docs/ssh/get-started/)に従ってユーザーが行う。Nix は秘密鍵を取得・展開せず、Bash も別の `ssh-agent` を起動しない。
+
+SSH 設定、シェルの `SSH_AUTH_SOCK`、macOS の `launchd.user.envVariables.SSH_AUTH_SOCK` を同じ 1Password socket に統一する。Home Manager の `services.ssh-agent.enable`、NixOS / WSL の `programs.ssh.startAgent`、Home Manager / system の GnuPG SSH agent 連携は明示的に `false` にする。SSH クライアントや `sshd` 自体は無効化しない。macOS 標準の launchd agent の停止ではなく、利用する接続先を 1Password に固定する。Windows の OpenSSH Authentication Agent サービスは Nix の管理外であり、公式手順に従って停止・自動起動を無効化する。
+
 ## OS 別の入口
 
 - [Windows](./windows.md)
@@ -79,7 +87,7 @@ Linux / macOS の native `op` は UNIX-like として cache が使えるため�
 
 ## SSH / Git 連携
 
-1Password SSH Agent と `op-ssh-sign` の OS 別パスは OS 別ドキュメントに置く。
+1Password SSH Agent の共通 Nix 定義は `nix/modules/1password/ssh.nix` に置く。`op-ssh-sign` の接続方法と OS 別パスは OS 別ドキュメントを参照する。
 
 - Windows: [windows.md](./windows.md)
 - WSL: [wsl.md](./wsl.md)

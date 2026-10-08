@@ -8,11 +8,6 @@ export DOTFILES_LOG_PREFIX="home-manager-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/codex-npm.sh"
 
-ensure_opt_in() {
-  [[ ${DOTFILES_ALLOW_USER_ONLY:-0} == "1" ]] ||
-    dotfiles_die "Set DOTFILES_ALLOW_USER_ONLY=1 to accept setup without Docker/systemd management."
-}
-
 ensure_nix() {
   dotfiles_load_nix
   if ! dotfiles_have nix; then
@@ -68,11 +63,9 @@ apply_chezmoi() {
 }
 
 main() {
-  ensure_opt_in
   [[ $(uname -s) == "Linux" ]] || dotfiles_die "Linux is required."
   ensure_nix
   dotfiles_link_checkout "$ROOT"
-  dotfiles_install_herdr
   dotfiles_update_flake "$ROOT"
   capture_user_identity
   activate_home_manager

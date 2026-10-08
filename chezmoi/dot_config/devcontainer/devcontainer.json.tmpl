@@ -1,9 +1,9 @@
 {
   // VS Code Dev Containers Extension が devcontainer 起動時に dotfiles リポを
   // clone し、installCommand を実行する。CLI (@devcontainers/cli) はこの設定を
-  // 読まない。dcnvim は devcontainer up 後に bootstrap を実行する。
+  // 読まない。dotfiles の導入は bootstrap.sh を明示的に実行する。
   // 実行内容: dotfiles repo 直下の bootstrap.sh (chezmoi apply +
-  // Codex + nvim/tmux 等の最低限)。
+  // Codex + nvim 等の最低限)。
   // Neovim の要件と設定: docs/chezmoi/neovim.md
   "dotfiles.repository": "{{ printf "https://github.com/%s/dotfiles" (get .github "username" | default "rurusasu") }}",
   "dotfiles.targetPath": "~/.dotfiles",

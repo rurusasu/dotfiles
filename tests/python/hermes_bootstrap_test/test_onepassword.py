@@ -7,7 +7,7 @@ from hermes_bootstrap.manifest import load_manifest
 from hermes_bootstrap.onepassword import build_onepassword_config
 
 
-MANIFEST = Path(__file__).resolve().parents[3] / "nix/home/hermes-agent/manifest.yaml"
+MANIFEST = Path(__file__).resolve().parents[3] / "nix/modules/hermes-agent/manifest.yaml"
 
 
 class OnePasswordConfigTests(unittest.TestCase):

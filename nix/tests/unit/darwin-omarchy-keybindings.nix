@@ -3,7 +3,7 @@ let
   darwin = inputs.nix-darwin.lib.darwinSystem {
     system = "aarch64-darwin";
     modules = [
-      ../../hosts/darwin/omarchy-keybindings.nix
+      ../../hosts/aarch64-darwin/omarchy-keybindings.nix
       {
         system.primaryUser = "keybinding-test";
         system.stateVersion = 6;
@@ -42,14 +42,10 @@ in
     expr = {
       enabled = service.enable;
       configVersion = service.settings.config-version;
-      catalogPackage =
-        service.package == builtins.head (catalog.resolveForInstallFeatures [ ] [ "aerospace" ]);
+      catalogPackage = service.package == builtins.head (catalog.resolve [ "aerospace" ]);
       systemPackage = builtins.elem service.package config.environment.systemPackages;
-      guiCatalogPackage = builtins.elem service.package (
-        catalog.darwinSystemPackagesForInstallFeatures [ ]
-      );
-      homeDoesNotDuplicateGui =
-        !(builtins.elem service.package (catalog.darwinHomePackagesForInstallFeatures [ ]));
+      guiCatalogPackage = builtins.elem service.package catalog.darwinSystemPackages;
+      homeDoesNotDuplicateGui = !(builtins.elem service.package catalog.darwinHomePackages);
       launchdOwnsStartup =
         !service.settings.start-at-login && agent.serviceConfig.RunAtLoad && agent.serviceConfig.KeepAlive;
       explicitImmutableConfig = lib.hasInfix "--config-path /nix/store/" agent.command;
@@ -165,7 +161,7 @@ in
             };
           in
           {
-            packages = linuxCatalog.resolveForInstallFeatures [ ] [ "aerospace" ];
+            packages = linuxCatalog.resolve [ "aerospace" ];
             linuxUnsupported = linuxCatalog.supportReport.aerospace.linux.unsupported != "";
             windowsUnsupported = linuxCatalog.supportReport.aerospace.windows.unsupported != "";
             providerErrors = builtins.filter (lib.hasPrefix "aerospace:") linuxCatalog.providerErrors;

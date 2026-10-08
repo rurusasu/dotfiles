@@ -1,6 +1,5 @@
 # Package identities and provider declarations for llm.
-{ pkgs, ... }:
-{
+_: {
   codex = {
     # Codex CLI is intentionally kept out of Nix package outputs. The
     # npm package is the single CLI provider on every supported OS so
@@ -23,27 +22,6 @@
         provider = "npm";
         source = "npm";
         identity = "@openai/codex";
-      };
-    };
-  };
-
-  ollama = {
-    pkg = pkgs.ollama;
-    winget = "Ollama.Ollama";
-    category = "llm";
-    installFeature = "WithOllama";
-    support = {
-      darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "ollama";
-        identity = "ollama";
-      };
-      linux = {
-        provider = "nix";
-        source = "nixpkgs";
-        identity = "ollama";
-        nixAttr = "ollama";
       };
     };
   };

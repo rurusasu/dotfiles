@@ -45,21 +45,3 @@ setup() {
 	run grep -F 'Docker Desktop' "$REPO_ROOT/README.md"
 	[ "$status" -eq 0 ]
 }
-
-@test "devcontainer CI watches macOS installer files" {
-	for path in install.sh scripts/sh/install-macos.sh; do
-		run python3 "$REPO_ROOT/scripts/python/detect_ci_changes.py" \
-			--manifest "$REPO_ROOT/ci/job-path-routing.json" --paths-file - <<<"$path"
-		[ "$status" -eq 0 ]
-		[[ "$output" == *'"devcontainer": true'* ]]
-	done
-}
-
-@test "macOS devcontainer CI allows the cold start and full test suite to finish" {
-	run awk '
-		/name: E2E \(macOS\)/ { in_job = 1 }
-		in_job && /timeout-minutes:/ { exit !($2 >= 60) }
-		END { if (!in_job) exit 1 }
-	' "$REPO_ROOT/.github/workflows/ci-devcontainer.yml"
-	[ "$status" -eq 0 ]
-}

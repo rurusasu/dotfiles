@@ -37,13 +37,10 @@ in
   testChatGPTPackageSelectionRemainsHostDependent = {
     expr = {
       darwin = builtins.map (package: package.drvPath) (
-        setsBySystem.${darwinSystem}.resolveForInstallFeatures [ ] [ "chatgpt" ]
+        setsBySystem.${darwinSystem}.resolve [ "chatgpt" ]
       );
       linux = builtins.mapAttrs (
-        system: _:
-        builtins.map (package: package.drvPath) (
-          setsBySystem.${system}.resolveForInstallFeatures [ ] [ "chatgpt" ]
-        )
+        system: _: builtins.map (package: package.drvPath) (setsBySystem.${system}.resolve [ "chatgpt" ])
       ) chatgptBySystem;
     };
     expected = {

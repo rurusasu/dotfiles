@@ -164,14 +164,14 @@ Describe 'Invoke-SetupHandler - 実際のハンドラーを使用' {
 
     It 'should not execute a handler when a dependency failed' {
         $dependency = New-DependencyTestHandler 'MLflow' 10 @() $false
-        $dependent = New-DependencyTestHandler 'Hindsight' 20 @('MLflow') $true
+        $dependent = New-DependencyTestHandler 'DependentService' 20 @('MLflow') $true
 
         $results = @(Invoke-SetupHandler -Handlers @($dependency, $dependent) -Context $ctx)
 
         $results | Should -HaveCount 1
         $results[0].HandlerName | Should -Be 'MLflow'
         Should -Invoke Write-Warning -ParameterFilter {
-            $Message -match 'Hindsight.*MLflow'
+            $Message -match 'DependentService.*MLflow'
         }
     }
 

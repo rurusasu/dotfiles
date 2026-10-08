@@ -10,7 +10,6 @@ BeforeAll {
     $script:codexLoginPreflight = Join-Path $script:chezmoiRoot "dot_local/bin/executable_stop-stale-codex-login.ps1"
     $script:orcaLaunch = Join-Path $script:chezmoiRoot "dot_local/bin/executable_orca-launch.cmd"
     $script:bashrcPath = Join-Path $script:chezmoiRoot "shells/bashrc"
-    $script:zshFunctionsPath = Join-Path $script:repoRoot "nix/modules/shells/zsh/functions.zsh"
 }
 
 AfterAll {
@@ -413,12 +412,6 @@ Describe 'GitHub token switching templates' {
         $content | Should -Match 'gh-token-switch\.sh'
     }
 
-    It 'Home Manager zsh init が gh token switching helper を読み込むこと' {
-        $content = Get-Content -LiteralPath $script:zshFunctionsPath -Raw
-
-        $content | Should -Match 'gh-token-switch\.sh'
-    }
-
     It 'WezTerm launcher は既定で GUI 起動時の op run を遅延すること' {
         $content = Get-Content -LiteralPath $script:weztermLaunch -Raw
 
@@ -475,8 +468,6 @@ Describe 'GitHub token switching templates' {
         $content | Should -Match '"%OP_EXE%" run --account "%WORK_ACCOUNT%" --env-file="%WORK_SECRETS_ENV%"' -Because 'work secrets must resolve against the company account'
         $content | Should -Match '%APPDATA%\\npm\\codex\.cmd' -Because 'the Codex CLI is installed globally through npm'
         $content | Should -Match 'codex\.cmd' -Because 'the npm Windows shim is the launched executable'
-        $content | Should -Not -Match 'WinGet\\Packages\\OpenAI\.Codex_\*' -Because 'the CLI must not resolve from the retired WinGet package'
-        $content | Should -Not -Match 'codex-x86_64-pc-windows-msvc\.exe' -Because 'the archived native CLI is no longer an installation source'
         $content | Should -Match 'WinGet\\Links\\op\.exe'
         $content | Should -Match 'GITHUB_PAT_TOKEN'
         $content | Should -Match 'if "%GITHUB_WORK_TOKEN%"=="" set "NEEDS_SECRET_LOAD=1"'
@@ -569,16 +560,13 @@ Describe 'GitHub token switching templates' {
         $content | Should -Not -Match '\binject\b' -Because 'forced shell loading should use bounded individual reads instead of bulk inject'
     }
 
-    It 'bash と zsh の codex wrapper が呼び出し時だけ secret loader を force すること' {
-        $bashrc = Get-Content -LiteralPath $script:bashrcPath -Raw
-        $zshFunctions = Get-Content -LiteralPath $script:zshFunctionsPath -Raw
+    It 'bash の codex wrapper が呼び出し時だけ secret loader を force すること' {
+        $content = Get-Content -LiteralPath $script:bashrcPath -Raw
 
-        foreach ($content in @($bashrc, $zshFunctions)) {
-            $content | Should -Match 'codex\(\)' -Because 'codex should be the explicit point where GitHub MCP secrets are loaded'
-            $content | Should -Match 'DOTFILES_FORCE_SECRET_LOAD'
-            $content | Should -Match '\.config/shell/secret\.sh'
-            $content | Should -Match 'command codex "\$@"'
-        }
+        $content | Should -Match 'codex\(\)' -Because 'codex should be the explicit point where GitHub MCP secrets are loaded'
+        $content | Should -Match 'DOTFILES_FORCE_SECRET_LOAD'
+        $content | Should -Match '\.config/shell/secret\.sh'
+        $content | Should -Match 'command codex "\$@"'
     }
 
     It 'GUI op run launcher attempts target fallback when 1Password injection times out' {

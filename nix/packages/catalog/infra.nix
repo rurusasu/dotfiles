@@ -25,12 +25,6 @@
     category = "infra";
   };
 
-  _1password-cli = {
-    pkg = pkgs._1password-cli;
-    winget = "AgileBits.1Password.CLI";
-    category = "infra";
-  };
-
   google-cloud-sdk = {
     pkg = pkgs.google-cloud-sdk;
     winget = "Google.CloudSDK";

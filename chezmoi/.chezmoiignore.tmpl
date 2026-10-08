@@ -11,22 +11,20 @@ ssh/
 README.md
 **/AGENTS.md
 **/AGENTS.override.md
+**/__pycache__/**
+**/*.pyc
 
 # Neovim の設定は Home Manager が管理する。
 .config/nvim/
 
-# OS-specific scripts (patterns match target names, not source names)
-{{ if ne .chezmoi.os "darwin" }}
-.chezmoiscripts/**/*_darwin.sh
-{{ end }}
-{{ if ne .chezmoi.os "linux" }}
-.chezmoiscripts/**/*_linux.sh
-{{ end }}
 {{ if ne .chezmoi.os "windows" }}
-# Native terminal configuration belongs to Home Manager.
-.config/ghostty/
-.config/wezterm/
-.local/bin/wezterm-launch.cmd
-.chezmoiscripts/**/*_windows.ps1
-.glzr/
+# Unix uses Home Manager, except for Codex and Claude user configuration.
+# Ignore all other top-level targets, including newly added Windows targets.
+*
+!.codex
+!.claude
+# Runtime instructions, unlike the source-directory documentation above.
+!.codex/AGENTS.override.md
+# Scripts are Windows-only; Unix configuration is deployed directly.
+.chezmoiscripts/**
 {{ end }}

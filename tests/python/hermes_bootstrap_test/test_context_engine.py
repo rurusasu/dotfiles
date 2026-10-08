@@ -85,7 +85,7 @@ class ContextEngineConfigurationTests(unittest.TestCase):
                 )
                 self.assertEqual(config["context"], {"engine": CONTEXT_ENGINE_NAME})
                 self.assertEqual(
-                    config["memory"], {"provider": "hindsight", "custom_policy": "keep"}
+                    config["memory"], {"provider": "builtin", "custom_policy": "keep"}
                 )
                 self.assertEqual(
                     config["plugins"]["enabled"],

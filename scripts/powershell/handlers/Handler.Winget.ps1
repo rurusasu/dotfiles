@@ -172,10 +172,6 @@ class WingetHandler : SetupHandlerBase {
                                 if ($pkg.PSObject.Properties.Name -contains "skipReason") {
                                     $skipReason = [string]$pkg.skipReason
                                 }
-                                $installFeature = $null
-                                if ($pkg.PSObject.Properties.Name -contains "installFeature") {
-                                    $installFeature = [string]$pkg.installFeature
-                                }
                                 $requiresAdmin = $false
                                 if ($pkg.PSObject.Properties.Name -contains "requiresAdmin") {
                                     $requiresAdmin = [bool]$pkg.requiresAdmin
@@ -193,7 +189,6 @@ class WingetHandler : SetupHandlerBase {
                                     PathEntries           = $pathEntries
                                     SkipInstall           = $skipInstall
                                     SkipReason            = $skipReason
-                                    InstallFeature        = $installFeature
                                     RequiresAdmin         = $requiresAdmin
                                 }
                             }
@@ -212,11 +207,6 @@ class WingetHandler : SetupHandlerBase {
                 $ciSkipMessage = if ($ciSkipped -gt 0) { ", $ciSkipped 個 CI 対象外" } else { "" }
                 $this.Log("CI 検証モード: verifyCommand 付きパッケージのみ対象にします ($($packages.Count) 個$ciSkipMessage)", "Gray")
             }
-
-            $packages = @($packages | Where-Object {
-                    [string]::IsNullOrWhiteSpace($_.InstallFeature) -or
-                    [bool]$ctx.GetOption($_.InstallFeature, $false)
-                })
 
             $adminPhase = [bool]$ctx.GetOption("WingetAdminPhase", $false)
             $deferredAdminPackages = @($packages | Where-Object { $_.RequiresAdmin })

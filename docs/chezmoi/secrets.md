@@ -121,10 +121,7 @@ op read --no-newline --account my.1password.com \
 ```
 
 値をコマンドライン引数に渡したり、Taskのログへ出力したりしない。Obsidian は Local REST API
-community plugin を有効化し、API key を `obsidian.api_key` として登録する。Hindsight は
-secret 不要の host-local MCP である。Docker MCP Gateway は local HTTP remote を受け付けないため
-Toolkit profile には入れず、`mcp_servers.yaml` と `.mcp.json` の直接 URL として全クライアントへ
-配布する。利用前に既存の `task hindsight:up` でサービスを起動する。
+community plugin を有効化し、API key を `obsidian.api_key` として登録する。
 
 Plane MCP の API token は共有された 1Password item を参照する:
 

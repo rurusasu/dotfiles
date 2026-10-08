@@ -1,4 +1,4 @@
-# Resolve install features, platform providers, and public package profiles.
+# Resolve platform providers and public package profiles.
 {
   pkgs,
   lib,
@@ -8,13 +8,6 @@
 }:
 let
   grouped = lib.groupBy (name: catalog.${name}.category) (lib.attrNames catalog);
-  featureEnabled =
-    enabledFeatures: entry:
-    !(entry ? installFeature)
-    || entry.installFeature == null
-    || enabledFeatures == null
-    || builtins.elem entry.installFeature enabledFeatures;
-
   isDarwinGuiNixPackage =
     entry:
     let
@@ -24,8 +17,8 @@ let
     (darwinSupport.provider or null) == "nix" && builtins.isAttrs identity && identity ? appName;
 
   # Resolve catalog IDs to Nix derivations selected for the current platform.
-  resolveForInstallFeaturesWhere =
-    enabledFeatures: predicate: names:
+  resolveWhere =
+    predicate: names:
     builtins.filter (p: p != null) (
       map (
         name:
@@ -36,7 +29,6 @@ let
         in
         if
           provider == "nix"
-          && featureEnabled enabledFeatures entry
           && predicate entry
           && package != null
           && supports package pkgs.stdenv.hostPlatform.system
@@ -47,27 +39,17 @@ let
       ) names
     );
 
-  resolveForInstallFeatures =
-    enabledFeatures: resolveForInstallFeaturesWhere enabledFeatures (_: true);
+  resolve = resolveWhere (_: true);
 
-  # Default package outputs contain only packages without an opt-in feature.
-  # Feature profiles use allForInstallFeatures or the platform-specific
-  # resolvers below with an explicit feature list.
-  resolve = resolveForInstallFeatures [ ];
-
-  darwinSystemPackagesForInstallFeatures =
-    enabledFeatures:
+  darwinSystemPackages =
     if pkgs.stdenv.hostPlatform.isDarwin then
-      resolveForInstallFeaturesWhere enabledFeatures isDarwinGuiNixPackage (lib.attrNames catalog)
+      resolveWhere isDarwinGuiNixPackage (lib.attrNames catalog)
     else
       [ ];
 
-  darwinHomePackagesForInstallFeatures =
-    enabledFeatures:
+  darwinHomePackages =
     if pkgs.stdenv.hostPlatform.isDarwin then
-      resolveForInstallFeaturesWhere enabledFeatures (entry: !isDarwinGuiNixPackage entry) (
-        lib.attrNames catalog
-      )
+      resolveWhere (entry: !isDarwinGuiNixPackage entry) (lib.attrNames catalog)
     else
       [ ];
 
@@ -78,28 +60,11 @@ let
       && (entry.support.darwin.cask or null) != null
     ) catalog
   );
-  darwinCasksForInstallFeatures =
-    enabledFeatures:
-    lib.mapAttrsToList (_: entry: entry.support.darwin.cask or null) (
-      lib.filterAttrs (
-        _: entry:
-        (entry.support.darwin.provider or null) == "homebrew-cask"
-        && (entry.support.darwin.cask or null) != null
-        && featureEnabled enabledFeatures entry
-      ) catalog
-    );
   darwinBrews = lib.mapAttrsToList (_: entry: entry.support.darwin.formula or null) (
     lib.filterAttrs (
       _: entry:
       (entry.support.darwin.provider or null) == "homebrew-formula"
       && (entry.support.darwin.formula or null) != null
-    ) catalog
-  );
-  linuxSystemModules = lib.mapAttrsToList (_: entry: entry.support.linux.systemModule or null) (
-    lib.filterAttrs (
-      _: entry:
-      (entry.support.linux.provider or null) == "system-manager"
-      && (entry.support.linux.systemModule or null) != null
     ) catalog
   );
   darwinPackage =
@@ -138,31 +103,19 @@ in
 lib.mapAttrs (_: resolve) grouped
 // {
   # All packages (flat list)
-  all = resolveForInstallFeatures null (lib.attrNames catalog);
-  allForInstallFeatures =
-    enabledFeatures: resolveForInstallFeatures enabledFeatures (lib.attrNames catalog);
+  all = resolve (lib.attrNames catalog);
   allWithout =
     excludedNames:
-    resolveForInstallFeatures null (
-      builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog)
-    );
-  allWithoutForInstallFeatures =
-    enabledFeatures: excludedNames:
-    resolveForInstallFeatures enabledFeatures (
-      builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog)
-    );
-
+    resolve (builtins.filter (name: !(builtins.elem name excludedNames)) (lib.attrNames catalog));
   # Host integrations such as Orca need GitHub CLI outside the user profile.
   hostPackages = resolve [ "gh" ];
 
   inherit
-    resolveForInstallFeatures
-    darwinSystemPackagesForInstallFeatures
-    darwinHomePackagesForInstallFeatures
+    resolve
+    darwinSystemPackages
+    darwinHomePackages
     darwinCasks
-    darwinCasksForInstallFeatures
     darwinBrews
     darwinPackages
-    linuxSystemModules
     ;
 }

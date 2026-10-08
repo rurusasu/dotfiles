@@ -78,15 +78,14 @@ Describe '標準キーバインド方針' {
     It 'docs は editor と Unix/Vim 系の標準レイヤーを明示すること' {
         $docs = Get-Content -Encoding UTF8 -LiteralPath $script:keybindingsDocsPath -Raw
 
-        $docs | Should -Match 'Ctrl\+H/J/K/L' -Because "Unix/Vim/tmux focus should keep the standard Ctrl+H/J/K/L layer"
+        $docs | Should -Match 'Ctrl\+H/J/K/L' -Because "Unix/Vim focus should keep the standard Ctrl+H/J/K/L layer"
     }
 
     It 'docs は共通 terminal window-manager metadata を明示すること' {
         $docs = Get-Content -Encoding UTF8 -LiteralPath $script:keybindingsDocsPath -Raw
         $expectations = [ordered]@{
-            'Ctrl\+Space Ctrl\+Space'               = 'nested prefix should be documented'
-            'AutoHotkey.*WindowsTerminal\.exe.*1秒'  = 'Windows Terminal adapter scope and timeout should be explicit'
-            'tmux.*Workspace=Session.*Tab=Window'   = 'tmux capability aliases should be explicit'
+            'Ctrl\+Space Ctrl\+Space'              = 'nested prefix should be documented'
+            'AutoHotkey.*WindowsTerminal\.exe.*1秒' = 'Windows Terminal adapter scope and timeout should be explicit'
         }
 
         foreach ($expectation in $expectations.GetEnumerator()) {
@@ -137,15 +136,6 @@ Describe '標準キーバインド方針' {
                 }
             },
             @{
-                Target       = 'tmux'
-                Capabilities = [ordered]@{
-                    Workspace = '対応 (Workspace=Session)'
-                    Tab       = '対応 (Tab=Window)'
-                    Pane      = '対応'
-                    Session   = '対応'
-                }
-            },
-            @{
                 Target       = 'Herdr'
                 Capabilities = [ordered]@{ Workspace = '対応'; Tab = '対応'; Pane = '対応'; Session = '対応' }
             }
@@ -178,12 +168,6 @@ Describe '標準キーバインド方針' {
                 Path          = 'chezmoi/terminals/wezterm/wezterm.lua'
                 SourcePattern = 'key = "t", mods = "LEADER", action = act\.SpawnTab|mods = "LEADER", action = act\.ActivateTab\([0-8]\)'
                 DocsPattern   = 'Leader.*`t/x/1-9`.*タブ操作'
-            },
-            @{
-                Name          = 'tmux Ctrl+A window-manager table'
-                Path          = 'chezmoi/dot_tmux.conf'
-                SourcePattern = '(?m)^set -g prefix C-a$|^bind t new-window$|^bind (?:h|l) (?:previous|next)-window$'
-                DocsPattern   = 'Prefix.*Ctrl\+A.*(?:pane|window|ペイン|ウィンドウ)'
             }
         )
 
@@ -296,7 +280,7 @@ Describe '標準キーバインド方針' {
                 PesterStep    = '- name: Install Pester'
             },
             @{
-                Workflow      = '.github/workflows/ci-powershell.yml'
+                Workflow      = '.github/workflows/ci-other.yml'
                 Job           = 'test'
                 InstallMarker = 'winget install --id AutoHotkey\.AutoHotkey --exact --source winget --scope machine'
                 PesterStep    = '- name: Install PowerShell modules'
@@ -370,39 +354,11 @@ Describe '標準キーバインド方針' {
         $content | Should -Match '\{ key = "Backspace", mods = "LEADER", action = act\.SendKey\(\{ key = "Backspace" \}\) \}'
     }
 
-    It 'Warp keybindings are no longer managed' {
-        Test-Path -LiteralPath (Join-Path $script:chezmoiRoot "terminals/warp/keybindings.yaml") | Should -BeFalse
-    }
 
-    It 'Unix/Linux/WSL の tmux と Neovim は Ctrl+H/J/K/L focus を維持すること' {
-        $tmux = (Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "dot_tmux.conf") -Raw) -replace "\r\n?", "`n"
-        $nvim = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "../nix/modules/nvim/lua/config/keymaps.lua") -Raw
-
-        $tmux | Should -Match '(?m)^set -g prefix C-Space$'
-        $tmux | Should -Match '(?m)^bind C-Space send-prefix$'
-        foreach ($binding in @(
-                @{ Key = 'w'; Command = 'choose-tree -s' },
-                @{ Key = 'a'; Command = 'command-prompt' },
-                @{ Key = 'n'; Command = 'new-window' },
-                @{ Key = 'q'; Command = 'kill-window' },
-                @{ Key = 'Tab'; Command = 'next-window' },
-                @{ Key = 'BTab'; Command = 'previous-window' },
-                @{ Key = 'h'; Command = 'select-pane -L' },
-                @{ Key = 'j'; Command = 'select-pane -D' },
-                @{ Key = 'k'; Command = 'select-pane -U' },
-                @{ Key = 'l'; Command = 'select-pane -R' },
-                @{ Key = 'v'; Command = 'split-window -h' },
-                @{ Key = '-'; Command = 'split-window -v' },
-                @{ Key = 'x'; Command = 'kill-pane' },
-                @{ Key = 'g'; Command = 'choose-tree -Zw' },
-                @{ Key = 'd'; Command = 'detach-client' }
-            )) {
-            $tmux | Should -Match "(?m)^bind $([regex]::Escape($binding.Key)) $([regex]::Escape($binding.Command))"
-        }
-        $tmux | Should -Not -Match '(?m)^set -g prefix C-a$'
+    It 'should preserve native Neovim Ctrl+H/J/K/L focus' {
+        $nvim = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot "nix/modules/editors/nvim/lua/config/keymaps.lua") -Raw
 
         foreach ($key in @("h", "j", "k", "l")) {
-            $tmux | Should -Match "bind-key -n C-$key"
             $nvim | Should -Match "map\(`"n`", `"<C-$key>`""
             $nvim | Should -Match "map\(`"t`", `"<C-$key>`""
         }

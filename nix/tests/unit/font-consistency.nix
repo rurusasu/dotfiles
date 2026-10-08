@@ -13,7 +13,6 @@ let
         inherit pkgs;
         extraSpecialArgs = {
           inherit inputs;
-          installFeatures = [ ];
         };
         modules = modules ++ [
           {
@@ -67,7 +66,7 @@ in
           specialArgs = { inherit inputs; };
           modules = [
             inputs.home-manager.nixosModules.home-manager
-            ../../modules/nixos
+            ../../hosts/shared/nixos/platform.nix
           ];
         };
       in
@@ -91,10 +90,10 @@ in
     };
   };
 
-  testLinuxInstallsManagedFont = fontContract "x86_64-linux" [ ../../home/linux.nix ];
-  testWSLInstallsManagedFont = fontContract "x86_64-linux" [ ../../home/wsl.nix ];
+  testLinuxInstallsManagedFont = fontContract "x86_64-linux" [ ../../hosts/shared/linux-home.nix ];
+  testWSLInstallsManagedFont = fontContract "x86_64-linux" [ ../../hosts/x86_64-linux/wsl/home.nix ];
   testStandaloneDarwinHomeProfileInstallsManagedFont = fontContract "aarch64-darwin" [
-    ../../home/darwin.nix
+    ../../hosts/aarch64-darwin/home.nix
   ];
 
 }

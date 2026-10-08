@@ -12,13 +12,81 @@ let
     inherit pkgs lib;
     catalogOverride = {
       base = fixture;
-      optional = fixture // {
-        installFeature = "FixtureFeature";
-      };
+      optional = fixture;
     };
   };
+  actualSets = import ../../packages/sets.nix { inherit pkgs lib; };
 in
 {
+  testFdAndPatinaUseCatalogProviders = {
+    expr = {
+      fdWindows = actualSets.wingetMap.fd;
+      starshipWindows = actualSets.supportReport."Starship.Starship".windows.identity;
+      patinaDarwin = actualSets.supportReport.zsh-patina.darwin.provider;
+      patinaLinux = actualSets.supportReport.zsh-patina.linux.provider;
+      patinaWindows = actualSets.supportReport.zsh-patina.windows.unsupported;
+      patinaProviderErrors = builtins.filter (lib.hasPrefix "zsh-patina:") actualSets.providerErrors;
+    };
+    expected = {
+      fdWindows = "sharkdp.fd";
+      starshipWindows = "Starship.Starship";
+      patinaDarwin = "nix";
+      patinaLinux = "nix";
+      patinaWindows = "No reviewed MSYS2/Cygwin package provider is selected";
+      patinaProviderErrors = [ ];
+    };
+  };
+
+  testShellPluginPackagesAreOwnedByHomeManagerModules = {
+    expr = {
+      remainingCatalogIds = builtins.filter (name: builtins.hasAttr name actualSets.supportReport) [
+        "fzf"
+        "zoxide"
+        "eza"
+        "bat"
+        "ripgrep"
+      ];
+      windowsPlugins =
+        map
+          (id: {
+            installed = builtins.elem id actualSets.windowsOnly.winget;
+            provider = actualSets.supportReport.${id}.windows.provider;
+            command = actualSets.wingetVerifyById.${id}.command;
+          })
+          [
+            "junegunn.fzf"
+            "ajeetdsouza.zoxide"
+            "eza-community.eza"
+            "BurntSushi.ripgrep.MSVC"
+          ];
+      ezaInstallArgs = actualSets.wingetInstallArgs."eza-community.eza";
+      ezaDirectInstaller = actualSets.wingetDirectInstallers."eza-community.eza".executable;
+      ezaPathEntries = actualSets.wingetPathEntries."eza-community.eza";
+    };
+    expected = {
+      remainingCatalogIds = [ ];
+      windowsPlugins =
+        map
+          (command: {
+            installed = true;
+            provider = "winget";
+            inherit command;
+          })
+          [
+            "fzf"
+            "zoxide"
+            "eza"
+            "rg"
+          ];
+      ezaInstallArgs = [
+        "--scope"
+        "user"
+      ];
+      ezaDirectInstaller = "eza.exe";
+      ezaPathEntries = [ "%LOCALAPPDATA%\\Programs\\eza" ];
+    };
+  };
+
   testSupportReportPublishesOnlyCurrentProviderMetadata = {
     expr = builtins.attrNames sets.supportReport.base;
     expected = [
@@ -84,34 +152,34 @@ in
     };
   };
 
-  testPackageCatalogOverridePreservesFeatureSelection = {
+  testPackageCatalogOverridePreservesSelection = {
     expr = lib.mapAttrs (_: packages: map (package: package.drvPath) packages) {
       category = sets.fixture;
       inherit (sets) all;
-      defaultFeatures = sets.allForInstallFeatures [ ];
-      enabledFeatures = sets.allForInstallFeatures [ "FixtureFeature" ];
       excluded = sets.allWithout [ "base" ];
-      excludedWithoutFeature = sets.allWithoutForInstallFeatures [ ] [ "base" ];
-      explicit = sets.resolveForInstallFeatures [ ] [ "optional" "base" ];
+      explicit = sets.resolve [
+        "optional"
+        "base"
+      ];
     };
     expected =
       let
         hello = pkgs.hello.drvPath;
       in
       {
-        category = [ hello ];
+        category = [
+          hello
+          hello
+        ];
         all = [
           hello
           hello
         ];
-        defaultFeatures = [ hello ];
-        enabledFeatures = [
+        excluded = [ hello ];
+        explicit = [
           hello
           hello
         ];
-        excluded = [ hello ];
-        excludedWithoutFeature = [ ];
-        explicit = [ hello ];
       };
   };
 }

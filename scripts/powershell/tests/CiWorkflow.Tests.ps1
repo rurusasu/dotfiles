@@ -1,12 +1,6 @@
 ﻿BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 
-    function Get-CiJobPattern {
-        param([string]$Output)
-        $manifest = Get-Content -LiteralPath (Join-Path $script:repoRoot 'ci/job-path-routing.json') -Raw | ConvertFrom-Json
-        $manifest.rules | Where-Object { $Output -in $_.outputs } | ForEach-Object { $_.patterns }
-    }
-
     function Assert-UniqueChezmoiPathOccurrence {
         param(
             [Parameter(Mandatory)]
@@ -31,7 +25,7 @@
 
 Describe 'CI workflow configuration' {
     It 'should provide pinned PSScriptAnalyzer in the image before nix fmt runs' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
         $dockerfile = Get-Content -LiteralPath (Join-Path $script:repoRoot 'docker/bootstrap-ci-tools/Dockerfile') -Raw
 
         $workflow | Should -Match 'image:\s+\$\{\{ needs\.ci-tools\.outputs\.image \}\}'
@@ -41,7 +35,7 @@ Describe 'CI workflow configuration' {
 
     It 'should pin PSScriptAnalyzer used by treefmt powershell formatter' {
         $treefmtToml = Get-Content -LiteralPath (Join-Path $script:repoRoot ".treefmt.toml") -Raw
-        $treefmtNix = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/flakes/treefmt.nix") -Raw
+        $treefmtNix = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/formatter.nix") -Raw
 
         $treefmtToml | Should -Match 'RequiredVersion 1\.22\.0'
         $treefmtToml | Should -Match 'Import-Module PSScriptAnalyzer -RequiredVersion 1\.22\.0'
@@ -50,7 +44,7 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should harden Windows PSScriptAnalyzer install against cache and gallery issues' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-other.yml") -Raw
 
         $workflow | Should -Match 'function Invoke-WithRetry'
         $workflow | Should -Match '\$env:PSModulePath = "\$moduleRoot;\$env:PSModulePath"'
@@ -62,7 +56,7 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should run install.cmd in CI with timeout and completion marker checks' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1") -Raw -Encoding UTF8
         $wingetAssertion = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/powershell/ci/Assert-WingetInstallSuccess.ps1") -Raw
 
@@ -107,7 +101,7 @@ Describe 'CI workflow configuration' {
         $wingetAssertion | Should -Match 'reported an empty WinGet CI verification inventory'
     }
     It 'should run the real installer in concurrent PowerShell 5.1 and 7 processes' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw -Encoding UTF8
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw -Encoding UTF8
         $installerJob = [regex]::Match(
             $workflow,
             '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
@@ -179,7 +173,7 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should run the admin-required Visual Studio package through an elevated installer and verify its compiler' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw
         $windowsJob = [regex]::Match(
             $workflow,
             '(?ms)^  windows:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
@@ -258,25 +252,23 @@ Describe 'CI workflow configuration' {
             [pscustomobject]@{ PackageIdentifier = 'Ordinary.Package' }
             [pscustomobject]@{ PackageIdentifier = 'CiSkipped.Package'; ciSkipInstall = $true }
             [pscustomobject]@{ PackageIdentifier = 'Admin.Package'; requiresAdmin = $true }
-            [pscustomobject]@{ PackageIdentifier = 'Feature.Package'; installFeature = 'optional-feature' }
             [pscustomobject]@{ PackageIdentifier = 'ManualSkip.Package'; skipInstall = $true }
-            [pscustomobject]@{ PackageIdentifier = 'EmptyFeature.Package'; installFeature = '' }
         )
         $actualIds = @($packages | Where-Object $predicate | ForEach-Object { [string]$_.PackageIdentifier } | Sort-Object -Unique)
 
-        $actualIds | Should -Be @('CiSkipped.Package', 'EmptyFeature.Package', 'Ordinary.Package')
+        $actualIds | Should -Be @('CiSkipped.Package', 'Ordinary.Package')
     }
     It 'should build the NixOS WSL system on hosted Nix CI' {
-        $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
+        $nixWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
 
-        $nixWorkflow | Should -Match 'Build both WSL system closures and export a local cache'
+        $nixWorkflow | Should -Match 'Build the WSL system closure and export a local cache'
         $nixWorkflow | Should -Match '\.#nixosConfigurations\.nixos\.config\.system\.build\.toplevel'
     }
 
     It 'should configure the Hermes binary cache for system builds' {
         $flake = Get-Content -LiteralPath (Join-Path $script:repoRoot "flake.nix") -Raw
         $postInstall = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
-        $bootstrapWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
+        $bootstrapWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
 
         $flake | Should -Match 'extra-substituters\s*=\s*\[\s*"https://cache\.numtide\.com"'
         $flake | Should -Match 'https://hermes-agent\.cachix\.org'
@@ -301,7 +293,7 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should run nixos-rebuild switch in a hosted WSL2 E2E workflow' {
-        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml"
+        $workflowPath = Join-Path $script:repoRoot ".github/workflows/ci-nix.yml"
         $scriptPath = Join-Path $script:repoRoot "scripts/powershell/ci/Invoke-NixosWslE2E.ps1"
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
         $script = Get-Content -LiteralPath $scriptPath -Raw
@@ -313,7 +305,7 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'runs-on:\s+windows-2025'
         $jobTimeout | Should -BeGreaterOrEqual (($rebuildTimeoutSeconds * $rebuildBudgetCount / 60) + 60) -Because 'the job must allow each independent rebuild timeout plus one hour for WSL setup and verification'
         $rebuildBudgetCount | Should -Be 2 -Because 'the E2E performs a post-install switch and a separate Hermes-enabled switch'
-        $workflow | Should -Match 'wsl-prebuild:[\s\S]*?DOTFILES_WITH_HERMES=1 nix build[\s\S]*?nix copy --to "file://\$cache_dir\?compression=zstd"[\s\S]*?Upload WSL Nix store cache'
+        $workflow | Should -Match 'wsl-prebuild:[\s\S]*?nix build[\s\S]*?nix copy --to "file://\$cache_dir\?compression=zstd"[\s\S]*?Upload WSL Nix store cache'
         $workflow | Should -Match 'wsl:[\s\S]*?needs: \[changes, wsl-prebuild\][\s\S]*?Download prebuilt WSL Nix store cache'
         $workflow | Should -Match 'actions/download-artifact@[0-9a-f]{40}'
         $workflow | Should -Match 'WSL_PREBUILD_RESULT: \$\{\{ needs\.wsl-prebuild\.result \}\}'
@@ -339,7 +331,7 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'wslpath", "-a", \$cacheDir\.Replace\('\''\\'\'', '\''/'\''\)'
         $script | Should -Match 'nix --version && nix --extra-experimental-features'
         $script | Should -Match "nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from 'file://"
-        $script | Should -Match 'CI_ASSERTION: imported base and Hermes system closures'
+        $script | Should -Match 'CI_ASSERTION: imported the NixOS system closure'
         $script | Should -Match 'bash ''\$postInstallWslPath'' --sync-mode repo --sync-back none --state-version 25\.05 --skip-flake-update'
         $script | Should -Match 'CI_ASSERTION: production NixOS-WSL post-install switch completed'
         $script | Should -Match 'GitHub access-token setting is loaded from a Nix configuration file inside WSL'
@@ -352,7 +344,6 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'Welcome to your new NixOS-WSL system'
         $script | Should -Match 'nixos-rebuild list-generations'
         $script | Should -Match 'handlers\\Handler\.NixRebuild\.ps1'
-        $script | Should -Match '\$rebuildContext\.Options\["WithHermes"\] = \$true'
         $script | Should -Match '\$rebuildContext\.Options\["SkipFlakeUpdate"\] = \$true'
         $script | Should -Match '\$rebuildContext\.Options\["NixRebuildTimeoutSeconds"\] = \$PostInstallTimeoutSeconds'
         $script | Should -Match 'dd if=/dev/zero of=/swapfile bs=1M count=8192'
@@ -368,7 +359,7 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'dmesg --time-format iso'
         $script | Should -Match '\$diagnosticScript = \$diagnosticScript -replace "`r`n\?", "`n"'
         $script | Should -Match '\$rebuildHandler\.Apply\(\$rebuildContext\)'
-        $script | Should -Match 'CI_ASSERTION: production NixRebuildHandler applied WithHermes'
+        $script | Should -Match 'CI_ASSERTION: production NixRebuildHandler applied native Hermes'
         $script | Should -Match '\$hermesVerifier = \$hermesVerifier -replace "`r`n\?", "`n"'
         $script | Should -Match '\$hermesVerifierBase64 = \[Convert\]::ToBase64String\(\[Text\.Encoding\]::UTF8\.GetBytes\(\$hermesVerifier\)\)'
         $script | Should -Match ([regex]::Escape('$hermesVerifierCommand = "set -o pipefail; printf ''%s'' ''$hermesVerifierBase64'' | base64 -d | bash"'))
@@ -418,9 +409,9 @@ Describe 'CI workflow configuration' {
         $script | Should -Not -Match 'systemctl --user restart hermes-agent\.service'
         $workflow | Should -Match 'GITHUB_TOKEN:\s+\$\{\{ secrets\.GITHUB_TOKEN \}\}'
         $workflow | Should -Match 'WSLENV:\s+GITHUB_TOKEN/u'
-        $script | Should -Match ([regex]::Escape('GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey"'))
-        $script | Should -Match ([regex]::Escape('rg "\"\^\[q\" __zoxide_zi_widget"'))
-        $script | Should -Not -Match ([regex]::Escape('rg "\"\^\[z\" __zoxide_zi_widget"'))
+        $script | Should -Match ([regex]::Escape('GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic'))
+        $script | Should -Match ([regex]::Escape('(( $+functions[cd] )) && functions cd'))
+        $script | Should -Match ([regex]::Escape('rg "__zoxide_z"'))
         $script | Should -Match 'Remove-TemporaryDistro'
     }
 
@@ -624,7 +615,7 @@ esac
     }
 
     It 'should run the complete PowerShell test suite in parallel on Windows PowerShell 5.1 and PowerShell 7' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-powershell.yml') -Raw
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-other.yml') -Raw
         $testJob = [regex]::Match(
             $workflow,
             '(?ms)^  test:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
@@ -645,7 +636,7 @@ esac
     }
 
     It 'should retry winget source update when the runner reports Cancelled' {
-        $wingetWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
+        $wingetWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
 
         $wingetWorkflow | Should -Match 'function Invoke-WingetSourceUpdate'
         $wingetWorkflow | Should -Match '\bCancelled\b'
@@ -654,18 +645,18 @@ esac
     }
 
     It 'should expose package provider report build logs in CI' {
-        $bootstrapWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
-        $consistencyWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-consistency.yml") -Raw
+        $bootstrapWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
+        $consistencyWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
 
         $linuxBuild = [regex]::Match($bootstrapWorkflow, '(?ms)^  linux-build:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)').Value
         $linuxBuild | Should -Match 'nix build --impure --no-link --print-build-logs'
-        $linuxBuild | Should -Match '\.#package-support-report'
+        $linuxBuild | Should -Not -Match '\.#package-support-report'
         $consistencyWorkflow | Should -Match 'nix build \.#package-support-report --print-build-logs'
         $consistencyWorkflow | Should -Not -Match 'nix build \.#package-support-report[^\r\n]*2>/dev/null'
     }
 
     It 'should pin the WinGet fallback module and avoid an AllUsers repair' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-bootstrap.yml") -Raw
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
 
         $workflow | Should -Match "Install-Module -Name Microsoft\.WinGet\.Client -RequiredVersion '1\.29\.280' -Scope CurrentUser -Force -Repository PSGallery"
         $workflow | Should -Match 'Repair-WinGetPackageManager'
@@ -673,64 +664,17 @@ esac
     }
 
     It 'should verify generated npm package catalog consistency' {
-        $consistencyWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-consistency.yml") -Raw
+        $consistencyWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
 
-        (Get-CiJobPattern -Output 'package_catalog') | Should -Contain 'windows/npm/packages.json'
         $consistencyWorkflow | Should -Match '/tmp/winget-export/npm/packages\.json'
         $consistencyWorkflow | Should -Match 'windows/npm/packages\.json'
     }
 
-    It 'should trigger entrypoint tests when install.cmd or bootstrap tests change' {
-        $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
 
-        $powershellWorkflow | Should -Match 'needs.changes.outputs.powershell_test'
-        (Get-CiJobPattern -Output 'powershell_test') | Should -Contain '**/*.cmd'
-        (Get-CiJobPattern -Output 'powershell_test') | Should -Contain 'docker/**'
-    }
 
-    It 'should assign Bash suites to one preinstalled Linux job' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
-        $job = [regex]::Match($workflow, '(?ms)^  bash-test:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)').Value
-        $job | Should -Not -BeNullOrEmpty
-        $job | Should -Match 'runs-on: ubuntu-24.04'
-        $job | Should -Match 'container:'
-        $job | Should -Match 'bash scripts/sh/run-bash-tests\.sh'
-        $job | Should -Not -Match 'matrix:|Install Nix|brew install'
-        $job | Should -Not -Match 'continue-on-error:\s*true'
-        Test-Path -LiteralPath (Join-Path $script:repoRoot '.devcontainer/ci/bats.sh') | Should -BeFalse
-        (Get-CiJobPattern -Output 'devcontainer') | Should -Not -Contain 'tests/bash/install_linux.bats'
-        (Get-CiJobPattern -Output 'devcontainer') | Should -Not -Contain 'tests/bash/install_macos.bats'
-    }
-
-    It 'should trigger PowerShell CI when Plane GitHub sync config changes' {
-        $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
-
-        $powershellWorkflow | Should -Match 'needs.changes.outputs.powershell_test'
-        (Get-CiJobPattern -Output 'powershell_test') | Should -Contain 'chezmoi/**'
-    }
-
-    It 'should trigger dcnvim platform tests when dcnvim implementations change' {
-        $chezmoiWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-chezmoi.yml") -Raw
-        $powershellWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-powershell.yml") -Raw
-        $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
-
-        (Get-CiJobPattern -Output 'chezmoi_lint') | Should -Contain 'chezmoi/**'
-        $chezmoiWorkflow | Should -Match '\.\\tests\\Invoke-Tests\.ps1 -Path \.\\tests\\chezmoi'
-        $powershellWorkflow | Should -Match 'needs.changes.outputs.powershell_test'
-        (Get-CiJobPattern -Output 'powershell_test') | Should -Contain '**/*.ps1'
-        $devcontainerWorkflow | Should -Match 'needs.changes.outputs.devcontainer'
-        (Get-CiJobPattern -Output 'devcontainer') | Should -Contain 'scripts/sh/dcnvim.sh'
-    }
-
-    It 'should use a supported Intel macOS runner for devcontainer E2E' {
-        $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
-
-        $devcontainerWorkflow | Should -Match 'runs-on:\s+macos-15-intel'
-        $devcontainerWorkflow | Should -Not -Match 'runs-on:\s+macos-13'
-    }
 
     It 'should retry Linux devcontainer CLI install when Nix cache downloads fail' {
-        $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-devcontainer.yml") -Raw
+        $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-other.yml") -Raw
 
         $devcontainerWorkflow | Should -Match 'for attempt in 1 2 3'
         $devcontainerWorkflow | Should -Match "nix profile install 'nixpkgs#devcontainer'"
@@ -738,23 +682,15 @@ esac
         $devcontainerWorkflow | Should -Match 'retrying in \$\{sleep_seconds\}s'
     }
 
-    It 'should preserve the NixOS VM coverage in the unified workflow' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
-
-        $workflow | Should -Match 'Bootstrap / Linux / E2E / NixOS'
-        $workflow | Should -Match 'bootstrap-nixos-vm'
-        $workflow | Should -Match 'actions/upload-artifact@[0-9a-f]{40}'
-    }
-
     It 'should run WSL E2E for fork pull requests and require it in the unified workflow' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw
         $test = Get-Content -LiteralPath (Join-Path $script:repoRoot 'nix/tests/build/bootstrap-nixos.nix') -Raw
 
         $wslJob = [regex]::Match(
             $workflow,
             '(?ms)^  wsl:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
         ).Value
-        $wslJob | Should -Match "(?m)^\s+if:\s+\$\{\{ needs\.changes\.outputs\.wsl == 'true' \}\}$"
+        $wslJob | Should -Match "(?m)^\s+if:\s+\$\{\{ needs\.changes\.outputs\.nix == 'true' \}\}$"
         $wslJob | Should -Match 'persist-credentials:\s+false'
         $wslJob | Should -Not -Match 'pull_request\.head\.repo\.full_name'
         $wslJob | Should -Match 'HEAD_REF:\s+\$\{\{ github\.head_ref \}\}'
@@ -765,14 +701,14 @@ esac
             $workflow,
             '(?ms)^  complete:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
         ).Value
-        $completeJob | Should -Match "(?m)^\s+WSL_REQUIRED:\s+\$\{\{ needs\.changes\.outputs\.wsl \}\}$"
+        $completeJob | Should -Match "(?m)^\s+WSL_REQUIRED:\s+\$\{\{ needs\.changes\.outputs\.nix == 'true' \}\}$"
         $test | Should -Match 'DOTFILES_NIXOS_PREBUILT_SYSTEM=\$\{nodes\.machine\.system\.build\.toplevel\}'
         $test | Should -Match 'system\.switch\.enable\s*=\s*true'
         $test | Should -Match 'docker/hermes-service/compose\.yml'
     }
 
     It 'should keep hosted Windows and Darwin contracts in the unified workflow' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw
 
         $workflow | Should -Match 'runs-on:\s+windows-2025'
         $workflow | Should -Match 'runs-on:\s+macos-15'
@@ -784,7 +720,7 @@ esac
     }
 
     It 'should keep the full Bash suite out of the Darwin build job' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml') -Raw
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw
         $macosJob = [regex]::Match($workflow, '(?ms)^  darwin:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)').Value
         $macosJob | Should -Not -BeNullOrEmpty
         $macosJob | Should -Not -Match 'scripts/sh/run-bash-tests\.sh|brew install'
@@ -799,7 +735,7 @@ esac
     It 'should install chezmoi before every Windows job that runs chezmoi template tests' {
         $workflowCases = @(
             @{ Path = '.github/workflows/ci-chezmoi.yml'; Job = 'lint'; TestMarker = '.\tests\Invoke-Tests.ps1' },
-            @{ Path = '.github/workflows/ci-powershell.yml'; Job = 'test'; TestMarker = 'Invoke-Tests.ps1' }
+            @{ Path = '.github/workflows/ci-other.yml'; Job = 'test'; TestMarker = 'Invoke-Tests.ps1' }
         )
 
         foreach ($case in $workflowCases) {
@@ -883,23 +819,22 @@ esac
     }
 
     It 'should expose one platform-routed Bootstrap CI workflow' {
-        $workflowPath = Join-Path $script:repoRoot '.github/workflows/ci-bootstrap.yml'
+        $workflowPath = Join-Path $script:repoRoot '.github/workflows/ci-nix.yml'
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
 
         $workflow | Should -Match 'name:\s+Bootstrap CI'
-        $workflow | Should -Match 'manifest:\s+ci/bootstrap-path-routing\.json'
         $workflow | Should -Match 'Bootstrap / Linux / Build'
         $workflow | Should -Match 'Bootstrap / Darwin'
         $workflow | Should -Match 'Bootstrap / WSL'
         $workflow | Should -Match 'Bootstrap / Windows'
         $workflow | Should -Match 'Bootstrap / Complete'
-        $workflow | Should -Match "needs\.changes\.outputs\.linux == 'true'"
-        $workflow | Should -Match "needs\.changes\.outputs\.darwin == 'true'"
-        $workflow | Should -Match "needs\.changes\.outputs\.wsl == 'true'"
-        $workflow | Should -Match "needs\.changes\.outputs\.windows == 'true'"
-        $workflow | Should -Match 'manifest: ci/job-path-routing\.json'
+        $workflow | Should -Match "needs\.changes\.outputs\.nix == 'true'"
+        $workflow | Should -Match "needs\.changes\.outputs\.nix == 'true'"
+        $workflow | Should -Match "needs\.changes\.outputs\.nix == 'true'"
+        $workflow | Should -Match "needs\.changes\.outputs\.chezmoi == 'true'"
         $workflow | Should -Match 'PLATFORM_REQUIRED'
-        $workflow | Should -Match 'check_platform'
+        $workflow | Should -Match 'check_required_job'
+        $workflow | Should -Not -Match 'check_platform'
         $workflow | Should -Not -Match 'success\|skipped'
         $workflow | Should -Match 'ref: \$\{\{ env\.TESTED_SHA \}\}'
     }

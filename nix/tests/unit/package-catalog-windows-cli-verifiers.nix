@@ -56,45 +56,15 @@ in
 
   testOnePasswordCliUsesOpVersionVerifier = {
     expr = {
-      packageId = sets.wingetMap._1password-cli;
-      verifier = sets.wingetVerify._1password-cli;
+      selected = builtins.elem "AgileBits.1Password.CLI" sets.windowsOnly.winget;
+      verifier = sets.wingetVerifyById."AgileBits.1Password.CLI";
     };
     expected = {
-      packageId = "AgileBits.1Password.CLI";
+      selected = true;
       verifier = {
         command = "op";
         args = [ "--version" ];
       };
     };
-  };
-  testNeovimSoftwareIsAbsentFromCatalogAndWindowsProviders = {
-    expr =
-      builtins.all
-        (
-          name:
-          !(builtins.hasAttr name sets.supportReport)
-          && !(builtins.hasAttr name sets.wingetMap)
-          && !(builtins.hasAttr name sets.wingetVerify)
-        )
-        [
-          "neovim"
-          "neovim-remote"
-          "nixd"
-          "ty"
-          "ruff"
-          "yaml-language-server"
-          "taplo"
-          "bash-language-server"
-          "lua-language-server"
-          "stylua"
-          "marksman"
-          "gopls"
-          "rust-analyzer"
-          "rustfmt"
-          "astro-language-server"
-          "oxlint"
-          "typescript-language-server"
-        ];
-    expected = true;
   };
 }

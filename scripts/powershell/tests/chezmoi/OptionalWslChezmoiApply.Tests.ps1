@@ -74,9 +74,7 @@ Describe 'Chezmoi task wiring and 1Password timeout contract' {
 
         $templates = @(
             'chezmoi/.chezmoiscripts/deploy/kaggle/run_always_deploy.ps1.tmpl',
-            'chezmoi/.chezmoiscripts/deploy/kaggle/run_always_deploy.sh.tmpl',
-            'chezmoi/.chezmoiscripts/deploy/ssh/run_always_deploy.ps1.tmpl',
-            'chezmoi/.chezmoiscripts/deploy/ssh/run_always_deploy.sh.tmpl'
+            'chezmoi/.chezmoiscripts/deploy/ssh/run_always_deploy.ps1.tmpl'
         )
         foreach ($relativePath in $templates) {
             $template = Get-Content -LiteralPath (Join-Path $script:repoRoot $relativePath) -Raw

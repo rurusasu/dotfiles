@@ -254,7 +254,7 @@ try {
         Complete-CiSection
     }
 
-    Write-CiSection "Import prebuilt NixOS and Hermes closures"
+    Write-CiSection "Import prebuilt NixOS system closure"
     try {
         $artifactDir = Join-Path $env:RUNNER_TEMP "wsl-nix-cache-artifact"
         $cacheArchive = Join-Path $artifactDir "wsl-nix-cache.tar"
@@ -264,8 +264,8 @@ try {
             throw "WSL prebuild artifact is incomplete: $artifactDir"
         }
         $systemPaths = @(Get-Content -LiteralPath $pathsFile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-        if ($systemPaths.Count -ne 2 -or $systemPaths.Where({ $_ -notmatch '^/nix/store/[a-z0-9]{32}-' }).Count -ne 0) {
-            throw "WSL prebuild artifact must contain exactly two Nix store paths: $($systemPaths -join ', ')"
+        if ($systemPaths.Count -ne 1 -or $systemPaths.Where({ $_ -notmatch '^/nix/store/[a-z0-9]{32}-' }).Count -ne 0) {
+            throw "WSL prebuild artifact must contain exactly one Nix store path: $($systemPaths -join ', ')"
         }
 
         $cacheDir = Join-Path $env:RUNNER_TEMP "wsl-nix-cache"
@@ -283,12 +283,12 @@ try {
             throw "Could not resolve WSL path for Nix cache artifact: $cacheDir"
         }
 
-        $importCommand = "nix --version && nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from 'file://$cacheLinuxPath' '$($systemPaths[0])' '$($systemPaths[1])' && nix --extra-experimental-features 'nix-command flakes' path-info '$($systemPaths[0])' '$($systemPaths[1])'"
+        $importCommand = "nix --version && nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from 'file://$cacheLinuxPath' '$($systemPaths[0])' && nix --extra-experimental-features 'nix-command flakes' path-info '$($systemPaths[0])'"
         Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "root", "--",
             "bash", "-lc", $importCommand
         ) -TimeoutSeconds 1800 | Out-Null
-        Write-Host "CI_ASSERTION: imported base and Hermes system closures from the Linux prebuild artifact."
+        Write-Host "CI_ASSERTION: imported the NixOS system closure from the Linux prebuild artifact."
     }
     finally {
         Complete-CiSection
@@ -380,7 +380,7 @@ fi
         Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "nixos", "--",
             "bash", "-lc",
-            'GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey" | rg "\"\^\[q\" __zoxide_zi_widget"'
+            'GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic ''(( $+functions[cd] )) && functions cd'' | rg "__zoxide_z"'
         ) -TimeoutSeconds 300 | Out-Null
 
         Write-CiSection "Enable Hermes Agent through Nix"
@@ -408,7 +408,6 @@ fi
 
             $rebuildContext = [SetupContext]::new($repoRoot)
             $rebuildContext.DistroName = $DistroName
-            $rebuildContext.Options["WithHermes"] = $true
             $rebuildContext.Options["SkipFlakeUpdate"] = $true
             $rebuildContext.Options["NixRebuildTimeoutSeconds"] = $PostInstallTimeoutSeconds
             $rebuildHandler = [NixRebuildHandler]::new()
@@ -426,7 +425,7 @@ fi
                 Write-WslRebuildDiagnostic -Phase "after Hermes rebuild failure"
                 throw
             }
-            Write-Host "CI_ASSERTION: production NixRebuildHandler applied WithHermes to $DistroName."
+            Write-Host "CI_ASSERTION: production NixRebuildHandler applied native Hermes to $DistroName."
             $hermesHandler = [HermesAgentHandler]::new()
             if (-not $hermesHandler.CanApply($rebuildContext)) {
                 throw "HermesAgentHandler skipped validation after NixRebuildHandler completed for $DistroName"

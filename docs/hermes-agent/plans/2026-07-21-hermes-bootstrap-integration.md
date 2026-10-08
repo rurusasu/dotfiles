@@ -1,5 +1,7 @@
 # Hermes Installer Integration and Migration Implementation Plan
 
+> Historical plan: the former full Linux installer has been retired. Non-NixOS Linux now uses standalone Home Manager without Docker/system-service provisioning; the integration steps below are not its current setup contract.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Connect the common container bootstrap to `install.sh` and `install.cmd`, delete the divergent OS-specific provisioning logic, migrate the real Hermes runtime safely, and verify every root/profile service with the confirmed 1Password items.
@@ -70,7 +72,7 @@ bats tests/bash/hermes_agent.bats
 **Files:**
 
 - Modify: `scripts/sh/install-macos.sh`
-- Modify: `scripts/sh/install-linux.sh`
+- Modify: former full Linux installer (retired)
 - Modify: `scripts/sh/install-nixos.sh`
 - Modify: `tests/bash/hermes_agent.bats`
 
@@ -93,7 +95,7 @@ dotfiles_hermes_start_stack docker_command "$DOTFILES_ROOT/docker/hermes-service
 - [ ] Run shell syntax and Bats tests.
 
 ```bash
-bash -n scripts/sh/hermes-agent.sh scripts/sh/install-macos.sh scripts/sh/install-linux.sh scripts/sh/install-nixos.sh
+bash -n scripts/sh/hermes-agent.sh scripts/sh/install-macos.sh scripts/sh/install-nixos.sh
 bats tests/bash/hermes_agent.bats
 ```
 

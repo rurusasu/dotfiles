@@ -21,7 +21,7 @@ let
   };
 in
 {
-  home.packages = sets.resolveForInstallFeatures [ "WithDesktop" ] (
+  home.packages = sets.resolve (
     builtins.filter (name: name != "hyprland") sets.nativeDesktopPackageNames
   );
   wayland.windowManager.hyprland = {

@@ -1,6 +1,6 @@
 -- Uses already-installed upstream configs and real language servers, without lazy.nvim.
 -- DOTFILES_NVIM_LSPCONFIG selects an explicit checkout for CI or local testing.
-local root = vim.fn.getcwd() .. "/nix/modules/nvim"
+local root = vim.fn.getcwd() .. "/nix/modules/editors/nvim"
 local upstream = assert(vim.env.DOTFILES_NVIM_LSPCONFIG, "set DOTFILES_NVIM_LSPCONFIG")
 local ts_server = vim.env.DOTFILES_NVIM_TS_SERVER or "tsc"
 assert(ts_server == "tsc" or ts_server == "ts_ls")
