@@ -13,6 +13,7 @@
 {
   imports = [
     ../modules/1password
+    ../modules/codex
     ../modules/git
     ../modules/lazygit
     ../modules/starship

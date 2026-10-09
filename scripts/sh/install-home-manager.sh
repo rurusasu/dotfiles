@@ -56,12 +56,6 @@ activate_home_manager() {
   hash -r
 }
 
-apply_chezmoi() {
-  dotfiles_have chezmoi || dotfiles_die "chezmoi is unavailable after Home Manager activation."
-  chezmoi init --source "$ROOT/chezmoi"
-  chezmoi apply --force
-}
-
 main() {
   [[ $(uname -s) == "Linux" ]] || dotfiles_die "Linux is required."
   ensure_nix
@@ -70,7 +64,6 @@ main() {
   capture_user_identity
   activate_home_manager
   dotfiles_install_codex_npm
-  apply_chezmoi
   printf 'User-only setup complete; Docker/systemd were not configured.\n'
 }
 

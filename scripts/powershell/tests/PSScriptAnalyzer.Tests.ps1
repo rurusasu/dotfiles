@@ -2,22 +2,28 @@
     $projectRoot = Split-Path -Parent $PSScriptRoot
     $settingsPath = Join-Path $projectRoot "PSScriptAnalyzerSettings.psd1"
 
-    # PSScriptAnalyzer モジュールの確認と自動インストール
-    if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer | Where-Object { $_.Version -eq ([version]'1.22.0') })) {
-        Write-Host "PSScriptAnalyzer 1.22.0 をインストールしています..." -ForegroundColor Yellow
+    # PowerShell Gallery の最新安定版を使用する。
+    $latestAnalyzer = Find-Module -Name PSScriptAnalyzer -Repository PSGallery -ErrorAction Stop
+    $analyzerModule = Get-Module -ListAvailable -Name PSScriptAnalyzer |
+        Where-Object { $_.Version -eq [Version]$latestAnalyzer.Version } | Select-Object -First 1
+    if (-not $analyzerModule) {
+        Write-Host "PSScriptAnalyzer の最新安定版をインストールしています..." -ForegroundColor Yellow
         try {
-            Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force -ErrorAction Stop
+            Install-Module -Name PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force -ErrorAction Stop
+            $analyzerModule = Get-Module -ListAvailable -Name PSScriptAnalyzer |
+                Where-Object { $_.Version -eq [Version]$latestAnalyzer.Version } | Select-Object -First 1
+            if (-not $analyzerModule) { throw 'Latest PSScriptAnalyzer module was not found after installation' }
         }
         catch {
-            throw "PSScriptAnalyzer の自動インストールに失敗しました: $($_.Exception.Message). 手動でインストールしてください: Install-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force"
+            throw "PSScriptAnalyzer の自動インストールに失敗しました: $($_.Exception.Message). 手動でインストールしてください: Install-Module PSScriptAnalyzer -Scope CurrentUser -Force"
         }
     }
 
     try {
-        Import-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Force -ErrorAction Stop
+        Import-Module -Name $analyzerModule.Path -Force -ErrorAction Stop
     }
     catch {
-        throw "PSScriptAnalyzer 1.22.0 のインポートに失敗しました: $($_.Exception.Message)"
+        throw "PSScriptAnalyzer のインポートに失敗しました: $($_.Exception.Message)"
     }
 
     # Run フェーズでも対象の存在を確認し、Discovery 時にケースがゼロでも失敗させる。

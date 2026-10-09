@@ -4,7 +4,7 @@
 `wsl-prebuild` は、このイメージで検査・ビルドを実行します。
 `bash-test` もこのイメージで Bash テストを一度だけ実行します。
 Nix、Bash、Bats、chezmoi、go-task、Git / Git LFS、Python 3.14、Ruby、Node.js 24、PowerShell、
-PSScriptAnalyzer 1.22.0、statix、jq、tar、xz を事前導入します。
+PSScriptAnalyzer の最新安定版、statix、jq、tar、xz を事前導入します。
 `nix fmt` の formatter と検証対象のパッケージは、引き続き checkout した flake から選択します。
 
 ## 更新と再利用

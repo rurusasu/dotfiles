@@ -43,7 +43,7 @@ RUN nix profile install --profile /opt/ci-tools --option sandbox false \
 # hadolint ignore=SC2016
 RUN mkdir -p /opt/powershell/Modules \
     && pwsh -NoLogo -NoProfile -Command \
-      '$ErrorActionPreference = "Stop"; Save-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Repository PSGallery -Path /opt/powershell/Modules'
+      '$ErrorActionPreference = "Stop"; Save-Module -Name PSScriptAnalyzer -Repository PSGallery -Path /opt/powershell/Modules'
 
 COPY check.sh /usr/local/libexec/check-bootstrap-ci-tools.sh
 RUN bash /usr/local/libexec/check-bootstrap-ci-tools.sh

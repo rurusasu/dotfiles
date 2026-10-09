@@ -263,6 +263,14 @@ in
       }) defaultConfig.launchd.daemons.nix-gc.serviceConfig.StartCalendarInterval;
       options = defaultConfig.nix.gc.options;
       userGc = defaultConfig.home-manager.users.rurusasu.nix.gc.automatic;
+      cacheMaintenance = defaultHome.launchd.agents.tool-cache-maintenance.enable;
+      cacheScheduleMatchesGc =
+        defaultHome.launchd.agents.tool-cache-maintenance.config.StartCalendarInterval
+        == defaultConfig.nix.gc.interval;
+      cacheRunsOnActivation = defaultHome.launchd.agents.tool-cache-maintenance.config.RunAtLoad;
+      storeOptimise = defaultConfig.nix.optimise.automatic;
+      minFree = defaultConfig.nix.settings.min-free;
+      maxFreeDeclared = builtins.hasAttr "max-free" defaultConfig.nix.settings;
     };
     expected = {
       automatic = true;
@@ -275,6 +283,12 @@ in
       ];
       options = "--delete-old";
       userGc = false;
+      cacheMaintenance = true;
+      cacheScheduleMatchesGc = true;
+      cacheRunsOnActivation = false;
+      storeOptimise = true;
+      minFree = 10737418240;
+      maxFreeDeclared = false;
     };
   };
 

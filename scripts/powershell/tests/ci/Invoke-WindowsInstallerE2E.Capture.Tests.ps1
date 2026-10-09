@@ -253,7 +253,7 @@ Describe 'Windows installer outer native capture consumer' {
         param($ChildRuntime, $Preference)
         $result = Invoke-InstallerCaptureFixture -Directory $TestDrive -ChildRuntime $ChildRuntime -Preference $Preference -Sink unavailable
         $result.ExitCode | Should -Be 1 -Because $result.Stderr
-        $result.Stderr | Should -Match 'Windows installer output capture/invocation failed:'
+        $result.Stderr | Should -Match 'Windows\s+installer\s+output\s+capture/invocation\s+failed:'
         $result.StateRecorded | Should -BeTrue
         $result.NativeExit | Should -BeNullOrEmpty
         $result.ChildStarted | Should -BeFalse

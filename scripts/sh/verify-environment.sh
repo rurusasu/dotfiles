@@ -42,7 +42,6 @@ required=(
   nix
   git
   gh
-  chezmoi
   rg
   fd
   jq
@@ -74,12 +73,6 @@ fi
 for command_name in "${required[@]}"; do
   command -v "$command_name" >/dev/null 2>&1 || fail "missing command: $command_name"
 done
-
-chezmoi apply --dry-run >/dev/null || fail "chezmoi dry-run failed"
-if ! chezmoi verify --exclude=scripts >/dev/null; then
-  chezmoi diff --exclude=scripts --no-pager --color=false >&2 || true
-  fail "chezmoi target state differs"
-fi
 
 if { [[ $platform == "linux" && $system_layer == "nixos" ]] && ((nix_only == 0)); } || ((runtime == 1)); then
   [[ -f $COMPOSE_FILE ]] || fail "missing Compose file: $COMPOSE_FILE"

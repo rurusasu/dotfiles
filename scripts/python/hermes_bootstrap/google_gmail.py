@@ -10,9 +10,9 @@ from pathlib import Path
 import yaml
 
 from .errors import ApplyError, BootstrapError, ValidationError
+from .mcp_config import install_mcp_configurations, load_managed_config
 from .payload import GoogleCalendarSecret, _google_calendar_oauth_client_values
 from .transaction import Transaction
-
 
 _DIRECTORY = "google-gmail-mcp"
 _OAUTH_FILE = "gcp-oauth.keys.json"
@@ -48,28 +48,17 @@ def install_google_gmail_configurations(
 ) -> None:
     """Install the same Gmail MCP entry in root and every named profile."""
 
-    from .distributions import _atomic_write
-
     try:
         if not targets:
             raise ValueError
         configuration = _mcp_configuration(targets[0])
-        for target in targets:
-            path = target / "config.yaml"
-            candidate = _load_managed_config(path)
-            if candidate is None:
-                # Final installed-layout validation owns replacement-race errors.
-                continue
-            metadata, config, mcp_servers = candidate
-            if mcp_servers.get("gmail") == configuration:
-                continue
-            mcp_servers["gmail"] = configuration
-            transaction.snapshot(path)
-            _atomic_write(
-                path,
-                yaml.safe_dump(config, sort_keys=False).encode("utf-8"),
-                stat.S_IMODE(metadata.st_mode),
-            )
+        install_mcp_configurations(
+            targets,
+            "gmail",
+            configuration,
+            transaction,
+            skip_invalid=True,
+        )
     except (OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
         raise ApplyError("could not install Google Gmail MCP configuration") from None
 
@@ -85,7 +74,7 @@ def validate_google_gmail_installation(
             raise ValueError
         configuration = _mcp_configuration(targets[0])
         for target in targets:
-            candidate = _load_managed_config(target / "config.yaml")
+            candidate = load_managed_config(target / "config.yaml")
             if candidate is None or candidate[2].get("gmail") != configuration:
                 raise ValueError
 
@@ -127,13 +116,20 @@ def validate_google_gmail_installation(
                 or stat.S_IMODE(metadata.st_mode) != 0o600
             ):
                 raise ValueError
-            _validate_runtime_credentials(
-                credentials_path.read_text(encoding="utf-8")
-            )
+            _validate_runtime_credentials(credentials_path.read_text(encoding="utf-8"))
     except ValidationError:
         raise
-    except (BootstrapError, OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
-        raise ValidationError("installed Google Gmail configuration is invalid") from None
+    except (
+        BootstrapError,
+        OSError,
+        TypeError,
+        UnicodeError,
+        ValueError,
+        yaml.YAMLError,
+    ):
+        raise ValidationError(
+            "installed Google Gmail configuration is invalid"
+        ) from None
 
 
 def install_google_gmail_credentials(
@@ -228,25 +224,3 @@ def is_google_gmail_configuration(value: object) -> bool:
         and value.get("args")
         == ["--yes", "--package", "@artymclabin/gmail-mcp@1.2.3", "gmail-mcp"]
     )
-
-
-def _load_managed_config(
-    path: Path,
-) -> tuple[os.stat_result, dict[object, object], dict[object, object]] | None:
-    try:
-        metadata = path.lstat()
-        if (
-            stat.S_ISLNK(metadata.st_mode)
-            or not stat.S_ISREG(metadata.st_mode)
-            or metadata.st_nlink != 1
-        ):
-            return None
-        config = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if not isinstance(config, dict):
-            return None
-        mcp_servers = config.get("mcp_servers")
-        if not isinstance(mcp_servers, dict):
-            return None
-        return metadata, config, mcp_servers
-    except (OSError, UnicodeError, yaml.YAMLError):
-        return None

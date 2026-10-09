@@ -27,8 +27,9 @@ let
       export HERMES_HOME=${lib.escapeShellArg hermesHome}
       export HERMES_BOOTSTRAP_MANIFEST=${bootstrapManifest}
       export DOTFILES_HERMES_GIT_EXECUTABLE=${pkgs.git}/bin/git
-      export PYTHONPATH=${inputs.hermes-agent}:${../../../scripts/python}
-      exec ${bootstrapPython}/bin/python ${../../../scripts/python/hermes_bootstrap_cli.py} "$@"
+      # Select our package even inside the upstream checkout or a conflicting cwd.
+      export PYTHONPATH=${../../../scripts/python}:${inputs.hermes-agent}
+      exec ${bootstrapPython}/bin/python -P -m hermes_bootstrap "$@"
     '';
   };
   hermesLcmPlugin = pkgs.fetchFromGitHub {

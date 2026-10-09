@@ -19,11 +19,8 @@ tasks:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1
 
   chezmoi:
-    desc: Apply Codex/Claude settings on Unix and dotfiles on Windows
+    desc: Apply Windows dotfiles
+    platforms: [windows]
     cmds:
-      - cmd: pwsh -NoProfile -File scripts/powershell/Invoke-OptionalWslChezmoiApply.ps1 -Distro {{.DISTRO}}
-        platforms: [windows]
       - cmd: pwsh -NoProfile -File scripts/powershell/Invoke-ChezmoiApplyWithOnePasswordPrefetch.ps1
         platforms: [windows]
-      - cmd: chezmoi apply --force
-        platforms: [linux, darwin]

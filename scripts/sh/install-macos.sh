@@ -6,7 +6,7 @@ export DOTFILES_ROOT="$ROOT"
 export DOTFILES_LOG_PREFIX="macos-install"
 # The native macOS CLI uses the desktop app integration for biometric sign-in.
 # Keep an explicit opt-out for troubleshooting, but make the integration
-# available to chezmoi deploy scripts by default.
+# available to Nix activation scripts by default.
 if [[ -z ${OP_BIOMETRIC_UNLOCK_ENABLED+x} ]]; then
   OP_BIOMETRIC_UNLOCK_ENABLED="${DOTFILES_OP_BIOMETRIC_UNLOCK_ENABLED:-true}"
 fi
@@ -79,7 +79,6 @@ preflight() {
 
   local -a required_paths=(
     "$ROOT/flake.nix"
-    "$ROOT/chezmoi"
     "$VERIFY_ENVIRONMENT"
   )
   for required in "${required_paths[@]}"; do
@@ -790,12 +789,6 @@ raise SystemExit(result.returncode)
 PY
 }
 
-apply_chezmoi() {
-  dotfiles_have chezmoi || dotfiles_die "chezmoi is unavailable after nix-darwin activation."
-  chezmoi init --source "$ROOT/chezmoi"
-  chezmoi apply --force
-}
-
 run_darwin_install_workflow() {
   # Bootstrap dependencies before Home Manager has installed Python and go-task.
   # Reuse the checkout's locked nixpkgs and the public update task.
@@ -847,8 +840,6 @@ finish_macos_install() {
     'Repair application artifacts if needed and verify the installed cask.' repair_and_verify_docker_desktop_cask
   dotfiles_step 'Finalizing Docker Desktop links' \
     'Finish the verified CLI link transaction.' commit_docker_desktop_cask_links
-  dotfiles_step 'Applying user configuration' \
-    'Apply chezmoi-managed dotfiles; authentication may be requested.' apply_chezmoi
   dotfiles_step 'Installing Hermes Desktop' \
     'Install or update the native desktop application.' dotfiles_run_task hermes:desktop:install
   dotfiles_step 'Starting Docker' \

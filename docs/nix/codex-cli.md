@@ -20,6 +20,23 @@ Codex のデスクトップアプリは別製品であり、Microsoft Store の 
 
 ## セットアップと更新
 
+Unix の設定・agents・rules・hooks・指示ファイルは `nix/modules/codex/` の
+Home Manager 標準 `programs.codex` が管理する。CLI の npm 導入は変更しない。
+`mutableSettings = true` により `config.toml` は書込み可能なまま、アプリが追加した
+UI 設定や project trust を保持して宣言値をマージする。宣言した配列は置換され、
+宣言から削除した値は既存ファイルに残るので、不要な設定は別途削除する。
+Windows の設定は引き続き chezmoi が管理し、Unix installer は chezmoi を呼ばない。
+
+`[desktop]` の `worktree-auto-cleanup-enabled = true` と `worktree-keep-count = 15`
+を宣言する。対象は Codex-managed worktree のみで、`Documents/codex` 内の通常の
+プロジェクトやモデルデータを一律に削除する設定ではない。保護対象や snapshot は
+[公式 cleanup](https://learn.chatgpt.com/docs/environments/git-worktrees) に従う。
+既存 config が不正な TOML、または Nix store への symlink ならマージは失敗し、
+上書きしない。認証ファイル・履歴・セッションは Home Manager の管理対象にしない。
+
+設定のマージは [Home Manager の標準機能](https://nix-community.github.io/home-manager/options/home-manager/programs/codex.html#programscodexmutablesettings)
+を使い、独自 cleanup timer や独自 config merger は追加しない。
+
 通常の OS セットアップでは次の処理が自動実行される。
 
 ```bash

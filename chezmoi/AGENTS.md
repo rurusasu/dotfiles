@@ -2,14 +2,14 @@
 
 ## 役割
 
-- `chezmoi/` は Windows のユーザー dotfiles と、全 OS の `.codex/` / `.claude/` の source of truth。
-- macOS / Linux / WSL のその他のユーザー設定は Home Manager が所有する。Unix 向け展開スクリプトは追加しない。
+- `chezmoi/` は Windows 専用のユーザー dotfiles の source of truth。
+- macOS / Linux / WSL のユーザー設定（Codex を含む）は Home Manager が所有する。Unix 向け配布は行わない。
 - インストールは Nix/winget、設定配布は chezmoi で分離する。
 - デスクトップキー配列は例外として `nix/home/keybindings/` を正本とする。macOS と native NixOS の設定は Nix が所有する。Windows の GlazeWM 設定・補助スクリプトは Nix から生成した成果物を chezmoi が配布し、生成物を直接編集しない。共通 action/key を Windows 用に複製しない。
 
 ## 変更先の目安
 
-- `dot_*`: `~/.<name>/` へ直接展開。Unix は `dot_codex` / `dot_claude` のみ
+- `dot_*`: Windows の `~/.<name>/` へ直接展開
 - `shells/`, `cli/`, `terminals/`, `github/`, `ssh/`, `secret/`: Windows の `.chezmoiscripts` 経由で展開
 
 ## 変更時の必須確認

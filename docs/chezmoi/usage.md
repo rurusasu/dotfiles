@@ -14,14 +14,14 @@
 .\install.cmd
 ```
 
-chezmoi のパッケージは `nix/packages/catalog/core.nix` で管理し、`nix/packages/sets.nix` を公開入口にします。共通 Nix パッケージは `nix/home/common.nix` が利用し、Windows は生成済み winget manifest を使います。配布と設定の変更理由を分ける方針は [パッケージ管理](../nix/package-management.md#分割の理由と編集先) を参照してください。
+chezmoi は Windows 専用です。`nix/packages/catalog/core.nix` の Windows provider から生成した winget manifest で導入します。Unix の設定は Home Manager が管理し、`install.sh` は chezmoi を呼びません。配布と設定の責務は [パッケージ管理](../nix/package-management.md#分割の理由と編集先) を参照してください。
 
 ## クローン済み設定の更新
 
 chezmoi のソースがリポジトリ全体ではなく **`chezmoi/`** であることを確認してください。
 
-```bash
-# リポジトリのルート。PowerShell でも同じコマンドを使用可能。
+```powershell
+# Windows: クローン済みリポジトリのルート。
 chezmoi init --source "$PWD/chezmoi"
 chezmoi --source "$PWD/chezmoi" diff
 chezmoi --source "$PWD/chezmoi" apply
@@ -29,7 +29,7 @@ chezmoi --source "$PWD/chezmoi" apply
 
 `init` は設定テンプレートを再生成します。`apply` はファイルだけでなく対象の install/deploy スクリプトも実行するため、差分と対象を確認してから適用します。1Password・暗号化設定は [シークレット管理](./secrets.md) と [1Password](../1password/README.md) を参照してください。
 
-`dotf chezmoi`（`task chezmoi`）は現在 WSL/Windows の相互呼び出しを含むため、macOS / Windows のない Linux では上記の直接コマンドを使います。
+`dotf chezmoi`（`task chezmoi`）は Windows のみで実行し、WSL 側の chezmoi は呼びません。WSL / macOS / Linux の更新には `./install.sh` を使います。
 
 `chezmoi init rurusasu/dotfiles --source-path chezmoi` は使用しません。`--source-path` はサブディレクトリを値に取るオプションではありません。また、削除済みの `scripts/powershell/apply-chezmoi.ps1` を直接呼ぶ旧手順も使用しません。
 
