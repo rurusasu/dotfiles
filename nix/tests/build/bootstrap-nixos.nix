@@ -63,9 +63,23 @@ pkgs.testers.runNixOSTest {
       home-manager = {
         useGlobalPkgs = true;
         useUserPackages = true;
+        sharedModules = [ inputs.hermes-agent.homeManagerModules.default ];
         users.nixos = {
           home.stateVersion = "25.05";
           programs.home-manager.enable = true;
+          programs.hermes-agent.enable = true;
+          services.hermes-agent = {
+            enable = true;
+            gateway.enable = true;
+            settings.model.default = "openrouter/auto";
+            # Test-only credentials: the offline VM never makes provider calls.
+            hermesHomeFiles.".env" = ''
+              OPENROUTER_API_KEY=ci
+              API_SERVER_ENABLED=true
+              API_SERVER_KEY=dotfiles-ci-health-probe
+              API_SERVER_PORT=18642
+            '';
+          };
         };
       };
 
@@ -111,8 +125,9 @@ pkgs.testers.runNixOSTest {
     machine.succeed("chmod -R u+w /home/nixos/dotfiles && chown -R nixos:users /home/nixos/dotfiles")
     machine.succeed("install -d /home/nixos/ci-bin && install -m 0755 ${offlineNpm} /home/nixos/ci-bin/npm")
 
-    # The VM intentionally has no external DNS. Herdr's official installer is
-    # covered by the platform adapter tests; keep this bootstrap fixture offline.
+    # Keep registry access offline while exercising the native Hermes service.
+    machine.succeed("su - nixos -c 'systemctl --user start hermes-agent.service'")
+    machine.wait_until_succeeds("su - nixos -c 'systemctl --user is-active --quiet hermes-agent.service'")
     install = "su - nixos -c 'env DOTFILES_NPM_COMMAND=/home/nixos/ci-bin/npm DOTFILES_SKIP_FLAKE_UPDATE=1 DOTFILES_NIXOS_PREBUILT_SYSTEM=${nodes.machine.system.build.toplevel} DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_CHECKOUT_TARGET=/home/nixos/dotfiles /home/nixos/dotfiles/.github/e2e/run-bootstrap-acceptance.sh'"
     machine.succeed(install)
     machine.succeed("su - nixos -c 'bash /home/nixos/dotfiles/.github/e2e/start-bootstrap-runtime.sh'")

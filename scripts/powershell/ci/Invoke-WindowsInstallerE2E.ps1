@@ -430,7 +430,6 @@ $requiredCommands = @(
   @{ Name = 'agent-browser'; Arguments = @('--version') }
   @{ Name = 'herdr'; Arguments = @('--version') }
   @{ Name = 'pnpm'; Arguments = @('--version') }
-  @{ Name = 'gemini'; Arguments = @('--version') }
   @{ Name = 'op.exe'; Arguments = @('--version') }
 )
 foreach ($requiredCommand in $requiredCommands) {

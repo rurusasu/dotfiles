@@ -70,7 +70,7 @@ runs:
                 docs/*|README*|AGENTS.md|CLAUDE.md|*/README*|*/AGENTS.md|LICENSE*)
                   ;;
                 # Catalogs and shared keybindings also generate Windows artifacts.
-                flake.nix|flake.lock|nix/packages/*|nix/home/keybindings/*|nix/hosts/windows/*|windows/*)
+                flake.nix|flake.lock|nix/packages/*|nix/modules/*/windows-install.nix|nix/home/keybindings/*|nix/hosts/windows/*|windows/*)
                   nix=true
                   chezmoi=true
                   ;;
