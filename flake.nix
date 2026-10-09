@@ -44,6 +44,11 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    psscriptanalyzer = {
+      type = "file";
+      url = "https://www.powershellgallery.com/api/v2/package/PSScriptAnalyzer";
+      flake = false;
+    };
     hermes-agent = {
       # Keep the upstream package and its complete locked dependency graph intact.
       # Following this repository's nixpkgs changes derivations and cache identities.

@@ -24,23 +24,24 @@
 }
 
 Describe 'CI workflow configuration' {
-    It 'should provide pinned PSScriptAnalyzer in the image before nix fmt runs' {
+    It 'should provide latest PSScriptAnalyzer in the image before nix fmt runs' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
         $dockerfile = Get-Content -LiteralPath (Join-Path $script:repoRoot 'docker/bootstrap-ci-tools/Dockerfile') -Raw
 
         $workflow | Should -Match 'image:\s+\$\{\{ needs\.ci-tools\.outputs\.image \}\}'
-        $dockerfile | Should -Match 'Save-Module -Name PSScriptAnalyzer -RequiredVersion 1\.22\.0'
+        $dockerfile | Should -Match 'Save-Module -Name PSScriptAnalyzer -Repository PSGallery'
+        $dockerfile | Should -Not -Match 'Save-Module -Name PSScriptAnalyzer -RequiredVersion'
         $workflow | Should -Match 'nix fmt -- --fail-on-change'
     }
 
-    It 'should pin PSScriptAnalyzer used by treefmt powershell formatter' {
+    It 'should import provisioned PSScriptAnalyzer without version limits' {
         $treefmtToml = Get-Content -LiteralPath (Join-Path $script:repoRoot ".treefmt.toml") -Raw
         $treefmtNix = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/formatter.nix") -Raw
 
-        $treefmtToml | Should -Match 'RequiredVersion 1\.22\.0'
-        $treefmtToml | Should -Match 'Import-Module PSScriptAnalyzer -RequiredVersion 1\.22\.0'
-        $treefmtNix | Should -Match 'RequiredVersion 1\.22\.0'
-        $treefmtNix | Should -Match 'Import-Module \$env:DOTFILES_PSSA_MODULE -RequiredVersion 1\.22\.0'
+        $treefmtToml | Should -Match 'Import-Module PSScriptAnalyzer -Force'
+        $treefmtNix | Should -Match 'Import-Module \$env:DOTFILES_PSSA_MODULE -Force'
+        $treefmtToml | Should -Not -Match 'RequiredVersion'
+        $treefmtNix | Should -Not -Match 'RequiredVersion'
     }
 
     It 'should harden Windows PSScriptAnalyzer install against cache and gallery issues' {
@@ -50,7 +51,8 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match '\$env:PSModulePath = "\$moduleRoot;\$env:PSModulePath"'
         $workflow | Should -Match 'function Install-GalleryModuleArchive'
         $workflow | Should -Match 'https://www\.powershellgallery\.com/api/v2/package/\$Name/\$Version'
-        $workflow | Should -Match "Install-GalleryModuleArchive -Name PSScriptAnalyzer -Version '1\.22\.0'"
+        $workflow | Should -Match '(?m)^\s+Install-GalleryModuleArchive -Name PSScriptAnalyzer\s*$'
+        $workflow | Should -Match 'Find-Module -Name \$Name -Repository PSGallery'
         $workflow | Should -Match ([regex]::Escape('$_.RuleName -ne ''TypeNotFound'''))
         $workflow | Should -Not -Match 'Register-PSRepository -Default'
     }
@@ -634,7 +636,7 @@ esac
         $testJob | Should -Match 'PS_TEST_EXECUTABLE: \$\{\{ matrix\.executable \}\}'
         $testJob | Should -Match '& \$env:PS_TEST_EXECUTABLE -NoProfile -File'
         $testJob | Should -Match 'Documents\\\$env:PS_MODULE_DIRECTORY\\Modules'
-        $testJob | Should -Match 'WindowsPowerShell\\Modules'
+        $testJob | Should -Match 'PS_MODULE_DIRECTORY: \$\{\{ matrix\.module_directory \}\}'
         $testJob | Should -Match 'Install-GalleryModuleArchive -Name Pester\r?\n'
         $testJob | Should -Match 'Find-Module -Name \$Name -Repository PSGallery'
         $workflow | Should -Not -Match '(?m)^  test-windows-powershell:'

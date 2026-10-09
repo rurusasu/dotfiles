@@ -409,6 +409,18 @@
         "type": "github"
       }
     },
+    "psscriptanalyzer": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-wzOs2+G7ug1VSClciqd6f+R61ow0YV8EmE5o82qiAlg=",
+        "type": "file",
+        "url": "https://www.powershellgallery.com/api/v2/package/PSScriptAnalyzer"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://www.powershellgallery.com/api/v2/package/PSScriptAnalyzer"
+      }
+    },
     "pyproject-build-systems": {
       "inputs": {
         "nixpkgs": [
@@ -471,6 +483,7 @@
         "nixos-vscode-server": "nixos-vscode-server",
         "nixos-wsl": "nixos-wsl",
         "nixpkgs": "nixpkgs_3",
+        "psscriptanalyzer": "psscriptanalyzer",
         "systems": "systems_2",
         "treefmt-nix": "treefmt-nix_3"
       }

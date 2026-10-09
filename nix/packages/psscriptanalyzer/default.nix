@@ -1,26 +1,22 @@
 {
   lib,
   stdenvNoCC,
-  fetchurl,
+  src,
   unzip,
 }:
-stdenvNoCC.mkDerivation rec {
-  pname = "psscriptanalyzer";
-  version = "1.22.0";
-
-  # Official immutable release archive; no PowerShell Gallery access at runtime.
-  src = fetchurl {
-    url = "https://github.com/PowerShell/PSScriptAnalyzer/releases/download/${version}/PSScriptAnalyzer.${version}.nupkg";
-    hash = "sha256-cb+561jhnUtmL0SUp9VypyS2DgWIhI3P80GVoOCK4b4=";
-  };
+stdenvNoCC.mkDerivation {
+  name = "psscriptanalyzer";
+  # The version-free Gallery input is refreshed by nix flake update.
+  # flake.lock records its content hash; no runtime download is needed.
+  inherit src;
 
   nativeBuildInputs = [ unzip ];
   dontUnpack = true;
   dontBuild = true;
   installPhase = ''
     runHook preInstall
-    mkdir -p "$out/share/powershell/Modules/PSScriptAnalyzer/${version}"
-    unzip -q "$src" -d "$out/share/powershell/Modules/PSScriptAnalyzer/${version}"
+    mkdir -p "$out/share/powershell/Modules/PSScriptAnalyzer"
+    unzip -q "$src" -d "$out/share/powershell/Modules/PSScriptAnalyzer"
     runHook postInstall
   '';
 

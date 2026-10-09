@@ -85,9 +85,11 @@ function Get-Something {
 ### Nix (推奨)
 
 この repository の `nix fmt` / `checks.<system>.treefmt` は、PowerShell と
-PSScriptAnalyzer 1.22.0 を宣言済みの依存として使用します。
+PSScriptAnalyzer を宣言済みの依存として使用します。
 [`nix/packages/psscriptanalyzer/default.nix`](../../nix/packages/psscriptanalyzer/default.nix) が
-公式 release archive の SHA-256 を固定し、formatter は store の manifest を直接 import します。
+PowerShell Gallery の最新版入力を使い、formatter は store の manifest を直接 import します。
+コードにバージョンを固定せず、`flake.lock` に取得した内容の hash を記録します。
+最新版への更新は `nix flake update psscriptanalyzer` で行います。
 HOME の module cache に依存せず、整形中の PowerShell Gallery download はありません。
 
 PowerShell 自体を単独で使う場合:
@@ -106,14 +108,14 @@ nix run nixpkgs#powershell -- -c "Write-Host 'Hello'"
 ### standalone treefmt の事前準備
 
 `.treefmt.toml` を直接使う `treefmt` には、PowerShell の module search path に
-PSScriptAnalyzer **1.22.0** を事前に用意してください。未導入・異なる version のみの環境では
+PSScriptAnalyzer の最新安定版を事前に用意してください。未導入の環境では
 import error で失敗し、自動 download は行いません。次は明示的な setup 操作であり、
 formatter の実行には含まれません。
 
 ```powershell
 # PowerShell Gallery からインストール
-Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force
-Import-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Force
+Install-Module -Name PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force
+Import-Module PSScriptAnalyzer -Force
 ```
 
 ## 使用方法
@@ -134,7 +136,7 @@ Invoke-ScriptAnalyzer -Path "." -Recurse -Settings "PSScriptAnalyzerSettings.psd
 ## treefmt 設定
 
 `.treefmt.toml` と `nix/formatter.nix` の PowerShell 定義を同時に更新します。
-PSScriptAnalyzer は 1.22.0 に固定し、対象は `.ps1`、`.psm1`、`.psd1` です。
+PSScriptAnalyzer にバージョン制約は設けず、対象は `.ps1`、`.psm1`、`.psd1` です。
 formatter は UTF-8 として読み、CRLF に正規化してから、対象パス・非 ASCII 文字・
 既存 BOM をもとに出力形式を決めます。本文の差分だけでなく BOM 不足も書き込み条件です。
 

@@ -70,8 +70,9 @@ nix build .#checks.x86_64-linux.bootstrap-nixos-vm --no-link --no-write-lock-fil
 
 `nix flake check --no-build` は評価確認です。nix-unit assertion や実行テストの成功は、
 対象 check の build 結果で確認します。Nix が既存の成功済み出力を再利用する場合もあります。
-`powershell-formatter` と `treefmt` は、公式 PSScriptAnalyzer 1.22.0 release archive を
-hash 固定した Nix input として取得し、Nix store の module manifest を直接 import します。
+`powershell-formatter` と `treefmt` は、PowerShell Gallery の最新版 URL を Nix input として
+取得し、Nix store の module manifest を直接 import します。バージョンはコードに固定せず、
+`flake.lock` が取得内容を記録します。更新は `nix flake update psscriptanalyzer` で行います。
 依存 input の取得は build に先行し、formatter の実行中に `Install-Module` を呼びません。
 空の HOME でも同じ依存を使用します。`powershell-formatter` は未整形 fixture を整形し、
 CRLF・日本語の BOM と二度目の実行で byte / 更新時刻が変わらないことを検証します。
