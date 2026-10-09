@@ -378,7 +378,7 @@ fi
         ) -TimeoutSeconds 300 | Out-Null
 
         Invoke-WslChecked -Arguments @(
-            "-d", $DistroName, "-u", "nixos", "--",
+            "-d", $DistroName, "-u", "nixos", "--exec",
             "bash", "-lc",
             'GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic ''(( $+functions[cd] )) && functions cd'' | rg "__zoxide_z"'
         ) -TimeoutSeconds 300 | Out-Null
