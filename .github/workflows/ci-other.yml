@@ -290,8 +290,8 @@ jobs:
       - name: Cache PowerShell modules
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
-          path: ${{ matrix.module_path }}
-          key: ${{ runner.os }}-${{ matrix.runtime }}-psmodules-pester-5.6.1-pssa-1.22.0
+          path: ${{ matrix.module_path }}\PSScriptAnalyzer
+          key: ${{ runner.os }}-${{ matrix.runtime }}-psmodules-pssa-1.22.0
 
       - name: Install PowerShell modules
         shell: pwsh
@@ -318,6 +318,10 @@ jobs:
           function Install-GalleryModuleArchive {
             param([string]$Name, [string]$Version)
 
+            if (-not $Version) {
+              $Version = (Find-Module -Name $Name -Repository PSGallery -ErrorAction Stop).Version.ToString()
+            }
+
             $modulePath = Join-Path $moduleRoot "$Name\$Version"
             if (-not (Test-Path -LiteralPath (Join-Path $modulePath "$Name.psd1"))) {
               $packagePath = Join-Path $env:RUNNER_TEMP "$Name.$Version.zip"
@@ -339,7 +343,7 @@ jobs:
             Import-Module -Name $Name -RequiredVersion $Version -Force
           }
 
-          Install-GalleryModuleArchive -Name Pester -Version '5.6.1'
+          Install-GalleryModuleArchive -Name Pester
           Install-GalleryModuleArchive -Name PSScriptAnalyzer -Version '1.22.0'
         env:
           PS_MODULE_DIRECTORY: ${{ matrix.module_directory }}

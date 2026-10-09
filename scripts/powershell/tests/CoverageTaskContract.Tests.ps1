@@ -24,13 +24,12 @@ Describe 'PowerShell coverage task contract' {
         $runner | Should -Match 'if\s*\(\$coverage\s+-lt\s+\$MinimumCoverage\)'
     }
 
-    It 'should pin Pester to v5 and import the selected version' {
+    It 'should resolve the latest stable Pester without a version pin' {
         $runner = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/tests/Invoke-Tests.ps1') -Raw
 
-        $runner | Should -Match '\$pesterV5\s*=\s*Get-Module\s+-ListAvailable\s+-Name\s+Pester'
-        $runner | Should -Match '\$_.Version\s+-ge\s+\[Version\]"5\.0\.0"\s+-and\s+\$_.Version\s+-lt\s+\[Version\]"6\.0\.0"'
-        $runner | Should -Match 'Install-Module\s+-Name\s+Pester[\s\S]*-MinimumVersion\s+5\.0\.0[\s\S]*-MaximumVersion\s+5\.999\.999'
-        $runner | Should -Match 'Import-Module\s+-Name\s+Pester\s+-RequiredVersion\s+\$pesterV5\.Version'
+        $runner | Should -Match 'Find-Module\s+-Name\s+Pester\s+-Repository\s+PSGallery'
+        $runner | Should -Match 'Import-Module\s+-Name\s+\$pesterModule\.Path'
+        $runner | Should -Not -Match '-(?:Required|Minimum|Maximum)Version'
     }
 
     It 'should exercise the coverage-requested true path and emit coverage XML' {

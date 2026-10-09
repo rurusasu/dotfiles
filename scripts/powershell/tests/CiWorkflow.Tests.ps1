@@ -635,6 +635,8 @@ esac
         $testJob | Should -Match '& \$env:PS_TEST_EXECUTABLE -NoProfile -File'
         $testJob | Should -Match 'Documents\\\$env:PS_MODULE_DIRECTORY\\Modules'
         $testJob | Should -Match 'WindowsPowerShell\\Modules'
+        $testJob | Should -Match 'Install-GalleryModuleArchive -Name Pester\r?\n'
+        $testJob | Should -Match 'Find-Module -Name \$Name -Repository PSGallery'
         $workflow | Should -Not -Match '(?m)^  test-windows-powershell:'
     }
 
@@ -775,6 +777,8 @@ esac
         ([regex]::Matches($workflow, '(?m)^  test:\s*$')).Count | Should -Be 0
         Assert-UniqueChezmoiPathOccurrence -Workflow $workflow -LintJob $lintJob
         $lintJob | Should -Match $pesterInvocation
+        $lintJob | Should -Match 'Install-Module -Name Pester -Scope CurrentUser -Force -Repository PSGallery\r?\n'
+        $lintJob | Should -Not -Match 'psmodules-pester-'
         $canonicalInvocation = '.\tests\Invoke-Tests.ps1 -Path .\tests\chezmoi -MinimumCoverage 0 -OutputFile chezmoi-test-results.xml'
         foreach ($alternateInvocation in @(
                 "      - run: >-`r`n          Invoke-Pester -Path .\tests\CHEZMOI",

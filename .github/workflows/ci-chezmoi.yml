@@ -89,12 +89,6 @@ jobs:
             throw "AutoHotkey v2 UIAccess behavioral self-tests failed (exit $LASTEXITCODE)"
           }
 
-      - name: Cache PowerShell modules
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
-        with:
-          path: ~\Documents\PowerShell\Modules
-          key: ${{ runner.os }}-psmodules-pester-5.6.1
-
       - name: Install Pester
         shell: pwsh
         run: |
@@ -104,9 +98,7 @@ jobs:
             Register-PSRepository -Default
           }
           Set-PSRepository PSGallery -InstallationPolicy Trusted
-          if (-not (Get-Module -ListAvailable Pester | Where-Object Version -eq '5.6.1')) {
-            Install-Module -Name Pester -RequiredVersion 5.6.1 -Scope CurrentUser -Force -Repository PSGallery
-          }
+          Install-Module -Name Pester -Scope CurrentUser -Force -Repository PSGallery
 
       - name: Validate chezmoi templates
         shell: pwsh
