@@ -399,6 +399,10 @@ Describe 'CI workflow configuration' {
         $script | Should -Match '-TimeoutSeconds \$readinessTimeoutSeconds'
         $script | Should -Match 'chmod 600 /home/nixos/\.hermes/\.env'
         $script | Should -Match 'preserve-existing-hermes-state'
+        $fixtureIndex = $script.IndexOf('install -d -m 700 /home/nixos/.hermes/memories')
+        $firstSwitchIndex = $script.IndexOf('bash ''$postInstallWslPath'' --sync-mode repo')
+        $fixtureIndex | Should -BeGreaterOrEqual 0
+        $firstSwitchIndex | Should -BeGreaterThan $fixtureIndex
         $script | Should -Match 'stat -c .*\.hermes/\.env'
         $script | Should -Not -Match 'systemctl --user set-environment OPENROUTER_API_KEY=ci'
         $script | Should -Not -Match 'systemctl --user restart hermes-agent\.service'

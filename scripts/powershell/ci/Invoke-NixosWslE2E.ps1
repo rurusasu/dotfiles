@@ -312,6 +312,15 @@ try {
                 "bash", "-lc", "bash '$ciNixConfigWslPath' --wsl"
             ) -TimeoutSeconds 60 | Out-Null
         }
+        # Hermes is enabled by the first switch and snapshots its API settings
+        # at startup. Seed existing state before either Home Manager activation
+        # so the gateway reads the fixture and both switches preserve user data.
+        # The readiness fixture does not make model-provider requests.
+        Invoke-WslChecked -Arguments @(
+            "-d", $DistroName, "-u", "nixos", "--",
+            "bash", "-lc",
+            "install -d -m 700 /home/nixos/.hermes/memories && printf '%s\\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' > /home/nixos/.hermes/.env && chmod 600 /home/nixos/.hermes/.env && printf '%s\\n' 'model:' '  default: openrouter/auto' > /home/nixos/.hermes/config.yaml && chmod 600 /home/nixos/.hermes/config.yaml && printf '%s\\n' 'preserve-existing-hermes-state' > /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt && chmod 600 /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
+        ) -TimeoutSeconds 60 | Out-Null
         Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "root", "--",
             "bash", "-lc", "bash '$postInstallWslPath' --sync-mode repo --sync-back none --state-version 25.05 --skip-flake-update"
@@ -383,7 +392,7 @@ fi
             'GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic ''(( $+functions[cd] )) && functions cd'' | rg "__zoxide_z"'
         ) -TimeoutSeconds 300 | Out-Null
 
-        Write-CiSection "Enable Hermes Agent through Nix"
+        Write-CiSection "Verify Hermes Agent through Nix"
         try {
             # Hermes' default package is large enough to trigger memory
             # pressure on the Windows runner while Nix evaluates/builds it.
@@ -394,17 +403,6 @@ fi
                 "bash", "-lc",
                 'if ! swapon --show=NAME --noheadings | grep -q .; then dd if=/dev/zero of=/swapfile bs=1M count=8192 status=none && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile; fi && free -h'
             ) -TimeoutSeconds 300 | Out-Null
-
-            # Seed the disposable distro with pre-existing Hermes state before
-            # Home Manager activation. This proves activation preserves user
-            # data and that the gateway can read a private provider env file.
-            # The readiness endpoint also requires an explicitly configured
-            # model; this fixture does not make model-provider requests.
-            Invoke-WslChecked -Arguments @(
-                "-d", $DistroName, "-u", "nixos", "--",
-                "bash", "-lc",
-                "install -d -m 700 /home/nixos/.hermes/memories && printf '%s\\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' > /home/nixos/.hermes/.env && chmod 600 /home/nixos/.hermes/.env && printf '%s\\n' 'model:' '  default: openrouter/auto' > /home/nixos/.hermes/config.yaml && chmod 600 /home/nixos/.hermes/config.yaml && printf '%s\\n' 'preserve-existing-hermes-state' > /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt && chmod 600 /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
-            ) -TimeoutSeconds 60 | Out-Null
 
             $rebuildContext = [SetupContext]::new($repoRoot)
             $rebuildContext.DistroName = $DistroName
