@@ -66,7 +66,7 @@ dotfiles/
 
 | Platform    | Entrypoint     | System layer                             | User layer             | Runtime                        |
 | ----------- | -------------- | ---------------------------------------- | ---------------------- | ------------------------------ |
-| Windows     | `install.cmd`  | PowerShell handlers, winget, NixOS-WSL   | Home Manager + chezmoi | Docker Desktop                 |
+| Windows     | `install.cmd`  | PowerShell handlers, winget, NixOS-WSL   | Home Manager + chezmoi | NixOS native Hermes            |
 | macOS ARM64 | `./install.sh` | nix-darwin + nix-homebrew                | Home Manager + chezmoi | Docker Desktop / native Hermes |
 | Other Linux | `./install.sh` | none                                     | Home Manager + chezmoi | not managed                    |
 | NixOS       | `./install.sh` | NixOS generation + host hardware profile | Home Manager + chezmoi | rootful Docker                 |
@@ -113,6 +113,14 @@ OS 固有の Home Manager 設定とパッケージ選択は `hosts/` が所有�
 | Windows / AI 設定       | chezmoi                 | Windows の設定と全 OS の `.codex/` / `.claude/` を配布        |
 | 受入検証                | platform verifier       | runtime acceptance と drift を検出                            |
 
+WSL の Git 設定は、ユーザー設定を Home Manager、共有 checkout の信頼設定を
+NixOS `programs.git.config.safe.directory` が所有します。再構築 wrapper はローカルの
+`--flake` から canonical path を求め、今回の checkout 一件だけを宣言に渡します。
+system trust は全ユーザーに適用されるため、親ディレクトリ、wildcard、過去の checkout は追加しません。
+installer は `~/.gitconfig` や XDG Git config を追記・コピーせず、mutable include も作りません。
+初回 postinstall の更新・構築は明示的な `path:` provider、適用後は Git provider を使用します。
+checkout を移動した場合も、新しい信頼設定の適用には明示的な初回 `path:` 構築が必要です。
+
 macOS の Docker Desktop と CLI artifacts は公式 Homebrew `docker-desktop` Cask が所有します。
 installer は `/Applications/Docker.app` への正確なリンクだけを管理し、他の app や Nix store を
 指すリンク、既存ファイルとの衝突では停止します。旧 Nix Docker Desktop の自動停止・リンク移行は
@@ -124,8 +132,12 @@ installer は `/Applications/Docker.app` への正確なリンクだけを管理
 On macOS and Linux/WSL, the pinned `hermes-agent` flake input and Home Manager
 module manage the Hermes CLI and gateway as a native user service: systemd on
 Linux/WSL and launchd on macOS. On Windows, Hermes is managed through the
-configured NixOS WSL distribution; the Windows installer no longer starts a
-Docker-managed Hermes Agent. Native state remains at `~/.hermes`.
+configured NixOS WSL distribution. Nix/Home Manager installs it directly in
+NixOS, and `NixRebuildHandler` validates the Linux user service and CLI after
+rebuild. No Hermes package or separate Hermes handler is installed on Windows.
+Docker Desktop integration is opt-in through `EnableDockerDesktopIntegration`;
+NixOS uses its native Docker engine for container workloads independently.
+Native state remains at `~/.hermes` in the Linux user's home.
 
 `docker/hermes-service/compose.yml` provides only Chromium, Browser MCP, and
 X API MCP sidecars. Browser state is bind-mounted from `~/.hermes/.browser`
@@ -257,24 +269,23 @@ $vhdPath = $context.SharedData["VhdPath"]
 
 ### ハンドラー実行順序
 
-| Order | Phase | Admin | ハンドラー      | ソースファイル                                                                            | 説明                                              |
-| ----- | ----- | ----- | --------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| 5     | 1     | No    | Winget          | [Handler.Winget.ps1](../scripts/powershell/handlers/Handler.Winget.ps1)                   | winget パッケージ管理                             |
-| 5     | 2     | Yes   | WslInstall      | [Handler.WslInstall.ps1](../scripts/powershell/handlers/Handler.WslInstall.ps1)           | WSL コンポーネントのインストール                  |
-| 6     | 1     | No    | Npm             | [Handler.Npm.ps1](../scripts/powershell/handlers/Handler.Npm.ps1)                         | npm グローバルパッケージ管理                      |
-| 7     | 1     | No    | Pnpm            | [Handler.Pnpm.ps1](../scripts/powershell/handlers/Handler.Pnpm.ps1)                       | pnpm グローバルパッケージ管理                     |
-| 8     | 1     | No    | Bun             | [Handler.Bun.ps1](../scripts/powershell/handlers/Handler.Bun.ps1)                         | Bun シンボリックリンク作成                        |
-| 9     | 1     | No    | OnePasswordCli  | [Handler.OnePasswordCli.ps1](../scripts/powershell/handlers/Handler.OnePasswordCli.ps1)   | 1Password CLI op.exe shim 作成                    |
-| 10    | 2     | No    | Chezmoi         | [Handler.Chezmoi.ps1](../scripts/powershell/handlers/Handler.Chezmoi.ps1)                 | chezmoi dotfiles 適用                             |
-| 17    | 2     | No    | NixOSWSL        | [Handler.NixOSWSL.ps1](../scripts/powershell/handlers/Handler.NixOSWSL.ps1)               | NixOS-WSL インストール                            |
-| 18    | 2     | No    | Docker          | [Handler.Docker.ps1](../scripts/powershell/handlers/Handler.Docker.ps1)                   | Docker Desktop WSL 連携                           |
-| 20    | 2     | No    | WslConfig       | [Handler.WslConfig.ps1](../scripts/powershell/handlers/Handler.WslConfig.ps1)             | .wslconfig 適用                                   |
-| 21    | 2     | Yes   | VhdManager      | [Handler.VhdManager.ps1](../scripts/powershell/handlers/Handler.VhdManager.ps1)           | WSL VHD サイズ拡張                                |
-| 40    | 2     | No    | VscodeServer    | [Handler.VscodeServer.ps1](../scripts/powershell/handlers/Handler.VscodeServer.ps1)       | VS Code Server キャッシュクリア                   |
-| 55    | 2     | No    | NixRebuild      | [Handler.NixRebuild.ps1](../scripts/powershell/handlers/Handler.NixRebuild.ps1)           | nixos-rebuild switch の実行                       |
-| 56    | 2     | No    | HermesAgent     | [Handler.HermesAgent.ps1](../scripts/powershell/handlers/Handler.HermesAgent.ps1)         | NixOS WSL の Hermes native service 適用結果を検証 |
-| 57    | 2     | No    | Plane           | [Handler.Plane.ps1](../scripts/powershell/handlers/Handler.Plane.ps1)                     | Plane Docker Compose セットアップ                 |
-| 58    | 2     | No    | PlaneGithubSync | [Handler.PlaneGithubSync.ps1](../scripts/powershell/handlers/Handler.PlaneGithubSync.ps1) | Plane / GitHub Issues 同期タスク登録              |
+| Order | Phase | Admin | ハンドラー      | ソースファイル                                                                            | 説明                                 |
+| ----- | ----- | ----- | --------------- | ----------------------------------------------------------------------------------------- | ------------------------------------ |
+| 5     | 1     | No    | Winget          | [Handler.Winget.ps1](../scripts/powershell/handlers/Handler.Winget.ps1)                   | winget パッケージ管理                |
+| 5     | 2     | Yes   | WslInstall      | [Handler.WslInstall.ps1](../scripts/powershell/handlers/Handler.WslInstall.ps1)           | WSL コンポーネントのインストール     |
+| 6     | 1     | No    | Npm             | [Handler.Npm.ps1](../scripts/powershell/handlers/Handler.Npm.ps1)                         | npm グローバルパッケージ管理         |
+| 7     | 1     | No    | Pnpm            | [Handler.Pnpm.ps1](../scripts/powershell/handlers/Handler.Pnpm.ps1)                       | pnpm グローバルパッケージ管理        |
+| 8     | 1     | No    | Bun             | [Handler.Bun.ps1](../scripts/powershell/handlers/Handler.Bun.ps1)                         | Bun シンボリックリンク作成           |
+| 9     | 1     | No    | OnePasswordCli  | [Handler.OnePasswordCli.ps1](../scripts/powershell/handlers/Handler.OnePasswordCli.ps1)   | 1Password CLI op.exe shim 作成       |
+| 10    | 2     | No    | Chezmoi         | [Handler.Chezmoi.ps1](../scripts/powershell/handlers/Handler.Chezmoi.ps1)                 | chezmoi dotfiles 適用                |
+| 17    | 2     | No    | NixOSWSL        | [Handler.NixOSWSL.ps1](../scripts/powershell/handlers/Handler.NixOSWSL.ps1)               | NixOS-WSL インストール               |
+| 18    | 2     | No    | Docker          | [Handler.Docker.ps1](../scripts/powershell/handlers/Handler.Docker.ps1)                   | Docker Desktop WSL 連携              |
+| 20    | 2     | No    | WslConfig       | [Handler.WslConfig.ps1](../scripts/powershell/handlers/Handler.WslConfig.ps1)             | .wslconfig 適用                      |
+| 21    | 2     | Yes   | VhdManager      | [Handler.VhdManager.ps1](../scripts/powershell/handlers/Handler.VhdManager.ps1)           | WSL VHD サイズ拡張                   |
+| 40    | 2     | No    | VscodeServer    | [Handler.VscodeServer.ps1](../scripts/powershell/handlers/Handler.VscodeServer.ps1)       | VS Code Server キャッシュクリア      |
+| 55    | 2     | No    | NixRebuild      | [Handler.NixRebuild.ps1](../scripts/powershell/handlers/Handler.NixRebuild.ps1)           | nixos-rebuild switch の実行          |
+| 57    | 2     | No    | Plane           | [Handler.Plane.ps1](../scripts/powershell/handlers/Handler.Plane.ps1)                     | Plane Docker Compose セットアップ    |
+| 58    | 2     | No    | PlaneGithubSync | [Handler.PlaneGithubSync.ps1](../scripts/powershell/handlers/Handler.PlaneGithubSync.ps1) | Plane / GitHub Issues 同期タスク登録 |
 
 **重要**: Order は依存関係を優先して設定する。Docker だけで完結するハンドラーは Docker の後、NixOS に依存するハンドラーは NixOSWSL/NixRebuild の後に置く。MLflow は独立した Docker service であり、Nix/Home Manager 管理の native Hermes Agent とは別に扱う。
 

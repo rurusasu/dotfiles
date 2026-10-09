@@ -69,6 +69,26 @@ Describe 'Test-DotfilesEnvironment' {
         { Test-DotfilesEnvironment } | Should -Throw '*Missing command: nvim*'
     }
 
+    It 'should verify native Hermes in the configured NixOS distro without Windows Hermes or Docker' {
+        $result = Test-DotfilesEnvironment -DistroName 'CustomNixOS'
+
+        $result.Success | Should -BeTrue
+        $script:commandLookups | Should -Not -Contain 'hermes'
+        $script:commandLookups | Should -Not -Contain 'docker'
+        $script:dockerCalls.Count | Should -Be 0
+        ($script:wslCalls | ForEach-Object { $_ -join ' ' }) | Should -Contain '--status'
+        ($script:wslCalls | Where-Object { $_ -contains 'CustomNixOS' } | ForEach-Object { $_ -join ' ' }) | Should -Match 'test -e /etc/NIXOS.*command -v hermes.*hermes-agent.service'
+    }
+
+    It 'should reject completion if NixOS or its native Hermes service is unavailable' {
+        Mock Invoke-Wsl {
+            $global:LASTEXITCODE = if ($Arguments -contains '-d') { 3 } else { 0 }
+        }
+
+        { Test-DotfilesEnvironment -DistroName 'NixOS' } | Should -Throw '*NixOS WSL native Hermes acceptance*'
+        $script:dockerCalls.Count | Should -Be 0
+    }
+
     It 'should fail when an acceptance command exits nonzero' {
         Mock Invoke-Docker {
             $global:LASTEXITCODE = if ($Arguments -contains 'info') { 1 } else { 0 }
@@ -79,10 +99,11 @@ Describe 'Test-DotfilesEnvironment' {
 
     It 'should run acceptance before printing final completion' {
         $content = Get-Content -LiteralPath $script:installTarget -Raw
-        $acceptanceIndex = $content.IndexOf('Test-DotfilesEnvironment -Docker -Runtime')
+        $acceptanceIndex = $content.IndexOf('Test-DotfilesEnvironment -Docker:$dockerDesktopRequested -Runtime:$dockerDesktopRequested')
         $completionIndex = $content.IndexOf('Setup Complete!')
 
         $acceptanceIndex | Should -BeGreaterThan -1
         $completionIndex | Should -BeGreaterThan $acceptanceIndex
+        $content | Should -Match '\$dockerDesktopRequested = \$Options\["EnableDockerDesktopIntegration"\] -eq \$true'
     }
 }

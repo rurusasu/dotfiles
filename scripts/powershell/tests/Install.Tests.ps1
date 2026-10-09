@@ -99,6 +99,40 @@ class TestHandler : SetupHandlerBase {
 
         $result | Should -HaveCount 0
     }
+
+    It 'should support instantiating preloaded handlers without loading their files twice' {
+        $preloadedPath = Join-Path $TestDrive 'preloaded'
+        New-Item -ItemType Directory -Path $preloadedPath | Out-Null
+        Copy-Item -LiteralPath (Join-Path $testHandlersPath 'Handler.Test.ps1') -Destination $preloadedPath
+        . (Join-Path $preloadedPath 'Handler.Test.ps1')
+        $result = Get-SetupHandler -HandlersPath $preloadedPath -SkipLoad
+
+        $result | Should -HaveCount 1
+        $result[0].Name | Should -Be 'Test'
+    }
+
+    It 'should keep handler helpers available when preloaded in the caller scope' {
+        $fixturePath = Join-Path $TestDrive 'scoped-helpers'
+        New-Item -ItemType Directory -Path $fixturePath | Out-Null
+        $fixture = @'
+function Get-ScopedHelperResult { return 'helper available' }
+class ScopedHelperHandler : SetupHandlerBase {
+    ScopedHelperHandler() { $this.Name = 'ScopedHelper' }
+    [bool] CanApply([SetupContext]$ctx) { return $true }
+    [SetupResult] Apply([SetupContext]$ctx) {
+        return $this.CreateSuccessResult((Get-ScopedHelperResult))
+    }
+}
+'@
+        $fixtureFile = Join-Path $fixturePath 'Handler.ScopedHelper.ps1'
+        Set-Content -LiteralPath $fixtureFile -Value $fixture
+        . $fixtureFile
+        $loaded = Get-SetupHandler -HandlersPath $fixturePath -SkipLoad
+        $result = $loaded[0].Apply([SetupContext]::new($TestDrive))
+
+        $result.Success | Should -BeTrue
+        $result.Message | Should -Be 'helper available'
+    }
 }
 
 Describe 'Select-SetupHandler' {

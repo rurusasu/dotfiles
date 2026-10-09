@@ -84,10 +84,10 @@ class NixRebuildHandler : SetupHandlerBase {
             $this.Log("pre-commit hooks をインストールしています...")
 
             # core.hooksPath が設定されていると pre-commit install が拒否するため
-            # local/global/system すべてのレベルで解除する
+            # リポジトリの local 設定だけを解除する。global は Home Manager が所有する。
             Invoke-Wsl -Arguments @(
                 "-d", $distroName, "-u", $this.NixOsUser, "--",
-                "bash", "-lc", "cd ~/.dotfiles && git config --unset-all core.hooksPath 2>/dev/null; git config --global --unset-all core.hooksPath 2>/dev/null; true"
+                "bash", "-lc", "cd ~/.dotfiles && git config --unset-all core.hooksPath 2>/dev/null; true"
             )
 
             $output = Invoke-Wsl -Arguments @(
@@ -394,7 +394,9 @@ class NixRebuildHandler : SetupHandlerBase {
 
             if (-not $this.IsTruthy($ctx.GetOption("SkipFlakeUpdate", $false))) {
                 $this.Log("nix flake update を実行しています...")
-                $flakeUpdateCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && nix flake update 2>&1"
+                $flakePath = "$($this.NixOsHome)/.dotfiles"
+                $quotedFlakePath = $this.QuoteShellArg($flakePath)
+                $flakeUpdateCommand = "cd $quotedFlakePath && source scripts/sh/install-common.sh && dotfiles_update_flake . 2>&1"
                 $flakeUpdateOutput = Invoke-Wsl -Arguments @("-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", $flakeUpdateCommand)
                 $flakeUpdateExitCode = $LASTEXITCODE
                 $flakeUpdateErrors = [System.Collections.Generic.List[string]]::new()
@@ -420,21 +422,12 @@ class NixRebuildHandler : SetupHandlerBase {
 
             $this.Log("nixos-rebuild switch を実行しています...")
 
-            # /mnt/ 配下の dotfiles は Windows 側オーナーのため CVE-2022-24765 の ownership チェックで
-            # nix (libgit2) がフレークの読み込みを拒否する。root の gitconfig で回避する。
-            # git が利用できない場合は直接 gitconfig を書き込む。
-            # 既存エントリがなければ追記（>> で上書き回避, 冪等）。
-            Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", "root", "--",
-                "bash", "-lc", "grep -qs 'directory = \*' /root/.gitconfig 2>/dev/null || printf '[safe]\n\tdirectory = *\n' >> /root/.gitconfig"
-            ) | Out-Null
-
             # 実ユーザーの identity を wrapper に渡して nixos-rebuild switch を実行する。
             # 2>&1 で stderr も捕捉しエラー詳細をログに残す。
             # This repository pins its binary-cache URL and signing key in flake.nix.
             # Accept that checked-in flake config only for this rebuild invocation;
             # do not persist trust in the user's or machine's Nix configuration.
-            $rebuildCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && DOTFILES_USER=$($this.QuoteShellArg($this.NixOsUser)) DOTFILES_HOME=$($this.QuoteShellArg($this.NixOsHome)) DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure 2>&1"
+            $rebuildCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && NIX_CONFIG='experimental-features = nix-command flakes' DOTFILES_USER=$($this.QuoteShellArg($this.NixOsUser)) DOTFILES_HOME=$($this.QuoteShellArg($this.NixOsHome)) DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure 2>&1"
             $nixRebuildTimeoutSeconds = [int]$ctx.GetOption("NixRebuildTimeoutSeconds", 5400)
             $output = Invoke-Wsl -TimeoutSeconds $nixRebuildTimeoutSeconds -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", $rebuildCommand)
             $nixosExitCode = $LASTEXITCODE
@@ -469,6 +462,16 @@ class NixRebuildHandler : SetupHandlerBase {
 
             # pre-commit hooks をインストール
             $this.InstallPreCommitHooks($distroName)
+
+            # Home Manager installs Hermes natively in NixOS. Validate it as
+            # the resolved Linux user, without a Windows Hermes installation.
+            $hermesCommand = 'export XDG_RUNTIME_DIR=/run/user/$(id -u); export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus; systemctl --user is-active --quiet hermes-agent.service && command -v hermes >/dev/null && hermes --version'
+            $hermesOutput = Invoke-Wsl -TimeoutSeconds 60 -Arguments @(
+                '-d', $distroName, '-u', $this.NixOsUser, '--', 'bash', '-lc', $hermesCommand
+            )
+            if ($LASTEXITCODE -ne 0) {
+                throw "NixOS 上の Hermes service/CLI 検証に失敗しました: $($hermesOutput -join '; ')"
+            }
 
             $ctx.Options["NixRebuildApplied"] = $true
             return $this.CreateSuccessResult("NixOS 設定を適用しました")

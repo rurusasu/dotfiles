@@ -15,6 +15,19 @@ let
   defaultConfig = mkWsl.config;
 in
 {
+  testWslOwnsExactCheckoutTrustInSystemGit = {
+    expr = {
+      enabled = defaultConfig.programs.git.enable;
+      directories = builtins.concatMap (
+        gitConfig: gitConfig.safe.directory or [ ]
+      ) defaultConfig.programs.git.config;
+    };
+    expected = {
+      enabled = true;
+      directories = [ "/home/nixos/.dotfiles" ];
+    };
+  };
+
   testWslConfiguresZshAndUsesOnePasswordAgent = {
     expr = {
       enabled = defaultConfig.programs.zsh.enable;
@@ -35,6 +48,19 @@ in
   testWslHermesEnablesUserLinger = {
     expr = defaultConfig.users.users.nixos.linger;
     expected = true;
+  };
+
+  testWslUsesNativeInteropWithoutDockerDesktop = {
+    expr = {
+      registerInterop = defaultConfig.wsl.interop.register;
+      registrations = builtins.attrNames defaultConfig.boot.binfmt.registrations;
+      dockerDesktop = defaultConfig.wsl.docker-desktop.enable;
+    };
+    expected = {
+      registerInterop = false;
+      registrations = [ ];
+      dockerDesktop = false;
+    };
   };
 
 }

@@ -284,7 +284,15 @@ script を成功させるだけのテストは、実 installer boundary の代�
 | VscodeServer | [Handler.VscodeServer.ps1](../../../scripts/powershell/handlers/Handler.VscodeServer.ps1) | [Handler.VscodeServer.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.VscodeServer.Tests.ps1) | VS Code Server 管理    |
 | NixOSWSL     | [Handler.NixOSWSL.ps1](../../../scripts/powershell/handlers/Handler.NixOSWSL.ps1)         | [Handler.NixOSWSL.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.NixOSWSL.Tests.ps1)         | NixOS-WSL インストール |
 | NixRebuild   | [Handler.NixRebuild.ps1](../../../scripts/powershell/handlers/Handler.NixRebuild.ps1)     | [Handler.NixRebuild.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.NixRebuild.Tests.ps1)     | NixOS 設定適用         |
-| HermesAgent  | [Handler.HermesAgent.ps1](../../../scripts/powershell/handlers/Handler.HermesAgent.ps1)   | [Handler.HermesAgent.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.HermesAgent.Tests.ps1)   | NixOS WSL 検証         |
+
+`NixRebuild` は NixOS 内に直接導入された Hermes service/CLI も、解決した Linux user で検証する。
+Windows 側に Hermes 専用ハンドラーは置かない。`Docker` の WSL 連携は
+`EnableDockerDesktopIntegration = $true` を明示した場合だけ実行し、NixOS の必須処理にしない。
+Docker VHDX 拡張は `ExpandDockerVhd = $true` で個別に選択する。
+
+ハンドラーファイルの helper function をクラスメソッドが使う場合、entrypoint の script scope
+で dot-source してから `Get-SetupHandler -SkipLoad` で生成する。loader の function scope
+だけで読み込むと、loader から戻った後に helper が見つからなくなる。
 
 ### 関連ドキュメント
 

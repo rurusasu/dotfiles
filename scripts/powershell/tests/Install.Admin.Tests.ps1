@@ -97,6 +97,11 @@ Describe 'install.admin.ps1' {
         $content | Should -Match '(?s)if \(\$CheckOnly\) \{.*\$handler\.CanApply\(\$context\).*return \(\$applicableCount -gt 0\).*\$results = Invoke-SetupHandler'
     }
 
+    It 'should preload handler files in the admin script scope before instantiating them' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match '(?s)\$handlerFiles\s*=.*Get-ChildItem.*Handler\.\*\.ps1.*foreach \(\$file in \$handlerFiles\)\s*\{\s*\. \$file\.FullName\s*\}.*Get-SetupHandler\s+-HandlersPath \$handlersPath\s+-SkipLoad'
+    }
+
     It 'should only pause the elevated child when NoPause is not requested' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '(?s)\[switch\]\$NoPause.*if \(\$LogFile -and -not \$NoPause\).*Read-Host'
@@ -114,5 +119,16 @@ Describe 'install.admin.ps1' {
         $content | Should -Match 'wslInstallRequiresRestart'
         $content | Should -Match 'WSL was installed and requires a Windows restart'
         $content | Should -Match '(?s)if \(\$wslInstallRequiresRestart\).*elseif \(-not \(Test-WslAvailable\)\).*else.*Invoke-Wsl --set-default'
+    }
+
+    It 'should inspect Docker VHD virtual size when Hyper-V is unavailable' {
+        $content = Get-Content -LiteralPath (Join-Path (Split-Path -Parent $script:target) '..\..\windows\expand-docker-vhd.ps1') -Raw
+        $content | Should -Match 'Get-DiskpartVhdxVirtualSizeGB'
+        $content | Should -Match '(?s)Hyper-V module unavailable.*Get-DiskpartVhdxVirtualSizeGB\s+-Path \$vhdxPath'
+    }
+
+    It 'should require an explicit option before expanding Docker Desktop storage' {
+        $content = Get-Content -LiteralPath $script:target -Raw
+        $content | Should -Match '\$effectiveOptions\["ExpandDockerVhd"\] -eq \$true -and'
     }
 }

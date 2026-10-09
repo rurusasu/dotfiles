@@ -64,7 +64,11 @@ $context.Options["SyncMode"] = $SyncMode
 $context.Options["SyncBack"] = $SyncBack
 
 $handlersPath = Join-Path $PSScriptRoot "handlers"
-$allHandlers = Get-SetupHandler -HandlersPath $handlersPath
+$handlerFiles = @(Get-ChildItem -Path $handlersPath -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue | Sort-Object -Property Name)
+foreach ($file in $handlerFiles) {
+    . $file.FullName
+}
+$allHandlers = Get-SetupHandler -HandlersPath $handlersPath -SkipLoad
 $allHandlers = Select-SetupHandler -Handlers $allHandlers
 
 # オプショナルサービスの一括同意プロンプト（全 Phase 対象）

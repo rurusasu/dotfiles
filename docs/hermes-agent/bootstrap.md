@@ -97,8 +97,10 @@ install.sh -> OS installer -> task hermes:bootstrap -> Nix/Home Manager runtime 
 install.cmd -> NixRebuild -> NixOS WSL runtime + native sync
 ```
 
-The Windows `HermesAgentHandler` verifies that a successful NixOS WSL rebuild
-took ownership. If WSL is absent or the rebuild failed, installation fails
+The Windows `NixRebuildHandler` applies Nix/Home Manager in NixOS WSL and
+verifies its native Hermes service and CLI as the configured Linux user.
+Hermes is installed only inside NixOS; Windows has no separate Hermes handler.
+If the rebuild or native service validation fails, installation fails
 instead of falling back to Docker. An old Docker volume is not copied, modified,
 or deleted automatically; follow the one-time migration instructions only if
 you explicitly need data from it.

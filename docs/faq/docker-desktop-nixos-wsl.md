@@ -60,5 +60,6 @@ export DOCKER_HOST=unix:///mnt/wsl/shared-docker/docker.sock
 ## install.cmd への影響
 
 - `Handler.Docker` は Docker Desktop の WSL 統合設定を変更しない（API が存在しないため）
+- Windows installer は Docker Desktop をインストールしない。NixOS-WSL と Hermes は Docker に依存せず直接実行する。既に導入済みの Docker Desktop の連携処理は `EnableDockerDesktopIntegration = $true` を明示した場合だけ実行する。NixOS 内のネイティブ dockerd は既存の開発用コンテナ向けであり、Hermes の実行基盤ではない。
 - `Handler.WslConfig` は `wsl --terminate` を使用（`--shutdown` は Docker Desktop の WSL ディストリビューションを壊す可能性があるため廃止）
 - NixOS ディストリビューションが消えた場合、install.cmd を再実行すれば `Handler.NixOSWSL` が自動的に再インストールする

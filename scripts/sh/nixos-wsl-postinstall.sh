@@ -362,28 +362,11 @@ install_codex_for_user() {
 }
 
 if [[ $SKIP_FLAKE_UPDATE -eq 0 ]]; then
-  # Update flake inputs so first install uses the latest Nix sources.
-  dotfiles_update_flake "$TARGET_DIR"
+  # Bootstrap uses the same explicit path provider as the initial rebuild.
+  # The target system's declarative Git trust does not exist until activation.
+  dotfiles_update_flake "$TARGET_DIR" path
 else
   echo "Skipping flake update."
-fi
-
-# The release rootfs can predate the target nixpkgs systemd. Re-executing the
-# target nixos-rebuild before activation would use its --output=cat option
-# with the still-installed systemd-run (the option was added in systemd 261).
-# Keep the release's matching rebuild/systemd pair for this bootstrap switch.
-# --fast is also understood by legacy Bash rebuilds; on rebuild-ng it means
-# --no-reexec. It does not skip the system build or systemd-wrapped activation.
-# Legacy Bash also keeps installed Nix instead of bootstrapping a new version.
-# Unsupported Nix/evaluation errors still fail; profile and post-switch checks
-# remain in place.
-# Probe failure is fatal; only a successful help response lacking the option
-# selects compatibility. Re-check each run so upgraded systems use the default.
-bootstrap_rebuild_args=()
-systemd_run_help="$(systemd-run --help)"
-if [[ $systemd_run_help != *--output=* ]]; then
-  echo "Bootstrap compatibility: keeping the installed nixos-rebuild (--fast); systemd-run lacks --output=."
-  bootstrap_rebuild_args+=(--fast)
 fi
 
 # Run nixos-rebuild
@@ -392,7 +375,7 @@ NIX_CONFIG="$(printf '%s\n' \
   'accept-flake-config = true' \
   'extra-substituters = https://cache.numtide.com https://hermes-agent.cachix.org' \
   'extra-trusted-public-keys = niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g= hermes-agent.cachix.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU=')" \
-  bash "$REBUILD_HELPER" switch --flake "path:$TARGET_DIR#$FLAKE_NAME" --impure "${bootstrap_rebuild_args[@]}"
+  bash "$REBUILD_HELPER" switch --flake "path:$TARGET_DIR#$FLAKE_NAME" --impure
 
 install_codex_for_user
 
@@ -417,7 +400,6 @@ fi
 if [[ $SYNC_MODE != "link" ]]; then
   if command -v git >/dev/null 2>&1; then
     git -C "$REPO_DIR" init
-    git config --global --add safe.directory "$REPO_DIR"
     git -C "$REPO_DIR" add -A
   else
     echo "git is not available yet. You can init later."

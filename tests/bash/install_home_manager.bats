@@ -8,7 +8,8 @@ setup() {
   ACTIVATION="$BATS_TEST_TMPDIR/home-manager-generation"
   mkdir -p "$STUB_BIN" "$ACTIVATION" "$BATS_TEST_TMPDIR/home"
   export HOME="$BATS_TEST_TMPDIR/home" USER=test-user
-  export PATH="$STUB_BIN:/usr/bin:/bin"
+  # Keep Nix-provided tools while giving external-command stubs precedence.
+  export PATH="$STUB_BIN:$PATH"
   export COMMAND_LOG ACTIVATION
   export DOTFILES_NIX_PROFILE_SCRIPT="$BATS_TEST_TMPDIR/nix-profile.sh"
   unset SUDO_USER

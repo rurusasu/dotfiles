@@ -13,9 +13,8 @@ in
   testDockerProviderMetadataAndCask = {
     expr = {
       inherit (support) installFeature;
-      windows = {
-        inherit (support.windows) provider source identity;
-      };
+      inherit (support) windows;
+      windowsIncluded = builtins.hasAttr "docker-desktop" sets.wingetMap;
       darwin = {
         inherit (support.darwin)
           provider
@@ -31,10 +30,9 @@ in
     expected = {
       installFeature = null;
       windows = {
-        provider = "winget";
-        source = "winget";
-        identity = "Docker.DockerDesktop";
+        unsupported = "Docker Desktop is not installed on Windows; NixOS-WSL runs directly as a WSL distribution";
       };
+      windowsIncluded = false;
       darwin = {
         provider = "homebrew-cask";
         source = "homebrew";

@@ -163,7 +163,14 @@ $context.Options["SyncMode"] = $SyncMode
 $context.Options["SyncBack"] = $SyncBack
 
 $handlersPath = Join-Path $PSScriptRoot "handlers"
-$handlers = Get-SetupHandler -HandlersPath $handlersPath
+# Handler files may define helper functions used by class methods. Load them in
+# this script scope so those functions remain available after Get-SetupHandler
+# returns; loading inside the loader's function scope would discard them.
+$handlerFiles = @(Get-ChildItem -Path $handlersPath -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue | Sort-Object -Property Name)
+foreach ($file in $handlerFiles) {
+    . $file.FullName
+}
+$handlers = Get-SetupHandler -HandlersPath $handlersPath -SkipLoad
 $handlers = Select-SetupHandler -Handlers $handlers
 # Phase 2: Phase = 2 のハンドラー（デフォルト）を実行
 $handlers = @($handlers | Where-Object { $_.Phase -eq 2 })
@@ -233,7 +240,7 @@ if ($applicableCount -gt 0 -and (Test-IsAdminCurrent)) {
         }
 
         $expandDockerVhd = Join-Path $repoRoot "windows\expand-docker-vhd.ps1"
-        if (Test-Path -LiteralPath $expandDockerVhd) {
+        if ($effectiveOptions["ExpandDockerVhd"] -eq $true -and (Test-Path -LiteralPath $expandDockerVhd)) {
             Write-Host "Expanding Docker Desktop VHDX..."
             & $expandDockerVhd -Force
         }
