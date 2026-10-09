@@ -126,9 +126,8 @@ line_of() {
 	grep -q "DOTFILES_NIXOS_HARDWARE_CONFIG=$HARDWARE_CONFIG" "$COMMAND_LOG"
 	[ "$(line_of 'nix flake update --flake')" -lt "$(line_of nixos-rebuild)" ]
 	[ "$(line_of nixos-rebuild)" -lt "$(line_of 'npm install --global --no-audit --no-fund @openai/codex@latest')" ]
-	[ "$(line_of 'npm install --global --no-audit --no-fund @openai/codex@latest')" -lt "$(line_of 'chezmoi init')" ]
-	[ "$(line_of nixos-rebuild)" -lt "$(line_of 'chezmoi init')" ]
-	[ "$(line_of 'chezmoi apply')" -lt "$(line_of verify-environment)" ]
+	[ "$(line_of 'npm install --global --no-audit --no-fund @openai/codex@latest')" -lt "$(line_of verify-environment)" ]
+	! grep -q '^chezmoi ' "$COMMAND_LOG"
 	grep -q '^verify-environment layer=nixos args=--nix-only$' "$COMMAND_LOG"
 	! grep -q 'hermes:bootstrap\|docker compose.*hermes\|hermes-bootstrap' "$COMMAND_LOG"
 }

@@ -383,7 +383,7 @@ fi
         Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "nixos", "--",
             "bash", "-lc",
-            "command -v zsh && command -v chezmoi && command -v task && command -v git"
+            "command -v zsh && command -v task && command -v git"
         ) -TimeoutSeconds 300 | Out-Null
 
         Invoke-WslChecked -Arguments @(

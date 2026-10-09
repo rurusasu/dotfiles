@@ -18,8 +18,8 @@ let
     }
   );
   bootstrapCli = pkgs.writeShellScriptBin "hermes-bootstrap" ''
-    export PYTHONPATH=${inputs.hermes-agent}:${sourceRoot}/scripts/python
-    exec ${bootstrapPython}/bin/python3 ${sourceRoot}/scripts/python/hermes_bootstrap_cli.py "$@"
+    export PYTHONPATH=${sourceRoot}/scripts/python:${inputs.hermes-agent}
+    exec ${bootstrapPython}/bin/python3 -P -m hermes_bootstrap "$@"
   '';
 in
 pkgs.runCommand "hermes-bootstrap-tests"
@@ -27,7 +27,7 @@ pkgs.runCommand "hermes-bootstrap-tests"
     nativeBuildInputs = [ pkgs.git ];
   }
   ''
-    export PYTHONPATH="${inputs.hermes-agent}:${sourceRoot}/scripts/python"
+    export PYTHONPATH="${sourceRoot}/scripts/python:${inputs.hermes-agent}"
     export DOTFILES_HERMES_MANAGED_WRAPPER="${managedWrapper}/bin/hermes-profile-sync"
     export DOTFILES_HERMES_GIT_EXECUTABLE="${pkgs.git}/bin/git"
     cd ${sourceRoot}

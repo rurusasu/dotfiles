@@ -86,6 +86,49 @@ let
     };
 in
 {
+  testCodexConfigurationIsOwnedByHomeManagerAcrossHomes = {
+    expr =
+      map
+        (home: {
+          enabled = home.config.programs.codex.enable;
+          npmProvider = home.config.programs.codex.package == null;
+          mutable = home.config.programs.codex.mutableSettings;
+          cleanup = home.config.programs.codex.settings.desktop;
+          agents = home.config.programs.codex.settings.agents.fast_worker.config_file;
+          hookCount = builtins.length (builtins.head home.config.programs.codex.hooks.PreToolUse).hooks;
+          rules = builtins.attrNames home.config.programs.codex.rules;
+          contextTakeover = home.config.home.file.".codex/AGENTS.override.md".force;
+          mergeActivation = home.config.home.activation ? codexMutableSettings;
+          noImmutableConfig = !(home.config.home.file ? ".codex/config.toml");
+        })
+        [
+          linux
+          wsl
+          darwin
+        ];
+    expected = builtins.genList (_: {
+      enabled = true;
+      npmProvider = true;
+      mutable = true;
+      cleanup = {
+        worktree-auto-cleanup-enabled = true;
+        worktree-keep-count = 15;
+      };
+      agents = "/home/test-user/.codex/agents/fast_worker.toml";
+      hookCount = 2;
+      rules = [
+        "commands"
+        "nix"
+        "python"
+        "safety"
+        "starlark"
+      ];
+      contextTakeover = true;
+      mergeActivation = true;
+      noImmutableConfig = true;
+    }) 3;
+  };
+
   testDshModuleUsesUpstreamPackageOnce = {
     expr =
       map

@@ -24,7 +24,7 @@ Windows、macOS、NixOS、Ubuntu、Debian を 1 コマンドで収束させる�
 ## クイックスタート
 
 clone 後、OS ごとの入口を 1 回実行します。installer は Nix、OS パッケージ、
-Home Manager、chezmoi と明示的に選択した optional profile を適用します。
+Unix は Home Manager、Windows は chezmoi と明示的に選択した optional profile を適用します。
 Docker profile では最後に runtime acceptance も実行します。途中で失敗した場合も
 同じコマンドを再実行できます。
 
@@ -76,7 +76,7 @@ cd dotfiles
 macOS の初回導入には Lix installer を使い、nix-darwin の `nix.package` も
 `pkgs.lixPackageSets.stable.lix` に統一します。既存の Nix 環境は nix-darwin の反映で
 Lix に切り替わります。nix-darwin がシステムを収束させ、nix-homebrew が選択した
-Homebrew formula/cask を管理します。Home Manager と chezmoi も同じコマンド内で
+Homebrew formula/cask を管理します。Home Manager も同じコマンド内で
 適用します。macOS では WSL や NixOS を導入しません。
 
 macOS 構成では、Hermes Desktop は公式 Homebrew Cask
@@ -101,7 +101,7 @@ task tart:run
 `task tart:run` は VM を起動し、 GitHub `main` の
 commit hash を取得します。VM に最後に正常適用した hash と一致すれば何もせず、
 更新時だけ `~/.dotfiles` を更新して、通常の `install.sh` で macOS のアプリと
-OS・Home Manager・chezmoi 設定をまとめて適用します。Tart 専用の最小パッケージ
+OS・Home Manager 設定をまとめて適用します。Tart 専用の最小パッケージ
 集合やインストーラーは持ちません。適用に失敗した場合は hash を進めないため次回に再試行
 されます。
 
@@ -129,21 +129,21 @@ cd dotfiles
 ```
 
 - NixOS: `nixos-rebuild switch` に Home Manager と rootful Docker を含めます。
-- その他の Linux（Ubuntu / Debian など）: Nix を必要に応じて導入し、Home Manager と chezmoi を適用します。ユーザー環境のみを管理し、Docker・systemd・既存アカウントは変更しません。
+- その他の Linux（Ubuntu / Debian など）: Nix を必要に応じて導入し、Home Manager を適用します。ユーザー環境のみを管理し、Docker・systemd・既存アカウントは変更しません。
 
 NixOS は現在の `/etc/nixos/hardware-configuration.nix` を必須の host profile として読み込みます。固定ディスク構成はリポジトリに持たず、このファイルが存在しない場合は activation 前に停止します。
 
 ### 成功条件と CI
 
-システム統合の installer は必須 CLI と chezmoi drift を acceptance で確認し、Docker を選択した profile では Docker daemon、Compose、`docker run --rm hello-world` も確認します。非 NixOS Linux は Home Manager の build・activation と chezmoi の適用までが対象です。CI は GitHub-hosted Actions だけで完結し、Nix の option、package、flake output は Nix-native `nix-unit`、Windows は PowerShell/Pester、macOS の installer/runtime 契約は Bats で検証します。NixOS は hosted VM E2E で installer の再実行と Docker・Compose の runtime acceptance を検証します。
+システム統合の installer は必須 CLI を acceptance で確認し、Docker を選択した profile では Docker daemon、Compose、`docker run --rm hello-world` も確認します。非 NixOS Linux は Home Manager の build・activation までが対象です。CI は GitHub-hosted Actions だけで完結し、Nix の option、package、flake output は Nix-native `nix-unit`、Windows は PowerShell/Pester、macOS の installer/runtime 契約は Bats で検証します。NixOS は hosted VM E2E で installer の再実行と Docker・Compose の runtime acceptance を検証します。
 
 標準の hosted Windows/macOS runner では Docker Desktop の VM を起動しないため、その実機固有部分は各 OS で one-command installer を実行した際の acceptance が判定します。ローカル acceptance が失敗した場合、installer はセットアップ成功を表示しません。
 
 ## 方針
 
-Nix catalog は各 OS の provider を定義し、OS の宣言レイヤーと Home Manager がそれを消費します。chezmoi は Windows の設定と全 OS の `.codex/` / `.claude/` のみを配布します。Unix の shell、Git、terminal、editor などは Home Manager が管理します。
+Nix catalog は各 OS の provider を定義し、OS の宣言レイヤーと Home Manager がそれを消費します。chezmoi は Windows 専用の設定を配布します。Unix の Codex、shell、Git、terminal、editor などは Home Manager が管理します。
 
-- ユーザー設定: Unix は `nix/home/`、Windows と共通 Codex / Claude 設定は `chezmoi/`
+- ユーザー設定: Unix は `nix/home/` と `nix/modules/`、Windows は `chezmoi/`
 - Home Manager: `nix/home/common.nix`
 - macOS system: `nix/hosts/aarch64-darwin/default.nix` が entrypoint、`configuration.nix` が system/cask/activation の実体
 - 非 NixOS Linux: `nix/hosts/<system>/home.nix` と standalone Home Manager

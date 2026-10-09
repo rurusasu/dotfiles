@@ -47,7 +47,7 @@ flake.nix -> hosts/configurations.nix -> hosts/<system>/ -> home/common.nix
 - Neovim は Darwin / WSL の `home.nix` と `hosts/shared/linux-home.nix` が `nix/modules/editors/nvim` を直接 import する。
 - Orca は `common.nix` が `../modules/editors/orca` を読み込み、Home Manager の `home.packages` で導入する。macOS は公式 DMG、Linux（x86_64 / ARM64）は公式 AppImage を使用する。Linux の CLI は公式と同じ `orca-ide`、macOS は `orca`。Windows は引き続き WinGet が管理する。
 - `common.nix` から OS 固有ファイルを import しない。
-- Unix の設定は Home Manager が生成し、`files/` に展開済み dotfiles のコピーを置かない。例外の `.codex/` / `.claude/` は chezmoi が直接配布する。
+- Unix の設定は Codex を含め Home Manager が生成し、`files/` に展開済み dotfiles のコピーを置かない。chezmoi は Windows 専用。
 - pnpm の導入は `../modules/pnpm.nix`、保存先は `pnpm.nix` の標準 `programs.pnpm` option で管理する。`PNPM_HOME` と PATH は Home Manager に生成させ、カタログからの重複導入やグローバルパッケージ導入 activation は持たない。`dsh` は `../modules/dsh.nix` から Numtide の既存 flake を参照する。Windows の pnpm グローバルパッケージも `dsh` のみとし、配布情報は `nix/packages/install/node.nix` に残す。
 - `nix/home/` 直下に `default.nix` と `users.nix` は作らない。入口と OS 依存方向を曖昧にするため。
 
@@ -64,6 +64,18 @@ flake 評価中の `builtins.getEnv` が選択した識別情報を読み取り�
 flake 評価へ渡す。
 
 ## Home Manager 固有のチェック
+
+Darwin の `hosts/aarch64-darwin/cache-maintenance.nix` は、システム GC と同じ日時に
+ユーザー権限で `uv cache prune`、`go clean -cache`、Docker の build cache 整理を実行する。
+Docker はローカルの Desktop socket に固定し、停止中は起動せずスキップする。
+volume・container・image・Go module cache・Rust の project `target/` は削除しない。
+Cargo の global cache は標準の自動 GC に任せる。Go の build cache は次回再生成される。
+結果は `~/Library/Logs/tool-cache-maintenance.log` に記録する。
+
+初回にこの agent だけを限定登録する場合は、生成した closure を
+`~/.local/state/nix/gcroots/tool-cache-maintenance` で一時的に保護する。
+正式な Home Manager activation 後、その generation の closure が agent の runner を
+含むことを確認してから、この一時 GC root を解除する。限定登録で既存 generation は切り替えない。
 
 - OS 固有設定は `nix/hosts/<system>/<environment>/home.nix` に追加し、`nix/home/` に OS 条件を増やさない。
 - Nix option、package、session variable のテストは `nix/tests/unit/` に追加し、

@@ -18,13 +18,10 @@ README.md
 .config/nvim/
 
 {{ if ne .chezmoi.os "windows" }}
-# Unix uses Home Manager, except for Codex and Claude user configuration.
-# Ignore all other top-level targets, including newly added Windows targets.
+# All chezmoi targets are Windows-only. Unix is owned by Home Manager.
 *
-!.codex
-!.claude
-# Runtime instructions, unlike the source-directory documentation above.
-!.codex/AGENTS.override.md
-# Scripts are Windows-only; Unix configuration is deployed directly.
 .chezmoiscripts/**
+{{ else }}
+# Runtime instructions, unlike source-directory documentation above.
+!.codex/AGENTS.override.md
 {{ end }}

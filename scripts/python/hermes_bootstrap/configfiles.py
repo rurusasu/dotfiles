@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import json
+import os
 import stat
 from collections.abc import Sequence
 from pathlib import Path
@@ -13,10 +13,10 @@ import yaml
 from .distributions import _atomic_write
 from .envfiles import LEGACY_SLACK_KEYS
 from .errors import ApplyError
+from .mcp_config import install_mcp_configurations, load_managed_config
 from .models import BootstrapManifest
 from .onepassword import build_onepassword_config, managed_environment_bindings
 from .transaction import Transaction
-
 
 _XAPI_MCP = {
     "url": "http://127.0.0.1:8766/mcp",
@@ -26,7 +26,9 @@ _CHROME_MCP = {
     "url": "http://127.0.0.1:8765/mcp",
     "connect_timeout": 120,
 }
-_MANAGED_ENVIRONMENT_STATE = Path(".bootstrap/onepassword-managed-environment-state.json")
+_MANAGED_ENVIRONMENT_STATE = Path(
+    ".bootstrap/onepassword-managed-environment-state.json"
+)
 _LEGACY_MANAGED_ENVIRONMENT_NAMES = frozenset(
     {
         "HERMES_DASHBOARD_BASIC_AUTH_USERNAME",
@@ -47,63 +49,13 @@ def reconcile_xapi_configurations(
 ) -> None:
     """Install the canonical internal X API MCP in every runtime profile."""
 
-    try:
-        for target in targets:
-            path = target / "config.yaml"
-            metadata = path.lstat()
-            if (
-                stat.S_ISLNK(metadata.st_mode)
-                or not stat.S_ISREG(metadata.st_mode)
-                or metadata.st_nlink != 1
-            ):
-                raise ApplyError("invalid Hermes X API configuration file")
-            config = yaml.safe_load(path.read_text(encoding="utf-8"))
-            if not isinstance(config, dict):
-                raise ApplyError("invalid Hermes X API configuration")
-            mcp_servers = config.get("mcp_servers")
-            if mcp_servers is None:
-                mcp_servers = {}
-            if not isinstance(mcp_servers, dict):
-                raise ApplyError("invalid Hermes X API configuration")
-            if mcp_servers.get("xapi") == _XAPI_MCP:
-                continue
-
-            candidate = dict(config)
-            candidate_servers = dict(mcp_servers)
-            candidate_servers["xapi"] = dict(_XAPI_MCP)
-            candidate["mcp_servers"] = candidate_servers
-            content = yaml.safe_dump(candidate, sort_keys=False).encode("utf-8")
-            transaction.snapshot(path)
-            _atomic_write(path, content, stat.S_IMODE(metadata.st_mode))
-    except ApplyError:
-        raise
-    except (OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
-        raise ApplyError("could not reconcile Hermes X API configuration") from None
+    _reconcile_mcp_configurations(targets, "xapi", _XAPI_MCP, "X API", transaction)
 
 
 def validate_xapi_configurations(targets: Sequence[Path]) -> None:
     """Require the canonical internal X API MCP in every runtime profile."""
 
-    try:
-        for target in targets:
-            path = target / "config.yaml"
-            metadata = path.lstat()
-            if (
-                stat.S_ISLNK(metadata.st_mode)
-                or not stat.S_ISREG(metadata.st_mode)
-                or metadata.st_nlink != 1
-            ):
-                raise ApplyError("installed Hermes X API configuration is invalid")
-            config = yaml.safe_load(path.read_text(encoding="utf-8"))
-            if not isinstance(config, dict):
-                raise ApplyError("installed Hermes X API configuration is invalid")
-            mcp_servers = config.get("mcp_servers")
-            if not isinstance(mcp_servers, dict) or mcp_servers.get("xapi") != _XAPI_MCP:
-                raise ApplyError("installed Hermes X API configuration is invalid")
-    except ApplyError:
-        raise
-    except (OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
-        raise ApplyError("installed Hermes X API configuration is invalid") from None
+    _validate_mcp_configurations(targets, "xapi", _XAPI_MCP, "X API")
 
 
 def reconcile_chrome_configurations(
@@ -112,63 +64,50 @@ def reconcile_chrome_configurations(
 ) -> None:
     """Point each Hermes profile at the host-published browser MCP endpoint."""
 
-    try:
-        for target in targets:
-            path = target / "config.yaml"
-            metadata = path.lstat()
-            if (
-                stat.S_ISLNK(metadata.st_mode)
-                or not stat.S_ISREG(metadata.st_mode)
-                or metadata.st_nlink != 1
-            ):
-                raise ApplyError("invalid Hermes browser MCP configuration file")
-            config = yaml.safe_load(path.read_text(encoding="utf-8"))
-            if not isinstance(config, dict):
-                raise ApplyError("invalid Hermes browser MCP configuration")
-            servers = config.get("mcp_servers")
-            if servers is None:
-                servers = {}
-            if not isinstance(servers, dict):
-                raise ApplyError("invalid Hermes browser MCP configuration")
-            if servers.get("chrome") == _CHROME_MCP:
-                continue
-            updated = dict(config)
-            updated_servers = dict(servers)
-            updated_servers["chrome"] = dict(_CHROME_MCP)
-            updated["mcp_servers"] = updated_servers
-            transaction.snapshot(path)
-            _atomic_write(
-                path,
-                yaml.safe_dump(updated, sort_keys=False).encode("utf-8"),
-                stat.S_IMODE(metadata.st_mode),
-            )
-    except ApplyError:
-        raise
-    except (OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
-        raise ApplyError("could not reconcile Hermes browser MCP configuration") from None
+    _reconcile_mcp_configurations(
+        targets, "chrome", _CHROME_MCP, "browser MCP", transaction
+    )
 
 
 def validate_chrome_configurations(targets: Sequence[Path]) -> None:
     """Require each profile's browser MCP URL to be reachable from native Hermes."""
 
+    _validate_mcp_configurations(targets, "chrome", _CHROME_MCP, "browser MCP")
+
+
+def _reconcile_mcp_configurations(
+    targets: Sequence[Path],
+    name: str,
+    configuration: dict[str, object],
+    label: str,
+    transaction: Transaction,
+) -> None:
+    try:
+        install_mcp_configurations(
+            targets,
+            name,
+            configuration,
+            transaction,
+            skip_invalid=False,
+            create_servers=True,
+        )
+    except (OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
+        raise ApplyError(f"could not reconcile Hermes {label} configuration") from None
+
+
+def _validate_mcp_configurations(
+    targets: Sequence[Path],
+    name: str,
+    configuration: dict[str, object],
+    label: str,
+) -> None:
     try:
         for target in targets:
-            path = target / "config.yaml"
-            metadata = path.lstat()
-            if (
-                stat.S_ISLNK(metadata.st_mode)
-                or not stat.S_ISREG(metadata.st_mode)
-                or metadata.st_nlink != 1
-            ):
-                raise ApplyError("installed Hermes browser MCP configuration is invalid")
-            config = yaml.safe_load(path.read_text(encoding="utf-8"))
-            servers = config.get("mcp_servers") if isinstance(config, dict) else None
-            if not isinstance(servers, dict) or servers.get("chrome") != _CHROME_MCP:
-                raise ApplyError("installed Hermes browser MCP configuration is invalid")
-    except ApplyError:
-        raise
+            candidate = load_managed_config(target / "config.yaml")
+            if candidate is None or candidate[2].get(name) != configuration:
+                raise ValueError
     except (OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
-        raise ApplyError("installed Hermes browser MCP configuration is invalid") from None
+        raise ApplyError(f"installed Hermes {label} configuration is invalid") from None
 
 
 def reconcile_onepassword_cli_permissions(
@@ -254,7 +193,9 @@ def reconcile_onepassword_configurations(
             try:
                 metadata = path.lstat()
             except OSError:
-                raise ApplyError("managed Hermes configuration is unavailable") from None
+                raise ApplyError(
+                    "managed Hermes configuration is unavailable"
+                ) from None
             if (
                 stat.S_ISLNK(metadata.st_mode)
                 or not stat.S_ISREG(metadata.st_mode)
@@ -378,23 +319,34 @@ def validate_onepassword_configurations(
                 raise ValueError
             config = yaml.safe_load(path.read_text(encoding="utf-8"))
             if not isinstance(config, dict):
-                raise ValueError
+                raise TypeError
             secrets = config.get("secrets")
-            onepassword = secrets.get("onepassword") if isinstance(secrets, dict) else None
+            onepassword = (
+                secrets.get("onepassword") if isinstance(secrets, dict) else None
+            )
             if not isinstance(onepassword, dict):
-                raise ValueError
+                raise TypeError
             expected = build_onepassword_config(manifest, profile)
-            for key in ("enabled", "account", "service_account_token_env", "binary_path"):
+            for key in (
+                "enabled",
+                "account",
+                "service_account_token_env",
+                "binary_path",
+            ):
                 if onepassword.get(key) != expected[key]:
                     raise ValueError
             installed_env = onepassword.get("env")
             expected_env = expected["env"]
-            if not isinstance(installed_env, dict) or not isinstance(expected_env, dict):
-                raise ValueError
+            if not isinstance(installed_env, dict) or not isinstance(
+                expected_env, dict
+            ):
+                raise TypeError
             if any(key in installed_env for key in expected_env):
                 raise ValueError
     except (OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
-        raise ApplyError("installed Hermes 1Password configuration is invalid") from None
+        raise ApplyError(
+            "installed Hermes 1Password configuration is invalid"
+        ) from None
 
 
 def _read_managed_environment_state(data_root: Path) -> set[str]:
@@ -417,7 +369,10 @@ def _read_managed_environment_state(data_root: Path) -> set[str]:
         state = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
         raise ApplyError("managed Hermes environment state is invalid") from None
-    if not isinstance(state, dict) or set(state) != {"schema_version", "environment_names"}:
+    if not isinstance(state, dict) or set(state) != {
+        "schema_version",
+        "environment_names",
+    }:
         raise ApplyError("managed Hermes environment state is invalid")
     names = state["environment_names"]
     if (

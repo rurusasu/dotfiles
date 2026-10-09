@@ -1,6 +1,6 @@
 # Chezmoi ドキュメント
 
-chezmoi によるユーザー設定管理の詳細ドキュメント。
+chezmoi による Windows 専用ユーザー設定管理の詳細ドキュメント。
 
 ## 目次
 
@@ -17,7 +17,7 @@ chezmoi によるユーザー設定管理の詳細ドキュメント。
 
 ## 概要
 
-chezmoi はユーザーレベルの dotfiles（設定ファイル）を管理します。
+chezmoi は Windows の dotfiles（設定ファイル）だけを管理します。Unix の設定は Codex を含め Home Manager が管理し、`install.sh` は chezmoi を呼びません。
 
 **管理対象:**
 
@@ -52,11 +52,6 @@ chezmoi --source "$PWD/chezmoi" apply
 
 ### macOS / WSL / Linux
 
-```bash
-# クローン済みリポジトリのルートで実行
-chezmoi init --source "$PWD/chezmoi"
-chezmoi --source "$PWD/chezmoi" diff
-chezmoi --source "$PWD/chezmoi" apply
-```
+`./install.sh` で Nix / Home Manager を適用します。chezmoi は適用しません。
 
 `--source-path` はサブディレクトリ指定ではなくターゲット解釈を変えるフラグです。詳細・installer 経由の適用は [usage.md](./usage.md) を参照。

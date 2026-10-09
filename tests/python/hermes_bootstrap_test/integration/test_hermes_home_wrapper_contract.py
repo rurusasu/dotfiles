@@ -44,6 +44,26 @@ class HermesHomeWrapperContractTests(unittest.TestCase):
         self.assertEqual(wrapped.returncode, direct.returncode)
         self.assertEqual(wrapped.stdout, direct.stdout)
         self.assertEqual(wrapped.stderr, direct.stderr)
+        with tempfile.TemporaryDirectory() as temporary:
+            collision = Path(temporary)
+            (collision / "hermes_bootstrap.py").write_text(
+                'raise SystemExit("wrong bootstrap module")\n', encoding="utf-8"
+            )
+            for kind in ("module", "package"):
+                with self.subTest(collision=kind):
+                    if kind == "package":
+                        package = collision / "hermes_bootstrap"
+                        package.mkdir()
+                        (package / "__init__.py").write_text(
+                            'raise SystemExit("wrong bootstrap package")\n',
+                            encoding="utf-8",
+                        )
+                    result = self._run(
+                        (str(ENGINE), "sync-profiles"), environment, cwd=collision
+                    )
+                    self.assertEqual(result.returncode, direct.returncode)
+                    self.assertEqual(result.stdout, direct.stdout)
+                    self.assertEqual(result.stderr, direct.stderr)
         payload = json.loads(wrapped.stdout)
         self.assertEqual(payload["command"], "sync-profiles")
         self.assertEqual(
@@ -123,10 +143,12 @@ class HermesHomeWrapperContractTests(unittest.TestCase):
     def _run(
         arguments: tuple[str, ...],
         environment: dict[str, str],
+        *,
+        cwd: Path | str = "/tmp",
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             arguments,
-            cwd="/tmp",
+            cwd=cwd,
             env=environment,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,

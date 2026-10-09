@@ -94,15 +94,11 @@ EOF
 	[[ "$output" == *"diagnostic-fixture"* ]]
 }
 
-@test "chezmoi drift fails verification" {
-	export CHEZMOI_VERIFY_FAIL=1
-
+@test "Unix verification does not require or apply chezmoi" {
+	rm "$STUB_BIN/chezmoi"
 	run "$VERIFIER"
-
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"chezmoi target state differs"* ]]
-	grep -q '^chezmoi verify --exclude=scripts$' "$COMMAND_LOG"
-	grep -q '^chezmoi diff --exclude=scripts --no-pager --color=false$' "$COMMAND_LOG"
+	[ "$status" -eq 0 ]
+	! grep -q '^chezmoi ' "$COMMAND_LOG"
 }
 
 @test "non-runtime verification does not run a test container" {
@@ -154,7 +150,7 @@ EOF
 	run "$VERIFIER"
 
 	[ "$status" -eq 0 ]
-	grep -q '^chezmoi verify --exclude=scripts$' "$COMMAND_LOG"
+	! grep -q '^chezmoi ' "$COMMAND_LOG"
 }
 
 @test "NixOS verification checks the current generation and Docker units" {

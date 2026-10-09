@@ -381,6 +381,7 @@ exit 97
 '
 	write_fixture_stub chezmoi 'printf "chezmoi %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_fixture_stub npm '
+printf "npm %s\\n" "$*" >>"$COMMAND_LOG"
 prefix="${NPM_CONFIG_PREFIX:-$HOME/.local/npm}"
 mkdir -p "$prefix/bin"
 printf "#!/usr/bin/env bash\\nexit 0\\n" >"$prefix/bin/codex"
@@ -542,7 +543,7 @@ EOF
 	[[ "$readiness_script" == *'all(.[]; .status == "ok")'* ]]
 }
 
-@test "install.sh routes each Unix installer through the Taskfile after chezmoi" {
+@test "install.sh routes each Unix installer through native activation without chezmoi" {
 	local platform task_line apply_line task_line_number verify_line expected_sudo_count target
 	for platform in macos linux nixos; do
 		: >"$COMMAND_LOG"
@@ -561,8 +562,9 @@ EOF
 		else
 			task_line=""
 		fi
-		apply_line="$(grep -n -m 1 '^chezmoi apply --force$' "$COMMAND_LOG" | cut -d: -f1)"
+		apply_line="$(grep -n -m 1 'npm install --global --no-audit --no-fund @openai/codex@latest' "$COMMAND_LOG" | cut -d: -f1)"
 		[ -n "$apply_line" ]
+		! grep -q '^chezmoi ' "$COMMAND_LOG"
 		if [[ -n $task_line ]]; then
 			grep -Fxq "$task_line" "$COMMAND_LOG"
 			task_line_number="$(grep -n -m 1 -F "$task_line" "$COMMAND_LOG" | cut -d: -f1)"

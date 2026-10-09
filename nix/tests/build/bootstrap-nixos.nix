@@ -87,7 +87,6 @@ pkgs.testers.runNixOSTest {
         nix
         git
         gh
-        chezmoi
         ripgrep
         fd
         jq

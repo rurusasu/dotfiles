@@ -64,7 +64,7 @@ assert_log_order() {
   done
 }
 
-@test "Home Manager activates the Linux user environment before Codex and chezmoi" {
+@test "Home Manager activates the Linux user environment before Codex without chezmoi" {
   run "$INSTALLER"
 
   [ "$status" -eq 0 ]
@@ -73,9 +73,8 @@ assert_log_order() {
     "nix flake update --flake $REPO_ROOT" \
     "homeConfigurations" \
     "home-manager-activate" \
-    "npm install --global --no-audit --no-fund @openai/codex@latest" \
-    "chezmoi init --source $REPO_ROOT/chezmoi" \
-    "chezmoi apply --force"
+    "npm install --global --no-audit --no-fund @openai/codex@latest"
+  ! grep -q '^chezmoi ' "$COMMAND_LOG"
   [[ "$output" == *"User-only setup complete; Docker/systemd were not configured."* ]]
 }
 

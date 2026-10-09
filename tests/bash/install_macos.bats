@@ -539,8 +539,6 @@ dotfiles_install_codex_npm
 		"nix flake update --flake $REPO_ROOT" \
 		"python3 scripts/python/update_darwin_packages.py --write --output darwin-package-update.json" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"chezmoi init --source $REPO_ROOT/chezmoi" \
-		"chezmoi apply --force" \
 		"verify-environment compose= args="
 	! grep -q '^brew uninstall' "$COMMAND_LOG"
 }
@@ -624,8 +622,6 @@ if [[ ${1:-} == run ]]; then "$FAKE_DOCKER_CASK_ARTIFACT_INSTALLER"; fi
 	assert_log_order \
 		"nix flake update --flake $REPO_ROOT" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"chezmoi init --source $REPO_ROOT/chezmoi" \
-		"chezmoi apply --force" \
 		"task --dir $REPO_ROOT hermes:desktop:install" \
 		"verify-environment compose= args="
 	! grep -q '^task .*hermes:docker:' "$COMMAND_LOG"
@@ -815,8 +811,7 @@ docker_desktop_md5_link_state /sbin/md5 "$1"
 		"sudo </usr/sbin/chown> <test-user:admin> </usr/local/bin>" \
 		"sudo </bin/chmod> <0775> </usr/local/bin>" \
 		"sudo </usr/sbin/chown> <test-user:admin> </usr/local/cli-plugins>" \
-		"sudo </bin/chmod> <0775> </usr/local/cli-plugins>" \
-		"chezmoi apply --force"
+		"sudo </bin/chmod> <0775> </usr/local/cli-plugins>"
 }
 
 @test "Linux harness stubs macOS-only parent inspection" {
@@ -1284,7 +1279,7 @@ exit 1
 	[ ! -L "$FAKE_HOMEBREW_BIN_DIR/docker-compose" ]
 }
 
-@test "installed Docker cask repairs links before a later chezmoi failure" {
+@test "installed Docker cask repairs links before a later environment verification failure" {
 	write_installed_stubs
 	export DOCKER_CASK_STATE="$BATS_TEST_TMPDIR/docker-cask-installed"
 	touch "$DOCKER_CASK_STATE"
@@ -1302,10 +1297,7 @@ fi
 exit 1
 '
 	write_stub nix 'printf "nix %s\n" "$*" >>"$COMMAND_LOG"'
-	write_stub chezmoi '
-printf "chezmoi %s\n" "$*" >>"$COMMAND_LOG"
-exit 61
-'
+	write_stub verify-environment 'printf "verify-environment failure\n" >>"$COMMAND_LOG"; exit 61'
 
 	run_macos_installer
 
@@ -1318,8 +1310,7 @@ exit 61
 	[ "$(readlink "$FAKE_HOMEBREW_CLI_PLUGINS_DIR/docker-compose")" = "$FAKE_DOCKER_APP/Contents/Resources/cli-plugins/docker-compose" ]
 	assert_log_order \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"brew reinstall --cask docker-desktop" \
-		"chezmoi init --source $REPO_ROOT/chezmoi"
+		"brew reinstall --cask docker-desktop"
 }
 
 @test "already-managed Docker cask rerun preserves exact official links without reinstall" {
@@ -1515,21 +1506,12 @@ exit 1
 	done
 }
 
-@test "nix-darwin user profile provides chezmoi after activation" {
+@test "nix-darwin installation does not require chezmoi" {
 	write_installed_stubs
 	rm "$STUB_BIN/chezmoi"
-	mkdir -p "$FAKE_USER_PROFILE_ROOT/test-user/bin"
-	cat >"$FAKE_USER_PROFILE_ROOT/test-user/bin/chezmoi" <<'EOF'
-#!/usr/bin/env bash
-printf 'profile-chezmoi %s\n' "$*" >>"$COMMAND_LOG"
-EOF
-	chmod +x "$FAKE_USER_PROFILE_ROOT/test-user/bin/chezmoi"
-
 	run_macos_installer
-
 	[ "$status" -eq 0 ]
-	grep -q "^profile-chezmoi init --source $REPO_ROOT/chezmoi$" "$COMMAND_LOG"
-	grep -q '^profile-chezmoi apply --force$' "$COMMAND_LOG"
+	! grep -q '^chezmoi ' "$COMMAND_LOG"
 }
 
 @test "nix-darwin switch failure stops before runtime setup" {
@@ -1557,7 +1539,6 @@ if [ "${1:-}" = "run" ]; then exit 42; fi
 	assert_log_order \
 		"nix-installer install --no-confirm" \
 		"nix run .#darwin-rebuild -- switch --flake .#macos --impure" \
-		"chezmoi init --source $REPO_ROOT/chezmoi" \
 		"task --dir $REPO_ROOT hermes:desktop:install"
 	[ "$(grep -c 'nix-installer install --no-confirm' "$COMMAND_LOG")" -eq 1 ]
 	! grep -q 'raw.githubusercontent.com/Homebrew/install' "$COMMAND_LOG"

@@ -607,7 +607,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         pattern = match.group("pattern") if match is not None else ""
         for path in (
             "scripts/python/hermes_bootstrap/app.py",
-            "scripts/python/hermes_bootstrap_cli.py",
+            "scripts/python/hermes_bootstrap/__main__.py",
             ".github/workflows/ci-nix.yml",
             "tests/python/hermes_bootstrap_test/test_app.py",
             "nix/modules/hermes-agent/default.nix",

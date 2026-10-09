@@ -40,6 +40,8 @@
     };
 
     finder = {
+      # 新しいウインドウは「最近の項目」ではなくホームフォルダーを開く。
+      NewWindowTarget = "Home";
       # Finder のタイトルバーに現在のパスを表示する。
       _FXShowPosixPathInTitle = true;
       # ファイル名の拡張子を表示する。

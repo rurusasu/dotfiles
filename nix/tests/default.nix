@@ -107,7 +107,6 @@
       // (import ./unit/package-catalog-vs-build-tools.nix { inherit inputs; })
       // (import ./unit/package-catalog-wsl.nix { inherit inputs; })
       // (import ./unit/hermes-agent.nix { inherit inputs; })
-      // (import ./unit/chatgpt-linux.nix { inherit inputs; })
       // (import ./unit/package-catalog-pnpm.nix { inherit inputs; })
       // (import ./unit/host-package-github-cli.nix { inherit inputs; })
       // (import ./unit/hosts/darwin-layout.nix)
