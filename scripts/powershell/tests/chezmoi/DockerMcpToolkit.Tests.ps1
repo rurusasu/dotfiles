@@ -18,8 +18,7 @@ BeforeAll {
     )
 
     $script:toolkitClients = @(
-        "codex",
-        "gemini"
+        "codex"
     )
 
     $script:removedServers = @(
@@ -32,7 +31,6 @@ BeforeAll {
 
     $script:clientTemplates = @(
         "dot_codex/config.toml.tmpl",
-        "dot_gemini/settings.json.tmpl",
         "dot_codeium/windsurf/mcp_config.json.tmpl"
     ) | ForEach-Object { Join-Path $script:chezmoiRoot $_ }
 }

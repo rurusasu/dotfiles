@@ -126,9 +126,9 @@ pkgs.testers.runNixOSTest {
     machine.succeed("install -d /home/nixos/ci-bin && install -m 0755 ${offlineNpm} /home/nixos/ci-bin/npm")
 
     # Keep registry access offline while exercising the native Hermes service.
-    machine.succeed("su - nixos -c 'systemctl --user start hermes-agent.service'")
-    machine.wait_until_succeeds("su - nixos -c 'systemctl --user is-active --quiet hermes-agent.service'")
-    install = "su - nixos -c 'env DOTFILES_NPM_COMMAND=/home/nixos/ci-bin/npm DOTFILES_SKIP_FLAKE_UPDATE=1 DOTFILES_NIXOS_PREBUILT_SYSTEM=${nodes.machine.system.build.toplevel} DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_CHECKOUT_TARGET=/home/nixos/dotfiles /home/nixos/dotfiles/.github/e2e/run-bootstrap-acceptance.sh'"
+    machine.succeed("su - nixos -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user start hermes-agent.service'")
+    machine.wait_until_succeeds("su - nixos -c 'XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active --quiet hermes-agent.service'")
+    install = "su - nixos -c 'env XDG_RUNTIME_DIR=/run/user/$(id -u) DOTFILES_NPM_COMMAND=/home/nixos/ci-bin/npm DOTFILES_SKIP_FLAKE_UPDATE=1 DOTFILES_NIXOS_PREBUILT_SYSTEM=${nodes.machine.system.build.toplevel} DOTFILES_NIXOS_HARDWARE_CONFIG=/etc/nixos/hardware-configuration.nix DOTFILES_CHECKOUT_TARGET=/home/nixos/dotfiles /home/nixos/dotfiles/.github/e2e/run-bootstrap-acceptance.sh'"
     machine.succeed(install)
     machine.succeed("su - nixos -c 'bash /home/nixos/dotfiles/.github/e2e/start-bootstrap-runtime.sh'")
     machine.succeed(install)

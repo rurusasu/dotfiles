@@ -1121,7 +1121,6 @@ Describe 'PnpmHandler' {
                 $global:LASTEXITCODE = 0
                 return "1.0.0"
             }
-            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
             Mock Write-Host { }
             Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
@@ -1224,9 +1223,6 @@ Describe 'PnpmHandler' {
                 $global:LASTEXITCODE = 0; return ""
             }
             Mock Invoke-VerifyCommand { }
-            # root 失敗 → EnsureGeminiCommandShim 0-arg でリトライするが root も失敗して早期 return
-            # TestGeminiCommand (Invoke-Gemini) には到達しないが明示的にモックして安全に
-            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
             Mock Write-Host { }
             Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
@@ -1237,14 +1233,6 @@ Describe 'PnpmHandler' {
             $result = $handler.Apply($ctx)
             $result.Success | Should -Be $true
             Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "add" } -Times 2
-        }
-
-        It 'should call pnpm root a second time inside 0-arg EnsureGeminiCommandShim when root was empty' {
-            # root 事前取得失敗 → Apply が 0-arg EnsureGeminiCommandShim にフォールバック
-            # → 内部で再度 pnpm root -g を呼ぶ（合計2回）
-            # 2回目も失敗するため shim 作成はスキップされる（動作として正常）
-            $handler.Apply($ctx)
-            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "root" } -Times 2
         }
     }
 
@@ -1503,121 +1491,6 @@ Describe 'PnpmHandler' {
         }
     }
 
-    Context 'EnsureGeminiCommandShim - gemini command healthy' {
-        BeforeEach {
-            $script:origProfile = $env:USERPROFILE
-            $env:USERPROFILE = $TestDrive
-            $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
-            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\bundle"
-            New-Item $entryDir -ItemType Directory -Force | Out-Null
-            Set-Content -Path (Join-Path $entryDir "gemini.js") -Value "console.log('ok')" -NoNewline
-            Mock Invoke-Pnpm {
-                param($Arguments)
-                if ($Arguments -contains "root") {
-                    $global:LASTEXITCODE = 0
-                    return $script:globalRoot
-                }
-                $global:LASTEXITCODE = 0
-                return ""
-            }
-            Mock Invoke-Gemini {
-                $global:LASTEXITCODE = 0
-                return "0.32.0"
-            }
-            Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
-            Mock Set-UserEnvironmentPath { }
-            Mock Write-Host { }
-        }
-        AfterEach {
-            $env:USERPROFILE = $script:origProfile
-        }
-
-        It 'should skip shim creation when gemini is healthy' {
-            $handler.EnsureGeminiCommandShim()
-            (Join-Path $TestDrive ".local\bin\gemini.cmd") | Should -Not -Exist
-            Should -Invoke Set-UserEnvironmentPath -Times 0
-        }
-    }
-
-    Context 'EnsureGeminiCommandShim - gemini command broken' {
-        BeforeEach {
-            $script:origProfile = $env:USERPROFILE
-            $env:USERPROFILE = $TestDrive
-            $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
-            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\bundle"
-            New-Item $entryDir -ItemType Directory -Force | Out-Null
-            Set-Content -Path (Join-Path $entryDir "gemini.js") -Value "console.log('ok')" -NoNewline
-            Mock Invoke-Pnpm {
-                param($Arguments)
-                if ($Arguments -contains "root") {
-                    $global:LASTEXITCODE = 0
-                    return $script:globalRoot
-                }
-                $global:LASTEXITCODE = 0
-                return ""
-            }
-            Mock Invoke-Gemini {
-                $global:LASTEXITCODE = 1
-                throw "broken"
-            }
-            Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
-            Mock Set-UserEnvironmentPath { }
-            Mock Write-Host { }
-        }
-        AfterEach {
-            $env:USERPROFILE = $script:origProfile
-        }
-
-        It 'should create gemini.cmd shim and prepend .local\bin to user PATH' {
-            $handler.EnsureGeminiCommandShim()
-            $shimPath = Join-Path $TestDrive ".local\bin\gemini.cmd"
-            $shimPath | Should -Exist
-            $content = Get-Content $shimPath -Raw
-            $content | Should -Match 'GEMINI_JS'
-            $content | Should -Match 'pnpm root -g'
-            $content | Should -Match '@google\\gemini-cli\\bundle\\gemini.js'
-            $content | Should -Match 'node "%GEMINI_JS%" %\*'
-            Should -Invoke Set-UserEnvironmentPath -Times 1
-        }
-    }
-
-    Context 'EnsureGeminiCommandShim([string]) - 1-arg overload with pre-computed root' {
-        BeforeEach {
-            $script:origProfile = $env:USERPROFILE
-            $env:USERPROFILE = $TestDrive
-            $script:globalRoot = Join-Path $TestDrive "pnpm-global\node_modules"
-            $entryDir = Join-Path $script:globalRoot "@google\gemini-cli\bundle"
-            New-Item $entryDir -ItemType Directory -Force | Out-Null
-            Set-Content -Path (Join-Path $entryDir "gemini.js") -Value "console.log('ok')" -NoNewline
-            Mock Invoke-Pnpm { $global:LASTEXITCODE = 0; return "" }
-            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "broken" }
-            Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
-            Mock Set-UserEnvironmentPath { }
-            Mock Write-Host { }
-        }
-        AfterEach {
-            $env:USERPROFILE = $script:origProfile
-        }
-
-        It 'should create shim when called with explicit root and gemini is broken' {
-            $handler.EnsureGeminiCommandShim($script:globalRoot)
-            $shimPath = Join-Path $TestDrive ".local\bin\gemini.cmd"
-            $shimPath | Should -Exist
-        }
-
-        It 'should not call pnpm root -g when root is provided' {
-            $handler.EnsureGeminiCommandShim($script:globalRoot)
-            Should -Invoke Invoke-Pnpm -ParameterFilter { $Arguments -contains "root" } -Times 0
-        }
-
-        It 'should return immediately when root is empty string' {
-            $handler.EnsureGeminiCommandShim("")
-            # 空ルートでは Set-UserEnvironmentPath も Invoke-Gemini も呼ばれない
-            Should -Invoke Set-UserEnvironmentPath -Times 0
-            Should -Invoke Invoke-Gemini -Times 0
-        }
-    }
-
     Context 'Apply - verifyCommand succeeds' {
         BeforeEach {
             $script:origPath = $env:PATH
@@ -1650,7 +1523,6 @@ Describe 'PnpmHandler' {
                 ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
             }
             Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
-            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
             Mock Write-Host { }
             Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
@@ -1731,7 +1603,6 @@ Describe 'PnpmHandler' {
                 if ($Arguments -contains "install") { return "Chromium installed" }
                 return "1.0.0"
             }
-            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
             Mock Write-Host { }
             Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
@@ -1806,7 +1677,6 @@ Describe 'PnpmHandler' {
                 $global:LASTEXITCODE = 0
                 return "1.0.0"
             }
-            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
             Mock Write-Host { }
             Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
@@ -1852,7 +1722,6 @@ Describe 'PnpmHandler' {
                 ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
             }
             Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 1; throw "binding not found" }
-            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
             Mock Write-Host { }
             Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
@@ -1898,7 +1767,6 @@ Describe 'PnpmHandler' {
                 $global:LASTEXITCODE = 124
                 return "検証コマンドがタイムアウトしました (30s): claude-agent-acp --version"
             }
-            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
             Mock Write-Host { }
             Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
@@ -1952,7 +1820,6 @@ Describe 'PnpmHandler' {
                 ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
             }
             Mock Invoke-VerifyCommand { throw "commandExists should not run the command" }
-            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
             Mock Write-Host { }
             Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }
@@ -2029,7 +1896,6 @@ Describe 'PnpmHandler' {
                 ($LiteralPath -and $LiteralPath -like '*nonexistent-root*')
             }
             Mock Invoke-VerifyCommand { }
-            Mock Invoke-Gemini { $global:LASTEXITCODE = 1; throw "not installed" }
             Mock Write-Host { }
             Mock Get-UserEnvironmentPath { return $script:pnpmBin }
             Mock Set-UserEnvironmentPath { }

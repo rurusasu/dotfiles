@@ -1,6 +1,6 @@
 {{ if eq .chezmoi.os "windows" -}}
 # Deploy LLM tool configurations for Windows
-# hash: {{ include "dot_codex/config.toml.tmpl" | sha256sum }}{{ include "dot_codex/AGENTS.override.md" | sha256sum }}{{ include "dot_gemini/settings.json.tmpl" | sha256sum }}
+# hash: {{ include "dot_codex/config.toml.tmpl" | sha256sum }}{{ include "dot_codex/AGENTS.override.md" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
@@ -41,7 +41,6 @@ Write-Host "Deploying LLM tool configurations..."
 
 Deploy-Template "$ChezmoiSource\dot_codex\config.toml.tmpl" "$HomeDir\.codex\config.toml"
 Deploy-File "$ChezmoiSource\dot_codex\AGENTS.override.md" "$HomeDir\.codex\AGENTS.override.md"
-Deploy-Template "$ChezmoiSource\dot_gemini\settings.json.tmpl" "$HomeDir\.gemini\settings.json"
 
 Write-Host "LLM tool configurations deployed."
 {{ end -}}

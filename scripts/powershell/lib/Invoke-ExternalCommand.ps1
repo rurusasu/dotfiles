@@ -672,7 +672,7 @@ function Start-SleepSafe {
     コマンドの出力
 .EXAMPLE
     Invoke-Npm -Arguments @("--version")
-    Invoke-Npm -Arguments @("install", "-g", "@google/gemini-cli")
+    Invoke-Npm -Arguments @("install", "-g", "@openai/codex")
 #>
 function Invoke-Npm {
     [CmdletBinding()]
@@ -834,7 +834,7 @@ function Update-NpmGlobalCommandPath {
     コマンドの出力
 .EXAMPLE
     Invoke-Pnpm -Arguments @("--version")
-    Invoke-Pnpm -Arguments @("add", "-g", "@google/gemini-cli")
+    Invoke-Pnpm -Arguments @("add", "-g", "@openai/codex")
 #>
 
 function Invoke-Pnpm {
@@ -1375,22 +1375,6 @@ function Test-IsAdminSession {
     catch {
         return $false
     }
-}
-
-<#
-.SYNOPSIS
-    gemini コマンドを実行する
-.PARAMETER Arguments
-    gemini に渡す引数
-.OUTPUTS
-    コマンドの出力
-#>
-function Invoke-Gemini {
-    param(
-        [Parameter(ValueFromRemainingArguments)]
-        [string[]]$Arguments
-    )
-    Invoke-NativeCommand -Command "gemini" -Arguments $Arguments
 }
 
 <#

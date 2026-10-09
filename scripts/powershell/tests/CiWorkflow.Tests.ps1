@@ -216,7 +216,6 @@ Describe 'CI workflow configuration' {
         $installerScript | Should -Match '\[version\]''24\.0\.0'''
         $installerScript | Should -Match "Name = 'herdr'"
         $installerScript | Should -Match "'pnpm'"
-        $installerScript | Should -Match "'gemini'"
         $installerScript | Should -Match "'op\.exe'"
         $installerScript | Should -Match 'Persisted user PATH does not identify an installed AgileBits\.1Password\.CLI package directory'
         $installerScript | Should -Match 'WinGet Links op\.exe shim is missing after OnePasswordCli setup'

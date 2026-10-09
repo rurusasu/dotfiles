@@ -9,6 +9,8 @@ CLI とデスクトップ版の導入、Windows の WinGet 配布・検証情報
 
 SSH agent は CLI 単体ではなくデスクトップ版が提供する。初回のサインイン・ロック解除と Settings > Developer > Use the SSH Agent の有効化は、[1Password 公式手順](https://developer.1password.com/docs/ssh/get-started/)に従ってユーザーが行う。Nix は秘密鍵を取得・展開せず、Bash も別の `ssh-agent` を起動しない。
 
+Unix の `~/.ssh/signing_key.pub` は Home Manager activation 時に、`ssh.nix` と同じ module 内の取得処理で 1Password の `public key` フィールドから配布する。個人 account を明示し、WSL で `op.exe` が利用できる場合は `--cache=false` を付ける。取得は最大 180 秒（強制終了まで追加 5 秒）に制限し、未認証・タイムアウト・不正な公開鍵の場合は既存ファイルを残して警告する。初回に取得できなかった場合は、1Password のサインイン・ロック解除後に Home Manager activation（`nrs` など）を再実行する。公開鍵の値は Git / Nix store に含めず、通常のシェル起動や dry-run では取得しない。[公式 `op read`](https://developer.1password.com/docs/cli/reference/commands/read/) と [公開鍵による SSH identity の選択](https://developer.1password.com/docs/ssh/agent/advanced/#match-key-with-host)に基づく。
+
 SSH 設定、シェルの `SSH_AUTH_SOCK`、macOS の `launchd.user.envVariables.SSH_AUTH_SOCK` を同じ 1Password socket に統一する。Home Manager の `services.ssh-agent.enable`、NixOS / WSL の `programs.ssh.startAgent`、Home Manager / system の GnuPG SSH agent 連携は明示的に `false` にする。SSH クライアントや `sshd` 自体は無効化しない。macOS 標準の launchd agent の停止ではなく、利用する接続先を 1Password に固定する。Windows の OpenSSH Authentication Agent サービスは Nix の管理外であり、公式手順に従って停止・自動起動を無効化する。
 
 ## OS 別の入口

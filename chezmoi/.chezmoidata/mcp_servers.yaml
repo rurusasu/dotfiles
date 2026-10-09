@@ -9,7 +9,6 @@ mcp_toolkit:
   server_name: MCP_DOCKER
   supports:
     - codex
-    - gemini
     - windsurf
   secrets:
     account: "my.1password.com"
@@ -54,7 +53,6 @@ mcp_servers:
     op_env:
       PLANE_API_KEY: "op://hxgiw3ekjzktxf7hiyf5lyb4hi/fzhjphxau3ila6wlelo5y4ehhe/credential"
     supports:
-      - gemini
       - windsurf
 
   # Draw.io Official - Open diagrams in draw.io editor (browser)
@@ -68,7 +66,6 @@ mcp_servers:
     # package in Codex startup, so keep it out of Codex auto-start.
     supports:
       - windsurf
-      - gemini
 
   # Kaggle - Official remote MCP (competitions, datasets, notebooks, models, benchmarks)
   # Docs: https://www.kaggle.com/docs/mcp
@@ -82,5 +79,4 @@ mcp_servers:
     startup_timeout_sec: 30
     # Keep OAuth/API-key remote startup out of Codex by default.
     supports:
-      - gemini
       - windsurf

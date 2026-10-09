@@ -233,6 +233,8 @@ in
           agentEnvironment = home.config.home.sessionVariables.SSH_AUTH_SOCK;
           opensshAgentEnabled = home.config.services.ssh-agent.enable;
           gpgSshAgentEnabled = home.config.services.gpg-agent.enableSshSupport;
+          publicKeyActivationAfter = home.config.home.activation.onePasswordSshPublicKey.after;
+          publicKeyIsStoreManaged = home.config.home.file ? ".ssh/signing_key.pub";
         })
         [
           linux
@@ -249,6 +251,8 @@ in
         agentEnvironment = "/home/test-user/.1password/agent.sock";
         opensshAgentEnabled = false;
         gpgSshAgentEnabled = false;
+        publicKeyActivationAfter = [ "writeBoundary" ];
+        publicKeyIsStoreManaged = false;
       }
       {
         cliCopies = 1;
@@ -262,6 +266,8 @@ in
         agentEnvironment = "/home/test-user/.1password/agent.sock";
         opensshAgentEnabled = false;
         gpgSshAgentEnabled = false;
+        publicKeyActivationAfter = [ "writeBoundary" ];
+        publicKeyIsStoreManaged = false;
       }
       {
         cliCopies = 1;
@@ -272,6 +278,8 @@ in
         agentEnvironment = "/home/test-user/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock";
         opensshAgentEnabled = false;
         gpgSshAgentEnabled = false;
+        publicKeyActivationAfter = [ "writeBoundary" ];
+        publicKeyIsStoreManaged = false;
       }
     ];
   };

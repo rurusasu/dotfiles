@@ -389,14 +389,6 @@ class PnpmHandler : SetupHandlerBase {
                 }
             }
 
-            # ルート取得済みなら再利用、失敗時は 0-arg 版でリトライ
-            if ($globalRootForCheck) {
-                $this.EnsureGeminiCommandShim($globalRootForCheck)
-            }
-            else {
-                $this.EnsureGeminiCommandShim()
-            }
-
             $parts = @()
             if ($succeeded.Count -gt 0) { $parts += "$($succeeded.Count) 個インストール" }
             if ($postInstallFailed.Count -gt 0) { $parts += "$($postInstallFailed.Count) 個post-install失敗" }
@@ -745,67 +737,6 @@ class PnpmHandler : SetupHandlerBase {
         }
         catch {
             $this.Log("pnpm bin パスの追加に失敗しました: $($_.Exception.Message)", "Yellow")
-        }
-    }
-
-    hidden [void] EnsureGeminiCommandShim() {
-        $globalRoot = ""
-        try {
-            $rawRoot = Invoke-Pnpm -Arguments @("root", "-g")
-            if ($LASTEXITCODE -ne 0 -or -not $rawRoot) { return }
-            $globalRoot = $rawRoot.Trim()
-        }
-        catch {
-            return
-        }
-        $this.EnsureGeminiCommandShim($globalRoot)
-    }
-
-    hidden [void] EnsureGeminiCommandShim([string]$globalRoot) {
-        if (-not $globalRoot) { return }
-
-        $entrypoint = Join-Path $globalRoot "@google\gemini-cli\bundle\gemini.js"
-        if (-not (Test-Path -LiteralPath $entrypoint -PathType Leaf)) {
-            $this.Log("Gemini CLI のエントリポイントが見つからないため shim 作成をスキップします", "Gray")
-            return
-        }
-
-        if ($this.TestGeminiCommand()) {
-            $this.Log("gemini コマンドは正常です。shim 作成は不要です", "Gray")
-            return
-        }
-
-        $localBin = Join-Path $env:USERPROFILE ".local\bin"
-        New-Item -ItemType Directory -Path $localBin -Force | Out-Null
-
-        $shimPath = Join-Path $localBin "gemini.cmd"
-        $shimContent = @(
-            "@echo off"
-            "setlocal"
-            "for /f ""delims="" %%i in ('pnpm root -g') do set ""PNPM_GLOBAL=%%i"""
-            "set ""GEMINI_JS=%PNPM_GLOBAL%\@google\gemini-cli\bundle\gemini.js"""
-            "if not exist ""%GEMINI_JS%"" ("
-            "  echo [ERROR] Gemini CLI entrypoint not found: %GEMINI_JS%"
-            "  exit /b 1"
-            ")"
-            "node ""%GEMINI_JS%"" %*"
-            "exit /b %ERRORLEVEL%"
-            ""
-        ) -join "`r`n"
-        [System.IO.File]::WriteAllText($shimPath, $shimContent, [System.Text.Encoding]::ASCII)
-
-        $this.PrependUserPath($localBin)
-        $this.Log("gemini.cmd shim を作成しました: $shimPath", "Green")
-        $this.Log("Windows では ~/.local/bin/gemini.cmd を優先して実行します", "Gray")
-    }
-
-    hidden [bool] TestGeminiCommand() {
-        try {
-            $output = Invoke-Gemini -Arguments @("--version")
-            return ($LASTEXITCODE -eq 0 -and ($output -match '\d+\.\d+'))
-        }
-        catch {
-            return $false
         }
     }
 

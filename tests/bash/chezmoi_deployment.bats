@@ -26,7 +26,6 @@
 		[[ "$output" == *'.claude/settings.json'* ]]
 		if [ "$os" = windows ]; then
 			[[ "$output" == *'.config/shell/secret.ps1'* ]]
-			[[ "$output" == *'.gemini/settings.json'* ]]
 			[[ "$output" == *'.future-windows/config'* ]]
 			run chezmoi "${chezmoi_args[@]}" managed --include scripts
 			[ "$status" -eq 0 ]

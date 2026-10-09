@@ -123,7 +123,6 @@ Describe 'Windows chezmoi 1Password batch prefetch' {
 
     It 'uses the prefetched reference value in every Windows client template' {
         $templates = @(
-            'chezmoi/dot_gemini/settings.json.tmpl',
             'chezmoi/dot_codex/config.toml.tmpl',
             'chezmoi/dot_codeium/windsurf/mcp_config.json.tmpl'
         )

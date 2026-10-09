@@ -8,7 +8,7 @@
 | ----------------------------------------------- | -------------------------------------------------------- |
 | `dot_config/git/hooks/`                         | Git hooks。直接配置                                      |
 | `dot_gitconfig.tmpl`、`dot_gitconfig-work.tmpl` | Git 設定テンプレート。直接配置                           |
-| `dot_agents/`、`dot_codex/`、`dot_gemini/`      | AI ツール設定。旧 `llms/` ではない                       |
+| `dot_agents/`、`dot_codex/`、`dot_claude/`      | AI ツール設定。旧 `llms/` ではない                       |
 | `shells/`                                       | bash / zsh / PowerShell / profile。deploy adapter が配置 |
 | `cli/`                                          | fd、ripgrep、starship、ghq、zoxide など                  |
 | `terminals/`                                    | WezTerm、Windows Terminal など                           |

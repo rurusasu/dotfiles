@@ -341,8 +341,7 @@ Describe 'chezmoi テンプレート バリデーション' {
         BeforeAll {
             $script:mcpClientTemplates = @(
                 "dot_codeium/windsurf/mcp_config.json.tmpl",
-                "dot_codex/config.toml.tmpl",
-                "dot_gemini/settings.json.tmpl"
+                "dot_codex/config.toml.tmpl"
             ) | ForEach-Object { Join-Path $script:chezmoiRoot $_ }
         }
 
@@ -901,18 +900,6 @@ Describe 'chezmoi テンプレート バリデーション' {
             }
             $content = Get-Content -Encoding UTF8 -Path $templatePath -Raw
             $content | Should -Match 'serverUrl' -Because "Windsurf は HTTP サーバーに serverUrl を使用する"
-        }
-    }
-
-    Context 'Gemini settings.json テンプレートの必須セクション' {
-        BeforeAll {
-            $script:geminiTemplate = Join-Path $script:chezmoiRoot "dot_gemini/settings.json.tmpl"
-        }
-
-        It 'security.auth セクションが含まれていること' {
-            $content = Get-Content -Encoding UTF8 -Path $script:geminiTemplate -Raw
-            $content | Should -Match '"security"' -Because "Gemini CLI の OAuth 認証設定が必要"
-            $content | Should -Match '"selectedType"' -Because "認証タイプの指定が必要"
         }
     }
 
