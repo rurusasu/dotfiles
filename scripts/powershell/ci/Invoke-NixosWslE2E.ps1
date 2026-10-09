@@ -33,7 +33,6 @@ Repair-WindowsSetupEnvironment
 . (Join-Path $libPath "Invoke-ExternalCommand.ps1")
 . (Join-Path $repoRoot "scripts\powershell\handlers\Handler.NixOSWSL.ps1")
 . (Join-Path $repoRoot "scripts\powershell\handlers\Handler.NixRebuild.ps1")
-. (Join-Path $repoRoot "scripts\powershell\handlers\Handler.HermesAgent.ps1")
 
 # The setup handler has legacy Invoke-Wsl calls without per-command timeouts.
 # Bound those calls in this disposable E2E process; long post-install rebuilds
@@ -424,15 +423,7 @@ fi
                 throw
             }
             Write-Host "CI_ASSERTION: production NixRebuildHandler applied native Hermes to $DistroName."
-            $hermesHandler = [HermesAgentHandler]::new()
-            if (-not $hermesHandler.CanApply($rebuildContext)) {
-                throw "HermesAgentHandler skipped validation after NixRebuildHandler completed for $DistroName"
-            }
-            $hermesResult = $hermesHandler.Apply($rebuildContext)
-            if (-not $hermesResult.Success) {
-                throw "Production HermesAgentHandler readiness validation failed: $($hermesResult.Message)"
-            }
-            Write-Host "CI_ASSERTION: production HermesAgentHandler verified its active Nix service and CLI."
+            Write-Host "CI_ASSERTION: production NixRebuildHandler verified the native Hermes service and CLI in NixOS."
 
             $hermesVerifier = @'
 set -eu

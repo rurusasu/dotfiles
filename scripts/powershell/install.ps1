@@ -43,7 +43,7 @@ $OutputEncoding = [System.Text.UTF8Encoding]::new()
 $libPath = Join-Path $PSScriptRoot "lib"
 . (Join-Path $libPath "WindowsEnvironment.ps1")
 Repair-WindowsSetupEnvironment
-. (Join-Path $PSScriptRoot "Test-Environment.ps1")
+. (Join-Path $PSScriptRoot "Test-Environment.ps1") -DistroName $DistroName
 
 if (-not $PSBoundParameters.ContainsKey("InstallDir")) {
     $InstallDir = Join-Path $env:USERPROFILE "NixOS"
@@ -247,7 +247,7 @@ else {
 if ($adminRequired) {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "Phase 2c: Post-Admin Docker Convergence" -ForegroundColor Cyan
+    Write-Host "Phase 2c: Post-Admin NixOS Convergence" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
@@ -260,7 +260,8 @@ Write-Host "Environment Acceptance" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-$acceptanceResult = Test-DotfilesEnvironment -Docker -Runtime
+$dockerDesktopRequested = $Options["EnableDockerDesktopIntegration"] -eq $true
+$acceptanceResult = Test-DotfilesEnvironment -Docker:$dockerDesktopRequested -Runtime:$dockerDesktopRequested -DistroName $DistroName
 if (-not $acceptanceResult.Success) {
     throw $acceptanceResult.Message
 }

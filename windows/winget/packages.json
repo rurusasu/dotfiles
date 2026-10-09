@@ -85,22 +85,6 @@
           }
         },
         {
-          "PackageIdentifier": "Docker.DockerDesktop",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "command": "Docker Desktop",
-            "type": "windowsInstalledProduct",
-            "uninstallEntry": {
-              "displayName": "Docker Desktop",
-              "executablePaths": [
-                "%ProgramFiles%\\Docker\\Docker\\Docker Desktop.exe",
-                "%LOCALAPPDATA%\\Programs\\DockerDesktop\\Docker Desktop.exe"
-              ],
-              "publisher": "Docker Inc."
-            }
-          }
-        },
-        {
           "PackageIdentifier": "dprint.dprint",
           "directInstaller": {
             "destination": "%LOCALAPPDATA%\\Programs\\dprint",

@@ -563,6 +563,7 @@ Describe 'NixRebuildHandler' {
             $script:wslArgs | Should -Match "-d NixOS"
             $script:wslArgs | Should -Match "-u root"
             $script:wslArgs | Should -Match "nixos-rebuild-with-user.sh switch --flake . --impure"
+            $script:wslArgs | Should -Not -Match '--fast|--no-reexec|systemd-run --help'
         }
 
         It 'should pass the Hermes feature to the NixOS rebuild wrapper' {
@@ -594,7 +595,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "nix flake update") {
+                if ($argStr -match "dotfiles_update_flake") {
                     $script:flakeUpdateArgs = $argStr
                     $script:flakeUpdateCalled = $true
                     if (-not $script:rebuildCalled) { $script:flakeUpdateCalledFirst = $true }
@@ -619,6 +620,26 @@ Describe 'NixRebuildHandler' {
             $script:flakeUpdateArgs | Should -Match "-u nixos"
         }
 
+        It 'should configure the flake repository and enable Nix features before updating inputs' {
+            $script:flakeUpdateArgs = ''
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $argStr = $Arguments -join ' '
+                if ($argStr -match 'dotfiles_update_flake') {
+                    $script:flakeUpdateArgs = $argStr
+                }
+                if ($argStr -match 'nixos-rebuild') { $global:LASTEXITCODE = 0; return '' }
+                if ($argStr -match 'command -v pnpm') { $global:LASTEXITCODE = 0; return '/nix/store/bin/pnpm' }
+                if ($argStr -match 'pnpm ls -g|pnpm add|core\.hooksPath|pre-commit install|echo exists|pnpm setup|grep.*PNPM_HOME|test -e') { $global:LASTEXITCODE = 0; return '' }
+                $global:LASTEXITCODE = 0
+                return ''
+            }
+
+            $handler.Apply($ctx)
+
+            $script:flakeUpdateArgs | Should -Match 'source scripts/sh/install-common.sh && dotfiles_update_flake \.'
+        }
+
         It 'should skip flake updates when the caller pins the checked-out inputs' {
             $ctx.Options['SkipFlakeUpdate'] = $true
             $script:flakeUpdateCalled = $false
@@ -626,7 +647,7 @@ Describe 'NixRebuildHandler' {
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "nix flake update") { $script:flakeUpdateCalled = $true }
+                if ($argStr -match "dotfiles_update_flake") { $script:flakeUpdateCalled = $true }
                 if ($argStr -match "nixos-rebuild") { $script:rebuildCalled = $true; $global:LASTEXITCODE = 0; return "" }
                 if ($argStr -match "command -v pnpm") { $global:LASTEXITCODE = 0; return "/nix/store/bin/pnpm" }
                 if ($argStr -match "pnpm ls -g|pnpm add|core\.hooksPath|pre-commit install|echo exists|pnpm setup|grep.*PNPM_HOME|test -e") { $global:LASTEXITCODE = 0; return "" }
@@ -641,14 +662,14 @@ Describe 'NixRebuildHandler' {
             $script:rebuildCalled | Should -BeTrue
         }
 
-        It 'should set git safe.directory before nixos-rebuild as root' {
+        It 'should rebuild without writing Git trust or global configuration' {
             $script:gitConfigCalled = $false
             $script:rebuildCalled = $false
             $script:gitCalledFirst = $false
             Mock Invoke-Wsl {
                 param($Arguments)
                 $argStr = $Arguments -join " "
-                if ($argStr -match "grep.*directory.*gitconfig|printf.*\[safe\]") {
+                if ($argStr -match 'dotfiles_trust_git_directory|git config --global') {
                     $script:gitConfigCalled = $true
                     if (-not $script:rebuildCalled) { $script:gitCalledFirst = $true }
                     $global:LASTEXITCODE = 0; return ""
@@ -666,8 +687,68 @@ Describe 'NixRebuildHandler' {
             }
             $handler.Apply($ctx)
 
-            $script:gitConfigCalled | Should -Be $true
-            $script:gitCalledFirst | Should -Be $true
+            $script:gitConfigCalled | Should -BeFalse
+            $script:rebuildCalled | Should -BeTrue
+        }
+
+        It 'should not invoke a mutable Git trust bootstrap' {
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $global:LASTEXITCODE = 0
+                if (($Arguments -join ' ') -match '-u root.*dotfiles_trust_git_directory') {
+                    $global:LASTEXITCODE = 1
+                }
+                return ''
+            }
+            $result = $handler.Apply($ctx)
+
+            Should -Invoke Invoke-Wsl -Times 0 -ParameterFilter { ($Arguments -join ' ') -match 'dotfiles_trust_git_directory' }
+            Should -Invoke Invoke-Wsl -Times 1 -ParameterFilter { ($Arguments -join ' ') -match 'nixos-rebuild-with-user' }
+        }
+
+        It 'should validate native Hermes using the resolved NixOS user and distro' {
+            $ctx.DistroName = 'CustomNixOS'
+            $script:hermesArguments = @()
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $global:LASTEXITCODE = 0
+                if (($Arguments -join ' ') -match '/var/lib/dotfiles/user') {
+                    return "alice`t/home/alice"
+                }
+                if (($Arguments -join ' ') -match 'hermes-agent.service') {
+                    $script:hermesArguments = $Arguments
+                    return 'hermes 1.0.0'
+                }
+                return ''
+            }
+            Mock Get-JsonContent { return @{ globalPackages = @() } }
+            Mock Invoke-Docker { throw 'Hermes must run directly in NixOS' }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            ($script:hermesArguments -join ' ') | Should -Match '-d CustomNixOS -u alice'
+            ($script:hermesArguments -join ' ') | Should -Match 'XDG_RUNTIME_DIR=/run/user/'
+            ($script:hermesArguments -join ' ') | Should -Match 'command -v hermes'
+        }
+
+        It 'should fail NixOS setup when native Hermes service validation fails' {
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $global:LASTEXITCODE = 0
+                if (($Arguments -join ' ') -match 'hermes-agent.service') {
+                    $global:LASTEXITCODE = 3
+                    return 'inactive'
+                }
+                return ''
+            }
+            Mock Get-JsonContent { return @{ globalPackages = @() } }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match 'Hermes.*inactive'
+            $ctx.Options.ContainsKey('NixRebuildApplied') | Should -BeFalse
         }
 
         It 'should use custom distro name from context' {

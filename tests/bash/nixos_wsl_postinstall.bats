@@ -25,7 +25,8 @@ setup() {
 	: >"$NIX_EVAL_CAPTURE"
 
 	export HOME="$TEST_HOME"
-	export PATH="$STUB_BIN:/usr/bin:/bin"
+	# NixOS provides coreutils/Git through Nix profiles, not /usr/bin.
+	export PATH="$STUB_BIN:$PATH"
 	export COMMAND_LOG NIXOS_ARGV_CAPTURE NIX_CONFIG_CAPTURE NIX_EVAL_CAPTURE REAL_NIX REPO_ROOT USER_HOME SYNC_SOURCE DOTFILES_STATE_DIR
 	export SYSTEMD_RUN_HAS_OUTPUT=1
 	export SYSTEMD_RUN_HELP_STATUS=0
@@ -101,6 +102,7 @@ printf "nixos-rebuild user=%s home=%s uid=%s gid=%s group=%s\n" \
   "${DOTFILES_USER:-}" "${DOTFILES_HOME:-}" "${DOTFILES_UID:-}" \
   "${DOTFILES_GID:-}" "${DOTFILES_GROUP:-}" >>"$COMMAND_LOG"
 printf "nixos-rebuild invoked\n" >>"$COMMAND_LOG"
+printf "repository=%s\n" "${DOTFILES_REPO_ROOT:-}" >>"$COMMAND_LOG"
 
 # Model the external boundary from the release rootfs: without --fast it
 # re-execs the target rebuild, whose --output=cat needs systemd >= 261.
@@ -169,6 +171,94 @@ fi
 	[[ "$output" =~ ^100755[[:space:]] ]]
 }
 
+@test "flake update never writes Home Manager Git configuration" {
+	local managed_config="$BATS_TEST_TMPDIR/managed-gitconfig"
+	printf '# immutable Home Manager config\n' >"$managed_config"
+	chmod 0444 "$managed_config"
+	ln -s "$managed_config" "$HOME/.gitconfig"
+	write_stub nix 'printf "nix %s\n" "$*" >>"$COMMAND_LOG"'
+	run bash -c '
+set -euo pipefail
+. "$REPO_ROOT/scripts/sh/install-common.sh"
+cd "$REPO_ROOT"
+dotfiles_update_flake .
+dotfiles_update_flake .
+'
+	[ "$status" -eq 0 ]
+	[ "$(cat "$managed_config")" = '# immutable Home Manager config' ]
+	[ -L "$HOME/.gitconfig" ]
+	[ ! -e "$HOME/.config/git/dotfiles-safe-directories" ]
+	[ "$(grep -Fc "nix flake update --flake $REPO_ROOT" "$COMMAND_LOG")" -eq 2 ]
+}
+
+@test "rebuild derives canonical checkout trust without changing public arguments" {
+	local linked_checkout="$BATS_TEST_TMPDIR/linked checkout"
+	ln -s "$REPO_ROOT" "$linked_checkout"
+	run env REAL_NIX= DOTFILES_USER=alice DOTFILES_HOME="$USER_HOME" \
+		DOTFILES_REPO_ROOT='*' bash "$REBUILD_WRAPPER" dry-build "--flake=path:$linked_checkout#nixos" --impure
+	[ "$status" -eq 0 ]
+	grep -Fxq "repository=$REPO_ROOT" "$COMMAND_LOG"
+	grep -Fxq -- "--flake=path:$linked_checkout#nixos" "$NIXOS_ARGV_CAPTURE"
+	[ ! -e "$HOME/.gitconfig" ]
+}
+
+@test "bootstrap update explicitly uses path source while normal update remains Git-backed" {
+	write_stub nix 'printf "nix %s\n" "$*" >>"$COMMAND_LOG"'
+	run bash -c '. "$REPO_ROOT/scripts/sh/install-common.sh"; dotfiles_update_flake "$REPO_ROOT" path'
+	[ "$status" -eq 0 ]
+	grep -Fxq "nix flake update --flake path:$REPO_ROOT" "$COMMAND_LOG"
+	run bash -c '. "$REPO_ROOT/scripts/sh/install-common.sh"; dotfiles_update_flake "$REPO_ROOT" invalid'
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"Invalid flake source"* ]]
+}
+
+@test "remote rebuild cannot inherit arbitrary local checkout trust" {
+	run env REAL_NIX= DOTFILES_USER=alice DOTFILES_HOME="$USER_HOME" \
+		DOTFILES_REPO_ROOT='*' bash "$REBUILD_WRAPPER" dry-build --flake github:example/repo --impure
+	[ "$status" -eq 0 ]
+	grep -Fxq 'repository=' "$COMMAND_LOG"
+}
+
+@test "rebuild without an explicit flake never trusts the caller directory" {
+	run env REAL_NIX= DOTFILES_USER=alice DOTFILES_HOME="$USER_HOME" \
+		DOTFILES_REPO_ROOT='*' bash "$REBUILD_WRAPPER" dry-build --impure
+	[ "$status" -eq 0 ]
+	grep -Fxq 'repository=' "$COMMAND_LOG"
+	! grep -Fq -- '--flake' "$NIXOS_ARGV_CAPTURE"
+}
+
+@test "relative checkout trust survives sudo without changing selected identity" {
+	write_stub id '
+case "$*" in
+  "-u") printf "4242\n" ;;
+  "-u alice") printf "4242\n" ;;
+  "-g alice") printf "4343\n" ;;
+  "-gn alice") printf "alicegrp\n" ;;
+  *) exit 2 ;;
+esac
+'
+	write_stub sudo 'printf "sudo invoked\n" >>"$COMMAND_LOG"; exec "$@"'
+	run env REAL_NIX= DOTFILES_USER=alice DOTFILES_HOME="$USER_HOME" REBUILD_WRAPPER="$REBUILD_WRAPPER" bash -c '
+cd "$REPO_ROOT/scripts"
+bash "$REBUILD_WRAPPER" dry-build --flake ../#nixos --impure
+'
+	[ "$status" -eq 0 ]
+	grep -Fxq 'sudo invoked' "$COMMAND_LOG"
+	grep -Fxq "repository=$REPO_ROOT" "$COMMAND_LOG"
+	grep -Fxq -- '../#nixos' "$NIXOS_ARGV_CAPTURE"
+	grep -Fxq "nixos-rebuild user=alice home=$USER_HOME uid=4242 gid=4343 group=alicegrp" "$COMMAND_LOG"
+}
+
+@test "postinstall updates through the explicit bootstrap provider" {
+	write_stub nix 'printf "nix %s\n" "$*" >>"$COMMAND_LOG"'
+	run env REAL_NIX= bash "$INSTALLER" --user alice --sync-mode link \
+		--sync-source "$SYNC_SOURCE" --repo-dir "$BATS_TEST_TMPDIR/repo" \
+		--sync-back none --state-version 26.05
+	[ "$status" -eq 0 ]
+	grep -Fxq "nix flake update --flake path:$SYNC_SOURCE" "$COMMAND_LOG"
+	[ ! -e "$HOME/.gitconfig" ]
+}
+
 write_stub() {
 	local name="$1"
 	local body="$2"
@@ -220,20 +310,21 @@ run_postinstall() {
 		--skip-flake-update
 }
 
-@test "postinstall keeps the release rebuild for an older systemd rootfs" {
+@test "postinstall does not bypass a standard rebuild failure on an older rootfs" {
 	export SYSTEMD_RUN_HAS_OUTPUT=0 NIXOS_REBUILD_CHECK_SYSTEMD=1
 	REAL_NIX= run_postinstall
 
-	[ "$status" -eq 0 ]
-	expected_args=(switch --flake "path:$SYNC_SOURCE#nixos" --impure --fast)
+	[ "$status" -eq 1 ]
+	expected_args=(switch --flake "path:$SYNC_SOURCE#nixos" --impure)
 	mapfile -t actual_args <"$NIXOS_ARGV_CAPTURE"
 	[ "${#actual_args[@]}" -eq "${#expected_args[@]}" ]
 	for index in "${!expected_args[@]}"; do
 		[ "${actual_args[$index]}" = "${expected_args[$index]}" ]
 	done
 	grep -Fqx "nixos-rebuild user=alice home=$USER_HOME uid=4242 gid=4343 group=alicegrp" "$COMMAND_LOG"
-	[ "$(cat "$DOTFILES_STATE_DIR/system-state-version")" = 26.05 ]
-	[[ "$output" == *"Post-install setup completed."* ]]
+	[ ! -e "$DOTFILES_STATE_DIR/system-state-version" ]
+	[[ "$output" == *"unrecognized option --output=cat"* ]]
+	[[ "$output" != *"Post-install setup completed."* ]]
 }
 
 @test "postinstall retains normal rebuild re-execution on modern systemd" {
@@ -245,11 +336,11 @@ run_postinstall() {
 	[[ "$output" == *"Post-install setup completed."* ]]
 }
 
-@test "postinstall drops bootstrap compatibility after the rootfs is upgraded" {
+@test "postinstall uses the same normal rebuild arguments after the rootfs is upgraded" {
 	export SYSTEMD_RUN_HAS_OUTPUT=0 NIXOS_REBUILD_CHECK_SYSTEMD=1
 	REAL_NIX= run_postinstall
-	[ "$status" -eq 0 ]
-	grep -Fxq -- --fast "$NIXOS_ARGV_CAPTURE"
+	[ "$status" -eq 1 ]
+	! grep -Fxq -- --fast "$NIXOS_ARGV_CAPTURE"
 
 	export SYSTEMD_RUN_HAS_OUTPUT=1
 	REAL_NIX= run_postinstall
@@ -260,27 +351,26 @@ run_postinstall() {
 	[[ "$output" == *"Post-install setup completed."* ]]
 }
 
-@test "postinstall propagates old-rootfs activation failures without recording success" {
-	export SYSTEMD_RUN_HAS_OUTPUT=0 NIXOS_REBUILD_CHECK_SYSTEMD=1 NIXOS_REBUILD_STATUS=42
+@test "postinstall propagates activation failures without recording success" {
+	export NIXOS_REBUILD_STATUS=42
 	REAL_NIX= run_postinstall
 
 	[ "$status" -eq 42 ]
-	grep -Fxq -- --fast "$NIXOS_ARGV_CAPTURE"
+	! grep -Fxq -- --fast "$NIXOS_ARGV_CAPTURE"
 	[[ "$output" == *"nixos-rebuild activation failed"* ]]
 	[[ "$output" != *"Post-install setup completed."* ]]
 	[ ! -e "$DOTFILES_STATE_DIR/system-state-version" ]
 	! grep -Fq 'npm install' "$COMMAND_LOG"
 }
 
-@test "postinstall does not treat a failed systemd probe as an older rootfs" {
+@test "postinstall does not probe systemd for compatibility arguments" {
 	export SYSTEMD_RUN_HELP_STATUS=37
 	REAL_NIX= run_postinstall
 
-	[ "$status" -eq 37 ]
-	[[ "$output" == *"systemd-run help failed"* ]]
-	! grep -q '^nixos-rebuild ' "$COMMAND_LOG"
-	[ ! -e "$DOTFILES_STATE_DIR/system-state-version" ]
-	[[ "$output" != *"Post-install setup completed."* ]]
+	[ "$status" -eq 0 ]
+	! grep -Fxq -- --fast "$NIXOS_ARGV_CAPTURE"
+	! grep -Fxq -- --no-reexec "$NIXOS_ARGV_CAPTURE"
+	[[ "$output" == *"Post-install setup completed."* ]]
 }
 
 @test "normal user rebuilds do not inherit postinstall compatibility" {
@@ -301,7 +391,7 @@ run_postinstall() {
 
 @test "NixOS rebuild wrapper accepts the pinned flake cache only when explicitly requested" {
 	run env \
-		PATH="$STUB_BIN:/usr/bin:/bin" \
+		PATH="$PATH" \
 		DOTFILES_USER=alice \
 		DOTFILES_HOME="$USER_HOME" \
 		DOTFILES_UID=4242 \
@@ -318,7 +408,7 @@ run_postinstall() {
 
 @test "NixOS rebuild wrapper preserves GitHub access-token config without exposing it" {
 	run env \
-		PATH="$STUB_BIN:/usr/bin:/bin" \
+		PATH="$PATH" \
 		NIX_CONFIG='access-tokens = github.com=ci-test-token' \
 		DOTFILES_USER=alice \
 		DOTFILES_HOME="$USER_HOME" \

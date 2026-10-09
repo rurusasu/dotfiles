@@ -11,7 +11,8 @@
 [CmdletBinding()]
 param(
     [switch]$Docker,
-    [switch]$Runtime
+    [switch]$Runtime,
+    [string]$DistroName = ''
 )
 
 . (Join-Path $PSScriptRoot "lib\Invoke-ExternalCommand.ps1")
@@ -32,7 +33,8 @@ function Test-DotfilesEnvironment {
     [CmdletBinding()]
     param(
         [switch]$Docker,
-        [switch]$Runtime
+        [switch]$Runtime,
+        [string]$DistroName = ''
     )
 
     $dockerEnabled = $Docker -or $Runtime
@@ -76,6 +78,16 @@ function Test-DotfilesEnvironment {
     Invoke-Wsl -Arguments @("--status") | Out-Null
     Assert-DotfilesAcceptanceExitCode -Label "wsl --status"
 
+    if (-not [string]::IsNullOrWhiteSpace($DistroName)) {
+        # Prevent a deferred/skipped NixOS rebuild from reporting setup success.
+        # WSL selects the distro's configured Linux user, not a Windows user.
+        Invoke-Wsl -TimeoutSeconds 60 -Arguments @(
+            '-d', $DistroName, '--', 'bash', '-lc',
+            'export XDG_RUNTIME_DIR=/run/user/$(id -u); export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus; test -e /etc/NIXOS && command -v hermes >/dev/null && systemctl --user is-active --quiet hermes-agent.service'
+        ) | Out-Null
+        Assert-DotfilesAcceptanceExitCode -Label "NixOS WSL native Hermes acceptance ($DistroName)"
+    }
+
     if ($Runtime) {
         Invoke-Docker -Arguments @("run", "--rm", "hello-world") | Out-Null
         Assert-DotfilesAcceptanceExitCode -Label "docker run --rm hello-world"
@@ -90,5 +102,5 @@ function Test-DotfilesEnvironment {
 }
 
 if ($MyInvocation.InvocationName -ne ".") {
-    Test-DotfilesEnvironment -Docker:$Docker -Runtime:$Runtime
+    Test-DotfilesEnvironment -Docker:$Docker -Runtime:$Runtime -DistroName $DistroName
 }

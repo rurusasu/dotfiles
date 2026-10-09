@@ -26,6 +26,47 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Get-DiskpartVhdxVirtualSizeGB {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $tempFile = New-TemporaryFile
+    $diskpartScript = @"
+select vdisk file="$Path"
+detail vdisk
+exit
+"@
+    Set-Content -Path $tempFile -Value $diskpartScript -Encoding ASCII
+    try {
+        $output = @(& diskpart /s $tempFile.FullName 2>&1)
+        if ($LASTEXITCODE -ne 0) { return 0 }
+        foreach ($line in $output) {
+            $match = [regex]::Match(
+                [string]$line,
+                '(?i)(?:Virtual size|仮想サイズ)\s*[:：]\s*(\d+(?:\.\d+)?)\s*(TB|GB|MB)'
+            )
+            if (-not $match.Success) {
+                continue
+            }
+
+            $size = [double]$match.Groups[1].Value
+            switch ($match.Groups[2].Value.ToUpperInvariant()) {
+                'TB' { return $size * 1024 }
+                'GB' { return $size }
+                'MB' { return $size / 1024 }
+            }
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
+    }
+
+    return 0
+}
+
 # Read target size from config if not specified
 if ($TargetSizeGB -eq 0) {
     $configPath = Join-Path $PSScriptRoot "docker-vhd-size.conf"
@@ -62,10 +103,16 @@ try {
     $hyperVAvailable = $true
 }
 catch {
-    # Hyper-V module unavailable - fall back to file size (may underestimate)
-    # Resize-VHD will also fail; diskpart will be used directly for expansion.
-    $currentSizeGB = [math]::Round((Get-Item $vhdxPath).Length / 1GB, 2)
-    Write-Host "Note: Hyper-V module unavailable. Size shown may be underestimated; diskpart will be used for expansion."
+    # Hyper-V module unavailable - query the VHD's virtual size with diskpart.
+    # The sparse file length is only the physical allocation and can be much
+    # smaller than the virtual capacity, causing a redundant expand failure.
+    $currentSizeGB = [math]::Round((Get-DiskpartVhdxVirtualSizeGB -Path $vhdxPath), 2)
+    if ($currentSizeGB -le 0) {
+        throw "Cannot determine the virtual VHDX capacity. Expansion was not attempted."
+    }
+    else {
+        Write-Host "Note: Hyper-V module unavailable; diskpart reported the virtual VHDX size."
+    }
 }
 $targetSizeBytes = [long]$TargetSizeGB * 1GB
 
@@ -159,7 +206,7 @@ try {
     $newSizeGB = [math]::Round((Get-VHD -Path $vhdxPath -ErrorAction Stop).Size / 1GB, 2)
 }
 catch {
-    $newSizeGB = [math]::Round((Get-Item $vhdxPath).Length / 1GB, 2)
+    $newSizeGB = [math]::Round((Get-DiskpartVhdxVirtualSizeGB -Path $vhdxPath), 2)
 }
 Write-Host "New VHDX size: ${newSizeGB}GB"
 

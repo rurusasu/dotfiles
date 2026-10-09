@@ -27,6 +27,46 @@ uid="${DOTFILES_UID:-$(id -u "$user")}"
 gid="${DOTFILES_GID:-$(id -g "$user")}"
 group="${DOTFILES_GROUP:-$(id -gn "$user")}"
 
+# Derive the declaration from this invocation, not an inherited trust value.
+# Keep the public rebuild arguments unchanged, including path: and #selectors.
+flake_ref=""
+flake_seen=0
+expect_flake=0
+for argument in "$@"; do
+  if [[ $expect_flake == 1 ]]; then
+    flake_ref="$argument"
+    expect_flake=0
+  elif [[ $argument == --flake || $argument == --flake=* ]]; then
+    [[ $flake_seen == 0 ]] || {
+      echo "Multiple --flake references are ambiguous." >&2
+      exit 1
+    }
+    flake_seen=1
+    if [[ $argument == --flake ]]; then
+      expect_flake=1
+    else
+      flake_ref="${argument#--flake=}"
+    fi
+  fi
+done
+[[ $expect_flake == 0 && ($flake_seen == 0 || -n $flake_ref) ]] || {
+  echo "--flake requires a reference." >&2
+  exit 1
+}
+flake_directory="${flake_ref%%#*}"
+repository=""
+case "$flake_directory" in
+path:*) flake_directory="${flake_directory#path:}" ;;
+*:*) flake_directory="" ;; # Remote/provider references are not local trust inputs.
+esac
+if [[ -n $flake_directory && -d $flake_directory ]]; then
+  repository="$(cd "$flake_directory" && pwd -P)"
+  [[ $repository != *'*'* ]] || {
+    echo "Checkout trust cannot contain wildcards." >&2
+    exit 1
+  }
+fi
+
 state_dir="${DOTFILES_STATE_DIR:-/var/lib/dotfiles}"
 state_version_file="$state_dir/system-state-version"
 if [[ -n ${DOTFILES_STATE_VERSION:-} ]]; then
@@ -51,6 +91,7 @@ rebuild_env=(
   "DOTFILES_UID=$uid"
   "DOTFILES_GID=$gid"
   "DOTFILES_GROUP=$group"
+  "DOTFILES_REPO_ROOT=$repository"
   "DOTFILES_STATE_VERSION=$state_version"
 )
 
