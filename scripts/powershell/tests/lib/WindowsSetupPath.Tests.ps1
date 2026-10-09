@@ -23,6 +23,10 @@ Describe 'Windows setup with missing command directories in PATH' -Skip:([Enviro
         Mock Write-Host { param($Object) $script:logs += [string]($Object -join ' ') }
         Mock Get-UserEnvironmentPath { return $env:PNPM_HOME }
         Mock Set-UserEnvironmentPath { throw 'The test must not persist PATH changes' }
+        Mock Get-ExternalCommand {
+            param($Name)
+            Get-Command -Name $Name -ErrorAction SilentlyContinue
+        }
         Mock Get-ExternalCommand { return @{ Source = 'C:\nodejs\npm.cmd' } } -ParameterFilter { $Name -eq 'npm' }
         Mock Invoke-Npm {
             param($Arguments)

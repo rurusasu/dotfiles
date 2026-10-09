@@ -313,7 +313,7 @@ Describe 'OnePasswordCliHandler' {
             $result.Success | Should -Be $true
             [System.IO.File]::ReadAllText((Join-Path $script:expectedLinks 'op.exe')) | Should -Be 'version one'
             Test-Path -LiteralPath (Join-Path $script:expectedLinks 'op.exe.dotfiles-managed') | Should -Be $true
-            $windowsAppsEntries = @(Get-ChildItem -LiteralPath $script:expectedWindowsApps -Force | Select-Object -ExpandProperty Name)
+            $windowsAppsEntries = @([System.IO.Directory]::GetFileSystemEntries($script:expectedWindowsApps) | ForEach-Object { [System.IO.Path]::GetFileName($_) })
             $windowsAppsEntries | Should -HaveCount 1
             $windowsAppsEntries | Should -Contain 'keep.txt'
             [System.IO.File]::ReadAllText($script:windowsAppsMarker) | Should -Be 'WindowsApps is OS-managed'
@@ -326,7 +326,7 @@ Describe 'OnePasswordCliHandler' {
 
             $upgradeResult.Success | Should -Be $true
             [System.IO.File]::ReadAllText((Join-Path $script:expectedLinks 'op.exe')) | Should -Be 'version two'
-            $windowsAppsEntries = @(Get-ChildItem -LiteralPath $script:expectedWindowsApps -Force | Select-Object -ExpandProperty Name)
+            $windowsAppsEntries = @([System.IO.Directory]::GetFileSystemEntries($script:expectedWindowsApps) | ForEach-Object { [System.IO.Path]::GetFileName($_) })
             $windowsAppsEntries | Should -HaveCount 1
             $windowsAppsEntries | Should -Contain 'keep.txt'
             [System.IO.File]::ReadAllText($script:windowsAppsMarker) | Should -Be 'WindowsApps is OS-managed'
