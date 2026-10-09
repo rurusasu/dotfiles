@@ -42,7 +42,7 @@ Home Manager の catalog package 選択は各 OS の host が担当します。D
 
 Windows だけに存在する GUI や OS component は `install/windows-only.nix` の `windowsOnlySupport` に置き、macOS/Linux で対応しない理由を必ず記録します。クロスプラットフォームのツールを理由なしに Windows-only へ入れることはできません。
 
-機能別 install profile は使いません。宣言した cask は `darwinCasks` を通して Homebrew Bundle へ含めます。Discord / Starship の Windows 配布 metadata は各 `nix/modules/<name>/windows-install.nix` に置き、manifest の生成入口から合成します。
+Windows の通常セットアップは `install/windows-gui.nix` の GUI 選択だけを使います。provider の利用可能性とインストール対象の選択は別の契約です。既存の `wingetMap` / `npmMap` などは互換性と Unix consumer のために維持しますが、Windows manifest にそのまま全件を出力しません。宣言した cask は `darwinCasks` を通して Homebrew Bundle へ含めます。Discord / Starship の Windows 配布 metadata は各 `nix/modules/<name>/windows-install.nix` に置き、manifest の生成入口から合成します。
 
 ## Provider の追加
 
@@ -69,7 +69,9 @@ NixOS:            ./install.sh
 Ubuntu / Debian:  ./install.sh
 ```
 
-- Windows は catalog から生成された winget/npm/pnpm manifest を PowerShell handlers が適用します。
+- Windows は GUI アプリのみを winget で導入します。`install/windows-gui.nix` が選ぶ catalog key / Windows-only key から manifest を生成し、npm/pnpm manifest は互換性のため空配列として保持します。
+- `install.cmd` は既存の PowerShell と winget を使い、CLI ツール・Node.js・npm・pnpm・dsh・AutoHotkey・GlazeWM を導入しません。chezmoi、管理者セットアップ、WSL 構築、CLI runtime の acceptance も実行しません。既存アプリや Startup shortcut は自動削除しません。
+- Windows の Codex は既存の Microsoft Store デスクトップアプリを対象とし、独立した `@openai/codex` を追加導入しません。Linux/macOS の Codex CLI は引き続き npm から導入します。
 - macOS は nix-darwin が Home Manager と nix-homebrew formula/cask を同じ switch に含めます。
 - 非 NixOS Linux（Ubuntu/Debian など）は standalone Home Manager がユーザー環境を適用します。Docker や OS service は管理しません。
 - NixOS は NixOS generation に Home Manager と system module を統合します。

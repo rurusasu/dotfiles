@@ -26,6 +26,7 @@ in
     npmMap
     ;
   inherit (windowsOnly) windowsOnlySupport windowsOnly;
+  windowsGuiPackages = import ./windows-gui.nix;
 }
 // import ./node.nix
 // (

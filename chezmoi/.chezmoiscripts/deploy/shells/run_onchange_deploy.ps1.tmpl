@@ -22,6 +22,14 @@ function Deploy-File {
     if (-not (Test-Path -LiteralPath $destDir)) {
       New-Item -ItemType Directory -Path $destDir -Force | Out-Null
     }
+    if (Test-Path -LiteralPath $Destination -PathType Leaf) {
+      $sourceHash = (Get-FileHash -LiteralPath $Source -Algorithm SHA256).Hash
+      $destinationHash = (Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash
+      if ($sourceHash -eq $destinationHash) {
+        Write-Host "Unchanged: $Destination"
+        return
+      }
+    }
     Copy-Item -LiteralPath $Source -Destination $Destination -Force
     Write-Host "Deployed: $Destination"
   }

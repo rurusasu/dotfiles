@@ -103,6 +103,19 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'Windows desktop deployment' {
+        It 'should not manage GlazeWM, Zebar or AutoHotkey startup scripts' {
+            $configPath = Join-Path $TestDrive 'desktop-chezmoi.toml'
+            Set-Content -LiteralPath $configPath -Value '' -Encoding UTF8
+            $executable = @(Get-Command chezmoi -CommandType Application -ErrorAction Stop)[0].Source
+            $managed = @(& $executable --source $script:chezmoiRoot --config $configPath --override-data '{"chezmoi":{"os":"windows"}}' managed)
+            $LASTEXITCODE | Should -Be 0
+            @($managed | Where-Object { $_ -match '(?i)glazewm|zebar|^\.glzr(?:[/\\]|$)' }).Count | Should -Be 0
+            @($managed | Where-Object { $_ -match 'start-terminal-keybindings_windows\.ps1$' }).Count | Should -Be 0
+            @($managed | Where-Object { $_ -match '^\.codex(?:[/\\]|$)' }).Count | Should -BeGreaterThan 0
+        }
+    }
+
     Context 'Terminal config deployment' {
         It 'should leave Unix terminal settings to Home Manager' {
             Test-Path -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/terminals/run_onchange_deploy.sh.tmpl') | Should -BeFalse
@@ -864,6 +877,67 @@ Describe 'chezmoi テンプレート バリデーション' {
     }
 
     Context 'Shell config deploy script' {
+        It 'should preserve an identical locked launcher and complete the remaining shell deployment' {
+            $source = Join-Path $TestDrive 'locked-launcher-source'
+            $destination = Join-Path $TestDrive 'locked-launcher-home'
+            New-Item -ItemType Directory -Path (Join-Path $source 'shells'), (Join-Path $source 'dot_local/bin'), (Join-Path $destination '.local/bin') -Force | Out-Null
+            foreach ($name in @('bashrc', 'zoxide.bash', 'fzf.bash')) {
+                Set-Content -LiteralPath (Join-Path $source "shells/$name") -Value '# shell fixture' -Encoding UTF8
+            }
+            $launcherSource = Join-Path $source 'dot_local/bin/executable_codex.cmd'
+            $launcherDestination = Join-Path $destination '.local/bin/codex.cmd'
+            Set-Content -LiteralPath $launcherSource -Value '@echo off' -Encoding ASCII
+            Copy-Item -LiteralPath $launcherSource -Destination $launcherDestination
+            Set-Content -LiteralPath (Join-Path $source 'dot_local/bin/executable_stop-stale-codex-login.ps1') -Value '# next deployment' -Encoding ASCII
+            $template = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/shells/run_onchange_deploy.ps1.tmpl') -Raw
+            $rendered = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"windows"}}'
+            $rendered.ExitCode | Should -Be 0 -Because $rendered.StandardError
+            $previousSource = $env:CHEZMOI_SOURCE_DIR
+            $previousProfile = $env:USERPROFILE
+            $lock = [System.IO.File]::Open($launcherDestination, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+            try {
+                $env:CHEZMOI_SOURCE_DIR = $source
+                $env:USERPROFILE = $destination
+                $deploy = [scriptblock]::Create($rendered.StandardOutput)
+
+                { & $deploy } | Should -Not -Throw
+
+                (Get-FileHash -LiteralPath $launcherDestination).Hash | Should -Be (Get-FileHash -LiteralPath $launcherSource).Hash
+                Get-Content -LiteralPath (Join-Path $destination '.local/bin/stop-stale-codex-login.ps1') | Should -Be '# next deployment'
+            }
+            finally {
+                $lock.Dispose()
+                $env:CHEZMOI_SOURCE_DIR = $previousSource
+                $env:USERPROFILE = $previousProfile
+            }
+        }
+
+        It 'should replace changed unlocked launchers and report changed locked launchers as failures' {
+            $template = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/shells/run_onchange_deploy.ps1.tmpl') -Raw
+            $rendered = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"windows"}}'
+            $rendered.ExitCode | Should -Be 0 -Because $rendered.StandardError
+            # Load the real rendered deployment function without deploying to the user profile.
+            $ast = [System.Management.Automation.Language.Parser]::ParseInput($rendered.StandardOutput, [ref]$null, [ref]$null)
+            $functionAst = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Deploy-File' }, $true)
+            . ([scriptblock]::Create($functionAst.Extent.Text))
+            $launcherSource = Join-Path $TestDrive 'new-codex.cmd'
+            $launcherDestination = Join-Path $TestDrive 'old-codex.cmd'
+            Set-Content -LiteralPath $launcherSource -Value 'new launcher' -Encoding ASCII
+            Set-Content -LiteralPath $launcherDestination -Value 'old launcher' -Encoding ASCII
+            Deploy-File $launcherSource $launcherDestination
+            Get-Content -LiteralPath $launcherDestination | Should -Be 'new launcher'
+
+            Set-Content -LiteralPath $launcherSource -Value 'updated launcher' -Encoding ASCII
+            $lock = [System.IO.File]::Open($launcherDestination, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+            try {
+                { $ErrorActionPreference = 'Stop'; Deploy-File $launcherSource $launcherDestination } | Should -Throw
+                Get-Content -LiteralPath $launcherDestination | Should -Be 'new launcher'
+            }
+            finally {
+                $lock.Dispose()
+            }
+        }
+
         It 'should deploy secret loader files from the managed dot_config paths' {
             $scriptPaths = @(
                 Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/shells/run_onchange_deploy.ps1.tmpl"

@@ -2,16 +2,14 @@
 _: {
   codex = {
     # Codex CLI is intentionally kept out of Nix package outputs. The
-    # npm package is the single CLI provider on every supported OS so
+    # npm package is the CLI provider on Unix so
     # `codex update` can identify and update its installation method.
     pkg = null;
     npm = "@openai/codex";
     category = "llm";
     support = {
       windows = {
-        provider = "npm";
-        source = "npm";
-        identity = "@openai/codex";
+        unsupported = "Use the Codex runtime bundled with the Windows ChatGPT desktop app";
       };
       darwin = {
         provider = "npm";

@@ -10,7 +10,7 @@ let
   support = sets.supportReport.codex;
 in
 {
-  testCodexUsesNpmOnEverySupportedPlatform = {
+  testCodexUsesNpmOnUnixAndBundledRuntimeOnWindows = {
     expr = {
       inherit (sets) providerErrors;
       nixPackageSelected = builtins.elem pkgs.hello sets.all;
@@ -18,7 +18,8 @@ in
       npmVerify = sets.npmVerify.codex;
       support = {
         windows = {
-          inherit (support.windows) provider source identity;
+          provider = support.windows.provider or null;
+          excludedWithReason = (support.windows.unsupported or "") != "";
         };
         darwin = {
           inherit (support.darwin) provider source identity;
@@ -38,9 +39,8 @@ in
       };
       support = {
         windows = {
-          provider = "npm";
-          source = "npm";
-          identity = "@openai/codex";
+          provider = null;
+          excludedWithReason = true;
         };
         darwin = {
           provider = "npm";

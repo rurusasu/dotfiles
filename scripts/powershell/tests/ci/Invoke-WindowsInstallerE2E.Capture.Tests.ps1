@@ -26,16 +26,17 @@ BeforeAll {
 
         $windowsFixture = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
         $parentRuntime = if ($windowsFixture) {
-            (Get-Command powershell.exe -CommandType Application -ErrorAction Stop).Source
+            (Get-Command powershell.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
         }
         else { (Get-Process -Id $PID).Path }
         $childRuntimePath = if ($windowsFixture) {
             $childCommand = if ($ChildRuntime -eq '5.1') { 'powershell.exe' } else { 'pwsh.exe' }
-            (Get-Command $childCommand -CommandType Application -ErrorAction Stop).Source
+            (Get-Command $childCommand -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
         }
         else { $parentRuntime }
         $expectedRuntime = if ($ChildRuntime -eq '5.1') { '5.1' } else { '7' }
-        $caseRoot = Join-Path $Directory ([guid]::NewGuid().ToString('N'))
+        # A wildcard-bearing directory must still capture to the exact log file.
+        $caseRoot = Join-Path $Directory ('capture [GUI] ' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $caseRoot | Out-Null
         $tokens = $null
         $parseErrors = $null

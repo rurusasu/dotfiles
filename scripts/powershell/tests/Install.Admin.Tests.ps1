@@ -62,17 +62,14 @@ Describe 'install.admin.ps1' {
 
         $exitCode | Should -Be 0 -Because $outputText
         $outputText | Should -Not -Match "Cannot process argument transformation on parameter 'AdminOnly'"
-        # The generated catalog now contains administrator-only WinGet
-        # packages (AutoHotkey/Build Tools), so the admin phase is applicable
-        # even when WSL and VHD setup are explicitly skipped.
-        $outputLines[-1] | Should -Be "True" -Because $outputText
+        # GUI setup has no administrator-only package entries. The standalone
+        # legacy admin adapter must remain idle with WSL/VHD explicitly skipped.
+        $outputLines[-1] | Should -Be "False" -Because $outputText
     }
 
-    It 'should encode elevated options so Start-Process cannot strip JSON quotes' {
+    It 'should leave the standalone admin adapter outside GUI setup' {
         $content = Get-Content -LiteralPath $script:entrypoint -Raw
-        $content | Should -Match '\[Convert\]::ToBase64String'
-        $content | Should -Match '"-OptionsBase64"'
-        $content | Should -Not -Match '"-OptionsJson"'
+        $content | Should -Not -Match 'install\.admin\.ps1|Start-Process|OptionsBase64'
     }
 
     It 'should filter handlers by Phase 2' {

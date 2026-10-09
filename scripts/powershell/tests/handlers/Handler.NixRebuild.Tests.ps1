@@ -100,8 +100,11 @@ Describe 'NixRebuildHandler' {
     Context 'Apply' {
         BeforeEach {
             Mock Write-Host { }
-            # windows/pnpm/packages.json が worktree/CI に存在しない場合でも
-            # pnpm テストが動作するよう Test-Path をモック
+            # The legacy WSL adapter accepts an explicit CLI manifest; the
+            # Windows GUI-only default manifest intentionally has no packages.
+            Mock Get-JsonContent {
+                return @{ globalPackages = @('@example/native-tool') }
+            }
             Mock Test-Path { return $true } -ParameterFilter { $LiteralPath -and $LiteralPath -match 'pnpm.*packages\.json' }
         }
 

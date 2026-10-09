@@ -18,66 +18,24 @@ Describe 'install.ps1 (orchestrator)' {
         @($errors).Count | Should -Be 0
     }
 
-    It 'should reference user/admin phase scripts' {
+    It 'should call only GUI user setup and not provision WSL or run CLI acceptance' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match 'install\.user\.ps1'
-        $content | Should -Match 'install\.admin\.ps1'
+        $content | Should -Not -Match 'install\.admin\.ps1|Test-DotfilesEnvironment|Start-Process|NixOS|Invoke-ConsentPrompt'
     }
 
-    It 'should elevate admin phase with RunAs' {
-        $content = Get-Content -LiteralPath $script:target -Raw
-        $content | Should -Match '-Verb RunAs'
-    }
-
-    It 'should handle canceled admin elevation without throwing' {
-        $content = Get-Content -LiteralPath $script:target -Raw
-        $content | Should -Match 'catch \[System\.InvalidOperationException\]'
-        $content | Should -Match 'Admin phase was canceled'
-        $content | Should -Match 'Admin phase skipped'
-    }
-
-    It 'should exit with failure when admin phase is skipped' {
-        $content = Get-Content -LiteralPath $script:target -Raw
-        $content | Should -Match 'Setup Incomplete'
-        $content | Should -Match '(?s)Admin phase skipped.*exit 1'
-    }
-
-    It 'should support NoPause switch for non-interactive runs' {
+    It 'should support noninteractive GUI verification and completion' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '\[switch\]\$NoPause'
-    }
-
-    It 'should forward NoPause to the elevated admin phase' {
-        $content = Get-Content -LiteralPath $script:target -Raw
-        $content | Should -Match '(?s)\$argList = @\(.*"-AdminOnly:\$true".*"-NoPause:\$NoPause"'
-    }
-
-    It 'should expose one explicit switch for each local AI service' {
-        $content = Get-Content -LiteralPath $script:target -Raw
-    }
-
-    It 'should converge deferred NixOS setup after admin work and before acceptance' {
-        $content = Get-Content -LiteralPath $script:target -Raw
-        $convergence = $content.IndexOf('Phase 2c: Post-Admin NixOS Convergence')
-        $acceptance = $content.IndexOf('Environment Acceptance')
-
-        $convergence | Should -BeGreaterThan -1
-        $acceptance | Should -BeGreaterThan $convergence
-        $content | Should -Match '(?s)\$adminRequired.*\$adminScriptPath.*-AdminOnly:\$false'
-    }
-
-    It 'should support CI user-phase package verification switches' {
-        $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '\[switch\]\$UserPhaseOnly'
         $content | Should -Match '\[switch\]\$WingetVerifyCommandOnly'
         $content | Should -Match 'WingetVerifyCommandOnly'
     }
 
-    It 'should repair Windows environment variables before computing default paths' {
+    It 'should repair the Windows environment before invoking GUI setup' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match 'WindowsEnvironment\.ps1'
         $content | Should -Match 'Repair-WindowsSetupEnvironment'
-        $content | Should -Match '\$PSBoundParameters\.ContainsKey\("InstallDir"\)'
     }
 
     It 'install.cmd should invoke the explicit PowerShell 7 path without changing PATH' {

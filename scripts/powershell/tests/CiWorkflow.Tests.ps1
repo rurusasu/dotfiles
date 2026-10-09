@@ -83,8 +83,6 @@ Describe 'CI workflow configuration' {
         $installerScript | Should -Match 'seededUserPath\.Length -le 32767'
         $installerScript | Should -Match 'Registry\]::CurrentUser\.OpenSubKey\(''Environment'', \$true\)'
         $installerScript | Should -Match 'SetValue\(''PATH'', \$seededUserPath, \[Microsoft\.Win32\.RegistryValueKind\]::ExpandString\)'
-        $installerScript | Should -Match 'User PATH repaired: removed'
-        $installerScript | Should -Match 'remainingStaleUserPathEntries'
         $installerScript | Should -Match 'DoNotExpandEnvironmentNames'
         $installerScript | Should -Match 'SetValue\(''PATH'', \$originalUserPathRegistryValue, \$originalUserPathRegistryKind\)'
         $installerScript | Should -Match 'DeleteValue\(''PATH'', \$false\)'
@@ -95,9 +93,11 @@ Describe 'CI workflow configuration' {
         $installerScript | Should -Match '\$wingetManifest = Get-Content.*windows/winget/packages\.json'
         $installerScript | Should -Match '\$wingetSources\s*=\s*@\('
         $installerScript | Should -Match 'SourceDetails\.Name -in @\(''winget'', ''msstore''\)'
-        $installerScript | Should -Match 'Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue \$true'
         $installerScript | Should -Match '\$null -eq \$skipInstall -or -not \[bool\]\$skipInstall\.Value'
         $installerScript | Should -Match 'Sort-Object -Unique'
+        $installerScript | Should -Not -Match 'User PATH repaired|remainingStaleUserPathEntries'
+        $installerScript | Should -Match 'Update-ProcessEnvironmentPath'
+        $installerScript | Should -Match 'Post-install PATH exceeds the cmd\.exe command environment limit'
         $wingetAssertion | Should -Match 'reported an empty WinGet CI verification inventory'
     }
     It 'should run the real installer in concurrent PowerShell 5.1 and 7 processes' {
@@ -122,19 +122,9 @@ Describe 'CI workflow configuration' {
 
         $installerScript | Should -Match '\$runtimeCommand = if \(\$expectedRuntime -eq ''5\.1''\) \{ ''powershell\.exe'' \} else \{ ''pwsh\.exe'' \}'
         $installerScript | Should -Match 'install\.cmd -NoPause -UserPhaseOnly(?!\s+-WingetVerifyCommandOnly)'
-        $installerScript | Should -Match 'RequiredOutputMarkers\s+\$requiredPackageManagerMarkers'
-        $installerScript | Should -Match '\[Pnpm\] npm で pnpm をインストールしました'
-        $installerScript | Should -Match '\[Npm\] ✓ \$\(\$package\.name\)'
-        $installerScript | Should -Match 'if \(\$expectedRuntime -eq ''7''\)'
-        $installerScript | Should -Match 'Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue \$true'
-        $installerScript | Should -Match '\$powerShellPackages\[0\]\s*\|\s*Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue \$true -Force'
         $installerScript | Should -Match '\$expectedWindowsPackageIds'
         $installerScript | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
-        $installerScript | Should -Match 'Update-ProcessEnvironmentPath -ExcludePath \$runnerPnpmDirectories'
-        ([regex]::Matches($installerScript, [regex]::Escape("Invoke-Npm -Arguments @('prefix', '--global')"))).Count | Should -Be 2
-        $installerScript | Should -Not -Match '\bnpm prefix --global\b'
         $installerScript | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'
-        $installerScript | Should -Match 'Name = ''pnpm''; Arguments = @\(''--version''\)'
         $installerScript | Should -Match 'Write-Host \$failureSummary -ForegroundColor Red'
     }
     It 'should keep the dedicated Windows installer E2E script UTF-8 BOM encoded and parseable' {
@@ -152,24 +142,11 @@ Describe 'CI workflow configuration' {
         $parseErrors | Should -BeNullOrEmpty
     }
 
-    It 'should verify Codex is installed and launched from the npm package' {
+    It 'should verify GUI inventory including Store Codex without CLI bootstrap or retirement' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
-
-        $installerScript | Should -Match "@openai/codex"
-        $installerScript | Should -Match "npm.*list.*--global"
-        $installerScript | Should -Match "Get-Command -Name 'codex' -CommandType Application"
-        $installerScript | Should -Match 'Codex CLI --help failed'
-        $installerScript | Should -Not -Match 'Handler\.Codex\.ps1'
-        $installerScript | Should -Not -Match 'codex-code-mode-host\.exe'
-    }
-    It 'should verify ChatGPT Classic is removed by the real Windows installer E2E' {
-        $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
-
-
-        $installerScript | Should -Match '9NT1R1C2HH7J'
-        $installerScript.Contains("RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=(removed|absent)") | Should -BeTrue
-        $installerScript | Should -Match 'winget list --id 9NT1R1C2HH7J --exact --source msstore'
-        $installerScript | Should -Match 'ChatGPT Classic is still installed after cleanup'
+        $installerScript | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
+        $installerScript | Should -Not -Match 'Microsoft\.PowerShell|ciSkipInstall -NotePropertyValue|Invoke-Npm|Invoke-Pnpm|@openai/codex|Codex CLI|9NT1R1C2HH7J|RETIRED_PACKAGE_CLEANUP'
+        $installerScript | Should -Match 'The GUI installer performed npm/pnpm activity'
     }
 
     It 'should run the admin-required Visual Studio package through an elevated installer and verify its compiler' {
@@ -206,35 +183,13 @@ Describe 'CI workflow configuration' {
         $windowsJob | Should -Match '\$selfTestExitCode = \$LASTEXITCODE'
     }
 
-    It 'should run npm pnpm and 1Password executables after the Windows installer' {
+    It 'should probe the GUI terminal without obsolete CLI or portable-command requirements' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
-
-
-        $installerScript | Should -Match "'agent-browser'"
-        $installerScript | Should -Match "Name = 'npm'"
-        $installerScript | Should -Match 'agent-browser@0\.38\.1 requires Node\.js >=24\.0\.0'
-        $installerScript | Should -Match '\[version\]''24\.0\.0'''
-        $installerScript | Should -Match "Name = 'herdr'"
-        $installerScript | Should -Match "'pnpm'"
-        $installerScript | Should -Match "'op\.exe'"
-        $installerScript | Should -Match 'Persisted user PATH does not identify an installed AgileBits\.1Password\.CLI package directory'
-        $installerScript | Should -Match 'WinGet Links op\.exe shim is missing after OnePasswordCli setup'
-        $installerScript | Should -Match "GetEnvironmentVariable\('Path',\s*'User'\)"
-        $installerScript | Should -Match "GetEnvironmentVariable\('PNPM_HOME',\s*'User'\)"
-        $installerScript | Should -Match 'Get-Command -Name \$requiredCommand\.Name -CommandType Application'
-        $installerScript | Should -Match 'Windows installer did not expose required command'
-        $installerScript | Should -Match 'Windows installer command.*failed'
-    }
-
-    It 'should diagnose an unsupported Node version before probing agent-browser' {
-        $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
-
-
-        $nodePreflightIndex = $installerScript.IndexOf('$nodeVersionOutput = @(node --version 2>&1)', [System.StringComparison]::Ordinal)
-        $requiredCommandIndex = $installerScript.IndexOf('$requiredCommands = @(', [System.StringComparison]::Ordinal)
-
-        $nodePreflightIndex | Should -BeGreaterThan -1
-        $requiredCommandIndex | Should -BeGreaterThan $nodePreflightIndex
+        $installerScript | Should -Not -Match 'agent-browser|herdr|op\.exe|node --version|PNPM_HOME|Assert-WingetCommandRecovery'
+        $installerScript | Should -Match "Invoke-WindowsE2EValidation -Name 'WezTerm install PATH and version'"
+        $installerScript | Should -Match 'Assert-WezTermInstallEvidence -Output \$out'
+        $installerScript | Should -Match "Invoke-VerifyCommand -Command 'wezterm'"
+        $installerScript | Should -Match 'WEZTERM_E2E: runtime='
     }
 
     It 'should derive the Windows E2E inventory when optional package metadata is omitted' {

@@ -20,10 +20,10 @@ Describe 'WingetHandler' {
             Mock Write-Host { param($Object) $script:phaseLogs.Add([string]$Object) }
             $script:phaseHandler = [WingetHandler]::new()
             $script:phasePackage = [pscustomobject]@{
-                Id = 'wez.wezterm'
+                Id                    = 'wez.wezterm'
                 InstallTimeoutSeconds = 30
-                PathEntries = @()
-                VerifyCommand = [pscustomobject]@{ command = 'wezterm'; args = @('--version') }
+                PathEntries           = @()
+                VerifyCommand         = [pscustomobject]@{ command = 'wezterm'; args = @('--version') }
             }
         }
 
@@ -201,6 +201,21 @@ Describe 'WingetHandler' {
     }
 
     Context 'RemoveRetiredPackages' {
+        It 'should not uninstall any retired packages in the GUI-only profile' {
+            $manifestDirectory = Join-Path $ctx.DotfilesPath 'windows/winget'
+            @{ Sources = @() } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $manifestDirectory 'packages.json') -Encoding UTF8
+            Remove-Item -LiteralPath (Join-Path $manifestDirectory 'retired-packages.json')
+            $ctx.Options['SkipRetiredPackageCleanup'] = $true
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains 'uninstall') { throw 'GUI setup must not run package removal' }
+                $global:LASTEXITCODE = 0
+                return ''
+            }
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -BeTrue
+        }
+
         It 'should fail instead of silently skipping cleanup when the retired manifest is missing' {
             { $handler.RemoveRetiredPackages($TestDrive) } | Should -Throw '*retired package manifest is missing*'
         }
@@ -880,6 +895,102 @@ Describe 'WingetHandler' {
             $ctx.Options["WingetMode"] = "export"
             $result = $handler.CanApply($ctx)
             $result | Should -Be $true
+        }
+    }
+
+    Context 'Apply - Discord forced update' {
+        BeforeEach {
+            $script:discordInstallCalls = 0
+            $script:discordInstallArguments = @()
+            Mock Get-JsonContent {
+                [pscustomobject]@{
+                    Sources = @([pscustomobject]@{
+                            SourceDetails = [pscustomobject]@{ Name = 'winget' }
+                            Packages      = @([pscustomobject]@{ PackageIdentifier = 'Discord.Discord' })
+                        })
+                }
+            }
+            Mock Get-Process { @() }
+            Mock Invoke-Winget {
+                param($Arguments)
+                $global:LASTEXITCODE = 0
+                if ($Arguments -contains 'list') {
+                    return @('Name Id Version Source', 'Discord Discord.Discord 1.0.9259 winget')
+                }
+                if ($Arguments -contains 'install') {
+                    $script:discordInstallCalls++
+                    $script:discordInstallArguments = @($Arguments)
+                    return 'Successfully installed'
+                }
+            }
+        }
+
+        It 'should force Discord install-or-upgrade without requiring a separate upgrade call' {
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:discordInstallCalls | Should -Be 1
+            $script:discordInstallArguments | Should -Contain '--force'
+            $script:discordInstallArguments | Should -Contain 'Discord.Discord'
+            $script:discordInstallArguments | Should -Contain '--silent'
+        }
+
+        It 'should fail Discord and avoid launching its installer when process preparation fails' {
+            Mock Get-Process { throw 'process inspection failed' }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $script:discordInstallCalls | Should -Be 0
+        }
+
+        It 'should prepare Discord before starting its installer' {
+            $script:discordInstallEvents = [System.Collections.Generic.List[string]]::new()
+            Mock Invoke-DiscordInstallPreparation { $script:discordInstallEvents.Add('prepare') }
+            Mock Invoke-Winget {
+                param($Arguments)
+                $global:LASTEXITCODE = 0
+                if ($Arguments -contains 'install') {
+                    $script:discordInstallEvents.Add('install')
+                    return 'Successfully installed'
+                }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            @($script:discordInstallEvents) | Should -Be @('prepare', 'install')
+        }
+
+        It 'should continue other packages after Discord process preparation fails' {
+            Mock Get-Process { throw 'process inspection failed' }
+            Mock Get-JsonContent {
+                [pscustomobject]@{
+                    Sources = @([pscustomobject]@{
+                            SourceDetails = [pscustomobject]@{ Name = 'winget' }
+                            Packages      = @(
+                                [pscustomobject]@{ PackageIdentifier = 'Discord.Discord' }
+                                [pscustomobject]@{ PackageIdentifier = 'Contoso.Tool' }
+                            )
+                        })
+                }
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeFalse
+            $script:discordInstallCalls | Should -Be 1
+            $script:discordInstallArguments | Should -Contain 'Contoso.Tool'
+            $script:discordInstallArguments | Should -Not -Contain '--force'
+        }
+
+        It 'should keep CanApply free of process termination' {
+            Mock Get-ExternalCommand { @{ Source = 'C:\winget.exe' } }
+            Mock Test-PathExist { $true }
+            Mock Invoke-Winget { $global:LASTEXITCODE = 0; 'v1.6.0' }
+            Mock Get-Process { throw 'CanApply must not inspect running applications' }
+
+            $handler.CanApply($ctx) | Should -BeTrue
         }
     }
 
@@ -1716,6 +1827,61 @@ Describe 'WingetHandler' {
         }
     }
 
+    Context 'Apply - GUI inventory and CLI environment isolation' {
+        BeforeEach {
+            Mock Write-Host { }
+            Mock Get-ExternalCommand { return @{ Source = 'C:\winget.exe' } }
+            Mock Test-PathExist { return $true }
+            Mock Get-JsonContent {
+                return [pscustomobject]@{ Sources = @(
+                        [pscustomobject]@{
+                            SourceDetails = [pscustomobject]@{ Name = 'winget' }
+                            Packages      = @(
+                                [pscustomobject]@{ PackageIdentifier = 'Obsidian.Obsidian'; verifyCommand = [pscustomobject]@{ command = 'gui-fixture'; args = @('--version') } },
+                                [pscustomobject]@{ PackageIdentifier = 'Google.Chrome'; verifyCommand = [pscustomobject]@{ command = 'gui-fixture'; args = @('--version') } }
+                            )
+                        }
+                    )
+                }
+            }
+            Mock Invoke-Winget { $global:LASTEXITCODE = 0; return '' }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return '1.0.0' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like '*\.cargo\bin' }
+            Mock Get-UserEnvironmentPath { return 'C:\Windows' }
+            Mock Set-UserEnvironmentPath { throw 'GUI setup must not configure Cargo' }
+            $ctx.Options['WingetMode'] = 'import'
+            $ctx.Options['SkipRetiredPackageCleanup'] = $true
+        }
+
+        It 'should emit one complete inventory during a normal GUI install' {
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -BeTrue
+            Should -Invoke Write-Host -Times 1 -Exactly -ParameterFilter {
+                [string]$Object -eq '[Winget] CI_VERIFICATION_INVENTORY: Google.Chrome|Obsidian.Obsidian'
+            }
+        }
+
+        It 'should leave existing Cargo settings unchanged without Rustup when VerifyOnly is <VerifyOnly>' -TestCases @(
+            @{ VerifyOnly = $false }
+            @{ VerifyOnly = $true }
+        ) {
+            param([bool]$VerifyOnly)
+            $ctx.Options['WingetVerifyCommandOnly'] = $VerifyOnly
+            Mock Invoke-Winget {
+                param($Arguments)
+                $global:LASTEXITCODE = 0
+                if ($Arguments -contains 'list') { return @('Google.Chrome', 'Obsidian.Obsidian') }
+                return ''
+            }
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -BeTrue
+            Should -Invoke Set-UserEnvironmentPath -Times 0 -Exactly
+            if ($VerifyOnly) {
+                Should -Invoke Invoke-Winget -Times 0 -Exactly -ParameterFilter { $Arguments -contains 'install' }
+            }
+        }
+    }
+
     Context 'EnsureCargoPath - .cargo\bin does not exist' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
@@ -1727,7 +1893,7 @@ Describe 'WingetHandler' {
                         [PSCustomObject]@{
                             SourceDetails = [PSCustomObject]@{ Name = "winget" }
                             Packages      = @(
-                                [PSCustomObject]@{ PackageIdentifier = "Git.Git" }
+                                [PSCustomObject]@{ PackageIdentifier = "Rustlang.Rustup" }
                             )
                         }
                     )
@@ -1758,7 +1924,7 @@ Describe 'WingetHandler' {
                         [PSCustomObject]@{
                             SourceDetails = [PSCustomObject]@{ Name = "winget" }
                             Packages      = @(
-                                [PSCustomObject]@{ PackageIdentifier = "Git.Git" }
+                                [PSCustomObject]@{ PackageIdentifier = "Rustlang.Rustup" }
                             )
                         }
                     )
@@ -1793,7 +1959,7 @@ Describe 'WingetHandler' {
                         [PSCustomObject]@{
                             SourceDetails = [PSCustomObject]@{ Name = "winget" }
                             Packages      = @(
-                                [PSCustomObject]@{ PackageIdentifier = "Git.Git" }
+                                [PSCustomObject]@{ PackageIdentifier = "Rustlang.Rustup" }
                             )
                         }
                     )
@@ -2388,6 +2554,16 @@ Describe 'WingetHandler' {
             }
         }
 
+        It 'should defer Microsoft.WSL without querying its installed state in the user phase' {
+            Mock Invoke-Winget { throw 'deferred WSL must not invoke winget' }
+            Mock Invoke-VerifyCommand { throw 'deferred WSL must not invoke its verifier' }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $result.Message | Should -Match '1 個管理者フェーズ待ち'
+        }
+
         It 'should defer Microsoft.WSL verification to admin WSL install during normal install' {
             Mock Test-WslAvailable { return $false }
             Mock Invoke-VerifyCommand {
@@ -2945,6 +3121,26 @@ Describe 'WingetHandler' {
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
+        It 'should skip manual packages without querying their installed state when no verifier is declared' {
+            Mock Get-JsonContent {
+                [pscustomobject]@{
+                    Sources = @([pscustomobject]@{
+                            SourceDetails = [pscustomobject]@{ Name = 'winget' }
+                            Packages      = @([pscustomobject]@{
+                                    PackageIdentifier = 'Manual.GUIApp'
+                                    skipInstall       = $true
+                                })
+                        })
+                }
+            }
+            Mock Invoke-Winget { throw 'manual package without a verifier must not invoke winget' }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $result.Message | Should -Match '1 個スキップ'
+        }
+
         It 'should skip manual packages instead of invoking winget install' {
             Mock Get-JsonContent {
                 return [PSCustomObject]@{
@@ -2980,6 +3176,42 @@ Describe 'WingetHandler' {
             Should -Invoke Write-Host -ParameterFilter {
                 [string]$Object -match 'スキップ \(手動対象\): Manual\.GUIApp'
             }
+        }
+
+        It 'should retain installed-state checks and verification for manual packages with a verifier from <Source>' -ForEach @(
+            @{ Source = 'winget' }
+            @{ Source = 'msstore' }
+        ) {
+            $script:manualPackageSource = $Source
+            $script:manualVerificationCalls = 0
+            Mock Get-JsonContent {
+                [pscustomobject]@{
+                    Sources = @([pscustomobject]@{
+                            SourceDetails = [pscustomobject]@{ Name = $script:manualPackageSource }
+                            Packages      = @([pscustomobject]@{
+                                    PackageIdentifier = 'Manual.Verified'
+                                    skipInstall       = $true
+                                    verifyCommand     = [pscustomobject]@{ command = 'manual-tool'; args = @('--version') }
+                                })
+                        })
+                }
+            }
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -notcontains 'list') { throw 'manual packages must not be installed' }
+                $global:LASTEXITCODE = 0
+                @('Name Id Version Source', '----------------------', 'Manual Manual.Verified 1.0.0 winget')
+            }
+            Mock Invoke-VerifyCommand {
+                $script:manualVerificationCalls++
+                $global:LASTEXITCODE = 0
+                'manual-tool 1.0.0'
+            }
+
+            $result = $handler.Apply($ctx)
+
+            $result.Success | Should -BeTrue
+            $script:manualVerificationCalls | Should -Be 1
         }
 
         It 'should install packages when verification is unavailable and skipInstall is absent' {

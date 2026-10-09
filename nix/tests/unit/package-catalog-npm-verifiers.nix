@@ -8,12 +8,11 @@ let
   };
 in
 {
-  testCodexIsAnAllPlatformNpmPackageAndUsesCliVerifier = {
+  testCodexUsesUnixNpmProvidersAndCliVerifier = {
     expr = {
       mapping = sets.npmMap.codex;
       verifier = sets.npmVerify.codex;
       providers = builtins.map (platform: sets.supportReport.codex.${platform}.provider) [
-        "windows"
         "darwin"
         "linux"
       ];
@@ -25,7 +24,6 @@ in
         args = [ "--version" ];
       };
       providers = [
-        "npm"
         "npm"
         "npm"
       ];

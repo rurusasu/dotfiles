@@ -436,6 +436,45 @@ function Stop-ProcessSafe {
 
 <#
 .SYNOPSIS
+    Release Discord's installation directory before a forced WinGet update.
+.DESCRIPTION
+    Stop only Discord and Update processes inside the current user's Discord
+    installation. Other Squirrel updaters and Discord channels are unaffected.
+    Termination errors and exit timeouts prevent the installer from starting.
+#>
+function Invoke-DiscordInstallPreparation {
+    [CmdletBinding()]
+    param()
+
+    if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+        throw 'LOCALAPPDATA is required to locate the current user Discord installation.'
+    }
+
+    $discordRoot = [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Discord'))
+    $discordPrefix = $discordRoot + [System.IO.Path]::DirectorySeparatorChar
+    foreach ($process in @(Get-Process -ErrorAction Stop)) {
+        if ($process.ProcessName -notin @('Discord', 'Update')) { continue }
+        $executablePath = $process.Path
+        if ([string]::IsNullOrWhiteSpace($executablePath)) { continue }
+        if (-not $executablePath.StartsWith($discordPrefix, [StringComparison]::OrdinalIgnoreCase)) { continue }
+
+        try {
+            Stop-Process -Id $process.Id -Force -ErrorAction Stop
+        }
+        catch {
+            # Discovery and termination race with Discord exiting on its own.
+            if ($process.HasExited) { continue }
+            throw
+        }
+
+        if (-not $process.WaitForExit(10000)) {
+            throw "Discord process $($process.Id) did not exit within 10 seconds."
+        }
+    }
+}
+
+<#
+.SYNOPSIS
     プロセスを起動する
 .PARAMETER FilePath
     実行ファイルのパス
@@ -1136,19 +1175,23 @@ function Set-UserEnvironmentPath {
     winget install 後は Machine/User PATH が更新されても、実行中の
     PowerShell プロセスには自動反映されない。検証コマンドを同じ
     install.cmd 実行内で見つけられるようにする。
+.PARAMETER ProcessOnly
+    Refresh this process without repairing the persisted User PATH. GUI setup
+    uses this mode; explicitly invoked legacy adapters retain their behavior.
 #>
 function Update-ProcessEnvironmentPath {
     [CmdletBinding()]
     param(
         [string[]]$ExcludePath = @(),
-        [switch]$ReportStatus
+        [switch]$ReportStatus,
+        [switch]$ProcessOnly
     )
 
     $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
     $userPath = Get-UserEnvironmentPath
     $removedMissingUserEntries = 0
     $removedDuplicateUserEntries = 0
-    if (-not [string]::IsNullOrWhiteSpace($userPath)) {
+    if (-not $ProcessOnly -and -not [string]::IsNullOrWhiteSpace($userPath)) {
         $normalizedUserItems = [System.Collections.Generic.List[string]]::new()
         $normalizedUserEntries = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
         foreach ($userItem in ($userPath -split ";")) {

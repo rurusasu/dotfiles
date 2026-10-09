@@ -143,144 +143,6 @@ BeforeAll {
         }
     }
 
-    function New-PhaseIntegrationFixture {
-        param(
-            [Parameter(Mandatory)]
-            [string]$Name
-        )
-
-        $workDir = Join-Path $TestDrive $Name
-        $scriptDir = Join-Path $workDir 'scripts\powershell'
-        $libDir = Join-Path $scriptDir 'lib'
-        $handlersDir = Join-Path $scriptDir 'handlers'
-        New-Item -ItemType Directory -Path $libDir -Force | Out-Null
-        New-Item -ItemType Directory -Path $handlersDir -Force | Out-Null
-
-        Copy-Item -LiteralPath (Join-Path $script:repoRoot 'install.cmd') -Destination (Join-Path $workDir 'install.cmd')
-        foreach ($scriptName in 'install.ps1', 'install.user.ps1', 'install.admin.ps1') {
-            Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\$scriptName") -Destination (Join-Path $scriptDir $scriptName)
-        }
-        foreach ($library in 'WindowsEnvironment.ps1', 'SetupHandler.ps1', 'Invoke-ExternalCommand.ps1') {
-            Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\lib\$library") -Destination (Join-Path $libDir $library)
-        }
-
-        $phaseOneHandler = @'
-class PhaseOneHandler : SetupHandlerBase {
-    PhaseOneHandler() {
-        $this.Name = 'FixturePhase1'
-        $this.Description = 'Deterministic Phase 1 fixture handler'
-        $this.Order = 10
-        $this.Phase = 1
-        $this.RequiresAdmin = $false
-    }
-
-    [bool] CanApply([SetupContext]$ctx) {
-        return $true
-    }
-
-    [SetupResult] Apply([SetupContext]$ctx) {
-        [System.IO.File]::AppendAllText(
-            (Join-Path $ctx.DotfilesPath 'phase-markers.txt'),
-            "PHASE1_APPLIED`nPHASE1_DISTRO=$($ctx.DistroName)`n"
-        )
-        return $this.CreateSuccessResult('FIXTURE_PHASE1_APPLIED')
-    }
-}
-'@
-        $phaseTwoHandler = @'
-class PhaseTwoHandler : SetupHandlerBase {
-    PhaseTwoHandler() {
-        $this.Name = 'FixturePhase2a'
-        $this.Description = 'Deterministic Phase 2a fixture handler'
-        $this.Order = 20
-        $this.Phase = 2
-        $this.RequiresAdmin = $false
-    }
-
-    [bool] CanApply([SetupContext]$ctx) {
-        return $true
-    }
-
-    [SetupResult] Apply([SetupContext]$ctx) {
-        [System.IO.File]::AppendAllText(
-            (Join-Path $ctx.DotfilesPath 'phase-markers.txt'),
-            "PHASE2A_APPLIED`nPHASE2A_DISTRO=$($ctx.DistroName)`n"
-        )
-        return $this.CreateSuccessResult('FIXTURE_PHASE2A_APPLIED')
-    }
-}
-'@
-        $adminProbeHandler = @'
-class PhaseTwoAdminProbeHandler : SetupHandlerBase {
-    PhaseTwoAdminProbeHandler() {
-        $this.Name = 'FixtureAdminProbe'
-        $this.Description = 'Deterministic admin phase probe'
-        $this.Order = 30
-        $this.Phase = 2
-        $this.RequiresAdmin = $true
-    }
-
-    [bool] CanApply([SetupContext]$ctx) {
-        return $false
-    }
-
-    [SetupResult] Apply([SetupContext]$ctx) {
-        return $this.CreateSuccessResult('FIXTURE_ADMIN_PROBE_APPLIED')
-    }
-}
-'@
-        [System.IO.File]::WriteAllText(
-            (Join-Path $handlersDir 'Handler.PhaseOne.ps1'),
-            $phaseOneHandler,
-            [System.Text.UTF8Encoding]::new($false)
-        )
-        [System.IO.File]::WriteAllText(
-            (Join-Path $handlersDir 'Handler.PhaseTwo.ps1'),
-            $phaseTwoHandler,
-            [System.Text.UTF8Encoding]::new($false)
-        )
-        [System.IO.File]::WriteAllText(
-            (Join-Path $handlersDir 'Handler.PhaseTwoAdminProbe.ps1'),
-            $adminProbeHandler,
-            [System.Text.UTF8Encoding]::new($false)
-        )
-
-        $acceptance = @'
-[CmdletBinding()]
-param(
-    [switch]$Docker,
-    [switch]$Runtime,
-    [string]$DistroName = ''
-)
-
-function Test-DotfilesEnvironment {
-    [CmdletBinding()]
-    param(
-        [switch]$Docker,
-        [switch]$Runtime,
-        [string]$DistroName = 'NixOS'
-    )
-
-    Write-Host "FIXTURE_ACCEPTANCE_COMPLETE distro=$DistroName"
-    return [pscustomobject]@{
-        Success = $true
-        Message = 'Fixture acceptance passed'
-    }
-}
-'@
-        [System.IO.File]::WriteAllText(
-            (Join-Path $scriptDir 'Test-Environment.ps1'),
-            $acceptance,
-            [System.Text.UTF8Encoding]::new($false)
-        )
-
-        return [pscustomobject]@{
-            WorkDirectory = $workDir
-            InstallScript = Join-Path $scriptDir 'install.ps1'
-            MarkerFile    = Join-Path $workDir 'phase-markers.txt'
-        }
-    }
-
     function New-InstallCmdSelectionFixture {
         param(
             [Parameter(Mandatory)]
@@ -311,7 +173,7 @@ Describe 'install.cmd entrypoint' {
     It 'should normalize the inherited PATH before discovering or running setup handlers' {
         $userPhase = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/install.user.ps1') -Raw
 
-        $userPhase | Should -Match '(?s)Invoke-ExternalCommand\.ps1.*?Update-ProcessEnvironmentPath\s+-ReportStatus.*?Get-SetupHandler'
+        $userPhase | Should -Match '(?s)Invoke-ExternalCommand\.ps1.*?Update-ProcessEnvironmentPath\s+-ReportStatus.*?WingetHandler.*?new\('
     }
 
     It 'should execute install.ps1 directly and return before timeout' {
@@ -590,35 +452,4 @@ exit 0
         Test-Path -LiteralPath (Join-Path $workDir 'scripts\powershell\selection.txt') | Should -BeFalse
     }
 
-    It 'should preserve <ExpectedDistro> through the real orchestrator phases and acceptance' -ForEach @(
-        @{ ArgumentDistro = $null; ExpectedDistro = 'NixOS' }
-        @{ ArgumentDistro = 'CustomNixOS'; ExpectedDistro = 'CustomNixOS' }
-    ) {
-        if (-not $script:runsOnWindows) {
-            Set-ItResult -Skipped -Because "install.cmd is a Windows entrypoint"
-            return
-        }
-
-        $fixture = New-PhaseIntegrationFixture -Name "install-phase-integration-$ExpectedDistro"
-        $result = Invoke-TestPowerShellProcess `
-            -WorkingDirectory $fixture.WorkDirectory `
-            -ScriptPath $fixture.InstallScript `
-            -DistroName $ArgumentDistro
-
-        $result.ExitCode | Should -Be 0 -Because "stdout=[$($result.Stdout)] stderr=[$($result.Stderr)]"
-        $result.Stdout | Should -Match "Phase 1: User Scope Setup"
-        $result.Stdout | Should -Match "Phase 2a: Non-Admin Setup"
-        $result.Stdout | Should -Match "FIXTURE_PHASE1_APPLIED"
-        $result.Stdout | Should -Match "FIXTURE_PHASE2A_APPLIED"
-        $result.Stdout | Should -Match "FIXTURE_ACCEPTANCE_COMPLETE"
-        $result.Stdout | Should -Match "FIXTURE_ACCEPTANCE_COMPLETE distro=$ExpectedDistro"
-        $result.Stdout | Should -Not -Match "Cannot convert.*SetupContext"
-        $result.Stdout | Should -Match "Setup Complete!"
-
-        $markers = Get-Content -LiteralPath $fixture.MarkerFile
-        $markers | Should -Contain 'PHASE1_APPLIED'
-        $markers | Should -Contain 'PHASE2A_APPLIED'
-        $markers | Should -Contain "PHASE1_DISTRO=$ExpectedDistro"
-        $markers | Should -Contain "PHASE2A_DISTRO=$ExpectedDistro"
-    }
 }

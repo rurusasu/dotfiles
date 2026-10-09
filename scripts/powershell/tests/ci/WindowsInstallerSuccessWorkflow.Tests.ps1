@@ -1,126 +1,177 @@
-﻿Describe 'Windows installer success workflow contract' {
+﻿Describe 'Windows GUI installer success workflow contract' {
     BeforeAll {
-        $workflowPath = Join-Path $PSScriptRoot '../../../../.github/workflows/ci-nix.yml'
-        $script:workflowLines = @(Get-Content -LiteralPath $workflowPath -Encoding UTF8)
-        $script:workflow = $script:workflowLines -join "`n"
-        $installerE2EPath = Join-Path $PSScriptRoot '../../ci/Invoke-WindowsInstallerE2E.ps1'
-        $script:installerE2ELines = @(Get-Content -LiteralPath $installerE2EPath -Encoding UTF8)
-        $script:installerE2E = $script:installerE2ELines -join "`n"
-    }
-    It 'passes package-manager success markers into the actual installer success assertion' {
-        $script:installerE2E | Should -Match '\$requiredPackageManagerMarkers\s*=\s*@\('
-        $script:installerE2E | Should -Match 'Assert-WindowsInstallerSuccess'
-        $script:installerE2E | Should -Match '\-RequiredOutputMarkers\s+\$requiredPackageManagerMarkers'
-    }
-    It 'requires success evidence for every npm and pnpm manifest package' {
-        $workflow = $script:installerE2E
-        $workflow | Should -Match '\$npmManifest\s*=\s*Get-Content'
-        $workflow | Should -Match '\$pnpmManifest\s*=\s*Get-Content'
-        $workflow | Should -Match '\[Npm\] \u2713 \$\(\$package\.name\)'
-        $workflow | Should -Match '\[Pnpm\] \u2713 \$\(\$package\.name\)'
-    }
-
-    It 'builds pnpm package evidence safely when optional metadata is absent under StrictMode' {
-        Set-StrictMode -Version Latest
-        $manifestPath = Join-Path $PSScriptRoot '../../../../windows/pnpm/packages.json'
-        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-        $packages = @($manifest.globalPackages)
-
-        $successMarker = [string][char]0x2713
-        $markers = @()
-        foreach ($package in $packages) {
-            $markers += "[Pnpm] $successMarker $($package.name)"
+        $script:repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../..'))
+        $script:workflow = Get-Content -LiteralPath (Join-Path $script:repositoryRoot '.github/workflows/ci-nix.yml') -Raw -Encoding UTF8
+        $installerPath = Join-Path $PSScriptRoot '../../ci/Invoke-WindowsInstallerE2E.ps1'
+        $script:installerE2E = Get-Content -LiteralPath $installerPath -Raw -Encoding UTF8
+        $tokens = $null
+        $parseErrors = $null
+        $outerAst = [Management.Automation.Language.Parser]::ParseFile($installerPath, [ref]$tokens, [ref]$parseErrors)
+        $embedded = $outerAst.Find({ param($node)
+                $node -is [Management.Automation.Language.StringConstantExpressionAst] -and
+                $node.StringConstantType -eq 'SingleQuotedHereString'
+            }, $true)
+        $innerAst = [Management.Automation.Language.Parser]::ParseInput($embedded.Value, [ref]$tokens, [ref]$parseErrors)
+        if ($parseErrors.Count) { throw ($parseErrors -join "`n") }
+        $validationFunction = $innerAst.Find({ param($node)
+                $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+                $node.Name -eq 'Invoke-WindowsE2EValidation'
+            }, $true)
+        . ([scriptblock]::Create($validationFunction.Extent.Text))
+        $script:validationCalls = @($innerAst.FindAll({ param($node)
+                    $node -is [Management.Automation.Language.CommandAst] -and
+                    $node.GetCommandName() -eq 'Invoke-WindowsE2EValidation'
+                }, $true))
+        $script:guiIds = @(
+            'TheBrowserCompany.Arc', 'Google.Chrome', 'Obsidian.Obsidian', 'wez.wezterm',
+            'AgileBits.1Password', 'Discord.Discord', 'StablyAI.Orca', 'Microsoft.PowerToys',
+            'Microsoft.WindowsTerminal', '9PLM9XGG6VKS'
+        )
+        $script:validOutput = (@(
+                'Using PowerShell 7'
+                '[INFO] Process PATH normalized: removed 1000 missing directories and omitted 0 over-limit entries; final length 1000/8191.'
+                'Total: 1 | Success: 1 | Failure: 0'
+                'User Phase Complete!'
+                "[Winget] CI_VERIFICATION_INVENTORY: $($script:guiIds -join '|')"
+            ) + @($script:guiIds | ForEach-Object { "[Winget] $([char]0x2713) $_" })) -join "`n"
+        function Invoke-ShippedValidation {
+            param([string]$Name)
+            $call = @($script:validationCalls | Where-Object { $_.CommandElements[2].Value -eq $Name })
+            if ($call.Count -ne 1) { throw "Expected exactly one shipped validation: $Name" }
+            & ([scriptblock]::Create($call[0].Extent.Text))
         }
-
-        $markers.Count | Should -BeGreaterThan 0
     }
 
-    It 'derives the WinGet inventory across sources and keeps verify-only CI packages' {
-        $installerE2E = $script:installerE2E
-        $expectedPackageBlock = [regex]::Match(
-            $installerE2E,
-            '(?s)\$expectedWindowsPackageIds\s*=\s*@\((?<block>.*?)\)\s*\n\s*if \(\$expectedWindowsPackageIds.Count'
-        ).Groups['block'].Value
-
-        $expectedPackageBlock | Should -Not -Be ''
-        $expectedPackageBlock | Should -Match '\$requiresAdmin'
-        $expectedPackageBlock | Should -Match '\$skipInstall'
-        $expectedPackageBlock | Should -Not -Match 'ciSkipInstall'
-
-        $installerE2E | Should -Match '\$wingetSources\s*=\s*@\([\s\S]*?SourceDetails\.Name -in @\(''winget'', ''msstore''\)'
-        $installerE2E | Should -Match 'Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue \$true'
-        $installerE2E | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
-        $installerE2E | Should -Match '(?s)\$script:npmPnpmShim = \$null.*?Invoke-WindowsE2EValidation -Name ''pnpm bootstrap'''
-        $installerE2E | Should -Match '\$script:npmPnpmShim = Join-Path \$npmGlobalPrefix ''pnpm\.cmd'''
-        $installerE2E | Should -Match '& \$script:npmPnpmShim --version'
-        $installerE2E | Should -Match '\$expectedPnpmPath = \[System\.IO\.Path\]::GetFullPath\(\$script:npmPnpmShim\)'
+    BeforeEach {
+        $script:originalWorkspace = $env:GITHUB_WORKSPACE
+        $env:GITHUB_WORKSPACE = $script:repositoryRoot
+        $validationErrors = [Collections.Generic.List[string]]::new()
+        $out = $script:validOutput
+        $exitCode = 0
+        $isWindowsPowerShell = $false
+        Set-StrictMode -Version Latest
     }
-    It 'runs the full installer in separate parallel PowerShell 5.1 and 7 jobs' {
+
+    AfterEach {
+        $env:GITHUB_WORKSPACE = $script:originalWorkspace
+    }
+
+    It 'should accept a completed GUI install without npm pnpm or retired-package evidence' {
+        Invoke-ShippedValidation -Name 'installer evidence'
+        $validationErrors | Should -BeNullOrEmpty
+    }
+
+    It 'should reject npm or pnpm activity in an otherwise successful GUI install' -TestCases @(
+        @{ Marker = '[Npm] installed a global package' }
+        @{ Marker = '[Pnpm] bootstrapped pnpm' }
+    ) {
+        param($Marker)
+        $out += "`n$Marker"
+        Invoke-ShippedValidation -Name 'installer evidence'
+        ($validationErrors -join ' | ') | Should -Match 'npm/pnpm activity'
+    }
+
+    It 'should reject a failed installer even with complete GUI evidence' {
+        $exitCode = 7
+        Invoke-ShippedValidation -Name 'installer evidence'
+        ($validationErrors -join ' | ') | Should -Match 'exited with code 7'
+    }
+
+    It 'should reject missing normalization evidence or a mismatched launcher runtime' -TestCases @(
+        @{ Fault = 'path' }
+        @{ Fault = 'runtime' }
+    ) {
+        param($Fault)
+        if ($Fault -eq 'path') {
+            $out = ($out -split "`n" | Where-Object { $_ -notmatch 'Process PATH normalized:' }) -join "`n"
+        }
+        else { $isWindowsPowerShell = $true }
+        Invoke-ShippedValidation -Name 'installer evidence'
+        $validationErrors.Count | Should -Be 1
+        ($validationErrors -join ' | ') | Should -Match 'stale PATH|forced Windows PowerShell'
+    }
+
+    It 'should verify every GUI package including verify-only Orca and Store Codex' {
+        Invoke-ShippedValidation -Name 'WinGet package inventory'
+        $validationErrors | Should -BeNullOrEmpty
+    }
+
+    It 'should reject missing GUI success evidence' -TestCases @(
+        @{ PackageId = 'StablyAI.Orca' }
+        @{ PackageId = '9PLM9XGG6VKS' }
+        @{ PackageId = 'AgileBits.1Password' }
+    ) {
+        param($PackageId)
+        $out = ($out -split "`n" | Where-Object { $_ -ne "[Winget] $([char]0x2713) $PackageId" }) -join "`n"
+        Invoke-ShippedValidation -Name 'WinGet package inventory'
+        ($validationErrors -join ' | ') | Should -Match ([regex]::Escape($PackageId))
+    }
+
+    It 'should reject a missing inventory even if all success markers exist' {
+        $out = ($out -split "`n" | Where-Object { $_ -notmatch 'CI_VERIFICATION_INVENTORY:' }) -join "`n"
+        Invoke-ShippedValidation -Name 'WinGet package inventory'
+        ($validationErrors -join ' | ') | Should -Match 'inventory'
+    }
+
+    It 'should reject multiple inventory records rather than trust the first record' {
+        $out += "`n[Winget] CI_VERIFICATION_INVENTORY: Google.Chrome"
+        Invoke-ShippedValidation -Name 'WinGet package inventory'
+        ($validationErrors -join ' | ') | Should -Match 'exactly one WinGet verification inventory'
+    }
+
+    It 'should reject partial extra or duplicate inventory IDs' -TestCases @(
+        @{ Inventory = 'Google.Chrome|Obsidian.Obsidian' }
+        @{ Inventory = 'extra' }
+        @{ Inventory = 'duplicate' }
+    ) {
+        param($Inventory)
+        if ($Inventory -eq 'extra') { $Inventory = ($script:guiIds + @('OpenAI.Codex.CLI')) -join '|' }
+        if ($Inventory -eq 'duplicate') { $Inventory = ($script:guiIds + @('Google.Chrome')) -join '|' }
+        $out = $out -replace '(?m)(CI_VERIFICATION_INVENTORY: ).*$', ('$1' + $Inventory)
+        Invoke-ShippedValidation -Name 'WinGet package inventory'
+        ($validationErrors -join ' | ') | Should -Match 'missing from the verification inventory|outside the Windows E2E scope|duplicate package IDs'
+    }
+
+    It 'should aggregate installer and inventory failures independently' {
+        $exitCode = 9
+        $out = $out -replace '(?m)^\[Winget\].*9PLM9XGG6VKS.*$', ''
+        Invoke-ShippedValidation -Name 'installer evidence'
+        Invoke-ShippedValidation -Name 'WinGet package inventory'
+        $validationErrors.Count | Should -Be 2
+        $validationErrors[0] | Should -Match '^installer evidence:'
+        $validationErrors[1] | Should -Match '^WinGet package inventory:'
+        $script:installerE2E | Should -Match '(?s)if\s*\(\$validationErrors.Count\s*-gt\s*0\).*?throw \$failureSummary'
+    }
+
+    It 'should retain process PATH normalization evidence without requiring persisted repairs' {
+        $script:installerE2E | Should -Match 'oversizedUserPathEntries = 1\.\.1000'
+        $script:installerE2E | Should -Match 'Process PATH normalized: removed'
+        $script:installerE2E | Should -Match 'Post-install PATH exceeds the cmd\.exe command environment limit'
+        $script:installerE2E | Should -Not -Match 'User PATH repaired|remainingStaleUserPathEntries|runnerPnpmDirectories|PNPM_HOME'
+        $script:installerE2E | Should -Match 'SetValue\(''PATH'', \$originalUserPathRegistryValue, \$originalUserPathRegistryKind\)'
+        $script:installerE2E | Should -Match 'DeleteValue\(''PATH'', \$false\)'
+    }
+
+    It 'should avoid self-update manifest mutations CLI probes and retired-package seed or removal' {
+        $script:installerE2E | Should -Not -Match 'Microsoft\.PowerShell|Add-Member|Set-Content|Invoke-Npm|Invoke-Pnpm|Assert-WingetCommandRecovery|node --version|op\.exe|herdr|@openai/codex|Codex CLI|9NT1R1C2HH7J|RETIRED_PACKAGE_CLEANUP'
+        @($script:validationCalls | ForEach-Object { $_.CommandElements[2].Value }) | Should -Be @(
+            'installer evidence', 'WinGet package inventory', 'WezTerm install PATH and version'
+        )
+    }
+
+    It 'should run the full installer in separate parallel PowerShell 5.1 and 7 jobs' {
         $script:workflow | Should -Match '(?s)windows-installer:.*?max-parallel:\s*2.*?runtime: Windows PowerShell 5\.1\s+version: "5\.1".*?runtime: PowerShell 7\s+version: "7"'
         $script:workflow | Should -Match 'shell:\s+cmd[\s\S]*?powershell\.exe .*Invoke-WindowsInstallerE2E\.ps1'
-        $script:installerE2E | Should -Match '\$runtimeCommand = if \(\$expectedRuntime -eq ''5\.1''\) \{ ''powershell\.exe'' \} else \{ ''pwsh\.exe'' \}'
         $script:installerE2E | Should -Match 'install\.cmd -NoPause -UserPhaseOnly(?!\s+-WingetVerifyCommandOnly)'
-        $script:installerE2E | Should -Match '& \$runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File \$installerE2EScriptPath'
-        $script:installerE2E | Should -Match '\$expectedMajorVersion = if \(\$expectedVersion -eq ''5\.1''\) \{ 5 \} else \{ 7 \}'
         $script:installerE2E | Should -Match 'Using Windows PowerShell'
         $script:installerE2E | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'
         $script:installerE2E | Should -Match 'Falling back to Windows PowerShell'
-    }
-    It 'preserves the installer process exit code and full output through the success assertion' {
-        $workflow = $script:installerE2E
-        $workflow | Should -Match '(?s)\$output = & cmd\.exe /d /c install\.cmd -NoPause -UserPhaseOnly.*?\$exitCode = \$LASTEXITCODE'
-        $workflow | Should -Match '(?s)Assert-WindowsInstallerSuccess `\s+-Output \$out `\s+-ExitCode \$exitCode'
+        $script:installerE2E | Should -Match '(?s)Get-Command -Name ''pwsh.exe'' -CommandType Application -ErrorAction Stop\s*\|\s*Select-Object -First 1'
     }
 
-    It 'attempts the Codex npm launch probe after validation failures and reports all errors at the end' {
-        $installerJob = $script:installerE2E
-
-        $installerJob | Should -Match '(?s)\$validationErrors\s*=.*?try\s*\{[\s\S]*?\$expectedVersion\s*=.*?Could not seed the ChatGPT Classic uninstall E2E[\s\S]*?Assert-WindowsInstallerSuccess'
-        $installerJob | Should -Match '(?s)catch\s*\{[\s\S]*?\$validationErrors\.Add'
-        $installerJob | Should -Match '(?s)finally\s*\{[\s\S]*?Codex CLI.*?try\s*\{[\s\S]*?--help[\s\S]*?catch\s*\{[\s\S]*?\$validationErrors\.Add'
-        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'Codex npm package'"
-        $installerJob | Should -Match 'npm list --global --depth=0 --json'
-        $installerJob | Should -Match '@openai/codex'
-        $installerJob | Should -Match '(?s)if\s*\(\$validationErrors\.Count\s*-gt\s*0\)[\s\S]*?\$failureSummary\s*=\s*"Windows installer E2E validation failed:'
-        $installerJob | Should -Match '(?s)\$failureSummary\s*=.*?\$validationErrors\s*-join'
-        $installerJob | Should -Match 'Write-Host \$failureSummary -ForegroundColor Red'
-        $installerJob | Should -Match '(?m)^\s*throw \$failureSummary\s*$'
-    }
-
-    It 'continues independent fatal validation groups after an installer assertion fails' {
-        $workflow = $script:installerE2E
-        $installerJob = $script:installerE2E
-
-        $installerJob | Should -Match '(?s)function Invoke-WindowsE2EValidation[\s\S]*?try\s*\{\s*& \$Validation[\s\S]*?catch\s*\{[\s\S]*?\$validationErrors\.Add'
-        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'installer evidence'"
-        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'WinGet package inventory'"
-        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'pnpm bootstrap'"
-        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'ChatGPT Classic removal'"
-        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'Codex npm package'"
-        $installerJob | Should -Match "Invoke-WindowsE2EValidation -Name 'required command smoke tests'"
-        $installerJob | Should -Match "Get-Command -Name 'op.exe' -CommandType Application -ErrorAction Stop"
-        $installerJob | Should -Match '(?s)\$onePasswordPackagesPath\s*=.*?AgileBits\.1Password\.CLI_\*'
-        $installerJob | Should -Match '(?s)\$resolvedOnePasswordPath\s*=\s*Get-ExternalCommandPath -CommandInfo \$resolvedOnePassword.*?Get-FileHash -LiteralPath \$onePasswordExecutablePath -Algorithm SHA256.*?Get-FileHash -LiteralPath \$resolvedOnePasswordPath -Algorithm SHA256'
-        $installerJob | Should -Match 'Persisted user PATH does not identify an installed AgileBits\.1Password\.CLI package directory'
-        $installerJob | Should -Match 'PATH-resolved op\.exe does not match the configured WinGet package binary'
-        $installerJob | Should -Match 'PATH-resolved pnpm is not the npm-installed pnpm shim'
-        $installerJob | Should -Match '(?s)\$onePasswordUserPathEntries\s*=.*?\$onePasswordPackageDirectory\s*='
-        $installerJob | Should -Match '& \$resolvedOnePasswordPath --version'
-        $installerJob | Should -Match 'Update-ProcessEnvironmentPath -ExcludePath \$runnerPnpmDirectories'
-        $installerJob | Should -Match 'Post-install PATH exceeds the cmd\.exe command environment limit'
-        $script:workflow | Should -Match 'winget source list failed \(exit=\$wingetSourcesExitCode\)'
-        $installerJob | Should -Match 'Unable to inspect ChatGPT Classic E2E seed state'
-        $installerJob | Should -Match '(?s)\$resolvedCommand\s*=\s*Get-Command -Name \$requiredCommand\.Name -CommandType Application -ErrorAction SilentlyContinue\s*\|\s*Select-Object -First 1'
-        $installerJob | Should -Match 'The @openai/codex npm package is missing from the global package list'
-        $installerJob | Should -Not -Match 'onePasswordPackageSearchPath|pnpm resolved outside the npm global prefix'
-    }
-
-    It 'seeds and verifies removal of ChatGPT Classic in the installer E2E' {
-        $installerE2E = $script:installerE2E
-        $installerE2E | Should -Match 'winget install --id 9NT1R1C2HH7J'
-        $installerE2E | Should -Match 'RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=\(removed\|absent\)'
-        $installerE2E | Should -Match 'winget list --id 9NT1R1C2HH7J'
-        $installerE2E | Should -Match 'winget list --id 9NT1R1C2HH7J --exact --source msstore --accept-source-agreements --disable-interactivity'
-        $installerE2E | Should -Match 'ChatGPT Classic is still installed after cleanup'
+    It 'should preserve the installer process exit code and full output through the success assertion' {
+        $script:installerE2E | Should -Match '(?s)\$output = & cmd\.exe /d /c install\.cmd -NoPause -UserPhaseOnly.*?\$exitCode = \$LASTEXITCODE'
+        $script:installerE2E | Should -Match '(?s)Assert-WindowsInstallerSuccess `\s+-Output \$out `\s+-ExitCode \$exitCode'
+        $script:installerE2E | Should -Match 'Write-Host \$failureSummary -ForegroundColor Red'
     }
 }

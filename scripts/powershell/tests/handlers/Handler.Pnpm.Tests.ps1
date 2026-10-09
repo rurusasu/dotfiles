@@ -1910,7 +1910,7 @@ Describe 'PnpmHandler' {
         }
     }
 
-    Context 'Apply - Windows pnpm manifest contracts' {
+    Context 'Apply - explicit custom pnpm manifest contracts' {
         It 'should verify Gemini by executing the installed CLI without probing an optional module' {
             $script:pnpmRoot = Join-Path $TestDrive 'pnpm-module-root'
             New-Item -Path (Join-Path $script:pnpmRoot '@google\gemini-cli') -ItemType Directory -Force | Out-Null
@@ -1971,6 +1971,16 @@ Describe 'PnpmHandler' {
             $script:originalProcessPath = $env:PATH
             $script:originalPnpmHome = $env:PNPM_HOME
             $script:pnpmBin = Join-Path $TestDrive "manifest-pnpm-bin"
+            $script:customPnpmManifest = @{
+                globalPackages = @(
+                    @{
+                        name          = '@deepseek-ai/dsh'
+                        installArgs   = @('--allow-build=@deepseek-ai/dsh-subprocess-local', '--allow-build=@google/genai', '--allow-build=koffi', '--allow-build=protobufjs', '--allow-build=!node-pty')
+                        verifyCommand = @{ command = 'dsh'; args = @('--version') }
+                    }
+                )
+            }
+            Mock Get-JsonContent { return $script:customPnpmManifest }
             $script:pnpmRoot = Join-Path $TestDrive ("manifest-pnpm-root-" + [guid]::NewGuid().ToString("N"))
             New-Item $script:pnpmRoot -ItemType Directory -Force | Out-Null
             $env:PNPM_HOME = $script:pnpmBin
