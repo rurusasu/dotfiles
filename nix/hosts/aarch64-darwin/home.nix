@@ -13,6 +13,7 @@ let
 in
 {
   imports = [
+    ./cache-maintenance.nix
     ../../modules/editors/nvim
     ../../modules/discord
     ../../home/common.nix

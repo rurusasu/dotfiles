@@ -288,6 +288,6 @@ Docker VHDX 拡張は `ExpandDockerVhd = $true` で個別に選択する。
 
 ### 関連ドキュメント
 
-- [テスト](testing.md) - Pester v5 の使用方法とテストパターン
+- [テスト](testing.md) - Pester の最新安定版の使用方法とテストパターン
 - [アーキテクチャ](../../architecture.md) - ハンドラーシステムの設計と実行フロー
 - [コーディング規約](coding-standards.md) - 命名規則、スタイル、ベストプラクティス

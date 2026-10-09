@@ -80,6 +80,24 @@ def validate_context_engine_installation(
 
 def _reconcile_config(path: Path, transaction: Transaction) -> None:
     metadata, original, config = _load_yaml_mapping_with_content(path)
+    content = _merged_configuration(config)
+    if original == content and stat.S_IMODE(metadata.st_mode) == 0o600:
+        return
+
+    transaction.snapshot(path)
+    _atomic_write(path, content, 0o600)
+
+
+def _reconcile_reserved_configuration(directory: int) -> None:
+    metadata, original, config = _load_yaml_mapping_at(directory, "config.yaml")
+    content = _merged_configuration(config)
+    if original == content and stat.S_IMODE(metadata.st_mode) == 0o600:
+        return
+    _atomic_write((directory, "config.yaml"), content, 0o600)
+
+
+def _merged_configuration(config: dict[object, object]) -> bytes:
+    """Use the same LCM merge for ordinary and reserved profile directories."""
 
     context = config.get("context")
     if context is None:
@@ -131,68 +149,7 @@ def _reconcile_config(path: Path, transaction: Transaction) -> None:
     memory = config.get("memory")
     if isinstance(memory, dict) and memory.get("provider") == "hindsight":
         candidate["memory"] = {**memory, "provider": "builtin"}
-    content = yaml.safe_dump(candidate, sort_keys=False).encode("utf-8")
-    if original == content and stat.S_IMODE(metadata.st_mode) == 0o600:
-        return
-
-    transaction.snapshot(path)
-    _atomic_write(path, content, 0o600)
-
-
-def _reconcile_reserved_configuration(directory: int) -> None:
-    metadata, original, config = _load_yaml_mapping_at(directory, "config.yaml")
-
-    context = config.get("context")
-    if context is None:
-        context = {}
-    if not isinstance(context, dict):
-        raise TypeError
-    merged_context = dict(context)
-    merged_context["engine"] = CONTEXT_ENGINE_NAME
-
-    plugins = config.get("plugins")
-    if plugins is None:
-        plugins = {}
-    if not isinstance(plugins, dict):
-        raise TypeError
-    merged_plugins = dict(plugins)
-
-    enabled_value = plugins.get("enabled", [])
-    if not isinstance(enabled_value, list) or any(
-        not isinstance(item, str) for item in enabled_value
-    ):
-        raise ValueError
-    enabled = list(enabled_value)
-    if CONTEXT_PLUGIN_NAME not in enabled:
-        enabled.append(CONTEXT_PLUGIN_NAME)
-    else:
-        enabled = [
-            item
-            for index, item in enumerate(enabled)
-            if item != CONTEXT_PLUGIN_NAME or CONTEXT_PLUGIN_NAME not in enabled[:index]
-        ]
-    merged_plugins["enabled"] = enabled
-
-    if "disabled" in plugins:
-        disabled_value = plugins["disabled"]
-        if not isinstance(disabled_value, list) or any(
-            not isinstance(item, str) for item in disabled_value
-        ):
-            raise ValueError
-        merged_plugins["disabled"] = [
-            item for item in disabled_value if item != CONTEXT_PLUGIN_NAME
-        ]
-
-    candidate = dict(config)
-    candidate["context"] = merged_context
-    candidate["plugins"] = merged_plugins
-    memory = config.get("memory")
-    if isinstance(memory, dict) and memory.get("provider") == "hindsight":
-        candidate["memory"] = {**memory, "provider": "builtin"}
-    content = yaml.safe_dump(candidate, sort_keys=False).encode("utf-8")
-    if original == content and stat.S_IMODE(metadata.st_mode) == 0o600:
-        return
-    _atomic_write((directory, "config.yaml"), content, 0o600)
+    return yaml.safe_dump(candidate, sort_keys=False).encode("utf-8")
 
 
 def _atomic_write(

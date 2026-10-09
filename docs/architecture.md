@@ -13,8 +13,8 @@
    - Unix 系 CLI は Home Manager、macOS cask は nix-homebrew、Linux system package は NixOS が消費
    - Windows は `nix build .#winget-export` で GUI 選択に限定した winget JSON と空の npm/pnpm JSON を導出
 2. **ユーザー設定は Unix と Windows の責務を分離**
-   - Unix の shell、Git、terminal、editor は Home Manager が管理
-   - chezmoi は Windows の設定と全 OS の `.codex/` / `.claude/` のみを配布し、Unix 向け展開スクリプトを持たない
+   - Unix の Codex、shell、Git、terminal、editor は Home Manager が管理
+   - chezmoi は Windows 専用で、Unix にはファイルもスクリプトも配布しない
    - デスクトップキー配列は例外として、共通 action/key・設定生成関数・ユーザー設定を `nix/home/keybindings/`、OS の service/有効化・競合解除を `nix/hosts/` に分ける。macOS/native NixOS の設定は Nix が所有する。Windows の GlazeWM 設定と補助スクリプトは生成契約のみ保持し、現在の GUI-only 構成では配布しない（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
 3. **システム収束は OS に適した宣言レイヤーへ分離**
    - Windows: PowerShell handlers + winget
@@ -22,7 +22,7 @@
    - 非 NixOS Linux: standalone Home Manager（ユーザー環境のみ、OS service は管理しない）
    - NixOS/WSL: NixOS module
 4. **Full support は runtime acceptance までを契約に含める**
-   - 必須 CLI と chezmoi drift を確認し、Docker profile では Docker、Compose、hello-world も確認
+   - Unix では必須 CLI、Docker profile では Docker、Compose、hello-world も確認。Windows は GUI アプリの導入検証だけを行う
    - installer は同じコマンドを安全に再実行できる
 
 ## 全体構造
@@ -64,16 +64,16 @@ dotfiles/
 
 ## セットアップフロー
 
-| Platform    | Entrypoint     | System layer                             | User layer             | Runtime                        |
-| ----------- | -------------- | ---------------------------------------- | ---------------------- | ------------------------------ |
-| Windows     | `install.cmd`  | 既存 PowerShell + winget（GUI のみ）     | 自動設定配布なし       | CLI / WSL 構築なし             |
-| macOS ARM64 | `./install.sh` | nix-darwin + nix-homebrew                | Home Manager + chezmoi | Docker Desktop / native Hermes |
-| Other Linux | `./install.sh` | none                                     | Home Manager + chezmoi | not managed                    |
-| NixOS       | `./install.sh` | NixOS generation + host hardware profile | Home Manager + chezmoi | rootful Docker                 |
+| Platform    | Entrypoint     | System layer                             | User layer       | Runtime                        |
+| ----------- | -------------- | ---------------------------------------- | ---------------- | ------------------------------ |
+| Windows     | `install.cmd`  | 既存 PowerShell + winget（GUI のみ）     | 自動設定配布なし | CLI / WSL 構築なし             |
+| macOS ARM64 | `./install.sh` | nix-darwin + nix-homebrew                | Home Manager     | Docker Desktop / native Hermes |
+| Other Linux | `./install.sh` | none                                     | Home Manager     | not managed                    |
+| NixOS       | `./install.sh` | NixOS generation + host hardware profile | Home Manager     | rootful Docker                 |
 
-Windows は GUI アプリ導入だけを実行し、既存アプリを自動アンインストールしません。Unix の Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → chezmoi → Compose → runtime acceptance` です。macOS では Docker Desktop と native Hermes の宣言済み構成を適用します。失敗時はその phase で停止し、同じ入口を再実行します。
+Windows は GUI アプリ導入だけを実行し、既存アプリを自動アンインストールしません。Unix の Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → Compose → runtime acceptance` です。macOS では Docker Desktop と native Hermes の宣言済み構成を適用します。失敗時はその phase で停止し、同じ入口を再実行します。
 
-非 NixOS Linux は `Nix/bootstrap → Home Manager → chezmoi` のみを実行します。
+非 NixOS Linux は `Nix/bootstrap → Home Manager` のみを実行します。
 
 macOS の `./install.sh` は英語の `[RUNNING]` 見出しと説明、完了時の
 `[DONE]`、失敗時の `[FAILED]` と終了コードを表示します。毎回の flake 更新は
@@ -110,7 +110,7 @@ OS 固有の Home Manager 設定とパッケージ選択は `hosts/` が所有�
 | macOS システム          | nix-darwin/nix-homebrew | Homebrew、Docker Desktop、Home Manager を 1 generation で適用 |
 | NixOS システム          | NixOS module            | native/WSL host、Docker、Home Manager を generation に統合    |
 | Unix ユーザー設定       | Home Manager            | shell、Git、terminal、editor の設定を宣言                     |
-| Windows / AI 設定       | chezmoi                 | Windows の設定と全 OS の `.codex/` / `.claude/` を配布        |
+| Windows 設定            | chezmoi                 | Windows のユーザー設定のみを配布                              |
 | 受入検証                | platform verifier       | runtime acceptance と drift を検出                            |
 
 WSL の Git 設定は、ユーザー設定を Home Manager、共有 checkout の信頼設定を

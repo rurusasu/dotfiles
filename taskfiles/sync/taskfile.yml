@@ -3,6 +3,7 @@ version: "3"
 tasks:
   skills:sync:
     desc: Sync shared agent skills from deployed ~/.agents/skills/ back to chezmoi source
+    platforms: [windows]
     cmds:
       - chezmoi re-add ~/.agents/skills/
     status:

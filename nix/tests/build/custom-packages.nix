@@ -10,12 +10,6 @@ let
       path = buildPkgs.callPackage ../../modules/editors/orca/package.nix { };
     }
   ]
-  ++ buildPkgs.lib.optionals buildPkgs.stdenv.hostPlatform.isLinux [
-    {
-      name = "chatgpt";
-      path = buildPkgs.callPackage ../../packages/chatgpt { };
-    }
-  ]
   ++ buildPkgs.lib.optionals buildPkgs.stdenv.hostPlatform.isDarwin [
     {
       name = "dia-browser";

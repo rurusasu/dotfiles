@@ -22,7 +22,7 @@
   };
 
   chatgpt = {
-    pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.chatgpt else pkgs.callPackage ../chatgpt { };
+    pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.chatgpt else null;
     category = "desktop";
     support = {
       darwin = {
@@ -33,12 +33,7 @@
           appName = "ChatGPT.app";
         };
       };
-      linux = {
-        provider = "nix";
-        source = "dotfiles";
-        identity = "chatgpt";
-        nixAttr = "chatgpt";
-      };
+      linux.unsupported = "The Linux desktop app is not managed by this repository";
       windows = {
         unsupported = "The Windows Store app is intentionally excluded from this package catalog";
       };

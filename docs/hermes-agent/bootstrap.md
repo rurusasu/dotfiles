@@ -67,6 +67,28 @@ Hermes の組み込み 1Password 連携と `op` CLI の利用手順は、[Hermes
 
 ## Run Bootstrap
 
+### Ownership and removal boundary
+
+Nix owns the Hermes package, native gateway, plugin installation and root
+`services.hermes-agent.settings`. The bootstrap is not an installer: it owns
+runtime secret updates, mutable profile distributions and shared repository sync.
+Its CLI uses the existing package entrypoint (`python -P -m hermes_bootstrap`),
+with the local package before upstream on `PYTHONPATH`; no separate CLI Python
+file or unused upstream source patch is needed.
+
+Chrome, X API, Calendar and Gmail share one MCP configuration writer. Their
+adapters keep the existing error policy: Chrome/X API reject invalid configs;
+Calendar/Gmail defer replacement-race errors to final installed-layout validation.
+LCM uses one pure merge for both ordinary and reserved profile directories,
+while keeping the transaction snapshots and FD-relative writes separate.
+
+Removing the remaining bootstrap requires replacements for all three runtime
+responsibilities above, including rollback, unmanaged-file preservation and
+every named or locally added profile. The pinned upstream Home Manager merge
+targets only the root config and replaces lists, so copying complete profile
+configs with `hermesHomeFiles` is not an equivalent migration. Secrets must
+remain runtime-only and must not be embedded in Nix store outputs.
+
 The native bootstrap requires the Nix-managed Hermes commands, `op`, `jq`, and
 access to the 1Password Service Account item and declared GitHub repositories.
 Home Manager installs Hermes, the native gateway, `hermes-bootstrap`, Node.js

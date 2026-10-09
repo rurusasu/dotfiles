@@ -2,9 +2,17 @@
 { pkgs, ... }:
 {
   chezmoi = {
-    pkg = pkgs.chezmoi;
     winget = "twpayne.chezmoi";
     category = "core";
+    support = {
+      windows = {
+        provider = "winget";
+        source = "winget";
+        identity = "twpayne.chezmoi";
+      };
+      darwin.unsupported = "Home Manager owns Unix configuration";
+      linux.unsupported = "Home Manager owns Unix configuration";
+    };
   };
 
   gh = {

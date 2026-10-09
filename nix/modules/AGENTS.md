@@ -2,6 +2,7 @@
 
 ## 管理対象
 
+- `codex/`: npm CLI の導入経路を維持し、標準 `programs.codex` で Unix の設定・context・rules・hooks を管理する。`mutableSettings` でアプリの設定追記を保持し、公式 desktop worktree cleanup を宣言する。Windows は chezmoi が所有する
 - `fonts.nix`: Darwin / NixOS 共通のフォントパッケージと fontconfig の既定フォント
 - `1password/`: nixpkgs の既存 CLI / デスクトップ版を直接導入する。`default.nix` が Home Manager の CLI と Linux デスクトップ版、`ssh.nix` が公式 agent socket の `IdentityAgent` / `SSH_AUTH_SOCK` と activation 時の公開鍵取得、`sync-ssh-public-key.sh` が timeout・検証・既存鍵保持、`darwin-system.nix` が macOS システムのデスクトップ版、`windows-install.nix` が Windows 配布・検証 metadata を担当する。Git signer / WSL interop の OS 固有設定は `nix/hosts/` に残す
 - `git/`: Git 共通設定と標準 program 有効化を `default.nix`、ghq の導入・共通保存先を `ghq.nix`、既存の `git gtr` alias を `gtr.nix`、Git / ghq の Windows 配布・検証 metadata を `windows-install.nix` にまとめる。署名コマンドと WSL の保存先は `nix/hosts/` が担当する

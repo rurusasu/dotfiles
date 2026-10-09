@@ -45,7 +45,7 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
    責務別 module を import する entrypoint として維持する。Darwin の `default.nix` は配線専用とする。
 3. 各 host の `home.nix` は `nix/home/common.nix` を直接、または `shared/linux-home.nix` を通じて import する。`nix/home/` に OS 別の入口を置かず、共通設定から host の設定を import しない。
 4. パッケージ追加前に `nix/packages/catalog/` の該当カテゴリと各 OS への影響を確認する。`sets.nix` の公開 API は維持する。
-5. dotfile と秘密情報は `chezmoi/` と既存の secret 経路を使い、所有を重複させない。
+5. Unix の dotfile は Home Manager、Windows は `chezmoi/`、秘密情報は既存の secret 経路を使い、所有を重複させない。
 6. Nix 設定の変更は `nix flake check --all-systems --no-build --no-write-lock-file` で評価し、
    対象 system の `nix-unit` と関連 build check を build して検証する。
    Bats は installer、shell、外部プロセス、runtime 契約に限って実行する。
@@ -56,7 +56,7 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
    runtime/integration assertion に限る。
 
    Repository-owned custom derivations は `checks.*.custom-package-builds` を build して確認する。
-   この check は chatgpt、Dia、Neovim、Orca の supported system だけを対象にし、
+   この check は Dia、Neovim、Orca の supported system だけを対象にし、
    upstream nixpkgs package 全体や privileged activation は実行しない。
 
    テストの登録は `nix/tests/default.nix` が担当する。nix-unit も flake の `checks` 経由で実行する。

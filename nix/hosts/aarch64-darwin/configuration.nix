@@ -16,6 +16,7 @@ let
     else
       throw "Unable to determine the macOS user: SUDO_USER and USER are both empty.";
   home = "/Users/${user}";
+  gibibyte = 1024 * 1024 * 1024;
   sets = import ../../packages/sets.nix {
     inherit pkgs lib;
   };
@@ -60,7 +61,12 @@ in
       options = "--delete-old";
     };
 
+    # Use the native weekly optimiser; auto-optimise-store is unsafe on Darwin.
+    optimise.automatic = true;
+
     settings = {
+      # During builds, collect unreferenced paths when free space falls below 10 GiB.
+      min-free = 10 * gibibyte;
       experimental-features = [
         "nix-command"
         "flakes"

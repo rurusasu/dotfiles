@@ -8,33 +8,24 @@ PSScriptAnalyzer の Pester 検査は各 library/handler を一度だけ解析�
 coverage smoke と管理者 entrypoint の子プロセスは現在の PowerShell 実行ファイルを使用し、
 PowerShell 5.1 / 7 の両方でそれぞれの実行境界を確認します。
 
-## Pester v5 の強制使用
+## Pester の最新安定版を使用
 
 ### テストランナー
 
 [tests/Invoke-Tests.ps1](../../../scripts/powershell/tests/Invoke-Tests.ps1)
 
-### 重要な設定
+### 取得と更新
+
+ランナーは毎回 PSGallery の最新安定版を確認し、未インストールの場合は取得します。
+バージョンやメジャー番号は固定せず、取得に失敗した場合も旧版へフォールバックしません。
+CI も最新安定版を取得し、Pester のキャッシュによる旧版の固定を避けます。
+Windows PowerShell 5.1 / PowerShell 7 の両方で互換性を検証します。
 
 ```powershell
-# 1. Pester v3 自動削除
-if (Get-Module -Name Pester) {
-    $currentVersion = (Get-Module -Name Pester).Version
-    if ($currentVersion -lt [Version]"5.0.0") {
-        Remove-Module -Name Pester -Force -ErrorAction SilentlyContinue
-    }
-}
+# 手動で最新安定版を取得する場合
+Install-Module -Name Pester -Repository PSGallery -Scope CurrentUser -Force -SkipPublisherCheck
 
-# 2. Pester v5 自動インストール
-$pesterV5 = Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge [Version]"5.0.0" }
-if (-not $pesterV5) {
-    Install-Module -Name Pester -MinimumVersion 5.0.0 -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber
-}
-
-# 3. Pester v5 強制ロード
-Import-Module -Name Pester -MinimumVersion 5.0.0 -Force
-
-# 4. カバレッジでモックを有効化
+# ランナーのカバレッジ設定ではモックを有効化
 $pesterConfig.CodeCoverage.UseBreakpoints = $false
 ```
 
@@ -74,7 +65,7 @@ cd scripts/powershell/tests
 | `.github/workflows/ci-other.yml` | Windows PowerShell 5.1 / PowerShell 7 | 全 Pester suite、launcher、encoding、handler unit、installer Phase 1 → Phase 2a integration |
 | `ci-nix.yml`                     | hosted Linux/macOS/Windows            | Linux/Darwin/WSL/Windows の platform-routed contract aggregate と外部 runtime E2E           |
 
-Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を両 runtime で実行します。`Install.Entrypoint.Tests.ps1` は実物の `install.ps1`、`install.user.ps1`、`install.admin.ps1`、`SetupHandler.ps1` を一時 fixture にコピーし、副作用のない fixture handler だけを差し替えて、Phase 1 → Phase 2a → acceptance → `Setup Complete!` の同一実行フローを検証します。これにより `SetupContext` の class identity / reload 回帰を、stub phase script や直接 `CanApply()` 呼び出しではなく実 installer boundary で検出します。実機アプリを要求する外部 runtime E2E は `ci-nix.yml` に残します。Nix option、package、flake output は `nix-unit` で検証し、macOS の installer/runtime 契約は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats で実行します。
+Windows hosted contract は Pester の最新安定版で `Invoke-Tests.ps1 -MinimumCoverage 0` を両 runtime で実行します。`Install.Entrypoint.Tests.ps1` は実物の `install.ps1`、`install.user.ps1`、`install.admin.ps1`、`SetupHandler.ps1` を一時 fixture にコピーし、副作用のない fixture handler だけを差し替えて、Phase 1 → Phase 2a → acceptance → `Setup Complete!` の同一実行フローを検証します。これにより `SetupContext` の class identity / reload 回帰を、stub phase script や直接 `CanApply()` 呼び出しではなく実 installer boundary で検出します。実機アプリを要求する外部 runtime E2E は `ci-nix.yml` に残します。Nix option、package、flake output は `nix-unit` で検証し、macOS の installer/runtime 契約は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats で実行します。
 
 Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-nix.yml` のNixOS VM jobで検証し、非 NixOS Linux は Home Manager build と mocked installer contract を検証します。Windows/macOS実機固有のruntimeは、Docker profile を選択した installer 末尾の acceptance が失敗を返します。
 
@@ -350,14 +341,14 @@ $result.Error | Should -Not -BeNullOrEmpty
 
 ### 1. Pester v3 が自動ロードされる
 
-**症状**: `Should` コマンドレットが見つからない、v5 の機能が使えない
+**症状**: `Should` コマンドレットが見つからない、最新版の機能が使えない
 
-**解決策**: Invoke-Tests.ps1 は自動的に v3 を削除して v5 をロードします
+**解決策**: Invoke-Tests.ps1 はロード済みの旧版をアンロードして、最新安定版をロードします。ディスク上の旧モジュールは削除しません。
 
 ```powershell
 # 手動で解決する場合
-Remove-Module -Name Pester -Force -ErrorAction SilentlyContinue
-Import-Module -Name Pester -MinimumVersion 5.0.0 -Force
+Install-Module -Name Pester -Repository PSGallery -Scope CurrentUser -Force -SkipPublisherCheck
+.\Invoke-Tests.ps1
 ```
 
 ### 2. カバレッジ有効時にテストが失敗する

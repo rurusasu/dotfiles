@@ -11,18 +11,25 @@ import yaml
 
 from .distributions import _atomic_write
 from .errors import ApplyError, BootstrapError, ValidationError
+from .mcp_config import install_mcp_configurations, load_managed_config
 from .payload import GoogleCalendarSecret, validate_google_calendar_secret
 from .transaction import Transaction
-
 
 _DIRECTORY = "google-calendar-mcp"
 _OAUTH_FILE = "gcp-oauth.keys.json"
 _TOKENS_FILE = "tokens.json"
+
+
 def _mcp_configuration(data_root: Path) -> dict[str, object]:
     credentials = data_root / _DIRECTORY
     return {
         "command": "npx",
-        "args": ["--yes", "--package", "@cocal/google-calendar-mcp@2.6.2", "google-calendar-mcp"],
+        "args": [
+            "--yes",
+            "--package",
+            "@cocal/google-calendar-mcp@2.6.2",
+            "google-calendar-mcp",
+        ],
         "connect_timeout": 300,
         "env": {
             "GOOGLE_OAUTH_CREDENTIALS": str(credentials / _OAUTH_FILE),
@@ -41,48 +48,17 @@ def install_google_calendar_configurations(
         if not targets:
             raise ValueError
         configuration = _mcp_configuration(targets[0])
-        for target in targets:
-            path = target / "config.yaml"
-            candidate = _load_managed_config(path)
-            if candidate is None:
-                # Final installed-layout validation owns replacement-race errors.
-                continue
-            metadata, config, mcp_servers = candidate
-            if mcp_servers.get("calendar") == configuration:
-                continue
-            mcp_servers["calendar"] = configuration
-            transaction.snapshot(path)
-            _atomic_write(
-                path,
-                yaml.safe_dump(config, sort_keys=False).encode("utf-8"),
-                stat.S_IMODE(metadata.st_mode),
-            )
+        install_mcp_configurations(
+            targets,
+            "calendar",
+            configuration,
+            transaction,
+            skip_invalid=True,
+        )
     except (OSError, TypeError, UnicodeError, ValueError, yaml.YAMLError):
         raise ApplyError(
             "could not install Google Calendar MCP configuration"
         ) from None
-
-
-def _load_managed_config(
-    path: Path,
-) -> tuple[os.stat_result, dict[object, object], dict[object, object]] | None:
-    try:
-        metadata = path.lstat()
-        if (
-            stat.S_ISLNK(metadata.st_mode)
-            or not stat.S_ISREG(metadata.st_mode)
-            or metadata.st_nlink != 1
-        ):
-            return None
-        config = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if not isinstance(config, dict):
-            return None
-        mcp_servers = config.get("mcp_servers")
-        if not isinstance(mcp_servers, dict):
-            return None
-        return metadata, config, mcp_servers
-    except (OSError, UnicodeError, yaml.YAMLError):
-        return None
 
 
 def install_google_calendar_credentials(
@@ -129,11 +105,8 @@ def validate_google_calendar_installation(
             raise ValueError
         configuration = _mcp_configuration(targets[0])
         for target in targets:
-            candidate = _load_managed_config(target / "config.yaml")
-            if (
-                candidate is None
-                or candidate[2].get("calendar") != configuration
-            ):
+            candidate = load_managed_config(target / "config.yaml")
+            if candidate is None or candidate[2].get("calendar") != configuration:
                 raise ValueError
 
         credentials = data_root / _DIRECTORY
@@ -167,7 +140,9 @@ def validate_google_calendar_installation(
     except ValidationError:
         raise
     except (BootstrapError, OSError, TypeError, UnicodeError, ValueError):
-        raise ValidationError("installed Google Calendar configuration is invalid") from None
+        raise ValidationError(
+            "installed Google Calendar configuration is invalid"
+        ) from None
 
 
 def _credentials_are_current(

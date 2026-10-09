@@ -33,7 +33,6 @@ preflight() {
   local required
   for required in \
     "$ROOT/flake.nix" \
-    "$ROOT/chezmoi" \
     "$VERIFY_ENVIRONMENT"; do
     [[ -e $required ]] || dotfiles_die "Required repository path is missing: $required"
   done
@@ -87,12 +86,6 @@ apply_nixos_system() {
   hash -r
 }
 
-apply_chezmoi() {
-  dotfiles_have chezmoi || dotfiles_die "chezmoi is unavailable after NixOS activation."
-  chezmoi init --source "$ROOT/chezmoi"
-  chezmoi apply --force
-}
-
 main() {
   preflight
   dotfiles_link_checkout "$ROOT"
@@ -100,7 +93,6 @@ main() {
   capture_host_identity
   apply_nixos_system
   dotfiles_install_codex_npm
-  apply_chezmoi
   export DOTFILES_VERIFY_SYSTEM_LAYER=nixos
   "$VERIFY_ENVIRONMENT" --nix-only
   dotfiles_log "NixOS setup complete."

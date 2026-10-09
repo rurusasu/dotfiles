@@ -83,21 +83,26 @@ let
   };
   homeOutputs = (import ../../hosts/configurations.nix { inputs = homeInputs; }).homeConfigurations;
 
-  treefmtModule = (import ../../formatter.nix { config = { }; }).perSystem {
-    config.treefmt.build = {
-      devShell.nativeBuildInputs = [ ];
-      wrapper = "treefmt-wrapper";
-    };
-    pkgs = {
-      stdenv.hostPlatform.isDarwin = true;
-      git = "git";
-      git-lfs = "git-lfs";
-      mkShell = attrs: attrs;
-      runCommandLocal = name: attrs: script: {
-        inherit name attrs script;
+  treefmtModule =
+    (import ../../formatter.nix {
+      config = { };
+      inherit inputs;
+    }).perSystem
+      {
+        config.treefmt.build = {
+          devShell.nativeBuildInputs = [ ];
+          wrapper = "treefmt-wrapper";
+        };
+        pkgs = {
+          stdenv.hostPlatform.isDarwin = true;
+          git = "git";
+          git-lfs = "git-lfs";
+          mkShell = attrs: attrs;
+          runCommandLocal = name: attrs: script: {
+            inherit name attrs script;
+          };
+        };
       };
-    };
-  };
   treefmtCheck = treefmtModule.treefmt.build.check "/source";
   hasScriptLine =
     pattern: script:

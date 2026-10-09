@@ -141,9 +141,10 @@ class OnePasswordConfigFileTests(unittest.TestCase):
         path.write_text(
             "model:\n"
             "  name: test\n"
-            "mcp_servers:\n"
+            "mcp_servers: &servers\n"
             "  calendar:\n"
-            "    url: http://calendar-mcp:8080/mcp\n",
+            "    url: http://calendar-mcp:8080/mcp\n"
+            "unmanaged_servers: *servers\n",
             encoding="utf-8",
         )
 
@@ -162,6 +163,10 @@ class OnePasswordConfigFileTests(unittest.TestCase):
         self.assertEqual(
             config["mcp_servers"]["calendar"],
             {"url": "http://calendar-mcp:8080/mcp"},
+        )
+        self.assertEqual(
+            config["unmanaged_servers"],
+            {"calendar": {"url": "http://calendar-mcp:8080/mcp"}},
         )
 
     def test_chrome_reconciler_targets_the_host_published_browser_sidecar(self) -> None:

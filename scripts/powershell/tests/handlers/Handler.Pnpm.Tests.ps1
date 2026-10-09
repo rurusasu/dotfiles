@@ -13,6 +13,7 @@ BeforeAll {
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
     . $PSScriptRoot/../../handlers/Handler.Pnpm.ps1
     $script:projectRoot = (Resolve-Path -LiteralPath "$PSScriptRoot/../../../..").Path
+    $script:testPathCmdlet = Get-Command -Name Test-Path -CommandType Cmdlet
 }
 
 Describe 'PnpmHandler' {
@@ -337,6 +338,10 @@ Describe 'PnpmHandler' {
             $env:PNPM_HOME = $script:oldPnpmHome
             $env:PATH = "$script:workingPnpmDirectory;$env:SystemRoot\System32"
             $script:policyCommandPaths = @()
+            Mock Get-ExternalCommand {
+                param($Name)
+                Get-Command -Name $Name -ErrorAction SilentlyContinue
+            }
             Mock Get-ExternalCommand { return @{ Source = 'C:\npm.cmd' } } -ParameterFilter { $Name -eq 'npm' }
             Mock Get-UserEnvironmentPath { return $script:workingPnpmDirectory }
             Mock Set-UserEnvironmentPath { }
@@ -488,6 +493,10 @@ Describe 'PnpmHandler' {
     BeforeEach {
         $script:handler = [PnpmHandler]::new()
         Mock Update-NpmGlobalCommandPath { }
+        Mock Test-Path {
+            param($Path, $LiteralPath, $PathType)
+            & $script:testPathCmdlet @PSBoundParameters
+        }
         $script:ctx = [SetupContext]::new($script:projectRoot)
     }
 

@@ -27,7 +27,7 @@ nix store info --store local
 # shellcheck disable=SC2016
 pwsh -NoLogo -NoProfile -Command '
   $ErrorActionPreference = "Stop"
-  Import-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Force
+  Import-Module PSScriptAnalyzer -Force
   $formatted = Invoke-Formatter -ScriptDefinition "function Test-Example{Get-Date}"
   if ([string]::IsNullOrWhiteSpace($formatted)) { throw "PowerShell formatter returned no output" }
 '

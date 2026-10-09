@@ -154,44 +154,27 @@ function Write-SafeJUnitReport {
     }
 }
 
-# Pester v3 / v6 が自動ロードされるのを防ぐ
-$currentPester = Get-Module -Name Pester | Select-Object -First 1
-if ($currentPester) {
-    $currentVersion = $currentPester.Version
-    if ($currentVersion -lt [Version]"5.0.0" -or $currentVersion -ge [Version]"6.0.0") {
-        Write-Host "Pester v$currentVersion がロードされています。Pester v5 に切り替えます..." -ForegroundColor Yellow
-        Remove-Module -Name Pester -Force -ErrorAction SilentlyContinue
-    }
-}
-
-# Pester v5 モジュールの確認とインストール
-$pesterV5 = Get-Module -ListAvailable -Name Pester |
-    Where-Object { $_.Version -ge [Version]"5.0.0" -and $_.Version -lt [Version]"6.0.0" } |
-    Sort-Object Version -Descending |
+# PSGallery の最新安定版を確認し、古いインストールへフォールバックしない。
+$latestPester = Find-Module -Name Pester -Repository PSGallery -ErrorAction Stop
+$pesterModule = Get-Module -ListAvailable -Name Pester |
+    Where-Object { $_.Version -eq [Version]$latestPester.Version } |
     Select-Object -First 1
 
-if (-not $pesterV5) {
-    Write-Host "Pester v5 がインストールされていません。自動インストールします..." -ForegroundColor Yellow
-    try {
-        Install-Module -Name Pester -MinimumVersion 5.0.0 -MaximumVersion 5.999.999 -Scope CurrentUser -Force -SkipPublisherCheck
-        $pesterV5 = Get-Module -ListAvailable -Name Pester |
-            Where-Object { $_.Version -ge [Version]"5.0.0" -and $_.Version -lt [Version]"6.0.0" } |
-            Sort-Object Version -Descending |
-            Select-Object -First 1
-        if (-not $pesterV5) {
-            throw "インストール後もモジュールが見つかりません"
-        }
-        Write-Host "Pester v$($pesterV5.Version) をインストールしました" -ForegroundColor Green
-    }
-    catch {
-        Write-Error "Pester v5 の自動インストールに失敗しました: $($_.Exception.Message)"
-        Write-Error "手動でインストールしてください: Install-Module -Name Pester -MinimumVersion 5.0.0 -MaximumVersion 5.999.999 -Scope CurrentUser -Force"
-        exit 1
+if (-not $pesterModule) {
+    Write-Host "Pester の最新安定版をインストールします..." -ForegroundColor Yellow
+    Install-Module -Name Pester -Repository PSGallery -Scope CurrentUser -Force -SkipPublisherCheck -ErrorAction Stop
+    $pesterModule = Get-Module -ListAvailable -Name Pester |
+        Where-Object { $_.Version -eq [Version]$latestPester.Version } |
+        Select-Object -First 1
+    if (-not $pesterModule) {
+        throw "最新の Pester が見つかりません。Install-Module -Name Pester -Repository PSGallery -Scope CurrentUser -Force を実行してください。"
     }
 }
 
-# Pester v5 を強制ロード
-Import-Module -Name Pester -RequiredVersion $pesterV5.Version -Force
+if (Get-Module -Name Pester) {
+    Remove-Module -Name Pester -Force -ErrorAction Stop
+}
+Import-Module -Name $pesterModule.Path -Force -ErrorAction Stop
 
 $loadedVersion = (Get-Module -Name Pester).Version
 Write-Host "Pester v$loadedVersion を使用します" -ForegroundColor Cyan
@@ -244,7 +227,7 @@ if ($coverageRequested) {
         $pesterConfig.CodeCoverage.Enabled = $true
         $pesterConfig.CodeCoverage.Path = $sourceFiles
         $pesterConfig.CodeCoverage.CoveragePercentTarget = $MinimumCoverage
-        $pesterConfig.CodeCoverage.OutputFormat = "CoverageGutters"
+        $pesterConfig.CodeCoverage.OutputFormat = "Cobertura"
         # 外部コマンド直接呼び出しはカバレッジから除外
         $pesterConfig.CodeCoverage.ExcludeTests = $true
         # カバレッジでモックを使用可能にする（ブレークポイント方式を無効化）
@@ -252,7 +235,7 @@ if ($coverageRequested) {
 
         if ($CoverageOutputFile) {
             $pesterConfig.CodeCoverage.OutputPath = $CoverageOutputFile
-            $pesterConfig.CodeCoverage.OutputFormat = "CoverageGutters"
+            $pesterConfig.CodeCoverage.OutputFormat = "Cobertura"
         }
     }
 }

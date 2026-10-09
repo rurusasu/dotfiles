@@ -100,12 +100,6 @@ jobs:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
-      - name: Cache PSScriptAnalyzer
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
-        with:
-          path: ~\Documents\PowerShell\Modules\PSScriptAnalyzer
-          key: ${{ runner.os }}-pssa-lint-1.22.0
-
       - name: Install PSScriptAnalyzer
         shell: pwsh
         run: |
@@ -129,7 +123,8 @@ jobs:
           }
 
           function Install-GalleryModuleArchive {
-            param([string]$Name, [string]$Version)
+            param([string]$Name)
+            $Version = (Find-Module -Name $Name -Repository PSGallery -ErrorAction Stop).Version.ToString()
 
             $modulePath = Join-Path $moduleRoot "$Name\$Version"
             if (-not (Test-Path -LiteralPath (Join-Path $modulePath "$Name.psd1"))) {
@@ -149,10 +144,10 @@ jobs:
               Expand-Archive -LiteralPath $packagePath -DestinationPath $modulePath -Force
             }
 
-            Import-Module -Name $Name -RequiredVersion $Version -Force
+            Import-Module -Name (Join-Path $modulePath "$Name.psd1") -Force
           }
 
-          Install-GalleryModuleArchive -Name PSScriptAnalyzer -Version '1.22.0'
+          Install-GalleryModuleArchive -Name PSScriptAnalyzer
 
       - name: Run PSScriptAnalyzer and generate SARIF
         shell: pwsh
@@ -239,11 +234,9 @@ jobs:
           - runtime: Windows PowerShell 5.1
             executable: powershell.exe
             module_directory: WindowsPowerShell
-            module_path: ~\Documents\WindowsPowerShell\Modules
           - runtime: PowerShell 7
             executable: pwsh.exe
             module_directory: PowerShell
-            module_path: ~\Documents\PowerShell\Modules
     permissions:
       contents: read
     steps:
@@ -287,12 +280,6 @@ jobs:
             throw "AutoHotkey v2 UIAccess behavioral self-tests failed (exit $LASTEXITCODE)"
           }
 
-      - name: Cache PowerShell modules
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
-        with:
-          path: ${{ matrix.module_path }}
-          key: ${{ runner.os }}-${{ matrix.runtime }}-psmodules-pester-5.6.1-pssa-1.22.0
-
       - name: Install PowerShell modules
         shell: pwsh
         run: |
@@ -316,7 +303,8 @@ jobs:
           }
 
           function Install-GalleryModuleArchive {
-            param([string]$Name, [string]$Version)
+            param([string]$Name)
+            $Version = (Find-Module -Name $Name -Repository PSGallery -ErrorAction Stop).Version.ToString()
 
             $modulePath = Join-Path $moduleRoot "$Name\$Version"
             if (-not (Test-Path -LiteralPath (Join-Path $modulePath "$Name.psd1"))) {
@@ -336,11 +324,11 @@ jobs:
               Expand-Archive -LiteralPath $packagePath -DestinationPath $modulePath -Force
             }
 
-            Import-Module -Name $Name -RequiredVersion $Version -Force
+            Import-Module -Name (Join-Path $modulePath "$Name.psd1") -Force
           }
 
-          Install-GalleryModuleArchive -Name Pester -Version '5.6.1'
-          Install-GalleryModuleArchive -Name PSScriptAnalyzer -Version '1.22.0'
+          Install-GalleryModuleArchive -Name Pester
+          Install-GalleryModuleArchive -Name PSScriptAnalyzer
         env:
           PS_MODULE_DIRECTORY: ${{ matrix.module_directory }}
 

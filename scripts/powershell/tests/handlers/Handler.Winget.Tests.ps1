@@ -556,6 +556,7 @@ Describe 'WingetHandler' {
         }
 
         It 'should verify PowerToys when WinGet uses its preview ARP display name' {
+            Mock Get-ChildItem { return @() }
             $env:LOCALAPPDATA = 'C:\Users\test\AppData\Local'
             $wingetManifestPath = Join-Path $PSScriptRoot '../../../../windows/winget/packages.json'
             $wingetManifest = Get-Content -LiteralPath $wingetManifestPath -Raw | ConvertFrom-Json
@@ -591,6 +592,7 @@ Describe 'WingetHandler' {
         }
 
         It 'should verify a product code found in a single matching uninstall string' {
+            Mock Get-ChildItem { return @() }
             $registryKey = [PSCustomObject]@{
                 Name   = 'DiscordSetup'
                 PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\DiscordSetup'
