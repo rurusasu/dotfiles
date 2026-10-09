@@ -8,9 +8,26 @@
 let
   configuredUser = builtins.getEnv "DOTFILES_USER";
   user = if configuredUser == "" then "nixos" else configuredUser;
+  configuredHome = builtins.getEnv "DOTFILES_HOME";
+  home = if configuredHome == "" then "/home/${user}" else configuredHome;
+  configuredRepository = builtins.getEnv "DOTFILES_REPO_ROOT";
+  repository = if configuredRepository == "" then "${home}/.dotfiles" else configuredRepository;
 in
 
 {
+  # Root evaluates the Windows-mounted, user-owned checkout during rebuild.
+  # Own its exact trust declaration here, never by editing Home Manager files.
+  programs.git = {
+    enable = true;
+    config.safe.directory = [ repository ];
+  };
+  assertions = [
+    {
+      assertion = builtins.substring 0 1 repository == "/" && !(pkgs.lib.hasInfix "*" repository);
+      message = "WSL Git trust requires one absolute checkout path without wildcards.";
+    }
+  ];
+
   imports = [
     inputs.home-manager.nixosModules.home-manager
   ];
@@ -143,9 +160,10 @@ in
 
   users.users.${user}.extraGroups = [ "docker" ];
 
-  # Re-register WSLInterop binfmt entry after systemd clears it on boot.
-  # Without this, Windows .exe files (e.g. VS Code) cannot be executed from WSL.
-  wsl.interop.register = true;
+  # WSL owns and protects its existing Windows executable registration.
+  # Re-registering it makes systemd-binfmt fail on WSL's read-only status file.
+  # No additional binfmt handlers are needed by this host.
+  wsl.interop.register = false;
 
   # WSL のデフォルトでは /etc/hosts を毎回上書きするため generateHosts = false で無効化し、
   # NixOS が networking.extraHosts 経由で /etc/hosts を管理できるようにする。

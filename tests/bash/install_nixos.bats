@@ -17,7 +17,8 @@ setup() {
 
 	export HOME="$TEST_HOME"
 	export USER="test-user"
-	export PATH="$STUB_BIN:/usr/bin:/bin"
+	# Keep Nix-provided tools while giving external-command stubs precedence.
+	export PATH="$STUB_BIN:$PATH"
 	export COMMAND_LOG STUB_BIN REAL_JQ REPO_ROOT
 	export DOTFILES_NIXOS_MARKER="$NIXOS_MARKER"
 	export DOTFILES_CURRENT_SYSTEM_PATH="$CURRENT_SYSTEM"

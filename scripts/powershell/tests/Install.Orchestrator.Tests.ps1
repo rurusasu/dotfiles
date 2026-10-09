@@ -56,9 +56,9 @@ Describe 'install.ps1 (orchestrator)' {
         $content = Get-Content -LiteralPath $script:target -Raw
     }
 
-    It 'should converge deferred Docker setup after admin work and before acceptance' {
+    It 'should converge deferred NixOS setup after admin work and before acceptance' {
         $content = Get-Content -LiteralPath $script:target -Raw
-        $convergence = $content.IndexOf('Phase 2c: Post-Admin Docker Convergence')
+        $convergence = $content.IndexOf('Phase 2c: Post-Admin NixOS Convergence')
         $acceptance = $content.IndexOf('Environment Acceptance')
 
         $convergence | Should -BeGreaterThan -1

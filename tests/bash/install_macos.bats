@@ -29,7 +29,10 @@ setup() {
 	REAL_TASK="$(command -v task)"
 	REAL_PYTHON="$(command -v python3)"
 	REAL_BASH="$(command -v bash)"
+	REAL_GIT="$(command -v git)"
 	mkdir -p "$TEST_HOME" "$STUB_BIN" "$TEST_HOMEBREW_CASK_PARENT_DIR" "$TEST_HOMEBREW_LINK_TARGET"
+	# Expose only Git, keeping real Nix outside the fresh-install fixture PATH.
+	ln -s "$REAL_GIT" "$STUB_BIN/git"
 	chmod 0755 "$TEST_HOMEBREW_CASK_PARENT_DIR"
 	: >"$COMMAND_LOG"
 	: >"$FAKE_NIX_PROFILE"

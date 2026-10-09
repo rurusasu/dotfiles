@@ -19,6 +19,7 @@ Describe 'DockerHandler' {
     BeforeEach {
         $script:handler = [DockerHandler]::new()
         $script:ctx = [SetupContext]::new("D:\dotfiles")
+        $ctx.Options['EnableDockerDesktopIntegration'] = $true
         Mock Test-DockerDaemon { return $true }
     }
 
@@ -39,9 +40,18 @@ Describe 'DockerHandler' {
 
     Context 'CanApply' {
         BeforeEach {
+            $ctx.Options['EnableDockerDesktopIntegration'] = $true
             Mock Write-Host { }
             Mock Test-PathExist { return $true }
             Mock Test-WslAvailable { return $true }
+        }
+
+        It 'should skip Docker Desktop integration by default without probing WSL or Docker' {
+            $ctx.Options.Remove('EnableDockerDesktopIntegration')
+            Mock Test-WslAvailable { throw 'WSL must not be probed for optional Docker integration' }
+            Mock Test-PathExist { throw 'Docker Desktop must not be probed by default' }
+
+            $handler.CanApply($ctx) | Should -BeFalse
         }
 
         It 'should return false when Retries is 0' {

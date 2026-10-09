@@ -46,6 +46,13 @@ class DockerHandler : SetupHandlerBase {
         - リトライ回数が 0 より大きいか
     #>
     [bool] CanApply([SetupContext]$ctx) {
+        # NixOS-WSL runs independently and uses its native dockerd. Legacy
+        # Docker Desktop integration must be explicitly requested.
+        if ($ctx.GetOption("EnableDockerDesktopIntegration", $false) -ne $true) {
+            $this.Log("Docker Desktop 連携は明示的に有効化された場合のみ実行します", "Gray")
+            return $false
+        }
+
         # リトライ回数の取得
         $this.Retries = $ctx.GetOption("DockerIntegrationRetries", 5)
         $this.RetryDelaySeconds = $ctx.GetOption("DockerIntegrationRetryDelaySeconds", 5)

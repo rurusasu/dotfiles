@@ -1,4 +1,4 @@
-﻿#Requires -Module Pester
+#Requires -Module Pester
 
 BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
@@ -58,8 +58,10 @@ Describe 'Package catalog consistency' {
 
             $taskfile | Should -Match 'nix flake update && scripts/sh/nixos-rebuild-with-user\.sh switch --flake \. --impure'
             $updateScript | Should -Match 'nix flake update --flake ~/.dotfiles'
-            $commonInstallScript | Should -Match 'nix flake update --flake "\$flake_root"'
-            $postInstallScript | Should -Match 'dotfiles_update_flake "\$TARGET_DIR"'
+            $commonInstallScript | Should -Match 'nix flake update --flake "\$flake_ref"'
+            $postInstallScript | Should -Match 'dotfiles_update_flake "\$TARGET_DIR" path'
+            $commonInstallScript | Should -Not -Match 'dotfiles_trust_git_directory|git config --global'
+            $postInstallScript | Should -Not -Match 'git config --global'
         }
 
     }
@@ -339,6 +341,11 @@ Describe 'Package catalog consistency' {
             @($retired.packages | Where-Object { $_.id -eq '9PLM9XGG6VKS' }).Count | Should -Be 0
         }
 
+        It 'should not install Docker Desktop on Windows' {
+            $wingetWithoutDocker = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
+            @($wingetWithoutDocker.Sources | ForEach-Object { $_.Packages } | Where-Object PackageIdentifier -EQ 'Docker.DockerDesktop').Count | Should -Be 0
+        }
+
         It 'should require a concrete verifier for every entry in nonempty Windows manifests' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetPackages = @($winget.Sources | ForEach-Object { $_.Packages })
@@ -351,7 +358,6 @@ Describe 'Package catalog consistency' {
                 'AgileBits.1Password'                    = @{ type = 'windowsInstalledProduct'; command = 'AgileBits.1Password' }
                 'AutoHotkey.AutoHotkey'                  = @{ type = 'windowsInstalledProduct'; command = 'AutoHotkey' }
                 'Discord.Discord'                        = @{ type = 'windowsInstalledProduct'; command = 'Discord' }
-                'Docker.DockerDesktop'                   = @{ type = 'windowsInstalledProduct'; command = 'Docker Desktop' }
                 'Google.Chrome'                          = @{ type = 'windowsInstalledProduct'; command = 'Google Chrome' }
                 'Obsidian.Obsidian'                      = @{ type = 'windowsInstalledProduct'; command = 'Obsidian' }
                 'StablyAI.Orca'                          = @{ type = 'windowsInstalledProduct'; command = 'OrcaSlicer' }

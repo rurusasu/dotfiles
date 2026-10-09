@@ -256,6 +256,19 @@ in
     }) 3;
   };
 
+  testHomeGitHasNoMutableCheckoutTrustIncludes = {
+    expr = map (home: home.config.programs.git.includes) [
+      linux
+      wsl
+      darwin
+    ];
+    expected = [
+      [ ]
+      [ ]
+      [ ]
+    ];
+  };
+
   testOnePasswordPackagesAndGitSshPlatformIntegration = {
     expr =
       map

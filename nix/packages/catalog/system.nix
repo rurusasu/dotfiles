@@ -21,13 +21,10 @@
   };
 
   docker-desktop = {
-    winget = "Docker.DockerDesktop";
     category = "system";
     support = {
       windows = {
-        provider = "winget";
-        source = "winget";
-        identity = "Docker.DockerDesktop";
+        unsupported = "Docker Desktop is not installed on Windows; NixOS-WSL runs directly as a WSL distribution";
       };
       darwin = {
         provider = "homebrew-cask";

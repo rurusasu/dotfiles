@@ -608,7 +608,10 @@ function Invoke-ConsentPrompt {
 function Get-SetupHandler {
     param(
         [Parameter(Mandatory)]
-        [string]$HandlersPath
+        [string]$HandlersPath,
+
+        [Parameter()]
+        [switch]$SkipLoad
     )
 
     $handlers = @()
@@ -621,8 +624,10 @@ function Get-SetupHandler {
 
     foreach ($file in $handlerFiles) {
         try {
-            # Dot-source the handler file
-            . $file.FullName
+            if (-not $SkipLoad) {
+                # Dot-source the handler file
+                . $file.FullName
+            }
 
             # Extract class name (Handler.Chezmoi.ps1 → ChezmoiHandler)
             $handlerName = $file.BaseName -replace '^Handler\.', ''

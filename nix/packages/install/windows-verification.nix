@@ -105,18 +105,6 @@
         executablePaths = [ "%ProgramFiles%\\AutoHotkey\\v2\\AutoHotkey.exe" ];
       };
     };
-    "Docker.DockerDesktop" = {
-      type = "windowsInstalledProduct";
-      command = "Docker Desktop";
-      uninstallEntry = {
-        displayName = "Docker Desktop";
-        publisher = "Docker Inc.";
-        executablePaths = [
-          "%ProgramFiles%\\Docker\\Docker\\Docker Desktop.exe"
-          "%LOCALAPPDATA%\\Programs\\DockerDesktop\\Docker Desktop.exe"
-        ];
-      };
-    };
     "dprint.dprint" = {
       command = "dprint";
       args = [ "--version" ];

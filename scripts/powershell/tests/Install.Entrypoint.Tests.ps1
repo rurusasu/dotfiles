@@ -81,6 +81,8 @@ BeforeAll {
             [Parameter(Mandatory)]
             [string]$ScriptPath,
 
+            [string]$DistroName,
+
             [int]$TimeoutMilliseconds = 60000
         )
 
@@ -99,6 +101,10 @@ BeforeAll {
         $psi.FileName = $executable
         $quotedScriptPath = $ScriptPath.Replace('"', '\"')
         $psi.Arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$quotedScriptPath`" -NoPause"
+        if ($DistroName) {
+            $quotedDistroName = $DistroName.Replace('"', '\"')
+            $psi.Arguments += " -DistroName `"$quotedDistroName`""
+        }
         $psi.WorkingDirectory = $WorkingDirectory
         $psi.UseShellExecute = $false
         $psi.RedirectStandardOutput = $true
@@ -175,7 +181,7 @@ class PhaseOneHandler : SetupHandlerBase {
     [SetupResult] Apply([SetupContext]$ctx) {
         [System.IO.File]::AppendAllText(
             (Join-Path $ctx.DotfilesPath 'phase-markers.txt'),
-            "PHASE1_APPLIED`n"
+            "PHASE1_APPLIED`nPHASE1_DISTRO=$($ctx.DistroName)`n"
         )
         return $this.CreateSuccessResult('FIXTURE_PHASE1_APPLIED')
     }
@@ -198,7 +204,7 @@ class PhaseTwoHandler : SetupHandlerBase {
     [SetupResult] Apply([SetupContext]$ctx) {
         [System.IO.File]::AppendAllText(
             (Join-Path $ctx.DotfilesPath 'phase-markers.txt'),
-            "PHASE2A_APPLIED`n"
+            "PHASE2A_APPLIED`nPHASE2A_DISTRO=$($ctx.DistroName)`n"
         )
         return $this.CreateSuccessResult('FIXTURE_PHASE2A_APPLIED')
     }
@@ -240,14 +246,22 @@ class PhaseTwoAdminProbeHandler : SetupHandlerBase {
         )
 
         $acceptance = @'
+[CmdletBinding()]
+param(
+    [switch]$Docker,
+    [switch]$Runtime,
+    [string]$DistroName = ''
+)
+
 function Test-DotfilesEnvironment {
     [CmdletBinding()]
     param(
         [switch]$Docker,
-        [switch]$Runtime
+        [switch]$Runtime,
+        [string]$DistroName = 'NixOS'
     )
 
-    Write-Host 'FIXTURE_ACCEPTANCE_COMPLETE'
+    Write-Host "FIXTURE_ACCEPTANCE_COMPLETE distro=$DistroName"
     return [pscustomobject]@{
         Success = $true
         Message = 'Fixture acceptance passed'
@@ -576,16 +590,20 @@ exit 0
         Test-Path -LiteralPath (Join-Path $workDir 'scripts\powershell\selection.txt') | Should -BeFalse
     }
 
-    It 'should drive the real install.ps1 orchestrator through Phase 2a and final completion' {
+    It 'should preserve <ExpectedDistro> through the real orchestrator phases and acceptance' -ForEach @(
+        @{ ArgumentDistro = $null; ExpectedDistro = 'NixOS' }
+        @{ ArgumentDistro = 'CustomNixOS'; ExpectedDistro = 'CustomNixOS' }
+    ) {
         if (-not $script:runsOnWindows) {
             Set-ItResult -Skipped -Because "install.cmd is a Windows entrypoint"
             return
         }
 
-        $fixture = New-PhaseIntegrationFixture -Name 'install-phase-integration'
+        $fixture = New-PhaseIntegrationFixture -Name "install-phase-integration-$ExpectedDistro"
         $result = Invoke-TestPowerShellProcess `
             -WorkingDirectory $fixture.WorkDirectory `
-            -ScriptPath $fixture.InstallScript
+            -ScriptPath $fixture.InstallScript `
+            -DistroName $ArgumentDistro
 
         $result.ExitCode | Should -Be 0 -Because "stdout=[$($result.Stdout)] stderr=[$($result.Stderr)]"
         $result.Stdout | Should -Match "Phase 1: User Scope Setup"
@@ -593,11 +611,14 @@ exit 0
         $result.Stdout | Should -Match "FIXTURE_PHASE1_APPLIED"
         $result.Stdout | Should -Match "FIXTURE_PHASE2A_APPLIED"
         $result.Stdout | Should -Match "FIXTURE_ACCEPTANCE_COMPLETE"
+        $result.Stdout | Should -Match "FIXTURE_ACCEPTANCE_COMPLETE distro=$ExpectedDistro"
         $result.Stdout | Should -Not -Match "Cannot convert.*SetupContext"
         $result.Stdout | Should -Match "Setup Complete!"
 
         $markers = Get-Content -LiteralPath $fixture.MarkerFile
         $markers | Should -Contain 'PHASE1_APPLIED'
         $markers | Should -Contain 'PHASE2A_APPLIED'
+        $markers | Should -Contain "PHASE1_DISTRO=$ExpectedDistro"
+        $markers | Should -Contain "PHASE2A_DISTRO=$ExpectedDistro"
     }
 }

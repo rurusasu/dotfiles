@@ -13,7 +13,7 @@ in
     expr = {
       supportReport = {
         isAttrs = builtins.isAttrs sets.supportReport;
-        dockerWindowsProvider = dockerSupport.windows.provider;
+        dockerWindowsReason = dockerSupport.windows.unsupported;
         dockerDarwinProvider = dockerSupport.darwin.provider;
         dockerLinuxReason = dockerSupport.linux.unsupported;
       };
@@ -27,7 +27,7 @@ in
     expected = {
       supportReport = {
         isAttrs = true;
-        dockerWindowsProvider = "winget";
+        dockerWindowsReason = "Docker Desktop is not installed on Windows; NixOS-WSL runs directly as a WSL distribution";
         dockerDarwinProvider = "homebrew-cask";
         dockerLinuxReason = "Docker Desktop is not selected on Linux; NixOS manages the Docker engine through virtualisation.docker";
       };

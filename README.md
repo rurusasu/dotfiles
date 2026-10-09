@@ -56,8 +56,13 @@ cd dotfiles
 .\install.cmd
 ```
 
-`install.cmd` は宣言済みの Windows パッケージ、Docker Desktop、NixOS WSL と
-native Hermes を適用します。機能別の `-With*` フラグは不要です。
+`install.cmd` は宣言済みの Windows パッケージと通常の WSL ディストリビューションとしての
+NixOS-WSL を適用します。Hermes は NixOS 内に Nix/Home Manager で直接導入し、
+systemd user service として実行します。Windows に Hermes や Docker Desktop を導入する処理はありません。
+NixOS/Hermes の直接実行に Docker は不要です。既に導入済みの Docker Desktop の連携と Docker runtime acceptance は
+PowerShell で `scripts/powershell/install.ps1` に
+`-Options @{ EnableDockerDesktopIntegration = $true }` を渡した場合だけ実行します。
+Docker Desktop の VHDX 拡張も同じ入口の `-Options @{ ExpandDockerVhd = $true }` で明示的に選択します。
 
 ### macOS (Apple Silicon)
 

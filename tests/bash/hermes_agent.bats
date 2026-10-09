@@ -12,6 +12,7 @@ setup() {
 	COMPOSE_FILE="$BATS_TEST_TMPDIR/docker/hermes-service/compose file.yml"
 	REAL_JQ="$(command -v jq)"
 	REAL_PYTHON3="$(command -v python3)"
+	REAL_GIT="$(command -v git)"
 	export REAL_INSTALL_TASK="$(command -v task)"
 	SECRET_MARKER="adapter-secret-marker"
 	mkdir -p "$TEST_HOME/.hermes" "$STUB_BIN"
@@ -225,6 +226,7 @@ create_mocked_installer_fixture() {
 		"$MOCK_BIN" "$MOCK_DOCKER_APP/Contents/MacOS" \
 		"$MOCK_DOCKER_APP/Contents/Resources/bin"
 	MOCK_REPO="$(cd "$MOCK_REPO" && pwd -P)"
+	ln -s "$REAL_GIT" "$MOCK_BIN/git"
 	cp "$REPO_ROOT/install.sh" "$MOCK_REPO/install.sh"
 	cp "$REPO_ROOT/Taskfile.yml" "$MOCK_REPO/Taskfile.yml"
 	cp -R "$REPO_ROOT/taskfiles" "$MOCK_REPO/taskfiles"
