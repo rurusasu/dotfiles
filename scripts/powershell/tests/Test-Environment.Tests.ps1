@@ -79,7 +79,7 @@ Describe 'Test-DotfilesEnvironment' {
 
     It 'should run acceptance before printing final completion' {
         $content = Get-Content -LiteralPath $script:installTarget -Raw
-        $acceptanceIndex = $content.IndexOf('Test-DotfilesEnvironment -Docker:$Options["WithDocker"] -Runtime:$Options["WithDocker"]')
+        $acceptanceIndex = $content.IndexOf('Test-DotfilesEnvironment -Docker -Runtime')
         $completionIndex = $content.IndexOf('Setup Complete!')
 
         $acceptanceIndex | Should -BeGreaterThan -1

@@ -6,7 +6,6 @@ setup() {
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	mkdir -p "$TEST_HOME" "$STUB_BIN"
 
-	write_stub tmux 'exit 0'
 	write_stub curl 'exit 0'
 	write_stub git 'exit 0'
 	write_stub tar 'exit 0'
@@ -45,7 +44,7 @@ EOF
 	[[ "$output" == *"bootstrap complete"* ]]
 }
 
-@test "bootstrap.sh installs Codex without installing Claude Code" {
+@test "bootstrap.sh installs Codex from npm" {
 	export HOME="$TEST_HOME"
 	export NPM_LOG="$BATS_TEST_TMPDIR/npm.log"
 	write_stub npm '
@@ -62,7 +61,7 @@ exit 0
 	IFS=: read -r -a path_entries <<<"$PATH"
 	for path_entry in "${path_entries[@]}"; do
 		[ -n "$path_entry" ] || continue
-		{ [ -x "$path_entry/claude" ] || [ -x "$path_entry/codex" ]; } && continue
+		[ -x "$path_entry/codex" ] && continue
 		if [ -z "$filtered_path" ]; then
 			filtered_path="$path_entry"
 		else
@@ -76,7 +75,6 @@ exit 0
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"bootstrap complete"* ]]
 	grep -q '@openai/codex' "$NPM_LOG"
-	! grep -qi 'claude' "$NPM_LOG"
 }
 
 @test "chezmoi apply preserves the Codex npm path in future shells" {

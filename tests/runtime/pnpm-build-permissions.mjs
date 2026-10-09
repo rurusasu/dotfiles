@@ -126,13 +126,11 @@ try {
   await run("pre-skip migration without pending packages", ["!node-pty"], false, "false", true);
   await run("pre-skip migration is idempotent", ["!node-pty"], false, "false", true);
   await run("pre-skip denial persists", [], false, "false");
-  for (const name of ["@deepseek-ai/dsh", "@google/gemini-cli"]) {
+  for (const { name, installArgs = [] } of catalog.globalPackages) {
     // Each package must independently migrate true -> false, not rely on its predecessor.
     writeFileSync(permissionPath, oldApprovals);
-    const entry = catalog.globalPackages.find((pkg) => pkg.name === name);
-    assert.ok(entry, `${name} must be present in the shipped manifest`);
-    await run(`${name} revokes saved approval`, entry.installArgs || [], false, "false");
-    await run(`${name} remains safe on repeat`, entry.installArgs || [], false, "false");
+    await run(`${name} revokes saved approval`, installArgs, false, "false");
+    await run(`${name} remains safe on repeat`, installArgs, false, "false");
   }
   await run("denial persists without flags", [], false, "false");
 } finally {

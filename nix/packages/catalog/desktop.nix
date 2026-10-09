@@ -4,7 +4,6 @@
   lib,
   selectDarwinPackage,
   darwinProviderCandidate,
-  darwinDiscordPackage,
   ...
 }:
 {
@@ -64,44 +63,6 @@
     };
   };
 
-  discord = {
-    pkg = if pkgs.stdenv.hostPlatform.isDarwin then darwinDiscordPackage else pkgs.discord;
-    winget = "Discord.Discord";
-    category = "desktop";
-    support = {
-      darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "discord";
-        identity = {
-          appName = "Discord.app";
-        };
-      };
-      linux = {
-        provider = "nix";
-        source = "nixpkgs";
-        identity = "discord";
-        nixAttr = "discord";
-      };
-    };
-  };
-
-  _1password-gui = {
-    pkg = pkgs._1password-gui;
-    winget = "AgileBits.1Password";
-    category = "desktop";
-    support = {
-      darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "_1password-gui";
-        identity = {
-          appName = "1Password.app";
-        };
-      };
-    };
-  };
-
   arc-browser = {
     winget = "TheBrowserCompany.Arc";
     category = "desktop";
@@ -151,7 +112,6 @@
     pkg = pkgs.google-chrome;
     winget = "Google.Chrome";
     category = "desktop";
-    installFeature = "WithHermes";
     support = {
       darwin = {
         provider = "nix";
@@ -160,31 +120,6 @@
         identity = {
           appName = "Google Chrome.app";
         };
-      };
-    };
-  };
-
-  orca-editor = {
-    pkg =
-      if pkgs.stdenv.hostPlatform.isDarwin then
-        selectDarwinPackage "orca-editor" (pkgs.callPackage ../orca-editor { })
-      else
-        null;
-    winget = "StablyAI.Orca";
-    category = "desktop";
-    support = {
-      darwin = {
-        provider = "nix";
-        inherit ((darwinProviderCandidate "orca-editor")) source;
-        identity = {
-          appName = "Orca.app";
-        };
-      }
-      // lib.optionalAttrs ((darwinProviderCandidate "orca-editor").nixAttr != null) {
-        inherit ((darwinProviderCandidate "orca-editor")) nixAttr;
-      };
-      linux = {
-        unsupported = "No reviewed Linux desktop package provider is selected";
       };
     };
   };

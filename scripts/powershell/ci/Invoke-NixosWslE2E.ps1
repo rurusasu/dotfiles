@@ -254,7 +254,7 @@ try {
         Complete-CiSection
     }
 
-    Write-CiSection "Import prebuilt NixOS and Hermes closures"
+    Write-CiSection "Import prebuilt NixOS system closure"
     try {
         $artifactDir = Join-Path $env:RUNNER_TEMP "wsl-nix-cache-artifact"
         $cacheArchive = Join-Path $artifactDir "wsl-nix-cache.tar"
@@ -264,8 +264,8 @@ try {
             throw "WSL prebuild artifact is incomplete: $artifactDir"
         }
         $systemPaths = @(Get-Content -LiteralPath $pathsFile | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-        if ($systemPaths.Count -ne 2 -or $systemPaths.Where({ $_ -notmatch '^/nix/store/[a-z0-9]{32}-' }).Count -ne 0) {
-            throw "WSL prebuild artifact must contain exactly two Nix store paths: $($systemPaths -join ', ')"
+        if ($systemPaths.Count -ne 1 -or $systemPaths.Where({ $_ -notmatch '^/nix/store/[a-z0-9]{32}-' }).Count -ne 0) {
+            throw "WSL prebuild artifact must contain exactly one Nix store path: $($systemPaths -join ', ')"
         }
 
         $cacheDir = Join-Path $env:RUNNER_TEMP "wsl-nix-cache"
@@ -283,12 +283,12 @@ try {
             throw "Could not resolve WSL path for Nix cache artifact: $cacheDir"
         }
 
-        $importCommand = "nix --version && nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from 'file://$cacheLinuxPath' '$($systemPaths[0])' '$($systemPaths[1])' && nix --extra-experimental-features 'nix-command flakes' path-info '$($systemPaths[0])' '$($systemPaths[1])'"
+        $importCommand = "nix --version && nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from 'file://$cacheLinuxPath' '$($systemPaths[0])' && nix --extra-experimental-features 'nix-command flakes' path-info '$($systemPaths[0])'"
         Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "root", "--",
             "bash", "-lc", $importCommand
         ) -TimeoutSeconds 1800 | Out-Null
-        Write-Host "CI_ASSERTION: imported base and Hermes system closures from the Linux prebuild artifact."
+        Write-Host "CI_ASSERTION: imported the NixOS system closure from the Linux prebuild artifact."
     }
     finally {
         Complete-CiSection
@@ -312,6 +312,15 @@ try {
                 "bash", "-lc", "bash '$ciNixConfigWslPath' --wsl"
             ) -TimeoutSeconds 60 | Out-Null
         }
+        # Hermes is enabled by the first switch and snapshots its API settings
+        # at startup. Seed existing state before either Home Manager activation
+        # so the gateway reads the fixture and both switches preserve user data.
+        # The readiness fixture does not make model-provider requests.
+        Invoke-WslChecked -Arguments @(
+            "-d", $DistroName, "-u", "nixos", "--",
+            "bash", "-lc",
+            "install -d -m 700 /home/nixos/.hermes/memories && printf '%s\\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' > /home/nixos/.hermes/.env && chmod 600 /home/nixos/.hermes/.env && printf '%s\\n' 'model:' '  default: openrouter/auto' > /home/nixos/.hermes/config.yaml && chmod 600 /home/nixos/.hermes/config.yaml && printf '%s\\n' 'preserve-existing-hermes-state' > /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt && chmod 600 /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
+        ) -TimeoutSeconds 60 | Out-Null
         Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "root", "--",
             "bash", "-lc", "bash '$postInstallWslPath' --sync-mode repo --sync-back none --state-version 25.05 --skip-flake-update"
@@ -378,12 +387,12 @@ fi
         ) -TimeoutSeconds 300 | Out-Null
 
         Invoke-WslChecked -Arguments @(
-            "-d", $DistroName, "-u", "nixos", "--",
+            "-d", $DistroName, "-u", "nixos", "--exec",
             "bash", "-lc",
-            'GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic "type z >/dev/null && bindkey" | rg "\"\^\[q\" __zoxide_zi_widget"'
+            'GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic ''(( $+functions[cd] )) && functions cd'' | rg "__zoxide_z"'
         ) -TimeoutSeconds 300 | Out-Null
 
-        Write-CiSection "Enable Hermes Agent through Nix"
+        Write-CiSection "Verify Hermes Agent through Nix"
         try {
             # Hermes' default package is large enough to trigger memory
             # pressure on the Windows runner while Nix evaluates/builds it.
@@ -395,20 +404,8 @@ fi
                 'if ! swapon --show=NAME --noheadings | grep -q .; then dd if=/dev/zero of=/swapfile bs=1M count=8192 status=none && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile; fi && free -h'
             ) -TimeoutSeconds 300 | Out-Null
 
-            # Seed the disposable distro with pre-existing Hermes state before
-            # Home Manager activation. This proves activation preserves user
-            # data and that the gateway can read a private provider env file.
-            # The readiness endpoint also requires an explicitly configured
-            # model; this fixture does not make model-provider requests.
-            Invoke-WslChecked -Arguments @(
-                "-d", $DistroName, "-u", "nixos", "--",
-                "bash", "-lc",
-                "install -d -m 700 /home/nixos/.hermes/memories && printf '%s\\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' > /home/nixos/.hermes/.env && chmod 600 /home/nixos/.hermes/.env && printf '%s\\n' 'model:' '  default: openrouter/auto' > /home/nixos/.hermes/config.yaml && chmod 600 /home/nixos/.hermes/config.yaml && printf '%s\\n' 'preserve-existing-hermes-state' > /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt && chmod 600 /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
-            ) -TimeoutSeconds 60 | Out-Null
-
             $rebuildContext = [SetupContext]::new($repoRoot)
             $rebuildContext.DistroName = $DistroName
-            $rebuildContext.Options["WithHermes"] = $true
             $rebuildContext.Options["SkipFlakeUpdate"] = $true
             $rebuildContext.Options["NixRebuildTimeoutSeconds"] = $PostInstallTimeoutSeconds
             $rebuildHandler = [NixRebuildHandler]::new()
@@ -426,7 +423,7 @@ fi
                 Write-WslRebuildDiagnostic -Phase "after Hermes rebuild failure"
                 throw
             }
-            Write-Host "CI_ASSERTION: production NixRebuildHandler applied WithHermes to $DistroName."
+            Write-Host "CI_ASSERTION: production NixRebuildHandler applied native Hermes to $DistroName."
             $hermesHandler = [HermesAgentHandler]::new()
             if (-not $hermesHandler.CanApply($rebuildContext)) {
                 throw "HermesAgentHandler skipped validation after NixRebuildHandler completed for $DistroName"

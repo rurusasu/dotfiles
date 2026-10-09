@@ -4,22 +4,23 @@ let
     system = pkgs.stdenv.hostPlatform.system;
     config.allowUnfree = true;
   };
-  customPackages =
-    buildPkgs.lib.optionals buildPkgs.stdenv.hostPlatform.isLinux [
-      {
-        name = "chatgpt";
-        path = buildPkgs.callPackage ../../packages/chatgpt { };
-      }
-    ]
-    ++ buildPkgs.lib.optionals buildPkgs.stdenv.hostPlatform.isDarwin [
-      {
-        name = "dia-browser";
-        path = buildPkgs.callPackage ../../packages/dia-browser { };
-      }
-      {
-        name = "orca-editor";
-        path = buildPkgs.callPackage ../../packages/orca-editor { };
-      }
-    ];
+  customPackages = [
+    {
+      name = "orca-editor";
+      path = buildPkgs.callPackage ../../modules/editors/orca/package.nix { };
+    }
+  ]
+  ++ buildPkgs.lib.optionals buildPkgs.stdenv.hostPlatform.isLinux [
+    {
+      name = "chatgpt";
+      path = buildPkgs.callPackage ../../packages/chatgpt { };
+    }
+  ]
+  ++ buildPkgs.lib.optionals buildPkgs.stdenv.hostPlatform.isDarwin [
+    {
+      name = "dia-browser";
+      path = buildPkgs.callPackage ../../packages/dia-browser { };
+    }
+  ];
 in
 buildPkgs.linkFarm "custom-package-builds" customPackages

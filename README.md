@@ -3,10 +3,9 @@
 [![NixOS](https://img.shields.io/badge/NixOS-26.05-5277C3?logo=nixos&logoColor=white)](https://nixos.org/)
 [![Home Manager](https://img.shields.io/badge/Home_Manager-Nix-5277C3?logo=nixos&logoColor=white)](https://github.com/nix-community/home-manager)
 [![WSL](https://img.shields.io/badge/WSL-2-0078D6?logo=windows&logoColor=white)](https://docs.microsoft.com/en-us/windows/wsl/)
-[![Bootstrap CI](https://github.com/rurusasu/dotfiles/actions/workflows/ci-bootstrap.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-bootstrap.yml)
-[![ci-powershell](https://github.com/rurusasu/dotfiles/actions/workflows/ci-powershell.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-powershell.yml)
+[![Bootstrap CI](https://github.com/rurusasu/dotfiles/actions/workflows/ci-nix.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-nix.yml)
+[![Other CI](https://github.com/rurusasu/dotfiles/actions/workflows/ci-other.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-other.yml)
 [![ci-chezmoi](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml)
-[![ci-consistency](https://github.com/rurusasu/dotfiles/actions/workflows/ci-consistency.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-consistency.yml)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 Windows、macOS、NixOS、Ubuntu、Debian を 1 コマンドで収束させる個人用 dotfiles リポジトリです。パッケージ定義は Nix catalog、ユーザー設定は Home Manager と chezmoi、OS サービスは各プラットフォームの宣言レイヤーで一元管理します。
@@ -17,7 +16,7 @@ Windows、macOS、NixOS、Ubuntu、Debian を 1 コマンドで収束させる�
 | ------------------ | --------------------------------------------------------- |
 | OS                 | Windows + NixOS-WSL, macOS, NixOS, Ubuntu, Debian         |
 | Package catalog    | Nix Flakes (`nix/packages/catalog/`、公開入口 `sets.nix`) |
-| System convergence | winget handlers, nix-darwin, System Manager, NixOS        |
+| System convergence | winget handlers, nix-darwin, NixOS                        |
 | User environment   | Home Manager + chezmoi                                    |
 | Containers         | Docker Desktop / rootful Docker + Docker Compose          |
 | Formatter          | treefmt-nix                                               |
@@ -57,17 +56,8 @@ cd dotfiles
 .\install.cmd
 ```
 
-引数なしの `install.cmd` は core 環境だけを適用し、Ollama、Docker Desktop、
-Hindsight、Hermes、Chrome、Discord、Chromium/browser-mcp は導入しません。
-必要な構成だけを明示的に追加します。
-
-```powershell
-.\install.cmd -WithOllama # Ollama のみ
-.\install.cmd -WithDocker # Docker のみ
-.\install.cmd -WithMLflow # Ollama + Docker + MLflow
-.\install.cmd -WithHindsight # Ollama + Docker + MLflow + Hindsight
-.\install.cmd -WithHermes # Ollama + Docker + MLflow + Hindsight + Hermes + Chrome + Discord + browser-mcp
-```
+`install.cmd` は宣言済みの Windows パッケージ、Docker Desktop、NixOS WSL と
+native Hermes を適用します。機能別の `-With*` フラグは不要です。
 
 ### macOS (Apple Silicon)
 
@@ -80,16 +70,8 @@ cd dotfiles
 ./install.sh
 ```
 
-引数なしでは core 環境だけを適用し、Ollama、Docker Desktop、Hindsight、
-Hermes、Chrome、Discord は install/update/起動の対象にしません。必要な構成だけを
-明示的に追加します。`--with-docker` と `--with-hermes` の runtime は、chezmoi と
-editor 同期が完了してから起動します。
-
-```bash
-./install.sh --with-ollama # Ollama のみ
-./install.sh --with-docker # Ollama + Docker + 独立 Hindsight
-./install.sh --with-hermes # native Hermes CLI/gateway + Hermes Desktop + Chrome + Discord
-```
+`./install.sh` は宣言済みの macOS パッケージ、Docker Desktop と native Hermes を
+適用します。機能別の選択フラグは不要です。
 
 macOS の初回導入には Lix installer を使い、nix-darwin の `nix.package` も
 `pkgs.lixPackageSets.stable.lix` に統一します。既存の Nix 環境は nix-darwin の反映で
@@ -97,7 +79,7 @@ Lix に切り替わります。nix-darwin がシステムを収束させ、nix-h
 Homebrew formula/cask を管理します。Home Manager と chezmoi も同じコマンド内で
 適用します。macOS では WSL や NixOS を導入しません。
 
-`--with-hermes` の macOS 構成では、Hermes Desktop は公式 Homebrew Cask
+macOS 構成では、Hermes Desktop は公式 Homebrew Cask
 `hermes-desktop` として nix-homebrew から導入され、Agent CLI と gateway は
 Nix/Home Manager が管理する native per-user service として起動します。
 Docker Compose は Chromium / Browser MCP / X API MCP の sidecar を提供します。
@@ -116,13 +98,12 @@ task tart:run
 
 `task tart:prepare` は `TART_HOME`（既定値 `~/.tart`）の空き容量を確認し、`tahoe-base` が既に存在する場合は再取得せず終了します。image、VM 名、必要空き容量は次で変更できます。
 
-`task tart:run` はホストの Hindsight を起動し、VM の起動後に GitHub `main` の
+`task tart:run` は VM を起動し、 GitHub `main` の
 commit hash を取得します。VM に最後に正常適用した hash と一致すれば何もせず、
 更新時だけ `~/.dotfiles` を更新して、通常の `install.sh` で macOS のアプリと
 OS・Home Manager・chezmoi 設定をまとめて適用します。Tart 専用の最小パッケージ
 集合やインストーラーは持ちません。適用に失敗した場合は hash を進めないため次回に再試行
-されます。SSH reverse forward により VM の Codex も
-`http://127.0.0.1:8888` の共有 Hindsight bank を利用します。
+されます。
 
 既存 guest の旧専用 CLI profile は、OS 管理のコマンドを確認した後に移行します。
 旧 profile を指す管理済みリンクだけを削除し、通常ファイル・別のリンク・
@@ -137,9 +118,9 @@ task tart:prepare
 
 `latest` image の更新は通常の dotfiles activation では自動実行しません。既存 VM を更新する場合は、必要な VM の退避・削除を確認してから明示的に再作成してください。
 
-### NixOS / Ubuntu / Debian
+### Linux / NixOS
 
-Linux では同じ入口が `/etc/NIXOS` と `/etc/os-release` を見て自動振り分けします。
+Linux では同じ入口が `/etc/NIXOS` を見て自動振り分けします。
 
 ```bash
 git clone https://github.com/rurusasu/dotfiles.git
@@ -148,34 +129,25 @@ cd dotfiles
 ```
 
 - NixOS: `nixos-rebuild switch` に Home Manager と rootful Docker を含めます。
-- Ubuntu / Debian: Nix を必要に応じて導入し、System Manager + Home Manager + rootful Docker を適用します。
-- どちらも既存ユーザーの UID、GID、home、primary group を保持します。
+- その他の Linux（Ubuntu / Debian など）: Nix を必要に応じて導入し、Home Manager と chezmoi を適用します。ユーザー環境のみを管理し、Docker・systemd・既存アカウントは変更しません。
 
 NixOS は現在の `/etc/nixos/hardware-configuration.nix` を必須の host profile として読み込みます。固定ディスク構成はリポジトリに持たず、このファイルが存在しない場合は activation 前に停止します。
 
-### その他の Linux
-
-Full support ではありません。Docker や systemd の収束を行わない Home Manager のみの fallback を、明示的に opt-in した場合だけ実行できます。
-
-```bash
-DOTFILES_ALLOW_USER_ONLY=1 ./install.sh
-```
-
 ### 成功条件と CI
 
-「コマンドが終了した」だけでは成功扱いにしません。必須 CLI と chezmoi drift を acceptance で確認し、Docker を選択した profile では Docker daemon、Compose、`docker run --rm hello-world` も確認します。CI は GitHub-hosted Actions だけで完結し、Nix の option、package、flake output は Nix-native `nix-unit`、Windows は PowerShell/Pester、macOS の installer/runtime 契約は Bats で検証します。Ubuntu、Debian、NixOS は hosted E2E で installer を 2 回適用し、Docker と Compose の runtime acceptance まで実行します。
+システム統合の installer は必須 CLI と chezmoi drift を acceptance で確認し、Docker を選択した profile では Docker daemon、Compose、`docker run --rm hello-world` も確認します。非 NixOS Linux は Home Manager の build・activation と chezmoi の適用までが対象です。CI は GitHub-hosted Actions だけで完結し、Nix の option、package、flake output は Nix-native `nix-unit`、Windows は PowerShell/Pester、macOS の installer/runtime 契約は Bats で検証します。NixOS は hosted VM E2E で installer の再実行と Docker・Compose の runtime acceptance を検証します。
 
 標準の hosted Windows/macOS runner では Docker Desktop の VM を起動しないため、その実機固有部分は各 OS で one-command installer を実行した際の acceptance が判定します。ローカル acceptance が失敗した場合、installer はセットアップ成功を表示しません。
 
 ## 方針
 
-Nix catalog は各 OS の provider を定義し、OS の宣言レイヤーと Home Manager がそれを消費します。chezmoi は shell、Git、terminal、editor などの設定ファイルを管理します。
+Nix catalog は各 OS の provider を定義し、OS の宣言レイヤーと Home Manager がそれを消費します。chezmoi は Windows の設定と全 OS の `.codex/` / `.claude/` のみを配布します。Unix の shell、Git、terminal、editor などは Home Manager が管理します。
 
-- ユーザー設定: `chezmoi/`
+- ユーザー設定: Unix は `nix/home/`、Windows と共通 Codex / Claude 設定は `chezmoi/`
 - Home Manager: `nix/home/common.nix`
-- macOS system: `nix/hosts/darwin/default.nix` が entrypoint、`configuration.nix` が system/cask/activation の実体
-- Ubuntu / Debian: `nix/system-manager/`
-- NixOS / WSL: `nix/hosts/<host>/default.nix` が entrypoint、`configuration.nix` が host 固有設定
+- macOS system: `nix/hosts/aarch64-darwin/default.nix` が entrypoint、`configuration.nix` が system/cask/activation の実体
+- 非 NixOS Linux: `nix/hosts/<system>/home.nix` と standalone Home Manager
+- NixOS / WSL: `nix/hosts/<system>/<environment>/default.nix` が entrypoint、`configuration.nix` が host 固有設定
 - パッケージ provider catalog: `nix/packages/catalog/`、既存 consumer の公開入口: `nix/packages/sets.nix`
 
 package データ、provider 選択、installer metadata、host 動作を分け、各定義は一度だけ管理します。
@@ -330,11 +302,10 @@ sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
 
 ```bash
 ./scripts/sh/verify-environment.sh --runtime
-systemctl status system-manager.target docker.service docker.socket
 docker compose -f docker/hermes-service/compose.yml ps
 ```
 
-NixOS では `system-manager.target` の代わりに `readlink /run/current-system` と `nixos-rebuild list-generations` を確認します。macOS は `darwin-rebuild --list-generations` と Docker Desktop の起動状態を確認します。Windows は次を実行します。
+NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations`、`systemctl status docker.service docker.socket` を確認します。非 NixOS Linux の通常検証は `./scripts/sh/verify-environment.sh` を使い、Docker は管理対象外です。macOS は `darwin-rebuild --list-generations` と Docker Desktop の起動状態を確認します。Windows は次を実行します。
 
 ```powershell
 .\scripts\powershell\Test-Environment.ps1 -Runtime

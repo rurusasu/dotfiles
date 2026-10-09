@@ -7,9 +7,9 @@ let
     );
 
   osEntrypoints = [
-    ../../../home/darwin.nix
-    ../../../home/linux.nix
-    ../../../home/wsl.nix
+    ../../../hosts/aarch64-darwin/home.nix
+    ../../../hosts/shared/linux-home.nix
+    ../../../hosts/x86_64-linux/wsl/home.nix
   ];
   moduleImports =
     path:
@@ -22,6 +22,27 @@ let
   importsCommon = path: builtins.elem (../../../home/common.nix) (moduleImports path);
 in
 {
+  testSharedGitAndSshDoNotDeclareOSSpecificProgramsOrAgents = {
+    expr = {
+      signer =
+        builtins.hasAttr "signer"
+          (import ../../../modules/git {
+            config = { };
+            lib = { };
+            pkgs = { };
+          }).programs.git.signing;
+      agent =
+        builtins.hasAttr "extraOptionOverrides"
+          (import ../../../modules/ssh.nix {
+            pkgs = { };
+          }).programs.ssh;
+    };
+    expected = {
+      signer = false;
+      agent = false;
+    };
+  };
+
   testCommonHomeModuleDoesNotRequireWSLSpecialArg = {
     expr = contains "isWSL";
     expected = false;

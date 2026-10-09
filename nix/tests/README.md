@@ -6,11 +6,11 @@ nix-unit と競合する別のテストフレームワークではありませ�
 
 ## 配置と所有境界
 
-| 配置        | 戻り値・役割                                                                    | 登録先                                     |
-| ----------- | ------------------------------------------------------------------------------- | ------------------------------------------ |
-| `unit/`     | `expr` / `expected` の属性セット。Nix 式、実効 option、package 選択、flake 配線 | `nix/flakes/tests.nix` の `nix-unit.tests` |
-| `build/`    | ビルド・生成物・外部プロセスを検証する derivation                               | 同ファイルの `checks`                      |
-| `fixtures/` | テスト用 pkgs、VM 用 hardware module などの共有入力                             | テストから import                          |
+| 配置        | 戻り値・役割                                                                    | 登録先                                      |
+| ----------- | ------------------------------------------------------------------------------- | ------------------------------------------- |
+| `unit/`     | `expr` / `expected` の属性セット。Nix 式、実効 option、package 選択、flake 配線 | `nix/tests/default.nix` の `nix-unit.tests` |
+| `build/`    | ビルド・生成物・外部プロセスを検証する derivation                               | 同ファイルの `checks`                       |
+| `fixtures/` | テスト用 pkgs、VM 用 hardware module などの共有入力                             | テストから import                           |
 
 Home Manager の構成テストは `unit/home/`、host の構成テストは `unit/hosts/` に置きます。
 unit のファイルは `test...` 属性を持つ nix-unit 形式にし、ファイル名は kebab-case にします。
@@ -19,7 +19,7 @@ unit のファイルは `test...` 属性を持つ nix-unit 形式にし、ファ
 nix-unit の flake-parts module が `checks.<system>.nix-unit` を自動生成します。
 `build/` には AeroSpace、Neovim、Ghostty、Windows キー設定生成物、独自 package build、
 NixOS VM のテスト本体を置きます。実行スクリプトを flake の配線ファイルに直書きしません。
-`package-provider-coverage` は `nix/flakes/packages.nix` で既存の package-support-report
+`package-provider-coverage` は `nix/packages/outputs.nix` で既存の package-support-report
 derivation を再利用し、`treefmt` は formatter module が公開します。
 
 - `tests/bash/` は shell / installer の順序、外部コマンドの stub、runtime / artifact 契約を検証します。
@@ -98,27 +98,28 @@ Linux の NixOS VM check は独立した runner で実行し、成果物を受�
 `aarch64-linux` は flake の support/output には含まれますが、この workflow には ARM64 Linux runner の native build がありません。
 NixOS VM は Linux 限定です。`aarch64-linux` の native build には対応する builder が必要で、
 Darwin での成功は Linux / VM の実行結果を代替しません。
-配置変更時には `ci/path-routing.json`、`ci/bootstrap-path-routing.json`、
-`ci/job-path-routing.json` とその回帰テストも更新してください。
+配置変更時には `.github/actions/detect-ci-changes/action.yml` の3分類と、
+対応する workflow の実行条件を確認してください。
 
 ## Bats の所有境界と完全分類
 
-`tests/bash/package_catalog.bats` は6件で、installer/runtime、generated artifact、
+`tests/bash/package_catalog.bats` は3件で、generated artifact、
 署名済みbundleの独自契約だけを含みます。Nix値/source-shape assertionsは移管済みです。
 番号は現在の `@test` 出現順です。
 CIのexport checkはWinget/npm/pnpm JSON全体を生成してcommitted filesとJSON dataとして比較するため、
 個別metadata grepは重ねません。nix-unit ownership assertionはBats一覧とREADME分類の完全一致を検査します。
 
-### Bats runtime / artifact contracts（6件）
+### Bats runtime / artifact contracts（3件）
 
 | 番号 | テスト                                                                      | native suite に残す契約                                                          |
 | ---: | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-|    1 | `DeepSeek Harness native builds are pre-approved for pnpm global installs`  | rendered installer behavior on Linux/macOS                                       |
-|    2 | `DeepSeek Harness is reinstalled when the native build approval changes`    | installer decision/runtime behavior                                              |
-|    3 | `pnpm v11 global installs skip packages present in the global manifest`     | pnpm runtime skip behavior                                                       |
-|    4 | `winget export matches committed Windows manifest data`                     | complete generated Winget/npm/pnpm artifact data, independent of JSON formatting |
-|    5 | `Darwin Raycast artifact has the declared identity and trusted signature`   | built app identity, codesign, Gatekeeper                                         |
-|    6 | `Darwin Discord keeps staged modules outside its signed application bundle` | built layout, launcher path, app identity and signatures                         |
+|    1 | `winget export matches committed Windows manifest data`                     | complete generated Winget/npm/pnpm artifact data, independent of JSON formatting |
+|    2 | `Darwin Raycast artifact has the declared identity and trusted signature`   | built app identity, codesign, Gatekeeper                                         |
+|    3 | `Darwin Discord keeps staged modules outside its signed application bundle` | built layout, launcher path, app identity and signatures                         |
+
+pnpm 本体の導入・保存先・環境変数・PATH は Home Manager の標準 module を使い、
+nix-unit が実効設定と導入の重複を検証します。Windows のグローバルパッケージ一覧と
+native build 引数は nix-unit、導入時の外部コマンドとの契約は Pester が検証します。
 
 上記の Darwin artifact 2件は `Bootstrap / Darwin` の native runner が限定実行します。
 Linux Bats での codesign 不在による skip は、この2件の成功として扱いません。

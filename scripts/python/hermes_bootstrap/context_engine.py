@@ -128,6 +128,9 @@ def _reconcile_config(path: Path, transaction: Transaction) -> None:
     candidate = dict(config)
     candidate["context"] = merged_context
     candidate["plugins"] = merged_plugins
+    memory = config.get("memory")
+    if isinstance(memory, dict) and memory.get("provider") == "hindsight":
+        candidate["memory"] = {**memory, "provider": "builtin"}
     content = yaml.safe_dump(candidate, sort_keys=False).encode("utf-8")
     if original == content and stat.S_IMODE(metadata.st_mode) == 0o600:
         return
@@ -183,6 +186,9 @@ def _reconcile_reserved_configuration(directory: int) -> None:
     candidate = dict(config)
     candidate["context"] = merged_context
     candidate["plugins"] = merged_plugins
+    memory = config.get("memory")
+    if isinstance(memory, dict) and memory.get("provider") == "hindsight":
+        candidate["memory"] = {**memory, "provider": "builtin"}
     content = yaml.safe_dump(candidate, sort_keys=False).encode("utf-8")
     if original == content and stat.S_IMODE(metadata.st_mode) == 0o600:
         return

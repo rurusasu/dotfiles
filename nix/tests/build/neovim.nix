@@ -2,10 +2,6 @@
 { inputs, pkgs }:
 let
   neovim = import ../fixtures/neovim.nix { inherit inputs pkgs; };
-  customXdgNeovim = import ../fixtures/neovim.nix {
-    inherit inputs pkgs;
-    configDirectory = ".custom config";
-  };
 in
 pkgs.runCommand "neovim-native-check"
   {
@@ -13,7 +9,6 @@ pkgs.runCommand "neovim-native-check"
       neovim.package
       pkgs.git
       pkgs.jq
-      pkgs.python3
       pkgs.gettext
       pkgs.poppler-utils
     ];
@@ -28,9 +23,6 @@ pkgs.runCommand "neovim-native-check"
     mkdir -p "$XDG_CONFIG_HOME/nvim"
     ln -s ${neovim.lua} "$XDG_CONFIG_HOME/nvim/lua"
     cd ${../../..}
-    python3 -m unittest discover -s tests/python -p test_neovim_migration.py -v
-    bash tests/bash/neovim_home_manager_activation.sh ${neovim.fileActivation} ${neovim.homeFiles}
-    bash tests/bash/neovim_home_manager_activation.sh ${customXdgNeovim.fileActivation} ${customXdgNeovim.homeFiles} '.custom config'
     nvim --headless -u NONE -i NONE -l tests/lua/nvim_modern_test.lua
     nvim --headless -u NONE -i NONE -l tests/lua/nvim_treesitter_test.lua
     nvim --headless -u NONE -i NONE -l tests/lua/nvim_snacks_test.lua

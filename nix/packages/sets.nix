@@ -26,15 +26,14 @@
 #   - supportReport      → per-package Windows/Darwin/Linux provider metadata
 #   - darwinCasks        → Homebrew casks derived from provider metadata
 #   - darwinBrews        → Homebrew formulas derived from provider metadata
-#   - linuxSystemModules → system-layer capabilities required on Linux
 #   - providerErrors     → unresolved provider metadata (must remain empty)
 #   - windowsOnly        → packages with no nix equivalent (winget/msstore/npm/pnpm)
 #
 # Imported by:
-#   - nix/flakes/packages.nix → export and validation artifacts
-#   - nix/home/darwin.nix     → feature-selected home.packages on macOS
-#   - nix/home/linux.nix      → home.packages with native desktop packages excluded
-#   - nix/home/wsl.nix        → home.packages with native desktop packages, Discord, and Ollama excluded
+#   - nix/packages/outputs.nix → export and validation artifacts
+#   - nix/hosts/aarch64-darwin/home.nix     → home.packages on macOS
+#   - nix/hosts/shared/linux-home.nix      → home.packages with native desktop packages excluded
+#   - nix/hosts/x86_64-linux/wsl/home.nix        → home.packages with native desktop packages excluded
 #   - nix/packages/winget.nix → winget/npm/pnpm JSON generation
 {
   pkgs,
@@ -67,7 +66,7 @@ in
 selection
 // installation
 // {
-  inherit (context) appearance darwinDiscordPackage selectDarwinPackage;
+  inherit (context) appearance selectDarwinPackage;
   inherit (normalized) supportReport;
   # Keep sets.all backward compatible while allowing headless consumers to
   # exclude session-only packages without duplicating the catalog IDs.

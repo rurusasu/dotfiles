@@ -91,9 +91,6 @@ if ! nc -z localhost 22 2>/dev/null; then
   eval "$(ssh-agent -s)" > /dev/null
 fi
 
-# dcnvim is shared with Nix/Home Manager zsh.
-[[ -f "$HOME/.dotfiles/scripts/sh/dcnvim.sh" ]] && source "$HOME/.dotfiles/scripts/sh/dcnvim.sh"
-
 # dotf: run task from dotfiles root without changing cwd
 dotf() { (cd ~/.dotfiles && task "$@"); }
 

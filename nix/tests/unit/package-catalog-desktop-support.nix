@@ -44,7 +44,7 @@ in
   testGoogleChromePreservesWindowsProviderAndDarwinIdentity = {
     expr = sets.supportReport.google-chrome;
     expected = {
-      installFeature = "WithHermes";
+      installFeature = null;
       windows = {
         provider = "winget";
         source = "winget";

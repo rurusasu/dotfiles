@@ -4,36 +4,6 @@
     {
       "Packages": [
         {
-          "PackageIdentifier": "AgileBits.1Password.CLI",
-          "installArgs": ["--scope", "user"],
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"],
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "op"
-          }
-        },
-        {
-          "PackageIdentifier": "AgileBits.1Password",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "appxPackage": {
-              "executable": "1Password.exe",
-              "name": "AgileBits.1Password",
-              "packageFamilyName": "Agilebits.1Password_amwd9z03whsfe"
-            },
-            "command": "AgileBits.1Password",
-            "type": "windowsInstalledProduct",
-            "uninstallEntry": {
-              "displayName": "1Password",
-              "executablePaths": [
-                "%ProgramFiles%\\1Password\\1Password.exe",
-                "%LOCALAPPDATA%\\1Password\\app\\*\\1Password.exe"
-              ]
-            }
-          }
-        },
-        {
           "PackageIdentifier": "TheBrowserCompany.Arc",
           "installTimeoutSeconds": 3600,
           "verifyCommand": {
@@ -115,22 +85,7 @@
           }
         },
         {
-          "PackageIdentifier": "Discord.Discord",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "command": "Discord",
-            "type": "windowsInstalledProduct",
-            "uninstallEntry": {
-              "displayName": "Discord",
-              "executablePaths": ["%LOCALAPPDATA%\\Discord\\app-*\\Discord.exe"],
-              "productCodes": ["Discord"],
-              "publisher": "Discord Inc."
-            }
-          }
-        },
-        {
           "PackageIdentifier": "Docker.DockerDesktop",
-          "installFeature": "WithDocker",
           "installTimeoutSeconds": 3600,
           "verifyCommand": {
             "command": "Docker Desktop",
@@ -164,24 +119,6 @@
           }
         },
         {
-          "PackageIdentifier": "eza-community.eza",
-          "directInstaller": {
-            "destination": "%LOCALAPPDATA%\\Programs\\eza",
-            "executable": "eza.exe",
-            "sha256": "c830638c844a5b89d39ba662b5549903a71fa539018e813880f5b8afa77bac2e",
-            "timeoutSeconds": 3600,
-            "type": "archive",
-            "url": "https://github.com/eza-community/eza/releases/download/v0.23.5/eza.exe_x86_64-pc-windows-gnu.zip"
-          },
-          "installArgs": ["--scope", "user"],
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Programs\\eza"],
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "eza"
-          }
-        },
-        {
           "PackageIdentifier": "sharkdp.fd",
           "directInstaller": {
             "destination": "%LOCALAPPDATA%\\Programs\\fd",
@@ -200,36 +137,12 @@
           }
         },
         {
-          "PackageIdentifier": "junegunn.fzf",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "fzf"
-          }
-        },
-        {
           "PackageIdentifier": "GitHub.cli",
           "installTimeoutSeconds": 3600,
           "verifyCommand": {
             "args": ["--version"],
             "command": "gh",
             "timeoutSeconds": 60
-          }
-        },
-        {
-          "PackageIdentifier": "x-motemen.ghq",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "ghq"
-          }
-        },
-        {
-          "PackageIdentifier": "Git.Git",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "git"
           }
         },
         {
@@ -263,7 +176,6 @@
         },
         {
           "PackageIdentifier": "Google.Chrome",
-          "installFeature": "WithHermes",
           "installTimeoutSeconds": 3600,
           "verifyCommand": {
             "command": "Google Chrome",
@@ -319,14 +231,6 @@
           }
         },
         {
-          "PackageIdentifier": "JesseDuffield.lazygit",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "lazygit"
-          }
-        },
-        {
           "PackageIdentifier": "OpenJS.NodeJS.LTS",
           "installTimeoutSeconds": 3600,
           "pathEntries": ["%ProgramFiles%\\nodejs"],
@@ -352,28 +256,6 @@
           }
         },
         {
-          "PackageIdentifier": "Ollama.Ollama",
-          "installFeature": "WithOllama",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "ollama"
-          }
-        },
-        {
-          "PackageIdentifier": "StablyAI.Orca",
-          "ciSkipInstall": true,
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "command": "OrcaSlicer",
-            "type": "windowsInstalledProduct",
-            "uninstallEntry": {
-              "displayName": "Orca",
-              "productCodes": ["2b325ec9-0ed1-575f-ad70-e08307aee879"]
-            }
-          }
-        },
-        {
           "PackageIdentifier": "oschwartz10612.Poppler",
           "installTimeoutSeconds": 3600,
           "pathEntries": [
@@ -394,28 +276,12 @@
           }
         },
         {
-          "PackageIdentifier": "BurntSushi.ripgrep.MSVC",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "rg"
-          }
-        },
-        {
           "PackageIdentifier": "Rustlang.Rustup",
           "installTimeoutSeconds": 3600,
           "pathEntries": ["%USERPROFILE%\\.cargo\\bin"],
           "verifyCommand": {
             "args": ["--version"],
             "command": "rustup"
-          }
-        },
-        {
-          "PackageIdentifier": "Starship.Starship",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "starship"
           }
         },
         {
@@ -456,11 +322,134 @@
           }
         },
         {
+          "PackageIdentifier": "AgileBits.1Password.CLI",
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 3600,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"],
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "op"
+          }
+        },
+        {
+          "PackageIdentifier": "AgileBits.1Password",
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "appxPackage": {
+              "executable": "1Password.exe",
+              "name": "AgileBits.1Password",
+              "packageFamilyName": "Agilebits.1Password_amwd9z03whsfe"
+            },
+            "command": "AgileBits.1Password",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "1Password",
+              "executablePaths": [
+                "%ProgramFiles%\\1Password\\1Password.exe",
+                "%LOCALAPPDATA%\\1Password\\app\\*\\1Password.exe"
+              ]
+            }
+          }
+        },
+        {
+          "PackageIdentifier": "Git.Git",
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "git"
+          }
+        },
+        {
+          "PackageIdentifier": "x-motemen.ghq",
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "ghq"
+          }
+        },
+        {
+          "PackageIdentifier": "Discord.Discord",
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "command": "Discord",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "Discord",
+              "executablePaths": ["%LOCALAPPDATA%\\Discord\\app-*\\Discord.exe"],
+              "productCodes": ["Discord"],
+              "publisher": "Discord Inc."
+            }
+          }
+        },
+        {
+          "PackageIdentifier": "Starship.Starship",
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "starship"
+          }
+        },
+        {
+          "PackageIdentifier": "JesseDuffield.lazygit",
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "lazygit"
+          }
+        },
+        {
+          "PackageIdentifier": "StablyAI.Orca",
+          "ciSkipInstall": true,
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "command": "OrcaSlicer",
+            "type": "windowsInstalledProduct",
+            "uninstallEntry": {
+              "displayName": "Orca",
+              "productCodes": ["2b325ec9-0ed1-575f-ad70-e08307aee879"]
+            }
+          }
+        },
+        {
+          "PackageIdentifier": "BurntSushi.ripgrep.MSVC",
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "rg"
+          }
+        },
+        {
           "PackageIdentifier": "ajeetdsouza.zoxide",
           "installTimeoutSeconds": 3600,
           "verifyCommand": {
             "args": ["--version"],
             "command": "zoxide"
+          }
+        },
+        {
+          "PackageIdentifier": "eza-community.eza",
+          "directInstaller": {
+            "destination": "%LOCALAPPDATA%\\Programs\\eza",
+            "executable": "eza.exe",
+            "sha256": "c830638c844a5b89d39ba662b5549903a71fa539018e813880f5b8afa77bac2e",
+            "timeoutSeconds": 3600,
+            "type": "archive",
+            "url": "https://github.com/eza-community/eza/releases/download/v0.23.5/eza.exe_x86_64-pc-windows-gnu.zip"
+          },
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 3600,
+          "pathEntries": ["%LOCALAPPDATA%\\Programs\\eza"],
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "eza"
+          }
+        },
+        {
+          "PackageIdentifier": "junegunn.fzf",
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "fzf"
           }
         },
         {

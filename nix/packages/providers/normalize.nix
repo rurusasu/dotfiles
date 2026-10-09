@@ -11,7 +11,6 @@ let
   reviewedUnsupported = {
     windows = lib.genAttrs [
       "argocd"
-      "bat"
       "bats"
       "cilium-cli"
       "cmake"
@@ -28,12 +27,10 @@ let
       "kustomize"
       "netcat"
       "p7zip"
-      "pnpm"
       "pre-commit"
       "python3"
       "sops"
       "stern"
-      "tmux"
       "treefmt"
       "trivy"
       "unzip"

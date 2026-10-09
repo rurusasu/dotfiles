@@ -2,7 +2,11 @@
 
 This directory holds chezmoi-managed user dotfiles.
 
-This repo intentionally deploys most files via `.chezmoiscripts/run_onchange_deploy.*` and ignores the top-level directories via `.chezmoiignore`.
+Windows uses the existing dotfiles and PowerShell deployment scripts.
+On macOS, Linux, and WSL, chezmoi deploys only `.codex/` and `.claude/`;
+all other user configuration belongs to Home Manager. Unix has no deployment
+scripts. `.claude/` is reserved for future settings; no Claude configuration
+is currently present in this repository.
 
 Initialize/apply:
 

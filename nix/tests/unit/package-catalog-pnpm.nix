@@ -8,11 +8,6 @@ let
   };
 in
 {
-  testPlaywrightInstallUsesSharedBudget = {
-    expr = sets.pnpmPostInstall.playwright.timeoutSeconds;
-    expected = 3600;
-  };
-
   testDirectInstallersUseSharedBudget = {
     expr = builtins.mapAttrs (_: installer: installer.timeoutSeconds) sets.wingetDirectInstallers;
     expected = {
@@ -20,7 +15,7 @@ in
       chezmoi = 3600;
       direnv = 3600;
       dprint = 3600;
-      eza = 3600;
+      "eza-community.eza" = 3600;
       fd = 3600;
     };
   };
@@ -47,22 +42,4 @@ in
     };
   };
 
-  testGeminiCliPnpmCatalog = {
-    expr = {
-      isGlobalPackage = builtins.elem "@google/gemini-cli" sets.windowsOnly.pnpm;
-      installArgs = sets.pnpmInstallArgs."@google/gemini-cli";
-      verifyCommand = sets.pnpmVerify."@google/gemini-cli";
-    };
-    expected = {
-      isGlobalPackage = true;
-      installArgs = [
-        "--allow-build=@github/keytar"
-        "--allow-build=!node-pty"
-      ];
-      verifyCommand = {
-        command = "gemini";
-        args = [ "--version" ];
-      };
-    };
-  };
 }

@@ -83,11 +83,11 @@ Docker MCP Toolkit が直接登録できる client は、profile取得後に次�
 task mcp:toolkit:clients
 ```
 
-これは Codex、Gemini の system-wide 設定へ `dotfiles` profile の gatewayを
+これは Codex の system-wide 設定へ `dotfiles` profile の gatewayを
 登録する。Windsurf は Docker MCP Toolkit CLI の client 登録対象外のため、chezmoi が生成する
 既存の gateway 設定を利用する。
 
-Toolkit 管理サーバーの API key は生成された Codex/Gemini/Windsurf
+Toolkit 管理サーバーの API key は生成された Codex/Windsurf
 設定や Git に書かず、Docker Desktop の secret store に登録する。現在の secret 名は次のとおり。
 
 | Server          | Docker MCP Toolkit secret      |
@@ -121,10 +121,7 @@ op read --no-newline --account my.1password.com \
 ```
 
 値をコマンドライン引数に渡したり、Taskのログへ出力したりしない。Obsidian は Local REST API
-community plugin を有効化し、API key を `obsidian.api_key` として登録する。Hindsight は
-secret 不要の host-local MCP である。Docker MCP Gateway は local HTTP remote を受け付けないため
-Toolkit profile には入れず、`mcp_servers.yaml` と `.mcp.json` の直接 URL として全クライアントへ
-配布する。利用前に既存の `task hindsight:up` でサービスを起動する。
+community plugin を有効化し、API key を `obsidian.api_key` として登録する。
 
 Plane MCP の API token は共有された 1Password item を参照する:
 

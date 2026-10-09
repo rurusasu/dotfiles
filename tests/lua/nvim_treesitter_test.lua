@@ -1,5 +1,5 @@
--- Run with the Home Manager package and plugin data from nix/modules/nvim.
-local root = vim.fn.getcwd() .. "/nix/modules/nvim"
+-- Run with the Home Manager package and plugin data from nix/modules/editors/nvim.
+local root = vim.fn.getcwd() .. "/nix/modules/editors/nvim"
 vim.opt.rtp:prepend(root)
 vim.cmd.packloadall()
 local ts = require("config.treesitter")

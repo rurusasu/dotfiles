@@ -32,8 +32,7 @@ $SecretRefs = [ordered]@{
     "tavily.api_token"             = "op://openclaw/TavilyUsedOpenclawPAT/credential"
 }
 $ToolkitClients = @(
-    "codex",
-    "gemini"
+    "codex"
 )
 
 $CatalogRefs = @(

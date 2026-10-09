@@ -14,27 +14,11 @@ let
       candidate = darwinProviderCandidate name;
     in
     if candidate.source == "nixpkgs" then builtins.getAttr candidate.nixAttr pkgs else customPackage;
-  darwinDiscordPackage =
-    if pkgs.stdenv.hostPlatform.isDarwin then
-      pkgs.discord.overrideAttrs (old: {
-        dontFixup = true;
-        postInstall = (old.postInstall or "") + ''
-          mkdir -p "$out/share/discord"
-          mv "$out/Applications/Discord.app/Contents/Resources/modules" "$out/share/discord/modules"
-          substituteInPlace "$out/bin/Discord" \
-            --replace-fail \
-            "$out/Applications/Discord.app/Contents/Resources/modules" \
-            "$out/share/discord/modules"
-        '';
-      })
-    else
-      null;
 in
 {
   inherit
     appearance
     selectDarwinPackage
     darwinProviderCandidate
-    darwinDiscordPackage
     ;
 }

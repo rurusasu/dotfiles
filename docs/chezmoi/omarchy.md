@@ -2,7 +2,7 @@
 
 ## 配置方針
 
-共通キー配置とユーザー設定は `nix/home/keybindings/`、OS のサービス・セッション有効化と競合解除は `nix/hosts/<host>/` に分けます。共通定義から Darwin、native NixOS、Windows のデスクトップ設定を生成します。OS への適用と実機検証は Nix 評価・ビルドとは別の確認事項です。
+共通キー配置とユーザー設定は `nix/home/keybindings/`、OS のサービス・セッション有効化と競合解除は `nix/hosts/<system>/<environment>/` に分けます。共通定義から Darwin、native NixOS、Windows のデスクトップ設定を生成します。OS への適用と実機検証は Nix 評価・ビルドとは別の確認事項です。
 
 キー割り当ては `bindings.nix` の action、key、modifier を正本とし、同じ操作のキーを OS ごとに複製しません。アプリの選択・起動などユーザー設定は home 側に置き、OS のロックやシステム設定画面など host 統合が必要なコマンドは host から渡せる構成にします。
 
@@ -15,8 +15,8 @@
 | native NixOS ユーザー設定 | `nix/home/keybindings/hyprland.nix`                                | Lua 設定を配置する Home Manager module                               |
 | Windows 設定生成          | `nix/home/keybindings/glazewm.nix`                                 | 共通 action を GlazeWM の binding へ変換する純粋な関数               |
 | Windows アプリ・補助操作  | `nix/home/keybindings/glazewm-commands.nix`, `windows-actions.ps1` | アプリ選択・起動、Windows の標準パネル                               |
-| macOS host                | `nix/hosts/darwin/omarchy-keybindings.nix`                         | AeroSpace サービスと macOS shortcut の競合処理                       |
-| native NixOS host         | `nix/hosts/linux/omarchy-keybindings.nix`                          | Hyprland セッション有効化と home 側 module の選択                    |
+| macOS host                | `nix/hosts/aarch64-darwin/omarchy-keybindings.nix`                 | AeroSpace サービスと macOS shortcut の競合処理                       |
+| native NixOS host         | `nix/hosts/shared/nixos/omarchy-keybindings.nix`                   | Hyprland セッション有効化と home 側 module の選択                    |
 | Windows host              | `nix/hosts/windows/omarchy-keybindings.nix`, `start-glazewm.ps1`   | 設定出力の合成、GlazeWM の起動と既存プロセスの確認                   |
 | package/provider          | `nix/packages/catalog/`                                            | アプリと compositor の配布 metadata                                  |
 
@@ -27,7 +27,7 @@
 - Darwin host は `aerospace.nix` を通常の Nix `import` で呼び、生成結果を `services.aerospace.settings.mode.main.binding` に渡します。設定ファイルと launchd は nix-darwin が所有し、Home Manager や chezmoi で二重管理しません。
 - native NixOS host は `programs.hyprland.enable` と Home Manager module の選択を担当します。`home/keybindings/hyprland.nix` が `configType = "lua"` を明示し、ユーザー設定を配置します。
 - Windows host は home の純粋な設定生成関数を通常の Nix `import` で呼び、`config`、`supported`、`unsupported`、`artifacts` を公開します。`windows-keybindings-export` から生成した成果物をリポジトリ内の chezmoi source に保持し、Windows では chezmoi が配布します。生成物は直接編集せず、正本を変更して `task keybindings:export` で更新し、`task keybindings:check` で差分を検査します。
-- `nix/home/linux.nix` は standalone Home Manager にも使われます。Hyprland module を無条件に読み込まず、native host のみが選択します。
+- `nix/hosts/shared/linux-home.nix` は standalone Home Manager にも使われます。Hyprland module を無条件に読み込まず、native host のみが選択します。
 - home 配下でも、共通データと純粋な設定生成関数は Home Manager module ではありません。これらを module の `imports` に渡しません。
 
 ## 対象範囲と実装状況

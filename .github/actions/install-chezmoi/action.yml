@@ -3,7 +3,8 @@ description: Install the latest chezmoi release without depending on the WinGet 
 runs:
   using: composite
   steps:
-    - name: Install latest chezmoi release
+    - name: Install latest chezmoi release (Windows)
+      if: ${{ runner.os == 'Windows' }}
       shell: pwsh
       run: |
         Set-StrictMode -Version Latest
@@ -19,3 +20,12 @@ runs:
         }
         Add-Content -LiteralPath $env:GITHUB_PATH -Value $binDir -Encoding utf8
         & $chezmoi --version
+    - name: Install latest chezmoi release (Unix)
+      if: ${{ runner.os != 'Windows' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        bin_dir="${RUNNER_TEMP}/chezmoi-bin"
+        sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b "${bin_dir}"
+        "${bin_dir}/chezmoi" --version
+        printf '%s\n' "${bin_dir}" >> "${GITHUB_PATH}"

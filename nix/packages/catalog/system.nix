@@ -23,7 +23,6 @@
   docker-desktop = {
     winget = "Docker.DockerDesktop";
     category = "system";
-    installFeature = "WithDocker";
     support = {
       windows = {
         provider = "winget";
@@ -37,11 +36,7 @@
         cask = "docker-desktop";
       };
       linux = {
-        provider = "system-manager";
-        source = "nixpkgs";
-        identity = "docker";
-        nixAttr = "docker";
-        systemModule = "docker";
+        unsupported = "Docker Desktop is not selected on Linux; NixOS manages the Docker engine through virtualisation.docker";
       };
     };
   };

@@ -9,7 +9,7 @@ BeforeAll {
 Describe 'MLflowHandler' {
     BeforeEach {
         $script:root = Join-Path $TestDrive 'dotfiles'
-        $script:composeDir = Join-Path $script:root 'docker/mlflow'
+        $script:composeDir = Join-Path $script:root 'docker/local-ai-services'
         $script:composeFile = Join-Path $script:composeDir 'compose.yml'
         New-Item -ItemType Directory -Path $script:composeDir -Force | Out-Null
         Set-Content -LiteralPath $script:composeFile -Value 'services: {}'
@@ -29,7 +29,7 @@ Describe 'MLflowHandler' {
         }
     }
 
-    It 'sets Phase 2 metadata after Docker and before Hindsight' {
+    It 'sets Phase 2 metadata after Docker and before Hermes' {
         $handler.Name | Should -Be 'MLflow'
         $handler.Description | Should -Be 'Shared MLflow Gateway Docker service'
         $handler.Order | Should -Be 54
@@ -37,15 +37,7 @@ Describe 'MLflowHandler' {
         $handler.Phase | Should -Be 2
     }
 
-    It 'is disabled unless WithMLflow is enabled' {
-        $handler.CanApply($ctx) | Should -BeFalse
-
-        $ctx.Options['WithMLflow'] = $true
-        $handler.CanApply($ctx) | Should -BeTrue
-    }
-
     It 'skips when Docker is unavailable or not ready' {
-        $ctx.Options['WithMLflow'] = $true
         Mock Get-Command { $null } -ParameterFilter { $Name -eq 'docker' }
         $handler.CanApply($ctx) | Should -BeFalse
 
@@ -55,14 +47,12 @@ Describe 'MLflowHandler' {
     }
 
     It 'skips when the MLflow compose file is missing' {
-        $ctx.Options['WithMLflow'] = $true
         Remove-Item -LiteralPath $composeFile -Force
 
         $handler.CanApply($ctx) | Should -BeFalse
     }
 
     It 'uses the shared network and reconciles the pinned MLflow container' {
-        $ctx.Options['WithMLflow'] = $true
 
         $result = $handler.Apply($ctx)
 
@@ -72,13 +62,11 @@ Describe 'MLflowHandler' {
             'network create local-ai-services',
             "compose -f $composeFile config --quiet",
             "compose -f $composeFile pull mlflow",
-            "compose -f $composeFile up -d --force-recreate --remove-orphans --wait mlflow",
-            "compose -f $composeFile exec -T mlflow python /opt/mlflow/configure.py --base-url http://127.0.0.1:5000 --manifest /opt/mlflow/endpoints.yml"
+            "compose -f $composeFile up -d --force-recreate --remove-orphans --wait mlflow"
         )
     }
 
     It 'does not recreate the shared network when it already exists' {
-        $ctx.Options['WithMLflow'] = $true
         Mock Invoke-Docker {
             param([string[]]$Arguments)
             $script:dockerCalls.Add(($Arguments -join ' '))
@@ -92,7 +80,6 @@ Describe 'MLflowHandler' {
     }
 
     It 'reports a network creation failure' {
-        $ctx.Options['WithMLflow'] = $true
         Mock Invoke-Docker {
             param([string[]]$Arguments)
             $script:dockerCalls.Add(($Arguments -join ' '))

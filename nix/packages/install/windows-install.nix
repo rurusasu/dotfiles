@@ -7,10 +7,6 @@
       "--scope"
       "machine"
     ];
-    _1password-cli = [
-      "--scope"
-      "user"
-    ];
     bun = [
       "--scope"
       "user"
@@ -27,7 +23,7 @@
       "--scope"
       "user"
     ];
-    eza = [
+    "eza-community.eza" = [
       "--scope"
       "user"
     ];
@@ -112,7 +108,7 @@
       executable = "fd-v10.5.0-x86_64-pc-windows-msvc\\fd.exe";
       timeoutSeconds = packageInstallTimeoutSeconds;
     };
-    eza = {
+    "eza-community.eza" = {
       type = "archive";
       url = "https://github.com/eza-community/eza/releases/download/v0.23.5/eza.exe_x86_64-pc-windows-gnu.zip";
       sha256 = "c830638c844a5b89d39ba662b5549903a71fa539018e813880f5b8afa77bac2e";
@@ -144,10 +140,6 @@
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\tree-sitter.tree-sitter-cli*"
     ];
     "astral-sh.uv" = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\astral-sh.uv*" ];
-    _1password-cli = [ "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*" ];
-    "AgileBits.1Password.CLI" = [
-      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\AgileBits.1Password.CLI*"
-    ];
     google-cloud-sdk = [
       "%ProgramFiles%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
       "%ProgramFiles(x86)%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
@@ -168,7 +160,6 @@
     "dprint.dprint" = [ "%LOCALAPPDATA%\\Programs\\dprint" ];
     fd = [ "%LOCALAPPDATA%\\Programs\\fd\\fd-v10.5.0-x86_64-pc-windows-msvc" ];
     "sharkdp.fd" = [ "%LOCALAPPDATA%\\Programs\\fd\\fd-v10.5.0-x86_64-pc-windows-msvc" ];
-    eza = [ "%LOCALAPPDATA%\\Programs\\eza" ];
     "eza-community.eza" = [ "%LOCALAPPDATA%\\Programs\\eza" ];
     poppler-utils = [
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\oschwartz10612.Poppler*\\*\\Library\\bin"

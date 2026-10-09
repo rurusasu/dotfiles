@@ -123,7 +123,6 @@ EOF
 
 @test "Linux Nix-only verification checks Hermes CLI and native user service without Docker" {
 	export DOTFILES_VERIFY_PLATFORM=linux
-	export DOTFILES_WITH_HERMES=1
 	rm "$STUB_BIN/brew" "$STUB_BIN/darwin-rebuild" "$STUB_BIN/docker"
 	write_stub systemctl
 	write_stub hermes
@@ -134,19 +133,6 @@ EOF
 	grep -q '^systemctl --user is-active --quiet hermes-agent.service$' "$COMMAND_LOG"
 	! grep -q '^docker ' "$COMMAND_LOG"
 	! grep -q 'docker.service\|docker.socket' "$COMMAND_LOG"
-}
-
-@test "Linux Nix-only verification does not require optional Hermes when feature is disabled" {
-	export DOTFILES_VERIFY_PLATFORM=linux
-	unset DOTFILES_WITH_HERMES
-	rm "$STUB_BIN/brew" "$STUB_BIN/darwin-rebuild" "$STUB_BIN/docker"
-	write_stub systemctl
-
-	run "$VERIFIER" --nix-only
-
-	[ "$status" -eq 0 ]
-	! grep -q 'hermes-agent.service' "$COMMAND_LOG"
-	! grep -q '^docker ' "$COMMAND_LOG"
 }
 
 @test "missing running Compose service fails runtime verification" {
@@ -160,17 +146,15 @@ EOF
 	[[ "$output" == *"Running Compose services:"* ]]
 }
 
-@test "Linux verification checks System Manager and Docker systemd units" {
+@test "standalone Linux verification checks user configuration without requiring Docker or systemd" {
 	export DOTFILES_VERIFY_PLATFORM=linux
-	rm "$STUB_BIN/brew" "$STUB_BIN/darwin-rebuild"
-	write_stub systemctl
+	export DOTFILES_NIXOS_MARKER="$BATS_TEST_TMPDIR/not-nixos"
+	rm "$STUB_BIN/brew" "$STUB_BIN/darwin-rebuild" "$STUB_BIN/docker"
 
 	run "$VERIFIER"
 
 	[ "$status" -eq 0 ]
-	grep -q '^systemctl is-active --quiet system-manager.target$' "$COMMAND_LOG"
-	grep -q '^systemctl is-active --quiet docker.service$' "$COMMAND_LOG"
-	grep -q '^systemctl is-active --quiet docker.socket$' "$COMMAND_LOG"
+	grep -q '^chezmoi verify --exclude=scripts$' "$COMMAND_LOG"
 }
 
 @test "NixOS verification checks the current generation and Docker units" {
@@ -185,7 +169,6 @@ EOF
 	run "$VERIFIER"
 
 	[ "$status" -eq 0 ]
-	! grep -q 'system-manager.target' "$COMMAND_LOG"
 	grep -q '^systemctl is-active --quiet docker.service$' "$COMMAND_LOG"
 	grep -q '^systemctl is-active --quiet docker.socket$' "$COMMAND_LOG"
 }

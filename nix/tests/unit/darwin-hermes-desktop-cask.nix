@@ -10,26 +10,21 @@ let
   hermesSupport = sets.supportReport.hermes-desktop;
 in
 {
-  testHermesDesktopCaskSupportMetadataAndDefaultExclusion = {
+  testHermesDesktopCaskSupportMetadata = {
     expr = {
       inherit (hermesSupport) installFeature;
       darwinSupport = hermesSupport.darwin;
-      excludedFromDefaultCasks =
-        !(builtins.elem "hermes-desktop" (sets.darwinCasksForInstallFeatures [ ]));
-      includedWithHermes = builtins.elem "hermes-desktop" (
-        sets.darwinCasksForInstallFeatures [ "WithHermes" ]
-      );
+      included = builtins.elem "hermes-desktop" sets.darwinCasks;
     };
     expected = {
-      installFeature = "WithHermes";
+      installFeature = null;
       darwinSupport = {
         provider = "homebrew-cask";
         source = "homebrew";
         identity = "hermes-desktop";
         cask = "hermes-desktop";
       };
-      excludedFromDefaultCasks = true;
-      includedWithHermes = true;
+      included = true;
     };
   };
 }

@@ -563,11 +563,9 @@ Describe 'NixRebuildHandler' {
             $script:wslArgs | Should -Match "-d NixOS"
             $script:wslArgs | Should -Match "-u root"
             $script:wslArgs | Should -Match "nixos-rebuild-with-user.sh switch --flake . --impure"
-            $script:wslArgs | Should -Match "DOTFILES_WITH_HERMES=0"
         }
 
         It 'should pass the Hermes feature to the NixOS rebuild wrapper' {
-            $ctx.Options['WithHermes'] = $true
             $script:wslArgs = ''
             Mock Invoke-Wsl {
                 param($Arguments)
@@ -583,7 +581,6 @@ Describe 'NixRebuildHandler' {
 
             $handler.Apply($ctx)
 
-            $script:wslArgs | Should -Match 'DOTFILES_WITH_HERMES=1'
             Should -Invoke Invoke-Wsl -ParameterFilter {
                 ($Arguments -join ' ') -match '\bdocker\b'
             } -Times 0

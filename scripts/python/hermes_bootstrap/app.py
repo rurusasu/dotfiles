@@ -74,10 +74,6 @@ from .google_gmail import (
     install_google_gmail_credentials,
     validate_google_gmail_installation,
 )
-from .hindsight import (
-    install_hindsight_configurations,
-    validate_hindsight_installation,
-)
 from .github import GitAuth, GitHubClient
 from .manifest import load_manifest
 from .models import BootstrapManifest, DistributionSource, SharedRepository
@@ -278,7 +274,6 @@ def _apply_sensitive(
             [target for _profile, target in _environment_targets(manifest)],
             tx,
         )
-        install_hindsight_configurations(_environment_targets(manifest), tx)
         install_context_engine_configurations(_environment_targets(manifest), tx)
         reconcile_chrome_configurations(_runtime_config_targets(manifest), tx)
         reconcile_xapi_configurations(_runtime_config_targets(manifest), tx)
@@ -704,7 +699,6 @@ def _validate_installed_layout(
         )
         validate_xapi_configurations(_runtime_config_targets(manifest))
         validate_chrome_configurations(_runtime_config_targets(manifest))
-        validate_hindsight_installation(_environment_targets(manifest))
         validate_context_engine_installation(_environment_targets(manifest))
         for profile, target in _environment_targets(manifest):
             required = (

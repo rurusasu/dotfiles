@@ -19,7 +19,6 @@ BeforeAll {
     $script:gitconfigTmpl = Join-Path $script:chezmoiRoot "dot_gitconfig.tmpl"
     $script:gitconfigWorkTmpl = Join-Path $script:chezmoiRoot "dot_gitconfig-work.tmpl"
     $script:sshDeployPs1 = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_always_deploy.ps1.tmpl"
-    $script:sshDeploySh = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/ssh/run_always_deploy.sh.tmpl"
     $script:chezmoiToml = Join-Path $script:chezmoiRoot ".chezmoi.toml.tmpl"
     $script:renderData = '{"chezmoi":{"os":"windows"},"op_account_personal":"test-account","op_read_timeout_seconds":180}'
 
@@ -231,58 +230,6 @@ Describe 'SSH deploy スクリプト' {
         }
     }
 
-    Context 'Linux/macOS (sh.tmpl)' {
-        BeforeAll {
-            $script:shContent = Get-Content -Encoding UTF8 -Path $script:sshDeploySh -Raw
-        }
-
-        It 'ssh/config.tmpl を includeTemplate で評価してインライン展開していること' {
-            $script:shContent | Should -Match 'includeTemplate "ssh/config\.tmpl" \.' -Because "include はテンプレート本文を再評価しないため、OS分岐を評価してから配置する"
-        }
-
-        It '展開後のmacOS用deployスクリプトに未評価のテンプレートを残さないこと' {
-            $render = Invoke-ChezmoiTemplateForTest -Template $script:shContent -OverrideData ($script:renderData -replace '"windows"', '"darwin"')
-            $rendered = $render -join [Environment]::NewLine
-
-            $rendered | Should -Not -Match '\{\{'
-            $rendered | Should -Match 'IdentityAgent "~/Library/Group Containers/2BUA8C4S2C\.com\.1password/t/agent\.sock"'
-        }
-
-        It '展開後のLinux用deployスクリプトに未評価のテンプレートを残さないこと' {
-            $render = Invoke-ChezmoiTemplateForTest -Template $script:shContent -OverrideData ($script:renderData -replace '"windows"', '"linux"')
-            $rendered = $render -join [Environment]::NewLine
-
-            $rendered | Should -Not -Match '\{\{'
-            $rendered | Should -Match 'IdentityAgent ~/.1password/agent\.sock'
-        }
-
-        It 'SSH config のパーミッションを 600 に設定していること' {
-            $script:shContent | Should -Match 'chmod 600.*\.ssh/config' -Because "SSH config は所有者のみ読み書き可能にする必要がある"
-        }
-
-        It '1Password 公開鍵はテンプレート時ではなく実行時に読み込むこと' {
-            $script:shContent | Should -Not -Match 'onepasswordRead' -Because "1Password app connection failures must not abort chezmoi template rendering"
-            $script:shContent | Should -Match 'op_cache_args=\(--cache=false\)' -Because "WSL op.exe reads should disable 1Password cache"
-            $script:shContent | Should -Match 'read "\$reference"' -Because "op read should happen at script runtime"
-            $script:shContent | Should -Match 'skipping \$label' -Because "runtime 1Password failures should be non-fatal"
-            $script:shContent | Should -Not -Match 'WORK_PUBKEY|WORK_ACCOUNT|work SSH public key|github_work\.pub' -Because "work SSH key deployment was removed"
-        }
-
-        It '1Password 実行時読み込みに timeout があること' {
-            $script:shContent | Should -Match 'OP_READ_TIMEOUT_SECONDS' -Because "run_always deploy should not hang when 1Password prompts or stalls"
-            $script:shContent | Should -Match 'OP_READ_TIMEOUT_SECONDS=\{\{\s*\.op_read_timeout_seconds\s*\}\}' -Because "Unix deploy should use the shared timeout data"
-            $script:shContent | Should -Match 'timeout|gtimeout' -Because "Unix op read should be bounded"
-            $script:shContent | Should -Match 'timed out after \$OP_READ_TIMEOUT_SECONDS seconds' -Because "timeout should take the non-fatal skip path"
-            $timeoutDataPath = Join-Path $script:chezmoiRoot '.chezmoidata/onepassword.json'
-            $timeoutData = Get-Content -Encoding UTF8 -LiteralPath $timeoutDataPath -Raw | ConvertFrom-Json
-            $timeoutData.op_read_timeout_seconds | Should -BeGreaterOrEqual 180
-        }
-
-        It 'should 設定済みアカウントがCLIにない場合に復旧方法を表示すること' {
-            $script:shContent | Should -Match 'configured 1Password account.*\$account' -Because "missing account UUID should be distinguishable from a missing item"
-            $script:shContent | Should -Match 'sign in.*update.*account' -Because "the warning should explain how to repair the account configuration"
-        }
-    }
 }
 
 Describe 'chezmoi.toml テンプレート' {

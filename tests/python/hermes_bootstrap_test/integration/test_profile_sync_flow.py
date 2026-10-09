@@ -1426,7 +1426,7 @@ class ProfileSyncFlowTests(unittest.TestCase):
         )
         self.flow._assert_no_temporary_resources()
 
-    def test_post_publish_replacement_survives_hindsight_reconciliation(
+    def test_post_publish_replacement_survives_context_engine_reconciliation(
         self,
     ) -> None:
         self.assertEqual(self.flow._apply()["status"], "applied")
@@ -1482,7 +1482,7 @@ class ProfileSyncFlowTests(unittest.TestCase):
         self.assertIsInstance(raised.exception, ApplyError)
         self.assertEqual(
             str(raised.exception),
-            "could not reconcile Hermes Hindsight configuration",
+            "could not reconcile Hermes context engine configuration",
         )
         self.flow._assert_no_temporary_resources()
 

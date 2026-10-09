@@ -95,12 +95,9 @@ BeforeAll {
 
 Describe 'chezmoi テンプレート バリデーション' {
     Context 'Codex global instructions deployment' {
-        It 'should deploy AGENTS.override.md and include it in the change hash for both OSes' {
-            $unixScript = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/llms/run_onchange_deploy.sh.tmpl') -Raw
+        It 'should include Windows global instructions in the deployment change hash' {
             $windowsScript = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/llms/run_onchange_deploy.ps1.tmpl') -Raw
 
-            $unixScript | Should -Match 'include "dot_codex/AGENTS\.override\.md" \| sha256sum'
-            $unixScript | Should -Match 'deploy_file "\$CHEZMOI_SOURCE/dot_codex/AGENTS\.override\.md" "\$HOME_DIR/\.codex/AGENTS\.override\.md"'
             $windowsScript | Should -Match 'include "dot_codex/AGENTS\.override\.md" \| sha256sum'
             $windowsScript | Should -Match 'Deploy-File "\$ChezmoiSource\\dot_codex\\AGENTS\.override\.md" "\$HomeDir\\\.codex\\AGENTS\.override\.md"'
         }
@@ -344,8 +341,7 @@ Describe 'chezmoi テンプレート バリデーション' {
         BeforeAll {
             $script:mcpClientTemplates = @(
                 "dot_codeium/windsurf/mcp_config.json.tmpl",
-                "dot_codex/config.toml.tmpl",
-                "dot_gemini/settings.json.tmpl"
+                "dot_codex/config.toml.tmpl"
             ) | ForEach-Object { Join-Path $script:chezmoiRoot $_ }
         }
 
@@ -399,19 +395,12 @@ Describe 'chezmoi テンプレート バリデーション' {
     }
 
     Context 'Shell keybindings' {
-        It 'should deploy zoxide environment configuration only on Windows' {
-            $unixTemplate = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/cli/run_onchange_deploy.sh.tmpl') -Raw
-            foreach ($os in @('linux', 'darwin')) {
-                $data = @{ chezmoi = @{ os = $os } } | ConvertTo-Json -Compress
-                $rendered = Invoke-ChezmoiTemplateForTest -Template $unixTemplate -OverrideData $data
-                $rendered.ExitCode | Should -Be 0 -Because $rendered.StandardError
-                $rendered.StandardOutput | Should -Not -Match 'zoxide'
-            }
-
+        It 'should deploy zoxide and ripgrep configuration only on Windows' {
             $windowsTemplate = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/cli/run_onchange_deploy.ps1.tmpl') -Raw
             $rendered = Invoke-ChezmoiTemplateForTest -Template $windowsTemplate -OverrideData '{"chezmoi":{"os":"windows"}}'
             $rendered.ExitCode | Should -Be 0 -Because $rendered.StandardError
             $rendered.StandardOutput | Should -Match 'Deploy-File .*cli\\zoxide\\env.*\.config\\zoxide\\env'
+            $rendered.StandardOutput | Should -Match 'Deploy-File .*cli\\ripgrep\\config.*\.config\\ripgrep\\config'
         }
 
         It 'should install Windows Bash zoxide and fzf widgets once across repeated deployment' {
@@ -464,7 +453,8 @@ Describe 'chezmoi テンプレート バリデーション' {
             $shellFiles = @(
                 Join-Path $script:chezmoiRoot "shells/bashrc"
                 Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1"
-                Join-Path $script:repoRoot "nix/modules/shells/zsh/aliases.zsh"
+                Join-Path $script:repoRoot "nix/home/shells/zsh/aliases.zsh"
+                Join-Path $script:repoRoot "nix/home/shells/plugins/eza.nix"
             )
 
             foreach ($path in $shellFiles) {
@@ -473,18 +463,15 @@ Describe 'chezmoi テンプレート バリデーション' {
             }
         }
 
-        It 'should keep zoxide interactive jump on Alt+Q across shells and terminals' {
+        It 'should keep zoxide interactive jump on Alt+Q in Bash and PowerShell' {
             $bashrc = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "shells/zoxide.bash") -Raw
             $powershellProfile = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "shells/Microsoft.PowerShell_profile.ps1") -Raw
-            $homeManagerZsh = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot "nix/home/zoxide.zsh") -Raw
             $wezterm = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "terminals/wezterm/wezterm.lua") -Raw
 
             $bashrc | Should -Match 'bind -x ''"\\eq": __zoxide_zi_widget'''
             $bashrc | Should -Not -Match 'bind -x ''"\\ez": __zoxide_zi_widget'''
             $powershellProfile | Should -Match 'Set-PSReadLineKeyHandler -Chord Alt\+q -ScriptBlock \{ Invoke-ZoxideInteractive \}'
             $powershellProfile | Should -Not -Match 'Set-PSReadLineKeyHandler -Chord Alt\+z -ScriptBlock \{ Invoke-ZoxideInteractive \}'
-            $homeManagerZsh | Should -Match "bindkey '\^\[q' __zoxide_zi_widget"
-            $homeManagerZsh | Should -Not -Match "bindkey '\^\[z' __zoxide_zi_widget"
             $wezterm | Should -Match 'key = "q", mods = "ALT", action = act\.SendString\("\\x1bq"\)'
             $wezterm | Should -Not -Match 'key = "z", mods = "ALT", action = act\.SendString\("\\x1bz"\)'
         }
@@ -694,27 +681,6 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
-    Context 'supports ID の整合性' {
-        BeforeAll {
-            $script:mcpServersPath = Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml"
-        }
-
-        It 'mcp_servers.yaml で Claude client ID が残っていないこと' {
-            $lines = Get-Content -Encoding UTF8 -Path $script:mcpServersPath
-            $violations = @()
-            foreach ($line in $lines) {
-                if ($line -match '^\s+-\s+claude(?:-code|-desktop)?\s*$') {
-                    $violations += $line.Trim()
-                }
-            }
-            $violations | Should -BeNullOrEmpty -Because "Claude は管理対象外"
-        }
-
-        It 'Claude templates are absent' {
-            @(Get-ChildItem -LiteralPath (Join-Path $script:chezmoiRoot 'dot_claude') -File -Recurse -ErrorAction SilentlyContinue).Count | Should -Be 0
-            @(Get-ChildItem -LiteralPath (Join-Path $script:chezmoiRoot 'AppData/Roaming/Claude') -File -Recurse -ErrorAction SilentlyContinue).Count | Should -Be 0
-        }
-    }
 
     Context 'Codex remote MCP テンプレート' {
         It 'should emit URL-based MCP as native Streamable HTTP without stdio settings' {
@@ -900,7 +866,6 @@ Describe 'chezmoi テンプレート バリデーション' {
     Context 'Shell config deploy script' {
         It 'should deploy secret loader files from the managed dot_config paths' {
             $scriptPaths = @(
-                Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/shells/run_onchange_deploy.sh.tmpl"
                 Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/shells/run_onchange_deploy.ps1.tmpl"
             )
 
@@ -938,35 +903,19 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
-    Context 'Gemini settings.json テンプレートの必須セクション' {
-        BeforeAll {
-            $script:geminiTemplate = Join-Path $script:chezmoiRoot "dot_gemini/settings.json.tmpl"
-        }
-
-        It 'security.auth セクションが含まれていること' {
-            $content = Get-Content -Encoding UTF8 -Path $script:geminiTemplate -Raw
-            $content | Should -Match '"security"' -Because "Gemini CLI の OAuth 認証設定が必要"
-            $content | Should -Match '"selectedType"' -Because "認証タイプの指定が必要"
-        }
-    }
-
     Context 'Kaggle credentials deploy script' {
         BeforeAll {
             $script:kaggleDeployWindows = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/kaggle/run_always_deploy.ps1.tmpl"
-            $script:kaggleDeployLinux = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/kaggle/run_always_deploy.sh.tmpl"
             $script:kaggleOldWindows = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/kaggle/run_onchange_deploy.ps1.tmpl"
-            $script:kaggleOldLinux = Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/kaggle/run_onchange_deploy.sh.tmpl"
         }
 
         It 'should retry on every apply instead of one-time onchange when 1Password is temporarily unavailable' {
             Test-Path -LiteralPath $script:kaggleDeployWindows | Should -BeTrue
-            Test-Path -LiteralPath $script:kaggleDeployLinux | Should -BeTrue
             Test-Path -LiteralPath $script:kaggleOldWindows | Should -BeFalse
-            Test-Path -LiteralPath $script:kaggleOldLinux | Should -BeFalse
         }
 
         It 'should not call onepasswordRead during template rendering' {
-            foreach ($path in @($script:kaggleDeployWindows, $script:kaggleDeployLinux)) {
+            foreach ($path in @($script:kaggleDeployWindows)) {
                 $content = Get-Content -Encoding UTF8 -LiteralPath $path -Raw
                 $content | Should -Not -Match 'onepasswordRead' -Because "1Password app connection failures must not abort chezmoi template rendering"
                 $content | Should -Match 'ArgumentList\.Add\("read"\)|read "\$SECRET_REF"' -Because "secret lookup should happen at script runtime"
@@ -977,7 +926,6 @@ Describe 'chezmoi テンプレート バリデーション' {
 
         It 'should bound runtime op reads with a timeout' {
             $windowsContent = Get-Content -Encoding UTF8 -LiteralPath $script:kaggleDeployWindows -Raw
-            $linuxContent = Get-Content -Encoding UTF8 -LiteralPath $script:kaggleDeployLinux -Raw
             $timeoutDataPath = Join-Path $script:repoRoot 'chezmoi/.chezmoidata/onepassword.json'
             $timeoutData = Get-Content -Encoding UTF8 -LiteralPath $timeoutDataPath -Raw | ConvertFrom-Json
 
@@ -985,58 +933,8 @@ Describe 'chezmoi テンプレート バリデーション' {
             $windowsContent | Should -Match '\$OpReadTimeoutSeconds = \{\{\s*\.op_read_timeout_seconds\s*\}\}' -Because "Windows deploy should use the shared timeout data"
             $windowsContent | Should -Match 'WaitForExit\(\$timeoutMs\)' -Because "Windows op read should be bounded"
             $windowsContent | Should -Match 'Kill\(' -Because "timed-out Windows op reads should be terminated"
-            $linuxContent | Should -Match 'OP_READ_TIMEOUT_SECONDS' -Because "run_always scripts must not hang when 1Password app integration prompts or stalls"
-            $linuxContent | Should -Match 'OP_READ_TIMEOUT_SECONDS=\{\{\s*\.op_read_timeout_seconds\s*\}\}' -Because "Unix deploy should use the shared timeout data"
-            $linuxContent | Should -Match 'timeout|gtimeout' -Because "Unix op read should be bounded"
-            $linuxContent | Should -Match 'timed out after \$OP_READ_TIMEOUT_SECONDS seconds' -Because "timeout failures should be reported as non-fatal skips"
             $timeoutData.op_read_timeout_seconds | Should -BeGreaterOrEqual 180
         }
     }
 
-    Context 'Warp integration removal' {
-        It 'should not install Warp-specific Gemini extensions from chezmoi scripts' {
-            $windowsScript = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_always_install-gemini-warp_windows.ps1.tmpl"
-            $linuxScript = Join-Path $script:chezmoiRoot ".chezmoiscripts/run_always_install-gemini-warp_linux.sh.tmpl"
-
-            Test-Path -LiteralPath $windowsScript | Should -BeFalse
-            Test-Path -LiteralPath $linuxScript | Should -BeFalse
-        }
-
-        It 'should remove retired editor and AI configuration' {
-            foreach ($relativePath in @(
-                    "editors/cursor/AGENTS.md",
-                    "editors/cursor/extensions.json",
-                    "editors/cursor/keybindings.json",
-                    "editors/cursor/settings.json",
-                    ".chezmoiscripts/deploy/editors/run_onchange_deploy.ps1.tmpl",
-                    ".chezmoiscripts/sync/editors/run_onchange_sync.sh.tmpl",
-                    ".chezmoiscripts/sync/editors/run_onchange_sync.ps1.tmpl",
-                    "editors/vscode/AGENTS.md",
-                    "editors/vscode/extensions.json",
-                    "editors/vscode/keybindings.json",
-                    "editors/vscode/settings.json",
-                    "editors/zed/AGENTS.md",
-                    "editors/zed/keymap.json",
-                    "editors/zed/settings.json",
-                    "github/copilot-instructions.md",
-                    "dot_config/opencode/opencode.json",
-                    ".chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.sh.tmpl",
-                    ".chezmoiscripts/deploy/editors/run_onchange_deploy_vscode_mcp.ps1.tmpl",
-                    ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.sh.tmpl",
-                    ".chezmoiscripts/deploy/editors/run_onchange_deploy_zed_mcp.ps1.tmpl"
-                )) {
-                Test-Path -LiteralPath (Join-Path $script:chezmoiRoot $relativePath) | Should -BeFalse -Because "$relativePath is retired"
-            }
-
-
-            $codexConfig = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "dot_codex/config.toml.tmpl") -Raw
-            $codexConfig | Should -Not -Match '(?i)copilot-instructions\.md'
-
-            $projectConfig = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot ".codex/config.toml") -Raw
-            $projectConfig | Should -Not -Match '(?i)copilot-instructions\.md'
-
-            $mcpConfig = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot ".chezmoidata/mcp_servers.yaml") -Raw
-            $mcpConfig | Should -Not -Match '(?m)^\s+-\s+(?:vscode|zed)\s*$'
-        }
-    }
 }

@@ -65,22 +65,22 @@ cd scripts/powershell/tests
 .\Invoke-Tests.ps1 -ShowCoverage
 ```
 
-**CI の authoritative check**: `.github/workflows/ci-powershell.yml` の `test` job が、同じ `Invoke-Tests.ps1` suite を Windows PowerShell 5.1 と PowerShell 7 の両方で実行する。ローカルの Pester version やテスト件数は固定契約ではない。
+**CI の authoritative check**: `.github/workflows/ci-other.yml` の `test` job が、同じ `Invoke-Tests.ps1` suite を Windows PowerShell 5.1 と PowerShell 7 の両方で実行する。ローカルの Pester version やテスト件数は固定契約ではない。
 
 ## CI テスト戦略
 
-| Workflow                              | Runner                                | Guarantee                                                                                   |
-| ------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `.github/workflows/ci-powershell.yml` | Windows PowerShell 5.1 / PowerShell 7 | 全 Pester suite、launcher、encoding、handler unit、installer Phase 1 → Phase 2a integration |
-| `ci-bootstrap.yml`                    | hosted Linux/macOS/Windows            | Linux/Darwin/WSL/Windows の platform-routed contract aggregate と外部 runtime E2E           |
+| Workflow                         | Runner                                | Guarantee                                                                                   |
+| -------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci-other.yml` | Windows PowerShell 5.1 / PowerShell 7 | 全 Pester suite、launcher、encoding、handler unit、installer Phase 1 → Phase 2a integration |
+| `ci-nix.yml`                     | hosted Linux/macOS/Windows            | Linux/Darwin/WSL/Windows の platform-routed contract aggregate と外部 runtime E2E           |
 
-Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を両 runtime で実行します。`Install.Entrypoint.Tests.ps1` は実物の `install.ps1`、`install.user.ps1`、`install.admin.ps1`、`SetupHandler.ps1` を一時 fixture にコピーし、副作用のない fixture handler だけを差し替えて、Phase 1 → Phase 2a → acceptance → `Setup Complete!` の同一実行フローを検証します。これにより `SetupContext` の class identity / reload 回帰を、stub phase script や直接 `CanApply()` 呼び出しではなく実 installer boundary で検出します。実機アプリを要求する外部 runtime E2E は `ci-bootstrap.yml` に残します。Nix option、package、flake output は `nix-unit` で検証し、macOS の installer/runtime 契約は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats で実行します。
+Windows hosted contract は Pester 5.6.1 を固定して `Invoke-Tests.ps1 -MinimumCoverage 0` を両 runtime で実行します。`Install.Entrypoint.Tests.ps1` は実物の `install.ps1`、`install.user.ps1`、`install.admin.ps1`、`SetupHandler.ps1` を一時 fixture にコピーし、副作用のない fixture handler だけを差し替えて、Phase 1 → Phase 2a → acceptance → `Setup Complete!` の同一実行フローを検証します。これにより `SetupContext` の class identity / reload 回帰を、stub phase script や直接 `CanApply()` 呼び出しではなく実 installer boundary で検出します。実機アプリを要求する外部 runtime E2E は `ci-nix.yml` に残します。Nix option、package、flake output は `nix-unit` で検証し、macOS の installer/runtime 契約は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats で実行します。
 
-Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-bootstrap.yml` のLinux jobsがUbuntu、Debian、NixOSで検証し、Windows/macOS実機固有のruntimeは、Docker profile を選択した installer 末尾の acceptance が失敗を返します。
+Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-nix.yml` のNixOS VM jobで検証し、非 NixOS Linux は Home Manager build と mocked installer contract を検証します。Windows/macOS実機固有のruntimeは、Docker profile を選択した installer 末尾の acceptance が失敗を返します。
 
 ## WezTerm の実インストール証跡
 
-`ci-bootstrap.yml` の既存 Windows installer jobs は PS5.1 / PS7 の両方で共通 `WingetHandler` を実行し、インストール → PATH 反映 → `wezterm --version` の成功を順序付きで検証します。続けて新しい外部 process で PATH 上の `wezterm --version` を実行し、終了コードとバージョン出力を要求します。追加のインストール job や WezTerm 専用 installer はありません。
+`ci-nix.yml` の既存 Windows installer jobs は PS5.1 / PS7 の両方で共通 `WingetHandler` を実行し、インストール → PATH 反映 → `wezterm --version` の成功を順序付きで検証します。続けて新しい外部 process で PATH 上の `wezterm --version` を実行し、終了コードとバージョン出力を要求します。追加のインストール job や WezTerm 専用 installer はありません。
 
 共通 handler の `PACKAGE_PHASE` は install、path、verify の開始・完了と経過ミリ秒を記録します。install は WinGet の終了コードを decimal / hexadecimal で、verify は実コマンドの終了コードを記録します。install の時間にはパッケージ取得と native installer の両方が含まれます。詳細な取得・hash・native installer 境界は `windows-installer-*` artifact の WinGet diagnostic logs で確認します。開始ログだけ残っている場合、完了を確認できたとは扱いません。
 

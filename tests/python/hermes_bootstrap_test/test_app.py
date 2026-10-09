@@ -41,27 +41,7 @@ from hermes_bootstrap.profile_sync import (
 from hermes_bootstrap.repositories import RemoteSyncResult
 
 
-MANIFEST = Path(__file__).resolve().parents[3] / "nix/home/hermes-agent/manifest.yaml"
-EXPECTED_HINDSIGHT = {
-    "mode": "local_external",
-    "api_url": "http://127.0.0.1:8888",
-    "bank_id": "hermes",
-    "bank_id_template": "hermes-{profile}",
-    "bank_retain_mission": (
-        "Retain durable preferences, decisions, corrections, entities, relationships, "
-        "and temporal facts. Never extract credentials, tokens, private keys, "
-        "authentication material, or transient logs as memories."
-    ),
-    "memory_mode": "hybrid",
-    "auto_recall": True,
-    "recall_sync": False,
-    "recall_types": "observation",
-    "recall_budget": "mid",
-    "auto_retain": True,
-    "retain_async": True,
-    "retain_every_n_turns": 1,
-    "retain_source": "hermes",
-}
+MANIFEST = Path(__file__).resolve().parents[3] / "nix/modules/hermes-agent/manifest.yaml"
 
 
 def manifest(
@@ -174,13 +154,6 @@ class AppTests(unittest.TestCase):
         )
         self.install_google_gmail_credentials = gmail_credentials_patcher.start()
         self.addCleanup(gmail_credentials_patcher.stop)
-        hindsight_patcher = mock.patch.object(
-            app,
-            "install_hindsight_configurations",
-            create=True,
-        )
-        self.install_hindsight_configurations = hindsight_patcher.start()
-        self.addCleanup(hindsight_patcher.stop)
         context_engine_patcher = mock.patch.object(
             app,
             "install_context_engine_configurations",
@@ -254,7 +227,7 @@ class AppTests(unittest.TestCase):
         target = self.write_installed_profile()
         calendar_config = (
             "memory:\n"
-            "  provider: hindsight\n"
+            "  provider: builtin\n"
             "plugins:\n"
             "  enabled:\n"
             "    - hermes-lcm\n"
@@ -304,15 +277,6 @@ class AppTests(unittest.TestCase):
         for config in (self.root / "config.yaml", target / "config.yaml"):
             config.write_text(calendar_config, encoding="utf-8")
             config.chmod(0o600)
-            hindsight = config.parent / "hindsight"
-            hindsight.mkdir(mode=0o700)
-            hindsight_config = hindsight / "config.json"
-            hindsight_config.write_text(
-                json.dumps(EXPECTED_HINDSIGHT, ensure_ascii=False, indent=2, sort_keys=True)
-                + "\n",
-                encoding="utf-8",
-            )
-            hindsight_config.chmod(0o600)
         credentials = self.root / "google-calendar-mcp"
         credentials.mkdir(mode=0o700)
         oauth = credentials / "gcp-oauth.keys.json"
@@ -725,13 +689,6 @@ class AppTests(unittest.TestCase):
                 + f":{transaction is tx}"
             )
         )
-        self.install_hindsight_configurations.side_effect = (
-            lambda targets, transaction: events.append(
-                "hindsight-config:"
-                + ",".join(profile for profile, _target in targets)
-                + f":{transaction is tx}"
-            )
-        )
         self.install_context_engine_configurations.side_effect = (
             lambda targets, transaction: events.append(
                 "context-engine-config:"
@@ -787,7 +744,6 @@ class AppTests(unittest.TestCase):
                 "shared:lifelog",
                 "calendar-config:data,rick,hoffman,risarisa,nancy:True",
                 "gmail-config:data,rick,hoffman,risarisa,nancy:True",
-                "hindsight-config:default,rick,hoffman,risarisa,nancy:True",
                 "context-engine-config:default,rick,hoffman,risarisa,nancy:True",
                 "onepassword-config",
                 "env:data",
@@ -2411,7 +2367,7 @@ class AppTests(unittest.TestCase):
         ):
             app._runtime_config_targets(manifest(self.root, ()))
 
-    def test_installed_layout_validates_hindsight_before_environment_files(self) -> None:
+    def test_installed_layout_validates_context_engine_before_environment_files(self) -> None:
         from hermes_bootstrap import app
 
         self.write_valid_layout()
@@ -2437,14 +2393,6 @@ class AppTests(unittest.TestCase):
             ) as validate_xapi,
             mock.patch.object(
                 app,
-                "validate_hindsight_installation",
-                create=True,
-                side_effect=lambda targets: events.append(
-                    "hindsight:" + ",".join(profile for profile, _target in targets)
-                ),
-            ) as validate_hindsight,
-            mock.patch.object(
-                app,
                 "validate_context_engine_installation",
                 create=True,
                 side_effect=lambda targets: events.append(
@@ -2462,9 +2410,6 @@ class AppTests(unittest.TestCase):
                 self.manifest, allow_active_transaction=True
             )
 
-        validate_hindsight.assert_called_once_with(
-            app._environment_targets(self.manifest)
-        )
         validate_context_engine.assert_called_once_with(
             app._environment_targets(self.manifest)
         )
@@ -2478,7 +2423,6 @@ class AppTests(unittest.TestCase):
             events,
             [
                 "xapi:default,rick",
-                "hindsight:default,rick",
                 "context-engine:default,rick",
                 "env:data",
                 "env:rick",

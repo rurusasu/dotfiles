@@ -28,13 +28,6 @@ in
     };
   };
 
-  testOrcaPreservesDarwinApplicationName = {
-    expr = sets.supportReport.orca-editor.darwin.identity;
-    expected = {
-      appName = "Orca.app";
-    };
-  };
-
   testArcPreservesWindowsProviderAndDarwinUnsupportedReason = {
     expr = {
       windows = sets.supportReport.arc-browser.windows;

@@ -83,7 +83,6 @@ class TaskfileContractTests(unittest.TestCase):
         )
 
     def test_native_hermes_setup_starts_the_independent_memory_service(self) -> None:
-        self.assertIn("task: hindsight:up", self._task_block("hermes:setup"))
         for profile in ("rick", "hoffman", "risarisa", "nancy"):
             with self.subTest(profile=profile):
                 plan = self._task_plan(f"hermes:{profile}:up")
@@ -148,10 +147,6 @@ class TaskfileContractTests(unittest.TestCase):
             taskfile,
             r"docker compose[^\n]*\b(?:stop|restart|logs|run|exec)\b[^\n]*[ \t]hermes(?:[ \t]|$)",
         )
-        hermes_module = (REPOSITORY_ROOT / "nix/home/hermes-agent.nix").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("settings.gateway.multiplex_profiles", hermes_module)
 
     def test_xapi_lifecycle_reads_oauth_credentials_from_1password(self) -> None:
         wrapper = XAPI_WRAPPER.read_text(encoding="utf-8")

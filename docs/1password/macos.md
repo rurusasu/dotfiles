@@ -39,7 +39,9 @@ Settings > Developer > Integrate with 1Password CLI を有効にする。複数a
 
 ## SSH / Git
 
-macOS の SSH agent socket は 1Password Group Container の socket を使う。
+`nix/modules/1password/ssh.nix` が macOS の 1Password Group Container の socket を `IdentityAgent` と `SSH_AUTH_SOCK` に設定する。空白を含むパスは SSH 設定で引用し、Bash の独自 agent 起動で上書きしない。
+
+Darwin host は同じ値を `launchd.user.envVariables.SSH_AUTH_SOCK` に渡し、反映後に起動する GUI アプリも 1Password agent を使う。GnuPG の SSH agent 連携は Home Manager / system とも無効化する。macOS 標準 agent のプロセス停止・システム plist の変更は行わない。
 
 ```sshconfig
 Host *

@@ -3,7 +3,7 @@
 ## 管理対象
 
 - `fd/ignore`
-- `ripgrep/config`
+- `ripgrep/config`（Windows のみ。Unix は `nix/home/shells/plugins/ripgrep.nix`）
 - `starship/starship.toml`
 - `ghq/config`
 - `zoxide/env`

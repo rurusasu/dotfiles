@@ -127,7 +127,7 @@ class BuildFixtureTests(unittest.TestCase):
         self.assertEqual(set(self.root.iterdir()), before)
 
     def test_ssot_manifest_paths_and_semantics_survive_yaml_sensitive_build_parent(self) -> None:
-        source = Path(__file__).resolve().parents[3] / "nix/home/hermes-agent/manifest.yaml"
+        source = Path(__file__).resolve().parents[3] / "nix/modules/hermes-agent/manifest.yaml"
         template = self.root / "ssot-template.yaml"
         template.write_text(
             source.read_text(encoding="utf-8").replace("/opt/data", HOME_MARKER),

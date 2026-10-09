@@ -11,7 +11,7 @@ let
         pkg = fixturePackage;
         category = "test";
       };
-      bat = {
+      netcat = {
         pkg = fixturePackage;
         category = "test";
       };
@@ -25,8 +25,8 @@ in
     expr = {
       missingProvider = windowsErrorsFor "fixture-without-windows-provider";
       reviewedUnsupported = {
-        reason = sets.supportReport.bat.windows.unsupported;
-        windowsErrors = windowsErrorsFor "bat";
+        reason = sets.supportReport.netcat.windows.unsupported;
+        windowsErrors = windowsErrorsFor "netcat";
       };
     };
     expected = {

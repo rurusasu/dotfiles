@@ -16,7 +16,6 @@ secret_specs=(
 
 toolkit_clients=(
   "codex"
-  "gemini"
 )
 
 catalog_refs=(

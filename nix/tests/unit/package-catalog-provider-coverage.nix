@@ -15,7 +15,7 @@ in
         isAttrs = builtins.isAttrs sets.supportReport;
         dockerWindowsProvider = dockerSupport.windows.provider;
         dockerDarwinProvider = dockerSupport.darwin.provider;
-        dockerLinuxProvider = dockerSupport.linux.provider;
+        dockerLinuxReason = dockerSupport.linux.unsupported;
       };
       inherit (sets) providerErrors;
       darwinCasks = {
@@ -23,27 +23,19 @@ in
         hasDockerDesktop = builtins.elem "docker-desktop" sets.darwinCasks;
         hasHermesDesktop = builtins.elem "hermes-desktop" sets.darwinCasks;
       };
-      linuxSystemModules = {
-        isList = builtins.isList sets.linuxSystemModules;
-        hasDocker = builtins.elem "docker" sets.linuxSystemModules;
-      };
     };
     expected = {
       supportReport = {
         isAttrs = true;
         dockerWindowsProvider = "winget";
         dockerDarwinProvider = "homebrew-cask";
-        dockerLinuxProvider = "system-manager";
+        dockerLinuxReason = "Docker Desktop is not selected on Linux; NixOS manages the Docker engine through virtualisation.docker";
       };
       providerErrors = [ ];
       darwinCasks = {
         isList = true;
         hasDockerDesktop = true;
         hasHermesDesktop = true;
-      };
-      linuxSystemModules = {
-        isList = true;
-        hasDocker = true;
       };
     };
   };

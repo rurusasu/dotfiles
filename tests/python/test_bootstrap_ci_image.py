@@ -12,25 +12,30 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-WORKFLOW = ROOT / ".github/workflows/ci-bootstrap.yml"
+WORKFLOW = ROOT / ".github/workflows/ci-nix.yml"
 
 
 class BootstrapCiImageTests(unittest.TestCase):
     def test_nix_runs_statix_directly_without_sarif_permissions(self) -> None:
-        workflow = (ROOT / ".github/workflows/ci-bootstrap.yml").read_text()
+        workflow = (ROOT / ".github/workflows/ci-nix.yml").read_text()
         lint_job = workflow.split("  nix:\n", 1)[1].split("  linux-build:\n", 1)[0]
         self.assertIn("run: statix check .", lint_job)
         self.assertNotIn("security-events:", lint_job)
         self.assertNotIn("SARIF", lint_job)
 
     def test_tool_image_changes_trigger_contract_checks_on_push(self) -> None:
-        workflow = (ROOT / ".github/workflows/ci-contract.yml").read_text()
-        push_paths = workflow.split("  push:\n", 1)[1].split("permissions:\n", 1)[0]
-        self.assertIn('"docker/bootstrap-ci-tools/**"', push_paths)
+        workflow = (ROOT / ".github/workflows/ci-other.yml").read_text()
+        push_trigger = workflow.split("  push:\n", 1)[1].split("\nenv:\n", 1)[0]
+        self.assertIn("branches: [main]", push_trigger)
+        self.assertNotIn("paths:", push_trigger)
+        self.assertIn("uses: ./.github/actions/detect-ci-changes", workflow)
 
     def test_authentication_uses_nix_config_home_and_keeps_tokens_private(self) -> None:
         for use_xdg, wsl, owned_home in itertools.product((True, False), repeat=3):
-            with self.subTest(use_xdg=use_xdg, wsl=wsl, owned_home=owned_home), tempfile.TemporaryDirectory() as directory:
+            with (
+                self.subTest(use_xdg=use_xdg, wsl=wsl, owned_home=owned_home),
+                tempfile.TemporaryDirectory() as directory,
+            ):
                 root = Path(directory)
                 home = root / "passwd-home"
                 home.mkdir()
@@ -48,7 +53,8 @@ class BootstrapCiImageTests(unittest.TestCase):
                 environment = {
                     key: value
                     for key, value in os.environ.items()
-                    if key not in ("XDG_CONFIG_HOME", "NIX_CONFIG", "NIX_USER_CONF_FILES")
+                    if key
+                    not in ("XDG_CONFIG_HOME", "NIX_CONFIG", "NIX_USER_CONF_FILES")
                 }
                 environment.update(
                     HOME=str(home if owned_home else root / "missing-home"),
@@ -73,11 +79,15 @@ class BootstrapCiImageTests(unittest.TestCase):
                         check=False,
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertNotIn(environment["GITHUB_TOKEN"], result.stdout + result.stderr)
+                    self.assertNotIn(
+                        environment["GITHUB_TOKEN"], result.stdout + result.stderr
+                    )
                 secret_file = config / "nix/bootstrap-ci.conf"
                 self.assertEqual(secret_file.stat().st_mode & 0o777, 0o600)
                 self.assertEqual(
-                    (config / "nix/nix.conf").read_text().count(f"include {secret_file}"),
+                    (config / "nix/nix.conf")
+                    .read_text()
+                    .count(f"include {secret_file}"),
                     1,
                 )
                 if wsl:
@@ -92,7 +102,10 @@ class BootstrapCiImageTests(unittest.TestCase):
                     check=False,
                 )
                 self.assertEqual(trusted_directories.returncode, 0)
-                self.assertNotIn(environment["GITHUB_TOKEN"], Path(environment["GIT_CONFIG_SYSTEM"]).read_text())
+                self.assertNotIn(
+                    environment["GITHUB_TOKEN"],
+                    Path(environment["GIT_CONFIG_SYSTEM"]).read_text(),
+                )
                 self.assertEqual(
                     trusted_directories.stdout.splitlines(),
                     [environment["GITHUB_WORKSPACE"]],
@@ -114,7 +127,7 @@ class BootstrapCiImageTests(unittest.TestCase):
             root = Path(directory)
             docker = root / "docker"
             docker.write_text(
-                '#!/bin/bash\nset -euo pipefail\n'
+                "#!/bin/bash\nset -euo pipefail\n"
                 '[[ "$1 $2 $3" == "buildx imagetools inspect" ]]\n'
                 'printf "%s\\n" "$DOCKER_RESULT"\n'
                 'exit "$DOCKER_EXIT"\n'

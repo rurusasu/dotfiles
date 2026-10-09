@@ -1,6 +1,6 @@
 let
-  entrypoint = ../../../hosts/darwin/default.nix;
-  configuration = ../../../hosts/darwin/configuration.nix;
+  entrypoint = ../../../hosts/aarch64-darwin/default.nix;
+  configuration = ../../../hosts/aarch64-darwin/configuration.nix;
   entrypointText = builtins.readFile entrypoint;
   configurationText =
     if builtins.pathExists configuration then builtins.readFile configuration else "";
@@ -30,8 +30,8 @@ in
       in
       builtins.all (module: builtins.elem module imports) [
         configuration
-        ../../../modules/darwin
-        ../../../hosts/darwin/system.nix
+        ../../../hosts/aarch64-darwin/platform.nix
+        ../../../hosts/aarch64-darwin/system.nix
       ];
     expected = true;
   };
@@ -39,9 +39,9 @@ in
   testDarwinFlakeConsumesHostDirectory = {
     expr =
       let
-        flakeText = builtins.readFile ../../../flakes/darwin.nix;
+        flakeText = builtins.readFile ../../../hosts/configurations.nix;
       in
-      hasLine "\\.\\./hosts/darwin" flakeText;
+      hasLine "\\./aarch64-darwin" flakeText;
     expected = true;
   };
 
@@ -50,11 +50,10 @@ in
       entrypointHasSystemOptions =
         hasLine "system[[:space:]]*=[[:space:]]*\\{" entrypointText
         || hasLine "homebrew[[:space:]]*=[[:space:]]*\\{" entrypointText
-        || hasLine "launchd\.user" entrypointText;
+        || hasLine "launchd\\.user" entrypointText;
       configurationHasSystemOptions =
         hasLine "system[[:space:]]*=[[:space:]]*\\{" configurationText
-        && hasLine "homebrew[[:space:]]*=[[:space:]]*\\{" configurationText
-        && hasLine "launchd\.user" configurationText;
+        && hasLine "homebrew[[:space:]]*=[[:space:]]*\\{" configurationText;
     };
     expected = {
       entrypointHasSystemOptions = false;

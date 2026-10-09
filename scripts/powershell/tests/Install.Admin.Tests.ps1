@@ -29,7 +29,9 @@ Describe 'install.admin.ps1' {
         $env:DOTFILES_WSL_CHECK_TIMEOUT_SECONDS = "1"
         try {
             $elapsed = Measure-Command {
-                $result = & $script:target -CheckOnly -AdminOnly:$false
+                # Fixture the prerequisite already validated by NixRebuild;
+                # this test checks the CheckOnly boundary, not a real WSL install.
+                $result = & $script:target -CheckOnly -AdminOnly:$false -Options @{ NixRebuildApplied = $true }
                 $result | Should -BeOfType [bool]
             }
             $elapsed.TotalSeconds | Should -BeLessThan 30

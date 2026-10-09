@@ -13,7 +13,7 @@ let
     builtins.readFile ../../../scripts/sh/hermes-profile-sync.sh
   );
   manifestTemplate = pkgs.writeText "hermes-bootstrap-test-manifest-template.yaml" (
-    import ../../home/hermes-agent/manifest.nix {
+    import ../../modules/hermes-agent/manifest.nix {
       hermesHome = "/__hermes_bootstrap_test_home__";
     }
   );

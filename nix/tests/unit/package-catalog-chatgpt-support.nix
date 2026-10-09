@@ -54,19 +54,6 @@ in
     };
   };
 
-  testChatGPTClassicHasNoCatalogOrMicrosoftStoreProviderID = {
-    expr = {
-      catalogEntry = builtins.hasAttr "9NT1R1C2HH7J" sets.supportReport;
-      mappedProviderId = builtins.elem "9NT1R1C2HH7J" (builtins.attrValues sets.msstoreMap);
-      windowsOnlyProviderId = builtins.elem "9NT1R1C2HH7J" sets.windowsOnly.msstore;
-    };
-    expected = {
-      catalogEntry = false;
-      mappedProviderId = false;
-      windowsOnlyProviderId = false;
-    };
-  };
-
   testChatGPTLinuxDerivationPreservesPinnedSourceUrlsAndHashes = {
     expr = builtins.mapAttrs (_: package: {
       url = package.src.url;

@@ -37,8 +37,8 @@ tasks:
     desc: Update custom packages then run the macOS activation adapter
     interactive: true
     preconditions:
-      - sh: test -n "${DOTFILES_ROOT:-}" && test -n "${DOTFILES_WITH_OLLAMA:-}" && test -n "${DOTFILES_WITH_DOCKER:-}" && test -n "${DOTFILES_WITH_HERMES:-}"
-        msg: Run ./install.sh to initialize the macOS install profile
+      - sh: test -n "${DOTFILES_ROOT:-}"
+        msg: Run ./install.sh to initialize the macOS installer
     cmds:
       - task: darwin:install:update
       - bash -c 'source scripts/sh/install-macos.sh; finish_macos_install'

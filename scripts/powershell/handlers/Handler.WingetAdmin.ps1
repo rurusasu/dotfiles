@@ -148,13 +148,6 @@ class WingetAdminHandler : SetupHandlerBase {
                 if (-not $requiresAdmin) { continue }
                 $skipInstall = $pkg.PSObject.Properties.Name -contains "skipInstall" -and [bool]$pkg.skipInstall
                 if ($skipInstall) { continue }
-                $installFeature = if ($pkg.PSObject.Properties.Name -contains "installFeature") {
-                    [string]$pkg.installFeature
-                }
-                else {
-                    ""
-                }
-                if ($installFeature -and -not [bool]$ctx.GetOption($installFeature, $false)) { continue }
                 $installTimeoutSeconds = if ($pkg.PSObject.Properties.Name -contains "installTimeoutSeconds") {
                     $pkg.installTimeoutSeconds
                 }

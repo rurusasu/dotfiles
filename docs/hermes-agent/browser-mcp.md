@@ -78,7 +78,7 @@ runtime では `web_search` を `browser` toolset から除外して `web` tools
 
 ## Distribution source contract
 
-root distribution と `nix/home/hermes-agent/manifest.yaml` に宣言された
+root distribution と `nix/modules/hermes-agent/manifest.yaml` に宣言された
 全 profile は、source repository の `config.yaml` で上記の
 `mcp_servers.chrome` と built-in `browser` の無効化を所有する。各 distribution
 manifest の `distribution_owned` は `config.yaml` を明示的に含める。他の MCP

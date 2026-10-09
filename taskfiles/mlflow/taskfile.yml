@@ -5,9 +5,7 @@ vars:
 
 tasks:
   mlflow:up:
-    desc: Start MLflow, wait for health, and configure local endpoints
-    status:
-      - test "${DOTFILES_ACCEPTANCE_SKIP_MLFLOW:-0}" = "1"
+    desc: Start MLflow and wait for health
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
@@ -19,25 +17,12 @@ tasks:
       - cmd: "pwsh -NoProfile -Command 'docker network inspect local-ai-services *> $null; if ($LASTEXITCODE -ne 0) { docker network create local-ai-services }'"
         platforms: [windows]
       - docker compose -f {{.MLFLOW_COMPOSE_FILE}} up -d --remove-orphans --wait mlflow
-      - task: mlflow:configure
 
   mlflow:update:
-    desc: Pull the pinned MLflow image, recreate it, and configure local endpoints
+    desc: Pull the pinned MLflow image and recreate it
     cmds:
       - docker compose -f {{.MLFLOW_COMPOSE_FILE}} pull mlflow
       - task: mlflow:up
-
-  mlflow:configure:
-    desc: Configure the local Ollama endpoints in running healthy MLflow
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-      - sh: >-
-          docker compose -f {{.MLFLOW_COMPOSE_FILE}} exec -T mlflow python -c
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5)"
-        msg: "MLflow is not running and healthy. Run task mlflow:up first."
-    cmds:
-      - docker compose -f {{.MLFLOW_COMPOSE_FILE}} exec -T mlflow python /opt/mlflow/configure.py --base-url http://127.0.0.1:5000 --manifest /opt/mlflow/endpoints.yml
 
   mlflow:down:
     desc: Stop MLflow without removing its data or the shared network
@@ -48,16 +33,12 @@ tasks:
       - docker compose -f {{.MLFLOW_COMPOSE_FILE}} stop mlflow
 
   mlflow:status:
-    desc: Show MLflow status and configured endpoint names
+    desc: Show MLflow service status
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
       - docker compose -f {{.MLFLOW_COMPOSE_FILE}} ps mlflow
-      - cmd: "awk '/^[[:space:]]*-[[:space:]]+name:/{print $3}' docker/mlflow/endpoints.yml"
-        platforms: [linux, darwin]
-      - cmd: 'pwsh -NoProfile -Command ''Get-Content docker/mlflow/endpoints.yml | Select-String "^\s*-\s+name:\s*(\S+)\s*$" | ForEach-Object { $_.Matches[0].Groups[1].Value }'''
-        platforms: [windows]
 
   mlflow:logs:
     desc: Follow MLflow logs
@@ -69,13 +50,11 @@ tasks:
       - docker compose -f {{.MLFLOW_COMPOSE_FILE}} logs -f --tail=100 mlflow
 
   mlflow:verify:
-    desc: Verify MLflow and its configured local endpoints
+    desc: Verify the MLflow API
     preconditions:
       - sh: docker info
         msg: "Docker daemon is not running. Start Docker Desktop and try again."
-      - sh: >-
-          docker compose -f {{.MLFLOW_COMPOSE_FILE}} exec -T mlflow python -c
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5)"
-        msg: "MLflow is not running and healthy. Run task mlflow:up first."
     cmds:
-      - docker compose -f {{.MLFLOW_COMPOSE_FILE}} exec -T mlflow python /opt/mlflow/verify.py
+      - >-
+        docker compose -f {{.MLFLOW_COMPOSE_FILE}} exec -T mlflow python -c
+        "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5)"

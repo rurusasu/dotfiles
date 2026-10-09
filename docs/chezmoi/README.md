@@ -26,7 +26,7 @@ chezmoi はユーザーレベルの dotfiles（設定ファイル）を管理し
 - CLI ツール設定 (fd, ripgrep, ghq, zoxide)
 - ターミナル設定 (WezTerm, Windows Terminal)
 - エディタ設定 (Neovim)
-- LLM ツール設定 (Claude, Codex, Gemini)
+- LLM ツール設定 (Claude, Codex)
 - SSH 設定テンプレート
 - GitHub 設定 (workflows, templates)
 

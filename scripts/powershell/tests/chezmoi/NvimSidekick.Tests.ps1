@@ -2,10 +2,10 @@
 
 BeforeAll {
     $script:repoRoot = Join-Path $PSScriptRoot "../../../.."
-    $script:pluginsPath = Join-Path $script:repoRoot "nix/modules/nvim/plugins.nix"
+    $script:pluginsPath = Join-Path $script:repoRoot "nix/modules/editors/nvim/plugins.nix"
     $script:pluginsContent = Get-Content -LiteralPath $script:pluginsPath -Raw
-    $script:snacks = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/modules/nvim/lua/plugins/snacks.lua") -Raw
-    $script:sidekick = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/modules/nvim/lua/plugins/sidekick.lua") -Raw
+    $script:snacks = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/modules/editors/nvim/lua/plugins/snacks.lua") -Raw
+    $script:sidekick = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/modules/editors/nvim/lua/plugins/sidekick.lua") -Raw
 }
 
 Describe 'Neovim Sidekick and Snacks plugin boundaries' {
@@ -24,7 +24,6 @@ Describe 'Neovim Sidekick and Snacks plugin boundaries' {
         $sidekick | Should -Match 'layout = "right"'
         $sidekick | Should -Match '"<C-.>"'
         $sidekick | Should -Not -Match '"<leader>aa"'
-        $sidekick | Should -Not -Match '(?i)claude'
         $sidekick | Should -Match '"<leader>af"'
         $sidekick | Should -Match '"<C-S-h>"'
         $sidekick | Should -Match '"<C-S-l>"'

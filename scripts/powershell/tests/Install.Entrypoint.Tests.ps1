@@ -154,7 +154,7 @@ BeforeAll {
         foreach ($scriptName in 'install.ps1', 'install.user.ps1', 'install.admin.ps1') {
             Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\$scriptName") -Destination (Join-Path $scriptDir $scriptName)
         }
-        foreach ($library in 'WindowsEnvironment.ps1', 'InstallProfiles.ps1', 'SetupHandler.ps1', 'Invoke-ExternalCommand.ps1') {
+        foreach ($library in 'WindowsEnvironment.ps1', 'SetupHandler.ps1', 'Invoke-ExternalCommand.ps1') {
             Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\lib\$library") -Destination (Join-Path $libDir $library)
         }
 
@@ -420,7 +420,7 @@ exit 0
         Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\Test-Environment.ps1") -Destination (Join-Path $scriptDir "Test-Environment.ps1")
         $libDir = Join-Path $scriptDir "lib"
         New-Item -ItemType Directory -Path $libDir -Force | Out-Null
-        foreach ($library in "WindowsEnvironment.ps1", "InstallProfiles.ps1", "Invoke-ExternalCommand.ps1") {
+        foreach ($library in "WindowsEnvironment.ps1", "Invoke-ExternalCommand.ps1") {
             Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\lib\$library") -Destination (Join-Path $scriptDir "lib\$library")
         }
         Set-Content -LiteralPath (Join-Path $scriptDir "install.user.ps1") -Value @'

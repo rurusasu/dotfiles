@@ -4,10 +4,7 @@
 nix-darwin の通常 activation は旧 formula の uninstall や tap の削除を行いません。
 未移行の端末では、所有者が利用状況を確認して一度だけ手動で撤去してください。
 
-現在の macOS LLM 構成は Nix の Ollama package と
-`com-dotfiles-ollama` LaunchAgent です。`--with-ollama`、`--with-docker`、
-`--with-hermes` のいずれかを選んだ場合に有効になります。
-この変更自体は Ollama の導入や実機の移行完了を保証しません。
+現在の構成ではローカル LLM サーバーを自動導入しません。旧サーバーのモデルや設定は通常 activation では移行・削除しません。
 
 ## 撤去前の確認
 
@@ -18,21 +15,11 @@ brew list --formula --versions omlx
 brew tap
 brew services list
 command -v omlx
-command -v ollama
-launchctl list | rg 'omlx|com-dotfiles-ollama'
+launchctl list | rg 'omlx'
 ```
 
 oMLX のモデル・設定を保管し、利用しているクライアントの接続先を確認してください。
-Ollama は別のサーバーなので、モデルや接続設定がそのまま移行されるとは限りません。
-Ollama を利用する端末では、通常の installer を選択した profile で適用し、
-必要なモデルとクライアントの動作を確認してから旧 formula を撤去します。
-
-```bash
-./install.sh --with-ollama
-command -v ollama
-launchctl list | rg 'com-dotfiles-ollama'
-curl --fail http://127.0.0.1:11434/api/tags
-```
+必要なクライアントの動作を確認してから旧 formula を撤去します。
 
 ## 一度だけ行う撤去
 

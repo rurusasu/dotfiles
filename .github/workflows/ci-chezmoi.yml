@@ -22,9 +22,9 @@ jobs:
     permissions:
       contents: read
     outputs:
-      chezmoi_lint: ${{ steps.detect.outputs.chezmoi_lint }}
-      templates: ${{ steps.detect.outputs.templates }}
-      fonts: ${{ steps.detect.outputs.fonts }}
+      nix: ${{ steps.detect.outputs.nix }}
+      chezmoi: ${{ steps.detect.outputs.chezmoi }}
+      other: ${{ steps.detect.outputs.other }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -39,11 +39,10 @@ jobs:
           base-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
           head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           run-all: ${{ github.event_name == 'workflow_dispatch' }}
-          manifest: ci/job-path-routing.json
 
   lint:
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.chezmoi_lint == 'true') }}
+    if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true')) }}
     name: Lint (Pester chezmoi)
     runs-on: windows-2025
     timeout-minutes: 10
@@ -128,7 +127,7 @@ jobs:
 
   fmt:
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.templates == 'true') }}
+    if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true')) }}
     name: Format (.tmpl BOM check)
     runs-on: windows-2025
     timeout-minutes: 5
@@ -166,7 +165,7 @@ jobs:
 
   font-install:
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.fonts == 'true') }}
+    if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true')) }}
     name: Font install smoke (Windows)
     runs-on: windows-2025
     timeout-minutes: 10
@@ -221,7 +220,7 @@ jobs:
 
   op-guard:
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.templates == 'true') }}
+    if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true')) }}
     # Behavioral guard for the "op present but unauthenticated" environment
     # (devcontainers, CI, fresh clones). The static Pester lint only checks
     # that onepasswordRead is wrapped in *a* guard; it cannot tell whether the
@@ -247,10 +246,7 @@ jobs:
           persist-credentials: false
 
       - name: Install chezmoi
-        run: |
-          set -euo pipefail
-          sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        uses: ./.github/actions/install-chezmoi
 
       - name: Install stub op (present but unauthenticated)
         run: |

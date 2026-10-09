@@ -2,8 +2,8 @@
 
 BeforeAll {
     $script:repoRoot = Join-Path $PSScriptRoot "../../../.."
-    $script:optionsPath = Join-Path $script:repoRoot "nix/modules/nvim/init.lua"
-    $script:lspPath = Join-Path $script:repoRoot "nix/modules/nvim/lua/config/lsp.lua"
+    $script:optionsPath = Join-Path $script:repoRoot "nix/modules/editors/nvim/init.lua"
+    $script:lspPath = Join-Path $script:repoRoot "nix/modules/editors/nvim/lua/config/lsp.lua"
     $script:nixLspProxyPath = Join-Path $script:repoRoot "chezmoi/dot_local/bin/executable_nix-lsp-wsl-proxy.mjs"
     $script:optionsContent = Get-Content -LiteralPath $script:optionsPath -Raw
     $script:lspContent = Get-Content -LiteralPath $script:lspPath -Raw

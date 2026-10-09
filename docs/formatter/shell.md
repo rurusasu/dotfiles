@@ -87,7 +87,7 @@ includes = ["*.sh", "*.bash"]
 
 ## treefmt-nix 設定
 
-[nix/flakes/treefmt.nix](../../nix/flakes/treefmt.nix) で設定:
+[nix/formatter.nix](../../nix/formatter.nix) で設定:
 
 ```nix
 {

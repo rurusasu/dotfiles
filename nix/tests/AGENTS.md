@@ -10,7 +10,7 @@
 ## 変更時
 
 - テストの戻り値と検証対象で配置を決める。unit と build はどちらも flake の `checks` 経由で実行する。
-- テスト本体はここに置き、`nix/flakes/tests.nix` に一度だけ登録する。
+- テスト本体はここに置き、`nix/tests/default.nix` に一度だけ登録する。
 - 移動時は相対 import、README、CI routing、Bats / PowerShell の固定パスを同時に更新する。
 - unit の登録漏れ・重複と build の登録漏れ・重複は `unit/ownership.nix` が検査する。
 - 既存の公開 check 名と OS 制約を維持する。VM テストは Linux builder が必要。

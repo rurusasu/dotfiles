@@ -7,9 +7,4 @@
     nixAttr = null;
     candidates = [ "dia-browser" ];
   };
-  orca-editor = {
-    source = "custom";
-    nixAttr = null;
-    candidates = [ "orca-editor" ];
-  };
 }

@@ -46,22 +46,15 @@
     };
   };
 
-  tmux = {
-    pkg = pkgs.tmux;
-    winget = null;
+  zsh-patina = {
+    pkg = pkgs.zsh-patina;
     category = "terminal";
-  };
-
-  starship = {
-    pkg = pkgs.starship;
-    winget = "Starship.Starship";
-    category = "terminal";
+    support.windows.unsupported = "No reviewed MSYS2/Cygwin package provider is selected";
   };
 
   hermes-desktop = {
     winget = null;
     category = "terminal";
-    installFeature = "WithHermes";
     support = {
       darwin = {
         provider = "homebrew-cask";

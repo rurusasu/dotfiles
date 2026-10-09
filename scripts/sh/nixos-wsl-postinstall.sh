@@ -273,7 +273,7 @@ aarch64 | arm64)
 esac
 
 NIX_DIR="$TARGET_DIR/nix"
-HOST_DIR="$NIX_DIR/hosts/wsl"
+HOST_DIR="$NIX_DIR/hosts/x86_64-linux/wsl"
 
 mkdir -p "$HOST_DIR"
 
@@ -287,9 +287,9 @@ if [[ ! -f $HOST_DEFAULT_PATH ]]; then
 { config, inputs, pkgs, ... }:
 {
   imports = [
-    ../../modules/nixos
-    ../../modules/wsl
-    ../../profiles/hosts/k3s
+    ../../../hosts/shared/nixos/platform.nix
+    ./integration.nix
+    ../../../profiles/hosts/k3s
     ./configuration.nix
     inputs.nixos-vscode-server.nixosModules.default
   ];
@@ -329,32 +329,6 @@ else
   echo "Skipping (exists): $HOST_HW_PATH"
 fi
 
-install_herdr_for_user() {
-  local user_home
-  user_home="$(getent passwd "$USER_NAME" | cut -d: -f6)"
-  [[ -n $user_home && -d $user_home ]] || {
-    echo "Unable to resolve the home directory for $USER_NAME." >&2
-    return 1
-  }
-
-  if [[ $USER_NAME == root ]]; then
-    dotfiles_install_herdr
-    return
-  fi
-
-  command -v runuser >/dev/null 2>&1 || {
-    echo "runuser is required to install Herdr for $USER_NAME." >&2
-    return 1
-  }
-
-  runuser -u "$USER_NAME" -- env \
-    HOME="$user_home" \
-    USER="$USER_NAME" \
-    PATH="$PATH:$user_home/.local/bin" \
-    bash -c 'source "$1"; dotfiles_install_herdr' \
-    _ "$SCRIPT_ROOT/install-common.sh"
-}
-
 install_codex_for_user() {
   local user_home
   user_home="$(getent passwd "$USER_NAME" | cut -d: -f6)"
@@ -386,8 +360,6 @@ install_codex_for_user() {
     bash -c 'source "$1"; dotfiles_install_codex_npm' \
     _ "$codex_script"
 }
-
-install_herdr_for_user
 
 if [[ $SKIP_FLAKE_UPDATE -eq 0 ]]; then
   # Update flake inputs so first install uses the latest Nix sources.

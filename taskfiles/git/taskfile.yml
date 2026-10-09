@@ -2,14 +2,13 @@ version: "3"
 
 tasks:
   commit:
-    desc: Sync skills, format, lint, and commit
+    desc: Format, lint, and commit
     vars:
       MSG: '{{.CLI_ARGS | trimAll "\u0027" | default "update"}}'
     env:
       GIT_COMMIT_MSG: "{{.MSG}}"
       WSLENV: "GIT_COMMIT_MSG"
     cmds:
-      - task: skills:sync
       - task: fmt
       - task: lint:no-format
       - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && git add -A && printf ''%s\n'' \"$GIT_COMMIT_MSG\" | git commit -F -"'

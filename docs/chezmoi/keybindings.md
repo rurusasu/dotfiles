@@ -18,7 +18,7 @@ Nix で管理するデスクトップ配列と、`chezmoi` で管理する `shel
 | `Ctrl+Command+M` (macOS)            | GUI window zoom / restore             | `Ctrl+Command+M`                    |
 | `Command+Alt` (WezTerm macOS)       | 契約外の GUI window focus             | `Command+Alt+H/L`                   |
 | `Alt+Shift` (WezTerm Windows/Linux) | 契約外の GUI window focus/pane resize | `Alt+Shift+H/L` / `Alt+Shift+矢印`  |
-| `Ctrl`                              | Unix/Vim/tmux focus                   | `Ctrl+H/J/K/L`                      |
+| `Ctrl`                              | Unix/Vim focus                        | `Ctrl+H/J/K/L`                      |
 | `Shift+Enter`                       | 複数行入力                            | AI CLI / terminal prompt 改行       |
 | `Space` (`Leader`)                  | editor 機能呼び出し                   | 検索、エクスプローラ、タブ操作      |
 | `Alt` (Shell)                       | CLI 補助操作                          | fzf/zoxide ウィジェット (`Q/D/T/R`) |
@@ -61,18 +61,17 @@ terminal Window Manager の共通 prefix は `Ctrl+Space`。prefix に続けて�
 
 target ごとの capability は次のとおり。非対応 suffix は別のキーへフォールバックせず no-op として消費する。
 
-| target           | Workspace                | Tab               | Pane | Session        |
-| ---------------- | ------------------------ | ----------------- | ---- | -------------- |
-| WezTerm          | 対応                     | 対応              | 対応 | 対応           |
-| Windows Terminal | Workspace 非対応 (no-op) | 対応              | 対応 | 非対応 (no-op) |
-| tmux             | 対応 (Workspace=Session) | 対応 (Tab=Window) | 対応 | 対応           |
-| Herdr            | 対応                     | 対応              | 対応 | 対応           |
+| target           | Workspace                | Tab  | Pane | Session        |
+| ---------------- | ------------------------ | ---- | ---- | -------------- |
+| WezTerm          | 対応                     | 対応 | 対応 | 対応           |
+| Windows Terminal | Workspace 非対応 (no-op) | 対応 | 対応 | 非対応 (no-op) |
+| Herdr            | 対応                     | 対応 | 対応 | 対応           |
 
 - WezTerm は組み込み leader を使い、prefix timeout は1秒。
 - Terminal.app は共通 prefix の対象外とし、標準のキー操作を使用する。デスクトップ全体の Omarchy 配列は AeroSpace、ターミナル内の共通操作は WezTerm の組み込み leader が担当するため、Terminal.app 専用の常駐 adapter は導入しない。
 - Windows Terminal は AutoHotkey v2 adapter が前面の `WindowsTerminal.exe` だけを対象にし、prefix timeout は1秒。Workspace / Session は非対応で no-op。
-- tmux と Herdr は各アプリの native prefix/key table を使う。tmux では Workspace=Session、Tab=Window として扱う。
-- nested terminal では `Ctrl+Space Ctrl+Space` を押すと内側へ `Ctrl+Space` を1回だけ転送する。その後に共通 suffix を入力することで、内側の tmux/Herdr を操作できる。
+- Herdr は native prefix/key table を使う。
+- nested terminal では `Ctrl+Space Ctrl+Space` を押すと内側へ `Ctrl+Space` を1回だけ転送する。その後に共通 suffix を入力することで、内側の Herdr を操作できる。
 
 Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢印` pane resize、macOS の `Command+Alt+H/L` window focus、Windows/Linux の `Alt+Shift+H/L` window focus と `Alt+Shift+矢印` pane resize、`Ctrl+Alt+W` pane zoom が該当する。WezTerm の `Shift+Enter` と Windows Terminal の `Shift+Enter` / `Ctrl+Enter` も複数行入力用として維持する。
 
@@ -83,7 +82,7 @@ Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢
 
 - Neovim
   - `Leader` は `Space`
-  - `Ctrl+H/J/K/L`: window 移動（tmux 境界越えも同じ）
+  - `Ctrl+H/J/K/L`: Neovim 内の window 移動（Herdr の pane 移動は共通 prefix を使う）
   - `Ctrl+Z`: undo
   - `Ctrl+Y`: normal/visual は redo、insert は補完候補の確定
   - `-`: Oil エクスプローラ、`Space+e`: 診断表示
@@ -101,9 +100,6 @@ Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢
 
 ### Shells
 
-- tmux (Unix/Linux/WSL)
-  - `Ctrl+H/J/K/L`: pane 移動（vim-tmux-navigator と共有）
-  - terminal Window Manager 操作は上記の `Ctrl+Space` 共通契約を使う
 - zsh
   - `Alt+Q`: zoxide interactive jump (`zoxide query -i`)
   - `Ctrl+T/R`・`Alt+C`: 標準 fzf ウィジェット（ファイル・履歴・ディレクトリ選択）
@@ -136,5 +132,5 @@ Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢
 - target が持たない capability は no-op とし、target 固有の代替キーを共通契約へ混ぜない
 - nested terminal の prefix 転送は `Ctrl+Space Ctrl+Space` に統一する
 - WezTerm の直接 window focus / pane resize は共通契約外の補助操作として維持する
-- tmux/Neovim など Unix/Vim 系は `Ctrl+H/J/K/L` を優先して維持する
+- Neovim など Unix/Vim 系は `Ctrl+H/J/K/L` を優先して維持する
 - `Vim` 拡張前提の操作説明は追加しない

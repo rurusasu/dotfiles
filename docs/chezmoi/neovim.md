@@ -4,14 +4,14 @@
 
 最低 Neovim **0.12**。更新時は `nvim --version` と `:checkhealth vim.lsp` を確認します。動作確認済み版と採否の根拠は [最新化調査](./neovim-modernization-audit.md) に記録します。
 
-- 基本設定: `nix/modules/nvim/init.lua`
-- 補助 Lua: `nix/modules/nvim/lua/`
-- Neovim 本体と補助コマンドの導入: `nix/modules/nvim/default.nix`
+- 基本設定: `nix/modules/editors/nvim/init.lua`
+- 補助 Lua: `nix/modules/editors/nvim/lua/`
+- Neovim 本体と補助コマンドの導入: `nix/modules/editors/nvim/default.nix`
 - LSP・整形ツールの導入: `nix/modules/lsp.nix`
-- Home Manager の起動設定: `nix/modules/nvim/default.nix`
-- 共通 LSP 処理と整形設定: `nix/modules/nvim/lua/config/lsp.lua`
-- プラグインの導入と Tree-sitter の言語一覧: `nix/modules/nvim/plugins.nix`
-- プラグインの Lua 設定: `nix/modules/nvim/lua/plugins/*.lua`
+- Home Manager の起動設定: `nix/modules/editors/nvim/default.nix`
+- 共通 LSP 処理と整形設定: `nix/modules/editors/nvim/lua/config/lsp.lua`
+- プラグインの導入と Tree-sitter の言語一覧: `nix/modules/editors/nvim/plugins.nix`
+- プラグインの Lua 設定: `nix/modules/editors/nvim/lua/plugins/*.lua`
 
 package データ、配布方式、エディタ設定を変更理由ごとに分けます。
 共通方針は [パッケージ管理の分割理由](../nix/package-management.md#分割の理由と編集先) を参照してください。
@@ -20,13 +20,9 @@ Neovim 関連ソフトウェアはパッケージカタログを使わず、Nixp
 
 Neovim の設定とプラグインは Home Manager が管理し、chezmoi は配布しません。`default.nix` が `builtins.readFile ./init.lua` で基本設定を読み込み、プラグイン設定より先に実行します。実際の参照先は `:lua print(vim.fn.stdpath("config"))` で確認してください。非 Nix 環境向けの設定配布は行いません。
 
-### 旧 chezmoi 設定からの初回移行
+### 設定ファイルの配置
 
-Home Manager の activation は、既存の `init.lua`、`lua/`、`after/lsp/` を同じ場所の `.pre-home-manager` 付きの名前へ退避してから、新しい `init.lua` と `lua` のリンクを配置します。たとえば `lua/` は `lua.pre-home-manager/` になります。ファイル内容と権限を保持し、削除やバックアップの上書きは行いません。旧 `after/lsp/` は上流 LSP 定義を上書きしないよう退避しますが、`after/ftplugin/` など無関係な `after/` の内容は残します。
-
-全対象を `checkLinkTargets` より前に読み取り専用で検査します。実際の移動は `writeBoundary` より後、Home Manager の `linkGeneration` より前だけで行います。dry-run は空の `DRY_RUN` 変数を指定した場合も変更せず、再 activation は既存の Home Manager リンクとバックアップをそのまま扱います。移行は pinned Home Manager の `legacy` file activator 用で、グローバルなバックアップ設定は変更しません。
-
-退避先が既にある場合、外部・壊れたシンボリックリンク、シンボリックリンクの親ディレクトリ、想定外のファイル種別は activation を停止します。`after/lsp` のリンクは Home Manager 管理のものも自動移行せず、実データの手動退避を要求します。リンクだけのバックアップは Nix の garbage collection 後に内容を失う可能性があるためです。この場合は表示された対象とバックアップを確認し、両方を別名で保管するなど手動で整理してから再実行してください。旧設定に戻す必要がある場合も、まず新しい Home Manager リンクを別の場所へ移し、退避済みデータを元の名前へ戻します。バックアップの自動削除はありません。
+`init.lua` と `lua/` は Home Manager 標準のファイル配布で配置します。専用の移行・退避スクリプトや強制上書きは使用しません。管理外の既存設定と衝突する場合は、Home Manager の標準検査で停止するため、対象を確認して手動で整理してください。`after/lsp/` などの既存ファイルは自動で移動・削除しません。
 
 ## Tree-sitter は何が必要か
 
@@ -111,7 +107,6 @@ Windows のカスタム floating terminal、Oil のドライブ一覧互換処�
 ```bash
 nix build path:.#checks.aarch64-darwin.neovim-native --no-link
 # Linux x86_64: checks.x86_64-linux.neovim-native
-python3 -m unittest discover -s tests/python -p test_neovim_migration.py -v
 nix build path:.#checks.aarch64-darwin.package-provider-coverage --no-link
 nix build path:.#winget-export --no-link --print-out-paths
 nvim --headless -u NONE -i NONE -l tests/lua/nvim_modern_test.lua
@@ -133,6 +128,6 @@ DOTFILES_NVIM_LSPCONFIG="/nix/store/<hash>-vimplugin-nvim-lspconfig-<version>" \
 pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/chezmoi/NvimShell.Tests.ps1 -MinimumCoverage 0
 ```
 
-全 plugin の起動テストは `neovim-native` に含まれます。一時 XDG data に Home Manager の native package を配置し、生成された `init.lua` と Nix 管理の基本設定を読み込みます。旧設定の移行も、評価済み Home Manager の preflight、`checkLinkTargets`、`writeBoundary`、`linkGeneration` を一時 HOME で実行し、退避・dry-run・再実行・衝突時の無変更を検証します。ホストへの反映は不要です。
+全 plugin の起動テストは `neovim-native` に含まれます。一時 XDG data に Home Manager の native package を配置し、生成された `init.lua` と Nix 管理の基本設定を読み込みます。ホストへの反映は不要です。
 
 Windows の PowerShell 検証を macOS で通しても、Windows 実機での compiler、PATH、WSL transport、画像、IME、キーバインドを検証したことにはなりません。これらと Linux/Devcontainer の実機動作は対応環境で別途確認してください。

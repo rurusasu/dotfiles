@@ -1,7 +1,7 @@
 -- DOTFILES_NVIM_LSPCONFIG=/existing/nvim-lspconfig nvim --headless -u NONE -i NONE -l tests/lua/nvim_typescript_test.lua
 -- Run the real upstream root callbacks against a virtual filesystem/process
 -- boundary. No npm installs or language-server processes are needed.
-local root = vim.fn.getcwd() .. "/nix/modules/nvim"
+local root = vim.fn.getcwd() .. "/nix/modules/editors/nvim"
 local upstream = assert(vim.env.DOTFILES_NVIM_LSPCONFIG, "set DOTFILES_NVIM_LSPCONFIG")
 vim.opt.rtp:prepend(upstream)
 vim.opt.rtp:prepend(root)

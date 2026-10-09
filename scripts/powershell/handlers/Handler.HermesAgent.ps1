@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Routes the Windows Hermes option to the NixOS WSL rebuild.
+    Validates the Nix-managed Hermes Agent in NixOS WSL.
 #>
 
 $libPath = Split-Path -Parent $PSScriptRoot
@@ -16,31 +16,27 @@ class HermesAgentHandler : SetupHandlerBase {
     }
 
     [bool] CanApply([SetupContext]$ctx) {
-        if ($this.IsSkipped($ctx)) {
-            $this.Log('Hermes Agent setup is disabled by option.', 'Gray')
-            return $false
-        }
 
         if ($this.IsNixRebuildApplied($ctx)) { return $true }
 
         if (-not (Get-Command -Name 'wsl' -ErrorAction SilentlyContinue)) {
-            throw "WithHermes on Windows requires WSL and the '$($ctx.DistroName)' NixOS distribution. Enable the WSL/NixOS setup and do not skip NixRebuild."
+            throw "Hermes Agent on Windows requires WSL and the '$($ctx.DistroName)' NixOS distribution. Enable the WSL/NixOS setup and do not skip NixRebuild."
         }
 
         $distros = @(Invoke-Wsl -TimeoutSeconds (Get-WslCheckTimeoutSecond) -Arguments @('--list', '--quiet'))
         $wslExitCode = $LASTEXITCODE
         if ($wslExitCode -ne 0) {
-            throw "Unable to inspect WSL distributions (exit code: $wslExitCode); refusing to start a Docker Hermes Agent."
+            throw "Unable to inspect WSL distributions (exit code: $wslExitCode); refusing to validate Hermes Agent."
         }
 
         $nixDistroExists = @($distros | Where-Object {
             ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim() -eq $ctx.DistroName
             }).Count -gt 0
         if (-not $nixDistroExists) {
-            throw "WithHermes on Windows requires the '$($ctx.DistroName)' NixOS WSL distribution. It is not registered; complete NixOS WSL setup and rerun the installer."
+            throw "Hermes Agent on Windows requires the '$($ctx.DistroName)' NixOS WSL distribution. It is not registered; complete NixOS WSL setup and rerun the installer."
         }
 
-        throw "The '$($ctx.DistroName)' WSL distribution is registered, but its Hermes Nix rebuild did not complete. Fix NixRebuild (and do not skip it) before rerunning; Docker fallback is disabled."
+        throw "The '$($ctx.DistroName)' WSL distribution is registered, but its Nix rebuild did not complete. Fix NixRebuild (and do not skip it) before rerunning; Docker fallback is disabled."
     }
 
     [SetupResult] Apply([SetupContext]$ctx) {
@@ -64,14 +60,6 @@ class HermesAgentHandler : SetupHandlerBase {
         }
 
         return $this.CreateFailureResult('Hermes Agent on Windows requires a successful NixOS WSL rebuild; Docker fallback is disabled.')
-    }
-
-    hidden [bool] IsSkipped([SetupContext]$ctx) {
-        if ($this.IsTruthy($ctx.GetOption('SkipHermesAgent', $false))) {
-            return $true
-        }
-
-        return -not $this.IsTruthy($ctx.GetOption('WithHermes', $false))
     }
 
     hidden [bool] IsNixRebuildApplied([SetupContext]$ctx) {

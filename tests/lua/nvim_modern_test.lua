@@ -1,5 +1,5 @@
 -- Run with: nvim --headless -u NONE -l tests/lua/nvim_modern_test.lua
-local root = vim.fn.getcwd() .. "/nix/modules/nvim"
+local root = vim.fn.getcwd() .. "/nix/modules/editors/nvim"
 vim.opt.rtp:prepend(root)
 
 local completion = require("config.completion")

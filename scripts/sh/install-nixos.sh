@@ -10,7 +10,6 @@ export DOTFILES_LOG_PREFIX="nixos-install"
 . "$ROOT/scripts/sh/codex-npm.sh"
 
 NIXOS_MARKER="${DOTFILES_NIXOS_MARKER:-/etc/NIXOS}"
-DOTFILES_WITH_HERMES="${DOTFILES_WITH_HERMES:-0}"
 VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
 NIXOS_HARDWARE_CONFIG="${DOTFILES_NIXOS_HARDWARE_CONFIG:-/etc/nixos/hardware-configuration.nix}"
 NIXOS_PREBUILT_SYSTEM="${DOTFILES_NIXOS_PREBUILT_SYSTEM:-}"
@@ -81,7 +80,6 @@ apply_nixos_system() {
     "DOTFILES_GID=$DOTFILES_GID" \
     "DOTFILES_GROUP=$DOTFILES_GROUP" \
     "DOTFILES_SYSTEM=$DOTFILES_SYSTEM" \
-    "DOTFILES_WITH_HERMES=${DOTFILES_WITH_HERMES:-0}" \
     "DOTFILES_NIXOS_HARDWARE_CONFIG=$NIXOS_HARDWARE_CONFIG" \
     "$rebuild_bin" switch --flake "$ROOT#linux" --impure
 
@@ -98,7 +96,6 @@ apply_chezmoi() {
 main() {
   preflight
   dotfiles_link_checkout "$ROOT"
-  dotfiles_install_herdr
   dotfiles_update_flake "$ROOT"
   capture_host_identity
   apply_nixos_system

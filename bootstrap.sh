@@ -3,9 +3,9 @@
 #
 # Auto-detected and executed by devcontainer-cli when this repository
 # is supplied as `--dotfiles-repository`. Sets up the minimum needed
-# for the "host terminal → container tmux+nvim" workflow:
+# for the "host Herdr pane → container nvim" workflow:
 #
-#   1. tmux + git + curl + tar + npm via apt (Debian/Ubuntu base only).
+#   1. git + curl + tar + npm via apt (Debian/Ubuntu base only).
 #   2. Modern Neovim release into ~/.local/nvim with bin symlink.
 #   3. Codex CLI into ~/.local/npm.
 #   4. chezmoi binary install + `chezmoi init --apply --source $ROOT/chezmoi`
@@ -44,7 +44,6 @@ fi
 # ── apt packages (Debian/Ubuntu base only; best effort otherwise) ───────
 if [ "$can_install" -eq 1 ] && have apt-get; then
   need=()
-  have tmux || need+=("tmux")
   have curl || need+=("curl")
   have git || need+=("git")
   have tar || need+=("tar")
@@ -57,7 +56,7 @@ if [ "$can_install" -eq 1 ] && have apt-get; then
       apt-get install -y -qq --no-install-recommends "${need[@]}"
   fi
 elif ! have apt-get; then
-  log "apt-get not found — package install skipped (install tmux/curl/git manually)"
+  log "apt-get not found — package install skipped (install curl/git manually)"
 fi
 
 # ── Codex CLI ──────────────────────────────────────────────────────────

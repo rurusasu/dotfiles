@@ -8,14 +8,13 @@ let
     inherit pkgs;
     extraSpecialArgs = {
       inherit inputs;
-      installFeatures = [ ];
     };
     modules = [
       {
         home.username = "test-user";
         home.homeDirectory = "/home/test-user";
       }
-      ../../../home/wsl.nix
+      ../../../hosts/x86_64-linux/wsl/home.nix
     ];
   };
 in

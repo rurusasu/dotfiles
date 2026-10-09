@@ -50,6 +50,8 @@ nvim-lspconfig 自体や `on_attach` が廃止されたという結論にはし�
 
 Catppuccin、Oil、Gitsigns、Modes、which-key、autopairs、surround、indent-blankline、better-escape、tmux navigator、devcontainer-cli/ToggleTerm、Incline/devicons、Snacks、Sidekick は、標準 LSP/completion の導入だけでは同等に代替されません。既存の表示・navigation・container/AI workflow を維持します。残すことは全機能・全OSで無欠陥という意味ではありません。
 
+後続変更（2026-10-08）：Herdr へ運用を切り替え、tmux navigator と `dcnvim` コマンドを削除しました。Neovim 内のウィンドウ移動は標準キーマップを使用します。
+
 `vim.pack` への全面変更は lazy.nvim の event/keys/dependency/UI 管理まで別の移行になるため採用しません。blink.cmp も有力ですが、今回の標準 API 優先方針では新しい補完エンジン依存を追加しません。[Neovim Lua API](https://neovim.io/doc/user/lua/)、[blink.cmp](https://github.com/saghen/blink.cmp)
 
 Windows の Oil / float workaround、個人用 nixd option expression は維持し、その前提を運用文書に記載します。PDF の完全非同期化や全言語の formatting provider 統一は追加の UX 設計が必要です。

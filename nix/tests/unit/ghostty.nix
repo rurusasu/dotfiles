@@ -37,9 +37,9 @@ let
         ++ [
           (
             if pkgs.stdenv.hostPlatform.isDarwin then
-              ../../modules/darwin/ghostty.nix
+              ../../hosts/aarch64-darwin/ghostty.nix
             else
-              ../../modules/nixos/ghostty.nix
+              ../../hosts/shared/linux-ghostty.nix
           )
         ];
       };

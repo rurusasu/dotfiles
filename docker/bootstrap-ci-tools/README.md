@@ -1,6 +1,6 @@
 # Bootstrap CI tools image
 
-`ci-bootstrap.yml` の `nix`、`linux-build`、
+`ci-nix.yml` の `nix`、`linux-build`、
 `wsl-prebuild` は、このイメージで検査・ビルドを実行します。
 `bash-test` もこのイメージで Bash テストを一度だけ実行します。
 Nix、Bash、Bats、chezmoi、go-task、Git / Git LFS、Python 3.14、Ruby、Node.js 24、PowerShell、
@@ -9,7 +9,7 @@ PSScriptAnalyzer 1.22.0、statix、jq、tar、xz を事前導入します。
 
 ## 更新と再利用
 
-`ci-bootstrap.yml` 内の `ci-tools` ジョブが Dockerfile、`nix.conf`、`check.sh`、`profile.sh` の
+`ci-nix.yml` 内の `ci-tools` ジョブが Dockerfile、`nix.conf`、`check.sh`、`profile.sh` の
 内容ハッシュをタグにして GHCR の既存イメージを探します。
 存在しない場合だけビルド・実行検証・公開を行い、利用側へ digest を返します。
 通常の dotfiles 変更や `flake.lock` 更新ではツールイメージを再ビルドしません。

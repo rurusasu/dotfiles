@@ -21,13 +21,21 @@ while (($# > 0)); do
 done
 
 platform="${DOTFILES_VERIFY_PLATFORM:-}"
-system_layer="${DOTFILES_VERIFY_SYSTEM_LAYER:-system-manager}"
+system_layer="${DOTFILES_VERIFY_SYSTEM_LAYER:-}"
 if [[ -z $platform ]]; then
   case "$(uname -s)" in
   Darwin) platform="darwin" ;;
   Linux) platform="linux" ;;
   *) fail "unsupported platform: $(uname -s)" ;;
   esac
+fi
+
+if [[ -z $system_layer && $platform == "linux" ]]; then
+  if [[ -e ${DOTFILES_NIXOS_MARKER:-/etc/NIXOS} ]]; then
+    system_layer=nixos
+  else
+    system_layer=home-manager
+  fi
 fi
 
 required=(
@@ -48,9 +56,13 @@ required=(
 case "$platform" in
 darwin) required+=(brew darwin-rebuild) ;;
 linux)
-  required+=(systemctl)
-  ((nix_only == 1)) || required+=(docker)
-  [[ $system_layer == "nixos" ]] && required+=(nixos-rebuild)
+  if [[ $system_layer == "nixos" ]]; then
+    required+=(systemctl nixos-rebuild)
+    ((nix_only == 1)) || required+=(docker)
+  elif [[ $system_layer != "home-manager" ]]; then
+    fail "unsupported Linux system layer: $system_layer"
+  fi
+  if ((nix_only == 1)); then required+=(systemctl); fi
   ;;
 *) fail "unsupported verification platform: $platform" ;;
 esac
@@ -69,7 +81,7 @@ if ! chezmoi verify --exclude=scripts >/dev/null; then
   fail "chezmoi target state differs"
 fi
 
-if { [[ $platform == "linux" ]] && ((nix_only == 0)); } || ((runtime == 1)); then
+if { [[ $platform == "linux" && $system_layer == "nixos" ]] && ((nix_only == 0)); } || ((runtime == 1)); then
   [[ -f $COMPOSE_FILE ]] || fail "missing Compose file: $COMPOSE_FILE"
   docker compose version >/dev/null || fail "Docker Compose is unavailable"
   docker info >/dev/null || fail "Docker engine is unavailable"
@@ -77,22 +89,20 @@ fi
 
 if [[ $platform == "linux" ]]; then
   case "$system_layer" in
-  system-manager)
-    systemctl is-active --quiet system-manager.target || fail "System Manager target is inactive"
-    ;;
+  home-manager) ;;
   nixos)
     current_system="${DOTFILES_CURRENT_SYSTEM_PATH:-/run/current-system}"
     [[ -e $current_system ]] || fail "NixOS current generation is missing: $current_system"
     ;;
   *) fail "unsupported Linux system layer: $system_layer" ;;
   esac
-  if ((nix_only == 0)); then
+  if [[ $system_layer == "nixos" ]] && ((nix_only == 0)); then
     systemctl is-active --quiet docker.service || fail "Docker service is inactive"
     systemctl is-active --quiet docker.socket || fail "Docker socket is inactive"
   fi
 fi
 
-if ((nix_only == 1)) && [[ $platform == "linux" && ${DOTFILES_WITH_HERMES:-0} == "1" ]]; then
+if ((nix_only == 1)) && [[ $platform == "linux" ]]; then
   command -v hermes >/dev/null 2>&1 || fail "missing native Hermes CLI: hermes"
   systemctl --user is-active --quiet hermes-agent.service ||
     fail "native Hermes user service is inactive: hermes-agent.service"

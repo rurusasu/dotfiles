@@ -1,0 +1,932 @@
+name: Bootstrap CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: bootstrap-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TESTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+  DOTFILES_SKIP_FLAKE_UPDATE: "1"
+
+jobs:
+  changes:
+    name: Bootstrap / Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect changed bootstrap targets
+        id: detect
+        uses: ./.github/actions/detect-ci-changes
+        with:
+          base-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
+          head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          run-all: ${{ github.event_name == 'workflow_dispatch' }}
+
+    outputs:
+      nix: ${{ steps.detect.outputs.nix }}
+      chezmoi: ${{ steps.detect.outputs.chezmoi }}
+      other: ${{ steps.detect.outputs.other }}
+
+  ci-tools:
+    needs: changes
+    if: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
+    name: Bootstrap / Tools image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Authenticate to the repository image registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Select image for the tool definition
+        id: select
+        env:
+          DEFINITION_HASH: ${{ hashFiles('docker/bootstrap-ci-tools/Dockerfile', 'docker/bootstrap-ci-tools/nix.conf', 'docker/bootstrap-ci-tools/check.sh', 'docker/bootstrap-ci-tools/profile.sh') }}
+          CAN_PUBLISH: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$DEFINITION_HASH" =~ ^[0-9a-f]{64}$ ]]
+          image="ghcr.io/${GITHUB_REPOSITORY,,}/bootstrap-ci-tools:${DEFINITION_HASH}"
+          echo "tag=$image" >> "$GITHUB_OUTPUT"
+          if docker buildx imagetools inspect "$image"; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$CAN_PUBLISH" == "true" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::This tool definition has no published image. A maintainer must build it on a repository branch before a fork can use it."
+            exit 1
+          fi
+
+      - name: Build the tools image
+        if: ${{ steps.select.outputs.build == 'true' }}
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: docker/bootstrap-ci-tools
+          platforms: linux/amd64
+          load: true
+          tags: ${{ steps.select.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ env.TESTED_SHA }}
+          cache-from: type=gha,scope=bootstrap-ci-tools
+          cache-to: type=gha,scope=bootstrap-ci-tools,mode=max
+
+      - name: Verify runtime tools and Nix sandbox before publishing
+        if: ${{ steps.select.outputs.build == 'true' }}
+        env:
+          IMAGE: ${{ steps.select.outputs.tag }}
+        run: |
+          docker run --rm --privileged "$IMAGE" \
+            bash /usr/local/libexec/check-bootstrap-ci-tools.sh --sandbox
+
+      - name: Publish the verified image
+        if: ${{ steps.select.outputs.build == 'true' }}
+        env:
+          IMAGE: ${{ steps.select.outputs.tag }}
+        run: docker push "$IMAGE"
+
+      - name: Resolve immutable image reference
+        id: resolve
+        env:
+          IMAGE: ${{ steps.select.outputs.tag }}
+        run: |
+          set -euo pipefail
+          digest=$(docker buildx imagetools inspect "$IMAGE" --format '{{.Manifest.Digest}}')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "image=${IMAGE%:*}@$digest" >> "$GITHUB_OUTPUT"
+
+  bash-test:
+    name: Bootstrap / Bash tests
+    needs: [changes, ci-tools]
+    if: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.ci-tools.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Configure Nix authentication
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/sh/configure-bootstrap-ci-nix.sh
+
+      - name: Run Bash tests
+        run: bash scripts/sh/run-bash-tests.sh
+
+  hermes-bootstrap-tests:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.other == 'true')) }}
+    name: Hermes Bootstrap Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run native Hermes bootstrap tests
+        run: nix build .#checks.x86_64-linux.hermes-bootstrap-tests --no-link --print-build-logs
+
+      - name: Run X API image contract
+        run: python3 -m unittest tests/python/test_xapi_image_contract.py -v
+
+      - name: Run Hermes browser runtime contracts
+        run: docker/hermes-browser/tests/test_runtime_contract.sh
+
+  nix:
+    name: Bootstrap / Nix / Lint and format
+    needs: [changes, ci-tools]
+    if: ${{ needs.changes.outputs.nix == 'true' }}
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.ci-tools.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Configure Nix authentication
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/sh/configure-bootstrap-ci-nix.sh
+
+      - name: Run statix
+        timeout-minutes: 15
+        run: statix check .
+
+      - name: Check source formatting
+        timeout-minutes: 10
+        run: |
+          if ! nix fmt -- --fail-on-change; then
+            git diff -- .
+            exit 1
+          fi
+
+  linux-build:
+    name: Bootstrap / Linux / Build
+    needs: [changes, ci-tools]
+    if: ${{ needs.changes.outputs.nix == 'true' }}
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.ci-tools.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Configure Nix authentication
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/sh/configure-bootstrap-ci-nix.sh
+
+      - name: Build Linux configurations and checks
+        run: |
+          # Home Manager uses the image's existing non-root account.
+          IFS=: read -r DOTFILES_USER _ _ _ _ DOTFILES_HOME _ < <(getent passwd node)
+          export DOTFILES_USER DOTFILES_HOME
+          export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"
+          nix build --impure --no-link --print-build-logs \
+            .#nixosConfigurations.linux.config.system.build.toplevel \
+            .#homeConfigurations.x86_64-linux.activationPackage \
+            .#checks.x86_64-linux.powershell-formatter \
+            .#checks.x86_64-linux.ghostty-config \
+            .#checks.x86_64-linux.neovim-native
+
+  linux-nixos:
+    name: Bootstrap / Linux / E2E / NixOS
+    needs: changes
+    if: ${{ needs.changes.outputs.nix == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run idempotent NixOS VM test
+        run: nix build .#checks.x86_64-linux.bootstrap-nixos-vm --no-link --print-build-logs
+
+      - name: Write NixOS attestation
+        if: always()
+        run: printf 'sha=%s\ncheck=bootstrap-nixos-vm\n' "$TESTED_SHA" > nixos-attestation.txt
+
+      - name: Upload NixOS attestation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: bootstrap-linux-nixos-${{ github.run_id }}-${{ github.run_attempt }}
+          path: nixos-attestation.txt
+
+  darwin:
+    name: Bootstrap / Darwin
+    needs: changes
+    if: ${{ needs.changes.outputs.nix == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 360
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      NUMTIDE_CACHE: https://cache.numtide.com
+      NUMTIDE_CACHE_KEY: niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build macOS packages, configuration, and tests
+        run: |
+          nix build --impure --no-link --print-build-logs \
+            --option extra-substituters "$NUMTIDE_CACHE" \
+            --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY" \
+            .#darwinConfigurations.macos.system \
+            .#package-support-report \
+            .#checks.aarch64-darwin.powershell-formatter \
+            .#checks.aarch64-darwin.nix-unit \
+            .#checks.aarch64-darwin.hermes-bootstrap-tests \
+            .#checks.aarch64-darwin.custom-package-builds \
+            .#checks.aarch64-darwin.aerospace-workspace-cycle \
+            .#checks.aarch64-darwin.ghostty-config \
+            .#checks.aarch64-darwin.neovim-native \
+            .#checks.aarch64-darwin.standalone-darwin-home
+
+      - name: Verify native Darwin application artifacts
+        run: |
+          nix shell --inputs-from . --no-write-lock-file nixpkgs#bats --command bash -euo pipefail <<'BATS'
+            for tool in nix codesign plutil spctl; do
+              command -v "$tool" >/dev/null || { echo "Required Darwin artifact tool is missing: $tool" >&2; exit 1; }
+            done
+            filter='^Darwin (Raycast artifact|Discord keeps)'
+            suite=tests/bash/package_catalog.bats
+            [[ "$(bats --count --filter "$filter" "$suite")" -eq 2 ]]
+            bats --print-output-on-failure --filter "$filter" "$suite"
+          BATS
+
+      - name: Build official Hermes runtime
+        if: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.other == 'true' }}
+        run: |
+          nix build --no-link --no-write-lock-file --print-build-logs \
+            --option extra-substituters "$NUMTIDE_CACHE" \
+            --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY" \
+            .#checks.aarch64-darwin.hermes-runtime
+
+  wsl-prebuild:
+    name: Bootstrap / WSL / Prebuild
+    needs: [changes, ci-tools]
+    if: ${{ needs.changes.outputs.nix == 'true' }}
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.ci-tools.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Configure Nix authentication
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/sh/configure-bootstrap-ci-nix.sh
+
+      - name: Build the WSL system closure and export a local cache
+        id: wsl-cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache_dir="$RUNNER_TEMP/wsl-nix-cache"
+          artifact_dir="$RUNNER_TEMP/wsl-nix-cache-artifact"
+          mkdir -p "$cache_dir" "$artifact_dir"
+
+          system_path="$(nix build \
+            .#nixosConfigurations.nixos.config.system.build.toplevel \
+            --impure --no-link --print-out-paths)"
+          printf '%s\n' "$system_path" > "$artifact_dir/wsl-system-paths.txt"
+
+          # This same-run transport cache favors fast compression over archival size.
+          echo "::group::Export WSL Nix cache (zstd)"
+          nix --version
+          nix copy --to "file://$cache_dir?compression=zstd" "$system_path"
+          du -sh "$cache_dir"
+          echo "::endgroup::"
+          tar -cf "$artifact_dir/wsl-nix-cache.tar" -C "$cache_dir" .
+          printf 'artifact-dir=%s\n' "$artifact_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Upload WSL Nix store cache
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bootstrap-wsl-nix-cache-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.wsl-cache.outputs.artifact-dir }}
+          if-no-files-found: error
+          compression-level: 0
+
+  wsl:
+    name: Bootstrap / WSL
+    needs: [changes, wsl-prebuild]
+    if: ${{ needs.changes.outputs.nix == 'true' }}
+    runs-on: windows-2025
+    # The isolated WSL E2E runs two independent rebuilds with 120-minute caps, plus setup and verification.
+    timeout-minutes: 300
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Download prebuilt WSL Nix store cache
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: bootstrap-wsl-nix-cache-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/wsl-nix-cache-artifact
+
+      - name: Prepare WSL2
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+
+          $env:WSL_UTF8 = "1"
+          if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+            winget install --id Microsoft.WSL --exact --accept-source-agreements --accept-package-agreements --silent
+          }
+
+          wsl --version
+          wsl --set-default-version 2
+          wsl --status
+
+      - name: Run isolated NixOS-WSL switch
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WSLENV: GITHUB_TOKEN/u
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+
+          $refName = $env:HEAD_REF
+          if ([string]::IsNullOrWhiteSpace($refName)) {
+            $refName = $env:REF_NAME
+          }
+          $safeRef = $refName -replace "[^A-Za-z0-9_.-]", "-"
+          if ([string]::IsNullOrWhiteSpace($safeRef)) {
+            $safeRef = "ref"
+          }
+          if ($safeRef.Length -gt 48) {
+            $safeRef = $safeRef.Substring(0, 48).TrimEnd("-", ".", "_")
+          }
+          $sha256 = [System.Security.Cryptography.SHA256]::Create()
+          try {
+            $refHashBytes = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($refName))
+          }
+          finally {
+            $sha256.Dispose()
+          }
+          $refHash = (-join ($refHashBytes | ForEach-Object { $_.ToString("x2") })).Substring(0, 8)
+          $distroName = "NixOS-CI-$safeRef-$refHash"
+          $installDir = Join-Path $env:RUNNER_TEMP $distroName
+
+          pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
+            -File scripts/powershell/ci/Invoke-NixosWslE2E.ps1 `
+            -DistroName $distroName `
+            -InstallDir $installDir
+
+  windows:
+    name: Bootstrap / Windows (${{ matrix.runtime }})
+    needs: changes
+    if: ${{ needs.changes.outputs.chezmoi == 'true' }}
+    runs-on: windows-2025
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - runtime: Windows PowerShell 5.1
+            executable: powershell.exe
+          - runtime: PowerShell 7
+            executable: pwsh.exe
+    env:
+      WINDOWS_E2E_RUNTIME: ${{ matrix.runtime }}
+      WINDOWS_E2E_EXECUTABLE: ${{ matrix.executable }}
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install chezmoi
+        uses: ./.github/actions/install-chezmoi
+
+      - name: Install and verify admin-required Visual Studio Build Tools through the installer
+        shell: pwsh
+        timeout-minutes: 60
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+          $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+          if (-not $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
+            throw 'Hosted Windows runner is not elevated; refusing to skip admin-required WinGet package coverage'
+          }
+
+          $options = @{
+            SkipSetDefaultDistro = $true
+            SkipVhdExpand = $true
+            SkipWslInstall = $true
+          }
+          $optionsBase64 = [Convert]::ToBase64String(
+            [Text.Encoding]::UTF8.GetBytes(($options | ConvertTo-Json -Compress))
+          )
+          $adminScript = Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/install.admin.ps1'
+          $installerOutput = @(
+            & $env:WINDOWS_E2E_EXECUTABLE `
+              -NoLogo -NoProfile -ExecutionPolicy Bypass `
+              -File $adminScript `
+              '-AdminOnly:$true' `
+              -OptionsBase64 $optionsBase64 `
+              -NoPause 2>&1
+          )
+          $installerExitCode = $LASTEXITCODE
+          $installerOutput | ForEach-Object { Write-Host ([string]$_) }
+          if ($installerExitCode -ne 0) {
+            throw "Admin-only installer phase failed (exit=$installerExitCode)"
+          }
+
+          $installerText = $installerOutput -join [Environment]::NewLine
+          if ($installerText -notmatch '(?m)^\[WingetAdmin\]\s+インストール/更新中: AutoHotkey\.AutoHotkey\s*$') {
+            throw 'Admin-only installer did not attempt AutoHotkey.AutoHotkey'
+          }
+          if ($installerText -match '(?m)^\[WingetAdmin\].*✗.*AutoHotkey\.AutoHotkey') {
+            throw 'Admin-only installer reported an AutoHotkey package failure'
+          }
+          if ($installerText -notmatch '(?m)^\[WingetAdmin\]\s+インストール/更新中: Microsoft\.VisualStudio\.2022\.BuildTools\s*$') {
+            throw 'Admin-only installer did not attempt Microsoft.VisualStudio.2022.BuildTools'
+          }
+          if ($installerText -match '(?m)^\[WingetAdmin\].*✗.*Microsoft\.VisualStudio\.2022\.BuildTools') {
+            throw 'Admin-only installer reported a Visual Studio Build Tools package failure'
+          }
+          if ($installerText -notmatch '(?m)^Total:\s*\d+\s*\|\s*Success:\s*\d+\s*\|\s*Failure:\s*0\s*$') {
+            throw 'Admin-only installer did not report a zero-failure setup summary'
+          }
+
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path -LiteralPath $vswhere -PathType Leaf)) {
+            throw "Visual Studio instance locator is missing: $vswhere"
+          }
+          $buildToolsPath = @(
+            & $vswhere -products Microsoft.VisualStudio.Product.BuildTools `
+              -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+              -property installationPath
+          ) | Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace([string]$buildToolsPath)) {
+            throw 'No Visual Studio Build Tools instance with the required x86/x64 C++ component was found'
+          }
+          $compiler = @(
+            Get-ChildItem -LiteralPath (Join-Path $buildToolsPath 'VC\Tools\MSVC') -Directory -ErrorAction Stop |
+              ForEach-Object {
+                Join-Path $_.FullName 'bin\Hostx64\x64\cl.exe'
+              } |
+              Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+              Select-Object -First 1
+          ) | Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace([string]$compiler)) {
+            throw "Visual Studio Build Tools compiler executable was not found under $buildToolsPath"
+          }
+          Write-Output "CI_ADMIN_PACKAGE_SUCCESS: id=Microsoft.VisualStudio.2022.BuildTools executable=$compiler"
+
+      - name: Verify admin-installed AutoHotkey v2
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $autoHotkey = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe"
+          if (-not (Test-Path -LiteralPath $autoHotkey -PathType Leaf)) {
+            throw "AutoHotkey v2 executable was not installed by the admin phase: $autoHotkey"
+          }
+          $uiAccess = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64_UIA.exe"
+          if (-not (Test-Path -LiteralPath $uiAccess -PathType Leaf)) {
+            throw "AutoHotkey v2 UIAccess executable was not installed by the admin phase: $uiAccess"
+          }
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'chezmoi\terminals\windows-terminal\terminal-keybindings.ahk'
+          $LASTEXITCODE = 0
+          & $uiAccess '/ErrorStdOut' $scriptPath '--check'
+          $syntaxExitCode = $LASTEXITCODE
+          if ($syntaxExitCode -ne 0) {
+            throw "AutoHotkey v2 UIAccess syntax validation failed (exit $syntaxExitCode)"
+          }
+          $LASTEXITCODE = 0
+          & $uiAccess '/ErrorStdOut' $scriptPath '--self-test'
+          $selfTestExitCode = $LASTEXITCODE
+          if ($selfTestExitCode -ne 0) {
+            throw "AutoHotkey v2 UIAccess behavioral self-tests failed (exit $selfTestExitCode)"
+          }
+
+      - name: Write Windows admin E2E attestation
+        if: always()
+        shell: pwsh
+        run: |
+          @(
+            "sha=$env:TESTED_SHA"
+            "runner_image=$env:ImageOS-$env:ImageVersion"
+            "layer=windows-bootstrap"
+            "runtime=${{ matrix.runtime }}"
+          ) | Set-Content -LiteralPath windows-admin-e2e-attestation.txt -Encoding utf8
+
+      - name: Upload Windows contract results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: bootstrap-windows-admin-${{ github.run_id }}-${{ github.run_attempt }}
+          path: windows-admin-e2e-attestation.txt
+          if-no-files-found: warn
+
+  windows-installer:
+    name: Bootstrap / Windows / Installer (${{ matrix.runtime }})
+    needs: changes
+    if: ${{ needs.changes.outputs.chezmoi == 'true' }}
+    runs-on: windows-2025
+    timeout-minutes: 210
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - runtime: Windows PowerShell 5.1
+            version: "5.1"
+          - runtime: PowerShell 7
+            version: "7"
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Bootstrap winget
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          # Ensure winget is available on the runner
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host "winget not found — installing Microsoft.WinGet.Client..."
+            $ErrorActionPreference = 'Continue'
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue
+            $ErrorActionPreference = 'Stop'
+            Install-Module -Name Microsoft.WinGet.Client -RequiredVersion '1.29.280' -Scope CurrentUser -Force -Repository PSGallery
+            Repair-WinGetPackageManager
+          }
+          function Invoke-WingetSourceUpdate {
+            param([int]$Attempts = 3)
+
+            for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+              Write-Host "winget source update attempt $attempt/$Attempts"
+              $ErrorActionPreference = 'Continue'
+              $sourceOutput = winget source update 2>&1 | ForEach-Object {
+                $line = [string]$_
+                Write-Host $line
+                $line
+              }
+              $sourceUpdateExit = $LASTEXITCODE
+              $ErrorActionPreference = 'Stop'
+
+              $sourceText = $sourceOutput -join [Environment]::NewLine
+              if ($sourceUpdateExit -eq 0 -and $sourceText -notmatch '(?im)\bCancelled\b') {
+                return
+              }
+
+              Write-Warning "winget source update did not complete cleanly (exit=$sourceUpdateExit). Retrying after source reset."
+              $ErrorActionPreference = 'Continue'
+              winget source reset --force
+              $ErrorActionPreference = 'Stop'
+              Start-Sleep -Seconds 5
+            }
+
+            throw "winget source update did not complete after $Attempts attempts"
+          }
+
+          # Validate winget sources before proceeding. A textual "Cancelled"
+          # with exit 0 still leaves later winget install calls unable to resolve
+          # packages, so detect it explicitly.
+          Invoke-WingetSourceUpdate
+          $wingetVersion = @(winget --version 2>&1)
+          $wingetVersionExitCode = $LASTEXITCODE
+          if ($wingetVersionExitCode -ne 0) {
+            throw "winget --version failed (exit=$wingetVersionExitCode): $($wingetVersion -join ' ')"
+          }
+          $wingetSources = @(winget source list 2>&1)
+          $wingetSourcesExitCode = $LASTEXITCODE
+          if ($wingetSourcesExitCode -ne 0) {
+            throw "winget source list failed (exit=$wingetSourcesExitCode): $($wingetSources -join ' ')"
+          }
+
+      - name: Run install.cmd strict user phase
+        shell: cmd
+        timeout-minutes: 180
+        env:
+          DOTFILES_INSTALL_TIMEOUT_SECONDS: "3600"
+          DOTFILES_E2E_POWERSHELL_VERSION: ${{ matrix.version }}
+        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts\powershell\ci\Invoke-WindowsInstallerE2E.ps1
+
+      - name: Collect Windows installer diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          $diagnostics = Join-Path $env:RUNNER_TEMP 'windows-installer-diagnostics'
+          New-Item -ItemType Directory -Path $diagnostics -Force | Out-Null
+          $wingetLogs = Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir'
+          if (Test-Path -LiteralPath $wingetLogs) {
+            Copy-Item -Path (Join-Path $wingetLogs '*.log') -Destination $diagnostics -ErrorAction Continue
+          }
+          Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP 'windows-installer-*.log') -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $diagnostics
+          "tested_sha=$env:TESTED_SHA`nruntime=${{ matrix.version }}" |
+            Set-Content -LiteralPath (Join-Path $diagnostics 'attestation.txt')
+
+      - name: Upload Windows installer diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-installer-${{ matrix.version }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-installer-diagnostics
+          retention-days: 7
+          if-no-files-found: error
+
+  complete:
+    name: Bootstrap / Complete
+    if: ${{ always() }}
+    needs:
+      [
+        changes,
+        ci-tools,
+        bash-test,
+        hermes-bootstrap-tests,
+        wsl-prebuild,
+        nix,
+        linux-build,
+        linux-nixos,
+        darwin,
+        wsl,
+        windows,
+        windows-installer,
+      ]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      CHANGES_RESULT: ${{ needs.changes.result }}
+      TOOLS_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
+      TOOLS_RESULT: ${{ needs.ci-tools.result }}
+      BASH_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
+      BASH_RESULT: ${{ needs.bash-test.result }}
+      HERMES_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.other == 'true' }}
+      HERMES_RESULT: ${{ needs.hermes-bootstrap-tests.result }}
+      PLATFORM_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
+      LINUX_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
+      LINUX_BUILD_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
+      DARWIN_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
+      WSL_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
+      WINDOWS_REQUIRED: ${{ needs.changes.outputs.chezmoi == 'true' }}
+      NIX_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
+      LINUX_BUILD_RESULT: ${{ needs.linux-build.result }}
+      LINUX_NIXOS_RESULT: ${{ needs.linux-nixos.result }}
+      DARWIN_RESULT: ${{ needs.darwin.result }}
+      WSL_RESULT: ${{ needs.wsl.result }}
+      WSL_PREBUILD_RESULT: ${{ needs.wsl-prebuild.result }}
+      WINDOWS_RESULT: ${{ needs.windows.result }}
+      NIX_RESULT: ${{ needs.nix.result }}
+      WINDOWS_INSTALLER_RESULT: ${{ needs.windows-installer.result }}
+    steps:
+      - name: Verify routed job results
+        run: |
+          set -euo pipefail
+
+          if [[ "${CHANGES_RESULT}" != "success" ]]; then
+            echo "CI change detection did not complete successfully: ${CHANGES_RESULT}"
+            exit 1
+          fi
+
+          if [[ "${PLATFORM_REQUIRED}" != "true" ]]; then
+            echo "No bootstrap runtime changes; verifying that platform jobs were skipped."
+          fi
+
+          check_required_job() {
+            local name="$1"
+            local required="$2"
+            local result="$3"
+
+            if [[ "${required}" == "true" && "${result}" != "success" ]]; then
+              echo "Required Bootstrap job ${name} did not succeed: ${result}"
+              return 1
+            fi
+            if [[ "${required}" != "true" && "${result}" != "skipped" ]]; then
+              echo "Unselected Bootstrap job ${name} ran unexpectedly: ${result}"
+              return 1
+            fi
+          }
+
+          check_required_job "Tools image" "${TOOLS_REQUIRED}" "${TOOLS_RESULT}"
+          check_required_job "Bash tests" "${BASH_REQUIRED}" "${BASH_RESULT}"
+          check_required_job "Hermes bootstrap tests" "${HERMES_REQUIRED}" "${HERMES_RESULT}"
+          check_required_job "Nix" "${NIX_REQUIRED}" "${NIX_RESULT}"
+          check_required_job "Windows / Installer" "${WINDOWS_REQUIRED}" "${WINDOWS_INSTALLER_RESULT}"
+          check_required_job "WSL / Prebuild" "${WSL_REQUIRED}" "${WSL_PREBUILD_RESULT}"
+
+          check_required_job "Linux / Build" "${LINUX_BUILD_REQUIRED}" "${LINUX_BUILD_RESULT}"
+          check_required_job "Linux / E2E / NixOS" "${LINUX_REQUIRED}" "${LINUX_NIXOS_RESULT}"
+          check_required_job "Darwin" "${DARWIN_REQUIRED}" "${DARWIN_RESULT}"
+          check_required_job "WSL" "${WSL_REQUIRED}" "${WSL_RESULT}"
+          check_required_job "Windows" "${WINDOWS_REQUIRED}" "${WINDOWS_RESULT}"
+
+          echo "All required bootstrap platform jobs completed successfully."
+
+  check:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Verify change detection
+        if: ${{ needs.changes.result != 'success' }}
+        shell: bash
+        run: exit 1
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+
+      - name: Build Nix configuration and runtime checks
+        run: |
+          nix build --no-link --no-write-lock-file --print-build-logs \
+            .#checks.x86_64-linux.nix-unit \
+            .#checks.x86_64-linux.custom-package-builds \
+            .#checks.x86_64-linux.aerospace-workspace-cycle \
+            .#checks.x86_64-linux.windows-keybindings-generated
+
+      - name: Install and verify Codex npm package
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/codex-npm"
+          nix shell nixpkgs#nodejs --command bash -euo pipefail -c \
+            "npm install --global --prefix '$prefix' --no-audit --no-fund @openai/codex@latest && '$prefix/bin/codex' --version && npm list --global --prefix '$prefix' --depth=0 @openai/codex"
+
+      - name: Verify package provider coverage
+        run: |
+          nix build .#package-support-report --print-build-logs -o /tmp/package-support-report
+          jq -e 'length == 0' /tmp/package-support-report/errors.json
+
+      - name: Build winget-export from SSOT
+        run: nix build .#winget-export -o /tmp/winget-export
+
+      - name: Verify winget packages.json is in sync
+        shell: bash
+        run: |
+          normalize='
+            .Sources |= sort_by(.SourceDetails.Name)
+            | .Sources |= map(.Packages |= sort_by(.PackageIdentifier))
+          '
+          diff \
+            <(jq -S "$normalize" /tmp/winget-export/winget/packages.json) \
+            <(jq -S "$normalize" windows/winget/packages.json)
+
+      - name: Verify npm packages.json is in sync
+        shell: bash
+        run: diff <(jq -S . /tmp/winget-export/npm/packages.json) <(jq -S . windows/npm/packages.json)
+
+      - name: Verify pnpm packages.json is in sync
+        shell: bash
+        run: diff <(jq -S . /tmp/winget-export/pnpm/packages.json) <(jq -S . windows/pnpm/packages.json)
+
+      - name: Verify persisted pnpm build permissions
+        shell: bash
+        run: |
+          nix shell nixpkgs#nodejs --command bash -euo pipefail <<'PNPM_TEST'
+            prefix="$RUNNER_TEMP/pnpm-permissions"
+            npm install --global --prefix "$prefix" --no-audit --no-fund pnpm@12.6.0
+            PNPM_TEST_EXECUTABLE="$prefix/bin/pnpm" node tests/runtime/pnpm-build-permissions.mjs
+          PNPM_TEST

@@ -52,15 +52,8 @@ cd dotfiles
 初回に WSL がまだ準備できていない場合、installer は WSL 基盤の有効化後に再起動を要求します。
 再起動後、同じ `install.cmd` を再実行してください。
 
-引数なしでは core 環境だけを適用します。追加サービスは必要な場合だけ選択します。
-
-```powershell
-.\install.cmd -WithOllama
-.\install.cmd -WithDocker
-.\install.cmd -WithMLflow
-.\install.cmd -WithHindsight
-.\install.cmd -WithHermes
-```
+宣言済みパッケージ、Docker Desktop と native Hermes をまとめて適用します。
+機能別の追加フラグは不要です。
 
 ### 3. NixOS を起動する
 
@@ -160,7 +153,7 @@ Windows 側 checkout に戻す場合だけ使用します。通常の初回 setu
 上記の対応範囲の tag を使用してください。`install.ps1` はこの値をユーザーフェーズへ渡し、
 handler が GitHub の `/releases/tags/<tag>` から取得します。CI の
 `scripts/powershell/ci/Invoke-NixosWslE2E.ps1` も `-ReleaseTag` を受け取れますが、
-`.github/workflows/ci-bootstrap.yml` は指定せず latest を検証します。`InstallDir` は
+`.github/workflows/ci-nix.yml` は指定せず latest を検証します。`InstallDir` は
 新規インストール時に空のディレクトリである必要があります。`-ForcePostInstall` は既存 checkout
 を削除または上書きし得るため、通常は指定しないでください。必要な場合も、先に checkout と
 VHD/stateful data のバックアップを作成してください。
@@ -181,9 +174,9 @@ sudo bash /mnt/d/path/to/dotfiles/scripts/sh/nixos-wsl-postinstall.sh \
 `/mnt/d/path/to/dotfiles` は実際の checkout の WSL パスに置き換えてください。postinstall が
 使用する主な設定は次のとおりです。
 
-- `nix/hosts/wsl/default.nix`: NixOS-WSL host の entrypoint
-- `nix/hosts/wsl/configuration.nix`: WSL 固有の system 設定
-- `nix/home/wsl.nix`: WSL 固有の Home Manager 設定
+- `nix/hosts/x86_64-linux/wsl/default.nix`: NixOS-WSL host の entrypoint
+- `nix/hosts/x86_64-linux/wsl/configuration.nix`: WSL 固有の system 設定
+- `nix/hosts/x86_64-linux/wsl/home.nix`: WSL 固有の Home Manager 設定
 - `/etc/nixos/hardware-configuration.nix`: native NixOS 用。NixOS-WSL では通常不要
 
 ## system version と `system.stateVersion`
@@ -201,7 +194,7 @@ nix flake update --flake ~/.dotfiles
 ~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh switch --flake ~/.dotfiles#nixos --impure
 ```
 
-一方、`nix/hosts/wsl/configuration.nix` の `system.stateVersion` は、パッケージの最新版を選択する値では
+一方、`nix/hosts/x86_64-linux/wsl/configuration.nix` の `system.stateVersion` は、パッケージの最新版を選択する値では
 ありません。新規 WSL インストールの既定値と、明示的に承認した移行先は現行 stable の NixOS 26.05 です。
 既存環境は、元の state schema を維持するため 25.05 を既定にします。
 

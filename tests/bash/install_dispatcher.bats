@@ -24,7 +24,7 @@ EOF
 write_dispatch_repo() {
 	mkdir -p "$BATS_TEST_TMPDIR/repo/scripts/sh"
 	cp "$REPO_ROOT/install.sh" "$BATS_TEST_TMPDIR/repo/install.sh"
-	for installer in install-macos.sh install-nixos.sh install-linux.sh install-home-manager.sh; do
+	for installer in install-macos.sh install-nixos.sh install-home-manager.sh; do
 		cat >"$BATS_TEST_TMPDIR/repo/scripts/sh/$installer" <<'EOF'
 #!/usr/bin/env bash
 printf 'target=%s args=%s\n' "${0##*/}" "$*" >"$DISPATCH_LOG"
@@ -58,13 +58,13 @@ EOF
 	grep -q '^target=install-nixos.sh args=--example$' "$DISPATCH_LOG"
 }
 
-@test "Ubuntu and Debian dispatch to the System Manager installer" {
+@test "non-NixOS Linux dispatches to Home Manager with arguments intact" {
 	write_uname_stub
 	write_dispatch_repo
 	export TEST_UNAME_S=Linux TEST_UNAME_M=x86_64
 	export DOTFILES_NIXOS_MARKER="$BATS_TEST_TMPDIR/not-nixos"
 
-	for distribution in ubuntu debian; do
+	for distribution in ubuntu debian fedora; do
 		release_file="$BATS_TEST_TMPDIR/$distribution-os-release"
 		printf 'ID=%s\n' "$distribution" >"$release_file"
 		export DOTFILES_OS_RELEASE_FILE="$release_file"
@@ -72,39 +72,8 @@ EOF
 		run "$BATS_TEST_TMPDIR/repo/install.sh" --example
 
 		[ "$status" -eq 0 ]
-		grep -q '^target=install-linux.sh args=--example$' "$DISPATCH_LOG"
+		grep -q '^target=install-home-manager.sh args=--example$' "$DISPATCH_LOG"
 	done
-}
-
-@test "unsupported Linux requires explicit user-only opt-in" {
-	write_uname_stub
-	write_dispatch_repo
-	release_file="$BATS_TEST_TMPDIR/fedora-os-release"
-	printf 'ID=fedora\n' >"$release_file"
-	export TEST_UNAME_S=Linux TEST_UNAME_M=x86_64
-	export DOTFILES_NIXOS_MARKER="$BATS_TEST_TMPDIR/not-nixos"
-	export DOTFILES_OS_RELEASE_FILE="$release_file"
-
-	run "$BATS_TEST_TMPDIR/repo/install.sh"
-
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"DOTFILES_ALLOW_USER_ONLY=1"* ]]
-}
-
-@test "unsupported Linux opt-in dispatches to Home Manager only" {
-	write_uname_stub
-	write_dispatch_repo
-	release_file="$BATS_TEST_TMPDIR/fedora-os-release"
-	printf 'ID=fedora\n' >"$release_file"
-	export TEST_UNAME_S=Linux TEST_UNAME_M=x86_64
-	export DOTFILES_NIXOS_MARKER="$BATS_TEST_TMPDIR/not-nixos"
-	export DOTFILES_OS_RELEASE_FILE="$release_file"
-	export DOTFILES_ALLOW_USER_ONLY=1
-
-	run "$BATS_TEST_TMPDIR/repo/install.sh" --example
-
-	[ "$status" -eq 0 ]
-	grep -q '^target=install-home-manager.sh args=--example$' "$DISPATCH_LOG"
 }
 
 @test "Windows-like environments direct the user to install.cmd" {

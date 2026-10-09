@@ -11,7 +11,6 @@ Describe 'HermesAgentHandler Windows-to-NixOS-WSL routing' {
     BeforeEach {
         $script:handler = [HermesAgentHandler]::new()
         $script:ctx = [SetupContext]::new($TestDrive)
-        $script:ctx.Options['WithHermes'] = $true
         $script:wslCommandChecks = 0
         $script:wslListCalls = 0
         $script:dockerCalls = 0
@@ -37,22 +36,6 @@ Describe 'HermesAgentHandler Windows-to-NixOS-WSL routing' {
         $handler.Name | Should -Be 'HermesAgent'
         $handler.RequiresAdmin | Should -BeFalse
         $handler.Phase | Should -Be 2
-    }
-
-    It 'is disabled unless WithHermes is enabled' {
-        $ctx.Options.Remove('WithHermes')
-
-        $handler.CanApply($ctx) | Should -BeFalse
-        $script:wslCommandChecks | Should -Be 0
-    }
-
-    It 'honors SkipHermesAgent without inspecting WSL or Docker' {
-        $ctx.Options['SkipHermesAgent'] = $true
-
-        $handler.CanApply($ctx) | Should -BeFalse
-        $script:wslCommandChecks | Should -Be 0
-        $script:wslListCalls | Should -Be 0
-        $script:dockerCalls | Should -Be 0
     }
 
     It 'validates the Nix-managed service and CLI after a successful rebuild' {
@@ -90,7 +73,7 @@ Describe 'HermesAgentHandler Windows-to-NixOS-WSL routing' {
     }
 
     It 'fails with the WSL prerequisite and never invokes Docker when WSL is unavailable' {
-        { $handler.CanApply($ctx) } | Should -Throw '*WithHermes on Windows requires WSL and the* NixOS distribution*'
+        { $handler.CanApply($ctx) } | Should -Throw '*Hermes Agent on Windows requires WSL and the* NixOS distribution*'
         $script:wslListCalls | Should -Be 0
         $script:dockerCalls | Should -Be 0
     }
@@ -115,14 +98,14 @@ Describe 'HermesAgentHandler Windows-to-NixOS-WSL routing' {
             return @('WSL failed')
         } -ParameterFilter { $Arguments -contains '--list' -and $Arguments -contains '--quiet' }
 
-        { $handler.CanApply($ctx) } | Should -Throw '*Unable to inspect WSL distributions*refusing to start a Docker Hermes Agent*'
+        { $handler.CanApply($ctx) } | Should -Throw '*Unable to inspect WSL distributions*refusing to validate Hermes Agent*'
         $script:dockerCalls | Should -Be 0
     }
 
     It 'fails rather than falling back to Docker when the NixOS distro exists but rebuild did not complete' {
         Mock Get-Command { [PSCustomObject]@{ Name = 'wsl' } } -ParameterFilter { $Name -eq 'wsl' }
 
-        { $handler.CanApply($ctx) } | Should -Throw '*registered, but its Hermes Nix rebuild did not complete*Docker fallback is disabled*'
+        { $handler.CanApply($ctx) } | Should -Throw '*registered, but its Nix rebuild did not complete*Docker fallback is disabled*'
         $script:wslListCalls | Should -Be 1
         $script:dockerCalls | Should -Be 0
     }

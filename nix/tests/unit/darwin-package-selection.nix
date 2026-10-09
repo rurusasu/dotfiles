@@ -10,7 +10,6 @@ let
       gui = {
         pkg = pkgs.hello;
         category = "test";
-        installFeature = "WithGui";
         support.darwin = {
           provider = "nix";
           source = "nixpkgs";
@@ -52,13 +51,10 @@ let
     );
   };
   contains = package: packages: builtins.elem package packages;
-  defaultSystem = sets.darwinSystemPackagesForInstallFeatures [ ];
-  defaultHome = sets.darwinHomePackagesForInstallFeatures [ ];
-  enabledSystem = sets.darwinSystemPackagesForInstallFeatures [ "WithGui" ];
-  enabledHome = sets.darwinHomePackagesForInstallFeatures [ "WithGui" ];
+  defaultSystem = sets.darwinSystemPackages;
+  defaultHome = sets.darwinHomePackages;
   promotedDarwinGuiPackages = {
     diaBrowser = pkgs.callPackage ../../packages/dia-browser { };
-    orcaEditor = pkgs.callPackage ../../packages/orca-editor { };
   };
   containsDerivation =
     expected: packages: builtins.any (package: package.drvPath == expected.drvPath) packages;
@@ -72,21 +68,9 @@ in
         commandSystem = contains pkgs.cowsay defaultSystem;
         commandHome = contains pkgs.cowsay defaultHome;
       };
-      enabled = {
-        guiSystem = contains pkgs.hello enabledSystem;
-        guiHome = contains pkgs.hello enabledHome;
-        commandSystem = contains pkgs.cowsay enabledSystem;
-        commandHome = contains pkgs.cowsay enabledHome;
-      };
     };
     expected = {
       default = {
-        guiSystem = false;
-        guiHome = false;
-        commandSystem = false;
-        commandHome = true;
-      };
-      enabled = {
         guiSystem = true;
         guiHome = false;
         commandSystem = false;
@@ -97,15 +81,11 @@ in
 
   testDarwinGuiPromotionsSelectTheirCustomSystemDerivations = {
     expr = builtins.mapAttrs (_: package: {
-      system = containsDerivation package (catalogSets.darwinSystemPackagesForInstallFeatures [ ]);
-      home = containsDerivation package (catalogSets.darwinHomePackagesForInstallFeatures [ ]);
+      system = containsDerivation package catalogSets.darwinSystemPackages;
+      home = containsDerivation package catalogSets.darwinHomePackages;
     }) promotedDarwinGuiPackages;
     expected = {
       diaBrowser = {
-        system = true;
-        home = false;
-      };
-      orcaEditor = {
         system = true;
         home = false;
       };
@@ -113,31 +93,27 @@ in
   };
 
   testRaycastCatalogDerivationIsSelectedForDarwinSystem = {
-    expr = containsDerivation pkgs.raycast (catalogSets.darwinSystemPackagesForInstallFeatures [ ]);
+    expr = containsDerivation pkgs.raycast catalogSets.darwinSystemPackages;
     expected = true;
   };
 
   testDarwinCustomProviderFallbacksResolveVendorDerivations = {
     expr = map (package: package.drvPath) (
-      customFallbackSets.resolveForInstallFeatures
-        [ ]
-        [
-          "dia-browser"
-          "orca-editor"
-        ]
+      customFallbackSets.resolve [
+        "dia-browser"
+      ]
     );
     expected = [
       promotedDarwinGuiPackages.diaBrowser.drvPath
-      promotedDarwinGuiPackages.orcaEditor.drvPath
     ];
   };
 
   testDarwinTerminalGuiPackagesUseNativeWindowManagerAndTerminals = {
     expr = builtins.sort builtins.lessThan (
       map (package: package.pname) (
-        builtins.filter (package: containsDerivation package catalogSets.terminal) (
-          catalogSets.darwinSystemPackagesForInstallFeatures [ ]
-        )
+        builtins.filter (
+          package: containsDerivation package catalogSets.terminal
+        ) catalogSets.darwinSystemPackages
       )
     );
     expected = [

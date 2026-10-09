@@ -3,7 +3,7 @@
 - Nix 式、Home Manager / host の実効 option、package 選択、flake の配線を検証する。
 - 各ファイルは `test...` 属性を持つ属性セットを返し、各テストに `expr` と `expected` を定義する。
 - 入力が必要なら `{ inputs }:` を受け取り、pkgs は `../fixtures/packages.nix` を利用する。
-- `nix/flakes/tests.nix` の `perSystem.nix-unit.tests` に明示的に登録する。
+- `nix/tests/default.nix` の `perSystem.nix-unit.tests` に明示的に登録する。
 - helper だけのファイルをここに追加しない。共有入力・関数は `../fixtures/` に置く。
 - テスト用 derivation を比較対象にすることは可能だが、そのビルドや外部プロセスの成功を主張しない。
 - shell の挙動やサービス起動は `../build/`、Bats、実機 CI の責務。

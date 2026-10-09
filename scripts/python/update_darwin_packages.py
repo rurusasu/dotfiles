@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Update reviewed custom Darwin derivations and test nixpkgs candidates.
 
-The updater is intentionally conservative.  It only edits version, URL, and
-hash literals in a known derivation, and it never changes a provider mapping
+The updater is intentionally conservative. It only edits reviewed source
+definitions (including Orca's Linux assets), and never changes a provider mapping
 unless the candidate was evaluated and built successfully.
 """
 
@@ -26,7 +26,13 @@ ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_PATH = ROOT / "nix" / "packages" / "darwin-provider-candidates.nix"
 DERIVATIONS = {
     "dia-browser": ROOT / "nix" / "packages" / "dia-browser" / "default.nix",
-    "orca-editor": ROOT / "nix" / "packages" / "orca-editor" / "default.nix",
+    "orca-editor": ROOT / "nix" / "modules" / "editors" / "orca" / "package.nix",
+}
+ORCA_SOURCES = DERIVATIONS["orca-editor"].with_name("sources.json")
+ORCA_ASSETS = {
+    "aarch64-darwin": "orca-macos-arm64.dmg",
+    "x86_64-linux": "orca-linux.AppImage",
+    "aarch64-linux": "orca-linux-arm64.AppImage",
 }
 
 
@@ -49,6 +55,7 @@ class PromotionResult:
 class Release:
     version: str
     url: str
+    sources: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -236,21 +243,29 @@ def _dia_release(payload: bytes) -> Release | None:
 
 
 def _orca_release(payload: bytes) -> Release | None:
-    """Match the DMG unpacker and architecture of our custom derivation."""
+    """対応する全 OS の公式リリース URL を取得する.
+
+    Design Decisions:
+        macOS と Linux のバージョンを共有するため、全 asset が揃った場合だけ更新する。
+
+    Args:
+        payload: GitHub Releases API の JSON。
+
+    Returns:
+        全プラットフォームのリリース。対応 asset が不足していれば None。
+    """
     data = json.loads(payload.decode("utf-8"))
     version = str(data.get("tag_name", "")).lstrip("v")
     if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", version):
         return None
-    expected = (
-        f"https://github.com/stablyai/orca/releases/download/v{version}/"
-        "orca-macos-arm64.dmg"
-    )
-    if any(
-        asset.get("browser_download_url") == expected
-        for asset in data.get("assets", [])
-    ):
-        return Release(version, expected)
-    return None
+    sources = {
+        system: f"https://github.com/stablyai/orca/releases/download/v{version}/{asset}"
+        for system, asset in ORCA_ASSETS.items()
+    }
+    available = {asset.get("browser_download_url") for asset in data.get("assets", [])}
+    if not set(sources.values()).issubset(available):
+        return None
+    return Release(version, sources["aarch64-darwin"], tuple(sources.items()))
 
 
 PROFILES = {
@@ -263,7 +278,7 @@ PROFILES = {
     "orca-editor": PackageProfile(
         "orca-editor",
         "https://api.github.com/repos/stablyai/orca/releases/latest",
-        DERIVATIONS["orca-editor"],
+        ORCA_SOURCES,
         _orca_release,
     ),
 }
@@ -319,6 +334,10 @@ def prefetch_hash(url: str) -> str:
 
 
 def current_literals(path: Path) -> tuple[str, str, str]:
+    if path.suffix == ".json":
+        release = json.loads(path.read_text(encoding="utf-8"))
+        source = release["sources"]["aarch64-darwin"]
+        return release["version"], source["url"], source["hash"]
     text = path.read_text(encoding="utf-8")
     values = []
     for field in ("version", "url", "hash"):
@@ -331,8 +350,8 @@ def current_literals(path: Path) -> tuple[str, str, str]:
 
 def collect_updates(
     package_ids: list[str], *, fetcher: Callable[[str], bytes] = fetch
-) -> list[dict[str, str]]:
-    updates: list[dict[str, str]] = []
+) -> list[dict[str, Any]]:
+    updates: list[dict[str, Any]] = []
     for package_id in package_ids:
         profile = PROFILES[package_id]
         version, old_url, old_hash = current_literals(profile.derivation)
@@ -356,7 +375,15 @@ def collect_updates(
             continue
         print(f"Downloading {package_id} {release.version} to acquire its hash: {release.url}", file=sys.stderr, flush=True)
         try:
-            hash_value = prefetch_hash(release.url)
+            sources = {
+                system: {"url": url, "hash": prefetch_hash(url)}
+                for system, url in release.sources
+            }
+            hash_value = (
+                sources["aarch64-darwin"]["hash"]
+                if sources
+                else prefetch_hash(release.url)
+            )
         except (
             OSError,
             subprocess.CalledProcessError,
@@ -378,23 +405,30 @@ def collect_updates(
                 "previous_version": version,
                 "previous_url": old_url,
                 "previous_hash": old_hash,
+                **({"sources": sources} if sources else {}),
             }
         )
     return updates
 
 
-def apply_updates(updates: list[dict[str, str]]) -> None:
+def apply_updates(updates: list[dict[str, Any]]) -> None:
     for update in updates:
         if update.get("status") != "update-available":
             continue
-        path = DERIVATIONS[update["package"]]
+        path = PROFILES[update["package"]].derivation
         original = path.read_text(encoding="utf-8")
-        updated = update_derivation_literals(
-            original,
-            version=update["version"],
-            url=update["url"],
-            hash_value=update["hash"],
-        )
+        if path.suffix == ".json":
+            updated = json.dumps(
+                {"version": update["version"], "sources": update["sources"]},
+                indent=2,
+            ) + "\n"
+        else:
+            updated = update_derivation_literals(
+                original,
+                version=update["version"],
+                url=update["url"],
+                hash_value=update["hash"],
+            )
         if updated != original:
             path.write_text(updated, encoding="utf-8")
 
@@ -411,8 +445,8 @@ def main(argv: list[str] | None = None) -> int:
 
     package_ids = args.packages or list(PROFILES)
     registry = load_candidate_registry()
-    if set(registry) != set(PROFILES):
-        raise ValueError("candidate registry and updater profiles differ")
+    if set(registry) - set(PROFILES):
+        raise ValueError("candidate registry contains an unknown updater profile")
     updates = collect_updates(package_ids)
     if any(update.get("status") == "error" for update in updates):
         report = {"updates": updates, "promotions": []}
@@ -426,7 +460,7 @@ def main(argv: list[str] | None = None) -> int:
     promotion_results = (
         promote_candidates(
             registry,
-            package_ids,
+            [package_id for package_id in package_ids if package_id in registry],
             NixRunner(),
         )
         if args.promote

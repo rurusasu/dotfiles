@@ -8,7 +8,7 @@
 | ----------------------------------------------- | -------------------------------------------------------- |
 | `dot_config/git/hooks/`                         | Git hooks。直接配置                                      |
 | `dot_gitconfig.tmpl`、`dot_gitconfig-work.tmpl` | Git 設定テンプレート。直接配置                           |
-| `dot_agents/`、`dot_codex/`、`dot_gemini/`      | AI ツール設定。旧 `llms/` ではない                       |
+| `dot_agents/`、`dot_codex/`、`dot_claude/`      | AI ツール設定。旧 `llms/` ではない                       |
 | `shells/`                                       | bash / zsh / PowerShell / profile。deploy adapter が配置 |
 | `cli/`                                          | fd、ripgrep、starship、ghq、zoxide など                  |
 | `terminals/`                                    | WezTerm、Windows Terminal など                           |
@@ -22,7 +22,7 @@ Neovim は chezmoi の配布対象ではなく、Home Manager が管理します
 ## Neovim の内部構造
 
 ```text
-nix/modules/nvim/
+nix/modules/editors/nvim/
 ├── default.nix               # Home Manager の設定・Lua の配置
 ├── plugins.nix               # プラグインの導入・設定の呼び出し
 ├── init.lua                  # エディタの基本設定・補助機能の読み込み
@@ -31,7 +31,7 @@ nix/modules/nvim/
     └── plugins/              # プラグインごとの Lua 設定
 ```
 
-起動設定は `nix/modules/nvim/default.nix`、プラグインの導入と設定の呼び出しは `nix/modules/nvim/plugins.nix`、Lua 設定の本体は `nix/modules/nvim/lua/plugins/` にあります。Home Manager が `init.lua` を生成します。LSP サーバーの package/provider 定義は `nix/packages/catalog/lsp.nix`、`sets.nix` は公開入口です。運用・テストは [Neovim](./neovim.md) を参照してください。
+起動設定は `nix/modules/editors/nvim/default.nix`、プラグインの導入と設定の呼び出しは `nix/modules/editors/nvim/plugins.nix`、Lua 設定の本体は `nix/modules/editors/nvim/lua/plugins/` にあります。Home Manager が `init.lua` を生成します。LSP サーバーの package/provider 定義は `nix/packages/catalog/lsp.nix`、`sets.nix` は公開入口です。運用・テストは [Neovim](./neovim.md) を参照してください。
 
 ## ファイル命名規則
 

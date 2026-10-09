@@ -34,14 +34,12 @@
       url = "github:nix-community/nix-unit";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    system-manager = {
-      url = "github:numtide/system-manager";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # Use the upstream package set unchanged so its binary cache can be used.
+    llm-agents.url = "github:numtide/llm-agents.nix";
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -55,9 +53,23 @@
 
   outputs =
     { flake-parts, ... }@inputs:
+    let
+      hosts = import ./nix/hosts { inherit inputs; };
+    in
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
-        ./nix/flakes
+        inputs.nix-unit.modules.flake.default
+        inputs.treefmt-nix.flakeModule
+        ./nix/packages/outputs.nix
+        ./nix/tests
+        ./nix/formatter.nix
       ];
+
+      # Current nixpkgs supports Apple Silicon macOS, not x86_64-darwin.
+      systems = builtins.filter (system: system != "x86_64-darwin") (import inputs.systems);
+
+      perSystem = hosts.mkApps;
+
+      flake = import ./nix/hosts/configurations.nix { inherit inputs; };
     };
 }

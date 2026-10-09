@@ -12,7 +12,3 @@ setup() {
 
 	[ -z "$violations" ]
 }
-
-@test "Claude marketplace installers are absent" {
-	[ -z "$(find "$REPO_ROOT/chezmoi/.chezmoiscripts" -type f -iname '*claude*' -print)" ]
-}
