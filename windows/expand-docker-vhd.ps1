@@ -46,7 +46,7 @@ exit
         foreach ($line in $output) {
             $match = [regex]::Match(
                 [string]$line,
-                '(?i)(?:Virtual size|仮想サイズ)\s*[:：]\s*(\d+(?:\.\d+)?)\s*(TB|GB|MB)'
+                '(?i)(?:Virtual size|\u4eee\u60f3\u30b5\u30a4\u30ba)\s*[:\uFF1A]\s*(\d+(?:\.\d+)?)\s*(TB|GB|MB)'
             )
             if (-not $match.Success) {
                 continue

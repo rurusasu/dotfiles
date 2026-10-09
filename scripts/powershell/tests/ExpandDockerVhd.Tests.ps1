@@ -7,6 +7,18 @@
 }
 
 Describe 'Docker VHD virtual capacity detection' {
+    It 'should parse the optional Windows script with ANSI codepage <codepage>' -ForEach @(
+        @{ codepage = 1252 }
+        @{ codepage = 932 }
+    ) {
+        $reader = [IO.StreamReader]::new($script:target, [Text.Encoding]::GetEncoding($codepage), $true)
+        try { $source = $reader.ReadToEnd() }
+        finally { $reader.Dispose() }
+        $parseErrors = $null
+        [void][System.Management.Automation.Language.Parser]::ParseInput($source, [ref]$null, [ref]$parseErrors)
+        $parseErrors | Should -BeNullOrEmpty
+    }
+
     It 'should read virtual capacity from DiskPart in <unit>' -ForEach @(
         @{ text = 'Virtual size: 64 GB'; expected = 64; unit = 'GB' }
         @{ text = 'Virtual size: 1 TB'; expected = 1024; unit = 'TB' }
