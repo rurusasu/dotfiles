@@ -1,16 +1,13 @@
 {
   config,
   inputs,
+  lib,
   pkgs,
   ...
 }:
 let
-  configuredUser = builtins.getEnv "DOTFILES_USER";
-  configuredHome = builtins.getEnv "DOTFILES_HOME";
-  configuredGroup = builtins.getEnv "DOTFILES_GROUP";
-  user = if configuredUser == "" then "nixos" else configuredUser;
-  home = if configuredHome == "" then "/home/${user}" else configuredHome;
-  group = if configuredGroup == "" then "users" else configuredGroup;
+  identity = import ../../shared/nixos/identity.nix { inherit lib; };
+  inherit (identity) user home group;
 in
 {
   imports = [
@@ -19,7 +16,7 @@ in
     inputs.nixos-vscode-server.nixosModules.default
   ];
 
-  users.groups.${group} = { };
+  users.groups.${group} = lib.optionalAttrs (identity.gid != "") { gid = lib.toInt identity.gid; };
   users.users.${user} = {
     isNormalUser = true;
     inherit home group;
@@ -30,7 +27,8 @@ in
       "wheel"
       "docker"
     ];
-  };
+  }
+  // lib.optionalAttrs (identity.uid != "") { uid = lib.toInt identity.uid; };
 
   services.vscode-server = {
     enable = true;

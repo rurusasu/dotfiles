@@ -228,18 +228,14 @@ try {
         $context.DistroName = $DistroName
         $context.InstallDir = $installFullPath
         $context.Options["ReleaseTag"] = $ReleaseTag
-        $context.Options["PostInstallScript"] = Join-Path $repoRoot "scripts\sh\nixos-wsl-postinstall.sh"
         $context.Options["PostInstallTimeoutSeconds"] = $PostInstallTimeoutSeconds
         $context.Options["SyncMode"] = "repo"
         $context.Options["SyncBack"] = "none"
         $context.Options["StateVersion"] = "25.05"
         # Import CI's prebuilt system closures before executing the production
-        # post-install script so both switches consume the same verified Nix
-        # outputs instead of compiling them again inside the WSL runner.
+        # setup so unchanged dependencies can reuse the imported closures.
+        # Each production switch still updates its flake inputs.
         $context.Options["SkipPostInstallSetup"] = $true
-        # The CI checkout is already pinned to TESTED_SHA. Do not let the
-        # post-install flow perform an unrelated network flake update.
-        $context.Options["SkipFlakeUpdate"] = $true
 
         $handler = [NixOSWSLHandler]::new()
         $createdDistro = $true
@@ -295,7 +291,7 @@ try {
 
     Write-CiSection "Run production NixOS-WSL post-install switch"
     try {
-        $postInstallPath = [string]$context.Options["PostInstallScript"]
+        $postInstallPath = Join-Path $repoRoot "scripts\sh\configure-bootstrap-ci-nix.sh"
         $postInstallWslPathResult = Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "root", "--",
             "wslpath", "-a", $postInstallPath.Replace('\', '/')
@@ -304,7 +300,7 @@ try {
         if ([string]::IsNullOrWhiteSpace($postInstallWslPath)) {
             throw "Could not resolve WSL post-install script path: $postInstallPath"
         }
-        $ciNixConfigWslPath = $postInstallWslPath -replace '/[^/]+$', '/configure-bootstrap-ci-nix.sh'
+        $ciNixConfigWslPath = $postInstallWslPath
         foreach ($ciUser in @("root", "nixos")) {
             Invoke-WslChecked -Arguments @(
                 "-d", $DistroName, "-u", $ciUser, "--",
@@ -320,10 +316,8 @@ try {
             "bash", "-lc",
             "install -d -m 700 /home/nixos/.hermes/memories && printf '%s\\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' > /home/nixos/.hermes/.env && chmod 600 /home/nixos/.hermes/.env && printf '%s\\n' 'model:' '  default: openrouter/auto' > /home/nixos/.hermes/config.yaml && chmod 600 /home/nixos/.hermes/config.yaml && printf '%s\\n' 'preserve-existing-hermes-state' > /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt && chmod 600 /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
         ) -TimeoutSeconds 60 | Out-Null
-        Invoke-WslChecked -Arguments @(
-            "-d", $DistroName, "-u", "root", "--",
-            "bash", "-lc", "bash '$postInstallWslPath' --sync-mode repo --sync-back none --state-version 25.05 --skip-flake-update"
-        ) -TimeoutSeconds $PostInstallTimeoutSeconds | Out-Null
+        . (Join-Path $repoRoot "scripts\powershell\lib\Invoke-NixosWslSetup.ps1")
+        Invoke-NixosWslSetup -Context $context
         Write-Host "CI_ASSERTION: production NixOS-WSL post-install switch completed for $DistroName."
     }
     finally {
@@ -405,7 +399,6 @@ fi
 
             $rebuildContext = [SetupContext]::new($repoRoot)
             $rebuildContext.DistroName = $DistroName
-            $rebuildContext.Options["SkipFlakeUpdate"] = $true
             $rebuildContext.Options["NixRebuildTimeoutSeconds"] = $PostInstallTimeoutSeconds
             $rebuildHandler = [NixRebuildHandler]::new()
             if (-not $rebuildHandler.CanApply($rebuildContext)) {

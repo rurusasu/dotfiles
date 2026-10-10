@@ -28,23 +28,20 @@ Unix は Home Manager、Windows は chezmoi と明示的に選択した optional
 Docker profile では最後に runtime acceptance も実行します。途中で失敗した場合も
 同じコマンドを再実行できます。
 
-更新も同じ入口を使います。macOS / Linux は `./install.sh`、Windows は
-`.\install.cmd` を再実行してください。既存の optional profile を更新する場合も、
-初回と同じ profile 引数を指定します。リポジトリ自体の pull / merge は自動では行いません。
+macOS / Linux の `./install.sh` は、Nix が未導入なら初回だけ導入し、
+その後は flake inputs を最新に更新して OS の Nix 構成を `switch` します。
+Windows / WSL も `switch` 前に inputs を更新します。更新に失敗した場合は反映しません。
+リポジトリの pull / merge と独自パッケージの更新は別途行います。
 
-- macOS: flake inputs と Orca・Dia の独自 Nix 定義を更新してから、
-  nix-darwin / Home Manager と選択済み Homebrew パッケージを反映します。
-- Linux / NixOS: flake inputs を更新し、その OS の構成と Home Manager を反映します。
-- Windows: catalog 対象を既存の WinGet 等のハンドラーで install / upgrade します。
-  手動管理・非対応のアプリは追加しません。
+```bash
+# macOS の独自パッケージを更新するとき
+task darwin:update
+./install.sh
+```
 
-macOS の独自パッケージ更新は `version` / URL / hash をチェックアウト内で更新します。
-差分は `git diff` で確認できます。取得エラーがある場合は独自定義を書き換えず、
-システム反映前に停止します（先行する `flake.lock` の更新は残ります）。
-GitHub API の認証には、設定されていれば `GH_TOKEN`、次に `GITHUB_TOKEN` を使用します。
-レート制限時は認証設定を確認して再実行してください。固定版 / オフライン検証向けの
-`DOTFILES_SKIP_FLAKE_UPDATE=1` は、Unix の flake 更新と macOS の独自パッケージ更新を
-スキップします。必要な依存パッケージは事前にキャッシュされている必要があります。
+Codex CLI の個別インストールは行わず、ChatGPT アプリ付属の CLI を使います。
+Node.js/npm はカタログ、Unix の dsh は Nix module、Windows の dsh は npm が導入します。
+pnpm と Bun は導入しません。
 
 ### Windows
 
@@ -77,6 +74,11 @@ cd dotfiles
 
 `./install.sh` は宣言済みの macOS パッケージ、Docker Desktop と native Hermes を
 適用します。機能別の選択フラグは不要です。
+Docker Desktop のライセンス同意と初期設定も nix-darwin の activation で管理するため、
+実行前の環境変数設定は不要です。初期設定済みの環境では既存の完了マーカーを引き継ぎます。
+macOS / NixOS / WSL の Docker 設定は [`nix/modules/docker.nix`](./nix/modules/docker.nix) に集約しています。
+Docker の設定は同モジュールが所有し、installer に Docker 用の環境変数はありません。
+1Password の環境変数は Home Manager が管理します。
 
 macOS の初回導入には Lix installer を使い、nix-darwin の `nix.package` も
 `pkgs.lixPackageSets.stable.lix` に統一します。既存の Nix 環境は nix-darwin の反映で
@@ -200,11 +202,11 @@ nix/hosts/
 WSL 内で実行:
 
 ```bash
-# 方法1: update.sh を使う（NixOS rebuild + winget 適用を一括実行）
-~/.dotfiles/scripts/sh/update.sh
-
-# 方法2: エイリアスを使う（NixOS rebuild + profile 更新 + Hermes bootstrap）
+# flake inputs の更新と NixOS の反映
 nrs  # alias for: task --dir ~/.dotfiles nrs
+
+# installer でも inputs の更新と反映
+~/.dotfiles/install.sh
 ```
 
 Windows 側のファイルを編集すると、`~/.dotfiles` シンボリックリンク経由で即座に WSL から参照可能。

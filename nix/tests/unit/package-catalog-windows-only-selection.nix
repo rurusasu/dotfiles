@@ -12,7 +12,6 @@ let
     "dprint.dprint"
     "hadolint.hadolint"
     "Google.Chrome"
-    "Oven-sh.Bun"
     "zig.zig"
   ];
 in

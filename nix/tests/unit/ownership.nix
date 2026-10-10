@@ -20,9 +20,7 @@ let
   nixEvalOwners = builtins.filter (
     name: hasNixEvalCommandIn (builtins.readFile (bashTests + "/${name}"))
   ) batsTests;
-  expectedNixEvalOwners = [
-    "nixos_wsl_postinstall.bats"
-  ];
+  expectedNixEvalOwners = [ ];
   packageCatalog = builtins.readFile (bashTests + "/package_catalog.bats");
   nixUnitRegistry = builtins.readFile ../default.nix;
   registryImports = builtins.filter (name: name != null) (

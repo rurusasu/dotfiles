@@ -7,10 +7,6 @@
       "--scope"
       "machine"
     ];
-    bun = [
-      "--scope"
-      "user"
-    ];
     chezmoi = [
       "--scope"
       "user"
@@ -66,16 +62,6 @@
   wingetInstallTimeoutSeconds = { };
 
   wingetDirectInstallers = {
-    bun = {
-      # Keep this in sync with the current Winget Bun archive. This is only a
-      # fallback for WinGet/Delivery Optimization registration failures.
-      type = "archive";
-      url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-windows-x64.zip";
-      sha256 = "ce4c17497b2f29712a99d3d53f028de28cd42e3bacb8589599e7f000e49b6405";
-      destination = "%LOCALAPPDATA%\\Programs\\Bun";
-      executable = "bun-windows-x64\\bun.exe";
-      timeoutSeconds = packageInstallTimeoutSeconds;
-    };
     chezmoi = {
       type = "archive";
       url = "https://github.com/twpayne/chezmoi/releases/download/v2.72.2/chezmoi_2.72.2_windows_amd64.zip";
@@ -144,14 +130,6 @@
       "%ProgramFiles%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
       "%ProgramFiles(x86)%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
       "%LOCALAPPDATA%\\Google\\Cloud SDK\\google-cloud-sdk\\bin"
-    ];
-    bun = [
-      "%LOCALAPPDATA%\\Programs\\Bun\\bun-windows-x64"
-      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Oven-sh.Bun*\\bun-windows-x64"
-    ];
-    "Oven-sh.Bun" = [
-      "%LOCALAPPDATA%\\Programs\\Bun\\bun-windows-x64"
-      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Oven-sh.Bun*\\bun-windows-x64"
     ];
     chezmoi = [ "%LOCALAPPDATA%\\Programs\\chezmoi" ];
     direnv = [ "%LOCALAPPDATA%\\Programs\\direnv" ];

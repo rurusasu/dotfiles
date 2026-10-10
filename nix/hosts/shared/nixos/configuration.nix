@@ -1,10 +1,11 @@
 { lib, pkgs, ... }:
 let
-  bootstrapUser = builtins.getEnv "DOTFILES_USER";
-  bootstrapHome = builtins.getEnv "DOTFILES_HOME";
-  uidText = builtins.getEnv "DOTFILES_UID";
-  gidText = builtins.getEnv "DOTFILES_GID";
-  groupText = builtins.getEnv "DOTFILES_GROUP";
+  identity = import ./identity.nix { inherit lib; };
+  bootstrapUser = identity.user;
+  bootstrapHome = identity.home;
+  uidText = identity.uid;
+  gidText = identity.gid;
+  groupText = identity.group;
   user = if bootstrapUser == "" then "nixos" else bootstrapUser;
   home = if bootstrapHome == "" then "/home/${user}" else bootstrapHome;
   primaryGroup = if groupText == "" then "users" else groupText;
@@ -13,15 +14,18 @@ let
   gid = if isNumericId gidText then lib.toInt gidText else null;
 in
 {
-  imports = [ ./omarchy-keybindings.nix ];
+  imports = [
+    ../../../modules/docker.nix
+    ./omarchy-keybindings.nix
+  ];
   assertions = [
     {
       assertion = uidText == "" || isNumericId uidText;
-      message = "DOTFILES_UID must be numeric when provided";
+      message = "The host UID must be numeric when provided";
     }
     {
       assertion = gidText == "" || isNumericId gidText;
-      message = "DOTFILES_GID must be numeric when provided";
+      message = "The host GID must be numeric when provided";
     }
   ];
 
@@ -44,20 +48,6 @@ in
       ];
     }
     // lib.optionalAttrs (uid != null) { inherit uid; };
-  };
-
-  environment.systemPackages = with pkgs; [
-    docker-compose
-    docker-buildx
-  ];
-
-  virtualisation.docker.enable = true;
-  virtualisation.docker.daemon.settings = {
-    "log-driver" = "json-file";
-    "log-opts" = {
-      "max-size" = "10m";
-      "max-file" = "3";
-    };
   };
 
 }

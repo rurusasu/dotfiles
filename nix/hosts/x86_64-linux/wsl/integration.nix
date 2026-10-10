@@ -1,17 +1,14 @@
 {
   config,
   pkgs,
+  lib,
   inputs,
   ...
 }:
 
 let
-  configuredUser = builtins.getEnv "DOTFILES_USER";
-  user = if configuredUser == "" then "nixos" else configuredUser;
-  configuredHome = builtins.getEnv "DOTFILES_HOME";
-  home = if configuredHome == "" then "/home/${user}" else configuredHome;
-  configuredRepository = builtins.getEnv "DOTFILES_REPO_ROOT";
-  repository = if configuredRepository == "" then "${home}/.dotfiles" else configuredRepository;
+  identity = import ../../shared/nixos/identity.nix { inherit lib; };
+  inherit (identity) user repository;
 in
 
 {
@@ -29,6 +26,7 @@ in
   ];
 
   imports = [
+    ../../../modules/docker.nix
     inputs.home-manager.nixosModules.home-manager
   ];
   home-manager.sharedModules = [
@@ -149,16 +147,6 @@ in
   # user systemd service in nix/hosts/x86_64-linux/wsl/home.nix to avoid a duplicate
   # instance competing for the org.freedesktop.secrets D-Bus name.
   security.pam.services.login.enableGnomeKeyring = true;
-
-  # Native dockerd. Kind node containers use regular runc at the docker level;
-  # GPU access inside kind nodes is handled via CDI (see k8s/kind/cluster.yaml).
-  # Windows can reach the socket via: DOCKER_HOST=unix:///wsl.localhost/NixOS/var/run/docker.sock
-  virtualisation.docker.enable = true;
-  virtualisation.docker.daemon.settings = {
-    insecure-registries = [ "registry.localhost" ];
-  };
-
-  users.users.${user}.extraGroups = [ "docker" ];
 
   # WSL owns and protects its existing Windows executable registration.
   # Re-registering it makes systemd-binfmt fail on WSL's read-only status file.

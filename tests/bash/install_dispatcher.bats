@@ -7,6 +7,11 @@ setup() {
 	mkdir -p "$TEST_BIN"
 	export PATH="$TEST_BIN:/usr/bin:/bin"
 	export DISPATCH_LOG
+	cat >"$TEST_BIN/nix" <<'EOF'
+#!/usr/bin/env bash
+printf 'nix=%s\n' "$*" >>"$DISPATCH_LOG"
+EOF
+	chmod +x "$TEST_BIN/nix"
 }
 
 write_uname_stub() {
@@ -23,8 +28,9 @@ EOF
 
 write_dispatch_repo() {
 	mkdir -p "$BATS_TEST_TMPDIR/repo/scripts/sh"
-	cp "$REPO_ROOT/install.sh" "$BATS_TEST_TMPDIR/repo/install.sh"
-	for installer in install-macos.sh install-nixos.sh install-home-manager.sh; do
+	sed "s|/etc/NIXOS|$BATS_TEST_TMPDIR/NIXOS|g" "$REPO_ROOT/install.sh" >"$BATS_TEST_TMPDIR/repo/install.sh"
+	chmod +x "$BATS_TEST_TMPDIR/repo/install.sh"
+	for installer in install-macos.sh install-nixos.sh; do
 		cat >"$BATS_TEST_TMPDIR/repo/scripts/sh/$installer" <<'EOF'
 #!/usr/bin/env bash
 printf 'target=%s args=%s\n' "${0##*/}" "$*" >"$DISPATCH_LOG"
@@ -50,7 +56,6 @@ EOF
 	marker="$BATS_TEST_TMPDIR/NIXOS"
 	touch "$marker"
 	export TEST_UNAME_S=Linux TEST_UNAME_M=x86_64
-	export DOTFILES_NIXOS_MARKER="$marker"
 
 	run "$BATS_TEST_TMPDIR/repo/install.sh" --example
 
@@ -58,21 +63,22 @@ EOF
 	grep -q '^target=install-nixos.sh args=--example$' "$DISPATCH_LOG"
 }
 
-@test "non-NixOS Linux dispatches to Home Manager with arguments intact" {
+@test "non-NixOS Linux updates inputs then runs Home Manager with arguments intact" {
 	write_uname_stub
 	write_dispatch_repo
 	export TEST_UNAME_S=Linux TEST_UNAME_M=x86_64
-	export DOTFILES_NIXOS_MARKER="$BATS_TEST_TMPDIR/not-nixos"
 
 	for distribution in ubuntu debian fedora; do
 		release_file="$BATS_TEST_TMPDIR/$distribution-os-release"
 		printf 'ID=%s\n' "$distribution" >"$release_file"
 		export DOTFILES_OS_RELEASE_FILE="$release_file"
+		: >"$DISPATCH_LOG"
 
 		run "$BATS_TEST_TMPDIR/repo/install.sh" --example
 
 		[ "$status" -eq 0 ]
-		grep -q '^target=install-home-manager.sh args=--example$' "$DISPATCH_LOG"
+		[ "$(sed -n '1p' "$DISPATCH_LOG")" = "nix=--accept-flake-config --extra-experimental-features nix-command flakes flake update --flake $BATS_TEST_TMPDIR/repo" ]
+		[ "$(sed -n '2p' "$DISPATCH_LOG")" = "nix=--accept-flake-config --extra-experimental-features nix-command flakes run $BATS_TEST_TMPDIR/repo#home-manager -- switch --flake $BATS_TEST_TMPDIR/repo#x86_64-linux --impure --example" ]
 	done
 }
 
@@ -93,5 +99,5 @@ EOF
 	run "$REPO_ROOT/install.sh"
 
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"Apple Silicon"* ]]
+	[[ "$output" == *"Unsupported platform"* ]]
 }

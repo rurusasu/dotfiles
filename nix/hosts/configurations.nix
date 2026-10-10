@@ -54,14 +54,23 @@ in
   };
   nixosConfigurations = inputs.nixpkgs.lib.mapAttrs (
     _: spec:
-    hosts.mkNixos {
-      inherit (spec) system hostPath homeModulePath;
-      extraModules =
-        if spec ? hardwareConfig then
-          [ (/. + spec.hardwareConfig) ]
-        else
-          [ inputs.nixos-wsl.nixosModules.wsl ];
-    }
+    let
+      nativeIdentity = import ./shared/nixos/identity.nix { lib = inputs.nixpkgs.lib; };
+    in
+    hosts.mkNixos (
+      {
+        inherit (spec) system hostPath homeModulePath;
+        inherit nativeIdentity;
+        extraModules =
+          if spec ? hardwareConfig then
+            [ (/. + spec.hardwareConfig) ]
+          else
+            [ inputs.nixos-wsl.nixosModules.wsl ];
+      }
+      // inputs.nixpkgs.lib.optionalAttrs (nativeIdentity != null) {
+        configuredUser = nativeIdentity.user;
+      }
+    )
   ) hostSpecs;
   darwinConfigurations.macos = inputs.nix-darwin.lib.darwinSystem {
     system = "aarch64-darwin";

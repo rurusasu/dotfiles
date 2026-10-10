@@ -7,10 +7,9 @@
 #
 #   1. git + curl + tar + npm via apt (Debian/Ubuntu base only).
 #   2. Modern Neovim release into ~/.local/nvim with bin symlink.
-#   3. Codex CLI into ~/.local/npm.
-#   4. chezmoi binary install + `chezmoi init --apply --source $ROOT/chezmoi`
+#   3. chezmoi binary install + `chezmoi init --apply --source $ROOT/chezmoi`
 #      so the container gets the same dotfiles as the host.
-#   5. Headless lazy.nvim plugin pre-warm (best effort, 90s cap).
+#   4. Headless lazy.nvim plugin pre-warm (best effort, 90s cap).
 #
 # Idempotent — safe to re-run on every DevcontainerUp.
 
@@ -22,9 +21,6 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$HOME/.local/npm/bin:$PATH"
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-
-# shellcheck source=/dev/null
-. "$ROOT/scripts/sh/codex-npm.sh"
 
 log() { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*" >&2; }
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -58,10 +54,6 @@ if [ "$can_install" -eq 1 ] && have apt-get; then
 elif ! have apt-get; then
   log "apt-get not found — package install skipped (install curl/git manually)"
 fi
-
-# ── Codex CLI ──────────────────────────────────────────────────────────
-log "installing/updating Codex CLI from npm to ~/.local/npm"
-dotfiles_install_codex_npm
 
 # ── chezmoi binary (best effort) ────────────────────────────────────────
 # devcontainer-cli が dotfiles リポを ~/.dotfiles に clone しているので、

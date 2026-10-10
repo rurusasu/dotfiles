@@ -44,9 +44,6 @@ $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..\..")).Path
 # before handler discovery or any package-manager command is started.
 Update-ProcessEnvironmentPath -ReportStatus
 
-if (-not $PSBoundParameters.ContainsKey("PostInstallScript")) {
-    $PostInstallScript = Join-Path $repoRoot "scripts\sh\nixos-wsl-postinstall.sh"
-}
 
 $context = [SetupContext]::new($repoRoot)
 $context.DistroName = $DistroName

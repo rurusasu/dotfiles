@@ -466,8 +466,8 @@ Describe 'GitHub token switching templates' {
 
         $content | Should -Match '"%OP_EXE%" run --account "%PERSONAL_ACCOUNT%" --env-file="%PERSONAL_SECRETS_ENV%"' -Because 'personal secrets must resolve against the personal account'
         $content | Should -Match '"%OP_EXE%" run --account "%WORK_ACCOUNT%" --env-file="%WORK_SECRETS_ENV%"' -Because 'work secrets must resolve against the company account'
-        $content | Should -Match '%APPDATA%\\npm\\codex\.cmd' -Because 'the Codex CLI is installed globally through npm'
-        $content | Should -Match 'codex\.cmd' -Because 'the npm Windows shim is the launched executable'
+        $content | Should -Match '%WHERE_EXE%.*codex\.exe' -Because 'the app supplies the Codex CLI executable'
+        $content | Should -Match 'codex\.exe' -Because 'the app-provided executable is launched'
         $content | Should -Match 'WinGet\\Links\\op\.exe'
         $content | Should -Match 'GITHUB_PAT_TOKEN'
         $content | Should -Match 'if "%GITHUB_WORK_TOKEN%"=="" set "NEEDS_SECRET_LOAD=1"'

@@ -24,8 +24,6 @@ derivation を再利用し、`treefmt` は formatter module が公開します�
 
 - `tests/bash/` は shell / installer の順序、外部コマンドの stub、runtime / artifact 契約を検証します。
 - Nix の値 assertion を Bats 内の `nix eval` に追加せず、`unit/` に記載します。
-- `nixos_wsl_postinstall.bats` の `nix eval` は、stubbed `nixos-rebuild` 境界内で選択 user と
-  `--impure` 伝播を確認する runtime / integration assertion に限ります。
 - 実機の activation、service 起動、secret、network は nix-unit の対象外です。
   ビルド・CLI double の成功だけで実機の動作確認が完了したとは扱いません。
 
@@ -33,7 +31,9 @@ derivation を再利用し、`treefmt` は formatter module が公開します�
 
 Unix の `task test` は `task test:nix` を呼びます。生成キー設定の整合性検査に続いて、
 現在の system の powershell-formatter、nix-unit、custom-package-builds、aerospace-workspace-cycle、
-neovim-native、ghostty-config を一つの `nix build` にまとめます。同じ flake の評価を6回繰り返しません。
+neovim-native、ghostty-config、docker-desktop-activation を一つの `nix build` にまとめます。
+Docker Desktop の初期設定は生成された activation を CLI double で実行し、再実行、失敗時の再試行、
+既存の `md5` パスとの衝突を検証します。実機の Docker Desktop 起動は installer の検証対象です。
 Windows の `task test` は PowerShell テストを実行します。
 
 ```bash
@@ -118,9 +118,8 @@ CIのexport checkはWinget/npm/pnpm JSON全体を生成してcommitted filesとJ
 |    2 | `Darwin Raycast artifact has the declared identity and trusted signature`   | built app identity, codesign, Gatekeeper                                         |
 |    3 | `Darwin Discord keeps staged modules outside its signed application bundle` | built layout, launcher path, app identity and signatures                         |
 
-pnpm 本体の導入・保存先・環境変数・PATH は Home Manager の標準 module を使い、
-nix-unit が実効設定と導入の重複を検証します。Windows のグローバルパッケージ一覧と
-native build 引数は nix-unit、導入時の外部コマンドとの契約は Pester が検証します。
+pnpm は導入せず、空の生成 manifest と Home Manager の無効化を nix-unit が検証します。
+Windows の dsh は npm manifest で管理し、外部コマンドとの契約は Pester が検証します。
 
 上記の Darwin artifact 2件は `Bootstrap / Darwin` の native runner が限定実行します。
 Linux Bats での codesign 不在による skip は、この2件の成功として扱いません。

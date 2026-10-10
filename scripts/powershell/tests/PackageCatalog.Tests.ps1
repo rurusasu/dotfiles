@@ -50,16 +50,14 @@ Describe 'Package catalog consistency' {
             @($wingetSource.Packages | Where-Object { $_.PackageIdentifier -eq 'TheBrowserCompany.Dia' }).Count | Should -Be 0
         }
 
-        It 'should update flake inputs before every scripted NixOS rebuild entry point' {
+        It 'should update flake inputs before setup and rebuild' {
             $taskfile = Get-Content -LiteralPath (Join-Path $script:repoRoot "taskfiles/nix/taskfile.yml") -Raw
-            $updateScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/update.sh") -Raw
-            $postInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
+            $postInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/powershell/lib/Invoke-NixosWslSetup.ps1") -Raw
             $commonInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/install-common.sh") -Raw
 
-            $taskfile | Should -Match 'nix flake update && scripts/sh/nixos-rebuild-with-user\.sh switch --flake \. --impure'
-            $updateScript | Should -Match 'nix flake update --flake ~/.dotfiles'
+            $taskfile | Should -Match 'nix flake update && sudo nixos-rebuild switch --flake \. --impure'
             $commonInstallScript | Should -Match 'nix flake update --flake "\$flake_ref"'
-            $postInstallScript | Should -Match 'dotfiles_update_flake "\$TARGET_DIR" path'
+            $postInstallScript | Should -Match 'flake update --flake'
             $commonInstallScript | Should -Not -Match 'dotfiles_trust_git_directory|git config --global'
             $postInstallScript | Should -Not -Match 'git config --global'
         }
@@ -177,13 +175,9 @@ Describe 'Package catalog consistency' {
     }
 
     Context 'Codex CLI package' {
-        It 'should generate Codex in the npm global package manifest' {
+        It 'should omit the separately installed Codex npm package' {
             $json = Get-Content -LiteralPath $script:npmJsonPath -Raw | ConvertFrom-Json
-            $package = @($json.globalPackages | Where-Object { $_.name -eq '@openai/codex' }) | Select-Object -First 1
-
-            $package | Should -Not -BeNullOrEmpty
-            $package.verifyCommand.command | Should -Be 'codex'
-            @($package.verifyCommand.args) | Should -Contain '--version'
+            @($json.globalPackages | Where-Object { $_.name -eq '@openai/codex' }).Count | Should -Be 0
         }
 
     }
@@ -273,33 +267,25 @@ Describe 'Package catalog consistency' {
 
 
 
-        It 'should not approve the legacy node-pty build for global pnpm packages' {
+        It 'should install dsh with npm and leave pnpm packages empty' {
             $pnpm = Get-Content -LiteralPath $script:pnpmJsonPath -Raw | ConvertFrom-Json
-            $dsh = @($pnpm.globalPackages | Where-Object { $_.name -eq '@deepseek-ai/dsh' }) | Select-Object -First 1
+            @($pnpm.globalPackages).Count | Should -Be 0
+            $npm = Get-Content -LiteralPath $script:npmJsonPath -Raw | ConvertFrom-Json
+            $dsh = @($npm.globalPackages | Where-Object { $_.name -eq '@deepseek-ai/dsh' }) | Select-Object -First 1
 
             $dsh | Should -Not -BeNullOrEmpty
             @($dsh.installArgs) | Should -Not -Contain '--allow-build=node-pty'
         }
 
-        It 'should add the portable Bun executable directory before verification' {
+        It 'should omit Bun from the Windows manifest' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
-            $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
-            $package = @($wingetSource.Packages | Where-Object PackageIdentifier -EQ 'Oven-sh.Bun')
-
-            $package.Count | Should -Be 1
-            @($package[0].pathEntries) | Should -Contain '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Oven-sh.Bun*\bun-windows-x64'
-            @($package[0].pathEntries) | Should -Contain '%LOCALAPPDATA%\Programs\Bun\bun-windows-x64'
-            @($package[0].installArgs) | Should -Contain '--scope'
-            @($package[0].installArgs) | Should -Contain 'user'
-            $package[0].directInstaller.type | Should -Be 'archive'
-            $package[0].directInstaller.sha256 | Should -Match '^[0-9a-f]{64}$'
+            @($winget.Sources.Packages | Where-Object PackageIdentifier -EQ 'Oven-sh.Bun').Count | Should -Be 0
         }
 
         It 'should provide direct fallbacks for portable packages affected by WinGet registration hangs' {
             $winget = Get-Content -LiteralPath $script:wingetJsonPath -Raw | ConvertFrom-Json
             $wingetSource = @($winget.Sources | Where-Object { $_.SourceDetails.Name -eq 'winget' }) | Select-Object -First 1
             $fallbackIds = @(
-                'Oven-sh.Bun'
                 'twpayne.chezmoi'
                 'direnv.direnv'
                 'dprint.dprint'

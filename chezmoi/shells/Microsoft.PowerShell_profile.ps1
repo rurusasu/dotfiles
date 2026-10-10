@@ -59,7 +59,7 @@ function Reset-DotfilesTerminalInputMode {
 }
 
 function Resolve-DotfilesCodexExecutable {
-    foreach ($commandName in @("codex.cmd", "codex.exe")) {
+    foreach ($commandName in @("codex.exe", "codex.cmd")) {
         $codexCommand = Get-Command $commandName -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($codexCommand) {
             if ($codexCommand.Source) {
@@ -74,7 +74,7 @@ function Resolve-DotfilesCodexExecutable {
         }
     }
 
-    throw "npm-installed Codex CLI was not found. Install @openai/codex with npm."
+    throw "Codex CLI was not found. Enable the CLI provided by the ChatGPT app."
 }
 
 function Invoke-CodexCli {

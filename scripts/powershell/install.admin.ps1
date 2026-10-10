@@ -144,9 +144,6 @@ $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..\..")).Path
 . (Join-Path $libPath "SetupHandler.ps1")
 . (Join-Path $libPath "Invoke-ExternalCommand.ps1")
 
-if (-not $PSBoundParameters.ContainsKey("PostInstallScript")) {
-    $PostInstallScript = Join-Path $repoRoot "scripts\sh\nixos-wsl-postinstall.sh"
-}
 
 $context = [SetupContext]::new($repoRoot)
 $context.DistroName = $DistroName

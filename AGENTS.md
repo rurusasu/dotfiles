@@ -23,7 +23,7 @@
 
 - Nix expression、Home Manager option、flake output、Nix package 選択の値テストは `nix/tests/unit/` に nix-unit 形式で記載する。ビルド・実行テストの derivation は `nix/tests/build/`、共有入力は `nix/tests/fixtures/` に置く。
 - `nix/tests/default.nix` が単体テストとビルドテストを登録する。nix-unit も flake の `checks` 経由で実行する。`nix flake check --no-build` は評価確認であり、テスト実行の代わりにはならない。詳細は [Nix テスト](nix/tests/README.md)。
-- Bats は shell、installer、外部コマンド、runtime/integration 契約に限定する。Nix option を `nix eval` するだけの Bats テストは追加しない。`tests/bash/package_catalog.bats` の値・source-shape assertion は nix-unit へ移管済みで、残る契約は `nix/tests/README.md` の分類に従って維持する。`tests/bash/nixos_wsl_postinstall.bats` の `nix eval` は、stubbed `nixos-rebuild` 境界内で選択 user と `--impure` 伝播を確認する runtime/integration assertion に限る。
+- Bats は shell、installer、外部コマンド、runtime/integration 契約に限定する。Nix option を `nix eval` するだけの Bats テストは追加しない。`tests/bash/package_catalog.bats` の値・source-shape assertion は nix-unit へ移管済みで、残る契約は `nix/tests/README.md` の分類に従って維持する。WSL の初回同期は PowerShell ハンドラー、NixOS rebuild は直接コマンドを境界として検証する。
 
 ## フォーマット・テスト・実行時間の境界
 

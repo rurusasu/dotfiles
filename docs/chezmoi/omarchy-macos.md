@@ -82,7 +82,7 @@ Hyprland の scrolling/dwindle 切り替え、pseudo、sticky、透明度、マ�
 確認済みの範囲は設定のビルドとパーサー検査です。nix-darwin の実機反映、Accessibility 許可、実際のキー入力は未検証です。
 
 通常は `nrs` で適用する。ブランチから適用する場合は対象 checkout 内で
-`DOTFILES_SKIP_FLAKE_UPDATE=1 ./install.sh` を使う。
+`./install.sh` を使う。
 初回はシステム設定 → プライバシーとセキュリティ → アクセシビリティで
 AeroSpace を許可する。この許可は nix-darwin では付与できない。
 システムショートカットの無効化が反映されない場合はログアウト・ログインする。

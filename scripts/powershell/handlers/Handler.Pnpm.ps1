@@ -26,6 +26,11 @@ class PnpmHandler : SetupHandlerBase {
     }
 
     [bool] CanApply([SetupContext]$ctx) {
+        $packagesPath = $this.GetPackagesPath($ctx)
+        if (Test-PathExist -Path $packagesPath) {
+            $manifest = Get-Content -LiteralPath $packagesPath -Raw | ConvertFrom-Json -ErrorAction Stop
+            if (@($manifest.globalPackages).Count -eq 0) { return $false }
+        }
         $pnpmCmd = Get-ExternalCommand -Name "pnpm"
         if (-not $pnpmCmd) {
             # CanApply は副作用を持たせず、Apply 側で bootstrap 可能かだけ判定する
@@ -228,7 +233,7 @@ class PnpmHandler : SetupHandlerBase {
             $pnpmCommandPath = Get-ExternalCommandPath -CommandInfo $pnpmCmd
             $existingPnpmDirectory = $null
             $pnpmIsUnusable = $pnpmCmd -and $pnpmCommandPath -and
-                (Test-Path -LiteralPath $pnpmCommandPath -PathType Leaf) -and
+            (Test-Path -LiteralPath $pnpmCommandPath -PathType Leaf) -and
             -not $this.TestPnpmExecutable()
             if (-not $pnpmCmd -or $pnpmIsUnusable) {
                 if (-not $this.TryBootstrapPnpm([string]$ctx.Options['NpmGlobalPrefix'])) {

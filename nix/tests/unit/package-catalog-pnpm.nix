@@ -11,7 +11,6 @@ in
   testDirectInstallersUseSharedBudget = {
     expr = builtins.mapAttrs (_: installer: installer.timeoutSeconds) sets.wingetDirectInstallers;
     expected = {
-      bun = 3600;
       chezmoi = 3600;
       direnv = 3600;
       dprint = 3600;
@@ -20,26 +19,14 @@ in
     };
   };
 
-  testDeepSeekHarnessPnpmCatalog = {
+  testNoPnpmPackagesAreDeclared = {
     expr = {
-      isGlobalPackage = builtins.elem "@deepseek-ai/dsh" sets.pnpmGlobal;
-      installArgs = sets.pnpmInstallArgs."@deepseek-ai/dsh";
-      verifyCommand = sets.pnpmVerify."@deepseek-ai/dsh";
+      packages = sets.pnpmGlobal;
+      args = sets.pnpmInstallArgs;
     };
     expected = {
-      isGlobalPackage = true;
-      installArgs = [
-        "--allow-build=@deepseek-ai/dsh-subprocess-local"
-        "--allow-build=@google/genai"
-        "--allow-build=koffi"
-        "--allow-build=protobufjs"
-        "--allow-build=!node-pty"
-      ];
-      verifyCommand = {
-        command = "dsh";
-        args = [ "--version" ];
-      };
+      packages = [ ];
+      args = { };
     };
   };
-
 }

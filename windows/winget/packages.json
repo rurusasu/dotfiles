@@ -28,27 +28,6 @@
           }
         },
         {
-          "PackageIdentifier": "Oven-sh.Bun",
-          "directInstaller": {
-            "destination": "%LOCALAPPDATA%\\Programs\\Bun",
-            "executable": "bun-windows-x64\\bun.exe",
-            "sha256": "ce4c17497b2f29712a99d3d53f028de28cd42e3bacb8589599e7f000e49b6405",
-            "timeoutSeconds": 3600,
-            "type": "archive",
-            "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-windows-x64.zip"
-          },
-          "installArgs": ["--scope", "user"],
-          "installTimeoutSeconds": 3600,
-          "pathEntries": [
-            "%LOCALAPPDATA%\\Programs\\Bun\\bun-windows-x64",
-            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Oven-sh.Bun*\\bun-windows-x64"
-          ],
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "bun"
-          }
-        },
-        {
           "PackageIdentifier": "twpayne.chezmoi",
           "directInstaller": {
             "destination": "%LOCALAPPDATA%\\Programs\\chezmoi",

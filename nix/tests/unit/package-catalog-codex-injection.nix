@@ -11,11 +11,11 @@ in
   testCodexCatalogDoesNotInjectAHostPackage = {
     expr = {
       selected = builtins.elem pkgs.hello sets.all;
-      provider = sets.supportReport.codex.linux.provider;
+      catalogEntry = sets.supportReport ? codex;
     };
     expected = {
       selected = false;
-      provider = "npm";
+      catalogEntry = false;
     };
   };
 }

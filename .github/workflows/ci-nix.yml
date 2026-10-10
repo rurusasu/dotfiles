@@ -16,7 +16,6 @@ permissions:
 
 env:
   TESTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-  DOTFILES_SKIP_FLAKE_UPDATE: "1"
 
 jobs:
   changes:
@@ -269,9 +268,7 @@ jobs:
 
       - name: Build Linux configurations and checks
         run: |
-          # Home Manager uses the image's existing non-root account.
-          IFS=: read -r DOTFILES_USER _ _ _ _ DOTFILES_HOME _ < <(getent passwd node)
-          export DOTFILES_USER DOTFILES_HOME
+          # Native NixOS build uses a hardware fixture inside this container.
           export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"
           nix build --impure --no-link --print-build-logs \
             .#nixosConfigurations.linux.config.system.build.toplevel \
@@ -347,6 +344,7 @@ jobs:
             .#checks.aarch64-darwin.hermes-bootstrap-tests \
             .#checks.aarch64-darwin.custom-package-builds \
             .#checks.aarch64-darwin.aerospace-workspace-cycle \
+            .#checks.aarch64-darwin.docker-desktop-activation \
             .#checks.aarch64-darwin.ghostty-config \
             .#checks.aarch64-darwin.neovim-native \
             .#checks.aarch64-darwin.standalone-darwin-home
@@ -888,13 +886,6 @@ jobs:
             .#checks.x86_64-linux.aerospace-workspace-cycle \
             .#checks.x86_64-linux.windows-keybindings-generated
 
-      - name: Install and verify Codex npm package
-        run: |
-          set -euo pipefail
-          prefix="$RUNNER_TEMP/codex-npm"
-          nix shell nixpkgs#nodejs --command bash -euo pipefail -c \
-            "npm install --global --prefix '$prefix' --no-audit --no-fund @openai/codex@latest && '$prefix/bin/codex' --version && npm list --global --prefix '$prefix' --depth=0 @openai/codex"
-
       - name: Verify package provider coverage
         run: |
           nix build .#package-support-report --print-build-logs -o /tmp/package-support-report
@@ -921,12 +912,3 @@ jobs:
       - name: Verify pnpm packages.json is in sync
         shell: bash
         run: diff <(jq -S . /tmp/winget-export/pnpm/packages.json) <(jq -S . windows/pnpm/packages.json)
-
-      - name: Verify persisted pnpm build permissions
-        shell: bash
-        run: |
-          nix shell nixpkgs#nodejs --command bash -euo pipefail <<'PNPM_TEST'
-            prefix="$RUNNER_TEMP/pnpm-permissions"
-            npm install --global --prefix "$prefix" --no-audit --no-fund pnpm@12.6.0
-            PNPM_TEST_EXECUTABLE="$prefix/bin/pnpm" node tests/runtime/pnpm-build-permissions.mjs
-          PNPM_TEST

@@ -2,18 +2,17 @@
 
 `nix/home/` は OS 非依存の Home Manager ユーザー設定です。OS 固有設定とパッケージ選択は `nix/hosts/` に置きます。Darwin は `aarch64-darwin/home.nix`、WSL は `x86_64-linux/wsl/home.nix`、Linux 共通設定は `shared/linux-home.nix` が所有します。
 
-| 入口                            | 内容                                                 |
-| ------------------------------- | ---------------------------------------------------- |
-| `common.nix`                    | 共通設定                                             |
-| `pnpm.nix`                      | pnpm の保存先（標準 module が環境変数・PATH を生成） |
-| `shells/zsh/`                   | zsh の履歴・alias・キー設定                          |
-| `shells/plugins/zoxide.nix`     | zoxide の Bash / Zsh 標準連携                        |
-| `shells/plugins/bat.nix`        | bat のユーザー設定（現在は既定値）                   |
-| `shells/plugins/ripgrep.nix`    | ripgrep の検索オプション                             |
-| `shells/plugins/eza.nix`        | eza の共通オプション・Zsh 標準連携                   |
-| `shells/plugins/fd.nix`         | fd の Zsh alias・パッケージ付属の補完                |
-| `shells/plugins/fzf.nix`        | fzf の検索条件・プレビューと Zsh 標準連携            |
-| `shells/plugins/zsh-patina.nix` | zsh-patina の公式 activate 連携                      |
+| 入口                            | 内容                                      |
+| ------------------------------- | ----------------------------------------- |
+| `common.nix`                    | 共通設定                                  |
+| `shells/zsh/`                   | zsh の履歴・alias・キー設定               |
+| `shells/plugins/zoxide.nix`     | zoxide の Bash / Zsh 標準連携             |
+| `shells/plugins/bat.nix`        | bat のユーザー設定（現在は既定値）        |
+| `shells/plugins/ripgrep.nix`    | ripgrep の検索オプション                  |
+| `shells/plugins/eza.nix`        | eza の共通オプション・Zsh 標準連携        |
+| `shells/plugins/fd.nix`         | fd の Zsh alias・パッケージ付属の補完     |
+| `shells/plugins/fzf.nix`        | fzf の検索条件・プレビューと Zsh 標準連携 |
+| `shells/plugins/zsh-patina.nix` | zsh-patina の公式 activate 連携           |
 
 ## import 方向
 
@@ -48,20 +47,17 @@ flake.nix -> hosts/configurations.nix -> hosts/<system>/ -> home/common.nix
 - Orca は `common.nix` が `../modules/editors/orca` を読み込み、Home Manager の `home.packages` で導入する。macOS は公式 DMG、Linux（x86_64 / ARM64）は公式 AppImage を使用する。Linux の CLI は公式と同じ `orca-ide`、macOS は `orca`。Windows は引き続き WinGet が管理する。
 - `common.nix` から OS 固有ファイルを import しない。
 - Unix の設定は Codex を含め Home Manager が生成し、`files/` に展開済み dotfiles のコピーを置かない。chezmoi は Windows 専用。
-- pnpm の導入は `../modules/pnpm.nix`、保存先は `pnpm.nix` の標準 `programs.pnpm` option で管理する。`PNPM_HOME` と PATH は Home Manager に生成させ、カタログからの重複導入やグローバルパッケージ導入 activation は持たない。`dsh` は `../modules/dsh.nix` から Numtide の既存 flake を参照する。Windows の pnpm グローバルパッケージも `dsh` のみとし、配布情報は `nix/packages/install/node.nix` に残す。
+- Node.js/npm はパッケージカタログ、`dsh` は `../modules/dsh.nix` の upstream Nix package で管理する。pnpm と Bun は導入せず、Codex CLI は ChatGPT アプリ付属のものを使う。Windows の dsh は npm が導入する。
 - `nix/home/` 直下に `default.nix` と `users.nix` は作らない。入口と OS 依存方向を曖昧にするため。
 
 standalone Home Manager のユーザー名は `rurusasu` を既定値とする。Darwin のホームディレクトリは
 `nix/hosts/aarch64-darwin/home.nix` が実効ユーザー名から `/Users/<name>` を既定化し、明示指定で上書きできる。
 Linux / WSL のホームディレクトリは各 OS ファイルが既定化する。nix-darwin / NixOS の
 Home Manager submodule は host の `users.users.<name>.home` を使う。
-NixOS は `DOTFILES_USER` 未指定時に `nixos` を使う。WSL postinstall は `--user` で選択した
-ユーザーの `DOTFILES_USER` / `DOTFILES_HOME` / `DOTFILES_UID` / `DOTFILES_GID` /
-`DOTFILES_GROUP` を export し、`nixos-rebuild` を `--impure` 付きで実行する。これにより
-flake 評価中の `builtins.getEnv` が選択した識別情報を読み取り、NixOS host、Home Manager、
-`wsl.defaultUser` の対象を一致させる。
-`nrs` / `nrt` / `nrb` は `scripts/sh/nixos-rebuild-with-user.sh` 経由で実行し、同じ識別情報を
-flake 評価へ渡す。
+NixOS のユーザー情報は `hosts/shared/nixos/identity.nix` が読み取る。
+Windows の初回セットアップは `/etc/nixos/dotfiles.json` に選択したユーザー・ホーム・checkout・
+stateVersion を保存する。通常の rebuild は `sudo nixos-rebuild` を直接実行し、
+Nix が同じホスト情報を読み取る。ネイティブ NixOS では `SUDO_USER` と既存アカウントを使う。
 
 ## Home Manager 固有のチェック
 
@@ -83,8 +79,6 @@ Cargo の global cache は標準の自動 GC に任せる。Go の build cache �
 - Bats は Home Manager option の値を検査する用途には使わず、installer、shell、外部プロセス、
   runtime 契約に限る。`tests/bash/package_catalog.bats` の値テストは移管済みで、
   残る runtime / artifact 契約の分類は [Nix テスト](../tests/README.md) に記載する。
-  `nixos_wsl_postinstall.bats` の `nix eval` は、stubbed `nixos-rebuild` 境界内で選択 user と
-  `--impure` 伝播を実 Nix eval で確認する runtime/integration assertion に限る。新しい例外は追加しない。
 
 ホストの system 設定は `nix/hosts/<system>/<environment>/configuration.nix` と責務別 host module、import の入口は
 同じディレクトリの `default.nix` が所有します。Darwin の system font は `nix/hosts/aarch64-darwin/`、OS-wide

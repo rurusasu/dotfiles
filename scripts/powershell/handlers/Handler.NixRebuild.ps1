@@ -5,7 +5,6 @@
 .DESCRIPTION
     - NixOS ディストリビューションの存在確認
     - nixos-rebuild switch の実行
-    - pnpm グローバルパッケージのインストール (windows/pnpm/packages.json)
 
 .NOTES
     Order = 55 (NixOSWSL=17 の後に実行)
@@ -15,13 +14,8 @@ $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath "lib\Invoke-ExternalCommand.ps1")
 
 class NixRebuildHandler : SetupHandlerBase {
-    hidden [string] $PnpmHomePath = '$HOME/.local/share/pnpm'
     hidden [string] $NixOsUser = 'nixos'
     hidden [string] $NixOsHome = '/home/nixos'
-
-    hidden [string] GetPnpmShellPrefix() {
-        return "export PNPM_HOME=$($this.PnpmHomePath); export PATH=`"`$PNPM_HOME/bin:`$PNPM_HOME:`$HOME/.npm-global/bin:`$PATH`""
-    }
 
     NixRebuildHandler() {
         $this.Name = "NixRebuild"
@@ -114,238 +108,8 @@ class NixRebuildHandler : SetupHandlerBase {
         }
     }
 
-    hidden [void] EnsurePnpmAvailable([string]$distroName) {
-        # WSL interop 経由で Windows 版 pnpm が /mnt/ 配下に見えることがある。
-        # Linux ネイティブの pnpm のみを有効とみなすため /mnt/ 配下を除外して確認する。
-        Invoke-Wsl -Arguments @(
-            "-d", $distroName, "-u", $this.NixOsUser, "--",
-            "bash", "-lc", "$($this.GetPnpmShellPrefix()); command -v pnpm 2>/dev/null | grep -qv '^/mnt/'"
-        ) | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            $this.Log("pnpm が見つかりません。npm 経由でインストールします...")
-            # NixOS では npm のグローバルプレフィックスが read-only nix store を指すため
-            # ~/.npm-global に変更してからインストールする
-            Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", $this.NixOsUser, "--",
-                "bash", "-lc", "mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global && npm install -g pnpm && grep -q npm-global ~/.bashrc || echo 'export PATH=~/.npm-global/bin:`$PATH' >> ~/.bashrc"
-            )
-            if ($LASTEXITCODE -ne 0) {
-                throw "pnpm のインストールに失敗しました (exit code: $LASTEXITCODE)"
-            }
-            $this.Log("pnpm をインストールしました", "Green")
-        }
-
-        # PNPM_HOME が未設定なら pnpm setup を実行してグローバル bin ディレクトリを作成
-        $pnpmHomeCheck = Invoke-Wsl -Arguments @(
-            "-d", $distroName, "-u", $this.NixOsUser, "--",
-            "bash", "-lc", "$($this.GetPnpmShellPrefix()); [ -d `"`$PNPM_HOME`" ] && [ -d `"`$PNPM_HOME/bin`" ] && echo exists"
-        )
-        if (-not $pnpmHomeCheck -or $pnpmHomeCheck -notmatch 'exists') {
-            $this.Log("PNPM_HOME を設定しています...")
-            Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", $this.NixOsUser, "--",
-                "bash", "-lc", "$($this.GetPnpmShellPrefix()); mkdir -p `"`$PNPM_HOME`" `"`$PNPM_HOME/bin`"; pnpm setup 2>/dev/null || true"
-            )
-        }
-        # .bashrc に PNPM_HOME/bin が無ければ追加
-        Invoke-Wsl -Arguments @(
-            "-d", $distroName, "-u", $this.NixOsUser, "--",
-            "bash", "-lc", "grep -q 'PNPM_HOME/bin' ~/.bashrc || echo 'export PNPM_HOME=$($this.PnpmHomePath); export PATH=`$PNPM_HOME/bin:`$PNPM_HOME:`$PATH' >> ~/.bashrc"
-        )
-    }
-
-    hidden [bool] InstallPnpmGlobalPackages([string]$distroName, [string]$packagesJsonPath) {
-        try {
-            if (-not (Test-Path -LiteralPath $packagesJsonPath -PathType Leaf)) {
-                $this.Log("pnpm パッケージ設定が見つかりません。スキップ: $packagesJsonPath", "Gray")
-                return $true
-            }
-
-            $json = Get-JsonContent -Path $packagesJsonPath
-            $packages = $json.globalPackages
-            if (-not $packages -or $packages.Count -eq 0) {
-                $this.Log("インストールする pnpm パッケージがありません", "Gray")
-                return $true
-            }
-
-            # pnpm が利用可能か確認し、なければ corepack で有効化
-            $this.EnsurePnpmAvailable($distroName)
-
-            # インストール済みパッケージを取得してフィルタリング
-            $installedOutput = Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", $this.NixOsUser, "--",
-                "bash", "-lc", "$($this.GetPnpmShellPrefix()); pnpm ls -g --depth=0 2>/dev/null"
-            )
-            $toInstall = @()
-            $skipped = 0
-            $verified = 0
-            foreach ($pkg in $packages) {
-                $pkgSpec = if ($pkg -is [string]) { $pkg } else { $pkg.name }
-                $pkgName = $pkgSpec -replace '@[\d\.]+$', ''
-                $verifyCmd = if ($pkg -is [string]) { $null } else { $pkg.verifyCommand }
-                $installArgs = @()
-                if ($pkg -isnot [string]) {
-                    if ($pkg -is [System.Collections.IDictionary] -and $pkg.Contains("installArgs")) {
-                        foreach ($arg in @($pkg["installArgs"])) {
-                            if (-not [string]::IsNullOrWhiteSpace([string]$arg)) {
-                                $installArgs += [string]$arg
-                            }
-                        }
-                    }
-                    elseif ($pkg.PSObject.Properties.Name -contains "installArgs") {
-                        foreach ($arg in @($pkg.installArgs)) {
-                            if (-not [string]::IsNullOrWhiteSpace([string]$arg)) {
-                                $installArgs += [string]$arg
-                            }
-                        }
-                    }
-                }
-                if ($installedOutput -and ($installedOutput | Where-Object { $_ -match [regex]::Escape($pkgName) })) {
-                    if ($verifyCmd) {
-                        if ($this.TestPnpmPackageVerificationInWsl($distroName, $verifyCmd)) {
-                            $this.Log("検証済み。latest を確認します: $pkgName", "Gray")
-                            $verified++
-                        }
-                        else {
-                            $this.LogWarning("インストール済みですが検証に失敗しました。再インストールします: $pkgName")
-                        }
-                    }
-                    else {
-                        $this.Log("インストール済み。latest を確認します: $pkgName", "Gray")
-                    }
-                }
-
-                $toInstall += [PSCustomObject]@{
-                    Spec          = $pkgSpec
-                    VerifyCommand = $verifyCmd
-                    InstallArgs   = $installArgs
-                }
-            }
-
-            if ($toInstall.Count -eq 0) {
-                $parts = @()
-                if ($verified -gt 0) { $parts += "$verified 個検証済み" }
-                $parts += "$skipped 個スキップ"
-                $this.Log("pnpm グローバルパッケージはすべてインストール済みで、検証対象も正常です ($($parts -join ', '))", "Gray")
-                return $true
-            }
-
-            # シェルメタ文字を含むパッケージ名（@scope/pkg 等）を安全に渡すためクォート
-            $packageSpecs = @($toInstall | ForEach-Object { $_.Spec })
-            $installArgs = @($toInstall | ForEach-Object { @($_.InstallArgs) } | Where-Object { $_ } | Select-Object -Unique)
-            $quotedInstallArgs = ($installArgs | ForEach-Object { $this.QuoteShellArg([string]$_) }) -join " "
-            $quotedPkgs = ($packageSpecs | ForEach-Object { $this.QuoteShellArg($_) }) -join " "
-            $this.Log("pnpm グローバルパッケージをインストールしています: $($packageSpecs -join ', ')")
-
-            # PNPM_HOME と ~/.npm-global/bin を PATH に追加
-            $pnpmExitCode = $this.InvokeWslPnpmInstall(@(
-                    "-d", $distroName, "-u", $this.NixOsUser, "--",
-                    "bash", "-lc", "$($this.GetPnpmShellPrefix()); pnpm add -g --reporter=append-only --yes $quotedInstallArgs $quotedPkgs"
-                ))
-
-            if ($pnpmExitCode -ne 0) {
-                $this.LogWarning("pnpm グローバルパッケージのインストールが失敗しました (exit code: $pnpmExitCode)")
-                return $false
-            }
-            else {
-                $verifyFailed = 0
-                foreach ($pkg in $toInstall) {
-                    if ($pkg.VerifyCommand -and -not $this.TestPnpmPackageVerificationInWsl($distroName, $pkg.VerifyCommand)) {
-                        $verifyFailed++
-                        $this.LogWarning("✗ $($pkg.Spec) のインストールは成功しましたが検証に失敗しました")
-                    }
-                }
-
-                $parts = @("$($toInstall.Count) 個インストール")
-                if ($verifyFailed -gt 0) { $parts += "$verifyFailed 個検証失敗" }
-                if ($verified -gt 0) { $parts += "$verified 個検証済み" }
-                $parts += "$skipped 個スキップ"
-                if ($verifyFailed -gt 0) {
-                    $this.LogWarning("pnpm グローバルパッケージの検証に失敗しました ($($parts -join ', '))")
-                    return $false
-                }
-                $this.Log("pnpm グローバルパッケージのインストール完了 ($($parts -join ', '))", "Green")
-                return $true
-            }
-        }
-        catch {
-            $this.LogWarning("pnpm パッケージインストール中にエラーが発生しました: $_")
-            return $false
-        }
-    }
-
-    hidden [int] InvokeWslPnpmInstall([string[]]$arguments) {
-        Invoke-Wsl -Arguments $arguments | ForEach-Object {
-            if ($_ -notmatch '^\s*$') {
-                $this.Log("  $_", "Gray")
-            }
-        }
-        return $LASTEXITCODE
-    }
-
-    hidden [bool] TestPnpmPackageVerificationInWsl([string]$distroName, [object]$verifyCmd) {
-        if (-not $verifyCmd) {
-            return $false
-        }
-
-        try {
-            $command = $null
-            $arguments = @()
-            $timeoutSeconds = 30
-            $verifyType = "command"
-            if ($verifyCmd -is [hashtable]) {
-                if (-not $verifyCmd.ContainsKey("command")) { return $false }
-                $command = [string]$verifyCmd["command"]
-                if ($verifyCmd.ContainsKey("args")) { $arguments = @($verifyCmd["args"]) }
-                if ($verifyCmd.ContainsKey("timeoutSeconds")) { $timeoutSeconds = [int]$verifyCmd["timeoutSeconds"] }
-                if ($verifyCmd.ContainsKey("type")) { $verifyType = [string]$verifyCmd["type"] }
-            }
-            else {
-                if (-not ($verifyCmd.PSObject.Properties.Name -contains "command")) { return $false }
-                $command = [string]$verifyCmd.command
-                if ($verifyCmd.PSObject.Properties.Name -contains "args") { $arguments = @($verifyCmd.args) }
-                if ($verifyCmd.PSObject.Properties.Name -contains "timeoutSeconds") { $timeoutSeconds = [int]$verifyCmd.timeoutSeconds }
-                if ($verifyCmd.PSObject.Properties.Name -contains "type") { $verifyType = [string]$verifyCmd.type }
-            }
-            if ($timeoutSeconds -le 0) { $timeoutSeconds = 30 }
-
-            if ($verifyType -eq "commandExists") {
-                $commandExistsLine = "command -v $($this.QuoteShellArg($command))"
-                $cmdLine = "bash -lc $($this.QuoteShellArg($commandExistsLine))"
-                $this.Log("検証中: command -v $command", "Gray")
-            }
-            else {
-                $cmdLine = (@($command) + $arguments | ForEach-Object { $this.QuoteShellArg([string]$_) }) -join " "
-                $this.Log("検証中: $command $($arguments -join ' ')", "Gray")
-            }
-
-            Invoke-Wsl -Arguments @(
-                "-d", $distroName, "-u", $this.NixOsUser, "--",
-                "bash", "-lc", "$($this.GetPnpmShellPrefix()); timeout ${timeoutSeconds}s $cmdLine"
-            ) | ForEach-Object {
-                if ($_ -notmatch '^\s*$') {
-                    $this.Log("  $_", "Gray")
-                }
-            }
-            if ($LASTEXITCODE -eq 124) {
-                $this.Log("検証コマンドがタイムアウトしました (${timeoutSeconds}s): $command $($arguments -join ' ')", "Yellow")
-            }
-            return $LASTEXITCODE -eq 0
-        }
-        catch {
-            $this.Log("検証コマンド実行エラー: $($_.Exception.Message)", "Yellow")
-            return $false
-        }
-    }
-
     hidden [string] QuoteShellArg([string]$value) {
         return "'" + ($value -replace "'", "'\\''") + "'"
-    }
-
-    hidden [bool] IsTruthy([object]$value) {
-        if ($null -eq $value) { return $false }
-        if ($value -is [bool]) { return [bool]$value }
-        return ([string]$value).Trim() -in @("1", "true", "TRUE", "True", "yes", "YES", "Yes", "on", "ON", "On")
     }
 
     hidden [void] EnsureDotfilesAvailable([string]$distroName, [string]$dotfilesPath) {
@@ -392,42 +156,37 @@ class NixRebuildHandler : SetupHandlerBase {
             # dotfiles が NixOS 内に存在しなければ Windows マウント経由でリンク
             $this.EnsureDotfilesAvailable($distroName, $ctx.DotfilesPath)
 
-            if (-not $this.IsTruthy($ctx.GetOption("SkipFlakeUpdate", $false))) {
-                $this.Log("nix flake update を実行しています...")
-                $flakePath = "$($this.NixOsHome)/.dotfiles"
-                $quotedFlakePath = $this.QuoteShellArg($flakePath)
-                $flakeUpdateCommand = "cd $quotedFlakePath && source scripts/sh/install-common.sh && dotfiles_update_flake . 2>&1"
-                $flakeUpdateOutput = Invoke-Wsl -Arguments @("-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", $flakeUpdateCommand)
-                $flakeUpdateExitCode = $LASTEXITCODE
-                $flakeUpdateErrors = [System.Collections.Generic.List[string]]::new()
-                $flakeUpdateOutput | ForEach-Object {
-                    if ($_ -notmatch '^\s*$') {
-                        if ($_ -match '^error:') {
-                            $this.LogError("  $_")
-                            $flakeUpdateErrors.Add([string]$_)
-                        }
-                        else {
-                            $this.Log("  $_", "Gray")
-                        }
+            $this.Log("nix flake update を実行しています...")
+            $flakePath = "$($this.NixOsHome)/.dotfiles"
+            $quotedFlakePath = $this.QuoteShellArg($flakePath)
+            $flakeUpdateCommand = "cd $quotedFlakePath && nix --accept-flake-config --extra-experimental-features 'nix-command flakes' flake update --flake . 2>&1"
+            $flakeUpdateOutput = Invoke-Wsl -Arguments @("-d", $distroName, "-u", $this.NixOsUser, "--", "bash", "-lc", $flakeUpdateCommand)
+            $flakeUpdateExitCode = $LASTEXITCODE
+            $flakeUpdateErrors = [System.Collections.Generic.List[string]]::new()
+            $flakeUpdateOutput | ForEach-Object {
+                if ($_ -notmatch '^\s*$') {
+                    if ($_ -match '^error:') {
+                        $this.LogError("  $_")
+                        $flakeUpdateErrors.Add([string]$_)
+                    }
+                    else {
+                        $this.Log("  $_", "Gray")
                     }
                 }
-                if ($flakeUpdateExitCode -ne 0) {
-                    $errorDetail = if ($flakeUpdateErrors.Count -gt 0) { ": $($flakeUpdateErrors[0])" } else { "" }
-                    throw "nix flake update が失敗しました (exit code: $flakeUpdateExitCode)$errorDetail"
-                }
             }
-            else {
-                $this.Log("SkipFlakeUpdate が設定されているため nix flake update をスキップします")
+            if ($flakeUpdateExitCode -ne 0) {
+                $errorDetail = if ($flakeUpdateErrors.Count -gt 0) { ": $($flakeUpdateErrors[0])" } else { "" }
+                throw "nix flake update が失敗しました (exit code: $flakeUpdateExitCode)$errorDetail"
             }
 
             $this.Log("nixos-rebuild switch を実行しています...")
 
-            # 実ユーザーの identity を wrapper に渡して nixos-rebuild switch を実行する。
+            # ホスト情報は Nix が /etc/nixos/dotfiles.json から取得する。
             # 2>&1 で stderr も捕捉しエラー詳細をログに残す。
             # This repository pins its binary-cache URL and signing key in flake.nix.
             # Accept that checked-in flake config only for this rebuild invocation;
             # do not persist trust in the user's or machine's Nix configuration.
-            $rebuildCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && NIX_CONFIG='experimental-features = nix-command flakes' DOTFILES_USER=$($this.QuoteShellArg($this.NixOsUser)) DOTFILES_HOME=$($this.QuoteShellArg($this.NixOsHome)) DOTFILES_ACCEPT_FLAKE_CONFIG=1 bash scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure 2>&1"
+            $rebuildCommand = "cd $($this.QuoteShellArg("$($this.NixOsHome)/.dotfiles")) && nixos-rebuild switch --flake .#nixos --impure --option accept-flake-config true --option experimental-features 'nix-command flakes' 2>&1"
             $nixRebuildTimeoutSeconds = [int]$ctx.GetOption("NixRebuildTimeoutSeconds", 5400)
             $output = Invoke-Wsl -TimeoutSeconds $nixRebuildTimeoutSeconds -Arguments @("-d", $distroName, "-u", "root", "--", "bash", "-lc", $rebuildCommand)
             $nixosExitCode = $LASTEXITCODE
@@ -453,12 +212,6 @@ class NixRebuildHandler : SetupHandlerBase {
             }
 
             $this.Log("nixos-rebuild switch 完了", "Green")
-
-            # pnpm グローバルパッケージをインストール（SSOT: nix/packages/sets.nix → windows/pnpm/packages.json）
-            $packagesJsonPath = Join-Path $ctx.DotfilesPath "windows\pnpm\packages.json"
-            if (-not $this.InstallPnpmGlobalPackages($distroName, $packagesJsonPath)) {
-                throw "pnpm グローバルパッケージのインストールまたは検証に失敗しました"
-            }
 
             # pre-commit hooks をインストール
             $this.InstallPreCommitHooks($distroName)

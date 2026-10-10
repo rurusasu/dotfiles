@@ -1,20 +1,5 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "description": "pnpm global packages to install on Windows",
-  "globalPackages": [
-    {
-      "installArgs": [
-        "--allow-build=@deepseek-ai/dsh-subprocess-local",
-        "--allow-build=@google/genai",
-        "--allow-build=koffi",
-        "--allow-build=protobufjs",
-        "--allow-build=!node-pty"
-      ],
-      "name": "@deepseek-ai/dsh",
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "dsh"
-      }
-    }
-  ]
+  "globalPackages": []
 }

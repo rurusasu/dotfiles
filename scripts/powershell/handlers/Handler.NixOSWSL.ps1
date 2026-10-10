@@ -18,6 +18,7 @@
 # クラスキャッシュ問題を防ぐため、ここでは読み込まない
 $libPath = Split-Path -Parent $PSScriptRoot
 . (Join-Path $libPath "lib\Invoke-ExternalCommand.ps1")
+. (Join-Path $libPath "lib\Invoke-NixosWslSetup.ps1")
 
 class NixOSWSLHandler : SetupHandlerBase {
     NixOSWSLHandler() {
@@ -75,7 +76,7 @@ class NixOSWSLHandler : SetupHandlerBase {
             $output = Invoke-Wsl -TimeoutSeconds $timeoutSeconds -Arguments @("--status")
             # WSL の出力は null バイトを含む場合があるため除去してからパターンを確認する
             $cleanOutput = ($output | ForEach-Object {
-                ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim()
+                    ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim()
                 }) -join " "
             if ($cleanOutput -match 'Default|既定|Version|バージョン|Kernel|カーネル') {
                 return $true
@@ -432,8 +433,8 @@ class NixOSWSLHandler : SetupHandlerBase {
 
         $scriptPath = $ctx.GetOption("PostInstallScript", "")
         if ([string]::IsNullOrWhiteSpace($scriptPath)) {
-            # デフォルトパスを設定
-            $scriptPath = Join-Path $ctx.DotfilesPath "scripts\sh\nixos-wsl-postinstall.sh"
+            Invoke-NixosWslSetup -Context $ctx
+            return
         }
 
         if (-not (Test-Path -LiteralPath $scriptPath)) {
@@ -473,9 +474,6 @@ class NixOSWSLHandler : SetupHandlerBase {
         $stateVersion = [string]$ctx.GetOption("StateVersion", "")
         if (-not [string]::IsNullOrWhiteSpace($stateVersion)) {
             $cmd += " --state-version $stateVersion"
-        }
-        if ($ctx.GetOption("SkipFlakeUpdate", $false)) {
-            $cmd += " --skip-flake-update"
         }
         $output = @(
             Invoke-Wsl -TimeoutSeconds $timeoutSeconds -Arguments @("-d", $ctx.DistroName, "-u", "root", "--", "sh", "-lc", $cmd)

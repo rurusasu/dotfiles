@@ -144,10 +144,6 @@
       timeoutSeconds = 120;
       recoveryStrategy = "wingetRepairThenReinstall";
     };
-    "Oven-sh.Bun" = {
-      command = "bun";
-      args = [ "--version" ];
-    };
     "Microsoft.PowerToys" = {
       type = "windowsInstalledProduct";
       command = "Microsoft PowerToys";

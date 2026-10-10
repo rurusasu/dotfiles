@@ -21,11 +21,11 @@ in
 {
   testNRTShellAliasUsesNixOSRebuildHelper = {
     expr = home.config.programs.zsh.shellAliases.nrt;
-    expected = "~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh test --flake ~/.dotfiles --impure";
+    expected = "sudo nixos-rebuild test --flake ~/.dotfiles --impure";
   };
 
   testNRBShellAliasUsesNixOSRebuildHelper = {
     expr = home.config.programs.zsh.shellAliases.nrb;
-    expected = "~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh boot --flake ~/.dotfiles --impure";
+    expected = "sudo nixos-rebuild boot --flake ~/.dotfiles --impure";
   };
 }
