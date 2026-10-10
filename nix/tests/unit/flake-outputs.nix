@@ -38,6 +38,7 @@ let
     (import ../../hosts {
       inputs = {
         nix-darwin.packages.${system}.darwin-rebuild.executable = "darwin-rebuild";
+        home-manager.packages.${system}.home-manager.executable = "home-manager";
       };
     }).mkApps
       {
@@ -221,7 +222,7 @@ in
     };
     expected = {
       darwin = "darwin-rebuild";
-      linux = { };
+      linux.home-manager.program = "home-manager";
       unsupportedPlatformHasNoRunnerApps = true;
     };
   };

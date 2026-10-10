@@ -8,6 +8,30 @@ let
   inherit (host) config pkgs;
 in
 {
+  testLinuxDockerModulePreservesDaemonAndCliConfiguration = {
+    expr = {
+      enabled = config.virtualisation.docker.enable;
+      logDriver = config.virtualisation.docker.daemon.settings."log-driver";
+      logOptions = config.virtualisation.docker.daemon.settings."log-opts";
+      compose = builtins.elem pkgs.docker-compose config.environment.systemPackages;
+      buildx = builtins.elem pkgs.docker-buildx config.environment.systemPackages;
+      userGroup = builtins.elem "docker" config.users.users.nixos.extraGroups;
+      insecureRegistries = config.virtualisation.docker.daemon.settings.insecure-registries or [ ];
+    };
+    expected = {
+      enabled = true;
+      logDriver = "json-file";
+      logOptions = {
+        "max-size" = "10m";
+        "max-file" = "3";
+      };
+      compose = true;
+      buildx = true;
+      userGroup = true;
+      insecureRegistries = [ ];
+    };
+  };
+
   testLinuxConfiguresZshAndUsesOnePasswordAgent = {
     expr = {
       enabled = config.programs.zsh.enable;

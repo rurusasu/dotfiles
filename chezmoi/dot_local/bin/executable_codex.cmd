@@ -16,16 +16,13 @@ if not exist "%OP_EXE%" (
 )
 :found_op
 
-set "CODEX_EXE=%APPDATA%\npm\codex.cmd"
-if not exist "%CODEX_EXE%" (
-  set "CODEX_EXE="
-  for /f "delims=" %%I in ('"%WHERE_EXE%" codex.cmd 2^>nul') do (
-    if /i not "%%~fI"=="%~f0" if not defined CODEX_EXE set "CODEX_EXE=%%~fI"
-  )
+set "CODEX_EXE="
+for /f "delims=" %%I in ('"%WHERE_EXE%" codex.exe 2^>nul') do (
+  if not defined CODEX_EXE set "CODEX_EXE=%%~fI"
 )
 
 if not exist "%CODEX_EXE%" (
-  echo Unable to locate the npm-installed codex.cmd 1>&2
+  echo Codex CLI was not found. Enable the CLI provided by the ChatGPT app. 1>&2
   exit /b 1
 )
 

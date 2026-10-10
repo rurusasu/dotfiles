@@ -5,13 +5,16 @@
 # NixOS-WSL specific options are documented on the NixOS-WSL repository:
 # https://github.com/nix-community/NixOS-WSL
 
-{ pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
-  configuredUser = builtins.getEnv "DOTFILES_USER";
-  user = if configuredUser == "" then "nixos" else configuredUser;
-  configuredStateVersion = builtins.getEnv "DOTFILES_STATE_VERSION";
-  stateVersion = if configuredStateVersion == "" then "25.05" else configuredStateVersion;
+  identity = import ../../shared/nixos/identity.nix { inherit lib; };
+  inherit (identity) user stateVersion;
 in
 
 {
@@ -35,7 +38,18 @@ in
   # this value at the release version of the first install of this system.
   # Before changing this value read the documentation for this option
   # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
-  # New installs and explicitly approved migrations pass a value through
-  # DOTFILES_STATE_VERSION. Existing systems retain their existing/default value.
-  system.stateVersion = stateVersion; # Did you read the comment?
+  # Windows bootstrap records explicit choices in /etc/nixos/dotfiles.json.
+  # Existing systems retain the persisted version, or the original 25.05 default.
+  system.stateVersion = stateVersion;
+  assertions = [
+    {
+      assertion = builtins.match "[0-9]{2}\\.[0-9]{2}" stateVersion != null;
+      message = "The NixOS stateVersion must use YY.MM format.";
+    }
+  ];
+  system.activationScripts.dotfilesHostState.text = ''
+    install -d -m 0755 /var/lib/dotfiles
+    printf '%s\n' ${lib.escapeShellArg user} > /var/lib/dotfiles/user
+    printf '%s\n' ${lib.escapeShellArg config.system.stateVersion} > /var/lib/dotfiles/system-state-version
+  '';
 }

@@ -36,7 +36,7 @@ in
 {
   programs.codex = {
     enable = true;
-    # Keep the existing npm CLI provider; Home Manager owns configuration only.
+    # The ChatGPT app supplies the CLI; Home Manager owns configuration only.
     package = null;
     # Preserve application settings and project trust in a writable user file.
     mutableSettings = true;

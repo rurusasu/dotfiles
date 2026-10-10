@@ -153,22 +153,12 @@ in
     }) 3;
   };
 
-  testPnpmIsInstalledOnceWithNativeHomeManagerSettings = {
+  testPnpmIsNotInstalled = {
     expr =
       map
         (home: {
           enabled = home.config.programs.pnpm.enable;
-          package = home.config.programs.pnpm.package.drvPath == home.pkgs.pnpm.drvPath;
-          packageCopies = builtins.length (
-            builtins.filter (package: package.drvPath == home.pkgs.pnpm.drvPath) home.config.home.packages
-          );
-          home = home.config.programs.pnpm.pnpmHome;
-          environment = home.config.home.sessionVariables.PNPM_HOME;
-          binCopies = builtins.length (
-            builtins.filter (
-              path: path == "${home.config.programs.pnpm.pnpmHome}/bin"
-            ) home.config.home.sessionPath
-          );
+          environment = home.config.home.sessionVariables ? PNPM_HOME;
         })
         [
           linux
@@ -176,12 +166,8 @@ in
           darwin
         ];
     expected = builtins.genList (_: {
-      enabled = true;
-      package = true;
-      packageCopies = 1;
-      home = "/home/test-user/.local/share/pnpm";
-      environment = "/home/test-user/.local/share/pnpm";
-      binCopies = 1;
+      enabled = false;
+      environment = false;
     }) 3;
   };
 

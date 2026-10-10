@@ -81,8 +81,8 @@ in
   programs.zsh.shellAliases = {
     # NixOS rebuild shortcuts
     nrs = "task --dir ~/.dotfiles nrs";
-    nrt = "~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh test --flake ~/.dotfiles --impure";
-    nrb = "~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh boot --flake ~/.dotfiles --impure";
+    nrt = "sudo nixos-rebuild test --flake ~/.dotfiles --impure";
+    nrb = "sudo nixos-rebuild boot --flake ~/.dotfiles --impure";
   };
 
   # fcitx5 user systemd service.

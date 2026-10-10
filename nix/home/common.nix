@@ -21,8 +21,6 @@
     ../modules/editors/orca
     ../modules/herdr
     ../modules/shells/bash
-    ./pnpm.nix
-    ../modules/pnpm.nix
     ../modules/dsh.nix
     ../modules/hermes-agent
     ../modules/shells/plugins/bat.nix
@@ -57,11 +55,10 @@
       QMD_RERANK_MODEL = "hf:giladgd/Qwen3-Reranker-4B-GGUF:Q8_0";
     };
 
-    # PATH: user-local Codex npm and bun global binaries
+    # PATH: user-local commands and npm global binaries
     sessionPath = [
       "$HOME/.local/bin"
       "$HOME/.local/npm/bin"
-      "$HOME/.bun/bin"
     ];
   };
 

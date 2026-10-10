@@ -34,8 +34,8 @@ timezone、defaults の反映 activation は `system.nix` が所有する。
 Darwin の `default.nix` は配線専用とし、必要な module を import する。system option を直接追加しない。
 
 `hardware-configuration.nix` は全 host に必要な標準ファイルではない。native NixOS の実機では、
-マシンごとの `/etc/nixos/hardware-configuration.nix` を `DOTFILES_NIXOS_HARDWARE_CONFIG` 経由で
-読み込む。複数の実機で同じ host profile を使う場合も、hardware configuration は各マシン固有にする。
+マシンごとの `/etc/nixos/hardware-configuration.nix` を Nix 側で検出して
+読み込む。ユーザーと UID/GID は `shared/nixos/identity.nix` が既存アカウントから取得する。複数の実機で同じ host profile を使う場合も、hardware configuration は各マシン固有にする。
 NixOS-WSL では通常不要で、Darwin では使用しない。
 
 `windows/` は NixOS/nix-darwin の system host ではなく、Windows デスクトップの設定出力と起動処理を持つ。`omarchy-keybindings.nix` を通常の Nix `import` で呼び、生成物を chezmoi 経由で配布する。上記の `default.nix` / `configuration.nix` 構成は適用しない。

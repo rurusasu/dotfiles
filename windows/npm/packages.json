@@ -3,17 +3,17 @@
   "description": "npm global packages to install on Windows",
   "globalPackages": [
     {
-      "name": "@openai/codex",
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "codex"
-      }
-    },
-    {
       "name": "@devcontainers/cli",
       "verifyCommand": {
         "args": ["--version"],
         "command": "devcontainer"
+      }
+    },
+    {
+      "name": "@deepseek-ai/dsh",
+      "verifyCommand": {
+        "args": ["--version"],
+        "command": "dsh"
       }
     },
     {

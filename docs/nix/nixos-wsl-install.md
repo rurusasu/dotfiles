@@ -71,9 +71,10 @@ install.cmd
   -> NixOS-WSL の latest release asset を GitHub API から取得
   -> nixos.wsl を選択し、wsl --install --from-file
      （WSL 2.4.4 未満または失敗時は wsl --import --version 2）
-  -> scripts/sh/nixos-wsl-postinstall.sh
+  -> scripts/powershell/lib/Invoke-NixosWslSetup.ps1
+  -> checkout の同期と /etc/nixos/dotfiles.json の保存
   -> nix flake update
-  -> user-aware nixos-rebuild-with-user.sh switch --flake ...#nixos --impure
+  -> nixos-rebuild switch --flake ...#nixos --impure
 ```
 
 release asset は `nixos.wsl` のみを使用します。対応範囲は、このアセットを配布する現行
@@ -155,35 +156,26 @@ handler が GitHub の `/releases/tags/<tag>` から取得します。CI の
 `scripts/powershell/ci/Invoke-NixosWslE2E.ps1` も `-ReleaseTag` を受け取れますが、
 `.github/workflows/ci-nix.yml` は指定せず latest を検証します。`InstallDir` は
 新規インストール時に空のディレクトリである必要があります。`-ForcePostInstall` は既存 checkout
-を削除または上書きし得るため、通常は指定しないでください。必要な場合も、先に checkout と
-VHD/stateful data のバックアップを作成してください。
+に競合する場合、隣接する `.backup-<ID>` へ移動してから同期します。
 
-## 手動 postinstall
+## 通常の反映
 
-installer 全体ではなく、既存の NixOS-WSL に dotfiles の postinstall だけを適用する場合は、
-WSL 形式のパスで実行します。
+初回の checkout 同期は Windows の PowerShell ハンドラーが担当します。
+セットアップ済みの WSL では次のコマンドで反映します。
 
 ```bash
-sudo bash /mnt/d/path/to/dotfiles/scripts/sh/nixos-wsl-postinstall.sh \
-  --user <USER> \
-  --sync-mode link \
-  --sync-source /mnt/d/path/to/dotfiles \
-  --sync-back lock
+~/.dotfiles/install.sh
 ```
 
-`/mnt/d/path/to/dotfiles` は実際の checkout の WSL パスに置き換えてください。postinstall が
-使用する主な設定は次のとおりです。
-
-- `nix/hosts/x86_64-linux/wsl/default.nix`: NixOS-WSL host の entrypoint
-- `nix/hosts/x86_64-linux/wsl/configuration.nix`: WSL 固有の system 設定
-- `nix/hosts/x86_64-linux/wsl/home.nix`: WSL 固有の Home Manager 設定
-- `/etc/nixos/hardware-configuration.nix`: native NixOS 用。NixOS-WSL では通常不要
+NixOS のアカウント情報、正確な checkout の Git trust、`stateVersion` は
+`/etc/nixos/dotfiles.json` を `nix/hosts/shared/nixos/identity.nix` が読み取ります。
+ネイティブ NixOS のハードウェア設定は `/etc/nixos/hardware-configuration.nix` を使います。
 
 ## system version と `system.stateVersion`
 
 NixOS のパッケージや system の更新は `flake.lock` の `nixpkgs` input で決まります。この
-リポジトリは `nixos-unstable` を使用し、初回 postinstall と通常の更新経路で `nix flake update`
-を実行します。WSL 内の更新は次のいずれかを使います。
+リポジトリは `nixos-unstable` を使用します。初回 installer と通常の更新操作 `nrs` は、
+毎回 `nix flake update` が成功した後に `switch` を実行します。WSL 内の更新は次のいずれかを使います。
 
 ```bash
 # dotfiles installer の更新経路
@@ -191,7 +183,7 @@ nrs
 
 # 状態を確認してから明示的に rebuild
 nix flake update --flake ~/.dotfiles
-~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh switch --flake ~/.dotfiles#nixos --impure
+sudo nixos-rebuild switch --flake ~/.dotfiles#nixos --impure
 ```
 
 一方、`nix/hosts/x86_64-linux/wsl/configuration.nix` の `system.stateVersion` は、パッケージの最新版を選択する値では
@@ -202,7 +194,7 @@ nix flake update --flake ~/.dotfiles
 system.stateVersion = stateVersion;
 ```
 
-新規構成では installer が `DOTFILES_STATE_VERSION=26.05` を渡します。既存の 25.05 WSL 環境では、
+新規構成では Windows installer が `stateVersion = "26.05"` をホスト設定 JSON に保存します。既存の 25.05 WSL 環境では、
 通常の `nrs` や `install.cmd` が stateVersion を勝手に変更しないよう、25.05 を保持します。26.05 へ
 移行する場合は、単なるパッケージ更新ではなく state schema の移行として扱ってください。適用前に VHD、
 Docker、データベース、各種 `/var/lib` のデータをバックアップし、使用中のモジュールの移行可否を確認して
@@ -212,20 +204,21 @@ runtime を検証します。
 このリポジトリの flake は `nixos-unstable` を使用するため、stable の `system.stateVersion` と
 unstable の実体 version が異なることがあります。
 
-既存の 25.05 環境から明示的に移行する場合は、次の順で承認します。`dry-build` が成功しても runtime
+既存の 25.05 環境から明示的に移行する場合は、まず `/etc/nixos/dotfiles.json` の
+`stateVersion` を編集し、次の順で反映します。`dry-build` が成功しても runtime
 data の互換性を保証するものではないため、バックアップと rollback generation を確認してから `switch`
 してください。
 
 ```bash
 nix flake update --flake ~/.dotfiles
-DOTFILES_STATE_VERSION=26.05 ~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh dry-build --flake ~/.dotfiles#nixos --impure
-DOTFILES_STATE_VERSION=26.05 ~/.dotfiles/scripts/sh/nixos-rebuild-with-user.sh switch --flake ~/.dotfiles#nixos --impure
+sudo nixos-rebuild dry-build --flake ~/.dotfiles#nixos --impure
+sudo nixos-rebuild switch --flake ~/.dotfiles#nixos --impure
 nixos-rebuild list-generations
 readlink -f /run/current-system
 ```
 
 新規インストール時に値を変更する場合は、Windows 側で `.install.cmd -StateVersion 26.05` を指定できます。
-手動 postinstall では `--state-version 26.05` を指定してください。
+セットアップ後は `/etc/nixos/dotfiles.json` で管理します。
 
 - [NixOS Wiki: When do I update stateVersion?](https://wiki.nixos.org/wiki/FAQ/When_do_I_update_stateVersion)
 - [NixOS 26.05 release](https://nixos.org/blog/announcements/2026/nixos-2605/)

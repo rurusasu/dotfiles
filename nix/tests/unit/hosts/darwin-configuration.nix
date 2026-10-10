@@ -173,6 +173,31 @@ in
     expected = true;
   };
 
+  testDarwinDockerInitializationUsesConfiguredIdentityAndHome = {
+    expr = {
+      configuredUser = inputs.nixpkgs.lib.hasInfix "--user=${inputs.nixpkgs.lib.escapeShellArg "ktome1995"}" sudoUserConfig.system.activationScripts.postActivation.text;
+      hostHome = inputs.nixpkgs.lib.hasInfix (inputs.nixpkgs.lib.escapeShellArg "/Volumes/Home/alice/.config/dotfiles") nonstandardHomeConfig.system.activationScripts.postActivation.text;
+      acceptsLicense = inputs.nixpkgs.lib.hasInfix "--accept-license" defaultConfig.system.activationScripts.postActivation.text;
+    };
+    expected = {
+      configuredUser = true;
+      hostHome = true;
+      acceptsLicense = true;
+    };
+  };
+
+  testDarwinDockerInitializationRequiresDeclaredCask = {
+    expr =
+      let
+        withoutDocker =
+          (mkDarwin {
+            extraModules = [ { homebrew.casks = inputs.nixpkgs.lib.mkForce [ ]; } ];
+          }).config;
+      in
+      inputs.nixpkgs.lib.hasInfix "--accept-license" withoutDocker.system.activationScripts.postActivation.text;
+    expected = false;
+  };
+
   testDarwinHomeManagerOwnsPlatformEnvironment = {
     expr = {
       autoUpdate = defaultHome.home.sessionVariables.HOMEBREW_AUTO_UPDATE_SECS;

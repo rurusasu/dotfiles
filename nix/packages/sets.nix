@@ -38,7 +38,7 @@
 {
   pkgs,
   lib,
-  # Accepted for existing callers; Codex CLI is installed through npm.
+  # Accepted for existing callers; Codex CLI is supplied by the ChatGPT app.
   codexPackage ? null,
   catalogOverride ? null,
 }:

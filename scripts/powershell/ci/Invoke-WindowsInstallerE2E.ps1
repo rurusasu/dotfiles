@@ -88,30 +88,8 @@ else {
   Remove-Item Env:\DOTFILES_FORCE_WINDOWS_POWERSHELL -ErrorAction SilentlyContinue
 }
 
-# The hosted image can contain pnpm already. Hide only its executable
-# directory for the installer process so both shell jobs exercise the
-# actual npm/corepack bootstrap path reported as failing by users.
-$pnpmExecutableDirectories = @(
-  Get-Command -Name 'pnpm' -CommandType Application -All -ErrorAction SilentlyContinue |
-    ForEach-Object { Split-Path -Parent $_.Source } |
-    Sort-Object -Unique
-)
-
 Push-Location $env:GITHUB_WORKSPACE
 try {
-  if ($pnpmExecutableDirectories.Count -gt 0) {
-    $env:PATH = @(
-      $env:PATH -split ';' |
-        Where-Object { $_ -and $_ -notin $pnpmExecutableDirectories }
-    ) -join ';'
-  }
-  if (Get-Command -Name 'pnpm' -CommandType Application -ErrorAction SilentlyContinue) {
-    throw 'Could not isolate the preinstalled pnpm executable for the bootstrap E2E'
-  }
-  if (-not (Get-Command -Name 'npm' -CommandType Application -ErrorAction SilentlyContinue)) {
-    throw 'Cannot exercise the pnpm bootstrap E2E because npm is unavailable after pnpm isolation'
-  }
-
   $classicBefore = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --accept-source-agreements --disable-interactivity 2>&1)
   $classicBeforeExitCode = $LASTEXITCODE
   $classicBeforeText = $classicBefore -join [Environment]::NewLine
@@ -195,36 +173,19 @@ finally {
 
 $out = $output -join [Environment]::NewLine
 
-# install.cmd persists PATH and PNPM_HOME to the user environment in
-# its child process. Re-read those values so post-install probes use
-# the shims the installer just published, not only the runner PATH.
+# Read the PATH published by the installer child process.
 . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/lib/Invoke-ExternalCommand.ps1')
-$npmPrefixOutput = @(Invoke-Npm -Arguments @('prefix', '--global'))
-$npmPrefixExitCode = $LASTEXITCODE
-$npmGlobalPrefix = if ($npmPrefixExitCode -eq 0) { [string]($npmPrefixOutput | Select-Object -Last 1) } else { '' }
-$runnerPnpmDirectories = @($pnpmExecutableDirectories | Where-Object {
-  [string]::IsNullOrWhiteSpace($npmGlobalPrefix) -or
-  -not [System.StringComparer]::OrdinalIgnoreCase.Equals(
-    [System.IO.Path]::GetFullPath($_).TrimEnd('\'),
-    [System.IO.Path]::GetFullPath($npmGlobalPrefix.Trim()).TrimEnd('\')
-  )
-})
 $env:PATH = $originalPath
-Update-ProcessEnvironmentPath -ExcludePath $runnerPnpmDirectories
+Update-ProcessEnvironmentPath
 if ($env:PATH.Length -gt 8191) {
   throw "Post-install PATH exceeds the cmd.exe command environment limit: $($env:PATH.Length)"
-}
-$script:npmPnpmShim = $null
-$persistedPnpmHome = [Environment]::GetEnvironmentVariable('PNPM_HOME', 'User')
-if (-not [string]::IsNullOrWhiteSpace($persistedPnpmHome)) {
-  $env:PNPM_HOME = $persistedPnpmHome
 }
 
 Invoke-WindowsE2EValidation -Name 'installer evidence' -Validation {
 . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WindowsInstallerSuccess.ps1')
 $npmManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/npm/packages.json') -Raw | ConvertFrom-Json
 $pnpmManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/pnpm/packages.json') -Raw | ConvertFrom-Json
-$requiredPackageManagerMarkers = @('[Pnpm] npm で pnpm をインストールしました')
+$requiredPackageManagerMarkers = @()
 foreach ($package in $npmManifest.globalPackages) {
   $requiredPackageManagerMarkers += "[Npm] ✓ $($package.name)"
 }
@@ -319,25 +280,6 @@ Assert-WezTermInstallEvidence -Output $out -PackageId $weztermPackages[0].Packag
 Write-Host "WEZTERM_E2E: runtime=$($PSVersionTable.PSVersion) package=$($weztermPackages[0].PackageIdentifier) executable=$($weztermCommand.Source) elapsedMs=$($weztermTimer.ElapsedMilliseconds) exitCode=$weztermVersionExitCode version=$weztermVersionText"
 }
 
-Invoke-WindowsE2EValidation -Name 'pnpm bootstrap' -Validation {
-$npmPrefixOutput = @(Invoke-Npm -Arguments @('prefix', '--global'))
-$npmPrefixExitCode = $LASTEXITCODE
-$npmGlobalPrefix = if ($npmPrefixExitCode -eq 0) { [string]($npmPrefixOutput | Select-Object -Last 1) } else { '' }
-if ([string]::IsNullOrWhiteSpace($npmGlobalPrefix)) {
-  throw "Unable to resolve the npm global prefix for the pnpm bootstrap (exit=$npmPrefixExitCode): $($npmPrefixOutput -join ' ')"
-}
-$npmGlobalPrefix = [System.IO.Path]::GetFullPath($npmGlobalPrefix.Trim())
-$script:npmPnpmShim = Join-Path $npmGlobalPrefix 'pnpm.cmd'
-if (-not (Test-Path -LiteralPath $script:npmPnpmShim -PathType Leaf)) {
-  throw "npm did not install the pnpm command shim under its global prefix: $script:npmPnpmShim"
-}
-$npmPnpmOutput = @(& $script:npmPnpmShim --version 2>&1)
-$npmPnpmExitCode = $LASTEXITCODE
-if ($npmPnpmExitCode -ne 0 -or ($npmPnpmOutput -join ' ') -notmatch '\d+\.\d+') {
-  throw "npm-installed pnpm shim failed its version probe (exit=$npmPnpmExitCode): $($npmPnpmOutput -join ' ')"
-}
-}
-
 Invoke-WindowsE2EValidation -Name 'ChatGPT Classic removal' -Validation {
 if ($out -notmatch '(?m)RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=(removed|absent)') {
   throw 'ChatGPT Classic retired-package cleanup did not complete successfully'
@@ -357,31 +299,9 @@ if ($classicListExitCode -ne 0) {
 }
 }
 
-Invoke-WindowsE2EValidation -Name 'Codex npm package' -Validation {
-  $npmListOutput = @(npm list --global --depth=0 --json 2>&1)
-  $npmListExitCode = $LASTEXITCODE
-  if ($npmListExitCode -ne 0) {
-    throw "npm global package listing failed (exit=$npmListExitCode): $($npmListOutput -join ' ')"
-  }
-  $npmList = ($npmListOutput -join [Environment]::NewLine) | ConvertFrom-Json
-  if (-not $npmList.dependencies.PSObject.Properties['@openai/codex']) {
-    throw 'The @openai/codex npm package is missing from the global package list'
-  }
-
-  $codexCommand = Get-Command -Name 'codex' -CommandType Application -ErrorAction SilentlyContinue |
-    Select-Object -First 1
-  if (-not $codexCommand) {
-    throw 'The npm-installed Codex command is missing from PATH'
-  }
-  $codexVersion = @(& $codexCommand.Source --version 2>&1)
-  if ($LASTEXITCODE -ne 0) {
-    throw "Codex CLI --version failed: $($codexVersion -join ' ')"
-  }
-}
-
 Invoke-WindowsE2EValidation -Name 'required command smoke tests' -Validation {
 # A handler that cannot run its setup predicate is skipped, not failed.
-# Require the key npm/pnpm/1Password tools themselves so a green phase
+# Require the key npm/dsh/1Password tools themselves so a green phase
 # cannot hide missing prerequisites or an unconfigured PATH.
 $onePasswordPackagesPath = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
 $persistedOnePasswordPath = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -429,7 +349,7 @@ $requiredCommands = @(
   @{ Name = 'npm'; Arguments = @('--version') }
   @{ Name = 'agent-browser'; Arguments = @('--version') }
   @{ Name = 'herdr'; Arguments = @('--version') }
-  @{ Name = 'pnpm'; Arguments = @('--version') }
+  @{ Name = 'dsh'; Arguments = @('--version') }
   @{ Name = 'op.exe'; Arguments = @('--version') }
 )
 foreach ($requiredCommand in $requiredCommands) {
@@ -437,14 +357,6 @@ foreach ($requiredCommand in $requiredCommands) {
     Select-Object -First 1
   if (-not $resolvedCommand) {
     throw "Windows installer did not expose required command '$($requiredCommand.Name)'"
-  }
-
-  if ($requiredCommand.Name -eq 'pnpm') {
-    $resolvedPnpmPath = [System.IO.Path]::GetFullPath((Get-ExternalCommandPath -CommandInfo $resolvedCommand))
-    $expectedPnpmPath = [System.IO.Path]::GetFullPath($script:npmPnpmShim)
-    if (-not [System.StringComparer]::OrdinalIgnoreCase.Equals($resolvedPnpmPath, $expectedPnpmPath)) {
-      throw "PATH-resolved pnpm is not the npm-installed pnpm shim: resolved=$resolvedPnpmPath expected=$expectedPnpmPath"
-    }
   }
 
   $commandArguments = @($requiredCommand.Arguments)
@@ -483,19 +395,6 @@ finally {
     $validationErrors.Add("User PATH cleanup: $($_.Exception.Message)")
   }
 
-  try {
-    $codexCommand = Get-Command -Name 'codex' -CommandType Application -ErrorAction Stop |
-      Select-Object -First 1
-    $codexCliOutput = @(& $codexCommand.Source --help 2>&1)
-    $codexCliExitCode = $LASTEXITCODE
-    if ($codexCliExitCode -ne 0) {
-      throw "Codex CLI --help failed (exit=$codexCliExitCode): $($codexCliOutput -join ' ')"
-    }
-    Write-Host 'Codex CLI launch probe passed'
-  }
-  catch {
-    $validationErrors.Add("Codex CLI launch probe: $($_.Exception.Message)")
-  }
 
 }
 

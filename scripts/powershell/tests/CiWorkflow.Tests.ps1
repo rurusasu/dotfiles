@@ -125,18 +125,17 @@ Describe 'CI workflow configuration' {
         $installerScript | Should -Match '\$runtimeCommand = if \(\$expectedRuntime -eq ''5\.1''\) \{ ''powershell\.exe'' \} else \{ ''pwsh\.exe'' \}'
         $installerScript | Should -Match 'install\.cmd -NoPause -UserPhaseOnly(?!\s+-WingetVerifyCommandOnly)'
         $installerScript | Should -Match 'RequiredOutputMarkers\s+\$requiredPackageManagerMarkers'
-        $installerScript | Should -Match '\[Pnpm\] npm で pnpm をインストールしました'
+        $installerScript | Should -Not -Match 'npm install -g pnpm'
         $installerScript | Should -Match '\[Npm\] ✓ \$\(\$package\.name\)'
         $installerScript | Should -Match 'if \(\$expectedRuntime -eq ''7''\)'
         $installerScript | Should -Match 'Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue \$true'
         $installerScript | Should -Match '\$powerShellPackages\[0\]\s*\|\s*Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue \$true -Force'
         $installerScript | Should -Match '\$expectedWindowsPackageIds'
         $installerScript | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
-        $installerScript | Should -Match 'Update-ProcessEnvironmentPath -ExcludePath \$runnerPnpmDirectories'
-        ([regex]::Matches($installerScript, [regex]::Escape("Invoke-Npm -Arguments @('prefix', '--global')"))).Count | Should -Be 2
+        $installerScript | Should -Match 'Update-ProcessEnvironmentPath'
         $installerScript | Should -Not -Match '\bnpm prefix --global\b'
         $installerScript | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'
-        $installerScript | Should -Match 'Name = ''pnpm''; Arguments = @\(''--version''\)'
+        $installerScript | Should -Match 'Name = ''dsh''; Arguments = @\(''--version''\)'
         $installerScript | Should -Match 'Write-Host \$failureSummary -ForegroundColor Red'
     }
     It 'should keep the dedicated Windows installer E2E script UTF-8 BOM encoded and parseable' {
@@ -154,15 +153,10 @@ Describe 'CI workflow configuration' {
         $parseErrors | Should -BeNullOrEmpty
     }
 
-    It 'should verify Codex is installed and launched from the npm package' {
+    It 'should leave Codex CLI installation to the ChatGPT app' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
-
-        $installerScript | Should -Match "@openai/codex"
-        $installerScript | Should -Match "npm.*list.*--global"
-        $installerScript | Should -Match "Get-Command -Name 'codex' -CommandType Application"
-        $installerScript | Should -Match 'Codex CLI --help failed'
-        $installerScript | Should -Not -Match 'Handler\.Codex\.ps1'
-        $installerScript | Should -Not -Match 'codex-code-mode-host\.exe'
+        $installerScript | Should -Not -Match '@openai/codex|npm-installed Codex|Codex CLI --help failed'
+        $installerScript | Should -Match "Name = 'dsh'"
     }
     It 'should verify ChatGPT Classic is removed by the real Windows installer E2E' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
@@ -208,7 +202,7 @@ Describe 'CI workflow configuration' {
         $windowsJob | Should -Match '\$selfTestExitCode = \$LASTEXITCODE'
     }
 
-    It 'should run npm pnpm and 1Password executables after the Windows installer' {
+    It 'should run npm dsh and 1Password executables after the Windows installer' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
 
 
@@ -217,12 +211,11 @@ Describe 'CI workflow configuration' {
         $installerScript | Should -Match 'agent-browser@0\.38\.1 requires Node\.js >=24\.0\.0'
         $installerScript | Should -Match '\[version\]''24\.0\.0'''
         $installerScript | Should -Match "Name = 'herdr'"
-        $installerScript | Should -Match "'pnpm'"
+        $installerScript | Should -Match "'dsh'"
         $installerScript | Should -Match "'op\.exe'"
         $installerScript | Should -Match 'Persisted user PATH does not identify an installed AgileBits\.1Password\.CLI package directory'
         $installerScript | Should -Match 'WinGet Links op\.exe shim is missing after OnePasswordCli setup'
         $installerScript | Should -Match "GetEnvironmentVariable\('Path',\s*'User'\)"
-        $installerScript | Should -Match "GetEnvironmentVariable\('PNPM_HOME',\s*'User'\)"
         $installerScript | Should -Match 'Get-Command -Name \$requiredCommand\.Name -CommandType Application'
         $installerScript | Should -Match 'Windows installer did not expose required command'
         $installerScript | Should -Match 'Windows installer command.*failed'
@@ -268,18 +261,15 @@ Describe 'CI workflow configuration' {
 
     It 'should configure the Hermes binary cache for system builds' {
         $flake = Get-Content -LiteralPath (Join-Path $script:repoRoot "flake.nix") -Raw
-        $postInstall = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
+        $postInstall = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/powershell/lib/Invoke-NixosWslSetup.ps1") -Raw
         $bootstrapWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
 
         $flake | Should -Match 'extra-substituters\s*=\s*\[\s*"https://cache\.numtide\.com"'
         $flake | Should -Match 'https://hermes-agent\.cachix\.org'
         $flake | Should -Match 'extra-trusted-public-keys\s*=\s*\[\s*"niks3\.numtide\.com-1:'
         $flake | Should -Match 'hermes-agent\.cachix\.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU='
-        $postInstall | Should -Match 'extra-substituters = https://cache\.numtide\.com'
-        $postInstall | Should -Match 'https://hermes-agent\.cachix\.org'
-        $postInstall | Should -Match 'extra-trusted-public-keys = niks3\.numtide\.com-1:'
-        $postInstall | Should -Match 'hermes-agent\.cachix\.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU='
         $bootstrapWorkflow | Should -Match 'Build macOS packages, configuration, and tests[\s\S]*?nix build --impure --no-link --print-build-logs[\s\S]*?--option extra-substituters "\$NUMTIDE_CACHE"[\s\S]*?\.#darwinConfigurations\.macos\.system'
+        $postInstall | Should -Match 'accept-flake-config true'
         $bootstrapWorkflow | Should -Match 'NUMTIDE_CACHE_KEY:\s*niks3\.numtide\.com-1:'
     }
 
@@ -324,7 +314,6 @@ Describe 'CI workflow configuration' {
         $script | Should -Match '\$repoRoot = \(Resolve-Path -LiteralPath \(Join-Path \$PSScriptRoot "\.\.\\\.\.\\\.\."\)\)\.Path'
         $script | Should -Match 'SyncMode"\] = "repo"'
         $script | Should -Match 'SyncBack"\] = "none"'
-        $script | Should -Match 'SkipFlakeUpdate"\] = \$true'
         $script | Should -Match 'handlers\\Handler\.NixOSWSL\.ps1'
         $script | Should -Match '\$handler = \[NixOSWSLHandler\]::new\(\)'
         $script | Should -Match '\$result = \$handler\.Apply\(\$context\)'
@@ -333,7 +322,7 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'nix --version && nix --extra-experimental-features'
         $script | Should -Match "nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from 'file://"
         $script | Should -Match 'CI_ASSERTION: imported the NixOS system closure'
-        $script | Should -Match 'bash ''\$postInstallWslPath'' --sync-mode repo --sync-back none --state-version 25\.05 --skip-flake-update'
+        $script | Should -Match 'Invoke-NixosWslSetup -Context \$context'
         $script | Should -Match 'CI_ASSERTION: production NixOS-WSL post-install switch completed'
         $script | Should -Match 'GitHub access-token setting is loaded from a Nix configuration file inside WSL'
         $script | Should -Match 'nix config show access-tokens'
@@ -345,7 +334,6 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'Welcome to your new NixOS-WSL system'
         $script | Should -Match 'nixos-rebuild list-generations'
         $script | Should -Match 'handlers\\Handler\.NixRebuild\.ps1'
-        $script | Should -Match '\$rebuildContext\.Options\["SkipFlakeUpdate"\] = \$true'
         $script | Should -Match '\$rebuildContext\.Options\["NixRebuildTimeoutSeconds"\] = \$PostInstallTimeoutSeconds'
         $script | Should -Match 'dd if=/dev/zero of=/swapfile bs=1M count=8192'
         $script | Should -Match 'swapon /swapfile'
@@ -402,7 +390,7 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'chmod 600 /home/nixos/\.hermes/\.env'
         $script | Should -Match 'preserve-existing-hermes-state'
         $fixtureIndex = $script.IndexOf('install -d -m 700 /home/nixos/.hermes/memories')
-        $firstSwitchIndex = $script.IndexOf('bash ''$postInstallWslPath'' --sync-mode repo')
+        $firstSwitchIndex = $script.IndexOf('Invoke-NixosWslSetup -Context $context')
         $fixtureIndex | Should -BeGreaterOrEqual 0
         $firstSwitchIndex | Should -BeGreaterThan $fixtureIndex
         $script | Should -Match 'stat -c .*\.hermes/\.env'
@@ -709,7 +697,7 @@ esac
             '(?ms)^  complete:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
         ).Value
         $completeJob | Should -Match "(?m)^\s+WSL_REQUIRED:\s+\$\{\{ needs\.changes\.outputs\.nix == 'true' \}\}$"
-        $test | Should -Match 'DOTFILES_NIXOS_PREBUILT_SYSTEM=\$\{nodes\.machine\.system\.build\.toplevel\}'
+        $test | Should -Match 'toplevel = builtins.storePath "\$\{nodes\.machine\.system\.build\.toplevel\}"'
         $test | Should -Match 'system\.switch\.enable\s*=\s*true'
         $test | Should -Match 'docker/hermes-service/compose\.yml'
     }
