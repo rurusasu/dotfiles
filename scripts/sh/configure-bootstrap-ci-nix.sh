@@ -78,11 +78,11 @@ if ! nix config show access-tokens | grep -E '^[[:space:]]*github\.com[[:space:]
   echo "Nix did not load the CI GitHub authentication configuration." >&2
   exit 1
 fi
-if ! nix config show extra-substituters | grep -Fq 'https://hermes-agent.cachix.org'; then
+if ! nix config show substituters | grep -Fq 'https://hermes-agent.cachix.org'; then
   echo "Nix did not load the Hermes binary cache." >&2
   exit 1
 fi
-if ! nix config show extra-trusted-public-keys | grep -Fq 'hermes-agent.cachix.org-1:'; then
+if ! nix config show trusted-public-keys | grep -Fq 'hermes-agent.cachix.org-1:'; then
   echo "Nix did not load the Hermes binary cache key." >&2
   exit 1
 fi
