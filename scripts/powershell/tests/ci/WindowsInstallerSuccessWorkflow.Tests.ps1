@@ -45,10 +45,10 @@
     BeforeEach {
         $script:originalWorkspace = $env:GITHUB_WORKSPACE
         $env:GITHUB_WORKSPACE = $script:repositoryRoot
-        $validationErrors = [Collections.Generic.List[string]]::new()
-        $out = $script:validOutput
-        $exitCode = 0
-        $isWindowsPowerShell = $false
+        $script:validationErrors = [Collections.Generic.List[string]]::new()
+        $script:out = $script:validOutput
+        $script:exitCode = 0
+        $script:isWindowsPowerShell = $false
         Set-StrictMode -Version Latest
     }
 
@@ -58,7 +58,7 @@
 
     It 'should accept a completed GUI install without npm pnpm or retired-package evidence' {
         Invoke-ShippedValidation -Name 'installer evidence'
-        $validationErrors | Should -BeNullOrEmpty
+        $script:validationErrors | Should -BeNullOrEmpty
     }
 
     It 'should reject npm or pnpm activity in an otherwise successful GUI install' -TestCases @(
@@ -66,15 +66,15 @@
         @{ Marker = '[Pnpm] bootstrapped pnpm' }
     ) {
         param($Marker)
-        $out += "`n$Marker"
+        $script:out += "`n$Marker"
         Invoke-ShippedValidation -Name 'installer evidence'
-        ($validationErrors -join ' | ') | Should -Match 'npm/pnpm activity'
+        ($script:validationErrors -join ' | ') | Should -Match 'npm/pnpm activity'
     }
 
     It 'should reject a failed installer even with complete GUI evidence' {
-        $exitCode = 7
+        $script:exitCode = 7
         Invoke-ShippedValidation -Name 'installer evidence'
-        ($validationErrors -join ' | ') | Should -Match 'exited with code 7'
+        ($script:validationErrors -join ' | ') | Should -Match 'exited with code 7'
     }
 
     It 'should reject missing normalization evidence or a mismatched launcher runtime' -TestCases @(
@@ -83,17 +83,17 @@
     ) {
         param($Fault)
         if ($Fault -eq 'path') {
-            $out = ($out -split "`n" | Where-Object { $_ -notmatch 'Process PATH normalized:' }) -join "`n"
+            $script:out = ($script:out -split "`n" | Where-Object { $_ -notmatch 'Process PATH normalized:' }) -join "`n"
         }
-        else { $isWindowsPowerShell = $true }
+        else { $script:isWindowsPowerShell = $true }
         Invoke-ShippedValidation -Name 'installer evidence'
-        $validationErrors.Count | Should -Be 1
-        ($validationErrors -join ' | ') | Should -Match 'stale PATH|forced Windows PowerShell'
+        $script:validationErrors.Count | Should -Be 1
+        ($script:validationErrors -join ' | ') | Should -Match 'stale PATH|forced Windows PowerShell'
     }
 
     It 'should verify every GUI package including verify-only Orca and Store Codex' {
         Invoke-ShippedValidation -Name 'WinGet package inventory'
-        $validationErrors | Should -BeNullOrEmpty
+        $script:validationErrors | Should -BeNullOrEmpty
     }
 
     It 'should reject missing GUI success evidence' -TestCases @(
@@ -102,21 +102,21 @@
         @{ PackageId = 'AgileBits.1Password' }
     ) {
         param($PackageId)
-        $out = ($out -split "`n" | Where-Object { $_ -ne "[Winget] $([char]0x2713) $PackageId" }) -join "`n"
+        $script:out = ($script:out -split "`n" | Where-Object { $_ -ne "[Winget] $([char]0x2713) $PackageId" }) -join "`n"
         Invoke-ShippedValidation -Name 'WinGet package inventory'
-        ($validationErrors -join ' | ') | Should -Match ([regex]::Escape($PackageId))
+        ($script:validationErrors -join ' | ') | Should -Match ([regex]::Escape($PackageId))
     }
 
     It 'should reject a missing inventory even if all success markers exist' {
-        $out = ($out -split "`n" | Where-Object { $_ -notmatch 'CI_VERIFICATION_INVENTORY:' }) -join "`n"
+        $script:out = ($script:out -split "`n" | Where-Object { $_ -notmatch 'CI_VERIFICATION_INVENTORY:' }) -join "`n"
         Invoke-ShippedValidation -Name 'WinGet package inventory'
-        ($validationErrors -join ' | ') | Should -Match 'inventory'
+        ($script:validationErrors -join ' | ') | Should -Match 'inventory'
     }
 
     It 'should reject multiple inventory records rather than trust the first record' {
-        $out += "`n[Winget] CI_VERIFICATION_INVENTORY: Google.Chrome"
+        $script:out += "`n[Winget] CI_VERIFICATION_INVENTORY: Google.Chrome"
         Invoke-ShippedValidation -Name 'WinGet package inventory'
-        ($validationErrors -join ' | ') | Should -Match 'exactly one WinGet verification inventory'
+        ($script:validationErrors -join ' | ') | Should -Match 'exactly one WinGet verification inventory'
     }
 
     It 'should reject partial extra or duplicate inventory IDs' -TestCases @(
@@ -127,19 +127,19 @@
         param($Inventory)
         if ($Inventory -eq 'extra') { $Inventory = ($script:guiIds + @('OpenAI.Codex.CLI')) -join '|' }
         if ($Inventory -eq 'duplicate') { $Inventory = ($script:guiIds + @('Google.Chrome')) -join '|' }
-        $out = $out -replace '(?m)(CI_VERIFICATION_INVENTORY: ).*$', ('$1' + $Inventory)
+        $script:out = $script:out -replace '(?m)(CI_VERIFICATION_INVENTORY: ).*$', ('$1' + $Inventory)
         Invoke-ShippedValidation -Name 'WinGet package inventory'
-        ($validationErrors -join ' | ') | Should -Match 'missing from the verification inventory|outside the Windows E2E scope|duplicate package IDs'
+        ($script:validationErrors -join ' | ') | Should -Match 'missing from the verification inventory|outside the Windows E2E scope|duplicate package IDs'
     }
 
     It 'should aggregate installer and inventory failures independently' {
-        $exitCode = 9
-        $out = $out -replace '(?m)^\[Winget\].*9PLM9XGG6VKS.*$', ''
+        $script:exitCode = 9
+        $script:out = $script:out -replace '(?m)^\[Winget\].*9PLM9XGG6VKS.*$', ''
         Invoke-ShippedValidation -Name 'installer evidence'
         Invoke-ShippedValidation -Name 'WinGet package inventory'
-        $validationErrors.Count | Should -Be 2
-        $validationErrors[0] | Should -Match '^installer evidence:'
-        $validationErrors[1] | Should -Match '^WinGet package inventory:'
+        $script:validationErrors.Count | Should -Be 2
+        $script:validationErrors[0] | Should -Match '^installer evidence:'
+        $script:validationErrors[1] | Should -Match '^WinGet package inventory:'
         $script:installerE2E | Should -Match '(?s)if\s*\(\$validationErrors.Count\s*-gt\s*0\).*?throw \$failureSummary'
     }
 

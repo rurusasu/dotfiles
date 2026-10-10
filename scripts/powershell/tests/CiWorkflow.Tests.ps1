@@ -151,7 +151,7 @@ Describe 'CI workflow configuration' {
         $installerScript | Should -Match 'The GUI installer performed npm/pnpm activity'
     }
 
-    It 'should run the admin-required Visual Studio package through an elevated installer and verify its compiler' {
+    It 'should run legacy admin fixture packages through an elevated installer and verify their compiler and UIAccess' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw
         $windowsJob = [regex]::Match(
             $workflow,
@@ -169,6 +169,8 @@ Describe 'CI workflow configuration' {
         $windowsJob | Should -Match 'WINDOWS_E2E_EXECUTABLE: \$\{\{ matrix\.executable \}\}'
         $windowsJob | Should -Match '& \$env:WINDOWS_E2E_EXECUTABLE'
         $windowsJob | Should -Match 'runtime=\$\{\{ matrix\.runtime \}\}'
+        $windowsJob | Should -Match 'Join-Path \$env:RUNNER_TEMP.*windows-legacy-admin-'
+        $windowsJob | Should -Match '\$adminScript = Join-Path \$legacyRoot'
         $windowsJob | Should -Match 'scripts/powershell/install\.admin\.ps1'
         $windowsJob | Should -Match '-AdminOnly:\$true'
         $windowsJob | Should -Match 'AutoHotkey\.AutoHotkey'

@@ -8,7 +8,7 @@
 [![ci-chezmoi](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Windows、macOS、NixOS、Ubuntu、Debian を 1 コマンドで収束させる個人用 dotfiles リポジトリです。パッケージ定義は Nix catalog、ユーザー設定は Home Manager と chezmoi、OS サービスは各プラットフォームの宣言レイヤーで一元管理します。
+Windows の GUI アプリと、macOS、NixOS、Ubuntu、Debian の環境を管理する個人用 dotfiles リポジトリです。パッケージ定義は Nix catalog、ユーザー設定は Home Manager と chezmoi、OS サービスは各プラットフォームの宣言レイヤーで一元管理します。NixOS-WSL は Windows の GUI installer とは別に手動で導入します。
 
 ## 技術スタック
 
@@ -23,9 +23,9 @@ Windows、macOS、NixOS、Ubuntu、Debian を 1 コマンドで収束させる�
 
 ## クイックスタート
 
-clone 後、OS ごとの入口を 1 回実行します。installer は Nix、OS パッケージ、
-Unix は Home Manager、Windows は chezmoi と明示的に選択した optional profile を適用します。
-Docker profile では最後に runtime acceptance も実行します。途中で失敗した場合も
+clone 後、OS ごとの入口を実行します。Unix の installer は Nix、OS パッケージ、
+Home Manager を適用します。Windows の installer は GUI アプリだけを導入・更新します。
+Unix の Docker profile では最後に runtime acceptance も実行します。途中で失敗した場合も
 同じコマンドを再実行できます。
 
 更新も同じ入口を使います。macOS / Linux は `./install.sh`、Windows は
@@ -35,8 +35,8 @@ Docker profile では最後に runtime acceptance も実行します。途中で
 - macOS: flake inputs と Orca・Dia の独自 Nix 定義を更新してから、
   nix-darwin / Home Manager と選択済み Homebrew パッケージを反映します。
 - Linux / NixOS: flake inputs を更新し、その OS の構成と Home Manager を反映します。
-- Windows: catalog 対象を既存の WinGet 等のハンドラーで install / upgrade します。
-  手動管理・非対応のアプリは追加しません。
+- Windows: GUI profile のアプリを既存の WinGet で install / upgrade します。
+  CLI、管理者フェーズ、chezmoi、WSL の setup は実行しません。
 
 macOS の独自パッケージ更新は `version` / URL / hash をチェックアウト内で更新します。
 差分は `git diff` で確認できます。取得エラーがある場合は独自定義を書き換えず、
@@ -48,7 +48,7 @@ GitHub API の認証には、設定されていれば `GH_TOKEN`、次に `GITHU
 
 ### Windows
 
-PowerShell または Command Prompt で実行します。管理者処理は installer が必要に応じて分離します。
+既存の PowerShell と WinGet が必要です。PowerShell または Command Prompt で実行します。
 
 ```powershell
 git clone https://github.com/rurusasu/dotfiles.git
@@ -56,13 +56,21 @@ cd dotfiles
 .\install.cmd
 ```
 
-`install.cmd` は宣言済みの Windows パッケージと通常の WSL ディストリビューションとしての
-NixOS-WSL を適用します。Hermes は NixOS 内に Nix/Home Manager で直接導入し、
-systemd user service として実行します。Windows に Hermes や Docker Desktop を導入する処理はありません。
-NixOS/Hermes の直接実行に Docker は不要です。既に導入済みの Docker Desktop の連携と Docker runtime acceptance は
-PowerShell で `scripts/powershell/install.ps1` に
-`-Options @{ EnableDockerDesktopIntegration = $true }` を渡した場合だけ実行します。
-Docker Desktop の VHDX 拡張も同じ入口の `-Options @{ ExpandDockerVhd = $true }` で明示的に選択します。
+`install.cmd` は宣言済みの GUI アプリだけを導入・更新します。WezTerm と Windows Terminal も対象です。
+CLI の導入、管理者フェーズ、chezmoi の設定配布、WSL/NixOS、Docker Desktop 連携、VHDX 拡張は実行しません。
+既存ソフトウェアのアンインストールや古い Startup ショートカットの削除も行いません。
+
+NixOS-WSL は別途、[公式手順](https://nix-community.github.io/NixOS-WSL/install.html)に従って
+`nixos.wsl` をダウンロードします。未導入の場合、WSL 2.4.4 以降では次のように導入できます。
+
+```powershell
+wsl --install --from-file "$env:USERPROFILE\Downloads\nixos.wsl"
+wsl -d NixOS
+```
+
+既定の登録名は `NixOS` です。初回起動後、WSL 内で
+`scripts/sh/nixos-wsl-postinstall.sh` を手動実行して NixOS/Home Manager を適用します。
+実行例と同期・stateVersion の注意点は [NixOS-WSL インストール](./docs/nix/nixos-wsl-install.md)を参照してください。
 
 ### macOS (Apple Silicon)
 
@@ -140,9 +148,9 @@ NixOS は現在の `/etc/nixos/hardware-configuration.nix` を必須の host pro
 
 ### 成功条件と CI
 
-システム統合の installer は必須 CLI を acceptance で確認し、Docker を選択した profile では Docker daemon、Compose、`docker run --rm hello-world` も確認します。非 NixOS Linux は Home Manager の build・activation までが対象です。CI は GitHub-hosted Actions だけで完結し、Nix の option、package、flake output は Nix-native `nix-unit`、Windows は PowerShell/Pester、macOS の installer/runtime 契約は Bats で検証します。NixOS は hosted VM E2E で installer の再実行と Docker・Compose の runtime acceptance を検証します。
+Unix のシステム統合 installer は必須 CLI を acceptance で確認し、Docker を選択した profile では Docker daemon、Compose、`docker run --rm hello-world` も確認します。非 NixOS Linux は Home Manager の build・activation までが対象です。Windows の installer は GUI アプリの導入結果を検証します。CI は GitHub-hosted Actions だけで完結し、Nix の option、package、flake output は Nix-native `nix-unit`、Windows は PowerShell/Pester、macOS の installer/runtime 契約は Bats で検証します。NixOS は hosted VM E2E で installer の再実行と Docker・Compose の runtime acceptance を検証します。
 
-標準の hosted Windows/macOS runner では Docker Desktop の VM を起動しないため、その実機固有部分は各 OS で one-command installer を実行した際の acceptance が判定します。ローカル acceptance が失敗した場合、installer はセットアップ成功を表示しません。
+標準の hosted macOS runner では Docker Desktop の VM を起動しないため、その実機固有部分は macOS の installer を実行した際の acceptance が判定します。ローカル acceptance が失敗した場合、installer はセットアップ成功を表示しません。Windows の GUI installer は Docker runtime acceptance を実行しません。
 
 ## 方針
 
@@ -174,7 +182,7 @@ dotfiles/
 ├── taskfiles/              # Feature-scoped Taskfiles
 ├── install.sh              # macOS / NixOS / Ubuntu / Debian launcher
 ├── install.cmd             # Windows launcher for install.ps1
-├── scripts/powershell/install.ps1 # NixOS WSL installer entrypoint
+├── scripts/powershell/install.ps1 # Windows GUI-app installer entrypoint
 └── flake.nix               # Nix flake entry point
 ```
 
@@ -211,7 +219,7 @@ Windows 側のファイルを編集すると、`~/.dotfiles` シンボリック�
 
 ### ターミナル設定を Windows に適用
 
-chezmoi を使って Windows に設定を適用します。詳細は [docs/chezmoi/](./docs/chezmoi/) を参照。
+必要な場合だけ、GUI installer とは別に chezmoi を使って Windows に設定を手動適用します。`install.cmd` はこの処理を実行しません。詳細は [docs/chezmoi/](./docs/chezmoi/) を参照。
 
 ```powershell
 # GitHub から直接取得（クローン不要・推奨）
@@ -310,10 +318,10 @@ sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
 docker compose -f docker/hermes-service/compose.yml ps
 ```
 
-NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations`、`systemctl status docker.service docker.socket` を確認します。非 NixOS Linux の通常検証は `./scripts/sh/verify-environment.sh` を使い、Docker は管理対象外です。macOS は `darwin-rebuild --list-generations` と Docker Desktop の起動状態を確認します。Windows は次を実行します。
+NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations`、`systemctl status docker.service docker.socket` を確認します。非 NixOS Linux の通常検証は `./scripts/sh/verify-environment.sh` を使い、Docker は管理対象外です。macOS は `darwin-rebuild --list-generations` と Docker Desktop の起動状態を確認します。Windows は PowerShell / WinGet とエラー内容を確認して GUI installer を再実行します。WSL の手動 setup は [NixOS-WSL インストール](./docs/nix/nixos-wsl-install.md)を参照してください。
 
 ```powershell
-.\scripts\powershell\Test-Environment.ps1 -Runtime
+.\install.cmd -NoPause
 ```
 
 ### macOS の WezTerm nightly cask

@@ -1863,6 +1863,39 @@ Describe 'WingetHandler' {
             }
         }
 
+        It 'should verify explicit GUI path entries without rewriting an oversized user PATH' {
+            $originalProcessPath = $env:PATH
+            try {
+                $script:guiDirectory = Join-Path $TestDrive 'GUI App'
+                $null = New-Item -ItemType Directory -Path $script:guiDirectory
+                Mock Get-JsonContent {
+                    return [pscustomobject]@{ Sources = @(
+                            [pscustomobject]@{
+                                SourceDetails = [pscustomobject]@{ Name = 'winget' }
+                                Packages = @([pscustomobject]@{
+                                        PackageIdentifier = 'wez.wezterm'
+                                        pathEntries = @($script:guiDirectory)
+                                        verifyCommand = [pscustomobject]@{ command = 'gui-fixture'; args = @('--version') }
+                                    })
+                            }) }
+                }
+                Mock Get-UserEnvironmentPath { return ('C:\missing;' * 4000) }
+                Mock Set-UserEnvironmentPath { throw 'User PATH exceeds the Windows 32767-character limit' }
+                Mock Invoke-VerifyCommand {
+                    $global:LASTEXITCODE = if (($env:PATH -split ';') -contains $script:guiDirectory) { 0 } else { 1 }
+                    return 'GUI fixture 1.0'
+                }
+                $ctx.Options['WingetProcessOnlyPath'] = $true
+
+                $result = $handler.Apply($ctx)
+
+                $result.Success | Should -BeTrue
+                ($env:PATH -split ';') | Should -Contain $script:guiDirectory
+                Should -Invoke Set-UserEnvironmentPath -Times 0 -Exactly
+            }
+            finally { $env:PATH = $originalProcessPath }
+        }
+
         It 'should leave existing Cargo settings unchanged without Rustup when VerifyOnly is <VerifyOnly>' -TestCases @(
             @{ VerifyOnly = $false }
             @{ VerifyOnly = $true }

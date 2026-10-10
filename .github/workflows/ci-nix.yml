@@ -533,7 +533,7 @@ jobs:
       - name: Install chezmoi
         uses: ./.github/actions/install-chezmoi
 
-      - name: Install and verify admin-required Visual Studio Build Tools through the installer
+      - name: Install and verify legacy admin packages through the standalone installer
         shell: pwsh
         timeout-minutes: 60
         run: |
@@ -546,6 +546,34 @@ jobs:
             throw 'Hosted Windows runner is not elevated; refusing to skip admin-required WinGet package coverage'
           }
 
+          # The default GUI profile has no admin packages. Exercise the real
+          # legacy adapter with a separate manifest; leave the checkout intact.
+          $legacyRoot = Join-Path $env:RUNNER_TEMP ('windows-legacy-admin-' + [guid]::NewGuid().ToString('N'))
+          $legacyScripts = Join-Path $legacyRoot 'scripts'
+          $legacyWinget = Join-Path $legacyRoot 'windows/winget'
+          New-Item -ItemType Directory -Path $legacyScripts, $legacyWinget -Force | Out-Null
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell') -Destination $legacyScripts -Recurse
+          @{
+            Sources = @(@{
+              SourceDetails = @{ Name = 'winget' }
+              Packages = @(
+                @{
+                  PackageIdentifier = 'AutoHotkey.AutoHotkey'
+                  requiresAdmin = $true
+                  installTimeoutSeconds = 3600
+                  installArgs = @('--scope', 'machine')
+                }
+                @{
+                  PackageIdentifier = 'Microsoft.VisualStudio.2022.BuildTools'
+                  requiresAdmin = $true
+                  installTimeoutSeconds = 3600
+                  installArgs = @('--override', '--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart')
+                }
+              )
+            })
+          } | ConvertTo-Json -Depth 10 |
+            Set-Content -LiteralPath (Join-Path $legacyWinget 'packages.json') -Encoding utf8
+
           $options = @{
             SkipSetDefaultDistro = $true
             SkipVhdExpand = $true
@@ -554,7 +582,7 @@ jobs:
           $optionsBase64 = [Convert]::ToBase64String(
             [Text.Encoding]::UTF8.GetBytes(($options | ConvertTo-Json -Compress))
           )
-          $adminScript = Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/install.admin.ps1'
+          $adminScript = Join-Path $legacyRoot 'scripts/powershell/install.admin.ps1'
           $installerOutput = @(
             & $env:WINDOWS_E2E_EXECUTABLE `
               -NoLogo -NoProfile -ExecutionPolicy Bypass `
@@ -645,7 +673,7 @@ jobs:
           @(
             "sha=$env:TESTED_SHA"
             "runner_image=$env:ImageOS-$env:ImageVersion"
-            "layer=windows-bootstrap"
+            "layer=windows-legacy-admin"
             "runtime=${{ matrix.runtime }}"
           ) | Set-Content -LiteralPath windows-admin-e2e-attestation.txt -Encoding utf8
 
@@ -653,7 +681,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: bootstrap-windows-admin-${{ github.run_id }}-${{ github.run_attempt }}
+          name: bootstrap-windows-admin-${{ matrix.executable }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: windows-admin-e2e-attestation.txt
           if-no-files-found: warn
 

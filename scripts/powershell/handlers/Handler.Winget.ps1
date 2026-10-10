@@ -23,6 +23,7 @@ class WingetHandler : SetupHandlerBase {
     hidden [bool]$LastInstallTimedOut
     hidden [bool]$LastInstallSucceeded
     hidden [int]$LastInstallExitCode
+    hidden [bool]$ProcessOnlyPath
 
     WingetHandler() {
         $this.Name = "Winget"
@@ -95,6 +96,7 @@ class WingetHandler : SetupHandlerBase {
         winget 操作を実行する
     #>
     [SetupResult] Apply([SetupContext]$ctx) {
+        $this.ProcessOnlyPath = [bool]$ctx.GetOption('WingetProcessOnlyPath', $false)
         $mode = $ctx.GetOption("WingetMode", "import")
 
         $result = $null
@@ -1863,7 +1865,7 @@ class WingetHandler : SetupHandlerBase {
 
         $userPath = Get-UserEnvironmentPath
         $pathItems = if ($userPath) { @($userPath -split ";" | Where-Object { $_ }) } else { @() }
-        if ($pathItems -notcontains $linksPath) {
+        if (-not $this.ProcessOnlyPath -and $pathItems -notcontains $linksPath) {
             Set-UserEnvironmentPath -Path (($pathItems + @($linksPath)) -join ";")
         }
         if (($env:PATH -split ";") -notcontains $linksPath) {
@@ -1911,7 +1913,7 @@ class WingetHandler : SetupHandlerBase {
     }
 
     hidden [void] EnsurePathEntriesInternal([object]$pkg, [bool]$quiet) {
-        $this.EnsurePathEntriesInternal($pkg, $quiet, $true)
+        $this.EnsurePathEntriesInternal($pkg, $quiet, (-not $this.ProcessOnlyPath))
     }
 
     hidden [void] EnsurePathEntriesInternal([object]$pkg, [bool]$quiet, [bool]$persist) {

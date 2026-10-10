@@ -27,6 +27,7 @@ foreach ($key in $Options.Keys) {
 }
 $context.Options["WingetMode"] = "import"
 $context.Options["SkipRetiredPackageCleanup"] = $true
+$context.Options['WingetProcessOnlyPath'] = $true
 
 # Do not discover or load CLI/bootstrap/WSL handlers, even when those tools
 # already exist on PATH. Their standalone implementations are not this profile.

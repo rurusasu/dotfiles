@@ -36,6 +36,9 @@ class WingetHandler : SetupHandlerBase {
         if (-not $ctx.GetOption('SkipRetiredPackageCleanup', $false)) {
             return $this.CreateFailureResult('GUI setup must preserve existing installations')
         }
+        if (-not $ctx.GetOption('WingetProcessOnlyPath', $false)) {
+            return $this.CreateFailureResult('GUI setup must not persist PATH entries')
+        }
         if (__SUCCESS__) { return $this.CreateSuccessResult('GUI_FIXTURE_APPLIED') }
         return $this.CreateFailureResult('GUI_FIXTURE_FAILED')
     }
@@ -71,6 +74,17 @@ class WingetHandler : SetupHandlerBase {
 }
 
 Describe 'GUI-only Windows setup execution' {
+    It 'should document GUI setup separately from the supported standalone WSL route' {
+        $readme = Get-Content -LiteralPath (Join-Path $script:repoRoot 'README.md') -Raw -Encoding UTF8
+        $windowsSection = [regex]::Match($readme, '(?s)### Windows.*?(?=### macOS)').Value
+        $windowsSection | Should -Match 'GUI'
+        $windowsSection | Should -Not -Match 'EnableDockerDesktopIntegration|ExpandDockerVhd'
+        $wslGuide = Get-Content -LiteralPath (Join-Path $script:repoRoot 'docs/nix/nixos-wsl-install.md') -Raw -Encoding UTF8
+        $wslGuide | Should -Match 'wsl --install --from-file'
+        $wslGuide | Should -Match 'scripts/sh/nixos-wsl-postinstall\.sh'
+        $wslGuide | Should -Not -Match 'install\.cmd[^\r\n]*-(?:SyncMode|SyncBack|DistroName|InstallDir|ReleaseTag|ForcePostInstall|StateVersion)'
+    }
+
     It 'should run only WinGet without loading CLI, WSL, admin or chezmoi code' {
         $result = Invoke-GuiSetupFixture
         $result.ExitCode | Should -Be 0 -Because $result.Output

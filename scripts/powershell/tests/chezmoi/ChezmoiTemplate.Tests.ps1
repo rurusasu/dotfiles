@@ -45,19 +45,23 @@ BeforeAll {
 
     function script:Invoke-ChezmoiTemplateForTest {
         param(
-            [Parameter(Mandatory)][string]$Template,
-            [Parameter(Mandatory)][string]$OverrideData
+            [Parameter(Mandatory)][AllowEmptyString()][string]$Template,
+            [Parameter(Mandatory)][string]$OverrideData,
+            [ValidateSet('execute-template', 'managed')][string]$Command = 'execute-template',
+            [string]$ConfigPath
         )
 
         $chezmoiCommand = Get-Command chezmoi -ErrorAction Stop
         $startInfo = New-Object System.Diagnostics.ProcessStartInfo
         $startInfo.FileName = $chezmoiCommand.Source
-        $nativeArguments = @(
+        $arguments = @(
             '--source'
             $script:chezmoiRoot
             "--override-data=$OverrideData"
-            'execute-template'
-        ) | ForEach-Object { ConvertTo-ChezmoiWindowsArgument -Argument ([string]$_) }
+        )
+        if ($ConfigPath) { $arguments += @('--config', $ConfigPath) }
+        $arguments += $Command
+        $nativeArguments = $arguments | ForEach-Object { ConvertTo-ChezmoiWindowsArgument -Argument ([string]$_) }
         $startInfo.Arguments = $nativeArguments -join ' '
         $startInfo.UseShellExecute = $false
         $startInfo.CreateNoWindow = $true
@@ -107,9 +111,9 @@ Describe 'chezmoi テンプレート バリデーション' {
         It 'should not manage GlazeWM, Zebar or AutoHotkey startup scripts' {
             $configPath = Join-Path $TestDrive 'desktop-chezmoi.toml'
             Set-Content -LiteralPath $configPath -Value '' -Encoding UTF8
-            $executable = @(Get-Command chezmoi -CommandType Application -ErrorAction Stop)[0].Source
-            $managed = @(& $executable --source $script:chezmoiRoot --config $configPath --override-data '{"chezmoi":{"os":"windows"}}' managed)
-            $LASTEXITCODE | Should -Be 0
+            $result = Invoke-ChezmoiTemplateForTest -Template '' -OverrideData '{"chezmoi":{"os":"windows"}}' -Command managed -ConfigPath $configPath
+            $result.ExitCode | Should -Be 0 -Because $result.StandardError
+            $managed = @($result.StandardOutput -split '\r?\n')
             @($managed | Where-Object { $_ -match '(?i)glazewm|zebar|^\.glzr(?:[/\\]|$)' }).Count | Should -Be 0
             @($managed | Where-Object { $_ -match 'start-terminal-keybindings_windows\.ps1$' }).Count | Should -Be 0
             @($managed | Where-Object { $_ -match '^\.codex(?:[/\\]|$)' }).Count | Should -BeGreaterThan 0
