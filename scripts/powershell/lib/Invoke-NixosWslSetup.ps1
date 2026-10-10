@@ -8,8 +8,10 @@ function Invoke-NixosWslSetup {
         return "'" + $Value.Replace("'", "'\''") + "'"
     }
     function Invoke-SetupCommand([string]$Command) {
+        # Bypass WSL's default shell and keep profile banners out of machine-readable output.
         $output = @(Invoke-Wsl -TimeoutSeconds $timeoutSeconds -Arguments @(
-                '-d', $Context.DistroName, '-u', 'root', '--', 'bash', '-lc', "set -euo pipefail; $Command"
+                '-d', $Context.DistroName, '-u', 'root', '--exec', 'bash', '-c',
+                ". /etc/profile >/dev/null || exit; set -euo pipefail; $Command"
             ))
         if ($LASTEXITCODE -ne 0) {
             throw "NixOS-WSL setup failed (exit=$LASTEXITCODE): $($output -join [Environment]::NewLine)"
