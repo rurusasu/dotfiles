@@ -46,7 +46,7 @@ tasks:
             sudo nixos-rebuild switch --flake . --impure
           else
             system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
-            home-manager switch --flake ".#${system}"
+            home-manager switch --flake ".#${system}" --impure
           fi
           task hermes:sync
         platforms: [linux]
