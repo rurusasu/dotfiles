@@ -81,7 +81,7 @@ in
         "Microsoft.WindowsTerminal"
         "Microsoft.WSL"
       ];
-    msstore = chatgpt.msstore;
+    inherit (chatgpt) msstore;
     npm = [
       "agent-browser@0.38.1"
     ];
