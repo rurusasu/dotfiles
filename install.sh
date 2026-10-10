@@ -20,6 +20,16 @@ Linux:x86_64 | Linux:aarch64 | Linux:arm64)
   ;;
 esac
 
+checkout="$HOME/.dotfiles"
+if [[ $ROOT -ef $checkout ]]; then
+  :
+elif [[ -e $checkout || -L $checkout ]]; then
+  printf 'Existing checkout conflicts with this repository: %s\n' "$checkout" >&2
+  exit 1
+else
+  ln -s "$ROOT" "$checkout"
+fi
+
 load_nix() {
   local profile
   command -v nix >/dev/null 2>&1 && return 0
