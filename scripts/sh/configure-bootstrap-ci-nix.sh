@@ -24,7 +24,14 @@ nix_home="$HOME"
 # Nix rejects the runner-owned HOME mount in root container jobs and falls
 # back to the passwd home. Keep this shell and later workflow steps aligned.
 if [[ ! -O $nix_home ]]; then
-  nix_home=$(getent passwd "$(id -u)" | cut -d: -f6)
+  if command -v getent >/dev/null 2>&1; then
+    nix_home=$(getent passwd "$(id -u)" | cut -d: -f6)
+  elif [[ $(uname -s) == Darwin && $(id -u) == 0 ]]; then
+    nix_home=/var/root
+  else
+    echo "Cannot resolve the Nix user's home." >&2
+    exit 1
+  fi
   [[ $nix_home == /* ]] || {
     echo "Cannot resolve the Nix user's home." >&2
     exit 1
