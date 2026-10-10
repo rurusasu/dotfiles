@@ -21,25 +21,6 @@
     };
   };
 
-  chatgpt = {
-    pkg = if pkgs.stdenv.hostPlatform.isDarwin then pkgs.chatgpt else null;
-    category = "desktop";
-    support = {
-      darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "chatgpt";
-        identity = {
-          appName = "ChatGPT.app";
-        };
-      };
-      linux.unsupported = "The Linux desktop app is not managed by this repository";
-      windows = {
-        unsupported = "The Windows Store app is intentionally excluded from this package catalog";
-      };
-    };
-  };
-
   steam = {
     category = "desktop";
     support = {

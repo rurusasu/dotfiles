@@ -17,7 +17,7 @@ The three managed content classes deliberately use different authority models:
 | Root/default   | `rurusasu/hermes-profile-alfred`                                | remote distribution to local runtime                                            |
 | Shared lifelog | `${HERMES_HOME}/shared/lifelog`                                 | normal locked read-write Git repository                                         |
 
-`nix/modules/hermes-agent/manifest.yaml` currently declares six named
+`nix/modules/ai_agents/hermes/manifest.yaml` currently declares six named
 profiles: `rick`, `hoffman`, `risarisa`, `nancy`, `kuroda`, and `shiraishi`.
 The manifest is the configuration source for their name, remote, branch,
 optional pinned first-install commit, deletion safety limit, and target;

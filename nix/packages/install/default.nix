@@ -13,6 +13,7 @@ let
   lazygitInstall = import ../../modules/lazygit/windows-install.nix;
   starshipInstall = import ../../modules/starship/windows-install.nix;
   terminalInstall = import ../../modules/terminals/wezterm/windows-install.nix;
+  chatgptInstall = import ../../modules/ai_agents/chatgpt/windows-install.nix;
   # Extract winget mappings (non-null only)
   wingetMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.winget or null) catalog);
   msstoreMap = lib.filterAttrs (_: v: v != null) (lib.mapAttrs (_: v: v.msstore or null) catalog);
@@ -35,6 +36,7 @@ in
   base
   // {
     wingetVerify = base.wingetVerify // terminalInstall.wingetVerify;
+    msstoreVerifyById = base.msstoreVerifyById // chatgptInstall.msstoreVerifyById;
     wingetVerifyById =
       base.wingetVerifyById
       // discordInstall.wingetVerifyById
@@ -51,6 +53,7 @@ in
   base
   // {
     wingetInstallArgs = base.wingetInstallArgs // onepasswordInstall.wingetInstallArgs;
+    wingetCiSkipInstall = base.wingetCiSkipInstall // chatgptInstall.wingetCiSkipInstall;
     wingetPathEntries =
       base.wingetPathEntries // terminalInstall.wingetPathEntries // onepasswordInstall.wingetPathEntries;
   }

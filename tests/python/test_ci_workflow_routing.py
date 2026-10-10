@@ -611,7 +611,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "scripts/python/hermes_bootstrap/__main__.py",
             ".github/workflows/ci-nix.yml",
             "tests/python/hermes_bootstrap_test/test_app.py",
-            "nix/modules/hermes-agent/default.nix",
+            "nix/modules/ai_agents/hermes/default.nix",
             "docker/hermes-xapi-mcp/Dockerfile",
             "docker/local-ai-services/compose.yml",
             "tests/python/test_xapi_image_contract.py",

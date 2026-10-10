@@ -28,7 +28,7 @@ let
       export HERMES_BOOTSTRAP_MANIFEST=${bootstrapManifest}
       export DOTFILES_HERMES_GIT_EXECUTABLE=${pkgs.git}/bin/git
       # Select our package even inside the upstream checkout or a conflicting cwd.
-      export PYTHONPATH=${../../../scripts/python}:${inputs.hermes-agent}
+      export PYTHONPATH=${../../../../scripts/python}:${inputs.hermes-agent}
       exec ${bootstrapPython}/bin/python -P -m hermes_bootstrap "$@"
     '';
   };
@@ -63,7 +63,7 @@ in
     ];
     hermesHomeFiles = {
       "bootstrap-manifest.yaml" = bootstrapManifest;
-      "scripts/profile_sync.sh" = ../../../scripts/sh/hermes-profile-sync.sh;
+      "scripts/profile_sync.sh" = ../../../../scripts/sh/hermes-profile-sync.sh;
     };
     extraPlugins = [ hermesLcmPlugin ];
     settings.gateway.multiplex_profiles = true;

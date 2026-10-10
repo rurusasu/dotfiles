@@ -42,7 +42,7 @@ let
           # this local derivation without forcing the upstream Python package.
           services.hermes-agent.package = testPackage;
         }
-        ../../modules/hermes-agent
+        ../../modules/ai_agents/hermes
       ];
     })
     // {
@@ -123,7 +123,7 @@ in
       profileSyncWrapper = builtins.hasAttr "scripts/profile_sync.sh" linux.config.services.hermes-agent.hermesHomeFiles;
       profileSyncActivation = builtins.hasAttr "hermesProfileSyncWrapperExecutable" linux.config.home.activation;
       plugins = map (plugin: plugin.name) linux.config.services.hermes-agent.extraPlugins;
-      manifest = import ../../modules/hermes-agent/manifest.nix {
+      manifest = import ../../modules/ai_agents/hermes/manifest.nix {
         hermesHome = "/home/test-user/.hermes";
       };
     };
@@ -136,7 +136,7 @@ in
       profileSyncActivation = true;
       plugins = [ "hermes-lcm" ];
       manifest = builtins.replaceStrings [ "/opt/data" ] [ "/home/test-user/.hermes" ] (
-        builtins.readFile ../../modules/hermes-agent/manifest.yaml
+        builtins.readFile ../../modules/ai_agents/hermes/manifest.yaml
       );
     };
   };

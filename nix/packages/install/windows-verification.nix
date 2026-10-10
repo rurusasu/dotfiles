@@ -194,12 +194,6 @@
 
   # Post-install verification commands for Windows-only Microsoft Store packages.
   # Keys match Microsoft Store Product ID values because these packages have no catalog attr.
-  msstoreVerifyById = {
-    "9PLM9XGG6VKS" = {
-      type = "appxLaunchTarget";
-      command = "OpenAI.Codex";
-      args = [ "OpenAI.Codex_2p2nqsd0c76g0!App" ];
-    };
-  };
+  msstoreVerifyById = { };
 
 }

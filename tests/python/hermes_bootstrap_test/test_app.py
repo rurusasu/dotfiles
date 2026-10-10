@@ -41,7 +41,7 @@ from hermes_bootstrap.profile_sync import (
 from hermes_bootstrap.repositories import RemoteSyncResult
 
 
-MANIFEST = Path(__file__).resolve().parents[3] / "nix/modules/hermes-agent/manifest.yaml"
+MANIFEST = Path(__file__).resolve().parents[3] / "nix/modules/ai_agents/hermes/manifest.yaml"
 
 
 def manifest(

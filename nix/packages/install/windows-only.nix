@@ -6,6 +6,7 @@ let
   discord = import ../../modules/discord/windows-install.nix;
   lazygit = import ../../modules/lazygit/windows-install.nix;
   starship = import ../../modules/starship/windows-install.nix;
+  chatgpt = import ../../modules/ai_agents/chatgpt/windows-install.nix;
   mkWindowsOnlySupport = provider: identity: reason: {
     windows = {
       inherit provider identity;
@@ -25,6 +26,7 @@ let
     // discord.windowsOnlySupport
     // starship.windowsOnlySupport
     // lazygit.windowsOnlySupport
+    // chatgpt.windowsOnlySupport
     // {
       "StablyAI.Orca" =
         mkWindowsOnlySupport "winget" "StablyAI.Orca"
@@ -54,7 +56,6 @@ let
         mkWindowsOnlySupport "winget" "Microsoft.WindowsTerminal"
           "Windows shell host";
       "Microsoft.WSL" = mkWindowsOnlySupport "winget" "Microsoft.WSL" "Windows subsystem component";
-      "9PLM9XGG6VKS" = mkWindowsOnlySupport "msstore" "9PLM9XGG6VKS" "Windows Store desktop application";
     };
 
 in
@@ -80,9 +81,7 @@ in
         "Microsoft.WindowsTerminal"
         "Microsoft.WSL"
       ];
-    msstore = [
-      "9PLM9XGG6VKS"
-    ];
+    msstore = chatgpt.msstore;
     npm = [
       "agent-browser@0.38.1"
     ];

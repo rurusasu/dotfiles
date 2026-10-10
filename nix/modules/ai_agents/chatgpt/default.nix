@@ -34,6 +34,8 @@ let
   ++ map (name: ".codex/rules/${name}.rules") (builtins.attrNames rules);
 in
 {
+  home.packages = lib.optionals pkgs.stdenv.hostPlatform.isDarwin [ pkgs.chatgpt ];
+
   programs.codex = {
     enable = true;
     # The ChatGPT app supplies the CLI; Home Manager owns configuration only.

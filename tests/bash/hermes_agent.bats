@@ -20,9 +20,9 @@ setup() {
 	: >"$OP_TOKEN_CAPTURE"
 	printf '0\n' >"$READY_ATTEMPT_FILE"
 	printf '0\n' >"$XAPI_TOKEN_ATTEMPT_FILE"
-	mkdir -p "$(dirname "$COMPOSE_FILE")" "$BATS_TEST_TMPDIR/nix/modules/hermes-agent"
-	cp "$REPO_ROOT/nix/modules/hermes-agent/manifest.yaml" \
-		"$BATS_TEST_TMPDIR/nix/modules/hermes-agent/manifest.yaml"
+	mkdir -p "$(dirname "$COMPOSE_FILE")" "$BATS_TEST_TMPDIR/nix/modules/ai_agents/hermes"
+	cp "$REPO_ROOT/nix/modules/ai_agents/hermes/manifest.yaml" \
+		"$BATS_TEST_TMPDIR/nix/modules/ai_agents/hermes/manifest.yaml"
 	: >"$COMPOSE_FILE"
 
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"

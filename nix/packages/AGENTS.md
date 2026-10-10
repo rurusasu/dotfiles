@@ -23,4 +23,5 @@ nix build .#package-support-report
 - パッケージと provider metadata の定義が責務。適用は OS 構成と Home Manager に統合し、独立した `nix profile` 用の集合出力は公開しない。dotfiles 設定は扱わない。
 - データ、選択ロジック、配布契約、host 動作は変更理由が異なるため分離する。SSOT は単一定義を意味し、単一ファイルを意味しない。
 - package 追加は既存の `catalog/<category>.nix`、配布方式の変更は `install/`、選択ルールの変更は `providers/` を編集する。custom derivation の既存パスは保つ。
+- ChatGPT アプリと同梱 Codex の設定・Windows 配布 metadata は `../modules/ai_agents/chatgpt/` が所有する。カタログには登録せず、`install/` は module の Windows 定義を読み込んで合成する。
 - 分割方針と consumer の対応は [パッケージ管理](../../docs/nix/package-management.md#分割の理由と編集先) を参照する。
