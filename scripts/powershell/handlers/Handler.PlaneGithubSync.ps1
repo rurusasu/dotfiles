@@ -58,7 +58,7 @@ function New-PlaneGithubSyncScheduledTaskPrincipal {
         [string]$UserId
     )
 
-    return New-ScheduledTaskPrincipal -UserId $UserId -LogonType Interactive -RunLevel LeastPrivilege
+    return New-ScheduledTaskPrincipal -UserId $UserId -LogonType Interactive -RunLevel Limited
 }
 
 function Register-PlaneGithubSyncScheduledTask {

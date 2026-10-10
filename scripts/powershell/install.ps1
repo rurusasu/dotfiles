@@ -1,278 +1,44 @@
 ﻿<#
 .SYNOPSIS
-    Dotfiles setup orchestrator.
-
+    Install Windows GUI applications only.
 .DESCRIPTION
-    Runs setup in three steps:
-    1. User phase (no elevation): install.user.ps1 — Phase 1 handlers (winget etc.)
-    2. Non-admin Phase 2 (no elevation): install.admin.ps1 -AdminOnly:$false
-       — Phase 2 handlers that don't require admin (chezmoi etc.)
-       — Runs without UAC so 1Password desktop app integration works
-    3. Admin phase (elevate when required): install.admin.ps1 -AdminOnly
-       — Phase 2 handlers that require admin (WSL, Docker, etc.)
-    4. Post-admin convergence: install.admin.ps1 -AdminOnly:$false
-       — Re-runs non-admin handlers that may have deferred until WSL/NixOS existed
-
+    Uses the existing PowerShell runtime and WinGet. Does not install CLI tools,
+    deploy dotfiles, provision WSL, or execute administrator setup phases.
 #>
-
 [CmdletBinding()]
 param(
-    [string]$DistroName = "NixOS",
-    [string]$InstallDir = "$env:USERPROFILE\NixOS",
-    [string]$ReleaseTag = "",
-    [string]$PostInstallScript = "",
-    [ValidatePattern('^\d{2}\.\d{2}$')]
-    [string]$StateVersion = "26.05",
     [hashtable]$Options = @{},
-    [ValidateSet("link", "repo", "nix", "none")]
-    [string]$SyncMode = "link",
-    [ValidateSet("repo", "lock", "none")]
-    [string]$SyncBack = "lock",
     [switch]$UserPhaseOnly,
     [switch]$WingetVerifyCommandOnly,
-    [switch]$ForcePostInstall,
     [switch]$NoPause
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 $OutputEncoding = [System.Text.UTF8Encoding]::new()
 
 $libPath = Join-Path $PSScriptRoot "lib"
 . (Join-Path $libPath "WindowsEnvironment.ps1")
 Repair-WindowsSetupEnvironment
-. (Join-Path $PSScriptRoot "Test-Environment.ps1") -DistroName $DistroName
 
-if (-not $PSBoundParameters.ContainsKey("InstallDir")) {
-    $InstallDir = Join-Path $env:USERPROFILE "NixOS"
+$userScriptPath = Join-Path $PSScriptRoot "install.user.ps1"
+if (-not (Test-Path -LiteralPath $userScriptPath -PathType Leaf)) {
+    throw "GUI setup script not found: $userScriptPath"
 }
-
-function Test-IsAdminCurrent {
-    [CmdletBinding()]
-    [OutputType([bool])]
-    param()
-
-    $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-    return $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-}
-
-function Get-PhaseConfiguration {
-    [CmdletBinding()]
-    param()
-
-    return @{
-        DistroName        = $DistroName
-        InstallDir        = $InstallDir
-        ReleaseTag        = $ReleaseTag
-        PostInstallScript = $PostInstallScript
-        StateVersion      = $StateVersion
-        Options           = $Options
-        SyncMode          = $SyncMode
-        SyncBack          = $SyncBack
-    }
-}
-
 if ($WingetVerifyCommandOnly) {
     $Options["WingetVerifyCommandOnly"] = $true
 }
-if ($UserPhaseOnly) {
-    $Options["UserPhaseOnly"] = $true
-}
 
-$userScriptPath = Join-Path $PSScriptRoot "install.user.ps1"
-$adminScriptPath = Join-Path $PSScriptRoot "install.admin.ps1"
-
-if (-not (Test-Path -LiteralPath $userScriptPath)) {
-    throw "User phase script not found: $userScriptPath"
-}
-if (-not (Test-Path -LiteralPath $adminScriptPath)) {
-    throw "Admin phase script not found: $adminScriptPath"
-}
-
-$phaseParams = Get-PhaseConfiguration
-
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Phase 1: User Scope Setup" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
-& $userScriptPath @phaseParams
+Write-Host "Windows GUI Application Setup" -ForegroundColor Cyan
+& $userScriptPath -Options $Options
 
 if ($UserPhaseOnly) {
-    Write-Host ""
-    Write-Host "========================================" -ForegroundColor Green
     Write-Host "User Phase Complete!" -ForegroundColor Green
-    Write-Host "========================================" -ForegroundColor Green
-    Write-Host ""
-    if (-not $NoPause) {
-        Write-Host "Press Enter to close..." -ForegroundColor Gray
-        Read-Host | Out-Null
-    }
-    exit 0
-}
-
-if ($ForcePostInstall) {
-    $Options["ForcePostInstall"] = $true
-}
-
-# Phase 2a: 管理者不要の Phase 2 ハンドラーを非昇格で実行
-# 1Password デスクトップアプリ連携など、UAC 昇格で動かなくなる機能に対応
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Phase 2a: Non-Admin Setup" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
-& $adminScriptPath @phaseParams -AdminOnly:$false
-
-
-# Phase 2b: 管理者必須ハンドラーの実行
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Phase 2b: Admin Setup Check" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
-$adminRequired = [bool](& $adminScriptPath @phaseParams -CheckOnly -AdminOnly:$true)
-
-if ($adminRequired) {
-    Write-Host "Admin-required tasks detected." -ForegroundColor Yellow
-
-    if (Test-IsAdminCurrent) {
-        Write-Host "Already running as administrator. Executing admin phase in-process." -ForegroundColor Cyan
-        & $adminScriptPath @phaseParams -AdminOnly:$true
-    }
-    else {
-        Write-Host "Starting admin phase with UAC prompt..." -ForegroundColor Yellow
-
-        $shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) {
-            "pwsh"
-        }
-        else {
-            "powershell.exe"
-        }
-
-        $optionsJson = if ($null -eq $Options -or $Options.Count -eq 0) {
-            "{}"
-        }
-        else {
-            ConvertTo-Json -InputObject $Options -Depth 10 -Compress
-        }
-        $optionsBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($optionsJson))
-
-        $argList = @(
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            $adminScriptPath,
-            "-DistroName",
-            $DistroName,
-            "-InstallDir",
-            $InstallDir,
-            "-OptionsBase64",
-            $optionsBase64,
-            "-SyncMode",
-            $SyncMode,
-            "-SyncBack",
-            $SyncBack,
-            "-AdminOnly:$true",
-            "-NoPause:$NoPause"
-        )
-
-        if (-not [string]::IsNullOrWhiteSpace($ReleaseTag)) {
-            $argList += "-ReleaseTag"
-            $argList += $ReleaseTag
-        }
-        if (-not [string]::IsNullOrWhiteSpace($PostInstallScript)) {
-            $argList += "-PostInstallScript"
-            $argList += $PostInstallScript
-        }
-        if (-not [string]::IsNullOrWhiteSpace($StateVersion)) {
-            $argList += "-StateVersion"
-            $argList += $StateVersion
-        }
-
-        # 管理者昇格プロセスの出力をログファイルに記録し、終了後に表示
-        # $env:TEMP はユーザーごとに異なるため、リポジトリルートの一時ファイルを使用
-        $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-        $logFile = Join-Path $repoRoot ".admin-phase.log"
-        if (Test-Path $logFile) { Remove-Item $logFile -Force }
-
-        # admin スクリプトにログファイルパスを渡す
-        $argList += "-LogFile"
-        $argList += $logFile
-
-        try {
-            $proc = Start-Process -FilePath $shell -ArgumentList $argList -Verb RunAs -Wait -PassThru
-        }
-        catch [System.InvalidOperationException] {
-            Write-Warning "Admin phase was canceled or could not be started: $($_.Exception.Message)"
-            Write-Warning "Re-run install.cmd and approve the UAC prompt to apply admin-required tasks."
-            $proc = $null
-        }
-
-        # ログファイルの内容を元のコンソールに表示
-        if (Test-Path $logFile) {
-            Write-Host ""
-            Get-Content $logFile | ForEach-Object { Write-Host $_ }
-        }
-
-        if ($null -eq $proc) {
-            Write-Host "Admin phase skipped." -ForegroundColor Yellow
-            Write-Host ""
-            Write-Host "========================================" -ForegroundColor Yellow
-            Write-Host "Setup Incomplete" -ForegroundColor Yellow
-            Write-Host "========================================" -ForegroundColor Yellow
-            Write-Warning "Admin-required tasks did not run. Re-run install.cmd and approve the UAC prompt to finish setup."
-            if (-not $NoPause) {
-                Write-Host "Press Enter to close..." -ForegroundColor Gray
-                Read-Host | Out-Null
-            }
-            exit 1
-        }
-        if ($proc.ExitCode -ne 0) {
-            throw "Admin phase failed with exit code $($proc.ExitCode)."
-        }
-    }
 }
 else {
-    Write-Host "No admin-required tasks detected. Running admin phase without elevation." -ForegroundColor Green
-    & $adminScriptPath @phaseParams -AdminOnly:$true
+    Write-Host "Setup Complete!" -ForegroundColor Green
 }
-
-if ($adminRequired) {
-    Write-Host ""
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "Phase 2c: Post-Admin NixOS Convergence" -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host ""
-
-    & $adminScriptPath @phaseParams -AdminOnly:$false
-}
-
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Environment Acceptance" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
-$dockerDesktopRequested = $Options["EnableDockerDesktopIntegration"] -eq $true
-$acceptanceResult = Test-DotfilesEnvironment -Docker:$dockerDesktopRequested -Runtime:$dockerDesktopRequested -DistroName $DistroName
-if (-not $acceptanceResult.Success) {
-    throw $acceptanceResult.Message
-}
-
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Green
-Write-Host "Setup Complete!" -ForegroundColor Green
-Write-Host "========================================" -ForegroundColor Green
-Write-Host ""
-Write-Host "Launch NixOS: wsl -d $DistroName" -ForegroundColor Cyan
-Write-Host ""
 if (-not $NoPause) {
     Write-Host "Press Enter to close..." -ForegroundColor Gray
     Read-Host | Out-Null

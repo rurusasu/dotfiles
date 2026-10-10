@@ -8,36 +8,38 @@ let
   };
 in
 {
-  testGlazeWMIsWindowsOnlyAndMachineInstalled = {
+  testGlazeWMIsExcludedFromWindowsInstallation = {
     expr = {
-      windows = sets.supportReport.glazewm.windows;
       unsupportedDarwin = sets.supportReport.glazewm.darwin ? unsupported;
       unsupportedLinux = sets.supportReport.glazewm.linux ? unsupported;
-      id = sets.wingetMap.glazewm;
-      admin = sets.wingetRequiresAdmin.glazewm;
-      args = sets.wingetInstallArgs.glazewm;
-      verify = sets.wingetVerify.glazewm;
-      path = sets.wingetPathEntries.glazewm;
+      selected = builtins.elem "glazewm" sets.windowsGuiPackages.catalog;
+      errors = sets.providerErrors;
     };
     expected = {
-      windows = {
-        provider = "winget";
-        source = "winget";
-        identity = "glzr-io.glazewm";
-      };
       unsupportedDarwin = true;
       unsupportedLinux = true;
-      id = "glzr-io.glazewm";
-      admin = true;
-      args = [
-        "--scope"
-        "machine"
+      selected = false;
+      errors = [ ];
+    };
+  };
+
+  testWindowsGuiProfileIsExplicitAndExcludesAutomation = {
+    expr = sets.windowsGuiPackages;
+    expected = {
+      catalog = [
+        "arc-browser"
+        "google-chrome"
+        "obsidian"
+        "wezterm"
       ];
-      verify = {
-        command = "glazewm";
-        args = [ "--version" ];
-      };
-      path = [ "%ProgramFiles%\\glzr.io\\GlazeWM" ];
+      windowsOnly = [
+        "AgileBits.1Password"
+        "Discord.Discord"
+        "StablyAI.Orca"
+        "Microsoft.PowerToys"
+        "Microsoft.WindowsTerminal"
+        "9PLM9XGG6VKS"
+      ];
     };
   };
 

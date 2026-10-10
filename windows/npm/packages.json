@@ -1,27 +1,5 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "description": "npm global packages to install on Windows",
-  "globalPackages": [
-    {
-      "name": "@devcontainers/cli",
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "devcontainer"
-      }
-    },
-    {
-      "name": "@deepseek-ai/dsh",
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "dsh"
-      }
-    },
-    {
-      "name": "agent-browser@0.38.1",
-      "verifyCommand": {
-        "args": ["--version"],
-        "command": "agent-browser"
-      }
-    }
-  ]
+  "globalPackages": []
 }

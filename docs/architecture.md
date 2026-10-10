@@ -11,18 +11,18 @@
    - provider 選択は `providers/`、配布 metadata は `install/`、host の動作は `nix/hosts/` などに分離し、`sets.nix` は既存 API を維持する合成入口
    - SSOT は単一定義を意味し、単一ファイルを意味しない。変更理由による境界は [分割の理由と編集先](./nix/package-management.md#分割の理由と編集先) を参照
    - Unix 系 CLI は Home Manager、macOS cask は nix-homebrew、Linux system package は NixOS が消費
-   - Windows は `nix build .#winget-export` で winget/npm/pnpm JSON を導出
+   - Windows は `nix build .#winget-export` で GUI 選択に限定した winget JSON と空の npm/pnpm JSON を導出
 2. **ユーザー設定は Unix と Windows の責務を分離**
    - Unix の Codex、shell、Git、terminal、editor は Home Manager が管理
    - chezmoi は Windows 専用で、Unix にはファイルもスクリプトも配布しない
-   - デスクトップキー配列は例外として、共通 action/key・設定生成関数・ユーザー設定を `nix/home/keybindings/`、OS の service/有効化・競合解除を `nix/hosts/` に分ける。macOS/native NixOS の設定は Nix が所有し、Windows の GlazeWM 設定と補助スクリプトは Nix 生成物を chezmoi が配布する。Windows の適用時に Nix は不要（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
+   - デスクトップキー配列は例外として、共通 action/key・設定生成関数・ユーザー設定を `nix/home/keybindings/`、OS の service/有効化・競合解除を `nix/hosts/` に分ける。macOS/native NixOS の設定は Nix が所有する。Windows の GlazeWM 設定と補助スクリプトは生成契約のみ保持し、現在の GUI-only 構成では配布しない（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
 3. **システム収束は OS に適した宣言レイヤーへ分離**
    - Windows: PowerShell handlers + winget
    - macOS: nix-darwin + nix-homebrew
    - 非 NixOS Linux: standalone Home Manager（ユーザー環境のみ、OS service は管理しない）
    - NixOS/WSL: NixOS module
 4. **Full support は runtime acceptance までを契約に含める**
-   - Unix では必須 CLI、Windows では chezmoi drift も確認し、Docker profile では Docker、Compose、hello-world も確認
+   - Unix では必須 CLI、Docker profile では Docker、Compose、hello-world も確認。Windows は GUI アプリの導入検証だけを行う
    - installer は同じコマンドを安全に再実行できる
 
 ## 全体構造
@@ -64,14 +64,14 @@ dotfiles/
 
 ## セットアップフロー
 
-| Platform    | Entrypoint     | System layer                             | User layer             | Runtime                        |
-| ----------- | -------------- | ---------------------------------------- | ---------------------- | ------------------------------ |
-| Windows     | `install.cmd`  | PowerShell handlers, winget, NixOS-WSL   | Home Manager + chezmoi | NixOS native Hermes            |
-| macOS ARM64 | `./install.sh` | nix-darwin + nix-homebrew                | Home Manager           | Docker Desktop / native Hermes |
-| Other Linux | `./install.sh` | none                                     | Home Manager           | not managed                    |
-| NixOS       | `./install.sh` | NixOS generation + host hardware profile | Home Manager           | rootful Docker                 |
+| Platform    | Entrypoint     | System layer                             | User layer       | Runtime                        |
+| ----------- | -------------- | ---------------------------------------- | ---------------- | ------------------------------ |
+| Windows     | `install.cmd`  | 既存 PowerShell + winget（GUI のみ）     | 自動設定配布なし | CLI / WSL 構築なし             |
+| macOS ARM64 | `./install.sh` | nix-darwin + nix-homebrew                | Home Manager     | Docker Desktop / native Hermes |
+| Other Linux | `./install.sh` | none                                     | Home Manager     | not managed                    |
+| NixOS       | `./install.sh` | NixOS generation + host hardware profile | Home Manager     | rootful Docker                 |
 
-Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → Compose → runtime acceptance` です。macOS では Docker Desktop と native Hermes の宣言済み構成を適用します。失敗時はその phase で停止し、同じ入口を再実行します。
+Windows は GUI アプリ導入だけを実行し、既存アプリを自動アンインストールしません。Unix の Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → Compose → runtime acceptance` です。macOS では Docker Desktop と native Hermes の宣言済み構成を適用します。失敗時はその phase で停止し、同じ入口を再実行します。
 
 非 NixOS Linux は `Nix/bootstrap → Home Manager` のみを実行します。
 
@@ -92,7 +92,7 @@ OS 固有の Home Manager 設定とパッケージ選択は `hosts/` が所有�
 | ----------------------- | ----------------------- | ------------------------------------------------------------- |
 | Provider 定義 (SSOT)    | Nix catalog             | package、winget、npm、Darwin cask を一元定義                  |
 | Unix ユーザーパッケージ | Home Manager            | macOS、NixOS、Ubuntu、Debian で共通の `home.packages`         |
-| Windows パッケージ      | winget/npm/pnpm         | catalog から生成した JSON を handlers が適用                  |
+| Windows パッケージ      | winget                  | GUI 選択から生成した JSON を WingetHandler が適用             |
 | macOS システム          | nix-darwin/nix-homebrew | Homebrew、Docker Desktop、Home Manager を 1 generation で適用 |
 | NixOS システム          | NixOS module            | native/WSL host、Docker、Home Manager を generation に統合    |
 | Unix ユーザー設定       | Home Manager            | shell、Git、terminal、editor の設定を宣言                     |
@@ -254,6 +254,8 @@ $vhdPath = $context.SharedData["VhdPath"]
 ```
 
 ### ハンドラー実行順序
+
+現在の `install.cmd` / `install.user.ps1` は WingetHandler だけを実行します。以下は独立呼び出しやテストのために保持している旧構成のハンドラー一覧であり、通常の Windows セットアップの実行順序ではありません。
 
 | Order | Phase | Admin | ハンドラー      | ソースファイル                                                                            | 説明                                 |
 | ----- | ----- | ----- | --------------- | ----------------------------------------------------------------------------------------- | ------------------------------------ |

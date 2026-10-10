@@ -2,14 +2,26 @@
 
 ## Windows セットアップのコマンド探索
 
+通常の `install.cmd` は GUI-only です。`install.user.ps1` は `WingetHandler` だけを明示的にロードし、npm/pnpm/Bun・CLI bootstrap・chezmoi・管理者フェーズ・WSL/runtime acceptance は呼びません。CLI の利用可能性と任意 adapter のテストは維持しますが、これらは通常の Windows セットアップの依存ではありません。GUI-only では退役パッケージの自動削除も無効です。
+
 - エントリーポイントの `Repair-WindowsSetupEnvironment` は、既存の `%LOCALAPPDATA%\Microsoft\WindowsApps` が PATH から欠落していれば、現在のプロセスに補完する。これにより WinGet の実行エイリアスを事前確認で検出できる。
 - npm / pnpm の `Apply` は `Update-NpmGlobalCommandPath` を呼ぶ。`npm prefix -g` が返す保存先を現在の PATH に補完してから、検証・bootstrap・インストールを行う。既定の `%APPDATA%\npm` に固定せず、カスタム prefix も扱う。
 - prefix の取得結果は同じ `SetupContext.Options` 内で共有し、npm と pnpm で重複して問い合わせない。永続 USER PATH は書き換えない。
 - `CanApply` が false の場合も、判定理由とスキップをログに表示する。検証に失敗した場合はコマンド・終了コード・出力を残す。
 - PATH 修復の回帰テストは `tests/lib/WindowsSetupPath.Tests.ps1`。実際のコマンド探索と子プロセスでの検証を使い、外部インストールと永続設定変更はモックする。Windows 以外では明示的にスキップする。
 - WinGet のコマンドリンクが欠落し `pathEntries` の明示設定もない場合は、対象 ID の WinGet パッケージディレクトリ内だけで検証コマンドと同名の exe を探す。候補が1件の場合に実体ディレクトリを PATH に追加し、DLL やデータファイルとの位置関係を保つ。候補が複数なら自動選択しない。
-- Windows Installer CI は PS7 / PS5.1 の両方で `ci/Assert-WingetCommandRecovery.ps1` を実行する。既定対象は実 manifest に残る `junegunn.fzf`、`x-motemen.ghq`、`jqlang.jq`、`JesseDuffield.lazygit`、`BurntSushi.ripgrep.MSVC` の5パッケージ（`fzf`、`ghq`、`jq`、`lazygit`、`rg`）。いずれも明示的な `pathEntries` に依存せず、PATH を最小限にした状態でパッケージ配下の入れ子ディレクトリから実体を探索し、`--version` で復旧・実行を検証する。runner の既存ツールによる偽陽性を防ぎ、対象なし・実体なし・複数候補・検証失敗はエラーにする。検証専用の `EnsureProcessPathEntries` は永続 PATH を変更せず、終了時には呼び出し元の PATH を復元する。
-- `tests/ci/Assert-WingetCommandRecovery.Tests.ps1` は、既定対象と実 manifest の ID・検証コマンド・`pathEntries` 不在の整合性を確認する。native Windows の言語サーバーを削除しても、残存する portable CLI の復旧検証は維持する。
+- `ci/Assert-WingetCommandRecovery.ps1` は任意の CLI 構成用に保持します。GUI-only E2E からは呼びません。検証専用の `EnsureProcessPathEntries` は永続 PATH を変更せず、終了時には呼び出し元の PATH を復元します。
+- `tests/ci/Assert-WingetCommandRecovery.Tests.ps1` は旧 CLI probe が GUI manifest に混入しないことと、fixture に対する PATH 復旧・欠落/複数候補/検証失敗の契約を検査します。
+
+## WinGet の導入状態確認
+
+WinGet の導入状態確認は、そのフェーズでインストールまたは検証するパッケージだけを対象にする。検証コマンドのない `skipInstall` パッケージと、管理者フェーズへ委譲した `Microsoft.WSL` には `winget list` を実行しない。検証付きの手動対象は、既存の検証を維持する。
+
+## Discord の強制更新
+
+`install.cmd` から呼ばれる WinGet ハンドラーは、`Discord.Discord` のインストール／更新前に `Invoke-DiscordInstallPreparation` で `%LOCALAPPDATA%\Discord` 配下の `Discord.exe` と `Update.exe` を強制終了し、各プロセスの終了を最大10秒待つ。Discord には `winget install --force` を使い、未インストール時も同じ install-or-upgrade 経路で処理する。Discord は実行時に強制終了されるため、未送信内容は事前に保存する。
+
+別アプリの `Update.exe`、Discord Canary、別ユーザーの Discord は停止対象外。停止失敗時は Discord のインストーラーを起動せず、そのパッケージの失敗として報告し、残りのパッケージを続行する。`CanApply` と export はプロセスを停止しない。
 
 ## 新しいハンドラーの作成
 
@@ -152,43 +164,23 @@ cd tests
 .\Invoke-Tests.ps1 -Path .\handlers\Handler.YourName.Tests.ps1 -MinimumCoverage 0
 ```
 
-### ステップ 5: オーケストレーターへの自動統合
+### ステップ 5: 実行経路の明示
 
-**不要**: install.ps1 は動的にハンドラーをロードするため、`Handler.*.ps1` パターンに一致すれば自動的に実行されます
+現在の `install.cmd` → `install.ps1` → `install.user.ps1` は、GUI 専用の `WingetHandler` だけを明示的に読み込みます。`Handler.*.ps1` を追加しても自動登録・実行されません。CLI・WSL・自動設定配布のハンドラーは既定経路に追加しません。
 
-### 実行フェーズ
+### 実行経路と独立アダプター
 
-install.ps1 は 3 ステップでハンドラーを実行します:
+Windows の既定経路には npm / pnpm / WSL / chezmoi / runtime acceptance の phase や UAC 昇格処理はありません。実行可能な WinGet がない場合、または GUI 導入に失敗した場合は非ゼロ終了になります。
 
-1. **Phase 1**（非昇格）: winget, npm, pnpm 等のユーザースコープハンドラー
-2. **Phase 2a**（非昇格）: `RequiresAdmin = $false` の Phase 2 ハンドラー（chezmoi 等）
-   - UAC 昇格なしで実行されるため、1Password デスクトップアプリ連携等が動作する
-3. **Phase 2b**（UAC 昇格）: `RequiresAdmin = $true` の Phase 2 ハンドラー（WSL, Docker 等）
+旧管理者入口は廃止しました。WSL の検証は専用の `ci/Invoke-NixosWslE2E.ps1` が担当し、GUI 入口とは分離しています。
 
-`install.admin.ps1` の `-AdminOnly` パラメータで制御:
+#### GUI-only の integration 契約
 
-- `-AdminOnly:$true`: 管理者必須ハンドラーのみ実行
-- `-AdminOnly:$false`: 管理者不要ハンドラーのみ実行
-- 省略時: 全 Phase 2 ハンドラーを実行（後方互換）
+`Install.GuiOnly.Tests.ps1` は実物の `install.cmd` → `install.ps1` → `install.user.ps1` を一時ディレクトリで実行します。`SetupHandlerBase` / `SetupContext` / `SetupResult` とライブラリは本番ファイルを使用し、WinGet の外部インストール境界だけを決定的な fixture に置き換えます。
 
-#### Phase 境界の integration 契約
+この契約は GUI ハンドラーの成功・失敗、WinGet 不在時の失敗伝播、不要な admin / CLI / WSL / chezmoi コードを読み込まないことを確認します。成功時にだけ `Setup Complete!` が出ます。`Install.Entrypoint.Tests.ps1` は実物の batch launcher の PowerShell 5.1 / 7 選択と引数伝播を検証します。
 
-`Install.Entrypoint.Tests.ps1` は、実物の `install.ps1` → `install.user.ps1` →
-`install.admin.ps1 -AdminOnly:$false` の境界を一時ディレクトリで実行する。fixture は
-`SetupHandlerBase`、`SetupContext`、`SetupResult`、handler loader を本番ファイルから読み込み、
-副作用のない Phase 1 / Phase 2a handler と acceptance だけを提供する。
-
-この契約で、次を同時に確認する。
-
-- Phase 1 handler が適用される
-- 同じ installer 実行フローで Phase 2a handler が適用される
-- `CanApply([SetupContext]...)` の class identity / reload エラーが発生しない
-- acceptance 成功後にだけ `Setup Complete!` が出る
-
-handler 単体テストは `CanApply` / `Apply` の条件と副作用を検証し、phase integration テストは
-loader と script boundary を検証する。外部 runtime、UAC、Docker、WSL、ネットワーク、secret は
-この deterministic contract に入れず、`ci-nix.yml` の外部 E2E で検証する。stub の phase
-script を成功させるだけのテストは、実 installer boundary の代替にしない。
+実 GUI アプリの WinGet 導入・検証は `Invoke-WindowsInstallerE2E.ps1` が担当し、CLI・WSL の導入は行いません。独立 WSL adapter と Unix の runtime 契約は別のテスト・E2E として維持します。
 
 ## ハンドラー開発のチェックリスト
 

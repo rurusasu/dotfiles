@@ -28,24 +28,6 @@
     };
   };
 
-  autohotkey = {
-    winget = "AutoHotkey.AutoHotkey";
-    category = "terminal";
-    support = {
-      darwin = {
-        unsupported = "AutoHotkey is only available on Windows";
-      };
-      linux = {
-        unsupported = "AutoHotkey is only available on Windows";
-      };
-      windows = {
-        provider = "winget";
-        source = "winget";
-        identity = "AutoHotkey.AutoHotkey";
-      };
-    };
-  };
-
   zsh-patina = {
     pkg = pkgs.zsh-patina;
     category = "terminal";

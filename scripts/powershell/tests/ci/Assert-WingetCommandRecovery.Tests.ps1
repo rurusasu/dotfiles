@@ -4,7 +4,7 @@ BeforeAll {
 }
 
 Describe 'WinGet command recovery manifest contract' {
-    It 'should default to five retained portable packages with executable verification and no explicit paths' {
+    It 'should keep the legacy portable CLI probes outside the GUI-only manifest' {
         $tokens = $null
         $parseErrors = $null
         $probeAst = [System.Management.Automation.Language.Parser]::ParseFile($script:probe, [ref]$tokens, [ref]$parseErrors)
@@ -25,13 +25,7 @@ Describe 'WinGet command recovery manifest contract' {
         $manifest = Get-Content -LiteralPath (Join-Path $script:projectRoot 'windows/winget/packages.json') -Raw | ConvertFrom-Json
         foreach ($id in $defaultPackageIds) {
             $entries = @($manifest.Sources.Packages | Where-Object { $_.PackageIdentifier -eq $id })
-            $entries | Should -HaveCount 1
-            $entry = $entries[0]
-            $entry.PSObject.Properties.Name | Should -Contain 'verifyCommand'
-            $entry.verifyCommand.command | Should -Be $expectedCommands[$id]
-            $entry.verifyCommand.args | Should -Be @('--version')
-            $entry.verifyCommand.PSObject.Properties.Name | Should -Not -Contain 'type'
-            $entry.PSObject.Properties.Name | Should -Not -Contain 'pathEntries'
+            $entries | Should -HaveCount 0
         }
     }
 }

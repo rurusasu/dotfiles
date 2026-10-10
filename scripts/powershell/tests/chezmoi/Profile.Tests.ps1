@@ -159,7 +159,14 @@ Describe 'PowerShell codex profile wrapper' {
         $script:oldLocalAppData = $env:LOCALAPPDATA
         $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppDataWithoutCodexPackage'
 
-        function global:codex.cmd {
+        # Keep native process and local secret-loader side effects outside the unit test.
+        $script:oldCodexSecretEnvironment = @{}
+        foreach ($name in @('GITHUB_PAT_TOKEN', 'GITHUB_WORK_TOKEN')) {
+            $script:oldCodexSecretEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+            [Environment]::SetEnvironmentVariable($name, 'unit-test-fixture', 'Process')
+        }
+
+        function global:codex.exe {
             $script:codexArgs = [string[]]$args
             $script:termDuringCodex = $env:TERM
             $script:keyboardEnhancementDuringCodex = $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT
@@ -172,11 +179,14 @@ Describe 'PowerShell codex profile wrapper' {
     }
 
     AfterEach {
+        foreach ($name in $script:oldCodexSecretEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($name, $script:oldCodexSecretEnvironment[$name], 'Process')
+        }
         foreach ($functionName in @(
                 "Invoke-CodexCli",
                 "Resolve-DotfilesCodexExecutable",
                 "Reset-DotfilesTerminalInputMode",
-                "codex.cmd"
+                "codex.exe"
             )) {
             Remove-Item "Function:\$functionName" -ErrorAction SilentlyContinue
         }

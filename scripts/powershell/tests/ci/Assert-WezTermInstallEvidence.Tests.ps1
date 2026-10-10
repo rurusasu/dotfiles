@@ -58,6 +58,10 @@ if ($FixtureBin) { $env:PATH = $FixtureBin + [System.IO.Path]::PathSeparator + $
 $validationErrors = [System.Collections.Generic.List[string]]::new()
 $out = Get-Content -LiteralPath $OutputPath -Raw
 . (Join-Path $RepositoryRoot 'scripts/powershell/lib/Invoke-ExternalCommand.ps1')
+# Isolate the persisted PATH read/write boundary; execute the real process
+# normalization without allowing a test to repair this machine's User PATH.
+function Get-UserEnvironmentPath { return $FixtureBin }
+function Set-UserEnvironmentPath { throw 'The WezTerm fixture must not persist PATH changes' }
 '@
         @($harness, $validationFunction.Extent.Text, $inventory.Extent.Text, $wezterm.Extent.Text,
             'if ($validationErrors.Count -gt 0) { throw ($validationErrors -join " | ") }') -join "`n" |

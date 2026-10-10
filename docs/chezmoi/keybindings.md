@@ -43,7 +43,7 @@ Hyprland セッションで動作する設定。Windows は [GlazeWM の運用�
 
 ### Terminals
 
-terminal Window Manager の共通 prefix は `Ctrl+Space`。prefix に続けて、次の共通 suffix を入力する。
+WezTerm / Herdr の terminal Window Manager の共通 prefix は `Ctrl+Space`。prefix に続けて、次の共通 suffix を入力する。
 
 | 対象      | suffix                | 操作                    |
 | --------- | --------------------- | ----------------------- |
@@ -61,15 +61,14 @@ terminal Window Manager の共通 prefix は `Ctrl+Space`。prefix に続けて�
 
 target ごとの capability は次のとおり。非対応 suffix は別のキーへフォールバックせず no-op として消費する。
 
-| target           | Workspace                | Tab  | Pane | Session        |
-| ---------------- | ------------------------ | ---- | ---- | -------------- |
-| WezTerm          | 対応                     | 対応 | 対応 | 対応           |
-| Windows Terminal | Workspace 非対応 (no-op) | 対応 | 対応 | 非対応 (no-op) |
-| Herdr            | 対応                     | 対応 | 対応 | 対応           |
+| target  | Workspace | Tab  | Pane | Session |
+| ------- | --------- | ---- | ---- | ------- |
+| WezTerm | 対応      | 対応 | 対応 | 対応    |
+| Herdr   | 対応      | 対応 | 対応 | 対応    |
 
 - WezTerm は組み込み leader を使い、prefix timeout は1秒。
 - Terminal.app は共通 prefix の対象外とし、標準のキー操作を使用する。デスクトップ全体の Omarchy 配列は AeroSpace、ターミナル内の共通操作は WezTerm の組み込み leader が担当するため、Terminal.app 専用の常駐 adapter は導入しない。
-- Windows Terminal は AutoHotkey v2 adapter が前面の `WindowsTerminal.exe` だけを対象にし、prefix timeout は1秒。Workspace / Session は非対応で no-op。
+- Windows Terminal は共通 prefix の対象外とし、タブ・ペイン操作は標準のキー操作を使用する。常駐 adapter は導入しない。
 - Herdr は native prefix/key table を使う。
 - nested terminal では `Ctrl+Space Ctrl+Space` を押すと内側へ `Ctrl+Space` を1回だけ転送する。その後に共通 suffix を入力することで、内側の Herdr を操作できる。
 

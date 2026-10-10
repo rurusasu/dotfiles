@@ -17,6 +17,11 @@ let
     inherit pkgs lib codexPackage;
   };
 
+  # GUI-only installation selection is separate from cross-platform provider
+  # availability. An unclassified package never enters Windows setup.
+  guiCatalogMap = lib.filterAttrs (name: _: builtins.elem name sets.windowsGuiPackages.catalog);
+  guiWindowsOnly = builtins.filter (id: builtins.elem id sets.windowsGuiPackages.windowsOnly);
+
   # Attach verifyCommand to a package object if defined in verifyMap
   attachVerify =
     verifyMap: key: pkg:
@@ -89,44 +94,6 @@ let
     in
     if pathEntries == null then pkg else pkg // { inherit pathEntries; };
 
-  attachPnpmInstallArgs =
-    installArgsMap: key: pkg:
-    let
-      installArgs = installArgsMap.${key} or null;
-    in
-    if installArgs == null then pkg else pkg // { inherit installArgs; };
-
-  pnpmPackageKey =
-    spec:
-    let
-      scoped = builtins.match "(@[^@]+/[^@]+)@.*" spec;
-      unscoped = builtins.match "([^@]+)@.*" spec;
-    in
-    if scoped != null then
-      builtins.elemAt scoped 0
-    else if unscoped != null then
-      builtins.elemAt unscoped 0
-    else
-      spec;
-
-  attachPnpmPostInstall =
-    postInstallMap: key: pkg:
-    let
-      postInstall = postInstallMap.${key} or null;
-    in
-    if postInstall == null then
-      pkg
-    else
-      pkg
-      // {
-        postInstallCommand = {
-          inherit (postInstall) command args;
-        }
-        // lib.optionalAttrs (postInstall ? timeoutSeconds) {
-          inherit (postInstall) timeoutSeconds;
-        };
-      };
-
   attachWingetMetadata =
     key: pkg:
     attachRequiresAdmin sets.wingetRequiresAdmin key (
@@ -169,7 +136,7 @@ let
   # --- winget ---
   wingetFromMap = lib.mapAttrsToList (
     name: id: attachWingetMetadata name (attachWingetIdMetadata id { PackageIdentifier = id; })
-  ) sets.wingetMap;
+  ) (guiCatalogMap sets.wingetMap);
 
   wingetFromWindowsOnly = map (
     id:
@@ -190,7 +157,7 @@ let
         )
       )
     )
-  ) sets.windowsOnly.winget;
+  ) (guiWindowsOnly sets.windowsOnly.winget);
 
   wingetPackages = wingetFromMap ++ wingetFromWindowsOnly;
 
@@ -207,7 +174,7 @@ let
         )
       )
     )
-  ) sets.msstoreMap;
+  ) (guiCatalogMap sets.msstoreMap);
 
   msstorePackagesWindowsOnly = map (
     id:
@@ -218,47 +185,13 @@ let
         )
       )
     )
-  ) sets.windowsOnly.msstore;
+  ) (guiWindowsOnly sets.windowsOnly.msstore);
 
   msstorePackages = msstoreFromMap ++ msstorePackagesWindowsOnly;
 
-  # --- pnpm ---
-  pnpmFromGlobal = map (
-    spec:
-    let
-      key = pnpmPackageKey spec;
-    in
-    attachPnpmInstallArgs sets.pnpmInstallArgs key (
-      attachPnpmPostInstall sets.pnpmPostInstall key (attachVerify sets.pnpmVerify key { name = spec; })
-    )
-  ) sets.pnpmGlobal;
-
-  pnpmFromWindowsOnly = map (
-    spec:
-    let
-      key = pnpmPackageKey spec;
-    in
-    attachPnpmInstallArgs sets.pnpmInstallArgs key (
-      attachPnpmPostInstall sets.pnpmPostInstall key (attachVerify sets.pnpmVerify key { name = spec; })
-    )
-  ) sets.windowsOnly.pnpm;
-
-  pnpmPackages = pnpmFromGlobal ++ pnpmFromWindowsOnly;
-
-  # --- npm ---
-  npmFromMap = lib.mapAttrsToList (
-    name: spec: attachVerify sets.npmVerify name { name = spec; }
-  ) sets.npmMap;
-
-  npmFromWindowsOnly = map (
-    spec:
-    let
-      key = pnpmPackageKey spec;
-    in
-    attachVerify sets.npmVerify key { name = spec; }
-  ) sets.windowsOnly.npm;
-
-  npmPackages = npmFromMap ++ npmFromWindowsOnly;
+  # Node CLI packages are deliberately excluded from Windows GUI setup.
+  npmPackages = [ ];
+  pnpmPackages = [ ];
 
   # --- outputs ---
   npmOutput = {

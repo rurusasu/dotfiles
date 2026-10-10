@@ -26,19 +26,19 @@
 
 - Darwin host は `aerospace.nix` を通常の Nix `import` で呼び、生成結果を `services.aerospace.settings.mode.main.binding` に渡します。設定ファイルと launchd は nix-darwin が所有し、Home Manager や chezmoi で二重管理しません。
 - native NixOS host は `programs.hyprland.enable` と Home Manager module の選択を担当します。`home/keybindings/hyprland.nix` が `configType = "lua"` を明示し、ユーザー設定を配置します。
-- Windows host は home の純粋な設定生成関数を通常の Nix `import` で呼び、`config`、`supported`、`unsupported`、`artifacts` を公開します。`windows-keybindings-export` から生成した成果物をリポジトリ内の chezmoi source に保持し、Windows では chezmoi が配布します。生成物は直接編集せず、正本を変更して `task keybindings:export` で更新し、`task keybindings:check` で差分を検査します。
+- Windows host は home の純粋な設定生成関数を通常の Nix `import` で呼び、`config`、`supported`、`unsupported`、`artifacts` を公開します。`windows-keybindings-export` の成果物はリポジトリ内に保持しますが、現在の GUI-only 構成では chezmoi の管理対象から除外し、配布しません。生成物は直接編集せず、正本を変更して `task keybindings:export` で更新し、`task keybindings:check` で差分を検査します。
 - `nix/hosts/shared/linux-home.nix` は standalone Home Manager にも使われます。Hyprland module を無条件に読み込まず、native host のみが選択します。
 - home 配下でも、共通データと純粋な設定生成関数は Home Manager module ではありません。これらを module の `imports` に渡しません。
 
 ## 対象範囲と実装状況
 
-| 環境                          | デスクトップ層 | Super              | 有効化の境界                                                      |
-| ----------------------------- | -------------- | ------------------ | ----------------------------------------------------------------- |
-| macOS                         | AeroSpace      | Command            | nix-darwin のサービス。Accessibility は実機で許可が必要           |
-| native NixOS                  | Hyprland       | Super/Windows キー | native Linux host のみで有効化。実機検証は未実施                  |
-| Windows                       | GlazeWM        | Windows キー       | Windows host のデスクトップ全体。chezmoi で配布。実機検証は未実施 |
-| NixOS-WSL                     | host が担当    | Windows キー       | guest に compositor を導入せず、Windows host の GlazeWM を使用    |
-| standalone Linux Home Manager | 自動導入なし   | —                  | package set を使うだけでは desktop session を変更しない           |
+| 環境                          | デスクトップ層   | Super              | 有効化の境界                                              |
+| ----------------------------- | ---------------- | ------------------ | --------------------------------------------------------- |
+| macOS                         | AeroSpace        | Command            | nix-darwin のサービス。Accessibility は実機で許可が必要   |
+| native NixOS                  | Hyprland         | Super/Windows キー | native Linux host のみで有効化。実機検証は未実施          |
+| Windows                       | 標準デスクトップ | Windows キー       | GlazeWM / AutoHotkey の導入・設定配布は行わない           |
+| NixOS-WSL                     | host が担当      | Windows キー       | guest に compositor を導入せず、Windows host の構成に従う |
+| standalone Linux Home Manager | 自動導入なし     | —                  | package set を使うだけでは desktop session を変更しない   |
 
 native desktop の Hyprland/fuzzel/Firefox/Nautilus は `nix/packages/catalog/native-desktop.nix` に定義し、`WithDesktop` で選択します。`sets.all` は全 feature を含む既存契約を維持するため、standalone/WSL の Home Manager consumer は `nativeDesktopPackageNames` を明示的に除外します。native host は compositor をシステム側で選択し、home 側はユーザー向けアプリを選択します。
 
@@ -50,10 +50,12 @@ macOS の全キー、標準 shortcut への影響、初回権限設定と回復�
 
 ## Windows デスクトップの運用
 
+現在の Windows GUI-only セットアップでは GlazeWM / Zebar / AutoHotkey を導入・起動しません。`.glzr` と GlazeWM の Startup 用スクリプトは chezmoi の管理対象から除外しています。AHK のパッケージ定義・設定配布・Startup スクリプトは廃止しました。以下の renderer・補助処理は既存の生成契約とテストのために保持した任意の構成で、通常の `install.cmd` から適用しません。以前配置した Startup shortcut と実行中プロセスは自動削除・停止しません。
+
 GlazeWM は Windows デスクトップ全体を対象にします。Super は左右の Windows キーに展開します。
 生成済みの `config.json`、`actions.ps1`、`start-glazewm.ps1`、`keybindings.txt` は
-`~/.glzr/glazewm/` へ chezmoi で配置し、Startup の `Dotfiles GlazeWM.lnk` が起動処理を呼びます。
-Windows で設定を適用する際に Nix は不要です。GlazeWM 自体は package catalog の Windows provider で導入します。
+以前の構成では `~/.glzr/glazewm/` へ chezmoi で配置し、Startup の `Dotfiles GlazeWM.lnk` が起動処理を呼んでいました。現在はこれらを配布しません。
+この任意構成を手動で使う際に Nix は不要です。GlazeWM 自体は通常の Windows GUI manifest には含めません。
 
 対応する操作は workspace 1〜10 の切り替え・移動・移動後の追従・次/前/直前への巡回、方向フォーカス、
 幅/高さのサイズ変更、ウィンドウを閉じる、floating、分割方向、

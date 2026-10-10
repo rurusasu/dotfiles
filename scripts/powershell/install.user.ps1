@@ -1,99 +1,49 @@
 ﻿<#
 .SYNOPSIS
-    User-scope setup phase (no elevation).
-
-.DESCRIPTION
-    Runs only Winget handler in user scope mode.
+    Install the selected Windows GUI applications through WinGet only.
 #>
-
 [CmdletBinding()]
 param(
-    [string]$DistroName = "NixOS",
-    [string]$InstallDir = "$env:USERPROFILE\NixOS",
-    [string]$ReleaseTag = "",
-    [string]$PostInstallScript = "",
-    [ValidatePattern('^\d{2}\.\d{2}$')]
-    [string]$StateVersion = "26.05",
     [hashtable]$Options = @{},
-    [ValidateSet("link", "repo", "nix", "none")]
-    [string]$SyncMode = "link",
-    [ValidateSet("repo", "lock", "none")]
-    [string]$SyncBack = "lock",
     [switch]$CheckOnly
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 $OutputEncoding = [System.Text.UTF8Encoding]::new()
 
 $libPath = Join-Path $PSScriptRoot "lib"
 . (Join-Path $libPath "WindowsEnvironment.ps1")
 Repair-WindowsSetupEnvironment
-
-if (-not $PSBoundParameters.ContainsKey("InstallDir")) {
-    $InstallDir = Join-Path $env:USERPROFILE "NixOS"
-}
-
-$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..\..")).Path
+$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "../..")).Path
 . (Join-Path $libPath "SetupHandler.ps1")
 . (Join-Path $libPath "Invoke-ExternalCommand.ps1")
-
-# User PATH can exceed Windows' child-process environment limits. Normalize it
-# before handler discovery or any package-manager command is started.
-Update-ProcessEnvironmentPath -ReportStatus
-
+Update-ProcessEnvironmentPath -ReportStatus -ProcessOnly
 
 $context = [SetupContext]::new($repoRoot)
-$context.DistroName = $DistroName
-$context.InstallDir = $InstallDir
-
 foreach ($key in $Options.Keys) {
     $context.Options[$key] = $Options[$key]
 }
-
 $context.Options["WingetMode"] = "import"
-$context.Options["ReleaseTag"] = $ReleaseTag
-$context.Options["PostInstallScript"] = $PostInstallScript
-$context.Options["StateVersion"] = $StateVersion
-$context.Options["SyncMode"] = $SyncMode
-$context.Options["SyncBack"] = $SyncBack
+$context.Options["SkipRetiredPackageCleanup"] = $true
+$context.Options['WingetProcessOnlyPath'] = $true
 
-$handlersPath = Join-Path $PSScriptRoot "handlers"
-$handlerFiles = @(Get-ChildItem -Path $handlersPath -Filter "Handler.*.ps1" -ErrorAction SilentlyContinue | Sort-Object -Property Name)
-foreach ($file in $handlerFiles) {
-    . $file.FullName
-}
-$allHandlers = Get-SetupHandler -HandlersPath $handlersPath -SkipLoad
-$allHandlers = Select-SetupHandler -Handlers $allHandlers
-
-# オプショナルサービスの一括同意プロンプト（全 Phase 対象）
-Invoke-ConsentPrompt -Handlers $allHandlers
-
-# Phase 1: Phase = 1 のハンドラーのみ実行
-$handlers = @($allHandlers | Where-Object { $_.Phase -eq 1 })
-
+# Do not discover or load CLI/bootstrap/WSL handlers, even when those tools
+# already exist on PATH. Their standalone implementations are not this profile.
+. (Join-Path $PSScriptRoot "handlers/Handler.Winget.ps1")
+$handler = [WingetHandler]::new()
+$available = $handler.CanApply($context)
 if ($CheckOnly) {
-    $canApply = $false
-    foreach ($handler in $handlers) {
-        try {
-            if ($handler.CanApply($context)) {
-                $canApply = $true
-                break
-            }
-        }
-        catch {
-            throw "[$($handler.Name)] CanApply() check failed: $($_.Exception.Message)"
-        }
-    }
-    return $canApply
+    return [bool]$available
+}
+if (-not $available) {
+    throw "WinGet is not available. Update App Installer from Microsoft Store."
 }
 
-$results = Invoke-SetupHandler -Handlers $handlers -Context $context
+$results = @($handler.Apply($context))
 Show-SetupSummary -Results $results
-
 $failedCount = @($results | Where-Object { -not $_.Success }).Count
 if ($failedCount -gt 0) {
-    throw "User phase failed with $failedCount handler failure(s)."
+    throw "GUI setup failed with $failedCount handler failure(s)."
 }

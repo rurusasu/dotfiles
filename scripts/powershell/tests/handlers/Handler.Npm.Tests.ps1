@@ -483,8 +483,16 @@ Describe 'NpmHandler' {
         }
     }
 
-    Context 'Apply - Windows npm manifest contracts' {
+    Context 'Apply - explicit custom npm manifest contracts' {
         BeforeEach {
+            $script:customNpmManifest = @{
+                globalPackages = @(
+                    @{ name = '@devcontainers/cli'; verifyCommand = @{ command = 'devcontainer'; args = @('--version') } }
+                    @{ name = '@deepseek-ai/dsh'; verifyCommand = @{ command = 'dsh'; args = @('--version') } }
+                    @{ name = 'agent-browser@0.38.1'; verifyCommand = @{ command = 'agent-browser'; args = @('--version') } }
+                )
+            }
+            Mock Get-JsonContent { return $script:customNpmManifest }
             $script:npmInstallCalls = @()
             $script:npmVerifyCalls = @()
             Mock Get-ExternalCommand { return @{ Source = "C:\npm.cmd" } }
@@ -526,8 +534,10 @@ Describe 'NpmHandler' {
 
             $result.Success | Should -BeTrue
             $script:npmInstallCalls.Count | Should -Be 3
+            $script:npmInstallCalls | Where-Object { $_ -contains '@openai/codex' } | Should -BeNullOrEmpty
+            $script:npmVerifyCalls | Where-Object { $_.Command -eq 'codex' } | Should -BeNullOrEmpty
             foreach ($entry in $expected) {
-                $expectedVerifyCount = if ($entry.Spec -eq "@deepseek-ai/dsh") { 1 } else { 2 }
+                $expectedVerifyCount = if ($entry.Spec -eq '@deepseek-ai/dsh') { 1 } else { 2 }
                 $script:npmInstallCalls | Where-Object { $_ -contains $entry.Spec } | Should -HaveCount 1
                 $script:npmVerifyCalls | Where-Object {
                     $_.Command -eq $entry.Command -and ($_.Arguments -join "|") -eq ($entry.Arguments -join "|")

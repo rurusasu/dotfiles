@@ -45,19 +45,23 @@ BeforeAll {
 
     function script:Invoke-ChezmoiTemplateForTest {
         param(
-            [Parameter(Mandatory)][string]$Template,
-            [Parameter(Mandatory)][string]$OverrideData
+            [Parameter(Mandatory)][AllowEmptyString()][string]$Template,
+            [Parameter(Mandatory)][string]$OverrideData,
+            [ValidateSet('execute-template', 'managed')][string]$Command = 'execute-template',
+            [string]$ConfigPath
         )
 
         $chezmoiCommand = Get-Command chezmoi -ErrorAction Stop
         $startInfo = New-Object System.Diagnostics.ProcessStartInfo
         $startInfo.FileName = $chezmoiCommand.Source
-        $nativeArguments = @(
+        $arguments = @(
             '--source'
             $script:chezmoiRoot
             "--override-data=$OverrideData"
-            'execute-template'
-        ) | ForEach-Object { ConvertTo-ChezmoiWindowsArgument -Argument ([string]$_) }
+        )
+        if ($ConfigPath) { $arguments += @('--config', $ConfigPath) }
+        $arguments += $Command
+        $nativeArguments = $arguments | ForEach-Object { ConvertTo-ChezmoiWindowsArgument -Argument ([string]$_) }
         $startInfo.Arguments = $nativeArguments -join ' '
         $startInfo.UseShellExecute = $false
         $startInfo.CreateNoWindow = $true
@@ -103,7 +107,52 @@ Describe 'chezmoi テンプレート バリデーション' {
         }
     }
 
+    Context 'Windows desktop deployment' {
+        It 'should not manage GlazeWM, Zebar or AutoHotkey startup scripts' {
+            $configPath = Join-Path $TestDrive 'desktop-chezmoi.toml'
+            Set-Content -LiteralPath $configPath -Value '' -Encoding UTF8
+            $result = Invoke-ChezmoiTemplateForTest -Template '' -OverrideData '{"chezmoi":{"os":"windows"}}' -Command managed -ConfigPath $configPath
+            $result.ExitCode | Should -Be 0 -Because $result.StandardError
+            $managed = @($result.StandardOutput -split '\r?\n')
+            @($managed | Where-Object { $_ -match '(?i)glazewm|zebar|^\.glzr(?:[/\\]|$)' }).Count | Should -Be 0
+            @($managed | Where-Object { $_ -match 'start-terminal-keybindings_windows\.ps1$' }).Count | Should -Be 0
+            @($managed | Where-Object { $_ -match '^\.codex(?:[/\\]|$)' }).Count | Should -BeGreaterThan 0
+        }
+    }
+
     Context 'Terminal config deployment' {
+        It 'should deploy native terminal settings without overwriting existing retired keybindings' {
+            $template = Get-Content -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/terminals/run_onchange_deploy.ps1.tmpl') -Raw
+            $render = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"windows"}}'
+            $render.ExitCode | Should -Be 0 -Because $render.StandardError
+            $originalEnvironment = @{}
+            foreach ($name in @('USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'CHEZMOI_SOURCE_DIR')) {
+                $originalEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+                [Environment]::SetEnvironmentVariable($name, (Join-Path $TestDrive $name), 'Process')
+            }
+            try {
+                $oldSource = Join-Path $env:CHEZMOI_SOURCE_DIR 'terminals/windows-terminal'
+                $oldDestination = Join-Path $env:APPDATA 'dotfiles'
+                $terminalDirectory = Join-Path $env:LOCALAPPDATA 'Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState'
+                New-Item -ItemType Directory -Path $oldSource, $oldDestination, $terminalDirectory -Force | Out-Null
+                Set-Content -LiteralPath (Join-Path $oldSource 'terminal-keybindings.ahk') -Value 'obsolete source'
+                $existingKeybindings = Join-Path $oldDestination 'terminal-keybindings.ahk'
+                Set-Content -LiteralPath $existingKeybindings -Value 'existing user settings'
+
+                & ([scriptblock]::Create($render.StandardOutput))
+
+                (Get-Content -LiteralPath $existingKeybindings -Raw).Trim() | Should -Be 'existing user settings'
+                Test-Path -LiteralPath (Join-Path $env:USERPROFILE '.config/wezterm/wezterm.lua') | Should -BeTrue
+                $settings = Get-Content -LiteralPath (Join-Path $terminalDirectory 'settings.json') -Raw | ConvertFrom-Json
+                $settings.profiles.list.Count | Should -BeGreaterThan 0
+            }
+            finally {
+                foreach ($name in $originalEnvironment.Keys) {
+                    [Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], 'Process')
+                }
+            }
+        }
+
         It 'should leave Unix terminal settings to Home Manager' {
             Test-Path -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/terminals/run_onchange_deploy.sh.tmpl') | Should -BeFalse
             Test-Path -LiteralPath (Join-Path $script:chezmoiRoot 'terminals/ghostty/config') | Should -BeFalse
@@ -115,130 +164,6 @@ Describe 'chezmoi テンプレート バリデーション' {
             }
         }
 
-        It 'should deploy the managed AutoHotkey source on Windows and include its source hash' {
-            $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/terminals/run_onchange_deploy.ps1.tmpl'
-            $template = Get-Content -Encoding UTF8 -LiteralPath $templatePath -Raw
-
-            $template | Should -Match 'include "terminals/windows-terminal/terminal-keybindings\.ahk" \| sha256sum'
-            $windowsRender = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"windows"}}'
-            $windowsRender.ExitCode | Should -Be 0 -Because $windowsRender.StandardError
-            $windowsContent = $windowsRender.StandardOutput -replace "\r\n?", "`n"
-            $windowsContent | Should -Match '(?m)^# hash: [0-9a-f]{192}$'
-            $windowsContent |
-                Should -Match 'Deploy-File "\$ChezmoiSource\\terminals\\windows-terminal\\terminal-keybindings\.ahk" "\$env:APPDATA\\dotfiles\\terminal-keybindings\.ahk"'
-        }
-
-        Context 'Windows Terminal AutoHotkey startup lifecycle' {
-            BeforeEach {
-                $script:originalProgramFiles = $env:ProgramFiles
-                $script:originalLocalAppData = $env:LOCALAPPDATA
-                $script:originalAppData = $env:APPDATA
-                $env:ProgramFiles = Join-Path $TestDrive 'ProgramFiles'
-                $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppData'
-                $env:APPDATA = Join-Path $TestDrive 'AppData/Roaming'
-
-                $templatePath = Join-Path $script:chezmoiRoot '.chezmoiscripts/run_onchange_start-terminal-keybindings_windows.ps1.tmpl'
-                Test-Path -LiteralPath $templatePath -PathType Leaf | Should -BeTrue
-                $script:startupTemplate = Get-Content -Encoding UTF8 -LiteralPath $templatePath -Raw
-                $render = Invoke-ChezmoiTemplateForTest -Template $script:startupTemplate -OverrideData '{"chezmoi":{"os":"windows"}}'
-                $render.ExitCode | Should -Be 0 -Because $render.StandardError
-                $script:startupContent = $render.StandardOutput
-                $script:startupScriptBlock = [scriptblock]::Create($script:startupContent)
-
-                $managedDirectory = Join-Path $env:APPDATA 'dotfiles'
-                New-Item -ItemType Directory -Path $managedDirectory -Force | Out-Null
-                Set-Content -LiteralPath (Join-Path $managedDirectory 'terminal-keybindings.ahk') -Value '#Requires AutoHotkey v2.0'
-            }
-
-            AfterEach {
-                $env:ProgramFiles = $script:originalProgramFiles
-                $env:LOCALAPPDATA = $script:originalLocalAppData
-                $env:APPDATA = $script:originalAppData
-            }
-
-            It 'should render valid PowerShell with the v2 discovery and single Startup shortcut contract' {
-                $tokens = $null
-                $parseErrors = $null
-                [System.Management.Automation.Language.Parser]::ParseInput(
-                    $script:startupContent,
-                    [ref]$tokens,
-                    [ref]$parseErrors
-                ) | Out-Null
-
-                $parseErrors | Should -BeNullOrEmpty
-                $script:startupTemplate | Should -Match 'include "terminals/windows-terminal/terminal-keybindings\.ahk" \| sha256sum'
-                $script:startupContent | Should -Match '\$env:ProgramFiles\\AutoHotkey\\v2\\AutoHotkey64_UIA\.exe'
-                $script:startupContent | Should -Not -Match '\$env:LOCALAPPDATA\\Programs\\AutoHotkey'
-                $script:startupContent | Should -Match '\$StartupDirectory = "\$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"'
-                $script:startupContent | Should -Match '\$ShortcutPath = "\$StartupDirectory\\Dotfiles Terminal Keybindings\.lnk"'
-                $script:startupContent | Should -Match '\$env:APPDATA\\dotfiles\\terminal-keybindings\.ahk'
-                $script:startupContent | Should -Match 'New-Object -ComObject WScript\.Shell'
-                $script:startupContent | Should -Not -Match '(?i)Stop-Process|taskkill'
-            }
-
-            It 'should fail explicitly without the trusted AutoHotkey v2 UIAccess executable and launch nothing' {
-                Mock Start-Process
-
-                { & $script:startupScriptBlock } | Should -Throw '*AutoHotkey v2 UIAccess executable was not found*'
-                Should -Invoke Start-Process -Times 0
-            }
-
-            It 'should reject an ordinary v2 executable that cannot cross the elevated profile boundary' {
-                $autoHotkeyDirectory = "$env:ProgramFiles\AutoHotkey\v2"
-                New-Item -ItemType Directory -Path $autoHotkeyDirectory -Force | Out-Null
-                Set-Content -LiteralPath "$autoHotkeyDirectory\AutoHotkey64.exe" -Value 'stub'
-                Mock Start-Process
-
-                { & $script:startupScriptBlock } | Should -Throw '*AutoHotkey v2 UIAccess executable was not found*'
-                Should -Invoke Start-Process -Times 0
-            }
-
-            It 'should idempotently save and launch one current-user Startup shortcut' {
-                $autoHotkeyDirectory = "$env:ProgramFiles\AutoHotkey\v2"
-                New-Item -ItemType Directory -Path $autoHotkeyDirectory -Force | Out-Null
-                $autoHotkey = "$autoHotkeyDirectory\AutoHotkey64_UIA.exe"
-                Set-Content -LiteralPath $autoHotkey -Value 'stub'
-
-                $script:createdShortcutPaths = [System.Collections.Generic.List[string]]::new()
-                $script:shortcutSaveCount = 0
-                $script:fakeShortcut = [pscustomobject]@{
-                    TargetPath       = $null
-                    Arguments        = $null
-                    WorkingDirectory = $null
-                }
-                $script:fakeShortcut | Add-Member -MemberType ScriptMethod -Name Save -Value {
-                    $script:shortcutSaveCount++
-                }
-                $script:fakeShell = [pscustomobject]@{}
-                $script:fakeShell | Add-Member -MemberType ScriptMethod -Name CreateShortcut -Value {
-                    param([string]$Path)
-                    $script:createdShortcutPaths.Add($Path)
-                    return $script:fakeShortcut
-                }
-                Mock Start-Process
-
-                $testableContent = $script:startupContent.Replace(
-                    '$Shell = New-Object -ComObject WScript.Shell',
-                    '$Shell = $script:fakeShell'
-                )
-                $testableScriptBlock = [scriptblock]::Create($testableContent)
-
-                & $testableScriptBlock
-                & $testableScriptBlock
-
-                $startupPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Dotfiles Terminal Keybindings.lnk"
-                @($script:createdShortcutPaths) | Should -HaveCount 2
-                $script:createdShortcutPaths[0] | Should -Be $startupPath
-                $script:createdShortcutPaths[1] | Should -Be $startupPath
-                $script:shortcutSaveCount | Should -Be 2
-                $script:fakeShortcut.TargetPath | Should -Be $autoHotkey
-                $managedScript = "$env:APPDATA\dotfiles\terminal-keybindings.ahk"
-                $script:fakeShortcut.Arguments | Should -Be ('"{0}"' -f $managedScript)
-                Should -Invoke Start-Process -Times 2 -Exactly -ParameterFilter {
-                    $FilePath -eq $startupPath
-                }
-            }
-        }
     }
 
     Context 'onepasswordRead はテンプレート展開中に呼ばない' {
@@ -864,6 +789,67 @@ Describe 'chezmoi テンプレート バリデーション' {
     }
 
     Context 'Shell config deploy script' {
+        It 'should preserve an identical locked launcher and complete the remaining shell deployment' {
+            $source = Join-Path $TestDrive 'locked-launcher-source'
+            $destination = Join-Path $TestDrive 'locked-launcher-home'
+            New-Item -ItemType Directory -Path (Join-Path $source 'shells'), (Join-Path $source 'dot_local/bin'), (Join-Path $destination '.local/bin') -Force | Out-Null
+            foreach ($name in @('bashrc', 'zoxide.bash', 'fzf.bash')) {
+                Set-Content -LiteralPath (Join-Path $source "shells/$name") -Value '# shell fixture' -Encoding UTF8
+            }
+            $launcherSource = Join-Path $source 'dot_local/bin/executable_codex.cmd'
+            $launcherDestination = Join-Path $destination '.local/bin/codex.cmd'
+            Set-Content -LiteralPath $launcherSource -Value '@echo off' -Encoding ASCII
+            Copy-Item -LiteralPath $launcherSource -Destination $launcherDestination
+            Set-Content -LiteralPath (Join-Path $source 'dot_local/bin/executable_stop-stale-codex-login.ps1') -Value '# next deployment' -Encoding ASCII
+            $template = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/shells/run_onchange_deploy.ps1.tmpl') -Raw
+            $rendered = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"windows"}}'
+            $rendered.ExitCode | Should -Be 0 -Because $rendered.StandardError
+            $previousSource = $env:CHEZMOI_SOURCE_DIR
+            $previousProfile = $env:USERPROFILE
+            $lock = [System.IO.File]::Open($launcherDestination, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+            try {
+                $env:CHEZMOI_SOURCE_DIR = $source
+                $env:USERPROFILE = $destination
+                $deploy = [scriptblock]::Create($rendered.StandardOutput)
+
+                { & $deploy } | Should -Not -Throw
+
+                (Get-FileHash -LiteralPath $launcherDestination).Hash | Should -Be (Get-FileHash -LiteralPath $launcherSource).Hash
+                Get-Content -LiteralPath (Join-Path $destination '.local/bin/stop-stale-codex-login.ps1') | Should -Be '# next deployment'
+            }
+            finally {
+                $lock.Dispose()
+                $env:CHEZMOI_SOURCE_DIR = $previousSource
+                $env:USERPROFILE = $previousProfile
+            }
+        }
+
+        It 'should replace changed unlocked launchers and report changed locked launchers as failures' {
+            $template = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot '.chezmoiscripts/deploy/shells/run_onchange_deploy.ps1.tmpl') -Raw
+            $rendered = Invoke-ChezmoiTemplateForTest -Template $template -OverrideData '{"chezmoi":{"os":"windows"}}'
+            $rendered.ExitCode | Should -Be 0 -Because $rendered.StandardError
+            # Load the real rendered deployment function without deploying to the user profile.
+            $ast = [System.Management.Automation.Language.Parser]::ParseInput($rendered.StandardOutput, [ref]$null, [ref]$null)
+            $functionAst = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Deploy-File' }, $true)
+            . ([scriptblock]::Create($functionAst.Extent.Text))
+            $launcherSource = Join-Path $TestDrive 'new-codex.cmd'
+            $launcherDestination = Join-Path $TestDrive 'old-codex.cmd'
+            Set-Content -LiteralPath $launcherSource -Value 'new launcher' -Encoding ASCII
+            Set-Content -LiteralPath $launcherDestination -Value 'old launcher' -Encoding ASCII
+            Deploy-File $launcherSource $launcherDestination
+            Get-Content -LiteralPath $launcherDestination | Should -Be 'new launcher'
+
+            Set-Content -LiteralPath $launcherSource -Value 'updated launcher' -Encoding ASCII
+            $lock = [System.IO.File]::Open($launcherDestination, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+            try {
+                { $ErrorActionPreference = 'Stop'; Deploy-File $launcherSource $launcherDestination } | Should -Throw
+                Get-Content -LiteralPath $launcherDestination | Should -Be 'new launcher'
+            }
+            finally {
+                $lock.Dispose()
+            }
+        }
+
         It 'should deploy secret loader files from the managed dot_config paths' {
             $scriptPaths = @(
                 Join-Path $script:chezmoiRoot ".chezmoiscripts/deploy/shells/run_onchange_deploy.ps1.tmpl"
