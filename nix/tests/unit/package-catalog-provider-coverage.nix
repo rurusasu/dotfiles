@@ -35,7 +35,7 @@ in
       darwinCasks = {
         isList = true;
         hasDockerDesktop = true;
-        hasHermesDesktop = true;
+        hasHermesDesktop = false;
       };
     };
   };

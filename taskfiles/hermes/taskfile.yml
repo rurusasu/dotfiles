@@ -39,8 +39,19 @@ tasks:
   hermes:bootstrap:
     desc: Apply the Nix-managed Hermes Agent profile and gateway service
     cmds:
+      - cmd: |-
+          set -eu
+          nix flake update
+          if [ -e /etc/NIXOS ]; then
+            sudo nixos-rebuild switch --flake . --impure
+          else
+            system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
+            home-manager switch --flake ".#${system}"
+          fi
+          task hermes:sync
+        platforms: [linux]
       - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix flake update && sudo nixos-rebuild switch --flake . --impure && task hermes:sync"'
-        platforms: [windows, linux]
+        platforms: [windows]
       - cmd: task darwin:install && task hermes:sync
         platforms: [darwin]
 
@@ -152,16 +163,20 @@ tasks:
         platforms: [windows]
 
   hermes:desktop:
-    desc: Launch the native Hermes Desktop application
+    desc: Launch the Home Manager Hermes Desktop application
     cmds:
-      - cmd: open -a /Applications/Hermes.app
-        platforms: [darwin]
+      - cmd: hermes-desktop
+        platforms: [darwin, linux]
+      - cmd: '{{.WSL}}bash -lc "hermes-desktop"'
+        platforms: [windows]
 
   hermes:desktop:install:
-    desc: Verify the Nix-managed Hermes CLI and nix-darwin Desktop cask
+    desc: Verify the Home Manager Hermes Desktop package and Hermes CLI
     cmds:
       - cmd: scripts/sh/hermes-desktop-install.sh
-        platforms: [darwin]
+        platforms: [darwin, linux]
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && scripts/sh/hermes-desktop-install.sh"'
+        platforms: [windows]
 
   hermes:cli:
     desc: Run the Nix-managed native Hermes CLI
@@ -169,6 +184,8 @@ tasks:
     cmds:
       - cmd: hermes {{range .CLI_ARGS_LIST}}{{. | shellQuote}} {{end}}
         platforms: [darwin, linux]
+      - cmd: '{{.WSL}}bash -lc "hermes {{range .CLI_ARGS_LIST}}{{. | shellQuote}} {{end}}"'
+        platforms: [windows]
 
   hermes:profile:status:
     desc: Show a Hermes profile status in the Nix-managed gateway
@@ -398,5 +415,5 @@ tasks:
     cmds:
       - cmd: task hermes:bootstrap
         platforms: [linux, darwin]
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix flake update && sudo nixos-rebuild switch --flake . --impure"'
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && task hermes:bootstrap"'
         platforms: [windows]

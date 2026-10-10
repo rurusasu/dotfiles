@@ -3,8 +3,6 @@
 #   home-manager switch --flake .#aarch64-darwin
 #   home-manager switch --flake .#x86_64-linux
 #   home-manager switch --flake .#aarch64-linux
-# Hermes Desktop is a Homebrew Cask and therefore requires the nix-darwin
-# installer instead of this standalone Home Manager output.
 { inputs, ... }:
 let
   hosts = import ./. { inherit inputs; };

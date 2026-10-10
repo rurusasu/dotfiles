@@ -64,7 +64,6 @@ in
     expr = defaultConfig.users.users.nixos.linger;
     expected = true;
   };
-
   testWslUsesNativeInteropWithoutDockerDesktop = {
     expr = {
       registerInterop = defaultConfig.wsl.interop.register;

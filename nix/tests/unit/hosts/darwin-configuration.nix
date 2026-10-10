@@ -244,7 +244,9 @@ in
 
   testDarwinHermesUsesExpectedProviders = {
     expr = {
-      hermesCask = hasDarwinCask "hermes-desktop" defaultConfig;
+      hermesDesktopHomePackage = builtins.any (
+        package: (package.pname or "") == "hermes-desktop"
+      ) defaultHome.home.packages;
       dockerCask = hasDarwinCask "docker-desktop" defaultConfig;
       chromeSystemPackage = builtins.any (name: hasPrefix "google-chrome" name) (
         packageNames defaultConfig
@@ -253,7 +255,7 @@ in
       discordAgent = builtins.hasAttr "discord-module-staging" defaultHome.launchd.agents;
     };
     expected = {
-      hermesCask = true;
+      hermesDesktopHomePackage = true;
       dockerCask = true;
       chromeSystemPackage = true;
       discordHomePackage = true;

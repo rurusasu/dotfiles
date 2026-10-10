@@ -59,6 +59,15 @@ class TaskfileContractTests(unittest.TestCase):
         self.assertNotIn("docker/hermes-agent", test_task)
         self.assertNotIn("hermes:docker:bootstrap", self.taskfile)
 
+    def test_bootstrap_applies_hermes_through_the_current_linux_manager(self) -> None:
+        task = self._task_block("hermes:bootstrap")
+
+        self.assertIn("if [ -e /etc/NIXOS ]", task)
+        self.assertIn("sudo nixos-rebuild switch --flake . --impure", task)
+        self.assertIn('home-manager switch --flake ".#${system}"', task)
+        self.assertIn("task hermes:sync", task)
+        self.assertIn('{{.WSL}}bash -lc', task)
+
     def test_windows_gmail_auth_runs_in_the_wsl_hermes_home(self) -> None:
         task = self._command_text("hermes:gmail:auth")
 
@@ -93,8 +102,9 @@ class TaskfileContractTests(unittest.TestCase):
     def test_desktop_entrypoint_uses_the_native_gateway(self) -> None:
         task = self._task_block("hermes:desktop")
 
-        self.assertIn("open -a /Applications/Hermes.app", task)
-        self.assertIn("platforms: [darwin]", task)
+        self.assertIn("hermes-desktop", task)
+        self.assertIn("platforms: [darwin, linux]", task)
+        self.assertIn('{{.WSL}}bash -lc "hermes-desktop"', task)
         self.assertNotIn("hermes-desktop-docker", task)
 
     def test_cli_entrypoint_uses_the_nix_managed_hermes_cli(self) -> None:
@@ -105,16 +115,27 @@ class TaskfileContractTests(unittest.TestCase):
         self.assertIn("CLI_ARGS_LIST", task)
         self.assertIn("shellQuote", task)
         self.assertIn("platforms: [darwin, linux]", task)
+        self.assertIn('{{.WSL}}bash -lc "hermes {{range .CLI_ARGS_LIST}}', task)
         self.assertNotIn("hermes-docker", task)
 
     def test_desktop_install_does_not_run_the_upstream_agent_installer(self) -> None:
         installer = (REPOSITORY_ROOT / "scripts" / "sh" / "hermes-desktop-install.sh").read_text(
             encoding="utf-8"
         )
-        self.assertIn("nix-darwin cask", installer)
+        self.assertIn("Home Manager Hermes Desktop package", installer)
         self.assertIn("hermes --version", installer)
         self.assertNotIn("Hermes-Setup", installer)
         self.assertNotIn("open -n", installer)
+        task = self._task_block("hermes:desktop:install")
+        self.assertIn("platforms: [darwin, linux]", task)
+        self.assertIn("{{.WSL}}bash -lc", task)
+
+    def test_windows_hermes_upgrade_delegates_to_the_shared_bootstrap(self) -> None:
+        task = self._task_block("hermes:upgrade")
+
+        self.assertIn("task hermes:bootstrap", task)
+        self.assertIn('{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && task hermes:bootstrap"', task)
+        self.assertNotIn("nixos-rebuild", task)
 
     def test_profile_lifecycle_uses_the_root_multiplexer_and_profile_status(
         self,
