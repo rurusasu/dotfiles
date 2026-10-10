@@ -736,7 +736,7 @@ Describe 'NixOSWSLHandler' {
             $script:execCmd | Should -Match '--force'
         }
 
-        It 'should pass skip-flake-update when requested' {
+        It 'should not pass a legacy skip-flake-update flag' {
             $scriptFile = Join-Path $TestDrive "postinstall.sh"
             New-Item $scriptFile -ItemType File -Force | Out-Null
             $ctx.Options["PostInstallScript"] = $scriptFile
@@ -755,7 +755,7 @@ Describe 'NixOSWSLHandler' {
 
             $handler.ExecutePostInstall($ctx)
 
-            $script:execCmd | Should -Match '--skip-flake-update'
+            $script:execCmd | Should -Not -Match '--skip-flake-update'
         }
 
         It 'should fall back to /mnt/ path when wslpath call fails' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {

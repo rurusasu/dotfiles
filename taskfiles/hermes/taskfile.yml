@@ -39,9 +39,9 @@ tasks:
   hermes:bootstrap:
     desc: Apply the Nix-managed Hermes Agent profile and gateway service
     cmds:
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure && task hermes:sync"'
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix flake update && sudo nixos-rebuild switch --flake . --impure && task hermes:sync"'
         platforms: [windows, linux]
-      - cmd: DOTFILES_ROOT="{{.ROOT_DIR}}" task darwin:install && task hermes:sync
+      - cmd: task darwin:install && task hermes:sync
         platforms: [darwin]
 
   hermes:bootstrap:test:
@@ -396,7 +396,7 @@ tasks:
   hermes:upgrade:
     desc: Update the Hermes flake input and activate the Nix-managed Hermes Agent
     cmds:
-      - cmd: nix flake update hermes-agent && task hermes:bootstrap
+      - cmd: task hermes:bootstrap
         platforms: [linux, darwin]
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix flake update hermes-agent && scripts/sh/nixos-rebuild-with-user.sh switch --flake . --impure"'
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix flake update && sudo nixos-rebuild switch --flake . --impure"'
         platforms: [windows]

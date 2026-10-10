@@ -13,7 +13,7 @@
         PATH="$HOME/.local/bin:$PATH"
       fi
 
-      # User-local npm globals (Codex in devcontainers)
+      # User-local npm globals
       if [ -d "$HOME/.local/npm/bin" ]; then
         case ":$PATH:" in
           *":$HOME/.local/npm/bin:"*) ;;

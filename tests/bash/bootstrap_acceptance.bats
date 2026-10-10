@@ -88,13 +88,12 @@ EOF
 }
 
 @test "production Linux installers leave Docker Hermes bootstrap out of native setup" {
-	for installer in install-home-manager.sh install-nixos.sh; do
-		file="$REPO_ROOT/scripts/sh/$installer"
+	for file in "$REPO_ROOT/install.sh" "$REPO_ROOT/scripts/sh/install-nixos.sh"; do
 		! grep -Fq 'hermes:bootstrap' "$file"
 		! grep -Fq 'docker/hermes-service/compose.yml' "$file"
 		! grep -q -- '--runtime' "$file"
 	done
-	grep -Fq '"$VERIFY_ENVIRONMENT"' "$REPO_ROOT/scripts/sh/install-nixos.sh"
+	grep -Fq 'nixos-rebuild switch' "$REPO_ROOT/scripts/sh/install-nixos.sh"
 	grep -Fq '{{.HERMES_COMPOSE_FILE}}' "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
 }
 

@@ -96,14 +96,12 @@ Describe 'Windows GUI-only package catalog' {
 
     It 'should update flake inputs before every scripted NixOS rebuild entry point' {
         $taskfile = Get-Content -LiteralPath (Join-Path $script:repoRoot "taskfiles/nix/taskfile.yml") -Raw
-        $updateScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/update.sh") -Raw
-        $postInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
+        $postInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/powershell/lib/Invoke-NixosWslSetup.ps1") -Raw
         $commonInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/install-common.sh") -Raw
 
-        $taskfile | Should -Match 'nix flake update && scripts/sh/nixos-rebuild-with-user\.sh switch --flake \. --impure'
-        $updateScript | Should -Match 'nix flake update --flake ~/.dotfiles'
+        $taskfile | Should -Match 'nix flake update && sudo nixos-rebuild switch --flake \. --impure'
         $commonInstallScript | Should -Match 'nix flake update --flake "\$flake_ref"'
-        $postInstallScript | Should -Match 'dotfiles_update_flake "\$TARGET_DIR" path'
+        $postInstallScript | Should -Match 'flake update --flake'
         $commonInstallScript | Should -Not -Match 'dotfiles_trust_git_directory|git config --global'
         $postInstallScript | Should -Not -Match 'git config --global'
     }

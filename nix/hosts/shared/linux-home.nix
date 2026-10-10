@@ -1,4 +1,4 @@
-{
+args@{
   config,
   pkgs,
   lib,
@@ -10,9 +10,19 @@ let
     inherit pkgs lib;
   };
   inherit ((import ../../modules/fonts.nix { inherit pkgs; })) fonts;
+  currentUser = builtins.getEnv "USER";
+  currentHome = builtins.getEnv "HOME";
+  # NixOS supplies account identity through Home Manager osConfig.
+  hasCurrentUser = !(args ? osConfig) && currentUser != "" && currentUser != "root";
 in
 {
-  home.homeDirectory = lib.mkDefault "/home/${config.home.username}";
+  home = {
+    username = lib.mkIf hasCurrentUser currentUser;
+    homeDirectory = lib.mkDefault (
+      if hasCurrentUser && currentHome != "" then currentHome else "/home/${config.home.username}"
+    );
+    packages = sets.allWithout sets.nativeDesktopPackageNames ++ fonts.packages;
+  };
 
   imports = [
     ../../modules/editors/nvim
@@ -20,7 +30,6 @@ in
     ../../home/common.nix
   ];
 
-  home.packages = sets.allWithout sets.nativeDesktopPackageNames ++ fonts.packages;
   fonts.fontconfig = fonts.fontconfig;
 
   programs.git.signing.signer = "/opt/1Password/op-ssh-sign";

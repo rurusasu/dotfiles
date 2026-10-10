@@ -81,7 +81,8 @@ Describe 'GUI-only Windows setup execution' {
         $windowsSection | Should -Not -Match 'EnableDockerDesktopIntegration|ExpandDockerVhd'
         $wslGuide = Get-Content -LiteralPath (Join-Path $script:repoRoot 'docs/nix/nixos-wsl-install.md') -Raw -Encoding UTF8
         $wslGuide | Should -Match 'wsl --install --from-file'
-        $wslGuide | Should -Match 'scripts/sh/nixos-wsl-postinstall\.sh'
+        $wslGuide | Should -Match 'scripts/powershell/lib/Invoke-NixosWslSetup\.ps1'
+        $wslGuide | Should -Not -Match 'scripts/sh/nixos-wsl-postinstall\.sh'
         $wslGuide | Should -Not -Match 'install\.cmd[^\r\n]*-(?:SyncMode|SyncBack|DistroName|InstallDir|ReleaseTag|ForcePostInstall|StateVersion)'
     }
 

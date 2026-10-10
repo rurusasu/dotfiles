@@ -92,12 +92,6 @@
     category = "dev";
   };
 
-  bun = {
-    pkg = pkgs.bun;
-    winget = "Oven-sh.Bun";
-    category = "dev";
-  };
-
   zig = {
     pkg = pkgs.zig;
     winget = "zig.zig";

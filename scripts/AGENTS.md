@@ -9,7 +9,7 @@
 
 - Windows 全体セットアップ: `scripts/powershell/install.ps1`
 - ユーザー権限ハンドラー: `scripts/powershell/install.user.ps1`
-- NixOS WSL postinstall: `scripts/sh/nixos-wsl-postinstall.sh`
+- NixOS WSL postinstall: `scripts/powershell/lib/Invoke-NixosWslSetup.ps1`
 
 ## 変更時の判断基準
 

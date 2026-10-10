@@ -488,6 +488,7 @@ Describe 'NpmHandler' {
             $script:customNpmManifest = @{
                 globalPackages = @(
                     @{ name = '@devcontainers/cli'; verifyCommand = @{ command = 'devcontainer'; args = @('--version') } }
+                    @{ name = '@deepseek-ai/dsh'; verifyCommand = @{ command = 'dsh'; args = @('--version') } }
                     @{ name = 'agent-browser@0.38.1'; verifyCommand = @{ command = 'agent-browser'; args = @('--version') } }
                 )
             }
@@ -522,23 +523,25 @@ Describe 'NpmHandler' {
             $manifest = Get-JsonContent -Path (Join-Path $script:projectRoot "windows\npm\packages.json")
             $expected = @(
                 @{ Spec = "@devcontainers/cli"; Command = "devcontainer"; Arguments = @("--version") }
+                @{ Spec = "@deepseek-ai/dsh"; Command = "dsh"; Arguments = @("--version") }
                 @{ Spec = "agent-browser@0.38.1"; Command = "agent-browser"; Arguments = @("--version") }
             )
             $actualSpecs = @($manifest.globalPackages | ForEach-Object { $_.name })
-            ($actualSpecs | Sort-Object) -join "|" | Should -Be "@devcontainers/cli|agent-browser@0.38.1"
+            ($actualSpecs | Sort-Object) -join "|" | Should -Be "@deepseek-ai/dsh|@devcontainers/cli|agent-browser@0.38.1"
 
             $ctx.Options["NpmMode"] = "import"
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeTrue
-            $script:npmInstallCalls.Count | Should -Be 2
+            $script:npmInstallCalls.Count | Should -Be 3
             $script:npmInstallCalls | Where-Object { $_ -contains '@openai/codex' } | Should -BeNullOrEmpty
             $script:npmVerifyCalls | Where-Object { $_.Command -eq 'codex' } | Should -BeNullOrEmpty
             foreach ($entry in $expected) {
+                $expectedVerifyCount = if ($entry.Spec -eq '@deepseek-ai/dsh') { 1 } else { 2 }
                 $script:npmInstallCalls | Where-Object { $_ -contains $entry.Spec } | Should -HaveCount 1
                 $script:npmVerifyCalls | Where-Object {
                     $_.Command -eq $entry.Command -and ($_.Arguments -join "|") -eq ($entry.Arguments -join "|")
-                } | Should -HaveCount 2
+                } | Should -HaveCount $expectedVerifyCount
             }
             $script:npmVerifyCalls | Where-Object { $_.TimeoutSeconds -ne 120 } | Should -BeNullOrEmpty
         }
@@ -559,8 +562,8 @@ Describe 'NpmHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -BeFalse
-            $result.Message | Should -Match "2 個検証失敗"
-            $script:npmInstallCalls.Count | Should -Be 2
+            $result.Message | Should -Match "3 個検証失敗"
+            $script:npmInstallCalls.Count | Should -Be 3
             $script:npmVerifyCalls | Where-Object { $_.TimeoutSeconds -ne 120 } | Should -BeNullOrEmpty
         }
 

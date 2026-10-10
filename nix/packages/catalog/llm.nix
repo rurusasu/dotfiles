@@ -1,27 +1,17 @@
-# Package identities and provider declarations for llm.
+# Unix DSH is supplied by nix/modules/dsh.nix; Windows uses npm.
 _: {
-  codex = {
-    # Codex CLI is intentionally kept out of Nix package outputs. The
-    # npm package is the CLI provider on Unix so
-    # `codex update` can identify and update its installation method.
+  dsh = {
     pkg = null;
-    npm = "@openai/codex";
+    npm = "@deepseek-ai/dsh";
     category = "llm";
     support = {
       windows = {
-        unsupported = "Use the Codex runtime bundled with the Windows ChatGPT desktop app";
-      };
-      darwin = {
         provider = "npm";
         source = "npm";
-        identity = "@openai/codex";
+        identity = "@deepseek-ai/dsh";
       };
-      linux = {
-        provider = "npm";
-        source = "npm";
-        identity = "@openai/codex";
-      };
+      darwin.unsupported = "Unix installation is owned by the dsh Home Manager module";
+      linux.unsupported = "Unix installation is owned by the dsh Home Manager module";
     };
   };
-
 }

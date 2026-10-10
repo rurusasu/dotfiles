@@ -44,40 +44,7 @@ EOF
 	[[ "$output" == *"bootstrap complete"* ]]
 }
 
-@test "bootstrap.sh installs Codex from npm" {
-	export HOME="$TEST_HOME"
-	export NPM_LOG="$BATS_TEST_TMPDIR/npm.log"
-	write_stub npm '
-printf "args=%s\n" "$*" >>"$NPM_LOG"
-printf "prefix=%s\n" "${NPM_CONFIG_PREFIX:-}" >>"$NPM_LOG"
-if [ "${1:-}" = "config" ]; then exit 70; fi
-prefix="${NPM_CONFIG_PREFIX:-$HOME/.local/npm}"
-mkdir -p "$prefix/bin"
-printf "#!/usr/bin/env bash\nexit 0\n" >"$prefix/bin/codex"
-chmod +x "$prefix/bin/codex"
-exit 0
-'
-	filtered_path=""
-	IFS=: read -r -a path_entries <<<"$PATH"
-	for path_entry in "${path_entries[@]}"; do
-		[ -n "$path_entry" ] || continue
-		[ -x "$path_entry/codex" ] && continue
-		if [ -z "$filtered_path" ]; then
-			filtered_path="$path_entry"
-		else
-			filtered_path="$filtered_path:$path_entry"
-		fi
-	done
-	export PATH="$STUB_BIN:$filtered_path"
-
-	run timeout 30 bash "$REPO_ROOT/bootstrap.sh" 2>&1
-
-	[ "$status" -eq 0 ]
-	[[ "$output" == *"bootstrap complete"* ]]
-	grep -q '@openai/codex' "$NPM_LOG"
-}
-
-@test "chezmoi apply preserves the Codex npm path in future shells" {
+@test "chezmoi apply preserves the npm global path in future shells" {
 	export HOME="$TEST_HOME"
 	export MANAGED_SHELLS="$REPO_ROOT/chezmoi/shells"
 	export PATH="$STUB_BIN:$PATH"

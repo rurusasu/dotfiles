@@ -1,4 +1,4 @@
-#Requires -Module Pester
+﻿#Requires -Module Pester
 
 BeforeAll {
     $script:repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "../../../..")).Path
@@ -159,7 +159,14 @@ Describe 'PowerShell codex profile wrapper' {
         $script:oldLocalAppData = $env:LOCALAPPDATA
         $env:LOCALAPPDATA = Join-Path $TestDrive 'LocalAppDataWithoutCodexPackage'
 
-        function global:codex.cmd {
+        # Keep native process and local secret-loader side effects outside the unit test.
+        $script:oldCodexSecretEnvironment = @{}
+        foreach ($name in @('GITHUB_PAT_TOKEN', 'GITHUB_WORK_TOKEN')) {
+            $script:oldCodexSecretEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+            [Environment]::SetEnvironmentVariable($name, 'unit-test-fixture', 'Process')
+        }
+
+        function global:codex.exe {
             $script:codexArgs = [string[]]$args
             $script:termDuringCodex = $env:TERM
             $script:keyboardEnhancementDuringCodex = $env:CODEX_TUI_DISABLE_KEYBOARD_ENHANCEMENT
@@ -172,11 +179,14 @@ Describe 'PowerShell codex profile wrapper' {
     }
 
     AfterEach {
+        foreach ($name in $script:oldCodexSecretEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($name, $script:oldCodexSecretEnvironment[$name], 'Process')
+        }
         foreach ($functionName in @(
                 "Invoke-CodexCli",
                 "Resolve-DotfilesCodexExecutable",
                 "Reset-DotfilesTerminalInputMode",
-                "codex.cmd"
+                "codex.exe"
             )) {
             Remove-Item "Function:\$functionName" -ErrorAction SilentlyContinue
         }
@@ -219,29 +229,15 @@ Describe 'PowerShell codex profile wrapper' {
         $codexBlock | Should -Not -Match 'opArgs'
     }
 
-    It 'should resolve the npm-installed codex command' {
-        $oldAppData = $env:APPDATA
-        try {
-            $env:APPDATA = Join-Path $TestDrive 'AppData'
-            $npmDir = Join-Path $env:APPDATA 'npm'
-            $npmCommand = Join-Path $npmDir 'codex.cmd'
-            New-Item -ItemType Directory -Path $npmDir -Force | Out-Null
-            Set-Content -LiteralPath $npmCommand -Encoding ascii -Value '@echo off'
+    It 'should resolve the app-provided codex command' {
+        $codexExecutable = Join-Path $TestDrive 'codex.exe'
+        Set-Content -LiteralPath $codexExecutable -Encoding ascii -Value 'fixture'
 
-            Mock Get-Command {
-                [pscustomobject]@{ Source = $npmCommand; Path = $npmCommand; Name = 'codex.cmd' }
-            } -ParameterFilter { $Name -eq 'codex.cmd' }
+        Mock Get-Command {
+            [pscustomobject]@{ Source = $codexExecutable; Path = $codexExecutable; Name = 'codex.exe' }
+        } -ParameterFilter { $Name -eq 'codex.exe' }
 
-            Resolve-DotfilesCodexExecutable | Should -Be $npmCommand
-        }
-        finally {
-            if ($oldAppData) {
-                $env:APPDATA = $oldAppData
-            }
-            else {
-                Remove-Item Env:\APPDATA -ErrorAction SilentlyContinue
-            }
-        }
+        Resolve-DotfilesCodexExecutable | Should -Be $codexExecutable
     }
 
     It 'should run codex.exe with conservative terminal input settings and restore the environment' {

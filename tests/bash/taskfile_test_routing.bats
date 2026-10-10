@@ -28,7 +28,7 @@ setup() {
 	command -v task >/dev/null 2>&1 || skip "task is not available"
 
 	fixture="$(mktemp -d)"
-	cat > "$fixture/Taskfile.yml" <<EOF
+	cat >"$fixture/Taskfile.yml" <<EOF
 version: "3"
 vars:
   DOTFILES_PATH: "$fixture"
@@ -121,17 +121,17 @@ EOF
 	run task --dir "$REPO_ROOT" --dry --force nrs
 
 	[ "$status" -eq 0 ]
-	rebuild_line="$(grep -n 'nix flake update && scripts/sh/nixos-rebuild-with-user.sh switch' <<<"$output" | cut -d: -f1)"
+	rebuild_line="$(grep -n 'nix flake update && sudo nixos-rebuild switch' <<<"$output" | cut -d: -f1)"
 	[ -n "$rebuild_line" ]
-	[[ "$output" == *"dotfiles_install_codex_npm"* ]]
+	[[ "$output" != *"dotfiles_install_codex_npm"* ]]
 	[[ "$output" != *"nix profile"* ]]
 	[[ "$output" != *"hermes:docker:bootstrap"* ]]
 	[[ "$output" != *"docker compose"* ]]
 }
 
-@test "NixOS rebuild helper wiring is retained for WSL and update tasks" {
-	grep -Fq 'scripts/sh/nixos-rebuild-with-user.sh' "$REPO_ROOT/taskfiles/nix/taskfile.yml"
-	grep -Fq 'scripts/sh/nixos-rebuild-with-user.sh switch --flake ~/.dotfiles#nixos --impure' "$REPO_ROOT/scripts/sh/update.sh"
+@test "NixOS rebuild entry points invoke nixos-rebuild directly" {
+	grep -Fq 'sudo nixos-rebuild' "$REPO_ROOT/taskfiles/nix/taskfile.yml"
+	grep -Fq 'exec sudo nixos-rebuild switch' "$REPO_ROOT/scripts/sh/install-nixos.sh"
 }
 
 @test "Hermes restart delegates to the Home Manager native gateway" {

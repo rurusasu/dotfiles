@@ -51,9 +51,7 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
    Bats は installer、shell、外部プロセス、runtime 契約に限って実行する。
    package catalog の構造、provider metadata、Nix package 選択、source shape は
    `nix/tests/unit/package-catalog-*.nix` の nix-unit が所有し、`tests/bash/package_catalog.bats` は
-   [テスト分類](tests/README.md) に記載した runtime / artifact 契約を保持する。`nixos_wsl_postinstall.bats` の `nix eval` は
-   stubbed `nixos-rebuild` 境界内で選択 user と `--impure` 伝播を実 Nix eval で確認する
-   runtime/integration assertion に限る。
+   [テスト分類](tests/README.md) に記載した runtime / artifact 契約を保持する。WSL の初回同期は PowerShell が担当し、rebuild は直接呼び出す。
 
    Repository-owned custom derivations は `checks.*.custom-package-builds` を build して確認する。
    この check は Dia、Neovim、Orca の supported system だけを対象にし、
@@ -70,5 +68,5 @@ Darwin ではフォント配布を `platform.nix`、OS-wide defaults を `system
 
 ## Codex CLI
 
-Codex CLI の全 OS npm 統一方針と、別製品であるデスクトップ AppX の責務分担は
+ChatGPT アプリ付属の Codex CLI と、設定管理の責務分担は
 [`docs/nix/codex-cli.md`](../docs/nix/codex-cli.md) を参照する。

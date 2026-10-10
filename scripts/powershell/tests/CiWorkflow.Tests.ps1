@@ -189,17 +189,14 @@ Describe 'CI workflow configuration' {
 
     It 'should configure the Hermes binary cache for system builds' {
         $flake = Get-Content -LiteralPath (Join-Path $script:repoRoot "flake.nix") -Raw
-        $postInstall = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/nixos-wsl-postinstall.sh") -Raw
+        $postInstall = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/powershell/lib/Invoke-NixosWslSetup.ps1") -Raw
         $bootstrapWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
 
         $flake | Should -Match 'extra-substituters\s*=\s*\[\s*"https://cache\.numtide\.com"'
         $flake | Should -Match 'https://hermes-agent\.cachix\.org'
         $flake | Should -Match 'extra-trusted-public-keys\s*=\s*\[\s*"niks3\.numtide\.com-1:'
         $flake | Should -Match 'hermes-agent\.cachix\.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU='
-        $postInstall | Should -Match 'extra-substituters = https://cache\.numtide\.com'
-        $postInstall | Should -Match 'https://hermes-agent\.cachix\.org'
-        $postInstall | Should -Match 'extra-trusted-public-keys = niks3\.numtide\.com-1:'
-        $postInstall | Should -Match 'hermes-agent\.cachix\.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU='
+        $postInstall | Should -Match 'accept-flake-config true'
         $bootstrapWorkflow | Should -Match 'Build macOS packages, configuration, and tests[\s\S]*?nix build --impure --no-link --print-build-logs[\s\S]*?--option extra-substituters "\$NUMTIDE_CACHE"[\s\S]*?\.#darwinConfigurations\.macos\.system'
         $bootstrapWorkflow | Should -Match 'NUMTIDE_CACHE_KEY:\s*niks3\.numtide\.com-1:'
     }
@@ -245,7 +242,6 @@ Describe 'CI workflow configuration' {
         $script | Should -Match '\$repoRoot = \(Resolve-Path -LiteralPath \(Join-Path \$PSScriptRoot "\.\.\\\.\.\\\.\."\)\)\.Path'
         $script | Should -Match 'SyncMode"\] = "repo"'
         $script | Should -Match 'SyncBack"\] = "none"'
-        $script | Should -Match 'SkipFlakeUpdate"\] = \$true'
         $script | Should -Match 'handlers\\Handler\.NixOSWSL\.ps1'
         $script | Should -Match '\$handler = \[NixOSWSLHandler\]::new\(\)'
         $script | Should -Match '\$result = \$handler\.Apply\(\$context\)'
@@ -254,7 +250,7 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'nix --version && nix --extra-experimental-features'
         $script | Should -Match "nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from 'file://"
         $script | Should -Match 'CI_ASSERTION: imported the NixOS system closure'
-        $script | Should -Match 'bash ''\$postInstallWslPath'' --sync-mode repo --sync-back none --state-version 25\.05 --skip-flake-update'
+        $script | Should -Match 'Invoke-NixosWslSetup -Context \$context'
         $script | Should -Match 'CI_ASSERTION: production NixOS-WSL post-install switch completed'
         $script | Should -Match 'GitHub access-token setting is loaded from a Nix configuration file inside WSL'
         $script | Should -Match 'nix config show access-tokens'
@@ -266,7 +262,6 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'Welcome to your new NixOS-WSL system'
         $script | Should -Match 'nixos-rebuild list-generations'
         $script | Should -Match 'handlers\\Handler\.NixRebuild\.ps1'
-        $script | Should -Match '\$rebuildContext\.Options\["SkipFlakeUpdate"\] = \$true'
         $script | Should -Match '\$rebuildContext\.Options\["NixRebuildTimeoutSeconds"\] = \$PostInstallTimeoutSeconds'
         $script | Should -Match 'dd if=/dev/zero of=/swapfile bs=1M count=8192'
         $script | Should -Match 'swapon /swapfile'
@@ -323,7 +318,7 @@ Describe 'CI workflow configuration' {
         $script | Should -Match 'chmod 600 /home/nixos/\.hermes/\.env'
         $script | Should -Match 'preserve-existing-hermes-state'
         $fixtureIndex = $script.IndexOf('install -d -m 700 /home/nixos/.hermes/memories')
-        $firstSwitchIndex = $script.IndexOf('bash ''$postInstallWslPath'' --sync-mode repo')
+        $firstSwitchIndex = $script.IndexOf('Invoke-NixosWslSetup -Context $context')
         $fixtureIndex | Should -BeGreaterOrEqual 0
         $firstSwitchIndex | Should -BeGreaterThan $fixtureIndex
         $script | Should -Match 'stat -c .*\.hermes/\.env'
@@ -630,7 +625,7 @@ esac
             '(?ms)^  complete:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
         ).Value
         $completeJob | Should -Match "(?m)^\s+WSL_REQUIRED:\s+\$\{\{ needs\.changes\.outputs\.nix == 'true' \}\}$"
-        $test | Should -Match 'DOTFILES_NIXOS_PREBUILT_SYSTEM=\$\{nodes\.machine\.system\.build\.toplevel\}'
+        $test | Should -Match 'toplevel = builtins.storePath "\$\{nodes\.machine\.system\.build\.toplevel\}"'
         $test | Should -Match 'system\.switch\.enable\s*=\s*true'
         $test | Should -Match 'docker/hermes-service/compose\.yml'
     }

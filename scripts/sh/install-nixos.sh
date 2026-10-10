@@ -2,100 +2,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-export DOTFILES_ROOT="$ROOT"
-export DOTFILES_LOG_PREFIX="nixos-install"
-# shellcheck source=/dev/null
-. "$ROOT/scripts/sh/install-common.sh"
-# shellcheck source=/dev/null
-. "$ROOT/scripts/sh/codex-npm.sh"
-
-NIXOS_MARKER="${DOTFILES_NIXOS_MARKER:-/etc/NIXOS}"
-VERIFY_ENVIRONMENT="${DOTFILES_VERIFY_ENVIRONMENT:-$ROOT/scripts/sh/verify-environment.sh}"
-NIXOS_HARDWARE_CONFIG="${DOTFILES_NIXOS_HARDWARE_CONFIG:-/etc/nixos/hardware-configuration.nix}"
-NIXOS_PREBUILT_SYSTEM="${DOTFILES_NIXOS_PREBUILT_SYSTEM:-}"
-
-preflight() {
-  [[ $(uname -s) == "Linux" && -e $NIXOS_MARKER ]] || dotfiles_die "NixOS is required."
-  dotfiles_have nix || dotfiles_die "Nix is required on NixOS."
-  dotfiles_have nixos-rebuild || dotfiles_die "nixos-rebuild is required on NixOS."
-
-  [[ $NIXOS_HARDWARE_CONFIG == /* ]] ||
-    dotfiles_die "NixOS hardware configuration must be an absolute path: $NIXOS_HARDWARE_CONFIG"
-  [[ -r $NIXOS_HARDWARE_CONFIG ]] ||
-    dotfiles_die "NixOS hardware configuration is missing or unreadable: $NIXOS_HARDWARE_CONFIG"
-  if [[ -n $NIXOS_PREBUILT_SYSTEM ]]; then
-    [[ $NIXOS_PREBUILT_SYSTEM == /* ]] ||
-      dotfiles_die "Prebuilt NixOS system must be an absolute path: $NIXOS_PREBUILT_SYSTEM"
-    [[ -x $NIXOS_PREBUILT_SYSTEM/bin/switch-to-configuration ]] ||
-      dotfiles_die "Prebuilt NixOS system is invalid: $NIXOS_PREBUILT_SYSTEM"
-  fi
-
-  local required
-  for required in \
-    "$ROOT/flake.nix" \
-    "$VERIFY_ENVIRONMENT"; do
-    [[ -e $required ]] || dotfiles_die "Required repository path is missing: $required"
-  done
-}
-
-capture_host_identity() {
-  export DOTFILES_USER="${SUDO_USER:-${USER:-}}"
-  export DOTFILES_HOME="$HOME"
-  [[ -n $DOTFILES_USER && $DOTFILES_HOME == /* ]] ||
-    dotfiles_die "A current user and absolute home directory are required."
-
-  DOTFILES_UID="$(id -u "$DOTFILES_USER")"
-  DOTFILES_GID="$(id -g "$DOTFILES_USER")"
-  DOTFILES_GROUP="$(id -gn "$DOTFILES_USER")"
-  export DOTFILES_UID DOTFILES_GID DOTFILES_GROUP
-  [[ $DOTFILES_UID =~ ^[0-9]+$ && $DOTFILES_GID =~ ^[0-9]+$ && -n $DOTFILES_GROUP ]] ||
-    dotfiles_die "The existing user must have numeric UID/GID values."
-
-  export DOTFILES_SYSTEM
-  DOTFILES_SYSTEM="$(nix eval --impure --raw --expr builtins.currentSystem)"
-  case "$DOTFILES_SYSTEM" in
-  x86_64-linux | aarch64-linux) ;;
-  *) dotfiles_die "Unsupported NixOS system: $DOTFILES_SYSTEM" ;;
-  esac
-}
-
-apply_nixos_system() {
-  if [[ -n $NIXOS_PREBUILT_SYSTEM ]]; then
-    dotfiles_log "Activating prebuilt NixOS system for E2E..."
-    sudo "$NIXOS_PREBUILT_SYSTEM/bin/switch-to-configuration" switch
-    export PATH="/run/current-system/sw/bin:/etc/profiles/per-user/$DOTFILES_USER/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:$PATH"
-    hash -r
-    return
-  fi
-
-  local rebuild_bin
-  rebuild_bin="$(command -v nixos-rebuild)"
-  dotfiles_log "Applying NixOS and Home Manager..."
-  sudo /usr/bin/env \
-    "NIX_CONFIG=extra-experimental-features = nix-command flakes" \
-    "DOTFILES_USER=$DOTFILES_USER" \
-    "DOTFILES_HOME=$DOTFILES_HOME" \
-    "DOTFILES_UID=$DOTFILES_UID" \
-    "DOTFILES_GID=$DOTFILES_GID" \
-    "DOTFILES_GROUP=$DOTFILES_GROUP" \
-    "DOTFILES_SYSTEM=$DOTFILES_SYSTEM" \
-    "DOTFILES_NIXOS_HARDWARE_CONFIG=$NIXOS_HARDWARE_CONFIG" \
-    "$rebuild_bin" switch --flake "$ROOT#linux" --impure
-
-  export PATH="/run/current-system/sw/bin:/etc/profiles/per-user/$DOTFILES_USER/bin:$HOME/.nix-profile/bin:$HOME/.local/state/nix/profile/bin:$PATH"
-  hash -r
-}
-
-main() {
-  preflight
-  dotfiles_link_checkout "$ROOT"
-  dotfiles_update_flake "$ROOT"
-  capture_host_identity
-  apply_nixos_system
-  dotfiles_install_codex_npm
-  export DOTFILES_VERIFY_SYSTEM_LAYER=nixos
-  "$VERIFY_ENVIRONMENT" --nix-only
-  dotfiles_log "NixOS setup complete."
-}
-
-main "$@"
+host=linux
+if [[ $(uname -r) == *[Mm]icrosoft* ]]; then
+  host=nixos
+fi
+nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
+  flake update --flake "$ROOT"
+exec sudo nixos-rebuild switch --flake "$ROOT#$host" --impure \
+  --option accept-flake-config true --option experimental-features 'nix-command flakes' "$@"

@@ -15,6 +15,21 @@ let
   defaultConfig = mkWsl.config;
 in
 {
+  testWslDockerModulePreservesNativeDaemonAndRegistry = {
+    expr = {
+      enabled = defaultConfig.virtualisation.docker.enable;
+      insecureRegistries = defaultConfig.virtualisation.docker.daemon.settings.insecure-registries;
+      logDriver = defaultConfig.virtualisation.docker.daemon.settings."log-driver" or null;
+      userGroup = builtins.elem "docker" defaultConfig.users.users.nixos.extraGroups;
+    };
+    expected = {
+      enabled = true;
+      insecureRegistries = [ "registry.localhost" ];
+      logDriver = "journald";
+      userGroup = true;
+    };
+  };
+
   testWslOwnsExactCheckoutTrustInSystemGit = {
     expr = {
       enabled = defaultConfig.programs.git.enable;

@@ -8,25 +8,19 @@ let
   };
 in
 {
-  testCodexUsesUnixNpmProvidersAndCliVerifier = {
+  testDeepSeekHarnessUsesNpmOnWindows = {
     expr = {
-      mapping = sets.npmMap.codex;
-      verifier = sets.npmVerify.codex;
-      providers = builtins.map (platform: sets.supportReport.codex.${platform}.provider) [
-        "darwin"
-        "linux"
-      ];
+      mapping = sets.npmMap.dsh;
+      verifier = sets.npmVerify.dsh;
+      provider = sets.supportReport.dsh.windows.provider;
     };
     expected = {
-      mapping = "@openai/codex";
+      mapping = "@deepseek-ai/dsh";
       verifier = {
-        command = "codex";
+        command = "dsh";
         args = [ "--version" ];
       };
-      providers = [
-        "npm"
-        "npm"
-      ];
+      provider = "npm";
     };
   };
 

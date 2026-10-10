@@ -71,7 +71,7 @@ Ubuntu / Debian:  ./install.sh
 
 - Windows は GUI アプリのみを winget で導入します。`install/windows-gui.nix` が選ぶ catalog key / Windows-only key から manifest を生成し、npm/pnpm manifest は互換性のため空配列として保持します。
 - `install.cmd` は既存の PowerShell と winget を使い、CLI ツール・Node.js・npm・pnpm・dsh・AutoHotkey・GlazeWM を導入しません。chezmoi、管理者セットアップ、WSL 構築、CLI runtime の acceptance も実行しません。既存アプリや Startup shortcut は自動削除しません。
-- Windows の Codex は既存の Microsoft Store デスクトップアプリを対象とし、独立した `@openai/codex` を追加導入しません。Linux/macOS の Codex CLI は引き続き npm から導入します。
+- Codex CLI はどの OS でも個別導入せず、ChatGPT アプリ付属の CLI を使います。Windows の GUI profile は Microsoft Store のデスクトップアプリを対象とし、npm/pnpm パッケージを導入しません。
 - macOS は nix-darwin が Home Manager と nix-homebrew formula/cask を同じ switch に含めます。
 - 非 NixOS Linux（Ubuntu/Debian など）は standalone Home Manager がユーザー環境を適用します。Docker や OS service は管理しません。
 - NixOS は NixOS generation に Home Manager と system module を統合します。
@@ -137,15 +137,9 @@ manifest の個別 timeout、未指定なら共通既定値を使います。
 短縮せず維持し、catalog に明記された個別値を優先します
 （例: Go は共通 install timeout）。
 
-dsh の `pnpmInstallArgs` は `--allow-build=!node-pty` を指定します。
-既存の `allowBuilds.node-pty: true` を明示的な拒否へ更新し、ほかの許可は維持します。
-Windows handler は選択済み manifest の拒否指定を集約し、検証済みパッケージの
-skip 判定より前に `pnpm approve-builds -g !node-pty` を一度実行します。
-このポリシー更新に失敗した場合は Apply を失敗として終了します。
-この否定形には [pnpm 12.4.0 以降](https://pnpm.io/cli/add#--allow-build) が必要です。
-Windows handler は既存 pnpm と bootstrap 後の実体のバージョンを検査します。
-12.4.0 未満や使用不能な pnpm は Apply で npm/Corepack による再セットアップを
-試み、必要なバージョンを準備できなければ失敗として報告します。
+Windows 用 dsh の provider metadata は npm を指定しますが、GUI profile の導入対象外です。
+pnpm と Bun、Codex CLI の個別導入は行いません。
+Codex CLI は ChatGPT アプリ付属のものを使います。
 
 provider coverage は次で確認できます。
 
@@ -169,13 +163,10 @@ cat result/package-support-report.json
 
 同じ package を Home Manager と system layer の両方へ重複させるのは、system service が絶対 path を必要とする場合に限定します。
 
-pnpm 本体はカタログではなく `nix/modules/pnpm.nix` の `programs.pnpm` が導入します。
-`nix/home/pnpm.nix` は保存先を指定し、`PNPM_HOME` と PATH は標準 module が生成します。
-Windows の pnpm bootstrap とグローバルパッケージ配布 metadata は維持します。
-Unix の `dsh` は `nix/modules/dsh.nix` から Numtide の `llm-agents` flake を参照します。
-upstream の nixpkgs を `follows` で置き換えず、キャッシュと同じ derivation を使います。
-Windows の pnpm グローバルパッケージは `dsh` のみです。
-導入時のグローバル npm/pnpm インストールやブラウザーダウンロード activation はありません。
+Node.js/npm はカタログで導入します。Unix の dsh は `nix/modules/dsh.nix` が
+upstream Nix package を導入します。Windows 用 dsh の metadata は npm provider を宣言しますが、
+GUI profile は選択しないため npm manifest は空です。
+Codex は設定だけを管理し、CLI は ChatGPT アプリ付属のものを使います。
 
 1Password の CLI / デスクトップ版はカタログではなく `nix/modules/1password/` で管理します。既存の nixpkgs バイナリを直接使い、独自 package は定義しません。`default.nix` が Home Manager の CLI と Linux デスクトップ版、`ssh.nix` が公式 SSH agent socket への `IdentityAgent` / `SSH_AUTH_SOCK`、`darwin-system.nix` が macOS システムのデスクトップ版、`windows-install.nix` が Windows WinGet の配布・検証・PATH・user scope 指定を担当します。署名コマンドと WSL の Windows 連携は既存の host 設定を維持します。
 

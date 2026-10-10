@@ -23,6 +23,7 @@ let
 in
 {
   imports = [
+    ../../modules/docker.nix
     ./omarchy-keybindings.nix
     ../../modules/1password/darwin-system.nix
   ];

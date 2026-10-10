@@ -603,7 +603,7 @@ claude plugin install qmd@qmd
 
 - QMD は自動導入対象ではありません。必要な場合のみ上記の手順で個別に導入します。
 - Windows の pnpm グローバルパッケージは `dsh` のみです。配布情報の正本は `nix/packages/install/node.nix` とし、PnpmHandler が生成された `windows/pnpm/packages.json` を読みます。
-- **Linux/macOS**: pnpm 本体は `nix/modules/pnpm.nix`、保存先・環境変数・PATH は Home Manager の標準 module で管理。グローバルパッケージの自動導入処理は置かない
+- **Linux/macOS**: dotfiles は pnpm を導入しない。QMD を pnpm で導入する場合は pnpm を別途用意する
 
 Node の配布 metadata は package/provider 選択から分離し、重複定義せず既存の export を維持します。
 理由と編集先は [パッケージ管理](../nix/package-management.md#分割の理由と編集先) を参照してください。
@@ -635,7 +635,5 @@ export QMD_RERANK_MODEL="hf:giladgd/Qwen3-Reranker-4B-GGUF:Q8_0"
 | ------------------------------------------------- | --------------------------------- |
 | `nix/packages/install/node.nix`                   | Node 配布 metadata (`pnpmGlobal`) |
 | `nix/packages/sets.nix`                           | consumer 向けの公開入口           |
-| `nix/modules/pnpm.nix`                            | Linux/macOS の pnpm 本体導入      |
-| `nix/home/pnpm.nix`                               | pnpm の保存先設定                 |
 | `nix/home/common.nix`                             | 環境変数設定 (Unix)               |
 | `chezmoi/shells/Microsoft.PowerShell_profile.ps1` | 環境変数設定 (Windows)            |
