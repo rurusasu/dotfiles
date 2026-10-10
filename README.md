@@ -100,9 +100,9 @@ Lix に切り替わります。nix-darwin がシステムを収束させ、nix-h
 Homebrew formula/cask を管理します。Home Manager も同じコマンド内で
 適用します。macOS では WSL や NixOS を導入しません。
 
-macOS 構成では、Hermes Desktop は公式 Homebrew Cask
-`hermes-desktop` として nix-homebrew から導入され、Agent CLI と gateway は
-Nix/Home Manager が管理する native per-user service として起動します。
+macOS / Linux 構成では、Hermes Desktop と Agent CLI は upstream の Home Manager
+module で導入します。Linuxはnative NixOS、WSLg、standalone Home Managerで利用できます。
+gateway は Nix/Home Manager が管理する native per-user service として起動します。
 Docker Compose は Chromium / Browser MCP / X API MCP の sidecar を提供します。
 旧 Docker Agent / Dashboard とその bootstrap の実行経路は削除済みです。
 既存の Docker volume は変更せず、Hermes の設定や runtime state は Nix store

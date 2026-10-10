@@ -20,29 +20,47 @@ if [[ ${1:-} != --wsl ]]; then
   git config --system --replace-all safe.directory "$GITHUB_WORKSPACE"
 fi
 
-config_home="${XDG_CONFIG_HOME:-}"
-if [[ -z $config_home ]]; then
-  nix_home="$HOME"
-  # Nix rejects the runner-owned HOME mount in root container jobs.
-  if [[ ! -O $nix_home ]]; then
+nix_home="$HOME"
+# Nix rejects the runner-owned HOME mount in root container jobs and falls
+# back to the passwd home. Keep this shell and later workflow steps aligned.
+if [[ ! -O $nix_home ]]; then
+  if command -v getent >/dev/null 2>&1; then
     nix_home=$(getent passwd "$(id -u)" | cut -d: -f6)
-    [[ $nix_home == /* ]] || {
-      echo "Cannot resolve the Nix user's home." >&2
-      exit 1
-    }
+  elif [[ $(uname -s) == Darwin && $(id -u) == 0 ]]; then
+    nix_home=/var/root
+  else
+    echo "Cannot resolve the Nix user's home." >&2
+    exit 1
   fi
-  config_home="$nix_home/.config"
+  [[ $nix_home == /* ]] || {
+    echo "Cannot resolve the Nix user's home." >&2
+    exit 1
+  }
+  export HOME="$nix_home"
+  unset XDG_CONFIG_HOME
+  if [[ -n ${GITHUB_ENV:-} ]]; then
+    {
+      printf 'HOME=%s\n' "$nix_home"
+      printf 'XDG_CONFIG_HOME=\n'
+    } >>"$GITHUB_ENV"
+  fi
 fi
+config_home="${XDG_CONFIG_HOME:-$nix_home/.config}"
 config_dir="$config_home/nix"
 config_file="$config_dir/bootstrap-ci.conf"
 umask 077
 mkdir -p "$config_dir"
 {
   printf 'access-tokens = github.com=%s\n' "$GITHUB_TOKEN"
+  repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+  # Share the public binary caches across every CI platform. Keeping these
+  # settings in the same source as the tools image avoids Darwin silently
+  # rebuilding Hermes dependencies from source.
+  grep -E '^(extra-substituters|extra-trusted-public-keys) = ' \
+    "$repo_root/docker/bootstrap-ci-tools/nix.conf"
   if [[ ${1:-} == --wsl ]]; then
-    repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
     # Keep container-only store ownership and sandbox settings out of NixOS.
-    grep -E '^(experimental-features|extra-substituters|extra-trusted-public-keys) = ' \
+    grep -E '^experimental-features = ' \
       "$repo_root/docker/bootstrap-ci-tools/nix.conf"
     printf 'max-jobs = 2\ncores = 1\n'
   fi
@@ -58,5 +76,13 @@ fi
 # Validate without printing credentials to the log.
 if ! nix config show access-tokens | grep -E '^[[:space:]]*github\.com[[:space:]]*=[[:space:]]*[^[:space:]]+' >/dev/null; then
   echo "Nix did not load the CI GitHub authentication configuration." >&2
+  exit 1
+fi
+if ! nix config show substituters | grep -Fq 'https://hermes-agent.cachix.org'; then
+  echo "Nix did not load the Hermes binary cache." >&2
+  exit 1
+fi
+if ! nix config show trusted-public-keys | grep -Fq 'hermes-agent.cachix.org-1:'; then
+  echo "Nix did not load the Hermes binary cache key." >&2
   exit 1
 fi

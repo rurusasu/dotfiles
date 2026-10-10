@@ -196,9 +196,11 @@ Describe 'CI workflow configuration' {
         $flake | Should -Match 'https://hermes-agent\.cachix\.org'
         $flake | Should -Match 'extra-trusted-public-keys\s*=\s*\[\s*"niks3\.numtide\.com-1:'
         $flake | Should -Match 'hermes-agent\.cachix\.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU='
+        $bootstrapWorkflow | Should -Match 'Configure shared Nix caches[\s\S]*?sudo env[\s\S]*?configure-bootstrap-ci-nix\.sh'
+        $bootstrapWorkflow | Should -Match 'Preserve installer files before nix-darwin takes ownership[\s\S]*?/etc/nix/nix\.conf[\s\S]*?/etc/bashrc[\s\S]*?/etc/zshrc[\s\S]*?\.before-nix-darwin[\s\S]*?nix --extra-experimental-features nix-command config show substituters[\s\S]*?nix --extra-experimental-features nix-command config show trusted-public-keys'
+        $bootstrapWorkflow | Should -Match 'Apply macOS configuration[\s\S]*?sudo nix --accept-flake-config[\s\S]*?run \.#darwin-rebuild -- switch --flake \.#macos --impure'
+        $bootstrapWorkflow | Should -Not -Match 'Darwin application artifacts|NUMTIDE_CACHE_KEY|checks\.aarch64-darwin\.hermes-runtime'
         $postInstall | Should -Match 'accept-flake-config true'
-        $bootstrapWorkflow | Should -Match 'Build macOS packages, configuration, and tests[\s\S]*?nix build --impure --no-link --print-build-logs[\s\S]*?--option extra-substituters "\$NUMTIDE_CACHE"[\s\S]*?\.#darwinConfigurations\.macos\.system'
-        $bootstrapWorkflow | Should -Match 'NUMTIDE_CACHE_KEY:\s*niks3\.numtide\.com-1:'
     }
 
     It 'should smoke test the Windows UDEV Gothic NF installer in chezmoi CI' {
@@ -607,7 +609,6 @@ esac
 
     It 'should run WSL E2E for fork pull requests and require it in the unified workflow' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw
-        $test = Get-Content -LiteralPath (Join-Path $script:repoRoot 'nix/tests/build/bootstrap-nixos.nix') -Raw
 
         $wslJob = [regex]::Match(
             $workflow,
@@ -625,9 +626,12 @@ esac
             '(?ms)^  complete:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
         ).Value
         $completeJob | Should -Match "(?m)^\s+WSL_REQUIRED:\s+\$\{\{ needs\.changes\.outputs\.nix == 'true' \}\}$"
-        $test | Should -Match 'toplevel = builtins.storePath "\$\{nodes\.machine\.system\.build\.toplevel\}"'
-        $test | Should -Match 'system\.switch\.enable\s*=\s*true'
-        $test | Should -Match 'docker/hermes-service/compose\.yml'
+        $workflow | Should -Not -Match 'linux-nixos:|bootstrap-nixos-vm'
+        $darwinJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  darwin:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
+        ).Value
+        $darwinJob | Should -Match 'darwin-rebuild -- switch --flake \.#macos --impure'
     }
 
     It 'should keep hosted Windows and Darwin contracts in the unified workflow' {
@@ -639,21 +643,17 @@ esac
         $workflow | Should -Not -Match '(?s)Invoke-Tests\.ps1.*?-MinimumCoverage 0'
         $workflow | Should -Match "Join-Path \`$diagnostics 'attestation\.txt'"
         $workflow | Should -Match 'name: Upload Windows installer diagnostics'
-        $workflow | Should -Match '\.\#darwinConfigurations\.macos\.system'
+        $workflow | Should -Match 'sudo nix --accept-flake-config[\s\S]*?run \.#darwin-rebuild -- switch --flake \.#macos --impure'
         $workflow | Should -Not -Match 'runs-on:\s*\[?self-hosted'
     }
 
-    It 'should keep the full Bash suite out of the Darwin build job' {
+    It 'should apply Darwin configuration without individual package artifact checks' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw
         $macosJob = [regex]::Match($workflow, '(?ms)^  darwin:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)').Value
         $macosJob | Should -Not -BeNullOrEmpty
-        $macosJob | Should -Not -Match 'scripts/sh/run-bash-tests\.sh|brew install'
+        $macosJob | Should -Not -Match 'scripts/sh/run-bash-tests\.sh|brew install|nix build|codesign|spctl|package_catalog\.bats'
         $macosJob | Should -Match 'Install Nix'
-        $macosJob | Should -Match 'darwinConfigurations\.macos\.system'
-        # The native artifact subset belongs on Darwin; behavioral checks live in Python.
-        $macosJob | Should -Match 'suite=tests/bash/package_catalog\.bats'
-        $macosJob | Should -Match ([regex]::Escape("filter='^Darwin (Raycast artifact|Discord keeps)'"))
-        $macosJob | Should -Match ([regex]::Escape('[[ "$(bats --count --filter "$filter" "$suite")" -eq 2 ]]'))
+        $macosJob | Should -Match 'sudo nix --accept-flake-config[\s\S]*?darwin-rebuild -- switch --flake \.#macos --impure'
     }
 
     It 'should install chezmoi before every Windows job that runs chezmoi template tests' {

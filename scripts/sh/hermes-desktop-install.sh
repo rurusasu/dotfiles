@@ -7,11 +7,9 @@ export DOTFILES_LOG_PREFIX="hermes-desktop-install"
 # shellcheck source=/dev/null
 . "$ROOT/scripts/sh/install-common.sh"
 
-HERMES_APP_PATH="${DOTFILES_HERMES_APP_PATH:-/Applications/Hermes.app}"
-
 main() {
-  [[ -f "$HERMES_APP_PATH/Contents/Info.plist" ]] ||
-    dotfiles_die "Hermes Desktop is not installed by the nix-darwin cask: $HERMES_APP_PATH"
+  command -v hermes-desktop >/dev/null 2>&1 ||
+    dotfiles_die "Home Manager Hermes Desktop package is unavailable: hermes-desktop"
   command -v hermes >/dev/null 2>&1 ||
     dotfiles_die "Nix-managed Hermes Agent CLI is unavailable: hermes"
 

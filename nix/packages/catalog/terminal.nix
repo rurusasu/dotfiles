@@ -33,23 +33,4 @@
     category = "terminal";
     support.windows.unsupported = "No reviewed MSYS2/Cygwin package provider is selected";
   };
-
-  hermes-desktop = {
-    winget = null;
-    category = "terminal";
-    support = {
-      darwin = {
-        provider = "homebrew-cask";
-        source = "homebrew";
-        identity = "hermes-desktop";
-        cask = "hermes-desktop";
-      };
-      linux = {
-        unsupported = "Hermes Desktop is provisioned by the native macOS profile";
-      };
-      windows = {
-        unsupported = "Hermes Desktop is provisioned by the native macOS profile";
-      };
-    };
-  };
 }

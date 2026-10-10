@@ -9,9 +9,7 @@ setup() {
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	export PATH="$STUB_BIN:/usr/bin:/bin"
 	export COMMAND_LOG
-	export DOTFILES_HERMES_APP_PATH="$BATS_TEST_TMPDIR/Applications/Hermes.app"
-	mkdir -p "$DOTFILES_HERMES_APP_PATH/Contents" "$STUB_BIN"
-	touch "$DOTFILES_HERMES_APP_PATH/Contents/Info.plist"
+	mkdir -p "$STUB_BIN"
 	: >"$COMMAND_LOG"
 }
 
@@ -26,7 +24,8 @@ write_stub() {
 	chmod +x "$STUB_BIN/$name"
 }
 
-@test "verifies the Nix-managed CLI and installed cask without invoking upstream setup" {
+@test "verifies the Home Manager Desktop package and CLI without invoking upstream setup" {
+	write_stub hermes-desktop 'printf "hermes-desktop %s\\n" "$*" >>"$COMMAND_LOG"'
 	write_stub hermes 'printf "hermes %s\\n" "$*" >>"$COMMAND_LOG"; printf "Hermes 0.21.0\\n"'
 	write_stub open 'printf "open %s\\n" "$*" >>"$COMMAND_LOG"; exit 42'
 
@@ -38,18 +37,18 @@ write_stub() {
 	[[ "$output" == *"Nix-managed Hermes Agent CLI is ready"* ]]
 }
 
-@test "fails when the nix-darwin Desktop cask is absent" {
-	rm -rf "$DOTFILES_HERMES_APP_PATH"
+@test "fails when the Home Manager Desktop package is unavailable" {
 	write_stub hermes 'printf "hermes %s\\n" "$*" >>"$COMMAND_LOG"; printf "Hermes 0.21.0\\n"'
 
 	run "$INSTALLER"
 
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"Hermes Desktop is not installed by the nix-darwin cask"* ]]
+	[[ "$output" == *"Home Manager Hermes Desktop package is unavailable"* ]]
 	[ ! -s "$COMMAND_LOG" ]
 }
 
 @test "fails when the Nix-managed Hermes CLI is unavailable" {
+	write_stub hermes-desktop 'printf "hermes-desktop %s\\n" "$*" >>"$COMMAND_LOG"'
 	run "$INSTALLER"
 
 	[ "$status" -ne 0 ]

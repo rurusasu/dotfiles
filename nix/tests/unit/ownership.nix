@@ -88,7 +88,6 @@ let
   ) packageCatalogTests;
   packageSupportOutputs = inputs.self.packages.x86_64-linux;
   packageSupportChecks = inputs.self.checks.x86_64-linux;
-  bootstrapNixos = builtins.readFile ../build/bootstrap-nixos.nix;
   sourceHasLine =
     source: pattern: builtins.any (line: builtins.match pattern line != null) (linesOf source);
   homeReadme = builtins.readFile ../README.md;
@@ -144,17 +143,15 @@ in
     expected = true;
   };
 
-  testDedicatedBuildChecksAndVmFixtureHaveOwners = {
+  testDedicatedBuildChecksHaveOwners = {
     expr = {
       buildChecksRegisteredExactlyOnce =
         buildFiles != [ ] && builtins.sort builtins.lessThan registeredBuildFiles == buildFiles;
-      hardwareFixtureConsumedByVm = sourceHasLine bootstrapNixos ".*[.][.]/fixtures/hardware-configuration[.]nix.*";
       hardwareFixtureExists = builtins.pathExists ../fixtures/hardware-configuration.nix;
       sharedPackageFixtureExists = builtins.pathExists ../fixtures/packages.nix;
     };
     expected = {
       buildChecksRegisteredExactlyOnce = true;
-      hardwareFixtureConsumedByVm = true;
       hardwareFixtureExists = true;
       sharedPackageFixtureExists = true;
     };

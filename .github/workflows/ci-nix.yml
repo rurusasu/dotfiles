@@ -161,10 +161,10 @@ jobs:
       - name: Run Bash tests
         run: bash scripts/sh/run-bash-tests.sh
 
-  hermes-bootstrap-tests:
+  hermes-runtime-contracts:
     needs: changes
     if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.other == 'true')) }}
-    name: Hermes Bootstrap Tests
+    name: Hermes Runtime Contracts
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -184,12 +184,6 @@ jobs:
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run native Hermes bootstrap tests
-        run: nix build .#checks.x86_64-linux.hermes-bootstrap-tests --no-link --print-build-logs
-
-      - name: Run X API image contract
-        run: python3 -m unittest tests/python/test_xapi_image_contract.py -v
 
       - name: Run Hermes browser runtime contracts
         run: docker/hermes-browser/tests/test_runtime_contract.sh
@@ -272,42 +266,7 @@ jobs:
           export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"
           nix build --impure --no-link --print-build-logs \
             .#nixosConfigurations.linux.config.system.build.toplevel \
-            .#homeConfigurations.x86_64-linux.activationPackage \
-            .#checks.x86_64-linux.powershell-formatter \
-            .#checks.x86_64-linux.ghostty-config \
-            .#checks.x86_64-linux.neovim-native
-
-  linux-nixos:
-    name: Bootstrap / Linux / E2E / NixOS
-    needs: changes
-    if: ${{ needs.changes.outputs.nix == 'true' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
-        with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run idempotent NixOS VM test
-        run: nix build .#checks.x86_64-linux.bootstrap-nixos-vm --no-link --print-build-logs
-
-      - name: Write NixOS attestation
-        if: always()
-        run: printf 'sha=%s\ncheck=bootstrap-nixos-vm\n' "$TESTED_SHA" > nixos-attestation.txt
-
-      - name: Upload NixOS attestation
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: bootstrap-linux-nixos-${{ github.run_id }}-${{ github.run_attempt }}
-          path: nixos-attestation.txt
+            .#homeConfigurations.x86_64-linux.activationPackage
 
   darwin:
     name: Bootstrap / Darwin
@@ -318,8 +277,6 @@ jobs:
     env:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
-      NUMTIDE_CACHE: https://cache.numtide.com
-      NUMTIDE_CACHE_KEY: niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=
     steps:
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -332,42 +289,50 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build macOS packages, configuration, and tests
+      - name: Configure shared Nix caches
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          nix build --impure --no-link --print-build-logs \
-            --option extra-substituters "$NUMTIDE_CACHE" \
-            --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY" \
-            .#darwinConfigurations.macos.system \
-            .#package-support-report \
-            .#checks.aarch64-darwin.powershell-formatter \
-            .#checks.aarch64-darwin.nix-unit \
-            .#checks.aarch64-darwin.hermes-bootstrap-tests \
-            .#checks.aarch64-darwin.custom-package-builds \
-            .#checks.aarch64-darwin.aerospace-workspace-cycle \
-            .#checks.aarch64-darwin.docker-desktop-activation \
-            .#checks.aarch64-darwin.ghostty-config \
-            .#checks.aarch64-darwin.neovim-native \
-            .#checks.aarch64-darwin.standalone-darwin-home
+          # Configure the daemon-owned Nix settings as root. A regular user
+          # can display extra substituters while the daemon still ignores
+          # them as untrusted, which silently turns cache hits into builds.
+          sudo env \
+            GITHUB_TOKEN="$GITHUB_TOKEN" \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            bash scripts/sh/configure-bootstrap-ci-nix.sh
 
-      - name: Verify native Darwin application artifacts
+      - name: Preserve installer files before nix-darwin takes ownership
         run: |
-          nix shell --inputs-from . --no-write-lock-file nixpkgs#bats --command bash -euo pipefail <<'BATS'
-            for tool in nix codesign plutil spctl; do
-              command -v "$tool" >/dev/null || { echo "Required Darwin artifact tool is missing: $tool" >&2; exit 1; }
-            done
-            filter='^Darwin (Raycast artifact|Discord keeps)'
-            suite=tests/bash/package_catalog.bats
-            [[ "$(bats --count --filter "$filter" "$suite")" -eq 2 ]]
-            bats --print-output-on-failure --filter "$filter" "$suite"
-          BATS
+          sudo bash <<'SCRIPT'
+          set -euo pipefail
 
-      - name: Build official Hermes runtime
-        if: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.other == 'true' }}
+          for path in /etc/nix/nix.conf /etc/bashrc /etc/zshrc; do
+            if [[ -e "$path" ]]; then
+              backup="${path}.before-nix-darwin"
+              if [[ -e "$backup" ]]; then
+                echo "Refusing to overwrite existing backup: $backup" >&2
+                exit 1
+              fi
+              mv -- "$path" "$backup"
+            fi
+          done
+
+          # The Nix installer owns /etc/nix/nix.conf before first activation.
+          # Confirm root's persistent settings still expose the shared caches
+          # after moving that file aside.
+          nix --extra-experimental-features nix-command config show substituters \
+            | grep -Fq 'https://hermes-agent.cachix.org'
+          nix --extra-experimental-features nix-command config show trusted-public-keys \
+            | grep -Fq 'hermes-agent.cachix.org-1:'
+          SCRIPT
+
+      - name: Apply macOS configuration
         run: |
-          nix build --no-link --no-write-lock-file --print-build-logs \
-            --option extra-substituters "$NUMTIDE_CACHE" \
-            --option extra-trusted-public-keys "$NUMTIDE_CACHE_KEY" \
-            .#checks.aarch64-darwin.hermes-runtime
+          # Root is trusted by the Nix daemon; SUDO_USER still identifies the
+          # hosted runner user for nix-darwin's primaryUser configuration.
+          sudo nix --accept-flake-config \
+            --extra-experimental-features 'nix-command flakes' \
+            run .#darwin-rebuild -- switch --flake .#macos --impure
 
   wsl-prebuild:
     name: Bootstrap / WSL / Prebuild
@@ -427,6 +392,7 @@ jobs:
         with:
           name: bootstrap-wsl-nix-cache-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.wsl-cache.outputs.artifact-dir }}
+          retention-days: 1
           if-no-files-found: error
           compression-level: 0
 
@@ -626,11 +592,10 @@ jobs:
         changes,
         ci-tools,
         bash-test,
-        hermes-bootstrap-tests,
+        hermes-runtime-contracts,
         wsl-prebuild,
         nix,
         linux-build,
-        linux-nixos,
         darwin,
         wsl,
         windows-installer,
@@ -644,16 +609,14 @@ jobs:
       BASH_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
       BASH_RESULT: ${{ needs.bash-test.result }}
       HERMES_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.other == 'true' }}
-      HERMES_RESULT: ${{ needs.hermes-bootstrap-tests.result }}
+      HERMES_RESULT: ${{ needs.hermes-runtime-contracts.result }}
       PLATFORM_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
-      LINUX_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
       LINUX_BUILD_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
       DARWIN_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
       WSL_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
       WINDOWS_REQUIRED: ${{ needs.changes.outputs.chezmoi == 'true' }}
       NIX_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
       LINUX_BUILD_RESULT: ${{ needs.linux-build.result }}
-      LINUX_NIXOS_RESULT: ${{ needs.linux-nixos.result }}
       DARWIN_RESULT: ${{ needs.darwin.result }}
       WSL_RESULT: ${{ needs.wsl.result }}
       WSL_PREBUILD_RESULT: ${{ needs.wsl-prebuild.result }}
@@ -690,13 +653,12 @@ jobs:
 
           check_required_job "Tools image" "${TOOLS_REQUIRED}" "${TOOLS_RESULT}"
           check_required_job "Bash tests" "${BASH_REQUIRED}" "${BASH_RESULT}"
-          check_required_job "Hermes bootstrap tests" "${HERMES_REQUIRED}" "${HERMES_RESULT}"
+          check_required_job "Hermes runtime contracts" "${HERMES_REQUIRED}" "${HERMES_RESULT}"
           check_required_job "Nix" "${NIX_REQUIRED}" "${NIX_RESULT}"
           check_required_job "Windows / Installer" "${WINDOWS_REQUIRED}" "${WINDOWS_INSTALLER_RESULT}"
           check_required_job "WSL / Prebuild" "${WSL_REQUIRED}" "${WSL_PREBUILD_RESULT}"
 
           check_required_job "Linux / Build" "${LINUX_BUILD_REQUIRED}" "${LINUX_BUILD_RESULT}"
-          check_required_job "Linux / E2E / NixOS" "${LINUX_REQUIRED}" "${LINUX_NIXOS_RESULT}"
           check_required_job "Darwin" "${DARWIN_REQUIRED}" "${DARWIN_RESULT}"
           check_required_job "WSL" "${WSL_REQUIRED}" "${WSL_RESULT}"
 

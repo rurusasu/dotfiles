@@ -48,17 +48,6 @@ EOF
 	[[ "$output" == *'No Bash test suites found'* ]]
 }
 
-@test "NixOS VM E2E routes installers through the acceptance fixture" {
-	workflow="$REPO_ROOT/.github/workflows/ci-nix.yml"
-	nixos_test="$REPO_ROOT/nix/tests/build/bootstrap-nixos.nix"
-
-	grep -Fq '.#checks.x86_64-linux.bootstrap-nixos-vm' "$workflow"
-	grep -q '.github/e2e/run-bootstrap-acceptance.sh' "$nixos_test"
-	[ "$(grep -c '.github/e2e/start-bootstrap-runtime.sh' "$nixos_test")" -eq 2 ]
-	! grep -Eq 'DOTFILES_HERMES_(DASHBOARD_AUTH|AGENT_SLACK_1PASSWORD)_ENABLED' \
-		"$workflow" "$nixos_test"
-}
-
 @test "acceptance runtime starts the complete stack on its external network" {
 	stub_bin="$BATS_TEST_TMPDIR/bin"
 	export COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
@@ -95,12 +84,6 @@ EOF
 	done
 	grep -Fq 'nixos-rebuild switch' "$REPO_ROOT/scripts/sh/install-nixos.sh"
 	grep -Fq '{{.HERMES_COMPOSE_FILE}}' "$REPO_ROOT/taskfiles/hermes/taskfile.yml"
-}
-
-@test "NixOS bootstrap VM provides task before Hermes bootstrap" {
-	nixos_test="$REPO_ROOT/nix/tests/build/bootstrap-nixos.nix"
-
-	grep -Eq '^[[:space:]]+go-task([[:space:]]|$)' "$nixos_test"
 }
 
 @test "acceptance runner installs only fixture plumbing before invoking install.sh" {
@@ -256,11 +239,14 @@ EOF
 	[ "$(grep -c -- '--frozen-lockfile' "$workflow")" -eq 1 ]
 }
 
-@test "Hermes bootstrap CI keeps the feature Taskfile contract" {
+@test "Hermes bootstrap CI uses runtime contracts without Python unit-test gates" {
 	workflow="$REPO_ROOT/.github/workflows/ci-nix.yml"
 	pre_commit="$REPO_ROOT/.pre-commit-config.yaml"
+	taskfile="$REPO_ROOT/taskfiles/hermes/taskfile.yml"
 
 	grep -Fq 'uses: ./.github/actions/detect-ci-changes' "$workflow"
 	grep -Fq 'needs.changes.outputs.nix' "$workflow"
-	grep -Eq 'taskfiles/hermes/taskfile\\.yml' "$pre_commit"
+	grep -Fq 'Hermes Runtime Contracts' "$workflow"
+	! grep -Eq 'python3? -m unittest|setup-python|hermes-bootstrap-tests' "$workflow"
+	! grep -Eq 'hermes:bootstrap:test' "$pre_commit" "$taskfile"
 }

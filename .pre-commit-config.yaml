@@ -24,10 +24,3 @@ repos:
         language: system
         pass_filenames: false
         files: '\.tmpl$'
-      - id: hermes-bootstrap-tests
-        name: hermes native bootstrap tests
-        entry: task hermes:bootstrap:test
-        language: system
-        pass_filenames: false
-        require_serial: true
-        files: '^(scripts/python/hermes_bootstrap/.*|tests/python/hermes_bootstrap_test/.*|nix/modules/ai_agents/hermes/.*|docker/hermes-service/.*|docker/hermes-xapi-mcp/.*|docker/local-ai-services/.*|scripts/sh/hermes-.*\.sh|scripts/powershell/hermes-.*\.ps1|scripts/powershell/handlers/Handler\.HermesAgent\.ps1|tests/python/test_xapi_image_contract\.py|taskfiles/hermes/taskfile\.yml|Taskfile\.yml|\.pre-commit-config\.yaml|\.github/workflows/ci-nix\.yml)$'

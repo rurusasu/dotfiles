@@ -19,6 +19,7 @@ let
           {
             pname = "hermes-agent";
             version = "test";
+            passthru.hermesDesktop = inputs.hermes-agent.packages.${system}.desktop;
           }
           ''
             mkdir -p "$out/bin"
@@ -144,6 +145,32 @@ in
   testDarwinHermesLaunchAgentUsesInjectedPackage = {
     expr = builtins.elem "${darwin.testPackage}/bin/hermes" darwin.config.launchd.agents.hermes-agent.config.ProgramArguments;
     expected = true;
+  };
+
+  testDarwinHermesDesktopIsInstalledByHomeManager = {
+    expr = {
+      enabled = darwin.config.programs.hermes-agent.desktop.enable;
+      installed = builtins.any (
+        package: (package.pname or "") == "hermes-desktop"
+      ) darwin.config.home.packages;
+    };
+    expected = {
+      enabled = true;
+      installed = true;
+    };
+  };
+
+  testLinuxHermesDesktopIsInstalledByHomeManager = {
+    expr = {
+      enabled = linux.config.programs.hermes-agent.desktop.enable;
+      installed = builtins.any (
+        package: (package.pname or "") == "hermes-desktop"
+      ) linux.config.home.packages;
+    };
+    expected = {
+      enabled = true;
+      installed = true;
+    };
   };
 
   testDarwinHermesLaunchAgentTargetsGateway = {

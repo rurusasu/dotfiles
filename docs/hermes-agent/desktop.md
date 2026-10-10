@@ -2,9 +2,11 @@
 
 ## Runtime ownership
 
-The normal macOS `./install.sh` and NixOS `task nrs` flows install
-and activate Hermes Agent through the Nix/Home Manager configuration. The
-gateway is a native per-user service: systemd on Linux and launchd on macOS.
+macOS `./install.sh`, NixOS/WSL `task nrs`, and standalone Linux Home Manager
+flows install and activate Hermes Agent through the shared Home Manager
+configuration. `task hermes:bootstrap` selects `nixos-rebuild` on NixOS and
+`home-manager switch` on standalone Linux. The gateway is a native per-user
+service: systemd on Linux and launchd on macOS.
 Use `task hermes:up`, `task hermes:down`, `task hermes:restart`, and
 `task hermes:logs` to control that service through the Hermes CLI.
 
@@ -24,8 +26,12 @@ removed adapters and the helpers retained by the current sidecars.
 
 ## Desktop installation and launch
 
-`task hermes:desktop:install` verifies that the nix-darwin cask and Nix-managed
-CLI are present; installation and repair belong to the Nix activation flow.
+The upstream Hermes Home Manager module installs Hermes Desktop on macOS and
+Linux, including native NixOS, WSLg, and standalone Home Manager, and sets its
+`HERMES_HOME` to the same state directory as the CLI and gateway.
+Windows does not install Hermes natively; Windows Task commands delegate to
+the NixOS-WSL installation.
+`task hermes:desktop:install` verifies the Desktop package and Nix-managed CLI.
 Launch the GUI with:
 
 ```bash

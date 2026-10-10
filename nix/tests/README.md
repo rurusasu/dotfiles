@@ -10,15 +10,15 @@ nix-unit と競合する別のテストフレームワークではありませ�
 | ----------- | ------------------------------------------------------------------------------- | ------------------------------------------- |
 | `unit/`     | `expr` / `expected` の属性セット。Nix 式、実効 option、package 選択、flake 配線 | `nix/tests/default.nix` の `nix-unit.tests` |
 | `build/`    | ビルド・生成物・外部プロセスを検証する derivation                               | 同ファイルの `checks`                       |
-| `fixtures/` | テスト用 pkgs、VM 用 hardware module などの共有入力                             | テストから import                           |
+| `fixtures/` | テスト用 pkgs、NixOS hardware module などの共有入力                             | テストから import                           |
 
 Home Manager の構成テストは `unit/home/`、host の構成テストは `unit/hosts/` に置きます。
 unit のファイルは `test...` 属性を持つ nix-unit 形式にし、ファイル名は kebab-case にします。
 `unit/ownership.nix` が unit / build の登録漏れ・重複と Bats の責務分類を検査します。
 
 nix-unit の flake-parts module が `checks.<system>.nix-unit` を自動生成します。
-`build/` には AeroSpace、Neovim、Ghostty、Windows キー設定生成物、独自 package build、
-NixOS VM のテスト本体を置きます。実行スクリプトを flake の配線ファイルに直書きしません。
+`build/` には AeroSpace、Neovim、Ghostty、Windows キー設定生成物、独自 package build を置きます。
+実行スクリプトを flake の配線ファイルに直書きしません。
 `package-provider-coverage` は `nix/packages/outputs.nix` で既存の package-support-report
 derivation を再利用し、`treefmt` は formatter module が公開します。
 
@@ -61,11 +61,8 @@ nix build .#checks.aarch64-darwin.powershell-formatter --no-link --no-write-lock
 # repository 全体の format gate（対象 system の builder が必要）
 nix build .#checks.aarch64-darwin.treefmt --no-link --no-write-lock-file
 
-# 現在の system の checks 全体を build（Linux では NixOS VM も含む）
+# 現在の system の checks 全体を build
 nix flake check --no-write-lock-file
-
-# Linux builder で NixOS VM のテストを実行
-nix build .#checks.x86_64-linux.bootstrap-nixos-vm --no-link --no-write-lock-file
 ```
 
 `nix flake check --no-build` は評価確認です。nix-unit assertion や実行テストの成功は、
@@ -87,45 +84,31 @@ Nix formatter は host module ではなく固定した store module を使いま
 `activationPackage` を checks に登録すれば Home Manager の構成ビルドも検証できますが、
 それ自体は activation の実行や、設定値を比較する nix-unit テストを意味しません。
 
-Linux bootstrap CI は `x86_64-linux`（`ubuntu-24.04`）の `linux-build` job で、
-アプリを含む OS 構成、standalone Home Manager 構成、nix-unit と各 build check を一つの `nix build` に渡します。
-Darwin bootstrap CI も `aarch64-darwin`（`macos-15`）で、アプリを含む OS 構成と native check をまとめて build します。
-`hermes-bootstrap-tests` は bootstrap 本体と同じ軽量 Python 環境で、固定した公式 Hermes source の API を使います。
-公式 full package は `hermes-runtime` で別に検証し、Hermes・依存 pin・flake wiring・関連 CI の変更時と
-手動 CI 実行時に Darwin で build します。公式依存は上書きしません。Darwin CI では無関係な shell 変更で音声/ML 依存を再ビルドさせません。
-Linux の NixOS VM check は独立した runner で実行し、成果物を受け取らない `linux-build` の終了を待ちません。
-両 job は引き続き Bootstrap / Complete の必須成功条件です。
+Linux bootstrap CI は `x86_64-linux`（`ubuntu-24.04`）で本番 NixOS system と standalone Home Manager activation package を build します。
+Darwin CI は `aarch64-darwin`（`macos-15`）の runner で `darwin-rebuild switch` を実行し、構成を実際に適用します。
+WSL CI も本番経路の `nixos-rebuild switch` を実行します。個別の Hermes Python suite や Darwin cask artifact check は CI で実行しません。
+Python unittest suite は CI の gate から外し、workflow 検証は `actionlint`、設定適用は対象 platform の rebuild で行います。
 共通の `nix` job は lint と format だけを確認し、事前の `nix eval` / `nix flake check --no-build` は実行しません。
 `aarch64-linux` は flake の support/output には含まれますが、この workflow には ARM64 Linux runner の native build がありません。
-NixOS VM は Linux 限定です。`aarch64-linux` の native build には対応する builder が必要で、
-Darwin での成功は Linux / VM の実行結果を代替しません。
+`aarch64-linux` の native build には対応する builder が必要です。
 配置変更時には `.github/actions/detect-ci-changes/action.yml` の3分類と、
 対応する workflow の実行条件を確認してください。
 
 ## Bats の所有境界と完全分類
 
-`tests/bash/package_catalog.bats` は3件で、generated artifact、
-署名済みbundleの独自契約だけを含みます。Nix値/source-shape assertionsは移管済みです。
+`tests/bash/package_catalog.bats` は1件で、generated artifact の独自契約を含みます。
+Nix値/source-shape assertionsは移管済みです。
 番号は現在の `@test` 出現順です。
 CIのexport checkはWinget/npm/pnpm JSON全体を生成してcommitted filesとJSON dataとして比較するため、
 個別metadata grepは重ねません。nix-unit ownership assertionはBats一覧とREADME分類の完全一致を検査します。
 
-### Bats runtime / artifact contracts（3件）
+### Bats runtime / artifact contract（1件）
 
-| 番号 | テスト                                                                      | native suite に残す契約                                                          |
-| ---: | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-|    1 | `winget export matches committed Windows manifest data`                     | complete generated Winget/npm/pnpm artifact data, independent of JSON formatting |
-|    2 | `Darwin Raycast artifact has the declared identity and trusted signature`   | built app identity, codesign, Gatekeeper                                         |
-|    3 | `Darwin Discord keeps staged modules outside its signed application bundle` | built layout, launcher path, app identity and signatures                         |
-
-pnpm は導入せず、空の生成 manifest と Home Manager の無効化を nix-unit が検証します。
-Windows の dsh は npm manifest で管理し、外部コマンドとの契約は Pester が検証します。
-
-上記の Darwin artifact 2件は `Bootstrap / Darwin` の native runner が限定実行します。
-Linux Bats での codesign 不在による skip は、この2件の成功として扱いません。
-Mac の専用 step は Nix・codesign・plutil・spctl と対象2件の存在を確認し、欠落・失敗を伝播します。
-既存の artifact assertion を再利用し、Bats 全体を Mac で重複実行しません。
-package_catalog.bats の変更も native Darwin job を起動します。
+|                                                                                  番号 | テスト                                                  | native suite に残す契約                                                          |
+| ------------------------------------------------------------------------------------: | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
+|                                                                                     1 | `winget export matches committed Windows manifest data` | complete generated Winget/npm/pnpm artifact data, independent of JSON formatting |
+| pnpm は導入せず、空の生成 manifest と Home Manager の無効化を nix-unit が検証します。 |
+| Windows の dsh は npm manifest で管理し、外部コマンドとの契約は Pester が検証します。 |
 
 ### 現行テストの所有境界
 

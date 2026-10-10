@@ -7,24 +7,10 @@ let
     inherit (pkgs) lib;
     codexPackage = pkgs.hello;
   };
-  hermesSupport = sets.supportReport.hermes-desktop;
 in
 {
-  testHermesDesktopCaskSupportMetadata = {
-    expr = {
-      inherit (hermesSupport) installFeature;
-      darwinSupport = hermesSupport.darwin;
-      included = builtins.elem "hermes-desktop" sets.darwinCasks;
-    };
-    expected = {
-      installFeature = null;
-      darwinSupport = {
-        provider = "homebrew-cask";
-        source = "homebrew";
-        identity = "hermes-desktop";
-        cask = "hermes-desktop";
-      };
-      included = true;
-    };
+  testHermesDesktopIsNotInstalledThroughHomebrewCask = {
+    expr = builtins.elem "hermes-desktop" sets.darwinCasks;
+    expected = false;
   };
 }

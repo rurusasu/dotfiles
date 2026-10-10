@@ -43,7 +43,7 @@ dotfiles/
 │   ├── modules/            # Custom NixOS modules (system-level)
 │   └── tests/
 │       ├── unit/           # nix-unit: Nix expressions and configuration values
-│       ├── build/          # Build, runtime, artifact and NixOS VM checks
+│       ├── build/          # Build, runtime, and artifact checks
 │       └── fixtures/       # Shared test inputs
 ├── chezmoi/                # User dotfiles (shell/git/terminal/VS Code/LLM)
 ├── scripts/                # All scripts
