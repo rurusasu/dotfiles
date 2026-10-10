@@ -43,7 +43,7 @@
 
 **Files:**
 
-- Create: `nix/modules/hermes-agent/default.nix`
+- Create: `nix/modules/ai_agents/hermes/default.nix`
 - Modify: `nix/home/darwin.nix`
 - Modify: `nix/home/linux.nix`
 - Modify: `nix/home/wsl.nix`

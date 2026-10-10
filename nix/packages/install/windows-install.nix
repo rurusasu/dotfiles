@@ -111,7 +111,6 @@
   # elevation, or hang in CI. Avoid making CI depend on their live behavior.
   wingetCiSkipInstall = {
     google-cloud-sdk = true;
-    "9PLM9XGG6VKS" = true;
     "StablyAI.Orca" = true;
   };
 

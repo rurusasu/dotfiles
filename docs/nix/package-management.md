@@ -164,6 +164,8 @@ Node.js/npm はカタログで導入します。Unix の dsh は `nix/modules/ds
 upstream Nix package を導入し、Windows の dsh は npm manifest に登録します。
 Codex は設定だけを管理し、CLI は ChatGPT アプリ付属のものを使います。
 
+ChatGPT は `nix/modules/ai_agents/chatgpt/` でアプリと同梱 Codex の設定をまとめて管理します。macOS のアプリは `default.nix` の `home.packages` で直接導入し、カタログには登録しません。Windows の Store ID・導入後の検証・CI 設定は同じ module の `windows-install.nix` が所有し、`nix/packages/install/` はその定義を合成します。
+
 1Password の CLI / デスクトップ版はカタログではなく `nix/modules/1password/` で管理します。既存の nixpkgs バイナリを直接使い、独自 package は定義しません。`default.nix` が Home Manager の CLI と Linux デスクトップ版、`ssh.nix` が公式 SSH agent socket への `IdentityAgent` / `SSH_AUTH_SOCK`、`darwin-system.nix` が macOS システムのデスクトップ版、`windows-install.nix` が Windows WinGet の配布・検証・PATH・user scope 指定を担当します。署名コマンドと WSL の Windows 連携は既存の host 設定を維持します。
 
 Git、ghq、既存の `git gtr` alias は `nix/modules/git/` にまとめます。`default.nix` は Home Manager 標準 `programs.git`、`ghq.nix` は nixpkgs の ghq と共通の `ghq.root`、`gtr.nix` は Git alias を管理し、独立した gtr パッケージは追加しません。Git / ghq の Windows WinGet 配布・検証 metadata も同じ module の `windows-install.nix` に置きます。署名と WSL の保存先の差分は host に残します。

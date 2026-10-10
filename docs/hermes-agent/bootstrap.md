@@ -230,7 +230,7 @@ task hermes:profiles:sync
 ```
 
 It processes every profile declared in
-`nix/modules/hermes-agent/manifest.yaml` in manifest order. Do not replace
+`nix/modules/ai_agents/hermes/manifest.yaml` in manifest order. Do not replace
 these commands with a clone or checkout inside a profile home.
 
 For every existing valid named profile, the local `distribution.yaml` and

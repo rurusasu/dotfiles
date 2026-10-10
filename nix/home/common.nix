@@ -13,7 +13,8 @@
 {
   imports = [
     ../modules/1password
-    ../modules/codex
+    ../modules/ai_agents/chatgpt
+    ../modules/ai_agents/hermes
     ../modules/git
     ../modules/lazygit
     ../modules/starship
@@ -22,7 +23,6 @@
     ../modules/herdr
     ../modules/shells/bash
     ../modules/dsh.nix
-    ../modules/hermes-agent
     ../modules/shells/plugins/bat.nix
     ../modules/shells/plugins/eza.nix
     ../modules/shells/plugins/fzf.nix

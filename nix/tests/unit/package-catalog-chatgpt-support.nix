@@ -6,27 +6,28 @@ let
     inherit (pkgs) lib;
     codexPackage = pkgs.hello;
   };
+  chatgpt =
+    system:
+    let
+      modulePkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
+    in
+    import ../../modules/ai_agents/chatgpt {
+      pkgs = modulePkgs;
+      inherit (modulePkgs) lib;
+      config.home.homeDirectory = "/home/test-user";
+    };
 in
 {
-  testChatGPTPreservesDarwinProviderAndDisablesLinux = {
+  testChatGPTInstallationIsOwnedByModule = {
     expr = {
-      darwin = sets.supportReport.chatgpt.darwin;
-      linux = sets.supportReport.chatgpt.linux;
-      windows = sets.supportReport.chatgpt.windows;
+      catalogEntry = sets.supportReport ? chatgpt;
+      darwin = builtins.elem pkgs.chatgpt (chatgpt "aarch64-darwin").home.packages;
+      linux = (chatgpt "x86_64-linux").home.packages;
     };
     expected = {
-      darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "chatgpt";
-        identity = {
-          appName = "ChatGPT.app";
-        };
-      };
-      linux.unsupported = "The Linux desktop app is not managed by this repository";
-      windows = {
-        unsupported = "The Windows Store app is intentionally excluded from this package catalog";
-      };
+      catalogEntry = false;
+      darwin = true;
+      linux = [ ];
     };
   };
 

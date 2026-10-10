@@ -33,7 +33,8 @@ flake.nix -> hosts/configurations.nix -> hosts/<system>/ -> home/common.nix
 - 1Password の導入と Windows 配布・検証 metadata は `../modules/1password/` にまとめる。`common.nix` が CLI と Linux デスクトップ版を導入する Home Manager module を読み込み、macOS デスクトップ版は Darwin host が同じ module の `darwin-system.nix` からシステムに導入する。`ssh.nix` が `IdentityAgent` と `SSH_AUTH_SOCK` を同じ公式 socket に設定する。Bash は別の `ssh-agent` を起動しない。Git 署名・WSL interop の設定は各 host に残す。
 - lazygit は `../modules/lazygit/` の標準 `programs.lazygit` で導入し、Bash / Zsh の `lg` は標準 wrapper を使う。Windows の配布・検証 metadata も同じ module の `windows-install.nix` に置く。
 - Herdr は `../modules/herdr/` の標準 `programs.herdr` で導入・設定する。キー配列などの既存 TOML を同じ module の `config.toml` にまとめ、標準 `settings` に読み込ませて Home Manager が設定ファイルを生成する。Windows は chezmoi 設定と既存の公式 installer を維持する。
-- Hermes Agent は `common.nix` が `../modules/hermes-agent/` を読み込み、公式 Home Manager module の CLI / gateway と既存 bootstrap を有効化する。bootstrap manifest も同じ module 内で管理する。既存の `~/.hermes`、依存 pin、macOS の launchd / Linux の systemd-user 設定は維持する。
+- ChatGPT は `common.nix` が `../modules/ai_agents/chatgpt/` を読み込み、macOS のアプリを直接導入する。同梱 Codex の設定も同じ module で管理し、Codex CLI は独立導入しない。Windows の Store 配布・検証 metadata は同じ module の `windows-install.nix` に置く。
+- Hermes Agent は `common.nix` が `../modules/ai_agents/hermes/` を読み込み、公式 Home Manager module の CLI / gateway と既存 bootstrap を有効化する。bootstrap manifest も同じ module 内で管理する。既存の `~/.hermes`、依存 pin、macOS の launchd / Linux の systemd-user 設定は維持する。
 - `common.nix` は `../modules/shells/plugins/` の fzf / zoxide / eza / bat / ripgrep を有効化する。
 - zoxide のシェル標準連携は `./shells/plugins/zoxide.nix` に置き、`--cmd cd` で `cd` / `cdi` を使う。WSL の除外ディレクトリは `nix/hosts/x86_64-linux/wsl/home.nix` に置く。
 - fzf の検索条件・プレビュー・Zsh 標準連携は `./shells/plugins/fzf.nix` で読み込む。

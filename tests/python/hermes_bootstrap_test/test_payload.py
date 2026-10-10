@@ -30,7 +30,7 @@ from hermes_bootstrap.payload import (
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-APPROVED_MANIFEST = REPOSITORY_ROOT / "nix/modules/hermes-agent/manifest.yaml"
+APPROVED_MANIFEST = REPOSITORY_ROOT / "nix/modules/ai_agents/hermes/manifest.yaml"
 
 
 def raw_item(identifier: str, values: dict[str, str]) -> dict[str, object]:
