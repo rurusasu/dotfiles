@@ -493,6 +493,7 @@ Describe 'PnpmHandler' {
     BeforeEach {
         $script:handler = [PnpmHandler]::new()
         Mock Update-NpmGlobalCommandPath { }
+        Mock Get-JsonContent { return @{ globalPackages = @(@{ name = 'fixture-package' }) } }
         Mock Test-Path {
             param($Path, $LiteralPath, $PathType)
             & $script:testPathCmdlet @PSBoundParameters
@@ -683,7 +684,7 @@ Describe 'PnpmHandler' {
         }
     }
 
-    Context 'CanApply - all conditions met' {
+    Context 'CanApply - current production manifest is empty' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\pnpm.cmd" } }
             Mock Invoke-Pnpm {
@@ -691,11 +692,14 @@ Describe 'PnpmHandler' {
                 return "9.15.0"
             }
             Mock Test-PathExist { return $true }
+            Mock Get-JsonContent { return @{ globalPackages = @() } }
         }
 
-        It 'should return true' {
+        It 'should return false without checking or installing pnpm' {
             $result = $handler.CanApply($ctx)
-            $result | Should -Be $true
+            $result | Should -Be $false
+            Should -Invoke Get-ExternalCommand -Times 0
+            Should -Invoke Invoke-Pnpm -Times 0
         }
     }
 
@@ -1919,7 +1923,7 @@ Describe 'PnpmHandler' {
         }
     }
 
-    Context 'Apply - Windows pnpm manifest contracts' {
+    Context 'Apply - fixture package contracts' {
         It 'should verify Gemini by executing the installed CLI without probing an optional module' {
             $script:pnpmRoot = Join-Path $TestDrive 'pnpm-module-root'
             New-Item -Path (Join-Path $script:pnpmRoot '@google\gemini-cli') -ItemType Directory -Force | Out-Null
@@ -1990,6 +1994,17 @@ Describe 'PnpmHandler' {
             $script:verifyExitCodeByCommand = @{}
             $script:outdatedJson = "{}"
 
+            # DSH is installed with npm in production; this fixture retains
+            # generic pnpm install-option and verification coverage.
+            Mock Get-JsonContent {
+                return @{
+                    globalPackages = @(@{
+                            name          = '@deepseek-ai/dsh'
+                            installArgs   = @('--allow-build=!node-pty')
+                            verifyCommand = @{ command = 'dsh'; args = @('--version') }
+                        })
+                }
+            }
             Mock Get-ExternalCommand {
                 param($Name)
                 if ($Name -eq "pnpm") { return @{ Source = "C:\pnpm.cmd" } }
@@ -2042,7 +2057,7 @@ Describe 'PnpmHandler' {
             $env:PNPM_HOME = $script:originalPnpmHome
         }
 
-        It 'should install and verify the manifest DSH package with declared options' {
+        It 'should install and verify the fixture package with declared options' {
             $expected = @(
                 @{ Spec = "@deepseek-ai/dsh"; Command = "dsh"; Arguments = @("--version") }
             )

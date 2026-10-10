@@ -20,7 +20,7 @@
         $workflow | Should -Match '\[Pnpm\] \u2713 \$\(\$package\.name\)'
     }
 
-    It 'builds pnpm package evidence safely when optional metadata is absent under StrictMode' {
+    It 'should allow an empty pnpm manifest without package evidence under StrictMode' {
         Set-StrictMode -Version Latest
         $manifestPath = Join-Path $PSScriptRoot '../../../../windows/pnpm/packages.json'
         $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -32,7 +32,8 @@
             $markers += "[Pnpm] $successMarker $($package.name)"
         }
 
-        $markers.Count | Should -BeGreaterThan 0
+        $packages | Should -BeNullOrEmpty
+        $markers.Count | Should -Be 0
     }
 
     It 'derives the WinGet inventory across sources and keeps verify-only CI packages' {

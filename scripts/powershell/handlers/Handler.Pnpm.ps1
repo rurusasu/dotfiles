@@ -28,7 +28,7 @@ class PnpmHandler : SetupHandlerBase {
     [bool] CanApply([SetupContext]$ctx) {
         $packagesPath = $this.GetPackagesPath($ctx)
         if (Test-PathExist -Path $packagesPath) {
-            $manifest = Get-Content -LiteralPath $packagesPath -Raw | ConvertFrom-Json -ErrorAction Stop
+            $manifest = Get-JsonContent -Path $packagesPath -ErrorAction Stop
             if (@($manifest.globalPackages).Count -eq 0) { return $false }
         }
         $pnpmCmd = Get-ExternalCommand -Name "pnpm"
