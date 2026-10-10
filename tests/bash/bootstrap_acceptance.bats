@@ -239,11 +239,14 @@ EOF
 	[ "$(grep -c -- '--frozen-lockfile' "$workflow")" -eq 1 ]
 }
 
-@test "Hermes bootstrap CI keeps the feature Taskfile contract" {
+@test "Hermes bootstrap CI uses runtime contracts without Python unit-test gates" {
 	workflow="$REPO_ROOT/.github/workflows/ci-nix.yml"
 	pre_commit="$REPO_ROOT/.pre-commit-config.yaml"
+	taskfile="$REPO_ROOT/taskfiles/hermes/taskfile.yml"
 
 	grep -Fq 'uses: ./.github/actions/detect-ci-changes' "$workflow"
 	grep -Fq 'needs.changes.outputs.nix' "$workflow"
-	grep -Eq 'taskfiles/hermes/taskfile\\.yml' "$pre_commit"
+	grep -Fq 'Hermes Runtime Contracts' "$workflow"
+	! grep -Eq 'python3? -m unittest|setup-python|hermes-bootstrap-tests' "$workflow"
+	! grep -Eq 'hermes:bootstrap:test' "$pre_commit" "$taskfile"
 }
