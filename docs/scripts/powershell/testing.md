@@ -67,7 +67,7 @@ cd scripts/powershell/tests
 
 Windows hosted contract は Pester の最新安定版で `Invoke-Tests.ps1 -MinimumCoverage 0` を両 runtime で実行します。`Install.Entrypoint.Tests.ps1` は実物の `install.ps1`、`install.user.ps1`、`install.admin.ps1`、`SetupHandler.ps1` を一時 fixture にコピーし、副作用のない fixture handler だけを差し替えて、Phase 1 → Phase 2a → acceptance → `Setup Complete!` の同一実行フローを検証します。これにより `SetupContext` の class identity / reload 回帰を、stub phase script や直接 `CanApply()` 呼び出しではなく実 installer boundary で検出します。実機アプリを要求する外部 runtime E2E は `ci-nix.yml` に残します。Nix option、package、flake output は `nix-unit` で検証し、macOS の installer/runtime 契約は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats で実行します。
 
-Docker Desktop と WSL2 の実runtimeは標準hosted runnerでは起動しません。Docker、Compose、chezmoiの共通runtimeは `ci-nix.yml` のNixOS VM jobで検証し、非 NixOS Linux は Home Manager build と mocked installer contract を検証します。Windows/macOS実機固有のruntimeは、Docker profile を選択した installer 末尾の acceptance が失敗を返します。
+WSL2 の実適用は `ci-nix.yml` の WSL E2E で `nixos-rebuild switch` を通して検証します。macOS は同 workflow の Darwin job で `darwin-rebuild switch` を実行します。Docker Desktop の実 runtime は標準 hosted runner では起動せず、Windows/macOS 実機固有の runtime は Docker profile を選択した installer 末尾の acceptance が失敗を返します。
 
 ## WezTerm の実インストール証跡
 

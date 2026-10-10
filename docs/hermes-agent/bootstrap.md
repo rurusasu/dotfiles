@@ -678,31 +678,14 @@ profiles.
 
 ## Source Validation Gate
 
-`hermes-bootstrap-tests` uses the bootstrap CLI's Python dependencies and the
-actual pinned upstream Python source. It does not need the full voice/ML runtime
-to exercise profile synchronization, secret handling, or native filesystem tests.
-Linux and Darwin retain their native bootstrap tests. The separate
-`hermes-runtime` check realizes the unmodified official full package on Darwin
-when Hermes sources, dependency pins, flake wiring, or its CI contracts change;
-manual Bootstrap CI runs select it too. Linux/WSL retains its full-feature system
-build. Package realization is not a host activation or a live gateway test.
+共有 `Bootstrap CI` は Hermes の構成適用を WSL の `nixos-rebuild switch` と
+macOS の `darwin-rebuild switch` で確認します。個別の Hermes Python suite、
+NixOS build check、個別 cask artifact build は CI の gate に含めません。
+Linux native host の system と standalone Home Manager は構成 build を行い、
+Hermes browser の shell runtime contract は個別に確認します。
 
-Changes to Hermes sources, task wiring, and CI contracts run
-`task hermes:bootstrap:test` through the local `hermes-bootstrap-tests`
-pre-commit hook. The task runs the Nix unit and native Python checks, native
-Bats contracts, and the XAPI image contract. Pull requests run the native
-bootstrap suite on Linux and Darwin, native secret transport, and sidecar
-contracts through the shared `Bootstrap CI` workflow.
-
-Native integration tests exercise the current Nix-managed
-`scripts/sh/hermes-profile-sync.sh` wrapper against the built bootstrap CLI.
-They require executable commands, matching exit status and output for
-`sync-profiles`, and isolated engine locks for independent build fixtures.
-The historical pinned wrapper fixture and its private-repository provenance
-fetch are no longer part of this gate. Integration coverage remains the
-publication gate for aggregate preflight, exact-tree deletion, local
-immutability, missing-only bootstrap install, continuation, retry, and result
-serialization.
+Python の unittest suite は自動 CI では実行しません。変更の適用確認は対象 platform の
+rebuild job を通して行います。
 
 The same source validation requires every root and managed profile distribution
 to own `config.yaml`. Bootstrap validates the Chrome MCP guardrails, then
@@ -715,11 +698,10 @@ repository-local `.github` workflows, pre-commit configuration, validators,
 tests, and README files because they are outside the local declarative
 allowlist. Therefore named-profile mirrors, including Nancy, are not governed
 by a repository-local `fast`/`full` or GitHub Actions validator contract.
-Their replacement is:
+Their validation path is:
 
 - runtime aggregate snapshot preflight and `sync-profiles` result handling;
-- dotfiles engine pre-commit and shared `Bootstrap CI` GitHub Actions; and
-- the pinned unit/integration gate `task hermes:bootstrap:test`.
+- dotfiles runtime activation through shared `Bootstrap CI` GitHub Actions.
 
 The scoped [Distribution Validation](distribution-validation-design.md)
 contract remains normative for the remote-authoritative `hermes-home` root and
@@ -734,14 +716,5 @@ failed check set; failure after two rounds is `FIX_FAILED`, while an
 
 ## Verification Gate
 
-Run the focused test gate for changes to the bootstrap implementation or these
-operations docs:
-
-```text
-task hermes:bootstrap:test
-```
-
-The suite covers six-profile bootstrap sequencing, first-install seeding,
-invalid-existing failure without fallback, aggregate preflight, exact remote
-tree deletion, local immutability, retry behavior, compact JSON, exit status,
-and redaction.
+Changes are verified by the selected platform's real configuration activation in
+`Bootstrap CI`. The workflow does not run the Python unittest suite.

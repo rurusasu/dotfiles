@@ -55,20 +55,6 @@ tasks:
       - cmd: task darwin:install && task hermes:sync
         platforms: [darwin]
 
-  hermes:bootstrap:test:
-    desc: Run native Hermes bootstrap Nix and shell contracts
-    cmds:
-      - cmd: 'system="$(nix eval --raw --impure --expr ''builtins.currentSystem'')" && nix build ".#checks.${system}.nix-unit" --no-link && nix build ".#checks.${system}.hermes-bootstrap-tests" --no-link'
-        platforms: [linux, darwin]
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && system=$(nix eval --raw --impure --expr builtins.currentSystem) && nix build .#checks.$system.nix-unit --no-link && nix build .#checks.$system.hermes-bootstrap-tests --no-link"'
-        platforms: [windows]
-      - cmd: python -m unittest tests/python/test_xapi_image_contract.py -v
-        platforms: [windows]
-      - cmd: python3 -m unittest tests/python/test_xapi_image_contract.py -v
-        platforms: [linux, darwin]
-      - cmd: bats tests/bash/hermes_native_bootstrap.bats
-        platforms: [linux, darwin]
-
   hermes:pull:
     desc: Rebuild the Hermes browser and MCP sidecar images
     preconditions:

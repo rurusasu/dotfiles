@@ -86,7 +86,7 @@ class CiJobRoutingTests(unittest.TestCase):
         for changes, expected in (
             ({}, 0),
             ({"CHANGES_RESULT": "failure"}, 1),
-            ({"LINUX_REQUIRED": "true"}, 1),
+            ({"LINUX_BUILD_REQUIRED": "true"}, 1),
             ({"NIX_REQUIRED": "true"}, 1),
             ({"BASH_REQUIRED": "true"}, 1),
             ({"BASH_REQUIRED": "true", "BASH_RESULT": "failure"}, 1),

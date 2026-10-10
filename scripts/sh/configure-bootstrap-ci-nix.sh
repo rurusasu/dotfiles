@@ -39,10 +39,15 @@ umask 077
 mkdir -p "$config_dir"
 {
   printf 'access-tokens = github.com=%s\n' "$GITHUB_TOKEN"
+  repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+  # Share the public binary caches across every CI platform. Keeping these
+  # settings in the same source as the tools image avoids Darwin silently
+  # rebuilding Hermes dependencies from source.
+  grep -E '^(extra-substituters|extra-trusted-public-keys) = ' \
+    "$repo_root/docker/bootstrap-ci-tools/nix.conf"
   if [[ ${1:-} == --wsl ]]; then
-    repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
     # Keep container-only store ownership and sandbox settings out of NixOS.
-    grep -E '^(experimental-features|extra-substituters|extra-trusted-public-keys) = ' \
+    grep -E '^experimental-features = ' \
       "$repo_root/docker/bootstrap-ci-tools/nix.conf"
     printf 'max-jobs = 2\ncores = 1\n'
   fi
@@ -58,5 +63,13 @@ fi
 # Validate without printing credentials to the log.
 if ! nix config show access-tokens | grep -E '^[[:space:]]*github\.com[[:space:]]*=[[:space:]]*[^[:space:]]+' >/dev/null; then
   echo "Nix did not load the CI GitHub authentication configuration." >&2
+  exit 1
+fi
+if ! nix config show extra-substituters | grep -Fq 'https://hermes-agent.cachix.org'; then
+  echo "Nix did not load the Hermes binary cache." >&2
+  exit 1
+fi
+if ! nix config show extra-trusted-public-keys | grep -Fq 'hermes-agent.cachix.org-1:'; then
+  echo "Nix did not load the Hermes binary cache key." >&2
   exit 1
 fi

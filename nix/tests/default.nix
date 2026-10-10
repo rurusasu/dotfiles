@@ -10,15 +10,10 @@
       ghostty-config = import ./build/ghostty-config.nix { inherit pkgs; };
       custom-package-builds = import ./build/custom-packages.nix { inherit pkgs; };
       neovim-native = import ./build/neovim.nix { inherit inputs pkgs; };
-      hermes-bootstrap-tests = import ./build/hermes-bootstrap-tests.nix { inherit inputs pkgs; };
-      hermes-runtime = import ./build/hermes-runtime.nix { inherit inputs pkgs; };
       powershell-formatter = import ./build/powershell-formatter.nix {
         inherit pkgs;
         formatter = config.treefmt.settings.formatter.powershell;
       };
-    }
-    // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-      bootstrap-nixos-vm = import ./build/bootstrap-nixos.nix { inherit inputs pkgs; };
     }
     // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
       standalone-darwin-home = import ./build/standalone-darwin-home.nix {

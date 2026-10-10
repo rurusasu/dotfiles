@@ -148,11 +148,10 @@ and output, and isolated engine locks for independent build fixtures. Home
 Manager installs this wrapper; the historical cross-repository wrapper fixture
 and provenance verifier are no longer part of publication validation.
 
-`task hermes:bootstrap:test` runs the Nix unit and native Python checks, native
-Bats contracts, and the XAPI image contract. The local `hermes-bootstrap-tests`
-pre-commit hook selects this task for changes to Hermes sources, task wiring,
-and CI contracts. The shared `Bootstrap CI` workflow runs the native bootstrap
-suite on Linux and Darwin, native secret transport, and sidecar contracts.
+`Bootstrap CI` verifies the Nix-managed Hermes configuration through the WSL
+and Darwin rebuild application paths. The workflow also retains the shell-based
+browser runtime contract; Python unittest and per-feature bootstrap checks are
+not part of the CI gate.
 
 For an ordered change spanning dotfiles and `hermes-home`, rerun the current
 gate before publishing the dotfiles pull request and again before publishing

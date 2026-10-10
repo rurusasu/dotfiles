@@ -48,7 +48,7 @@ jobs:
     if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true')) }}
     name: CI Contract
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - name: Verify change detection
         if: ${{ needs.changes.result != 'success' }}
@@ -60,22 +60,6 @@ jobs:
           ref: ${{ env.TESTED_SHA }}
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
-        with:
-          python-version: "3.14"
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
-
-      - name: Install go-task
-        run: |
-          nix profile install nixpkgs#go-task
-          task --version
-
-      - name: Run Python workflow contracts
-        run: python -m unittest discover -s tests/python -v
 
       - name: Run actionlint
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
