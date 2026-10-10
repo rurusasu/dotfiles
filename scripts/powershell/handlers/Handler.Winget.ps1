@@ -23,6 +23,7 @@ class WingetHandler : SetupHandlerBase {
     hidden [bool]$LastInstallTimedOut
     hidden [bool]$LastInstallSucceeded
     hidden [int]$LastInstallExitCode
+    hidden [bool]$LastInstallCrashRecoveryAttempted
     hidden [bool]$ProcessOnlyPath
 
     WingetHandler() {
@@ -382,6 +383,14 @@ class WingetHandler : SetupHandlerBase {
                     }
                 }
 
+                # A failed crash-recovery attempt must not be converted into a
+                # successful no-op or preservation of an older installation.
+                if ($this.LastInstallCrashRecoveryAttempted -and $this.LastInstallExitCode -ne 0) {
+                    $failed++
+                    $this.LogWarning("✗ $($pkg.Id) のクラッシュ回復に失敗しました (exit code: $($this.LastInstallExitCode))")
+                    continue
+                }
+
                 if ($this.LastInstallTimedOut) {
                     if ($this.LastInstallSucceeded) {
                         Update-ProcessEnvironmentPath -ProcessOnly
@@ -593,6 +602,7 @@ class WingetHandler : SetupHandlerBase {
         $this.LastInstallTimedOut = $false
         $this.LastInstallSucceeded = $false
         $this.LastInstallExitCode = 1
+        $this.LastInstallCrashRecoveryAttempted = $false
 
         if ($pkg.Id -eq 'Discord.Discord') {
             try {
@@ -652,17 +662,40 @@ class WingetHandler : SetupHandlerBase {
         $startedAt = [DateTime]::UtcNow
         $installTimer = [System.Diagnostics.Stopwatch]::StartNew()
         $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=install status=started timeoutSeconds=$installTimeoutSeconds utc=$($startedAt.ToString('o'))", "Gray")
-        if ($installTimeoutSeconds -gt 0) {
-            $output = @(Invoke-Winget -Arguments $installArgs -TimeoutSeconds $installTimeoutSeconds)
+        $attemptTimeoutSeconds = $installTimeoutSeconds
+        $output = @()
+        for ($attempt = 1; $attempt -le 2; $attempt++) {
+            if ($attemptTimeoutSeconds -gt 0) {
+                $output = @(Invoke-Winget -Arguments $installArgs -TimeoutSeconds $attemptTimeoutSeconds)
+            }
+            else {
+                $output = @(Invoke-Winget -Arguments $installArgs)
+            }
             $this.LastInstallExitCode = [int]$LASTEXITCODE
-        }
-        else {
-            $output = @(Invoke-Winget -Arguments $installArgs)
-            $this.LastInstallExitCode = [int]$LASTEXITCODE
+            $exitCodeHex = [BitConverter]::ToUInt32([BitConverter]::GetBytes($this.LastInstallExitCode), 0).ToString('X8')
+            $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=install status=completed elapsedMs=$($installTimer.ElapsedMilliseconds) exitCode=$($this.LastInstallExitCode) exitCodeHex=$exitCodeHex attempt=$attempt", "Gray")
+
+            # Observed with WinGet 1.11.510 after Arc dependency installation.
+            # The internal crash cause is unknown. Retry the identical request
+            # in a fresh process once, never skipping dependencies/verification.
+            if ($attempt -ne 1 -or $this.LastInstallExitCode -ne -1073740791 -or
+                $pkg.Id -ne 'TheBrowserCompany.Arc' -or $pkg.SourceName -ne 'winget') {
+                break
+            }
+            $this.LastInstallCrashRecoveryAttempted = $true
+            foreach ($line in $output) {
+                $this.Log("  WinGet crash attempt 1: $line", "Gray")
+            }
+            if ($installTimeoutSeconds -gt 0) {
+                $attemptTimeoutSeconds = [int][Math]::Floor($installTimeoutSeconds - $installTimer.Elapsed.TotalSeconds)
+                if ($attemptTimeoutSeconds -lt 1) {
+                    $this.LogWarning("WinGet crash recovery skipped: package=$($pkg.Id) original timeout budget exhausted")
+                    break
+                }
+            }
+            $this.LogWarning("WinGet crash recovery: package=$($pkg.Id) exitCodeHex=$exitCodeHex retry=1 remainingTimeoutSeconds=$attemptTimeoutSeconds")
         }
         $installTimer.Stop()
-        $exitCodeHex = [BitConverter]::ToUInt32([BitConverter]::GetBytes($this.LastInstallExitCode), 0).ToString('X8')
-        $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=install status=completed elapsedMs=$($installTimer.ElapsedMilliseconds) exitCode=$($this.LastInstallExitCode) exitCodeHex=$exitCodeHex", "Gray")
         if ($this.LastInstallExitCode -eq 124) {
             $diagnosis = $this.GetWingetTimeoutDiagnosis([string]$pkg.Id, $startedAt)
             $this.Log("TIMEOUT_DIAGNOSTIC: $diagnosis", "Yellow")
