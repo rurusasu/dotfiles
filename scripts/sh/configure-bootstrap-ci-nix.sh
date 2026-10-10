@@ -20,19 +20,25 @@ if [[ ${1:-} != --wsl ]]; then
   git config --system --replace-all safe.directory "$GITHUB_WORKSPACE"
 fi
 
-config_home="${XDG_CONFIG_HOME:-}"
-if [[ -z $config_home ]]; then
-  nix_home="$HOME"
-  # Nix rejects the runner-owned HOME mount in root container jobs.
-  if [[ ! -O $nix_home ]]; then
-    nix_home=$(getent passwd "$(id -u)" | cut -d: -f6)
-    [[ $nix_home == /* ]] || {
-      echo "Cannot resolve the Nix user's home." >&2
-      exit 1
-    }
+nix_home="$HOME"
+# Nix rejects the runner-owned HOME mount in root container jobs and falls
+# back to the passwd home. Keep this shell and later workflow steps aligned.
+if [[ ! -O $nix_home ]]; then
+  nix_home=$(getent passwd "$(id -u)" | cut -d: -f6)
+  [[ $nix_home == /* ]] || {
+    echo "Cannot resolve the Nix user's home." >&2
+    exit 1
+  }
+  export HOME="$nix_home"
+  unset XDG_CONFIG_HOME
+  if [[ -n ${GITHUB_ENV:-} ]]; then
+    {
+      printf 'HOME=%s\n' "$nix_home"
+      printf 'XDG_CONFIG_HOME=\n'
+    } >>"$GITHUB_ENV"
   fi
-  config_home="$nix_home/.config"
 fi
+config_home="${XDG_CONFIG_HOME:-$nix_home/.config}"
 config_dir="$config_home/nix"
 config_file="$config_dir/bootstrap-ci.conf"
 umask 077
