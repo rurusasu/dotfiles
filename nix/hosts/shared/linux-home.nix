@@ -16,10 +16,13 @@ let
   hasCurrentUser = !(args ? osConfig) && currentUser != "" && currentUser != "root";
 in
 {
-  home.username = lib.mkIf hasCurrentUser currentUser;
-  home.homeDirectory = lib.mkDefault (
-    if hasCurrentUser && currentHome != "" then currentHome else "/home/${config.home.username}"
-  );
+  home = {
+    username = lib.mkIf hasCurrentUser currentUser;
+    homeDirectory = lib.mkDefault (
+      if hasCurrentUser && currentHome != "" then currentHome else "/home/${config.home.username}"
+    );
+    packages = sets.allWithout sets.nativeDesktopPackageNames ++ fonts.packages;
+  };
 
   imports = [
     ../../modules/editors/nvim
@@ -27,7 +30,6 @@ in
     ../../home/common.nix
   ];
 
-  home.packages = sets.allWithout sets.nativeDesktopPackageNames ++ fonts.packages;
   fonts.fontconfig = fonts.fontconfig;
 
   programs.git.signing.signer = "/opt/1Password/op-ssh-sign";

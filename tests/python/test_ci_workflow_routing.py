@@ -62,6 +62,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                 "nix-unit",
                 "custom-package-builds",
                 "aerospace-workspace-cycle",
+                "docker-desktop-activation",
                 "neovim-native",
                 "ghostty-config",
             ),
@@ -277,7 +278,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(calls.exists())
 
-    def test_linux_build_uses_image_identity_for_home_manager(
+    def test_linux_build_leaves_identity_resolution_to_nix(
         self,
     ) -> None:
         workflow = self._named_workflow("ci-nix.yml")
@@ -338,8 +339,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertEqual(
             invocation["identity"],
             {
-                "DOTFILES_USER": "node",
-                "DOTFILES_HOME": "/home/node",
+                "DOTFILES_USER": None,
+                "DOTFILES_HOME": None,
             },
         )
         for variable in (
