@@ -644,7 +644,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "darwin",
             "wsl-prebuild",
             "wsl",
-            "windows",
             "windows-installer",
             "check",
             "complete",
@@ -678,7 +677,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "darwin",
             "wsl-prebuild",
             "wsl",
-            "windows",
         ):
             job = self._workflow_job(workflow, job_name)
             self.assertIn("ref: ${{ env.TESTED_SHA }}", job)

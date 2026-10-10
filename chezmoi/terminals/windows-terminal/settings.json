@@ -19,40 +19,12 @@
       "id": "User.paste"
     },
     {
-      "command": { "action": "splitPane", "split": "right", "splitMode": "duplicate" },
-      "id": "User.splitPane.horizontal"
-    },
-    {
-      "command": "closePane",
-      "id": "User.closePane"
-    },
-    {
       "command": { "action": "adjustFontSize", "delta": -1 },
       "id": "User.decreaseFontSize"
     },
     {
-      "command": { "action": "splitPane", "split": "down", "splitMode": "duplicate" },
-      "id": "User.splitPane.vertical"
-    },
-    {
       "command": "togglePaneZoom",
       "id": "User.togglePaneZoom"
-    },
-    {
-      "command": { "action": "nextTab" },
-      "id": "User.nextTab"
-    },
-    {
-      "command": "closeTab",
-      "id": "User.closeTab"
-    },
-    {
-      "command": { "action": "prevTab" },
-      "id": "User.prevTab"
-    },
-    {
-      "command": { "action": "moveFocus", "direction": "left" },
-      "id": "User.moveFocus.left"
     },
     {
       "command": { "action": "sendInput", "input": "\u001b[13;2u" },
@@ -63,24 +35,8 @@
       "id": "User.sendInput.CtrlEnter"
     },
     {
-      "command": { "action": "newTab" },
-      "id": "User.newTab"
-    },
-    {
-      "command": { "action": "moveFocus", "direction": "right" },
-      "id": "User.moveFocus.right"
-    },
-    {
       "command": "resetFontSize",
       "id": "User.resetFontSize"
-    },
-    {
-      "command": { "action": "moveFocus", "direction": "up" },
-      "id": "User.moveFocus.up"
-    },
-    {
-      "command": { "action": "moveFocus", "direction": "down" },
-      "id": "User.moveFocus.down"
     },
     {
       "command": { "action": "adjustFontSize", "delta": 1 },
@@ -103,58 +59,7 @@
     { "id": "User.find", "keys": "ctrl+shift+f" },
     { "id": "User.paste", "keys": "ctrl+v" },
     { "id": "User.togglePaneZoom", "keys": "ctrl+alt+w" },
-    { "id": null, "keys": "ctrl+shift+t" },
-    { "id": null, "keys": "ctrl+shift+1" },
-    { "id": null, "keys": "ctrl+shift+2" },
-    { "id": null, "keys": "ctrl+shift+3" },
-    { "id": null, "keys": "ctrl+shift+4" },
-    { "id": null, "keys": "ctrl+shift+5" },
-    { "id": null, "keys": "ctrl+shift+6" },
-    { "id": null, "keys": "ctrl+shift+7" },
-    { "id": null, "keys": "ctrl+shift+8" },
-    { "id": null, "keys": "ctrl+shift+9" },
-    { "id": null, "keys": "ctrl+shift+d" },
-    { "id": null, "keys": "ctrl+tab" },
-    { "id": null, "keys": "ctrl+shift+tab" },
-    { "id": null, "keys": "ctrl+alt+1" },
-    { "id": null, "keys": "ctrl+alt+2" },
-    { "id": null, "keys": "ctrl+alt+3" },
-    { "id": null, "keys": "ctrl+alt+4" },
-    { "id": null, "keys": "ctrl+alt+5" },
-    { "id": null, "keys": "ctrl+alt+6" },
-    { "id": null, "keys": "ctrl+alt+7" },
-    { "id": null, "keys": "ctrl+alt+8" },
-    { "id": null, "keys": "ctrl+alt+9" },
-    { "id": null, "keys": "ctrl+alt+t" },
-    { "id": null, "keys": "ctrl+shift+w" },
-    { "id": null, "keys": "alt+left" },
-    { "id": null, "keys": "alt+down" },
-    { "id": null, "keys": "alt+up" },
-    { "id": null, "keys": "alt+right" },
-    { "id": null, "keys": "ctrl+alt+left" },
-    { "id": null, "keys": "alt+shift+d" },
-    { "id": null, "keys": "alt+shift+plus" },
-    { "id": null, "keys": "alt+shift+minus" },
-    { "id": null, "keys": "alt+shift+h" },
-    { "id": null, "keys": "alt+shift+j" },
-    { "id": null, "keys": "alt+shift+k" },
-    { "id": null, "keys": "alt+shift+l" },
-    { "id": null, "keys": "alt+shift+left" },
-    { "id": null, "keys": "alt+shift+down" },
-    { "id": null, "keys": "alt+shift+up" },
-    { "id": null, "keys": "alt+shift+right" },
     { "id": "User.toggleFullscreen", "keys": "f11" },
-    { "id": "User.newTab", "keys": "f13" },
-    { "id": "User.closeTab", "keys": "f14" },
-    { "id": "User.nextTab", "keys": "f15" },
-    { "id": "User.prevTab", "keys": "f16" },
-    { "id": "User.moveFocus.left", "keys": "f17" },
-    { "id": "User.moveFocus.down", "keys": "f18" },
-    { "id": "User.moveFocus.up", "keys": "f19" },
-    { "id": "User.moveFocus.right", "keys": "f20" },
-    { "id": "User.splitPane.horizontal", "keys": "f21" },
-    { "id": "User.splitPane.vertical", "keys": "f22" },
-    { "id": "User.closePane", "keys": "f23" },
     { "id": "User.resetFontSize", "keys": "ctrl+shift+0" },
     { "id": "User.increaseFontSize", "keys": "ctrl+shift+plus" },
     { "id": "User.decreaseFontSize", "keys": "ctrl+shift+minus" }

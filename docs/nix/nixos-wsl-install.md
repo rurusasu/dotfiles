@@ -1,256 +1,140 @@
 # NixOS-WSL インストールと初期 setup
 
-このドキュメントは、リポジトリルートの `install.cmd` から現在の NixOS-WSL と dotfiles を導入する手順です。
-NixOS-WSL 公式の `.wsl` パッケージを使用し、初回起動後にこのリポジトリの Flake と NixOS/
-Home Manager 設定を適用します。
+公式の `nixos.wsl` を手動導入し、独立した
+`scripts/powershell/lib/Invoke-NixosWslSetup.ps1` で checkout を同期して NixOS/Home Manager を適用します。
+Windows の `install.cmd` は GUI アプリ専用です。CLI、管理者フェーズ、chezmoi、WSL の setup は実行せず、
+WSL 用引数も受け取りません。
 
 ## 前提
 
 - Windows 10 version 2004 (build 19041) 以降、または Windows 11
-- WSL 2
-- 管理者権限の PowerShell（WSL 基盤を初めて有効化するとき）
+- WSL 2（以下の `--from-file` 手順には WSL 2.4.4 以降）
+- 管理者権限の PowerShell（WSL 基盤を初めて有効化するときだけ）
 - Git
-- PowerShell 7 (`pwsh`) 推奨
 
-NixOS-WSL は Windows Store 版 WSL 2 を推奨します。`wsl --install --from-file` を使うには
-WSL 2.4.4 以降が必要です。古い WSL では installer が `wsl --import --version 2` に
-フォールバックします。
+公式資料: [NixOS-WSL Installation](https://nix-community.github.io/NixOS-WSL/install.html)、
+[Microsoft: Install WSL](https://learn.microsoft.com/en-us/windows/wsl/install)。
 
-公式資料:
+## 1. WSL 基盤と公式ディストリビューションを準備する
 
-- [NixOS-WSL Installation](https://nix-community.github.io/NixOS-WSL/install.html)
-- [Microsoft: Install WSL](https://learn.microsoft.com/en-us/windows/wsl/install)
-
-## インストール手順
-
-### 1. WSL 基盤を準備する
-
-管理者として PowerShell を起動し、WSL が未導入の場合だけ実行します。
+管理者 PowerShell で、WSL 未導入の場合だけ実行します。
 
 ```powershell
 wsl --install --no-distribution
 ```
 
-再起動を求められた場合は Windows を再起動し、PowerShell を開き直します。既存の WSL が
-動作している場合はこの手順を省略できます。WSL を更新する場合は次を実行します。
+再起動を求められた場合は再起動してください。既存の WSL が動作していれば省略できます。
+WSL を更新・確認する場合は次を実行します。
 
 ```powershell
 wsl --update
+wsl --version
 wsl --status
 ```
 
-### 2. dotfiles を取得して installer を実行する
+[公式 release](https://github.com/nix-community/NixOS-WSL/releases/latest) から `nixos.wsl` をダウンロードし、
+通常ユーザーの PowerShell で実行します。パスは実際の保存先に置き換えてください。
 
-`install.cmd` はリポジトリルートから実行します。`windows` ディレクトリへ移動する必要はありません。
+```powershell
+wsl --install --from-file "$env:USERPROFILE\Downloads\nixos.wsl"
+wsl -d NixOS
+```
+
+既定の登録名は `NixOS` です。既存の `NixOS` がある場合は再インストールせず使用してください。
+登録名・保存先の変更や旧 WSL の手動 import は公式資料と `wsl --help` を参照してください。
+以下の setup は release のダウンロードやディストリビューションの登録を行いません。
+
+初回は NixOS-WSL の案内に従って通常ユーザーのパスワードを設定します。
+
+```bash
+passwd
+exit
+```
+
+## 2. Windows checkout から WSL setup を明示的に実行する
+
+Windows 側に checkout がなければ clone し、通常ユーザーの新しい PowerShell をそのルートで開きます。
+既存 checkout は再利用してください。次の呼び出しは WSL 内の構成を変更するため、
+既存環境では先に VHD と stateful data をバックアップしてください。
 
 ```powershell
 git clone https://github.com/rurusasu/dotfiles.git
 cd dotfiles
-.\install.cmd
+
+. ./scripts/powershell/lib/WindowsEnvironment.ps1
+. ./scripts/powershell/lib/SetupHandler.ps1
+. ./scripts/powershell/lib/Invoke-ExternalCommand.ps1
+. ./scripts/powershell/lib/Invoke-NixosWslSetup.ps1
+$context = [SetupContext]::new((Get-Location).Path)
+$context.DistroName = 'NixOS'
+$context.Options['SyncMode'] = 'link'
+$context.Options['SyncBack'] = 'lock'
+Invoke-NixosWslSetup -Context $context
 ```
 
-初回に WSL がまだ準備できていない場合、installer は WSL 基盤の有効化後に再起動を要求します。
-再起動後、同じ `install.cmd` を再実行してください。
+`SetupContext` は PowerShell class のため、新しいセッションで一度だけ読み込んでください。
+既存の stateVersion は省略時に保持します。新規構成で 26.05 を明示する場合だけ、
+実行前に `$context.Options['StateVersion'] = '26.05'` を設定します。
 
-宣言済みパッケージ、Docker Desktop と native Hermes をまとめて適用します。
-機能別の追加フラグは不要です。
-
-### 3. NixOS を起動する
-
-```powershell
-wsl -d NixOS
-```
-
-## installer の実際の処理
-
-現在の Windows の処理経路は次のとおりです。
+処理経路は Windows GUI installer と独立しています。
 
 ```text
-install.cmd
-  -> scripts/powershell/install.ps1
-  -> NixOS-WSL の latest release asset を GitHub API から取得
-  -> nixos.wsl を選択し、wsl --install --from-file
-     （WSL 2.4.4 未満または失敗時は wsl --import --version 2）
-  -> scripts/powershell/lib/Invoke-NixosWslSetup.ps1
-  -> checkout の同期と /etc/nixos/dotfiles.json の保存
+公式 nixos.wsl を手動導入
+  -> Invoke-NixosWslSetup -Context $context
+  -> checkout 同期と /etc/nixos/dotfiles.json 保存
   -> nix flake update
-  -> nixos-rebuild switch --flake ...#nixos --impure
+  -> nixos-rebuild switch --flake path:<checkout>#nixos --impure
 ```
 
-release asset は `nixos.wsl` のみを使用します。対応範囲は、このアセットを配布する現行
-`.wsl` 形式の release（`2411.6.0` 以降）です。公式 release の `2411.6.0`、`2505.7.0`、
-`2511.7.1`、`2605.7.2` で配布を確認しています。旧 tar.gz 形式の `2405.5.4` 以前は
-対応しません。対応外 tag や `nixos.wsl` が欠落した release を指定すると、対象 tag と
-必要なアセットを示すエラーで停止します。`nixos.aarch64.wsl` や checksum ファイルは
-選択しません。
+保存済みの選択ユーザーを再利用し、なければ UID 1000 の通常ユーザーを検出します。
+名前・home・UID・GID・primary group・正確な checkout パスを
+`/etc/nixos/dotfiles.json` に保存し、Nix の identity module が読み取ります。
 
-アセット形式の境界は公式の [2411.6.0 のアセット](https://github.com/nix-community/NixOS-WSL/releases/expanded_assets/2411.6.0)
-と [2405.5.4 のアセット](https://github.com/nix-community/NixOS-WSL/releases/expanded_assets/2405.5.4)
-で確認できます。既に同名の WSL ディストリビューションが登録されている場合は
-再インストールせず、既存の状態を使います。
+## 同期オプション
 
-postinstall は `--user` がなければ UID 1000 の通常ユーザーを検出します。検出したユーザーの
-名前、home、UID、GID、primary group を NixOS、Home Manager、`wsl.defaultUser` に渡すため、
-通常の再構成でユーザーが `nixos` に戻ることはありません。
+`$context.Options` で指定します。
 
-## リポジトリ同期方式
+| Option                      | 値と意味                                                                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SyncMode`                  | `link`（既定）: Windows checkout への symlink、`repo`: 完全コピー、`nix`: 既存 checkout の nix/ だけ同期、`none`: 既存 WSL checkout を使用 |
+| `SyncBack`                  | `lock`（既定）: flake.lock だけ戻す、`none`: 戻さない、`repo`: checkout を戻す                                                             |
+| `StateVersion`              | 明示する場合は `YY.MM`。省略時は既存の明示値を維持                                                                                         |
+| `ForcePostInstall`          | 既存 checkout が競合した場合、隣接する `.backup-<ID>` へ移動して同期を許可                                                                 |
+| `PostInstallTimeoutSeconds` | 各 WSL setup コマンドのタイムアウト（既定 1800 秒）                                                                                        |
 
-既定値は `link` です。Windows 側の checkout を WSL から参照し、`~/.dotfiles` をその checkout
-へリンクします。
-
-```text
-Windows checkout
-    |
-    | sync-mode=link (既定)
-    v
-WSL ~/.dotfiles -> /mnt/<drive>/<path>/dotfiles
-    |
-    | nixos-rebuild switch --flake ...#nixos
-    v
-NixOS system + Home Manager
-```
-
-PowerShell から方式を指定できます。
-
-```powershell
-# link: Windows 側 checkout を直接参照（既定）
-.\install.cmd -SyncMode link -SyncBack lock
-
-# repo: リポジトリ全体を WSL の ~/.dotfiles にコピー
-.\install.cmd -SyncMode repo -SyncBack lock
-
-# nix: 既存の完全な WSL 側 checkout に nix ディレクトリだけを同期
-#      （fresh install では link または repo を使用）
-.\install.cmd -SyncMode nix -SyncBack none
-
-# none: 既存の WSL 側 ~/.dotfiles をそのまま使用
-.\install.cmd -SyncMode none -SyncBack none
-```
-
-`nix` 方式は既存の完全な WSL 側 checkout に対する差分同期です。`flake.nix`、`flake.lock`、
-`scripts/` などが既に存在する必要があり、fresh install では使用しないでください。
-また、部分同期した `nix` 方式では `-SyncBack repo` を使わないでください。Windows 側 checkout
-全体を上書きする対象ではありません。`-SyncBack repo` は完全な `repo` 方式で WSL 側の変更を
-Windows 側 checkout に戻す場合だけ使用します。通常の初回 setup では `lock` を使い、生成・更新
-された `flake.lock` だけを戻します。
-
-## 主な installer 引数
-
-```powershell
-# ディストリビューション名と VHD の保存先
-.\install.cmd -DistroName NixOS -InstallDir "$env:USERPROFILE\NixOS"
-
-# 特定の NixOS-WSL release を使う場合は release tag を指定
-.\install.cmd -ReleaseTag 2605.7.2
-
-# 対話的な終了待ちを抑止
-.\install.cmd -NoPause
-
-# 既存の ~/.dotfiles を意図的に置き換える場合だけ明示的に許可
-.\install.cmd -ForcePostInstall
-```
-
-通常は `-ReleaseTag` を指定せず、NixOS-WSL の latest release を使用します。指定する場合は
-上記の対応範囲の tag を使用してください。`install.ps1` はこの値をユーザーフェーズへ渡し、
-handler が GitHub の `/releases/tags/<tag>` から取得します。CI の
-`scripts/powershell/ci/Invoke-NixosWslE2E.ps1` も `-ReleaseTag` を受け取れますが、
-`.github/workflows/ci-nix.yml` は指定せず latest を検証します。`InstallDir` は
-新規インストール時に空のディレクトリである必要があります。`-ForcePostInstall` は既存 checkout
-に競合する場合、隣接する `.backup-<ID>` へ移動してから同期します。
+`link` は Windows 側の変更が即時に見えます。既に同じ場所へのリンクなら維持します。
+`repo` / `nix` と逆同期はファイルを上書きし得るため、両側の checkout をバックアップしてください。
+`nix` は既に flake.nix・flake.lock・scripts/ を持つ完全な WSL checkout が必要で、
+`SyncBack = 'repo'` と併用できません。
+`ForcePostInstall` は通常設定せず、競合する checkout を退避する必要がある場合だけ明示します。
+Flake inputs の更新失敗時は構成を反映しません。
 
 ## 通常の反映
 
-初回の checkout 同期は Windows の PowerShell ハンドラーが担当します。
-セットアップ済みの WSL では次のコマンドで反映します。
+setup 済みの WSL では次を実行します。
 
 ```bash
 ~/.dotfiles/install.sh
 ```
 
-NixOS のアカウント情報、正確な checkout の Git trust、`stateVersion` は
-`/etc/nixos/dotfiles.json` を `nix/hosts/shared/nixos/identity.nix` が読み取ります。
-ネイティブ NixOS のハードウェア設定は `/etc/nixos/hardware-configuration.nix` を使います。
+WSL 固有構成は `nix/hosts/x86_64-linux/wsl/`、
+ユーザー・stateVersion は `/etc/nixos/dotfiles.json` を
+`nix/hosts/shared/nixos/identity.nix` が読み取ります。
+native NixOS 用の `/etc/nixos/hardware-configuration.nix` は WSL では通常不要です。
 
-## system version と `system.stateVersion`
+## system version と system.stateVersion
 
-NixOS のパッケージや system の更新は `flake.lock` の `nixpkgs` input で決まります。この
-リポジトリは `nixos-unstable` を使用します。初回 installer と通常の更新操作 `nrs` は、
-毎回 `nix flake update` が成功した後に `switch` を実行します。WSL 内の更新は次のいずれかを使います。
+`system.stateVersion` はパッケージの更新版ではなく、永続データの互換性を決める schema です。
+既存の 25.05 WSL 環境を単なるパッケージ更新で 26.05 に変更しないでください。
+通常の反映では保存値を維持します。`install.cmd` は NixOS の設定を変更しません。
 
-```bash
-# dotfiles installer の更新経路
-nrs
-
-# 状態を確認してから明示的に rebuild
-nix flake update --flake ~/.dotfiles
-sudo nixos-rebuild switch --flake ~/.dotfiles#nixos --impure
-```
-
-一方、`nix/hosts/x86_64-linux/wsl/configuration.nix` の `system.stateVersion` は、パッケージの最新版を選択する値では
-ありません。新規 WSL インストールの既定値と、明示的に承認した移行先は現行 stable の NixOS 26.05 です。
-既存環境は、元の state schema を維持するため 25.05 を既定にします。
-
-```nix
-system.stateVersion = stateVersion;
-```
-
-新規構成では Windows installer が `stateVersion = "26.05"` をホスト設定 JSON に保存します。既存の 25.05 WSL 環境では、
-通常の `nrs` や `install.cmd` が stateVersion を勝手に変更しないよう、25.05 を保持します。26.05 へ
-移行する場合は、単なるパッケージ更新ではなく state schema の移行として扱ってください。適用前に VHD、
-Docker、データベース、各種 `/var/lib` のデータをバックアップし、使用中のモジュールの移行可否を確認して
-ください。適用後は generation、`/run/current-system`、Docker、データベース、各種 stateful data の
-runtime を検証します。
-パッケージや system の実体は引き続き `flake.lock` の `nixpkgs` input で決まります。
-このリポジトリの flake は `nixos-unstable` を使用するため、stable の `system.stateVersion` と
-unstable の実体 version が異なることがあります。
-
-既存の 25.05 環境から明示的に移行する場合は、まず `/etc/nixos/dotfiles.json` の
-`stateVersion` を編集し、次の順で反映します。`dry-build` が成功しても runtime
-data の互換性を保証するものではないため、バックアップと rollback generation を確認してから `switch`
-してください。
+明示的に移行する場合は VHD、Docker、データベース、各種 `/var/lib` のデータをバックアップし、
+使用中のモジュールの移行可否を確認してください。反映後は generation、
+`/run/current-system`、Docker とデータベースなどの状態を確認します。
 
 ```bash
-nix flake update --flake ~/.dotfiles
-sudo nixos-rebuild dry-build --flake ~/.dotfiles#nixos --impure
-sudo nixos-rebuild switch --flake ~/.dotfiles#nixos --impure
 nixos-rebuild list-generations
 readlink -f /run/current-system
 ```
-
-新規インストール時に値を変更する場合は、Windows 側で `.install.cmd -StateVersion 26.05` を指定できます。
-セットアップ後は `/etc/nixos/dotfiles.json` で管理します。
 
 - [NixOS Wiki: When do I update stateVersion?](https://wiki.nixos.org/wiki/FAQ/When_do_I_update_stateVersion)
-- [NixOS 26.05 release](https://nixos.org/blog/announcements/2026/nixos-2605/)
-
-## 動作確認
-
-Windows 側:
-
-```powershell
-wsl --list --verbose
-wsl -d NixOS
-```
-
-WSL 側:
-
-```bash
-readlink -f /run/current-system
-nixos-rebuild list-generations
-readlink -f ~/.dotfiles
-```
-
-`nrs` を実行した後、必要な CLI と chezmoi の適用状態を確認します。Windows 側の runtime を
-確認する場合は、リポジトリルートで次を実行します。
-
-```powershell
-.\scripts\powershell\Test-Environment.ps1 -Runtime
-```
-
-installer の途中で停止した場合は、完了済みの宣言状態を再利用できるため、同じ `install.cmd` を
-再実行してください。既存のディストリビューションや install directory を変更する場合は、
-対象の VHD とデータを確認してから操作してください。
-
-## パッケージ追加方法
-
-パッケージ追加は [Nix package management](./package-management.md) を参照してください。

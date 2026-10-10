@@ -4,28 +4,11 @@ $runtimeExecutable = Get-Command -Name $runtimeCommand -CommandType Application 
     Select-Object -First 1
 $runtimePath = [string]$runtimeExecutable.Source
 
-# The PowerShell 7 E2E host cannot safely update its own executable.
-# Windows PowerShell 5.1 runs the same full install and verifies this package.
-if ($expectedRuntime -eq '7') {
-    $manifestPath = Join-Path $env:GITHUB_WORKSPACE 'windows\winget\packages.json'
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    $powerShellPackages = @(
-        $manifest.Sources | ForEach-Object { $_.Packages } |
-            Where-Object { $_.PackageIdentifier -eq 'Microsoft.PowerShell' }
-    )
-    if ($powerShellPackages.Count -ne 1) {
-        throw "Expected one Microsoft.PowerShell manifest entry; found $($powerShellPackages.Count)."
-    }
-    $powerShellPackages[0] | Add-Member -NotePropertyName ciSkipInstall -NotePropertyValue $true -Force
-    $manifest | ConvertTo-Json -Depth 100 |
-        Set-Content -LiteralPath $manifestPath -Encoding utf8
-    Write-Host 'Microsoft.PowerShell self-update is covered by the Windows PowerShell 5.1 E2E job'
-}
-
 $installerE2EScript = @'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $validationErrors = [System.Collections.Generic.List[string]]::new()
+$userPathSeeded = $false
 function Invoke-WindowsE2EValidation {
   param(
     [Parameter(Mandatory)]
@@ -77,11 +60,13 @@ if ($userEnvironmentReadKey) {
 $originalPs7Dir = $env:DOTFILES_PS7_DIR
 $originalForceWindowsPowerShell = $env:DOTFILES_FORCE_WINDOWS_POWERSHELL
 $isWindowsPowerShell = $expectedVersion -eq '5.1'
-$pwshExecutable = (Get-Command -Name 'pwsh.exe' -CommandType Application -ErrorAction Stop).Source
+$pwshExecutable = Get-Command -Name 'pwsh.exe' -CommandType Application -ErrorAction Stop |
+  Select-Object -First 1
+$pwshExecutable = [string]$pwshExecutable.Source
 $env:DOTFILES_PS7_DIR = Split-Path -Parent $pwshExecutable
 if ($isWindowsPowerShell) {
-  # Keep PowerShell 7 visible so WinGet verifies its installed package;
-  # the explicit flag forces only install.cmd to use Windows PowerShell.
+  # The explicit flag selects Windows PowerShell for install.cmd while
+  # keeping the pre-existing PowerShell 7 runtime available.
   $env:DOTFILES_FORCE_WINDOWS_POWERSHELL = '1'
 }
 else {
@@ -90,34 +75,12 @@ else {
 
 Push-Location $env:GITHUB_WORKSPACE
 try {
-  $classicBefore = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --accept-source-agreements --disable-interactivity 2>&1)
-  $classicBeforeExitCode = $LASTEXITCODE
-  $classicBeforeText = $classicBefore -join [Environment]::NewLine
-  if ($classicBeforeExitCode -ne 0) {
-    $classicBeforeExitCodeUnsigned = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$classicBeforeExitCode), 0)
-    if ($classicBeforeExitCodeUnsigned.ToString('X8') -ne '8A150014') {
-      throw "Unable to inspect ChatGPT Classic E2E seed state (winget list exit=$($classicBeforeExitCodeUnsigned.ToString('X8'))): $classicBeforeText"
-    }
-  }
-  if ($classicBeforeText -notmatch '(?im)^\s*.*\b9NT1R1C2HH7J\b') {
-    $classicInstallOutput = @(winget install --id 9NT1R1C2HH7J --exact --source msstore --silent --accept-package-agreements --accept-source-agreements --disable-interactivity 2>&1)
-    $classicInstallExitCode = $LASTEXITCODE
-    if ($classicInstallExitCode -ne 0) {
-      throw "Could not seed the ChatGPT Classic uninstall E2E (winget exit=$classicInstallExitCode): $($classicInstallOutput -join ' ')"
-    }
-    $classicInstalled = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --accept-source-agreements --disable-interactivity 2>&1)
-    $classicInstalledText = $classicInstalled -join [Environment]::NewLine
-    if ($classicInstalledText -notmatch '(?im)^\s*.*\b9NT1R1C2HH7J\b') {
-      throw "ChatGPT Classic E2E seed install did not become visible in WinGet: $classicInstalledText"
-    }
-  }
-
   if ($isWindowsPowerShell) {
     if ($env:DOTFILES_FORCE_WINDOWS_POWERSHELL -ne '1') {
       throw 'The Windows PowerShell 5.1 E2E did not force the install.cmd fallback'
     }
     if (-not (Get-Command -Name 'pwsh.exe' -CommandType Application -ErrorAction SilentlyContinue)) {
-      throw 'PowerShell 7 must remain discoverable so WinGet can verify the installed package'
+      throw 'PowerShell 7 must remain discoverable for the runtime selection check'
     }
   }
   else {
@@ -139,6 +102,7 @@ try {
   }
   try {
     $userEnvironmentKey.SetValue('PATH', $seededUserPath, [Microsoft.Win32.RegistryValueKind]::ExpandString)
+    $userPathSeeded = $true
   }
   finally {
     $userEnvironmentKey.Dispose()
@@ -173,30 +137,18 @@ finally {
 
 $out = $output -join [Environment]::NewLine
 
-# Read the PATH published by the installer child process.
 . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/lib/Invoke-ExternalCommand.ps1')
-$env:PATH = $originalPath
-Update-ProcessEnvironmentPath
-if ($env:PATH.Length -gt 8191) {
-  throw "Post-install PATH exceeds the cmd.exe command environment limit: $($env:PATH.Length)"
-}
 
 Invoke-WindowsE2EValidation -Name 'installer evidence' -Validation {
 . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WindowsInstallerSuccess.ps1')
-$npmManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/npm/packages.json') -Raw | ConvertFrom-Json
-$pnpmManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/pnpm/packages.json') -Raw | ConvertFrom-Json
-$requiredPackageManagerMarkers = @()
-foreach ($package in $npmManifest.globalPackages) {
-  $requiredPackageManagerMarkers += "[Npm] ✓ $($package.name)"
-}
-foreach ($package in $pnpmManifest.globalPackages) {
-  $requiredPackageManagerMarkers += "[Pnpm] ✓ $($package.name)"
-}
 Assert-WindowsInstallerSuccess `
   -Output $out `
   -ExitCode $exitCode `
   -CompletionMarker 'User Phase Complete!' `
-  -RequiredOutputMarkers $requiredPackageManagerMarkers
+  -RequiredOutputMarkers @('[Winget] CI_VERIFICATION_INVENTORY:')
+if ($out -match '(?im)^\s*\[(?:Npm|Pnpm)\]') {
+  throw 'The GUI installer performed npm/pnpm activity'
+}
 if ($isWindowsPowerShell -and $out -notmatch 'Using Windows PowerShell') {
   throw 'The full Windows installer E2E did not exercise the forced Windows PowerShell 5.1 path'
 }
@@ -206,20 +158,13 @@ if (-not $isWindowsPowerShell -and $out -match '(Using Windows PowerShell|Fallin
 if ($out -notmatch '\[INFO\] Process PATH normalized: removed \d+ missing directories and omitted \d+ over-limit entries; final length \d+/8191\.') {
   throw 'The real installer E2E did not remove stale PATH entries before starting package commands'
 }
-$persistedUserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
-if ($persistedUserPath.Length -gt 32767) {
-  throw "Post-install User PATH exceeds the Windows environment-variable limit: $($persistedUserPath.Length)"
-}
-$remainingStaleUserPathEntries = @($oversizedUserPathEntries | Where-Object { $persistedUserPath -split ';' -contains $_ })
-if ($remainingStaleUserPathEntries.Count -gt 0) {
-  throw "The installer left $($remainingStaleUserPathEntries.Count) stale entries in the persisted User PATH"
-}
-if ($out -notmatch '\[INFO\] User PATH repaired: removed \d+ missing local directories and \d+ duplicate entries; final length \d+/32767\.') {
-  throw 'The real installer E2E did not repair stale entries in the persisted User PATH'
-}
 }
 
 Invoke-WindowsE2EValidation -Name 'WinGet package inventory' -Validation {
+$inventoryRecords = [regex]::Matches($out, '(?m)^\[Winget\][ \t]+CI_VERIFICATION_INVENTORY:')
+if ($inventoryRecords.Count -ne 1) {
+  throw "The GUI installer must report exactly one WinGet verification inventory; found $($inventoryRecords.Count)"
+}
 . (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WingetInstallSuccess.ps1')
 $wingetManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json') -Raw | ConvertFrom-Json
 $wingetSources = @(
@@ -252,12 +197,12 @@ if ($expectedWindowsPackageIds.Count -eq 0) {
 Assert-WingetInstallSuccess -Output $out -ExpectedPackageIds $expectedWindowsPackageIds
 }
 
-Invoke-WindowsE2EValidation -Name 'portable command PATH recovery' -Validation {
-& (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell/ci/Assert-WingetCommandRecovery.ps1') `
-  -ManifestPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json')
-}
-
 Invoke-WindowsE2EValidation -Name 'WezTerm install PATH and version' -Validation {
+# Refresh only this process so GUI installation can expose its executable.
+Update-ProcessEnvironmentPath -ProcessOnly
+if ($env:PATH.Length -gt 8191) {
+  throw "Post-install PATH exceeds the cmd.exe command environment limit: $($env:PATH.Length)"
+}
 $weztermManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json') -Raw | ConvertFrom-Json
 $weztermPackages = @(
   $weztermManifest.Sources | Where-Object { $_.SourceDetails.Name -in @('winget', 'msstore') } |
@@ -280,122 +225,34 @@ Assert-WezTermInstallEvidence -Output $out -PackageId $weztermPackages[0].Packag
 Write-Host "WEZTERM_E2E: runtime=$($PSVersionTable.PSVersion) package=$($weztermPackages[0].PackageIdentifier) executable=$($weztermCommand.Source) elapsedMs=$($weztermTimer.ElapsedMilliseconds) exitCode=$weztermVersionExitCode version=$weztermVersionText"
 }
 
-Invoke-WindowsE2EValidation -Name 'ChatGPT Classic removal' -Validation {
-if ($out -notmatch '(?m)RETIRED_PACKAGE_CLEANUP: id=9NT1R1C2HH7J status=(removed|absent)') {
-  throw 'ChatGPT Classic retired-package cleanup did not complete successfully'
-}
-
-$classicListOutput = @(winget list --id 9NT1R1C2HH7J --exact --source msstore --accept-source-agreements --disable-interactivity 2>&1)
-$classicListExitCode = $LASTEXITCODE
-$classicListText = $classicListOutput -join [Environment]::NewLine
-if ($classicListText -match '(?im)^\s*.*\b9NT1R1C2HH7J\b') {
-  throw 'ChatGPT Classic is still installed after cleanup'
-}
-if ($classicListExitCode -ne 0) {
-  $classicListExitCodeUnsigned = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$classicListExitCode), 0)
-  if ($classicListExitCodeUnsigned.ToString('X8') -ne '8A150014') {
-    throw "Unable to verify ChatGPT Classic removal (winget list exit=$($classicListExitCodeUnsigned.ToString('X8'))): $classicListText"
-  }
-}
-}
-
-Invoke-WindowsE2EValidation -Name 'required command smoke tests' -Validation {
-# A handler that cannot run its setup predicate is skipped, not failed.
-# Require the key npm/dsh/1Password tools themselves so a green phase
-# cannot hide missing prerequisites or an unconfigured PATH.
-$onePasswordPackagesPath = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
-$persistedOnePasswordPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-$onePasswordUserPathEntries = @($persistedOnePasswordPath -split ';' | Where-Object { $_ } | ForEach-Object { [System.IO.Path]::GetFullPath($_.Trim()) })
-$onePasswordPackageRoot = [System.IO.Path]::GetFullPath($onePasswordPackagesPath).TrimEnd('\') + '\'
-$onePasswordPackageDirectory = $onePasswordUserPathEntries |
-  Where-Object {
-    $_.StartsWith($onePasswordPackageRoot, [System.StringComparison]::OrdinalIgnoreCase) -and
-    (Split-Path -Leaf $_) -like 'AgileBits.1Password.CLI_*' -and
-    (Test-Path -LiteralPath (Join-Path $_ 'op.exe') -PathType Leaf)
-  } |
-  Select-Object -First 1
-if (-not $onePasswordPackageDirectory) {
-  throw 'Persisted user PATH does not identify an installed AgileBits.1Password.CLI package directory containing op.exe'
-}
-$onePasswordExecutablePath = Join-Path $onePasswordPackageDirectory 'op.exe'
-$resolvedOnePassword = Get-Command -Name 'op.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1
-$resolvedOnePasswordPath = Get-ExternalCommandPath -CommandInfo $resolvedOnePassword
-$installedOnePasswordHash = (Get-FileHash -LiteralPath $onePasswordExecutablePath -Algorithm SHA256).Hash
-$resolvedOnePasswordHash = (Get-FileHash -LiteralPath $resolvedOnePasswordPath -Algorithm SHA256).Hash
-if (-not [System.StringComparer]::OrdinalIgnoreCase.Equals($installedOnePasswordHash, $resolvedOnePasswordHash)) {
-  throw "PATH-resolved op.exe does not match the configured WinGet package binary: resolved=$resolvedOnePasswordPath installed=$onePasswordExecutablePath"
-}
-$onePasswordVersion = @(& $resolvedOnePasswordPath --version 2>&1)
-$onePasswordExitCode = $LASTEXITCODE
-if ($onePasswordExitCode -ne 0) {
-  throw "Installed 1Password CLI failed its version probe (exit=$onePasswordExitCode): $($onePasswordVersion -join ' ')"
-}
-$winGetLinksPath = [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'))
-if ($onePasswordUserPathEntries -contains $winGetLinksPath -and -not (Test-Path -LiteralPath (Join-Path $winGetLinksPath 'op.exe') -PathType Leaf)) {
-  throw 'WinGet Links op.exe shim is missing after OnePasswordCli setup'
-}
-$nodeVersionOutput = @(node --version 2>&1)
-$nodeVersionExitCode = $LASTEXITCODE
-if ($nodeVersionExitCode -ne 0 -or $nodeVersionOutput.Count -eq 0) {
-  throw "Cannot determine the active Node.js version required by agent-browser@0.38.1 (exit=$nodeVersionExitCode): $($nodeVersionOutput -join ' ')"
-}
-$nodeVersionText = ([string]($nodeVersionOutput | Select-Object -Last 1)).Trim() -replace '^v', ''
-$nodeVersion = $null
-if (-not [version]::TryParse($nodeVersionText, [ref]$nodeVersion) -or $nodeVersion -lt [version]'24.0.0') {
-  throw "agent-browser@0.38.1 requires Node.js >=24.0.0; active Node.js version is '$nodeVersionText'"
-}
-
-$requiredCommands = @(
-  @{ Name = 'npm'; Arguments = @('--version') }
-  @{ Name = 'agent-browser'; Arguments = @('--version') }
-  @{ Name = 'herdr'; Arguments = @('--version') }
-  @{ Name = 'dsh'; Arguments = @('--version') }
-  @{ Name = 'op.exe'; Arguments = @('--version') }
-)
-foreach ($requiredCommand in $requiredCommands) {
-  $resolvedCommand = Get-Command -Name $requiredCommand.Name -CommandType Application -ErrorAction SilentlyContinue |
-    Select-Object -First 1
-  if (-not $resolvedCommand) {
-    throw "Windows installer did not expose required command '$($requiredCommand.Name)'"
-  }
-
-  $commandArguments = @($requiredCommand.Arguments)
-  $resolvedCommandPath = Get-ExternalCommandPath -CommandInfo $resolvedCommand
-  $commandOutput = @(& $resolvedCommandPath @commandArguments 2>&1)
-  $commandExitCode = $LASTEXITCODE
-  if ($commandExitCode -ne 0) {
-    throw "Windows installer command '$($requiredCommand.Name)' failed (exit=$commandExitCode): $($commandOutput -join ' ')"
-  }
-}
-}
 }
 catch {
   $validationErrors.Add("Windows installer E2E setup: $($_.Exception.Message)")
 }
 finally {
-  try {
-    $userEnvironmentCleanupKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
-    if (-not $userEnvironmentCleanupKey) {
-      throw 'Could not open the current user Environment registry key to restore PATH'
-    }
+  if ($userPathSeeded) {
     try {
-      if ($originalUserPathExists) {
-        $userEnvironmentCleanupKey.SetValue('PATH', $originalUserPathRegistryValue, $originalUserPathRegistryKind)
+      $userEnvironmentCleanupKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+      if (-not $userEnvironmentCleanupKey) {
+        throw 'Could not open the current user Environment registry key to restore PATH'
       }
-      else {
-        $userEnvironmentCleanupKey.DeleteValue('PATH', $false)
+      try {
+        if ($originalUserPathExists) {
+          $userEnvironmentCleanupKey.SetValue('PATH', $originalUserPathRegistryValue, $originalUserPathRegistryKind)
+        }
+        else {
+          $userEnvironmentCleanupKey.DeleteValue('PATH', $false)
+        }
       }
+      finally {
+        $userEnvironmentCleanupKey.Dispose()
+      }
+      Write-Host 'Restored the original User PATH after the Windows installer E2E'
     }
-    finally {
-      $userEnvironmentCleanupKey.Dispose()
+    catch {
+      $validationErrors.Add("User PATH cleanup: $($_.Exception.Message)")
     }
-    Write-Host 'Restored the original User PATH after the Windows installer E2E'
   }
-  catch {
-    $validationErrors.Add("User PATH cleanup: $($_.Exception.Message)")
-  }
-
-
 }
 
 if ($validationErrors.Count -gt 0) {

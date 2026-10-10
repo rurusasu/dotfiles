@@ -1025,6 +1025,23 @@ Describe 'Update-ProcessEnvironmentPath' {
         }
     }
 
+    It 'should refresh only the process without changing a stale oversized persisted User PATH' {
+        $validUserPath = Join-Path $TestDrive 'gui-only-command-directory'
+        $null = New-Item -ItemType Directory -Path $validUserPath -Force
+        $staleEntries = 1..1000 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
+        $oversizedUserPath = (@($staleEntries) + @($validUserPath)) -join ';'
+        $oversizedUserPath.Length | Should -BeGreaterThan 32767
+        Mock Get-UserEnvironmentPath { return $oversizedUserPath }
+        Mock Set-UserEnvironmentPath { throw 'GUI setup must not rewrite persisted PATH' }
+        $env:PATH = $script:originalPath
+
+        Update-ProcessEnvironmentPath -ProcessOnly
+
+        $env:PATH.Length | Should -BeLessOrEqual 8191
+        ($env:PATH -split ';') | Should -Contain $validUserPath
+        Should -Invoke Set-UserEnvironmentPath -Times 0 -Exactly
+    }
+
     It 'should persistently remove stale local directories while retaining unresolved and offline User PATH entries' {
         if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
             Set-ItResult -Skipped -Because 'User PATH registry repair is Windows-specific'

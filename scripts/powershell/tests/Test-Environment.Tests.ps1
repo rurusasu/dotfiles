@@ -97,13 +97,9 @@ Describe 'Test-DotfilesEnvironment' {
         { Test-DotfilesEnvironment -Docker } | Should -Throw '*docker info failed*'
     }
 
-    It 'should run acceptance before printing final completion' {
+    It 'should keep CLI environment acceptance outside GUI-only setup' {
         $content = Get-Content -LiteralPath $script:installTarget -Raw
-        $acceptanceIndex = $content.IndexOf('Test-DotfilesEnvironment -Docker:$dockerDesktopRequested -Runtime:$dockerDesktopRequested')
-        $completionIndex = $content.IndexOf('Setup Complete!')
-
-        $acceptanceIndex | Should -BeGreaterThan -1
-        $completionIndex | Should -BeGreaterThan $acceptanceIndex
-        $content | Should -Match '\$dockerDesktopRequested = \$Options\["EnableDockerDesktopIntegration"\] -eq \$true'
+        $content | Should -Not -Match 'Test-Environment|Test-DotfilesEnvironment|EnableDockerDesktopIntegration'
+        $content | Should -Match 'Setup Complete!'
     }
 }

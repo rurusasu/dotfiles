@@ -96,15 +96,6 @@
       command = "TheBrowserCompany.Arc";
       args = [ "TheBrowserCompany.Arc_ttt1ap7aakyb4!Arc" ];
     };
-    "AutoHotkey.AutoHotkey" = {
-      type = "windowsInstalledProduct";
-      command = "AutoHotkey";
-      uninstallEntry = {
-        productCodes = [ "AutoHotkey" ];
-        displayName = "AutoHotkey";
-        executablePaths = [ "%ProgramFiles%\\AutoHotkey\\v2\\AutoHotkey.exe" ];
-      };
-    };
     "dprint.dprint" = {
       command = "dprint";
       args = [ "--version" ];

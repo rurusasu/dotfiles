@@ -21,15 +21,16 @@ Describe 'install.user.ps1' {
         $result | Should -BeOfType [bool]
     }
 
-    It 'should filter handlers by Phase 1' {
+    It 'should instantiate only the GUI package adapter' {
         $content = Get-Content -LiteralPath $script:target -Raw
-        $content | Should -Match '\$_\.Phase -eq 1'
+        $content | Should -Match '\[WingetHandler\]::new\('
+        $content | Should -Not -Match 'Get-SetupHandler|Handler\.\*|Invoke-ConsentPrompt'
     }
 
     It 'should repair Windows environment variables before computing default paths' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match 'WindowsEnvironment\.ps1'
         $content | Should -Match 'Repair-WindowsSetupEnvironment'
-        $content | Should -Match '\$PSBoundParameters\.ContainsKey\("InstallDir"\)'
+        $content | Should -Not -Match 'InstallDir|DistroName|SyncMode'
     }
 }

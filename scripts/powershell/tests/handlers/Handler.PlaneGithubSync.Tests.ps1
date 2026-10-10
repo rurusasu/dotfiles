@@ -5,6 +5,20 @@ BeforeAll {
     . $PSScriptRoot/../../handlers/Handler.PlaneGithubSync.ps1
 }
 
+Describe 'Plane GitHub sync scheduled task principal' {
+    It 'should create a non-elevated interactive principal using the real Windows cmdlet' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+        $currentUser = Get-PlaneGithubSyncCurrentUser
+
+        # Object creation is read-only; no task is registered. Keeping the
+        # native cmdlet real catches invalid RunLevel and LogonType arguments.
+        $principal = New-PlaneGithubSyncScheduledTaskPrincipal -UserId $currentUser
+
+        $principal.UserId | Should -Be $currentUser
+        $principal.RunLevel | Should -Be 0
+        $principal.LogonType | Should -Be 3
+    }
+}
+
 Describe 'PlaneGithubSyncHandler' {
     BeforeEach {
         $script:handler = [PlaneGithubSyncHandler]::new()

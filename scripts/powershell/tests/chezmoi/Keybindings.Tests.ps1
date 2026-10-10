@@ -85,7 +85,6 @@ Describe '標準キーバインド方針' {
         $docs = Get-Content -Encoding UTF8 -LiteralPath $script:keybindingsDocsPath -Raw
         $expectations = [ordered]@{
             'Ctrl\+Space Ctrl\+Space'              = 'nested prefix should be documented'
-            'AutoHotkey.*WindowsTerminal\.exe.*1秒' = 'Windows Terminal adapter scope and timeout should be explicit'
         }
 
         foreach ($expectation in $expectations.GetEnumerator()) {
@@ -125,15 +124,6 @@ Describe '標準キーバインド方針' {
             @{
                 Target       = 'WezTerm'
                 Capabilities = [ordered]@{ Workspace = '対応'; Tab = '対応'; Pane = '対応'; Session = '対応' }
-            },
-            @{
-                Target       = 'Windows Terminal'
-                Capabilities = [ordered]@{
-                    Workspace = 'Workspace 非対応 (no-op)'
-                    Tab       = '対応'
-                    Pane      = '対応'
-                    Session   = '非対応 (no-op)'
-                }
             },
             @{
                 Target       = 'Herdr'
@@ -178,54 +168,12 @@ Describe '標準キーバインド方針' {
         }
     }
 
-    It 'should expose only F13-F23 for Windows Terminal window-manager actions' {
+    It 'should preserve native terminal shortcuts and application input bindings' {
         $settings = Get-JsonContent "chezmoi/terminals/windows-terminal/settings.json"
-
-        $transport = [ordered]@{
-            f13 = 'User.newTab'
-            f14 = 'User.closeTab'
-            f15 = 'User.nextTab'
-            f16 = 'User.prevTab'
-            f17 = 'User.moveFocus.left'
-            f18 = 'User.moveFocus.down'
-            f19 = 'User.moveFocus.up'
-            f20 = 'User.moveFocus.right'
-            f21 = 'User.splitPane.horizontal'
-            f22 = 'User.splitPane.vertical'
-            f23 = 'User.closePane'
+        foreach ($nativeKey in @('ctrl+shift+t', 'ctrl+tab', 'ctrl+shift+tab', 'ctrl+shift+w', 'alt+left', 'alt+right', 'alt+shift+plus', 'alt+shift+minus')) {
+            @($settings.keybindings | Where-Object keys -EQ $nativeKey).Count | Should -Be 0 -Because 'native shortcuts must inherit Windows Terminal defaults'
         }
-        foreach ($entry in $transport.GetEnumerator()) {
-            $bindings = @($settings.keybindings | Where-Object keys -EQ $entry.Key)
-            $bindings.Count | Should -Be 1 -Because "$($entry.Key) should have exactly one transport binding"
-            $bindings[0].id | Should -Be $entry.Value
-            $actionBindings = @($settings.keybindings | Where-Object id -EQ $entry.Value)
-            $actionBindings.Count | Should -Be 1 -Because "$($entry.Value) should not retain a direct legacy binding"
-            $actionBindings[0].keys | Should -Be $entry.Key
-        }
-
-        $legacyKeys = @(
-            'ctrl+shift+t',
-            'ctrl+shift+1', 'ctrl+shift+2', 'ctrl+shift+3',
-            'ctrl+shift+4', 'ctrl+shift+5', 'ctrl+shift+6',
-            'ctrl+shift+7', 'ctrl+shift+8', 'ctrl+shift+9',
-            'ctrl+shift+d',
-            'ctrl+tab', 'ctrl+shift+tab',
-            'ctrl+alt+1', 'ctrl+alt+2', 'ctrl+alt+3',
-            'ctrl+alt+4', 'ctrl+alt+5', 'ctrl+alt+6',
-            'ctrl+alt+7', 'ctrl+alt+8', 'ctrl+alt+9',
-            'ctrl+alt+t', 'ctrl+shift+w',
-            'alt+left', 'alt+down', 'alt+up', 'alt+right',
-            'ctrl+alt+left',
-            'alt+shift+d', 'alt+shift+plus', 'alt+shift+minus',
-            'alt+shift+h', 'alt+shift+j', 'alt+shift+k', 'alt+shift+l',
-            'alt+shift+left', 'alt+shift+down', 'alt+shift+up', 'alt+shift+right'
-        )
-        foreach ($legacyKey in $legacyKeys) {
-            $unbindings = @($settings.keybindings | Where-Object keys -EQ $legacyKey)
-            $unbindings.Count | Should -Be 1 -Because "$legacyKey must explicitly override inherited Windows Terminal defaults"
-            $unbindings[0].PSObject.Properties.Name | Should -Contain 'id'
-            ($null -eq $unbindings[0].id) | Should -BeTrue -Because "$legacyKey must use the Windows Terminal id:null unbind contract"
-        }
+        @($settings.keybindings | Where-Object keys -Match '^f(?:1[3-9]|2[0-3])$').Count | Should -Be 0
 
         $preserved = [ordered]@{
             'ctrl+c'           = 'User.copy'
@@ -244,67 +192,8 @@ Describe '標準キーバインド方針' {
         }
 
         $defaultProfile = @($settings.profiles.list | Where-Object guid -EQ $settings.defaultProfile) | Select-Object -First 1
-        $defaultProfile.elevate | Should -BeTrue -Because 'UIAccess transport must preserve the managed profile elevation policy'
+        $defaultProfile.elevate | Should -BeTrue -Because 'the existing profile elevation policy is independent of keyboard adapters'
     }
-
-    It 'should implement the Windows Terminal AutoHotkey prefix state and mapping contract' {
-        $path = Join-Path $script:chezmoiRoot 'terminals/windows-terminal/terminal-keybindings.ahk'
-        Test-Path -LiteralPath $path -PathType Leaf | Should -BeTrue
-        $ahk = Get-Content -Encoding UTF8 -LiteralPath $path -Raw
-
-        $ahk | Should -Match '#Requires AutoHotkey v2\.0'
-        $ahk | Should -Match '#HotIf WinActive\("ahk_exe WindowsTerminal\.exe"\).*IsExactTerminalPrefix\(\)'
-        $ahk | Should -Match '\$\^Space::StartTerminalPrefix\(\)'
-        $ahk | Should -Match 'InputHook\("T1"\)'
-        $ahk | Should -Match 'KeyOpt\("\{All\}", "NS"\)'
-        $ahk | Should -Match 'KeyOpt\("\{LCtrl\}\{RCtrl\}\{LAlt\}\{RAlt\}\{LShift\}\{RShift\}\{LWin\}\{RWin\}", "-S"\)'
-        $ahk | Should -Match 'A_Args\[1\] = "--check"'
-        $ahk | Should -Match 'A_Args\[1\] = "--self-test"'
-        $ahk | Should -Match 'RunTerminalSelfTests\(\)'
-        $ahk | Should -Match '(?s)IsExactTerminalPrefix\(\).*?GetKeyState\("Shift", "P"\).*?GetKeyState\("Alt", "P"\).*?GetKeyState\("LWin", "P"\).*?GetKeyState\("RWin", "P"\)'
-        $ahk | Should -Match '(?s)IsTerminalModifierKey\(key\).*?return'
-        $ahk | Should -Match 'ForwardNestedTerminalPrefix\(TerminalInputHook, SendTerminalOutput\)'
-        $ahk | Should -Match 'ProcessTerminalSuffix\('
-        $ahk | Should -Match 'RunTerminalResolverSelfTests\(\)'
-        $ahk | Should -Match 'RunTerminalStateSelfTests\(\)'
-        $ahk | Should -Not -Match '(?i)Stop-Process|taskkill|ProcessClose'
-
-    }
-
-    It 'should run the production UIAccess interpreter in every Windows CI job that runs chezmoi Pester' {
-        $ciJobs = @(
-            @{
-                Workflow      = '.github/workflows/ci-chezmoi.yml'
-                Job           = 'lint'
-                InstallMarker = 'winget install --id AutoHotkey\.AutoHotkey --exact --source winget --scope machine'
-                PesterStep    = '- name: Install Pester'
-            },
-            @{
-                Workflow      = '.github/workflows/ci-other.yml'
-                Job           = 'test'
-                InstallMarker = 'winget install --id AutoHotkey\.AutoHotkey --exact --source winget --scope machine'
-                PesterStep    = '- name: Install PowerShell modules'
-            }
-        )
-        foreach ($case in $ciJobs) {
-            $workflow = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot $case.Workflow) -Raw
-            $job = [regex]::Match(
-                $workflow,
-                "(?ms)^  $($case.Job)`:\s*.*?(?=^  [a-zA-Z0-9_-]+`:\s*$|\z)"
-            ).Value
-            $job | Should -Not -BeNullOrEmpty
-            $job | Should -Match $case.InstallMarker
-            $job | Should -Match 'AutoHotkey\\v2\\AutoHotkey64_UIA\.exe'
-            $job | Should -Match ([regex]::Escape("& `$uiAccess '/ErrorStdOut' `$scriptPath '--check'"))
-            $job | Should -Match ([regex]::Escape("& `$uiAccess '/ErrorStdOut' `$scriptPath '--self-test'"))
-            $job | Should -Match 'AutoHotkey v2 UIAccess syntax validation failed'
-            $job | Should -Match 'AutoHotkey v2 UIAccess behavioral self-tests failed'
-            $job | Should -Not -Match ([regex]::Escape("& `$autoHotkey '/ErrorStdOut'"))
-            $job.IndexOf(($case.InstallMarker -replace '\\', '')) |
-                Should -BeLessThan $job.IndexOf($case.PesterStep) -Because "$($case.Workflow) $($case.Job) must install AutoHotkey before Pester"
-        }
-    }
-
     It 'WezTerm は共通 terminal window-manager 契約と nested prefix を提供すること' {
         $content = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $script:chezmoiRoot "terminals/wezterm/wezterm.lua") -Raw
 

@@ -23,6 +23,8 @@ class WingetHandler : SetupHandlerBase {
     hidden [bool]$LastInstallTimedOut
     hidden [bool]$LastInstallSucceeded
     hidden [int]$LastInstallExitCode
+    hidden [bool]$LastInstallCrashRecoveryAttempted
+    hidden [bool]$ProcessOnlyPath
 
     WingetHandler() {
         $this.Name = "Winget"
@@ -95,6 +97,7 @@ class WingetHandler : SetupHandlerBase {
         winget 操作を実行する
     #>
     [SetupResult] Apply([SetupContext]$ctx) {
+        $this.ProcessOnlyPath = [bool]$ctx.GetOption('WingetProcessOnlyPath', $false)
         $mode = $ctx.GetOption("WingetMode", "import")
 
         $result = $null
@@ -118,7 +121,9 @@ class WingetHandler : SetupHandlerBase {
             $this.Log("winget パッケージをインストールしています...")
             $this.Log("ソース: $packagesPath")
 
-            $this.RemoveRetiredPackages((Split-Path -Parent $packagesPath)) | Out-Null
+            if (-not $ctx.GetOption('SkipRetiredPackageCleanup', $false)) {
+                $this.RemoveRetiredPackages((Split-Path -Parent $packagesPath)) | Out-Null
+            }
 
             # packages.json を読み込んで各パッケージを取得
             $packagesJson = Get-JsonContent -Path $packagesPath
@@ -231,16 +236,18 @@ class WingetHandler : SetupHandlerBase {
 
             # インストール済みパッケージを一括取得（winget list を1回だけ実行）
             # 表示名やバージョンに含まれるドットを ID と誤認しないよう、manifest ID と照合する。
-            $wingetPackageIds = @($packages | Where-Object { $_.SourceName -eq "winget" } | ForEach-Object { [string]$_.Id })
+            $wingetPackageIds = @($packages | Where-Object {
+                    $_.SourceName -eq "winget" -and
+                    -not ($_.SkipInstall -and -not $_.VerifyCommand) -and
+                    -not ($_.VerifyCommand -and $this.ShouldDeferWslVerificationToAdminInstall($_, $ctx))
+                } | ForEach-Object { [string]$_.Id })
             $installedIds = $this.GetInstalledPackageIds($wingetPackageIds)
 
             # 通常実行ではインストール済みも含めて winget install を流し、
             # winget 側の install-or-upgrade 動作で latest を選ばせる。
             $verifyCommandOnly = $ctx.GetOption("WingetVerifyCommandOnly", $false)
-            if ($verifyCommandOnly) {
-                $inventoryIds = @($packages | ForEach-Object { [string]$_.Id } | Sort-Object -Unique)
-                $this.Log("CI_VERIFICATION_INVENTORY: $($inventoryIds -join '|')", "Gray")
-            }
+            $inventoryIds = @($packages | ForEach-Object { [string]$_.Id } | Sort-Object -Unique)
+            $this.Log("CI_VERIFICATION_INVENTORY: $($inventoryIds -join '|')", "Gray")
             $toInstall = @()
             $skipped = 0
             $verified = 0
@@ -248,6 +255,17 @@ class WingetHandler : SetupHandlerBase {
             $preserved = 0
             $deferred = 0
             foreach ($pkg in $packages) {
+                if ($pkg.VerifyCommand -and $this.ShouldDeferWslVerificationToAdminInstall($pkg, $ctx)) {
+                    $this.LogWarning("Microsoft.WSL の検証は Phase 2b の管理者 WSL インストールに委譲します")
+                    $deferred++
+                    continue
+                }
+                if ($pkg.SkipInstall -and -not $pkg.VerifyCommand) {
+                    $this.LogSkippedInstall($pkg)
+                    $skipped++
+                    continue
+                }
+
                 $directInstallerCurrent = $pkg.DirectInstaller -and $this.TestDirectInstallerCurrent($pkg)
                 $isInstalled = ($pkg.Id -in $installedIds) -or $directInstallerCurrent
                 if (-not $isInstalled) {
@@ -255,11 +273,6 @@ class WingetHandler : SetupHandlerBase {
                 }
 
                 $verificationPassed = $false
-                if ($pkg.VerifyCommand -and $this.ShouldDeferWslVerificationToAdminInstall($pkg, $ctx)) {
-                    $this.LogWarning("Microsoft.WSL の検証は Phase 2b の管理者 WSL インストールに委譲します")
-                    $deferred++
-                    continue
-                }
 
                 if ($pkg.VerifyCommand -and ($isInstalled -or $directInstallerCurrent)) {
                     # Existing portable packages need their command shim before
@@ -330,7 +343,9 @@ class WingetHandler : SetupHandlerBase {
             }
 
             if ($toInstall.Count -eq 0) {
-                $this.EnsureCargoPath()
+                if ($packages.Id -contains 'Rustlang.Rustup') {
+                    $this.EnsureCargoPath()
+                }
                 $parts = @()
                 if ($verified -gt 0) { $parts += "$verified 個検証済み" }
                 if ($verifyFailed -gt 0) { $parts += "$verifyFailed 個検証失敗" }
@@ -368,9 +383,17 @@ class WingetHandler : SetupHandlerBase {
                     }
                 }
 
+                # A failed crash-recovery attempt must not be converted into a
+                # successful no-op or preservation of an older installation.
+                if ($this.LastInstallCrashRecoveryAttempted -and $this.LastInstallExitCode -ne 0) {
+                    $failed++
+                    $this.LogWarning("✗ $($pkg.Id) のクラッシュ回復に失敗しました (exit code: $($this.LastInstallExitCode))")
+                    continue
+                }
+
                 if ($this.LastInstallTimedOut) {
                     if ($this.LastInstallSucceeded) {
-                        Update-ProcessEnvironmentPath
+                        Update-ProcessEnvironmentPath -ProcessOnly
                         $this.EnsurePortableLinkQuiet($pkg)
                         $this.EnsurePathEntriesQuiet($pkg)
                         $succeeded++
@@ -395,7 +418,7 @@ class WingetHandler : SetupHandlerBase {
                             continue
                         }
 
-                        Update-ProcessEnvironmentPath
+                        Update-ProcessEnvironmentPath -ProcessOnly
                         $this.EnsurePortableLinkQuiet($pkg)
                         $this.EnsurePathEntriesQuiet($pkg)
                         if ($this.TestPackageVerificationForPackage($pkg, $false)) {
@@ -426,7 +449,7 @@ class WingetHandler : SetupHandlerBase {
 
                 $pathTimer = [System.Diagnostics.Stopwatch]::StartNew()
                 $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=path status=started", "Gray")
-                Update-ProcessEnvironmentPath
+                Update-ProcessEnvironmentPath -ProcessOnly
 
                 $this.EnsurePortableLink($pkg)
                 $this.EnsurePathEntries($pkg)
@@ -452,8 +475,11 @@ class WingetHandler : SetupHandlerBase {
                 }
             }
 
-            # Rustup インストール後: ~/.cargo/bin を PATH に追加
-            $this.EnsureCargoPath()
+            # Only an explicitly selected Rustup installation owns Cargo PATH
+            # setup. Existing Cargo directories are irrelevant to GUI installs.
+            if ($packages.Id -contains 'Rustlang.Rustup') {
+                $this.EnsureCargoPath()
+            }
 
             $parts = @()
             if ($succeeded -gt 0) { $parts += "$succeeded 個インストール" }
@@ -521,7 +547,7 @@ class WingetHandler : SetupHandlerBase {
             return $false
         }
 
-        Update-ProcessEnvironmentPath
+        Update-ProcessEnvironmentPath -ProcessOnly
         $this.EnsurePortableLinkQuiet($pkg)
         $this.EnsurePathEntriesQuiet($pkg)
         return $this.TestPackageVerificationForPackage($pkg, $false)
@@ -566,7 +592,7 @@ class WingetHandler : SetupHandlerBase {
         if ($pkg.InstallArgs) {
             $installArgs += @($pkg.InstallArgs)
         }
-        if ($force) {
+        if ($force -or $pkg.Id -eq 'Discord.Discord') {
             $installArgs += "--force"
         }
         return $installArgs
@@ -576,6 +602,17 @@ class WingetHandler : SetupHandlerBase {
         $this.LastInstallTimedOut = $false
         $this.LastInstallSucceeded = $false
         $this.LastInstallExitCode = 1
+        $this.LastInstallCrashRecoveryAttempted = $false
+
+        if ($pkg.Id -eq 'Discord.Discord') {
+            try {
+                $this.LogWarning('Discord will be force-closed before install/update.')
+                Invoke-DiscordInstallPreparation
+            }
+            catch {
+                return @("Discord process preparation failed: $($_.Exception.Message)")
+            }
+        }
 
         if ($pkg.DirectInstaller) {
             $wingetOutput = @($this.InvokeWingetInstall($pkg, $installArgs))
@@ -625,17 +662,40 @@ class WingetHandler : SetupHandlerBase {
         $startedAt = [DateTime]::UtcNow
         $installTimer = [System.Diagnostics.Stopwatch]::StartNew()
         $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=install status=started timeoutSeconds=$installTimeoutSeconds utc=$($startedAt.ToString('o'))", "Gray")
-        if ($installTimeoutSeconds -gt 0) {
-            $output = @(Invoke-Winget -Arguments $installArgs -TimeoutSeconds $installTimeoutSeconds)
+        $attemptTimeoutSeconds = $installTimeoutSeconds
+        $output = @()
+        for ($attempt = 1; $attempt -le 2; $attempt++) {
+            if ($attemptTimeoutSeconds -gt 0) {
+                $output = @(Invoke-Winget -Arguments $installArgs -TimeoutSeconds $attemptTimeoutSeconds)
+            }
+            else {
+                $output = @(Invoke-Winget -Arguments $installArgs)
+            }
             $this.LastInstallExitCode = [int]$LASTEXITCODE
-        }
-        else {
-            $output = @(Invoke-Winget -Arguments $installArgs)
-            $this.LastInstallExitCode = [int]$LASTEXITCODE
+            $exitCodeHex = [BitConverter]::ToUInt32([BitConverter]::GetBytes($this.LastInstallExitCode), 0).ToString('X8')
+            $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=install status=completed elapsedMs=$($installTimer.ElapsedMilliseconds) exitCode=$($this.LastInstallExitCode) exitCodeHex=$exitCodeHex attempt=$attempt", "Gray")
+
+            # Observed with WinGet 1.11.510 after Arc dependency installation.
+            # The internal crash cause is unknown. Retry the identical request
+            # in a fresh process once, never skipping dependencies/verification.
+            if ($attempt -ne 1 -or $this.LastInstallExitCode -ne -1073740791 -or
+                $pkg.Id -ne 'TheBrowserCompany.Arc' -or $pkg.SourceName -ne 'winget') {
+                break
+            }
+            $this.LastInstallCrashRecoveryAttempted = $true
+            foreach ($line in $output) {
+                $this.Log("  WinGet crash attempt 1: $line", "Gray")
+            }
+            if ($installTimeoutSeconds -gt 0) {
+                $attemptTimeoutSeconds = [int][Math]::Floor($installTimeoutSeconds - $installTimer.Elapsed.TotalSeconds)
+                if ($attemptTimeoutSeconds -lt 1) {
+                    $this.LogWarning("WinGet crash recovery skipped: package=$($pkg.Id) original timeout budget exhausted")
+                    break
+                }
+            }
+            $this.LogWarning("WinGet crash recovery: package=$($pkg.Id) exitCodeHex=$exitCodeHex retry=1 remainingTimeoutSeconds=$attemptTimeoutSeconds")
         }
         $installTimer.Stop()
-        $exitCodeHex = [BitConverter]::ToUInt32([BitConverter]::GetBytes($this.LastInstallExitCode), 0).ToString('X8')
-        $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=install status=completed elapsedMs=$($installTimer.ElapsedMilliseconds) exitCode=$($this.LastInstallExitCode) exitCodeHex=$exitCodeHex", "Gray")
         if ($this.LastInstallExitCode -eq 124) {
             $diagnosis = $this.GetWingetTimeoutDiagnosis([string]$pkg.Id, $startedAt)
             $this.Log("TIMEOUT_DIAGNOSTIC: $diagnosis", "Yellow")
@@ -1017,7 +1077,7 @@ class WingetHandler : SetupHandlerBase {
             $this.LogWarning("winget repair が失敗しました: $($pkg.Id)")
         }
 
-        Update-ProcessEnvironmentPath
+        Update-ProcessEnvironmentPath -ProcessOnly
         if ($this.TestPackageVerificationForPackage($pkg, $false)) {
             $this.Log("✓ $($pkg.Id) (repair 後に検証済み)", "Green")
             return $true
@@ -1063,7 +1123,7 @@ class WingetHandler : SetupHandlerBase {
             return $false
         }
 
-        Update-ProcessEnvironmentPath
+        Update-ProcessEnvironmentPath -ProcessOnly
         if ($this.TestPackageVerificationForPackage($pkg, $false)) {
             $this.Log("✓ $($pkg.Id) (reinstall 後に検証済み)", "Green")
             return $true
@@ -1838,7 +1898,7 @@ class WingetHandler : SetupHandlerBase {
 
         $userPath = Get-UserEnvironmentPath
         $pathItems = if ($userPath) { @($userPath -split ";" | Where-Object { $_ }) } else { @() }
-        if ($pathItems -notcontains $linksPath) {
+        if (-not $this.ProcessOnlyPath -and $pathItems -notcontains $linksPath) {
             Set-UserEnvironmentPath -Path (($pathItems + @($linksPath)) -join ";")
         }
         if (($env:PATH -split ";") -notcontains $linksPath) {
@@ -1886,7 +1946,7 @@ class WingetHandler : SetupHandlerBase {
     }
 
     hidden [void] EnsurePathEntriesInternal([object]$pkg, [bool]$quiet) {
-        $this.EnsurePathEntriesInternal($pkg, $quiet, $true)
+        $this.EnsurePathEntriesInternal($pkg, $quiet, (-not $this.ProcessOnlyPath))
     }
 
     hidden [void] EnsurePathEntriesInternal([object]$pkg, [bool]$quiet, [bool]$persist) {

@@ -42,7 +42,7 @@ Home Manager の catalog package 選択は各 OS の host が担当します。D
 
 Windows だけに存在する GUI や OS component は `install/windows-only.nix` の `windowsOnlySupport` に置き、macOS/Linux で対応しない理由を必ず記録します。クロスプラットフォームのツールを理由なしに Windows-only へ入れることはできません。
 
-機能別 install profile は使いません。宣言した cask は `darwinCasks` を通して Homebrew Bundle へ含めます。Discord / Starship の Windows 配布 metadata は各 `nix/modules/<name>/windows-install.nix` に置き、manifest の生成入口から合成します。
+Windows の通常セットアップは `install/windows-gui.nix` の GUI 選択だけを使います。provider の利用可能性とインストール対象の選択は別の契約です。既存の `wingetMap` / `npmMap` などは互換性と Unix consumer のために維持しますが、Windows manifest にそのまま全件を出力しません。宣言した cask は `darwinCasks` を通して Homebrew Bundle へ含めます。Discord / Starship の Windows 配布 metadata は各 `nix/modules/<name>/windows-install.nix` に置き、manifest の生成入口から合成します。
 
 ## Provider の追加
 
@@ -69,7 +69,9 @@ NixOS:            ./install.sh
 Ubuntu / Debian:  ./install.sh
 ```
 
-- Windows は catalog から生成された winget/npm/pnpm manifest を PowerShell handlers が適用します。
+- Windows は GUI アプリのみを winget で導入します。`install/windows-gui.nix` が選ぶ catalog key / Windows-only key から manifest を生成し、npm/pnpm manifest は互換性のため空配列として保持します。
+- `install.cmd` は既存の PowerShell と winget を使い、CLI ツール・Node.js・npm・pnpm・dsh・AutoHotkey・GlazeWM を導入しません。chezmoi、管理者セットアップ、WSL 構築、CLI runtime の acceptance も実行しません。既存アプリや Startup shortcut は自動削除しません。
+- Codex CLI はどの OS でも個別導入せず、ChatGPT アプリ付属の CLI を使います。Windows の GUI profile は Microsoft Store のデスクトップアプリを対象とし、npm/pnpm パッケージを導入しません。
 - macOS は nix-darwin が Home Manager と nix-homebrew formula/cask を同じ switch に含めます。
 - 非 NixOS Linux（Ubuntu/Debian など）は standalone Home Manager がユーザー環境を適用します。Docker や OS service は管理しません。
 - NixOS は NixOS generation に Home Manager と system module を統合します。
@@ -135,7 +137,8 @@ manifest の個別 timeout、未指定なら共通既定値を使います。
 短縮せず維持し、catalog に明記された個別値を優先します
 （例: Go は共通 install timeout）。
 
-Windows の dsh は npm で導入します。pnpm と Bun、Codex CLI の個別導入は行いません。
+Windows 用 dsh の provider metadata は npm を指定しますが、GUI profile の導入対象外です。
+pnpm と Bun、Codex CLI の個別導入は行いません。
 Codex CLI は ChatGPT アプリ付属のものを使います。
 
 provider coverage は次で確認できます。
@@ -161,7 +164,8 @@ cat result/package-support-report.json
 同じ package を Home Manager と system layer の両方へ重複させるのは、system service が絶対 path を必要とする場合に限定します。
 
 Node.js/npm はカタログで導入します。Unix の dsh は `nix/modules/dsh.nix` が
-upstream Nix package を導入し、Windows の dsh は npm manifest に登録します。
+upstream Nix package を導入します。Windows 用 dsh の metadata は npm provider を宣言しますが、
+GUI profile は選択しないため npm manifest は空です。
 Codex は設定だけを管理し、CLI は ChatGPT アプリ付属のものを使います。
 
 ChatGPT は `nix/modules/ai_agents/chatgpt/` でアプリと同梱 Codex の設定をまとめて管理します。macOS のアプリは `default.nix` の `home.packages` で直接導入し、カタログには登録しません。Windows の Store ID・導入後の検証・CI 設定は同じ module の `windows-install.nix` が所有し、`nix/packages/install/` はその定義を合成します。

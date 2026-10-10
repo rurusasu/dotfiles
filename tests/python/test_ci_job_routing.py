@@ -131,6 +131,14 @@ class CiJobRoutingTests(unittest.TestCase):
                 },
                 1,
             ),
+            ({"WINDOWS_REQUIRED": "true"}, 1),
+            ({"WINDOWS_REQUIRED": "true", "WINDOWS_INSTALLER_RESULT": ""}, 1),
+            ({"WINDOWS_REQUIRED": "true", "WINDOWS_INSTALLER_RESULT": "queued"}, 1),
+            ({"WINDOWS_REQUIRED": "true", "WINDOWS_INSTALLER_RESULT": "failure"}, 1),
+            ({"WINDOWS_REQUIRED": "true", "WINDOWS_INSTALLER_RESULT": "cancelled"}, 1),
+            ({"WINDOWS_REQUIRED": "true", "WINDOWS_INSTALLER_RESULT": "timed_out"}, 1),
+            ({"WINDOWS_REQUIRED": "true", "WINDOWS_INSTALLER_RESULT": "success"}, 0),
+            ({"WINDOWS_INSTALLER_RESULT": "success"}, 1),
             ({"DARWIN_RESULT": "success"}, 1),
         ):
             with self.subTest(changes=changes):
