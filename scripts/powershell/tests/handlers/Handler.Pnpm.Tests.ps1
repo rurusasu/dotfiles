@@ -2000,7 +2000,13 @@ Describe 'PnpmHandler' {
                 return @{
                     globalPackages = @(@{
                             name          = '@deepseek-ai/dsh'
-                            installArgs   = @('--allow-build=!node-pty')
+                            installArgs   = @(
+                                '--allow-build=@deepseek-ai/dsh-subprocess-local',
+                                '--allow-build=@google/genai',
+                                '--allow-build=koffi',
+                                '--allow-build=protobufjs',
+                                '--allow-build=!node-pty'
+                            )
                             verifyCommand = @{ command = 'dsh'; args = @('--version') }
                         })
                 }
