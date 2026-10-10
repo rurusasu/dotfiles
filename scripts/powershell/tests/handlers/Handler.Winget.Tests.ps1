@@ -3347,7 +3347,7 @@ Describe 'WingetHandler' {
                             SourceDetails = [PSCustomObject]@{ Name = "winget" }
                             Packages      = @(
                                 [PSCustomObject]@{
-                                    PackageIdentifier = "AutoHotkey.AutoHotkey"
+                                    PackageIdentifier = "Example.AdminPackage"
                                     requiresAdmin     = $true
                                     installArgs       = @("--scope", "machine")
                                 }

@@ -17,7 +17,7 @@ BeforeAll {
         foreach ($file in 'WindowsEnvironment.ps1', 'SetupHandler.ps1', 'Invoke-ExternalCommand.ps1') {
             Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts/powershell/lib/$file") -Destination $library
         }
-        foreach ($file in 'install.admin.ps1', 'Test-Environment.ps1') {
+        foreach ($file in 'Test-Environment.ps1') {
             Set-Content -LiteralPath (Join-Path $adapter $file) -Encoding UTF8 -Value "throw 'GUI setup must not load $file'"
         }
         foreach ($name in 'Npm', 'Pnpm', 'Bun', 'NixosWsl', 'Chezmoi', 'Herdr') {

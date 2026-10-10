@@ -36,7 +36,7 @@ param([string]$Root)
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -ne 5) { throw 'Expected Windows PowerShell 5.1' }
 Write-Output ('ANSI codepage: ' + [Text.Encoding]::Default.CodePage)
-foreach ($name in 'install.ps1', 'install.user.ps1', 'install.admin.ps1') {
+foreach ($name in 'install.ps1', 'install.user.ps1') {
     $tokens = $null
     $parseErrors = $null
     [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $Root $name), [ref]$tokens, [ref]$parseErrors)

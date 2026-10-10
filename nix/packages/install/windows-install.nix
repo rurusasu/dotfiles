@@ -27,10 +27,6 @@
       "--scope"
       "user"
     ];
-    autohotkey = [
-      "--scope"
-      "machine"
-    ];
     "Microsoft.VisualStudio.2022.BuildTools" = [
       "--override"
       "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart"
@@ -54,7 +50,6 @@
   # accidentally passing machine-scope installers to winget.
   wingetRequiresAdmin = {
     glazewm = true;
-    autohotkey = true;
     "Microsoft.VisualStudio.2022.BuildTools" = true;
   };
 

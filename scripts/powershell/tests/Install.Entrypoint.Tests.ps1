@@ -314,11 +314,6 @@ param(
 Write-Host 'STUB_USER_PHASE_COMPLETE'
 exit 0
 '@ -Encoding UTF8
-        Set-Content -LiteralPath (Join-Path $scriptDir "install.admin.ps1") -Value @'
-[CmdletBinding()]
-param()
-exit 0
-'@ -Encoding UTF8
 
         $oldDotfilesPs7Dir = $env:DOTFILES_PS7_DIR
         $oldPath = $env:PATH

@@ -292,7 +292,7 @@ wsl --shutdown
 ### Windows Terminal
 
 - 設定ソース: `chezmoi/terminals/windows-terminal/settings.json`
-- 共通 prefix: `Ctrl+Space`（AutoHotkey adapter）。続けて `v` で左右分割、`-` で上下分割、`x` でペインを閉じる
+- タブ・ペイン操作は Windows Terminal 標準のキー操作を使用（常駐キー変換は不要）
 
 ### WezTerm
 

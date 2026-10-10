@@ -1069,16 +1069,6 @@ in
           linuxUnsupported = report.aerospace.linux.unsupported;
           windowsUnsupported = report.aerospace.windows.unsupported;
         };
-        autohotkey = {
-          wingetId = darwinPackageSets.sets.wingetMap.autohotkey;
-          windows = {
-            provider = report.autohotkey.windows.provider;
-            source = report.autohotkey.windows.source;
-            identity = report.autohotkey.windows.identity;
-          };
-          darwinUnsupported = report.autohotkey.darwin.unsupported;
-          linuxUnsupported = report.autohotkey.linux.unsupported;
-        };
       };
       expected = {
         aerospace = {
@@ -1090,16 +1080,6 @@ in
           };
           linuxUnsupported = "AeroSpace is only available on macOS";
           windowsUnsupported = "AeroSpace is only available on macOS";
-        };
-        autohotkey = {
-          wingetId = "AutoHotkey.AutoHotkey";
-          windows = {
-            provider = "winget";
-            source = "winget";
-            identity = "AutoHotkey.AutoHotkey";
-          };
-          darwinUnsupported = "AutoHotkey is only available on Windows";
-          linuxUnsupported = "AutoHotkey is only available on Windows";
         };
       };
     };

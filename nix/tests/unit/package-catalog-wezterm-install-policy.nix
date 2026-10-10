@@ -7,7 +7,6 @@ let
     codexPackage = pkgs.hello;
   };
   terminalWingetPackages = {
-    autohotkey = "AutoHotkey.AutoHotkey";
     wezterm = "wez.wezterm";
   };
   terminalWingetMap = builtins.intersectAttrs terminalWingetPackages sets.wingetMap;

@@ -151,42 +151,6 @@ Describe 'CI workflow configuration' {
         $installerScript | Should -Match 'The GUI installer performed npm/pnpm activity'
     }
 
-    It 'should run legacy admin fixture packages through an elevated installer and verify their compiler and UIAccess' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw
-        $windowsJob = [regex]::Match(
-            $workflow,
-            '(?ms)^  windows:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
-        ).Value
-
-        $windowsJob | Should -Not -BeNullOrEmpty
-        $windowsJob | Should -Match 'WindowsIdentity\]::GetCurrent\(\)'
-        $windowsJob | Should -Match 'WindowsPrincipal'
-        $windowsJob | Should -Match 'WindowsBuiltinRole\]::Administrator'
-        $windowsJob | Should -Match 'runner is not elevated'
-        $windowsJob | Should -Match 'name: Bootstrap / Windows \(\$\{\{ matrix\.runtime \}\}\)'
-        $windowsJob | Should -Match 'runtime: Windows PowerShell 5\.1\s+executable: powershell\.exe'
-        $windowsJob | Should -Match 'runtime: PowerShell 7\s+executable: pwsh\.exe'
-        $windowsJob | Should -Match 'WINDOWS_E2E_EXECUTABLE: \$\{\{ matrix\.executable \}\}'
-        $windowsJob | Should -Match '& \$env:WINDOWS_E2E_EXECUTABLE'
-        $windowsJob | Should -Match 'runtime=\$\{\{ matrix\.runtime \}\}'
-        $windowsJob | Should -Match 'Join-Path \$env:RUNNER_TEMP.*windows-legacy-admin-'
-        $windowsJob | Should -Match '\$adminScript = Join-Path \$legacyRoot'
-        $windowsJob | Should -Match 'scripts/powershell/install\.admin\.ps1'
-        $windowsJob | Should -Match '-AdminOnly:\$true'
-        $windowsJob | Should -Match 'AutoHotkey\.AutoHotkey'
-        $windowsJob | Should -Match 'SkipWslInstall'
-        $windowsJob | Should -Match 'SkipVhdExpand'
-        $windowsJob | Should -Match 'Microsoft\.VisualStudio\.2022\.BuildTools'
-        $windowsJob.Contains('Failure:\s*0') | Should -BeTrue
-        $windowsJob | Should -Match 'CI_ADMIN_PACKAGE_SUCCESS: id=Microsoft\.VisualStudio\.2022\.BuildTools'
-        $windowsJob.Contains('VC\Tools\MSVC') | Should -BeTrue
-        $windowsJob.Contains('bin\Hostx64\x64\cl.exe') | Should -BeTrue
-        $windowsJob | Should -Match '\$LASTEXITCODE = 0\s+& \$uiAccess .+--check'
-        $windowsJob | Should -Match '\$syntaxExitCode = \$LASTEXITCODE'
-        $windowsJob | Should -Match '\$LASTEXITCODE = 0\s+& \$uiAccess .+--self-test'
-        $windowsJob | Should -Match '\$selfTestExitCode = \$LASTEXITCODE'
-    }
-
     It 'should probe the GUI terminal without obsolete CLI or portable-command requirements' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
         $installerScript | Should -Not -Match 'agent-browser|herdr|op\.exe|node --version|PNPM_HOME|Assert-WingetCommandRecovery'
@@ -678,7 +642,8 @@ esac
         $workflow | Should -Match 'runs-on:\s+macos-15'
         $workflow | Should -Not -Match "Install-Module -Name Pester -RequiredVersion '5\.6\.1'"
         $workflow | Should -Not -Match '(?s)Invoke-Tests\.ps1.*?-MinimumCoverage 0'
-        $workflow | Should -Match 'windows-admin-e2e-attestation\.txt'
+        $workflow | Should -Match "Join-Path \`$diagnostics 'attestation\.txt'"
+        $workflow | Should -Match 'name: Upload Windows installer diagnostics'
         $workflow | Should -Match '\.\#darwinConfigurations\.macos\.system'
         $workflow | Should -Not -Match 'runs-on:\s*\[?self-hosted'
     }

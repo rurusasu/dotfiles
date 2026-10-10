@@ -505,186 +505,6 @@ jobs:
             -DistroName $distroName `
             -InstallDir $installDir
 
-  windows:
-    name: Bootstrap / Windows (${{ matrix.runtime }})
-    needs: changes
-    if: ${{ needs.changes.outputs.chezmoi == 'true' }}
-    runs-on: windows-2025
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        include:
-          - runtime: Windows PowerShell 5.1
-            executable: powershell.exe
-          - runtime: PowerShell 7
-            executable: pwsh.exe
-    env:
-      WINDOWS_E2E_RUNTIME: ${{ matrix.runtime }}
-      WINDOWS_E2E_EXECUTABLE: ${{ matrix.executable }}
-    steps:
-      - name: Checkout exact tested SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Install chezmoi
-        uses: ./.github/actions/install-chezmoi
-
-      - name: Install and verify legacy admin packages through the standalone installer
-        shell: pwsh
-        timeout-minutes: 60
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-
-          $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-          $principal = [Security.Principal.WindowsPrincipal]::new($identity)
-          if (-not $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-            throw 'Hosted Windows runner is not elevated; refusing to skip admin-required WinGet package coverage'
-          }
-
-          # The default GUI profile has no admin packages. Exercise the real
-          # legacy adapter with a separate manifest; leave the checkout intact.
-          $legacyRoot = Join-Path $env:RUNNER_TEMP ('windows-legacy-admin-' + [guid]::NewGuid().ToString('N'))
-          $legacyScripts = Join-Path $legacyRoot 'scripts'
-          $legacyWinget = Join-Path $legacyRoot 'windows/winget'
-          New-Item -ItemType Directory -Path $legacyScripts, $legacyWinget -Force | Out-Null
-          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'scripts/powershell') -Destination $legacyScripts -Recurse
-          @{
-            Sources = @(@{
-              SourceDetails = @{ Name = 'winget' }
-              Packages = @(
-                @{
-                  PackageIdentifier = 'AutoHotkey.AutoHotkey'
-                  requiresAdmin = $true
-                  installTimeoutSeconds = 3600
-                  installArgs = @('--scope', 'machine')
-                }
-                @{
-                  PackageIdentifier = 'Microsoft.VisualStudio.2022.BuildTools'
-                  requiresAdmin = $true
-                  installTimeoutSeconds = 3600
-                  installArgs = @('--override', '--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait --norestart')
-                }
-              )
-            })
-          } | ConvertTo-Json -Depth 10 |
-            Set-Content -LiteralPath (Join-Path $legacyWinget 'packages.json') -Encoding utf8
-
-          $options = @{
-            SkipSetDefaultDistro = $true
-            SkipVhdExpand = $true
-            SkipWslInstall = $true
-          }
-          $optionsBase64 = [Convert]::ToBase64String(
-            [Text.Encoding]::UTF8.GetBytes(($options | ConvertTo-Json -Compress))
-          )
-          $adminScript = Join-Path $legacyRoot 'scripts/powershell/install.admin.ps1'
-          $installerOutput = @(
-            & $env:WINDOWS_E2E_EXECUTABLE `
-              -NoLogo -NoProfile -ExecutionPolicy Bypass `
-              -File $adminScript `
-              '-AdminOnly:$true' `
-              -OptionsBase64 $optionsBase64 `
-              -NoPause 2>&1
-          )
-          $installerExitCode = $LASTEXITCODE
-          $installerOutput | ForEach-Object { Write-Host ([string]$_) }
-          if ($installerExitCode -ne 0) {
-            throw "Admin-only installer phase failed (exit=$installerExitCode)"
-          }
-
-          $installerText = $installerOutput -join [Environment]::NewLine
-          if ($installerText -notmatch '(?m)^\[WingetAdmin\]\s+インストール/更新中: AutoHotkey\.AutoHotkey\s*$') {
-            throw 'Admin-only installer did not attempt AutoHotkey.AutoHotkey'
-          }
-          if ($installerText -match '(?m)^\[WingetAdmin\].*✗.*AutoHotkey\.AutoHotkey') {
-            throw 'Admin-only installer reported an AutoHotkey package failure'
-          }
-          if ($installerText -notmatch '(?m)^\[WingetAdmin\]\s+インストール/更新中: Microsoft\.VisualStudio\.2022\.BuildTools\s*$') {
-            throw 'Admin-only installer did not attempt Microsoft.VisualStudio.2022.BuildTools'
-          }
-          if ($installerText -match '(?m)^\[WingetAdmin\].*✗.*Microsoft\.VisualStudio\.2022\.BuildTools') {
-            throw 'Admin-only installer reported a Visual Studio Build Tools package failure'
-          }
-          if ($installerText -notmatch '(?m)^Total:\s*\d+\s*\|\s*Success:\s*\d+\s*\|\s*Failure:\s*0\s*$') {
-            throw 'Admin-only installer did not report a zero-failure setup summary'
-          }
-
-          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-          if (-not (Test-Path -LiteralPath $vswhere -PathType Leaf)) {
-            throw "Visual Studio instance locator is missing: $vswhere"
-          }
-          $buildToolsPath = @(
-            & $vswhere -products Microsoft.VisualStudio.Product.BuildTools `
-              -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-              -property installationPath
-          ) | Select-Object -First 1
-          if ([string]::IsNullOrWhiteSpace([string]$buildToolsPath)) {
-            throw 'No Visual Studio Build Tools instance with the required x86/x64 C++ component was found'
-          }
-          $compiler = @(
-            Get-ChildItem -LiteralPath (Join-Path $buildToolsPath 'VC\Tools\MSVC') -Directory -ErrorAction Stop |
-              ForEach-Object {
-                Join-Path $_.FullName 'bin\Hostx64\x64\cl.exe'
-              } |
-              Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
-              Select-Object -First 1
-          ) | Select-Object -First 1
-          if ([string]::IsNullOrWhiteSpace([string]$compiler)) {
-            throw "Visual Studio Build Tools compiler executable was not found under $buildToolsPath"
-          }
-          Write-Output "CI_ADMIN_PACKAGE_SUCCESS: id=Microsoft.VisualStudio.2022.BuildTools executable=$compiler"
-
-      - name: Verify admin-installed AutoHotkey v2
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          $autoHotkey = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe"
-          if (-not (Test-Path -LiteralPath $autoHotkey -PathType Leaf)) {
-            throw "AutoHotkey v2 executable was not installed by the admin phase: $autoHotkey"
-          }
-          $uiAccess = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64_UIA.exe"
-          if (-not (Test-Path -LiteralPath $uiAccess -PathType Leaf)) {
-            throw "AutoHotkey v2 UIAccess executable was not installed by the admin phase: $uiAccess"
-          }
-          $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'chezmoi\terminals\windows-terminal\terminal-keybindings.ahk'
-          $LASTEXITCODE = 0
-          & $uiAccess '/ErrorStdOut' $scriptPath '--check'
-          $syntaxExitCode = $LASTEXITCODE
-          if ($syntaxExitCode -ne 0) {
-            throw "AutoHotkey v2 UIAccess syntax validation failed (exit $syntaxExitCode)"
-          }
-          $LASTEXITCODE = 0
-          & $uiAccess '/ErrorStdOut' $scriptPath '--self-test'
-          $selfTestExitCode = $LASTEXITCODE
-          if ($selfTestExitCode -ne 0) {
-            throw "AutoHotkey v2 UIAccess behavioral self-tests failed (exit $selfTestExitCode)"
-          }
-
-      - name: Write Windows admin E2E attestation
-        if: always()
-        shell: pwsh
-        run: |
-          @(
-            "sha=$env:TESTED_SHA"
-            "runner_image=$env:ImageOS-$env:ImageVersion"
-            "layer=windows-legacy-admin"
-            "runtime=${{ matrix.runtime }}"
-          ) | Set-Content -LiteralPath windows-admin-e2e-attestation.txt -Encoding utf8
-
-      - name: Upload Windows contract results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: bootstrap-windows-admin-${{ matrix.executable }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: windows-admin-e2e-attestation.txt
-          if-no-files-found: warn
-
   windows-installer:
     name: Bootstrap / Windows / Installer (${{ matrix.runtime }})
     needs: changes
@@ -815,7 +635,6 @@ jobs:
         linux-nixos,
         darwin,
         wsl,
-        windows,
         windows-installer,
       ]
     runs-on: ubuntu-24.04
@@ -840,7 +659,6 @@ jobs:
       DARWIN_RESULT: ${{ needs.darwin.result }}
       WSL_RESULT: ${{ needs.wsl.result }}
       WSL_PREBUILD_RESULT: ${{ needs.wsl-prebuild.result }}
-      WINDOWS_RESULT: ${{ needs.windows.result }}
       NIX_RESULT: ${{ needs.nix.result }}
       WINDOWS_INSTALLER_RESULT: ${{ needs.windows-installer.result }}
     steps:
@@ -883,7 +701,6 @@ jobs:
           check_required_job "Linux / E2E / NixOS" "${LINUX_REQUIRED}" "${LINUX_NIXOS_RESULT}"
           check_required_job "Darwin" "${DARWIN_REQUIRED}" "${DARWIN_RESULT}"
           check_required_job "WSL" "${WSL_REQUIRED}" "${WSL_RESULT}"
-          check_required_job "Windows" "${WINDOWS_REQUIRED}" "${WINDOWS_RESULT}"
 
           echo "All required bootstrap platform jobs completed successfully."
 

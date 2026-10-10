@@ -172,7 +172,7 @@ cd tests
 
 Windows の既定経路には npm / pnpm / WSL / chezmoi / runtime acceptance の phase や UAC 昇格処理はありません。実行可能な WinGet がない場合、または GUI 導入に失敗した場合は非ゼロ終了になります。
 
-`install.admin.ps1` は独立アダプターとして保持していますが、`install.cmd` は呼び出しません。明示的な呼び出しでは従来の `-AdminOnly` によるハンドラー選択を維持します。
+旧管理者入口は廃止しました。WSL の検証は専用の `ci/Invoke-NixosWslE2E.ps1` が担当し、GUI 入口とは分離しています。
 
 #### GUI-only の integration 契約
 

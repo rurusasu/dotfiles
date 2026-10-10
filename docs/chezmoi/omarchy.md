@@ -50,7 +50,7 @@ macOS の全キー、標準 shortcut への影響、初回権限設定と回復�
 
 ## Windows デスクトップの運用
 
-現在の Windows GUI-only セットアップでは GlazeWM / Zebar / AutoHotkey を導入・起動しません。`.glzr` と GlazeWM / terminal-keybindings の Startup 用スクリプトは chezmoi の管理対象から除外しています。以下の renderer・補助処理は既存の生成契約とテストのために保持した任意の構成で、通常の `install.cmd` から適用しません。以前配置した Startup shortcut と実行中プロセスは自動削除・停止しません。
+現在の Windows GUI-only セットアップでは GlazeWM / Zebar / AutoHotkey を導入・起動しません。`.glzr` と GlazeWM の Startup 用スクリプトは chezmoi の管理対象から除外しています。AHK のパッケージ定義・設定配布・Startup スクリプトは廃止しました。以下の renderer・補助処理は既存の生成契約とテストのために保持した任意の構成で、通常の `install.cmd` から適用しません。以前配置した Startup shortcut と実行中プロセスは自動削除・停止しません。
 
 GlazeWM は Windows デスクトップ全体を対象にします。Super は左右の Windows キーに展開します。
 生成済みの `config.json`、`actions.ps1`、`start-glazewm.ps1`、`keybindings.txt` は
