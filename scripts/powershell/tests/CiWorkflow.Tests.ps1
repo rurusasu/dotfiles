@@ -197,6 +197,7 @@ Describe 'CI workflow configuration' {
         $flake | Should -Match 'extra-trusted-public-keys\s*=\s*\[\s*"niks3\.numtide\.com-1:'
         $flake | Should -Match 'hermes-agent\.cachix\.org-1:jN3pjR50Mxi4SESKC/FIMNM6/LCosvPk2VUwzVvebzU='
         $bootstrapWorkflow | Should -Match 'Configure shared Nix caches[\s\S]*?sudo env[\s\S]*?configure-bootstrap-ci-nix\.sh'
+        $bootstrapWorkflow | Should -Match 'Preserve installer files before nix-darwin takes ownership[\s\S]*?/etc/nix/nix\.conf[\s\S]*?/etc/bashrc[\s\S]*?/etc/zshrc[\s\S]*?\.before-nix-darwin[\s\S]*?nix config show substituters[\s\S]*?nix config show trusted-public-keys'
         $bootstrapWorkflow | Should -Match 'Apply macOS configuration[\s\S]*?sudo nix --accept-flake-config[\s\S]*?run \.#darwin-rebuild -- switch --flake \.#macos --impure'
         $bootstrapWorkflow | Should -Not -Match 'Darwin application artifacts|NUMTIDE_CACHE_KEY|checks\.aarch64-darwin\.hermes-runtime'
         $postInstall | Should -Match 'accept-flake-config true'

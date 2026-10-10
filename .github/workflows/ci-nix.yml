@@ -301,6 +301,29 @@ jobs:
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             bash scripts/sh/configure-bootstrap-ci-nix.sh
 
+      - name: Preserve installer files before nix-darwin takes ownership
+        run: |
+          sudo bash <<'SCRIPT'
+          set -euo pipefail
+
+          for path in /etc/nix/nix.conf /etc/bashrc /etc/zshrc; do
+            if [[ -e "$path" ]]; then
+              backup="${path}.before-nix-darwin"
+              if [[ -e "$backup" ]]; then
+                echo "Refusing to overwrite existing backup: $backup" >&2
+                exit 1
+              fi
+              mv -- "$path" "$backup"
+            fi
+          done
+
+          # The Nix installer owns /etc/nix/nix.conf before first activation.
+          # Confirm root's persistent settings still expose the shared caches
+          # after moving that file aside.
+          nix config show substituters | grep -Fq 'https://hermes-agent.cachix.org'
+          nix config show trusted-public-keys | grep -Fq 'hermes-agent.cachix.org-1:'
+          SCRIPT
+
       - name: Apply macOS configuration
         run: |
           # Root is trusted by the Nix daemon; SUDO_USER still identifies the
