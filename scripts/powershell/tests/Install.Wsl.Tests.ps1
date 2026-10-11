@@ -157,7 +157,8 @@ Describe 'Windows installer WSL integration' -Skip:($env:OS -ne 'Windows_NT') {
         ($result.Events -join ',') | Should -Be 'gui'
     }
 
-    It 'should preserve an explicitly disabled force option across processes' {
+    # Windows PowerShell 5.1 -File treats this switch value as a string and cannot bind explicit false.
+    It 'should preserve an explicitly disabled force option across processes' -Skip:($PSVersionTable.PSVersion.Major -lt 6) {
         $result = Invoke-WslInstallerFixture -Arguments '-ForcePostInstall:$false'
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $result.Context.Options.ForcePostInstall | Should -BeFalse
