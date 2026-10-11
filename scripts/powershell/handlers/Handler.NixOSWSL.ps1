@@ -115,23 +115,27 @@ class NixOSWSLHandler : SetupHandlerBase {
             # Post-install セットアップ
             $this.ExecutePostInstall($ctx)
 
-            # whoami shim の作成
-            $this.EnsureWhoamiShim($ctx.DistroName)
-
-            # 書き込み可能チェック
-            $this.EnsureWslWritable($ctx.DistroName)
-
-            # Docker グループへのユーザー追加
-            # NixOSWSL (Order=17) は DockerHandler (Order=18) より先に実行される。
-            # ここで docker グループを設定し、直後の Docker 連携で正規ユーザーが
-            # Docker ソケットを使用できる状態にする。
-            $this.EnsureDockerGroup($ctx.DistroName)
+            $this.EnsurePostInstallIntegration($ctx.DistroName)
 
             return $this.CreateSuccessResult("NixOS-WSL のインストールが完了しました")
         }
         catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
+    }
+
+    [void] EnsurePostInstallIntegration([string]$distroName) {
+        # whoami shim の作成
+        $this.EnsureWhoamiShim($distroName)
+
+        # 書き込み可能チェック
+        $this.EnsureWslWritable($distroName)
+
+        # Docker グループへのユーザー追加
+        # NixOSWSL (Order=17) は DockerHandler (Order=18) より先に実行される。
+        # ここで docker グループを設定し、直後の Docker 連携で正規ユーザーが
+        # Docker ソケットを使用できる状態にする。
+        $this.EnsureDockerGroup($distroName)
     }
 
     # ========================================
@@ -175,7 +179,8 @@ class NixOSWSLHandler : SetupHandlerBase {
         if ($LASTEXITCODE -ne 0) {
             return $null
         }
-        if ($output -match "WSL version:\\s*([0-9\\.]+)") {
+        $text = ($output -join "`n") -replace "`0", '' -replace [char]0xFEFF, ''
+        if ($text -match '(?im)^\s*WSL\s+[^:\r\n]+:\s*(\d+\.\d+\.\d+(?:\.\d+)?)') {
             try {
                 return [version]$Matches[1]
             }
@@ -197,7 +202,8 @@ class NixOSWSLHandler : SetupHandlerBase {
         }
         # Fallback: ヘルプテキストを確認
         $help = Invoke-Wsl -Arguments @("--help")
-        return ($help -match "--install --from-file")
+        $text = ($help -join "`n") -replace "`0", '' -replace [char]0xFEFF, ''
+        return ($text -match '(?:^|\s)--from-file(?:\s|$)')
     }
 
     # ========================================
@@ -405,7 +411,7 @@ class NixOSWSLHandler : SetupHandlerBase {
     hidden [void] InstallFromFile([string]$name, [string]$archive, [string]$location) {
         $this.Log("WSL 2.4.4+ の手順で登録します: wsl --install --from-file")
         $this.WaitForWslReady()
-        $wslArgs = @("--install", "--from-file", $archive, "--name", $name)
+        $wslArgs = @("--install", "--from-file", $archive, "--name", $name, "--no-launch")
         if ($location) {
             $this.EnsureInstallDir($location)
             $wslArgs += @("--location", $location)

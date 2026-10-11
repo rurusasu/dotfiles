@@ -18,12 +18,6 @@ Describe 'install.ps1 (orchestrator)' {
         @($errors).Count | Should -Be 0
     }
 
-    It 'should call only GUI user setup and not provision WSL or run CLI acceptance' {
-        $content = Get-Content -LiteralPath $script:target -Raw
-        $content | Should -Match 'install\.user\.ps1'
-        $content | Should -Not -Match 'install\.admin\.ps1|Test-DotfilesEnvironment|Start-Process|NixOS|Invoke-ConsentPrompt'
-    }
-
     It 'should support noninteractive GUI verification and completion' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '\[switch\]\$NoPause'

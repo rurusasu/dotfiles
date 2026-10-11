@@ -64,14 +64,14 @@ dotfiles/
 
 ## セットアップフロー
 
-| Platform    | Entrypoint     | System layer                             | User layer       | Runtime                        |
-| ----------- | -------------- | ---------------------------------------- | ---------------- | ------------------------------ |
-| Windows     | `install.cmd`  | 既存 PowerShell + winget（GUI のみ）     | 自動設定配布なし | CLI / WSL 構築なし             |
-| macOS ARM64 | `./install.sh` | nix-darwin + nix-homebrew                | Home Manager     | Docker Desktop / native Hermes |
-| Other Linux | `./install.sh` | none                                     | Home Manager     | not managed                    |
-| NixOS       | `./install.sh` | NixOS generation + host hardware profile | Home Manager     | rootful Docker                 |
+| Platform    | Entrypoint     | System layer                             | User layer               | Runtime                        |
+| ----------- | -------------- | ---------------------------------------- | ------------------------ | ------------------------------ |
+| Windows     | `install.cmd`  | Winget + WSL 基盤（初回のみ）            | NixOS-WSL + Home Manager | Windows GUI + WSL2 / NixOS     |
+| macOS ARM64 | `./install.sh` | nix-darwin + nix-homebrew                | Home Manager             | Docker Desktop / native Hermes |
+| Other Linux | `./install.sh` | none                                     | Home Manager             | not managed                    |
+| NixOS       | `./install.sh` | NixOS generation + host hardware profile | Home Manager             | rootful Docker                 |
 
-Windows は GUI アプリ導入だけを実行し、既存アプリを自動アンインストールしません。Unix の Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → Compose → runtime acceptance` です。macOS では Docker Desktop と native Hermes の宣言済み構成を適用します。失敗時はその phase で停止し、同じ入口を再実行します。
+Windows の通常セットアップは `install.cmd` から GUI/Winget と WSL/NixOS-WSL のフェーズを順に実行し、既存アプリを自動アンインストールしません。`-UserPhaseOnly` を指定すると GUI アプリ導入だけを実行します。WSL 基盤が未導入なら UAC 昇格と Windows の再起動が必要になることがあり、再起動後に同じ入口を再実行します。distro の登録と NixOS/Home Manager の適用は元のユーザーで行います。Unix の Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → Compose → runtime acceptance` です。macOS では Docker Desktop と native Hermes の宣言済み構成を適用します。失敗時はその phase で停止し、同じ入口を再実行します。
 
 非 NixOS Linux は `Nix/bootstrap → Home Manager` のみを実行します。
 
@@ -255,7 +255,7 @@ $vhdPath = $context.SharedData["VhdPath"]
 
 ### ハンドラー実行順序
 
-現在の `install.cmd` / `install.user.ps1` は WingetHandler だけを実行します。以下は独立呼び出しやテストのために保持している旧構成のハンドラー一覧であり、通常の Windows セットアップの実行順序ではありません。
+現在の `install.cmd` は Taskfile が管理する GUI/Winget と WSL/NixOS-WSL のフェーズを実行します。`install.user.ps1` は GUI/Winget フェーズを担当します。以下は独立呼び出しやテストのために保持している旧構成のハンドラー一覧であり、通常の Windows セットアップの実行順序ではありません。
 
 | Order | Phase | Admin | ハンドラー      | ソースファイル                                                                            | 説明                                 |
 | ----- | ----- | ----- | --------------- | ----------------------------------------------------------------------------------------- | ------------------------------------ |

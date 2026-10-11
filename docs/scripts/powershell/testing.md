@@ -65,7 +65,7 @@ cd scripts/powershell/tests
 | `.github/workflows/ci-other.yml` | Windows PowerShell 5.1 / PowerShell 7 | 全 Pester suite、launcher、encoding、handler unit、installer Phase 1 → Phase 2a integration |
 | `ci-nix.yml`                     | hosted Linux/macOS/Windows            | Linux/Darwin/WSL/Windows の platform-routed contract aggregate と外部 runtime E2E           |
 
-Windows hosted contract は Pester の最新安定版で `Invoke-Tests.ps1 -MinimumCoverage 0` を両 runtime で実行します。`Install.GuiOnly.Tests.ps1` は実物の `install.cmd` → `install.ps1` → `install.user.ps1` と本番ライブラリを一時 fixture にコピーし、外部 WinGet 境界だけを差し替えて GUI 導入の成功・失敗と不要な phase を実行しない契約を検証します。実機アプリを要求する GUI installer E2E は `ci-nix.yml` に残します。Nix option、package、flake output は `nix-unit` で検証し、macOS の installer/runtime 契約は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats で実行します。
+Windows hosted contract は Pester の最新安定版で `Invoke-Tests.ps1 -MinimumCoverage 0` を両 runtime で実行します。`Install.GuiOnly.Tests.ps1` は実物の `install.cmd -UserPhaseOnly` → `install.ps1` → `install.user.ps1` と本番ライブラリを一時 fixture にコピーし、外部 WinGet 境界だけを差し替えて GUI 導入の成功・失敗と不要な phase を実行しない契約を検証します。`Install.Wsl.Tests.ps1` は実物の Taskfile・installer・NixOSWSL handler を使用し、OS・ネットワーク・設定適用境界を fixture に置き換えて、既存 distro の再利用、新規導入時の一度だけの設定適用、引数伝播、失敗と再起動待ちの終了を検証します。Task runtime は既存 executable または installer の専用 cache を再利用します。実機アプリを要求する GUI installer E2E は `ci-nix.yml` に残します。Nix option、package、flake output は `nix-unit` で検証し、macOS の installer/runtime 契約は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats で実行します。
 
 WSL2 の実適用は `ci-nix.yml` の WSL E2E で `nixos-rebuild switch` を通して検証します。macOS は同 workflow の Darwin job で `darwin-rebuild switch` を実行します。Docker Desktop の実 runtime は標準 hosted runner では起動せず、Windows/macOS 実機固有の runtime は Docker profile を選択した installer 末尾の acceptance が失敗を返します。
 
@@ -79,7 +79,8 @@ Windows の catalog は PR #633 の変更により stable の `wez.wezterm` を�
 
 ## Windows environment acceptance
 
-Unit testsだけでなく、`install.cmd` の最後に [Test-Environment.ps1](../../../scripts/powershell/Test-Environment.ps1) を実行します。`Setup Complete!` は acceptance が成功した後にだけ表示されます。
+`install.cmd` は GUI と WSL の phase が両方成功した後にだけ `Setup Complete!` を表示します。`-UserPhaseOnly` は GUI だけを実行します。[Test-Environment.ps1](../../../scripts/powershell/Test-Environment.ps1) は独立した runtime 検証用で、Windows installer からは呼び出しません。
+WSL 基盤の有効化後はエラー表示を出さず、再起動を案内して終了コード `3010` を返します。PS5.1 / PS7 の integration test で、完了表示・後続の distro 登録を行わず、本当の有効化失敗は引き続きエラーになることを検証します。
 
 ```powershell
 # core-only profile

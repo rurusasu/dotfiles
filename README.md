@@ -8,7 +8,7 @@
 [![ci-chezmoi](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Windows の GUI アプリと、macOS、NixOS、Ubuntu、Debian の環境を管理する個人用 dotfiles リポジトリです。パッケージ定義は Nix catalog、ユーザー設定は Home Manager と chezmoi、OS サービスは各プラットフォームの宣言レイヤーで一元管理します。NixOS-WSL は Windows の GUI installer とは別に手動で導入します。
+Windows の GUI アプリと、macOS、NixOS、Ubuntu、Debian の環境を管理する個人用 dotfiles リポジトリです。パッケージ定義は Nix catalog、ユーザー設定は Home Manager と chezmoi、OS サービスは各プラットフォームの宣言レイヤーで一元管理します。Windows installer は NixOS-WSL の導入と設定適用も行います。
 
 ## 技術スタック
 
@@ -24,7 +24,7 @@ Windows の GUI アプリと、macOS、NixOS、Ubuntu、Debian の環境を管�
 ## クイックスタート
 
 clone 後、OS ごとの入口を実行します。Unix の installer は Nix、OS パッケージ、
-Home Manager を適用します。Windows の installer は GUI アプリだけを導入・更新します。
+Home Manager を適用します。Windows の installer は GUI アプリの導入・更新と NixOS-WSL の設定適用を行います。
 Unix の Docker profile では最後に runtime acceptance も実行します。途中で失敗した場合も
 同じコマンドを再実行できます。
 
@@ -35,8 +35,8 @@ WSL も `switch` 前に inputs を更新します。更新に失敗した場合�
 
 - macOS: flake inputs を更新してから、nix-darwin / Home Manager と Homebrew パッケージを反映します。
 - Linux / NixOS: flake inputs を更新し、その OS の構成と Home Manager を反映します。
-- Windows: GUI profile のアプリを既存の WinGet で install / upgrade します。
-  CLI、管理者フェーズ、chezmoi、WSL の setup は実行しません。
+- Windows: GUI profile のアプリを既存の WinGet で install / upgrade し、NixOS-WSL を導入・設定します。
+  Windows の CLI パッケージと chezmoi は導入・適用しません。WSL 基盤の有効化だけ管理者権限で行います。
 
 ```bash
 # macOS の独自パッケージを更新するとき
@@ -59,20 +59,19 @@ cd dotfiles
 .\install.cmd
 ```
 
-`install.cmd` は宣言済みの GUI アプリだけを導入・更新します。WezTerm と Windows Terminal も対象です。
-CLI の導入、管理者フェーズ、chezmoi の設定配布、WSL/NixOS、Docker Desktop 連携、VHDX 拡張は実行しません。
+`install.cmd` は宣言済みの GUI アプリを導入・更新した後、NixOS-WSL を導入し、checkout の同期と NixOS/Home Manager の適用を行います。WezTerm と Windows Terminal も対象です。
+既存の NixOS ディストリビューションと保存済み `stateVersion` は再利用します。WSL 基盤が未導入の場合だけ UAC で有効化し、再起動後の再実行を案内します。登録と設定適用は元のユーザーで行います。
+Windows の CLI パッケージ導入、chezmoi の設定配布、Docker Desktop 連携、VHDX 拡張は実行しません。
 既存ソフトウェアのアンインストールや古い Startup ショートカットの削除も行いません。
 
-NixOS-WSL は別途、[公式手順](https://nix-community.github.io/NixOS-WSL/install.html)に従って
-`nixos.wsl` をダウンロードします。未導入の場合、WSL 2.4.4 以降では次のように導入できます。
+GUI アプリだけをセットアップする場合は、WSL を呼び出さず次を実行します。
 
 ```powershell
-wsl --install --from-file "$env:USERPROFILE\Downloads\nixos.wsl"
-wsl -d NixOS
+.\install.cmd -UserPhaseOnly
 ```
 
-既定の登録名は `NixOS` です。初回起動後、Windows側から独立した
-`scripts/powershell/lib/Invoke-NixosWslSetup.ps1` を明示的に呼び出して NixOS/Home Manager を適用します。
+実行順序は `taskfiles/install/taskfile.yml` が管理します。Task が見つからなければ、installer 専用の実行ファイルを `%LOCALAPPDATA%\dotfiles\tools\task` に取得します。永続 PATH は変更しません。
+既定の登録名は `NixOS`、同期方式は `link` です。`-DistroName`、`-InstallDir`、`-ReleaseTag`、`-SyncMode`、`-SyncBack`、`-StateVersion`、`-ForcePostInstall` で指定できます。
 実行例と同期・stateVersion の注意点は [NixOS-WSL インストール](./docs/nix/nixos-wsl-install.md)を参照してください。
 
 ### macOS (Apple Silicon)
@@ -190,7 +189,7 @@ dotfiles/
 ├── taskfiles/              # Feature-scoped Taskfiles
 ├── install.sh              # macOS / NixOS / Ubuntu / Debian launcher
 ├── install.cmd             # Windows launcher for install.ps1
-├── scripts/powershell/install.ps1 # Windows GUI-app installer entrypoint
+├── scripts/powershell/install.ps1 # Windows GUI + NixOS-WSL installer entrypoint
 └── flake.nix               # Nix flake entry point
 ```
 
@@ -326,7 +325,7 @@ sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
 docker compose -f docker/hermes-service/compose.yml ps
 ```
 
-NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations`、`systemctl status docker.service docker.socket` を確認します。非 NixOS Linux の通常検証は `./scripts/sh/verify-environment.sh` を使い、Docker は管理対象外です。macOS は `darwin-rebuild --list-generations` と Docker Desktop の起動状態を確認します。Windows は PowerShell / WinGet とエラー内容を確認して GUI installer を再実行します。WSL の手動 setup は [NixOS-WSL インストール](./docs/nix/nixos-wsl-install.md)を参照してください。
+NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations`、`systemctl status docker.service docker.socket` を確認します。非 NixOS Linux の通常検証は `./scripts/sh/verify-environment.sh` を使い、Docker は管理対象外です。macOS は `darwin-rebuild --list-generations` と Docker Desktop の起動状態を確認します。Windows は PowerShell / WinGet / WSL とエラー内容を確認して installer を再実行します。WSL の個別 setup は [NixOS-WSL インストール](./docs/nix/nixos-wsl-install.md)を参照してください。
 
 ```powershell
 .\install.cmd -NoPause

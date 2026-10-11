@@ -1093,6 +1093,34 @@ Describe 'Update-ProcessEnvironmentPath' {
 }
 
 Describe 'Test-WslAvailable' {
+    BeforeEach { Mock Get-CimInstance { [pscustomobject]@{ InstallState = 1 } } }
+
+    It 'should reject a disabled Virtual Machine Platform even when WSL status exits zero' {
+        Mock Get-CimInstance { [pscustomobject]@{ InstallState = 2 } }
+        Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
+
+        Test-WslAvailable | Should -BeFalse
+        Should -Invoke Invoke-Wsl -Times 0
+        Should -Invoke Get-CimInstance -Times 1 -ParameterFilter {
+            $ClassName -eq 'Win32_OptionalFeature' -and $Filter -eq "Name = 'VirtualMachinePlatform'"
+        }
+    }
+
+    It 'should reject an absent Virtual Machine Platform' {
+        Mock Get-CimInstance { [pscustomobject]@{ InstallState = 3 } }
+        Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
+
+        Test-WslAvailable | Should -BeFalse
+        Should -Invoke Invoke-Wsl -Times 0
+    }
+
+    It 'should fall back to WSL status when the optional feature query is unavailable' {
+        Mock Get-CimInstance { throw 'CIM unavailable' }
+        Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
+
+        Test-WslAvailable | Should -BeTrue
+    }
+
     It 'should return true when wsl --status succeeds' {
         Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
 

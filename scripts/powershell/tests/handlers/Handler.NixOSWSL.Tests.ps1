@@ -34,6 +34,25 @@ Describe 'NixOSWSLHandler' {
         }
     }
 
+    Context 'EnsurePostInstallIntegration' {
+        It 'should repair the whoami shim, writable state, and Docker group for an existing distro' {
+            $script:integrationCalls = @()
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureWhoamiShim -Value {
+                $script:integrationCalls += "whoami:$args"
+            } -Force
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureWslWritable -Value {
+                $script:integrationCalls += "writable:$args"
+            } -Force
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureDockerGroup -Value {
+                $script:integrationCalls += "docker:$args"
+            } -Force
+
+            $handler.EnsurePostInstallIntegration('NixOS')
+
+            $script:integrationCalls | Should -Be @('whoami:NixOS', 'writable:NixOS', 'docker:NixOS')
+        }
+    }
+
     Context 'CanApply' {
         BeforeEach {
             # TestWslExecutable が実際の wsl.exe を呼ばないようにモック
@@ -191,6 +210,39 @@ Describe 'NixOSWSLHandler' {
     }
 
     Context 'SupportsFromFileInstall' {
+        It 'should recognize a current Japanese WSL version without falling back to import' {
+            Mock Invoke-Wsl {
+                param($Arguments)
+                $global:LASTEXITCODE = 0
+                if ($Arguments -contains '--version') {
+                    return @("WSL バージョン: 3.0.3.0", "カーネル バージョン: 6.18.54.1-1")
+                }
+                return @('    --install [Distro] [Options...]', '        --from-file <Path>')
+            }
+
+            $handler.GetWslVersion() | Should -Be ([version]'3.0.3.0')
+            $handler.SupportsFromFileInstall() | Should -BeTrue
+        }
+
+        It 'should recognize null-padded WSL version output' {
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = 0
+                return 'WSL version: 3.0.3.0'.ToCharArray() -join "`0"
+            }
+
+            $handler.GetWslVersion() | Should -Be ([version]'3.0.3.0')
+        }
+
+        It 'should recognize from-file on a separate help line' {
+            $handler | Add-Member -MemberType ScriptMethod -Name GetWslVersion -Value { return $null } -Force
+            Mock Invoke-Wsl {
+                $global:LASTEXITCODE = -1
+                return @('    --install [Distro] [Options...]', '        --from-file <Path>')
+            }
+
+            $handler.SupportsFromFileInstall() | Should -BeTrue
+        }
+
         It 'should return true when WSL version is 2.4.4+' {
             $handler | Add-Member -MemberType ScriptMethod -Name GetWslVersion -Value {
                 return [version]"2.4.4.0"
@@ -557,6 +609,20 @@ Describe 'NixOSWSLHandler' {
             $handler.InstallDistro($ctx, $script:asset, "C:\Temp\nixos.wsl")
 
             $script:callCount | Should -Be 1
+        }
+    }
+
+    Context 'InstallFromFile' {
+        It 'should register without opening an interactive shell before post-install setup' {
+            $handler | Add-Member -MemberType ScriptMethod -Name WaitForWslReady -Value { } -Force
+            Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
+
+            $handler.InstallFromFile('NixOS', 'C:\downloads\nixos.wsl', '')
+
+            Should -Invoke Invoke-Wsl -Times 1 -ParameterFilter {
+                $Arguments -contains '--install' -and $Arguments -contains '--from-file' -and
+                $Arguments -contains '--no-launch' -and $Arguments -contains 'C:\downloads\nixos.wsl'
+            }
         }
     }
 

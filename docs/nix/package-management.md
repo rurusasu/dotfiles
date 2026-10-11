@@ -70,7 +70,7 @@ Ubuntu / Debian:  ./install.sh
 ```
 
 - Windows は GUI アプリのみを winget で導入します。`install/windows-gui.nix` が選ぶ catalog key / Windows-only key から manifest を生成し、npm/pnpm manifest は互換性のため空配列として保持します。
-- `install.cmd` は既存の PowerShell と winget を使い、CLI ツール・Node.js・npm・pnpm・dsh・AutoHotkey・GlazeWM を導入しません。chezmoi、管理者セットアップ、WSL 構築、CLI runtime の acceptance も実行しません。既存アプリや Startup shortcut は自動削除しません。
+- `install.cmd` は既存の PowerShell と winget で GUI アプリを導入した後、NixOS-WSL の導入と NixOS/Home Manager 適用を行います。実行順序は `taskfiles/install/taskfile.yml` が管理し、Task がなければ専用 cache に取得します。`-UserPhaseOnly` は GUI のみです。WSL 基盤の有効化だけ UAC 昇格します。Windows の CLI ツール・Node.js・npm・pnpm・dsh・AutoHotkey・GlazeWM、chezmoi、CLI runtime acceptance は導入・実行しません。既存アプリや Startup shortcut は自動削除しません。
 - Codex CLI はどの OS でも個別導入せず、ChatGPT アプリ付属の CLI を使います。Windows の GUI profile は Microsoft Store のデスクトップアプリを対象とし、npm/pnpm パッケージを導入しません。
 - macOS は nix-darwin が Home Manager と nix-homebrew formula/cask を同じ switch に含めます。
 - 非 NixOS Linux（Ubuntu/Debian など）は standalone Home Manager がユーザー環境を適用します。Docker や OS service は管理しません。

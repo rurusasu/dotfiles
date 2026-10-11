@@ -1,13 +1,22 @@
 ﻿<#
 .SYNOPSIS
-    Install Windows GUI applications only.
+    Install Windows GUI applications and configure NixOS-WSL.
 .DESCRIPTION
-    Uses the existing PowerShell runtime and WinGet. Does not install CLI tools,
-    deploy dotfiles, provision WSL, or execute administrator setup phases.
+    Taskfile owns the GUI -> NixOS-WSL sequence. UserPhaseOnly runs GUI setup alone.
 #>
 [CmdletBinding()]
 param(
     [hashtable]$Options = @{},
+    [string]$DistroName = 'NixOS',
+    [string]$InstallDir = '',
+    [string]$ReleaseTag = '',
+    [ValidateSet('link', 'repo', 'nix', 'none')]
+    [string]$SyncMode = 'link',
+    [ValidateSet('repo', 'lock', 'none')]
+    [string]$SyncBack = 'lock',
+    [ValidatePattern('^$|^\d{2}\.\d{2}$')]
+    [string]$StateVersion = '',
+    [switch]$ForcePostInstall,
     [switch]$UserPhaseOnly,
     [switch]$WingetVerifyCommandOnly,
     [switch]$NoPause
@@ -30,16 +39,29 @@ if ($WingetVerifyCommandOnly) {
     $Options["WingetVerifyCommandOnly"] = $true
 }
 
-Write-Host "Windows GUI Application Setup" -ForegroundColor Cyan
-& $userScriptPath -Options $Options
-
+$restartRequired = $false
 if ($UserPhaseOnly) {
+    Write-Host "Windows GUI Application Setup" -ForegroundColor Cyan
+    & $userScriptPath -Options $Options
     Write-Host "User Phase Complete!" -ForegroundColor Green
 }
 else {
-    Write-Host "Setup Complete!" -ForegroundColor Green
+    foreach ($name in 'ReleaseTag', 'SyncMode', 'SyncBack', 'StateVersion', 'ForcePostInstall') {
+        if ($PSBoundParameters.ContainsKey($name)) {
+            $Options[$name] = Get-Variable -Name $name -ValueOnly
+            if ($name -eq 'ForcePostInstall') { $Options[$name] = [bool]$ForcePostInstall }
+        }
+    }
+    . (Join-Path $libPath 'Invoke-ExternalCommand.ps1')
+    . (Join-Path $libPath 'Invoke-WindowsInstallTask.ps1')
+    $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../..')).Path
+    $restartRequired = Invoke-WindowsInstallTask -Repository $repoRoot -Configuration @{
+        DistroName = $DistroName; InstallDir = $InstallDir; Options = $Options
+    }
+    if (-not $restartRequired) { Write-Host "Setup Complete!" -ForegroundColor Green }
 }
 if (-not $NoPause) {
     Write-Host "Press Enter to close..." -ForegroundColor Gray
     Read-Host | Out-Null
 }
+if ($restartRequired) { exit 3010 }
