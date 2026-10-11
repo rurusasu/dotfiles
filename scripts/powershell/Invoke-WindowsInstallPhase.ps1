@@ -58,6 +58,7 @@ if ($foundation.CanApply($context)) {
 $installer = [NixOSWSLHandler]::new()
 if ($installer.DistroExists($context.DistroName)) {
     Invoke-NixosWslSetup -Context $context
+    $installer.EnsurePostInstallIntegration($context.DistroName)
 }
 else {
     # Apply already invokes Invoke-NixosWslSetup; do not rebuild twice on first install.

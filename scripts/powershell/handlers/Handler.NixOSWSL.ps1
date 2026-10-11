@@ -115,23 +115,27 @@ class NixOSWSLHandler : SetupHandlerBase {
             # Post-install セットアップ
             $this.ExecutePostInstall($ctx)
 
-            # whoami shim の作成
-            $this.EnsureWhoamiShim($ctx.DistroName)
-
-            # 書き込み可能チェック
-            $this.EnsureWslWritable($ctx.DistroName)
-
-            # Docker グループへのユーザー追加
-            # NixOSWSL (Order=17) は DockerHandler (Order=18) より先に実行される。
-            # ここで docker グループを設定し、直後の Docker 連携で正規ユーザーが
-            # Docker ソケットを使用できる状態にする。
-            $this.EnsureDockerGroup($ctx.DistroName)
+            $this.EnsurePostInstallIntegration($ctx.DistroName)
 
             return $this.CreateSuccessResult("NixOS-WSL のインストールが完了しました")
         }
         catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
         }
+    }
+
+    [void] EnsurePostInstallIntegration([string]$distroName) {
+        # whoami shim の作成
+        $this.EnsureWhoamiShim($distroName)
+
+        # 書き込み可能チェック
+        $this.EnsureWslWritable($distroName)
+
+        # Docker グループへのユーザー追加
+        # NixOSWSL (Order=17) は DockerHandler (Order=18) より先に実行される。
+        # ここで docker グループを設定し、直後の Docker 連携で正規ユーザーが
+        # Docker ソケットを使用できる状態にする。
+        $this.EnsureDockerGroup($distroName)
     }
 
     # ========================================

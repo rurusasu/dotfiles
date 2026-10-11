@@ -34,6 +34,25 @@ Describe 'NixOSWSLHandler' {
         }
     }
 
+    Context 'EnsurePostInstallIntegration' {
+        It 'should repair the whoami shim, writable state, and Docker group for an existing distro' {
+            $script:integrationCalls = @()
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureWhoamiShim -Value {
+                $script:integrationCalls += "whoami:$args"
+            } -Force
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureWslWritable -Value {
+                $script:integrationCalls += "writable:$args"
+            } -Force
+            $handler | Add-Member -MemberType ScriptMethod -Name EnsureDockerGroup -Value {
+                $script:integrationCalls += "docker:$args"
+            } -Force
+
+            $handler.EnsurePostInstallIntegration('NixOS')
+
+            $script:integrationCalls | Should -Be @('whoami:NixOS', 'writable:NixOS', 'docker:NixOS')
+        }
+    }
+
     Context 'CanApply' {
         BeforeEach {
             # TestWslExecutable が実際の wsl.exe を呼ばないようにモック
