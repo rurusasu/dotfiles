@@ -77,6 +77,7 @@ function Invoke-NixosWslSetup {
     }
     $target = if ($syncMode -eq 'link') { $source } else { $repo }
     $qTarget = ConvertTo-WslArgument $target
+    $qFlakeTarget = ConvertTo-WslArgument ('path:' + $target)
     Invoke-SetupCommand "test -f $qTarget/flake.nix; test -f $qTarget/flake.lock" | Out-Host
 
     $settings = @{
@@ -97,7 +98,7 @@ function Invoke-NixosWslSetup {
     }
     $json = ConvertTo-WslArgument ($settings | ConvertTo-Json -Compress)
     Invoke-SetupCommand "install -d -m 0755 /etc/nixos; printf '%s\n' $json > /etc/nixos/dotfiles.json; chmod 0644 /etc/nixos/dotfiles.json" | Out-Host
-    Invoke-SetupCommand "nix --accept-flake-config --extra-experimental-features 'nix-command flakes' flake update --flake $qTarget" | Out-Host
+    Invoke-SetupCommand "nix --accept-flake-config --extra-experimental-features 'nix-command flakes' flake update --flake $qFlakeTarget" | Out-Host
     Invoke-SetupCommand "nixos-rebuild switch --flake $(ConvertTo-WslArgument ('path:' + $target + '#nixos')) --impure --option accept-flake-config true --option experimental-features 'nix-command flakes'" | Out-Host
 
     if ($target -ne $source) {

@@ -1,9 +1,31 @@
 # NixOS-WSL インストールと初期 setup
 
-公式の `nixos.wsl` を手動導入し、独立した
-`scripts/powershell/lib/Invoke-NixosWslSetup.ps1` で checkout を同期して NixOS/Home Manager を適用します。
-Windows の `install.cmd` は GUI アプリ専用です。CLI、管理者フェーズ、chezmoi、WSL の setup は実行せず、
-WSL 用引数も受け取りません。
+Windows の `install.cmd` は GUI アプリ導入後に NixOS-WSL をセットアップします。
+既存 distro は再利用し、未登録なら公式の `nixos.wsl` を取得して登録します。
+`scripts/powershell/lib/Invoke-NixosWslSetup.ps1` が checkout を同期して NixOS/Home Manager を適用します。
+
+## 推奨: Windows installer から実行する
+
+checkout のルートで通常ユーザーの PowerShell から実行します。
+
+```powershell
+.\install.cmd
+# GUI アプリだけを導入・更新
+.\install.cmd -UserPhaseOnly
+# 既存 WSL checkout を使用し、逆同期を行わない
+.\install.cmd -DistroName NixOS -SyncMode none -SyncBack none
+```
+
+実行順序は `taskfiles/install/taskfile.yml` の `install:windows` が管理します。
+Task がなければ installer 専用 cache に取得します。WSL 基盤の有効化だけ UAC 昇格し、
+成功後は再起動して `install.cmd` を再実行するよう案内します。distro の登録と設定適用は元のユーザーで行います。
+再起動待ちはエラー表示せず終了コード `3010` を返し、`Setup Complete!` は表示しません。
+初回導入で設定適用を二重実行しません。失敗時は非ゼロ終了し、`Setup Complete!` は表示しません。
+
+`-DistroName`、`-InstallDir`、`-ReleaseTag`、`-SyncMode`、`-SyncBack`、`-StateVersion`、
+`-ForcePostInstall` を指定できます。`StateVersion` は省略時に既存の値を保持します。
+同期オプションと既存環境のバックアップについては後述を参照してください。
+以下は distro の手動導入と、設定適用だけを独立して実行する場合の手順です。
 
 ## 前提
 
@@ -24,6 +46,8 @@ wsl --install --no-distribution
 ```
 
 再起動を求められた場合は再起動してください。既存の WSL が動作していれば省略できます。
+`wsl --version` が成功していても、`VirtualMachinePlatform` が無効だと WSL 2 は起動できません。
+installer はこの状態を検出して、WSL 基盤の有効化と再起動を案内します。
 WSL を更新・確認する場合は次を実行します。
 
 ```powershell
@@ -76,15 +100,18 @@ Invoke-NixosWslSetup -Context $context
 既存の stateVersion は省略時に保持します。新規構成で 26.05 を明示する場合だけ、
 実行前に `$context.Options['StateVersion'] = '26.05'` を設定します。
 
-処理経路は Windows GUI installer と独立しています。
+設定適用だけを独立して呼び出すこともできます。
 
 ```text
 公式 nixos.wsl を手動導入
   -> Invoke-NixosWslSetup -Context $context
   -> checkout 同期と /etc/nixos/dotfiles.json 保存
-  -> nix flake update
+  -> nix flake update --flake path:<checkout>
   -> nixos-rebuild switch --flake path:<checkout>#nixos --impure
 ```
+
+初期 NixOS-WSL イメージには Git CLI がないため、ローカル checkout は明示的な `path:` flake として扱います。
+通常のファイルシステムパスを渡すと Git flake として自動判定され、Git CLI が必要になるためです。
 
 保存済みの選択ユーザーを再利用し、なければ UID 1000 の通常ユーザーを検出します。
 名前・home・UID・GID・primary group・正確な checkout パスを
@@ -126,7 +153,7 @@ native NixOS 用の `/etc/nixos/hardware-configuration.nix` は WSL では通常
 
 `system.stateVersion` はパッケージの更新版ではなく、永続データの互換性を決める schema です。
 既存の 25.05 WSL 環境を単なるパッケージ更新で 26.05 に変更しないでください。
-通常の反映では保存値を維持します。`install.cmd` は NixOS の設定を変更しません。
+通常の反映では保存値を維持します。`install.cmd` も `-StateVersion` を省略すれば既存の値を維持します。
 
 明示的に移行する場合は VHD、Docker、データベース、各種 `/var/lib` のデータをバックアップし、
 使用中のモジュールの移行可否を確認してください。反映後は generation、

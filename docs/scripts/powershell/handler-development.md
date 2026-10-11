@@ -2,7 +2,7 @@
 
 ## Windows セットアップのコマンド探索
 
-通常の `install.cmd` は GUI-only です。`install.user.ps1` は `WingetHandler` だけを明示的にロードし、npm/pnpm/Bun・CLI bootstrap・chezmoi・管理者フェーズ・WSL/runtime acceptance は呼びません。CLI の利用可能性と任意 adapter のテストは維持しますが、これらは通常の Windows セットアップの依存ではありません。GUI-only では退役パッケージの自動削除も無効です。
+通常の `install.cmd` は GUI アプリ導入後に NixOS-WSL を導入・設定します。`-UserPhaseOnly` は GUI のみです。`install.user.ps1` は引き続き `WingetHandler` だけを明示的にロードし、npm/pnpm/Bun・chezmoi・WSL/runtime acceptance は呼びません。GUI phase では退役パッケージの自動削除も無効です。
 
 - エントリーポイントの `Repair-WindowsSetupEnvironment` は、既存の `%LOCALAPPDATA%\Microsoft\WindowsApps` が PATH から欠落していれば、現在のプロセスに補完する。これにより WinGet の実行エイリアスを事前確認で検出できる。
 - npm / pnpm の `Apply` は `Update-NpmGlobalCommandPath` を呼ぶ。`npm prefix -g` が返す保存先を現在の PATH に補完してから、検証・bootstrap・インストールを行う。既定の `%APPDATA%\npm` に固定せず、カスタム prefix も扱う。
@@ -166,19 +166,19 @@ cd tests
 
 ### ステップ 5: 実行経路の明示
 
-現在の `install.cmd` → `install.ps1` → `install.user.ps1` は、GUI 専用の `WingetHandler` だけを明示的に読み込みます。`Handler.*.ps1` を追加しても自動登録・実行されません。CLI・WSL・自動設定配布のハンドラーは既定経路に追加しません。
+現在の `install.cmd` → `install.ps1` → `task install:windows` は、`taskfiles/install/taskfile.yml` の順序で `Invoke-WindowsInstallPhase.ps1 -Phase Gui`、`-Phase Wsl` を実行します。GUI は `install.user.ps1`、WSL は `WslInstallHandler` と `NixOSWSLHandler` を明示的に読み込みます。`Handler.*.ps1` を追加しても自動登録・実行されません。
 
 ### 実行経路と独立アダプター
 
-Windows の既定経路には npm / pnpm / WSL / chezmoi / runtime acceptance の phase や UAC 昇格処理はありません。実行可能な WinGet がない場合、または GUI 導入に失敗した場合は非ゼロ終了になります。
+WSL 基盤の有効化だけを `Invoke-WslBaseElevation` で UAC 昇格し、再起動後の再実行を案内します。distro の登録と設定適用は元のユーザーで実行します。新規導入では handler 内の設定適用を一度だけ実行し、既存 distro は `Invoke-NixosWslSetup` で更新します。GUI・WSL の失敗は非ゼロ終了になります。基盤有効化成功後の再起動待ちは例外にせず、installer が専用の終了コード `3010` を返します。どちらも `Setup Complete!` は表示しません。
 
-旧管理者入口は廃止しました。WSL の検証は専用の `ci/Invoke-NixosWslE2E.ps1` が担当し、GUI 入口とは分離しています。
+旧管理者入口は復活させず、WSL 基盤専用の `WslBase` phase に限定します。`Invoke-WindowsInstallTask.ps1` は Task runtime の取得と configuration の子プロセスへの伝播を担当し、CLI の順序を重複定義しません。呼び出しごとの一時 result file で再起動待ちを受け取り、呼び出し元へ bool を返します。Task の標準出力は画面へ表示し、一時 result file は成功・失敗いずれも後片付けします。WSL の実環境検証は `ci/Invoke-NixosWslE2E.ps1` が担当します。
 
 #### GUI-only の integration 契約
 
-`Install.GuiOnly.Tests.ps1` は実物の `install.cmd` → `install.ps1` → `install.user.ps1` を一時ディレクトリで実行します。`SetupHandlerBase` / `SetupContext` / `SetupResult` とライブラリは本番ファイルを使用し、WinGet の外部インストール境界だけを決定的な fixture に置き換えます。
+`Install.GuiOnly.Tests.ps1` は実物の `install.cmd -UserPhaseOnly` → `install.ps1` → `install.user.ps1` を一時ディレクトリで実行します。`SetupHandlerBase` / `SetupContext` / `SetupResult` とライブラリは本番ファイルを使用し、WinGet の外部インストール境界だけを決定的な fixture に置き換えます。
 
-この契約は GUI ハンドラーの成功・失敗、WinGet 不在時の失敗伝播、不要な admin / CLI / WSL / chezmoi コードを読み込まないことを確認します。成功時にだけ `Setup Complete!` が出ます。`Install.Entrypoint.Tests.ps1` は実物の batch launcher の PowerShell 5.1 / 7 選択と引数伝播を検証します。
+この契約は `-UserPhaseOnly` で GUI ハンドラーの成功・失敗、WinGet 不在時の失敗伝播、不要な admin / CLI / WSL / chezmoi コードを読み込まないことを確認します。成功時にだけ `User Phase Complete!` が出ます。`Install.Wsl.Tests.ps1` は実物の Taskfile と installer で既存・新規 distro、同期引数、失敗伝播、再起動待ちを検証します。`Install.Entrypoint.Tests.ps1` は実物の batch launcher の PowerShell 5.1 / 7 選択と引数伝播を検証します。
 
 実 GUI アプリの WinGet 導入・検証は `Invoke-WindowsInstallerE2E.ps1` が担当し、CLI・WSL の導入は行いません。独立 WSL adapter と Unix の runtime 契約は別のテスト・E2E として維持します。
 

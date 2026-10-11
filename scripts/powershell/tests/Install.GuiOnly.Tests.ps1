@@ -48,7 +48,7 @@ class WingetHandler : SetupHandlerBase {
         Set-Content -LiteralPath (Join-Path $handlers 'Handler.Winget.ps1') -Encoding UTF8 -Value $fixture
         $info = New-Object System.Diagnostics.ProcessStartInfo
         $info.FileName = 'cmd.exe'
-        $info.Arguments = '/d /c install.cmd -NoPause'
+        $info.Arguments = '/d /c install.cmd -NoPause -UserPhaseOnly'
         $info.WorkingDirectory = $root
         $info.UseShellExecute = $false
         $info.CreateNoWindow = $true
@@ -74,23 +74,11 @@ class WingetHandler : SetupHandlerBase {
 }
 
 Describe 'GUI-only Windows setup execution' {
-    It 'should document GUI setup separately from the supported standalone WSL route' {
-        $readme = Get-Content -LiteralPath (Join-Path $script:repoRoot 'README.md') -Raw -Encoding UTF8
-        $windowsSection = [regex]::Match($readme, '(?s)### Windows.*?(?=### macOS)').Value
-        $windowsSection | Should -Match 'GUI'
-        $windowsSection | Should -Not -Match 'EnableDockerDesktopIntegration|ExpandDockerVhd'
-        $wslGuide = Get-Content -LiteralPath (Join-Path $script:repoRoot 'docs/nix/nixos-wsl-install.md') -Raw -Encoding UTF8
-        $wslGuide | Should -Match 'wsl --install --from-file'
-        $wslGuide | Should -Match 'scripts/powershell/lib/Invoke-NixosWslSetup\.ps1'
-        $wslGuide | Should -Not -Match 'scripts/sh/nixos-wsl-postinstall\.sh'
-        $wslGuide | Should -Not -Match 'install\.cmd[^\r\n]*-(?:SyncMode|SyncBack|DistroName|InstallDir|ReleaseTag|ForcePostInstall|StateVersion)'
-    }
-
     It 'should run only WinGet without loading CLI, WSL, admin or chezmoi code' {
         $result = Invoke-GuiSetupFixture
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $result.Output | Should -Match 'GUI_FIXTURE_APPLIED'
-        $result.Output | Should -Match 'Setup Complete!'
+        $result.Output | Should -Match 'User Phase Complete!'
         $result.Output | Should -Not -Match 'Phase 2|Environment Acceptance|\[Npm\]|\[Pnpm\]'
     }
 

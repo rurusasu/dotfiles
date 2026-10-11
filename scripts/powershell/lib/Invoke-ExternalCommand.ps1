@@ -12,6 +12,27 @@
     実際のコマンド実行結果は $LASTEXITCODE で取得可能。
 #>
 
+function Invoke-WindowsInstallTaskCommand {
+    [CmdletBinding()]
+    param([string]$Executable, [string[]]$Arguments)
+    & $Executable @Arguments
+}
+
+function Invoke-WslBaseElevation {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$ScriptPath)
+
+    $shell = Join-Path $PSHOME $(if ($PSVersionTable.PSVersion.Major -lt 6) { 'powershell.exe' } else { 'pwsh.exe' })
+    $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $ScriptPath, '-Phase', 'WslBase')
+    if (Test-IsAdminSession) {
+        & $shell @arguments
+        return $LASTEXITCODE
+    }
+    $arguments[4] = '"' + $ScriptPath + '"'
+    $process = Start-Process -FilePath $shell -ArgumentList $arguments -Verb RunAs -WindowStyle Hidden -Wait -PassThru
+    return $process.ExitCode
+}
+
 <#
 .SYNOPSIS
     WSL コマンドを実行する
@@ -722,7 +743,7 @@ function Invoke-Npm {
 
     $isGlobalInstall = $Arguments.Count -gt 1 -and
     $Arguments[0] -eq "install" -and
-        ($Arguments -contains "-g" -or $Arguments -contains "--global")
+    ($Arguments -contains "-g" -or $Arguments -contains "--global")
     if ($isGlobalInstall) {
         Add-NpmNodeDirectoryToProcessPath
     }
@@ -898,7 +919,7 @@ function Invoke-Pnpm {
 
     $isGlobalAdd = $Arguments.Count -gt 1 -and
     $Arguments[0] -eq "add" -and
-        ($Arguments -contains "-g" -or $Arguments -contains "--global")
+    ($Arguments -contains "-g" -or $Arguments -contains "--global")
     if ($isGlobalAdd) {
         $timeoutSeconds = Get-PackageInstallTimeoutSecond
         if ($timeoutSeconds -gt 0) {
@@ -1313,8 +1334,9 @@ function Test-InteractiveEnvironment {
 .SYNOPSIS
     WSL が利用可能かどうかを確認する
 .DESCRIPTION
-    Invoke-Wsl --status を実行し、終了コードで WSL コンポーネントの
-    インストール状態を判定する。Pester でモック可能。
+    VirtualMachinePlatform の無効・未導入を先に検出する。
+    wsl --status は WSL 2 を起動できない状態でも exit 0 を返すため、
+    終了コードだけでは基盤の有効化を判定しない。Pester でモック可能。
 .OUTPUTS
     [bool] WSL が利用可能なら $true
 #>
@@ -1322,6 +1344,17 @@ function Test-WslAvailable {
     [CmdletBinding()]
     [OutputType([bool])]
     param()
+
+    try {
+        $feature = Get-CimInstance -ClassName Win32_OptionalFeature -Filter "Name = 'VirtualMachinePlatform'" -ErrorAction Stop
+        if ($null -ne $feature -and $feature.InstallState -in @(2, 3)) {
+            return $false
+        }
+    }
+    catch {
+        # CIM 非対応・照会不可の環境では従来の WSL コマンド判定に戻す。
+        Write-Verbose "VirtualMachinePlatform query unavailable: $($_.Exception.Message)"
+    }
 
     try {
         $null = Invoke-Wsl -TimeoutSeconds (Get-WslCheckTimeoutSecond) "--status" 2>&1

@@ -175,7 +175,8 @@ class NixOSWSLHandler : SetupHandlerBase {
         if ($LASTEXITCODE -ne 0) {
             return $null
         }
-        if ($output -match "WSL version:\\s*([0-9\\.]+)") {
+        $text = ($output -join "`n") -replace "`0", '' -replace [char]0xFEFF, ''
+        if ($text -match '(?im)^\s*WSL\s+[^:\r\n]+:\s*(\d+\.\d+\.\d+(?:\.\d+)?)') {
             try {
                 return [version]$Matches[1]
             }
@@ -197,7 +198,8 @@ class NixOSWSLHandler : SetupHandlerBase {
         }
         # Fallback: ヘルプテキストを確認
         $help = Invoke-Wsl -Arguments @("--help")
-        return ($help -match "--install --from-file")
+        $text = ($help -join "`n") -replace "`0", '' -replace [char]0xFEFF, ''
+        return ($text -match '(?:^|\s)--from-file(?:\s|$)')
     }
 
     # ========================================
@@ -405,7 +407,7 @@ class NixOSWSLHandler : SetupHandlerBase {
     hidden [void] InstallFromFile([string]$name, [string]$archive, [string]$location) {
         $this.Log("WSL 2.4.4+ の手順で登録します: wsl --install --from-file")
         $this.WaitForWslReady()
-        $wslArgs = @("--install", "--from-file", $archive, "--name", $name)
+        $wslArgs = @("--install", "--from-file", $archive, "--name", $name, "--no-launch")
         if ($location) {
             $this.EnsureInstallDir($location)
             $wslArgs += @("--location", $location)
