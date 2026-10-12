@@ -1,0 +1,84 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Install the pinned upstream UDEV Gothic NF release for the current user.
+# version: v2.2.0
+
+$ErrorActionPreference = "Stop"
+
+$version = "v2.2.0"
+$archiveName = "UDEVGothic_NF_$version.zip"
+$downloadUrl = "https://github.com/yuru7/udev-gothic/releases/download/$version/$archiveName"
+$workDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "udev-gothic-nf-$version"
+$archivePath = Join-Path $workDirectory $archiveName
+$extractDirectory = Join-Path $workDirectory "extracted"
+$fontRootDirectory = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Fonts\UDEV Gothic NF"
+$fontDirectory = Join-Path $fontRootDirectory $version
+$fontRegistryPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+
+New-Item -ItemType Directory -Path $workDirectory -Force | Out-Null
+New-Item -ItemType Directory -Path $extractDirectory -Force | Out-Null
+New-Item -ItemType Directory -Path $fontDirectory -Force | Out-Null
+New-Item -Path $fontRegistryPath -Force | Out-Null
+
+Write-Host "Downloading UDEV Gothic NF $version from the upstream release..."
+Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath
+Expand-Archive -LiteralPath $archivePath -DestinationPath $extractDirectory -Force
+
+$fontFiles = @(Get-ChildItem -LiteralPath $extractDirectory -Recurse -File | Where-Object {
+    $_.Extension -ieq ".ttf" -and $_.Name -like "UDEVGothic*NF*.ttf"
+})
+if ($fontFiles.Count -eq 0) {
+    throw "The UDEV Gothic NF archive did not contain any matching TrueType fonts."
+}
+
+if (-not ("UdevGothicFontNativeMethods" -as [type])) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class UdevGothicFontNativeMethods
+{
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern int AddFontResourceEx(string fileName, uint flags, IntPtr reserved);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SendMessageTimeout(
+        IntPtr windowHandle,
+        uint message,
+        UIntPtr wParam,
+        IntPtr lParam,
+        uint flags,
+        uint timeout,
+        out UIntPtr result);
+}
+"@
+}
+
+foreach ($fontFile in $fontFiles) {
+    $installedPath = Join-Path $fontDirectory $fontFile.Name
+    if (-not (Test-Path -LiteralPath $installedPath)) {
+        Copy-Item -LiteralPath $fontFile.FullName -Destination $installedPath
+    }
+
+    $registryName = "$($fontFile.BaseName) (TrueType)"
+    New-ItemProperty -LiteralPath $fontRegistryPath -Name $registryName -Value $installedPath -PropertyType String -Force | Out-Null
+
+    if (-not ([UdevGothicFontNativeMethods]::AddFontResourceEx($installedPath, 0, [IntPtr]::Zero))) {
+        throw "Windows could not load the installed font into the current session: $installedPath"
+    }
+}
+
+$messageResult = [UIntPtr]::Zero
+if (-not ([UdevGothicFontNativeMethods]::SendMessageTimeout(
+    [IntPtr]0xffff,
+    0x001D,
+    [UIntPtr]::Zero,
+    [IntPtr]::Zero,
+    0x0002,
+    5000,
+    [ref]$messageResult
+))) {
+    Write-Warning "Windows did not acknowledge the font-change notification. Restart WezTerm or sign out to load UDEV Gothic NF."
+} else {
+    Write-Host "Installed and loaded $($fontFiles.Count) UDEV Gothic NF font files for the current user. Restart WezTerm to use them."
+}
+{{ end -}}

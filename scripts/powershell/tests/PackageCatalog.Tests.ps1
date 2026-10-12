@@ -10,7 +10,7 @@ Describe 'Windows application and setup-tool package catalog' {
     It 'should install exactly the selected apps and Windows setup tools without desktop automation packages' {
         $expected = @(
             'AgileBits.1Password', 'Discord.Discord', 'Google.Chrome',
-            'Microsoft.PowerToys', 'Microsoft.PowerShell', 'Microsoft.WindowsTerminal', 'Obsidian.Obsidian', 'twpayne.chezmoi',
+            'Microsoft.PowerToys', 'Microsoft.PowerShell', 'Microsoft.WindowsTerminal', 'Obsidian.Obsidian', 'Task.Task', 'twpayne.chezmoi',
             'StablyAI.Orca', 'TheBrowserCompany.Arc', 'wez.wezterm', '9PLM9XGG6VKS'
         )
         (@($script:packages.PackageIdentifier | Sort-Object) -join '|') |
