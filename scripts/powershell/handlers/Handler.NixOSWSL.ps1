@@ -516,7 +516,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         $writableCheck = "touch /tmp/.wsl-write-test 2>/dev/null && rm -f /tmp/.wsl-write-test"
         Invoke-Wsl -Arguments @("-d", $distroName, "-u", "root", "--", "sh", "-lc", $writableCheck)
         if ($LASTEXITCODE -ne 0) {
-            $this.LogWarning("WSL が読み取り専用です。VHD 拡張は WslConfig ハンドラーで処理されます。")
+            $this.LogWarning("WSL が読み取り専用です。ディストリビューションのディスク状態を確認してください。")
         }
     }
 

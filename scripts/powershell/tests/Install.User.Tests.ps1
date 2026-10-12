@@ -24,7 +24,7 @@ Describe 'install.user.ps1' {
     It 'should instantiate only the GUI package adapter' {
         $content = Get-Content -LiteralPath $script:target -Raw
         $content | Should -Match '\[WingetHandler\]::new\('
-        $content | Should -Not -Match 'Get-SetupHandler|Handler\.\*|Invoke-ConsentPrompt'
+        $content | Should -Not -Match 'Handler\.\*'
     }
 
     It 'should repair Windows environment variables before computing default paths' {

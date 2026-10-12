@@ -2,8 +2,6 @@ BeforeAll {
     . $PSScriptRoot/../../lib/WindowsEnvironment.ps1
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
-    . $PSScriptRoot/../../handlers/Handler.Npm.ps1
-    . $PSScriptRoot/../../handlers/Handler.Pnpm.ps1
     . $PSScriptRoot/../../handlers/Handler.Winget.ps1
 }
 
@@ -11,39 +9,24 @@ Describe 'Windows setup with missing command directories in PATH' -Skip:([Enviro
     BeforeEach {
         $script:originalPath = $env:PATH
         $script:originalLocalAppData = $env:LOCALAPPDATA
-        $script:originalPnpmHome = $env:PNPM_HOME
         $env:PATH = "$PSHOME;$env:SystemRoot\System32"
         $caseRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         $env:LOCALAPPDATA = Join-Path $caseRoot 'local'
-        $env:PNPM_HOME = Join-Path $caseRoot 'pnpm-home'
-        $script:npmPrefix = Join-Path $caseRoot 'custom npm prefix'
-        New-Item -ItemType Directory -Path $env:PNPM_HOME, $script:npmPrefix -Force | Out-Null
+        New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
         $script:ctx = [SetupContext]::new($TestDrive)
         $script:logs = @()
         Mock Write-Host { param($Object) $script:logs += [string]($Object -join ' ') }
-        Mock Get-UserEnvironmentPath { return $env:PNPM_HOME }
+        Mock Get-UserEnvironmentPath { return $env:PATH }
         Mock Set-UserEnvironmentPath { throw 'The test must not persist PATH changes' }
         Mock Get-ExternalCommand {
             param($Name)
             Get-Command -Name $Name -ErrorAction SilentlyContinue
-        }
-        Mock Get-ExternalCommand { return @{ Source = 'C:\nodejs\npm.cmd' } } -ParameterFilter { $Name -eq 'npm' }
-        Mock Invoke-Npm {
-            param($Arguments)
-            $global:LASTEXITCODE = 0
-            switch ($Arguments[0]) {
-                'prefix' { return $script:npmPrefix }
-                'list' { return '{"dependencies":{}}' }
-                'install' { return 'installed' }
-                default { throw "Unexpected npm arguments: $Arguments" }
-            }
         }
     }
 
     AfterEach {
         $env:PATH = $script:originalPath
         $env:LOCALAPPDATA = $script:originalLocalAppData
-        $env:PNPM_HOME = $script:originalPnpmHome
     }
 
     It 'should restore the existing WindowsApps directory without duplicating or replacing PATH entries' {
@@ -58,85 +41,6 @@ Describe 'Windows setup with missing command directories in PATH' -Skip:([Enviro
         $env:PATH | Should -Match ([regex]::Escape($before))
     }
 
-    It 'should verify npm packages from the configured global prefix when it was absent from PATH' {
-        Set-Content -LiteralPath (Join-Path $script:npmPrefix 'path-recovery-tool.ps1') -Value "'1.2.3'; exit 0"
-        Mock Get-JsonContent { return @{ globalPackages = @(@{ name = 'path-recovery-tool'; verifyCommand = @{ command = 'path-recovery-tool'; args = @('--version') } }) } }
-
-        $result = [NpmHandler]::new().Apply($script:ctx)
-
-        $result.Success | Should -BeTrue -Because $result.Message
-        $env:PATH -split ';' | Should -Contain $script:npmPrefix
-    }
-
-    It 'should reuse the npm prefix across handlers and avoid duplicate PATH entries' {
-        $before = $env:PATH
-        Update-NpmGlobalCommandPath -Cache $script:ctx.Options
-        Update-NpmGlobalCommandPath -Cache $script:ctx.Options
-
-        @($env:PATH -split ';' | Where-Object { $_ -eq $script:npmPrefix }).Count | Should -Be 1
-        $env:PATH | Should -Match ([regex]::Escape($before))
-        Should -Invoke Invoke-Npm -Times 1 -Exactly -ParameterFilter { $Arguments[0] -eq 'prefix' }
-    }
-
-    It 'should fail npm setup with the prefix diagnostic instead of adding invalid output to PATH' {
-        $before = $env:PATH
-        Mock Invoke-Npm { $global:LASTEXITCODE = 9; return 'prefix lookup failed' } -ParameterFilter { $Arguments[0] -eq 'prefix' }
-
-        $result = [NpmHandler]::new().Apply($script:ctx)
-
-        $result.Success | Should -BeFalse
-        $result.Message | Should -Match 'exit code 9.*prefix lookup failed'
-        $env:PATH | Should -Be $before
-    }
-
-    It 'should find an already installed pnpm before attempting npm or corepack bootstrap' {
-        Set-Content -LiteralPath (Join-Path $script:npmPrefix 'pnpm.cmd') -Value "@echo 12.6.0`r`n@exit /b 0"
-        Mock Get-JsonContent { return @{ globalPackages = @() } }
-        Mock Invoke-Npm { throw 'Existing pnpm must not be reinstalled' } -ParameterFilter { $Arguments[0] -eq 'install' }
-        Mock Invoke-Corepack { throw 'Existing pnpm must not use corepack' }
-
-        $result = [PnpmHandler]::new().Apply($script:ctx)
-
-        $result.Success | Should -BeTrue -Because $result.Message
-        (Get-Command pnpm.cmd | Select-Object -First 1).Source | Should -Be (Join-Path $script:npmPrefix 'pnpm.cmd')
-    }
-
-    It 'should verify a newly bootstrapped pnpm from the configured prefix' {
-        Mock Set-UserEnvironmentPath { }
-        Mock Get-JsonContent { return @{ globalPackages = @() } }
-        Mock Invoke-Npm {
-            Set-Content -LiteralPath (Join-Path $script:npmPrefix 'pnpm.cmd') -Value "@echo 12.6.0`r`n@exit /b 0"
-            $global:LASTEXITCODE = 0
-            return 'installed pnpm'
-        } -ParameterFilter { $Arguments[0] -eq 'install' }
-        Mock Invoke-Corepack { throw 'Successful npm bootstrap must not use corepack' }
-
-        $result = [PnpmHandler]::new().Apply($script:ctx)
-
-        $result.Success | Should -BeTrue -Because $result.Message
-        Should -Invoke Invoke-Npm -Times 1 -Exactly -ParameterFilter { $Arguments[0] -eq 'prefix' }
-    }
-
-    It 'should retain the missing-command reason when a handler cannot apply' {
-        Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'winget' }
-
-        $results = @(Invoke-SetupHandler -Handlers @([WingetHandler]::new()) -Context $script:ctx)
-
-        $results.Count | Should -Be 0
-        $script:logs -join "`n" | Should -Match 'Winget.*winget'
-    }
-
-    It 'should retain the command output and exit code when npm verification fails' {
-        Mock Get-JsonContent { return @{ globalPackages = @(@{ name = 'broken-tool'; verifyCommand = @{ command = 'broken-tool'; args = @('--version') } }) } }
-        Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 127; return 'command not found: broken-tool' }
-
-        $result = [NpmHandler]::new().Apply($script:ctx)
-
-        $result.Success | Should -BeFalse
-        $script:logs -join "`n" | Should -Match 'command not found: broken-tool'
-        $script:logs -join "`n" | Should -Match '127'
-    }
-
     It 'should recover an installed portable command without a WinGet link or explicit pathEntries' -ForEach @(
         @{ RelativeDirectory = ''; CommandName = 'fzf' }
         @{ RelativeDirectory = 'ghq_windows_amd64'; CommandName = 'ghq' }
@@ -146,7 +50,7 @@ Describe 'Windows setup with missing command directories in PATH' -Skip:([Enviro
         $commandDirectory = if ($RelativeDirectory) { Join-Path $packageRoot $RelativeDirectory } else { $packageRoot }
         New-Item -ItemType Directory -Path $commandDirectory -Force | Out-Null
         Copy-Item -LiteralPath $env:ComSpec -Destination (Join-Path $commandDirectory "$CommandName.exe")
-        $script:persistedPath = $env:PNPM_HOME
+        $script:persistedPath = $env:PATH
         Mock Get-UserEnvironmentPath { return $script:persistedPath }
         Mock Set-UserEnvironmentPath { param($Path) $script:persistedPath = $Path }
         $pkg = [PSCustomObject]@{

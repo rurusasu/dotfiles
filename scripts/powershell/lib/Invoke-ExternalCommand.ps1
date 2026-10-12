@@ -3,7 +3,7 @@
     外部コマンドのラッパー関数群
 
 .DESCRIPTION
-    外部コマンド（wsl, chezmoi, docker 等）をラップする関数群。
+    外部コマンド（wsl, chezmoi, winget 等）をラップする関数群。
     Pester テストでモック可能にするため、直接呼び出しを避けて
     これらの関数を経由する。
 
@@ -224,83 +224,8 @@ function Get-PackageInstallTimeoutSecond {
     return 3600
 }
 
-<#
-.SYNOPSIS
-    diskpart コマンドを実行する（内部関数）
-.DESCRIPTION
-    cmd /c 経由で diskpart を実行する。モック可能にするためラッパー関数として分離。
-#>
-function Invoke-DiskpartInternal {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$ScriptPath
-    )
-    # diskpart requires admin privileges.
-    # Use Start-Process with -NoNewWindow to avoid output capture issues.
-    # Note: Start-Process with -RedirectStandardOutput requires additional privileges.
-    $proc = Start-Process -FilePath "diskpart" -ArgumentList "/s", $ScriptPath -Wait -PassThru -NoNewWindow
-    return @{
-        Output   = $null
-        ExitCode = $proc.ExitCode
-    }
-}
 
-<#
-.SYNOPSIS
-    diskpart コマンドを実行する
-.PARAMETER ScriptContent
-    diskpart スクリプトの内容
-.OUTPUTS
-    コマンドの出力
-.EXAMPLE
-    Invoke-Diskpart -ScriptContent "list disk"
-#>
-function Invoke-Diskpart {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$ScriptContent
-    )
-    $tmp = New-TemporaryFile
-    try {
-        Set-ContentNoNewline -Path $tmp -Value $ScriptContent
-        # Run diskpart via internal function (mockable for tests)
-        $result = Invoke-DiskpartInternal -ScriptPath $tmp.FullName
 
-        # Output the result
-        if ($result.Output) {
-            $result.Output | ForEach-Object { Write-Output $_ }
-        }
-
-        # Check for errors
-        if ($result.ExitCode -ne 0) {
-            throw "diskpart failed with exit code $($result.ExitCode)"
-        }
-    }
-    finally {
-        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
-    }
-}
-
-<#
-.SYNOPSIS
-    ファイルに内容を書き込む（改行なし）
-.PARAMETER Path
-    書き込み先のパス
-.PARAMETER Value
-    書き込む内容
-#>
-function Set-ContentNoNewline {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Path,
-        [Parameter(Mandatory)]
-        [string]$Value
-    )
-    Set-Content -Path $Path -Value $Value -NoNewline
-}
 
 <#
 .SYNOPSIS
@@ -351,6 +276,7 @@ function Get-ExternalCommandPath {
 
     return $null
 }
+
 
 <#
 .SYNOPSIS
@@ -418,42 +344,7 @@ function Test-PathExist {
     Test-Path -LiteralPath $Path
 }
 
-<#
-.SYNOPSIS
-    プロセスを安全に取得する
-.PARAMETER Name
-    プロセス名
-.OUTPUTS
-    プロセスオブジェクト、存在しない場合は $null
-.EXAMPLE
-    $proc = Get-ProcessSafe -Name "Docker Desktop"
-    if ($proc) { "Docker Desktop is running" }
-#>
-function Get-ProcessSafe {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Name
-    )
-    Get-Process -Name $Name -ErrorAction SilentlyContinue
-}
 
-<#
-.SYNOPSIS
-    プロセスを安全に停止する
-.PARAMETER Name
-    プロセス名
-.EXAMPLE
-    Stop-ProcessSafe -Name "Docker Desktop"
-#>
-function Stop-ProcessSafe {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Name
-    )
-    Stop-Process -Name $Name -ErrorAction SilentlyContinue
-}
 
 <#
 .SYNOPSIS
@@ -494,65 +385,8 @@ function Invoke-DiscordInstallPreparation {
     }
 }
 
-<#
-.SYNOPSIS
-    プロセスを起動する
-.PARAMETER FilePath
-    実行ファイルのパス
-.EXAMPLE
-    Start-ProcessSafe -FilePath "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-#>
-function Start-ProcessSafe {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$FilePath
-    )
-    Start-Process -FilePath $FilePath | Out-Null
-}
 
-<#
-.SYNOPSIS
-    ファイルをコピーする
-.PARAMETER Source
-    コピー元パス
-.PARAMETER Destination
-    コピー先パス
-.PARAMETER Force
-    上書きを許可するか
-.EXAMPLE
-    Copy-FileSafe -Source ".\source.txt" -Destination ".\dest.txt" -Force
-#>
-function Copy-FileSafe {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Source,
-        [Parameter(Mandatory)]
-        [string]$Destination,
-        [switch]$Force
-    )
-    Copy-Item -LiteralPath $Source -Destination $Destination -Force:$Force
-}
 
-<#
-.SYNOPSIS
-    ファイルの内容を取得する
-.PARAMETER Path
-    ファイルパス
-.OUTPUTS
-    ファイルの内容
-.EXAMPLE
-    $content = Get-FileContentSafe -Path ".\config.json"
-#>
-function Get-FileContentSafe {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Path
-    )
-    Get-Content -Raw -LiteralPath $Path
-}
 
 <#
 .SYNOPSIS
@@ -625,43 +459,7 @@ function Get-ChildItemSafe {
     Get-ChildItem @params
 }
 
-<#
-.SYNOPSIS
-    レジストリ値を取得する
-.PARAMETER Path
-    レジストリパス
-.OUTPUTS
-    レジストリキーのプロパティ
-.EXAMPLE
-    Get-RegistryValue -Path "HKCU:\Software\Microsoft"
-#>
-function Get-RegistryValue {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Path
-    )
-    Get-ItemProperty -Path $Path -ErrorAction SilentlyContinue
-}
 
-<#
-.SYNOPSIS
-    レジストリキーの子キーを取得する
-.PARAMETER Path
-    レジストリパス
-.OUTPUTS
-    子キーの配列
-.EXAMPLE
-    Get-RegistryChildItem -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss"
-#>
-function Get-RegistryChildItem {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Path
-    )
-    Get-ChildItem -Path $Path -ErrorAction SilentlyContinue
-}
 
 <#
 .SYNOPSIS
@@ -723,232 +521,12 @@ function Start-SleepSafe {
     Start-Sleep -Seconds $Seconds
 }
 
-<#
-.SYNOPSIS
-    npm コマンドを実行する
-.PARAMETER Arguments
-    npm に渡す引数
-.OUTPUTS
-    コマンドの出力
-.EXAMPLE
-    Invoke-Npm -Arguments @("--version")
-    Invoke-Npm -Arguments @("install", "-g", "@openai/codex")
-#>
-function Invoke-Npm {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string[]]$Arguments
-    )
 
-    $isGlobalInstall = $Arguments.Count -gt 1 -and
-    $Arguments[0] -eq "install" -and
-    ($Arguments -contains "-g" -or $Arguments -contains "--global")
-    if ($isGlobalInstall) {
-        Add-NpmNodeDirectoryToProcessPath
-    }
-    $npmInvocation = Get-NpmInvocation -Arguments $Arguments
-    if ($isGlobalInstall) {
-        $timeoutSeconds = Get-PackageInstallTimeoutSecond
-        if ($timeoutSeconds -gt 0) {
-            return Invoke-ExternalCommandWithTimeout `
-                -Command $npmInvocation.Command `
-                -Arguments $npmInvocation.Arguments `
-                -TimeoutSeconds $timeoutSeconds
-        }
-    }
 
-    Invoke-NativeCommand -Command $npmInvocation.Command -Arguments $npmInvocation.Arguments
-}
 
-function Get-NpmInvocation {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string[]]$Arguments
-    )
 
-    $npmCommand = Get-ExternalCommand -Name "npm"
-    $npmPath = Get-ExternalCommandPath -CommandInfo $npmCommand
-    $isWindowsRuntime = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
-    if ($isWindowsRuntime -and $npmPath -like "*.ps1") {
-        $npmDirectory = Split-Path -Parent $npmPath
-        $nodePath = Join-Path $npmDirectory "node.exe"
-        $npmCliCandidates = @(
-            (Join-Path $npmDirectory "node_modules\npm\bin\npm-cli.js"),
-            (Join-Path $npmDirectory "npm\node_modules\npm\bin\npm-cli.js")
-        )
-        $npmCliPath = $npmCliCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
-        if ((Test-Path -LiteralPath $nodePath -PathType Leaf) -and $npmCliPath) {
-            return [pscustomobject]@{
-                Command   = $nodePath
-                Arguments = @($npmCliPath) + @($Arguments)
-            }
-        }
-    }
 
-    return [pscustomobject]@{
-        Command   = "npm"
-        Arguments = @($Arguments)
-    }
-}
 
-function Get-NpmNodeDirectory {
-    [CmdletBinding()]
-    [OutputType([string])]
-    param()
-
-    $nodeCommand = Get-ExternalCommand -Name "node.exe"
-    $nodePath = Get-ExternalCommandPath -CommandInfo $nodeCommand
-    if ($nodePath -and (Test-Path -LiteralPath $nodePath -PathType Leaf)) {
-        return Split-Path -Parent $nodePath
-    }
-
-    # npm.cmd and node.exe normally share the Node installation directory. This
-    # resolves Node even when winget updated the registry PATH after this process
-    # started, leaving node.exe undiscoverable by Get-Command.
-    foreach ($npmName in @("npm.cmd", "npm")) {
-        $npmCommand = Get-ExternalCommand -Name $npmName
-        if (-not $npmCommand) { continue }
-
-        $npmPath = Get-ExternalCommandPath -CommandInfo $npmCommand
-        if (-not $npmPath) { continue }
-
-        $nodePath = Join-Path (Split-Path -Parent $npmPath) "node.exe"
-        if (Test-Path -LiteralPath $nodePath -PathType Leaf) {
-            return Split-Path -Parent $nodePath
-        }
-    }
-
-    return $null
-}
-
-function Add-NpmNodeDirectoryToProcessPath {
-    [CmdletBinding()]
-    param()
-
-    $isWindowsRuntime = $true
-    $isWindowsVariable = Get-Variable -Name IsWindows -Scope Global -ErrorAction SilentlyContinue
-    if ($null -ne $isWindowsVariable) {
-        $isWindowsRuntime = [bool]$isWindowsVariable.Value
-    }
-    elseif ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
-        $isWindowsRuntime = $false
-    }
-    if (-not $isWindowsRuntime) { return }
-
-    $nodeDirectory = Get-NpmNodeDirectory
-    if ([string]::IsNullOrWhiteSpace($nodeDirectory)) { return }
-
-    $pathEntries = @($env:PATH -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    foreach ($entry in $pathEntries) {
-        if ([System.StringComparer]::OrdinalIgnoreCase.Equals($entry.TrimEnd('\'), $nodeDirectory.TrimEnd('\'))) {
-            return
-        }
-    }
-
-    if ([string]::IsNullOrWhiteSpace($env:PATH)) {
-        $env:PATH = $nodeDirectory
-    }
-    else {
-        $env:PATH = "$nodeDirectory;$env:PATH"
-    }
-}
-
-function Update-NpmGlobalCommandPath {
-    [CmdletBinding()]
-    param(
-        [hashtable]$Cache = @{}
-    )
-
-    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { return }
-    if (-not $Cache.ContainsKey('NpmGlobalPrefix')) {
-        if (-not (Get-ExternalCommand -Name 'npm')) { return }
-        $output = @(Invoke-Npm -Arguments @('prefix', '-g'))
-        $exitCode = $LASTEXITCODE
-        $prefix = [string]($output | Select-Object -Last 1)
-        if ($exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($prefix) -or
-            -not [IO.Path]::IsPathRooted($prefix.Trim())) {
-            throw "npm prefix -g failed (exit code ${exitCode}): $($output -join ' ')"
-        }
-        $Cache['NpmGlobalPrefix'] = $prefix.Trim()
-    }
-
-    # On Windows npm places global command shims directly in its prefix.
-    # Include it before installation, even when npm has not created it yet.
-    $prefix = [string]$Cache['NpmGlobalPrefix']
-    $normalizedPrefix = $prefix.TrimEnd([char[]]'\/')
-    $pathItems = @($env:PATH -split ';' | Where-Object { $_ })
-    $normalizedItems = @($pathItems | ForEach-Object { $_.Trim('"').TrimEnd([char[]]'\/') })
-    if ($normalizedItems -notcontains $normalizedPrefix) {
-        $env:PATH = (@($prefix) + $pathItems) -join ';'
-    }
-}
-
-<#
-.SYNOPSIS
-    pnpm コマンドを実行する
-.PARAMETER Arguments
-    pnpm に渡す引数
-.OUTPUTS
-    コマンドの出力
-.EXAMPLE
-    Invoke-Pnpm -Arguments @("--version")
-    Invoke-Pnpm -Arguments @("add", "-g", "@openai/codex")
-#>
-
-function Invoke-Pnpm {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string[]]$Arguments
-    )
-    # Windows の npm/Corepack は extensionless な POSIX shim と
-    # pnpm.cmd を同じディレクトリに配置することがある。PowerShell の
-    # 解決結果が extensionless shim になると、Windows がそれを実行できず
-    # ERROR_BAD_EXE_FORMAT (os error 193) になるため、.cmd を優先する。
-    $pnpmCommand = Get-Command -Name "pnpm.cmd" -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-    $pnpmPath = "pnpm"
-    if ($pnpmCommand) {
-        $resolvedPnpmPath = Get-ExternalCommandPath -CommandInfo $pnpmCommand
-        if ($resolvedPnpmPath) {
-            $pnpmPath = $resolvedPnpmPath
-        }
-    }
-
-    $isGlobalAdd = $Arguments.Count -gt 1 -and
-    $Arguments[0] -eq "add" -and
-    ($Arguments -contains "-g" -or $Arguments -contains "--global")
-    if ($isGlobalAdd) {
-        $timeoutSeconds = Get-PackageInstallTimeoutSecond
-        if ($timeoutSeconds -gt 0) {
-            return Invoke-ExternalCommandWithTimeout -Command $pnpmPath -Arguments $Arguments -TimeoutSeconds $timeoutSeconds
-        }
-    }
-
-    Invoke-NativeCommand -Command $pnpmPath -Arguments $Arguments
-}
-
-<#
-.SYNOPSIS
-    corepack コマンドを実行する
-.PARAMETER Arguments
-    corepack に渡す引数
-.OUTPUTS
-    コマンドの出力
-.EXAMPLE
-    Invoke-Corepack -Arguments @("enable")
-    Invoke-Corepack -Arguments @("prepare", "pnpm@latest", "--activate")
-#>
-function Invoke-Corepack {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string[]]$Arguments
-    )
-    Invoke-NativeCommand -Command "corepack" -Arguments $Arguments
-}
 
 <#
 .SYNOPSIS
@@ -974,191 +552,13 @@ function Invoke-Docker {
     & docker @Arguments
 }
 
-<#
-.SYNOPSIS
-    Docker デーモンへの接続性を確認する
-.DESCRIPTION
-    Docker Desktop の Linux engine が応答するかチェックする。
-    Pester でモック可能にするためラッパーとして提供。
-.OUTPUTS
-    [bool] デーモン接続可能なら $true
-#>
-function Test-DockerDaemon {
-    [CmdletBinding()]
-    param(
-        [int]$TimeoutSeconds = 15
-    )
 
-    $originalDockerHost = $env:DOCKER_HOST
-    $originalDockerContext = $env:DOCKER_CONTEXT
-    try {
-        Remove-Item Env:\DOCKER_HOST -ErrorAction SilentlyContinue
-        Remove-Item Env:\DOCKER_CONTEXT -ErrorAction SilentlyContinue
 
-        Invoke-Docker -Arguments @("--context", "desktop-linux", "version", "--format", "{{.Server.Version}}") -TimeoutSeconds $TimeoutSeconds | Out-Null
-        return $LASTEXITCODE -eq 0
-    }
-    finally {
-        if ($null -eq $originalDockerHost) {
-            Remove-Item Env:\DOCKER_HOST -ErrorAction SilentlyContinue
-        }
-        else {
-            $env:DOCKER_HOST = $originalDockerHost
-        }
 
-        if ($null -eq $originalDockerContext) {
-            Remove-Item Env:\DOCKER_CONTEXT -ErrorAction SilentlyContinue
-        }
-        else {
-            $env:DOCKER_CONTEXT = $originalDockerContext
-        }
-    }
-}
 
-<#
-.SYNOPSIS
-    1Password CLI の account list を実行する
-.DESCRIPTION
-    Pester でモック可能にするため直接呼び出しを避けてラップする。
-    ExitCode を PSCustomObject に含めて返す。
-.PARAMETER OpExe
-    op.exe のパス
-.OUTPUTS
-    [PSCustomObject]@{ Output=[string]; ExitCode=[int] }
-.EXAMPLE
-    $result = Invoke-OpAccountList -OpExe "C:\op.exe"
-    if ($result.ExitCode -eq 0) { "signed in" }
-#>
-function Invoke-OpAccountList {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$OpExe,
 
-        [string]$Account
-    )
-    $opArgs = @("account", "list")
-    if ($Account) { $opArgs += @("--account", $Account) }
-    return Invoke-OpCommand -OpExe $OpExe -Arguments $opArgs
-}
 
-<#
-.SYNOPSIS
-    1Password CLI の whoami を実行する
-.DESCRIPTION
-    op account list はアカウント情報を返すだけで認証状態を確認できない。
-    op whoami は実際にサインイン済みかを確認でき、UAC 昇格プロセスで
-    デスクトップアプリ連携が切れている場合も正しく検出できる。
-.PARAMETER OpExe
-    op.exe のパス
-.OUTPUTS
-    [PSCustomObject]@{ Output=[string]; ExitCode=[int] }
-.EXAMPLE
-    $result = Invoke-OpWhoAmI -OpExe "C:\op.exe"
-    if ($result.ExitCode -eq 0) { "authenticated" }
-#>
-function Invoke-OpWhoAmI {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$OpExe
-    )
-    return Invoke-OpCommand -OpExe $OpExe -Arguments @("whoami")
-}
 
-<#
-.SYNOPSIS
-    1Password CLI の vault list を実行する
-.DESCRIPTION
-    op whoami はデスクトップアプリ連携環境（特に PowerShell -File モード）で
-    "account is not signed in" を返す場合がある。
-    op vault list は認証済みなら exit 0 を返し、認証チェックとしてより信頼性が高い。
-.PARAMETER OpExe
-    op.exe のパス
-.OUTPUTS
-    [PSCustomObject]@{ Output=[string]; ExitCode=[int] }
-#>
-function Invoke-OpVaultList {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$OpExe,
-
-        [string]$Account
-    )
-    $opArgs = @("vault", "list", "--format=json")
-    if ($Account) { $opArgs += @("--account", $Account) }
-    return Invoke-OpCommand -OpExe $OpExe -Arguments $opArgs
-}
-
-<#
-.SYNOPSIS
-    1Password CLI の signin を実行する
-.DESCRIPTION
-    UAC 昇格プロセスなどデスクトップアプリ連携が使えない環境で
-    対話的にサインインするためのラッパー。
-.PARAMETER OpExe
-    op.exe のパス
-.OUTPUTS
-    [PSCustomObject]@{ Output=[string]; ExitCode=[int] }
-#>
-function Invoke-OpSignIn {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$OpExe,
-
-        [string]$Account
-    )
-    $opArgs = @("signin")
-    if ($Account) { $opArgs += @("--account", $Account) }
-    return Invoke-OpCommand -OpExe $OpExe -Arguments $opArgs -TimeoutSeconds (Get-OpSignInTimeoutSecond)
-}
-
-function Invoke-OpCommand {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$OpExe,
-        [string[]]$Arguments = @(),
-        [int]$TimeoutSeconds = (Get-OpCommandTimeoutSecond)
-    )
-
-    $output = Invoke-ExternalCommandWithTimeout -Command $OpExe -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
-    return [PSCustomObject]@{ Output = $output; ExitCode = $LASTEXITCODE }
-}
-
-function Get-OpCommandTimeoutSecond {
-    [CmdletBinding()]
-    [OutputType([int])]
-    param()
-
-    $timeoutSeconds = 15
-    $rawTimeout = $env:DOTFILES_OP_TIMEOUT_SECONDS
-    if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
-        $parsed = 0
-        if ([int]::TryParse($rawTimeout, [ref]$parsed) -and $parsed -gt 0) {
-            $timeoutSeconds = $parsed
-        }
-    }
-    return $timeoutSeconds
-}
-
-function Get-OpSignInTimeoutSecond {
-    [CmdletBinding()]
-    [OutputType([int])]
-    param()
-
-    $timeoutSeconds = 120
-    $rawTimeout = $env:DOTFILES_OP_SIGNIN_TIMEOUT_SECONDS
-    if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
-        $parsed = 0
-        if ([int]::TryParse($rawTimeout, [ref]$parsed) -and $parsed -gt 0) {
-            $timeoutSeconds = $parsed
-        }
-    }
-    return $timeoutSeconds
-}
 
 <#
 .SYNOPSIS
@@ -1317,17 +717,6 @@ function Update-ProcessEnvironmentPath {
     if ($omittedEntries -gt 0) {
         Write-Warning "Process PATH refresh omitted $omittedEntries entries to stay within the Windows cmd.exe limit of $maxPathLength characters. Trim stale entries from the User PATH if required commands are missing."
     }
-}
-
-<#
-.SYNOPSIS
-    対話環境かどうかを判定する
-.DESCRIPTION
-    Pester でモック可能にするため [Environment]::UserInteractive / [Console]::IsInputRedirected を
-    直接呼ばずにラップする。非対話環境（CI、リダイレクト入力）では $false を返す。
-#>
-function Test-InteractiveEnvironment {
-    return [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
 }
 
 <#

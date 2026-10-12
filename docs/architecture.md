@@ -117,8 +117,7 @@ module manage the Hermes gateway as a native user service: systemd on
 Linux/WSL and launchd on macOS. `nix/modules/tools.nix` enables the Hermes CLI;
 `nix/modules/ai_agents/hermes/` owns its settings and bootstrap. On Windows, Hermes is managed through the
 configured NixOS WSL distribution. Nix/Home Manager installs it directly in
-NixOS, and `NixRebuildHandler` validates the Linux user service and CLI after
-rebuild. No Hermes package or separate Hermes handler is installed on Windows.
+NixOS. The public `nrs` task applies rebuilds; WSL E2E validates the Linux user service and CLI. No Hermes package or separate Hermes handler is installed on Windows.
 Docker Desktop integration is opt-in through `EnableDockerDesktopIntegration`;
 NixOS uses its native Docker engine for container workloads independently.
 Native state remains at `~/.hermes` in the Linux user's home.
@@ -188,116 +187,25 @@ Windows 専用のアプリも同じ WinGet manifest に直接追加する。Unix
 
 ## PowerShell ハンドラーシステム
 
-`install.ps1` で使用するハンドラーベースのセットアップシステム。
+Windows の実行順序は `taskfiles/install/taskfile.yml` が管理します。
+`install.cmd` → `install.ps1` → `Invoke-WindowsInstallTask.ps1` → Taskfile の順に進み、
+GUI 導入、WSL 初期化、`nrs`、chezmoi 適用を実行します。
+`Invoke-WindowsInstallPhase.ps1` は各 phase に必要な handler だけを明示して読み込みます。
 
-### 基底クラス: SetupHandlerBase
+| Handler    | 役割                                        | 呼び出し元                       |
+| ---------- | ------------------------------------------- | -------------------------------- |
+| Winget     | Windows manifest の導入・検証               | `install.user.ps1`               |
+| WslInstall | WSL 基盤の有効化、必要時の昇格・再起動通知  | `Invoke-WindowsInstallPhase.ps1` |
+| NixOSWSL   | distro 導入、初回同期、既存 distro の再利用 | `Invoke-WindowsInstallPhase.ps1` |
+| Chezmoi    | chezmoi 初期化・Windows 設定の適用          | `Invoke-WindowsInstallPhase.ps1` |
 
-**場所**: [scripts/powershell/lib/SetupHandler.ps1](../scripts/powershell/lib/SetupHandler.ps1#L114-L180)
-
-```powershell
-class SetupHandlerBase {
-    [string]$Name          # ハンドラー名（表示用）
-    [string]$Description   # 説明
-    [int]$Order            # 実行順序（小さい方が先に実行）
-
-    # 実行可否判定（サブクラスで実装）
-    [bool] CanApply([SetupContext]$context) { return $false }
-
-    # 実行処理（サブクラスで実装）
-    [SetupResult] Apply([SetupContext]$context) { throw "Not implemented" }
-
-    # ヘルパーメソッド
-    [SetupResult] CreateSuccessResult([string]$message)
-    [SetupResult] CreateFailureResult([string]$message, [System.Exception]$error)
-    [void] WriteInfo([string]$message)
-    [void] WriteSuccess([string]$message)
-    [void] WriteError([string]$message)
-}
-```
-
-### セットアップコンテキスト: SetupContext
-
-**場所**: [scripts/powershell/lib/SetupHandler.ps1](../scripts/powershell/lib/SetupHandler.ps1#L25-L83)
-
-```powershell
-class SetupContext {
-    [string]$RootPath          # プロジェクトルート
-    [string]$DistroName        # WSL ディストリビューション名
-    [string]$InstallDir        # インストールディレクトリ
-    [hashtable]$SharedData     # ハンドラー間の共有データ
-
-    SetupContext([string]$rootPath) {
-        $this.RootPath = $rootPath
-        $this.SharedData = @{}
-    }
-}
-```
-
-**SharedData の使用例**:
-
-```powershell
-# ハンドラー A（Order 10）が共有データを設定
-$context.SharedData["VhdPath"] = "C:\path\to.vhdx"
-
-# ハンドラー B（Order 20）が共有データを使用
-$vhdPath = $context.SharedData["VhdPath"]
-```
-
-### ハンドラー実行順序
-
-現在の `install.cmd` は Taskfile が管理する GUI/Winget と WSL/NixOS-WSL のフェーズを実行します。`install.user.ps1` は GUI/Winget フェーズを担当します。以下は独立呼び出しやテストのために保持している旧構成のハンドラー一覧であり、通常の Windows セットアップの実行順序ではありません。
-
-| Order | Phase | Admin | ハンドラー      | ソースファイル                                                                            | 説明                                 |
-| ----- | ----- | ----- | --------------- | ----------------------------------------------------------------------------------------- | ------------------------------------ |
-| 5     | 1     | No    | Winget          | [Handler.Winget.ps1](../scripts/powershell/handlers/Handler.Winget.ps1)                   | winget パッケージ管理                |
-| 5     | 2     | Yes   | WslInstall      | [Handler.WslInstall.ps1](../scripts/powershell/handlers/Handler.WslInstall.ps1)           | WSL コンポーネントのインストール     |
-| 6     | 1     | No    | Npm             | [Handler.Npm.ps1](../scripts/powershell/handlers/Handler.Npm.ps1)                         | npm グローバルパッケージ管理         |
-| 7     | 1     | No    | Pnpm            | [Handler.Pnpm.ps1](../scripts/powershell/handlers/Handler.Pnpm.ps1)                       | pnpm グローバルパッケージ管理        |
-| 8     | 1     | No    | Bun             | [Handler.Bun.ps1](../scripts/powershell/handlers/Handler.Bun.ps1)                         | Bun シンボリックリンク作成           |
-| 9     | 1     | No    | OnePasswordCli  | [Handler.OnePasswordCli.ps1](../scripts/powershell/handlers/Handler.OnePasswordCli.ps1)   | 1Password CLI op.exe shim 作成       |
-| 10    | 2     | No    | Chezmoi         | [Handler.Chezmoi.ps1](../scripts/powershell/handlers/Handler.Chezmoi.ps1)                 | chezmoi dotfiles 適用                |
-| 17    | 2     | No    | NixOSWSL        | [Handler.NixOSWSL.ps1](../scripts/powershell/handlers/Handler.NixOSWSL.ps1)               | NixOS-WSL インストール               |
-| 18    | 2     | No    | Docker          | [Handler.Docker.ps1](../scripts/powershell/handlers/Handler.Docker.ps1)                   | Docker Desktop WSL 連携              |
-| 20    | 2     | No    | WslConfig       | [Handler.WslConfig.ps1](../scripts/powershell/handlers/Handler.WslConfig.ps1)             | .wslconfig 適用                      |
-| 21    | 2     | Yes   | VhdManager      | [Handler.VhdManager.ps1](../scripts/powershell/handlers/Handler.VhdManager.ps1)           | WSL VHD サイズ拡張                   |
-| 40    | 2     | No    | VscodeServer    | [Handler.VscodeServer.ps1](../scripts/powershell/handlers/Handler.VscodeServer.ps1)       | VS Code Server キャッシュクリア      |
-| 55    | 2     | No    | NixRebuild      | [Handler.NixRebuild.ps1](../scripts/powershell/handlers/Handler.NixRebuild.ps1)           | nixos-rebuild switch の実行          |
-| 57    | 2     | No    | Plane           | [Handler.Plane.ps1](../scripts/powershell/handlers/Handler.Plane.ps1)                     | Plane Docker Compose セットアップ    |
-| 58    | 2     | No    | PlaneGithubSync | [Handler.PlaneGithubSync.ps1](../scripts/powershell/handlers/Handler.PlaneGithubSync.ps1) | Plane / GitHub Issues 同期タスク登録 |
-
-**重要**: Order は依存関係を優先して設定する。Docker だけで完結するハンドラーは Docker の後、NixOS に依存するハンドラーは NixOSWSL/NixRebuild の後に置く。MLflow は独立した Docker service であり、Nix/Home Manager 管理の native Hermes Agent とは別に扱う。
-
-### ハンドラー実行フロー
-
-```powershell
-# 1. ライブラリ読み込み
-$libPath = Join-Path $PSScriptRoot "scripts\powershell\lib"
-. (Join-Path $libPath "SetupHandler.ps1")
-
-# 2. コンテキスト作成
-$context = [SetupContext]::new($PSScriptRoot)
-
-# 3. ハンドラー動的ロード
-$handlersPath = Join-Path $PSScriptRoot "scripts\powershell\handlers"
-$handlerFiles = Get-ChildItem -LiteralPath $handlersPath -Filter "Handler.*.ps1"
-
-$handlers = @()
-foreach ($file in $handlerFiles) {
-    . $file.FullName
-    $className = $file.BaseName.Replace("Handler.", "") + "Handler"
-    $handlers += New-Object $className
-}
-
-# 4. Order でソート・実行
-$handlers | Sort-Object Order | ForEach-Object {
-    if ($_.CanApply($context)) {
-        $_.Apply($context)
-    }
-}
-```
+`lib/SetupHandler.ps1` は共有の `SetupContext` / `SetupResult` / `SetupHandlerBase` と
+結果表示を提供します。未使用 handler の動的探索・ソート・一括実行は行いません。
+`CanApply()` は判定専用、`Apply()` は適用結果を `SetupResult` で返します。
+外部コマンドは `lib/Invoke-ExternalCommand.ps1` の wrapper を使用します。
+NixOS の通常 rebuild は公開タスク `nrs` に集約します。
 
 ---
-
 ## 外部コマンドラッパー
 
 テストでモック可能にするため、すべての外部コマンドをラップ関数経由で実行します。
@@ -331,7 +239,6 @@ function Invoke-CopyItem { param([string]$Source, [string]$Destination); Copy-It
 Mock Invoke-Wsl { return "Mocked output" }
 Should -Invoke Invoke-Wsl -Times 1 -Exactly
 ```
-
 ---
 
 ## テスト戦略
