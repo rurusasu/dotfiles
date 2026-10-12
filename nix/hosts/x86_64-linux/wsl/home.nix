@@ -11,6 +11,7 @@ in
 {
   imports = [
     (import ../../../modules/tools.nix).linuxDesktop
+    (import ../../../modules/tools.nix).chatgptCli
     ../../../modules/editors/nvim
     ../../../home/common.nix
   ];

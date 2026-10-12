@@ -36,7 +36,7 @@ in
 {
   programs.codex = {
     enable = true;
-    # Native desktops select the app-bundled CLI in tools.nix; WSL uses Windows.
+    # tools.nix selects the app-bundled Linux/macOS CLI where appropriate.
     package = lib.mkDefault null;
     # Preserve application settings and project trust in a writable user file.
     mutableSettings = true;

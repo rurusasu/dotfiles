@@ -33,7 +33,7 @@ flake.nix -> hosts/configurations.nix -> hosts/<system>/ -> home/common.nix
 - 1Password の CLI / GUI は `../modules/tools.nix`、SSH agent 設定は `../modules/1password/` が担当する。Linux の GUI は Home Manager、macOS の GUI は nix-darwin に導入する。`ssh.nix` が `IdentityAgent` と `SSH_AUTH_SOCK` を同じ公式 socket に設定する。Bash は別の `ssh-agent` を起動しない。Git 署名・WSL interop の設定は各 host に残す。
 - lazygit は `../modules/tools.nix` で有効化し、`../modules/lazygit/` が Bash / Zsh の `lg` 標準連携を設定する。
 - Herdr は `../modules/tools.nix` で有効化し、`../modules/herdr/` で設定する。キー配列などを標準 `programs.herdr.settings` に Nix で直接定義し、Home Manager が設定ファイルを生成する。Windows は chezmoi 設定と既存の公式 installer を維持する。
-- ChatGPT は `../modules/tools.nix` が Darwin と native NixOS のアプリを `home.packages`、同梱 CLI を標準 `programs.codex.package` で宣言する。両 OS は `../modules/ai_agents/chatgpt/packages.nix` を共有し、Linux のキャッシュ cleanup は `desktop.nix` の `systemd.user.tmpfiles.rules` で管理する。`common.nix` が同 module の Codex 設定を読み込む。WSL に Linux GUI は導入せず、Codex CLI は独立導入しない。
+- ChatGPT / Codex は `../modules/tools.nix` が Darwin と native NixOS でアプリと同梱 CLI を宣言し、WSL では Linux 同梱 CLI のみを選ぶ。各 Linux は `../modules/ai_agents/chatgpt/packages.nix` を共有し、desktop のキャッシュ cleanup は `desktop.nix` の `systemd.user.tmpfiles.rules` で管理する。`common.nix` が同 module の Codex 設定を読み込む。WSL の GUI は導入せず、Windows 側は Windows アプリ付属 CLI を使う。
 - Hermes Agent の CLI は `../modules/tools.nix` で有効化する。`common.nix` が `../modules/ai_agents/hermes/` を読み込み、gateway・CLI 設定・bootstrap manifest を管理する。`bootstrap.nix` が bootstrap の構築を担当する。既存の `~/.hermes`、依存 pin、macOS の launchd / Linux の systemd-user 設定は維持する。
 - `common.nix` は `../modules/tools.nix` の `homeManager` を読み込み、Unix CLI / GUI を有効化・導入する。各アプリ module と `./shells/plugins/` が設定・連携を担当する。
 - zoxide のシェル標準連携は `./shells/plugins/zoxide.nix` に置き、`--cmd cd` で `cd` / `cdi` を使う。WSL の除外ディレクトリは `nix/hosts/x86_64-linux/wsl/home.nix` に置く。
@@ -49,7 +49,7 @@ flake.nix -> hosts/configurations.nix -> hosts/<system>/ -> home/common.nix
 - `common.nix` から OS 固有ファイルを import しない。
 - Unix の設定は Codex を含め Home Manager が生成し、`files/` に展開済み dotfiles のコピーを置かない。chezmoi は Windows 専用。
 - Python のユーザー環境は `../modules/tools.nix` が導入する uv で管理し、interpreter を直接 `home.packages` に追加しない。公開 Python コマンドは uv 経由で実行する。
-- Node.js/npm と `dsh` は `../modules/tools.nix` で導入し、dsh は upstream Nix package を使用する。pnpm と Bun は導入せず、Codex CLI は ChatGPT アプリ付属のものを使う。Windows の npm/pnpm manifest は空で、dsh を導入しない。
+- Node.js/npm と `dsh` は `../modules/tools.nix` で導入し、dsh は upstream Nix package を使用する。pnpm と Bun は導入せず、Codex CLI は各 OS の ChatGPT アプリ付属のものを使う。Windows の npm/pnpm manifest は空で、dsh を導入しない。
 - `nix/home/` 直下に `default.nix` と `users.nix` は作らない。入口と OS 依存方向を曖昧にするため。
 
 standalone Home Manager のユーザー名は `rurusasu` を既定値とする。Darwin のホームディレクトリは

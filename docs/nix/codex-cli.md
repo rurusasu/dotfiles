@@ -1,7 +1,8 @@
 # ChatGPT と同梱 Codex の管理
 
-Codex CLI は ChatGPT アプリ付属のものを使用します。Windows、WSL/NixOS、macOS の
-installer では `@openai/codex` を個別にインストールしません。
+Codex CLI は各 OS 向け ChatGPT アプリ付属のものを使用します。Windows は Windows アプリの CLI、
+NixOS / WSL は Linux アプリの CLI、macOS は macOS アプリの CLI です。installer では
+`@openai/codex` を個別にインストールしません。
 
 ## モジュール構成
 
@@ -13,11 +14,12 @@ nix/modules/ai_agents/
 └── hermes/   # Hermes gateway・CLI 設定・bootstrap manifest
 ```
 
-ChatGPT アプリは `nix/modules/tools.nix` が導入します。Darwin と native NixOS が同じ
-`chatgpt/packages.nix` からアプリと同梱 CLI を選択します。アプリは `home.packages`、CLI は
-標準 `programs.codex.package` で宣言し、CLI の PATH 配置と設定生成を Home Manager に任せます。
-`chatgpt/desktop.nix` が Linux のキャッシュ cleanup を設定します。WSL には Linux GUI を導入しません。
-Darwin host は `tools.nix` の `chatgpt` module、native NixOS は `nativeDesktop` を選択します。
+`nix/modules/tools.nix` がアプリと CLI を選択します。Darwin と native NixOS は同じ
+`chatgpt/packages.nix` からアプリと同梱 CLI を選び、WSL は同じ Linux package の CLI だけを選びます。
+アプリは `home.packages`、CLI は標準 `programs.codex.package` で宣言し、CLI の PATH 配置と設定生成を
+Home Manager に任せます。`chatgpt/desktop.nix` が Linux desktop のキャッシュ cleanup を設定します。
+WSL には Linux GUI を導入しません。Darwin host は `tools.nix` の `chatgpt` module、native NixOS は
+`nativeDesktop`、WSL は `chatgptCli` を選択します。
 Windows の Store 導入・検証情報は `windows/winget/packages.json` で直接管理します。
 Codex CLI を独立したパッケージとして導入しません。
 
@@ -50,8 +52,8 @@ native Wayland には制約があります。最新の範囲は [公式 Linux �
 ## 設定の所有
 
 Unix の config・agents・rules・hooks は `nix/modules/ai_agents/chatgpt/` の
-Home Manager `programs.codex` が管理します。Darwin / native NixOS の `package` は同梱 CLI の
-wrapper を指定し、独立した Codex 配布物は導入しません。WSL は `package = null` のまま Windows 側のアプリを使います。
+Home Manager `programs.codex` が管理します。Darwin / NixOS / WSL の `package` は各 OS 向け同梱 CLI の
+wrapper を指定し、独立した Codex 配布物は導入しません。WSL は Linux 版を使い、Windows は Windows 側のアプリを使います。
 `mutableSettings = true` で既存の UI 設定や project trust を保持して宣言値をマージします。
 認証ファイル・履歴・セッションは Home Manager の管理対象にしません。
 Windows の設定は chezmoi が管理します。

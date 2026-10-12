@@ -66,7 +66,7 @@ Ubuntu / Debian:  ./install.sh
 
 - Windows は `windows/winget/packages.json` を正本として GUI アプリのみを winget で導入します。npm/pnpm manifest は独立した空配列として保持します。
 - `install.cmd` は既存の PowerShell と winget で GUI アプリを導入した後、NixOS-WSL の導入と NixOS/Home Manager 適用を行います。実行順序は `taskfiles/install/taskfile.yml` が管理し、Task がなければ専用 cache に取得します。`-UserPhaseOnly` は GUI のみです。WSL 基盤の有効化だけ UAC 昇格します。Windows の CLI ツール・Node.js・npm・pnpm・dsh・AutoHotkey・GlazeWM、chezmoi、CLI runtime acceptance は導入・実行しません。既存アプリや Startup shortcut は自動削除しません。
-- Codex CLI はどの OS でも個別導入せず、ChatGPT アプリ付属の CLI を使います。Windows の GUI profile は Microsoft Store のデスクトップアプリを対象とし、npm/pnpm パッケージを導入しません。
+- Codex CLI はどの OS でも個別導入せず、各 OS 向け ChatGPT アプリ付属の CLI を使います。Windows の GUI profile は Microsoft Store のデスクトップアプリを対象とし、npm/pnpm パッケージを導入しません。
 - macOS は nix-darwin が Home Manager と nix-homebrew formula/cask を同じ switch に含めます。
 - 非 NixOS Linux（Ubuntu/Debian など）は standalone Home Manager がユーザー環境を適用します。Docker や OS service は管理しません。
 - NixOS は NixOS generation に Home Manager と system module を統合します。
@@ -118,7 +118,7 @@ Windows の package install timeout は 3600 秒を共通既定値とし、WinGe
 
 起動検証の既定と WSL の検証は 120 秒です。既存の長い個別 timeout は短縮せず、manifest の個別値を優先します。
 
-Windows の npm/pnpm manifest は空で、dsh、pnpm、Bun、Codex CLI の個別導入は行いません。Codex CLI は ChatGPT アプリ付属のものを使います。
+Windows の npm/pnpm manifest は空で、dsh、pnpm、Bun、Codex CLI の個別導入は行いません。Windows は Windows アプリ付属 CLI を、NixOS / WSL は Linux アプリ付属 CLI を使います。
 
 ## システム package と Home Manager の境界
 
@@ -133,9 +133,9 @@ Windows の npm/pnpm manifest は空で、dsh、pnpm、Bun、Codex CLI の個別
 
 同じ package を Home Manager と system layer の両方へ重複させるのは、system service が絶対 path を必要とする場合に限定します。
 
-Node.js/npm と dsh は `nix/modules/tools.nix` が導入します。`hermes:gmail:auth` が呼ぶ `scripts/sh/hermes-gmail.sh` の `npx` は、この公開 PATH の Node.js/npm を使います。Hermes 自身の専用 Node runtime は upstream wrapper が提供します。dsh は upstream Nix package を使用します。Codex は設定だけを管理し、CLI は ChatGPT アプリ付属のものを使います。
+Node.js/npm と dsh は `nix/modules/tools.nix` が導入します。`hermes:gmail:auth` が呼ぶ `scripts/sh/hermes-gmail.sh` の `npx` は、この公開 PATH の Node.js/npm を使います。Hermes 自身の専用 Node runtime は upstream wrapper が提供します。dsh は upstream Nix package を使用します。Codex の設定は Home Manager が管理し、NixOS / WSL は Linux アプリ付属 CLI、Windows は Windows アプリ付属 CLI を使います。
 
-ChatGPT アプリは `tools.nix` で導入し、`nix/modules/ai_agents/chatgpt/` が同梱 Codex の設定を管理します。Windows の Store ID・導入・検証情報は `windows/winget/packages.json` が所有します。
+ChatGPT アプリと同梱 Codex CLI は `tools.nix` で OS ごとに選択し、`nix/modules/ai_agents/chatgpt/` が Codex の設定を管理します。WSL は Linux CLI のみを選び、GUI を導入しません。Windows の Store ID・導入・検証情報は `windows/winget/packages.json` が所有します。
 
 1Password の CLI / GUI 導入は `nix/modules/tools.nix`、公式 SSH agent socket の `IdentityAgent` / `SSH_AUTH_SOCK` は `nix/modules/1password/ssh.nix` が管理します。Git 署名コマンドと WSL の Windows 連携は host に残します。
 
