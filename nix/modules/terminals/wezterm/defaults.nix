@@ -13,7 +13,7 @@ in
     package = pkgs.wezterm;
     settings = {
       color_scheme = appearance.theme;
-      font_size = appearance.font_size;
+      inherit (appearance) font_size;
     };
     extraConfig = weztermLua;
     enableBashIntegration = true;
