@@ -141,7 +141,7 @@ ChatGPT は `nix/modules/ai_agents/chatgpt/` で macOS のアプリと同梱 Cod
 
 Git / ghq の導入は `nix/modules/tools.nix`、設定は `nix/modules/git/` にまとめます。`default.nix` は Home Manager 標準 `programs.git` の設定、`ghq.nix` は共通の `ghq.root`、`gtr.nix` は既存の Git alias を管理します。署名と WSL の保存先の差分は host に残します。
 
-lazygit / Herdr の有効化は `nix/modules/tools.nix` に置きます。`nix/modules/lazygit/` は Bash / Zsh の `lg` 連携、`nix/modules/herdr/` は `config.toml` を読み込む標準 `settings` を管理します。Windows の既存 Herdr installer・chezmoi 設定は維持します。
+lazygit / Herdr の有効化は `nix/modules/tools.nix` に置きます。`nix/modules/lazygit/` は Bash / Zsh の `lg` 連携、`nix/modules/herdr/` は標準 `programs.herdr.settings` に Nix で設定値を直接定義します。Windows の既存 Herdr installer・chezmoi 設定は維持します。
 
 エディタの設定は `nix/modules/editors/` にまとめます。Neovim 本体・補助 CLI・LSP・プラグイン実行依存の導入は `nix/modules/tools.nix`、設定とプラグインは `nvim/` が管理します。プラグインが宣言する実行依存も tools が Home Manager の設定から集め、通常の PATH に導入します。Orca の `default.nix` は Home Manager にアプリを導入し、`package.nix` が macOS の公式 DMG と Linux の公式 AppImage を選択します。Linux の FHS 環境・デスクトップ登録・公式 `orca-ide` CLI は `linux.nix`、バージョン・URL・ハッシュは `sources.json` が管理します。LSP・整形ツールは全エディタ共通で `nix/modules/tools.nix` から PATH に導入します。運用は [Neovim](../chezmoi/neovim.md) を参照してください。
 

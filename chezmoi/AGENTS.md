@@ -5,7 +5,7 @@
 - `chezmoi/` は Windows 専用のユーザー dotfiles の source of truth。
 - macOS / Linux / WSL のユーザー設定（Codex を含む）は Home Manager が所有する。Unix 向け配布は行わない。
 - インストールは Nix/winget、設定配布は chezmoi で分離する。
-- デスクトップキー配列は例外として `nix/home/keybindings/` を正本とする。macOS と native NixOS の設定は Nix が所有する。Windows の GlazeWM 設定・補助スクリプトは Nix から生成した成果物を chezmoi が配布し、生成物を直接編集しない。共通 action/key を Windows 用に複製しない。
+- デスクトップキー配列は例外として `nix/home/keybindings/` を正本とする。macOS と native NixOS の設定は Nix が所有する。Windows は標準デスクトップを使用し、Nix 生成のデスクトップ設定を配布しない。
 
 ## 変更先の目安
 

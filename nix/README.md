@@ -21,8 +21,7 @@ Unix CLI の導入は `nix/modules/tools.nix`、設定・連携は機能ごと�
 詳細は [分割の理由と編集先](../docs/nix/package-management.md#分割の理由と編集先) を参照してください。
 キー配列は home のユーザー設定と hosts の OS 統合に分けます。Darwin は home の生成結果を
 nix-darwin のサービス設定へ渡し、native NixOS は host から Home Manager module を選択します。
-Windows は home の GlazeWM 設定生成関数を `nix/hosts/windows/` から呼び、生成済み成果物を
-通常の GUI-only 構成では配布しません。生成物を使う Windows の適用時に Nix は不要です。WSL guest と standalone Linux へ
+Windows は標準デスクトップを使用し、Nix から設定を生成・配布しません。WSL guest と standalone Linux へ
 Hyprland を自動導入しない設計です。[対応範囲・移行状況と検証](../docs/chezmoi/omarchy.md) を参照してください。
 
 秘密情報はリポジトリや Nix モジュールに書かない。既存の 1Password / chezmoi テンプレートまたは

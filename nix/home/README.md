@@ -32,7 +32,7 @@ flake.nix -> hosts/configurations.nix -> hosts/<system>/ -> home/common.nix
 - Bash の有効化は `../modules/tools.nix`、初期化・ログイン設定は `../modules/shells/bash/` が担当し、`common.nix` から読み込む。
 - 1Password の CLI は `../modules/tools.nix`、デスクトップ版の導入と SSH agent 設定は `../modules/1password/` が担当する。`common.nix` が Linux デスクトップ版の Home Manager module を読み込み、macOS デスクトップ版は Darwin host が同じ module の `darwin-system.nix` からシステムに導入する。`ssh.nix` が `IdentityAgent` と `SSH_AUTH_SOCK` を同じ公式 socket に設定する。Bash は別の `ssh-agent` を起動しない。Git 署名・WSL interop の設定は各 host に残す。
 - lazygit は `../modules/tools.nix` で有効化し、`../modules/lazygit/` が Bash / Zsh の `lg` 標準連携を設定する。
-- Herdr は `../modules/tools.nix` で有効化し、`../modules/herdr/` で設定する。キー配列などの既存 TOML を同じ module の `config.toml` にまとめ、標準 `settings` に読み込ませて Home Manager が設定ファイルを生成する。Windows は chezmoi 設定と既存の公式 installer を維持する。
+- Herdr は `../modules/tools.nix` で有効化し、`../modules/herdr/` で設定する。キー配列などを標準 `programs.herdr.settings` に Nix で直接定義し、Home Manager が設定ファイルを生成する。Windows は chezmoi 設定と既存の公式 installer を維持する。
 - ChatGPT は `common.nix` が `../modules/ai_agents/chatgpt/` を読み込み、macOS のアプリを直接導入する。同梱 Codex の設定も同じ module で管理し、Codex CLI は独立導入しない。
 - Hermes Agent の CLI は `../modules/tools.nix` で有効化する。`common.nix` が `../modules/ai_agents/hermes/` を読み込み、gateway・CLI 設定・bootstrap manifest を管理する。`bootstrap.nix` が bootstrap の構築を担当する。既存の `~/.hermes`、依存 pin、macOS の launchd / Linux の systemd-user 設定は維持する。
 - `common.nix` は `../modules/tools.nix` を読み込み、Unix CLI を有効化・導入する。各アプリ module と `./shells/plugins/` が設定・連携を担当する。

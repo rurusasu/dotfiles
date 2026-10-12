@@ -69,9 +69,9 @@ runs:
                   ;;
                 docs/*|README*|AGENTS.md|CLAUDE.md|*/README*|*/AGENTS.md|LICENSE*)
                   ;;
-                # Shared keybindings generate Windows artifacts; Windows manifests
-                # are edited directly and validated by both platform workflows.
-                flake.nix|flake.lock|nix/home/keybindings/*|nix/hosts/windows/*|windows/*)
+                # Windows manifests are edited directly and validated by both
+                # platform workflows. Unix keybindings are owned by Nix.
+                flake.nix|flake.lock|windows/*)
                   nix=true
                   chezmoi=true
                   ;;

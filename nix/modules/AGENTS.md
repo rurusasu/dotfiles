@@ -19,7 +19,7 @@
 - `editors/nvim/`: Neovim の設定・プラグイン・Lua 配置。Neovim 本体と補助 CLI・LSP・プラグイン実行依存の導入は `tools.nix` が担当する
 - `editors/orca/`: macOS / Linux 共通の Orca Editor Home Manager module と公式バイナリのパッケージ定義。バージョン・URL・ハッシュは `sources.json` に集約する
 - `terminals/`: Ghostty / WezTerm の Home Manager 設定。各 `defaults.nix` を OS module の `sharedModules` から直接読み込む
-- `herdr/`: `config.toml` を標準 `programs.herdr.settings` に読み込み、キー設定を管理する。CLI の有効化は `tools.nix` が担当する
+- `herdr/`: 標準 `programs.herdr.settings` にキー設定を Nix で直接定義する。CLI の有効化は `tools.nix` が担当する
 - `shells/zsh/`: zsh の補完プラグインと連携設定。CLI の有効化は `tools.nix`、履歴・alias・キー設定などは `nix/home/shells/zsh/` が担当する
 - `shells/bash/`: Bash の初期化・ログイン設定。CLI の有効化は `tools.nix` が担当し、`nix/home/common.nix` から読み込む
 - OS 固有の option・有効化・共通 module の配線は `nix/hosts/` が担当する。OS 別ディレクトリは置かない

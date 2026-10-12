@@ -690,8 +690,7 @@ jobs:
           nix build --no-link --no-write-lock-file --print-build-logs \
             .#checks.x86_64-linux.nix-unit \
             .#checks.x86_64-linux.custom-package-builds \
-            .#checks.x86_64-linux.aerospace-workspace-cycle \
-            .#checks.x86_64-linux.windows-keybindings-generated
+            .#checks.x86_64-linux.aerospace-workspace-cycle
 
       - name: Validate Windows package manifests
         shell: bash

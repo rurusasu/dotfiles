@@ -2,9 +2,6 @@
 {
   perSystem = { pkgs, config, ... }: {
     checks = {
-      windows-keybindings-generated = import ./build/windows-keybindings-generated.nix {
-        inherit pkgs;
-      };
       aerospace-workspace-cycle = import ./build/aerospace-cycle.nix { inherit pkgs; };
       docker-desktop-activation = import ./build/docker-desktop-activation.nix { inherit inputs pkgs; };
       ghostty-config = import ./build/ghostty-config.nix { inherit pkgs; };
@@ -65,7 +62,6 @@
       // (import ./unit/darwin-omarchy-keybindings.nix { inherit inputs; })
       // (import ./unit/keybindings.nix { inherit inputs; })
       // (import ./unit/native-keybindings.nix { inherit inputs; })
-      // (import ./unit/windows-keybindings.nix { inherit inputs; })
       // (import ./unit/darwin-package-selection.nix { inherit inputs; })
       // (import ./unit/darwin-hermes-desktop-cask.nix { inherit inputs; })
       // (import ./unit/darwin-vendor-bundles.nix { inherit inputs; })

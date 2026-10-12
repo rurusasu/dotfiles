@@ -89,7 +89,7 @@ class DetectCiActionContractTests(unittest.TestCase):
             (("nix/modules/discord/default.nix",), {"nix"}),
             (("nix/modules/git/default.nix",), {"nix"}),
             (("nix/modules/1password/default.nix",), {"nix"}),
-            (("nix/home/keybindings/bindings.nix",), {"nix", "chezmoi"}),
+            (("nix/home/keybindings/bindings.nix",), {"nix"}),
             (("windows/winget/packages.json",), {"nix", "chezmoi"}),
             (("scripts/sh/install-macos.sh",), OUTPUTS),
             ((".github/workflows/ci-other.yml",), OUTPUTS),

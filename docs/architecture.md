@@ -15,7 +15,7 @@
 2. **ユーザー設定は Unix と Windows の責務を分離**
    - Unix の Codex、shell、Git、terminal、editor は Home Manager が管理
    - chezmoi は Windows 専用で、Unix にはファイルもスクリプトも配布しない
-   - デスクトップキー配列は例外として、共通 action/key・設定生成関数・ユーザー設定を `nix/home/keybindings/`、OS の service/有効化・競合解除を `nix/hosts/` に分ける。macOS/native NixOS の設定は Nix が所有する。Windows の GlazeWM 設定と補助スクリプトは生成契約のみ保持し、現在の GUI-only 構成では配布しない（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
+   - デスクトップキー配列は例外として、共通 action/key・設定生成関数・ユーザー設定を `nix/home/keybindings/`、OS の service/有効化・競合解除を `nix/hosts/` に分ける。macOS/native NixOS の設定は Nix が所有する。Windows は標準デスクトップを使用し、Nix からデスクトップ設定を生成・配布しない（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
 3. **システム収束は OS に適した宣言レイヤーへ分離**
    - Windows: PowerShell handlers + winget
    - macOS: nix-darwin + nix-homebrew

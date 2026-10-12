@@ -9,7 +9,6 @@ tasks:
   test:nix:
     desc: Run Nix-native configuration tests
     cmds:
-      - task: keybindings:check
       - |-
         system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
         nix build ".#checks.${system}.powershell-formatter" \
