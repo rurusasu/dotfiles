@@ -25,7 +25,7 @@
         $script:guiIds = @(
             'TheBrowserCompany.Arc', 'Google.Chrome', 'Obsidian.Obsidian', 'wez.wezterm',
             'AgileBits.1Password', 'Discord.Discord', 'StablyAI.Orca', 'Microsoft.PowerToys',
-            'Microsoft.WindowsTerminal', '9PLM9XGG6VKS', 'Microsoft.PowerShell', 'twpayne.chezmoi'
+            'Microsoft.WindowsTerminal', '9PLM9XGG6VKS', 'Microsoft.PowerShell', 'Task.Task', 'twpayne.chezmoi'
         )
         $script:validOutput = (@(
                 'Using PowerShell 7'
