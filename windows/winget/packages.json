@@ -55,6 +55,14 @@
           }
         },
         {
+          "PackageIdentifier": "Task.Task",
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "task"
+          }
+        },
+        {
           "PackageIdentifier": "twpayne.chezmoi",
           "installTimeoutSeconds": 3600,
           "verifyCommand": {
