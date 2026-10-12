@@ -588,7 +588,7 @@ esac
         $workflow | Should -Match 'runs-on:\s+windows-2025'
         $workflow | Should -Match 'runs-on:\s+macos-15'
         $workflow | Should -Not -Match "Install-Module -Name Pester -RequiredVersion '5\.6\.1'"
-        $workflow | Should -Not -Match '(?s)Invoke-Tests\.ps1.*?-MinimumCoverage 0'
+        $workflow | Should -Match '(?s)Run PowerShell test suite.*?Invoke-Tests\.ps1.*?-MinimumCoverage 0'
         $workflow | Should -Match "Join-Path \`$diagnostics 'attestation\.txt'"
         $workflow | Should -Match 'name: Upload Windows installer diagnostics'
         $workflow | Should -Match 'sudo nix --accept-flake-config[\s\S]*?run \.#darwin-rebuild -- switch --flake \.#macos --impure'
