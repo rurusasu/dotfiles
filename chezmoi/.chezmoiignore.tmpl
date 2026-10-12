@@ -1,27 +1,9 @@
-# Directories deployed via .chezmoiscripts/run_onchange_*
-shells/
-secret/
-git/
-cli/
-terminals/
-github/
-ssh/
-
-# Documentation files (not deployed to home)
 README.md
 **/AGENTS.md
 **/AGENTS.override.md
-**/__pycache__/**
-**/*.pyc
-
-# Neovim の設定は Home Manager が管理する。
-.config/nvim/
+terminals/
 
 {{ if ne .chezmoi.os "windows" }}
-# All chezmoi targets are Windows-only. Unix is owned by Home Manager.
 *
 .chezmoiscripts/**
-{{ else }}
-# Runtime instructions, unlike source-directory documentation above.
-!.codex/AGENTS.override.md
 {{ end }}

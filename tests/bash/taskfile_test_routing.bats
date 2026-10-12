@@ -60,10 +60,10 @@ EOF
 	[ "$output" = "chore(nix): update flake inputs for Darwin packages" ]
 }
 
-@test "root Taskfile composes feature taskfiles without renaming public tasks" {
+@test "root Taskfile composes active feature taskfiles" {
 	command -v task >/dev/null 2>&1 || skip "task is not available in this test environment"
 
-	for feature in quality sync git nix dev test install docker hermes hooks; do
+	for feature in quality git nix dev test install docker hermes hooks; do
 		[ -f "$REPO_ROOT/taskfiles/$feature/taskfile.yml" ]
 		grep -Fq "taskfiles/$feature/taskfile.yml" "$REPO_ROOT/Taskfile.yml"
 		grep -Fq "flatten: true" "$REPO_ROOT/Taskfile.yml"

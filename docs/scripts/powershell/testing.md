@@ -56,16 +56,15 @@ cd scripts/powershell/tests
 .\Invoke-Tests.ps1 -ShowCoverage
 ```
 
-**CI の authoritative check**: `.github/workflows/ci-other.yml` の `test` job が、同じ `Invoke-Tests.ps1` suite を Windows PowerShell 5.1 と PowerShell 7 の両方で実行する。ローカルの Pester version やテスト件数は固定契約ではない。
+`Invoke-Tests.ps1` はローカルで PowerShell 5.1 と PowerShell 7 の両方から実行できます。CI では `ci-nix.yml` の Windows installer E2E job が、両 runtime でPester suiteを実行してから `install.cmd` を適用します。PowerShell 7のjobでは同じrunner上でPSScriptAnalyzerも実行します。
 
 ## CI テスト戦略
 
-| Workflow                         | Runner                                | Guarantee                                                                                   |
-| -------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `.github/workflows/ci-other.yml` | Windows PowerShell 5.1 / PowerShell 7 | 全 Pester suite、launcher、encoding、handler unit、installer Phase 1 → Phase 2a integration |
-| `ci-nix.yml`                     | hosted Linux/macOS/Windows            | Linux/Darwin/WSL/Windows の platform-routed contract aggregate と外部 runtime E2E           |
+| Workflow     | Runner                     | Guarantee                                                                            |
+| ------------ | -------------------------- | ------------------------------------------------------------------------------------ |
+| `ci-nix.yml` | hosted Linux/macOS/Windows | Linux/Darwin/WSL/Windows の platform E2E、PowerShell 5.1 / 7 のPesterとinstaller検証 |
 
-Windows hosted contract は Pester の最新安定版で `Invoke-Tests.ps1 -MinimumCoverage 0` を両 runtime で実行します。`Install.GuiOnly.Tests.ps1` は実物の `install.cmd -UserPhaseOnly` → `install.ps1` → `install.user.ps1` と本番ライブラリを一時 fixture にコピーし、外部 WinGet 境界だけを差し替えて GUI 導入の成功・失敗と不要な phase を実行しない契約を検証します。`Install.Wsl.Tests.ps1` は実物の Taskfile・installer・NixOSWSL handler を使用し、OS・ネットワーク・設定適用境界を fixture に置き換えて、既存 distro の再利用、新規導入時の一度だけの設定適用、引数伝播、失敗と再起動待ちの終了を検証します。Task runtime は既存 executable または installer の専用 cache を再利用します。実機アプリを要求する GUI installer E2E は `ci-nix.yml` に残します。Nix option、package、flake output は `nix-unit` で検証し、macOS の installer/runtime 契約は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats で実行します。
+`Install.GuiOnly.Tests.ps1` は実物の `install.cmd -UserPhaseOnly` → `install.ps1` → `install.user.ps1` と本番ライブラリを一時 fixture にコピーし、外部 WinGet 境界だけを差し替えて GUI 導入の成功・失敗と不要な phase を実行しない契約を検証します。`Install.Wsl.Tests.ps1` は実物の Taskfile・installer・NixOSWSL handler を使用し、OS・ネットワーク・設定適用境界を fixture に置き換えて、既存 distro の再利用、新規導入時の一度だけの設定適用、引数伝播、失敗と再起動待ちの終了を検証します。Task runtime は既存 executable または installer の専用 cache を再利用します。実機アプリを要求する GUI installer E2E は `ci-nix.yml` に残します。Nix option、package、flake output は `nix-unit` で検証し、macOS の installer/runtime 契約は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats で実行します。
 
 WSL2 の実適用は `ci-nix.yml` の WSL E2E で `nixos-rebuild switch` を通して検証します。macOS は同 workflow の Darwin job で `darwin-rebuild switch` を実行します。Docker Desktop の実 runtime は標準 hosted runner では起動せず、Windows/macOS 実機固有の runtime は Docker profile を選択した installer 末尾の acceptance が失敗を返します。
 
@@ -473,17 +472,12 @@ PSScriptAnalyzer は以下のような問題を検出します:
 
 ### コードフォーマット
 
-コードフォーマットは [.treefmt.toml](../../../.treefmt.toml) で管理されています:
+コードフォーマットは [nix/formatter.nix](../../../nix/formatter.nix) で管理されています。
+PowerShell と PSScriptAnalyzer は Nix の依存として宣言し、formatter は Nix store の module manifest を直接読み込みます。
 
-```toml
-[formatter.powershell]
-command = "pwsh"
-options = [
-  "-NoProfile",
-  "-Command",
-  "& { $ErrorActionPreference = 'Stop'; if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber | Out-Null }; Import-Module PSScriptAnalyzer -Force; $content = Get-Content -Raw -LiteralPath $env:FILENAME; $formatted = Invoke-Formatter -ScriptDefinition $content; Set-Content -LiteralPath $env:FILENAME -Value $formatted -Encoding utf8 }"
-]
-includes = ["*.ps1"]
+```bash
+nix fmt
+nix fmt -- --fail-on-change
 ```
 
 **注意**:

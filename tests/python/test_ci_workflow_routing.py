@@ -1,4 +1,4 @@
-"""Contract tests for the lightweight CI routing workflow."""
+"""Contract tests for bootstrap and platform CI routing."""
 
 from __future__ import annotations
 
@@ -15,17 +15,13 @@ import unittest
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci-other.yml"
-WORKFLOWS_DIRECTORY = WORKFLOW_PATH.parent
+WORKFLOWS_DIRECTORY = REPOSITORY_ROOT / ".github" / "workflows"
 PRE_COMMIT_PATH = REPOSITORY_ROOT / ".pre-commit-config.yaml"
-DEVCONTAINER_BATS_PATH = REPOSITORY_ROOT / ".devcontainer" / "ci" / "bats.sh"
 HERMES_TASKFILE_PATH = REPOSITORY_ROOT / "taskfiles" / "hermes" / "taskfile.yml"
-CHEZMOI_WORKFLOW = "ci-chezmoi.yml"
-CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 
 
 class CiWorkflowRoutingContractTests(unittest.TestCase):
-    """Keep the lightweight CI workflow's trigger and tool contracts stable."""
+    """Keep bootstrap and platform CI routing contracts stable."""
 
     def test_platform_jobs_use_rebuild_for_application_checks(self) -> None:
         workflow = self._named_workflow("ci-nix.yml")
@@ -46,10 +42,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertNotIn("Darwin application artifacts", darwin)
         self.assertIn("Configure shared Nix caches", darwin)
 
-    def _workflow(self) -> str:
-        self.assertTrue(WORKFLOW_PATH.is_file(), f"missing workflow: {WORKFLOW_PATH}")
-        return WORKFLOW_PATH.read_text(encoding="utf-8")
-
     def _named_workflow(self, name: str) -> str:
         path = WORKFLOWS_DIRECTORY / name
         self.assertTrue(path.is_file(), f"missing workflow: {path}")
@@ -63,47 +55,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIsNotNone(job, f"missing {name} job")
         return job.group("job") if job is not None else ""
 
-    def _assert_single_chezmoi_path_occurrence(
-        self,
-        workflow: str,
-        lint: str,
-    ) -> None:
-        normalized_workflow = workflow.casefold().replace("\\", "/")
-        normalized_lint = lint.casefold().replace("\\", "/")
-        self.assertEqual(normalized_workflow.count("tests/chezmoi"), 1)
-        self.assertEqual(normalized_lint.count("tests/chezmoi"), 1)
-
-    def test_pull_requests_to_main_always_run_ci_contract(self) -> None:
-        workflow = self._workflow()
-        self.assertIn("name: CI Contract", workflow)
-        self.assertRegex(
-            workflow,
-            r"(?ms)^\s*pull_request:\n\s*branches: \[main\]\n(?!\s*paths:)",
-        )
-        self.assertRegex(workflow, r"(?m)^\s+name: CI Contract$")
-
-    def test_push_always_reports_and_manual_runs_are_supported(self) -> None:
-        workflow = self._workflow()
-        triggers = workflow.split("env:", 1)[0]
-        self.assertIn("workflow_dispatch:", triggers)
-        self.assertIn("push:", triggers)
-        self.assertIn("branches: [main]", triggers)
-        self.assertNotIn("paths:", triggers)
-
-    def test_ci_contract_lints_workflows_without_python_tests(self) -> None:
-        workflow = self._workflow_job(self._workflow(), "ci-contract")
-        self.assertIn(CHECKOUT_ACTION, workflow)
-        self.assertNotIn("actions/setup-python", workflow)
-        self.assertNotIn("tests/python", workflow)
-        self.assertNotIn("install-nix-action", workflow)
-        self.assertIn("actionlint", workflow)
-
-    def test_ci_contract_does_not_install_test_only_tools(self) -> None:
-        workflow = self._workflow()
-        self.assertNotIn("nix profile install nixpkgs#go-task", workflow)
-        self.assertNotIn("python -m unittest", workflow)
-        self.assertIn("Run actionlint", workflow)
-
     def test_bash_contracts_have_one_preinstalled_linux_owner(self) -> None:
         workflow = self._named_workflow("ci-nix.yml")
         job = self._workflow_job(workflow, "bash-test")
@@ -113,7 +64,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("needs.changes.outputs.other == 'true'", job)
         self.assertNotIn("matrix:", job)
         self.assertNotIn("Install Nix", job)
-        self.assertNotIn("Run Bash workflow contracts", self._workflow())
         self.assertNotIn("DOTFILES_USER", job)
         self.assertNotIn("DOTFILES_HOME", job)
         darwin = self._workflow_job(workflow, "darwin")
@@ -338,46 +288,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("path: ${{ steps.wsl-cache.outputs.artifact-dir }}", job)
         self.assertNotIn("${{ runner.temp }}", job)
 
-    def test_runs_actionlint_without_python_test_discovery(self) -> None:
-        workflow = self._workflow()
-        actionlint_lines = [
-            line.strip()
-            for line in workflow.splitlines()
-            if "go run github.com/rhysd/actionlint" in line
-        ]
-        self.assertIn(
-            "run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 "
-            ".github/workflows/*.yml",
-            actionlint_lines,
-        )
-        self.assertNotIn(
-            "run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12",
-            actionlint_lines,
-        )
-        self.assertNotIn("python -m unittest", workflow)
-
-    def test_ci_security_checks_cover_local_actions_and_pinned_devcontainer_tools(
-        self,
-    ) -> None:
-        codeql = self._named_workflow("codeql.yml")
-        self.assertEqual(codeql.count('      - ".github/actions/**"'), 2)
-
-        devcontainer = self._named_workflow("ci-other.yml")
-        self.assertNotRegex(devcontainer, r"(?m)^  macos:$")
-        self.assertNotRegex(devcontainer, r"runs-on:\s+macos-")
-        self.assertEqual(
-            devcontainer.count(
-                "npm install --global --no-audit --no-fund @devcontainers/cli@0.88.0"
-            ),
-            1,
-        )
-        self.assertNotIn("npm install -g @devcontainers/cli", devcontainer)
-        linux = self._workflow_job(devcontainer, "linux-nix")
-        self.assertIn("nix profile install 'nixpkgs#devcontainer'", linux)
-        self.assertIn("--frozen-lockfile", linux)
-        windows = self._workflow_job(devcontainer, "windows")
-        self.assertIn("@devcontainers/cli@0.88.0", windows)
-
     def test_nix_build_jobs_use_authenticated_github_fetches(self) -> None:
         workflow = self._named_workflow("ci-nix.yml")
         for job_name in ("nix", "linux-build", "wsl-prebuild"):
@@ -452,17 +362,9 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "ci-devcontainer.yml",
             "ci-contract.yml",
             "ci-winget.yml",
+            "ci-other.yml",
         ):
             self.assertFalse((WORKFLOWS_DIRECTORY / name).exists(), name)
-
-    def test_bash_suites_no_longer_have_devcontainer_ownership(self) -> None:
-        self.assertFalse(DEVCONTAINER_BATS_PATH.exists())
-        workflow = self._named_workflow("ci-other.yml")
-        for job in ("linux-nix", "windows"):
-            self.assertNotIn(
-                "scripts/sh/run-bash-tests.sh", self._workflow_job(workflow, job)
-            )
-        self.assertNotIn(".devcontainer/ci/bats.sh", workflow)
 
     def test_hermes_ci_keeps_shell_runtime_contract_without_python_tests(self) -> None:
         workflow = self._named_workflow("ci-nix.yml")
@@ -541,67 +443,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "TESTED_SHA: ${{ github.event_name == 'pull_request' && "
             "github.event.pull_request.head.sha || github.sha }}",
             workflow,
-        )
-
-    def test_chezmoi_ci_runs_pester_once_in_lint_and_uploads_its_junit_result(
-        self,
-    ) -> None:
-        """Catch a second Chezmoi Pester job or a JUnit artifact detached from lint."""
-        workflow = self._named_workflow(CHEZMOI_WORKFLOW)
-        lint = self._workflow_job(workflow, "lint")
-        fmt = self._workflow_job(workflow, "fmt")
-        font_install = self._workflow_job(workflow, "font-install")
-        op_guard = self._workflow_job(workflow, "op-guard")
-
-        self.assertIsNone(
-            re.search(r"(?m)^  test:\s*$", workflow),
-            "Chezmoi CI must not define a duplicate top-level test job",
-        )
-        pester_invocation = (
-            r"(?m)^          \.\\tests\\Invoke-Tests\.ps1 -Path "
-            r"\.\\tests\\chezmoi -MinimumCoverage 0 -OutputFile "
-            r"chezmoi-test-results\.xml$"
-        )
-        self._assert_single_chezmoi_path_occurrence(workflow, lint)
-        self.assertRegex(lint, pester_invocation)
-        canonical_invocation = (
-            ".\\tests\\Invoke-Tests.ps1 -Path .\\tests\\chezmoi -MinimumCoverage 0 "
-            "-OutputFile chezmoi-test-results.xml"
-        )
-        for alternate_invocation in (
-            ("      - run: >-\n          Invoke-Pester -Path .\\tests\\CHEZMOI"),
-            "      - run: Invoke-Pester -Path ./tests/chezmoi",
-        ):
-            mutated_workflow = workflow.replace(
-                canonical_invocation,
-                f"{canonical_invocation}\n{alternate_invocation}",
-                1,
-            )
-            mutated_lint = self._workflow_job(mutated_workflow, "lint")
-            with self.assertRaises(AssertionError):
-                self._assert_single_chezmoi_path_occurrence(
-                    mutated_workflow,
-                    mutated_lint,
-                )
-
-        for job, required_name in (
-            (lint, "Lint (Pester chezmoi)"),
-            (fmt, "Format (.tmpl BOM check)"),
-            (op_guard, "Render guard (op unauthenticated)"),
-        ):
-            self.assertRegex(job, rf"(?m)^    name: {re.escape(required_name)}$")
-        self.assertRegex(
-            font_install, r"(?m)^    name: Font install smoke \(Windows\)$"
-        )
-
-        self.assertRegex(
-            lint,
-            r"(?ms)^      - name: Upload test results\n"
-            r"        uses: actions/upload-artifact@[0-9a-f]{40}.*?\n"
-            r"        if: always\(\)\n"
-            r"        with:\n"
-            r"          name: chezmoi-test-results\n"
-            r"          path: scripts/powershell/chezmoi-test-results\.xml$",
         )
 
     def test_home_readme_distinguishes_supported_systems_from_ci_build_routes(

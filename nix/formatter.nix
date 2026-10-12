@@ -1,6 +1,6 @@
 # treefmt-nix configuration
-# Formatter settings are in .treefmt.toml (source of truth)
-# This file supplies formatters and their declared runtime dependencies via Nix
+# Settings and runtime dependencies are declared here. treefmt-nix generates
+# configuration in the Nix store and passes it explicitly to each formatter.
 #
 # References:
 # - treefmt config: https://treefmt.com/v2.1/getting-started/configure/
@@ -10,6 +10,18 @@
   perSystem =
     { pkgs, config, ... }:
     let
+      oxfmtConfig = (pkgs.formats.json { }).generate "oxfmtrc.json" {
+        printWidth = 100;
+        tabWidth = 2;
+        useTabs = false;
+        semi = true;
+        singleQuote = false;
+        trailingComma = "es5";
+        bracketSpacing = true;
+        arrowParens = "always";
+        proseWrap = "preserve";
+        endOfLine = "lf";
+      };
       psscriptanalyzer = pkgs.callPackage ./modules/shells/powershell/psscriptanalyzer.nix {
         src = inputs.psscriptanalyzer;
       };
@@ -72,13 +84,57 @@
               touch $out
             '';
 
-        # Install formatters (settings come from .treefmt.toml)
         programs = {
           nixfmt.enable = true; # *.nix
           shfmt.enable = true; # *.sh
-          taplo.enable = true; # *.toml
-          stylua.enable = true; # *.lua
-          oxfmt.enable = true; # *.json, *.yaml, *.yml
+          taplo = {
+            enable = true;
+            settings.formatting = {
+              align_entries = false;
+              array_trailing_comma = true;
+              array_auto_expand = true;
+              array_auto_collapse = false;
+              compact_arrays = false;
+              compact_inline_tables = false;
+              column_width = 100;
+              indent_tables = false;
+              indent_entries = false;
+              reorder_keys = false;
+              allowed_blank_lines = 1;
+              trailing_newline = true;
+            };
+          };
+          stylua = {
+            enable = true;
+            settings = {
+              column_width = 120;
+              indent_type = "Spaces";
+              indent_width = 4;
+            };
+          };
+          oxfmt = {
+            enable = true;
+            includes = [
+              "*.json"
+              "*.yaml"
+              "*.yml"
+            ];
+          };
+          dprint = {
+            enable = true;
+            includes = [ "*.md" ];
+            settings = {
+              lineWidth = 100;
+              markdown = {
+                lineWidth = 100;
+                textWrap = "maintain";
+                emphasisKind = "asterisks";
+                strongKind = "asterisks";
+                newLineKind = "lf";
+              };
+              plugins = pkgs.dprint-plugins.getPluginList (plugins: [ plugins.dprint-plugin-markdown ]);
+            };
+          };
         };
 
         # Custom formatters not in treefmt-nix programs
@@ -86,8 +142,12 @@
           # Keep raw chezmoi JSON templates out of oxfmt. They become valid
           # JSON only after chezmoi expansion and are validated by Chezmoi CI.
           oxfmt = {
+            options = [
+              "--write"
+              "--config"
+              (toString oxfmtConfig)
+            ];
             excludes = [
-              "chezmoi/terminals/windows-terminal/settings.json"
             ];
           };
 

@@ -1,22 +1,14 @@
-# Omarchy 配列の共通定義と OS 別実装
+# デスクトップキー設定の所有範囲
 
-## 配置方針
+共通キー設定とユーザー設定は `nix/home/keybindings/`、OS service と有効化は `nix/hosts/<system>/<environment>/` が所有します。macOS は AeroSpace、native NixOS は Hyprland を使います。NixOS-WSL には compositor を導入しません。
 
-共通キー配置とユーザー設定は `nix/home/keybindings/`、OS のサービス・セッション有効化と競合解除は `nix/hosts/<system>/<environment>/` に分けます。共通定義から Darwin、native NixOS、Windows のデスクトップ設定を生成します。OS への適用と実機検証は Nix 評価・ビルドとは別の確認事項です。
+Windows 用 GlazeWM の設定生成・配布機能は削除しました。Windows デスクトップのキー配列はこの repository では管理しません。WezTerm の pane、tab、launcher 操作は WezTerm 設定の責務です。
 
-キー割り当ては `bindings.nix` の action、key、modifier を正本とし、同じ操作のキーを OS ごとに複製しません。アプリの選択・起動などユーザー設定は home 側に置き、OS のロックやシステム設定画面など host 統合が必要なコマンドは host から渡せる構成にします。
+## WezTerm の境界
 
-| 層                        | 編集先                                                            | 責務                                                                 |
-| ------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------- |
-| キー割り当て              | `nix/home/keybindings/bindings.nix`                               | action とキーの単一定義、重複キーの検出                              |
-| macOS 設定生成            | `nix/home/keybindings/aerospace.nix`                              | 共通 action を AeroSpace の binding へ変換する純粋な関数             |
-| macOS アプリ・補助操作    | `nix/home/keybindings/darwin-commands.nix`, `aerospace-cycle.nix` | ユーザーのアプリ選択と数値順 workspace 巡回。OS サービスを所有しない |
-| native NixOS 設定生成     | `nix/home/keybindings/hyprland-renderer.nix`                      | 共通 action を Hyprland Lua へ変換する純粋な関数                     |
-| native NixOS ユーザー設定 | `nix/home/keybindings/hyprland.nix`                               | Lua 設定を配置する Home Manager module                               |
-| macOS host                | `nix/hosts/aarch64-darwin/omarchy-keybindings.nix`                | AeroSpace サービスと macOS shortcut の競合処理                       |
-| native NixOS host         | `nix/hosts/shared/nixos/omarchy-keybindings.nix`                  | Hyprland セッション有効化と home 側 module の選択                    |
-| Unix アプリ導入           | `nix/modules/`                                                    | アプリと compositor の導入・設定                                     |
-| Windows アプリ導入        | `windows/winget/packages.json`                                    | Windows GUI の独立した install manifest                              |
+Windows の WezTerm 設定は chezmoi の `terminals/wezterm/wezterm.lua` に置きます。PowerShell を既定シェルとし、NixOS-WSL は別の launcher profile から起動します。Unix の設定は Home Manager が管理します。
+
+Nix のテストは純粋な設定生成と実効値を検査します。実機の compositor 動作やキー入力は対象 host 上で確認します。
 
 キー配置は OS をまたぐ個人設定であり、特定 host や package の配布定義には属しません。一方、セッションやサービスの有効化は OS 側の責務です。この変更理由の違いで分割し、新しいトップレベルのディレクトリを増やさず既存の home/hosts 境界を使います。SSOT は各定義を一度だけ持つことであり、1 ファイルへの集約ではありません。Unix module と Windows manifest の共通ルールは [パッケージ管理の分割理由](../nix/package-management.md#分割の理由と編集先) を参照してください。
 

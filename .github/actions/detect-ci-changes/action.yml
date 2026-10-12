@@ -99,15 +99,6 @@ runs:
                   ;;
                 docs/*|README*|AGENTS.md|CLAUDE.md|*/README*|*/AGENTS.md|LICENSE*)
                   ;;
-                # Nix's SSH module also reads this shared 1Password catalog.
-                chezmoi/.chezmoidata/onepassword.json)
-                  nix=true
-                  chezmoi=true
-                  linux=true
-                  darwin=true
-                  wsl=true
-                  windows=true
-                  ;;
                 # Windows manifests are edited directly and validated by both
                 # platform workflows. Unix keybindings are owned by Nix.
                 windows/*)
@@ -151,7 +142,7 @@ runs:
                   windows=true
                   ;;
                 # These entrypoints and fixtures span Nix, Windows and templates.
-                .github/*|scripts/*|taskfiles/*|Taskfile.yml|install.*|bootstrap.*|docker/*|.devcontainer/*|tests/*|.pre-commit-config.yaml|.treefmt.toml|.gitattributes|.editorconfig)
+                .github/*|scripts/*|taskfiles/*|Taskfile.yml|install.*|bootstrap.*|docker/*|.devcontainer/*|tests/*|.pre-commit-config.yaml|.gitattributes|.editorconfig)
                   nix=true
                   chezmoi=true
                   other=true

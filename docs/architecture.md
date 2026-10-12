@@ -341,17 +341,16 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 | Workflow         | Runner                     | Guarantee                                                                      |
 | ---------------- | -------------------------- | ------------------------------------------------------------------------------ |
 | `ci-nix.yml`     | hosted Linux/macOS/Windows | Nix lint・format・build・Windows manifest 検査と OS 別 installer / runtime E2E |
-| `ci-chezmoi.yml` | hosted Windows/Linux       | Windows 設定の Pester、template BOM、font installer、未認証 op の render guard |
-| `ci-other.yml`   | hosted Linux/Windows       | Python・MLflow・actionlint、PowerShell lint / Pester、devcontainer E2E         |
+| `ci-chezmoi.yml` | hosted Windows             | chezmoi の Windows 管理対象と template BOM 検査                                |
 
-通常 CI はこの3本に集約します。`codeql.yml` は独立した Actions セキュリティ検査として維持します。
+通常 CI はこの2本に集約します。`codeql.yml` は独立した Actions セキュリティ検査として維持します。
 選別ルールは `.github/actions/detect-ci-changes/action.yml` の Bash に直接定義し、外部 manifest と専用 Python detector は持ちません。
 Git の差分を共有検査用の `nix`・`chezmoi`・`other` と、構成適用用の `linux`・`darwin`・`wsl`・`windows` に分類し、workflow の `if` で実行条件を定義します。
 Nix 設定は Nix、Windows の chezmoi 設定は chezmoi、共通 installer・scripts・Taskfile・Docker・workflow・テストは全分類を選択します。
 共有キー設定、flake input、Windows manifest は Nix と chezmoi を両方選択します。
 通常の docs / README / AGENTS はスキップしますが、配布対象の agent 設定などの Markdown はその所属分類で検証します。
 分類は排他的ではなく、複数変更の和集合を実行します。Windows manifest の変更は共有 checks と Windows installer、OS 固有 host の変更は該当 OS の build / E2E を選択します。
-共有 Nix module や flake input、共通スクリプトは依存する各 OS を選択し、Nix も読む 1Password catalog と配布するキーバインド help 文書も実行対象に含めます。
+共有 Nix module や flake input、共通スクリプトは依存する各 OS を選択し、配布するキーバインド help 文書も実行対象に含めます。
 
 各検証ジョブの名前・OS runner・実際の runtime assertion を維持します。Changes ジョブは各 workflow に一つだけ置きます。
 workflow は常時起動し、対象外の検証ジョブだけを `if` でスキップします。検出失敗はチェック失敗とし、手動実行は全分類を有効にします。

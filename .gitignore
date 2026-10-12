@@ -19,8 +19,6 @@ Thumbs.db
 *.local
 # chezmoi naming convention: `dot_local` deploys to `~/.local/` and is part
 # of the SSoT — exclude it from the `*_local` pattern above.
-!chezmoi/dot_local/
-!chezmoi/dot_local/**
 
 # History files
 *_history

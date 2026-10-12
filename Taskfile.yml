@@ -14,9 +14,6 @@ includes:
   quality:
     taskfile: ./taskfiles/quality/taskfile.yml
     flatten: true
-  sync:
-    taskfile: ./taskfiles/sync/taskfile.yml
-    flatten: true
   git:
     taskfile: ./taskfiles/git/taskfile.yml
     flatten: true

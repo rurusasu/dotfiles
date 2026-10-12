@@ -43,14 +43,6 @@ treefmt
 nix fmt
 ```
 
-## .treefmt.toml 設定
-
-```toml
-[formatter.nix]
-command = "nixfmt"
-includes = ["*.nix"]
-```
-
 ## treefmt-nix 設定
 
 [nix/formatter.nix](../../nix/formatter.nix) で設定:

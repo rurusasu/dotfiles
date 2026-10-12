@@ -4,8 +4,7 @@
 [![Home Manager](https://img.shields.io/badge/Home_Manager-Nix-5277C3?logo=nixos&logoColor=white)](https://github.com/nix-community/home-manager)
 [![WSL](https://img.shields.io/badge/WSL-2-0078D6?logo=windows&logoColor=white)](https://docs.microsoft.com/en-us/windows/wsl/)
 [![Bootstrap CI](https://github.com/rurusasu/dotfiles/actions/workflows/ci-nix.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-nix.yml)
-[![Other CI](https://github.com/rurusasu/dotfiles/actions/workflows/ci-other.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-other.yml)
-[![ci-chezmoi](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml)
+[![Chezmoi CI](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 Windows の GUI アプリと、macOS、NixOS、Ubuntu、Debian の環境を管理する個人用 dotfiles リポジトリです。Unix のパッケージ導入と設定は Nix module / Home Manager、Windows の GUI 導入は独立した WinGet manifest、ユーザー設定は chezmoi、OS サービスは各プラットフォームの宣言レイヤーで管理します。Windows installer は NixOS-WSL の導入と設定適用も行います。
@@ -253,7 +252,7 @@ chezmoi init rurusasu/dotfiles --source-path chezmoi && chezmoi apply
 nix fmt
 ```
 
-Markdown の自動整形は現在無効です。
+Markdown も dprint で自動整形します。設定とプラグインは Nix で管理します。
 
 pre-commit を使う場合:
 
@@ -267,10 +266,8 @@ PowerShell (.ps1) の整形は PSScriptAnalyzer の `Invoke-Formatter` を使用
 pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser"
 ```
 
-TOML/Lua はそれぞれ設定ファイルで整形幅などを調整しています:
-
-- `.taplo.toml`
-- `stylua.toml`
+TOML・Lua・JSON/YAML・Markdown の整形設定は [nix/formatter.nix](nix/formatter.nix) に宣言します。
+設定ファイルは Nix store に生成され、`nix fmt` と `nix develop` 内の `treefmt` が直接参照します。
 
 ## WSL 設定 (.wslconfig)
 

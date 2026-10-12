@@ -12,51 +12,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CiJobRoutingTests(unittest.TestCase):
-    def test_devcontainer_cancellation_stops_work_but_keeps_detection_fail_closed(
-        self,
-    ) -> None:
-        workflow = (ROOT / ".github/workflows/ci-other.yml").read_text()
-        for job in ("linux-nix", "windows"):
-            body = re.search(rf"(?ms)^  {job}:\n(.*?)(?=^  [\w-]+:\n|\Z)", workflow)[1]
-            expression = re.search(r"(?m)^    if: \$\{\{ (.*?) \}\}$", body)[1]
-            # This predicate uses only boolean operators and string equality,
-            # shared with Bash. Evaluate its actual operands, not a copied rule.
-            expression = expression.replace("needs.changes.result", '"$CHANGES_RESULT"')
-            expression = expression.replace("needs.changes.outputs.nix", '"$SELECTED"')
-            expression = expression.replace(
-                "needs.changes.outputs.other", '"$SELECTED"'
-            )
-            expression = expression.replace("!cancelled()", '"$CANCELLED" != "true"')
-            expression = expression.replace("cancelled()", '"$CANCELLED" == "true"')
-            expression = expression.replace("always()", '"true" == "true"')
-            for status in ("success", "failure", "cancelled", "skipped", ""):
-                for selected in ("true", "false"):
-                    for cancelled in ("true", "false"):
-                        with self.subTest(
-                            job=job,
-                            status=status,
-                            selected=selected,
-                            cancelled=cancelled,
-                        ):
-                            result = subprocess.run(
-                                ["bash", "-c", f"[[ {expression} ]]"],
-                                env=os.environ
-                                | {
-                                    "CHANGES_RESULT": status,
-                                    "SELECTED": selected,
-                                    "CANCELLED": cancelled,
-                                },
-                                capture_output=True,
-                                text=True,
-                                check=False,
-                            )
-                            run = status != "success" or (
-                                selected == "true" and cancelled == "false"
-                            )
-                            self.assertEqual(
-                                result.returncode, 0 if run else 1, result.stderr
-                            )
-
     def test_bootstrap_always_reports_on_pull_requests(self) -> None:
         workflow = (ROOT / ".github/workflows/ci-nix.yml").read_text()
         trigger = workflow.split("  pull_request:\n", 1)[1].split("\nconcurrency:", 1)[

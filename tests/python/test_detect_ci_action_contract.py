@@ -93,7 +93,7 @@ class DetectCiActionContractTests(unittest.TestCase):
             (("nix/home/keybindings/bindings.nix",), UNIX),
             (("windows/winget/packages.json",), {"nix", "chezmoi", "windows"}),
             (("scripts/sh/install-macos.sh",), OUTPUTS),
-            ((".github/workflows/ci-other.yml",), OUTPUTS),
+            ((".github/workflows/ci-chezmoi.yml",), OUTPUTS),
             (("taskfiles/hermes/taskfile.yml",), OUTPUTS),
             (("README.md", "docs/architecture.md", "nix/hosts/AGENTS.md"), set()),
             (("chezmoi/prompt.md",), {"chezmoi", "windows"}),

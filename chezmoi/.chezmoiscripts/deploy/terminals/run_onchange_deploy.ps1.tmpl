@@ -1,40 +1,15 @@
 {{ if eq .chezmoi.os "windows" -}}
-# Deploy terminal configurations for Windows
-# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}{{ include "terminals/windows-terminal/settings.json" | sha256sum }}
+# Deploy the Windows WezTerm configuration.
+# hash: {{ include "terminals/wezterm/wezterm.lua" | sha256sum }}
 
 $ErrorActionPreference = "Stop"
 
-$HomeDir = $env:USERPROFILE
-
-function Deploy-Content {
-  param(
-    [string]$Content,
-    [string]$Destination
-  )
-
-  $destDir = Split-Path -Parent $Destination
-  if (-not (Test-Path -LiteralPath $destDir)) {
-    New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-  }
-  Set-Content -LiteralPath $Destination -Value $Content -Encoding UTF8 -NoNewline
-  Write-Host "Deployed: $Destination"
-}
-
-Write-Host "Deploying terminal configurations..."
-
-$WezTermConfig = @'
+$destination = Join-Path $env:USERPROFILE ".config/wezterm/wezterm.lua"
+$destinationDirectory = Split-Path -Parent $destination
+New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
+@'
 {{ include "terminals/wezterm/wezterm.lua" }}
-'@
-Deploy-Content $WezTermConfig "$HomeDir\.config\wezterm\wezterm.lua"
+'@ | Set-Content -LiteralPath $destination -Encoding UTF8 -NoNewline
 
-# Windows Terminal
-$WTSettingsDir = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState"
-if (Test-Path -LiteralPath $WTSettingsDir) {
-  $WindowsTerminalSettings = @'
-{{ includeTemplate "terminals/windows-terminal/settings.json" . }}
-'@
-  Deploy-Content $WindowsTerminalSettings "$WTSettingsDir\settings.json"
-}
-
-Write-Host "Terminal configurations deployed."
+Write-Host "Deployed WezTerm configuration: $destination"
 {{ end -}}

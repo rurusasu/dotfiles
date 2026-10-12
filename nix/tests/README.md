@@ -17,7 +17,7 @@ unit のファイルは `test...` 属性を持つ nix-unit 形式にし、ファ
 `unit/ownership.nix` が unit / build の登録漏れ・重複と Bats の責務分類を検査します。
 
 nix-unit の flake-parts module が `checks.<system>.nix-unit` を自動生成します。
-`build/` には AeroSpace、Neovim、Ghostty、Windows キー設定生成物、独自 package build を置きます。
+`build/` には AeroSpace、Neovim、Ghostty/WezTerm 設定、独自 package build を置きます。
 実行スクリプトを flake の配線ファイルに直書きしません。
 `treefmt` は formatter module が公開します。
 Unix CLI の選択は `nix/modules/tools.nix` と各設定 module を組み合わせた
@@ -35,7 +35,7 @@ Windows の install / verifier metadata は独立した `windows/winget/packages
 Unix の `task test` は `task test:nix` を呼びます。CI と同じ
 `nix flake check --no-write-lock-file --print-build-logs` で、現在の system に登録された
 すべての check を実行します。check 名のリストや system 判定を呼び出し側で管理しません。
-対象には nix-unit、独自 package build、AeroSpace、Neovim、Ghostty、Docker Desktop、
+対象には nix-unit、独自 package build、AeroSpace、Neovim、WezTerm、Docker Desktop、
 PowerShell formatter、treefmt を含み、Darwin では standalone Home Manager の構成ビルドも含みます。
 Docker Desktop の初期設定は生成された activation を CLI double で実行し、再実行、失敗時の再試行、
 既存の `md5` パスとの衝突を検証します。実機の Docker Desktop 起動は installer の検証対象です。

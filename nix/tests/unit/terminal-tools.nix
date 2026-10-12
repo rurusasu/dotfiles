@@ -17,6 +17,7 @@ let
       modules = [
         ../../home/common.nix
         ../../modules/editors/nvim
+        ../../modules/terminals/wezterm/defaults.nix
         {
           home = {
             username = "test-user";
@@ -28,6 +29,35 @@ let
     };
 in
 {
+  testAppearanceIsNixOwned = {
+    expr = import ../../modules/terminals/appearance.nix;
+    expected = {
+      font_family = "UDEV Gothic NF";
+      font_size = 10;
+      theme = "Catppuccin Mocha";
+    };
+  };
+  testWezTermUsesSharedAppearance = {
+    expr = map (
+      system:
+      let
+        cfg = (mkHome system).config.programs.wezterm;
+        appearance = import ../../modules/terminals/appearance.nix;
+      in
+      {
+        inherit system;
+        font = (mkPkgs system).lib.hasInfix appearance.font_family cfg.extraConfig;
+        font_size = cfg.settings.font_size;
+        color_scheme = cfg.settings.color_scheme;
+      }
+    ) systems;
+    expected = map (system: {
+      inherit system;
+      font = true;
+      font_size = 10;
+      color_scheme = "Catppuccin Mocha";
+    }) systems;
+  };
   testTerminalToolsUseNativeHomeManagerModules = {
     expr = map (
       system:
@@ -51,9 +81,7 @@ in
       herdr = true;
       bashWrapper = true;
       zshWrapper = true;
-      herdrConfig = builtins.fromTOML (
-        builtins.readFile ../../../chezmoi/AppData/Roaming/herdr/config.toml
-      );
+      herdrConfig = (import ../../modules/herdr/default.nix { }).programs.herdr.settings;
     }) systems;
   };
 }
