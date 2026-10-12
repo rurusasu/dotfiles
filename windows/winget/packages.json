@@ -55,6 +55,14 @@
           }
         },
         {
+          "PackageIdentifier": "twpayne.chezmoi",
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "chezmoi"
+          }
+        },
+        {
           "PackageIdentifier": "wez.wezterm",
           "installTimeoutSeconds": 3600,
           "pathEntries": ["%ProgramFiles%\\WezTerm"],
