@@ -9,7 +9,6 @@
 #   2. Modern Neovim release into ~/.local/nvim with bin symlink.
 #   3. chezmoi binary install + `chezmoi init --apply --source $ROOT/chezmoi`
 #      so the container gets the same dotfiles as the host.
-#   4. Headless lazy.nvim plugin pre-warm (best effort, 90s cap).
 #
 # Idempotent — safe to re-run on every DevcontainerUp.
 
@@ -137,7 +136,7 @@ fi
 
 # The managed profile/bashrc own this PATH. Keep a post-apply fallback for a
 # partial chezmoi deployment so later login and interactive shells still find
-# the Codex binary installed above.
+# user-local commands.
 for f in "$HOME/.profile" "$HOME/.bashrc"; do
   if ! grep -q '\.local/npm/bin' "$f" 2>/dev/null; then
     # Preserve variables literally for expansion by the future shell.
@@ -145,19 +144,5 @@ for f in "$HOME/.profile" "$HOME/.bashrc"; do
     printf '\n# Fallback added by dotfiles bootstrap\nexport PATH="$HOME/.local/bin:$HOME/.local/npm/bin:$PATH"\n' >>"$f"
   fi
 done
-
-# ── lazy.nvim plugin pre-warm (best effort) ─────────────────────────────
-# stderr goes to a log file so a broken init.lua or plugin compile error
-# can be diagnosed rather than blackholed.
-NVIM_BIN="$HOME/.local/bin/nvim"
-[ -x "$NVIM_BIN" ] || NVIM_BIN="$(command -v nvim 2>/dev/null || true)"
-if [ -n "$NVIM_BIN" ] && [ -x "$NVIM_BIN" ]; then
-  log "pre-warming lazy.nvim plugins (best effort, 90s cap)"
-  lazy_log="$HOME/.local/share/nvim-bootstrap.log"
-  mkdir -p "$(dirname "$lazy_log")"
-  if ! timeout 90 "$NVIM_BIN" --headless "+Lazy! sync" +qa >"$lazy_log" 2>&1; then
-    log "lazy.nvim pre-warm did not complete cleanly; see $lazy_log"
-  fi
-fi
 
 log "bootstrap complete"

@@ -12,22 +12,16 @@
 }:
 {
   imports = [
+    (import ../modules/tools.nix).homeManager
     ../modules/1password
     ../modules/ai_agents/chatgpt
     ../modules/ai_agents/hermes
     ../modules/git
     ../modules/lazygit
-    ../modules/starship
     ../modules/ssh.nix
-    ../modules/editors/orca
     ../modules/herdr
     ../modules/shells/bash
-    ../modules/dsh.nix
-    ../modules/shells/plugins/bat.nix
-    ../modules/shells/plugins/eza.nix
-    ../modules/shells/plugins/fzf.nix
-    ../modules/shells/plugins/ripgrep.nix
-    ../modules/shells/plugins/zoxide.nix
+    ../modules/shells/plugins/starship
     ./shells/plugins/bat.nix
     ./shells/plugins/eza.nix
     ./shells/plugins/fd.nix
@@ -63,11 +57,8 @@
   };
 
   programs = {
-    home-manager.enable = true;
-
     # ── direnv ─────────────────────────────────────────────────────────────
     direnv = {
-      enable = true;
       nix-direnv.enable = true;
       enableZshIntegration = true;
     };

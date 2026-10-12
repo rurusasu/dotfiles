@@ -1,6 +1,6 @@
 # Markdown フォーマット設定 (dprint)
 
-[dprint](https://dprint.dev/) を使用して Markdown ファイルをフォーマットします。
+Markdown の自動整形は現在無効です。以下は [dprint](https://dprint.dev/) を任意に手動実行するための設定と、有効化する場合の例です。
 
 ## 設定ファイル
 
@@ -87,7 +87,7 @@ treefmt
 dprint check "**/*.md"
 ```
 
-## .treefmt.toml 設定
+## 任意に有効化する場合の .treefmt.toml 設定
 
 ```toml
 [formatter.dprint]
@@ -96,9 +96,9 @@ options = ["fmt"]
 includes = ["*.md"]
 ```
 
-## treefmt-nix 設定
+## 任意に有効化する場合の treefmt-nix 設定
 
-[nix/formatter.nix](../../nix/formatter.nix) で設定:
+現在の [nix/formatter.nix](../../nix/formatter.nix) は dprint を有効化していません。有効化する場合の設定例:
 
 ```nix
 {

@@ -17,15 +17,12 @@ let
       throw "Unable to determine the macOS user: SUDO_USER and USER are both empty.";
   home = "/Users/${user}";
   gibibyte = 1024 * 1024 * 1024;
-  sets = import ../../packages/sets.nix {
-    inherit pkgs lib;
-  };
 in
 {
   imports = [
     ../../modules/docker.nix
     ./omarchy-keybindings.nix
-    ../../modules/1password/darwin-system.nix
+    (import ../../modules/tools.nix).darwin
   ];
 
   system = {
@@ -93,8 +90,11 @@ in
 
   homebrew = {
     enable = true;
-    brews = sets.darwinBrews;
-    casks = sets.darwinCasks;
+    brews = [ ];
+    casks = [
+      "docker-desktop"
+      "steam"
+    ];
     # nix-darwin installs and upgrades declared casks through Homebrew Bundle.
     greedyCasks = true;
     onActivation = {
@@ -114,8 +114,6 @@ in
   # GUI apps use the same 1Password socket as Home Manager's shell sessions.
   launchd.user.envVariables.SSH_AUTH_SOCK =
     config.home-manager.users.${user}.home.sessionVariables.SSH_AUTH_SOCK;
-
-  environment.systemPackages = sets.darwinSystemPackages ++ sets.hostPackages;
 
   home-manager = {
     useGlobalPkgs = true;

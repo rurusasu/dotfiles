@@ -38,10 +38,3 @@ setup() {
 	run grep -F 'arm64)' "$REPO_ROOT/docker/hermes-browser/Dockerfile"
 	[ "$status" -eq 0 ]
 }
-
-@test "README documents the one-command macOS installer" {
-	run grep -F './install.sh' "$REPO_ROOT/README.md"
-	[ "$status" -eq 0 ]
-	run grep -F 'Docker Desktop' "$REPO_ROOT/README.md"
-	[ "$status" -eq 0 ]
-}

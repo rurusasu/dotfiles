@@ -32,11 +32,11 @@ chezmoi は Windows の dotfiles（設定ファイル）だけを管理します
 
 **役割分担:**
 
-| 役割                   | ツール                                             |
-| ---------------------- | -------------------------------------------------- |
-| パッケージインストール | Nix (macOS/Linux/WSL)、catalog の Windows provider |
-| ユーザー設定           | Chezmoi                                            |
-| シェル統合             | Unix は Home Manager、Windows は chezmoi           |
+| 役割                   | ツール                                                          |
+| ---------------------- | --------------------------------------------------------------- |
+| パッケージインストール | Nix modules (macOS/Linux/WSL)、独立した Windows WinGet manifest |
+| ユーザー設定           | Chezmoi                                                         |
+| シェル統合             | Unix は Home Manager、Windows は chezmoi                        |
 
 ## クイックスタート
 

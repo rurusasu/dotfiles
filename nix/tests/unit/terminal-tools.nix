@@ -13,26 +13,19 @@ let
     in
     import "${inputs.home-manager}/lib/eval-config.nix" {
       inherit pkgs;
+      extraSpecialArgs = { inherit inputs; };
       modules = [
-        ../../modules/lazygit
-        ../../modules/herdr
+        ../../home/common.nix
+        ../../modules/editors/nvim
         {
           home = {
             username = "test-user";
             homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
             stateVersion = "26.05";
           };
-          programs.bash.enable = true;
-          programs.zsh.enable = true;
         }
       ];
     };
-  pkgs = mkPkgs "aarch64-darwin";
-  sets = import ../../packages/sets.nix {
-    inherit pkgs;
-    inherit (pkgs) lib;
-    codexPackage = pkgs.hello;
-  };
 in
 {
   testTerminalToolsUseNativeHomeManagerModules = {
@@ -62,20 +55,5 @@ in
         builtins.readFile ../../../chezmoi/AppData/Roaming/herdr/config.toml
       );
     }) systems;
-  };
-  testLazygitKeepsWindowsWingetDistribution = {
-    expr = {
-      selected = builtins.elem "JesseDuffield.lazygit" sets.windowsOnly.winget;
-      provider = sets.supportReport."JesseDuffield.lazygit".windows.provider;
-      verifier = sets.wingetVerifyById."JesseDuffield.lazygit";
-    };
-    expected = {
-      selected = true;
-      provider = "winget";
-      verifier = {
-        command = "lazygit";
-        args = [ "--version" ];
-      };
-    };
   };
 }

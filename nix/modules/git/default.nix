@@ -10,8 +10,6 @@
   ];
 
   programs.git = {
-    enable = true;
-
     signing = {
       format = "ssh";
       key = "~/.ssh/signing_key.pub";

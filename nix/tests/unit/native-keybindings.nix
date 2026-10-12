@@ -23,7 +23,6 @@ let
   };
   cfg = native.config;
   home = cfg.home-manager.users.test;
-  sets = import ../../packages/sets.nix { inherit pkgs lib; };
 in
 {
   testNativeHostSelectsHyprlandUserModule = {
@@ -58,22 +57,14 @@ in
       systemOwnsCompositor = true;
     };
   };
-  testNativeDesktopProviderResolvesSelectedPackages = {
+  testNativeDesktopModulesSelectTheirPackages = {
     expr = {
-      selectedPackages = map (package: package.pname) (
-        sets.resolve [
-          "hyprland"
-          "fuzzel"
-        ]
-      );
-      inherit (sets) providerErrors;
+      compositor = builtins.elem cfg.programs.hyprland.package cfg.environment.systemPackages;
+      launcher = builtins.elem pkgs.fuzzel home.home.packages;
     };
     expected = {
-      selectedPackages = [
-        "hyprland"
-        "fuzzel"
-      ];
-      providerErrors = [ ];
+      compositor = true;
+      launcher = true;
     };
   };
 }

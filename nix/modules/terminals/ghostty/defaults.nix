@@ -1,7 +1,7 @@
 { config, ... }:
 {
+  imports = [ (import ../../tools.nix).ghostty ];
   programs.ghostty = {
-    enable = true;
     settings = { };
     enableBashIntegration = true;
     enableFishIntegration = false;

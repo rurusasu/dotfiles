@@ -86,7 +86,7 @@ function Get-Something {
 
 この repository の `nix fmt` / `checks.<system>.treefmt` は、PowerShell と
 PSScriptAnalyzer を宣言済みの依存として使用します。
-[`nix/packages/psscriptanalyzer/default.nix`](../../nix/packages/psscriptanalyzer/default.nix) が
+[`nix/modules/shells/powershell/psscriptanalyzer.nix`](../../nix/modules/shells/powershell/psscriptanalyzer.nix) が
 PowerShell Gallery の最新版入力を使い、formatter は store の manifest を直接 import します。
 コードにバージョンを固定せず、`flake.lock` に取得した内容の hash を記録します。
 最新版への更新は `nix flake update psscriptanalyzer` で行います。

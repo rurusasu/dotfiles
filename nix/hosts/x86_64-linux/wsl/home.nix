@@ -6,13 +6,11 @@
   ...
 }:
 let
-  sets = import ../../../packages/sets.nix {
-    inherit pkgs lib;
-  };
   inherit ((import ../../../modules/fonts.nix { inherit pkgs; })) fonts;
 in
 {
   imports = [
+    (import ../../../modules/tools.nix).linuxDesktop
     ../../../modules/editors/nvim
     ../../../home/common.nix
   ];
@@ -32,7 +30,7 @@ in
   };
   home = {
     homeDirectory = lib.mkDefault "/home/${config.home.username}";
-    packages = sets.allWithout sets.nativeDesktopPackageNames ++ fonts.packages;
+    inherit (fonts) packages;
 
     # Declaratively manage fcitx5 input method profile.
     # fcitx5 overwrites this file on exit, so home-manager re-applies it on

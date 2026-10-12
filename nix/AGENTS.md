@@ -11,11 +11,12 @@
 - ホスト固有: `nix/hosts/`
 - 再利用モジュール: `nix/modules/`
 - Home Manager: `nix/home/`
-- パッケージ SSOT: `nix/packages/catalog/`（カテゴリ別に単一定義）
-- provider 選択・検証: `nix/packages/providers/`、installer metadata: `nix/packages/install/`
-- パッケージの公開入口: `nix/packages/sets.nix`（既存 API を保つ合成だけ）
+- Unix のパッケージ導入・アプリ設定: `nix/modules/`。Unix CLI / GUI の導入はすべて `tools.nix`、GUI の OS 別選択も `tools.nix` にまとめ、個別アプリの設定・連携は各 module に定義する
+- CLI / GUI の `programs.*.enable` と `home.packages`: `nix/modules/tools.nix`。各アプリ module は設定・連携・package override を担当する
+- ホストのパッケージ構成: `tools.nix` が公開する対象の module とアプリ設定 module を imports で選択する
+- Windows の導入情報: `windows/{winget,npm,pnpm}/packages.json` を直接管理し、Unix module から生成しない
 - 共通キー配列・設定生成関数・ユーザー設定: `nix/home/keybindings/`。host 配下には OS の service/有効化・競合解除を置く。純粋な関数を Home Manager module の imports に渡さない
-- flake wiring: root の `flake.nix`。package 出力は `nix/packages/outputs.nix`、テスト登録は `nix/tests/default.nix`、formatter は `nix/formatter.nix`
+- flake wiring: root の `flake.nix`。custom package の出力は `nix/outputs.nix`、テスト登録は `nix/tests/default.nix`、formatter は `nix/formatter.nix`
 - nix-unit の値テスト: `nix/tests/unit/`
 - ビルド・実行テストの derivation: `nix/tests/build/`
 - テスト用の共有入力: `nix/tests/fixtures/`
@@ -23,8 +24,7 @@
 テストの登録は `nix/tests/default.nix`、配置・実行方法は [tests/README.md](tests/README.md) を参照する。
 flake の `checks` は nix-unit とビルドテストの公開入口であり、ディレクトリの分類名ではない。
 
-データ、provider 選択、配布 metadata、host 動作は変更理由が異なるため分離する。
-SSOT を巨大な 1 ファイルと解釈しない。詳細は [分割の理由と編集先](../docs/nix/package-management.md#分割の理由と編集先)。
+Unix CLI / GUI の導入は `tools.nix`、設定・連携は機能ごとの module、Windows の導入情報は独立した manifest、OS の動作は host に分ける。詳細は [分割の理由と編集先](../docs/nix/package-management.md#分割の理由と編集先)。
 キー配列も同じ境界で分割する。native NixOS と WSL を同じデスクトップとして扱わない。詳細は [対応範囲](../docs/chezmoi/omarchy.md)。
 
 ## 実行

@@ -19,8 +19,11 @@ unit のファイルは `test...` 属性を持つ nix-unit 形式にし、ファ
 nix-unit の flake-parts module が `checks.<system>.nix-unit` を自動生成します。
 `build/` には AeroSpace、Neovim、Ghostty、Windows キー設定生成物、独自 package build を置きます。
 実行スクリプトを flake の配線ファイルに直書きしません。
-`package-provider-coverage` は `nix/packages/outputs.nix` で既存の package-support-report
-derivation を再利用し、`treefmt` は formatter module が公開します。
+`treefmt` は formatter module が公開します。
+Unix CLI の選択は `nix/modules/tools.nix` と各設定 module を組み合わせた
+Home Manager の実効設定で検証し、GUI / OS 固有 package は host の実効設定で検証します。
+Windows の install / verifier metadata は独立した `windows/winget/packages.json` を直接評価します。
+廃止した package catalog / provider resolution の fixture や生成 manifest 比較は対象にしません。
 
 - `tests/bash/` は shell / installer の順序、外部コマンドの stub、runtime / artifact 契約を検証します。
 - Nix の値 assertion を Bats 内の `nix eval` に追加せず、`unit/` に記載します。
@@ -98,31 +101,16 @@ Python unittest suite は CI の gate から外し、workflow 検証は `actionl
 配置変更時には `.github/actions/detect-ci-changes/action.yml` の3分類と、
 対応する workflow の実行条件を確認してください。
 
-## Bats の所有境界と完全分類
+## Bats の所有境界
 
-`tests/bash/package_catalog.bats` は1件で、generated artifact の独自契約を含みます。
-Nix値/source-shape assertionsは移管済みです。
-番号は現在の `@test` 出現順です。
-CIのexport checkはWinget/npm/pnpm JSON全体を生成してcommitted filesとJSON dataとして比較するため、
-個別metadata grepは重ねません。nix-unit ownership assertionはBats一覧とREADME分類の完全一致を検査します。
-
-### Bats runtime / artifact contract（1件）
-
-|                                                                                  番号 | テスト                                                  | native suite に残す契約                                                          |
-| ------------------------------------------------------------------------------------: | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
-|                                                                                     1 | `winget export matches committed Windows manifest data` | complete generated Winget/npm/pnpm artifact data, independent of JSON formatting |
-| pnpm は導入せず、空の生成 manifest と Home Manager の無効化を nix-unit が検証します。 |
-| Windows の dsh は npm manifest で管理し、外部コマンドとの契約は Pester が検証します。 |
-
-### 現行テストの所有境界
+`tests/bash/` は shell / installer の runtime 契約を担当します。Windows の manifest は
+独立した管理対象なので、Nix から生成した JSON との一致検査はありません。
+Windows の installer と verifier の実行契約は PowerShell / Pester が担当します。
 
 `unit/ownership.nix` は現在のファイル一覧から、再帰的な unit/build 登録の完全一致、
 重複したテスト名、Bats 内の `nix eval` 所有者を検査します。過去の移行時の件数や
 廃止したテスト名は固定しません。実行中の移行・backup・rollback 処理を守る
 runtime テストは残します。過去の移管履歴は [PR #633](https://github.com/rurusasu/dotfiles/pull/633) を参照してください。
 
-Nix / Bats 間の責務や呼び出しを変更した場合は、上記の全 system の評価と対象 check の build に加えて、
+Nix / Bats 間の責務や呼び出しを変更した場合は、全 system の評価と対象 check の build に加えて、
 変更対象に絞った `bats` 実行または `task test:bash` で関連する runtime 契約を確認します。
-package catalog の変更時は focused exact command として `bats tests/bash/package_catalog.bats` も実行する。
-Nix または `jq` がないため Bats ケースが `skip` された場合、検証成功とは扱わない。必要なツールを
-用意して再実行するか、未検証として停止する。

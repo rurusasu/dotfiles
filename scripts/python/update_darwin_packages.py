@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --no-project --managed-python --python 3.14 python
 """Update reviewed custom Darwin derivations and test nixpkgs candidates.
 
 The updater is intentionally conservative. It only edits reviewed source
@@ -23,9 +23,9 @@ from typing import Any, Callable
 
 
 ROOT = Path(__file__).resolve().parents[2]
-REGISTRY_PATH = ROOT / "nix" / "packages" / "darwin-provider-candidates.nix"
+REGISTRY_PATH = ROOT / "nix" / "modules" / "browsers" / "dia" / "provider-candidates.nix"
 DERIVATIONS = {
-    "dia-browser": ROOT / "nix" / "packages" / "dia-browser" / "default.nix",
+    "dia-browser": ROOT / "nix" / "modules" / "browsers" / "dia" / "package.nix",
     "orca-editor": ROOT / "nix" / "modules" / "editors" / "orca" / "package.nix",
 }
 ORCA_SOURCES = DERIVATIONS["orca-editor"].with_name("sources.json")

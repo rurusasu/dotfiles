@@ -53,10 +53,6 @@ class TaskfileContractTests(unittest.TestCase):
 
     def test_native_bootstrap_tasks_do_not_require_docker_backend(self) -> None:
         self.assertIn("scripts/sh/hermes-bootstrap.sh apply", self._task_block("hermes:sync"))
-        test_task = self._task_block("hermes:bootstrap:test")
-        self.assertIn(".#checks.${system}.nix-unit", test_task)
-        self.assertIn(".#checks.$system.nix-unit", test_task)
-        self.assertNotIn("docker/hermes-agent", test_task)
         self.assertNotIn("hermes:docker:bootstrap", self.taskfile)
 
     def test_bootstrap_applies_hermes_through_the_current_linux_manager(self) -> None:

@@ -163,7 +163,7 @@ in
       oldFlakes = builtins.pathExists ../../flakes;
       hostConstruction = builtins.pathExists ../../hosts/default.nix;
       registryPresent = builtins.pathExists ../default.nix;
-      packageOutputs = builtins.pathExists ../../packages/outputs.nix;
+      packageOutputs = builtins.pathExists ../../outputs.nix;
       formatter = builtins.pathExists ../../formatter.nix;
     };
     expected = {
@@ -282,7 +282,6 @@ in
       darwin = [
         (toString ../../hosts/aarch64-darwin/home.nix)
         (toString ../../modules/shells/zsh)
-        (toString ../../modules/lsp.nix)
         (toString ../../modules/terminals/ghostty/defaults.nix)
         (toString ../../hosts/aarch64-darwin/ghostty.nix)
         (toString ../../modules/terminals/wezterm/defaults.nix)
@@ -291,7 +290,6 @@ in
       x86Linux = [
         (toString ../../hosts/x86_64-linux/home.nix)
         (toString ../../modules/shells/zsh)
-        (toString ../../modules/lsp.nix)
         (toString ../../modules/terminals/ghostty/defaults.nix)
         (toString ../../hosts/shared/linux-ghostty.nix)
         (toString ../../modules/terminals/wezterm/defaults.nix)
@@ -299,7 +297,6 @@ in
       armLinux = [
         (toString ../../hosts/aarch64-linux/home.nix)
         (toString ../../modules/shells/zsh)
-        (toString ../../modules/lsp.nix)
         (toString ../../modules/terminals/ghostty/defaults.nix)
         (toString ../../hosts/shared/linux-ghostty.nix)
         (toString ../../modules/terminals/wezterm/defaults.nix)

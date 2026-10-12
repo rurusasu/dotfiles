@@ -43,7 +43,8 @@ let
           # this local derivation without forcing the upstream Python package.
           services.hermes-agent.package = testPackage;
         }
-        ../../modules/ai_agents/hermes
+        ../../home/common.nix
+        ../../modules/editors/nvim
       ];
     })
     // {
@@ -120,7 +121,7 @@ in
       installed = hasHermesBootstrap linux.config.home.packages;
       nodeRuntimeInstalled = hasNodejs linux.config.home.packages;
       availableToGateway = hasHermesBootstrap linux.config.services.hermes-agent.extraPackages;
-      nodeRuntimeAvailableToGateway = hasNodejs linux.config.services.hermes-agent.extraPackages;
+      nodeRuntimeInServiceExtraPackages = hasNodejs linux.config.services.hermes-agent.extraPackages;
       profileSyncWrapper = builtins.hasAttr "scripts/profile_sync.sh" linux.config.services.hermes-agent.hermesHomeFiles;
       profileSyncActivation = builtins.hasAttr "hermesProfileSyncWrapperExecutable" linux.config.home.activation;
       plugins = map (plugin: plugin.name) linux.config.services.hermes-agent.extraPlugins;
@@ -132,7 +133,7 @@ in
       installed = true;
       nodeRuntimeInstalled = true;
       availableToGateway = true;
-      nodeRuntimeAvailableToGateway = true;
+      nodeRuntimeInServiceExtraPackages = false;
       profileSyncWrapper = true;
       profileSyncActivation = true;
       plugins = [ "hermes-lcm" ];

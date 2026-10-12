@@ -42,6 +42,5 @@
     ../linux-ghostty.nix
     ../../../modules/terminals/ghostty/defaults.nix
     ../../../modules/terminals/wezterm/defaults.nix
-    ../../../modules/lsp.nix
   ];
 }

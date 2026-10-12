@@ -23,7 +23,6 @@ let
       modules = [
         ./aarch64-darwin/home.nix
         ../modules/shells/zsh
-        ../modules/lsp.nix
         ../modules/terminals/ghostty/defaults.nix
         ../hosts/aarch64-darwin/ghostty.nix
         ../modules/terminals/wezterm/defaults.nix
@@ -37,7 +36,6 @@ let
       modules = [
         ./${system}/home.nix
         ../modules/shells/zsh
-        ../modules/lsp.nix
         ../modules/terminals/ghostty/defaults.nix
         ../hosts/shared/linux-ghostty.nix
         ../modules/terminals/wezterm/defaults.nix

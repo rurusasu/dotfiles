@@ -5,8 +5,7 @@
   ...
 }:
 let
-  sets = import ../../packages/sets.nix { inherit pkgs lib; };
-  aerospace = builtins.head (sets.resolve [ "aerospace" ]);
+  inherit (pkgs) aerospace;
   openUrl = url: "/usr/bin/open ${lib.escapeShellArg url}";
   contract = import ../../home/keybindings/bindings.nix { inherit lib; };
   rendered = import ../../home/keybindings/aerospace.nix {

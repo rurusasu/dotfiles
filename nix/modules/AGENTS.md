@@ -2,27 +2,32 @@
 
 ## 管理対象
 
-- `ai_agents/chatgpt/`: macOS の ChatGPT アプリを `default.nix`、native NixOS の公式 Linux 版と同梱 CLI を `desktop.nix` / `packages.nix` が導入する。Linux は専用 `chatgpt-nixpkgs` input を利用し、host 側で有効化して WSL への GUI 配布を防ぐ。標準 `programs.codex` の `package = null` で同梱 CLI の設定・context・rules・hooks を管理する。`mutableSettings` でアプリの設定追記を保持し、公式 desktop worktree cleanup を宣言する。Windows の Store 配布・検証・CI metadata は `windows-install.nix`、ユーザー設定は chezmoi が所有する
+- `tools.nix`: Unix CLI / GUI の導入を一括管理する。Home Manager 標準の `programs.*.enable`、設定をユーザーが管理する CLI・標準 module のない CLI・LSP・プラグイン実行依存の `home.packages` をここに宣言する
+- `browsers/dia/`: Dia の package 選択関数・公式バイナリの package 定義・更新用 candidate 情報
+- `shells/powershell/psscriptanalyzer.nix`: formatter 用 PSScriptAnalyzer の package 定義
+- `ai_agents/chatgpt/`: ChatGPT アプリと同梱 CLI の導入は `tools.nix` が担当する。native NixOS は専用 `chatgpt-nixpkgs` input を利用する `packages.nix` を選択し、host が `desktop.nix` のキャッシュ cleanup を有効化する。WSL には Linux GUI を配布しない。標準 `programs.codex` の `package = null` で同梱 CLI の設定・context・rules・hooks を管理する。`mutableSettings` でアプリの設定追記を保持し、公式 desktop worktree cleanup を宣言する。Windows の導入は `windows/winget/packages.json`、ユーザー設定は chezmoi が所有する
 - `fonts.nix`: Darwin / NixOS 共通のフォントパッケージと fontconfig の既定フォント
-- `1password/`: nixpkgs の既存 CLI / デスクトップ版を直接導入する。`default.nix` が Home Manager の CLI と Linux デスクトップ版、`ssh.nix` が公式 agent socket の `IdentityAgent` / `SSH_AUTH_SOCK` と activation 時の公開鍵取得、`sync-ssh-public-key.sh` が timeout・検証・既存鍵保持、`darwin-system.nix` が macOS システムのデスクトップ版、`windows-install.nix` が Windows 配布・検証 metadata を担当する。Git signer / WSL interop の OS 固有設定は `nix/hosts/` に残す
-- `git/`: Git 共通設定と標準 program 有効化を `default.nix`、ghq の導入・共通保存先を `ghq.nix`、既存の `git gtr` alias を `gtr.nix`、Git / ghq の Windows 配布・検証 metadata を `windows-install.nix` にまとめる。署名コマンドと WSL の保存先は `nix/hosts/` が担当する
+- `1password/`: CLI / GUI の導入は `tools.nix`。`default.nix` が SSH 設定を読み込み、`ssh.nix` が公式 agent socket の `IdentityAgent` / `SSH_AUTH_SOCK` と activation 時の公開鍵取得、`sync-ssh-public-key.sh` が timeout・検証・既存鍵保持を担当する。Git signer / WSL interop の OS 固有設定は `nix/hosts/` に置く
+- `git/`: Git 共通設定を `default.nix`、ghq の共通保存先を `ghq.nix`、既存の `git gtr` alias を `gtr.nix` にまとめる。Git / ghq の導入は `tools.nix`、署名コマンドと WSL の保存先は `nix/hosts/` が担当する
 - `ssh.nix`: SSH の共通 Home Manager 設定。1Password agent の接続設定は `1password/ssh.nix` が担当する
 - `discord/`: Home Manager 標準 `programs.discord` と macOS の native module staging。Darwin / native Linux から読み込み、WSL には導入しない
-- `starship/`: Home Manager 標準 `programs.starship` と Zsh 連携。Discord / Starship の Windows 配布 metadata も各 module の `windows-install.nix` に置く
-- `lazygit/`: Home Manager 標準 `programs.lazygit` と Bash / Zsh の `lg` 連携。Windows 配布・検証 metadata は同じ module の `windows-install.nix` が担当する
-- `lsp.nix`: 全エディタ共通の言語サーバー・整形ツール。通常の PATH に導入する
-- `dsh.nix`: Numtide の `llm-agents` flake から DeepSeek Harness を導入する。キャッシュを保つため upstream の nixpkgs を変更しない
-- `ai_agents/hermes/`: 公式 flake の Home Manager module と native gateway・bootstrap manifest を管理する。`nix/home/common.nix` が読み込み、CLI / gateway を常に有効化する。upstream の依存 pin と既存データは維持する
-- `shells/plugins/`: fzf / zoxide / eza / bat / ripgrep の Home Manager program 有効化。ユーザー設定は `nix/home/shells/plugins/`、WSL 固有設定は `nix/hosts/x86_64-linux/wsl/home.nix` が担当する
-- `editors/nvim/`: Darwin / NixOS の Home Manager に読み込む Neovim とプラグインの設定
-- `editors/orca/`: macOS / Linux 共通の Orca Editor Home Manager module と公式バイナリのパッケージ定義。バージョン・URL・ハッシュは `sources.json` に集約する。Windows 配布 metadata は `nix/packages/install/` が担当する
+- `lazygit/`: Bash / Zsh の `lg` 連携。CLI の有効化は `tools.nix` が担当する
+- `ai_agents/hermes/`: 公式 flake の Home Manager module と native gateway・CLI 設定・bootstrap manifest を管理する。`bootstrap.nix` が bootstrap の構築を担当する。CLI の有効化は `tools.nix`、gateway とサービス用依存はこの module に置く。upstream の依存 pin と既存データは維持する
+- `shells/plugins/starship/`: Zsh 連携とプロンプト設定を `programs.starship.settings` で管理する。CLI の有効化は `tools.nix` が担当し、Home Manager が `starship.toml` を生成する
+- `editors/nvim/`: Neovim の設定・プラグイン・Lua 配置。Neovim 本体と補助 CLI・LSP・プラグイン実行依存の導入は `tools.nix` が担当する
+- `editors/orca/`: macOS / Linux 共通の Orca Editor の公式バイナリ定義。導入は `tools.nix` が担当する。バージョン・URL・ハッシュは `sources.json` に集約する
 - `terminals/`: Ghostty / WezTerm の Home Manager 設定。各 `defaults.nix` を OS module の `sharedModules` から直接読み込む
-- `herdr/`: Home Manager 標準 `programs.herdr` による導入とキー設定。`default.nix` と `config.toml` を同じ module にまとめ、Unix の外部 installer は使わない
-- `shells/zsh/`: zsh の導入と補完プラグインの定義。`default.nix` を OS module の `sharedModules` と standalone Home Manager から読み込む。履歴・alias・キー設定などは `nix/home/shells/zsh/` が担当する
-- `shells/bash/`: Bash の Home Manager 有効化・初期化・ログイン設定。`nix/home/common.nix` から読み込む
+- `herdr/`: 標準 `programs.herdr.settings` にキー設定を Nix で直接定義する。CLI の有効化は `tools.nix` が担当する
+- `shells/zsh/`: zsh の補完プラグインと連携設定。CLI の有効化は `tools.nix`、履歴・alias・キー設定などは `nix/home/shells/zsh/` が担当する
+- `shells/bash/`: Bash の初期化・ログイン設定。CLI の有効化は `tools.nix` が担当し、`nix/home/common.nix` から読み込む
 - OS 固有の option・有効化・共通 module の配線は `nix/hosts/` が担当する。OS 別ディレクトリは置かない
 
 ## ルール
 
 - ホスト依存が強い設定は `nix/hosts/*` に残す。
+- Python のユーザー環境は `tools.nix` が導入する uv で管理する。Python interpreter の直接導入は行わず、Nix 内部専用の Python 依存はその module に置く。
+- GitHub CLI は `tools.nix` の `home.packages` に `gh` を導入し、既存の `~/.config/gh/config.yml` はユーザーが管理する。
+- CLI の PATH への導入は `tools.nix` に宣言し、各 module は設定・連携・package override を担当する。GUI の導入も `tools.nix` にまとめ、OS service・フォント・ビルド用依存はそれぞれの所有先に置く。
+- 設定・サービスから絶対 store path で呼び出す専用の実行依存は、その module が管理する。zsh-patina の activate 連携もこの範囲に含む。
 - ここでは複数ホストで再利用できる単位に分割する。
+- Windows の WinGet 導入情報は `windows/winget/packages.json` に直接定義し、Unix module に Windows install metadata を置かない。

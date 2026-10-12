@@ -9,15 +9,14 @@ AI エージェントの設定はアプリ単位でまとめます。
 
 ```text
 nix/modules/ai_agents/
-├── chatgpt/  # ChatGPT アプリ・同梱 Codex の設定・Windows 配布 metadata
-└── hermes/   # Hermes CLI・gateway・bootstrap manifest
+├── chatgpt/  # ChatGPT アプリ・同梱 Codex の設定
+└── hermes/   # Hermes gateway・CLI 設定・bootstrap manifest
 ```
 
-ChatGPT アプリは `chatgpt/default.nix` が macOS の `home.packages` に直接導入します。
-native NixOS は host が `chatgpt/desktop.nix` を読み込み、`packages.nix` が公式 Linux 版と
-同梱 CLI の wrapper を導入します。WSL には Linux GUI を導入しません。
-Windows の Store 配布・検証・CI 設定は `chatgpt/windows-install.nix` が管理します。
-パッケージカタログには登録しません。
+ChatGPT アプリは `nix/modules/tools.nix` が導入します。native NixOS は `nativeDesktop` が
+`chatgpt/packages.nix` の公式 Linux 版と同梱 CLI の wrapper を選択し、host が読み込む
+`chatgpt/desktop.nix` がキャッシュの cleanup を設定します。WSL には Linux GUI を導入しません。
+Windows の Store 導入・検証情報は `windows/winget/packages.json` で直接管理します。
 Codex CLI を独立したパッケージとして導入しません。
 
 ## native NixOS の Linux 版
@@ -48,8 +47,8 @@ Home Manager `programs.codex` が管理します。`package = null` により CL
 認証ファイル・履歴・セッションは Home Manager の管理対象にしません。
 Windows の設定は chezmoi が管理します。
 
-Node.js/npm はパッケージカタログで管理し、dsh は Unix では `nix/modules/dsh.nix`、
-Windows では生成した `windows/npm/packages.json` で導入します。pnpm と Bun は導入しません。
+Unix の Node.js/npm と dsh の導入は `nix/modules/tools.nix` で管理します。
+Windows の npm/pnpm manifest は空で、dsh を導入しません。pnpm と Bun は導入しません。
 
 ## 反映
 

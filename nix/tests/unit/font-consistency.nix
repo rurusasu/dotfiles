@@ -5,10 +5,6 @@ let
     system: modules:
     let
       pkgs = fixtures.mkPkgs system;
-      sets = import ../../packages/sets.nix {
-        inherit pkgs;
-        inherit (pkgs) lib;
-      };
       home = inputs.home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
         extraSpecialArgs = {
@@ -28,7 +24,6 @@ let
     in
     {
       expr = {
-        allPackages = containsFont sets.all;
         homePackages = containsFont home.config.home.packages;
         emojiPackage = builtins.any (
           package: package.drvPath == pkgs.noto-fonts-color-emoji.drvPath
@@ -44,7 +39,6 @@ let
         };
       };
       expected = {
-        allPackages = false;
         homePackages = true;
         emojiPackage = true;
         fontconfig = true;
