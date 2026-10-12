@@ -9,13 +9,15 @@ let
       ../../hosts/shared/nixos/configuration.nix
       {
         nixpkgs.pkgs = pkgs;
-        home-manager.useGlobalPkgs = true;
-        home-manager.extraSpecialArgs = { inherit inputs; };
-        home-manager.users.test = {
-          home = {
-            username = "test";
-            homeDirectory = "/home/test";
-            stateVersion = "25.05";
+        home-manager = {
+          useGlobalPkgs = true;
+          extraSpecialArgs = { inherit inputs; };
+          users.test = {
+            home = {
+              username = "test";
+              homeDirectory = "/home/test";
+              stateVersion = "25.05";
+            };
           };
         };
       }
@@ -34,11 +36,15 @@ in
       chatgpt = builtins.elem "chatgpt" (map lib.getName home.home.packages);
       codex = builtins.elem "codex" (map lib.getName home.home.packages);
       aiShortcut = lib.hasInfix "chatgpt" home.wayland.windowManager.hyprland.extraConfig;
+      cliManaged = home.programs.codex.package != null;
+      cleanup = home.systemd.user.tmpfiles.rules;
     };
     expected = {
       chatgpt = true;
       codex = true;
       aiShortcut = true;
+      cliManaged = true;
+      cleanup = [ "e %C/chatgpt/bundled-plugins-v2 - - - 0" ];
     };
   };
   testNativeHomeGeneratesLuaFromSharedKeys = {

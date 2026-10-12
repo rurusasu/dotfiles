@@ -39,9 +39,9 @@ Docker Desktop の初期設定は生成された activation を CLI double で�
 既存の `md5` パスとの衝突を検証します。実機の Docker Desktop 起動は installer の検証対象です。
 Windows の `task test` は PowerShell テストを実行します。
 
-Linux の `custom-package-builds` は `chatgpt-desktop` check も含み、公式 Linux 版と同梱 CLI の
-ビルド、CLI 起動、desktop entry と user tmpfiles を確認します。GUI の起動・ログイン・操作は
-この check の対象外で、native NixOS 実機で確認します。
+Darwin / Linux の `custom-package-builds` は `chatgpt-desktop` check も含み、公式アプリと同梱 CLI の
+ビルド・CLI 起動、および Linux の desktop entry と upstream tmpfiles 規則の一致を確認します。
+GUI の起動・ログイン・操作はこの check の対象外で、各 OS の実機で確認します。
 
 ```bash
 # 全 system の flake 出力を評価する。テスト本体は実行しない

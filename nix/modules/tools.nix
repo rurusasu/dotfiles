@@ -1,4 +1,19 @@
 # Unix application installation. Feature modules own settings and integration.
+let
+  chatgptDesktop =
+    { inputs, pkgs, ... }:
+    let
+      packages = import ./ai_agents/chatgpt/packages.nix { inherit inputs pkgs; };
+    in
+    {
+      imports = [ ./ai_agents/chatgpt/desktop.nix ];
+      home.packages = [ packages.chatgpt ];
+      programs.codex = {
+        enable = true;
+        package = packages.codex;
+      };
+    };
+in
 {
   homeManager =
     {
@@ -100,11 +115,12 @@
         ++ neovimRuntimeDependencies
         ++ lib.optionals stdenv.hostPlatform.isLinux [ _1password-gui ]
         ++ lib.optionals stdenv.hostPlatform.isDarwin [
-          chatgpt
           coreutils
           tart
         ];
     };
+
+  chatgpt = chatgptDesktop;
 
   darwin = { pkgs, ... }: {
     environment.systemPackages = [
@@ -124,20 +140,14 @@
     ];
   };
 
-  nativeDesktop =
-    { inputs, pkgs, ... }:
-    let
-      chatgptPackages = import ./ai_agents/chatgpt/packages.nix { inherit inputs pkgs; };
-    in
-    {
-      home.packages = [
-        pkgs.firefox
-        pkgs.fuzzel
-        pkgs.nautilus
-        chatgptPackages.chatgpt
-        chatgptPackages.codex
-      ];
-    };
+  nativeDesktop = { pkgs, ... }: {
+    imports = [ chatgptDesktop ];
+    home.packages = [
+      pkgs.firefox
+      pkgs.fuzzel
+      pkgs.nautilus
+    ];
+  };
 
   discord = _: { programs.discord.enable = true; };
   ghostty = _: { programs.ghostty.enable = true; };

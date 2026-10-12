@@ -18,7 +18,6 @@ in
     ../../../modules/docker.nix
     ./omarchy-keybindings.nix
   ];
-  home-manager.sharedModules = [ ../../../modules/ai_agents/chatgpt/desktop.nix ];
   assertions = [
     {
       assertion = uidText == "" || isNumericId uidText;

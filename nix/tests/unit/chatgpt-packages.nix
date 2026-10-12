@@ -5,12 +5,12 @@ let
     system:
     builtins.any (package: (package.pname or "") == "chatgpt")
       (fixtures.mkHome system [
-        ../../home/common.nix
+        (if system == "aarch64-darwin" then ../../hosts/aarch64-darwin/home.nix else ../../home/common.nix)
         ../../modules/editors/nvim
       ]).config.home.packages;
 in
 {
-  testLinuxChatGPTDesktopKeepsTheAppProvidedCodex = {
+  testChatGPTDesktopKeepsTheAppProvidedCodexAcrossPlatforms = {
     expr =
       builtins.all
         (
@@ -31,6 +31,7 @@ in
         [
           "x86_64-linux"
           "aarch64-linux"
+          "aarch64-darwin"
         ];
     expected = true;
   };

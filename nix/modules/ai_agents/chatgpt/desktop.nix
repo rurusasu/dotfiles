@@ -1,10 +1,17 @@
-# Selected by native NixOS; common.nix also serves WSL and owns configuration.
-{ inputs, pkgs, ... }:
-let
-  packages = import ./packages.nix { inherit inputs pkgs; };
-in
+# Selected with the desktop app on Darwin and native Linux.
 {
-  # Use upstream's cleanup policy for the writable bundled-plugin cache.
-  xdg.configFile."user-tmpfiles.d/chatgpt.conf".source =
-    "${packages.chatgpt}/share/user-tmpfiles.d/chatgpt.conf";
+  inputs,
+  lib,
+  pkgs,
+  ...
+}:
+{
+  # Home Manager owns tmpfiles generation, activation, and systemd integration.
+  systemd.user.tmpfiles.rules = lib.optionals pkgs.stdenv.hostPlatform.isLinux (
+    lib.splitString "\n" (
+      lib.removeSuffix "\n" (
+        builtins.readFile "${inputs.chatgpt-nixpkgs}/pkgs/by-name/ch/chatgpt/tmpfiles.conf"
+      )
+    )
+  );
 }

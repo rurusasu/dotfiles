@@ -14,8 +14,6 @@
         inherit pkgs;
         formatter = config.treefmt.settings.formatter.powershell;
       };
-    }
-    // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
       chatgpt-desktop = import ./build/chatgpt-desktop.nix { inherit inputs pkgs; };
     }
     // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {

@@ -5,7 +5,7 @@
 - `tools.nix`: Unix CLI / GUI の導入を一括管理する。Home Manager 標準の `programs.*.enable`、設定をユーザーが管理する CLI・標準 module のない CLI・LSP・プラグイン実行依存の `home.packages` をここに宣言する
 - `browsers/dia/`: Dia の package 選択関数・公式バイナリの package 定義・更新用 candidate 情報
 - `shells/powershell/psscriptanalyzer.nix`: formatter 用 PSScriptAnalyzer の package 定義
-- `ai_agents/chatgpt/`: ChatGPT アプリと同梱 CLI の導入は `tools.nix` が担当する。native NixOS は専用 `chatgpt-nixpkgs` input を利用する `packages.nix` を選択し、host が `desktop.nix` のキャッシュ cleanup を有効化する。WSL には Linux GUI を配布しない。標準 `programs.codex` の `package = null` で同梱 CLI の設定・context・rules・hooks を管理する。`mutableSettings` でアプリの設定追記を保持し、公式 desktop worktree cleanup を宣言する。Windows の導入は `windows/winget/packages.json`、ユーザー設定は chezmoi が所有する
+- `ai_agents/chatgpt/`: `tools.nix` が Darwin / native NixOS のアプリを `home.packages`、同梱 CLI を標準 `programs.codex.package` で宣言する。専用 `chatgpt-nixpkgs` input を利用する `packages.nix` を両 OS で共有し、`desktop.nix` が Linux のキャッシュ cleanup を標準 `systemd.user.tmpfiles.rules` で管理する。WSL は `package = null` とし Linux GUI を配布しない。標準 `programs.codex` で設定・context・rules・hooks を管理する。`mutableSettings` でアプリの設定追記を保持し、公式 desktop worktree cleanup を宣言する。Windows の導入は `windows/winget/packages.json`、ユーザー設定は chezmoi が所有する
 - `fonts.nix`: Darwin / NixOS 共通のフォントパッケージと fontconfig の既定フォント
 - `1password/`: CLI / GUI の導入は `tools.nix`。`default.nix` が SSH 設定を読み込み、`ssh.nix` が公式 agent socket の `IdentityAgent` / `SSH_AUTH_SOCK` と activation 時の公開鍵取得、`sync-ssh-public-key.sh` が timeout・検証・既存鍵保持を担当する。Git signer / WSL interop の OS 固有設定は `nix/hosts/` に置く
 - `git/`: Git 共通設定を `default.nix`、ghq の共通保存先を `ghq.nix`、既存の `git gtr` alias を `gtr.nix` にまとめる。Git / ghq の導入は `tools.nix`、署名コマンドと WSL の保存先は `nix/hosts/` が担当する
