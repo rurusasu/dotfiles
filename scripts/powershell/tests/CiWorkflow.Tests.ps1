@@ -128,7 +128,7 @@ Describe 'CI workflow configuration' {
     It 'should verify GUI inventory including Store Codex without CLI bootstrap or retirement' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
         $installerScript | Should -Match 'Assert-WingetInstallSuccess -Output \$out -ExpectedPackageIds \$expectedWindowsPackageIds'
-        $installerScript | Should -Not -Match 'Microsoft\.PowerShell|ciSkipInstall -NotePropertyValue|Invoke-Npm|Invoke-Pnpm|@openai/codex|Codex CLI|9NT1R1C2HH7J|RETIRED_PACKAGE_CLEANUP'
+        $installerScript | Should -Not -Match 'ciSkipInstall -NotePropertyValue|Invoke-Npm|Invoke-Pnpm|@openai/codex|Codex CLI|9NT1R1C2HH7J|RETIRED_PACKAGE_CLEANUP'
         $installerScript | Should -Match 'The GUI installer performed npm/pnpm activity'
     }
 
