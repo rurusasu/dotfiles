@@ -167,9 +167,9 @@ MCP sidecars. No inference provider or model download is configured here.
 ```text
 nix/modules/ ───── host が imports で選択
 ├── tools.nix ─────────── 全 Unix CLI の有効化・導入・LSP/実行依存
-├── desktop.nix ───────── Linux / WSLg の共通 GUI
-├── desktop-system.nix ── Darwin system GUI
 └── 各アプリ module ───── 設定・連携・package override・GUI
+
+nix/hosts/ ────────────── OS 固有の GUI 一覧・service・Homebrew
 
 windows/winget/packages.json ── Windows GUI を直接宣言
 windows/{npm,pnpm}/packages.json ── 独立した空 manifest
@@ -178,7 +178,7 @@ windows/{npm,pnpm}/packages.json ── 独立した空 manifest
 ### ツール追加手順
 
 1. Unix CLI はすべて `nix/modules/tools.nix` に宣言する。設定・連携も管理する CLI は標準の `programs.<name>.enable`、設定をユーザーが管理する CLI・標準 module のない CLI・LSP・実行依存は `home.packages` に追加する。設定・連携・package override は対応するアプリ module に置く。
-2. Linux / WSLg の GUI は `desktop.nix`、Darwin の system GUI は `desktop-system.nix` に追加する。Homebrew と OS service は host に定義する。
+2. Linux / WSLg の GUI は各 host の `home.nix`、Darwin の system GUI は host の `configuration.nix` に追加する。Homebrew と OS service は host に定義する。
 3. Windows に追加する場合は `windows/winget/packages.json` の既存 schema に合わせ、package ID・導入・検証情報を直接記述する。
 4. 各 OS の通常インストーラーで反映する。具体的な入口と所有境界は [パッケージ管理](./nix/package-management.md) を参照する。
 

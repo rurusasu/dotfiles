@@ -11,12 +11,12 @@
 - ホスト固有: `nix/hosts/`
 - 再利用モジュール: `nix/modules/`
 - Home Manager: `nix/home/`
-- Unix のパッケージ導入・アプリ設定: `nix/modules/`。Unix CLI の PATH への導入はすべて `tools.nix`、Linux / WSLg GUI は `desktop.nix`、Darwin system GUI は `desktop-system.nix`、個別アプリの設定・連携は各 module に定義する
+- Unix のパッケージ導入・アプリ設定: `nix/modules/`。Unix CLI の PATH への導入はすべて `tools.nix`、Linux / WSLg GUI は各 host の `home.nix`、Darwin system GUI は host の `configuration.nix`、個別アプリの設定・連携は各 module に定義する
 - CLI の `programs.*.enable` と `home.packages`: `nix/modules/tools.nix`。各アプリ module は設定・連携・package override を担当する
-- ホストのパッケージ構成: 必要な module の imports で選択する
+- ホストのパッケージ構成: CLI とアプリ設定は必要な module の imports で選択し、OS 固有の GUI 一覧は host に直接宣言する
 - Windows の導入情報: `windows/{winget,npm,pnpm}/packages.json` を直接管理し、Unix module から生成しない
 - 共通キー配列・設定生成関数・ユーザー設定: `nix/home/keybindings/`。host 配下には OS の service/有効化・競合解除を置く。純粋な関数を Home Manager module の imports に渡さない
-- flake wiring: root の `flake.nix`。custom package・キー設定の出力は `nix/outputs.nix`、テスト登録は `nix/tests/default.nix`、formatter は `nix/formatter.nix`
+- flake wiring: root の `flake.nix`。custom package の出力は `nix/outputs.nix`、テスト登録は `nix/tests/default.nix`、formatter は `nix/formatter.nix`
 - nix-unit の値テスト: `nix/tests/unit/`
 - ビルド・実行テストの derivation: `nix/tests/build/`
 - テスト用の共有入力: `nix/tests/fixtures/`
