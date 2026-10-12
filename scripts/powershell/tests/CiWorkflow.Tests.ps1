@@ -646,13 +646,14 @@ esac
         $workflow | Should -Not -Match 'runs-on:\s*\[?self-hosted'
     }
 
-    It 'should apply Darwin configuration without individual package artifact checks' {
+    It 'should apply Darwin configuration and run the declared ChatGPT build check' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw
         $macosJob = [regex]::Match($workflow, '(?ms)^  darwin:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)').Value
         $macosJob | Should -Not -BeNullOrEmpty
-        $macosJob | Should -Not -Match 'scripts/sh/run-bash-tests\.sh|brew install|nix build|codesign|spctl|package_catalog\.bats'
+        $macosJob | Should -Not -Match 'scripts/sh/run-bash-tests\.sh|brew install|codesign|spctl|package_catalog\.bats'
         $macosJob | Should -Match 'Install Nix'
         $macosJob | Should -Match 'sudo nix --accept-flake-config[\s\S]*?darwin-rebuild -- switch --flake \.#macos --impure'
+        $macosJob | Should -Match 'nix build --no-link --print-build-logs\s+\\\s+\.#checks\.aarch64-darwin\.chatgpt-desktop'
     }
 
     It 'should install chezmoi before every Windows job that runs chezmoi template tests' {
