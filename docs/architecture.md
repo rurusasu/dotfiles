@@ -252,20 +252,22 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 
 通常 CI はこの2本に集約します。`codeql.yml` は独立した Actions セキュリティ検査として維持します。
 選別ルールは `.github/actions/detect-ci-changes/action.yml` の Bash に直接定義し、外部 manifest と専用 Python detector は持ちません。
-Git の差分を `nix`・`chezmoi`・`other` の3つのフラグに分類し、workflow の `if` で実行条件を定義します。
+Git の差分を共有検査用の `nix`・`chezmoi`・`other` と、構成適用用の `linux`・`darwin`・`wsl`・`windows` に分類し、workflow の `if` で実行条件を定義します。
 Nix 設定は Nix、Windows の chezmoi 設定は chezmoi、共通 installer・scripts・Taskfile・Docker・workflow・テストは全分類を選択します。
 共有キー設定、flake input、Windows manifest は Nix と chezmoi を両方選択します。
 通常の docs / README / AGENTS はスキップしますが、配布対象の agent 設定などの Markdown はその所属分類で検証します。
-分類は排他的ではなく、複数変更の和集合を実行します。言語・OS 別の細かな最適化は行わず、分類内の検証をまとめて実行します。
+分類は排他的ではなく、複数変更の和集合を実行します。Windows manifest の変更は共有 checks と Windows installer、OS 固有 host の変更は該当 OS の build / E2E を選択します。
+共有 Nix module や flake input、共通スクリプトは依存する各 OS を選択し、配布するキーバインド help 文書も実行対象に含めます。
 
 各検証ジョブの名前・OS runner・実際の runtime assertion を維持します。Changes ジョブは各 workflow に一つだけ置きます。
 workflow は常時起動し、対象外の検証ジョブだけを `if` でスキップします。検出失敗はチェック失敗とし、手動実行は全分類を有効にします。
 PR は merge-base からの差分を使い、削除・移動元も含めます。NUL 区切りでファイル名を扱い、push のゼロ base SHA では empty tree と比較します。
 `ci-nix.yml` の `complete` は必要な build / E2E の success と、対象外ジョブの skipped を確認します。
 Linux の nix-unit・custom-package-builds・workspace-cycle と Windows キー設定生成・manifest 検査は `check` ジョブに集約し、`linux-build` からの二重ビルド参照をなくします。
+Nix の成果物は GitHub Actions cache に保存し、WSL artifact では取得可能な公開依存の payload を省きます。詳細は [CI cache](../docker/bootstrap-ci-tools/README.md#nix-成果物の再利用) を参照してください。
 
 WSL job は一時 NixOS-WSL 環境で native Nix/Home Manager switch、既存 `~/.hermes` state の保持、CLI 起動、user service の再起動と active 状態を検証します。
-Docker Desktop の実機適用と nix-darwin switch は runner の OS 制約により実行せず、installer 末尾の local acceptance が判定します。
+Windows の Docker Desktop の実機適用は installer 末尾の local acceptance が判定します。macOS は Darwin job で nix-darwin switch を実行します。
 詳細は [WSL Hermes E2E](../scripts/powershell/ci/Invoke-NixosWslE2E.ps1) を参照してください。
 
 NixOS の hosted VM job は installer の再実行と Docker・Compose の runtime acceptance を検証します。非 NixOS Linux は standalone Home Manager の build と installer の mocked contract が対象です。pull request では hosted contract、declarative build、Linux runtime E2E の全checkが成功し、approval待ちやqueued jobがないことをmerge条件にします。

@@ -32,9 +32,11 @@ Windows の install / verifier metadata は独立した `windows/winget/packages
 
 ## 実行
 
-Unix の `task test` は `task test:nix` を呼び、
-現在の system の powershell-formatter、nix-unit、custom-package-builds、aerospace-workspace-cycle、
-neovim-native、wezterm-config、docker-desktop-activation を一つの `nix build` にまとめます。
+Unix の `task test` は `task test:nix` を呼びます。CI と同じ
+`nix flake check --no-write-lock-file --print-build-logs` で、現在の system に登録された
+すべての check を実行します。check 名のリストや system 判定を呼び出し側で管理しません。
+対象には nix-unit、独自 package build、AeroSpace、Neovim、WezTerm、Docker Desktop、
+PowerShell formatter、treefmt を含み、Darwin では standalone Home Manager の構成ビルドも含みます。
 Docker Desktop の初期設定は生成された activation を CLI double で実行し、再実行、失敗時の再試行、
 既存の `md5` パスとの衝突を検証します。実機の Docker Desktop 起動は installer の検証対象です。
 Windows の `task test` は PowerShell テストを実行します。
@@ -47,29 +49,14 @@ GUI の起動・ログイン・操作はこの check の対象外で、各 OS �
 # 全 system の flake 出力を評価する。テスト本体は実行しない
 nix flake check --all-systems --no-build --no-write-lock-file
 
-# 通常のローカル検証セット（Unix）
+# CI と共通の全 checks 実行（Unix）
 task test:nix
 
-# 単体テストだけを実行（Apple Silicon の例）
+# Taskfile を介さず現在の system の全 checks を実行する
+nix flake check --no-write-lock-file --print-build-logs
+
+# 障害調査で単体テストだけを実行（Apple Silicon の例）
 nix build .#checks.aarch64-darwin.nix-unit --no-link --no-write-lock-file
-
-# CI と同じ単体テスト・独自 package build の個別実行例（各対象の builder が必要）
-nix build .#checks.x86_64-linux.nix-unit --no-link --no-write-lock-file
-nix build .#checks.x86_64-linux.powershell-formatter --no-link --no-write-lock-file
-nix build .#checks.x86_64-linux.custom-package-builds --no-link --no-write-lock-file
-nix build .#checks.aarch64-darwin.custom-package-builds --no-link --no-write-lock-file
-
-# ビルド・実行テストを指定する例
-nix build .#checks.aarch64-darwin.aerospace-workspace-cycle --no-link --no-write-lock-file
-
-# PowerShell formatter を空 HOME・ダウンロード禁止で実行し、BOM/CRLF/冪等性を確認
-nix build .#checks.aarch64-darwin.powershell-formatter --no-link --no-write-lock-file
-
-# repository 全体の format gate（対象 system の builder が必要）
-nix build .#checks.aarch64-darwin.treefmt --no-link --no-write-lock-file
-
-# 現在の system の checks 全体を build
-nix flake check --no-write-lock-file
 ```
 
 `nix flake check --no-build` は評価確認です。nix-unit assertion や実行テストの成功は、
@@ -80,25 +67,25 @@ nix flake check --no-write-lock-file
 依存 input の取得は build に先行し、formatter の実行中に `Install-Module` を呼びません。
 空の HOME でも同じ依存を使用します。`powershell-formatter` は未整形 fixture を整形し、
 CRLF・日本語の BOM と二度目の実行で byte / 更新時刻が変わらないことを検証します。
-通常の `task test:nix` と Linux/Darwin CI は `powershell-formatter` を個別に build しますが、
-全 checks の build とは範囲が異なります。Linux CI は `docker/bootstrap-ci-tools/nix.conf` で
+`task test:nix` と Linux の check job は全 checks に含めて実行します。
+Linux の container job は `docker/bootstrap-ci-tools/nix.conf` で
 `sandbox = true` を設定した tools image を使います。新しい image は公開前に
 `check-bootstrap-ci-tools.sh --sandbox` で sandbox 内の build を検証し、各 job は検証済みの
 image を immutable digest で再利用します。
-CI の format job は `nix fmt -- --fail-on-change` を実行し、`treefmt` derivation や
-`powershell-formatter` の build を代替しません。CI が host の PSGallery module を準備しても、
+CI の format 検査は全 checks 内の `treefmt` にまとめ、同じ検査を別 job では実行しません。
+check job の結果も `Bootstrap / Complete` の成功条件に含めます。CI が host の PSGallery module を準備しても、
 Nix formatter は host module ではなく固定した store module を使います。
 `activationPackage` を checks に登録すれば Home Manager の構成ビルドも検証できますが、
 それ自体は activation の実行や、設定値を比較する nix-unit テストを意味しません。
 
 Linux bootstrap CI は `x86_64-linux`（`ubuntu-24.04`）で本番 NixOS system と standalone Home Manager activation package を build します。
-Darwin CI は `aarch64-darwin`（`macos-15`）の runner で `darwin-rebuild switch` を実行し、構成を実際に適用します。
+Darwin CI は `aarch64-darwin`（`macos-15`）の runner で `darwin-rebuild switch` と全 flake checks を実行します。
 WSL CI も本番経路の `nixos-rebuild switch` を実行します。個別の Hermes Python suite や Darwin cask artifact check は CI で実行しません。
 Python unittest suite は CI の gate から外し、workflow 検証は `actionlint`、設定適用は対象 platform の rebuild で行います。
-共通の `nix` job は lint と format だけを確認し、事前の `nix eval` / `nix flake check --no-build` は実行しません。
+共通の `nix` job は statix の lint を確認し、事前の `nix eval` / `nix flake check --no-build` は実行しません。
 `aarch64-linux` は flake の support/output には含まれますが、この workflow には ARM64 Linux runner の native build がありません。
 `aarch64-linux` の native build には対応する builder が必要です。
-配置変更時には `.github/actions/detect-ci-changes/action.yml` の3分類と、
+配置変更時には `.github/actions/detect-ci-changes/action.yml` の共有検査・OS 別の分類と、
 対応する workflow の実行条件を確認してください。
 
 ## Bats の所有境界

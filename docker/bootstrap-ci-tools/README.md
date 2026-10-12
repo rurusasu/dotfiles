@@ -35,12 +35,14 @@ Nix sandbox は有効で、Nix のビルドを行う job container は `--privil
 権限 600 で保存します。token をイメージに含めたり、ログへ出力したりしません。
 WSL でも同じスクリプトで root / nixos の両方を設定し、builder の並列数制限を維持します。
 
-`nix` ジョブは lint と format の確認だけを行い、失敗をそのままジョブへ反映します。
-アプリを含む OS 構成と設定テストは Linux / Darwin の各 build job に集約します。
+`nix` ジョブは statix の検査を行い、format と全 flake checks は `check` に集約します。
+アプリを含む OS 構成は Linux / Darwin の各 build job で検証します。
 事前の `nix eval` や `nix flake check --no-build` は重ねません。
-Linux build は Linux または Nix の変更で実行します。
+Linux / Darwin / WSL / Windows の実行条件は、共有 checks の分類と独立しています。
+Windows manifest の変更では共有 checks と Windows installer を実行し、Unix の build は起動しません。
+OS 固有 host の変更は該当 OS、共有 Nix module / flake input の変更は依存する各 OS を選択します。
 Ubuntu / Debian の個別構成 build と E2E は実行せず、NixOS VM の検証は維持します。
-WSL は通常構成と Hermes 有効構成をそれぞれ build し、E2E で使う cache を生成します。
+WSL は本番構成を一度 build し、E2E で使う cache を生成します。
 ホストの SDK 削除や Docker イメージの一括削除は行いません。
 
 Bash テストは同じ workflow の Linux `bash-test` job に集約し、
@@ -53,6 +55,24 @@ push / PR では軽量な変更検出を必ず実行し、必要な job だけ�
 
 - NixOS E2E: KVM を使う VM テストを実行する。
 - Darwin / Windows / WSL E2E: 対象 OS のネイティブ環境を検証する。
+
+## Nix 成果物の再利用
+
+`.github/actions/cache-nix` が GitHub Actions cache を復元・保存します。追加アカウントや secret は不要です。
+OS・architecture・Nix version・job・flake.lock のハッシュで分離し、同じ inputs、次に同じ実行環境の順で復元します。
+各 commit に保存するため、設定変更で生じた新しい出力も次回から利用できます。
+
+- Darwin と native Linux の `check`: `cache-nix-action` で store と DB を復元します。
+  macOS の torch などのビルド用依存を残すため、保存前の GC は実行しません。
+- Linux / WSL prebuild の root container: 公式 `actions/cache` で file binary cache を復元します。
+  store DB や runner ユーザーの所有権を変更せず、復元した cache を local substituter として使います。
+  保存時は今回の構成の closure に入れ替え、過去の構成を蓄積しません。
+- WSL への同一 run の artifact: 完全な cache の hardlink 複製から、`cache.nixos.org` に依存一式がある
+  NAR payload だけを除きます。metadata は残し、Windows 側で署名付きの公開依存を先に取得してから取り込みます。
+  公開 cache の判定は並列実行し、問い合わせ失敗時は未確認の payload を省きません。
+
+初回や GitHub 側の容量制限で cache が削除された場合は通常の build に戻ります。
+warm run の時間と cache / artifact のサイズは hosted Actions のログで確認します。
 
 ## ローカル検証
 

@@ -5,7 +5,6 @@
       aerospace-workspace-cycle = import ./build/aerospace-cycle.nix { inherit pkgs; };
       docker-desktop-activation = import ./build/docker-desktop-activation.nix { inherit inputs pkgs; };
       wezterm-config = import ./build/wezterm-config.nix { inherit pkgs; };
-      ghostty-config = import ./build/ghostty-config.nix { inherit pkgs; };
       custom-package-builds = import ./build/custom-packages.nix {
         inherit pkgs;
         chatgptDesktopCheck = config.checks.chatgpt-desktop or null;

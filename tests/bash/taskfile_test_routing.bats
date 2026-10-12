@@ -10,7 +10,7 @@ setup() {
 	run task --dir "$REPO_ROOT" --dry test DOTFILES_PATH="$REPO_ROOT"
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"nix build .#checks."* || "$output" == *'nix build ".#checks.'* ]]
+	[[ "$output" == *"nix flake check --no-write-lock-file --print-build-logs"* ]]
 	[[ "$output" != *"Invoke-Tests.ps1"* ]]
 }
 
