@@ -36,8 +36,8 @@ in
 {
   programs.codex = {
     enable = true;
-    # The ChatGPT app supplies the CLI; Home Manager owns configuration only.
-    package = null;
+    # Native desktops select the app-bundled CLI in tools.nix; WSL uses Windows.
+    package = lib.mkDefault null;
     # Preserve application settings and project trust in a writable user file.
     mutableSettings = true;
     contextOverride = ./AGENTS.override.md;

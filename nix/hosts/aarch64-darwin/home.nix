@@ -10,6 +10,7 @@ let
 in
 {
   imports = [
+    (import ../../modules/tools.nix).chatgpt
     ./cache-maintenance.nix
     ../../modules/editors/nvim
     ../../modules/discord

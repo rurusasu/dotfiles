@@ -80,7 +80,8 @@ in
       map
         (home: {
           enabled = home.config.programs.codex.enable;
-          npmProvider = home.config.programs.codex.package == null;
+          appProvided =
+            home.config.programs.codex.package == null || home.config.programs.codex.package ? chatgpt;
           mutable = home.config.programs.codex.mutableSettings;
           cleanup = home.config.programs.codex.settings.desktop;
           agents = home.config.programs.codex.settings.agents.fast_worker.config_file;
@@ -97,7 +98,7 @@ in
         ];
     expected = builtins.genList (_: {
       enabled = true;
-      npmProvider = true;
+      appProvided = true;
       mutable = true;
       cleanup = {
         worktree-auto-cleanup-enabled = true;

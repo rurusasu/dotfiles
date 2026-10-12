@@ -33,7 +33,7 @@ flake.nix -> hosts/configurations.nix -> hosts/<system>/ -> home/common.nix
 - 1Password の CLI / GUI は `../modules/tools.nix`、SSH agent 設定は `../modules/1password/` が担当する。Linux の GUI は Home Manager、macOS の GUI は nix-darwin に導入する。`ssh.nix` が `IdentityAgent` と `SSH_AUTH_SOCK` を同じ公式 socket に設定する。Bash は別の `ssh-agent` を起動しない。Git 署名・WSL interop の設定は各 host に残す。
 - lazygit は `../modules/tools.nix` で有効化し、`../modules/lazygit/` が Bash / Zsh の `lg` 標準連携を設定する。
 - Herdr は `../modules/tools.nix` で有効化し、`../modules/herdr/` で設定する。キー配列などを標準 `programs.herdr.settings` に Nix で直接定義し、Home Manager が設定ファイルを生成する。Windows は chezmoi 設定と既存の公式 installer を維持する。
-- ChatGPT は `../modules/tools.nix` が macOS のアプリを導入し、`common.nix` が `../modules/ai_agents/chatgpt/` を読み込む。同梱 Codex の設定も同じ module で管理し、Codex CLI は独立導入しない。
+- ChatGPT は `../modules/tools.nix` が Darwin と native NixOS のアプリを `home.packages`、同梱 CLI を標準 `programs.codex.package` で宣言する。両 OS は `../modules/ai_agents/chatgpt/packages.nix` を共有し、Linux のキャッシュ cleanup は `desktop.nix` の `systemd.user.tmpfiles.rules` で管理する。`common.nix` が同 module の Codex 設定を読み込む。WSL に Linux GUI は導入せず、Codex CLI は独立導入しない。
 - Hermes Agent の CLI は `../modules/tools.nix` で有効化する。`common.nix` が `../modules/ai_agents/hermes/` を読み込み、gateway・CLI 設定・bootstrap manifest を管理する。`bootstrap.nix` が bootstrap の構築を担当する。既存の `~/.hermes`、依存 pin、macOS の launchd / Linux の systemd-user 設定は維持する。
 - `common.nix` は `../modules/tools.nix` の `homeManager` を読み込み、Unix CLI / GUI を有効化・導入する。各アプリ module と `./shells/plugins/` が設定・連携を担当する。
 - zoxide のシェル標準連携は `./shells/plugins/zoxide.nix` に置き、`--cmd cd` で `cd` / `cdi` を使う。WSL の除外ディレクトリは `nix/hosts/x86_64-linux/wsl/home.nix` に置く。

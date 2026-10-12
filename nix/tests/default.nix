@@ -5,12 +5,17 @@
       aerospace-workspace-cycle = import ./build/aerospace-cycle.nix { inherit pkgs; };
       docker-desktop-activation = import ./build/docker-desktop-activation.nix { inherit inputs pkgs; };
       wezterm-config = import ./build/wezterm-config.nix { inherit pkgs; };
-      custom-package-builds = import ./build/custom-packages.nix { inherit pkgs; };
+      ghostty-config = import ./build/ghostty-config.nix { inherit pkgs; };
+      custom-package-builds = import ./build/custom-packages.nix {
+        inherit pkgs;
+        chatgptDesktopCheck = config.checks.chatgpt-desktop or null;
+      };
       neovim-native = import ./build/neovim.nix { inherit inputs pkgs; };
       powershell-formatter = import ./build/powershell-formatter.nix {
         inherit pkgs;
         formatter = config.treefmt.settings.formatter.powershell;
       };
+      chatgpt-desktop = import ./build/chatgpt-desktop.nix { inherit inputs pkgs; };
     }
     // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
       standalone-darwin-home = import ./build/standalone-darwin-home.nix {
@@ -35,6 +40,7 @@
       "llm-agents/systems" = inputs.llm-agents.inputs.systems;
       "llm-agents/treefmt-nix" = inputs.llm-agents.inputs.treefmt-nix;
       inherit (inputs)
+        chatgpt-nixpkgs
         flake-parts
         home-manager
         hermes-agent
