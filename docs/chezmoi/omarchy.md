@@ -37,7 +37,7 @@
 | NixOS-WSL                     | host が担当      | Windows キー       | guest に compositor を導入せず、Windows host の構成に従う |
 | standalone Linux Home Manager | 自動導入なし     | —                  | 共通 CLI module では desktop session を変更しない         |
 
-Chrome / Obsidian は `nix/modules/desktop.nix` から Linux / WSLg 共通で導入します。native desktop の Firefox / fuzzel / Nautilus とユーザー設定は `nix/home/keybindings/hyprland.nix` に定義し、native NixOS host のみが選択します。Hyprland のセッションは native NixOS host がシステム側で有効化します。standalone / WSL には compositor を自動導入しません。
+Chrome / Obsidian は Linux / WSLg の各 host の `home.nix` に宣言します。Darwin のブラウザーは Dia を使い、host の `configuration.nix` で導入します。native desktop の Firefox / fuzzel / Nautilus とユーザー設定は `nix/home/keybindings/hyprland.nix` に定義し、native NixOS host のみが選択します。Hyprland のセッションは native NixOS host がシステム側で有効化します。standalone / WSL には compositor を自動導入しません。
 
 native NixOS では window/workspace 操作と terminal/browser/files/notes/AI/passwords/launcher/help/activity の起動を生成します。capture、calculator、lock、clipboard、emoji、audio、bluetooth、display、network、power、passthrough は未対応です。対応する実装なしにキーを割り当てないため、macOS と完全同等ではありません。既存の display manager は変更せず、Hyprland セッションを選択するか TTY から `Hyprland` を起動します。
 

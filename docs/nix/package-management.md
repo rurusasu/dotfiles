@@ -21,8 +21,6 @@ Unix CLI の導入は `tools.nix`、設定・連携はアプリ・機能ごと�
 | 編集先                                               | 責務                                                                                        |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `nix/modules/tools.nix`                              | 全 Unix CLI の `programs.*.enable`、その他の CLI・LSP・プラグイン実行依存の `home.packages` |
-| `nix/modules/desktop.nix`                            | Linux / WSLg 共通の Chrome / Obsidian                                                       |
-| `nix/modules/desktop-system.nix`                     | Darwin の system GUI                                                                        |
 | `nix/modules/<app>/`                                 | CLI の設定・連携・package override、GUI の導入、custom package 定義                         |
 | `nix/modules/ai_agents/hermes/bootstrap.nix`         | Hermes bootstrap の package 構築。CLI の導入は tools、サービス用依存は Hermes module        |
 | `nix/modules/browsers/dia/`                          | Dia の package 選択関数、`package.nix`、更新用 `provider-candidates.nix`                    |
@@ -32,9 +30,9 @@ Unix CLI の導入は `tools.nix`、設定・連携はアプリ・機能ごと�
 | `nix/home/keybindings/`                              | 共通キー配置・設定生成関数・ユーザー設定                                                    |
 | `windows/winget/packages.json`                       | Windows GUI の package ID、導入・検証情報                                                   |
 | `windows/{npm,pnpm}/packages.json`                   | 独立した Node package manifest。現在は空                                                    |
-| `nix/outputs.nix`                                    | Windows キー設定の export と Darwin custom package の build 出力                            |
+| `nix/outputs.nix`                                    | Darwin custom package の build 出力                                                         |
 
-各 host の `home.nix` は `nix/home/common.nix` を通じて CLI 導入とアプリ設定を読み込みます。Darwin の system module は `desktop-system.nix` から GUI の system package を導入し、Homebrew は host が設定します。`desktop.nix` は Linux / WSLg の共通 GUI を導入します。native NixOS の Hyprland / Firefox / fuzzel / Nautilus は native host と `nix/home/keybindings/hyprland.nix` が所有し、WSL / standalone へ compositor を自動導入しません。Discord も Darwin / native Linux の Home Manager module から導入し、WSL では Windows のアプリを利用します。
+各 host の `home.nix` は `nix/home/common.nix` を通じて CLI 導入とアプリ設定を読み込みます。Darwin の GUI は `nix/hosts/aarch64-darwin/configuration.nix` の `environment.systemPackages` に直接宣言し、ブラウザーは Dia を使います。Linux / WSLg の Chrome / Obsidian は各 host の `home.nix` に宣言します。Homebrew も host が設定します。native NixOS の Hyprland / Firefox / fuzzel / Nautilus は native host と `nix/home/keybindings/hyprland.nix` が所有し、WSL / standalone へ compositor を自動導入しません。Discord も Darwin / native Linux の Home Manager module から導入し、WSL では Windows のアプリを利用します。
 
 [共通のキー割り当て](../chezmoi/omarchy.md) は `nix/home/keybindings/` に一度だけ定義し、host が OS 統合と有効化を担当します。共通データや純粋な設定生成関数は Home Manager module ではないため、`imports` に渡しません。
 
@@ -51,7 +49,7 @@ CLI はすべて `nix/modules/tools.nix` に追加します。Home Manager で�
 }
 ```
 
-Linux / WSLg の共通 GUI は `desktop.nix`、Darwin の system GUI は `desktop-system.nix` に追加します。Homebrew と OS service は host module に定義します。Windows に追加する場合は `windows/winget/packages.json` を直接編集し、導入・検証情報を同じ entry に記述します。
+Linux / WSLg の GUI は各 host の `home.nix`、Darwin の system GUI は `nix/hosts/aarch64-darwin/configuration.nix` に追加します。Homebrew と OS service は host module に定義します。Windows に追加する場合は `windows/winget/packages.json` を直接編集し、導入・検証情報を同じ entry に記述します。
 
 ## OS ごとの反映
 

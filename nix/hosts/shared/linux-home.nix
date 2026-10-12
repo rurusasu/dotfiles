@@ -18,12 +18,14 @@ in
     homeDirectory = lib.mkDefault (
       if hasCurrentUser && currentHome != "" then currentHome else "/home/${config.home.username}"
     );
-    inherit (fonts) packages;
+    packages = fonts.packages ++ [
+      pkgs.google-chrome
+      pkgs.obsidian
+    ];
   };
 
   imports = [
     ../../modules/editors/nvim
-    ../../modules/desktop.nix
     ../../modules/discord
     ../../home/common.nix
   ];

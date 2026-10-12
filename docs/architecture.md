@@ -8,7 +8,7 @@
 
 1. **Unix の導入・設定は Nix module、Windows の導入情報は独立した manifest**
    - Unix CLI の導入は `nix/modules/tools.nix`、設定・連携は各アプリ module にまとめ、host は必要な module を import して構成を選択
-   - Unix CLI の PATH への導入はすべて `tools.nix`、Linux / WSLg GUI は `desktop.nix`、Darwin system GUI は `desktop-system.nix`、個別アプリの設定・連携は各 module に宣言
+   - Unix CLI の PATH への導入はすべて `tools.nix`、Linux / WSLg GUI は各 host の `home.nix`、Darwin system GUI は host の `configuration.nix`、個別アプリの設定・連携は各 module に宣言
    - Unix 系 CLI は Home Manager、macOS cask は nix-homebrew、Linux system package は NixOS が管理
    - Windows は `windows/winget/packages.json` を直接管理し、GUI アプリを導入。npm/pnpm manifest は空
    - 機能と OS の所有境界は [分割の理由と編集先](./nix/package-management.md#分割の理由と編集先) を参照
@@ -35,10 +35,8 @@ dotfiles/
 │   ├── formatter.nix       # treefmt-nix and formatter dependencies
 │   ├── hosts/              # OS-specific system and Home Manager configuration
 │   ├── modules/            # Unix packages and app configuration
-│   │   ├── tools.nix       # Unix CLI enablement and dependencies
-│   │   ├── desktop.nix     # Linux / WSLg GUI apps
-│   │   └── desktop-system.nix # Darwin system GUI apps
-│   ├── outputs.nix         # Custom package and Windows keybindings exports
+│   │   └── tools.nix       # Unix CLI enablement and dependencies
+│   ├── outputs.nix         # Custom package build outputs
 │   └── tests/
 │       ├── unit/           # nix-unit: Nix expressions and configuration values
 │       ├── build/          # Build, runtime, and artifact checks

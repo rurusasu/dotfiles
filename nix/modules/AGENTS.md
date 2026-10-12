@@ -3,8 +3,6 @@
 ## 管理対象
 
 - `tools.nix`: Unix CLI の導入を一括管理する。Home Manager 標準の `programs.*.enable`、設定をユーザーが管理する CLI・標準 module のない CLI・LSP・プラグイン実行依存の `home.packages` をここに宣言する
-- `desktop.nix`: Linux / WSLg 共通の Chrome と Obsidian。Hyprland と native desktop のアプリは含めない
-- `desktop-system.nix`: Darwin の system GUI。nix-darwin host から import し、Homebrew と OS service は host が管理する
 - `browsers/dia/`: Dia の package 選択関数・公式バイナリの package 定義・更新用 candidate 情報
 - `shells/powershell/psscriptanalyzer.nix`: formatter 用 PSScriptAnalyzer の package 定義
 - `ai_agents/chatgpt/`: macOS の ChatGPT アプリを `home.packages` に直接導入し、標準 `programs.codex` の `package = null` で同梱 CLI の設定・context・rules・hooks を管理する。`mutableSettings` でアプリの設定追記を保持し、公式 desktop worktree cleanup を宣言する。Windows の導入は `windows/winget/packages.json`、ユーザー設定は chezmoi が所有する
