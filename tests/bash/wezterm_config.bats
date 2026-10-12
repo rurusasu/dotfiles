@@ -20,7 +20,7 @@ setup() {
         fi
     done
 }
-@test "chezmoi manages only WezTerm on Windows" {
+@test "chezmoi manages WezTerm settings and the font installer on Windows" {
     for os in linux darwin windows; do
         managed=$(chezmoi --config /dev/null --config-format toml --source "$REPO_ROOT/chezmoi" \
             --destination "$HOME" --cache "$BATS_TEST_TMPDIR/cache" --persistent-state "$BATS_TEST_TMPDIR/state.boltdb" \
@@ -30,7 +30,7 @@ setup() {
             scripts=$(chezmoi --config /dev/null --config-format toml --source "$REPO_ROOT/chezmoi" \
                 --destination "$HOME" --cache "$BATS_TEST_TMPDIR/scripts-cache" --persistent-state "$BATS_TEST_TMPDIR/scripts-state.boltdb" \
                 --override-data "{\"chezmoi\":{\"os\":\"$os\"}}" managed --include scripts --path-style relative)
-            [ "$scripts" = ".chezmoiscripts/deploy/terminals/deploy.ps1" ]
+            [ "$scripts" = $'.chezmoiscripts/deploy/terminals/deploy.ps1\n.chezmoiscripts/deploy/terminals/install_udev_gothic_nf.ps1' ]
         else
             [ -z "$managed" ]
         fi

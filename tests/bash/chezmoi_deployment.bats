@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-@test "chezmoi runs only the Windows WezTerm deployment script" {
+@test "chezmoi runs the Windows WezTerm deployment and font installation scripts" {
     command -v chezmoi >/dev/null 2>&1 || skip "chezmoi is required"
     REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
     source_dir="$BATS_TEST_TMPDIR/source"
@@ -26,7 +26,7 @@
         run chezmoi "${chezmoi_args[@]}" managed --include scripts --path-style relative
         [ "$status" -eq 0 ]
         if [ "$os" = windows ]; then
-            [ "$output" = ".chezmoiscripts/deploy/terminals/deploy.ps1" ]
+            [ "$output" = $'.chezmoiscripts/deploy/terminals/deploy.ps1\n.chezmoiscripts/deploy/terminals/install_udev_gothic_nf.ps1' ]
         else
             [ -z "$output" ]
         fi
