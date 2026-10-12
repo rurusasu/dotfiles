@@ -14,9 +14,31 @@ nix/modules/ai_agents/
 ```
 
 ChatGPT アプリは `chatgpt/default.nix` が macOS の `home.packages` に直接導入します。
+native NixOS は host が `chatgpt/desktop.nix` を読み込み、`packages.nix` が公式 Linux 版と
+同梱 CLI の wrapper を導入します。WSL には Linux GUI を導入しません。
 Windows の Store 配布・検証・CI 設定は `chatgpt/windows-install.nix` が管理します。
 パッケージカタログには登録しません。
 Codex CLI を独立したパッケージとして導入しません。
+
+## native NixOS の Linux 版
+
+Linux 対応済みの nixpkgs を `chatgpt-nixpkgs` input に固定します。システム全体の nixpkgs は
+更新せず、この input の package set をそのまま利用します。公式 `.deb` の取得・ELF 修正・
+プラグインキャッシュ・起動処理は upstream の package 定義が所有します。
+`chatgpt.override { codex = null; }` により、upstream の独立 Codex package への置換を無効化します。
+端末の `codex` はアプリ内の実体を呼び出し、隣接する `codex-code-mode-host` を同じ配布物に保ちます。
+書き込み可能なプラグインキャッシュの cleanup は upstream の user tmpfiles 定義を配布します。
+
+Hyprland の AI キーと application launcher から起動できます。通常は XWayland を使い、
+native Wayland を試す場合は `chatgpt --ozone-platform=wayland` で起動します。
+OpenAI の Linux 版はプレビューで、NixOS は正式サポート対象外です。Linux の Computer Use と
+native Wayland には制約があります。最新の範囲は [公式 Linux 版案内](https://learn.chatgpt.com/docs/linux/linux-app) を参照してください。
+
+更新時は `flake.nix` の `chatgpt-nixpkgs` revision を対応済みの upstream revision に変更し、
+`nix flake lock` を実行します。通常の `task test:nix` は `custom-package-builds` 経由で
+アプリのビルド・同梱 CLI の起動・desktop entry と tmpfiles の存在を検証します。
+単独では `nix build .#checks.x86_64-linux.chatgpt-desktop --no-link --no-write-lock-file` を使えます。
+`aarch64-linux` のビルドには対応する builder が必要です。GUI のログイン・権限・操作は実機で確認します。
 
 ## 設定の所有
 

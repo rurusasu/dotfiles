@@ -485,7 +485,8 @@
         "nixpkgs": "nixpkgs_3",
         "psscriptanalyzer": "psscriptanalyzer",
         "systems": "systems_2",
-        "treefmt-nix": "treefmt-nix_3"
+        "treefmt-nix": "treefmt-nix_3",
+        "chatgpt-nixpkgs": "chatgpt-nixpkgs"
       }
     },
     "systems": {
@@ -602,6 +603,22 @@
       "original": {
         "owner": "pyproject-nix",
         "repo": "uv2nix",
+        "type": "github"
+      }
+    },
+    "chatgpt-nixpkgs": {
+      "locked": {
+        "lastModified": 1791734486,
+        "narHash": "sha256-SajnYFP+7drRou+IzJ1v6BPJti1L+F55wrnC/xqiHek=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "2a8c86bc625fe3f592181e47efd8b4c9930b61d3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "2a8c86bc625fe3f592181e47efd8b4c9930b61d3",
         "type": "github"
       }
     }

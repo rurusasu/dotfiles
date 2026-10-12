@@ -12,7 +12,7 @@ let
       browser = "firefox --new-window";
       files = "nautilus --new-window";
       notes = "obsidian";
-      ai = "firefox --new-window https://chatgpt.com";
+      ai = "chatgpt";
       passwords = "1password";
       launcher = "fuzzel";
       help = "wezterm start --always-new-process -- less ${help}";

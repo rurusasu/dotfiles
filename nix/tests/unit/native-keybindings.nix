@@ -10,6 +10,7 @@ let
       {
         nixpkgs.pkgs = pkgs;
         home-manager.useGlobalPkgs = true;
+        home-manager.extraSpecialArgs = { inherit inputs; };
         home-manager.users.test = {
           home = {
             username = "test";
@@ -28,6 +29,18 @@ in
   testNativeHostSelectsHyprlandUserModule = {
     expr = cfg.programs.hyprland.enable;
     expected = true;
+  };
+  testNativeHomeInstallsChatGPTAndBundledCodex = {
+    expr = {
+      chatgpt = builtins.elem "chatgpt" (map lib.getName home.home.packages);
+      codex = builtins.elem "codex" (map lib.getName home.home.packages);
+      aiShortcut = lib.hasInfix "chatgpt" home.wayland.windowManager.hyprland.extraConfig;
+    };
+    expected = {
+      chatgpt = true;
+      codex = true;
+      aiShortcut = true;
+    };
   };
   testNativeHomeGeneratesLuaFromSharedKeys = {
     expr = {

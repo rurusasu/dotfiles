@@ -12,6 +12,9 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Linux ChatGPT support has not reached nixos-unstable yet. Keep its package
+    # set separate so adding the desktop app does not update the entire system.
+    chatgpt-nixpkgs.url = "github:NixOS/nixpkgs/2a8c86bc625fe3f592181e47efd8b4c9930b61d3";
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
