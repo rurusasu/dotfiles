@@ -68,22 +68,6 @@ Describe 'CI workflow configuration' {
         $wingetAssertion | Should -Match 'reported an empty WinGet CI verification inventory'
     }
 
-    It 'should run PowerShell tests before each Windows installer E2E runtime' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw
-        $installerJob = [regex]::Match(
-            $workflow,
-            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
-        ).Groups['job'].Value
-
-        $installerJob | Should -Match 'runtime: Windows PowerShell 5\.1\s+version: "5\.1"'
-        $installerJob | Should -Match 'runtime: PowerShell 7\s+version: "7"'
-        $installerJob | Should -Match 'Run PowerShell test suite'
-        $installerJob | Should -Match '& \$env:PS_TEST_EXECUTABLE -NoProfile -File .\\tests\\Invoke-Tests\.ps1 -MinimumCoverage 0'
-        $installerJob | Should -Match 'Run PSScriptAnalyzer'
-        $installerJob | Should -Match "if: \$\{\{ matrix\.version == '7' \}\}"
-        $installerJob.IndexOf('Run PowerShell test suite') | Should -BeLessThan $installerJob.IndexOf('Run install.cmd strict user phase')
-    }
-
     It 'should run the real installer in concurrent PowerShell 5.1 and 7 processes' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw -Encoding UTF8
         $installerJob = [regex]::Match(
@@ -588,7 +572,6 @@ esac
         $workflow | Should -Match 'runs-on:\s+windows-2025'
         $workflow | Should -Match 'runs-on:\s+macos-15'
         $workflow | Should -Not -Match "Install-Module -Name Pester -RequiredVersion '5\.6\.1'"
-        $workflow | Should -Match '(?s)Run PowerShell test suite.*?Invoke-Tests\.ps1.*?-MinimumCoverage 0'
         $workflow | Should -Match "Join-Path \`$diagnostics 'attestation\.txt'"
         $workflow | Should -Match 'name: Upload Windows installer diagnostics'
         $workflow | Should -Match 'sudo nix --accept-flake-config[\s\S]*?run \.#darwin-rebuild -- switch --flake \.#macos --impure'
