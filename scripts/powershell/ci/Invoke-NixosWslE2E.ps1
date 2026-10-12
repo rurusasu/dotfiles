@@ -32,7 +32,6 @@ Repair-WindowsSetupEnvironment
 . (Join-Path $libPath "SetupHandler.ps1")
 . (Join-Path $libPath "Invoke-ExternalCommand.ps1")
 . (Join-Path $repoRoot "scripts\powershell\handlers\Handler.NixOSWSL.ps1")
-. (Join-Path $repoRoot "scripts\powershell\handlers\Handler.NixRebuild.ps1")
 
 # The setup handler has legacy Invoke-Wsl calls without per-command timeouts.
 # Bound those calls in this disposable E2E process; long post-install rebuilds
@@ -397,26 +396,19 @@ fi
                 'if ! swapon --show=NAME --noheadings | grep -q .; then dd if=/dev/zero of=/swapfile bs=1M count=8192 status=none && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile; fi && free -h'
             ) -TimeoutSeconds 300 | Out-Null
 
-            $rebuildContext = [SetupContext]::new($repoRoot)
-            $rebuildContext.DistroName = $DistroName
-            $rebuildContext.Options["NixRebuildTimeoutSeconds"] = $PostInstallTimeoutSeconds
-            $rebuildHandler = [NixRebuildHandler]::new()
-            if (-not $rebuildHandler.CanApply($rebuildContext)) {
-                throw "NixRebuildHandler cannot apply to the newly installed WSL distro $DistroName"
-            }
             Write-WslRebuildDiagnostic -Phase "before Hermes rebuild"
             try {
-                $rebuildResult = $rebuildHandler.Apply($rebuildContext)
-                if (-not $rebuildResult.Success) {
-                    throw "Nix-managed Hermes setup via NixRebuildHandler failed: $($rebuildResult.Message)"
-                }
+                # Exercise the same public task as the installer and nrs alias.
+                Invoke-WslChecked -Arguments @(
+                    "-d", $DistroName, "-u", "nixos", "--", "bash", "-lc",
+                    "task --dir /home/nixos/.dotfiles nrs"
+                ) -TimeoutSeconds $PostInstallTimeoutSeconds | Out-Null
             }
             catch {
                 Write-WslRebuildDiagnostic -Phase "after Hermes rebuild failure"
                 throw
             }
-            Write-Host "CI_ASSERTION: production NixRebuildHandler applied native Hermes to $DistroName."
-            Write-Host "CI_ASSERTION: production NixRebuildHandler verified the native Hermes service and CLI in NixOS."
+            Write-Host "CI_ASSERTION: production nrs task applied native Hermes to $DistroName."
 
             $hermesVerifier = @'
 set -eu

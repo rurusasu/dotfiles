@@ -44,20 +44,22 @@ foreach ($name in 'install.ps1', 'install.user.ps1') {
 }
 . (Join-Path $Root 'lib/SetupHandler.ps1')
 . (Join-Path $Root 'lib/Invoke-ExternalCommand.ps1')
-$handlerRoot = Join-Path $Root 'handlers'
-$warnings = @()
-$handlers = @(Get-SetupHandler -HandlersPath $handlerRoot -WarningVariable warnings)
-if ($warnings) { throw ($warnings -join [Environment]::NewLine) }
-$expected = @(Get-ChildItem $handlerRoot -Filter 'Handler.*.ps1').Count
-if ($expected -eq 0 -or $handlers.Count -ne $expected) { throw 'Not all handlers loaded' }
-Write-Output ('BOOTSTRAP_LOADED: ' + $handlers.Count)
+foreach ($name in @(
+    'Handler.Winget.ps1'
+    'Handler.WslInstall.ps1'
+    'Handler.Chezmoi.ps1'
+    'Handler.NixOSWSL.ps1'
+)) {
+    . (Join-Path (Join-Path $Root 'handlers') $name)
+}
+Write-Output 'BOOTSTRAP_LOADED: Winget, WslInstall, Chezmoi, NixOSWSL'
 '@
         $probePath = Join-Path $TestDrive 'probe.ps1'
         [IO.File]::WriteAllText($probePath, $probe, [Text.UTF8Encoding]::new($false))
         $exe = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
         $output = & $exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $probePath -Root $script:sourceRoot 2>&1
         $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
-        $output -join [Environment]::NewLine | Should -Match 'BOOTSTRAP_LOADED: \d+'
+        $output -join [Environment]::NewLine | Should -Match 'BOOTSTRAP_LOADED: Winget, WslInstall, Chezmoi, NixOSWSL'
     }
 }
 

@@ -293,7 +293,6 @@ exit 0
         Copy-Item -LiteralPath (Join-Path $script:repoRoot "install.cmd") -Destination (Join-Path $workDir "install.cmd")
 
         Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\install.ps1") -Destination (Join-Path $scriptDir "install.ps1")
-        Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts\powershell\Test-Environment.ps1") -Destination (Join-Path $scriptDir "Test-Environment.ps1")
         $libDir = Join-Path $scriptDir "lib"
         New-Item -ItemType Directory -Path $libDir -Force | Out-Null
         foreach ($library in "WindowsEnvironment.ps1", "Invoke-ExternalCommand.ps1") {

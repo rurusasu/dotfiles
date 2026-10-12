@@ -22,9 +22,6 @@
 .PARAMETER ShowCoverage
     詳細なカバレッジレポートを表示するか
 
-.PARAMETER IncludeIntegration
-    Integration.Tests.ps1 を実行対象に含めるか
-
 .EXAMPLE
     .\Invoke-Tests.ps1
     全テストを実行
@@ -53,10 +50,7 @@ param(
     [string]$CoverageOutputFile,
 
     [Parameter()]
-    [switch]$ShowCoverage,
-
-    [Parameter()]
-    [switch]$IncludeIntegration
+    [switch]$ShowCoverage
 )
 
 $ErrorActionPreference = "Stop"
@@ -194,10 +188,8 @@ if ($coverageRequested) {
 }
 
 # テストパスの決定
-$excludeIntegration = $false
 if (-not $Path) {
     $Path = @($scriptRoot)
-    $excludeIntegration = -not $IncludeIntegration
 }
 
 # Pester 設定
@@ -205,9 +197,6 @@ $pesterConfig = New-PesterConfiguration
 
 # テストパス
 $pesterConfig.Run.Path = $Path
-if ($excludeIntegration) {
-    $pesterConfig.Run.ExcludePath = @("**/Integration.Tests.ps1")
-}
 $pesterConfig.Run.Exit = $false
 $pesterConfig.Run.PassThru = $true
 

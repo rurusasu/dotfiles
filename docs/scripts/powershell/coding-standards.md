@@ -4,8 +4,8 @@
 
 ### ファイル名
 
-- **ハンドラー**: `Handler.{Name}.ps1` 形式（例: `Handler.Docker.ps1`）
-- **テスト**: `{FileName}.Tests.ps1` 形式（例: `Handler.Docker.Tests.ps1`）
+- **ハンドラー**: `Handler.{Name}.ps1` 形式（例: `Handler.Winget.ps1`）
+- **テスト**: `{FileName}.Tests.ps1` 形式（例: `Handler.Winget.Tests.ps1`）
 - **ライブラリ**: PascalCase + 動詞-名詞（例: `Invoke-ExternalCommand.ps1`）
 
 ### クラス名
@@ -24,7 +24,7 @@ PascalCase を使用します。
 
 ```powershell
 # ✅ 正しい
-function Get-SetupHandler { }
+function Get-ExternalCommand { }
 function Invoke-Wsl { }
 function New-HandlerInstance { }
 function Test-PathExist { }  # 単数形

@@ -225,6 +225,14 @@ Assert-WezTermInstallEvidence -Output $out -PackageId $weztermPackages[0].Packag
 Write-Host "WEZTERM_E2E: runtime=$($PSVersionTable.PSVersion) package=$($weztermPackages[0].PackageIdentifier) executable=$($weztermCommand.Source) elapsedMs=$($weztermTimer.ElapsedMilliseconds) exitCode=$weztermVersionExitCode version=$weztermVersionText"
 }
 
+# Later Actions steps run in new processes, after the seeded User PATH is
+# restored below. Export the installed command directories for the full suite.
+if ($validationErrors.Count -eq 0 -and $env:GITHUB_PATH) {
+  $inheritedPath = @($originalPath -split ';')
+  $env:PATH -split ';' | Where-Object { $_ -and $inheritedPath -notcontains $_ } |
+    Add-Content -LiteralPath $env:GITHUB_PATH -Encoding UTF8
+}
+
 }
 catch {
   $validationErrors.Add("Windows installer E2E setup: $($_.Exception.Message)")
