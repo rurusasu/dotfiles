@@ -116,11 +116,10 @@ The standard installer paths are:
 
 ```text
 install.sh -> OS installer -> task hermes:bootstrap -> Nix/Home Manager runtime + native sync
-install.cmd -> NixRebuild -> NixOS WSL runtime + native sync
+install.cmd -> task nrs -> NixOS WSL runtime + native sync
 ```
 
-The Windows `NixRebuildHandler` applies Nix/Home Manager in NixOS WSL and
-verifies its native Hermes service and CLI as the configured Linux user.
+The Windows installer uses the public `nrs` task to apply Nix/Home Manager in NixOS WSL. The WSL E2E verifies the native Hermes service and CLI as the configured Linux user.
 Hermes is installed only inside NixOS; Windows has no separate Hermes handler.
 If the rebuild or native service validation fails, installation fails
 instead of falling back to Docker. An old Docker volume is not copied, modified,

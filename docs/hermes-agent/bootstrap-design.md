@@ -131,10 +131,7 @@ for `apply`, `sync-profiles`, and `sync-repository`; subordinate repository
 locks retain their repository-specific role. `secret-plan` and `validate` are
 read-only and do not acquire this lock.
 
-On Windows, `NixRebuildHandler` (Phase `2`, order `55`, non-admin) invokes WSL
-directly. Nix/Home Manager installs Hermes in NixOS, and the handler validates
-the service and CLI as the configured Linux user with its systemd runtime
-directory. Windows has no Hermes installation or dedicated Hermes handler.
+On Windows, the installer invokes the public `nrs` task in WSL. Nix/Home Manager installs Hermes in NixOS; WSL E2E validates the service and CLI as the configured Linux user with its systemd runtime directory. Windows has no Hermes installation or dedicated Hermes handler.
 WSL's `op.exe` bridge can still use the Windows 1Password desktop integration.
 
 The required profile items are `Master`, `Rick`, `Hoffman`, `RisaRisa`,

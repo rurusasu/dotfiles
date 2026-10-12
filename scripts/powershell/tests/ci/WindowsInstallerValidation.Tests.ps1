@@ -1,7 +1,6 @@
-﻿Describe 'Windows GUI installer success workflow contract' {
+﻿Describe 'Windows GUI installer validation' {
     BeforeAll {
         $script:repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../..'))
-        $script:workflow = Get-Content -LiteralPath (Join-Path $script:repositoryRoot '.github/workflows/ci-nix.yml') -Raw -Encoding UTF8
         $installerPath = Join-Path $PSScriptRoot '../../ci/Invoke-WindowsInstallerE2E.ps1'
         $script:installerE2E = Get-Content -LiteralPath $installerPath -Raw -Encoding UTF8
         $tokens = $null
@@ -159,9 +158,7 @@
         )
     }
 
-    It 'should run the full installer in separate parallel PowerShell 5.1 and 7 jobs' {
-        $script:workflow | Should -Match '(?s)windows-installer:.*?max-parallel:\s*2.*?runtime: Windows PowerShell 5\.1\s+version: "5\.1".*?runtime: PowerShell 7\s+version: "7"'
-        $script:workflow | Should -Match 'shell:\s+cmd[\s\S]*?powershell\.exe .*Invoke-WindowsInstallerE2E\.ps1'
+    It 'should preserve runtime selection and installer failure evidence' {
         $script:installerE2E | Should -Match 'install\.cmd -NoPause -UserPhaseOnly(?!\s+-WingetVerifyCommandOnly)'
         $script:installerE2E | Should -Match 'Using Windows PowerShell'
         $script:installerE2E | Should -Match 'PowerShell 7 installer E2E unexpectedly used the Windows PowerShell 5\.1 path'

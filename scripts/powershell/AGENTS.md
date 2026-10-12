@@ -20,7 +20,7 @@
 ```powershell
 cd scripts/powershell/tests
 .\Invoke-Tests.ps1
-.\Invoke-Tests.ps1 -All -IncludeBats
+.\Invoke-Tests.ps1 -ShowCoverage
 .\Invoke-Tests.ps1 -MinimumCoverage 0
 ```
 
