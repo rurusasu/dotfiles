@@ -46,64 +46,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertNotIn("Darwin application artifacts", darwin)
         self.assertIn("Configure shared Nix caches", darwin)
 
-    def test_local_nix_checks_share_one_build_invocation(self) -> None:
-        taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
-        block = taskfile.split("  test:nix:\n", 1)[1].split("  test:powershell:\n", 1)[
-            0
-        ]
-        self.assertEqual(block.count("nix build "), 1)
-        self.assertCountEqual(
-            re.findall(r"\.\#checks\.\$\{system\}\.([a-z-]+)", block),
-            (
-                "powershell-formatter",
-                "nix-unit",
-                "custom-package-builds",
-                "aerospace-workspace-cycle",
-                "docker-desktop-activation",
-                "neovim-native",
-                "ghostty-config",
-            ),
-        )
-        self.assertIn("--no-write-lock-file", block)
-
-    def test_consistency_nix_checks_share_one_logged_build(self) -> None:
-        workflow = self._workflow_job(self._named_workflow("ci-nix.yml"), "check")
-        commands = workflow.replace("\\\n", " ").splitlines()
-        check_commands = [
-            line for line in commands if "nix build " in line and ".#checks." in line
-        ]
-        self.assertEqual(len(check_commands), 1)
-        for check in (
-            "nix-unit",
-            "custom-package-builds",
-            "aerospace-workspace-cycle",
-        ):
-            self.assertIn(f".#checks.x86_64-linux.{check}", check_commands[0])
-        self.assertIn("--print-build-logs", check_commands[0])
-
-    def test_powershell_formatter_regression_runs_in_local_and_native_ci_routes(
-        self,
-    ) -> None:
-        taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
-        self.assertIn(".#checks.${system}.powershell-formatter", taskfile)
-        bootstrap = self._named_workflow("ci-nix.yml")
-        linux = self._workflow_job(bootstrap, "linux-build")
-        self.assertNotIn("powershell-formatter", linux)
-        self.assertIn(".#nixosConfigurations.linux.config.system.build.toplevel", linux)
-        self.assertIn("darwin-rebuild -- switch", self._workflow_job(bootstrap, "darwin"))
-        tools = self._workflow_job(bootstrap, "ci-tools")
-        self.assertIn("check-bootstrap-ci-tools.sh --sandbox", tools)
-
-    def test_workspace_cycle_runtime_check_runs_in_local_and_hosted_nix_jobs(
-        self,
-    ) -> None:
-        taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
-        self.assertIn(".#checks.${system}.aerospace-workspace-cycle", taskfile)
-        consistency = self._named_workflow("ci-nix.yml")
-        bootstrap = self._named_workflow("ci-nix.yml")
-        self.assertIn(".#checks.x86_64-linux.aerospace-workspace-cycle", consistency)
-        self.assertNotIn("aerospace-workspace-cycle", bootstrap)
-
     def _workflow(self) -> str:
         self.assertTrue(WORKFLOW_PATH.is_file(), f"missing workflow: {WORKFLOW_PATH}")
         return WORKFLOW_PATH.read_text(encoding="utf-8")
@@ -149,7 +91,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertNotIn("paths:", triggers)
 
     def test_ci_contract_lints_workflows_without_python_tests(self) -> None:
-        workflow = self._workflow()
+        workflow = self._workflow_job(self._workflow(), "ci-contract")
         self.assertIn(CHECKOUT_ACTION, workflow)
         self.assertNotIn("actions/setup-python", workflow)
         self.assertNotIn("tests/python", workflow)
@@ -206,16 +148,24 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             nix.write_text(
                 f"#!{sys.executable}\n"
                 "import json, os, sys\n"
-                "print(json.dumps({'argv': sys.argv[1:], 'identity': "
+                "if sys.argv[1] == 'copy': raise SystemExit(0)\n"
+                "with open(os.environ['INVOCATION_LOG'], 'w') as log:\n"
+                "    log.write(json.dumps({'argv': sys.argv[1:], 'identity': "
                 "{key: os.environ.get(key) for key in "
                 "('DOTFILES_USER', 'DOTFILES_HOME')}}))\n"
+                "print('/nix/store/' + 'b' * 32 + '-system')\n"
             )
             getent.chmod(0o755)
             nix.chmod(0o755)
             environment = dict(os.environ)
             environment.update(
-                PATH=f"{directory}:{environment['PATH']}", GITHUB_WORKSPACE=temporary
+                PATH=f"{directory}:{environment['PATH']}",
+                GITHUB_WORKSPACE=temporary,
+                INVOCATION_LOG=str(directory / "invocation.json"),
+                DOTFILES_CI_BINARY_CACHE=str(directory / "persistent-cache"),
+                RUNNER_TEMP=temporary,
             )
+            (directory / "persistent-cache").mkdir()
             for variable in (
                 "DOTFILES_USER",
                 "DOTFILES_HOME",
@@ -237,10 +187,15 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                 text=True,
                 check=True,
             )
-        invocation = json.loads(result.stdout)
+            invocation = json.loads((directory / "invocation.json").read_text())
         self.assertEqual(invocation["argv"][:2], ["build", "--impure"])
-        self.assertIn(".#nixosConfigurations.linux.config.system.build.toplevel", invocation["argv"])
-        self.assertIn(".#homeConfigurations.x86_64-linux.activationPackage", invocation["argv"])
+        self.assertIn(
+            ".#nixosConfigurations.linux.config.system.build.toplevel",
+            invocation["argv"],
+        )
+        self.assertIn(
+            ".#homeConfigurations.x86_64-linux.activationPackage", invocation["argv"]
+        )
         self.assertEqual(
             invocation["identity"],
             {
@@ -296,18 +251,34 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                     "    assert target.scheme == 'file' and not target.netloc\n"
                     "    assert parse_qs(target.query) == {'compression': ['zstd']}\n"
                     "    if os.environ['COPY_EXIT'] != '0': raise SystemExit(int(os.environ['COPY_EXIT']))\n"
-                    "    pathlib.Path(target.path, 'cache-entry').write_text('cache')\n"
+                    "    cache = pathlib.Path(target.path)\n"
+                    "    (cache / 'nar').mkdir(exist_ok=True)\n"
+                    "    (cache / 'nar/private.nar.zst').write_text('cache')\n"
+                    "    (cache / (paths[0].split('/')[-1].split('-')[0] + '.narinfo')).write_text(\n"
+                    "        f'StorePath: {paths[0]}\\nURL: nar/private.nar.zst\\nReferences: \\n')\n"
+                    "elif sys.argv[1:3] == ['path-info', '--recursive']:\n"
+                    "    print(paths[0])\n"
                     "else:\n"
                     "    raise SystemExit(64)\n"
                 )
                 nix.chmod(0o755)
+                nix_store = directory / "nix-store"
+                nix_store.write_text(
+                    f"#!{sys.executable}\n"
+                    "import sys\n"
+                    "assert sys.argv[1:5] == ['--store', 'https://cache.nixos.org', '--check-validity', '--print-invalid']\n"
+                    "print('\\n'.join(sys.argv[5:]))\n"
+                )
+                nix_store.chmod(0o755)
                 environment = dict(os.environ)
                 environment.update(
                     PATH=f"{directory}:{environment['PATH']}",
                     RUNNER_TEMP=str(runner_temp),
                     GITHUB_OUTPUT=str(output),
                     COPY_EXIT=str(copy_exit),
+                    DOTFILES_CI_BINARY_CACHE=str(runner_temp / "persistent-cache"),
                 )
+                (runner_temp / "persistent-cache").mkdir()
                 result = subprocess.run(
                     [
                         "bash",
@@ -357,7 +328,12 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                     expected_paths,
                 )
                 with tarfile.open(artifact / "wsl-nix-cache.tar") as archive:
-                    self.assertIn("./cache-entry", archive.getnames())
+                    self.assertIn("./nar/private.nar.zst", archive.getnames())
+                    self.assertIn("./public-paths.txt", archive.getnames())
+                self.assertTrue(
+                    (runner_temp / "persistent-cache/nar/private.nar.zst").is_file(),
+                    "transport pruning must preserve the persistent cache",
+                )
         self.assertIn("id: wsl-cache", job)
         self.assertIn("path: ${{ steps.wsl-cache.outputs.artifact-dir }}", job)
         self.assertNotIn("${{ runner.temp }}", job)
@@ -447,7 +423,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
 
         for job_name, output in (
             ("nix", "nix"),
-            ("windows-installer", "chezmoi"),
+            ("windows-installer", "windows"),
         ):
             job = self._workflow_job(workflow, job_name)
             self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
@@ -459,6 +435,12 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIn("NIX_REQUIRED", complete)
         self.assertIn("WINDOWS_INSTALLER_RESULT", complete)
         self.assertIn("NIX_RESULT: ${{ needs.nix.result }}", complete)
+        self.assertIn("check,", complete)
+        self.assertIn("CHECKS_RESULT: ${{ needs.check.result }}", complete)
+        self.assertIn(
+            'check_required_job "Checks" "${CHECKS_REQUIRED}" "${CHECKS_RESULT}"',
+            complete,
+        )
         self.assertIn("windows-installer", complete)
         self.assertIn("check_required_job", complete)
 
@@ -657,14 +639,11 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn(f"`{runner}`", readme)
             self.assertIn(f"runs-on: {runner}", job)
 
-        for target, job in (
-            (".#checks.x86_64-linux.nix-unit", nix_test),
-            (".#checks.x86_64-linux.custom-package-builds", nix_test),
-            (".#checks.aarch64-darwin.nix-unit", darwin),
-            (".#checks.aarch64-darwin.custom-package-builds", darwin),
-        ):
-            self.assertIn(target, readme)
-            self.assertIn(target, job)
+        self.assertIn("nix flake check --no-write-lock-file --print-build-logs", readme)
+        self.assertIn(
+            "nix flake check --no-write-lock-file --print-build-logs", nix_test
+        )
+        self.assertIn("darwin-rebuild -- switch", darwin)
 
 
 if __name__ == "__main__":

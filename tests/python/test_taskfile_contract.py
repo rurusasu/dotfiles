@@ -78,14 +78,12 @@ class TaskfileContractTests(unittest.TestCase):
         self.assertIn("task: lint:no-format", commit)
         self.assertNotIn("task: lint\n", commit)
 
-    def test_nix_tests_evaluate_current_system_once(self) -> None:
-        taskfile = (
-            REPOSITORY_ROOT / "taskfiles" / "test" / "taskfile.yml"
-        ).read_text(encoding="utf-8")
-        self.assertEqual(
-            taskfile.count("nix eval --raw --impure --expr 'builtins.currentSystem'"),
-            1,
-        )
+    def test_nix_tests_run_all_checks_in_one_invocation(self) -> None:
+        plan = self._task_plan("test:nix")
+        self.assertEqual(plan.count("nix flake check "), 1)
+        self.assertIn("--no-write-lock-file --print-build-logs", plan)
+        self.assertNotIn("nix eval", plan)
+        self.assertNotIn(".#checks.", plan)
 
     def test_native_hermes_setup_starts_the_independent_memory_service(self) -> None:
         for profile in ("rick", "hoffman", "risarisa", "nancy"):

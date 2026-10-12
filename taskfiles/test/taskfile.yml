@@ -7,18 +7,9 @@ tasks:
       - task: '{{if eq OS "windows"}}test:powershell{{else}}test:nix{{end}}'
 
   test:nix:
-    desc: Run Nix-native configuration tests
+    desc: Run all Nix flake checks for the current system
     cmds:
-      - |-
-        system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
-        nix build ".#checks.${system}.powershell-formatter" \
-          ".#checks.${system}.nix-unit" \
-          ".#checks.${system}.custom-package-builds" \
-          ".#checks.${system}.aerospace-workspace-cycle" \
-          ".#checks.${system}.docker-desktop-activation" \
-          ".#checks.${system}.neovim-native" \
-          ".#checks.${system}.ghostty-config" \
-          --no-link --no-write-lock-file
+      - nix flake check --no-write-lock-file --print-build-logs
 
   test:powershell:
     desc: Run PowerShell tests

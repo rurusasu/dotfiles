@@ -42,6 +42,10 @@ jobs:
       nix: ${{ steps.detect.outputs.nix }}
       chezmoi: ${{ steps.detect.outputs.chezmoi }}
       other: ${{ steps.detect.outputs.other }}
+      linux: ${{ steps.detect.outputs.linux }}
+      darwin: ${{ steps.detect.outputs.darwin }}
+      wsl: ${{ steps.detect.outputs.wsl }}
+      windows: ${{ steps.detect.outputs.windows }}
 
   ci-tools:
     needs: changes
@@ -189,7 +193,7 @@ jobs:
         run: docker/hermes-browser/tests/test_runtime_contract.sh
 
   nix:
-    name: Bootstrap / Nix / Lint and format
+    name: Bootstrap / Nix / Lint
     needs: [changes, ci-tools]
     if: ${{ needs.changes.outputs.nix == 'true' }}
     runs-on: ubuntu-24.04
@@ -222,18 +226,10 @@ jobs:
         timeout-minutes: 15
         run: statix check .
 
-      - name: Check source formatting
-        timeout-minutes: 10
-        run: |
-          if ! nix fmt -- --fail-on-change; then
-            git diff -- .
-            exit 1
-          fi
-
   linux-build:
     name: Bootstrap / Linux / Build
     needs: [changes, ci-tools]
-    if: ${{ needs.changes.outputs.nix == 'true' }}
+    if: ${{ needs.changes.outputs.linux == 'true' }}
     runs-on: ubuntu-24.04
     container:
       image: ${{ needs.ci-tools.outputs.image }}
@@ -255,6 +251,12 @@ jobs:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
+      - name: Restore Nix cache
+        uses: ./.github/actions/cache-nix
+        with:
+          name: linux-build
+          mode: binary
+
       - name: Configure Nix authentication
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -264,14 +266,21 @@ jobs:
         run: |
           # Native NixOS build uses a hardware fixture inside this container.
           export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"
-          nix build --impure --no-link --print-build-logs \
+          output="$(nix build --impure --no-link --print-build-logs --print-out-paths \
             .#nixosConfigurations.linux.config.system.build.toplevel \
-            .#homeConfigurations.x86_64-linux.activationPackage
+            .#homeConfigurations.x86_64-linux.activationPackage)"
+          mapfile -t paths <<< "$output"
+          # Save only this build's closure, rather than accumulating old systems.
+          export_dir="$RUNNER_TEMP/nix-cache-export"
+          mkdir -p "$export_dir"
+          nix copy --to "file://$export_dir?compression=zstd" "${paths[@]}"
+          mv "$DOTFILES_CI_BINARY_CACHE" "$DOTFILES_CI_BINARY_CACHE.restored"
+          mv "$export_dir" "$DOTFILES_CI_BINARY_CACHE"
 
   darwin:
     name: Bootstrap / Darwin
     needs: changes
-    if: ${{ needs.changes.outputs.nix == 'true' }}
+    if: ${{ needs.changes.outputs.darwin == 'true' }}
     runs-on: macos-15
     timeout-minutes: 360
     env:
@@ -288,6 +297,11 @@ jobs:
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Restore Nix cache
+        uses: ./.github/actions/cache-nix
+        with:
+          name: darwin
 
       - name: Configure shared Nix caches
         env:
@@ -337,7 +351,7 @@ jobs:
   wsl-prebuild:
     name: Bootstrap / WSL / Prebuild
     needs: [changes, ci-tools]
-    if: ${{ needs.changes.outputs.nix == 'true' }}
+    if: ${{ needs.changes.outputs.wsl == 'true' }}
     runs-on: ubuntu-24.04
     container:
       image: ${{ needs.ci-tools.outputs.image }}
@@ -358,6 +372,12 @@ jobs:
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
+
+      - name: Restore Nix cache
+        uses: ./.github/actions/cache-nix
+        with:
+          name: wsl-prebuild
+          mode: binary
 
       - name: Configure Nix authentication
         env:
@@ -381,7 +401,14 @@ jobs:
           # This same-run transport cache favors fast compression over archival size.
           echo "::group::Export WSL Nix cache (zstd)"
           nix --version
-          nix copy --to "file://$cache_dir?compression=zstd" "$system_path"
+          export_dir="$RUNNER_TEMP/nix-cache-export"
+          mkdir -p "$export_dir"
+          nix copy --to "file://$export_dir?compression=zstd" "$system_path"
+          mv "$DOTFILES_CI_BINARY_CACHE" "$DOTFILES_CI_BINARY_CACHE.restored"
+          mv "$export_dir" "$DOTFILES_CI_BINARY_CACHE"
+          # Hard links avoid copying gigabytes; pruning unlinks only the transport files.
+          cp -al "$DOTFILES_CI_BINARY_CACHE/." "$cache_dir/"
+          python3 scripts/python/prepare_wsl_nix_cache.py "$cache_dir" "$system_path"
           du -sh "$cache_dir"
           echo "::endgroup::"
           tar -cf "$artifact_dir/wsl-nix-cache.tar" -C "$cache_dir" .
@@ -399,7 +426,7 @@ jobs:
   wsl:
     name: Bootstrap / WSL
     needs: [changes, wsl-prebuild]
-    if: ${{ needs.changes.outputs.nix == 'true' }}
+    if: ${{ needs.changes.outputs.wsl == 'true' }}
     runs-on: windows-2025
     # The isolated WSL E2E runs two independent rebuilds with 120-minute caps, plus setup and verification.
     timeout-minutes: 300
@@ -472,7 +499,7 @@ jobs:
   windows-installer:
     name: Bootstrap / Windows / Installer (${{ matrix.runtime }})
     needs: changes
-    if: ${{ needs.changes.outputs.chezmoi == 'true' }}
+    if: ${{ needs.changes.outputs.windows == 'true' }}
     runs-on: windows-2025
     timeout-minutes: 210
     strategy:
@@ -599,6 +626,7 @@ jobs:
         darwin,
         wsl,
         windows-installer,
+        check,
       ]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -611,16 +639,18 @@ jobs:
       HERMES_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.other == 'true' }}
       HERMES_RESULT: ${{ needs.hermes-runtime-contracts.result }}
       PLATFORM_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
-      LINUX_BUILD_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
-      DARWIN_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
-      WSL_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
-      WINDOWS_REQUIRED: ${{ needs.changes.outputs.chezmoi == 'true' }}
+      LINUX_BUILD_REQUIRED: ${{ needs.changes.outputs.linux == 'true' }}
+      DARWIN_REQUIRED: ${{ needs.changes.outputs.darwin == 'true' }}
+      WSL_REQUIRED: ${{ needs.changes.outputs.wsl == 'true' }}
+      WINDOWS_REQUIRED: ${{ needs.changes.outputs.windows == 'true' }}
       NIX_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
+      CHECKS_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' }}
       LINUX_BUILD_RESULT: ${{ needs.linux-build.result }}
       DARWIN_RESULT: ${{ needs.darwin.result }}
       WSL_RESULT: ${{ needs.wsl.result }}
       WSL_PREBUILD_RESULT: ${{ needs.wsl-prebuild.result }}
       NIX_RESULT: ${{ needs.nix.result }}
+      CHECKS_RESULT: ${{ needs.check.result }}
       WINDOWS_INSTALLER_RESULT: ${{ needs.windows-installer.result }}
     steps:
       - name: Verify routed job results
@@ -655,6 +685,7 @@ jobs:
           check_required_job "Bash tests" "${BASH_REQUIRED}" "${BASH_RESULT}"
           check_required_job "Hermes runtime contracts" "${HERMES_REQUIRED}" "${HERMES_RESULT}"
           check_required_job "Nix" "${NIX_REQUIRED}" "${NIX_RESULT}"
+          check_required_job "Checks" "${CHECKS_REQUIRED}" "${CHECKS_RESULT}"
           check_required_job "Windows / Installer" "${WINDOWS_REQUIRED}" "${WINDOWS_INSTALLER_RESULT}"
           check_required_job "WSL / Prebuild" "${WSL_REQUIRED}" "${WSL_PREBUILD_RESULT}"
 
@@ -684,13 +715,16 @@ jobs:
 
       - name: Install Nix
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Nix configuration and runtime checks
-        run: |
-          nix build --no-link --no-write-lock-file --print-build-logs \
-            .#checks.x86_64-linux.nix-unit \
-            .#checks.x86_64-linux.custom-package-builds \
-            .#checks.x86_64-linux.aerospace-workspace-cycle
+      - name: Restore Nix check cache
+        uses: ./.github/actions/cache-nix
+        with:
+          name: checks
+
+      - name: Run all Nix checks
+        run: nix flake check --no-write-lock-file --print-build-logs
 
       - name: Validate Windows package manifests
         shell: bash

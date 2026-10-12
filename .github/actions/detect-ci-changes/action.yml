@@ -1,5 +1,5 @@
 name: Detect CI changes
-description: Classify Git changes as Nix, chezmoi, or other without an external manifest.
+description: Select shared checks and platform builds from Git changes.
 
 inputs:
   base-sha:
@@ -23,6 +23,18 @@ outputs:
   other:
     description: Whether shared tooling and other checks are required.
     value: ${{ steps.detect.outputs.other }}
+  linux:
+    description: Whether native Linux builds are required.
+    value: ${{ steps.detect.outputs.linux }}
+  darwin:
+    description: Whether macOS activation is required.
+    value: ${{ steps.detect.outputs.darwin }}
+  wsl:
+    description: Whether NixOS-WSL prebuild and activation are required.
+    value: ${{ steps.detect.outputs.wsl }}
+  windows:
+    description: Whether Windows installer tests are required.
+    value: ${{ steps.detect.outputs.windows }}
 
 runs:
   using: composite
@@ -39,12 +51,20 @@ runs:
         nix=false
         chezmoi=false
         other=false
+        linux=false
+        darwin=false
+        wsl=false
+        windows=false
 
         case "${RUN_ALL}" in
           true)
             nix=true
             chezmoi=true
             other=true
+            linux=true
+            darwin=true
+            wsl=true
+            windows=true
             ;;
           false)
             head="$(git rev-parse --verify --end-of-options "${HEAD_SHA}^{commit}")"
@@ -66,26 +86,79 @@ runs:
                 # These Markdown files are distributed settings, not repo docs.
                 chezmoi/dot_*/*)
                   chezmoi=true
+                  windows=true
+                  ;;
+                # These documents are also generated runtime help files.
+                docs/chezmoi/omarchy-macos.md)
+                  nix=true
+                  darwin=true
+                  ;;
+                docs/chezmoi/omarchy.md)
+                  nix=true
+                  linux=true
                   ;;
                 docs/*|README*|AGENTS.md|CLAUDE.md|*/README*|*/AGENTS.md|LICENSE*)
                   ;;
-                # Windows manifests are edited directly and validated by both
-                # platform workflows. Unix keybindings are owned by Nix.
-                flake.nix|flake.lock|windows/*)
+                # Nix's SSH module also reads this shared 1Password catalog.
+                chezmoi/.chezmoidata/onepassword.json)
                   nix=true
                   chezmoi=true
+                  linux=true
+                  darwin=true
+                  wsl=true
+                  windows=true
+                  ;;
+                # Windows manifests are edited directly and validated by both
+                # platform workflows. Unix keybindings are owned by Nix.
+                windows/*)
+                  nix=true
+                  chezmoi=true
+                  windows=true
+                  ;;
+                flake.nix|flake.lock)
+                  nix=true
+                  chezmoi=true
+                  linux=true
+                  darwin=true
+                  wsl=true
+                  windows=true
+                  ;;
+                nix/hosts/aarch64-darwin/*)
+                  nix=true
+                  darwin=true
+                  ;;
+                nix/hosts/x86_64-linux/wsl/*)
+                  nix=true
+                  wsl=true
+                  ;;
+                nix/hosts/x86_64-linux/nixos/*|nix/hosts/aarch64-linux/*|nix/hosts/x86_64-linux/home.nix)
+                  nix=true
+                  linux=true
+                  ;;
+                nix/hosts/shared/*)
+                  nix=true
+                  linux=true
+                  wsl=true
                   ;;
                 nix/*|*.nix)
                   nix=true
+                  linux=true
+                  darwin=true
+                  wsl=true
                   ;;
                 chezmoi/*)
                   chezmoi=true
+                  windows=true
                   ;;
                 # These entrypoints and fixtures span Nix, Windows and templates.
                 .github/*|scripts/*|taskfiles/*|Taskfile.yml|install.*|bootstrap.*|docker/*|.devcontainer/*|tests/*|.pre-commit-config.yaml|.treefmt.toml|.gitattributes|.editorconfig)
                   nix=true
                   chezmoi=true
                   other=true
+                  linux=true
+                  darwin=true
+                  wsl=true
+                  windows=true
                   ;;
                 *)
                   other=true
@@ -100,3 +173,4 @@ runs:
         esac
 
         printf 'nix=%s\nchezmoi=%s\nother=%s\n' "${nix}" "${chezmoi}" "${other}" >> "${GITHUB_OUTPUT}"
+        printf 'linux=%s\ndarwin=%s\nwsl=%s\nwindows=%s\n' "${linux}" "${darwin}" "${wsl}" "${windows}" >> "${GITHUB_OUTPUT}"

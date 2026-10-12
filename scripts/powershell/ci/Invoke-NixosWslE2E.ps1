@@ -249,6 +249,29 @@ try {
         Complete-CiSection
     }
 
+    Write-CiSection "Configure Nix caches before importing the prebuild"
+    try {
+        $postInstallPath = Join-Path $repoRoot "scripts\sh\configure-bootstrap-ci-nix.sh"
+        $postInstallWslPathResult = Invoke-WslChecked -Arguments @(
+            "-d", $DistroName, "-u", "root", "--",
+            "wslpath", "-a", $postInstallPath.Replace('\', '/')
+        ) -TimeoutSeconds 60
+        $postInstallWslPath = ($postInstallWslPathResult.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -match '^/' } | Select-Object -First 1)
+        if ([string]::IsNullOrWhiteSpace($postInstallWslPath)) {
+            throw "Could not resolve WSL post-install script path: $postInstallPath"
+        }
+        $ciNixConfigWslPath = $postInstallWslPath
+        foreach ($ciUser in @("root", "nixos")) {
+            Invoke-WslChecked -Arguments @(
+                "-d", $DistroName, "-u", $ciUser, "--",
+                "bash", "-lc", "bash '$ciNixConfigWslPath' --wsl"
+            ) -TimeoutSeconds 60 | Out-Null
+        }
+    }
+    finally {
+        Complete-CiSection
+    }
+
     Write-CiSection "Import prebuilt NixOS system closure"
     try {
         $artifactDir = Join-Path $env:RUNNER_TEMP "wsl-nix-cache-artifact"
@@ -278,7 +301,17 @@ try {
             throw "Could not resolve WSL path for Nix cache artifact: $cacheDir"
         }
 
-        $importCommand = "nix --version && nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from 'file://$cacheLinuxPath' '$($systemPaths[0])' && nix --extra-experimental-features 'nix-command flakes' path-info '$($systemPaths[0])'"
+        $publicPathsFile = Join-Path $cacheDir "public-paths.txt"
+        if (-not (Test-Path -LiteralPath $publicPathsFile -PathType Leaf)) {
+            throw "WSL prebuild artifact is missing the public closure manifest."
+        }
+        $publicPaths = @(Get-Content -LiteralPath $publicPathsFile)
+        if ($publicPaths.Where({ $_ -notmatch '^/nix/store/[a-z0-9]{32}-[A-Za-z0-9+._?=-]+$' }).Count -ne 0) {
+            throw "WSL prebuild artifact contains an invalid public Nix store path."
+        }
+        # Public paths use the configured signed caches. Import private paths
+        # only after those dependencies exist in the destination store.
+        $importCommand = "nix --version && xargs -r -n 128 nix-store --realise < '$cacheLinuxPath/public-paths.txt' && nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from 'file://$cacheLinuxPath' '$($systemPaths[0])' && nix --extra-experimental-features 'nix-command flakes' path-info '$($systemPaths[0])'"
         Invoke-WslChecked -Arguments @(
             "-d", $DistroName, "-u", "root", "--",
             "bash", "-lc", $importCommand
@@ -291,22 +324,6 @@ try {
 
     Write-CiSection "Run production NixOS-WSL post-install switch"
     try {
-        $postInstallPath = Join-Path $repoRoot "scripts\sh\configure-bootstrap-ci-nix.sh"
-        $postInstallWslPathResult = Invoke-WslChecked -Arguments @(
-            "-d", $DistroName, "-u", "root", "--",
-            "wslpath", "-a", $postInstallPath.Replace('\', '/')
-        ) -TimeoutSeconds 60
-        $postInstallWslPath = ($postInstallWslPathResult.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -match '^/' } | Select-Object -First 1)
-        if ([string]::IsNullOrWhiteSpace($postInstallWslPath)) {
-            throw "Could not resolve WSL post-install script path: $postInstallPath"
-        }
-        $ciNixConfigWslPath = $postInstallWslPath
-        foreach ($ciUser in @("root", "nixos")) {
-            Invoke-WslChecked -Arguments @(
-                "-d", $DistroName, "-u", $ciUser, "--",
-                "bash", "-lc", "bash '$ciNixConfigWslPath' --wsl"
-            ) -TimeoutSeconds 60 | Out-Null
-        }
         # Hermes is enabled by the first switch and snapshots its API settings
         # at startup. Seed existing state before either Home Manager activation
         # so the gateway reads the fixture and both switches preserve user data.

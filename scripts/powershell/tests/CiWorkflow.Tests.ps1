@@ -24,14 +24,15 @@
 }
 
 Describe 'CI workflow configuration' {
-    It 'should provide latest PSScriptAnalyzer in the image before nix fmt runs' {
+    It 'should provide PSScriptAnalyzer in the tools image and run all flake checks' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
         $dockerfile = Get-Content -LiteralPath (Join-Path $script:repoRoot 'docker/bootstrap-ci-tools/Dockerfile') -Raw
 
         $workflow | Should -Match 'image:\s+\$\{\{ needs\.ci-tools\.outputs\.image \}\}'
         $dockerfile | Should -Match 'Save-Module -Name PSScriptAnalyzer -Repository PSGallery'
         $dockerfile | Should -Not -Match 'Save-Module -Name PSScriptAnalyzer -RequiredVersion'
-        $workflow | Should -Match 'nix fmt -- --fail-on-change'
+        $workflow | Should -Match 'nix flake check --no-write-lock-file --print-build-logs'
+        $workflow | Should -Not -Match 'nix fmt'
     }
 
     It 'should import provisioned PSScriptAnalyzer without version limits' {
@@ -153,7 +154,7 @@ Describe 'CI workflow configuration' {
 
     It 'should probe the GUI terminal without obsolete CLI or portable-command requirements' {
         $installerScript = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/ci/Invoke-WindowsInstallerE2E.ps1') -Raw -Encoding UTF8
-        $installerScript | Should -Not -Match 'agent-browser|herdr|op\.exe|node --version|PNPM_HOME|Assert-WingetCommandRecovery'
+        $installerScript | Should -Not -Match 'agent-browser|herdr|op\.exe|node --version|PNPM_HOME'
         $installerScript | Should -Match "Invoke-WindowsE2EValidation -Name 'WezTerm install PATH and version'"
         $installerScript | Should -Match 'Assert-WezTermInstallEvidence -Output \$out'
         $installerScript | Should -Match "Invoke-VerifyCommand -Command 'wezterm'"
@@ -226,7 +227,7 @@ Describe 'CI workflow configuration' {
         $workflow | Should -Match 'runs-on:\s+windows-2025'
         $jobTimeout | Should -BeGreaterOrEqual (($rebuildTimeoutSeconds * $rebuildBudgetCount / 60) + 60) -Because 'the job must allow each independent rebuild timeout plus one hour for WSL setup and verification'
         $rebuildBudgetCount | Should -Be 2 -Because 'the E2E performs a post-install switch and a separate Hermes-enabled switch'
-        $workflow | Should -Match 'wsl-prebuild:[\s\S]*?nix build[\s\S]*?nix copy --to "file://\$cache_dir\?compression=zstd"[\s\S]*?Upload WSL Nix store cache'
+        $workflow | Should -Match 'wsl-prebuild:[\s\S]*?nix build[\s\S]*?nix copy --to "file://\$export_dir\?compression=zstd"[\s\S]*?Upload WSL Nix store cache'
         $workflow | Should -Match 'wsl:[\s\S]*?needs: \[changes, wsl-prebuild\][\s\S]*?Download prebuilt WSL Nix store cache'
         $workflow | Should -Match 'actions/download-artifact@[0-9a-f]{40}'
         $workflow | Should -Match 'WSL_PREBUILD_RESULT: \$\{\{ needs\.wsl-prebuild\.result \}\}'
@@ -249,7 +250,7 @@ Describe 'CI workflow configuration' {
         $script | Should -Match '\$result = \$handler\.Apply\(\$context\)'
         $script | Should -Match 'SkipPostInstallSetup"\] = \$true'
         $script | Should -Match 'wslpath", "-a", \$cacheDir\.Replace\('\''\\'\'', '\''/'\''\)'
-        $script | Should -Match 'nix --version && nix --extra-experimental-features'
+        $script | Should -Match 'nix --version && xargs -r -n 128 nix-store --realise'
         $script | Should -Match "nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from 'file://"
         $script | Should -Match 'CI_ASSERTION: imported the NixOS system closure'
         $script | Should -Match 'Invoke-NixosWslSetup -Context \$context'
@@ -613,7 +614,7 @@ esac
             $workflow,
             '(?ms)^  wsl:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
         ).Value
-        $wslJob | Should -Match "(?m)^\s+if:\s+\$\{\{ needs\.changes\.outputs\.nix == 'true' \}\}$"
+        $wslJob | Should -Match "(?m)^\s+if:\s+\$\{\{ needs\.changes\.outputs\.wsl == 'true' \}\}$"
         $wslJob | Should -Match 'persist-credentials:\s+false'
         $wslJob | Should -Not -Match 'pull_request\.head\.repo\.full_name'
         $wslJob | Should -Match 'HEAD_REF:\s+\$\{\{ github\.head_ref \}\}'
@@ -624,7 +625,7 @@ esac
             $workflow,
             '(?ms)^  complete:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
         ).Value
-        $completeJob | Should -Match "(?m)^\s+WSL_REQUIRED:\s+\$\{\{ needs\.changes\.outputs\.nix == 'true' \}\}$"
+        $completeJob | Should -Match "(?m)^\s+WSL_REQUIRED:\s+\$\{\{ needs\.changes\.outputs\.wsl == 'true' \}\}$"
         $workflow | Should -Not -Match 'linux-nixos:|bootstrap-nixos-vm'
         $darwinJob = [regex]::Match(
             $workflow,

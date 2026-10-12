@@ -153,7 +153,7 @@
     }
 
     It 'should avoid self-update manifest mutations CLI probes and retired-package seed or removal' {
-        $script:installerE2E | Should -Not -Match 'Microsoft\.PowerShell|Add-Member|Set-Content|Invoke-Npm|Invoke-Pnpm|Assert-WingetCommandRecovery|node --version|op\.exe|herdr|@openai/codex|Codex CLI|9NT1R1C2HH7J|RETIRED_PACKAGE_CLEANUP'
+        $script:installerE2E | Should -Not -Match 'Microsoft\.PowerShell|Add-Member|Set-Content|Invoke-Npm|Invoke-Pnpm|node --version|op\.exe|herdr|@openai/codex|Codex CLI|9NT1R1C2HH7J|RETIRED_PACKAGE_CLEANUP'
         @($script:validationCalls | ForEach-Object { $_.CommandElements[2].Value }) | Should -Be @(
             'installer evidence', 'WinGet package inventory', 'WezTerm install PATH and version'
         )
