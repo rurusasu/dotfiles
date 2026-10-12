@@ -1,5 +1,4 @@
 {
-  config,
   lib,
   pkgs,
   ...
@@ -11,8 +10,7 @@
   ];
 
   programs.neovim = {
-    # Home Manager で Neovim のパッケージを導入する。
-    enable = true;
+    # Use the unwrapped package; tools.nix owns CLI enablement.
     package = pkgs.neovim-unwrapped;
     # プラグインの実行依存も内部 PATH ではなく通常のユーザー環境へ導入する。
     autowrapRuntimeDeps = false;
@@ -23,16 +21,6 @@
     # Home Manager が init.lua を生成し、プラグイン設定より先に基本設定を読む。
     initLua = lib.mkBefore (builtins.readFile ./init.lua);
   };
-
-  # Neovim の外から呼ぶ補助コマンドとプラグインの実行依存を導入する。
-  home.packages = [
-    pkgs.neovim-remote
-  ]
-  ++ (pkgs.neovimUtils.makeVimPackageInfo (
-    map (
-      plugin: if plugin ? plugin then builtins.removeAttrs plugin [ "runtime" ] else plugin
-    ) config.programs.neovim.plugins
-  )).runtimeDeps;
 
   xdg.configFile."nvim/lua".source = ./lua;
 }

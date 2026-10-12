@@ -10,7 +10,7 @@
   perSystem =
     { pkgs, config, ... }:
     let
-      psscriptanalyzer = pkgs.callPackage ./packages/psscriptanalyzer {
+      psscriptanalyzer = pkgs.callPackage ./modules/shells/powershell/psscriptanalyzer.nix {
         src = inputs.psscriptanalyzer;
       };
       powershellFormatter = pkgs.writeShellScript "dotfiles-powershell-formatter" ''

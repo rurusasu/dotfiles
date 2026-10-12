@@ -1,7 +1,6 @@
 { pkgs, ... }:
 {
   programs.ssh = {
-    enable = true;
     package = pkgs.openssh;
     enableDefaultConfig = false;
     includes = [ "~/.ssh/orca-docker-*.config" ];

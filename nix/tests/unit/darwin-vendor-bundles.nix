@@ -5,7 +5,7 @@ let
     config.allowUnfree = true;
   };
   packages = {
-    dia-browser = pkgs.callPackage ../../packages/dia-browser { };
+    dia-browser = pkgs.callPackage ../../modules/browsers/dia/package.nix { };
     orca-editor = pkgs.callPackage ../../modules/editors/orca/package.nix { };
   };
 in

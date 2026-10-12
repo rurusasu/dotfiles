@@ -65,7 +65,7 @@
       imports = [
         inputs.nix-unit.modules.flake.default
         inputs.treefmt-nix.flakeModule
-        ./nix/packages/outputs.nix
+        ./nix/outputs.nix
         ./nix/tests
         ./nix/formatter.nix
       ];

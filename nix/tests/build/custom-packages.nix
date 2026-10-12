@@ -13,7 +13,7 @@ let
   ++ buildPkgs.lib.optionals buildPkgs.stdenv.hostPlatform.isDarwin [
     {
       name = "dia-browser";
-      path = buildPkgs.callPackage ../../packages/dia-browser { };
+      path = buildPkgs.callPackage ../../modules/browsers/dia/package.nix { };
     }
   ];
 in

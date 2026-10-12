@@ -693,29 +693,24 @@ jobs:
             .#checks.x86_64-linux.aerospace-workspace-cycle \
             .#checks.x86_64-linux.windows-keybindings-generated
 
-      - name: Verify package provider coverage
-        run: |
-          nix build .#package-support-report --print-build-logs -o /tmp/package-support-report
-          jq -e 'length == 0' /tmp/package-support-report/errors.json
-
-      - name: Build winget-export from SSOT
-        run: nix build .#winget-export -o /tmp/winget-export
-
-      - name: Verify winget packages.json is in sync
+      - name: Validate Windows package manifests
         shell: bash
         run: |
-          normalize='
-            .Sources |= sort_by(.SourceDetails.Name)
-            | .Sources |= map(.Packages |= sort_by(.PackageIdentifier))
-          '
-          diff \
-            <(jq -S "$normalize" /tmp/winget-export/winget/packages.json) \
-            <(jq -S "$normalize" windows/winget/packages.json)
-
-      - name: Verify npm packages.json is in sync
-        shell: bash
-        run: diff <(jq -S . /tmp/winget-export/npm/packages.json) <(jq -S . windows/npm/packages.json)
-
-      - name: Verify pnpm packages.json is in sync
-        shell: bash
-        run: diff <(jq -S . /tmp/winget-export/pnpm/packages.json) <(jq -S . windows/pnpm/packages.json)
+          jq -e '
+            (.Sources | type == "array" and length > 0)
+            and all(.Sources[];
+              (.SourceDetails.Name | type == "string" and length > 0)
+              and (.Packages | type == "array")
+              and all(.Packages[];
+                .PackageIdentifier | type == "string" and length > 0))
+            and ([.Sources[].Packages[].PackageIdentifier] as $ids
+              | ($ids | length) == ($ids | unique | length))
+          ' windows/winget/packages.json
+          for manifest in windows/npm/packages.json windows/pnpm/packages.json; do
+            jq -e '
+              (.globalPackages | type == "array")
+              and all(.globalPackages[];
+                (if type == "string" then . else .name end)
+                | type == "string" and length > 0)
+            ' "$manifest"
+          done

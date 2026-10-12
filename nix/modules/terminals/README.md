@@ -11,7 +11,7 @@ theme/size は各 `defaults.nix` に直接定義します。WezTerm のフォン
 - Darwin の WezTerm terminfo と `TERMINFO_DIRS` は `nix/hosts/aarch64-darwin/wezterm.nix` が管理します。
 - WSL の Ghostty GUI は WSLg が必要です。
 - Windows の設定・launcher・shortcut は chezmoi 側を直接編集し、Windows のみ配布します。
-- Windows の WezTerm winget ID は既存の package catalog、PATH/verifier は `wezterm/windows-install.nix` が管理します。
+- Windows の WezTerm 導入情報と PATH / verifier は `windows/winget/packages.json` で直接管理します。
 
 `checks.<system>.ghostty-config` は Lua 構文と Windows 専用の配布を検証します。
 

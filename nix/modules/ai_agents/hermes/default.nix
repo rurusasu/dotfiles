@@ -10,27 +10,13 @@ let
   bootstrapManifest = pkgs.writeText "hermes-bootstrap-manifest.yaml" (
     import ./manifest.nix { inherit hermesHome; }
   );
-  bootstrapPython = pkgs.python3.withPackages (pythonPackages: [
-    pythonPackages.httpx
-    pythonPackages.python-dotenv
-    pythonPackages.pyyaml
-  ]);
-  hermesBootstrap = pkgs.writeShellApplication {
-    name = "hermes-bootstrap";
-    runtimeInputs = [
-      bootstrapPython
-      pkgs.git
-      pkgs.jq
-      pkgs._1password-cli
-    ];
-    text = ''
-      export HERMES_HOME=${lib.escapeShellArg hermesHome}
-      export HERMES_BOOTSTRAP_MANIFEST=${bootstrapManifest}
-      export DOTFILES_HERMES_GIT_EXECUTABLE=${pkgs.git}/bin/git
-      # Select our package even inside the upstream checkout or a conflicting cwd.
-      export PYTHONPATH=${../../../../scripts/python}:${inputs.hermes-agent}
-      exec ${bootstrapPython}/bin/python -P -m hermes_bootstrap "$@"
-    '';
+  hermesBootstrap = import ./bootstrap.nix {
+    inherit
+      config
+      inputs
+      lib
+      pkgs
+      ;
   };
   hermesLcmPlugin = pkgs.fetchFromGitHub {
     name = "hermes-lcm";
@@ -43,13 +29,8 @@ in
 {
   imports = [ inputs.hermes-agent.homeManagerModules.default ];
 
-  programs.hermes-agent.enable = true;
   programs.hermes-agent.desktop.enable = true;
   home = {
-    packages = [
-      hermesBootstrap
-      pkgs.nodejs
-    ];
     activation.hermesProfileSyncWrapperExecutable = lib.hm.dag.entryAfter [ "hermesAgentSetup" ] ''
       $DRY_RUN_CMD ${pkgs.coreutils}/bin/chmod 0700 ${lib.escapeShellArg "${hermesHome}/scripts/profile_sync.sh"}
     '';
@@ -58,10 +39,7 @@ in
     enable = true;
     gateway.enable = true;
     inherit hermesHome;
-    extraPackages = [
-      hermesBootstrap
-      pkgs.nodejs
-    ];
+    extraPackages = [ hermesBootstrap ];
     hermesHomeFiles = {
       "bootstrap-manifest.yaml" = bootstrapManifest;
       "scripts/profile_sync.sh" = ../../../../scripts/sh/hermes-profile-sync.sh;

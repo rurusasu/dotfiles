@@ -18,9 +18,10 @@
 | macOS host                | `nix/hosts/aarch64-darwin/omarchy-keybindings.nix`                 | AeroSpace サービスと macOS shortcut の競合処理                       |
 | native NixOS host         | `nix/hosts/shared/nixos/omarchy-keybindings.nix`                   | Hyprland セッション有効化と home 側 module の選択                    |
 | Windows host              | `nix/hosts/windows/omarchy-keybindings.nix`, `start-glazewm.ps1`   | 設定出力の合成、GlazeWM の起動と既存プロセスの確認                   |
-| package/provider          | `nix/packages/catalog/`                                            | アプリと compositor の配布 metadata                                  |
+| Unix アプリ導入           | `nix/modules/`                                                     | アプリと compositor の導入・設定                                     |
+| Windows アプリ導入        | `windows/winget/packages.json`                                     | Windows GUI の独立した install manifest                              |
 
-キー配置は OS をまたぐ個人設定であり、特定 host や package の配布定義には属しません。一方、セッションやサービスの有効化は OS 側の責務です。この変更理由の違いで分割し、新しいトップレベルのディレクトリを増やさず既存の home/hosts 境界を使います。SSOT は各定義を一度だけ持つことであり、1 ファイルへの集約ではありません。package データ・provider 選択・配布 metadata の共通ルールは [パッケージ管理の分割理由](../nix/package-management.md#分割の理由と編集先) を参照してください。
+キー配置は OS をまたぐ個人設定であり、特定 host や package の配布定義には属しません。一方、セッションやサービスの有効化は OS 側の責務です。この変更理由の違いで分割し、新しいトップレベルのディレクトリを増やさず既存の home/hosts 境界を使います。SSOT は各定義を一度だけ持つことであり、1 ファイルへの集約ではありません。Unix module と Windows manifest の共通ルールは [パッケージ管理の分割理由](../nix/package-management.md#分割の理由と編集先) を参照してください。
 
 ## 読み込みと設定の所有者
 
@@ -38,9 +39,9 @@
 | native NixOS                  | Hyprland         | Super/Windows キー | native Linux host のみで有効化。実機検証は未実施          |
 | Windows                       | 標準デスクトップ | Windows キー       | GlazeWM / AutoHotkey の導入・設定配布は行わない           |
 | NixOS-WSL                     | host が担当      | Windows キー       | guest に compositor を導入せず、Windows host の構成に従う |
-| standalone Linux Home Manager | 自動導入なし     | —                  | package set を使うだけでは desktop session を変更しない   |
+| standalone Linux Home Manager | 自動導入なし     | —                  | 共通 CLI module では desktop session を変更しない         |
 
-native desktop の Hyprland/fuzzel/Firefox/Nautilus は `nix/packages/catalog/native-desktop.nix` に定義し、`WithDesktop` で選択します。`sets.all` は全 feature を含む既存契約を維持するため、standalone/WSL の Home Manager consumer は `nativeDesktopPackageNames` を明示的に除外します。native host は compositor をシステム側で選択し、home 側はユーザー向けアプリを選択します。
+Chrome / Obsidian は `nix/modules/desktop.nix` から Linux / WSLg 共通で導入します。native desktop の Firefox / fuzzel / Nautilus とユーザー設定は `nix/home/keybindings/hyprland.nix` に定義し、native NixOS host のみが選択します。Hyprland のセッションは native NixOS host がシステム側で有効化します。standalone / WSL には compositor を自動導入しません。
 
 native NixOS では window/workspace 操作と terminal/browser/files/notes/AI/passwords/launcher/help/activity の起動を生成します。capture、calculator、lock、clipboard、emoji、audio、bluetooth、display、network、power、passthrough は未対応です。対応する実装なしにキーを割り当てないため、macOS と完全同等ではありません。既存の display manager は変更せず、Hyprland セッションを選択するか TTY から `Hyprland` を起動します。
 

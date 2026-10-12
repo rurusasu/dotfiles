@@ -2,8 +2,10 @@
 
 ## 編集対象
 
-- package/provider の SSOT は `nix/packages/catalog/`。Windows 専用 metadata は `nix/packages/install/windows-only.nix`。`sets.nix` は公開入口、`packages.json` は `winget-export` の生成物。
-- データと installer 契約を分け、同じ package を再定義しない。分割理由・生成・反映方法は [パッケージ管理](../../docs/nix/package-management.md#分割の理由と編集先) を参照する。
+- `packages.json` を直接編集する。Windows の WinGet / Microsoft Store パッケージと installer metadata の SSOT であり、Nix からは生成しない。
+- `Sources[].Packages[]` に `PackageIdentifier` と必要な `verifyCommand`、`pathEntries`、`installTimeoutSeconds`、`ciSkipInstall` などをまとめる。
+- 現在の installer は Windows GUI アプリを管理する。Unix の CLI パッケージは `nix/modules/` 側で管理し、Windows manifest に自動追加しない。
+- `retired-packages.json` は既存の引退パッケージ cleanup 用 manifest。通常の追加・更新は `packages.json` を編集する。
 
 ## 実行コマンド
 

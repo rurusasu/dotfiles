@@ -5,7 +5,7 @@
 
 ## Nix の管理場所
 
-CLI とデスクトップ版の導入、Windows の WinGet 配布・検証情報は `nix/modules/1password/` にまとめる。既存の nixpkgs バイナリを利用し、パッケージカタログには登録しない。macOS デスクトップ版はシステム、CLI と Linux デスクトップ版は Home Manager が管理する。`ssh.nix` が公式 SSH agent socket の `IdentityAgent` と `SSH_AUTH_SOCK` を設定する。Git 署名 / WSL interop の OS 固有設定は `nix/hosts/` に残す。
+Unix の CLI 導入は `nix/modules/tools.nix`、デスクトップ版の導入と SSH agent 設定は `nix/modules/1password/` が管理し、既存の nixpkgs バイナリを利用する。Windows の WinGet 導入・検証情報は `windows/winget/packages.json` で直接管理する。macOS デスクトップ版はシステム、CLI と Linux デスクトップ版は Home Manager が管理する。`ssh.nix` が公式 SSH agent socket の `IdentityAgent` と `SSH_AUTH_SOCK` を設定する。Git 署名 / WSL interop の OS 固有設定は `nix/hosts/` に残す。
 
 SSH agent は CLI 単体ではなくデスクトップ版が提供する。初回のサインイン・ロック解除と Settings > Developer > Use the SSH Agent の有効化は、[1Password 公式手順](https://developer.1password.com/docs/ssh/get-started/)に従ってユーザーが行う。Nix は秘密鍵を取得・展開せず、Bash も別の `ssh-agent` を起動しない。
 

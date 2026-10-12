@@ -6,8 +6,8 @@
 
 - 基本設定: `nix/modules/editors/nvim/init.lua`
 - 補助 Lua: `nix/modules/editors/nvim/lua/`
-- Neovim 本体と補助コマンドの導入: `nix/modules/editors/nvim/default.nix`
-- LSP・整形ツールの導入: `nix/modules/lsp.nix`
+- Neovim 本体・補助コマンド・LSP・整形ツール・プラグイン実行依存の導入: `nix/modules/tools.nix`
+- Neovim の設定・Lua の配置: `nix/modules/editors/nvim/default.nix`
 - Home Manager の起動設定: `nix/modules/editors/nvim/default.nix`
 - 共通 LSP 処理と整形設定: `nix/modules/editors/nvim/lua/config/lsp.lua`
 - プラグインの導入と Tree-sitter の言語一覧: `nix/modules/editors/nvim/plugins.nix`
@@ -16,7 +16,7 @@
 package データ、配布方式、エディタ設定を変更理由ごとに分けます。
 共通方針は [パッケージ管理の分割理由](../nix/package-management.md#分割の理由と編集先) を参照してください。
 
-Neovim 関連ソフトウェアはパッケージカタログを使わず、Nixpkgs のパッケージを直接宣言します。共通の `nix/modules/lsp.nix` は `home.packages` を使い、通常の PATH に LSP・整形ツールを導入します。Darwin／NixOS の `default.nix` が Home Manager に読み込ませます。Neovim の内部 PATH は追加しません。プラグインの実行依存も通常のユーザー環境へ導入します。Windows の winget / pnpm では配布しません。
+Neovim 本体は `nix/modules/tools.nix` の標準 `programs.neovim` で有効化し、補助コマンド・LSP・整形ツール・プラグイン実行依存も同じファイルから通常の PATH に導入します。`nix/modules/editors/nvim/` は設定、プラグイン、Lua の配置を担当します。Neovim の内部 PATH は追加しません。Windows の winget / pnpm では配布しません。
 
 Neovim の設定とプラグインは Home Manager が管理し、chezmoi は配布しません。`default.nix` が `builtins.readFile ./init.lua` で基本設定を読み込み、プラグイン設定より先に実行します。実際の参照先は `:lua print(vim.fn.stdpath("config"))` で確認してください。非 Nix 環境向けの設定配布は行いません。
 
@@ -107,8 +107,6 @@ Windows のカスタム floating terminal、Oil のドライブ一覧互換処�
 ```bash
 nix build path:.#checks.aarch64-darwin.neovim-native --no-link
 # Linux x86_64: checks.x86_64-linux.neovim-native
-nix build path:.#checks.aarch64-darwin.package-provider-coverage --no-link
-nix build path:.#winget-export --no-link --print-out-paths
 nvim --headless -u NONE -i NONE -l tests/lua/nvim_modern_test.lua
 bats tests/bash/bootstrap_entrypoint.bats
 ```

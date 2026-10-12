@@ -8,18 +8,18 @@
 [![ci-chezmoi](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Windows の GUI アプリと、macOS、NixOS、Ubuntu、Debian の環境を管理する個人用 dotfiles リポジトリです。パッケージ定義は Nix catalog、ユーザー設定は Home Manager と chezmoi、OS サービスは各プラットフォームの宣言レイヤーで一元管理します。Windows installer は NixOS-WSL の導入と設定適用も行います。
+Windows の GUI アプリと、macOS、NixOS、Ubuntu、Debian の環境を管理する個人用 dotfiles リポジトリです。Unix のパッケージ導入と設定は Nix module / Home Manager、Windows の GUI 導入は独立した WinGet manifest、ユーザー設定は chezmoi、OS サービスは各プラットフォームの宣言レイヤーで管理します。Windows installer は NixOS-WSL の導入と設定適用も行います。
 
 ## 技術スタック
 
-| Category           | Technology                                                |
-| ------------------ | --------------------------------------------------------- |
-| OS                 | Windows + NixOS-WSL, macOS, NixOS, Ubuntu, Debian         |
-| Package catalog    | Nix Flakes (`nix/packages/catalog/`、公開入口 `sets.nix`) |
-| System convergence | winget handlers, nix-darwin, NixOS                        |
-| User environment   | Home Manager + chezmoi                                    |
-| Containers         | Docker Desktop / rootful Docker + Docker Compose          |
-| Formatter          | treefmt-nix                                               |
+| Category           | Technology                                               |
+| ------------------ | -------------------------------------------------------- |
+| OS                 | Windows + NixOS-WSL, macOS, NixOS, Ubuntu, Debian        |
+| Packages           | Unix: Nix modules (`nix/modules/`)、Windows: WinGet JSON |
+| System convergence | winget handlers, nix-darwin, NixOS                       |
+| User environment   | Home Manager + chezmoi                                   |
+| Containers         | Docker Desktop / rootful Docker + Docker Compose         |
+| Formatter          | treefmt-nix                                              |
 
 ## クイックスタート
 
@@ -45,7 +45,8 @@ task darwin:update
 ```
 
 Codex CLI の個別インストールは行わず、ChatGPT アプリ付属の CLI を使います。
-Unix の Node.js/npm はカタログ、dsh は Nix module が導入します。
+Unix の Node.js/npm と dsh を含む CLI は `nix/modules/tools.nix` が導入します。
+Python は同じファイルが導入する uv で管理し、interpreter を直接インストールしません。
 Windows の GUI profile は Node.js/npm や dsh を導入しません。
 pnpm と Bun は導入しません。
 
@@ -99,8 +100,8 @@ Lix に切り替わります。nix-darwin がシステムを収束させ、nix-h
 Homebrew formula/cask を管理します。Home Manager も同じコマンド内で
 適用します。macOS では WSL や NixOS を導入しません。
 
-macOS / Linux 構成では、Hermes Desktop と Agent CLI は upstream の Home Manager
-module で導入します。Linuxはnative NixOS、WSLg、standalone Home Managerで利用できます。
+macOS / Linux 構成では、Hermes Desktop と native gateway は upstream の Home Manager
+module、Agent CLI の有効化は `nix/modules/tools.nix` で管理します。Linuxはnative NixOS、WSLg、standalone Home Managerで利用できます。
 gateway は Nix/Home Manager が管理する native per-user service として起動します。
 Docker Compose は Chromium / Browser MCP / X API MCP の sidecar を提供します。
 旧 Docker Agent / Dashboard とその bootstrap の実行経路は削除済みです。
@@ -161,17 +162,17 @@ Unix のシステム統合 installer は必須 CLI を acceptance で確認し�
 
 ## 方針
 
-Nix catalog は各 OS の provider を定義し、OS の宣言レイヤーと Home Manager がそれを消費します。chezmoi は Windows 専用の設定を配布します。Unix の Codex、shell、Git、terminal、editor などは Home Manager が管理します。
+Unix の導入とアプリ設定は `nix/modules/`、Windows の導入情報は `windows/winget/packages.json` で管理します。chezmoi は Windows 専用の設定を配布します。Unix の Codex、shell、Git、terminal、editor などは Home Manager が管理します。
 
 - ユーザー設定: Unix は `nix/home/` と `nix/modules/`、Windows は `chezmoi/`
 - Home Manager: `nix/home/common.nix`
 - macOS system: `nix/hosts/aarch64-darwin/default.nix` が entrypoint、`configuration.nix` が system/cask/activation の実体
 - 非 NixOS Linux: `nix/hosts/<system>/home.nix` と standalone Home Manager
 - NixOS / WSL: `nix/hosts/<system>/<environment>/default.nix` が entrypoint、`configuration.nix` が host 固有設定
-- パッケージ provider catalog: `nix/packages/catalog/`、既存 consumer の公開入口: `nix/packages/sets.nix`
+- Unix CLI の導入: `nix/modules/tools.nix`、アプリ設定・GUI: 各 `nix/modules/`、Windows の GUI 導入: `windows/winget/packages.json`
 
-package データ、provider 選択、installer metadata、host 動作を分け、各定義は一度だけ管理します。
-SSOT と巨大な 1 ファイルを同一視せず、変更理由ごとに編集先を決めます。
+Unix CLI の導入は `nix/modules/tools.nix` にまとめ、各アプリ module は設定・連携を担当します。GUI と OS service はそれぞれの module / host が管理します。
+Windows の manifest と OS service は、それぞれを適用する層が所有します。
 詳細は [パッケージ管理の分割方針](./docs/nix/package-management.md#分割の理由と編集先) を参照してください。
 
 ## ディレクトリ構造
@@ -242,7 +243,7 @@ chezmoi init rurusasu/dotfiles --source-path chezmoi && chezmoi apply
 以下を treefmt で整形します:
 
 - Nix: `nixfmt`
-- JSON/YAML/Markdown: `prettier`
+- JSON/YAML: `oxfmt`
 - TOML: `taplo`
 - Lua: `stylua`
 - Shell: `shfmt`
@@ -252,11 +253,7 @@ chezmoi init rurusasu/dotfiles --source-path chezmoi && chezmoi apply
 nix fmt
 ```
 
-または:
-
-```bash
-./scripts/sh/treefmt.sh
-```
+Markdown の自動整形は現在無効です。
 
 pre-commit を使う場合:
 
@@ -321,11 +318,10 @@ sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
 同じ installer を再実行すると、完了済みの宣言状態を再利用して停止した phase から収束できます。runtime だけを再確認する場合:
 
 ```bash
-./scripts/sh/verify-environment.sh --runtime
 docker compose -f docker/hermes-service/compose.yml ps
 ```
 
-NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations`、`systemctl status docker.service docker.socket` を確認します。非 NixOS Linux の通常検証は `./scripts/sh/verify-environment.sh` を使い、Docker は管理対象外です。macOS は `darwin-rebuild --list-generations` と Docker Desktop の起動状態を確認します。Windows は PowerShell / WinGet / WSL とエラー内容を確認して installer を再実行します。WSL の個別 setup は [NixOS-WSL インストール](./docs/nix/nixos-wsl-install.md)を参照してください。
+NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations`、`systemctl status docker.service docker.socket` を確認します。非 NixOS Linux は `home-manager generations` で適用済みのユーザー環境を確認します。Docker は管理対象外です。macOS は `darwin-rebuild --list-generations` と Docker Desktop の起動状態を確認します。Windows は PowerShell / WinGet / WSL とエラー内容を確認して installer を再実行します。WSL の個別 setup は [NixOS-WSL インストール](./docs/nix/nixos-wsl-install.md)を参照してください。
 
 ```powershell
 .\install.cmd -NoPause

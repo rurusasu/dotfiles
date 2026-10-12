@@ -6,12 +6,12 @@
 
 **「OS ごとに 1 コマンドで同じ開発環境へ収束する」** を目標に、以下の原則で管理する。
 
-1. **Nix catalog がパッケージ provider の Single Source of Truth (SSOT)**
-   - 全ツールと OS ごとの provider metadata は `nix/packages/catalog/` のカテゴリ別ファイルに一度だけ定義
-   - provider 選択は `providers/`、配布 metadata は `install/`、host の動作は `nix/hosts/` などに分離し、`sets.nix` は既存 API を維持する合成入口
-   - SSOT は単一定義を意味し、単一ファイルを意味しない。変更理由による境界は [分割の理由と編集先](./nix/package-management.md#分割の理由と編集先) を参照
-   - Unix 系 CLI は Home Manager、macOS cask は nix-homebrew、Linux system package は NixOS が消費
-   - Windows は `nix build .#winget-export` で GUI 選択に限定した winget JSON と空の npm/pnpm JSON を導出
+1. **Unix の導入・設定は Nix module、Windows の導入情報は独立した manifest**
+   - Unix CLI の導入は `nix/modules/tools.nix`、設定・連携は各アプリ module にまとめ、host は必要な module を import して構成を選択
+   - Unix CLI の PATH への導入はすべて `tools.nix`、Linux / WSLg GUI は `desktop.nix`、Darwin system GUI は `desktop-system.nix`、個別アプリの設定・連携は各 module に宣言
+   - Unix 系 CLI は Home Manager、macOS cask は nix-homebrew、Linux system package は NixOS が管理
+   - Windows は `windows/winget/packages.json` を直接管理し、GUI アプリを導入。npm/pnpm manifest は空
+   - 機能と OS の所有境界は [分割の理由と編集先](./nix/package-management.md#分割の理由と編集先) を参照
 2. **ユーザー設定は Unix と Windows の責務を分離**
    - Unix の Codex、shell、Git、terminal、editor は Home Manager が管理
    - chezmoi は Windows 専用で、Unix にはファイルもスクリプトも配布しない
@@ -30,17 +30,15 @@
 ```
 dotfiles/
 ├── nix/                    # Cross-platform declarative configuration
-│   ├── packages/
-│   │   ├── catalog/        # ★ SSOT: category-scoped package/provider data
-│   │   ├── providers/      # Provider normalization, selection, validation
-│   │   ├── install/        # Installer/manifest metadata
-│   │   ├── sets.nix        # Stable public API and composition
-│   │   └── winget.nix      # winget/npm/pnpm JSON 生成 derivation
 │   ├── home/               # Shared Home Manager configuration
 │   │   └── keybindings/    # Shared keys and user settings
 │   ├── formatter.nix       # treefmt-nix and formatter dependencies
 │   ├── hosts/              # OS-specific system and Home Manager configuration
-│   ├── modules/            # Custom NixOS modules (system-level)
+│   ├── modules/            # Unix packages and app configuration
+│   │   ├── tools.nix       # Unix CLI enablement and dependencies
+│   │   ├── desktop.nix     # Linux / WSLg GUI apps
+│   │   └── desktop-system.nix # Darwin system GUI apps
+│   ├── outputs.nix         # Custom package and Windows keybindings exports
 │   └── tests/
 │       ├── unit/           # nix-unit: Nix expressions and configuration values
 │       ├── build/          # Build, runtime, and artifact checks
@@ -49,9 +47,10 @@ dotfiles/
 ├── scripts/                # All scripts
 │   ├── sh/                 # Shell scripts (Linux/WSL)
 │   └── powershell/         # PowerShell scripts (Windows)
-├── windows/                # Windows-side config files (generated + static)
-│   ├── winget/             # packages.json (generated from nix)
-│   ├── pnpm/               # packages.json (generated from nix)
+├── windows/                # Windows-side config files
+│   ├── winget/             # Independently maintained GUI packages.json
+│   ├── npm/                # Empty independent packages.json
+│   ├── pnpm/               # Empty independent packages.json
 │   └── .wslconfig          # WSL configuration
 ├── docs/                   # Documentation
 ├── Taskfile.yml            # Task runner (WSL 経由で nix fmt 等を実行)
@@ -86,13 +85,13 @@ macOS のカスタムパッケージ更新は `task darwin:update` で実行し�
 ホストは system 名で分類し、同じ system 内の native NixOS と WSL は `nixos/` と `wsl/` に分けます。
 Darwin は `nix/hosts/aarch64-darwin/`、Linux は `nix/hosts/{x86_64-linux,aarch64-linux}/` に置きます。
 Linux の共通設定は `nix/hosts/shared/linux-home.nix` と `shared/nixos/` に置き、CPU ごとに複製しません。
-OS 固有の Home Manager 設定とパッケージ選択は `hosts/` が所有し、OS 非依存のユーザー設定は `nix/home/` に残します。
+OS 固有の Home Manager 設定と module の選択は `hosts/` が所有し、OS 非依存のユーザー設定は `nix/home/` に残します。
 
 | 役割                    | ツール                  | 説明                                                          |
 | ----------------------- | ----------------------- | ------------------------------------------------------------- |
-| Provider 定義 (SSOT)    | Nix catalog             | package、winget、npm、Darwin cask を一元定義                  |
+| Unix CLI 定義           | Nix / Home Manager      | 導入は `tools.nix`、設定・連携は各アプリ module に宣言        |
 | Unix ユーザーパッケージ | Home Manager            | macOS、NixOS、Ubuntu、Debian で共通の `home.packages`         |
-| Windows パッケージ      | winget                  | GUI 選択から生成した JSON を WingetHandler が適用             |
+| Windows パッケージ      | winget                  | 独立した GUI manifest を WingetHandler が適用                 |
 | macOS システム          | nix-darwin/nix-homebrew | Homebrew、Docker Desktop、Home Manager を 1 generation で適用 |
 | NixOS システム          | NixOS module            | native/WSL host、Docker、Home Manager を generation に統合    |
 | Unix ユーザー設定       | Home Manager            | shell、Git、terminal、editor の設定を宣言                     |
@@ -116,8 +115,9 @@ installer は `/Applications/Docker.app` への正確なリンクだけを管理
 ## Hermes Runtime and Bootstrap Ownership
 
 On macOS and Linux/WSL, the pinned `hermes-agent` flake input and Home Manager
-module manage the Hermes CLI and gateway as a native user service: systemd on
-Linux/WSL and launchd on macOS. On Windows, Hermes is managed through the
+module manage the Hermes gateway as a native user service: systemd on
+Linux/WSL and launchd on macOS. `nix/modules/tools.nix` enables the Hermes CLI;
+`nix/modules/ai_agents/hermes/` owns its settings and bootstrap. On Windows, Hermes is managed through the
 configured NixOS WSL distribution. Nix/Home Manager installs it directly in
 NixOS, and `NixRebuildHandler` validates the Linux user service and CLI after
 rebuild. No Hermes package or separate Hermes handler is installed on Windows.
@@ -139,7 +139,7 @@ policy for resolving conflicting paths before data is copied.
 | Owner                  | Source                                                                                    | Responsibility                                                                                         |
 | ---------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Dotfiles               | [rurusasu/dotfiles](https://github.com/rurusasu/dotfiles)                                 | Sidecar Compose wiring, native bootstrap, manifest, host adapters, operator Taskfile and documentation |
-| Nix + Home Manager     | `flake.nix`, `nix/modules/ai_agents/hermes/default.nix`                                   | Pinned CLI package and native gateway user service on macOS and Linux/WSL                              |
+| Nix + Home Manager     | `nix/modules/tools.nix`, `nix/modules/ai_agents/hermes/`                                  | Pinned CLI package and native gateway user service on macOS and Linux/WSL                              |
 | Root distribution      | [rurusasu/hermes-profile-alfred](https://github.com/rurusasu/hermes-profile-alfred)       | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks            |
 | Rick distribution      | [rurusasu/hermes-profile-rick](https://github.com/rurusasu/hermes-profile-rick)           | Official `distribution.yaml` and Rick declarative content                                              |
 | Hoffman distribution   | [rurusasu/hermes-profile-hoffman](https://github.com/rurusasu/hermes-profile-hoffman)     | Official `distribution.yaml` and Hoffman declarative content                                           |
@@ -166,33 +166,25 @@ MCP sidecars. No inference provider or model download is configured here.
 
 ## パッケージ管理フロー
 
-```
-nix/packages/catalog/ (package/provider metadata の SSOT)
-  + providers/ (選択・検証) + install/ (配布 metadata)
-  → nix/packages/sets.nix (公開 API)
-├── Home Manager ───────── macOS / NixOS / Ubuntu / Debian CLI
-├── darwinCasks ── declarative nix-homebrew casks
-├── darwinBrews ────────── nix-homebrew formulas
-├── wingetMap + npmMap ─── generated Windows manifests
-├── supportReport ──────── per-OS provider/unsupported evidence
-└── providerErrors ─────── CI failure when coverage is missing
+```text
+nix/modules/ ───── host が imports で選択
+├── tools.nix ─────────── 全 Unix CLI の有効化・導入・LSP/実行依存
+├── desktop.nix ───────── Linux / WSLg の共通 GUI
+├── desktop-system.nix ── Darwin system GUI
+└── 各アプリ module ───── 設定・連携・package override・GUI
+
+windows/winget/packages.json ── Windows GUI を直接宣言
+windows/{npm,pnpm}/packages.json ── 独立した空 manifest
 ```
 
 ### ツール追加手順
 
-1. `nix/packages/catalog/` の該当カテゴリにエントリを追加:
-   ```nix
-   mypackage = { pkg = pkgs.mypackage; winget = "Publisher.Package"; category = "dev"; };
-   ```
-   Windows 相当がない場合は `winget = null` とし、provider coverage に未対応理由を明記する。
-2. `nix build .#winget-export` で winget/npm/pnpm JSON を再生成
-3. `nixos-rebuild switch` で Linux 反映、`winget import` で Windows 反映
+1. Unix CLI はすべて `nix/modules/tools.nix` に宣言する。設定・連携も管理する CLI は標準の `programs.<name>.enable`、設定をユーザーが管理する CLI・標準 module のない CLI・LSP・実行依存は `home.packages` に追加する。設定・連携・package override は対応するアプリ module に置く。
+2. Linux / WSLg の GUI は `desktop.nix`、Darwin の system GUI は `desktop-system.nix` に追加する。Homebrew と OS service は host に定義する。
+3. Windows に追加する場合は `windows/winget/packages.json` の既存 schema に合わせ、package ID・導入・検証情報を直接記述する。
+4. 各 OS の通常インストーラーで反映する。具体的な入口と所有境界は [パッケージ管理](./nix/package-management.md) を参照する。
 
-### Windows 専用アプリの追加
-
-`nix/packages/install/windows-only.nix` の `windowsOnly` と対応する
-`windowsOnlySupport` に追加し、macOS/Linux で対応しない理由を記録する。
-生成物の更新・検証は [パッケージ管理](./nix/package-management.md) に従う。
+Windows 専用のアプリも同じ WinGet manifest に直接追加する。Unix の Nix module に Windows install metadata は置かない。
 
 ---
 
@@ -350,7 +342,7 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 
 | Workflow         | Runner                     | Guarantee                                                                      |
 | ---------------- | -------------------------- | ------------------------------------------------------------------------------ |
-| `ci-nix.yml`     | hosted Linux/macOS/Windows | Nix lint・format・build・catalog 整合性と OS 別 installer / runtime E2E        |
+| `ci-nix.yml`     | hosted Linux/macOS/Windows | Nix lint・format・build・Windows manifest 検査と OS 別 installer / runtime E2E |
 | `ci-chezmoi.yml` | hosted Windows/Linux       | Windows 設定の Pester、template BOM、font installer、未認証 op の render guard |
 | `ci-other.yml`   | hosted Linux/Windows       | Python・MLflow・actionlint、PowerShell lint / Pester、devcontainer E2E         |
 
@@ -358,7 +350,7 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 選別ルールは `.github/actions/detect-ci-changes/action.yml` の Bash に直接定義し、外部 manifest と専用 Python detector は持ちません。
 Git の差分を `nix`・`chezmoi`・`other` の3つのフラグに分類し、workflow の `if` で実行条件を定義します。
 Nix 設定は Nix、Windows の chezmoi 設定は chezmoi、共通 installer・scripts・Taskfile・Docker・workflow・テストは全分類を選択します。
-catalog と共有キー設定は Windows の生成物にも影響するため、Nix と chezmoi を両方選択します。
+共有キー設定、flake input、Windows manifest は Nix と chezmoi を両方選択します。
 通常の docs / README / AGENTS はスキップしますが、配布対象の agent 設定などの Markdown はその所属分類で検証します。
 分類は排他的ではなく、複数変更の和集合を実行します。言語・OS 別の細かな最適化は行わず、分類内の検証をまとめて実行します。
 
@@ -366,7 +358,7 @@ catalog と共有キー設定は Windows の生成物にも影響するため、
 workflow は常時起動し、対象外の検証ジョブだけを `if` でスキップします。検出失敗はチェック失敗とし、手動実行は全分類を有効にします。
 PR は merge-base からの差分を使い、削除・移動元も含めます。NUL 区切りでファイル名を扱い、push のゼロ base SHA では empty tree と比較します。
 `ci-nix.yml` の `complete` は必要な build / E2E の success と、対象外ジョブの skipped を確認します。
-Linux の nix-unit・custom-package-builds・workspace-cycle は catalog の `check` ジョブに集約し、`linux-build` からの二重ビルド参照をなくします。
+Linux の nix-unit・custom-package-builds・workspace-cycle と Windows キー設定生成・manifest 検査は `check` ジョブに集約し、`linux-build` からの二重ビルド参照をなくします。
 
 WSL job は一時 NixOS-WSL 環境で native Nix/Home Manager switch、既存 `~/.hermes` state の保持、CLI 起動、user service の再起動と active 状態を検証します。
 Docker Desktop の実機適用と nix-darwin switch は runner の OS 制約により実行せず、installer 末尾の local acceptance が判定します。

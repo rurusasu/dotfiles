@@ -2,7 +2,6 @@
 {
   # Bash configuration is generated together with terminal shell integrations.
   programs.bash = {
-    enable = true;
     initExtra = lib.mkBefore (builtins.readFile ./bashrc);
     profileExtra = ''
       # Set PATH so it includes user's private bin if it exists

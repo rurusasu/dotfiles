@@ -12,7 +12,7 @@
 | PowerShell | [PSScriptAnalyzer](https://github.com/PowerShell/PSScriptAnalyzer) | [PSScriptAnalyzerSettings.psd1](../../scripts/powershell/PSScriptAnalyzerSettings.psd1) |
 | TOML       | [taplo](https://taplo.tamasfe.dev/)                                | [.taplo.toml](../../.taplo.toml)                                                        |
 | Lua        | [StyLua](https://github.com/JohnnyMorganz/StyLua)                  | [.stylua.toml](../../.stylua.toml)                                                      |
-| Markdown   | [dprint](https://dprint.dev/)                                      | [.dprint.json](../../.dprint.json)                                                      |
+| Markdown   | 自動整形は無効（dprint は任意の手動実行用）                        | [.dprint.json](../../.dprint.json)                                                      |
 
 ## 設定ファイル
 
@@ -26,7 +26,7 @@
 - [treefmt](./treefmt.md) - treefmt 統合設定
 - [Nix (nixfmt)](./nix.md) - Nix フォーマット設定
 - [Shell (shfmt)](./shell.md) - Shell フォーマット設定
-- [Markdown (dprint)](./markdown.md) - Markdown フォーマット設定
+- [Markdown (dprint)](./markdown.md) - 任意の手動整形設定
 - [TOML (taplo)](./toml.md) - TOML フォーマット設定
 - [PowerShell](./powershell.md) - PowerShell フォーマット設定
 - [JSON/YAML (oxfmt)](./json-yaml.md) - JSON/YAML フォーマット設定
@@ -59,7 +59,7 @@ Zed では `languages` 設定で外部フォーマッターを指定します。
 treefmt
 
 # 特定のファイルをフォーマット
-treefmt path/to/file.md
+treefmt path/to/file.nix
 
 # チェックのみ（変更なし）
 treefmt --check

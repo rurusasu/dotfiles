@@ -17,7 +17,6 @@ let
   service = config.services.aerospace;
   keys = service.settings.mode.main.binding;
   agent = config.launchd.user.agents.aerospace;
-  catalog = import ../../packages/sets.nix { inherit pkgs lib; };
 in
 {
   testOmarchyDisabledDoesNotChangeSystemShortcuts = {
@@ -42,10 +41,8 @@ in
     expr = {
       enabled = service.enable;
       configVersion = service.settings.config-version;
-      catalogPackage = service.package == builtins.head (catalog.resolve [ "aerospace" ]);
+      selectedPackage = service.package == pkgs.aerospace;
       systemPackage = builtins.elem service.package config.environment.systemPackages;
-      guiCatalogPackage = builtins.elem service.package catalog.darwinSystemPackages;
-      homeDoesNotDuplicateGui = !(builtins.elem service.package catalog.darwinHomePackages);
       launchdOwnsStartup =
         !service.settings.start-at-login && agent.serviceConfig.RunAtLoad && agent.serviceConfig.KeepAlive;
       explicitImmutableConfig = lib.hasInfix "--config-path /nix/store/" agent.command;
@@ -53,10 +50,8 @@ in
     expected = {
       enabled = true;
       configVersion = 2;
-      catalogPackage = true;
+      selectedPackage = true;
       systemPackage = true;
-      guiCatalogPackage = true;
-      homeDoesNotDuplicateGui = true;
       launchdOwnsStartup = true;
       explicitImmutableConfig = true;
     };
@@ -150,21 +145,18 @@ in
 
   testOmarchyPackageDoesNotLeakToLinux = {
     expr =
-      builtins.map
+      map
         (
           system:
           let
-            linuxPkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
-            linuxCatalog = import ../../packages/sets.nix {
-              pkgs = linuxPkgs;
-              inherit lib;
-            };
+            fixtures = import ../fixtures/packages.nix { inherit inputs; };
+            home = fixtures.mkHome system [ ../../hosts/shared/linux-home.nix ];
           in
           {
-            packages = linuxCatalog.resolve [ "aerospace" ];
-            linuxUnsupported = linuxCatalog.supportReport.aerospace.linux.unsupported != "";
-            windowsUnsupported = linuxCatalog.supportReport.aerospace.windows.unsupported != "";
-            providerErrors = builtins.filter (lib.hasPrefix "aerospace:") linuxCatalog.providerErrors;
+            linuxPackage = builtins.any (
+              package: (package.pname or "") == "aerospace"
+            ) home.config.home.packages;
+            windowsPackage = fixtures.windowsPackages ? "aerospace";
           }
         )
         [
@@ -172,10 +164,8 @@ in
           "x86_64-linux"
         ];
     expected = builtins.genList (_: {
-      packages = [ ];
-      linuxUnsupported = true;
-      windowsUnsupported = true;
-      providerErrors = [ ];
+      linuxPackage = false;
+      windowsPackage = false;
     }) 2;
   };
 }

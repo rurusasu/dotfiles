@@ -6,9 +6,6 @@ args@{
   ...
 }:
 let
-  sets = import ../../packages/sets.nix {
-    inherit pkgs lib;
-  };
   inherit ((import ../../modules/fonts.nix { inherit pkgs; })) fonts;
   currentUser = builtins.getEnv "USER";
   currentHome = builtins.getEnv "HOME";
@@ -21,11 +18,12 @@ in
     homeDirectory = lib.mkDefault (
       if hasCurrentUser && currentHome != "" then currentHome else "/home/${config.home.username}"
     );
-    packages = sets.allWithout sets.nativeDesktopPackageNames ++ fonts.packages;
+    packages = fonts.packages;
   };
 
   imports = [
     ../../modules/editors/nvim
+    ../../modules/desktop.nix
     ../../modules/discord
     ../../home/common.nix
   ];

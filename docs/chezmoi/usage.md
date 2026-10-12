@@ -14,7 +14,7 @@
 .\install.cmd
 ```
 
-chezmoi は Windows 専用です。`nix/packages/catalog/core.nix` の Windows provider から生成した winget manifest で導入します。Unix の設定は Home Manager が管理し、`install.sh` は chezmoi を呼びません。配布と設定の責務は [パッケージ管理](../nix/package-management.md#分割の理由と編集先) を参照してください。
+chezmoi は Windows 専用です。直接管理する `windows/winget/packages.json` の winget manifest で導入します。Unix の設定は Home Manager が管理し、`install.sh` は chezmoi を呼びません。配布と設定の責務は [パッケージ管理](../nix/package-management.md#分割の理由と編集先) を参照してください。
 
 ## クローン済み設定の更新
 

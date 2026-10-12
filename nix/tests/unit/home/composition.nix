@@ -65,25 +65,14 @@ let
     };
   };
 
-  darwinPackageSets =
-    let
-      system = "aarch64-darwin";
-      pkgs = import inputs.nixpkgs {
-        inherit system;
-        config.allowUnfree = true;
-      };
-      sets = import ../../../packages/sets.nix {
-        inherit pkgs;
-        inherit (pkgs) lib;
-        codexPackage = pkgs.hello;
-      };
-      contains = package: packages: builtins.elem package packages;
-    in
-    {
-      inherit sets;
-      inherit (pkgs) obsidian;
-      inherit contains;
-    };
+  darwinPackages = {
+    pkgs = mkPkgs "aarch64-darwin";
+    system = fixtures.darwin.config.environment.systemPackages;
+    home = fixtures.darwin.config.home-manager.users.test-user.home.packages;
+    contains =
+      package: packages: builtins.any (candidate: candidate.drvPath == package.drvPath) packages;
+  };
+
 in
 {
   testCodexConfigurationIsOwnedByHomeManagerAcrossHomes = {
@@ -129,7 +118,7 @@ in
     }) 3;
   };
 
-  testDshModuleUsesUpstreamPackageOnce = {
+  testDshToolsSelectionUsesUpstreamPackageOnce = {
     expr =
       map
         (
@@ -401,7 +390,7 @@ in
     expected = builtins.genList (_: {
       fdCopies = 1;
       fdFindAlias = "fd";
-      patinaCopies = 1;
+      patinaCopies = 0;
       starshipEnabled = true;
       starshipZshIntegration = true;
       starshipInit = true;
@@ -950,35 +939,26 @@ in
   testWSLHomeModuleExcludesNativeDesktopPackages =
     let
       pkgs = mkPkgs "x86_64-linux";
-      sets = import ../../../packages/sets.nix {
-        inherit pkgs;
-        inherit (pkgs) lib;
-        codexPackage = pkgs.hello;
-      };
-      catalogDrvPaths = builtins.map (package: package.drvPath) sets.all;
-      selectedCatalogDrvPaths = builtins.sort builtins.lessThan (
-        pkgs.lib.unique (
-          builtins.filter (drvPath: builtins.elem drvPath catalogDrvPaths) (
-            builtins.map (package: package.drvPath) wsl.config.home.packages
-          )
-        )
-      );
-      expectedCatalogDrvPaths = builtins.sort builtins.lessThan (
-        pkgs.lib.unique (
-          builtins.map (package: package.drvPath) (sets.allWithout sets.nativeDesktopPackageNames)
-        )
-      );
-      containsDrvPath =
-        needle: packages: builtins.any (package: package.drvPath == needle.drvPath) packages;
+      tools =
+        (import ../../../modules/tools.nix {
+          config = wsl.config;
+          inherit inputs pkgs;
+          inherit (pkgs) lib;
+        }).home.packages;
+      contains = needle: packages: builtins.any (package: package.drvPath == needle.drvPath) packages;
     in
     {
       expr = {
-        inherit selectedCatalogDrvPaths;
-        excludesDiscord = !(containsDrvPath pkgs.discord wsl.config.home.packages);
+        sharedTools = builtins.all (package: contains package wsl.config.home.packages) tools;
+        excludesDiscord = !(contains pkgs.discord wsl.config.home.packages);
+        excludesCompositor = !(contains pkgs.hyprland wsl.config.home.packages);
+        excludesLauncher = !(contains pkgs.fuzzel wsl.config.home.packages);
       };
       expected = {
-        selectedCatalogDrvPaths = expectedCatalogDrvPaths;
+        sharedTools = true;
         excludesDiscord = true;
+        excludesCompositor = true;
+        excludesLauncher = true;
       };
     };
 
@@ -997,39 +977,23 @@ in
     };
   };
 
-  testObsidianDeclaresCrossPlatformProviders = {
+  testObsidianIsSelectedByPlatformModules = {
     expr = {
-      windows = darwinPackageSets.sets.supportReport.obsidian.windows;
-      darwin = darwinPackageSets.sets.supportReport.obsidian.darwin;
-      linux = darwinPackageSets.sets.supportReport.obsidian.linux;
+      windows = fixtures.windowsPackages."Obsidian.Obsidian".PackageIdentifier;
+      darwin = darwinPackages.contains darwinPackages.pkgs.obsidian darwinPackages.system;
+      linux = builtins.any (package: (package.pname or "") == "obsidian") linux.config.home.packages;
     };
     expected = {
-      windows = {
-        provider = "winget";
-        source = "winget";
-        identity = "Obsidian.Obsidian";
-      };
-      darwin = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "obsidian";
-        identity = {
-          appName = "Obsidian.app";
-        };
-      };
-      linux = {
-        provider = "nix";
-        source = "nixpkgs";
-        nixAttr = "obsidian";
-        identity = "obsidian";
-      };
+      windows = "Obsidian.Obsidian";
+      darwin = true;
+      linux = true;
     };
   };
 
   testObsidianDarwinGuiUsesSystemPackage = {
     expr = {
-      system = darwinPackageSets.contains darwinPackageSets.obsidian darwinPackageSets.sets.darwinSystemPackages;
-      home = darwinPackageSets.contains darwinPackageSets.obsidian darwinPackageSets.sets.darwinHomePackages;
+      system = darwinPackages.contains darwinPackages.pkgs.obsidian darwinPackages.system;
+      home = darwinPackages.contains darwinPackages.pkgs.obsidian darwinPackages.home;
     };
     expected = {
       system = true;
@@ -1037,36 +1001,16 @@ in
     };
   };
 
-  testTerminalKeybindingHelpersHavePlatformScopedProviders =
-    let
-      report = darwinPackageSets.sets.supportReport;
-    in
-    {
-      expr = {
-        aerospace = {
-          inTerminal = builtins.any (
-            package: (package.pname or null) == "aerospace"
-          ) darwinPackageSets.sets.terminal;
-          darwin = {
-            provider = report.aerospace.darwin.provider;
-            source = report.aerospace.darwin.source;
-            appName = report.aerospace.darwin.identity.appName;
-          };
-          linuxUnsupported = report.aerospace.linux.unsupported;
-          windowsUnsupported = report.aerospace.windows.unsupported;
-        };
-      };
-      expected = {
-        aerospace = {
-          inTerminal = true;
-          darwin = {
-            provider = "nix";
-            source = "nixpkgs";
-            appName = "AeroSpace.app";
-          };
-          linuxUnsupported = "AeroSpace is only available on macOS";
-          windowsUnsupported = "AeroSpace is only available on macOS";
-        };
-      };
+  testTerminalKeybindingHelpersHavePlatformScopedPackages = {
+    expr = {
+      darwinSystem = darwinPackages.contains darwinPackages.pkgs.aerospace darwinPackages.system;
+      linuxHome = builtins.any (package: (package.pname or "") == "aerospace") linux.config.home.packages;
+      wslHome = builtins.any (package: (package.pname or "") == "aerospace") wsl.config.home.packages;
     };
+    expected = {
+      darwinSystem = true;
+      linuxHome = false;
+      wslHome = false;
+    };
+  };
 }
