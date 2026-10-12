@@ -254,3 +254,33 @@ jobs:
             exit 1
           fi
           echo "OK  weak lookPath-only guard correctly fails under unauthenticated op"
+
+  source:
+    name: Chezmoi source
+    if: ${{ always() }}
+    needs: [changes, lint, fmt, font-install, op-guard]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      CHANGES_RESULT: ${{ needs.changes.result }}
+      CHECKS_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' }}
+      JOB_RESULTS: ${{ toJSON(needs) }}
+    steps:
+      - name: Verify Chezmoi source checks
+        run: |
+          set -euo pipefail
+          if [[ "${CHANGES_RESULT}" != "success" ]]; then
+            echo "CI change detection did not complete successfully: ${CHANGES_RESULT}"
+            exit 1
+          fi
+          expected=skipped
+          if [[ "${CHECKS_REQUIRED}" == "true" ]]; then
+            expected=success
+          fi
+          if ! jq -e --arg expected "${expected}" \
+            'del(.changes) | all(.[]; .result == $expected)' <<< "${JOB_RESULTS}"; then
+            echo "Chezmoi source checks did not all finish as expected: ${expected}"
+            exit 1
+          fi
