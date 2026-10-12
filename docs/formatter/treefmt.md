@@ -42,7 +42,6 @@ command = "oxfmt"
 options = ["--write"]
 includes = ["*.json", "*.yaml", "*.yml"]
 excludes = [
-  "chezmoi/terminals/windows-terminal/settings.json",
 ]
 
 [formatter.shfmt]
@@ -68,11 +67,10 @@ includes = ["*.toml"]
 command = "stylua"
 includes = ["*.lua"]
 
-# Markdown の自動整形は無効
-# [formatter.dprint]
-# command = "dprint"
-# options = ["fmt", "--allow-no-files"]
-# includes = ["*.md"]
+[formatter.dprint]
+command = "dprint"
+options = ["fmt"]
+includes = ["*.md"]
 ```
 
 ## treefmt-nix 統合
@@ -98,6 +96,7 @@ _: {
           shfmt.enable = true; # *.sh
           taplo.enable = true; # *.toml
           stylua.enable = true; # *.lua
+          dprint.enable = true; # *.md
           oxfmt.enable = true; # *.json, *.yaml, *.yml
         };
 
@@ -147,7 +146,7 @@ nix fmt -- --check
 treefmt
 
 # 特定のファイルをフォーマット
-treefmt path/to/file.nix
+treefmt path/to/file.md
 
 # チェックのみ（CI 用）
 treefmt --check

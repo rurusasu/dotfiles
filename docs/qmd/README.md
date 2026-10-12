@@ -602,10 +602,10 @@ claude plugin install qmd@qmd
 ### インストール
 
 - QMD は自動導入対象ではありません。必要な場合のみ上記の手順で個別に導入します。
-- Windows の npm/pnpm manifest は空です。通常の Windows セットアップは GUI のみを WinGet で導入し、dsh は導入しません。Unix の dsh は `nix/modules/tools.nix` の upstream Nix package で管理します。
+- Windows の pnpm グローバルパッケージは `dsh` のみです。配布情報の正本は `nix/packages/install/node.nix` とし、PnpmHandler が生成された `windows/pnpm/packages.json` を読みます。
 - **Linux/macOS**: dotfiles は pnpm を導入しない。QMD を pnpm で導入する場合は pnpm を別途用意する
 
-Unix の Node.js/npm は `nix/modules/tools.nix`、Windows の導入情報は独立した manifest で管理します。
+Node の配布 metadata は package/provider 選択から分離し、重複定義せず既存の export を維持します。
 理由と編集先は [パッケージ管理](../nix/package-management.md#分割の理由と編集先) を参照してください。
 
 ### モデル構成 (8GB VRAM)
@@ -631,9 +631,9 @@ export QMD_RERANK_MODEL="hf:giladgd/Qwen3-Reranker-4B-GGUF:Q8_0"
 
 ### 関連ファイル
 
-| ファイル                                          | 役割                            |
-| ------------------------------------------------- | ------------------------------- |
-| `nix/modules/tools.nix`                           | Unix の Node.js/npm と dsh 導入 |
-| `windows/pnpm/packages.json`                      | Windows の独立した空 manifest   |
-| `nix/home/common.nix`                             | 環境変数設定 (Unix)             |
-| `chezmoi/shells/Microsoft.PowerShell_profile.ps1` | 環境変数設定 (Windows)          |
+| ファイル                        | 役割                              |
+| ------------------------------- | --------------------------------- |
+| `nix/packages/install/node.nix` | Node 配布 metadata (`pnpmGlobal`) |
+| `nix/packages/sets.nix`         | consumer 向けの公開入口           |
+| `nix/home/common.nix`           | 環境変数設定 (Unix)               |
+| PowerShell profile              | chezmoi source では管理しません   |

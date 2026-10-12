@@ -7,9 +7,7 @@
 let
   account = "EJLA3HRAVZBCXIQ7SRSFGQBTNU";
   publicKeyReference = "op://Private/xnoq6xbcdktkph76e2bg37ou6y/public key";
-  readTimeoutSeconds =
-    (builtins.fromJSON (builtins.readFile ../../../chezmoi/.chezmoidata/onepassword.json))
-    .op_read_timeout_seconds;
+  readTimeoutSeconds = 180;
   agentSocket =
     if pkgs.stdenv.hostPlatform.isDarwin then
       "${config.home.homeDirectory}/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"

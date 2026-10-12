@@ -1,57 +1,20 @@
 # Chezmoi ドキュメント
 
-chezmoi による Windows 専用ユーザー設定管理の詳細ドキュメント。
+chezmoi は Windows の WezTerm 設定だけを管理します。PowerShell は WinGet manifest から最新版を導入し、WezTerm の既定プロファイルとして起動します。NixOS-WSL は別の WezTerm プロファイルから起動します。
 
 ## 目次
 
-- [概要](#概要)
 - [インストールと適用](./usage.md)
 - [ディレクトリ構造](./structure.md)
-- [キーバインド統一方針](./keybindings.md)
-- [Omarchy 配列の共通定義と OS 別実装](./omarchy.md)
-- [macOS のデスクトップキー・権限設定・回復](./omarchy-macos.md)
-- [Neovim の設定と検証](./neovim.md)
-- [Neovim 最新化調査・採否](./neovim-modernization-audit.md)
-- [シークレット管理](./secrets.md)
-- [1Password CLI 運用](../1password/README.md)
+- [Nix と OS ごとの設定所有](../architecture.md)
 
-## 概要
+## 所有境界
 
-chezmoi は Windows の dotfiles（設定ファイル）だけを管理します。Unix の設定は Codex を含め Home Manager が管理し、`install.sh` は chezmoi を呼びません。
+| 設定                                 | 所有者              |
+| ------------------------------------ | ------------------- |
+| Windows WezTerm                      | chezmoi             |
+| Windows PowerShell / WezTerm package | WinGet manifest     |
+| macOS、Linux、NixOS-WSL 内の WezTerm | Home Manager        |
+| WezTerm の共有 appearance values     | Nix package catalog |
 
-**管理対象:**
-
-- シェル設定 (bash, zsh, starship)
-- Git 設定
-- CLI ツール設定 (fd, ripgrep, ghq, zoxide)
-- ターミナル設定 (WezTerm, Windows Terminal)
-- エディタ設定 (Neovim)
-- LLM ツール設定 (Claude, Codex)
-- SSH 設定テンプレート
-- GitHub 設定 (workflows, templates)
-
-**役割分担:**
-
-| 役割                   | ツール                                                          |
-| ---------------------- | --------------------------------------------------------------- |
-| パッケージインストール | Nix modules (macOS/Linux/WSL)、独立した Windows WinGet manifest |
-| ユーザー設定           | Chezmoi                                                         |
-| シェル統合             | Unix は Home Manager、Windows は chezmoi                        |
-
-## クイックスタート
-
-### Windows
-
-```powershell
-# クローン済みリポジトリのルートで実行
-winget install -e --id twpayne.chezmoi
-chezmoi init --source "$PWD/chezmoi"
-chezmoi --source "$PWD/chezmoi" diff
-chezmoi --source "$PWD/chezmoi" apply
-```
-
-### macOS / WSL / Linux
-
-`./install.sh` で Nix / Home Manager を適用します。chezmoi は適用しません。
-
-`--source-path` はサブディレクトリ指定ではなくターゲット解釈を変えるフラグです。詳細・installer 経由の適用は [usage.md](./usage.md) を参照。
+この source tree には WezTerm 以外のユーザー設定を置きません。詳しい適用方法は [usage.md](./usage.md) を参照してください。

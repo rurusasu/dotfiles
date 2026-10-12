@@ -1,26 +1,7 @@
 ﻿BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 
-    function Assert-UniqueChezmoiPathOccurrence {
-        param(
-            [Parameter(Mandatory)]
-            [string]$Workflow,
 
-            [Parameter(Mandatory)]
-            [string]$LintJob
-        )
-
-        $normalizedWorkflow = $Workflow.ToLowerInvariant().Replace('\', '/')
-        $normalizedLint = $LintJob.ToLowerInvariant().Replace('\', '/')
-        $workflowOccurrences = ([regex]::Matches($normalizedWorkflow, [regex]::Escape('tests/chezmoi'))).Count
-        $lintOccurrences = ([regex]::Matches($normalizedLint, [regex]::Escape('tests/chezmoi'))).Count
-        if ($workflowOccurrences -ne 1) {
-            throw "Chezmoi CI must contain exactly one tests/chezmoi path occurrence; found $workflowOccurrences."
-        }
-        if ($lintOccurrences -ne 1) {
-            throw 'The unique tests/chezmoi path occurrence must belong to the lint job.'
-        }
-    }
 }
 
 Describe 'CI workflow configuration' {
@@ -203,14 +184,13 @@ Describe 'CI workflow configuration' {
         $postInstall | Should -Match 'accept-flake-config true'
     }
 
-    It 'should smoke test the Windows UDEV Gothic NF installer in chezmoi CI' {
-        $chezmoiWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-chezmoi.yml") -Raw
+    It 'should validate only the Windows WezTerm source in chezmoi CI' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-chezmoi.yml') -Raw
 
-        $chezmoiWorkflow | Should -Match 'Font install smoke \(Windows\)'
-        $chezmoiWorkflow | Should -Match 'run_onchange_before_00-install-udev-gothic\.ps1\.tmpl'
-        $chezmoiWorkflow | Should -Match '& pwsh -NoProfile -File \$scriptPath'
-        $chezmoiWorkflow | Should -Match 'UDEVGothic\*NF\*'
-        $chezmoiWorkflow | Should -Match 'Test-Path -LiteralPath \$fontPath -PathType Leaf'
+        $workflow | Should -Match 'name: Windows WezTerm CI'
+        $workflow | Should -Match 'name: Windows WezTerm source'
+        $workflow | Should -Match 'managed Windows targets'
+        $workflow | Should -Not -Match 'Font install smoke|onepasswordRead|Windows Terminal|GlazeWM'
     }
 
     It 'should run nixos-rebuild switch in a hosted WSL2 E2E workflow' {
@@ -655,24 +635,14 @@ esac
         $macosJob | Should -Match 'sudo nix --accept-flake-config[\s\S]*?darwin-rebuild -- switch --flake \.#macos --impure'
     }
 
-    It 'should install chezmoi before every Windows job that runs chezmoi template tests' {
-        $workflowCases = @(
-            @{ Path = '.github/workflows/ci-chezmoi.yml'; Job = 'lint'; TestMarker = '.\tests\Invoke-Tests.ps1' },
-            @{ Path = '.github/workflows/ci-other.yml'; Job = 'test'; TestMarker = 'Invoke-Tests.ps1' }
-        )
+    It 'should install chezmoi before Windows source validation' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-chezmoi.yml') -Raw
+        $sourceJob = [regex]::Match($workflow, '(?ms)^  source:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)').Value
 
-        foreach ($case in $workflowCases) {
-            $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot $case.Path) -Raw
-            $job = [regex]::Match(
-                $workflow,
-                "(?ms)^  $($case.Job):\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)"
-            ).Value
-
-            $job | Should -Not -BeNullOrEmpty
-            $job | Should -Match 'uses: \.\/\.github\/actions\/install-chezmoi'
-            $job.IndexOf('uses: ./.github/actions/install-chezmoi') |
-                Should -BeLessThan $job.IndexOf($case.TestMarker)
-        }
+        $sourceJob | Should -Not -BeNullOrEmpty
+        $sourceJob | Should -Match 'uses: \.\/\.github\/actions\/install-chezmoi'
+        $sourceJob.IndexOf('uses: ./.github/actions/install-chezmoi') |
+            Should -BeLessThan $sourceJob.IndexOf('managed Windows targets')
     }
 
     It 'should keep the shared chezmoi installer independent of WinGet' {
@@ -683,55 +653,11 @@ esac
         $action | Should -Not -Match 'winget install.*chezmoi'
     }
 
-    It 'should run Chezmoi Pester once in required lint and upload lint JUnit output' {
+    It 'should not run removed settings or secret template workflows' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-chezmoi.yml') -Raw
-        $pesterInvocation = '(?m)^          \.\\tests\\Invoke-Tests\.ps1 -Path \.\\tests\\chezmoi -MinimumCoverage 0 -OutputFile chezmoi-test-results\.xml$'
-        $lintJob = [regex]::Match(
-            $workflow,
-            '(?ms)^  lint:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
-        ).Value
 
-        $lintJob | Should -Not -BeNullOrEmpty
-        ([regex]::Matches($workflow, '(?m)^  test:\s*$')).Count | Should -Be 0
-        Assert-UniqueChezmoiPathOccurrence -Workflow $workflow -LintJob $lintJob
-        $lintJob | Should -Match $pesterInvocation
-        $lintJob | Should -Match 'Install-Module -Name Pester -Scope CurrentUser -Force -Repository PSGallery\r?\n'
-        $lintJob | Should -Not -Match 'psmodules-pester-'
-        $canonicalInvocation = '.\tests\Invoke-Tests.ps1 -Path .\tests\chezmoi -MinimumCoverage 0 -OutputFile chezmoi-test-results.xml'
-        foreach ($alternateInvocation in @(
-                "      - run: >-`r`n          Invoke-Pester -Path .\tests\CHEZMOI",
-                '      - run: Invoke-Pester -Path ./tests/chezmoi'
-            )) {
-            $mutatedWorkflow = $workflow.Replace(
-                $canonicalInvocation,
-                "$canonicalInvocation`r`n$alternateInvocation"
-            )
-            $mutatedLintJob = [regex]::Match(
-                $mutatedWorkflow,
-                '(?ms)^  lint:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
-            ).Value
-            { Assert-UniqueChezmoiPathOccurrence -Workflow $mutatedWorkflow -LintJob $mutatedLintJob } | Should -Throw
-        }
-
-        foreach ($requiredJob in @(
-                @{ Job = 'lint'; Name = 'Lint \(Pester chezmoi\)' },
-                @{ Job = 'fmt'; Name = 'Format \(\.tmpl BOM check\)' },
-                @{ Job = 'op-guard'; Name = 'Render guard \(op unauthenticated\)' }
-            )) {
-            $job = [regex]::Match(
-                $workflow,
-                "(?ms)^  $($requiredJob.Job):\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)"
-            ).Value
-            $job | Should -Not -BeNullOrEmpty
-            $job | Should -Match "(?m)^    name: $($requiredJob.Name)$"
-        }
-
-        $fontInstallJob = [regex]::Match(
-            $workflow,
-            '(?ms)^  font-install:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)'
-        ).Value
-        $fontInstallJob | Should -Match '(?m)^    name: Font install smoke \(Windows\)$'
-        $lintJob | Should -Match '(?ms)^      - name: Upload test results\r?\n        uses: actions/upload-artifact@[0-9a-f]{40}.*?\r?\n        if: always\(\)\r?\n        with:\r?\n          name: chezmoi-test-results\r?\n          path: scripts/powershell/chezmoi-test-results\.xml$'
+        $workflow | Should -Not -Match 'tests\\chezmoi|Font install smoke|op-guard|chezmoi-test-results|onepasswordRead'
+        $workflow | Should -Match 'Get-ChildItem -Recurse -Filter'
     }
 
     It 'should use directory discovery when excluding Windows integration tests' {

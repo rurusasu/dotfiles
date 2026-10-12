@@ -1,6 +1,6 @@
 # Neovim 最新化調査
 
-調査日: 2026-09-06。対象は [issue #182](https://github.com/rurusasu/dotfiles/issues/182)、`chezmoi/dot_config/nvim` 全体、およびその package/deploy/test/documentation 経路。無関係なシェル・サービス全体の最新化は対象外です。
+調査日: 2026-09-06。対象は [issue #182](https://github.com/rurusasu/dotfiles/issues/182) と当時の Neovim package/deploy/test/documentation 経路。無関係なシェル・サービス全体の最新化は対象外です。
 
 ## バージョンを混同しない
 

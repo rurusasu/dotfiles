@@ -46,6 +46,15 @@
           }
         },
         {
+          "PackageIdentifier": "Microsoft.PowerShell",
+          "installArgs": ["--installer-type", "wix"],
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "pwsh"
+          }
+        },
+        {
           "PackageIdentifier": "wez.wezterm",
           "installTimeoutSeconds": 3600,
           "pathEntries": ["%ProgramFiles%\\WezTerm"],

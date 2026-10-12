@@ -1,4 +1,4 @@
-﻿#Requires -Module Pester
+#Requires -Module Pester
 
 <#
 .SYNOPSIS
@@ -102,7 +102,6 @@ Describe 'ChezmoiHandler' {
                 if ($Path -like "*chezmoi") { return $true }  # ソースディレクトリ
                 return $false
             }
-            Mock Get-ChildItemSafe { return @() }
 
             $result = $handler.CanApply($ctx)
 
@@ -112,7 +111,6 @@ Describe 'ChezmoiHandler' {
         It 'should return false and show install instructions when chezmoi is not found' {
             Mock Get-ExternalCommand { return $null }
             Mock Test-PathExist { return $false }
-            Mock Get-ChildItemSafe { return @() }
             $script:notFoundMessageShown = $false
             Mock Write-Host {
                 param($Object)
@@ -166,14 +164,6 @@ Describe 'ChezmoiHandler' {
             Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Write-Host { }
-            # op が見つからない想定（EnsureOnePasswordAvailable は警告のみ出して続行）
-            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
-            Mock Get-ChildItemSafe { return @() }
-            # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
-            Mock Find-WinGetExe { return $null }
-            # 管理者セッションとしてモック（DeployProfileToOtherUsers が実行されるケースを検証）
-            Mock Test-IsAdminSession { return $true }
-            # DeployProfileToOtherUsers でプロファイルが存在しないケース（早期リターン）
             Mock Test-Path { return $false }
         }
 
@@ -243,149 +233,6 @@ Describe 'ChezmoiHandler' {
         }
     }
 
-    Context 'Apply - non-interactive execution' {
-        BeforeEach {
-            Mock Get-ExternalCommand {
-                return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
-            }
-            Mock Test-PathExist { return $true }
-            Mock New-DirectorySafe { }
-            Mock Write-Host { }
-            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
-            Mock Get-ChildItemSafe { return @() }
-            # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
-            Mock Find-WinGetExe { return $null }
-            # 非管理者セッションでは DeployProfileToOtherUsers はスキップされる
-            Mock Test-IsAdminSession { return $false }
-        }
-
-        It 'should not call DeployProfileToOtherUsers when not running as admin' {
-            Mock Invoke-Chezmoi {
-                $global:LASTEXITCODE = 0
-                if ($Arguments -contains '--version') {
-                    return "chezmoi version 2.45.0"
-                }
-            }
-            $script:getChildItemDeployCallCount = 0
-            # DeployProfileToOtherUsers が呼ばれると $usersDir の Get-ChildItemSafe が実行される
-            # 非管理者では Test-IsAdminSession が false を返すのでここには到達しない
-            Mock Get-ChildItemSafe {
-                # USERPROFILE の親ディレクトリへのアクセスを検出
-                $script:getChildItemDeployCallCount++
-                return @()
-            }
-
-            $handler.CanApply($ctx) | Should -Be $true
-            $handler.Apply($ctx) | Out-Null
-
-            # 非管理者では DeployProfileToOtherUsers が呼ばれないため Get-ChildItemSafe も呼ばれない
-            $script:getChildItemDeployCallCount | Should -Be 0
-        }
-
-        It 'should invoke chezmoi init to regenerate config before apply' {
-            Mock Invoke-Chezmoi {
-                $global:LASTEXITCODE = 0
-                if ($Arguments -contains '--version') {
-                    return "chezmoi version 2.45.0"
-                }
-            }
-
-            $handler.CanApply($ctx) | Should -Be $true
-            $handler.Apply($ctx) | Out-Null
-
-            Should -Invoke Invoke-Chezmoi -ParameterFilter {
-                $Arguments -contains "init" -and
-                $Arguments -contains "--source"
-            } -Times 1
-        }
-
-        It 'should include --no-tty in apply command' {
-            Mock Invoke-Chezmoi {
-                $global:LASTEXITCODE = 0
-                if ($Arguments -contains '--version') {
-                    return "chezmoi version 2.45.0"
-                }
-            }
-
-            $handler.CanApply($ctx) | Should -Be $true
-            $handler.Apply($ctx) | Out-Null
-
-            Should -Invoke Invoke-Chezmoi -ParameterFilter {
-                $Arguments -contains "--persistent-state" -and
-                $Arguments -contains "--cache" -and
-                $Arguments -contains "--no-tty" -and
-                $Arguments -contains "apply" -and
-                $Arguments -contains "--source" -and
-                $Arguments -contains "D:\dotfiles\chezmoi"
-            } -Times 1
-        }
-
-        It 'should include -v in apply command to show progress' {
-            Mock Invoke-Chezmoi {
-                $global:LASTEXITCODE = 0
-                if ($Arguments -contains '--version') {
-                    return "chezmoi version 2.45.0"
-                }
-            }
-
-            $handler.CanApply($ctx) | Should -Be $true
-            $handler.Apply($ctx) | Out-Null
-
-            Should -Invoke Invoke-Chezmoi -ParameterFilter {
-                $Arguments -contains "-v" -and
-                $Arguments -contains "apply"
-            } -Times 1
-        }
-
-        It 'should include --force in apply command to skip conflict prompts' {
-            Mock Invoke-Chezmoi {
-                $global:LASTEXITCODE = 0
-                if ($Arguments -contains '--version') {
-                    return "chezmoi version 2.45.0"
-                }
-            }
-
-            $handler.CanApply($ctx) | Should -Be $true
-            $handler.Apply($ctx) | Out-Null
-
-            Should -Invoke Invoke-Chezmoi -ParameterFilter {
-                $Arguments -contains "--force" -and
-                $Arguments -contains "apply"
-            } -Times 1
-        }
-
-        It 'should use -MergeStderr to show script stderr output in console' {
-            Mock Invoke-Chezmoi {
-                $global:LASTEXITCODE = 0
-                if ($Arguments -contains '--version') {
-                    return "chezmoi version 2.45.0"
-                }
-            }
-
-            $handler.CanApply($ctx) | Should -Be $true
-            $handler.Apply($ctx) | Out-Null
-
-            Should -Invoke Invoke-Chezmoi -ParameterFilter {
-                $MergeStderr -eq $true -and
-                $Arguments -contains "apply"
-            } -Times 1
-        }
-
-        It 'should create runtime directories before apply' {
-            Mock Invoke-Chezmoi {
-                $global:LASTEXITCODE = 0
-                if ($Arguments -contains '--version') {
-                    return "chezmoi version 2.45.0"
-                }
-            }
-
-            $handler.CanApply($ctx) | Should -Be $true
-            $handler.Apply($ctx) | Out-Null
-
-            Should -Invoke New-DirectorySafe -Times 2
-        }
-    }
-
     Context 'Apply - failure cases' {
         BeforeEach {
             Mock Get-ExternalCommand {
@@ -394,12 +241,6 @@ Describe 'ChezmoiHandler' {
             Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Write-Host { }
-            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
-            Mock Get-ChildItemSafe { return @() }
-            # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
-            Mock Find-WinGetExe { return $null }
-            # 非管理者セッションでは DeployProfileToOtherUsers はスキップされる
-            Mock Test-IsAdminSession { return $false }
         }
 
         It 'should fail when chezmoi apply returns non-zero exit code' {
@@ -469,7 +310,6 @@ Describe 'ChezmoiHandler' {
         It 'should include winget command in install instructions' {
             Mock Get-ExternalCommand { return $null }
             Mock Test-PathExist { return $false }
-            Mock Get-ChildItemSafe { return @() }
             Mock Write-Host { }
 
             $handler.CanApply($ctx)
@@ -482,7 +322,6 @@ Describe 'ChezmoiHandler' {
         It 'should include GitHub direct fetch method in install instructions' {
             Mock Get-ExternalCommand { return $null }
             Mock Test-PathExist { return $false }
-            Mock Get-ChildItemSafe { return @() }
             Mock Write-Host { }
 
             $handler.CanApply($ctx)
@@ -495,7 +334,6 @@ Describe 'ChezmoiHandler' {
         It 'should include source path in install instructions' {
             Mock Get-ExternalCommand { return $null }
             Mock Test-PathExist { return $false }
-            Mock Get-ChildItemSafe { return @() }
             Mock Write-Host { }
 
             $handler.CanApply($ctx)
@@ -508,7 +346,6 @@ Describe 'ChezmoiHandler' {
         It 'should not use deprecated --source-path option in install instructions' {
             Mock Get-ExternalCommand { return $null }
             Mock Test-PathExist { return $false }
-            Mock Get-ChildItemSafe { return @() }
             Mock Write-Host { }
 
             $handler.CanApply($ctx)
@@ -551,7 +388,6 @@ Describe 'ChezmoiHandler' {
                 }
                 return $false
             }
-            Mock Get-ChildItemSafe { return @() }
             Mock Write-Host { }
 
             $handler.CanApply($ctx)
@@ -637,377 +473,6 @@ Describe 'ChezmoiHandler' {
         }
     }
 
-    Context 'EnsureOnePasswordAvailable' {
-        BeforeEach {
-            Mock Get-ExternalCommand {
-                return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
-            }
-            Mock Invoke-Chezmoi {
-                $global:LASTEXITCODE = 0
-                return "chezmoi version 2.45.0"
-            }
-            Mock Test-PathExist { return $true }
-            Mock New-DirectorySafe { }
-            Mock Invoke-Chezmoi {
-                $global:LASTEXITCODE = 0
-            }
-            # 非管理者セッションでは DeployProfileToOtherUsers はスキップされる
-            Mock Test-IsAdminSession { return $false }
-            # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
-            Mock Find-WinGetExe { return $null }
-            # DiagnoseOpAuthFailure で使用される op account list のデフォルトモック
-            Mock Invoke-OpAccountList {
-                return [PSCustomObject]@{ Output = '[]'; ExitCode = 0 }
-            }
-            # OpAccount のデフォルト値を検証用変数に保存
-            $script:expectedOpAccount = "my.1password.com"
-        }
-
-        It 'should log warning and continue when op is not found' {
-            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
-            Mock Get-ChildItemSafe { return @() }
-            # Find-WinGetExe が実ファイルシステムにアクセスしないようモック
-            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
-            $script:warningLogged = $false
-            Mock Write-Host {
-                param($Object)
-                if ($Object -match '1Password CLI.*見つかりません') { $script:warningLogged = $true }
-            }
-            $handler.CanApply($ctx)
-
-            $result = $handler.Apply($ctx)
-
-            $script:warningLogged | Should -Be $true
-            $result.Success | Should -Be $true
-        }
-
-        It 'should proceed silently when op whoami succeeds' {
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = '[{"id":"vault1"}]'; ExitCode = 0 }
-            }
-            Mock Read-Host { return '' }
-            $script:signedInLogged = $false
-            $script:instructionsShown = $false
-            Mock Write-Host {
-                param($Object)
-                if ($Object -match 'サインイン済み') { $script:signedInLogged = $true }
-                if ($Object -match '認証が必要') { $script:instructionsShown = $true }
-            }
-            $handler.CanApply($ctx)
-
-            $handler.Apply($ctx)
-
-            $script:signedInLogged | Should -Be $true
-            # サインイン済みなのでセットアップ案内は表示されない
-            $script:instructionsShown | Should -Be $false
-            Should -Invoke Read-Host -Times 0
-            # --account パラメータが正しく渡されていること
-            Should -Invoke Invoke-OpVaultList -ParameterFilter {
-                $Account -eq $script:expectedOpAccount
-            }
-            # chezmoi 内部の op signin 用に OP_ACCOUNT 環境変数が設定されていること
-            $env:OP_ACCOUNT | Should -Be $script:expectedOpAccount
-        }
-
-        It 'should warn and continue when op auth fails' {
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
-            Mock Invoke-OpSignIn { return [PSCustomObject]@{ Output = ''; ExitCode = 0 } }
-            Mock Read-Host { return '' }
-            $script:warningShown = $false
-            Mock Write-Host {
-                param($Object)
-                if ($Object -match 'secret は既定値で続行') { $script:warningShown = $true }
-            }
-            $handler.CanApply($ctx)
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $script:warningShown | Should -Be $true
-            Should -Invoke Invoke-OpSignIn -Times 0
-            Should -Invoke Read-Host -Times 0
-            Should -Invoke Invoke-OpVaultList -ParameterFilter {
-                $Account -eq $script:expectedOpAccount
-            }
-        }
-
-        It 'should not prompt even in an interactive session when op auth fails' {
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
-            Mock Invoke-OpSignIn { return [PSCustomObject]@{ Output = ''; ExitCode = 0 } }
-            Mock Read-Host { return '' }
-            Mock Test-InteractiveEnvironment { return $true }
-            $handler.CanApply($ctx)
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            Should -Invoke Invoke-OpSignIn -Times 0
-            Should -Invoke Read-Host -Times 0
-        }
-
-        It 'should continue after repeated auth failures would have exhausted retries before' {
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
-            Mock Invoke-OpSignIn { return [PSCustomObject]@{ Output = ''; ExitCode = 1 } }
-            Mock Read-Host { return '' }
-            Mock Test-InteractiveEnvironment { return $true }
-            $handler.CanApply($ctx)
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            Should -Invoke Invoke-OpSignIn -Times 0
-            Should -Invoke Read-Host -Times 0
-        }
-
-        It 'should log fallback warning in non-admin session without interactive signin text' {
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
-            Mock Test-IsAdminSession { return $false }
-            $script:fallbackShown = $false
-            $script:interactiveText = $false
-            Mock Write-Host {
-                param($Object)
-                if ($Object -match 'secret は既定値で続行') { $script:fallbackShown = $true }
-                if ($Object -match 'Enter を押してください|認証が必要') { $script:interactiveText = $true }
-            }
-            $handler.CanApply($ctx)
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $script:fallbackShown | Should -Be $true
-            $script:interactiveText | Should -Be $false
-        }
-
-        It 'should not require admin-specific op signin in admin session' {
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
-            Mock Invoke-OpSignIn { return [PSCustomObject]@{ Output = ''; ExitCode = 1 } }
-            Mock Read-Host { return '' }
-            Mock Test-IsAdminSession { return $true }
-            $script:adminMsg = $false
-            Mock Write-Host {
-                param($Object)
-                if ($Object -match '管理者昇格プロセス') { $script:adminMsg = $true }
-            }
-            $handler.CanApply($ctx)
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $script:adminMsg | Should -Be $false
-            Should -Invoke Invoke-OpSignIn -Times 0
-        }
-
-        It 'should continue without waiting for desktop app sign-in' {
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            $script:vaultListCount = 0
-            Mock Invoke-OpVaultList {
-                $script:vaultListCount++
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
-            Mock Invoke-OpSignIn { return [PSCustomObject]@{ Output = ''; ExitCode = 1 } }
-            Mock Read-Host { return '' }
-            Mock Invoke-Chezmoi { $global:LASTEXITCODE = 0 }
-
-            $handler.CanApply($ctx)
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $script:vaultListCount | Should -Be 1
-            Should -Invoke Read-Host -Times 0
-        }
-
-        It 'should continue in non-interactive environment when op is not authenticated' {
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
-            Mock Test-InteractiveEnvironment { return $false }
-            $handler.CanApply($ctx)
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-        }
-
-        It 'should warn and continue when 1Password CLI commands time out' {
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = 'timeout'; ExitCode = 124 }
-            }
-            Mock Invoke-OpAccountList {
-                return [PSCustomObject]@{ Output = 'timeout'; ExitCode = 124 }
-            }
-            Mock Test-InteractiveEnvironment { return $false }
-            $script:warningText = ''
-            Mock Write-Host {
-                param($Object)
-                $script:warningText += "`n$Object"
-            }
-            $handler.CanApply($ctx)
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $script:warningText | Should -Match '1Password CLI がタイムアウト'
-        }
-
-        It 'should warn with CLI integration hint when no accounts are registered and continue' {
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
-            Mock Invoke-OpAccountList {
-                return [PSCustomObject]@{ Output = '[]'; ExitCode = 0 }
-            }
-            Mock Test-InteractiveEnvironment { return $false }
-            $script:warningText = ''
-            Mock Write-Host {
-                param($Object)
-                $script:warningText += "`n$Object"
-            }
-            $handler.CanApply($ctx)
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $script:warningText | Should -Match 'アカウントが登録されていません'
-            $script:warningText | Should -Match 'Biometric unlock for 1Password CLI'
-            # DiagnoseOpAuthFailure 内でも --account が渡されていること
-            Should -Invoke Invoke-OpAccountList -ParameterFilter {
-                $Account -eq $script:expectedOpAccount
-            }
-        }
-
-        It 'should warn with generic auth error when accounts exist but are not authenticated and continue' {
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
-            Mock Invoke-OpAccountList {
-                return [PSCustomObject]@{ Output = '[{"url":"my.1password.com"}]'; ExitCode = 0 }
-            }
-            Mock Test-InteractiveEnvironment { return $false }
-            $script:warningText = ''
-            Mock Write-Host {
-                param($Object)
-                $script:warningText += "`n$Object"
-            }
-            $handler.CanApply($ctx)
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $script:warningText | Should -Match '1Password CLI が未認証です'
-            $script:warningText | Should -Match 'ロック解除'
-        }
-
-        It 'should warn with restart hint when desktop app connection fails and continue' {
-            Mock Get-ExternalCommand { return [PSCustomObject]@{ Source = 'C:\op.exe' } } -ParameterFilter { $Name -eq 'op' }
-            Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = ''; ExitCode = 1 }
-            }
-            Mock Invoke-OpAccountList {
-                return [PSCustomObject]@{ Output = 'cannot connect to 1Password app, make sure it is running'; ExitCode = 1 }
-            }
-            Mock Test-InteractiveEnvironment { return $false }
-            $script:warningText = ''
-            Mock Write-Host {
-                param($Object)
-                $script:warningText += "`n$Object"
-            }
-            $handler.CanApply($ctx)
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            $script:warningText | Should -Match '接続できません'
-            $script:warningText | Should -Match '再起動'
-        }
-    }
-
-    Context 'FindOpExe' {
-        BeforeEach {
-            Mock Invoke-Chezmoi {
-                $global:LASTEXITCODE = 0
-                return "chezmoi version 2.45.0"
-            }
-            Mock Get-ExternalCommand {
-                return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
-            }
-            Mock Test-PathExist { return $true }
-            Mock New-DirectorySafe { }
-            Mock Write-Host { }
-            Mock Invoke-OpVaultList {
-                return [PSCustomObject]@{ Output = '[{"id":"vault1"}]'; ExitCode = 0 }
-            }
-            # 非管理者セッションでは DeployProfileToOtherUsers はスキップされる
-            Mock Test-IsAdminSession { return $false }
-            # Find-WinGetExe が実ファイルシステムにアクセスしないようデフォルトモック
-            Mock Find-WinGetExe { return $null }
-        }
-
-        It 'should find op from PATH' {
-            Mock Get-ExternalCommand {
-                return [PSCustomObject]@{ Source = 'C:\tools\op.exe' }
-            } -ParameterFilter { $Name -eq 'op' }
-
-            $handler.CanApply($ctx)
-            $handler.Apply($ctx)
-
-            Should -Invoke Invoke-OpVaultList -ParameterFilter {
-                $OpExe -eq 'C:\tools\op.exe' -and $Account -eq 'my.1password.com'
-            } -Times 1
-        }
-
-        It 'should find op from WinGet Packages when not in PATH' {
-            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
-            # Find-WinGetExe が全ユーザーの WinGet Packages を検索するため、
-            # Get-ChildItem と Test-Path をモックして op.exe を返す
-            Mock Find-WinGetExe {
-                return 'C:\WinGet\Packages\AgileBits.1Password.CLI_2.32.1\op.exe'
-            } -ParameterFilter { $PackagePattern -like '*1Password*' }
-
-            $handler.CanApply($ctx)
-            $handler.Apply($ctx)
-
-            Should -Invoke Invoke-OpVaultList -ParameterFilter {
-                $OpExe -eq 'C:\WinGet\Packages\AgileBits.1Password.CLI_2.32.1\op.exe' -and $Account -eq 'my.1password.com'
-            } -Times 1
-        }
-
-        It 'should log warning when op is not found anywhere' {
-            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
-            Mock Find-WinGetExe { return $null } -ParameterFilter { $PackagePattern -like '*1Password*' }
-            $script:notFoundWarned = $false
-            Mock Write-Host {
-                param($Object)
-                if ($Object -match '1Password CLI.*見つかりません') { $script:notFoundWarned = $true }
-            }
-
-            $handler.CanApply($ctx)
-            $handler.Apply($ctx)
-
-            $script:notFoundWarned | Should -Be $true
-            Should -Invoke Invoke-OpVaultList -Times 0
-        }
-    }
-
     Context 'TestChezmoiExecutable - DLL check' {
         It 'should return false when chezmoi fails due to DLL error' {
             Mock Get-ExternalCommand {
@@ -1063,105 +528,5 @@ Describe 'ChezmoiHandler' {
         }
     }
 
-    Context 'DeployProfileToOtherUsers - admin session' {
-        BeforeEach {
-            Mock Get-ExternalCommand {
-                return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
-            }
-            Mock Test-PathExist { return $true }
-            Mock New-DirectorySafe { }
-            Mock Write-Host { }
-            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
-            Mock Get-ChildItemSafe { return @() }
-            Mock Find-WinGetExe { return $null }
-            Mock Invoke-Chezmoi {
-                $global:LASTEXITCODE = 0
-                return "chezmoi version 2.45.0"
-            }
-            Mock Test-IsAdminSession { return $true }
-        }
 
-        It 'should skip deploy when profile source does not exist' {
-            Mock Test-Path { return $false }
-            $script:copyItemCalled = $false
-            Mock Copy-Item { $script:copyItemCalled = $true }
-
-            $handler.CanApply($ctx)
-            $handler.Apply($ctx)
-
-            $script:copyItemCalled | Should -Be $false
-        }
-
-        It 'should deploy profile to other users when admin' {
-            Mock Test-Path { return $true }
-            Mock Get-ChildItemSafe {
-                return @([PSCustomObject]@{ Name = "OtherUser"; FullName = "C:\Users\OtherUser" })
-            }
-            $script:copyItemCalled = $false
-            Mock Copy-Item { $script:copyItemCalled = $true }
-
-            $handler.CanApply($ctx)
-            $handler.Apply($ctx)
-
-            $script:copyItemCalled | Should -Be $true
-        }
-
-        It 'should skip inaccessible user directories without failing' {
-            Mock Test-Path { return $true }
-            Mock Get-ChildItemSafe {
-                return @([PSCustomObject]@{ Name = "OtherUser"; FullName = "C:\Users\OtherUser" })
-            }
-            Mock Copy-Item { throw [System.UnauthorizedAccessException]"Access to the path is denied." }
-
-            $handler.CanApply($ctx)
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-        }
-    }
-
-    Context 'DeployProfileToOtherUsers - non-admin session' {
-        BeforeEach {
-            Mock Get-ExternalCommand {
-                return [PSCustomObject]@{ Source = "C:\chezmoi\chezmoi.exe" }
-            }
-            Mock Test-PathExist { return $true }
-            Mock New-DirectorySafe { }
-            Mock Write-Host { }
-            Mock Get-ExternalCommand { return $null } -ParameterFilter { $Name -eq 'op' }
-            Mock Get-ChildItemSafe { return @() }
-            Mock Find-WinGetExe { return $null }
-            Mock Invoke-Chezmoi {
-                $global:LASTEXITCODE = 0
-                return "chezmoi version 2.45.0"
-            }
-            Mock Test-IsAdminSession { return $false }
-        }
-
-        It 'should not call Copy-Item even when profile source exists' {
-            Mock Test-Path { return $true }
-            Mock Copy-Item { }
-
-            $handler.CanApply($ctx)
-            $handler.Apply($ctx)
-
-            Should -Invoke Copy-Item -Times 0
-        }
-    }
-
-    Context 'Test-IsAdminSession' {
-        It 'should return a bool value' {
-            $result = Test-IsAdminSession
-            $result | Should -BeOfType [bool]
-        }
-
-        It 'should return consistent result with .NET API' {
-            # .NET の WindowsPrincipal API と一致することを検証
-            $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-            $principal = [Security.Principal.WindowsPrincipal]$identity
-            $expected = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-            $result = Test-IsAdminSession
-            $result | Should -Be $expected
-        }
-    }
 }

@@ -31,5 +31,5 @@ tasks:
     desc: Apply Windows dotfiles
     platforms: [windows]
     cmds:
-      - cmd: pwsh -NoProfile -File scripts/powershell/Invoke-ChezmoiApplyWithOnePasswordPrefetch.ps1
+      - cmd: chezmoi apply --force
         platforms: [windows]

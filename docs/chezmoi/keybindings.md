@@ -1,6 +1,6 @@
 # キーバインド統一方針
 
-Nix で管理するデスクトップ配列と、`chezmoi` で管理する `shells` / `terminals` のキー設計方針。
+Nix で管理するデスクトップ配列と、chezmoi が管理する Windows WezTerm 設定のキー設計方針。
 
 ## 目的
 
@@ -27,18 +27,12 @@ Nix で管理するデスクトップ配列と、`chezmoi` で管理する `shel
 
 ### デスクトップ（Omarchy 配列）
 
-配置方針は `nix/home/keybindings/bindings.nix` に action とキーを一度だけ定義し、同じ home 配下で
-macOS の AeroSpace と native NixOS の Hyprland の設定を生成する。
-`nix/hosts/` は OS のサービス・セッション有効化と競合解除に限定する。
-責務・未対応の操作は [共通定義と OS 別実装](./omarchy.md) を参照。
-WSL guest に Hyprland は導入しない。Windows は標準デスクトップを使用し、Nix からデスクトップ設定を生成・配布しない。
+配置方針は `nix/home/keybindings/` に共通 action とキーを定義し、macOS の AeroSpace と native NixOS の Hyprland 設定を生成する。Windows の GlazeWM 設定生成と配布機能は削除しました。WSL guest に Hyprland は導入しません。責務・未対応の操作は [共通定義と OS 別実装](./omarchy.md) を参照してください。
 
 macOS は nix-darwin の AeroSpace サービスで管理し、Super=Command とする。
 ⌘F・⌘T・⌘S・⌘数字・⌘Tab などはデスクトップ操作がアプリ標準キーより優先する。
 配列、macOS での代替動作、初回権限設定と回復方法は
-[Omarchy macOS](./omarchy-macos.md) を参照。native NixOS は Super キーを使い、
-Hyprland セッションで動作する設定。
-これらはターミナル内の prefix 契約とは別の層であり、各 OS の実際のキー入力は未検証。
+[Omarchy macOS](./omarchy-macos.md) を参照。native NixOS は Super キーを使い、Hyprland セッションで動作します。これらはターミナル内の prefix 契約とは別の層です。
 
 ### Terminals
 
@@ -67,11 +61,10 @@ target ごとの capability は次のとおり。非対応 suffix は別のキ�
 
 - WezTerm は組み込み leader を使い、prefix timeout は1秒。
 - Terminal.app は共通 prefix の対象外とし、標準のキー操作を使用する。デスクトップ全体の Omarchy 配列は AeroSpace、ターミナル内の共通操作は WezTerm の組み込み leader が担当するため、Terminal.app 専用の常駐 adapter は導入しない。
-- Windows Terminal は共通 prefix の対象外とし、タブ・ペイン操作は標準のキー操作を使用する。常駐 adapter は導入しない。
 - Herdr は native prefix/key table を使う。
 - nested terminal では `Ctrl+Space Ctrl+Space` を押すと内側へ `Ctrl+Space` を1回だけ転送する。その後に共通 suffix を入力することで、内側の Herdr を操作できる。
 
-Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢印` pane resize、macOS の `Command+Alt+H/L` window focus、Windows/Linux の `Alt+Shift+H/L` window focus と `Alt+Shift+矢印` pane resize、`Ctrl+Alt+W` pane zoom が該当する。WezTerm の `Shift+Enter` と Windows Terminal の `Shift+Enter` / `Ctrl+Enter` も複数行入力用として維持する。
+Window Manager 契約外の WezTerm 操作として、pane resize、window focus、pane zoom を設定します。Windows の WezTerm は PowerShell を既定シェルにし、NixOS-WSL の起動は別の launcher profile から行います。
 
 - macOS の全アプリに `Ctrl+Command+M` を割り当て、標準メニューの `Zoom` または `拡大／縮小` を実行する。
 - 設定反映後は対象アプリを再起動する。対象メニューを持たないアプリや、一部のElectronアプリでは動作しない場合がある。
@@ -112,7 +105,6 @@ Window Manager 契約外の操作は維持する。WezTerm の `Ctrl+Command+矢
 ### AI CLI
 
 - Claude Code / Codex / terminal 内 AI prompt の複数行入力は `Shift+Enter` に統一する。
-- Windows Terminal では `Shift+Enter` を `CSI u` sequence として送る。`Ctrl+Enter` は fallback として同じ用途に割り当てる。
 - `Ctrl+J` は押下キーとして使わない。Codex では LF を送る terminal の受信互換としてのみ許可する。
 
 ### zoxide + fzf integration

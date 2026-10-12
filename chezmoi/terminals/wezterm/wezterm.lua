@@ -46,13 +46,12 @@ local function focus_adjacent_window(direction)
     end)
 end
 
--- Detect Windows for default shell
-local is_windows = wezterm.target_triple:find("windows") ~= nil
-local is_macos = wezterm.target_triple:find("darwin") ~= nil
-if is_windows then
-    config.default_prog = { "pwsh.exe", "-NoLogo" }
-    config.exit_behavior = "Close"
-end
+config.default_prog = { "pwsh.exe", "-NoLogo" }
+config.exit_behavior = "Close"
+config.wsl_domains = wezterm.default_wsl_domains()
+config.launch_menu = {
+    { label = "NixOS (WSL)", domain = "WSL:NixOS" },
+}
 
 -- Terminal type (enables undercurl, colored underlines, etc.)
 config.term = "wezterm"
@@ -91,21 +90,6 @@ config.leader = { key = "Space", mods = "CTRL", timeout_milliseconds = 1000 }
 config.set_environment_variables = {
     SNACKS_WEZTERM = "true",
 }
-
--- zsh resolves TERM=wezterm while it starts, before .zshenv can restore
--- Home Manager's terminfo path. Provide the Darwin path to child shells
--- directly from WezTerm so startup never begins without a definition.
-if is_macos then
-    local terminfo_user = os.getenv("USER")
-    if terminfo_user and terminfo_user ~= "" then
-        local inherited_terminfo_dirs = os.getenv("TERMINFO_DIRS")
-        local terminfo_dirs = "/etc/profiles/per-user/" .. terminfo_user .. "/share/terminfo:/usr/share/terminfo"
-        if inherited_terminfo_dirs and inherited_terminfo_dirs ~= "" then
-            terminfo_dirs = terminfo_dirs .. ":" .. inherited_terminfo_dirs
-        end
-        config.set_environment_variables.TERMINFO_DIRS = terminfo_dirs
-    end
-end
 
 -- Alt key sends escape sequence for fzf Alt+C support
 config.send_composed_key_when_left_alt_is_pressed = false
@@ -176,15 +160,6 @@ config.keys = {
     { key = "-", mods = "CTRL|SHIFT", action = act.DecreaseFontSize },
     { key = "0", mods = "CTRL|SHIFT", action = act.ResetFontSize },
 }
-
-if is_macos then
-    -- Bypass macOS IME processing so Backspace cannot be inserted as a space.
-    table.insert(config.keys, 1, {
-        key = "Backspace",
-        mods = "NONE",
-        action = act.SendString("\x7f"),
-    })
-end
 
 -- Remove inherited tab/pane window-manager shortcuts. The shared Leader table
 -- above is the only effective path for these actions; non-WM defaults remain.
@@ -273,27 +248,14 @@ end
 
 -- GUI window focus stays direct and does not conflict with Leader+h/l.
 -- Existing direct resize chords remain available on each platform.
-local direct_window_bindings
-if is_macos then
-    direct_window_bindings = {
-        { key = "h", mods = "SUPER|ALT", action = focus_adjacent_window("left") },
-        { key = "l", mods = "SUPER|ALT", action = focus_adjacent_window("right") },
-        -- iTerm2-style pane resize: hold Ctrl+Command and repeat Arrow
-        { key = "LeftArrow", mods = "SUPER|CTRL", action = act.AdjustPaneSize({ "Left", 1 }) },
-        { key = "UpArrow", mods = "SUPER|CTRL", action = act.AdjustPaneSize({ "Up", 1 }) },
-        { key = "RightArrow", mods = "SUPER|CTRL", action = act.AdjustPaneSize({ "Right", 1 }) },
-        { key = "DownArrow", mods = "SUPER|CTRL", action = act.AdjustPaneSize({ "Down", 1 }) },
-    }
-else
-    direct_window_bindings = {
-        { key = "h", mods = "ALT|SHIFT", action = focus_adjacent_window("left") },
-        { key = "l", mods = "ALT|SHIFT", action = focus_adjacent_window("right") },
-        { key = "LeftArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Left", 5 }) },
-        { key = "UpArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Up", 5 }) },
-        { key = "RightArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Right", 5 }) },
-        { key = "DownArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Down", 5 }) },
-    }
-end
+local direct_window_bindings = {
+    { key = "h", mods = "ALT|SHIFT", action = focus_adjacent_window("left") },
+    { key = "l", mods = "ALT|SHIFT", action = focus_adjacent_window("right") },
+    { key = "LeftArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Left", 5 }) },
+    { key = "UpArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Up", 5 }) },
+    { key = "RightArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Right", 5 }) },
+    { key = "DownArrow", mods = "ALT|SHIFT", action = act.AdjustPaneSize({ "Down", 5 }) },
+}
 
 for _, binding in ipairs(direct_window_bindings) do
     table.insert(config.keys, binding)

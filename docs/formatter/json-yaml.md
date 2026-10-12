@@ -91,7 +91,6 @@ command = "oxfmt"
 options = ["--write"]
 includes = ["*.json", "*.yaml", "*.yml"]
 excludes = [
-  "chezmoi/terminals/windows-terminal/settings.json",
 ]
 ```
 

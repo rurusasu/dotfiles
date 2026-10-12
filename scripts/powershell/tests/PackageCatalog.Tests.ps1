@@ -10,11 +10,19 @@ Describe 'Windows GUI-only package catalog' {
     It 'should install exactly the selected GUI apps and no CLI or desktop automation packages' {
         $expected = @(
             'AgileBits.1Password', 'Discord.Discord', 'Google.Chrome',
-            'Microsoft.PowerToys', 'Microsoft.WindowsTerminal', 'Obsidian.Obsidian',
+            'Microsoft.PowerToys', 'Microsoft.PowerShell', 'Microsoft.WindowsTerminal', 'Obsidian.Obsidian',
             'StablyAI.Orca', 'TheBrowserCompany.Arc', 'wez.wezterm', '9PLM9XGG6VKS'
         )
         (@($script:packages.PackageIdentifier | Sort-Object) -join '|') |
             Should -Be (($expected | Sort-Object) -join '|')
+    }
+
+    It 'should include unpinned stable PowerShell with the pwsh verifier' {
+        @($script:packages | Where-Object PackageIdentifier -EQ 'Microsoft.PowerShell').Count | Should -Be 1
+        $powershell = $script:packages | Where-Object PackageIdentifier -EQ 'Microsoft.PowerShell'
+        $powershell.verifyCommand.command | Should -Be 'pwsh'
+        @($powershell.verifyCommand.args) | Should -Be @('--version')
+        $powershell.PSObject.Properties.Name | Should -Not -Contain 'Version'
     }
 
     It 'should generate empty npm and pnpm manifests' {
