@@ -30,6 +30,16 @@ BeforeAll {
         Copy-Item "$script:repoRoot/scripts/powershell/lib/*.ps1" "$adapter/lib"
         Copy-Item "$script:repoRoot/scripts/powershell/handlers/Handler.NixOSWSL.ps1" "$adapter/handlers"
         Copy-Item "$script:repoRoot/scripts/powershell/handlers/Handler.WslInstall.ps1" "$adapter/handlers"
+        Set-Content "$adapter/handlers/Handler.Chezmoi.ps1" -Value @'
+class ChezmoiHandler : SetupHandlerBase {
+    ChezmoiHandler() { $this.Name = 'Chezmoi' }
+    [bool] CanApply([SetupContext]$ctx) { return $true }
+    [SetupResult] Apply([SetupContext]$ctx) {
+        Add-Content (Join-Path $ctx.DotfilesPath 'events.txt') 'chezmoi'
+        return $this.CreateSuccessResult('WezTerm fixture applied')
+    }
+}
+'@
         Copy-Item "$script:repoRoot/taskfiles/install/taskfile.yml" "$root/taskfiles/install"
         Set-Content "$root/Taskfile.yml" -Value @'
 version: '3'
@@ -37,6 +47,13 @@ includes:
   install:
     taskfile: ./taskfiles/install/taskfile.yml
     flatten: true
+tasks:
+  nrs:
+    cmds:
+      - pwsh -NoProfile -File nrs.ps1
+'@
+        Set-Content "$root/nrs.ps1" -Value @'
+Add-Content (Join-Path $env:FIXTURE_ROOT 'events.txt') 'nrs'
 '@
         Set-Content "$adapter/handlers/Handler.Winget.ps1" -Value @'
 class WingetHandler : SetupHandlerBase {
@@ -131,7 +148,7 @@ Describe 'Windows installer WSL integration' -Skip:($env:OS -ne 'Windows_NT') {
     It 'should apply existing NixOS once after GUI setup without reinstalling' {
         $result = Invoke-WslInstallerFixture
         $result.ExitCode | Should -Be 0 -Because $result.Output
-        ($result.Events -join ',') | Should -Be 'gui,setup'
+        ($result.Events -join ',') | Should -Be 'gui,setup,nrs,chezmoi'
         $result.Context.Options.PSObject.Properties.Name | Should -Not -Contain 'StateVersion'
         $result.Output | Should -Match 'Setup Complete!'
     }
@@ -139,7 +156,7 @@ Describe 'Windows installer WSL integration' -Skip:($env:OS -ne 'Windows_NT') {
     It 'should install a missing distro and apply its configuration only once' {
         $result = Invoke-WslInstallerFixture -Existing $false
         $result.ExitCode | Should -Be 0 -Because $result.Output
-        ($result.Events -join ',') | Should -Be 'gui,install,setup'
+        ($result.Events -join ',') | Should -Be 'gui,install,setup,nrs,chezmoi'
     }
 
     It 'should forward synchronization and explicit state version options' {
@@ -171,7 +188,7 @@ Describe 'Windows installer WSL integration' -Skip:($env:OS -ne 'Windows_NT') {
         $result.Context.DistroName | Should -Be 'WorkNix'
         $result.Context.InstallDir | Should -Be $customLocation
         $result.Context.Options.ReleaseTag | Should -Be 'fixture'
-        ($result.Events -join ',') | Should -Be 'gui,install,setup'
+        ($result.Events -join ',') | Should -Be 'gui,install,setup,nrs,chezmoi'
     }
 
     It 'should propagate configuration failure without reporting completion' {
@@ -216,7 +233,7 @@ Describe 'Windows installer WSL integration' -Skip:($env:OS -ne 'Windows_NT') {
     It 'should apply an existing distro with explicit options through Windows PowerShell 5.1' {
         $result = Invoke-WslInstallerFixture -WindowsPowerShell -Arguments '-SyncMode none -SyncBack none -StateVersion 25.05'
         $result.ExitCode | Should -Be 0 -Because $result.Output
-        ($result.Events -join ',') | Should -Be 'gui,setup'
+        ($result.Events -join ',') | Should -Be 'gui,setup,nrs,chezmoi'
         $result.Context.Options.StateVersion | Should -Be '25.05'
         $result.Context.Options.SyncMode | Should -Be 'none'
         $result.Output | Should -Match 'Using Windows PowerShell'
@@ -225,7 +242,7 @@ Describe 'Windows installer WSL integration' -Skip:($env:OS -ne 'Windows_NT') {
     It 'should install a missing distro only once through Windows PowerShell 5.1' {
         $result = Invoke-WslInstallerFixture -WindowsPowerShell -Existing $false
         $result.ExitCode | Should -Be 0 -Because $result.Output
-        ($result.Events -join ',') | Should -Be 'gui,install,setup'
+        ($result.Events -join ',') | Should -Be 'gui,install,setup,nrs,chezmoi'
     }
 
     It 'should propagate setup failure through Windows PowerShell 5.1' {

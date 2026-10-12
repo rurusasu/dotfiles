@@ -3,7 +3,7 @@
     Windows platform adapter for the installer phases ordered by Taskfile.
 #>
 [CmdletBinding()]
-param([Parameter(Mandatory)][ValidateSet('Gui', 'Wsl', 'WslBase')][string]$Phase)
+param([Parameter(Mandatory)][ValidateSet('Gui', 'Wsl', 'WslBase', 'Chezmoi')][string]$Phase)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -32,6 +32,20 @@ if ($configuration) {
     if ($configuration.InstallDir) { $context.InstallDir = $configuration.InstallDir }
 }
 
+if ($Phase -eq 'Chezmoi') {
+    . (Join-Path $PSScriptRoot 'handlers/Handler.Chezmoi.ps1')
+    $handler = [ChezmoiHandler]::new()
+    if ($handler.CanApply($context)) {
+        $result = $handler.Apply($context)
+    }
+    else {
+        $result = $handler.CreateFailureResult('chezmoi is unavailable or its Windows WezTerm source is missing')
+    }
+    Show-SetupSummary -Results @($result)
+    if (-not $result.Success) { throw $result.Message }
+    return
+}
+
 . (Join-Path $PSScriptRoot 'handlers/Handler.WslInstall.ps1')
 $foundation = [WslInstallHandler]::new()
 if ($Phase -eq 'WslBase') {
@@ -48,6 +62,7 @@ if ($foundation.CanApply($context)) {
             Set-Content -LiteralPath $configuration.ResultPath -Value 'RestartRequired' -Encoding Ascii
         }
         Write-Host 'WSL foundation enabled. Restart Windows and run install.cmd again.' -ForegroundColor Yellow
+        $global:LASTEXITCODE = 0
         return
     }
     throw "WSL foundation setup failed or was cancelled (exit=$exitCode)."

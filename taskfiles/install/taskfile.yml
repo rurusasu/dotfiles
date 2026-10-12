@@ -2,13 +2,20 @@ version: "3"
 
 tasks:
   install:windows:
-    desc: Install Windows GUI apps and configure NixOS-WSL
+    desc: Install Windows apps, configure NixOS-WSL, and apply dotfiles
     platforms: [windows]
     vars:
       INSTALL_POWERSHELL: '{{.DOTFILES_INSTALL_POWERSHELL | default "pwsh"}}'
     cmds:
       - '"{{.INSTALL_POWERSHELL}}" -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/Invoke-WindowsInstallPhase.ps1 -Phase Gui'
       - '"{{.INSTALL_POWERSHELL}}" -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/Invoke-WindowsInstallPhase.ps1 -Phase Wsl'
+
+  install:windows:post:
+    desc: Rebuild NixOS and apply Windows dotfiles after initial setup
+    platforms: [windows]
+    cmds:
+      - task: nrs
+      - task: chezmoi
 
   tart:prepare:
     desc: Download and clone the optional macOS Tart VM image
@@ -30,6 +37,7 @@ tasks:
   chezmoi:
     desc: Apply Windows dotfiles
     platforms: [windows]
+    vars:
+      INSTALL_POWERSHELL: '{{.DOTFILES_INSTALL_POWERSHELL | default "pwsh"}}'
     cmds:
-      - cmd: chezmoi apply --force
-        platforms: [windows]
+      - '"{{.INSTALL_POWERSHELL}}" -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/Invoke-WindowsInstallPhase.ps1 -Phase Chezmoi'
