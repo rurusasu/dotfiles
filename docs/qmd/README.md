@@ -631,9 +631,9 @@ export QMD_RERANK_MODEL="hf:giladgd/Qwen3-Reranker-4B-GGUF:Q8_0"
 
 ### 関連ファイル
 
-| ファイル                        | 役割                              |
-| ------------------------------- | --------------------------------- |
-| `nix/packages/install/node.nix` | Node 配布 metadata (`pnpmGlobal`) |
-| `nix/packages/sets.nix`         | consumer 向けの公開入口           |
-| `nix/home/common.nix`           | 環境変数設定 (Unix)               |
-| PowerShell profile              | chezmoi source では管理しません   |
+| ファイル                        | 役割                                           |
+| ------------------------------- | ---------------------------------------------- |
+| `nix/packages/install/node.nix` | Node 配布 metadata (`pnpmGlobal`)              |
+| `nix/packages/sets.nix`         | consumer 向けの公開入口                        |
+| `nix/home/common.nix`           | 環境変数設定 (Unix)                            |
+| PowerShell profile              | Windows は chezmoi（QMD 固有設定は含みません） |
