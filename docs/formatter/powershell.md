@@ -35,7 +35,6 @@
 システムの ANSI コードページで読み、日本語の閉じ引用符まで誤読する場合があります。
 `chcp 65001` や `$OutputEncoding` では、このファイル読み込みの問題は解消しません。
 
-[`.treefmt.toml`](../../.treefmt.toml) と
 [`nix/formatter.nix`](../../nix/formatter.nix) は本文が変わらない場合も
 必要な BOM を補い、既存 BOM を維持します。ASCII のみのファイルには必須ではありません。
 `chezmoi/` テンプレートには BOM を追加しません。
@@ -105,19 +104,6 @@ nix-env -iA nixpkgs.powershell
 nix run nixpkgs#powershell -- -c "Write-Host 'Hello'"
 ```
 
-### standalone treefmt の事前準備
-
-`.treefmt.toml` を直接使う `treefmt` には、PowerShell の module search path に
-PSScriptAnalyzer の最新安定版を事前に用意してください。未導入の環境では
-import error で失敗し、自動 download は行いません。次は明示的な setup 操作であり、
-formatter の実行には含まれません。
-
-```powershell
-# PowerShell Gallery からインストール
-Install-Module -Name PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force
-Import-Module PSScriptAnalyzer -Force
-```
-
 ## 使用方法
 
 ```powershell
@@ -135,7 +121,7 @@ Invoke-ScriptAnalyzer -Path "." -Recurse -Settings "PSScriptAnalyzerSettings.psd
 
 ## treefmt 設定
 
-`.treefmt.toml` と `nix/formatter.nix` の PowerShell 定義を同時に更新します。
+`nix/formatter.nix` の PowerShell 定義を更新します。
 PSScriptAnalyzer にバージョン制約は設けず、対象は `.ps1`、`.psm1`、`.psd1` です。
 formatter は UTF-8 として読み、CRLF に正規化してから、対象パス・非 ASCII 文字・
 既存 BOM をもとに出力形式を決めます。本文の差分だけでなく BOM 不足も書き込み条件です。

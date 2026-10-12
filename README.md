@@ -253,7 +253,7 @@ chezmoi init rurusasu/dotfiles --source-path chezmoi && chezmoi apply
 nix fmt
 ```
 
-Markdown の自動整形は現在無効です。
+Markdown も dprint で自動整形します。設定とプラグインは Nix で管理します。
 
 pre-commit を使う場合:
 
@@ -267,10 +267,8 @@ PowerShell (.ps1) の整形は PSScriptAnalyzer の `Invoke-Formatter` を使用
 pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser"
 ```
 
-TOML/Lua はそれぞれ設定ファイルで整形幅などを調整しています:
-
-- `.taplo.toml`
-- `stylua.toml`
+TOML・Lua・JSON/YAML・Markdown の整形設定は [nix/formatter.nix](nix/formatter.nix) に宣言します。
+設定ファイルは Nix store に生成され、`nix fmt` と `nix develop` 内の `treefmt` が直接参照します。
 
 ## WSL 設定 (.wslconfig)
 

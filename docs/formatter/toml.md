@@ -4,7 +4,7 @@
 
 ## 設定ファイル
 
-[.taplo.toml](../../.taplo.toml)
+[nix/formatter.nix](../../nix/formatter.nix) に設定値を宣言します。以下は生成される設定の内容です。
 
 ```toml
 [formatting]
@@ -81,6 +81,10 @@ winget install tamasfe.taplo
 
 ## 使用方法
 
+このリポジトリの設定を使う場合は `nix fmt -- path/to/file.toml` を実行します。
+`nix develop` 内の `treefmt` も同じ設定を使います。
+以下の単体実行とエディターの直接呼び出しには、生成された設定を明示的に渡す必要があります。
+
 ```bash
 # 単体実行
 taplo format "**/*.toml"
@@ -95,15 +99,6 @@ taplo check "**/*.toml"
 taplo lint "**/*.toml"
 ```
 
-## .treefmt.toml 設定
-
-```toml
-[formatter.taplo]
-command = "taplo"
-options = ["format"]
-includes = ["*.toml"]
-```
-
 ## treefmt-nix 設定
 
 [nix/formatter.nix](../../nix/formatter.nix) で設定:
@@ -111,7 +106,13 @@ includes = ["*.toml"]
 ```nix
 {
   treefmt = {
-    programs.taplo.enable = true;
+    programs.taplo = {
+      enable = true;
+      settings.formatting = {
+        column_width = 100;
+        reorder_keys = false;
+      };
+    };
   };
 }
 ```
