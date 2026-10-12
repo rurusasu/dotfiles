@@ -4,13 +4,14 @@ if ($weztermCommand) {
     $completionMarker = '$completions = @(switch ($command) {'
     $domainCompletion = @'
 if ($command -in @('wezterm;start', 'wezterm;cli;spawn') -and $commandElements.Count -gt 2) {
-    $domainOptionIndex = $commandElements.Count - 1
-    if ($commandElements[$domainOptionIndex].Value -eq $wordToComplete) {
-        $domainOptionIndex--
-    }
+    $previousElement = $commandElements |
+        Where-Object { $_.Extent.EndOffset -lt $cursorPosition } |
+        Select-Object -Last 1
     $expectedDomainOption = if ($command -eq 'wezterm;start') { '--domain' } else { '--domain-name' }
-    if ($domainOptionIndex -gt 1 -and $commandElements[$domainOptionIndex].Value -eq $expectedDomainOption) {
-        [CompletionResult]::new('WSL:NixOS', 'WSL:NixOS', [CompletionResultType]::ParameterValue, 'NixOS WSL domain')
+    if ($previousElement -is [StringConstantExpressionAst] -and $previousElement.Value -eq $expectedDomainOption) {
+        if ('WSL:NixOS' -like "$wordToComplete*") {
+            [CompletionResult]::new('WSL:NixOS', 'WSL:NixOS', [CompletionResultType]::ParameterValue, 'NixOS WSL domain')
+        }
         return
     }
 }
