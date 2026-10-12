@@ -34,6 +34,8 @@ Windows の全テストには、installer が導入する `winget`、`pwsh`、`c
 `wezterm` が必要です。CI の Windows installer matrix は PowerShell 5.1 / 7 の
 それぞれで実際の `install.cmd -UserPhaseOnly` を適用した後に全スイートを実行します。
 PowerShell 7 では同じ job で PSScriptAnalyzer も実行します。
+installer E2E は追加されたコマンドパスを `GITHUB_PATH` に渡し、
+テスト用の User PATH を復元した後も後続 step で実行ファイルを検出できるようにします。
 workflow の構造やテストの配置先を Pester の文字列 assertion で固定しません。
 
 `Integration.Tests.ps1` は次を実コマンドで検証します。
