@@ -473,17 +473,12 @@ PSScriptAnalyzer は以下のような問題を検出します:
 
 ### コードフォーマット
 
-コードフォーマットは [.treefmt.toml](../../../.treefmt.toml) で管理されています:
+コードフォーマットは [nix/formatter.nix](../../../nix/formatter.nix) で管理されています。
+PowerShell と PSScriptAnalyzer は Nix の依存として宣言し、formatter は Nix store の module manifest を直接読み込みます。
 
-```toml
-[formatter.powershell]
-command = "pwsh"
-options = [
-  "-NoProfile",
-  "-Command",
-  "& { $ErrorActionPreference = 'Stop'; if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber | Out-Null }; Import-Module PSScriptAnalyzer -Force; $content = Get-Content -Raw -LiteralPath $env:FILENAME; $formatted = Invoke-Formatter -ScriptDefinition $content; Set-Content -LiteralPath $env:FILENAME -Value $formatted -Encoding utf8 }"
-]
-includes = ["*.ps1"]
+```bash
+nix fmt
+nix fmt -- --fail-on-change
 ```
 
 **注意**:

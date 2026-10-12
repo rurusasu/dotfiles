@@ -4,7 +4,7 @@
 
 ## 設定ファイル
 
-[.oxfmtrc.json](../../.oxfmtrc.json)
+[nix/formatter.nix](../../nix/formatter.nix) に設定値を宣言します。以下は生成される設定の内容です。
 
 ```json
 {
@@ -72,6 +72,10 @@ cargo install oxfmt
 
 ## 使用方法
 
+このリポジトリの設定を使う場合は `nix fmt -- path/to/file.json` を実行します。
+`nix develop` 内の `treefmt` も同じ設定を使います。
+以下の単体実行とエディターの直接呼び出しには、生成された設定を明示的に渡す必要があります。
+
 ```bash
 # 単体実行（書き込み）
 oxfmt --write "**/*.json"
@@ -81,17 +85,6 @@ oxfmt "**/*.json"
 
 # treefmt 経由
 treefmt
-```
-
-## .treefmt.toml 設定
-
-```toml
-[formatter.oxfmt]
-command = "oxfmt"
-options = ["--write"]
-includes = ["*.json", "*.yaml", "*.yml"]
-excludes = [
-]
 ```
 
 ## treefmt-nix 設定
