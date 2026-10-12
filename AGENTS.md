@@ -8,13 +8,14 @@
 
 ## 変更先の原則
 
-- パッケージと OS 別 provider metadata の SSOT: `nix/packages/catalog/`（カテゴリごとに一度だけ定義）
-- provider 選択・検証: `nix/packages/providers/`、installer metadata: `nix/packages/install/`
-- `nix/packages/sets.nix` は既存 export を維持する合成入口。データ・選択・配布・host 動作の変更理由を分離する。詳細は [パッケージ管理](docs/nix/package-management.md#分割の理由と編集先)。
-- Home Manager パッケージの選択・OS 固有設定: `nix/hosts/<system>/<environment>/home.nix`。`nix/home/common.nix` は OS 非依存の共有設定を担当する。
+- Unix のパッケージ導入とアプリ設定: `nix/modules/`。Unix CLI の PATH への導入はすべて `tools.nix`、Linux / WSLg GUI は `desktop.nix`、Darwin system GUI は `desktop-system.nix`、個別アプリの設定・連携は各 module にまとめる。
+- CLI の `programs.*.enable` と `home.packages` は `nix/modules/tools.nix` に宣言し、各 module は設定・連携・package override を担当する。GUI、OS service、フォント、ビルド用依存はそれぞれの所有先に置く。
+- Python のユーザー環境は uv で管理し、interpreter を直接 `home.packages` に追加しない。公開コマンドは uv 経由で実行する。Nix 内部専用の Python 依存は各 module が管理する。
+- ホストは必要な module を import して構成を選択する。Windows のインストール情報は Nix module と分離する。詳細は [パッケージ管理](docs/nix/package-management.md#分割の理由と編集先)。
+- Home Manager module の選択・OS 固有設定: `nix/hosts/<system>/<environment>/home.nix`。`nix/home/common.nix` は OS 非依存の共有設定を担当する。
 - デスクトップの共通キー配列・ユーザー設定: `nix/home/keybindings/`。OS の service/有効化・競合解除は `nix/hosts/<system>/<environment>/` が担当する。純粋な設定生成関数と Home Manager module を区別する（[責務と対応範囲・移行状況](docs/chezmoi/omarchy.md)）。
-- Windows manifest: `windows/{winget,npm,pnpm}/packages.json`（`winget-export` の生成物）
-- ユーザー設定: 原則 `chezmoi/` 以下。Nix 管理のデスクトップキー設定は `nix/home/keybindings/` に置き、同じ設定を二重配布しない。
+- Windows manifest: `windows/{winget,npm,pnpm}/packages.json`（直接管理する独立した正本。通常導入は WinGet の GUI のみ）
+- ユーザー設定: Unix は `nix/modules/` と `nix/home/`、Windows は `chezmoi/` 以下。Nix 管理のデスクトップキー設定は `nix/home/keybindings/` に置き、同じ設定を二重配布しない。
 - Windows 実行ロジック: `scripts/powershell/`
 - CLI の実行順序・依存関係・公開コマンドは `Taskfile.yml` と `taskfiles/` に実装する。
 - Bash/PowerShell は Taskfile から呼ばれる platform adapter、secret 処理、複雑な検証に限定し、CLI の処理順序を重複定義しない。
@@ -23,7 +24,7 @@
 
 - Nix expression、Home Manager option、flake output、Nix package 選択の値テストは `nix/tests/unit/` に nix-unit 形式で記載する。ビルド・実行テストの derivation は `nix/tests/build/`、共有入力は `nix/tests/fixtures/` に置く。
 - `nix/tests/default.nix` が単体テストとビルドテストを登録する。nix-unit も flake の `checks` 経由で実行する。`nix flake check --no-build` は評価確認であり、テスト実行の代わりにはならない。詳細は [Nix テスト](nix/tests/README.md)。
-- Bats は shell、installer、外部コマンド、runtime/integration 契約に限定する。Nix option を `nix eval` するだけの Bats テストは追加しない。`tests/bash/package_catalog.bats` の値・source-shape assertion は nix-unit へ移管済みで、残る契約は `nix/tests/README.md` の分類に従って維持する。WSL の初回同期は PowerShell ハンドラー、NixOS rebuild は直接コマンドを境界として検証する。
+- Bats は shell、installer、外部コマンド、runtime/integration 契約に限定する。Nix option を `nix eval` するだけの Bats テストは追加しない。Windows manifest は CI で JSON を直接検証する。テストの分類は `nix/tests/README.md` に従う。WSL の初回同期は PowerShell ハンドラー、NixOS rebuild は直接コマンドを境界として検証する。
 
 ## フォーマット・テスト・実行時間の境界
 

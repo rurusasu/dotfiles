@@ -1,16 +1,10 @@
 { inputs }:
 let
-  system = "aarch64-darwin";
-  pkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
-  sets = import ../../packages/sets.nix {
-    inherit pkgs;
-    inherit (pkgs) lib;
-    codexPackage = pkgs.hello;
-  };
+  darwin = (import ../fixtures/packages.nix { inherit inputs; }).darwin.config;
 in
 {
   testHermesDesktopIsNotInstalledThroughHomebrewCask = {
-    expr = builtins.elem "hermes-desktop" sets.darwinCasks;
+    expr = builtins.any (cask: cask.name == "hermes-desktop") darwin.homebrew.casks;
     expected = false;
   };
 }

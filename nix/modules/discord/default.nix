@@ -9,8 +9,8 @@ let
   modulesPath = "share/discord/modules";
 in
 {
+  imports = [ (import ../tools.nix).discord ];
   programs.discord = {
-    enable = true;
     settings.SKIP_HOST_UPDATE = true;
     package = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin (
       pkgs.discord.overrideAttrs (old: {

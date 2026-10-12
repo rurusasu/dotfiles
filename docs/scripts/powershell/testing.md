@@ -75,7 +75,7 @@ WSL2 の実適用は `ci-nix.yml` の WSL E2E で `nixos-rebuild switch` を通�
 
 共通 handler の `PACKAGE_PHASE` は install、path、verify の開始・完了と経過ミリ秒を記録します。install は WinGet の終了コードを decimal / hexadecimal で、verify は実コマンドの終了コードを記録します。install の時間にはパッケージ取得と native installer の両方が含まれます。詳細な取得・hash・native installer 境界は `windows-installer-*` artifact の WinGet diagnostic logs で確認します。開始ログだけ残っている場合、完了を確認できたとは扱いません。
 
-Windows の catalog は PR #633 の変更により stable の `wez.wezterm` を使用し、CI 除外も削除済みです。nightly へ戻したり `--ignore-security-hash` を追加したりしません。Issue #637 の過去ログは DeliveryOptimization の取得開始までしか記録していないため、その実行の原因を timeout や hash mismatch と断定できません。artifact は失敗時にも保存され、対象 SHA、runtime、installer transcript、WinGet diagnostic logs を含みます。
+Windows の `windows/winget/packages.json` は PR #633 の変更により stable の `wez.wezterm` を使用し、CI 除外も削除済みです。nightly へ戻したり `--ignore-security-hash` を追加したりしません。Issue #637 の過去ログは DeliveryOptimization の取得開始までしか記録していないため、その実行の原因を timeout や hash mismatch と断定できません。artifact は失敗時にも保存され、対象 SHA、runtime、installer transcript、WinGet diagnostic logs を含みます。
 
 ## Windows environment acceptance
 
@@ -473,7 +473,7 @@ PSScriptAnalyzer は以下のような問題を検出します:
 
 ### コードフォーマット
 
-コードフォーマットは [treefmt.toml](../../../treefmt.toml) で管理されています:
+コードフォーマットは [.treefmt.toml](../../../.treefmt.toml) で管理されています:
 
 ```toml
 [formatter.powershell]

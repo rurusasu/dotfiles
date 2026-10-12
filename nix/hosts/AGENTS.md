@@ -23,8 +23,7 @@ nix/hosts/
 ├── aarch64-darwin/        # default.nix / configuration.nix / home.nix / system.nix
 ├── x86_64-linux/         # home.nix / nixos/default.nix / wsl/
 ├── aarch64-linux/        # home.nix / nixos/default.nix
-├── shared/              # linux-home.nix / nixos/
-└── windows/             # Windows 設定生成・起動処理
+└── shared/              # linux-home.nix / nixos/
 ```
 
 Darwin も例外にせず、`nix/hosts/aarch64-darwin/default.nix` を flake の entrypoint とし、実体は
@@ -38,10 +37,10 @@ Darwin の `default.nix` は配線専用とし、必要な module を import す
 読み込む。ユーザーと UID/GID は `shared/nixos/identity.nix` が既存アカウントから取得する。複数の実機で同じ host profile を使う場合も、hardware configuration は各マシン固有にする。
 NixOS-WSL では通常不要で、Darwin では使用しない。
 
-`windows/` は NixOS/nix-darwin の system host ではなく、Windows デスクトップの設定出力と起動処理を持つ。`omarchy-keybindings.nix` を通常の Nix `import` で呼び、生成物を chezmoi 経由で配布する。上記の `default.nix` / `configuration.nix` 構成は適用しない。
+Windows の導入は `windows/winget/packages.json`、ユーザー設定は `chezmoi/` が所有する。Nix から Windows デスクトップ設定を生成しない。
 
 ## ルール
 
 - OS 非依存で再利用するアプリ・機能設定は `nix/modules/`、OS 固有の共通設定は `nix/hosts/shared/` に置く。
-- キー配置の共通 action/key とユーザー設定は `nix/home/keybindings/` に置く。host の `omarchy-keybindings.nix` は OS の service/有効化・競合解除を担当する。Darwin と Windows は純粋な設定生成関数を通常の import で呼び、native NixOS は Home Manager module を選択して読み込む。
+- キー配置の共通 action/key とユーザー設定は `nix/home/keybindings/` に置く。host の `omarchy-keybindings.nix` は OS の service/有効化・競合解除を担当する。Darwin は純粋な設定生成関数を通常の import で呼び、native NixOS は Home Manager module を選択して読み込む。
 - データと host 動作を分けて OS 間の重複を防ぐ。責務と WSL 境界は [Omarchy 配列](../../docs/chezmoi/omarchy.md) を参照する。

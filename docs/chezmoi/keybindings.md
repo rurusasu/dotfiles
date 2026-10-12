@@ -28,17 +28,16 @@ Nix で管理するデスクトップ配列と、`chezmoi` で管理する `shel
 ### デスクトップ（Omarchy 配列）
 
 配置方針は `nix/home/keybindings/bindings.nix` に action とキーを一度だけ定義し、同じ home 配下で
-macOS の AeroSpace、native NixOS の Hyprland、Windows の GlazeWM の設定を生成する。
+macOS の AeroSpace と native NixOS の Hyprland の設定を生成する。
 `nix/hosts/` は OS のサービス・セッション有効化と競合解除に限定する。
 責務・未対応の操作は [共通定義と OS 別実装](./omarchy.md) を参照。
-WSL guest に Hyprland は導入しない。Windows は Windows キーを Super とし、GlazeWM で
-デスクトップ全体の操作を扱う。Nix 生成済み設定を chezmoi で配布するため、Windows の適用時に Nix は不要。
+WSL guest に Hyprland は導入しない。Windows は標準デスクトップを使用し、Nix からデスクトップ設定を生成・配布しない。
 
 macOS は nix-darwin の AeroSpace サービスで管理し、Super=Command とする。
 ⌘F・⌘T・⌘S・⌘数字・⌘Tab などはデスクトップ操作がアプリ標準キーより優先する。
 配列、macOS での代替動作、初回権限設定と回復方法は
 [Omarchy macOS](./omarchy-macos.md) を参照。native NixOS は Super キーを使い、
-Hyprland セッションで動作する設定。Windows は [GlazeWM の運用と差異](./omarchy.md#windows-デスクトップの運用) を参照。
+Hyprland セッションで動作する設定。
 これらはターミナル内の prefix 契約とは別の層であり、各 OS の実際のキー入力は未検証。
 
 ### Terminals

@@ -10,10 +10,6 @@ let
           inherit pkgs;
           inherit (pkgs) lib;
         }).programs.wezterm;
-      sets = import ../../packages/sets.nix {
-        inherit pkgs;
-        inherit (pkgs) lib;
-      };
       home = inputs.home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
         modules = [
@@ -48,9 +44,6 @@ let
         builtins.length (builtins.filter (p: p.outPath == package.outPath) home.config.home.packages);
     in
     {
-      catalogInstalls = builtins.any (
-        p: p.drvPath == home.config.programs.ghostty.package.drvPath || p.drvPath == wezterm.package.drvPath
-      ) sets.terminal;
       ghosttyHomeCopies = copies home.config.programs.ghostty.package;
       weztermHomeCopies = copies wezterm.package;
       ghosttyConfig =
@@ -77,13 +70,11 @@ let
       ghosttySystemd = home.config.programs.ghostty.systemd.enable;
       ghosttyService = home.config.xdg.configFile ? "systemd/user/app-com.mitchellh.ghostty.service";
       customTarget = home.config.xdg.configFile."ghostty/config".target;
-      windowsWinget = sets.wingetMap.wezterm;
-      providerErrors = builtins.filter (
-        error: pkgs.lib.hasPrefix "ghostty:" error || pkgs.lib.hasPrefix "wezterm:" error
-      ) sets.providerErrors;
+      windowsWinget =
+        (import ../fixtures/packages.nix { inherit inputs; })
+        .windowsPackages."wez.wezterm".PackageIdentifier;
     };
   expected = system: {
-    catalogInstalls = false;
     ghosttyHomeCopies = 1;
     weztermHomeCopies = 1;
     ghosttyConfig = true;
@@ -94,7 +85,6 @@ let
     ghosttyService = system != "aarch64-darwin";
     customTarget = "custom config/ghostty/config";
     windowsWinget = "wez.wezterm";
-    providerErrors = [ ];
   };
   systems = [
     "aarch64-darwin"

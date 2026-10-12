@@ -569,15 +569,11 @@ esac
         $wingetWorkflow | Should -Match 'throw "winget source update did not complete after \$Attempts attempts"'
     }
 
-    It 'should expose package provider report build logs in CI' {
-        $bootstrapWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
-        $consistencyWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
+    It 'should expose Linux system build logs in CI' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
 
-        $linuxBuild = [regex]::Match($bootstrapWorkflow, '(?ms)^  linux-build:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)').Value
+        $linuxBuild = [regex]::Match($workflow, '(?ms)^  linux-build:\s*.*?(?=^  [a-zA-Z0-9_-]+:\s*$|\z)').Value
         $linuxBuild | Should -Match 'nix build --impure --no-link --print-build-logs'
-        $linuxBuild | Should -Not -Match '\.#package-support-report'
-        $consistencyWorkflow | Should -Match 'nix build \.#package-support-report --print-build-logs'
-        $consistencyWorkflow | Should -Not -Match 'nix build \.#package-support-report[^\r\n]*2>/dev/null'
     }
 
     It 'should pin the WinGet fallback module and avoid an AllUsers repair' {
@@ -588,11 +584,14 @@ esac
         $workflow | Should -Not -Match 'Repair-WinGetPackageManager -AllUsers'
     }
 
-    It 'should verify generated npm package catalog consistency' {
-        $consistencyWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
+    It 'should validate standalone Windows package manifests' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
 
-        $consistencyWorkflow | Should -Match '/tmp/winget-export/npm/packages\.json'
-        $consistencyWorkflow | Should -Match 'windows/npm/packages\.json'
+        $workflow | Should -Match 'Validate Windows package manifests'
+        $workflow | Should -Match 'windows/winget/packages\.json'
+        $workflow | Should -Match 'windows/npm/packages\.json windows/pnpm/packages\.json'
+        $workflow | Should -Match '\.PackageIdentifier'
+        $workflow | Should -Match '\.globalPackages'
     }
 
 

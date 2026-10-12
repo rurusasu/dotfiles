@@ -6,7 +6,9 @@ let
   };
   home = inputs.home-manager.lib.homeManagerConfiguration {
     pkgs = testPkgs;
+    extraSpecialArgs = { inherit inputs; };
     modules = [
+      ../../home/common.nix
       ../../modules/editors/nvim
       {
         home = {

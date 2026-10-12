@@ -21,7 +21,6 @@ let
     name: hasNixEvalCommandIn (builtins.readFile (bashTests + "/${name}"))
   ) batsTests;
   expectedNixEvalOwners = [ ];
-  packageCatalog = builtins.readFile (bashTests + "/package_catalog.bats");
   nixUnitRegistry = builtins.readFile ../default.nix;
   registryImports = builtins.filter (name: name != null) (
     builtins.map (
@@ -79,55 +78,12 @@ let
       )
     ) allNixTestFiles
   );
-  packageCatalogTests = builtins.filter (
-    line: builtins.match "^[[:space:]]*@test[[:space:]].*" line != null
-  ) (linesOf packageCatalog);
-  packageCatalogTestNames = builtins.map (
-    line:
-    builtins.head (builtins.match "^[[:space:]]*@test[[:space:]]+\"([^\"]+)\"[[:space:]]*[{].*" line)
-  ) packageCatalogTests;
-  packageSupportOutputs = inputs.self.packages.x86_64-linux;
-  packageSupportChecks = inputs.self.checks.x86_64-linux;
-  sourceHasLine =
-    source: pattern: builtins.any (line: builtins.match pattern line != null) (linesOf source);
-  homeReadme = builtins.readFile ../README.md;
-  classifiedTests = builtins.filter (test: test != null) (
-    builtins.map (
-      line:
-      let
-        match = builtins.match "^[[:space:]]*[|][[:space:]]*([0-9]+)[[:space:]]*[|][[:space:]]*`([^`]+)`[[:space:]]*[|].*$" line;
-      in
-      if match == null then
-        null
-      else
-        {
-          index = builtins.fromJSON (builtins.elemAt match 0);
-          name = builtins.elemAt match 1;
-        }
-    ) (linesOf homeReadme)
-  );
-  orderedClassifiedTests = builtins.sort (a: b: a.index < b.index) classifiedTests;
-  indexedPackageCatalogTests = builtins.genList (index: {
-    index = index + 1;
-    name = builtins.elemAt packageCatalogTestNames index;
-  }) (builtins.length packageCatalogTestNames);
+
 in
 {
   testNixEvalBatsHaveExplicitRuntimeOwnership = {
     expr = nixEvalOwners;
     expected = expectedNixEvalOwners;
-  };
-
-  testSupportReportPackageAndCheckExposeTheSameNamedOutput = {
-    expr =
-      packageSupportOutputs."package-support-report".drvPath
-      == packageSupportChecks."package-provider-coverage".drvPath;
-    expected = true;
-  };
-
-  testPackageCatalogNamesMatchTheReadmeClassification = {
-    expr = orderedClassifiedTests == indexedPackageCatalogTests;
-    expected = true;
   };
 
   testEveryRecursiveNixUnitModuleIsRegisteredExactlyOnce = {

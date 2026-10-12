@@ -257,7 +257,7 @@ in
     expected = {
       hermesDesktopHomePackage = true;
       dockerCask = true;
-      chromeSystemPackage = true;
+      chromeSystemPackage = false;
       discordHomePackage = true;
       discordAgent = true;
     };

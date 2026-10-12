@@ -201,7 +201,7 @@ dotfiles_hermes_require_xapi_tools() {
   dotfiles_hermes_op_command >/dev/null ||
     dotfiles_die "1Password CLI (op) is required for Hermes X API credentials."
   dotfiles_have jq || dotfiles_die "jq is required for Hermes X API credentials."
-  dotfiles_have python3 || dotfiles_die "python3 is required for Hermes X API token synchronization."
+  dotfiles_have uv || dotfiles_die "uv is required for Hermes X API token synchronization."
 }
 
 dotfiles_hermes_xapi_secret_item() {
@@ -426,7 +426,7 @@ dotfiles_hermes_sync_xapi_refresh_token_to_onepassword() {
       "$op_command" item get "$item" --account "$account" --vault "$vault" --format json >"$item_file" || status=$?
   fi
   if ((status == 0)); then
-    if python3 - "$item_file" "$cache_path" >"$template_file" <<'PY'
+    if uv run --no-project --managed-python --python 3.14 python - "$item_file" "$cache_path" >"$template_file" <<'PY'
 import json
 import re
 import sys

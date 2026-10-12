@@ -51,7 +51,11 @@ setup() {
 	write_stub jq '
 exec "$REAL_JQ" "$@"
 '
-	write_stub python3 'exec "$REAL_PYTHON3" "$@"'
+	write_stub uv '
+[[ "$1 $2 $3 $4 $5 $6" == "run --no-project --managed-python --python 3.14 python" ]] || exit 64
+shift 6
+exec "$REAL_PYTHON3" "$@"
+'
 	write_stub op '
 printf "op" >>"$COMMAND_LOG"
 printf " <%s>" "$@" >>"$COMMAND_LOG"
@@ -701,10 +705,10 @@ esac
 	[ ! -s "$COMMAND_LOG" ]
 }
 
-@test "fails preflight before Compose when python3 is unavailable" {
-	run_restart_sidecar python3
+@test "fails preflight before Compose when uv is unavailable" {
+	run_restart_sidecar uv
 
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"python3 is required"* ]]
+	[[ "$output" == *"uv is required"* ]]
 	[ ! -s "$COMMAND_LOG" ]
 }

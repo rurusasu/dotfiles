@@ -18,7 +18,5 @@ in
     ./wezterm.nix
     ../../modules/terminals/ghostty/defaults.nix
     ../../modules/terminals/wezterm/defaults.nix
-    # Neovim が利用する言語サーバーをユーザー環境へ導入する。
-    ../../modules/lsp.nix
   ];
 }

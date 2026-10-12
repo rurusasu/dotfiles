@@ -9,9 +9,9 @@ nix-darwin の `services.aerospace` へ渡す。Home Manager 側で同じサー�
 nix-darwin の `services.aerospace` が設定ファイルを
 Nix store に生成し、launchd で起動する。chezmoi で AeroSpace 設定を配布しない。
 
-パッケージの定義は `nix/packages/catalog/`、選択ロジックは `providers/`、公開入口は
-`nix/packages/sets.nix` に置く。キー配列、OS ごとの実行方法、パッケージ配布は
-変更理由が異なるため分割する。共通データを複製せず consumer の入口を保つ方針は
+Unix のパッケージ導入・アプリ設定は `nix/modules/` にまとめ、host は必要な module を
+import する。Windows の導入は `windows/winget/packages.json` を直接管理する。
+キー配列と OS ごとの実行方法を分ける方針は
 [パッケージ管理の分割理由](../nix/package-management.md#分割の理由と編集先) を参照。
 native NixOS、Windows デスクトップ、WSL の対応範囲は [共通定義と OS 別実装](./omarchy.md) を参照。
 

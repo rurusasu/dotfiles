@@ -77,7 +77,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             "nix-unit",
             "custom-package-builds",
             "aerospace-workspace-cycle",
-            "windows-keybindings-generated",
         ):
             self.assertIn(f".#checks.x86_64-linux.{check}", check_commands[0])
         self.assertIn("--print-build-logs", check_commands[0])
@@ -104,16 +103,6 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         bootstrap = self._named_workflow("ci-nix.yml")
         self.assertIn(".#checks.x86_64-linux.aerospace-workspace-cycle", consistency)
         self.assertNotIn("aerospace-workspace-cycle", bootstrap)
-
-    def test_generated_windows_keybindings_have_local_and_hosted_drift_checks(
-        self,
-    ) -> None:
-        consistency = self._named_workflow("ci-nix.yml")
-        self.assertIn(
-            ".#checks.x86_64-linux.windows-keybindings-generated", consistency
-        )
-        taskfile = (REPOSITORY_ROOT / "taskfiles/test/taskfile.yml").read_text()
-        self.assertIn("task: keybindings:check", taskfile)
 
     def _workflow(self) -> str:
         self.assertTrue(WORKFLOW_PATH.is_file(), f"missing workflow: {WORKFLOW_PATH}")

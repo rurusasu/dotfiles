@@ -1,23 +1,14 @@
 { inputs }:
 let
   fixtures = import ../fixtures/packages.nix { inherit inputs; };
-  hostPackageNames =
-    system:
-    let
-      pkgs = fixtures.mkPkgs system;
-      sets = import ../../packages/sets.nix {
-        inherit pkgs;
-        inherit (pkgs) lib;
-        codexPackage = pkgs.hello;
-      };
-    in
-    builtins.map (package: package.pname or package.name) sets.hostPackages;
 in
 {
-  testHostPackageSetIncludesGitHubCliForDarwinAndLinux = {
+  testHostModulesIncludeGitHubCliForDarwinAndLinux = {
     expr = {
-      darwin = builtins.elem "gh" (hostPackageNames "aarch64-darwin");
-      linux = builtins.elem "gh" (hostPackageNames "x86_64-linux");
+      darwin = builtins.elem (fixtures.mkPkgs "aarch64-darwin").gh fixtures.darwin.config.environment.systemPackages;
+      linux =
+        builtins.elem (fixtures.mkPkgs "x86_64-linux").gh
+          (fixtures.mkHome "x86_64-linux" [ ../../hosts/shared/linux-home.nix ]).config.home.packages;
     };
     expected = {
       darwin = true;

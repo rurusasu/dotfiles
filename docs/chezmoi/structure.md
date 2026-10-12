@@ -31,7 +31,7 @@ nix/modules/editors/nvim/
     └── plugins/              # プラグインごとの Lua 設定
 ```
 
-起動設定は `nix/modules/editors/nvim/default.nix`、プラグインの導入と設定の呼び出しは `nix/modules/editors/nvim/plugins.nix`、Lua 設定の本体は `nix/modules/editors/nvim/lua/plugins/` にあります。Home Manager が `init.lua` を生成します。LSP サーバーの package/provider 定義は `nix/packages/catalog/lsp.nix`、`sets.nix` は公開入口です。運用・テストは [Neovim](./neovim.md) を参照してください。
+起動設定は `nix/modules/editors/nvim/default.nix`、プラグインの導入と設定の呼び出しは `nix/modules/editors/nvim/plugins.nix`、Lua 設定の本体は `nix/modules/editors/nvim/lua/plugins/` にあります。Home Manager が `init.lua` を生成します。Neovim 本体・LSP サーバー・整形ツール・プラグイン実行依存の導入定義は `nix/modules/tools.nix` です。運用・テストは [Neovim](./neovim.md) を参照してください。
 
 ## ファイル命名規則
 
