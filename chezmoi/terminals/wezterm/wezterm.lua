@@ -50,7 +50,7 @@ config.default_prog = { "pwsh.exe", "-NoLogo" }
 config.exit_behavior = "Close"
 config.wsl_domains = wezterm.default_wsl_domains()
 config.launch_menu = {
-    { label = "NixOS (WSL)", domain = "WSL:NixOS" },
+    { label = "NixOS (WSL)", domain = { DomainName = "WSL:NixOS" } },
 }
 
 -- Terminal type (enables undercurl, colored underlines, etc.)

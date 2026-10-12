@@ -53,7 +53,10 @@ pkgs.runCommand "wezterm-config-check"
     assert(has_nixos_wsl, "default WSL domains must include NixOS")
     local has_nixos_launcher = false
     for _, entry in ipairs(config.launch_menu) do
-      if entry.label == "NixOS (WSL)" and entry.domain == "WSL:NixOS" then
+      if entry.label == "NixOS (WSL)"
+        and type(entry.domain) == "table"
+        and entry.domain.DomainName == "WSL:NixOS"
+      then
         has_nixos_launcher = true
       end
     end
