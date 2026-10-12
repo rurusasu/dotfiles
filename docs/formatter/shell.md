@@ -67,24 +67,6 @@ treefmt
 | `-kp`      | カラム位置を保持           | false      |
 | `-fn`      | 関数の開き括弧を次行に     | false      |
 
-## .treefmt.toml 設定
-
-```toml
-[formatter.shfmt]
-command = "shfmt"
-options = ["-w"]
-includes = ["*.sh"]
-```
-
-### カスタム設定例
-
-```toml
-[formatter.shfmt]
-command = "shfmt"
-options = ["-w", "-i", "2", "-ci"]
-includes = ["*.sh", "*.bash"]
-```
-
 ## treefmt-nix 設定
 
 [nix/formatter.nix](../../nix/formatter.nix) で設定:

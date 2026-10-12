@@ -80,9 +80,9 @@ method: grok-api-x_search
 
 ## Trending Tech Posts
 
-| #   | Author  | Post             | URL | Likes | RTs |
-| --- | ------- | ---------------- | --- | ----- | --- |
-| 1   | @handle | 投稿本文（要約） | URL | XX    | XX  |
+| # | Author  | Post             | URL | Likes | RTs |
+| - | ------- | ---------------- | --- | ----- | --- |
+| 1 | @handle | 投稿本文（要約） | URL | XX    | XX  |
 
 ## Notes
 

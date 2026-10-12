@@ -342,8 +342,7 @@ copying remote content into the profile home.
 A different failed profile is a separate repair task. A nonzero aggregate exit
 means the original repair is not complete. If any report used category
 `cleanup_failed`, a later successful run is also insufficient by itself:
-follow the guarded recovery procedure in [Hermes Bootstrap
-Operations](bootstrap.md). Keep every automated, installer, Compose, and manual
+follow the guarded recovery procedure in [Hermes Bootstrap Operations](bootstrap.md). Keep every automated, installer, Compose, and manual
 sync launch path, including the gateway and scheduler, disabled under one
 maintenance owner; reject candidate subtrees containing mounts; atomically
 isolate verified artifacts in the same-filesystem private quarantine; and

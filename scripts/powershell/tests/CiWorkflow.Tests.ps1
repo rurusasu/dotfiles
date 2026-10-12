@@ -35,12 +35,9 @@ Describe 'CI workflow configuration' {
     }
 
     It 'should import provisioned PSScriptAnalyzer without version limits' {
-        $treefmtToml = Get-Content -LiteralPath (Join-Path $script:repoRoot ".treefmt.toml") -Raw
         $treefmtNix = Get-Content -LiteralPath (Join-Path $script:repoRoot "nix/formatter.nix") -Raw
 
-        $treefmtToml | Should -Match 'Import-Module PSScriptAnalyzer -Force'
         $treefmtNix | Should -Match 'Import-Module \$env:DOTFILES_PSSA_MODULE -Force'
-        $treefmtToml | Should -Not -Match 'RequiredVersion'
         $treefmtNix | Should -Not -Match 'RequiredVersion'
     }
 

@@ -82,7 +82,7 @@ runs:
                   chezmoi=true
                   ;;
                 # These entrypoints and fixtures span Nix, Windows and templates.
-                .github/*|scripts/*|taskfiles/*|Taskfile.yml|install.*|bootstrap.*|docker/*|.devcontainer/*|tests/*|.pre-commit-config.yaml|.treefmt.toml|.gitattributes|.editorconfig)
+                .github/*|scripts/*|taskfiles/*|Taskfile.yml|install.*|bootstrap.*|docker/*|.devcontainer/*|tests/*|.pre-commit-config.yaml|.gitattributes|.editorconfig)
                   nix=true
                   chezmoi=true
                   other=true
