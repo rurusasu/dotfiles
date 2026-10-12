@@ -30,7 +30,7 @@ in
   };
   home = {
     homeDirectory = lib.mkDefault "/home/${config.home.username}";
-    packages = fonts.packages;
+    inherit (fonts) packages;
 
     # Declaratively manage fcitx5 input method profile.
     # fcitx5 overwrites this file on exit, so home-manager re-applies it on

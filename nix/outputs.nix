@@ -1,6 +1,5 @@
 # Standalone artifacts. Application installation is owned by modules/.
-{ ... }:
-{
+_: {
   perSystem =
     { pkgs, lib, ... }:
     {

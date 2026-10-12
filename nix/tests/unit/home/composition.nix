@@ -941,7 +941,7 @@ in
       pkgs = mkPkgs "x86_64-linux";
       tools =
         (import ../../../modules/tools.nix {
-          config = wsl.config;
+          inherit (wsl) config;
           inherit inputs pkgs;
           inherit (pkgs) lib;
         }).home.packages;

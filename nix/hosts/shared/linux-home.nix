@@ -18,7 +18,7 @@ in
     homeDirectory = lib.mkDefault (
       if hasCurrentUser && currentHome != "" then currentHome else "/home/${config.home.username}"
     );
-    packages = fonts.packages;
+    inherit (fonts) packages;
   };
 
   imports = [

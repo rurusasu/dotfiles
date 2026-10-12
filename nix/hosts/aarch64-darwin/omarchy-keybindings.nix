@@ -5,7 +5,7 @@
   ...
 }:
 let
-  aerospace = pkgs.aerospace;
+  inherit (pkgs) aerospace;
   openUrl = url: "/usr/bin/open ${lib.escapeShellArg url}";
   contract = import ../../home/keybindings/bindings.nix { inherit lib; };
   rendered = import ../../home/keybindings/aerospace.nix {
