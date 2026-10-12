@@ -940,7 +940,7 @@ in
     let
       pkgs = mkPkgs "x86_64-linux";
       tools =
-        (import ../../../modules/tools.nix {
+        ((import ../../../modules/tools.nix).homeManager {
           inherit (wsl) config;
           inherit inputs pkgs;
           inherit (pkgs) lib;

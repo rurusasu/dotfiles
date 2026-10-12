@@ -10,6 +10,7 @@ let
 in
 {
   imports = [
+    (import ../../../modules/tools.nix).linuxDesktop
     ../../../modules/editors/nvim
     ../../../home/common.nix
   ];
@@ -29,10 +30,7 @@ in
   };
   home = {
     homeDirectory = lib.mkDefault "/home/${config.home.username}";
-    packages = fonts.packages ++ [
-      pkgs.google-chrome
-      pkgs.obsidian
-    ];
+    inherit (fonts) packages;
 
     # Declaratively manage fcitx5 input method profile.
     # fcitx5 overwrites this file on exit, so home-manager re-applies it on

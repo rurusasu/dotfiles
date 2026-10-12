@@ -22,7 +22,7 @@ in
   imports = [
     ../../modules/docker.nix
     ./omarchy-keybindings.nix
-    ../../modules/1password/darwin-system.nix
+    (import ../../modules/tools.nix).darwin
   ];
 
   system = {
@@ -110,14 +110,6 @@ in
   };
 
   users.users.${user}.home = home;
-
-  environment.systemPackages = [
-    (import ../../modules/browsers/dia { inherit pkgs; })
-    pkgs.obsidian
-    pkgs.raycast
-    # Host integrations such as Orca need GitHub CLI outside the user profile.
-    pkgs.gh
-  ];
 
   # GUI apps use the same 1Password socket as Home Manager's shell sessions.
   launchd.user.envVariables.SSH_AUTH_SOCK =

@@ -2,11 +2,13 @@
 
 ## 管理方針
 
-Unix CLI の PATH への導入はすべて `nix/modules/tools.nix` にまとめます。Home Manager 標準の `programs.*.enable` と、設定をユーザーが管理する CLI・標準 module のない CLI・LSP・プラグイン実行依存の `home.packages` をここに宣言します。各アプリ module は設定・連携・package override を担当し、`nix/home/common.nix` が tools と設定 module を並列に import します。
+Unix CLI / GUI の導入はすべて `nix/modules/tools.nix` にまとめます。Home Manager 標準の `programs.*.enable` と、設定をユーザーが管理する CLI・標準 module のない CLI・LSP・プラグイン実行依存の `home.packages` をここに宣言します。各アプリ module は設定・連携・package override を担当し、`nix/home/common.nix` が tools の `homeManager` と設定 module を import します。
+
+`tools.nix` は通常の Home Manager module 一つではなく、`homeManager`、`darwin`、`linuxDesktop`、`nativeDesktop` とアプリ有効化の module を公開します。対象 host / 設定 module が必要な scope を選択し、OS の option を混在させません。
 
 Python のユーザー環境は `uv` で管理し、`tools.nix` は uv を導入します。Python interpreter は直接 `home.packages` に追加しません。Darwin の package updater と X API 同期の公開コマンドは `uv run --no-project --managed-python --python 3.14 python ...` を使います。Hermes bootstrap など、Nix の構築・実行に閉じた専用 Python 依存は各 module が管理します。
 
-GUI、OS service、フォント、ビルド用依存はそれぞれの module / host で管理します。設定・サービスから絶対 store path で呼び出す専用の実行依存は、その設定・サービスの module に宣言します。host は必要な module を import して構成を選択します。
+GUI も `tools.nix` に宣言します。OS service、フォント、ビルド用依存はそれぞれの module / host で管理します。設定・サービスから絶対 store path で呼び出す専用の実行依存は、その設定・サービスの module に宣言します。host は必要な module を import して構成を選択します。
 
 Windows の導入情報は `windows/winget/packages.json` を直接管理します。Unix の Nix module と独立した正本で、Nix から生成しません。通常の Windows セットアップは GUI アプリだけを導入し、`windows/npm/packages.json` と `windows/pnpm/packages.json` は空です。
 
@@ -16,23 +18,23 @@ Windows の導入情報は `windows/winget/packages.json` を直接管理しま�
 
 ## 分割の理由と編集先
 
-Unix CLI の導入は `tools.nix`、設定・連携はアプリ・機能ごとの module にまとめます。Windows の manifest、OS の service、有効化、ユーザー設定は、それぞれを適用する層が管理します。
+Unix CLI / GUI の導入は `tools.nix`、設定・連携はアプリ・機能ごとの module にまとめます。Windows の manifest、OS の service、有効化、ユーザー設定は、それぞれを適用する層が管理します。
 
-| 編集先                                               | 責務                                                                                        |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `nix/modules/tools.nix`                              | 全 Unix CLI の `programs.*.enable`、その他の CLI・LSP・プラグイン実行依存の `home.packages` |
-| `nix/modules/<app>/`                                 | CLI の設定・連携・package override、GUI の導入、custom package 定義                         |
-| `nix/modules/ai_agents/hermes/bootstrap.nix`         | Hermes bootstrap の package 構築。CLI の導入は tools、サービス用依存は Hermes module        |
-| `nix/modules/browsers/dia/`                          | Dia の package 選択関数、`package.nix`、更新用 `provider-candidates.nix`                    |
-| `nix/modules/shells/powershell/psscriptanalyzer.nix` | formatter が使用する PSScriptAnalyzer の package 定義                                       |
-| `nix/hosts/`                                         | module の選択、OS の service / 有効化・競合解除                                             |
-| `nix/home/`                                          | OS 非依存の Home Manager 共通設定と module の読み込み                                       |
-| `nix/home/keybindings/`                              | 共通キー配置・設定生成関数・ユーザー設定                                                    |
-| `windows/winget/packages.json`                       | Windows GUI の package ID、導入・検証情報                                                   |
-| `windows/{npm,pnpm}/packages.json`                   | 独立した Node package manifest。現在は空                                                    |
-| `nix/outputs.nix`                                    | Darwin custom package の build 出力                                                         |
+| 編集先                                               | 責務                                                                                 |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `nix/modules/tools.nix`                              | Unix CLI / GUI の導入。Home Manager / nix-darwin と OS 別の宣言を同じファイルに集約  |
+| `nix/modules/<app>/`                                 | アプリの設定・連携・package override、custom package 定義                            |
+| `nix/modules/ai_agents/hermes/bootstrap.nix`         | Hermes bootstrap の package 構築。CLI の導入は tools、サービス用依存は Hermes module |
+| `nix/modules/browsers/dia/`                          | Dia の package 選択関数、`package.nix`、更新用 `provider-candidates.nix`             |
+| `nix/modules/shells/powershell/psscriptanalyzer.nix` | formatter が使用する PSScriptAnalyzer の package 定義                                |
+| `nix/hosts/`                                         | module の選択、OS の service / 有効化・競合解除                                      |
+| `nix/home/`                                          | OS 非依存の Home Manager 共通設定と module の読み込み                                |
+| `nix/home/keybindings/`                              | 共通キー配置・設定生成関数・ユーザー設定                                             |
+| `windows/winget/packages.json`                       | Windows GUI の package ID、導入・検証情報                                            |
+| `windows/{npm,pnpm}/packages.json`                   | 独立した Node package manifest。現在は空                                             |
+| `nix/outputs.nix`                                    | Darwin custom package の build 出力                                                  |
 
-各 host の `home.nix` は `nix/home/common.nix` を通じて CLI 導入とアプリ設定を読み込みます。Darwin の GUI は `nix/hosts/aarch64-darwin/configuration.nix` の `environment.systemPackages` に直接宣言し、ブラウザーは Dia を使います。Linux / WSLg の Chrome / Obsidian は各 host の `home.nix` に宣言します。Homebrew も host が設定します。native NixOS の Hyprland / Firefox / fuzzel / Nautilus は native host と `nix/home/keybindings/hyprland.nix` が所有し、WSL / standalone へ compositor を自動導入しません。Discord も Darwin / native Linux の Home Manager module から導入し、WSL では Windows のアプリを利用します。
+各 host の `home.nix` は `nix/home/common.nix` を通じて CLI 導入とアプリ設定を読み込みます。Darwin host は `tools.nix` の `darwin`、Linux / WSLg host は `linuxDesktop` を読み込みます。Darwin のブラウザーは Dia、Linux / WSLg は Chrome を使います。Homebrew も host が設定します。native NixOS の Hyprland は host が有効化し、Firefox / fuzzel / Nautilus は `tools.nix` の `nativeDesktop` が導入します。WSL / standalone へ compositor を自動導入しません。Discord も Darwin / native Linux の Home Manager module から導入し、WSL では Windows のアプリを利用します。
 
 [共通のキー割り当て](../chezmoi/omarchy.md) は `nix/home/keybindings/` に一度だけ定義し、host が OS 統合と有効化を担当します。共通データや純粋な設定生成関数は Home Manager module ではないため、`imports` に渡しません。
 
@@ -49,7 +51,7 @@ CLI はすべて `nix/modules/tools.nix` に追加します。Home Manager で�
 }
 ```
 
-Linux / WSLg の GUI は各 host の `home.nix`、Darwin の system GUI は `nix/hosts/aarch64-darwin/configuration.nix` に追加します。Homebrew と OS service は host module に定義します。Windows に追加する場合は `windows/winget/packages.json` を直接編集し、導入・検証情報を同じ entry に記述します。
+GUI は `tools.nix` の対象 scope に追加します。Homebrew と OS service は host module に定義します。Windows に追加する場合は `windows/winget/packages.json` を直接編集し、導入・検証情報を同じ entry に記述します。
 
 ## OS ごとの反映
 
@@ -133,15 +135,15 @@ Windows の npm/pnpm manifest は空で、dsh、pnpm、Bun、Codex CLI の個別
 
 Node.js/npm と dsh は `nix/modules/tools.nix` が導入します。`hermes:gmail:auth` が呼ぶ `scripts/sh/hermes-gmail.sh` の `npx` は、この公開 PATH の Node.js/npm を使います。Hermes 自身の専用 Node runtime は upstream wrapper が提供します。dsh は upstream Nix package を使用します。Codex は設定だけを管理し、CLI は ChatGPT アプリ付属のものを使います。
 
-ChatGPT は `nix/modules/ai_agents/chatgpt/` で macOS のアプリと同梱 Codex の設定をまとめます。Windows の Store ID・導入・検証情報は `windows/winget/packages.json` が所有します。
+ChatGPT アプリは `tools.nix` で導入し、`nix/modules/ai_agents/chatgpt/` が同梱 Codex の設定を管理します。Windows の Store ID・導入・検証情報は `windows/winget/packages.json` が所有します。
 
-1Password の CLI は `nix/modules/tools.nix`、デスクトップ版と SSH agent 設定は `nix/modules/1password/` が管理します。`default.nix` が Home Manager の Linux デスクトップ版、`ssh.nix` が公式 SSH agent socket の `IdentityAgent` / `SSH_AUTH_SOCK`、`darwin-system.nix` が macOS システムのデスクトップ版を担当します。Git 署名コマンドと WSL の Windows 連携は host に残します。
+1Password の CLI / GUI 導入は `nix/modules/tools.nix`、公式 SSH agent socket の `IdentityAgent` / `SSH_AUTH_SOCK` は `nix/modules/1password/ssh.nix` が管理します。Git 署名コマンドと WSL の Windows 連携は host に残します。
 
 Git / ghq の導入は `nix/modules/tools.nix`、設定は `nix/modules/git/` にまとめます。`default.nix` は Home Manager 標準 `programs.git` の設定、`ghq.nix` は共通の `ghq.root`、`gtr.nix` は既存の Git alias を管理します。署名と WSL の保存先の差分は host に残します。
 
 lazygit / Herdr の有効化は `nix/modules/tools.nix` に置きます。`nix/modules/lazygit/` は Bash / Zsh の `lg` 連携、`nix/modules/herdr/` は標準 `programs.herdr.settings` に Nix で設定値を直接定義します。Windows の既存 Herdr installer・chezmoi 設定は維持します。
 
-エディタの設定は `nix/modules/editors/` にまとめます。Neovim 本体・補助 CLI・LSP・プラグイン実行依存の導入は `nix/modules/tools.nix`、設定とプラグインは `nvim/` が管理します。プラグインが宣言する実行依存も tools が Home Manager の設定から集め、通常の PATH に導入します。Orca の `default.nix` は Home Manager にアプリを導入し、`package.nix` が macOS の公式 DMG と Linux の公式 AppImage を選択します。Linux の FHS 環境・デスクトップ登録・公式 `orca-ide` CLI は `linux.nix`、バージョン・URL・ハッシュは `sources.json` が管理します。LSP・整形ツールは全エディタ共通で `nix/modules/tools.nix` から PATH に導入します。運用は [Neovim](../chezmoi/neovim.md) を参照してください。
+エディタの設定は `nix/modules/editors/` にまとめます。Neovim 本体・補助 CLI・LSP・プラグイン実行依存の導入は `nix/modules/tools.nix`、設定とプラグインは `nvim/` が管理します。プラグインが宣言する実行依存も tools が Home Manager の設定から集め、通常の PATH に導入します。Orca の導入は `tools.nix`、`editors/orca/package.nix` が macOS の公式 DMG と Linux の公式 AppImage を選択します。Linux の FHS 環境・デスクトップ登録・公式 `orca-ide` CLI は `linux.nix`、バージョン・URL・ハッシュは `sources.json` が管理します。LSP・整形ツールは全エディタ共通で `nix/modules/tools.nix` から PATH に導入します。運用は [Neovim](../chezmoi/neovim.md) を参照してください。
 
 zoxide / fzf / eza / bat / ripgrep の導入は `nix/modules/tools.nix`、ユーザー設定は `nix/home/shells/plugins/` に置きます。zoxide は標準連携の `--cmd cd` で `cd` / `cdi` を使い、WSL の除外ディレクトリは host が管理します。fzf の Zsh は標準 integration の Ctrl+T/R・Alt+C を使い、Unix の Bash integration は無効です。ripgrep の設定ファイルと `RIPGREP_CONFIG_PATH` は Home Manager が生成します。Windows の Bash 設定は chezmoi の既存設定を使います。
 

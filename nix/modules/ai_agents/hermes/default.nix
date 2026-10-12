@@ -29,7 +29,6 @@ in
 {
   imports = [ inputs.hermes-agent.homeManagerModules.default ];
 
-  programs.hermes-agent.desktop.enable = true;
   home = {
     activation.hermesProfileSyncWrapperExecutable = lib.hm.dag.entryAfter [ "hermesAgentSetup" ] ''
       $DRY_RUN_CMD ${pkgs.coreutils}/bin/chmod 0700 ${lib.escapeShellArg "${hermesHome}/scripts/profile_sync.sh"}

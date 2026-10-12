@@ -1,27 +1,23 @@
 { inputs }:
 let
-  pkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs "aarch64-darwin";
-  chatgpt =
+  fixtures = import ../fixtures/packages.nix { inherit inputs; };
+  installed =
     system:
-    let
-      modulePkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
-    in
-    import ../../modules/ai_agents/chatgpt {
-      pkgs = modulePkgs;
-      inherit (modulePkgs) lib;
-      config.home.homeDirectory = "/home/test-user";
-    };
+    builtins.any (package: (package.pname or "") == "chatgpt")
+      (fixtures.mkHome system [
+        ../../home/common.nix
+        ../../modules/editors/nvim
+      ]).config.home.packages;
 in
 {
-  testChatGPTInstallationIsOwnedByModule = {
+  testChatGPTInstallationIsOwnedByTools = {
     expr = {
-      darwin = builtins.elem pkgs.chatgpt (chatgpt "aarch64-darwin").home.packages;
-      linux = (chatgpt "x86_64-linux").home.packages;
+      darwin = installed "aarch64-darwin";
+      linux = installed "x86_64-linux";
     };
     expected = {
       darwin = true;
-      linux = [ ];
+      linux = false;
     };
   };
-
 }

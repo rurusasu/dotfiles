@@ -7,8 +7,8 @@
 **「OS ごとに 1 コマンドで同じ開発環境へ収束する」** を目標に、以下の原則で管理する。
 
 1. **Unix の導入・設定は Nix module、Windows の導入情報は独立した manifest**
-   - Unix CLI の導入は `nix/modules/tools.nix`、設定・連携は各アプリ module にまとめ、host は必要な module を import して構成を選択
-   - Unix CLI の PATH への導入はすべて `tools.nix`、Linux / WSLg GUI は各 host の `home.nix`、Darwin system GUI は host の `configuration.nix`、個別アプリの設定・連携は各 module に宣言
+   - Unix CLI / GUI の導入は `nix/modules/tools.nix`、設定・連携は各アプリ module にまとめ、host は必要な module を import して構成を選択
+   - Unix CLI / GUI の導入はすべて `tools.nix`、GUI の OS 別選択も `tools.nix` にまとめ、個別アプリの設定・連携は各 module に宣言
    - Unix 系 CLI は Home Manager、macOS cask は nix-homebrew、Linux system package は NixOS が管理
    - Windows は `windows/winget/packages.json` を直接管理し、GUI アプリを導入。npm/pnpm manifest は空
    - 機能と OS の所有境界は [分割の理由と編集先](./nix/package-management.md#分割の理由と編集先) を参照
@@ -35,7 +35,7 @@ dotfiles/
 │   ├── formatter.nix       # treefmt-nix and formatter dependencies
 │   ├── hosts/              # OS-specific system and Home Manager configuration
 │   ├── modules/            # Unix packages and app configuration
-│   │   └── tools.nix       # Unix CLI enablement and dependencies
+│   │   └── tools.nix       # Unix CLI / GUI installation and dependencies
 │   ├── outputs.nix         # Custom package build outputs
 │   └── tests/
 │       ├── unit/           # nix-unit: Nix expressions and configuration values
@@ -166,10 +166,10 @@ MCP sidecars. No inference provider or model download is configured here.
 
 ```text
 nix/modules/ ───── host が imports で選択
-├── tools.nix ─────────── 全 Unix CLI の有効化・導入・LSP/実行依存
+├── tools.nix ─────────── Unix CLI / GUI の有効化・導入・LSP/実行依存
 └── 各アプリ module ───── 設定・連携・package override・GUI
 
-nix/hosts/ ────────────── OS 固有の GUI 一覧・service・Homebrew
+nix/hosts/ ────────────── tools の対象 scope を選択・OS service・Homebrew
 
 windows/winget/packages.json ── Windows GUI を直接宣言
 windows/{npm,pnpm}/packages.json ── 独立した空 manifest
@@ -178,7 +178,7 @@ windows/{npm,pnpm}/packages.json ── 独立した空 manifest
 ### ツール追加手順
 
 1. Unix CLI はすべて `nix/modules/tools.nix` に宣言する。設定・連携も管理する CLI は標準の `programs.<name>.enable`、設定をユーザーが管理する CLI・標準 module のない CLI・LSP・実行依存は `home.packages` に追加する。設定・連携・package override は対応するアプリ module に置く。
-2. Linux / WSLg の GUI は各 host の `home.nix`、Darwin の system GUI は host の `configuration.nix` に追加する。Homebrew と OS service は host に定義する。
+2. GUI も `tools.nix` の対象 scope に宣言する。Homebrew と OS service は host に定義する。
 3. Windows に追加する場合は `windows/winget/packages.json` の既存 schema に合わせ、package ID・導入・検証情報を直接記述する。
 4. 各 OS の通常インストーラーで反映する。具体的な入口と所有境界は [パッケージ管理](./nix/package-management.md) を参照する。
 

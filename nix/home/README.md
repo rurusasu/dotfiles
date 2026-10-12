@@ -30,12 +30,12 @@ flake.nix -> hosts/configurations.nix -> hosts/<system>/ -> home/common.nix
   Git の実設定は `~/.config/git/config` に生成し、以前の `~/.gitconfig` はコメントだけの管理ファイルに置き換えて設定の二重読み込み・上書きを防ぐ。対象設定の移行にはバックアップを作らない。
 - zsh の導入は `../modules/tools.nix`、補完プラグインは `../modules/shells/zsh/` が担当する。`common.nix` は `./shells/zsh/` からユーザー設定を読み込む。
 - Bash の有効化は `../modules/tools.nix`、初期化・ログイン設定は `../modules/shells/bash/` が担当し、`common.nix` から読み込む。
-- 1Password の CLI は `../modules/tools.nix`、デスクトップ版の導入と SSH agent 設定は `../modules/1password/` が担当する。`common.nix` が Linux デスクトップ版の Home Manager module を読み込み、macOS デスクトップ版は Darwin host が同じ module の `darwin-system.nix` からシステムに導入する。`ssh.nix` が `IdentityAgent` と `SSH_AUTH_SOCK` を同じ公式 socket に設定する。Bash は別の `ssh-agent` を起動しない。Git 署名・WSL interop の設定は各 host に残す。
+- 1Password の CLI / GUI は `../modules/tools.nix`、SSH agent 設定は `../modules/1password/` が担当する。Linux の GUI は Home Manager、macOS の GUI は nix-darwin に導入する。`ssh.nix` が `IdentityAgent` と `SSH_AUTH_SOCK` を同じ公式 socket に設定する。Bash は別の `ssh-agent` を起動しない。Git 署名・WSL interop の設定は各 host に残す。
 - lazygit は `../modules/tools.nix` で有効化し、`../modules/lazygit/` が Bash / Zsh の `lg` 標準連携を設定する。
 - Herdr は `../modules/tools.nix` で有効化し、`../modules/herdr/` で設定する。キー配列などを標準 `programs.herdr.settings` に Nix で直接定義し、Home Manager が設定ファイルを生成する。Windows は chezmoi 設定と既存の公式 installer を維持する。
-- ChatGPT は `common.nix` が `../modules/ai_agents/chatgpt/` を読み込み、macOS のアプリを直接導入する。同梱 Codex の設定も同じ module で管理し、Codex CLI は独立導入しない。
+- ChatGPT は `../modules/tools.nix` が macOS のアプリを導入し、`common.nix` が `../modules/ai_agents/chatgpt/` を読み込む。同梱 Codex の設定も同じ module で管理し、Codex CLI は独立導入しない。
 - Hermes Agent の CLI は `../modules/tools.nix` で有効化する。`common.nix` が `../modules/ai_agents/hermes/` を読み込み、gateway・CLI 設定・bootstrap manifest を管理する。`bootstrap.nix` が bootstrap の構築を担当する。既存の `~/.hermes`、依存 pin、macOS の launchd / Linux の systemd-user 設定は維持する。
-- `common.nix` は `../modules/tools.nix` を読み込み、Unix CLI を有効化・導入する。各アプリ module と `./shells/plugins/` が設定・連携を担当する。
+- `common.nix` は `../modules/tools.nix` の `homeManager` を読み込み、Unix CLI / GUI を有効化・導入する。各アプリ module と `./shells/plugins/` が設定・連携を担当する。
 - zoxide のシェル標準連携は `./shells/plugins/zoxide.nix` に置き、`--cmd cd` で `cd` / `cdi` を使う。WSL の除外ディレクトリは `nix/hosts/x86_64-linux/wsl/home.nix` に置く。
 - fzf の検索条件・プレビュー・Zsh 標準連携は `./shells/plugins/fzf.nix` で読み込む。
 - eza の `programs.eza` 共通オプション・Zsh 標準連携と `ls` / `ll` / `la` / `lt` alias の差分は `./shells/plugins/eza.nix` で定義する。
@@ -45,7 +45,7 @@ flake.nix -> hosts/configurations.nix -> hosts/<system>/ -> home/common.nix
 - fd の `find` alias と fzf の検索コマンド・`_fzf_compgen_path` / `_fzf_compgen_dir` は `./shells/plugins/fd.nix` で定義する。通常の Zsh 補完はパッケージ付属のものを共有 Zsh 設定から読み込む。fzf の通常検索・`Ctrl+T` はファイル、`Alt+C` はディレクトリを検索し、内容検索は ripgrep の `rfg` が担当する。
 - zsh-patina はシェル設定専用の実行依存として `./shells/plugins/zsh-patina.nix` が絶対 store path を参照し、Zsh 初期化の最後に公式の `activate` を実行する。外部のプラグインマネージャーは使わない。
 - Neovim 本体・補助 CLI・LSP・プラグイン実行依存は `../modules/tools.nix` が導入する。Darwin / WSL の `home.nix` と `hosts/shared/linux-home.nix` は `nix/modules/editors/nvim` を import し、設定とプラグインを適用する。
-- Orca は `common.nix` が `../modules/editors/orca` を読み込み、Home Manager の `home.packages` で導入する。macOS は公式 DMG、Linux（x86_64 / ARM64）は公式 AppImage を使用する。Linux の CLI は公式と同じ `orca-ide`、macOS は `orca`。Windows は引き続き WinGet が管理する。
+- Orca は `../modules/tools.nix` が `../modules/editors/orca/package.nix` を選択し、Home Manager の `home.packages` で導入する。macOS は公式 DMG、Linux（x86_64 / ARM64）は公式 AppImage を使用する。Linux の CLI は公式と同じ `orca-ide`、macOS は `orca`。Windows は引き続き WinGet が管理する。
 - `common.nix` から OS 固有ファイルを import しない。
 - Unix の設定は Codex を含め Home Manager が生成し、`files/` に展開済み dotfiles のコピーを置かない。chezmoi は Windows 専用。
 - Python のユーザー環境は `../modules/tools.nix` が導入する uv で管理し、interpreter を直接 `home.packages` に追加しない。公開 Python コマンドは uv 経由で実行する。

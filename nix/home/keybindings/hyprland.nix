@@ -20,11 +20,7 @@ let
   };
 in
 {
-  home.packages = [
-    pkgs.firefox
-    pkgs.fuzzel
-    pkgs.nautilus
-  ];
+  imports = [ (import ../../modules/tools.nix).nativeDesktop ];
   wayland.windowManager.hyprland = {
     enable = true;
     # The NixOS module owns compositor/portal packages and session registration.

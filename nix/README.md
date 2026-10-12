@@ -17,7 +17,7 @@
 - host / hardware 設定を `nix/home/` に置かない。
 - Home Manager と chezmoi で同じファイルを所有しない。
 
-Unix CLI の導入は `nix/modules/tools.nix`、設定・連携は機能ごとの module、Windows の導入情報は独立した manifest、OS の動作は host に分けます。
+Unix CLI / GUI の導入は `nix/modules/tools.nix`、設定・連携は機能ごとの module、Windows の導入情報は独立した manifest、OS の動作は host に分けます。
 詳細は [分割の理由と編集先](../docs/nix/package-management.md#分割の理由と編集先) を参照してください。
 キー配列は home のユーザー設定と hosts の OS 統合に分けます。Darwin は home の生成結果を
 nix-darwin のサービス設定へ渡し、native NixOS は host から Home Manager module を選択します。
@@ -40,7 +40,7 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
    activation は `configuration.nix` に置く。各 host の `default.nix` は `configuration.nix` と
    責務別 module を import する entrypoint として維持する。Darwin の `default.nix` は配線専用とする。
 3. 各 host の `home.nix` は `nix/home/common.nix` を直接、または `shared/linux-home.nix` を通じて import する。`nix/home/` に OS 別の入口を置かず、共通設定から host の設定を import しない。
-4. Unix のパッケージは `nix/modules/` に宣言する。Unix CLI の PATH への導入はすべて `tools.nix`、Linux / WSLg GUI は各 host の `home.nix`、Darwin system GUI は host の `configuration.nix`、個別アプリの設定・連携は各 module にまとめる。CLI の `programs.*.enable` と `home.packages` をアプリ module へ分散させない。Windows は `windows/winget/packages.json` を直接編集する。
+4. Unix のパッケージは `nix/modules/` に宣言する。Unix CLI / GUI の導入はすべて `tools.nix`、GUI の OS 別選択も `tools.nix` にまとめ、個別アプリの設定・連携は各 module にまとめる。CLI / GUI の `programs.*.enable` と `home.packages` をアプリ module へ分散させない。Windows は `windows/winget/packages.json` を直接編集する。
 5. Unix の dotfile は Home Manager、Windows は `chezmoi/`、秘密情報は既存の secret 経路を使い、所有を重複させない。
 6. Nix 設定の変更は `nix flake check --all-systems --no-build --no-write-lock-file` で評価し、
    対象 system の `nix-unit` と関連 build check を build して検証する。

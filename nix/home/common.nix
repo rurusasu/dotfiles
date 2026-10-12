@@ -12,14 +12,13 @@
 }:
 {
   imports = [
-    ../modules/tools.nix
+    (import ../modules/tools.nix).homeManager
     ../modules/1password
     ../modules/ai_agents/chatgpt
     ../modules/ai_agents/hermes
     ../modules/git
     ../modules/lazygit
     ../modules/ssh.nix
-    ../modules/editors/orca
     ../modules/herdr
     ../modules/shells/bash
     ../modules/shells/plugins/starship

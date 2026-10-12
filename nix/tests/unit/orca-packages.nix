@@ -7,19 +7,14 @@ let
     ../../home/common.nix
     ../../modules/editors/nvim
   ];
-  orcaModule = import ../../modules/editors/orca { inherit pkgs; };
   orcaPackage = pkgs.callPackage ../../modules/editors/orca/package.nix { };
 in
 {
   testOrcaHomeManagerModuleAndWingetMetadata = {
     expr = {
-      orcaModulePackages = map (package: package.drvPath) orcaModule.home.packages;
-      orcaCommonImportsModule =
-        builtins.elem ../../modules/editors/orca
-          (import ../../home/common.nix {
-            config = { };
-            inherit (pkgs) lib;
-          }).imports;
+      orcaModulePackages = map (package: package.drvPath) (
+        builtins.filter (package: (package.pname or "") == "orca-editor") home.config.home.packages
+      );
       orcaWindowsProvider = windows."StablyAI.Orca".source;
       orcaInWindowsOnlyWinget = windows ? "StablyAI.Orca";
       orcaCiSkipInstall = windows."StablyAI.Orca".ciSkipInstall or false;
@@ -28,7 +23,6 @@ in
     };
     expected = {
       orcaModulePackages = [ orcaPackage.drvPath ];
-      orcaCommonImportsModule = true;
       orcaWindowsProvider = "winget";
       orcaInWindowsOnlyWinget = true;
       orcaCiSkipInstall = true;
@@ -43,7 +37,7 @@ in
           system:
           let
             linuxPkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
-            package = builtins.head (import ../../modules/editors/orca { pkgs = linuxPkgs; }).home.packages;
+            package = linuxPkgs.callPackage ../../modules/editors/orca/package.nix { };
           in
           {
             inherit system;
