@@ -5,13 +5,9 @@
 通常の `install.cmd` は GUI アプリ導入後に NixOS-WSL を導入・設定します。`-UserPhaseOnly` は GUI のみです。`install.user.ps1` は引き続き `WingetHandler` だけを明示的にロードし、npm/pnpm/Bun・chezmoi・WSL/runtime acceptance は呼びません。GUI phase では退役パッケージの自動削除も無効です。
 
 - エントリーポイントの `Repair-WindowsSetupEnvironment` は、既存の `%LOCALAPPDATA%\Microsoft\WindowsApps` が PATH から欠落していれば、現在のプロセスに補完する。これにより WinGet の実行エイリアスを事前確認で検出できる。
-- npm / pnpm の `Apply` は `Update-NpmGlobalCommandPath` を呼ぶ。`npm prefix -g` が返す保存先を現在の PATH に補完してから、検証・bootstrap・インストールを行う。既定の `%APPDATA%\npm` に固定せず、カスタム prefix も扱う。
-- prefix の取得結果は同じ `SetupContext.Options` 内で共有し、npm と pnpm で重複して問い合わせない。永続 USER PATH は書き換えない。
 - `CanApply` が false の場合も、判定理由とスキップをログに表示する。検証に失敗した場合はコマンド・終了コード・出力を残す。
 - PATH 修復の回帰テストは `tests/lib/WindowsSetupPath.Tests.ps1`。実際のコマンド探索と子プロセスでの検証を使い、外部インストールと永続設定変更はモックする。Windows 以外では明示的にスキップする。
 - WinGet のコマンドリンクが欠落し `pathEntries` の明示設定もない場合は、対象 ID の WinGet パッケージディレクトリ内だけで検証コマンドと同名の exe を探す。候補が1件の場合に実体ディレクトリを PATH に追加し、DLL やデータファイルとの位置関係を保つ。候補が複数なら自動選択しない。
-- `ci/Assert-WingetCommandRecovery.ps1` は任意の CLI 構成用に保持します。GUI-only E2E からは呼びません。検証専用の `EnsureProcessPathEntries` は永続 PATH を変更せず、終了時には呼び出し元の PATH を復元します。
-- `tests/ci/Assert-WingetCommandRecovery.Tests.ps1` は旧 CLI probe が GUI manifest に混入しないことと、fixture に対する PATH 復旧・欠落/複数候補/検証失敗の契約を検査します。
 
 ## WinGet の導入状態確認
 
@@ -212,82 +208,18 @@ WSL 基盤の有効化だけを `Invoke-WslBaseElevation` で UAC 昇格し、�
 - [ ] SharedData を適切に使用している（必要な場合）
 - [ ] パス操作に Join-Path を使用している
 
-## ハンドラーが動的ロードされない場合
+## 現役ハンドラー
 
-### チェック項目
+| Handler             | 役割                                             |
+| ------------------- | ------------------------------------------------ |
+| `WingetHandler`     | Windows manifest のインストール・PATH 回復・検証 |
+| `WslInstallHandler` | WSL コンポーネントの有効化、昇格・再起動の通知   |
+| `NixOSWSLHandler`   | distro 初期化・初回同期、既存 distro の再利用    |
+| `ChezmoiHandler`    | chezmoi の初期化・Windows 設定適用               |
 
-1. **ファイル名パターン**: `Handler.*.ps1` に一致しているか
+`lib/SetupHandler.ps1` の型を読み込んでから必要な handler を呼び出し元で
+明示的に dot-source します。実行順序は Taskfile で管理し、新しい handler を
+ディレクトリに置いても自動では実行しません。通常の NixOS rebuild は `nrs`
+タスクが担当します。CI の WSL E2E も同じ公開タスクを使用します。
 
-   ```powershell
-   # ✅ 正しい
-   Handler.Docker.ps1
-
-   # ❌ 誤り
-   docker-handler.ps1
-   MyHandler.ps1
-   ```
-
-2. **クラス名パターン**: `{Name}Handler` に一致しているか
-
-   ```powershell
-   # ✅ 正しい（Handler.Docker.ps1 の場合）
-   class DockerHandler : SetupHandlerBase { }
-
-   # ❌ 誤り
-   class Docker : SetupHandlerBase { }
-   class HandlerDocker : SetupHandlerBase { }
-   ```
-
-3. **基底クラス継承**: `SetupHandlerBase` を継承しているか
-
-   ```powershell
-   # ✅ 正しい
-   class DockerHandler : SetupHandlerBase { }
-
-   # ❌ 誤り
-   class DockerHandler { }
-   ```
-
-4. **Order プロパティ**: コンストラクタで設定されているか
-
-   ```powershell
-   # ✅ 正しい
-   DockerHandler() {
-       $this.Order = 20
-   }
-
-   # ❌ 誤り（Order が未設定）
-   DockerHandler() {
-       $this.Name = "Docker"
-   }
-   ```
-
-## 実装例
-
-### 既存ハンドラーの参考実装
-
-| ハンドラー   | ソースファイル                                                                            | テストファイル                                                                                              | 説明                   |
-| ------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------- |
-| Winget       | [Handler.Winget.ps1](../../../scripts/powershell/handlers/Handler.Winget.ps1)             | [Handler.Winget.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Winget.Tests.ps1)             | winget パッケージ管理  |
-| Chezmoi      | [Handler.Chezmoi.ps1](../../../scripts/powershell/handlers/Handler.Chezmoi.ps1)           | [Handler.Chezmoi.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Chezmoi.Tests.ps1)           | dotfiles 適用          |
-| WslConfig    | [Handler.WslConfig.ps1](../../../scripts/powershell/handlers/Handler.WslConfig.ps1)       | [Handler.WslConfig.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.WslConfig.Tests.ps1)       | .wslconfig 適用        |
-| VhdManager   | [Handler.VhdManager.ps1](../../../scripts/powershell/handlers/Handler.VhdManager.ps1)     | [Handler.VhdManager.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.VhdManager.Tests.ps1)     | VHD 拡張、FS リサイズ  |
-| Docker       | [Handler.Docker.ps1](../../../scripts/powershell/handlers/Handler.Docker.ps1)             | [Handler.Docker.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Docker.Tests.ps1)             | Docker Desktop 連携    |
-| VscodeServer | [Handler.VscodeServer.ps1](../../../scripts/powershell/handlers/Handler.VscodeServer.ps1) | [Handler.VscodeServer.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.VscodeServer.Tests.ps1) | VS Code Server 管理    |
-| NixOSWSL     | [Handler.NixOSWSL.ps1](../../../scripts/powershell/handlers/Handler.NixOSWSL.ps1)         | [Handler.NixOSWSL.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.NixOSWSL.Tests.ps1)         | NixOS-WSL インストール |
-| NixRebuild   | [Handler.NixRebuild.ps1](../../../scripts/powershell/handlers/Handler.NixRebuild.ps1)     | [Handler.NixRebuild.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.NixRebuild.Tests.ps1)     | NixOS 設定適用         |
-
-`NixRebuild` は NixOS 内に直接導入された Hermes service/CLI も、解決した Linux user で検証する。
-Windows 側に Hermes 専用ハンドラーは置かない。`Docker` の WSL 連携は
-`EnableDockerDesktopIntegration = $true` を明示した場合だけ実行し、NixOS の必須処理にしない。
-Docker VHDX 拡張は `ExpandDockerVhd = $true` で個別に選択する。
-
-ハンドラーファイルの helper function をクラスメソッドが使う場合、entrypoint の script scope
-で dot-source してから `Get-SetupHandler -SkipLoad` で生成する。loader の function scope
-だけで読み込むと、loader から戻った後に helper が見つからなくなる。
-
-### 関連ドキュメント
-
-- [テスト](testing.md) - Pester の最新安定版の使用方法とテストパターン
-- [アーキテクチャ](../../architecture.md) - ハンドラーシステムの設計と実行フロー
-- [コーディング規約](coding-standards.md) - 命名規則、スタイル、ベストプラクティス
+[テスト方針](./testing.md) / [コーディング規約](./coding-standards.md)

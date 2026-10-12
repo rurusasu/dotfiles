@@ -1,109 +1,78 @@
 ﻿#Requires -Module Pester
 
-Describe 'Integration Verification - Windows Environment' {
+Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     BeforeAll {
-        $machinePath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
-        $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-        $processPath = [Environment]::GetEnvironmentVariable("PATH", "Process")
-        $env:PATH = @($machinePath, $userPath, $processPath) -join ";"
+        $script:repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+        . (Join-Path $PSScriptRoot '../lib/WindowsEnvironment.ps1')
+        . (Join-Path $PSScriptRoot '../lib/Invoke-ExternalCommand.ps1')
+        $script:originalPath = $env:PATH
+        Repair-WindowsSetupEnvironment
+        Update-ProcessEnvironmentPath -ProcessOnly
     }
 
-    Context 'GUI Apps Installation' {
-        It "should have <_> installed" -ForEach @(
-            'Obsidian.Obsidian'
-        ) {
-            $null = & winget list --id $_ --accept-source-agreements 2>$null
-            if ($LASTEXITCODE -ne 0) { throw "winget パッケージ '$_' がインストールされていません" }
-            Write-Host "確認完了: '$_'"
-        }
+    AfterAll { $env:PATH = $script:originalPath }
+
+    It 'should run the installed <Command> executable' -ForEach @(
+        @{ Command = 'winget'; Arguments = @('--version') }
+        @{ Command = 'pwsh'; Arguments = @('--version') }
+        @{ Command = 'chezmoi'; Arguments = @('--version') }
+        @{ Command = 'wezterm'; Arguments = @('--version') }
+    ) {
+        Get-Command -Name $Command -CommandType Application -ErrorAction Stop | Should -Not -BeNullOrEmpty
+        $output = @(Invoke-VerifyCommand -Command $Command -Arguments $Arguments -TimeoutSeconds 120)
+        $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
+        $output -join '' | Should -Match '\d+'
     }
 
-    Context 'Dev Tools Installation' {
-        It "should have <_> installed" -ForEach @(
-            'gh'
-            'rg'
-            'fd'
-            'eza'
-            'fzf'
-            'zoxide'
-            'winget'
-        ) {
-            $c = Get-Command -Name $_ -ErrorAction SilentlyContinue
-            if ($null -eq $c) { throw "コマンド '$_' が見つかりません" }
-            Write-Host "確認完了: '$_'"
+    It 'should deploy the Windows configuration through real chezmoi apply and remain idempotent' {
+        # Keep the real user's configuration and chezmoi state outside the test.
+        $destination = Join-Path $TestDrive 'home'
+        $config = Join-Path $TestDrive 'chezmoi.toml'
+        $state = Join-Path $TestDrive 'chezmoi-state.boltdb'
+        New-Item -ItemType Directory -Path $destination -Force | Out-Null
+        [IO.File]::WriteAllText($config, '')
+        $chezmoi = (Get-Command chezmoi -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+        $arguments = @('--config', $config, '--source', (Join-Path $script:repoRoot 'chezmoi'),
+            '--destination', $destination, '--persistent-state', $state, 'apply', '--force')
+        $originalProfile = $env:USERPROFILE
+        try {
+            # Deployment scripts use USERPROFILE as Windows does in production.
+            $env:USERPROFILE = $destination
+            $output = @(& $chezmoi @arguments 2>&1)
+            $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
+            $deployed = Join-Path $destination '.config/wezterm/wezterm.lua'
+            Test-Path -LiteralPath $deployed -PathType Leaf | Should -BeTrue
+            $expected = [IO.File]::ReadAllText((Join-Path $script:repoRoot 'chezmoi/terminals/wezterm/wezterm.lua'))
+            ([IO.File]::ReadAllText($deployed) -replace "`r`n?", "`n").TrimEnd() |
+                Should -BeExactly (($expected -replace "`r`n?", "`n").TrimEnd())
+            @(Get-ChildItem -LiteralPath (Join-Path $destination '.config') -Recurse -File -Force).Count | Should -Be 1
+            $first = [Convert]::ToBase64String([IO.File]::ReadAllBytes($deployed))
+            $output = @(& $chezmoi @arguments 2>&1)
+            $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
+            [Convert]::ToBase64String([IO.File]::ReadAllBytes($deployed)) | Should -BeExactly $first
         }
+        finally { $env:USERPROFILE = $originalProfile }
     }
+}
 
-    Context 'NixOS Verification' {
-        BeforeAll {
-            $script:nixosAvailable = $false
-            try {
-                $distros = & wsl --list --quiet 2>$null
-                if ($LASTEXITCODE -eq 0 -and ($distros -match 'NixOS')) {
-                    $script:nixosAvailable = $true
-                }
-            }
-            catch {
-                Write-Verbose "NixOS availability check failed: $($_.Exception.Message)"
-            }
-        }
-
-        It "should have <_> installed in NixOS" -ForEach @(
-            'nvim'
-            'task'
-            'op'
-            'obsidian'
-        ) {
-            if (-not $script:nixosAvailable) {
-                Set-ItResult -Skipped -Because "NixOS ディストリビューションが利用できません"
-            }
-            $output = & wsl -d NixOS -- bash -lc "command -v $_"
-            if ($LASTEXITCODE -ne 0) { throw "NixOS: '$_' が見つかりません" }
-            Write-Host "NixOS: 確認完了 '$_' 場所: '$output'"
-        }
-    }
-
-    Context 'Neovim PATH Dependencies (options.lua glob patterns)' {
-        It "should find magick.exe via ImageMagick glob" {
-            # options.lua: vim.fn.glob("C:/Program Files/ImageMagick*")
-            $dirs = @(Get-Item "C:/Program Files/ImageMagick*" -ErrorAction SilentlyContinue)
-            $found = $dirs | Where-Object { Test-Path (Join-Path $_.FullName "magick.exe") }
-            if (-not $found) {
-                throw "magick.exe が見つかりません。ImageMagick をインストールしてください: winget install ImageMagick.ImageMagick"
-            }
-            Write-Host "確認完了: magick.exe @ $($found[0].FullName)"
-        }
-
-        It "should find pdftoppm.exe via Poppler glob" {
-            # options.lua: vim.fn.glob("$LOCALAPPDATA/Microsoft/WinGet/Packages/oschwartz10612.Poppler*/*/Library/bin")
-            $localAppData = [Environment]::GetFolderPath('LocalApplicationData')
-            $pattern = Join-Path $localAppData "Microsoft/WinGet/Packages/oschwartz10612.Poppler*/*/Library/bin"
-            $dirs = @(Get-Item $pattern -ErrorAction SilentlyContinue)
-            $found = $dirs | Where-Object { Test-Path (Join-Path $_.FullName "pdftoppm.exe") }
-            if (-not $found) {
-                throw "pdftoppm.exe が見つかりません。Poppler をインストールしてください: winget install oschwartz10612.Poppler"
-            }
-            Write-Host "確認完了: pdftoppm.exe @ $($found[0].FullName)"
+Describe 'NixOS WSL environment integration' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    BeforeAll {
+        $script:nixosAvailable = $false
+        if (Get-Command wsl.exe -CommandType Application -ErrorAction SilentlyContinue) {
+            $distros = @(& wsl.exe --list --quiet 2>$null)
+            $script:nixosAvailable = $LASTEXITCODE -eq 0 -and @($distros | Where-Object {
+                    ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim() -eq 'NixOS'
+                }).Count -gt 0
         }
     }
 
-    Context 'Font Installation' {
-        It "should have UDEV Gothic NF font installed" {
-            # GDI キャッシュ（InstalledFontCollection）はセッション再起動後に更新されるため
-            # レジストリを直接確認する（インストール直後でも信頼性が高い）
-            $regPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
-            $key = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
-            if ($null -eq $key) { throw "フォント 'UDEVGothic NF' がインストールされていません。chezmoi apply を実行してください。" }
-            $found = @($key.PSObject.Properties | Where-Object {
-                    $fontPath = [string]$_.Value
-                    $_.Name -like "UDEVGothic*NF*" -and
-                    -not [string]::IsNullOrWhiteSpace($fontPath) -and
-                    (Test-Path -LiteralPath $fontPath -PathType Leaf)
-                })
-            if ($found.Count -eq 0) {
-                throw "フォント 'UDEVGothic NF' のレジストリエントリと実ファイルが揃っていません。chezmoi apply を実行してください。"
-            }
-            Write-Host "確認完了: フォント '$($found[0].Name)' がインストール済み ($($found.Count) 件)"
+    It 'should resolve <_> in an existing NixOS distribution' -ForEach @('nvim', 'task', 'op', 'obsidian') {
+        if (-not $script:nixosAvailable) {
+            Set-ItResult -Skipped -Because 'NixOS is not installed here; disposable distro setup is exercised by the WSL E2E job'
+            return
         }
+        $output = @(& wsl.exe -d NixOS -- bash -lc "command -v $_" 2>&1)
+        $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
+        $output -join '' | Should -Not -BeNullOrEmpty
     }
 }

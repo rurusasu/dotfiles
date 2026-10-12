@@ -1,506 +1,71 @@
-# テスト
+# PowerShell テスト
 
-Issue #652 で installer の phase 境界を見直し、PowerShell 5.1 / 7 の通常 Pester matrix を authoritative な PowerShell test lane とする。
+## 全テストの実行
 
-PSScriptAnalyzer の Pester 検査は各 library/handler を一度だけ解析し、Error と Warning を検査します。
-`SetupHandler.ps1` と `Invoke-ExternalCommand.ps1` は TypeNotFound も失敗とし、他の対象だけで既存の除外を維持します。
-対象ゼロ・必須 library の欠落・解析の実行エラーを成功扱いしません。
-coverage smoke と管理者 entrypoint の子プロセスは現在の PowerShell 実行ファイルを使用し、
-PowerShell 5.1 / 7 の両方でそれぞれの実行境界を確認します。
-
-## Pester の最新安定版を使用
-
-### テストランナー
-
-[tests/Invoke-Tests.ps1](../../../scripts/powershell/tests/Invoke-Tests.ps1)
-
-### 取得と更新
-
-ランナーは毎回 PSGallery の最新安定版を確認し、未インストールの場合は取得します。
-バージョンやメジャー番号は固定せず、取得に失敗した場合も旧版へフォールバックしません。
-CI も最新安定版を取得し、Pester のキャッシュによる旧版の固定を避けます。
-Windows PowerShell 5.1 / PowerShell 7 の両方で互換性を検証します。
+`tests/Invoke-Tests.ps1` を CI とローカルで共用します。既定では `tests/` 以下の
+すべての `*.Tests.ps1` を検出し、`Integration.Tests.ps1` も実行します。
+テストの除外や workflow ごとのテスト一覧はありません。0 件の検出、テスト・
+container・block の失敗は失敗終了します。
 
 ```powershell
-# 手動で最新安定版を取得する場合
-Install-Module -Name Pester -Repository PSGallery -Scope CurrentUser -Force -SkipPublisherCheck
-
-# ランナーのカバレッジ設定ではモックを有効化
-$pesterConfig.CodeCoverage.UseBreakpoints = $false
+task test:powershell
+pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/tests/Invoke-Tests.ps1
 ```
 
-**重要**: `UseBreakpoints = $false` を設定しないと、カバレッジ有効時にモックが正しく動作しません
-
-## テスト実行
+個別の診断には `-Path`、カバレッジには `-ShowCoverage` / `-MinimumCoverage`、
+JUnit 出力には `-OutputFile` を使います。カバレッジの既定値は 0 です。
 
 ```powershell
-# tests/ ディレクトリに移動
-cd scripts/powershell/tests
-
-# 全テスト実行（カバレッジなし、高速）
-.\Invoke-Tests.ps1 -MinimumCoverage 0
-
-# 全テスト + カバレッジ（80%以上を要求）
-.\Invoke-Tests.ps1
-
-# カバレッジしきい値を変更
-.\Invoke-Tests.ps1 -MinimumCoverage 90
-
-# 特定のテストファイルのみ
-.\Invoke-Tests.ps1 -Path .\Install.Tests.ps1 -MinimumCoverage 0
-
-# installer の Phase 1 → Phase 2a integration contract のみ
-.\Invoke-Tests.ps1 -Path .\Install.Entrypoint.Tests.ps1 -MinimumCoverage 0
-
-# カバレッジ詳細表示
-.\Invoke-Tests.ps1 -ShowCoverage
+pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/handlers/Handler.Chezmoi.Tests.ps1
+pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -ShowCoverage -MinimumCoverage 80
 ```
 
-`Invoke-Tests.ps1` はローカルで PowerShell 5.1 と PowerShell 7 の両方から実行できます。CI では `ci-nix.yml` の Windows installer E2E job が、両 runtime でPester suiteを実行してから `install.cmd` を適用します。PowerShell 7のjobでは同じrunner上でPSScriptAnalyzerも実行します。
+## 前提と環境境界
 
-## CI テスト戦略
-
-| Workflow     | Runner                     | Guarantee                                                                            |
-| ------------ | -------------------------- | ------------------------------------------------------------------------------------ |
-| `ci-nix.yml` | hosted Linux/macOS/Windows | Linux/Darwin/WSL/Windows の platform E2E、PowerShell 5.1 / 7 のPesterとinstaller検証 |
-
-`Install.GuiOnly.Tests.ps1` は実物の `install.cmd -UserPhaseOnly` → `install.ps1` → `install.user.ps1` と本番ライブラリを一時 fixture にコピーし、外部 WinGet 境界だけを差し替えて GUI 導入の成功・失敗と不要な phase を実行しない契約を検証します。`Install.Wsl.Tests.ps1` は実物の Taskfile・installer・NixOSWSL handler を使用し、OS・ネットワーク・設定適用境界を fixture に置き換えて、既存 distro の再利用、新規導入時の一度だけの設定適用、引数伝播、失敗と再起動待ちの終了を検証します。Task runtime は既存 executable または installer の専用 cache を再利用します。実機アプリを要求する GUI installer E2E は `ci-nix.yml` に残します。Nix option、package、flake output は `nix-unit` で検証し、macOS の installer/runtime 契約は Homebrew Bash、UTF-8 locale、GNU coreutils を用意して Bats で実行します。
-
-WSL2 の実適用は `ci-nix.yml` の WSL E2E で `nixos-rebuild switch` を通して検証します。macOS は同 workflow の Darwin job で `darwin-rebuild switch` を実行します。Docker Desktop の実 runtime は標準 hosted runner では起動せず、Windows/macOS 実機固有の runtime は Docker profile を選択した installer 末尾の acceptance が失敗を返します。
-
-## WezTerm の実インストール証跡
-
-`ci-nix.yml` の既存 Windows installer jobs は PS5.1 / PS7 の両方で共通 `WingetHandler` を実行し、インストール → PATH 反映 → `wezterm --version` の成功を順序付きで検証します。続けて新しい外部 process で PATH 上の `wezterm --version` を実行し、終了コードとバージョン出力を要求します。追加のインストール job や WezTerm 専用 installer はありません。
-
-共通 handler の `PACKAGE_PHASE` は install、path、verify の開始・完了と経過ミリ秒を記録します。install は WinGet の終了コードを decimal / hexadecimal で、verify は実コマンドの終了コードを記録します。install の時間にはパッケージ取得と native installer の両方が含まれます。詳細な取得・hash・native installer 境界は `windows-installer-*` artifact の WinGet diagnostic logs で確認します。開始ログだけ残っている場合、完了を確認できたとは扱いません。
-
-Windows の `windows/winget/packages.json` は PR #633 の変更により stable の `wez.wezterm` を使用し、CI 除外も削除済みです。nightly へ戻したり `--ignore-security-hash` を追加したりしません。Issue #637 の過去ログは DeliveryOptimization の取得開始までしか記録していないため、その実行の原因を timeout や hash mismatch と断定できません。artifact は失敗時にも保存され、対象 SHA、runtime、installer transcript、WinGet diagnostic logs を含みます。
-
-## Windows environment acceptance
-
-`install.cmd` は GUI と WSL の phase が両方成功した後にだけ `Setup Complete!` を表示します。`-UserPhaseOnly` は GUI だけを実行します。[Test-Environment.ps1](../../../scripts/powershell/Test-Environment.ps1) は独立した runtime 検証用で、Windows installer からは呼び出しません。
-WSL 基盤の有効化後はエラー表示を出さず、再起動を案内して終了コード `3010` を返します。PS5.1 / PS7 の integration test で、完了表示・後続の distro 登録を行わず、本当の有効化失敗は引き続きエラーになることを検証します。
+ランナーは PSGallery の最新安定版 Pester を確認し、必要ならインストールします。
+PSScriptAnalyzer も事前に用意してください。取得失敗を古い版へのフォールバックで隠しません。
 
 ```powershell
-# core-only profile
-.\scripts\powershell\Test-Environment.ps1
-
-# Docker profile
-.\scripts\powershell\Test-Environment.ps1 -Runtime
+Install-Module PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force
 ```
 
-acceptance は次を検証します。
-
-- winget、git、gh、chezmoi、rg、fd、jq、nvim、Node.js、uv、Go、Rust、WSL の command resolution
-- Docker profile の場合だけ Docker の command resolution、`docker info`、`docker compose version`
-- `chezmoi apply --dry-run`
-- `wsl --status`
-- runtime mode の `docker run --rm hello-world`（runtime mode は Docker を暗黙に有効化）
-
-外部 process は `Invoke-Docker`、`Invoke-Chezmoi`、`Invoke-Wsl` wrapper 経由で呼び出し、[Test-Environment.Tests.ps1](../../../scripts/powershell/tests/Test-Environment.Tests.ps1) では wrapper と `Get-Command` を mock します。
-
-```powershell
-.\Invoke-Tests.ps1 -Path .\Test-Environment.Tests.ps1 -MinimumCoverage 0
-```
-
-`Bootstrap CI` は hosted Windows の全Pester contract、Nix-native `nix-unit` checks、hosted macOS の Bats runtime contract と nix-darwin build、Linux/WSL の bootstrap checks を集約します。実機変更やEnvironment approvalを要求しないため、fork pull requestを含めrunner待ちなしで完了します。
-
-## pre-commit 統合
-
-PowerShell ファイルの変更時に自動でテストが実行されます。
-
-**設定ファイル**: [.pre-commit-config.yaml](../../../.pre-commit-config.yaml)
-
-```yaml
-- repo: local
-  hooks:
-    - id: powershell-tests
-      name: powershell tests
-      entry: pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 80"
-      language: system
-      pass_filenames: false
-      types: [powershell]
-```
-
-**実行方法**:
-
-```bash
-# PowerShell テストのみ
-pre-commit run powershell-tests --all-files
-
-# 全フックを実行
-pre-commit run --all-files
-```
-
-## テスト命名規則（ベストプラクティス）
-
-### It ブロックの命名
-
-`It` ブロック名は `'should ...'` で始めます（英語、小文字）。
-
-```powershell
-# ✅ 正しい
-It 'should return true when path exists' { }
-It 'should throw exception when file not found' { }
-It 'should set <property> to <expected>' { }
-
-# ❌ 誤り
-It 'パスが存在する場合は true を返す' { }  # 日本語
-It 'Returns true when path exists' { }        # 大文字始まり
-It 'true を返す' { }                          # 説明不足
-```
-
-### -ForEach によるパラメタライズ
-
-類似テストは `-ForEach` でパラメタライズします（pytest の `@pytest.mark.parametrize` と同様）。
-
-```powershell
-# ✅ 正しい（パラメタライズ）
-It 'should set <property> to <expected>' -ForEach @(
-    @{ property = "Name"; expected = "Docker" }
-    @{ property = "Description"; expected = "Docker Desktop WSL 連携" }
-    @{ property = "Order"; expected = 20 }
-    @{ property = "RequiresAdmin"; expected = $false }
-) {
-    $handler.$property | Should -Be $expected
-}
-
-# ❌ 誤り（個別テスト）
-It 'should set Name to Docker' {
-    $handler.Name | Should -Be "Docker"
-}
-It 'should set Order to 20' {
-    $handler.Order | Should -Be 20
-}
-```
-
-### トークン置換
-
-`-ForEach` でハッシュテーブルを渡すと、`<key>` 形式のトークンがテスト名で自動置換されます。
-
-```powershell
-# テスト名: "should set Name to Docker"
-#           "should set Order to 20"
-It 'should set <property> to <expected>' -ForEach @(
-    @{ property = "Name"; expected = "Docker" }
-    @{ property = "Order"; expected = 20 }
-) {
-    $handler.$property | Should -Be $expected
-}
-```
-
-## テストパターン
-
-### 1. ハンドラーテスト
-
-**参考**: [tests/handlers/Handler.Chezmoi.Tests.ps1](../../../scripts/powershell/tests/handlers/Handler.Chezmoi.Tests.ps1)
-
-```powershell
-BeforeAll {
-    # ライブラリ読み込み
-    . "$PSScriptRoot\..\..\lib\SetupHandler.ps1"
-    . "$PSScriptRoot\..\..\lib\Invoke-ExternalCommand.ps1"
-    . "$PSScriptRoot\..\..\handlers\Handler.Chezmoi.ps1"
-}
-
-Describe 'ChezmoiHandler' {
-    BeforeEach {
-        $script:handler = [ChezmoiHandler]::new()
-        $script:ctx = [SetupContext]::new("D:\dotfiles")
-    }
-
-    Context 'Constructor' {
-        # パラメタライズされたテスト
-        It 'should set <property> to <expected>' -ForEach @(
-            @{ property = "Name"; expected = "Chezmoi" }
-            @{ property = "Description"; expected = "chezmoi による dotfiles 適用" }
-            @{ property = "Order"; expected = 100 }
-            @{ property = "RequiresAdmin"; expected = $false }
-        ) {
-            $handler.$property | Should -Be $expected
-        }
-    }
-
-    Context 'CanApply' {
-        It 'should return true when chezmoi is found' {
-            Mock Get-ExternalCommand { return @{ Source = "chezmoi.exe" } }
-
-            $result = $handler.CanApply($ctx)
-            $result | Should -Be $true
-        }
-
-        It 'should return false when chezmoi is not found' {
-            Mock Get-ExternalCommand { return $null }
-
-            $result = $handler.CanApply($ctx)
-            $result | Should -Be $false
-        }
-    }
-
-    Context 'Apply' {
-        It 'should return success when chezmoi apply succeeds' {
-            Mock Invoke-Chezmoi { return "Applied" }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $true
-            Should -Invoke Invoke-Chezmoi -Times 1
-        }
-
-        It 'should return failure when exception is thrown' {
-            Mock Invoke-Chezmoi { throw "chezmoi error" }
-
-            $result = $handler.Apply($ctx)
-
-            $result.Success | Should -Be $false
-            $result.Error | Should -Not -BeNullOrEmpty
-        }
-    }
-}
-```
-
-### 2. オーケストレーターテスト
-
-**参考**: [tests/Install.Tests.ps1](../../../scripts/powershell/tests/Install.Tests.ps1)
-
-```powershell
-Describe 'Handler dynamic loading' {
-    BeforeAll {
-        $handlersPath = Join-Path $PSScriptRoot "..\handlers"
-    }
-
-    It 'should load all handlers' {
-        $handlers = @()
-        $handlerFiles = Get-ChildItem -Path "$handlersPath" -Filter "Handler.*.ps1"
-
-        foreach ($file in $handlerFiles) {
-            . $file.FullName
-            $baseName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
-            $className = $baseName.Replace("Handler.", "") + "Handler"
-            $handlerInstance = New-Object $className
-            $handlers += $handlerInstance
-        }
-
-        $handlers.Count | Should -BeGreaterThan 0
-    }
-
-    It 'should sort handlers by Order property' {
-        $handlers = @(
-            [PSCustomObject]@{ Name = "A"; Order = 20 },
-            [PSCustomObject]@{ Name = "B"; Order = 10 },
-            [PSCustomObject]@{ Name = "C"; Order = 30 }
-        )
-
-        $sorted = $handlers | Sort-Object Order
-
-        $sorted[0].Name | Should -Be "B"
-        $sorted[1].Name | Should -Be "A"
-        $sorted[2].Name | Should -Be "C"
-    }
-
-    It 'should return empty array when no handlers exist' {
-        $emptyArray = @() | Sort-Object Order
-        @($emptyArray).Count | Should -Be 0
-    }
-}
-```
-
-## モックのベストプラクティス
-
-### 1. 外部コマンドは必ずラッパー経由でモック
-
-```powershell
-Mock Invoke-Wsl { return "output" }
-Mock Invoke-Chezmoi { return "success" }
-```
-
-### 2. ファイル操作もラッパー経由
-
-```powershell
-Mock Invoke-TestPath { return $true }
-Mock Invoke-GetContent { return "content" }
-```
-
-### 3. Should -Invoke でモック呼び出しを検証
-
-```powershell
-Should -Invoke Invoke-Wsl -Times 1 -Exactly
-Should -Invoke Invoke-Chezmoi -ParameterFilter { $ArgumentList -contains "apply" }
-```
-
-### 4. エラーハンドリングのテスト
-
-```powershell
-Mock Invoke-Wsl { throw "WSL error" }
-$result = $handler.Apply($context)
-$result.Success | Should -Be $false
-$result.Error | Should -Not -BeNullOrEmpty
-```
-
-## トラブルシューティング
-
-### 1. Pester v3 が自動ロードされる
-
-**症状**: `Should` コマンドレットが見つからない、最新版の機能が使えない
-
-**解決策**: Invoke-Tests.ps1 はロード済みの旧版をアンロードして、最新安定版をロードします。ディスク上の旧モジュールは削除しません。
-
-```powershell
-# 手動で解決する場合
-Install-Module -Name Pester -Repository PSGallery -Scope CurrentUser -Force -SkipPublisherCheck
-.\Invoke-Tests.ps1
-```
-
-### 2. カバレッジ有効時にテストが失敗する
-
-**症状**: `-MinimumCoverage 0` だと成功するが、カバレッジ有効だと失敗する
-
-**原因**: `UseBreakpoints = $true` によりモックが正しく動作しない
-
-**解決策**: [tests/Invoke-Tests.ps1:134](../../../scripts/powershell/tests/Invoke-Tests.ps1#L134) で既に設定済み
-
-```powershell
-$pesterConfig.CodeCoverage.UseBreakpoints = $false
-```
-
-### 3. テストでモックが効かない
-
-**原因**: 外部コマンドを直接呼び出している
-
-**解決策**: ラッパー関数を使用する
-
-```powershell
-# ❌ 直接呼び出し（モック不可）
-& wsl.exe --list
-
-# ✅ ラッパー経由（モック可能）
-Invoke-Wsl -ArgumentList "--list"
-
-# テストでモック
-Mock Invoke-Wsl { return "Mocked output" }
-```
-
-### 4. 空配列のプロパティアクセスエラー
-
-**症状**: `PropertyNotFoundException: The property 'Count' cannot be found`
-
-**解決策**: `@()` でラップする
-
-```powershell
-# ❌ エラーの可能性
-$handlers = $handlers | Sort-Object Order
-$handlers.Count
-
-# ✅ 安全
-$handlers = @($handlers | Sort-Object Order)
-@($handlers).Count
-```
-
-## PSScriptAnalyzer 静的解析
-
-### 概要
-
-PSScriptAnalyzer による静的解析テストを [tests/PSScriptAnalyzer.Tests.ps1](../../../scripts/powershell/tests/PSScriptAnalyzer.Tests.ps1) で実施しています。
-
-- **設定ファイル**: [PSScriptAnalyzerSettings.psd1](../../../scripts/powershell/PSScriptAnalyzerSettings.psd1)
-- **検出レベル**: Error/Warning のみ(Information は除外)
-- **テスト数**: 15 テスト(ライブラリ 2 + ハンドラー 5 + 全体 3 + ベストプラクティス 2 + 設定 3)
-
-### 実行方法
-
-```powershell
-cd scripts/powershell/tests
-
-# PSScriptAnalyzer テストのみ実行
-.\Invoke-Tests.ps1 -Path .\PSScriptAnalyzer.Tests.ps1 -MinimumCoverage 0
-
-# 全テストと一緒に実行
-.\Invoke-Tests.ps1
-```
-
-### 設定ファイル
-
-[PSScriptAnalyzerSettings.psd1](../../../scripts/powershell/PSScriptAnalyzerSettings.psd1) で除外ルールと重大度を設定:
-
-```powershell
-@{
-    # 除外するルール
-    ExcludeRules = @(
-        # dot-source で読み込む型は静的解析で認識できないため除外
-        'PSUseOutputTypeCorrectly',
-        # 外部コマンドラッパー関数では ShouldProcess は不要なため除外
-        'PSUseShouldProcessForStateChangingFunctions'
-    )
-
-    # 重大度でフィルタリング(Information レベルを除外)
-    # TypeNotFound は Information レベルで、using module の制限によるパースエラーなので無視
-    Severity = @('Error', 'Warning')
-
-    # 特定のルールの設定
-    Rules = @{
-        PSAvoidUsingCmdletAliases = @{
-            allowlist = @()
-        }
-    }
-}
-```
-
-### TypeNotFound について
-
-`using module` ステートメントで読み込む型は、PSScriptAnalyzer が静的解析時に認識できないため、`TypeNotFound` 警告が出ます。これは Information レベルのため、Severity 設定で除外され、テストにも影響しません。
-
-**理由**:
-
-- `using module` は実行時に型を読み込む
-- PSScriptAnalyzer は静的解析ツールでファイルを実行しない
-- 実際には問題なく動作する
-
-**対処法**:
-
-- Severity を Error/Warning のみに設定(設定済み)
-- テスト内で明示的にフィルタリング: `$results | Where-Object { $_.RuleName -ne 'TypeNotFound' }`
-
-### 検出される問題例
-
-PSScriptAnalyzer は以下のような問題を検出します:
-
-1. **PSAvoidAssignmentToAutomaticVariable**: `$error` などの自動変数への代入
-2. **PSUseSingularNouns**: 複数形の名詞を使用した関数名(例: `Test-PathExists` → `Test-PathExist`)
-3. **PSUseDeclaredVarsMoreThanAssignments**: 未使用変数
-4. **PSAvoidUsingCmdletAliases**: エイリアスの使用
-5. **PSUseShouldProcessForStateChangingFunctions**: ShouldProcess の欠如(wrapper関数は除外)
-
-### コードフォーマット
-
-コードフォーマットは [nix/formatter.nix](../../../nix/formatter.nix) で管理されています。
-PowerShell と PSScriptAnalyzer は Nix の依存として宣言し、formatter は Nix store の module manifest を直接読み込みます。
-
-```bash
-nix fmt
-nix fmt -- --fail-on-change
-```
-
-**注意**:
-
-- `Invoke-Formatter` はフォーマット(スタイル)
-- `Invoke-ScriptAnalyzer` はリント(コード品質)
-- 両者は別の目的を持つツールです
-
-## Windows PowerShell 5.1 の文字コード回帰テスト
-
-`install.cmd` は PowerShell 7 がなければ Windows PowerShell 5.1 にフォールバックします。
-その経路を保証するため、`scripts/powershell/` 配下の非 ASCII ソースは UTF-8 BOM 付きで保存します。
-詳細は [formatter の文字コード方針](../../formatter/powershell.md) を参照してください。
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/WindowsPowerShell.Encoding.Tests.ps1 -MinimumCoverage 0
-pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/WindowsPowerShell.Encoding.Tests.ps1 -MinimumCoverage 0
-```
-
-- 5.1 では実 entrypoint を `Parser.ParseFile` で解析し、実ライブラリと全 handler を読み込みます。
-  `Apply()` は呼ばず、パッケージ導入・昇格・サービス変更は行いません。
-- 読み込み時の警告も失敗として扱い、`Get-SetupHandler` が失敗した handler をスキップする挙動を見逃しません。
-- CP932 をフォールバックにした BOM 自動検出付き reader で全 PowerShell ソースの文字列保持を確認します。
-  CI runner の ANSI コードページが日本語以外でも、BOM 欠落を検出します。
-- formatter は本番と同じ PowerShell 7 でのみテストし、本文が変わらない場合の BOM 補完と冪等性を確認します。
-- launcher の stub 試験はコマンド選択・引数伝播・PowerShell 5.1 fallback の検査に限定します。installer の phase 成功を stub の `install.user.ps1` で確認するテストは追加せず、実 installer integration fixture を使用します。
+Windows の全テストには、installer が導入する `winget`、`pwsh`、`chezmoi`、
+`wezterm` が必要です。CI の Windows installer matrix は PowerShell 5.1 / 7 の
+それぞれで実際の `install.cmd -UserPhaseOnly` を適用した後に全スイートを実行します。
+PowerShell 7 では同じ job で PSScriptAnalyzer も実行します。
+workflow の構造やテストの配置先を Pester の文字列 assertion で固定しません。
+
+`Integration.Tests.ps1` は次を実コマンドで検証します。
+
+- Windows が管理する4つの CLI の起動と終了コード。
+- 一時 USERPROFILE と独立した chezmoi 設定・state を使った本物の `chezmoi apply`。
+- 配布した設定の内容、配置ファイルの範囲、再適用時の冪等性。
+- `NixOS` が存在する環境では、その distro 内の nvim / task / op / Obsidian。
+
+Windows の検査は Windows 以外で skip します。NixOS の既存環境の検査は
+`NixOS` distro がない環境で理由を付けて skip します。Windows installer job は
+WSL distro を構築せず、使い捨て distro の導入・rebuild・Hermes service の
+runtime 検証は同 workflow の WSL E2E が担当します。
+削除した Windows CLI 設定やフォントの導入は現在の installer の検証対象に含めません。
+
+## 維持する契約
+
+- `Install.GuiOnly.Tests.ps1`: 実 entrypoint と本番 library に対し、WinGet 境界だけを fixture に置き換えた GUI 導入。
+- `Install.Wsl.Tests.ps1`: 実 Taskfile / installer / NixOSWSL handler に対する再利用、新規導入、引数、失敗、再起動待ち。
+- `tests/ci/`: installer の終了コード・完了証跡・パッケージ inventory・ログ取得の挙動。
+- `PSScriptAnalyzer.Tests.ps1`: 現役 library / handler の Error と Warning。対象ゼロ・解析失敗も失敗。
+- `WindowsPowerShell.Encoding.Tests.ps1`: 実 entrypoint と現役 handler の 5.1 読み込み、CP932 fallback での文字保持、formatter の BOM と冪等性。
+
+Nix expression / option / package の値は `nix/tests/unit/` の nix-unit、ビルドと実行は
+flake checks、shell / installer 境界は Bats が担当します。
+
+## テストの実装
+
+`It` 名は `should ...` で始め、関連ケースは `-ForEach` を使用します。
+handler の単体テストでは外部コマンドの `Invoke-*` wrapper を mock し、
+成功・失敗・適用できない条件を検証します。実 OS とコマンドの接続は integration / E2E で確認します。
+
+PowerShell の formatter は `nix/formatter.nix` に宣言し、`nix fmt` から実行します。
+`scripts/powershell/` の非 ASCII ソースは Windows PowerShell 5.1 用に UTF-8 BOM 付きで保存します。
+詳細は [文字コード方針](../../formatter/powershell.md) を参照してください。
