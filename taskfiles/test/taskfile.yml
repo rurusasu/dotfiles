@@ -17,7 +17,7 @@ tasks:
           ".#checks.${system}.aerospace-workspace-cycle" \
           ".#checks.${system}.docker-desktop-activation" \
           ".#checks.${system}.neovim-native" \
-          ".#checks.${system}.ghostty-config" \
+          ".#checks.${system}.wezterm-config" \
           --no-link --no-write-lock-file
 
   test:powershell:

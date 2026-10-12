@@ -498,6 +498,79 @@ jobs:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
+      - name: Install PowerShell test modules
+        shell: pwsh
+        env:
+          PS_MODULE_DIRECTORY: ${{ matrix.version == '5.1' && 'WindowsPowerShell' || 'PowerShell' }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $moduleRoot = Join-Path $HOME "Documents\$env:PS_MODULE_DIRECTORY\Modules"
+          if ($env:PSModulePath -notlike "*$moduleRoot*") {
+            $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
+          }
+
+          function Invoke-WithRetry {
+            param([Parameter(Mandatory)][scriptblock]$Script, [int]$Attempts = 3)
+            for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+              try {
+                & $Script
+                return
+              }
+              catch {
+                if ($attempt -eq $Attempts) { throw }
+                Start-Sleep -Seconds ($attempt * 5)
+              }
+            }
+          }
+
+          function Install-GalleryModuleArchive {
+            param([Parameter(Mandatory)][string]$Name)
+            $version = (Find-Module -Name $Name -Repository PSGallery -ErrorAction Stop).Version.ToString()
+            $modulePath = Join-Path $moduleRoot "$Name\$version"
+            if (-not (Test-Path -LiteralPath (Join-Path $modulePath "$Name.psd1"))) {
+              $packagePath = Join-Path $env:RUNNER_TEMP "$Name.$version.zip"
+              New-Item -ItemType Directory -Force -Path $modulePath | Out-Null
+              Invoke-WithRetry {
+                Invoke-WebRequest -Uri "https://www.powershellgallery.com/api/v2/package/$Name/$version" -OutFile $packagePath -UseBasicParsing
+              }
+              Expand-Archive -LiteralPath $packagePath -DestinationPath $modulePath -Force
+            }
+            Import-Module -Name (Join-Path $modulePath "$Name.psd1") -Force
+          }
+
+          Install-GalleryModuleArchive -Name Pester
+          Install-GalleryModuleArchive -Name PSScriptAnalyzer
+
+      - name: Run PowerShell test suite
+        shell: pwsh
+        working-directory: scripts/powershell
+        env:
+          PS_MODULE_DIRECTORY: ${{ matrix.version == '5.1' && 'WindowsPowerShell' || 'PowerShell' }}
+          PS_TEST_EXECUTABLE: ${{ matrix.version == '5.1' && 'powershell.exe' || 'pwsh.exe' }}
+        run: |
+          $moduleRoot = Join-Path $HOME "Documents\$env:PS_MODULE_DIRECTORY\Modules"
+          if ($env:PSModulePath -notlike "*$moduleRoot*") {
+            $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
+          }
+          & $env:PS_TEST_EXECUTABLE -NoProfile -File .\tests\Invoke-Tests.ps1 -MinimumCoverage 0
+
+      - name: Run PSScriptAnalyzer
+        if: ${{ matrix.version == '7' }}
+        shell: pwsh
+        run: |
+          $moduleRoot = Join-Path $HOME 'Documents\PowerShell\Modules'
+          if ($env:PSModulePath -notlike "*$moduleRoot*") {
+            $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
+          }
+          $findings = @(Invoke-ScriptAnalyzer -Path scripts/powershell -Recurse -Settings scripts/powershell/PSScriptAnalyzerSettings.psd1 |
+            Where-Object { $_.RuleName -ne 'TypeNotFound' })
+          $errors = @($findings | Where-Object { $_.Severity -in 'Error', 'ParseError' })
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error "$($_.ScriptPath):$($_.Line) $($_.RuleName): $($_.Message)" }
+            throw "PSScriptAnalyzer found $($errors.Count) error(s)"
+          }
+
       - name: Bootstrap winget
         shell: pwsh
         run: |
@@ -686,6 +759,9 @@ jobs:
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
+
+      - name: Run actionlint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
 
       - name: Install Nix
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24

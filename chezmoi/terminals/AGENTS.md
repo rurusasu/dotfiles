@@ -1,17 +1,3 @@
-# chezmoi/terminals: ターミナル設定の統一方針
+# chezmoi terminals
 
-## 管理対象
-
-- `wezterm/wezterm.lua`: Windows 専用設定
-- `windows-terminal/settings.json`
-
-## ルール
-
-- ペイン/タブ操作キーは両ターミナルで極力統一する。
-- OS 固有設定は各ターミナル配下で分離する。
-
-## 反映
-
-```bash
-chezmoi apply
-```
+Only Windows WezTerm is managed here. Unix configuration is owned by Home Manager.

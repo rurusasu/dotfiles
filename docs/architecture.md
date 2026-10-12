@@ -341,10 +341,9 @@ Should -Invoke Invoke-Wsl -Times 1 -Exactly
 | Workflow         | Runner                     | Guarantee                                                                      |
 | ---------------- | -------------------------- | ------------------------------------------------------------------------------ |
 | `ci-nix.yml`     | hosted Linux/macOS/Windows | Nix lint・format・build・Windows manifest 検査と OS 別 installer / runtime E2E |
-| `ci-chezmoi.yml` | hosted Windows/Linux       | Windows 設定の Pester、template BOM、font installer、未認証 op の render guard |
-| `ci-other.yml`   | hosted Linux/Windows       | Python・MLflow・actionlint、PowerShell lint / Pester、devcontainer E2E         |
+| `ci-chezmoi.yml` | hosted Windows             | chezmoi の Windows 管理対象と template BOM 検査                                |
 
-通常 CI はこの3本に集約します。`codeql.yml` は独立した Actions セキュリティ検査として維持します。
+通常 CI はこの2本に集約します。`codeql.yml` は独立した Actions セキュリティ検査として維持します。
 選別ルールは `.github/actions/detect-ci-changes/action.yml` の Bash に直接定義し、外部 manifest と専用 Python detector は持ちません。
 Git の差分を `nix`・`chezmoi`・`other` の3つのフラグに分類し、workflow の `if` で実行条件を定義します。
 Nix 設定は Nix、Windows の chezmoi 設定は chezmoi、共通 installer・scripts・Taskfile・Docker・workflow・テストは全分類を選択します。

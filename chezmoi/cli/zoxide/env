@@ -1,3 +1,0 @@
-# Zoxide environment configuration
-# Exclude WSL system directories
-_ZO_EXCLUDE_DIRS=/mnt/wsl/*:/mnt/wslg/*

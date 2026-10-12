@@ -40,10 +40,10 @@ jobs:
           head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           run-all: ${{ github.event_name == 'workflow_dispatch' }}
 
-  lint:
+  source:
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true')) }}
-    name: Lint (Pester chezmoi)
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.chezmoi == 'true') }}
+    name: Chezmoi source
     runs-on: windows-2025
     timeout-minutes: 10
     permissions:
@@ -58,199 +58,32 @@ jobs:
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
-
       - name: Install chezmoi
         uses: ./.github/actions/install-chezmoi
-
-      - name: Install Pester
+      - name: Verify the managed Windows targets
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
-            Register-PSRepository -Default
+          $source = Join-Path $env:GITHUB_WORKSPACE 'chezmoi'
+          $data = '{"chezmoi":{"os":"windows"}}'
+          $managedFiles = @(& chezmoi --source $source --override-data $data managed --include files --path-style relative)
+          if ($LASTEXITCODE -ne 0) { throw "chezmoi managed files failed with exit $LASTEXITCODE" }
+          if ($managedFiles.Count -ne 0) { throw "Unexpected managed files: $($managedFiles -join ', ')" }
+          $managedScripts = @(& chezmoi --source $source --override-data $data managed --include scripts --path-style relative)
+          if ($LASTEXITCODE -ne 0) { throw "chezmoi managed scripts failed with exit $LASTEXITCODE" }
+          if ($managedScripts.Count -ne 1 -or $managedScripts[0] -ne '.chezmoiscripts/deploy/terminals/deploy.ps1') {
+            throw "Unexpected managed scripts: $($managedScripts -join ', ')"
           }
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module -Name Pester -Scope CurrentUser -Force -Repository PSGallery
-
-      - name: Validate chezmoi templates
-        shell: pwsh
-        working-directory: scripts/powershell
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          .\tests\Invoke-Tests.ps1 -Path .\tests\chezmoi -MinimumCoverage 0 -OutputFile chezmoi-test-results.xml
-
-      - name: Upload test results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: chezmoi-test-results
-          path: scripts/powershell/chezmoi-test-results.xml
-          retention-days: 30
-          if-no-files-found: warn
-
-  fmt:
-    needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true')) }}
-    name: Format (.tmpl BOM check)
-    runs-on: windows-2025
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Verify change detection
-        if: ${{ needs.changes.result != 'success' }}
-        shell: bash
-        run: exit 1
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Check .tmpl files for BOM
+      - name: Check template files for BOM
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $files = Get-ChildItem -Recurse -Filter "*.tmpl" ./chezmoi
-          $violations = [System.Collections.Generic.List[string]]::new()
-          foreach ($f in $files) {
-            $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+          foreach ($file in $files) {
+            $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
             if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
-              $violations.Add($f.FullName)
+              throw "UTF-8 BOM detected: $($file.FullName)"
             }
           }
-          if ($violations.Count -gt 0) {
-            Write-Error "BOM detected in $($violations.Count) file(s):`n$($violations -join "`n")"
-            exit 1
-          }
-          Write-Host "BOM check passed: $(@($files).Count) .tmpl file(s) checked"
-
-  font-install:
-    needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true')) }}
-    name: Font install smoke (Windows)
-    runs-on: windows-2025
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: Verify change detection
-        if: ${{ needs.changes.result != 'success' }}
-        shell: bash
-        run: exit 1
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Install chezmoi
-        uses: ./.github/actions/install-chezmoi
-
-      - name: Run UDEV Gothic NF installer
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-
-          $templatePath = Join-Path $env:GITHUB_WORKSPACE 'chezmoi/.chezmoiscripts/setup/fonts/run_onchange_before_00-install-udev-gothic.ps1.tmpl'
-          $scriptPath = Join-Path $env:RUNNER_TEMP 'install-udev-gothic.ps1'
-          $template = Get-Content -LiteralPath $templatePath -Raw
-          $script = ($template |
-            & chezmoi --source (Join-Path $env:GITHUB_WORKSPACE 'chezmoi') `
-              --override-data '{"chezmoi":{"os":"windows"}}' execute-template)
-          if ($LASTEXITCODE -ne 0) {
-            throw "chezmoi failed to render the font installer (exit $LASTEXITCODE)"
-          }
-          $script = $script -join [Environment]::NewLine
-          [System.IO.File]::WriteAllText($scriptPath, $script, [System.Text.UTF8Encoding]::new($false))
-
-          & pwsh -NoProfile -File $scriptPath
-
-          $regPath = 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
-          $key = Get-ItemProperty -Path $regPath -ErrorAction Stop
-          $entries = @($key.PSObject.Properties | Where-Object {
-            $fontPath = [string]$_.Value
-            $_.Name -like 'UDEVGothic*NF*' -and
-              -not [string]::IsNullOrWhiteSpace($fontPath) -and
-              (Test-Path -LiteralPath $fontPath -PathType Leaf)
-          })
-          if ($entries.Count -eq 0) {
-            throw 'UDEV Gothic NF was not installed with a registry entry pointing to an existing font file.'
-          }
-          $entries | ForEach-Object { Write-Host "Verified font: $($_.Name) -> $($_.Value)" }
-
-  op-guard:
-    needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true')) }}
-    # Behavioral guard for the "op present but unauthenticated" environment
-    # (devcontainers, CI, fresh clones). The static Pester lint only checks
-    # that onepasswordRead is wrapped in *a* guard; it cannot tell whether the
-    # guard is strong enough. Here we put a stub `op` on PATH that simulates
-    # the binary being installed with no account signed in, then render every
-    # template that calls onepasswordRead and require each to succeed. A guard
-    # that only checks `lookPath "op"` would call `op read` and fail — which is
-    # exactly the regression this job catches (see the self-check step).
-    name: Render guard (op unauthenticated)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: Verify change detection
-        if: ${{ needs.changes.result != 'success' }}
-        shell: bash
-        run: exit 1
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Install chezmoi
-        uses: ./.github/actions/install-chezmoi
-
-      - name: Install stub op (present but unauthenticated)
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.local/bin"
-          cat > "$HOME/.local/bin/op" <<'STUB'
-          #!/usr/bin/env bash
-          # Simulate 1Password CLI installed but with no account signed in.
-          [ "${1:-}" = "account" ] && [ "${2:-}" = "list" ] && exit 0   # empty list, success
-          [ "${1:-}" = "--version" ] && { echo "0.0.0-stub"; exit 0; }
-          echo "[stub op] no 1Password account found (unauthenticated)" >&2
-          exit 1
-          STUB
-          chmod +x "$HOME/.local/bin/op"
-
-      - name: Render every onepasswordRead template (must succeed)
-        run: |
-          set -euo pipefail
-          src="$PWD/chezmoi"
-          chezmoi init --source "$src"
-          fail=0
-          while IFS= read -r f; do
-            if ! chezmoi --source "$src" execute-template < "$f" >/dev/null 2>/tmp/te.err; then
-              rel="${f#"$src"/}"
-              echo "::error file=chezmoi/${rel}::onepasswordRead failed while op is unauthenticated — the guard is insufficient (must skip the read when the account is not signed in)"
-              sed 's/^/    /' /tmp/te.err
-              fail=1
-            fi
-          done < <(grep -rl --include='*.tmpl' -E '\{\{[^}]*onepasswordRead' "$src")
-          if [ "$fail" -ne 0 ]; then exit 1; fi
-          echo "OK  all onepasswordRead templates render cleanly with op present but unauthenticated"
-
-      - name: Self-check (a lookPath-only guard must be caught)
-        run: |
-          set -uo pipefail
-          src="$PWD/chezmoi"
-          weak='{{ if lookPath "op" }}{{ onepasswordRead "op://Private/Kaggle/c4patuuzwob2vcwt43qqphoyeu" .op_account_personal }}{{ end }}'
-          if printf '%s' "$weak" | chezmoi --source "$src" execute-template >/dev/null 2>&1; then
-            echo "::error::self-check failed: a lookPath-only guard rendered successfully, so this job would not catch the original bug class"
-            exit 1
-          fi
-          echo "OK  weak lookPath-only guard correctly fails under unauthenticated op"

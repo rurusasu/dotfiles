@@ -48,8 +48,11 @@ function Invoke-WindowsInstallTask {
         $env:DOTFILES_INSTALL_CONFIGURATION = $invocationConfiguration | ConvertTo-Json -Depth 20 -Compress
         $env:DOTFILES_INSTALL_POWERSHELL = (Join-Path $PSHOME $(if ($PSVersionTable.PSVersion.Major -lt 6) { 'powershell.exe' } else { 'pwsh.exe' })).Replace('\', '/')
         Invoke-WindowsInstallTaskCommand -Executable $task -Arguments @('--dir', $Repository, '--taskfile', (Join-Path $Repository 'Taskfile.yml'), 'install:windows') | Out-Host
+        if ([IO.File]::ReadAllText($resultPath).Trim() -eq 'RestartRequired') { return $true }
         if ($LASTEXITCODE -ne 0) { throw "Windows setup failed (Task exit=$LASTEXITCODE)." }
-        return ([IO.File]::ReadAllText($resultPath).Trim() -eq 'RestartRequired')
+        Invoke-WindowsInstallTaskCommand -Executable $task -Arguments @('--dir', $Repository, '--taskfile', (Join-Path $Repository 'Taskfile.yml'), 'install:windows:post') | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Windows post-install setup failed (Task exit=$LASTEXITCODE)." }
+        return $false
     }
     finally {
         $env:DOTFILES_INSTALL_CONFIGURATION = $previousConfiguration

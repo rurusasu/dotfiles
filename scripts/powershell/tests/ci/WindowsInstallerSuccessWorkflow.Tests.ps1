@@ -25,7 +25,7 @@
         $script:guiIds = @(
             'TheBrowserCompany.Arc', 'Google.Chrome', 'Obsidian.Obsidian', 'wez.wezterm',
             'AgileBits.1Password', 'Discord.Discord', 'StablyAI.Orca', 'Microsoft.PowerToys',
-            'Microsoft.WindowsTerminal', '9PLM9XGG6VKS'
+            'Microsoft.WindowsTerminal', '9PLM9XGG6VKS', 'Microsoft.PowerShell', 'twpayne.chezmoi'
         )
         $script:validOutput = (@(
                 'Using PowerShell 7'
@@ -153,7 +153,7 @@
     }
 
     It 'should avoid self-update manifest mutations CLI probes and retired-package seed or removal' {
-        $script:installerE2E | Should -Not -Match 'Microsoft\.PowerShell|Add-Member|Set-Content|Invoke-Npm|Invoke-Pnpm|Assert-WingetCommandRecovery|node --version|op\.exe|herdr|@openai/codex|Codex CLI|9NT1R1C2HH7J|RETIRED_PACKAGE_CLEANUP'
+        $script:installerE2E | Should -Not -Match 'Add-Member|Set-Content|Invoke-Npm|Invoke-Pnpm|Assert-WingetCommandRecovery|node --version|op\.exe|herdr|@openai/codex|Codex CLI|9NT1R1C2HH7J|RETIRED_PACKAGE_CLEANUP'
         @($script:validationCalls | ForEach-Object { $_.CommandElements[2].Value }) | Should -Be @(
             'installer evidence', 'WinGet package inventory', 'WezTerm install PATH and version'
         )

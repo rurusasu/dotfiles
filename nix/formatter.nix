@@ -148,7 +148,6 @@
               (toString oxfmtConfig)
             ];
             excludes = [
-              "chezmoi/terminals/windows-terminal/settings.json"
             ];
           };
 

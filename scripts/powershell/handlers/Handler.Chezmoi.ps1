@@ -21,7 +21,6 @@ class ChezmoiHandler : SetupHandlerBase {
     # 検出された chezmoi 実行ファイルのパス
     hidden [string]$ChezmoiExePath
     # 1Password アカウント（複数アカウント環境での --account 指定用）
-    hidden [string]$OpAccount = "my.1password.com"
 
     ChezmoiHandler() {
         $this.Name = "Chezmoi"
@@ -80,16 +79,7 @@ class ChezmoiHandler : SetupHandlerBase {
             $userPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
             $env:PATH = (@($machinePath, $userPath) | Where-Object { $_ }) -join ";"
 
-            # 1Password CLI のセットアップ確認は任意。secret が取れない場合も
-            # chezmoi テンプレート側で既定値に fallback して apply を継続する。
-            $this.EnsureOnePasswordAvailable()
-
-            # chezmoi 内部の op signin に複数アカウント環境でアカウントを指定する
-            # chezmoi.toml の [onepassword].args は op signin には適用されないため
-            # 環境変数で渡す必要がある
-            $env:OP_ACCOUNT = $this.OpAccount
-
-            $this.Log("chezmoi でターミナル設定を適用します: $sourcePath")
+            $this.Log("chezmoi will apply the Windows WezTerm configuration: $sourcePath")
             New-DirectorySafe -Path $runtimeRoot
             New-DirectorySafe -Path $cachePath
 
@@ -116,21 +106,15 @@ class ChezmoiHandler : SetupHandlerBase {
             # chezmoi apply の終了コードを保存（後続処理で上書きされるのを防ぐ）
             $chezmoiExitCode = $LASTEXITCODE
 
-            # 管理者昇格セッション対応: Windows Terminal の elevate: true により
             # 別ユーザーのプロファイルが読まれるケースがある。
-            # 管理者権限がある場合のみ実行（非管理者では他ユーザーの Documents にアクセス不可）
-            if (Test-IsAdminSession) {
-                $this.DeployProfileToOtherUsers($sourcePath)
-            }
-
             if ($chezmoiExitCode -eq 0) {
                 $this.Log("chezmoi apply 完了", "Green")
-                $this.Log("Windows Terminal を起動中なら、再起動すると確実に反映されます", "Gray")
+                $this.Log("Restart WezTerm to ensure the settings are applied", "Gray")
                 return $this.CreateSuccessResult("dotfiles を適用しました")
             }
             else {
                 $this.LogError("chezmoi apply が失敗しました (exit=$chezmoiExitCode)")
-                $this.Log("手動で実行してください: chezmoi --source `"$sourcePath`" apply", "Yellow")
+                $this.Log("chezmoi will apply the Windows WezTerm configuration: $sourcePath")
                 return $this.CreateFailureResult("chezmoi apply が失敗しました (exit=$chezmoiExitCode)")
             }
         }
@@ -218,7 +202,7 @@ class ChezmoiHandler : SetupHandlerBase {
         Write-Host "chezmoi がインストールされていません" -ForegroundColor Yellow
         Write-Host "========================================" -ForegroundColor Yellow
         Write-Host ""
-        Write-Host "Windows Terminal / WezTerm 設定を適用するには、以下のいずれかを実行してください:" -ForegroundColor Cyan
+        Write-Host "Windows WezTerm settings can be applied with task chezmoi" -ForegroundColor Cyan
         Write-Host ""
         Write-Host "  # 方法1: winget で chezmoi をインストールして適用"
         Write-Host "  winget install -e --id twpayne.chezmoi"
@@ -244,168 +228,5 @@ class ChezmoiHandler : SetupHandlerBase {
         return Join-Path $env:LOCALAPPDATA "chezmoi"
     }
 
-    <#
-    .SYNOPSIS
-        1Password CLI のサインイン状態を確認する
-    .DESCRIPTION
-        1Password secret はテンプレート展開時の必須条件ではない。
-        op CLI が使えない場合は警告だけ出し、chezmoi apply は fallback 値で続行する。
-    #>
-    hidden [void] EnsureOnePasswordAvailable() {
-        $opExe = $this.FindOpExe()
-        if (-not $opExe) {
-            $this.LogWarning("1Password CLI (op) が見つかりません。secret は既定値で続行します")
-            return
-        }
 
-        $this.Log("1Password CLI: 認証状態を確認しています...", "Gray")
-
-        $result = $null
-        try {
-            # op whoami はデスクトップアプリ連携環境（特に -File モード）で
-            # "account is not signed in" を返す場合がある。
-            # op vault list は認証済みなら exit 0 を返し、より信頼性が高い。
-            $result = Invoke-OpVaultList -OpExe $opExe -Account $this.OpAccount
-        }
-        catch {
-            $this.LogWarning("1Password CLI の確認に失敗しました。secret は既定値で続行します: $($_.Exception.Message)")
-            return
-        }
-
-        if ($result.ExitCode -eq 0) {
-            $this.Log("1Password CLI: サインイン済み", "Gray")
-            return
-        }
-
-        $diagnosis = try {
-            $this.DiagnoseOpAuthFailure($opExe)
-        }
-        catch {
-            $_.Exception.Message
-        }
-
-        $this.LogWarning("1Password CLI を利用できません。secret は既定値で続行します")
-        if (-not [string]::IsNullOrWhiteSpace($diagnosis)) {
-            foreach ($line in ($diagnosis -split "`r?`n")) {
-                if (-not [string]::IsNullOrWhiteSpace($line)) {
-                    $this.LogWarning($line)
-                }
-            }
-        }
-    }
-
-    <#
-    .SYNOPSIS
-        op whoami 失敗の原因を診断し、具体的な対処法を返す
-    .DESCRIPTION
-        以下の順序で原因を特定する:
-        1. op account list が空 → CLI にアカウント未登録（デスクトップアプリ連携が無効）
-        2. それ以外 → 一般的な認証エラー
-    #>
-    hidden [string] DiagnoseOpAuthFailure([string]$opExe) {
-        $accountResult = Invoke-OpAccountList -OpExe $opExe -Account $this.OpAccount
-        $outputStr = if ($accountResult.Output) { ($accountResult.Output | Out-String).Trim() } else { '' }
-
-        if ($accountResult.ExitCode -eq 124) {
-            return @(
-                "1Password CLI がタイムアウトしました。"
-                "1Password デスクトップアプリが起動・ロック解除されていることを確認してください。"
-                "CLI 連携を有効にした直後は、1Password アプリを完全終了して再起動してください。"
-            ) -join "`n"
-        }
-
-        # op account list 自体が失敗 → デスクトップアプリに接続できない
-        if ($accountResult.ExitCode -ne 0) {
-            $isConnectError = $outputStr -match 'cannot connect|make sure it is running'
-            if ($isConnectError) {
-                return @(
-                    "1Password デスクトップアプリに接続できません。"
-                    "CLI 連携を有効にした後、アプリの再起動が必要な場合があります:"
-                    "  1. タスクトレイの 1Password を右クリック → 「Quit 1Password」で完全終了"
-                    "  2. 1Password デスクトップアプリを再起動"
-                    "  3. アプリでロック解除（パスワード or 生体認証）"
-                    "  4. install.cmd を再実行する"
-                ) -join "`n"
-            }
-            return @(
-                "1Password CLI がデスクトップアプリと通信できません。"
-                "1Password デスクトップアプリが起動・ロック解除されていることを確認してください。"
-            ) -join "`n"
-        }
-
-        # account list は成功したがアカウントが空 → CLI連携が無効
-        $hasAccounts = $outputStr -and $outputStr -ne '[]' -and $outputStr -ne ''
-        if (-not $hasAccounts) {
-            return @(
-                "1Password CLI にアカウントが登録されていません。"
-                "1Password デスクトップアプリで CLI 連携を有効にしてください:"
-                "  1. 1Password デスクトップアプリを開く"
-                "  2. Settings > Developer を開く"
-                "  3. 「Biometric unlock for 1Password CLI」をオンにする"
-                "  4. 1Password デスクトップアプリを再起動する"
-                "  5. install.cmd を再実行する"
-                ""
-                "  参考: https://developer.1password.com/docs/cli/app-integration/"
-            ) -join "`n"
-        }
-
-        # アカウントはあるが未認証
-        return @(
-            "1Password CLI が未認証です。"
-            "1Password デスクトップアプリでロック解除してから再実行してください。"
-        ) -join "`n"
-    }
-
-    <#
-    .SYNOPSIS
-        op.exe を探す（PATH または WinGet Packages）
-    #>
-    hidden [string] FindOpExe() {
-        # 1. PATH から検索
-        $cmd = Get-ExternalCommand -Name "op"
-        if ($cmd) {
-            return $cmd.Source
-        }
-
-        # 2. 全ユーザーの WinGet Packages を検索（管理者昇格セッション対応）
-        return Find-WinGetExe -PackagePattern 'AgileBits.1Password.CLI*' -ExeFilter 'op.exe'
-    }
-
-    <#
-    .SYNOPSIS
-        他ユーザーの Documents にも PowerShell プロファイルをデプロイする
-    .DESCRIPTION
-        Windows Terminal の elevate: true 設定により、管理者昇格セッションでは
-        別ユーザーのプロファイルが読み込まれることがある。
-        管理者権限で実行されるこのハンドラーから、他ユーザーの Documents にも
-        プロファイルをコピーすることで昇格セッションでもプロファイルが有効になる。
-    #>
-    hidden [void] DeployProfileToOtherUsers([string]$sourcePath) {
-        $profileSource = Join-Path $sourcePath "shells\Microsoft.PowerShell_profile.ps1"
-        if (-not (Test-Path -LiteralPath $profileSource -PathType Leaf)) { return }
-
-        $usersDir = Split-Path $env:USERPROFILE
-        Get-ChildItemSafe -Path $usersDir -Directory |
-            Where-Object { $_.Name -notin @("Public", "Default", "Default User", "All Users", $env:USERNAME) } |
-            ForEach-Object {
-                $userDir = $_
-                try {
-                    $docs = Join-Path $userDir.FullName "Documents"
-                    if (Test-Path -LiteralPath $docs) {
-                        foreach ($subDir in @("PowerShell", "WindowsPowerShell")) {
-                            $dest = Join-Path $docs "$subDir\Microsoft.PowerShell_profile.ps1"
-                            $destDir = Split-Path -Parent $dest
-                            if (-not (Test-Path -LiteralPath $destDir)) {
-                                New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-                            }
-                            Copy-Item -LiteralPath $profileSource -Destination $dest -Force
-                            $this.Log("プロファイルをデプロイ: $dest", "Green")
-                        }
-                    }
-                }
-                catch {
-                    $this.Log("スキップ: $($userDir.FullName) ($($_.Exception.Message))", "Gray")
-                }
-            }
-    }
 }
