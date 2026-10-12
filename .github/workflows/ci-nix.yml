@@ -334,6 +334,11 @@ jobs:
             --extra-experimental-features 'nix-command flakes' \
             run .#darwin-rebuild -- switch --flake .#macos --impure
 
+      - name: Verify ChatGPT and bundled Codex on Darwin
+        run: |
+          nix build --no-link --print-build-logs \
+            .#checks.aarch64-darwin.chatgpt-desktop
+
   wsl-prebuild:
     name: Bootstrap / WSL / Prebuild
     needs: [changes, ci-tools]
