@@ -107,7 +107,7 @@ in
           (lib.hiPrio rust-analyzer)
           (lib.hiPrio rustfmt)
           oxlint
-          typescript-language-server
+          (pkgs.callPackage ./typescript-language-server/package.nix { })
           typescript
           astro-language-server
           prisma-language-server
