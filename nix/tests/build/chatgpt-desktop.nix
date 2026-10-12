@@ -12,6 +12,8 @@ pkgs.runCommand "chatgpt-desktop-check" { nativeBuildInputs = [ packages.codex ]
     cmp ${packages.chatgpt}/share/user-tmpfiles.d/chatgpt.conf \
       ${inputs.chatgpt-nixpkgs}/pkgs/by-name/ch/chatgpt/tmpfiles.conf
   ''}
-  codex --version
+  version="$(codex --version)"
+  echo "$version"
+  test "$version" = "codex-cli ${packages.codex.version}"
   touch "$out"
 ''
