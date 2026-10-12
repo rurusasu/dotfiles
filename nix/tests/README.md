@@ -41,6 +41,10 @@ Docker Desktop の初期設定は生成された activation を CLI double で�
 既存の `md5` パスとの衝突を検証します。実機の Docker Desktop 起動は installer の検証対象です。
 Windows の `task test` は PowerShell テストを実行します。
 
+Darwin / Linux の `custom-package-builds` は `chatgpt-desktop` check も含み、公式アプリと同梱 CLI の
+ビルド・CLI 起動、および Linux の desktop entry と upstream tmpfiles 規則の一致を確認します。
+GUI の起動・ログイン・操作はこの check の対象外で、各 OS の実機で確認します。
+
 ```bash
 # 全 system の flake 出力を評価する。テスト本体は実行しない
 nix flake check --all-systems --no-build --no-write-lock-file
@@ -75,13 +79,13 @@ Nix formatter は host module ではなく固定した store module を使いま
 それ自体は activation の実行や、設定値を比較する nix-unit テストを意味しません。
 
 Linux bootstrap CI は `x86_64-linux`（`ubuntu-24.04`）で本番 NixOS system と standalone Home Manager activation package を build します。
-Darwin CI は `aarch64-darwin`（`macos-15`）の runner で `darwin-rebuild switch` を実行し、構成を実際に適用します。
+Darwin CI は `aarch64-darwin`（`macos-15`）の runner で `darwin-rebuild switch` と全 flake checks を実行します。
 WSL CI も本番経路の `nixos-rebuild switch` を実行します。個別の Hermes Python suite や Darwin cask artifact check は CI で実行しません。
 Python unittest suite は CI の gate から外し、workflow 検証は `actionlint`、設定適用は対象 platform の rebuild で行います。
 共通の `nix` job は statix の lint を確認し、事前の `nix eval` / `nix flake check --no-build` は実行しません。
 `aarch64-linux` は flake の support/output には含まれますが、この workflow には ARM64 Linux runner の native build がありません。
 `aarch64-linux` の native build には対応する builder が必要です。
-配置変更時には `.github/actions/detect-ci-changes/action.yml` の3分類と、
+配置変更時には `.github/actions/detect-ci-changes/action.yml` の共有検査・OS 別の分類と、
 対応する workflow の実行条件を確認してください。
 
 ## Bats の所有境界
