@@ -1,4 +1,4 @@
-﻿BeforeAll {
+BeforeAll {
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 
 
@@ -20,19 +20,6 @@ Describe 'CI workflow configuration' {
 
         $treefmtNix | Should -Match 'Import-Module \$env:DOTFILES_PSSA_MODULE -Force'
         $treefmtNix | Should -Not -Match 'RequiredVersion'
-    }
-
-    It 'should harden Windows PSScriptAnalyzer install against cache and gallery issues' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-other.yml") -Raw
-
-        $workflow | Should -Match 'function Invoke-WithRetry'
-        $workflow | Should -Match '\$env:PSModulePath = "\$moduleRoot;\$env:PSModulePath"'
-        $workflow | Should -Match 'function Install-GalleryModuleArchive'
-        $workflow | Should -Match 'https://www\.powershellgallery\.com/api/v2/package/\$Name/\$Version'
-        $workflow | Should -Match '(?m)^\s+Install-GalleryModuleArchive -Name PSScriptAnalyzer\s*$'
-        $workflow | Should -Match 'Find-Module -Name \$Name -Repository PSGallery'
-        $workflow | Should -Match ([regex]::Escape('$_.RuleName -ne ''TypeNotFound'''))
-        $workflow | Should -Not -Match 'Register-PSRepository -Default'
     }
 
     It 'should run install.cmd in CI with timeout and completion marker checks' {
@@ -80,6 +67,23 @@ Describe 'CI workflow configuration' {
         $installerScript | Should -Match 'Post-install PATH exceeds the cmd\.exe command environment limit'
         $wingetAssertion | Should -Match 'reported an empty WinGet CI verification inventory'
     }
+
+    It 'should run PowerShell tests before each Windows installer E2E runtime' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw
+        $installerJob = [regex]::Match(
+            $workflow,
+            '(?ms)^  windows-installer:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
+        ).Groups['job'].Value
+
+        $installerJob | Should -Match 'runtime: Windows PowerShell 5\.1\s+version: "5\.1"'
+        $installerJob | Should -Match 'runtime: PowerShell 7\s+version: "7"'
+        $installerJob | Should -Match 'Run PowerShell test suite'
+        $installerJob | Should -Match '& \$env:PS_TEST_EXECUTABLE -NoProfile -File .\\tests\\Invoke-Tests\.ps1 -MinimumCoverage 0'
+        $installerJob | Should -Match 'Run PSScriptAnalyzer'
+        $installerJob | Should -Match "if: \$\{\{ matrix\.version == '7' \}\}"
+        $installerJob.IndexOf('Run PowerShell test suite') | Should -BeLessThan $installerJob.IndexOf('Run install.cmd strict user phase')
+    }
+
     It 'should run the real installer in concurrent PowerShell 5.1 and 7 processes' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw -Encoding UTF8
         $installerJob = [regex]::Match(
@@ -181,11 +185,11 @@ Describe 'CI workflow configuration' {
         $postInstall | Should -Match 'accept-flake-config true'
     }
 
-    It 'should validate only the Windows WezTerm source in chezmoi CI' {
+    It 'should validate Windows chezmoi targets and template encoding' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-chezmoi.yml') -Raw
 
-        $workflow | Should -Match 'name: Windows WezTerm CI'
-        $workflow | Should -Match 'name: Windows WezTerm source'
+        $workflow | Should -Match 'name: Chezmoi CI'
+        $workflow | Should -Match 'name: Chezmoi source'
         $workflow | Should -Match 'managed Windows targets'
         $workflow | Should -Not -Match 'Font install smoke|onepasswordRead|Windows Terminal|GlazeWM'
     }
@@ -514,29 +518,6 @@ esac
         $script:cleanupCalls[1].AllowFailure | Should -BeTrue
     }
 
-    It 'should run the complete PowerShell test suite in parallel on Windows PowerShell 5.1 and PowerShell 7' {
-        $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-other.yml') -Raw
-        $testJob = [regex]::Match(
-            $workflow,
-            '(?ms)^  test:\s*\r?\n(?<job>.*?)(?=^  [a-zA-Z0-9_-]+:|\z)'
-        ).Groups['job'].Value
-
-        $testJob | Should -Match 'fail-fast:\s*false'
-        $testJob | Should -Match 'max-parallel:\s*2'
-        $testJob | Should -Match 'runtime: Windows PowerShell 5\.1\s+executable: powershell\.exe\s+module_directory: WindowsPowerShell'
-        $testJob | Should -Match 'runtime: PowerShell 7\s+executable: pwsh\.exe\s+module_directory: PowerShell'
-        $testJob | Should -Match 'name: Test \(Pester \+ Codecov / \$\{\{ matrix\.runtime \}\}\)'
-        $testJob | Should -Match 'name: test-results-\$\{\{ matrix\.runtime \}\}'
-        $testJob | Should -Not -Match 'shell:\s+\$\{\{\s*matrix\.'
-        $testJob | Should -Match 'PS_TEST_EXECUTABLE: \$\{\{ matrix\.executable \}\}'
-        $testJob | Should -Match '& \$env:PS_TEST_EXECUTABLE -NoProfile -File'
-        $testJob | Should -Match 'Documents\\\$env:PS_MODULE_DIRECTORY\\Modules'
-        $testJob | Should -Match 'PS_MODULE_DIRECTORY: \$\{\{ matrix\.module_directory \}\}'
-        $testJob | Should -Match 'Install-GalleryModuleArchive -Name Pester\r?\n'
-        $testJob | Should -Match 'Find-Module -Name \$Name -Repository PSGallery'
-        $workflow | Should -Not -Match '(?m)^  test-windows-powershell:'
-    }
-
     It 'should retry winget source update when the runner reports Cancelled' {
         $wingetWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-nix.yml") -Raw
 
@@ -573,15 +554,6 @@ esac
 
 
 
-
-    It 'should retry Linux devcontainer CLI install when Nix cache downloads fail' {
-        $devcontainerWorkflow = Get-Content -LiteralPath (Join-Path $script:repoRoot ".github/workflows/ci-other.yml") -Raw
-
-        $devcontainerWorkflow | Should -Match 'for attempt in 1 2 3'
-        $devcontainerWorkflow | Should -Match "nix profile install 'nixpkgs#devcontainer'"
-        $devcontainerWorkflow | Should -Match 'nix profile install devcontainer failed after \$attempt attempts'
-        $devcontainerWorkflow | Should -Match 'retrying in \$\{sleep_seconds\}s'
-    }
 
     It 'should run WSL E2E for fork pull requests and require it in the unified workflow' {
         $workflow = Get-Content -LiteralPath (Join-Path $script:repoRoot '.github/workflows/ci-nix.yml') -Raw

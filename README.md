@@ -4,8 +4,7 @@
 [![Home Manager](https://img.shields.io/badge/Home_Manager-Nix-5277C3?logo=nixos&logoColor=white)](https://github.com/nix-community/home-manager)
 [![WSL](https://img.shields.io/badge/WSL-2-0078D6?logo=windows&logoColor=white)](https://docs.microsoft.com/en-us/windows/wsl/)
 [![Bootstrap CI](https://github.com/rurusasu/dotfiles/actions/workflows/ci-nix.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-nix.yml)
-[![Other CI](https://github.com/rurusasu/dotfiles/actions/workflows/ci-other.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-other.yml)
-[![ci-chezmoi](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml)
+[![Chezmoi CI](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml/badge.svg)](https://github.com/rurusasu/dotfiles/actions/workflows/ci-chezmoi.yml)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 Windows の GUI アプリと、macOS、NixOS、Ubuntu、Debian の環境を管理する個人用 dotfiles リポジトリです。Unix のパッケージ導入と設定は Nix module / Home Manager、Windows の GUI 導入は独立した WinGet manifest、ユーザー設定は chezmoi、OS サービスは各プラットフォームの宣言レイヤーで管理します。Windows installer は NixOS-WSL の導入と設定適用も行います。

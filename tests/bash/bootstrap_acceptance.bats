@@ -58,7 +58,6 @@ EOF
 @test "CI devcontainer pins Nix for the unskipped POSIX suite" {
 	config="$REPO_ROOT/.devcontainer/ci/devcontainer.json"
 	lock="$REPO_ROOT/.devcontainer/ci/devcontainer-lock.json"
-	workflow="$REPO_ROOT/.github/workflows/ci-other.yml"
 	feature='ghcr.io/devcontainers/features/nix:1.3.1'
 
 	jq -e --arg feature "$feature" '
@@ -73,7 +72,6 @@ EOF
 		  and (.resolved | startswith("ghcr.io/devcontainers/features/nix@sha256:"))
 		  and (.integrity | startswith("sha256:"))
 	' "$lock" >/dev/null
-	[ "$(grep -c -- '--frozen-lockfile' "$workflow")" -eq 1 ]
 }
 
 @test "Hermes bootstrap CI uses runtime contracts without Python unit-test gates" {

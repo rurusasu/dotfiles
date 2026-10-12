@@ -1,4 +1,4 @@
-name: Windows WezTerm CI
+name: Chezmoi CI
 
 on:
   workflow_dispatch:
@@ -43,7 +43,7 @@ jobs:
   source:
     needs: changes
     if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.chezmoi == 'true') }}
-    name: Windows WezTerm source
+    name: Chezmoi source
     runs-on: windows-2025
     timeout-minutes: 10
     permissions:

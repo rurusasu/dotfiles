@@ -24,7 +24,7 @@ class BootstrapCiImageTests(unittest.TestCase):
         self.assertNotIn("SARIF", lint_job)
 
     def test_tool_image_changes_trigger_contract_checks_on_push(self) -> None:
-        workflow = (ROOT / ".github/workflows/ci-other.yml").read_text()
+        workflow = (ROOT / ".github/workflows/ci-nix.yml").read_text()
         push_trigger = workflow.split("  push:\n", 1)[1].split("\nenv:\n", 1)[0]
         self.assertIn("branches: [main]", push_trigger)
         self.assertNotIn("paths:", push_trigger)
