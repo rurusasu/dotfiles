@@ -72,7 +72,12 @@ jobs:
           if ($managedFiles.Count -ne 0) { throw "Unexpected managed files: $($managedFiles -join ', ')" }
           $managedScripts = @(& chezmoi --source $source --override-data $data managed --include scripts --path-style relative)
           if ($LASTEXITCODE -ne 0) { throw "chezmoi managed scripts failed with exit $LASTEXITCODE" }
-          if ($managedScripts.Count -ne 1 -or $managedScripts[0] -ne '.chezmoiscripts/deploy/terminals/deploy.ps1') {
+          $expectedScripts = @(
+            '.chezmoiscripts/deploy/terminals/deploy.ps1'
+            '.chezmoiscripts/deploy/terminals/install_udev_gothic_nf.ps1'
+          )
+          if ($managedScripts.Count -ne $expectedScripts.Count -or
+              @($expectedScripts | Where-Object { $_ -notin $managedScripts }).Count -gt 0) {
             throw "Unexpected managed scripts: $($managedScripts -join ', ')"
           }
       - name: Check template files for BOM

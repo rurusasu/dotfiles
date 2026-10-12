@@ -1,0 +1,64 @@
+name: Cache CI Nix builds
+description: Persist native stores or container binary caches without additional credentials.
+
+inputs:
+  name:
+    description: Job-specific cache namespace.
+    required: true
+  mode:
+    description: Use store on hosted runners and binary in root containers.
+    default: store
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare Nix cache
+      id: prepare
+      shell: bash
+      env:
+        CACHE_NAME: ${{ inputs.name }}
+        CACHE_MODE: ${{ inputs.mode }}
+        LOCK_HASH: ${{ hashFiles('flake.lock') }}
+      run: |
+        set -euo pipefail
+        [[ "$CACHE_NAME" =~ ^[a-z0-9-]+$ ]]
+        version="$(nix --version | tr -cs '[:alnum:].-' '-')"
+        prefix="ci-nix-v1-$RUNNER_OS-$RUNNER_ARCH-$CACHE_MODE-$CACHE_NAME-$version"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "lock-prefix=$prefix-$LOCK_HASH" >> "$GITHUB_OUTPUT"
+        case "$CACHE_MODE" in
+          store)
+            echo 'nix=true' >> "$GITHUB_OUTPUT"
+            ;;
+          binary)
+            # RUNNER_TEMP reflects the container mount; runner.temp does not.
+            cache_dir="$RUNNER_TEMP/nix-binary-cache"
+            mkdir -p "$cache_dir"
+            echo "DOTFILES_CI_BINARY_CACHE=$cache_dir" >> "$GITHUB_ENV"
+            echo "path=$cache_dir" >> "$GITHUB_OUTPUT"
+            echo 'nix=false' >> "$GITHUB_OUTPUT"
+            ;;
+          *) exit 64 ;;
+        esac
+
+    - name: Restore and save native Nix store
+      if: ${{ inputs.mode == 'store' }}
+      uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
+      with:
+        nix: ${{ steps.prepare.outputs.nix }}
+        paths: ${{ steps.prepare.outputs.path }}
+        primary-key: ${{ steps.prepare.outputs.lock-prefix }}-${{ github.sha }}
+        restore-prefixes-first-match: |
+          ${{ steps.prepare.outputs.lock-prefix }}-
+          ${{ steps.prepare.outputs.prefix }}-
+        # Keep build-time dependencies such as torch; GC would discard them.
+
+    - name: Restore and save container binary cache
+      if: ${{ inputs.mode == 'binary' }}
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.prepare.outputs.path }}
+        key: ${{ steps.prepare.outputs.lock-prefix }}-${{ github.sha }}
+        restore-keys: |
+          ${{ steps.prepare.outputs.lock-prefix }}-
+          ${{ steps.prepare.outputs.prefix }}-

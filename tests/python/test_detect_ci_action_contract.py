@@ -13,7 +13,8 @@ ACTION_PATH = (
     REPOSITORY_ROOT / ".github" / "actions" / "detect-ci-changes" / "action.yml"
 )
 INPUTS = {"base-sha", "head-sha", "run-all"}
-OUTPUTS = {"nix", "chezmoi", "other"}
+OUTPUTS = {"nix", "chezmoi", "other", "linux", "darwin", "wsl", "windows"}
+UNIX = {"nix", "linux", "darwin", "wsl"}
 
 
 class DetectCiActionContractTests(unittest.TestCase):
@@ -22,7 +23,7 @@ class DetectCiActionContractTests(unittest.TestCase):
             ACTION_PATH.read_text(encoding="utf-8") if ACTION_PATH.is_file() else ""
         )
 
-    def test_action_declares_the_three_category_interface(self) -> None:
+    def test_action_declares_check_and_platform_outputs(self) -> None:
         self.assertTrue(ACTION_PATH.is_file())
         self.assertEqual(self._top_level_keys("inputs"), INPUTS)
         self.assertEqual(self._top_level_keys("outputs"), OUTPUTS)
@@ -67,7 +68,7 @@ class DetectCiActionContractTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertEqual(
                 self._read_outputs(output_path),
-                {name: name in {"nix"} for name in OUTPUTS},
+                {name: name in UNIX for name in OUTPUTS},
             )
             self.assertEqual(
                 (runner_temp / "ci-changed-paths").read_text(encoding="utf-8"),
@@ -83,23 +84,26 @@ class DetectCiActionContractTests(unittest.TestCase):
                     self.assertEqual(self._read_outputs(output_path), {})
 
         cases = (
-            (("chezmoi/config.tmpl",), {"chezmoi"}),
-            (("nix/hosts/aarch64-darwin/system.nix",), {"nix"}),
-            (("nix/modules/tools.nix",), {"nix"}),
-            (("nix/modules/discord/default.nix",), {"nix"}),
-            (("nix/modules/git/default.nix",), {"nix"}),
-            (("nix/modules/1password/default.nix",), {"nix"}),
-            (("nix/home/keybindings/bindings.nix",), {"nix"}),
-            (("windows/winget/packages.json",), {"nix", "chezmoi"}),
+            (("chezmoi/config.tmpl",), {"chezmoi", "windows"}),
+            (("nix/hosts/aarch64-darwin/system.nix",), {"nix", "darwin"}),
+            (("nix/modules/tools.nix",), UNIX),
+            (("nix/modules/discord/default.nix",), UNIX),
+            (("nix/modules/git/default.nix",), UNIX),
+            (("nix/modules/1password/default.nix",), UNIX),
+            (("nix/home/keybindings/bindings.nix",), UNIX),
+            (("windows/winget/packages.json",), {"nix", "chezmoi", "windows"}),
             (("scripts/sh/install-macos.sh",), OUTPUTS),
             ((".github/workflows/ci-chezmoi.yml",), OUTPUTS),
             (("taskfiles/hermes/taskfile.yml",), OUTPUTS),
             (("README.md", "docs/architecture.md", "nix/hosts/AGENTS.md"), set()),
-            (("chezmoi/prompt.md",), {"chezmoi"}),
-            (("chezmoi/dot_codex/AGENTS.md",), {"chezmoi"}),
-            (("nix/modules/shells/bash/bashrc",), {"nix"}),
+            (("chezmoi/prompt.md",), {"chezmoi", "windows"}),
+            (("chezmoi/dot_codex/AGENTS.md",), {"chezmoi", "windows"}),
+            (("nix/modules/shells/bash/bashrc",), UNIX),
             (("config/other.json",), {"other"}),
-            (("nix/odd\n name.nix", "chezmoi/config.tmpl"), {"nix", "chezmoi"}),
+            (
+                ("nix/odd\n name.nix", "chezmoi/config.tmpl"),
+                UNIX | {"chezmoi", "windows"},
+            ),
         )
         for paths, categories in cases:
             with self.subTest(paths=paths), tempfile.TemporaryDirectory() as temporary:

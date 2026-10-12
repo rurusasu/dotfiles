@@ -58,6 +58,11 @@ mkdir -p "$config_dir"
   # rebuilding Hermes dependencies from source.
   grep -E '^(extra-substituters|extra-trusted-public-keys) = ' \
     "$repo_root/docker/bootstrap-ci-tools/nix.conf"
+  if [[ -n ${DOTFILES_CI_BINARY_CACHE:-} ]]; then
+    # This local cache is restored within GitHub's branch-scoped CI cache.
+    [[ $DOTFILES_CI_BINARY_CACHE == /* && $DOTFILES_CI_BINARY_CACHE != *[[:space:]?]* ]] || exit 64
+    printf 'extra-substituters = file://%s?trusted=true\n' "$DOTFILES_CI_BINARY_CACHE"
+  fi
   if [[ ${1:-} == --wsl ]]; then
     # Keep container-only store ownership and sandbox settings out of NixOS.
     grep -E '^experimental-features = ' \
