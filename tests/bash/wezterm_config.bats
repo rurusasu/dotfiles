@@ -20,13 +20,13 @@ setup() {
         fi
     done
 }
-@test "chezmoi manages WezTerm settings and the font installer on Windows" {
+@test "chezmoi manages the PowerShell profile, WezTerm settings, and font installer on Windows" {
     for os in linux darwin windows; do
         managed=$(chezmoi --config /dev/null --config-format toml --source "$REPO_ROOT/chezmoi" \
             --destination "$HOME" --cache "$BATS_TEST_TMPDIR/cache" --persistent-state "$BATS_TEST_TMPDIR/state.boltdb" \
             --override-data "{\"chezmoi\":{\"os\":\"$os\"}}" managed --include files --path-style relative)
         if [[ $os == windows ]]; then
-            [ -z "$managed" ]
+            [ "$managed" = 'Documents/PowerShell/Microsoft.PowerShell_profile.ps1' ]
             scripts=$(chezmoi --config /dev/null --config-format toml --source "$REPO_ROOT/chezmoi" \
                 --destination "$HOME" --cache "$BATS_TEST_TMPDIR/scripts-cache" --persistent-state "$BATS_TEST_TMPDIR/scripts-state.boltdb" \
                 --override-data "{\"chezmoi\":{\"os\":\"$os\"}}" managed --include scripts --path-style relative)

@@ -339,7 +339,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
             self.assertIn(f"needs.changes.outputs.{output} == 'true'", job)
 
         self.assertIn("Bootstrap / Nix", workflow)
-        self.assertIn("Bootstrap / Windows / Installer", workflow)
+        self.assertIn("  windows-installer:\n", workflow)
 
         complete = self._workflow_job(workflow, "complete")
         self.assertIn("NIX_REQUIRED", complete)
@@ -353,6 +353,16 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         )
         self.assertIn("windows-installer", complete)
         self.assertIn("check_required_job", complete)
+
+    def test_windows_installer_uses_default_names_when_matrix_is_skipped(self) -> None:
+        job = self._workflow_job(self._named_workflow("ci-nix.yml"), "windows-installer")
+        self.assertIn("needs.changes.outputs.windows == 'true'", job)
+        self.assertIn("matrix:", job)
+        self.assertIn("runtime: Windows PowerShell 5.1", job)
+        self.assertIn("runtime: PowerShell 7", job)
+        # GitHub evaluates job-level if before expanding the matrix. Default
+        # names identify each runtime and stay readable when the job is skipped.
+        self.assertNotRegex(job, r"(?m)^    name:")
 
     def test_replaced_workflows_are_removed(self) -> None:
         for name in (
