@@ -28,10 +28,12 @@ in
     # include NixOS-WSL modules
   ];
 
-  wsl.enable = true;
-  wsl.defaultUser = user;
-  # Expose Windows D3D12/DXCore libraries through /run/opengl-driver/lib.
-  wsl.useWindowsDriver = true;
+  wsl = {
+    enable = true;
+    defaultUser = user;
+    # Expose Windows D3D12/DXCore libraries through /run/opengl-driver/lib.
+    useWindowsDriver = true;
+  };
 
   # Cover both login shells and GUI apps activated by the user systemd manager.
   environment.variables = graphicsEnvironment;
