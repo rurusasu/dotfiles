@@ -19,18 +19,20 @@ let
 in
 {
   imports = [ (import ../../tools.nix).wezterm ];
-  programs.wezterm = {
-    package = pkgs.wezterm;
-    settings = {
-      color_scheme = appearance.theme;
-      inherit (appearance) font_size;
+  programs = {
+    wezterm = {
+      package = pkgs.wezterm;
+      settings = {
+        color_scheme = appearance.theme;
+        inherit (appearance) font_size;
+      };
+      extraConfig = weztermLua;
+      # The upstream integration installs prompt/OSC hooks in every terminal.
+      # Scope it to WezTerm so Ghostty can use its own shell integration.
+      enableBashIntegration = false;
+      enableZshIntegration = false;
     };
-    extraConfig = weztermLua;
-    # The upstream integration installs prompt/OSC hooks in every terminal.
-    # Scope it to WezTerm so Ghostty can use its own shell integration.
-    enableBashIntegration = false;
-    enableZshIntegration = false;
+    bash.initExtra = shellIntegration;
+    zsh.initContent = lib.mkOrder 1000 shellIntegration;
   };
-  programs.bash.initExtra = shellIntegration;
-  programs.zsh.initContent = lib.mkOrder 1000 shellIntegration;
 }

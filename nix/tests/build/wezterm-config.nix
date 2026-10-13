@@ -19,7 +19,10 @@ let
           stateVersion = "25.05";
         };
         programs.bash.enable = true;
-        programs.zsh.enable = true;
+        programs.zsh = {
+          enable = true;
+          history.path = "$HOME/.zsh_history";
+        };
       }
     ];
   };
@@ -84,7 +87,7 @@ pkgs.runCommand "wezterm-config-check"
     WEZTERM_TEST_REPO_ROOT=${../../..} bats ${../../../tests/bash/wezterm_config.bats}
 
     # Execute the generated shell startup with the real WezTerm integration.
-    # Ghostty must retain its own prompt hooks; WezTerm must retain its hooks.
+    # WezTerm hooks must load in WezTerm and stay absent in Ghostty.
     for terminal in ghostty WezTerm; do
       for shell in bash zsh; do
         case "$shell" in
