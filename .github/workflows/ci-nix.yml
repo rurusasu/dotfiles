@@ -244,6 +244,9 @@ jobs:
     permissions:
       contents: read
       packages: read
+    outputs:
+      cache_key: ${{ steps.save-cache.outputs.key }}
+      cache_prefix: ${{ steps.save-cache.outputs.prefix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -251,31 +254,32 @@ jobs:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
+      - name: Configure Nix authentication
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/nix-binary-cache" \
+            bash scripts/sh/configure-bootstrap-ci-nix.sh
+
       - name: Restore Nix cache
         uses: ./.github/actions/cache-nix
         with:
           name: linux-build
-          mode: binary
-
-      - name: Configure Nix authentication
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash scripts/sh/configure-bootstrap-ci-nix.sh
 
       - name: Build Linux configurations and checks
         run: |
           # Native NixOS build uses a hardware fixture inside this container.
           export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"
-          output="$(nix build --impure --no-link --print-build-logs --print-out-paths \
+          nix build --impure --no-link --print-build-logs \
             .#nixosConfigurations.linux.config.system.build.toplevel \
-            .#homeConfigurations.x86_64-linux.activationPackage)"
-          mapfile -t paths <<< "$output"
-          # Save only this build's closure, rather than accumulating old systems.
-          export_dir="$RUNNER_TEMP/nix-cache-export"
-          mkdir -p "$export_dir"
-          nix copy --to "file://$export_dir?compression=zstd" "${paths[@]}"
-          mv "$DOTFILES_CI_BINARY_CACHE" "$DOTFILES_CI_BINARY_CACHE.restored"
-          mv "$export_dir" "$DOTFILES_CI_BINARY_CACHE"
+            .#homeConfigurations.x86_64-linux.activationPackage
+
+      - name: Save Nix cache
+        id: save-cache
+        uses: ./.github/actions/cache-nix
+        with:
+          name: linux-build
+          phase: save
 
   darwin:
     name: Bootstrap / Darwin
@@ -283,9 +287,14 @@ jobs:
     if: ${{ needs.changes.outputs.darwin == 'true' }}
     runs-on: macos-15
     timeout-minutes: 360
+    permissions:
+      contents: read
     env:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
+    outputs:
+      cache_key: ${{ steps.save-cache.outputs.key }}
+      cache_prefix: ${{ steps.save-cache.outputs.prefix }}
     steps:
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -298,11 +307,6 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Restore Nix cache
-        uses: ./.github/actions/cache-nix
-        with:
-          name: darwin
-
       - name: Configure shared Nix caches
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -313,7 +317,13 @@ jobs:
           sudo env \
             GITHUB_TOKEN="$GITHUB_TOKEN" \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/nix-binary-cache" \
             bash scripts/sh/configure-bootstrap-ci-nix.sh
+
+      - name: Restore Nix cache
+        uses: ./.github/actions/cache-nix
+        with:
+          name: darwin
 
       - name: Preserve installer files before nix-darwin takes ownership
         run: |
@@ -348,8 +358,19 @@ jobs:
             --extra-experimental-features 'nix-command flakes' \
             run .#darwin-rebuild -- switch --flake .#macos --impure
 
+      - name: Keep private build dependencies through checks
+        run: python3 scripts/python/prepare_ci_nix_cache.py root "$RUNNER_TEMP/ci-build-dependencies"
+
       - name: Run all macOS Nix checks
-        run: nix flake check --no-write-lock-file --print-build-logs
+        run: sudo nix flake check --no-write-lock-file --print-build-logs
+
+      - name: Save Nix cache
+        id: save-cache
+        uses: ./.github/actions/cache-nix
+        with:
+          name: darwin
+          phase: save
+          max-size: "2147483648"
 
   wsl-prebuild:
     name: Bootstrap / WSL / Prebuild
@@ -369,6 +390,9 @@ jobs:
     permissions:
       contents: read
       packages: read
+    outputs:
+      cache_key: ${{ steps.save-cache.outputs.key }}
+      cache_prefix: ${{ steps.save-cache.outputs.prefix }}
     steps:
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -376,16 +400,17 @@ jobs:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
+      - name: Configure Nix authentication
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/nix-binary-cache" \
+            bash scripts/sh/configure-bootstrap-ci-nix.sh
+
       - name: Restore Nix cache
         uses: ./.github/actions/cache-nix
         with:
           name: wsl-prebuild
-          mode: binary
-
-      - name: Configure Nix authentication
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash scripts/sh/configure-bootstrap-ci-nix.sh
 
       - name: Build the WSL system closure and export a local cache
         id: wsl-cache
@@ -425,6 +450,13 @@ jobs:
           retention-days: 1
           if-no-files-found: error
           compression-level: 0
+
+      - name: Save Nix cache
+        id: save-cache
+        uses: ./.github/actions/cache-nix
+        with:
+          name: wsl-prebuild
+          phase: save
 
   wsl:
     name: Bootstrap / WSL
@@ -778,6 +810,9 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    outputs:
+      cache_key: ${{ steps.save-cache.outputs.key }}
+      cache_prefix: ${{ steps.save-cache.outputs.prefix }}
     steps:
       - name: Verify change detection
         if: ${{ needs.changes.result != 'success' }}
@@ -797,13 +832,23 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Configure shared Nix caches
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sudo env \
+            GITHUB_TOKEN="$GITHUB_TOKEN" \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/nix-binary-cache" \
+            bash scripts/sh/configure-bootstrap-ci-nix.sh
+
       - name: Restore Nix check cache
         uses: ./.github/actions/cache-nix
         with:
           name: checks
 
       - name: Run all Nix checks
-        run: nix flake check --no-write-lock-file --print-build-logs
+        run: sudo nix flake check --no-write-lock-file --print-build-logs
 
       - name: Validate Windows package manifests
         shell: bash
@@ -826,3 +871,36 @@ jobs:
                 | type == "string" and length > 0)
             ' "$manifest"
           done
+
+      - name: Save Nix cache
+        id: save-cache
+        uses: ./.github/actions/cache-nix
+        with:
+          name: checks
+          phase: save
+          max-size: "536870912"
+
+  cache-cleanup:
+    name: Bootstrap / Cache cleanup
+    needs: [linux-build, darwin, wsl-prebuild, check]
+    if: >-
+      ${{ always() && github.ref == 'refs/heads/main' && !cancelled() &&
+          (needs.linux-build.outputs.cache_key != '' || needs.darwin.outputs.cache_key != '' ||
+           needs.wsl-prebuild.outputs.cache_key != '' || needs.check.outputs.cache_key != '') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+
+      - name: Retain confirmed main cache generations
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CACHE_PRODUCERS: ${{ toJSON(needs) }}
+        run: python3 scripts/python/prepare_ci_nix_cache.py prune

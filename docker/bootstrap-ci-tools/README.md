@@ -60,13 +60,17 @@ push / PR では軽量な変更検出を必ず実行し、必要な job だけ�
 
 `.github/actions/cache-nix` が GitHub Actions cache を復元・保存します。追加アカウントや secret は不要です。
 OS・architecture・Nix version・job・flake.lock のハッシュで分離し、同じ inputs、次に同じ実行環境の順で復元します。
-各 commit に保存するため、設定変更で生じた新しい出力も次回から利用できます。
+成功した main の commit だけが保存し、PR は main の cache を読み取ります。
 
-- Darwin と native Linux の `check`: `cache-nix-action` で store と DB を復元します。
-  macOS の torch などのビルド用依存を残すため、保存前の GC は実行しません。
-- Linux / WSL prebuild の root container: 公式 `actions/cache` で file binary cache を復元します。
-  store DB や runner ユーザーの所有権を変更せず、復元した cache を local substituter として使います。
-  保存時は今回の構成の closure に入れ替え、過去の構成を蓄積しません。
+- 全ジョブで公式 `actions/cache` の file binary cache を使い、store DB は保存しません。
+  `cache.nixos.org` にある成果物は metadata ごと除外し、公開 substituter から取得します。
+  実現済みの全出力を調べるため、macOS の torch などのビルド用依存も保存対象です。
+  Darwin は activation 直後に private 出力を GC root で保持し、checks 中の GC による削除を防ぎます。
+- 圧縮は Nix の zstd を GC root と PATH で固定します。Homebrew cleanup 後も同じツールを使います。
+- 保存上限は Darwin 2 GiB、Linux / WSL は各 768 MiB、checks は 512 MiB です。上限超過時は警告し、前世代を維持します。
+  新世代の保存を API で確認してから、同じ namespace の古い main cache を削除します。
+  4ジョブの定常上限は計 4 GiB、全ジョブの世代交代が重なっても最大 8 GiB です。
+  他 workflow の cache も repository の 10 GB 枠を共有します。
 - WSL への同一 run の artifact: 完全な cache の hardlink 複製から、`cache.nixos.org` に依存一式がある
   NAR payload だけを除きます。metadata は残し、Windows 側で署名付きの公開依存を先に取得してから取り込みます。
   公開 cache の判定は並列実行し、問い合わせ失敗時は未確認の payload を省きません。
