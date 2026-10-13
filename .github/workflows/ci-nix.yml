@@ -314,7 +314,7 @@ jobs:
           # Configure the daemon-owned Nix settings as root. A regular user
           # can display extra substituters while the daemon still ignores
           # them as untrusted, which silently turns cache hits into builds.
-          sudo env \
+          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES \
             PATH="$PATH" \
             GITHUB_TOKEN="$GITHUB_TOKEN" \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
@@ -328,7 +328,7 @@ jobs:
 
       - name: Preserve installer files before nix-darwin takes ownership
         run: |
-          sudo bash <<'SCRIPT'
+          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" bash <<'SCRIPT'
           set -euo pipefail
 
           for path in /etc/nix/nix.conf /etc/bashrc /etc/zshrc; do
@@ -355,7 +355,8 @@ jobs:
         run: |
           # Root is trusted by the Nix daemon; SUDO_USER still identifies the
           # hosted runner user for nix-darwin's primaryUser configuration.
-          sudo nix --accept-flake-config \
+          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
+            nix --accept-flake-config \
             --extra-experimental-features 'nix-command flakes' \
             run .#darwin-rebuild -- switch --flake .#macos --impure
 
@@ -363,7 +364,7 @@ jobs:
         run: python3 scripts/python/prepare_ci_nix_cache.py root "$RUNNER_TEMP/ci-build-dependencies"
 
       - name: Run all macOS Nix checks
-        run: sudo env PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
+        run: sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
 
       - name: Save Nix cache
         id: save-cache
@@ -837,7 +838,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sudo env \
+          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES \
             PATH="$PATH" \
             GITHUB_TOKEN="$GITHUB_TOKEN" \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
@@ -850,7 +851,7 @@ jobs:
           name: checks
 
       - name: Run all Nix checks
-        run: sudo env PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
+        run: sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
 
       - name: Validate Windows package manifests
         shell: bash
