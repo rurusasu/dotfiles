@@ -59,6 +59,8 @@ nvim-lspconfig の標準サーバー定義を使い、起動は `vim.lsp.config`
 
 TypeScript 7 の `tsc --lsp --stdio` を優先し、使用できない環境では typescript-language-server へフォールバックします。両方を同じバッファへ起動しません。旧サーバーには TS5/6 の `tsserver.js` が必要です。global TypeScript を7に更新しただけでは旧サーバーの依存は満たせません。必要な旧プロジェクトには対応する TS5/6 を project-local に保持してください。TS 用の上流設定は Deno 判定も行います。
 
+`typescript-language-server` 6.0.2 の pnpm 依存ハッシュが古い Nixpkgs に対しては、`nix/modules/typescript-language-server/package.nix` が上流の修正値を適用します。通常のセットアップ時の flake inputs 更新と Nix のハッシュ検証は継続します。修正済みのハッシュまたは別バージョンには補正を適用せず、lock 更新で上流修正を取り込んだらこの一時対応を削除します。
+
 未導入 executable は起動対象から外し、後から別の project-local executable があるプロジェクトを開くケースも再評価します。実行ファイルが存在しても server 初期化やプロジェクト設定の成功までは保証しません。`:checkhealth vim.lsp`、`:messages`、`:lua vim.print(vim.lsp.get_clients({bufnr=0}))` を確認します。
 
 選択順は project-local tsc → PATH tsc → project-local tsgo → PATH tsgo → local/PATH の従来サーバーです。バージョン確認は候補ごとに最大3秒。成功した選択は root ごとにセッション中固定し、不在はキャッシュしません。特定の旧機能のため従来サーバーを明示指定する場合は、LSP 起動前に `vim.g.dotfiles_typescript_server = "ts_ls"` を設定します。`"tsc"` を指定すると native のみに限定します。選択変更・依存更新後は再起動してください。
