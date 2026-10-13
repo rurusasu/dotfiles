@@ -98,8 +98,12 @@ function Invoke-NixosWslSetup {
     }
     $json = ConvertTo-WslArgument ($settings | ConvertTo-Json -Compress)
     Invoke-SetupCommand "install -d -m 0755 /etc/nixos; printf '%s\n' $json > /etc/nixos/dotfiles.json; chmod 0644 /etc/nixos/dotfiles.json" | Out-Host
-    Invoke-SetupCommand "nix --accept-flake-config --extra-experimental-features 'nix-command flakes' flake update --flake $qFlakeTarget" | Out-Host
-    Invoke-SetupCommand "nixos-rebuild switch --flake $(ConvertTo-WslArgument ('path:' + $target + '#nixos')) --impure --option accept-flake-config true --option experimental-features 'nix-command flakes'" | Out-Host
+    $updateFlakeInputs = [bool]$Context.GetOption('UpdateFlakeInputs', $true)
+    if ($updateFlakeInputs) {
+        Invoke-SetupCommand "nix --accept-flake-config --extra-experimental-features 'nix-command flakes' flake update --flake $qFlakeTarget" | Out-Host
+    }
+    $lockOption = if ($updateFlakeInputs) { '' } else { ' --no-update-lock-file' }
+    Invoke-SetupCommand "nixos-rebuild switch --flake $(ConvertTo-WslArgument ('path:' + $target + '#nixos')) --impure$lockOption --option accept-flake-config true --option experimental-features 'nix-command flakes'" | Out-Host
 
     if ($target -ne $source) {
         switch ($syncBack) {

@@ -770,7 +770,7 @@ in
                   home.pkgs.ruff
                   home.pkgs.ty
                   home.pkgs.lua-language-server
-                  (home.pkgs.callPackage ../../../modules/editors/nvim/typescript-language-server.nix { })
+                  (home.pkgs.callPackage ../../../modules/typescript-language-server/package.nix { })
                   home.pkgs.nixfmt
                 ];
             remoteInstalled = builtins.any (

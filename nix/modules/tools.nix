@@ -1,17 +1,27 @@
 # Unix application installation. Feature modules own settings and integration.
 let
+  chatgptCli =
+    { inputs, pkgs, ... }:
+    let
+      packages = import ./ai_agents/chatgpt/packages.nix { inherit inputs pkgs; };
+    in
+    {
+      programs.codex = {
+        enable = true;
+        package = packages.codex;
+      };
+    };
   chatgptDesktop =
     { inputs, pkgs, ... }:
     let
       packages = import ./ai_agents/chatgpt/packages.nix { inherit inputs pkgs; };
     in
     {
-      imports = [ ./ai_agents/chatgpt/desktop.nix ];
+      imports = [
+        ./ai_agents/chatgpt/desktop.nix
+        chatgptCli
+      ];
       home.packages = [ packages.chatgpt ];
-      programs.codex = {
-        enable = true;
-        package = packages.codex;
-      };
     };
 in
 {
@@ -107,7 +117,7 @@ in
           (lib.hiPrio rust-analyzer)
           (lib.hiPrio rustfmt)
           oxlint
-          (pkgs.callPackage ./editors/nvim/typescript-language-server.nix { })
+          (pkgs.callPackage ./typescript-language-server/package.nix { })
           typescript
           astro-language-server
           prisma-language-server
@@ -121,6 +131,7 @@ in
     };
 
   chatgpt = chatgptDesktop;
+  inherit chatgptCli;
 
   darwin = { pkgs, ... }: {
     environment.systemPackages = [

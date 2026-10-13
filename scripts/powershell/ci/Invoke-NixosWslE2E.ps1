@@ -231,9 +231,10 @@ try {
         $context.Options["SyncMode"] = "repo"
         $context.Options["SyncBack"] = "none"
         $context.Options["StateVersion"] = "25.05"
+        $context.Options["UpdateFlakeInputs"] = $false
         # Import CI's prebuilt system closures before executing the production
         # setup so unchanged dependencies can reuse the imported closures.
-        # Each production switch still updates its flake inputs.
+        # Both switches use the PR lock file that produced the prebuild.
         $context.Options["SkipPostInstallSetup"] = $true
 
         $handler = [NixOSWSLHandler]::new()
@@ -418,7 +419,7 @@ fi
                 # Exercise the same public task as the installer and nrs alias.
                 Invoke-WslChecked -Arguments @(
                     "-d", $DistroName, "-u", "nixos", "--", "bash", "-lc",
-                    "task --dir /home/nixos/.dotfiles nrs"
+                    "task --dir /home/nixos/.dotfiles nrs UPDATE_FLAKE_INPUTS=false"
                 ) -TimeoutSeconds $PostInstallTimeoutSeconds | Out-Null
             }
             catch {

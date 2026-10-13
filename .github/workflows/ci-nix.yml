@@ -534,7 +534,8 @@ jobs:
             -InstallDir $installDir
 
   windows-installer:
-    name: Bootstrap / Windows / Installer (${{ matrix.runtime }})
+    # Let GitHub generate matrix names; job-level skips happen before matrix
+    # expansion and would otherwise display an unevaluated name expression.
     needs: changes
     if: ${{ needs.changes.outputs.windows == 'true' }}
     runs-on: windows-2025

@@ -79,6 +79,7 @@
       // (import ./unit/docker-packages.nix { inherit inputs; })
       // (import ./unit/tart-package-selection.nix { inherit inputs; })
       // (import ./unit/nodejs-package-selection.nix { inherit inputs; })
+      // (import ./unit/typescript-language-server.nix { inherit inputs; })
       // (import ./unit/windows-path-metadata.nix { inherit inputs; })
       // (import ./unit/windows-desktop-verifiers.nix { inherit inputs; })
       // (import ./unit/windows-codex-desktop-verifier.nix { inherit inputs; })
