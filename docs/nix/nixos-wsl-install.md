@@ -156,6 +156,30 @@ WSL 固有構成は `nix/hosts/x86_64-linux/wsl/`、
 `nix/hosts/shared/nixos/identity.nix` が読み取ります。
 native NixOS 用の `/etc/nixos/hardware-configuration.nix` は WSL では通常不要です。
 
+## WSLg の GPU 描画
+
+WSL host は `wsl.useWindowsDriver = true` で Windows の D3D12 / DXCore ライブラリを
+`/run/opengl-driver/lib` に接続します。`LD_LIBRARY_PATH` にそのディレクトリを設定し、
+`GALLIUM_DRIVER=d3d12` で Mesa の描画経路を選択します。
+Ghostty などの OpenGL アプリが CPU 描画の `llvmpipe` にフォールバックするのを防ぎます。
+設定は `nix/hosts/x86_64-linux/wsl/configuration.nix` が所有します。
+シェルには `environment.variables`、systemd 経由の GUI 起動には `environment.d` で渡します。
+詳細は [NixOS-WSL の option](https://nix-community.github.io/NixOS-WSL/options.html#wsl.useWindowsDriver) と
+[WSLg の D3D12 自動選択の問題](https://github.com/microsoft/wslg/issues/1332) を参照してください。
+
+反映後は新しい WSL シェルで確認します。既に起動している Ghostty は再起動してください。
+
+```bash
+nix shell --inputs-from ~/.dotfiles nixpkgs#mesa-demos -c glxinfo -B
+```
+
+`OpenGL renderer string` が `D3D12 (<GPU 名>)`、`Accelerated` が `yes` なら GPU 描画です。
+`direct rendering: Yes` や OpenGL のバージョンだけでは、GPU 描画かどうかは判別できません。
+Wayland 側は同じ package の `eglinfo -B` で確認できます。
+
+Windows 側には GPU メーカーの対応ドライバーが必要です。NixOS 内に native Linux 用の
+NVIDIA カーネルドライバーを導入する構成ではありません。
+
 ## system version と system.stateVersion
 
 `system.stateVersion` はパッケージの更新版ではなく、永続データの互換性を決める schema です。

@@ -15,6 +15,26 @@ let
   defaultConfig = mkWsl.config;
 in
 {
+  testWslUsesWindowsGpuForOpenGL = {
+    expr = {
+      graphics = defaultConfig.hardware.graphics.enable;
+      windowsDriver = defaultConfig.wsl.useWindowsDriver;
+      driverLibraries = builtins.elem defaultConfig.wsl.wslLib defaultConfig.hardware.graphics.extraPackages;
+      galliumDriver = defaultConfig.environment.variables.GALLIUM_DRIVER or null;
+      libraryPath = defaultConfig.environment.variables.LD_LIBRARY_PATH or null;
+      serviceEnvironment =
+        defaultConfig.environment.etc."environment.d/60-wsl-graphics.conf".text or null;
+    };
+    expected = {
+      graphics = true;
+      windowsDriver = true;
+      driverLibraries = true;
+      galliumDriver = "d3d12";
+      libraryPath = "/run/opengl-driver/lib";
+      serviceEnvironment = "GALLIUM_DRIVER=d3d12\nLD_LIBRARY_PATH=/run/opengl-driver/lib\n";
+    };
+  };
+
   testWslDockerModulePreservesNativeDaemonAndRegistry = {
     expr = {
       enabled = defaultConfig.virtualisation.docker.enable;
