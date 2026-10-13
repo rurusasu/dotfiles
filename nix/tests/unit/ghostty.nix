@@ -9,6 +9,7 @@ let
         (import ../../modules/terminals/wezterm/defaults.nix {
           inherit pkgs;
           inherit (pkgs) lib;
+          inherit (home) config;
         }).programs.wezterm;
       home = inputs.home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
@@ -59,12 +60,10 @@ let
         && home.config.programs.wezterm.settings.color_scheme == wezterm.settings.color_scheme;
       zshIntegration =
         home.config.programs.ghostty.enableZshIntegration
-        && home.config.programs.wezterm.enableZshIntegration
         && pkgs.lib.hasInfix "shell-integration/zsh/ghostty-integration" home.config.programs.zsh.initContent
         && pkgs.lib.hasInfix "/etc/profile.d/wezterm.sh" home.config.programs.zsh.initContent;
       bashIntegration =
         home.config.programs.ghostty.enableBashIntegration
-        && home.config.programs.wezterm.enableBashIntegration
         && pkgs.lib.hasInfix "shell-integration/bash/ghostty.bash" home.config.programs.bash.initExtra
         && pkgs.lib.hasInfix "/etc/profile.d/wezterm.sh" home.config.programs.bash.initExtra;
       ghosttySystemd = home.config.programs.ghostty.systemd.enable;

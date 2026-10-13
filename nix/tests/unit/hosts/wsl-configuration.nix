@@ -15,6 +15,31 @@ let
   defaultConfig = mkWsl.config;
 in
 {
+  testWslStartsGraphicalSessionForPortals = {
+    expr = {
+      sessionAtLogin = builtins.elem "default.target" (
+        defaultConfig.systemd.user.targets.graphical-session.wantedBy or [ ]
+      );
+      displayEnvironment =
+        builtins.all
+          (
+            value:
+            inputs.nixpkgs.lib.hasInfix value
+              defaultConfig.environment.etc."environment.d/60-wsl-graphics.conf".text
+          )
+          [
+            "DISPLAY=:0\n"
+            "WAYLAND_DISPLAY=wayland-0\n"
+          ];
+      portal = defaultConfig.xdg.portal.enable;
+    };
+    expected = {
+      sessionAtLogin = true;
+      displayEnvironment = true;
+      portal = true;
+    };
+  };
+
   testWslUsesWindowsGpuForOpenGL = {
     expr = {
       graphics = defaultConfig.hardware.graphics.enable;
@@ -31,7 +56,7 @@ in
       driverLibraries = true;
       galliumDriver = "d3d12";
       libraryPath = "/run/opengl-driver/lib";
-      serviceEnvironment = "GALLIUM_DRIVER=d3d12\nLD_LIBRARY_PATH=/run/opengl-driver/lib\n";
+      serviceEnvironment = "DISPLAY=:0\nGALLIUM_DRIVER=d3d12\nLD_LIBRARY_PATH=/run/opengl-driver/lib\nWAYLAND_DISPLAY=wayland-0\n";
     };
   };
 
