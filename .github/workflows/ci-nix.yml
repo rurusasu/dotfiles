@@ -315,6 +315,7 @@ jobs:
           # can display extra substituters while the daemon still ignores
           # them as untrusted, which silently turns cache hits into builds.
           sudo env \
+            PATH="$PATH" \
             GITHUB_TOKEN="$GITHUB_TOKEN" \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/nix-binary-cache" \
@@ -362,7 +363,7 @@ jobs:
         run: python3 scripts/python/prepare_ci_nix_cache.py root "$RUNNER_TEMP/ci-build-dependencies"
 
       - name: Run all macOS Nix checks
-        run: sudo nix flake check --no-write-lock-file --print-build-logs
+        run: sudo env PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
 
       - name: Save Nix cache
         id: save-cache
@@ -837,6 +838,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           sudo env \
+            PATH="$PATH" \
             GITHUB_TOKEN="$GITHUB_TOKEN" \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/nix-binary-cache" \
@@ -848,7 +850,7 @@ jobs:
           name: checks
 
       - name: Run all Nix checks
-        run: sudo nix flake check --no-write-lock-file --print-build-logs
+        run: sudo env PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
 
       - name: Validate Windows package manifests
         shell: bash
