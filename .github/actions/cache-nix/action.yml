@@ -1,13 +1,24 @@
 name: Cache CI Nix builds
-description: Persist native stores or container binary caches without additional credentials.
+description: Reuse bounded private binary caches from main on every platform.
 
 inputs:
   name:
     description: Job-specific cache namespace.
     required: true
-  mode:
-    description: Use store on hosted runners and binary in root containers.
-    default: store
+  phase:
+    description: Restore before building or save after all checks succeed.
+    default: restore
+  max-size:
+    description: Maximum exported cache size in bytes (Darwin uses 2 GiB).
+    default: "805306368"
+
+outputs:
+  key:
+    description: Cache generation to confirm before pruning.
+    value: ${{ steps.prepare.outputs.key }}
+  prefix:
+    description: Job namespace to retain across Nix and input updates.
+    value: ${{ steps.prepare.outputs.namespace }}
 
 runs:
   using: composite
@@ -17,48 +28,69 @@ runs:
       shell: bash
       env:
         CACHE_NAME: ${{ inputs.name }}
-        CACHE_MODE: ${{ inputs.mode }}
+        CACHE_PHASE: ${{ inputs.phase }}
         LOCK_HASH: ${{ hashFiles('flake.lock') }}
       run: |
         set -euo pipefail
         [[ "$CACHE_NAME" =~ ^[a-z0-9-]+$ ]]
-        version="$(nix --version | tr -cs '[:alnum:].-' '-')"
-        prefix="ci-nix-v1-$RUNNER_OS-$RUNNER_ARCH-$CACHE_MODE-$CACHE_NAME-$version"
-        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
-        echo "lock-prefix=$prefix-$LOCK_HASH" >> "$GITHUB_OUTPUT"
-        case "$CACHE_MODE" in
-          store)
-            echo 'nix=true' >> "$GITHUB_OUTPUT"
-            ;;
-          binary)
-            # RUNNER_TEMP reflects the container mount; runner.temp does not.
-            cache_dir="$RUNNER_TEMP/nix-binary-cache"
-            mkdir -p "$cache_dir"
-            echo "DOTFILES_CI_BINARY_CACHE=$cache_dir" >> "$GITHUB_ENV"
-            echo "path=$cache_dir" >> "$GITHUB_OUTPUT"
-            echo 'nix=false' >> "$GITHUB_OUTPUT"
-            ;;
-          *) exit 64 ;;
-        esac
+        [[ "$CACHE_PHASE" == restore || "$CACHE_PHASE" == save ]]
+        cache_dir="$RUNNER_TEMP/nix-binary-cache"
+        if [[ "$CACHE_PHASE" == restore ]]; then
+          # Homebrew cleanup removes its zstd during Darwin activation. A Nix
+          # GC root and GITHUB_PATH keep the same compressor for restore/save.
+          compressor="$(nix build --inputs-from . nixpkgs#zstd.bin \
+            --out-link "$RUNNER_TEMP/ci-zstd" --print-out-paths)"
+          "$compressor/bin/zstd" --version
+          echo "$compressor/bin" >> "$GITHUB_PATH"
+          version="$(nix --version | sed -n '1p' | tr -cs '[:alnum:].-' '-')"
+          namespace="ci-nix-v2-$RUNNER_OS-$RUNNER_ARCH-$CACHE_NAME-"
+          prefix="$namespace$version"
+          {
+            echo "DOTFILES_CI_BINARY_CACHE=$cache_dir"
+            echo "DOTFILES_CI_CACHE_PREFIX=$namespace"
+            echo "DOTFILES_CI_CACHE_KEY=$prefix-$LOCK_HASH-$GITHUB_SHA"
+          } >> "$GITHUB_ENV"
+          echo "prefix=$prefix-" >> "$GITHUB_OUTPUT"
+          echo "lock-prefix=$prefix-$LOCK_HASH-" >> "$GITHUB_OUTPUT"
+          echo "key=$prefix-$LOCK_HASH-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          mkdir -p "$cache_dir"
+        else
+          echo "key=$DOTFILES_CI_CACHE_KEY" >> "$GITHUB_OUTPUT"
+          echo "namespace=$DOTFILES_CI_CACHE_PREFIX" >> "$GITHUB_OUTPUT"
+        fi
+        echo "path=$cache_dir" >> "$GITHUB_OUTPUT"
 
-    - name: Restore and save native Nix store
-      if: ${{ inputs.mode == 'store' }}
-      uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
-      with:
-        nix: ${{ steps.prepare.outputs.nix }}
-        paths: ${{ steps.prepare.outputs.path }}
-        primary-key: ${{ steps.prepare.outputs.lock-prefix }}-${{ github.sha }}
-        restore-prefixes-first-match: |
-          ${{ steps.prepare.outputs.lock-prefix }}-
-          ${{ steps.prepare.outputs.prefix }}-
-        # Keep build-time dependencies such as torch; GC would discard them.
-
-    - name: Restore and save container binary cache
-      if: ${{ inputs.mode == 'binary' }}
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    - name: Restore binary cache
+      if: ${{ inputs.phase == 'restore' }}
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.prepare.outputs.path }}
-        key: ${{ steps.prepare.outputs.lock-prefix }}-${{ github.sha }}
+        key: ${{ steps.prepare.outputs.key }}
         restore-keys: |
-          ${{ steps.prepare.outputs.lock-prefix }}-
-          ${{ steps.prepare.outputs.prefix }}-
+          ${{ steps.prepare.outputs.lock-prefix }}
+          ${{ steps.prepare.outputs.prefix }}
+
+    - name: Export private build outputs
+      if: ${{ inputs.phase == 'save' && github.ref == 'refs/heads/main' }}
+      id: export
+      shell: bash
+      env:
+        MAX_CACHE_SIZE: ${{ inputs.max-size }}
+      run: |
+        python3 scripts/python/prepare_ci_nix_cache.py export \
+          "$RUNNER_TEMP/nix-private-cache" --max-size "$MAX_CACHE_SIZE"
+
+    - name: Replace the restored cache with current outputs
+      if: ${{ inputs.phase == 'save' && github.ref == 'refs/heads/main' && steps.export.outputs.cacheable == 'true' }}
+      shell: bash
+      run: |
+        mv "$DOTFILES_CI_BINARY_CACHE" "$RUNNER_TEMP/nix-cache-before-save"
+        mv "$RUNNER_TEMP/nix-private-cache" "$DOTFILES_CI_BINARY_CACHE"
+
+    - name: Save binary cache
+      if: ${{ inputs.phase == 'save' && github.ref == 'refs/heads/main' && steps.export.outputs.cacheable == 'true' }}
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        # Cache versions include the path: restore and save must use the same one.
+        path: ${{ steps.prepare.outputs.path }}
+        key: ${{ env.DOTFILES_CI_CACHE_KEY }}

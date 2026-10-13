@@ -36,7 +36,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         workflow = self._named_workflow("ci-nix.yml")
         darwin = self._workflow_job(workflow, "darwin")
         self.assertIn("name: Apply macOS configuration", darwin)
-        self.assertIn("sudo nix --accept-flake-config", darwin)
+        self.assertIn("nix --accept-flake-config", darwin)
+        self.assertIn("sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES", darwin)
         self.assertIn("run .#darwin-rebuild -- switch --flake .#macos --impure", darwin)
         self.assertNotIn("nix build", darwin)
         self.assertNotIn("Darwin application artifacts", darwin)
@@ -167,7 +168,10 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         workflow = self._named_workflow("ci-nix.yml")
         job = self._workflow_job(workflow, "wsl-prebuild")
         script = re.search(
-            r"(?m)^        run: \|\n(?P<script>(?:          [^\n]*\n|\n)+)", job
+            r"(?m)^      - name: Build the WSL system closure and export a local cache\n"
+            r"        id: wsl-cache\n        shell: bash\n"
+            r"        run: \|\n(?P<script>(?:          [^\n]*\n|\n)+)",
+            job,
         )
         self.assertIsNotNone(script)
         assert script is not None
@@ -293,7 +297,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         for job_name in ("nix", "linux-build", "wsl-prebuild"):
             with self.subTest(job=job_name):
                 job = self._workflow_job(workflow, job_name)
-                self.assertIn("run: bash scripts/sh/configure-bootstrap-ci-nix.sh", job)
+                self.assertIn("bash scripts/sh/configure-bootstrap-ci-nix.sh", job)
                 self.assertIn(
                     "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
                     job,

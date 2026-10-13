@@ -39,12 +39,19 @@ class BootstrapCiImageTests(unittest.TestCase):
                 root = Path(directory)
                 home = root / "passwd-home"
                 home.mkdir()
-                config = root / "xdg" if use_xdg else home / ".config"
+                config = root / "xdg" if use_xdg and owned_home else home / ".config"
                 tools = root / "bin"
                 tools.mkdir()
                 commands = {
                     "getent": '#!/bin/bash\nprintf "fixture:x:0:0:Fixture:%s:/bin/bash\\n" "$FALLBACK_HOME"\n',
-                    "nix": '#!/bin/bash\n[[ "$*" == "config show access-tokens" ]] || exit 64\ngrep "^access-tokens = " "$EXPECTED_CONFIG/nix/bootstrap-ci.conf" | cut -d= -f2-\n',
+                    "nix": (
+                        '#!/bin/bash\ncase "$*" in\n'
+                        '  "config show access-tokens") field=access-tokens ;;\n'
+                        '  "config show substituters") field=extra-substituters ;;\n'
+                        '  "config show trusted-public-keys") field=extra-trusted-public-keys ;;\n'
+                        '  *) exit 64 ;;\nesac\n'
+                        'grep "^$field = " "$EXPECTED_CONFIG/nix/bootstrap-ci.conf" | cut -d= -f2-\n'
+                    ),
                 }
                 for name, content in commands.items():
                     command = tools / name
