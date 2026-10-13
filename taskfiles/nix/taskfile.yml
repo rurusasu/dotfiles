@@ -1,5 +1,8 @@
 version: "3"
 
+vars:
+  UPDATE_FLAKE_INPUTS: '{{.UPDATE_FLAKE_INPUTS | default "true"}}'
+
 tasks:
   darwin:install:
     desc: Install Nix if needed and switch the macOS configuration
@@ -35,7 +38,7 @@ tasks:
   rebuild:
     desc: Run nixos-rebuild switch
     cmds:
-      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix flake update && sudo nixos-rebuild switch --flake . --impure"'
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && {{if ne .UPDATE_FLAKE_INPUTS "false"}}nix flake update && {{end}}sudo nixos-rebuild switch --flake . --impure{{if eq .UPDATE_FLAKE_INPUTS "false"}} --no-update-lock-file{{end}}"'
 
   build:
     desc: Dry build NixOS configuration

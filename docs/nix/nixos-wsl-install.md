@@ -136,6 +136,13 @@ Invoke-NixosWslSetup -Context $context
 `ForcePostInstall` は通常設定せず、競合する checkout を退避する必要がある場合だけ明示します。
 Flake inputs の更新失敗時は構成を反映しません。
 
+検証済みの `flake.lock` をそのまま適用する場合は、setup 前に
+`$context.Options['UpdateFlakeInputs'] = $false` を指定します。既定値は `$true` です。
+WSL 内の再適用では `task nrs UPDATE_FLAKE_INPUTS=false` を使います。
+どちらも更新を省略し、`--no-update-lock-file` で lock の変更を禁止します。
+WSL CI は初回 setup と `nrs` の両方にこの指定を使い、PR の head SHA に含まれる
+lock と事前ビルドの依存を一致させます。
+
 ## 通常の反映
 
 setup 済みの WSL では次を実行します。
