@@ -110,12 +110,12 @@ Describe 'Windows application and setup-tool package catalog' {
         @($retired.packages | Where-Object id -EQ '9PLM9XGG6VKS').Count | Should -Be 0
     }
 
-    It 'should update flake inputs before every scripted NixOS rebuild entry point' {
+    It 'should update flake inputs by default before scripted NixOS rebuild entry points' {
         $taskfile = Get-Content -LiteralPath (Join-Path $script:repoRoot "taskfiles/nix/taskfile.yml") -Raw
         $postInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/powershell/lib/Invoke-NixosWslSetup.ps1") -Raw
         $commonInstallScript = Get-Content -LiteralPath (Join-Path $script:repoRoot "scripts/sh/install-common.sh") -Raw
 
-        $taskfile | Should -Match 'nix flake update && sudo nixos-rebuild switch --flake \. --impure'
+        $taskfile | Should -Match 'nix flake update && \{\{end\}\}sudo nixos-rebuild switch --flake \. --impure'
         $commonInstallScript | Should -Match 'nix flake update --flake "\$flake_ref"'
         $postInstallScript | Should -Match 'flake update --flake'
         $commonInstallScript | Should -Not -Match 'dotfiles_trust_git_directory|git config --global'
