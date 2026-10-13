@@ -74,6 +74,9 @@ in
         set.TERM = "xterm-256color";
       };
       features = {
+        # The app-bundled CLI lacks the complete package layout required by
+        # the managed daemon; keep interactive sessions in embedded mode.
+        daemon_auto_start = false;
         hooks = true;
         unified_exec = true;
         apps = true;
