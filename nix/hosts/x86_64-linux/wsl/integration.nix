@@ -9,6 +9,18 @@
 let
   identity = import ../../shared/nixos/identity.nix { inherit lib; };
   inherit (identity) user repository;
+  graphicsEnvironment = {
+    # Mesa dynamically loads the Windows bridge libraries from this directory.
+    LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+    # https://github.com/microsoft/wslg/issues/1332
+    GALLIUM_DRIVER = "d3d12";
+  };
+  # WSLg exports these to shells, but the user manager starts without a
+  # desktop login and needs them for D-Bus-activated GTK portal backends.
+  wslgServiceEnvironment = graphicsEnvironment // {
+    DISPLAY = ":0";
+    WAYLAND_DISPLAY = "wayland-0";
+  };
 in
 
 {
@@ -36,7 +48,31 @@ in
     ../../../modules/terminals/wezterm/defaults.nix
   ];
 
+  # WSLg has no desktop session manager to activate this target. Recent
+  # xdg-desktop-portal units require it even when activated through D-Bus.
+  systemd.user = {
+    targets.graphical-session.wantedBy = [ "default.target" ];
+    # switch-to-configuration restarts this service for existing user managers.
+    # A new WantedBy link alone would only take effect at the next login.
+    services.nixos-activation = {
+      wants = [ "graphical-session.target" ];
+      after = [ "graphical-session.target" ];
+    };
+  };
+
+  xdg.portal = {
+    enable = true;
+    extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
+    config.common.default = "*";
+  };
+
   environment = {
+    # Cover GUI applications activated by the user systemd manager.
+    etc."environment.d/60-wsl-graphics.conf".text =
+      lib.concatStringsSep "\n" (
+        lib.mapAttrsToList (name: value: "${name}=${value}") wslgServiceEnvironment
+      )
+      + "\n";
     systemPackages = with pkgs; [
       coreutils
       nvidia-container-toolkit
@@ -55,7 +91,7 @@ in
     pathsToLink = [ "/share/fcitx5" ];
 
     # Ensure nix-ld works for non-login shells (e.g. VS Code WSL server).
-    variables = {
+    variables = graphicsEnvironment // {
       NIX_LD = "/run/current-system/sw/share/nix-ld/lib/ld.so";
       NIX_LD_LIBRARY_PATH = "/run/current-system/sw/share/nix-ld/lib";
       WARP_ENABLE_WAYLAND = "1";

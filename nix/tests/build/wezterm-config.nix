@@ -1,4 +1,4 @@
-{ pkgs }:
+{ inputs, pkgs }:
 let
   terminals = ../../modules/terminals;
   windowsWezTerm = ../../../chezmoi/terminals/wezterm/wezterm.lua;
@@ -6,7 +6,28 @@ let
     (import (terminals + "/wezterm/defaults.nix") {
       inherit pkgs;
       inherit (pkgs) lib;
+      inherit (terminalHome) config;
     }).programs.wezterm.settings;
+  terminalHome = inputs.home-manager.lib.homeManagerConfiguration {
+    inherit pkgs;
+    modules = [
+      (terminals + "/wezterm/defaults.nix")
+      {
+        home = {
+          username = "test-user";
+          homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
+          stateVersion = "25.05";
+        };
+        programs.bash.enable = true;
+        programs.zsh = {
+          enable = true;
+          history.path = "$HOME/.zsh_history";
+        };
+      }
+    ];
+  };
+  bashInit = pkgs.writeText "wezterm-bash-init" terminalHome.config.programs.bash.initExtra;
+  zshInit = pkgs.writeText "wezterm-zsh-init" terminalHome.config.programs.zsh.initContent;
 in
 pkgs.runCommand "wezterm-config-check"
   {
@@ -64,5 +85,26 @@ pkgs.runCommand "wezterm-config-check"
     print("Windows WezTerm default shell and NixOS WSL launcher are valid")
     LUA
     WEZTERM_TEST_REPO_ROOT=${../../..} bats ${../../../tests/bash/wezterm_config.bats}
+
+    # Execute the generated shell startup with the real WezTerm integration.
+    # WezTerm hooks must load in WezTerm and stay absent in Ghostty.
+    for terminal in ghostty WezTerm; do
+      for shell in bash zsh; do
+        case "$shell" in
+          bash) executable=${pkgs.bash}/bin/bash; init=${bashInit}; args="--noprofile --norc" ;;
+          zsh) executable=${pkgs.zsh}/bin/zsh; init=${zshInit}; args="-d -f" ;;
+        esac
+        TERM=xterm-256color TERM_PROGRAM="$terminal" "$executable" $args -ic '
+          source "$1"
+          if typeset -f __wezterm_osc7 >/dev/null; then loaded=yes; else loaded=no; fi
+          if [ "$TERM_PROGRAM" = WezTerm ]; then expected=yes; else expected=no; fi
+          if [ "$loaded" != "$expected" ]; then
+            echo "$TERM_PROGRAM: unexpected WezTerm shell hooks (loaded=$loaded)" >&2
+            exit 1
+          fi
+        ' terminal-test "$init"
+        echo "$terminal/$shell: terminal-specific shell integration passed"
+      done
+    done
     touch "$out"
   ''

@@ -8,19 +8,12 @@
 {
   config,
   lib,
-  pkgs,
   ...
 }:
 
 let
   identity = import ../../shared/nixos/identity.nix { inherit lib; };
   inherit (identity) user stateVersion;
-  graphicsEnvironment = {
-    # Mesa dynamically loads the Windows bridge libraries from this directory.
-    LD_LIBRARY_PATH = "/run/opengl-driver/lib";
-    # https://github.com/microsoft/wslg/issues/1332
-    GALLIUM_DRIVER = "d3d12";
-  };
 in
 
 {
@@ -33,19 +26,6 @@ in
     defaultUser = user;
     # Expose Windows D3D12/DXCore libraries through /run/opengl-driver/lib.
     useWindowsDriver = true;
-  };
-
-  # Cover both login shells and GUI apps activated by the user systemd manager.
-  environment.variables = graphicsEnvironment;
-  environment.etc."environment.d/60-wsl-graphics.conf".text =
-    lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "${name}=${value}") graphicsEnvironment)
-    + "\n";
-
-  # XDG desktop portal: provides color-scheme and other settings queries via D-Bus.
-  xdg.portal = {
-    enable = true;
-    extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
-    config.common.default = "*";
   };
 
   # This value determines the NixOS release from which the default
