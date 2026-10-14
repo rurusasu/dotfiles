@@ -677,6 +677,12 @@ jobs:
             throw "winget source list failed (exit=$wingetSourcesExitCode): $($wingetSources -join ' ')"
           }
 
+      # Updating the MSI-managed runtime can terminate every process using it.
+      # Prepare it from stable Windows PowerShell before seeding E2E state.
+      - name: Prepare PowerShell 7 before installer E2E
+        shell: cmd
+        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts\powershell\ci\Initialize-WindowsInstallerRuntime.ps1
+
       - name: Run install.cmd strict user phase
         shell: cmd
         timeout-minutes: 180
@@ -684,6 +690,9 @@ jobs:
           DOTFILES_INSTALL_TIMEOUT_SECONDS: "3600"
           DOTFILES_E2E_POWERSHELL_VERSION: ${{ matrix.version }}
         run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts\powershell\ci\Invoke-WindowsInstallerE2E.ps1
+
+      - name: Install chezmoi for rendering tests
+        uses: ./.github/actions/install-chezmoi
 
       - name: Run PowerShell test suite
         shell: pwsh
@@ -858,12 +867,41 @@ jobs:
         shell: bash
         run: |
           jq -e '
+            def nonempty_string: if type == "string" then length > 0 else false end;
+            def https_url: if type == "string" then test("^https://[^[:space:]]+$") else false end;
+            def sha256_hash: if type == "string" then test("^[A-Fa-f0-9]{64}$") else false end;
             (.Sources | type == "array" and length > 0)
             and all(.Sources[];
               (.SourceDetails.Name | type == "string" and length > 0)
               and (.Packages | type == "array")
               and all(.Packages[];
-                .PackageIdentifier | type == "string" and length > 0))
+                .PackageIdentifier | type == "string" and length > 0)
+              and (if .SourceDetails.Name == "direct" then
+                .SourceDetails.Type == "Dotfiles.DirectInstaller"
+                and .SourceDetails.Identifier == "Dotfiles.DirectInstallers"
+                and (.SourceDetails.Argument | https_url)
+                and all(.Packages[];
+                  . as $package | .directInstaller |
+                  type == "object"
+                  and .type == "appx"
+                  and .name == $package.PackageIdentifier
+                  and (.packageFamilyName | nonempty_string)
+                  and (.version | if type == "string" then test("^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$") else false end)
+                  and .architecture == "x64"
+                  and (.executable | nonempty_string)
+                  and (.publisher | nonempty_string)
+                  and (.url | https_url)
+                  and (.sha256 | sha256_hash)
+                  and (.dependencies | type == "array"
+                    and all(.[];
+                      (.name | nonempty_string)
+                      and (.packageFamilyName | nonempty_string)
+                      and (.publisher | nonempty_string)
+                      and (.version | if type == "string" then test("^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$") else false end)
+                      and .architecture == "x64"
+                      and (.url | https_url)
+                      and (.sha256 | sha256_hash))))
+              else true end))
             and ([.Sources[].Packages[].PackageIdentifier] as $ids
               | ($ids | length) == ($ids | unique | length))
           ' windows/winget/packages.json

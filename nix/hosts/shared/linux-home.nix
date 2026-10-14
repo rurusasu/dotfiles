@@ -22,7 +22,7 @@ in
   };
 
   imports = [
-    (import ../../modules/tools.nix).linuxDesktop
+    (import ../../modules/desktop.nix).linuxDesktop
     ../../modules/editors/nvim
     ../../modules/discord
     ../../home/common.nix

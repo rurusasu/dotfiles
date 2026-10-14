@@ -4,7 +4,6 @@ let
     system:
     let
       pkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
-      ghostty = (import ../../modules/terminals/ghostty/defaults.nix { inherit pkgs; }).programs.ghostty;
       wezterm =
         (import ../../modules/terminals/wezterm/defaults.nix {
           inherit pkgs;
@@ -51,8 +50,10 @@ let
         home.config.programs.ghostty.enable
         && home.config.programs.ghostty.settings == { }
         &&
-          builtins.readFile home.config.xdg.configFile."ghostty/config".source
-          == builtins.readFile ../../modules/terminals/ghostty/config.ghostty;
+          home.config.xdg.configFile."ghostty/config".text
+          == builtins.readFile ../../modules/terminals/ghostty/config.ghostty
+          + "\n"
+          + (import ../../home/keybindings/bindings.nix { inherit (pkgs) lib; }).ghosttyConfig;
       weztermConfig =
         home.config.programs.wezterm.enable
         && home.config.programs.wezterm.extraConfig == wezterm.extraConfig
@@ -90,10 +91,37 @@ let
     "aarch64-linux"
     "x86_64-linux"
   ];
+  exportedHome =
+    let
+      pkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs "x86_64-linux";
+    in
+    inputs.home-manager.lib.homeManagerConfiguration {
+      inherit pkgs;
+      modules = [
+        ../../modules/terminals/ghostty/defaults.nix
+        ../../hosts/shared/linux-ghostty.nix
+        ../../home/keybindings/windows-export.nix
+        {
+          home = {
+            username = "test-user";
+            homeDirectory = "/home/test-user";
+            stateVersion = "25.05";
+          };
+          dotfiles.keybindings.fromWindowsExport = true;
+          xdg.configHome = "/home/test-user/custom config";
+        }
+      ];
+    };
 in
 {
   testGhosttyPlatformSelection = {
     expr = map check systems;
     expected = map expected systems;
+  };
+  testWslGhosttyReadsChezmoiExportAtConfiguredXdgPath = {
+    expr = exportedHome.config.xdg.configFile."ghostty/config".text;
+    expected =
+      builtins.readFile ../../modules/terminals/ghostty/config.ghostty
+      + "\nconfig-file = ?/home/test-user/custom config/dotfiles/keybindings/ghostty.conf\n";
   };
 }

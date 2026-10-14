@@ -8,7 +8,7 @@
 
 ## 変更先の原則
 
-- Unix のパッケージ導入とアプリ設定: `nix/modules/`。Unix CLI の PATH への導入はすべて `tools.nix`、Linux / WSLg GUI は `desktop.nix`、Darwin system GUI は `desktop-system.nix`、個別アプリの設定・連携は各 module にまとめる。
+- Unix のパッケージ導入とアプリ設定: `nix/modules/`。Unix CLI の PATH への導入はすべて `tools.nix`、Linux / WSLg GUI は `desktop.nix`、Darwin system GUI は `desktop-darwin.nix`、個別アプリの設定・連携は各 module にまとめる。
 - CLI の `programs.*.enable` と `home.packages` は `nix/modules/tools.nix` に宣言し、各 module は設定・連携・package override を担当する。GUI、OS service、フォント、ビルド用依存はそれぞれの所有先に置く。
 - Python のユーザー環境は uv で管理し、interpreter を直接 `home.packages` に追加しない。公開コマンドは uv 経由で実行する。Nix 内部専用の Python 依存は各 module が管理する。
 - ホストは必要な module を import して構成を選択する。Windows のインストール情報は Nix module と分離する。詳細は [パッケージ管理](docs/nix/package-management.md#分割の理由と編集先)。

@@ -1,6 +1,6 @@
 # キーバインド統一方針
 
-Nix で管理するデスクトップ配列と、chezmoi が管理する Windows WezTerm 設定のキー設計方針。
+Nix で管理するデスクトップ・Ghostty・Neovim 配列と、chezmoi が配布する Windows / WSL 設定のキー設計方針。
 
 ## 目的
 
@@ -27,7 +27,17 @@ Nix で管理するデスクトップ配列と、chezmoi が管理する Windows
 
 ### デスクトップ（Omarchy 配列）
 
-配置方針は `nix/home/keybindings/` に共通 action とキーを定義し、macOS の AeroSpace と native NixOS の Hyprland 設定を生成する。Windows の GlazeWM 設定生成と配布機能は削除しました。WSL guest に Hyprland は導入しません。責務・未対応の操作は [共通定義と OS 別実装](./omarchy.md) を参照してください。
+配置方針は `nix/home/keybindings/` に共通 action とキーを定義し、macOS の AeroSpace と native NixOS の Hyprland 設定を生成する。Windows は PowerToys で提示された Omarchy 配列を反映します。Windows の GlazeWM 設定生成と配布機能は削除しました。WSL guest に Hyprland は導入しません。責務・OS ごとの代替動作は [共通定義と OS 別実装](./omarchy.md) を参照してください。
+
+キー配列の正本は `nix/home/keybindings/bindings.nix` と、それが読み込む `ghostty.nix` / `neovim.nix` です。`task keybindings:export` が Nix output `.#keybindings-json` をビルドし、コミット対象の `generated.json` を更新します。chezmoi は Windows 向け38割り当てを PowerToys に反映し、Ghostty / Neovim の export を NixOS-WSL の `~/.config/dotfiles/keybindings/` に配置します。Windows の apply は Nix を呼びません。WSL の Home Manager は export を読む loader を所有し、native Unix は同じ Nix 定義を直接読みます。Nix の単体テストは生成済み JSON と正本の一致を検査します。
+
+Windows では `Super=Win` とし、同じキーの標準操作を remap で上書きします。`Win+D` は無効化します。Windows キーの全機能を無効化する `NoWinKeys` は使わず、`Win+L` や `Ctrl+Alt+Del` などの OS 予約操作は維持します。初回の loader 導入は `nrs`、以後の反映は `task chezmoi` です。[install.cmd と export の手順](./omarchy.md#export-と反映手順) を参照してください。
+
+`Win+Shift+F` の Files は Nix が導入する NixOS-WSL の Nautilus を WSLg で起動します。Obsidian も Nix 側のアプリを起動し、Windows WinGet では導入しません。
+
+配列の配置と実キーでの動作確認は別に記録します。[反映・確認記録](./keybindings-verification.md) に確認済み、未確認、修正中の操作を示します。
+
+`Win+C/X/V` は前面アプリを判定する Windows runtime が扱い、WSLg Ghostty のコピー・ペーストには `Ctrl+Shift+C/V` を使います。Ghostty の `Win+X` はコピーとして扱います。クリップボード履歴が無効なら、初回の `Win+Ctrl+V` で **[有効にする]** を選びます。`PrintScreen` 単独割り当ての PowerToys editor 制約と各 Windows 操作の詳細は [Windows デスクトップの運用](./omarchy.md#windows-デスクトップの運用) を参照してください。
 
 macOS は nix-darwin の AeroSpace サービスで管理し、Super=Command とする。
 ⌘F・⌘T・⌘S・⌘数字・⌘Tab などはデスクトップ操作がアプリ標準キーより優先する。
@@ -35,6 +45,26 @@ macOS は nix-darwin の AeroSpace サービスで管理し、Super=Command と�
 [Omarchy macOS](./omarchy-macos.md) を参照。native NixOS は Super キーを使い、Hyprland セッションで動作します。これらはターミナル内の prefix 契約とは別の層です。
 
 ### Terminals
+
+#### Ghostty
+
+Ghostty は `ghostty.nix` の直接キー28割り当てを使います。macOS の標準 Command キー設定は残し、次の配列を追加します。WSL では export した `ghostty.conf` を読み込みます。Win resize は `ghostty-windows.nix` の transport remap を使い、公開するキー配列を維持します。remap は `msrdc.exe` が扱う WSLg 全体に適用され、Windows native アプリには適用されません。
+
+| キー                        | 操作                              |
+| --------------------------- | --------------------------------- |
+| `Ctrl+Shift+E`              | 上下に分割（新しい pane は下）    |
+| `Ctrl+Shift+O`              | 左右に分割（新しい pane は右）    |
+| `Ctrl+Alt+矢印`             | その方向の pane に移動            |
+| `Super+Ctrl+Shift+矢印`     | その方向へ10ピクセルのサイズ変更  |
+| `Super+Ctrl+Shift+Alt+矢印` | その方向へ100ピクセルのサイズ変更 |
+| `Ctrl+Shift+T`              | 新しい tab                        |
+| `Ctrl+Shift+Left/Up`        | 前の tab                          |
+| `Ctrl+Shift+Right/Down`     | 次の tab                          |
+| `Alt+1..9`                  | 指定した tab に移動               |
+
+Ghostty の `resize_split` の単位はピクセルで、行数ではありません。反映後は Ghostty の設定を再読み込みします。
+
+#### WezTerm / Herdr
 
 WezTerm / Herdr の terminal Window Manager の共通 prefix は `Ctrl+Space`。prefix に続けて、次の共通 suffix を入力する。
 
@@ -76,8 +106,14 @@ Window Manager 契約外の WezTerm 操作として、pane resize、window focus
   - `Ctrl+H/J/K/L`: Neovim 内の window 移動（Herdr の pane 移動は共通 prefix を使う）
   - `Ctrl+Z`: undo
   - `Ctrl+Y`: normal/visual は redo、insert は補完候補の確定
-  - `-`: Oil エクスプローラ、`Space+e`: 診断表示
-  - Oil 内: `Enter` で開く、`Ctrl+S` で縦分割、`Ctrl+H` で横分割、`Ctrl+T` で新規タブ、`Esc` で閉じる、`g.` で隠しファイル切替、`Ctrl+L` で再読み込み（Oil 内では window 移動より優先）
+  - `Space`: which-key のコマンド候補、`Space Space`: fuzzy file search
+  - `Space e`: Oil サイドバー切り替え、`-`: 現在のディレクトリを Oil で開く
+  - `Space g g`: Lazygit、`Space s g`: ファイル検索
+  - `Ctrl+w w`: 次の window、`Ctrl+Left/Right`: Oil サイドバーの幅を2列ずつ変更（サイドバーがなければ現在の window）
+  - `Shift+H/L`: 前 / 次の buffer、`Space b d`: buffer を閉じる
+  - `Space d e`: 診断表示
+  - Oil 内: `a` / `A` で現在の親ディレクトリにファイル / ディレクトリを追加、`d` で削除、`m` で移動先ディレクトリを指定、`r` で名前変更、`?` でキーのヘルプ。入力 prompt と Oil の確認・保存処理を使い、削除は trash に送る
+  - Oil 内の補助操作: `Enter` で開く、`Ctrl+S` で縦分割、`Ctrl+H` で横分割、`Ctrl+T` で新規タブ、`Esc` で閉じる、`g.` で隠しファイル切替、`Ctrl+L` で再読み込み（Oil 内では window 移動より優先）
   - `gc/gcc`: 標準コメント、`grr/grn/gra/gri/grt`: 標準 LSP 操作
   - `Ctrl+X Ctrl+O`: LSP 補完、`Ctrl+X Ctrl+F`: パス補完、`Ctrl+N/P`: バッファ補完
   - `Tab/Shift+Tab`: 補完選択／snippet 移動、`Enter`: 選択候補の確定（未選択なら改行）
@@ -87,7 +123,7 @@ Window Manager 契約外の WezTerm 操作として、pane resize、window focus
   - `Space+du/dc/dd/dt`: Devcontainer up／コンテナ内 bash／down／toggle
   - Markdown のインライン表示切り替え: `Space+mp`（`render-markdown.nvim`）
   - Marp のブラウザプレビュー切り替え: `Space+marp`
-  - 詳細・terminal prefix と補完の競合は [Neovim](./neovim.md) を参照
+  - 提示された共通17割り当ては `neovim.nix` が正本。反映後は Neovim を再起動する。補助機能・terminal prefix と補完の競合は [Neovim](./neovim.md) を参照
 
 ### Shells
 
@@ -118,7 +154,7 @@ Window Manager 契約外の WezTerm 操作として、pane resize、window focus
 ## 運用ルール
 
 - 新しいショートカットを追加する前に、この表のどのグループに属するかを先に決める
-- terminal の Workspace/Tab/Pane/Session 操作は `Ctrl+Space` と共通 suffix を優先する
+- Ghostty の分割・tab 操作は `ghostty.nix` の直接キーを使う。WezTerm / Herdr の Workspace/Tab/Pane/Session 操作は `Ctrl+Space` と共通 suffix を優先する
 - target が持たない capability は no-op とし、target 固有の代替キーを共通契約へ混ぜない
 - nested terminal の prefix 転送は `Ctrl+Space Ctrl+Space` に統一する
 - WezTerm の直接 window focus / pane resize は共通契約外の補助操作として維持する

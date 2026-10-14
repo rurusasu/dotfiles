@@ -15,12 +15,23 @@ in
     };
   };
 
-  testArcUsesAppxLaunchTargetVerifier = {
-    expr = windows."TheBrowserCompany.Arc".verifyCommand;
+  testWindowsOnePasswordRemainsInstallableForWslInterop = {
+    expr = windows."AgileBits.1Password".verifyCommand;
     expected = {
-      type = "appxLaunchTarget";
-      command = "TheBrowserCompany.Arc";
-      args = [ "TheBrowserCompany.Arc_ttt1ap7aakyb4!Arc" ];
+      type = "windowsInstalledProduct";
+      command = "AgileBits.1Password";
+      appxPackage = {
+        executable = "1Password.exe";
+        name = "AgileBits.1Password";
+        packageFamilyName = "Agilebits.1Password_amwd9z03whsfe";
+      };
+      uninstallEntry = {
+        displayName = "1Password";
+        executablePaths = [
+          "%ProgramFiles%\\1Password\\1Password.exe"
+          "%LOCALAPPDATA%\\1Password\\app\\*\\1Password.exe"
+        ];
+      };
     };
   };
 

@@ -4,48 +4,6 @@
     {
       "Packages": [
         {
-          "PackageIdentifier": "TheBrowserCompany.Arc",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["TheBrowserCompany.Arc_ttt1ap7aakyb4!Arc"],
-            "command": "TheBrowserCompany.Arc",
-            "type": "appxLaunchTarget"
-          }
-        },
-        {
-          "PackageIdentifier": "Google.Chrome",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "command": "Google Chrome",
-            "type": "windowsInstalledProduct",
-            "uninstallEntry": {
-              "displayName": "Google Chrome",
-              "executablePaths": [
-                "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe",
-                "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe",
-                "%LOCALAPPDATA%\\Google\\Chrome\\Application\\chrome.exe"
-              ],
-              "publisher": "Google LLC"
-            }
-          }
-        },
-        {
-          "PackageIdentifier": "Obsidian.Obsidian",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "command": "Obsidian",
-            "type": "windowsInstalledProduct",
-            "uninstallEntry": {
-              "displayName": "Obsidian",
-              "executablePaths": [
-                "%LOCALAPPDATA%\\Programs\\Obsidian\\Obsidian.exe",
-                "%ProgramFiles%\\Obsidian\\Obsidian.exe"
-              ],
-              "productCodes": ["bd400747-f0c1-5638-a859-982036102edf"]
-            }
-          }
-        },
-        {
           "PackageIdentifier": "Microsoft.PowerShell",
           "installArgs": ["--installer-type", "wix"],
           "installTimeoutSeconds": 3600,
@@ -162,6 +120,15 @@
     {
       "Packages": [
         {
+          "PackageIdentifier": "9PCFS5B6T72H",
+          "ciSkipInstall": true,
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "command": "Microsoft.Paint",
+            "type": "appxPackage"
+          }
+        },
+        {
           "PackageIdentifier": "9PLM9XGG6VKS",
           "ciSkipInstall": true,
           "installTimeoutSeconds": 3600,
@@ -177,6 +144,47 @@
         "Identifier": "StoreEdgeFD",
         "Name": "msstore",
         "Type": "Microsoft.Rest"
+      }
+    },
+    {
+      "Packages": [
+        {
+          "PackageIdentifier": "TheBrowserCompany.Dia",
+          "directInstaller": {
+            "architecture": "x64",
+            "dependencies": [
+              {
+                "architecture": "x64",
+                "name": "Microsoft.VCLibs.140.00.UWPDesktop",
+                "packageFamilyName": "Microsoft.VCLibs.140.00.UWPDesktop_8wekyb3d8bbwe",
+                "publisher": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+                "sha256": "077a3d1a5d0622bd3004dca85f5e192d6e98ec79b83d4aa06766759ea6c09c3d",
+                "url": "https://releases.diabrowser.com/windows/dependencies/x64/Microsoft.VCLibs.x64.14.00.Desktop.14.0.33728.0.appx",
+                "version": "14.0.33728.0"
+              }
+            ],
+            "executable": "Dia.exe",
+            "name": "TheBrowserCompany.Dia",
+            "packageFamilyName": "TheBrowserCompany.Dia_ttt1ap7aakyb4",
+            "publisher": "E=hello@thebrowser.company, CN=THE BROWSER COMPANY OF NEW YORK INC., O=THE BROWSER COMPANY OF NEW YORK INC., STREET=295 LAFAYETTE STREET, L=New York, S=New York, C=US, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US, SERIALNUMBER=7571542, OID.2.5.4.15=Private Organization",
+            "sha256": "b83e1e696cd5e479da7b8b580efc107e673fffec3a400011212a050aed61800e",
+            "type": "appx",
+            "url": "https://releases.diabrowser.com/windows/release/1.1.0.6/Dia.x64.msix",
+            "version": "1.1.0.6"
+          },
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "args": ["TheBrowserCompany.Dia_ttt1ap7aakyb4!Dia"],
+            "command": "TheBrowserCompany.Dia",
+            "type": "appxLaunchTarget"
+          }
+        }
+      ],
+      "SourceDetails": {
+        "Argument": "https://releases.diabrowser.com",
+        "Identifier": "Dotfiles.DirectInstallers",
+        "Name": "direct",
+        "Type": "Dotfiles.DirectInstaller"
       }
     }
   ]

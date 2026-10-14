@@ -4,8 +4,9 @@ if vim.fn.has("nvim-0.12") == 0 then
 end
 
 -- プラグインのキー設定より先にリーダーキーを指定する。
-vim.g.mapleader = " "
-vim.g.maplocalleader = " "
+local shared_keys = require("config.shared_keybindings")
+vim.g.mapleader = shared_keys.leader
+vim.g.maplocalleader = shared_keys.leader
 
 -- Core Neovim options
 

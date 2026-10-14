@@ -17,9 +17,7 @@ let
 in
 
 {
-  imports = [
-    # include NixOS-WSL modules
-  ];
+  imports = [ ./fonts.nix ];
 
   wsl = {
     enable = true;
@@ -27,6 +25,9 @@ in
     # Expose Windows D3D12/DXCore libraries through /run/opengl-driver/lib.
     useWindowsDriver = true;
   };
+
+  # Chrome's process locale is Japanese; keep the system's default language.
+  i18n.extraLocales = [ "ja_JP.UTF-8/UTF-8" ];
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions

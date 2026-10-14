@@ -20,6 +20,9 @@ includes:
   nix:
     taskfile: ./taskfiles/nix/taskfile.yml
     flatten: true
+  keybindings:
+    taskfile: ./taskfiles/keybindings/taskfile.yml
+    flatten: true
   dev:
     taskfile: ./taskfiles/dev/taskfile.yml
     flatten: true

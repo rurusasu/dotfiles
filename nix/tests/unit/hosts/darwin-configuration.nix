@@ -52,6 +52,10 @@ let
   hasPrefix = prefix: value: builtins.match "${prefix}.*" value != null;
 in
 {
+  testDarwinDoesNotInstallWslgFontBridge = {
+    expr = defaultConfig.system.activationScripts ? wslgFonts;
+    expected = false;
+  };
   testOrcaModuleInstallsEditorOnceInDarwinHomeProfile = {
     expr = map (package: package.pname) (
       builtins.filter (package: (package.pname or "") == "orca-editor") defaultHome.home.packages

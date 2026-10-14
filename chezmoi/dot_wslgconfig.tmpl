@@ -1,0 +1,6 @@
+{{- if eq .chezmoi.os "windows" -}}
+{{- $home := replace "\\" "/" .chezmoi.homeDir -}}
+{{- $drive := lower (substr 0 1 $home) -}}
+[system-distro-env]
+FONTCONFIG_FILE=/mnt/{{ $drive }}{{ substr 2 (len $home) $home }}/.config/dotfiles/wslg-fontconfig.conf
+{{ end -}}

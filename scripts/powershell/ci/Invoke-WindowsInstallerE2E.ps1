@@ -4,11 +4,49 @@ $runtimeExecutable = Get-Command -Name $runtimeCommand -CommandType Application 
     Select-Object -First 1
 $runtimePath = [string]$runtimeExecutable.Source
 
+function Get-WindowsInstallerUserPathSnapshot {
+    $snapshot = [pscustomobject]@{ Exists = $false; Value = $null; Kind = [Microsoft.Win32.RegistryValueKind]::ExpandString }
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
+    if ($key) {
+        try {
+            $snapshot.Exists = $key.GetValueNames() -contains 'PATH'
+            if ($snapshot.Exists) {
+                $snapshot.Value = $key.GetValue('PATH', $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                $snapshot.Kind = $key.GetValueKind('PATH')
+            }
+        }
+        finally { $key.Dispose() }
+    }
+    return $snapshot
+}
+
+function Set-WindowsInstallerUserPathSeed {
+    param([Parameter(Mandatory)]$Snapshot)
+    $oversizedUserPathEntries = 1..1000 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
+    $seededUserPath = (@($oversizedUserPathEntries) + @([string]$Snapshot.Value -split ';' | Where-Object { $_ })) -join ';'
+    if ($seededUserPath.Length -le 32767) { throw 'Could not seed an over-limit User PATH for the installer E2E' }
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+    if (-not $key) { throw 'Could not open the current user Environment registry key for the PATH E2E' }
+    try { $key.SetValue('PATH', $seededUserPath, [Microsoft.Win32.RegistryValueKind]::ExpandString) }
+    finally { $key.Dispose() }
+}
+
+function Restore-WindowsInstallerUserPath {
+    param([Parameter(Mandatory)]$Snapshot)
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+    if (-not $key) { throw 'Could not open the current user Environment registry key to restore PATH' }
+    try {
+        if ($Snapshot.Exists) { $key.SetValue('PATH', $Snapshot.Value, $Snapshot.Kind) }
+        else { $key.DeleteValue('PATH', $false) }
+    }
+    finally { $key.Dispose() }
+    Write-Host 'Restored the original User PATH after the Windows installer E2E'
+}
+
 $installerE2EScript = @'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $validationErrors = [System.Collections.Generic.List[string]]::new()
-$userPathSeeded = $false
 function Invoke-WindowsE2EValidation {
   param(
     [Parameter(Mandatory)]
@@ -35,28 +73,6 @@ if ($PSVersionTable.PSVersion.Major -ne $expectedMajorVersion) {
 }
 
 $originalPath = $env:PATH
-$originalUserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
-$originalUserPathExists = $false
-$originalUserPathRegistryValue = $null
-$originalUserPathRegistryKind = [Microsoft.Win32.RegistryValueKind]::ExpandString
-$userEnvironmentReadKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
-if ($userEnvironmentReadKey) {
-  try {
-    $originalUserPathExists = $userEnvironmentReadKey.GetValueNames() -contains 'PATH'
-    if ($originalUserPathExists) {
-      $originalUserPathRegistryValue = $userEnvironmentReadKey.GetValue(
-        'PATH',
-        $null,
-        [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
-      )
-      $originalUserPathRegistryKind = $userEnvironmentReadKey.GetValueKind('PATH')
-      $originalUserPath = [string]$originalUserPathRegistryValue
-    }
-  }
-  finally {
-    $userEnvironmentReadKey.Dispose()
-  }
-}
 $originalPs7Dir = $env:DOTFILES_PS7_DIR
 $originalForceWindowsPowerShell = $env:DOTFILES_FORCE_WINDOWS_POWERSHELL
 $isWindowsPowerShell = $expectedVersion -eq '5.1'
@@ -87,25 +103,6 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $env:DOTFILES_PS7_DIR 'pwsh.exe'))) {
       throw 'PowerShell 7 executable is missing from DOTFILES_PS7_DIR'
     }
-  }
-
-  # Seed stale persisted User PATH entries. Keep the launcher PATH viable:
-  # install.cmd invokes chcp before PowerShell can normalize the environment.
-  $oversizedUserPathEntries = 1..1000 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
-  $seededUserPath = (@($oversizedUserPathEntries) + @($originalUserPath -split ';' | Where-Object { $_ })) -join ';'
-  if ($seededUserPath.Length -le 32767) {
-    throw "Could not seed an over-limit User PATH for the installer E2E: $($seededUserPath.Length) characters"
-  }
-  $userEnvironmentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
-  if (-not $userEnvironmentKey) {
-    throw 'Could not open the current user Environment registry key for the PATH E2E'
-  }
-  try {
-    $userEnvironmentKey.SetValue('PATH', $seededUserPath, [Microsoft.Win32.RegistryValueKind]::ExpandString)
-    $userPathSeeded = $true
-  }
-  finally {
-    $userEnvironmentKey.Dispose()
   }
 
   $ErrorActionPreference = 'Continue'
@@ -169,7 +166,7 @@ if ($inventoryRecords.Count -ne 1) {
 $wingetManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json') -Raw | ConvertFrom-Json
 $wingetSources = @(
   $wingetManifest.Sources |
-    Where-Object { $_.SourceDetails.Name -in @('winget', 'msstore') }
+    Where-Object { $_.SourceDetails.Name -in @('winget', 'msstore', 'direct') }
 )
 if ($wingetSources.Count -eq 0) {
   throw 'Windows E2E manifest does not contain a supported WinGet source'
@@ -237,37 +234,12 @@ if ($validationErrors.Count -eq 0 -and $env:GITHUB_PATH) {
 catch {
   $validationErrors.Add("Windows installer E2E setup: $($_.Exception.Message)")
 }
-finally {
-  if ($userPathSeeded) {
-    try {
-      $userEnvironmentCleanupKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
-      if (-not $userEnvironmentCleanupKey) {
-        throw 'Could not open the current user Environment registry key to restore PATH'
-      }
-      try {
-        if ($originalUserPathExists) {
-          $userEnvironmentCleanupKey.SetValue('PATH', $originalUserPathRegistryValue, $originalUserPathRegistryKind)
-        }
-        else {
-          $userEnvironmentCleanupKey.DeleteValue('PATH', $false)
-        }
-      }
-      finally {
-        $userEnvironmentCleanupKey.Dispose()
-      }
-      Write-Host 'Restored the original User PATH after the Windows installer E2E'
-    }
-    catch {
-      $validationErrors.Add("User PATH cleanup: $($_.Exception.Message)")
-    }
-  }
-}
-
 if ($validationErrors.Count -gt 0) {
   $failureSummary = "Windows installer E2E validation failed:`n - $($validationErrors -join "`n - ")"
   Write-Host $failureSummary -ForegroundColor Red
   throw $failureSummary
 }
+Write-Host "WINDOWS_INSTALLER_E2E_COMPLETE: runtime=$expectedVersion"
 '@
 $installerE2EScriptPath = Join-Path $env:RUNNER_TEMP "windows-installer-e2e-$expectedRuntime-$PID.ps1"
 $installerE2ELogPath = Join-Path $env:RUNNER_TEMP "windows-installer-$expectedRuntime.log"
@@ -275,16 +247,32 @@ $installerE2ELogPath = Join-Path $env:RUNNER_TEMP "windows-installer-$expectedRu
 Write-Host "Running the complete Windows installer E2E under $expectedRuntime ($($runtimeExecutable.Source))"
 $previousErrorActionPreference = $ErrorActionPreference
 try {
+    $installerUserPathSeeded = $false
+    $installerUserPathSnapshot = $null
+    $installerE2EOutput = [Collections.Generic.List[string]]::new()
     # Open the exact required sink before starting any installer child.
     $prelaunchLog = [IO.File]::Open($installerE2ELogPath, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
     $prelaunchLog.Dispose()
+    # The stable Windows PowerShell supervisor owns persisted state even if
+    # an MSI terminates the selected runtime before its finally can execute.
+    $installerUserPathSnapshot = Get-WindowsInstallerUserPathSnapshot
+    $installerUserPathSeeded = $true
+    Set-WindowsInstallerUserPathSeed -Snapshot $installerUserPathSnapshot
     $ErrorActionPreference = 'Continue'
     & $runtimePath -NoLogo -NoProfile -ExecutionPolicy Bypass -File $installerE2EScriptPath 2>&1 |
         ForEach-Object {
             if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message }
             else { [string]$_ }
-        } | Tee-Object -LiteralPath $installerE2ELogPath -ErrorAction Stop | Out-Host
+        } | Tee-Object -LiteralPath $installerE2ELogPath -ErrorAction Stop | ForEach-Object {
+            $installerE2EOutput.Add([string]$_)
+            $_
+        } | Out-Host
     $installerE2EExitCode = $LASTEXITCODE
+    if ($installerE2EExitCode -eq 0 -and @($installerE2EOutput | Where-Object {
+                $_ -ceq "WINDOWS_INSTALLER_E2E_COMPLETE: runtime=$expectedRuntime"
+            }).Count -ne 1) {
+        throw 'Windows installer child exited without the required completion attestation'
+    }
 }
 catch {
     Write-Error ("Windows installer output capture/invocation failed: " + $_.Exception.Message) -ErrorAction Continue
@@ -292,6 +280,13 @@ catch {
 }
 finally {
     $ErrorActionPreference = $previousErrorActionPreference
+    if ($installerUserPathSeeded) {
+        try { Restore-WindowsInstallerUserPath -Snapshot $installerUserPathSnapshot }
+        catch {
+            Write-Error ("Windows installer User PATH cleanup failed: " + $_.Exception.Message) -ErrorAction Continue
+            $installerE2EExitCode = 1
+        }
+    }
     Remove-Item -LiteralPath $installerE2EScriptPath -Force -ErrorAction SilentlyContinue
 }
 if ($installerE2EExitCode -ne 0) {

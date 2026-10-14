@@ -1,0 +1,51 @@
+{{ if eq .chezmoi.os "windows" -}}
+# Windows owns these exported WSL data files; Home Manager owns their app loaders.
+$ErrorActionPreference = 'Stop'
+$contractBase64 = '{{ include "../nix/home/keybindings/generated.json" | b64enc }}'
+$ghosttyBase64 = '{{ (include "../nix/home/keybindings/generated.json" | fromJson).windows.ghosttyConfig | b64enc }}'
+$shellBody = @'
+set -eu
+keybindingsDirectory="$HOME/.config/dotfiles/keybindings"
+mkdir -p "$keybindingsDirectory"
+write_export() {
+  output="$keybindingsDirectory/$1"
+  if [ -L "$output" ]; then
+    printf 'Refusing to overwrite a managed symlink: %s\n' "$output" >&2
+    exit 1
+  fi
+  temporary="$output.tmp.$$"
+  printf '%s' "$2" | base64 --decode > "$temporary"
+  chmod 600 "$temporary"
+  if [ -f "$output" ] && cmp -s "$temporary" "$output"; then
+    rm -f "$temporary"
+  else
+    mv -f "$temporary" "$output"
+  fi
+}
+write_export generated.json "$contractBase64"
+write_export ghostty.conf "$ghosttyBase64"
+printf 'Applied exported Ghostty and Neovim keys in %s\n' "$keybindingsDirectory"
+'@
+$shellInput = "contractBase64='$contractBase64'`nghosttyBase64='$ghosttyBase64'`n" + ($shellBody -replace "`r`n", "`n") + "`n"
+$startInfo = New-Object Diagnostics.ProcessStartInfo
+$startInfo.FileName = Join-Path $env:SystemRoot 'System32/wsl.exe'
+$startInfo.Arguments = '--distribution NixOS --exec bash --login -s'
+$startInfo.UseShellExecute = $false
+$startInfo.CreateNoWindow = $true
+$startInfo.RedirectStandardInput = $true
+$startInfo.RedirectStandardOutput = $true
+$startInfo.RedirectStandardError = $true
+$process = New-Object Diagnostics.Process
+$process.StartInfo = $startInfo
+try {
+    [void]$process.Start()
+    $process.StandardInput.Write($shellInput)
+    $process.StandardInput.Close()
+    $output = $process.StandardOutput.ReadToEnd()
+    $errorOutput = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0) { throw "WSL key allocation deployment failed: $errorOutput" }
+    Write-Host $output.TrimEnd()
+}
+finally { $process.Dispose() }
+{{ end -}}

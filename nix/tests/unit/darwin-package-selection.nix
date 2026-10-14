@@ -13,12 +13,16 @@ in
     expr = {
       guiSystem = contains pkgs.obsidian systemPackages;
       guiHome = contains pkgs.obsidian homePackages;
+      onePasswordSystem = contains pkgs._1password-gui systemPackages;
+      onePasswordHome = contains pkgs._1password-gui homePackages;
       commandSystem = contains pkgs.jq systemPackages;
       commandHome = contains pkgs.jq homePackages;
     };
     expected = {
       guiSystem = true;
       guiHome = false;
+      onePasswordSystem = true;
+      onePasswordHome = false;
       commandSystem = false;
       commandHome = true;
     };

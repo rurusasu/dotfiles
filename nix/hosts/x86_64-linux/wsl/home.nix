@@ -7,16 +7,24 @@
 }:
 let
   inherit ((import ../../../modules/fonts.nix { inherit pkgs; })) fonts;
+  japaneseFonts = import ../../../modules/fonts/japanese.nix { inherit lib pkgs; };
+  chrome = import ../../../modules/browsers/chrome { inherit pkgs; };
 in
 {
   imports = [
-    (import ../../../modules/tools.nix).linuxDesktop
+    (import ../../../modules/desktop.nix).wslDesktop
     (import ../../../modules/tools.nix).chatgptCli
     ../../../modules/editors/nvim
     ../../../home/common.nix
+    ../../../home/keybindings/windows-export.nix
   ];
 
-  fonts.fontconfig = fonts.fontconfig;
+  dotfiles.keybindings.fromWindowsExport = true;
+
+  fonts.fontconfig = lib.mkMerge [
+    fonts.fontconfig
+    japaneseFonts.fontconfig
+  ];
   programs.git = {
     signing.signer = "${config.home.homeDirectory}/.local/bin/op-ssh-sign-wsl";
     settings.ghq.root = [
@@ -31,7 +39,7 @@ in
   };
   home = {
     homeDirectory = lib.mkDefault "/home/${config.home.username}";
-    inherit (fonts) packages;
+    packages = fonts.packages ++ japaneseFonts.packages;
 
     # Declaratively manage fcitx5 input method profile.
     # fcitx5 overwrites this file on exit, so home-manager re-applies it on
@@ -61,7 +69,7 @@ in
     sessionVariables = {
       # Avoid recording temporary runtime directories in zoxide's database.
       _ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
-      BROWSER = "explorer.exe";
+      BROWSER = "${chrome}/bin/google-chrome-stable";
       # fcitx5 GTK_IM_MODULE bridge for WSLg GUI applications.
       GTK_IM_MODULE = "fcitx";
       QT_IM_MODULE = "fcitx";

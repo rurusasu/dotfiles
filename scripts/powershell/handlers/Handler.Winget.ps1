@@ -491,7 +491,10 @@ class WingetHandler : SetupHandlerBase {
             if ($deferred -gt 0) { $parts += "$deferred 個管理者フェーズ待ち" }
             $parts += "$skipped 個スキップ"
             $message = $parts -join ", "
-            if ($failed -gt 0 -or $verifyFailed -gt 0) {
+            # CI runtime preparation must consume an available MSI update
+            # before starting processes that the same update could terminate.
+            $requiredUpdateFailed = $preserved -gt 0 -and [bool]$ctx.GetOption('WingetRequireSuccessfulUpdate', $false)
+            if ($failed -gt 0 -or $verifyFailed -gt 0 -or $requiredUpdateFailed) {
                 return $this.CreateFailureResult($message)
             }
             return $this.CreateSuccessResult($message)
@@ -612,6 +615,18 @@ class WingetHandler : SetupHandlerBase {
             catch {
                 return @("Discord process preparation failed: $($_.Exception.Message)")
             }
+        }
+
+        if (($pkg.PSObject.Properties.Name -contains 'SourceName') -and $pkg.SourceName -eq 'direct') {
+            if (-not $pkg.DirectInstaller -or $this.GetDirectInstallerType($pkg.DirectInstaller) -ne 'appx') {
+                $global:LASTEXITCODE = 1
+                return @("Direct source requires an appx directInstaller for $($pkg.Id)")
+            }
+            $directOutput = @($this.InvokeDirectInstaller($pkg))
+            $this.LastInstallExitCode = [int]$LASTEXITCODE
+            $this.LastInstallTimedOut = $this.LastInstallExitCode -eq 124
+            $this.LastInstallSucceeded = $this.LastInstallExitCode -eq 0
+            return $directOutput
         }
 
         if ($pkg.DirectInstaller) {
@@ -775,6 +790,9 @@ class WingetHandler : SetupHandlerBase {
 
     hidden [object[]] InvokeDirectInstaller([object]$pkg) {
         $type = $this.GetDirectInstallerType($pkg.DirectInstaller)
+        if ($type -eq 'appx') {
+            return $this.InvokeDirectAppxInstaller($pkg)
+        }
         if ($type -ne "archive" -and $type -ne "file") {
             $global:LASTEXITCODE = 1
             return @("Unsupported directInstaller type for $($pkg.Id): $type")
@@ -906,6 +924,163 @@ class WingetHandler : SetupHandlerBase {
         }
     }
 
+    hidden [object[]] InvokeDirectAppxInstaller([object]$pkg) {
+        $installer = $pkg.DirectInstaller
+        $name = $this.GetDirectInstallerString($installer, 'name')
+        $family = $this.GetDirectInstallerString($installer, 'packageFamilyName')
+        $publisher = $this.GetDirectInstallerString($installer, 'publisher')
+        $versionText = $this.GetDirectInstallerString($installer, 'version')
+        $architecture = $this.GetDirectInstallerString($installer, 'architecture')
+        $executable = $this.GetDirectInstallerString($installer, 'executable')
+        $url = $this.GetDirectInstallerString($installer, 'url')
+        $sha256 = $this.GetDirectInstallerString($installer, 'sha256')
+        $version = $null
+        if ([string]::IsNullOrWhiteSpace($name) -or [string]::IsNullOrWhiteSpace($family) -or
+            [string]::IsNullOrWhiteSpace($publisher) -or -not [version]::TryParse($versionText, [ref]$version) -or
+            $architecture -ne 'x64' -or [string]::IsNullOrWhiteSpace($executable) -or
+            [IO.Path]::IsPathRooted($executable) -or $executable -match '(^|[\\/])\.\.([\\/]|$)' -or
+            $url -notmatch '^https://' -or $sha256 -notmatch '^[a-fA-F0-9]{64}$') {
+            $global:LASTEXITCODE = 1
+            return @("AppX directInstaller metadata is incomplete or invalid for $($pkg.Id)")
+        }
+
+        $nativeArchitecture = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+        if ($nativeArchitecture -ne 'AMD64') {
+            $global:LASTEXITCODE = 1
+            return @("Unsupported AppX architecture for $($pkg.Id): $nativeArchitecture; configured package is x64")
+        }
+        $force = ($pkg.PSObject.Properties.Name -contains 'Force') -and [bool]$pkg.Force
+        if (-not $force -and $this.TestDirectAppxCurrent($pkg)) {
+            $global:LASTEXITCODE = 0
+            return @("AppX registration and executable are already current: $($pkg.Id)")
+        }
+
+        $dependencies = @()
+        if ($installer -is [hashtable] -and $installer.ContainsKey('dependencies')) {
+            $dependencies = @($installer['dependencies'])
+        }
+        elseif ($installer.PSObject.Properties.Name -contains 'dependencies') {
+            $dependencies = @($installer.dependencies)
+        }
+        $artifacts = @([pscustomobject]@{ url = $url; sha256 = $sha256; filename = 'main.msix' })
+        for ($index = 0; $index -lt $dependencies.Count; $index++) {
+            $dependencyUrl = $this.GetDirectInstallerString($dependencies[$index], 'url')
+            $dependencyHash = $this.GetDirectInstallerString($dependencies[$index], 'sha256')
+            if ($dependencyUrl -notmatch '^https://' -or $dependencyHash -notmatch '^[a-fA-F0-9]{64}$') {
+                $global:LASTEXITCODE = 1
+                return @("AppX dependency metadata is invalid for $($pkg.Id)")
+            }
+            if ($this.TestDirectAppxDependencyCurrent($dependencies[$index])) { continue }
+            $artifacts += [pscustomobject]@{ url = $dependencyUrl; sha256 = $dependencyHash; filename = "dependency-$index.appx" }
+        }
+
+        $timeoutSeconds = $this.GetInstallTimeoutSeconds($pkg)
+        $tempRoot = [IO.Path]::GetFullPath($env:TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar)
+        $workPath = [IO.Path]::GetFullPath((Join-Path $tempRoot "dotfiles-appx-$([guid]::NewGuid().ToString('N'))"))
+        if (-not $workPath.StartsWith($tempRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            $global:LASTEXITCODE = 1
+            return @('AppX staging path is outside the temporary directory')
+        }
+        try {
+            New-Item -ItemType Directory -Path $workPath -ErrorAction Stop | Out-Null
+            foreach ($artifact in $artifacts) {
+                $artifactPath = Join-Path $workPath $artifact.filename
+                Invoke-WebRequest -Uri $artifact.url -OutFile $artifactPath -UseBasicParsing -TimeoutSec $timeoutSeconds -ErrorAction Stop
+                $actualHash = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256 -ErrorAction Stop).Hash
+                if ($actualHash -ne $artifact.sha256) {
+                    throw "AppX directInstaller hash mismatch for $($pkg.Id): $($artifact.filename)"
+                }
+            }
+            $mainPathLiteral = (Join-Path $workPath 'main.msix').Replace("'", "''")
+            $dependencyLiterals = @($artifacts | Select-Object -Skip 1 | ForEach-Object {
+                    "'" + (Join-Path $workPath $_.filename).Replace("'", "''") + "'"
+                })
+            $dependencyArgument = if ($dependencyLiterals.Count -gt 0) { ' -DependencyPath @(' + ($dependencyLiterals -join ',') + ')' } else { '' }
+            $deploymentScript = "[Console]::OutputEncoding = [Text.UTF8Encoding]::new(`$false); `$ProgressPreference = 'SilentlyContinue'; `$ErrorActionPreference = 'Stop'; try { Import-Module Appx -ErrorAction Stop; Add-AppxPackage -Path '$mainPathLiteral'$dependencyArgument -ErrorAction Stop; exit 0 } catch { Write-Error `$_; exit 1 }"
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($deploymentScript))
+            $powershell = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
+            $arguments = @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-OutputFormat', 'Text', '-EncodedCommand', $encoded)
+            $output = if ($timeoutSeconds -gt 0) {
+                @(Invoke-ExternalCommandWithTimeout -Command $powershell -Arguments $arguments -TimeoutSeconds $timeoutSeconds)
+            }
+            else {
+                @(Invoke-NativeCommand -Command $powershell -Arguments $arguments)
+            }
+            $deploymentExitCode = [int]$LASTEXITCODE
+            if ($deploymentExitCode -ne 0) {
+                $global:LASTEXITCODE = $deploymentExitCode
+                return $output
+            }
+            if (-not $this.TestDirectAppxCurrent($pkg)) {
+                throw "AppX registration or executable verification failed after deployment: $($pkg.Id)"
+            }
+            $global:LASTEXITCODE = 0
+            return $output
+        }
+        catch {
+            $global:LASTEXITCODE = 1
+            return @($_.Exception.Message)
+        }
+        finally {
+            if ([IO.Path]::GetFullPath($workPath).StartsWith($tempRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+                Remove-Item -LiteralPath $workPath -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    hidden [bool] TestDirectAppxCurrent([object]$pkg) {
+        if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) { return $false }
+        $installer = $pkg.DirectInstaller
+        $name = $this.GetDirectInstallerString($installer, 'name')
+        $family = $this.GetDirectInstallerString($installer, 'packageFamilyName')
+        $publisher = $this.GetDirectInstallerString($installer, 'publisher')
+        $architecture = $this.GetDirectInstallerString($installer, 'architecture')
+        $executable = $this.GetDirectInstallerString($installer, 'executable')
+        $version = $null
+        if ([string]::IsNullOrWhiteSpace($name) -or [string]::IsNullOrWhiteSpace($family) -or
+            [string]::IsNullOrWhiteSpace($publisher) -or [string]::IsNullOrWhiteSpace($executable) -or
+            [IO.Path]::IsPathRooted($executable) -or $executable -match '(^|[\\/])\.\.([\\/]|$)' -or
+            -not [version]::TryParse($this.GetDirectInstallerString($installer, 'version'), [ref]$version)) { return $false }
+        try {
+            foreach ($registered in @(Get-AppxPackage -Name $name -ErrorAction Stop)) {
+                $installedVersion = $null
+                if ($registered.Name -ne $name -or $registered.PackageFamilyName -ne $family -or
+                    $registered.Publisher -ne $publisher -or [string]$registered.Architecture -ne $architecture -or
+                    -not [version]::TryParse([string]$registered.Version, [ref]$installedVersion) -or $installedVersion -lt $version -or
+                    [string]::IsNullOrWhiteSpace([string]$registered.InstallLocation)) { continue }
+                if (Test-Path -LiteralPath (Join-Path $registered.InstallLocation $executable) -PathType Leaf) { return $true }
+            }
+        }
+        catch { return $false }
+        return $false
+    }
+
+    hidden [bool] TestDirectAppxDependencyCurrent([object]$dependency) {
+        # Identity is optional for older direct-installer declarations. Without
+        # it, retain the hash-checked download and deployment path.
+        $name = $this.GetDirectInstallerString($dependency, 'name')
+        $family = $this.GetDirectInstallerString($dependency, 'packageFamilyName')
+        $publisher = $this.GetDirectInstallerString($dependency, 'publisher')
+        $architecture = $this.GetDirectInstallerString($dependency, 'architecture')
+        $version = $null
+        if ([string]::IsNullOrWhiteSpace($name) -or [string]::IsNullOrWhiteSpace($family) -or
+            [string]::IsNullOrWhiteSpace($publisher) -or [string]::IsNullOrWhiteSpace($architecture) -or
+            -not [version]::TryParse($this.GetDirectInstallerString($dependency, 'version'), [ref]$version) -or
+            -not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) { return $false }
+        try {
+            foreach ($registered in @(Get-AppxPackage -Name $name -ErrorAction Stop)) {
+                $installedVersion = $null
+                if ($registered.Name -ne $name -or $registered.PackageFamilyName -ne $family -or
+                    $registered.Publisher -ne $publisher -or [string]$registered.Architecture -ne $architecture -or
+                    [string]$registered.Status -ne 'Ok' -or
+                    -not [version]::TryParse([string]$registered.Version, [ref]$installedVersion) -or $installedVersion -lt $version) { continue }
+                return $true
+            }
+        }
+        catch { return $false }
+        return $false
+    }
+
     hidden [bool] TestInstallTimedOut([object[]]$installOutput) {
         if ($LASTEXITCODE -eq 124) {
             return $true
@@ -918,6 +1093,9 @@ class WingetHandler : SetupHandlerBase {
     hidden [bool] TestDirectInstallerCurrent([object]$pkg) {
         if ($null -eq $pkg -or $null -eq $pkg.DirectInstaller) {
             return $false
+        }
+        if ($this.GetDirectInstallerType($pkg.DirectInstaller) -eq 'appx') {
+            return $this.TestDirectAppxCurrent($pkg)
         }
         $destination = $this.ResolveDirectInstallerPath(
             $this.GetDirectInstallerString($pkg.DirectInstaller, "destination")
@@ -1260,6 +1438,7 @@ class WingetHandler : SetupHandlerBase {
         個別チェック用。一括チェックには GetInstalledPackageIds を使用。
     #>
     hidden [bool] IsPackageInstalled([string]$packageId, [string]$sourceName) {
+        if ($sourceName -eq 'direct') { return $false }
         try {
             $arguments = @("list", "--id", $packageId, "--exact", "--disable-interactivity")
             if ($sourceName -eq "msstore" -or $sourceName -eq "winget") {
@@ -2020,6 +2199,7 @@ class WingetHandler : SetupHandlerBase {
         インストール済みパッケージをエクスポートする (winget export)
     #>
     hidden [SetupResult] ExportPackages([SetupContext]$ctx) {
+        $stagingPath = $null
         try {
             $packagesPath = $this.GetPackagesPath($ctx)
             $this.Log("winget パッケージをエクスポートしています...")
@@ -2031,24 +2211,61 @@ class WingetHandler : SetupHandlerBase {
                 New-DirectorySafe -Path $parentDir | Out-Null
             }
 
+            # WinGet cannot export our declarative direct installers. Keep the
+            # full source records and stage its inventory beside the manifest
+            # so a failed export never truncates the original file.
+            $directSources = @()
+            if ([IO.File]::Exists($packagesPath)) {
+                $original = Get-Content -LiteralPath $packagesPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                $directSources = @($original.Sources | Where-Object { $_.SourceDetails.Name -eq 'direct' })
+            }
+            $stagingPath = Join-Path $parentDir ".packages-export-$([guid]::NewGuid().ToString('N')).json"
             Invoke-Winget -Arguments @(
                 "export",
-                "-o", $packagesPath
+                "-o", $stagingPath
             ) | Out-Null
 
-            if ($LASTEXITCODE -eq 0) {
-                $this.Log("winget export 完了", "Green")
-                $this.Log("git でコミットするのを忘れずに", "Gray")
-                return $this.CreateSuccessResult("パッケージリストをエクスポートしました: $packagesPath")
+            if ($LASTEXITCODE -ne 0) {
+                return $this.CreateFailureResult("winget export が失敗しました (exit code: $LASTEXITCODE)")
+            }
+
+            $exported = Get-Content -LiteralPath $stagingPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            if ($null -eq $exported -or -not ($exported.PSObject.Properties.Name -contains 'Sources') -or
+                $exported.Sources -isnot [array]) {
+                throw 'winget export output does not contain a Sources array'
+            }
+            foreach ($source in $exported.Sources) {
+                if ($source.SourceDetails.Name -isnot [string] -or
+                    [string]::IsNullOrWhiteSpace($source.SourceDetails.Name) -or $source.Packages -isnot [array]) {
+                    throw 'winget export output contains invalid source metadata'
+                }
+                foreach ($package in $source.Packages) {
+                    if ($package.PackageIdentifier -isnot [string] -or [string]::IsNullOrWhiteSpace($package.PackageIdentifier)) {
+                        throw 'winget export output contains an invalid package identifier'
+                    }
+                }
+            }
+            if ($directSources.Count -gt 0) {
+                $exported.Sources = @($exported.Sources | Where-Object { $_.SourceDetails.Name -ne 'direct' }) + $directSources
+                [IO.File]::WriteAllText($stagingPath, ($exported | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
+            }
+            if ([IO.File]::Exists($packagesPath)) {
+                [IO.File]::Replace($stagingPath, $packagesPath, [System.Management.Automation.Language.NullString]::Value)
             }
             else {
-                # 一部エクスポートできないパッケージがあっても続行
-                $this.LogWarning("一部のパッケージがエクスポートできなかった可能性があります（正常な動作です）")
-                return $this.CreateSuccessResult("パッケージリストをエクスポートしました（一部除外）: $packagesPath")
+                [IO.File]::Move($stagingPath, $packagesPath)
             }
+            $this.Log("winget export 完了", "Green")
+            $this.Log("git でコミットするのを忘れずに", "Gray")
+            return $this.CreateSuccessResult("パッケージリストをエクスポートしました: $packagesPath")
         }
         catch {
             return $this.CreateFailureResult($_.Exception.Message, $_.Exception)
+        }
+        finally {
+            if ($stagingPath -and [IO.File]::Exists($stagingPath)) {
+                Remove-Item -LiteralPath $stagingPath -Force -ErrorAction SilentlyContinue
+            }
         }
     }
 

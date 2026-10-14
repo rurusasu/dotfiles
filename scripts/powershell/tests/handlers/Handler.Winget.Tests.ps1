@@ -191,6 +191,14 @@ Describe 'WingetHandler' {
             }
         }
         Mock Update-ProcessEnvironmentPath { }
+        # Unit installs own a per-test PATH store, never this Windows user's
+        # registry. Contexts that exercise PATH failures can override it.
+        $script:fixtureUserPathForWingetTests = "$env:SystemRoot\System32"
+        Mock Get-UserEnvironmentPath { return $script:fixtureUserPathForWingetTests }
+        Mock Set-UserEnvironmentPath {
+            param([string]$Path)
+            $script:fixtureUserPathForWingetTests = $Path
+        }
     }
 
     AfterEach {
@@ -1622,6 +1630,28 @@ Describe 'WingetHandler' {
             $result.Message | Should -Match '1 個更新失敗（既存を維持）'
             Should -Invoke Invoke-VerifyCommand -Times 2
         }
+
+        It 'should reject preservation after update exit <ExitCode> when runtime preparation requires a successful update' -TestCases @(
+            @{ ExitCode = 1 }
+            @{ ExitCode = 124 }
+        ) {
+            param($ExitCode)
+            $script:strictUpdateExitCode = $ExitCode
+            Mock Invoke-Winget {
+                param($Arguments)
+                if ($Arguments -contains 'list') {
+                    $global:LASTEXITCODE = 0
+                    return @('Name Id Version Source', '-------------------', 'Contoso Contoso.Tool 1.0.0 winget')
+                }
+                $global:LASTEXITCODE = $script:strictUpdateExitCode
+                if ($script:strictUpdateExitCode -eq 124) { return 'Network update timed out' }
+                return 'Network update failed'
+            }
+            $ctx.Options['WingetRequireSuccessfulUpdate'] = $true
+            $result = $handler.Apply($ctx)
+            $result.Success | Should -BeFalse
+            $result.Message | Should -Match '1 個更新失敗（既存を維持）'
+        }
     }
 
     Context 'Apply - import mode: msstore package already installed' {
@@ -1743,6 +1773,8 @@ Describe 'WingetHandler' {
             Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Invoke-Winget {
+                param($Arguments)
+                [IO.File]::WriteAllText($Arguments[2], '{"Sources":[]}')
                 $global:LASTEXITCODE = 0
                 return "Packages exported"
             }
@@ -1762,6 +1794,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 $script:wingetCalled = $true
                 $script:wingetArgs = $Arguments
+                [IO.File]::WriteAllText($Arguments[2], '{"Sources":[]}')
                 $global:LASTEXITCODE = 0
             }
 
@@ -1779,6 +1812,8 @@ Describe 'WingetHandler' {
             Mock Test-PathExist { return $false }
             Mock New-DirectorySafe { }
             Mock Invoke-Winget {
+                param($Arguments)
+                [IO.File]::WriteAllText($Arguments[2], '{"Sources":[]}')
                 $global:LASTEXITCODE = 0
                 return "Packages exported"
             }
@@ -1807,11 +1842,11 @@ Describe 'WingetHandler' {
             }
         }
 
-        It 'should return success with partial exclusion warning' {
+        It 'should report a failed export instead of claiming a partial inventory was saved' {
             $ctx.Options["WingetMode"] = "export"
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
-            $result.Message | Should -Match "一部除外"
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "失敗"
         }
     }
 

@@ -22,7 +22,8 @@
 BeforeAll {
     function Invoke-InstallerCaptureFixture {
         param([string]$Directory, [string]$ChildRuntime, [string]$Preference,
-            [int]$ExpectedExit = 0, [ValidateSet('normal', 'unavailable', 'pipe')][string]$Sink = 'normal')
+            [int]$ExpectedExit = 0, [ValidateSet('normal', 'unavailable', 'pipe')][string]$Sink = 'normal',
+            [ValidateSet('complete', 'early-zero', 'aborted')][string]$Outcome = 'complete')
 
         $windowsFixture = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
         $parentRuntime = if ($windowsFixture) {
@@ -99,6 +100,15 @@ $fixtureState = [pscustomobject]@{
 param([string]$CaseRoot, [string]$runtimePath, [string]$expectedRuntime, [string]$Preference)
 $ErrorActionPreference = $Preference
 $env:RUNNER_TEMP = $CaseRoot
+function Get-WindowsInstallerUserPathSnapshot { return @{ Exists = $true; Value = '%FIXTURE%\\original'; Kind = 'ExpandString' } }
+function Set-WindowsInstallerUserPathSeed {
+    param($Snapshot)
+    [IO.File]::WriteAllText((Join-Path $CaseRoot 'seeded-user-path.txt'), 'seeded')
+}
+function Restore-WindowsInstallerUserPath {
+    param($Snapshot)
+    [IO.File]::WriteAllText((Join-Path $CaseRoot 'restored-user-path.txt'), [string]$Snapshot.Value)
+}
 '@
         $child = @'
 Set-StrictMode -Version Latest
@@ -111,6 +121,8 @@ Write-Output 'MARK_STDOUT'
 [Console]::Out.WriteLine('MARK_RAWOUT 日本語')
 [Console]::Error.WriteLine('MARK_STDERR 日本語')
 Write-Host 'MARK_HOST'
+if ($env:DOTFILES_CAPTURE_FIXTURE_OUTCOME -eq 'early-zero') { exit 0 }
+if ($env:DOTFILES_CAPTURE_FIXTURE_OUTCOME -eq 'aborted') { [Diagnostics.Process]::GetCurrentProcess().Kill() }
 Start-Sleep -Milliseconds 1500
 if ($env:DOTFILES_CAPTURE_FIXTURE_SINK -eq 'pipe') {
     1..256 | ForEach-Object { [Console]::Out.WriteLine(('MIDDLE_' + $_ + '_' + ('x' * 512))) }
@@ -118,6 +130,7 @@ if ($env:DOTFILES_CAPTURE_FIXTURE_SINK -eq 'pipe') {
 }
 [Console]::Out.WriteLine('MARK_TAIL')
 [IO.File]::WriteAllText((Join-Path $caseRoot 'child-finished.txt'), 'finished')
+Write-Host "WINDOWS_INSTALLER_E2E_COMPLETE: runtime=$env:DOTFILES_CAPTURE_FIXTURE_RUNTIME"
 exit [int]$env:DOTFILES_CAPTURE_FIXTURE_EXIT
 '@
         $fixtureBody = Join-Path $caseRoot 'fixture-body.txt'
@@ -153,6 +166,8 @@ exit [int]$env:DOTFILES_CAPTURE_FIXTURE_EXIT
         $info.EnvironmentVariables['DOTFILES_CAPTURE_FIXTURE_ROOT'] = $caseRoot
         $info.EnvironmentVariables['DOTFILES_CAPTURE_FIXTURE_EXIT'] = [string]$ExpectedExit
         $info.EnvironmentVariables['DOTFILES_CAPTURE_FIXTURE_SINK'] = $Sink
+        $info.EnvironmentVariables['DOTFILES_CAPTURE_FIXTURE_OUTCOME'] = $Outcome
+        $info.EnvironmentVariables['DOTFILES_CAPTURE_FIXTURE_RUNTIME'] = $expectedRuntime
         $process = [Diagnostics.Process]::Start($info)
         $stderrTask = $process.StandardError.ReadToEndAsync()
         $output = [Text.StringBuilder]::new()
@@ -212,6 +227,10 @@ exit [int]$env:DOTFILES_CAPTURE_FIXTURE_EXIT
                 ChildAliveAtCleanup = $state.childAliveAtCleanup; ChildRemoved = $state.childFileRemoved
                 ChildFinished = Test-Path -LiteralPath (Join-Path $caseRoot 'child-finished.txt')
                 Log = $log; LogClosed = $closed
+                UserPathSeeded = Test-Path -LiteralPath (Join-Path $caseRoot 'seeded-user-path.txt')
+                UserPathRestored = if (Test-Path -LiteralPath (Join-Path $caseRoot 'restored-user-path.txt')) {
+                    [IO.File]::ReadAllText((Join-Path $caseRoot 'restored-user-path.txt'))
+                } else { $null }
             }
         }
         finally {
@@ -248,6 +267,31 @@ Describe 'Windows installer outer native capture consumer' {
         $result.ChildAlive | Should -BeFalse
         $result.ChildRemoved | Should -BeTrue
         $result.LogClosed | Should -BeTrue
+        $result.UserPathSeeded | Should -BeTrue
+        $result.UserPathRestored | Should -Be '%FIXTURE%\\original'
+    }
+
+    It 'should reject incomplete <ChildRuntime> exit zero and restore User PATH with <Preference>' -TestCases $captureFailureCases {
+        param($ChildRuntime, $Preference)
+        $result = Invoke-InstallerCaptureFixture -Directory $TestDrive -ChildRuntime $ChildRuntime -Preference $Preference -Outcome early-zero
+        $result.ExitCode | Should -Be 1
+        $result.NativeExit | Should -Be 0
+        ($result.Stderr -replace '\r?\n', '') | Should -Match 'completion attestation'
+        $result.UserPathSeeded | Should -BeTrue
+        $result.UserPathRestored | Should -Be '%FIXTURE%\\original'
+        $result.ChildRemoved | Should -BeTrue
+        $result.ChildAlive | Should -BeFalse
+    }
+
+    It 'should restore User PATH when <ChildRuntime> terminates before its finally with <Preference>' -TestCases $captureFailureCases {
+        param($ChildRuntime, $Preference)
+        $result = Invoke-InstallerCaptureFixture -Directory $TestDrive -ChildRuntime $ChildRuntime -Preference $Preference -Outcome aborted
+        $result.ExitCode | Should -Not -Be 0
+        $result.UserPathSeeded | Should -BeTrue
+        $result.UserPathRestored | Should -Be '%FIXTURE%\\original'
+        $result.ChildFinished | Should -BeFalse
+        $result.ChildAlive | Should -BeFalse
+        $result.ChildRemoved | Should -BeTrue
     }
 
     It 'should not launch <ChildRuntime> for an unavailable log with <Preference>' -TestCases $captureFailureCases {
