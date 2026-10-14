@@ -49,7 +49,7 @@ Windows は標準デスクトップを使用します。PowerToys Keyboard Manag
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ターミナル・Btop・Neovim・LazyDocker | `NixOS` WSL の Ghostty をホームディレクトリで開き、対象 CLI を起動                                                                                                                                                               |
 | ブラウザ・プライベートブラウザ       | NixOS-WSL の Chrome を通常 / incognito で起動                                                                                                                                                                                    |
-| ファイルマネージャー                 | Windows Explorer                                                                                                                                                                                                                 |
+| ファイルマネージャー                 | `Win+Shift+F` で Nix が導入する NixOS-WSL の Nautilus（Files）を WSLg で起動                                                                                                                                                     |
 | Spotify・1Password・Obsidian・Signal | Nix で導入した NixOS-WSL のアプリを WSLg で起動。Windows 版への fallback は行わない                                                                                                                                              |
 | HEY Calendar / Email                 | WSL Chrome の app window で HEY の該当ページを開く                                                                                                                                                                               |
 | ChatGPT・Google Messenger・WhatsApp  | WSL Chrome の app window で各 web アプリを開く                                                                                                                                                                                   |
@@ -69,7 +69,7 @@ Windows は標準デスクトップを使用します。PowerToys Keyboard Manag
 
 クリップボード履歴が無効な環境では、初回の `Win+Ctrl+V` で表示される **[有効にする]** を選びます。これは Windows の初回操作で、キーの配布とは別です。[Microsoft の手順](https://support.microsoft.com/ja-jp/windows/apps/using-the-clipboard) を参照してください。
 
-ブラウザと Spotify / Signal / Obsidian / 1Password GUI の起動先は WSLg に統一します。Chrome / Spotify / Signal / Obsidian は Windows manifest から外し、既存の Windows 版は自動 uninstall しません。Windows 版 1Password は従来の `op.exe` / Git signer 連携のため維持し、GUI の起動先変更で認証方式は変えません。Windows の既定ブラウザ設定も変更しません。
+ブラウザ、Nautilus（Files）と Spotify / Signal / Obsidian / 1Password GUI の起動先は WSLg に統一します。これらの Linux GUI は Nix が導入します。Chrome / Spotify / Signal / Obsidian は Windows manifest から外し、既存の Windows 版は自動 uninstall しません。Windows 版 1Password は従来の `op.exe` / Git signer 連携のため維持し、GUI の起動先変更で認証方式は変えません。Windows の既定ブラウザ設定も変更しません。
 
 PowerToys の他の割り当てと設定を維持しながら Keyboard Manager / Color Picker を有効化し、必要な場合は PowerToys を再起動します。以後は管理対象の割り当てを更新し、keyboard engine に再読み込みを通知します。GlazeWM / Zebar / AutoHotkey は導入・起動しません。以前配置した Startup shortcut と実行中プロセスは自動削除・停止しません。
 

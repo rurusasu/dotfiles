@@ -1535,7 +1535,7 @@ function Invoke-DesktopAction {
         'terminal' { Invoke-WslDesktopTerminal }
         'browser' { Invoke-WslDesktopApplication -Executable 'google-chrome' -Arguments @('--new-window') }
         'browser-private' { Invoke-PrivateDesktopBrowser }
-        'files' { Invoke-DesktopProcess (Join-Path $env:WINDIR 'explorer.exe') }
+        'files' { Invoke-WslDesktopApplication -Executable 'nautilus' -Arguments @('--new-window') }
         'activity' { Invoke-WslDesktopTerminal 'btop' }
         'editor' { Invoke-WslDesktopTerminal 'nvim' }
         'docker' { Invoke-WslDesktopTerminal 'lazydocker' }

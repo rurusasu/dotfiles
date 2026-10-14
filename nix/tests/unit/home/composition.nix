@@ -994,6 +994,7 @@ in
             signal = copies home.pkgs.signal-desktop;
             obsidian = copies home.pkgs.obsidian;
             onePassword = copies home.pkgs._1password-gui;
+            nautilus = copies home.pkgs.nautilus;
             browser = home.config.home.sessionVariables.BROWSER or null;
           }
         )
@@ -1009,6 +1010,7 @@ in
         signal = 1;
         obsidian = 1;
         onePassword = 1;
+        nautilus = 1;
         browser = "${configuredChrome wsl}/bin/google-chrome-stable";
       }
       {
@@ -1018,10 +1020,36 @@ in
         signal = 0;
         obsidian = 1;
         onePassword = 1;
+        nautilus = 1;
         browser = null;
       }
     ];
   };
+
+  testNautilusKeepsDarwinAndCliPackageBoundaries =
+    let
+      isNautilus = package: (package.pname or "") == "nautilus";
+      cliPackages =
+        ((import ../../../modules/tools.nix).homeManager {
+          inherit (wsl) config pkgs;
+          inherit inputs;
+          inherit (wsl.pkgs) lib;
+        }).home.packages;
+    in
+    {
+      expr = {
+        darwin = builtins.any isNautilus darwin.config.home.packages;
+        sharedCli = builtins.any isNautilus cliPackages;
+        legacyNativeDesktop = builtins.any isNautilus (
+          ((import ../../../modules/tools.nix).nativeDesktop { inherit (wsl) pkgs; }).home.packages
+        );
+      };
+      expected = {
+        darwin = false;
+        sharedCli = false;
+        legacyNativeDesktop = false;
+      };
+    };
 
   testWslChromePackageWrapsJapaneseLocaleAndLanguage = {
     expr = builtins.all (token: wsl.pkgs.lib.hasInfix token (configuredChrome wsl).postFixup) [

@@ -146,7 +146,6 @@ in
     home.packages = [
       pkgs.firefox
       pkgs.fuzzel
-      pkgs.nautilus
     ];
   };
 

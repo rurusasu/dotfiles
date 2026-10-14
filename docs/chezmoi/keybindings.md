@@ -33,6 +33,8 @@ Nix で管理するデスクトップ・Ghostty・Neovim 配列と、chezmoi が
 
 Windows では `Super=Win` とし、同じキーの標準操作を remap で上書きします。`Win+D` は無効化します。Windows キーの全機能を無効化する `NoWinKeys` は使わず、`Win+L` や `Ctrl+Alt+Del` などの OS 予約操作は維持します。初回の loader 導入は `nrs`、以後の反映は `task chezmoi` です。[install.cmd と export の手順](./omarchy.md#export-と反映手順) を参照してください。
 
+`Win+Shift+F` の Files は Nix が導入する NixOS-WSL の Nautilus を WSLg で起動します。Obsidian も Nix 側のアプリを起動し、Windows WinGet では導入しません。
+
 配列の配置と実キーでの動作確認は別に記録します。[反映・確認記録](./keybindings-verification.md) に確認済み、未確認、修正中の操作を示します。
 
 `Win+C/X/V` は前面アプリを判定する Windows runtime が扱い、WSLg Ghostty のコピー・ペーストには `Ctrl+Shift+C/V` を使います。Ghostty の `Win+X` はコピーとして扱います。クリップボード履歴が無効なら、初回の `Win+Ctrl+V` で **[有効にする]** を選びます。`PrintScreen` 単独割り当ての PowerToys editor 制約と各 Windows 操作の詳細は [Windows デスクトップの運用](./omarchy.md#windows-デスクトップの運用) を参照してください。

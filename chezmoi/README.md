@@ -30,7 +30,8 @@ PowerToys Keyboard Manager applies the Omarchy desktop shortcuts with
 `Super=Win`: application launchers, clipboard, capture, notifications, appearance,
 idle, night light, taskbar, and audio output actions. `Win+Enter` opens Ghostty
 in the `NixOS` WSL distribution; Btop, Neovim, and LazyDocker also open there.
-The browser and Spotify, Signal, Obsidian, and 1Password GUI launch in WSLg.
+The browser, Nautilus (Files), and Spotify, Signal, Obsidian, and 1Password GUI
+launch in WSLg from Nix-managed packages. `Win+Shift+F` opens Nautilus.
 HEY, ChatGPT, Google Messages, and WhatsApp open in WSL Chrome app windows.
 PowerToys remains a Windows host dependency. The Windows 1Password installation
 remains for existing CLI/signing integration; the GUI shortcut opens the WSL

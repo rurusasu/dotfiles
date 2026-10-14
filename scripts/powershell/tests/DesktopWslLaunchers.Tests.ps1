@@ -17,6 +17,7 @@ Describe 'WSL desktop launcher dispatch' {
     It 'should launch <Action> through the selected WSL application' -ForEach @(
         @{ Action = 'browser'; Executable = 'google-chrome'; Arguments = @('--new-window') },
         @{ Action = 'browser-private'; Executable = 'google-chrome'; Arguments = @('--incognito', '--new-window') },
+        @{ Action = 'files'; Executable = 'nautilus'; Arguments = @('--new-window') },
         @{ Action = 'calendar'; Executable = 'google-chrome'; Arguments = @('--app=https://app.hey.com/calendar/weeks/') },
         @{ Action = 'email'; Executable = 'google-chrome'; Arguments = @('--app=https://app.hey.com/') },
         @{ Action = 'ai'; Executable = 'google-chrome'; Arguments = @('--app=https://chatgpt.com/') },

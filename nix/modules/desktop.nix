@@ -8,6 +8,7 @@ let
         (chromeProvider pkgs)
         pkgs.obsidian
         pkgs._1password-gui
+        pkgs.nautilus
       ];
     };
 in
