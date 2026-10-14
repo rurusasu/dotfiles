@@ -49,6 +49,12 @@ in
       sessionAtLogin = builtins.elem "default.target" (
         defaultConfig.systemd.user.targets.graphical-session.wantedBy or [ ]
       );
+      sessionOnSwitch = builtins.elem "graphical-session.target" (
+        defaultConfig.systemd.user.services.nixos-activation.wants or [ ]
+      );
+      activationAfterSession = builtins.elem "graphical-session.target" (
+        defaultConfig.systemd.user.services.nixos-activation.after or [ ]
+      );
       displayEnvironment =
         builtins.all
           (
@@ -64,6 +70,8 @@ in
     };
     expected = {
       sessionAtLogin = true;
+      sessionOnSwitch = true;
+      activationAfterSession = true;
       displayEnvironment = true;
       portal = true;
     };

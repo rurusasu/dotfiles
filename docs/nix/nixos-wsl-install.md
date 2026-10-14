@@ -162,7 +162,7 @@ WSL host は `wsl.useWindowsDriver = true` で Windows の D3D12 / DXCore ライ
 `/run/opengl-driver/lib` に接続します。`LD_LIBRARY_PATH` にそのディレクトリを設定し、
 `GALLIUM_DRIVER=d3d12` で Mesa の描画経路を選択します。
 Ghostty などの OpenGL アプリが CPU 描画の `llvmpipe` にフォールバックするのを防ぎます。
-設定は `nix/hosts/x86_64-linux/wsl/configuration.nix` が所有します。
+描画環境とポータルの連携は `nix/hosts/x86_64-linux/wsl/integration.nix` が所有します。
 シェルには `environment.variables`、systemd 経由の GUI 起動には `environment.d` で渡します。
 詳細は [NixOS-WSL の option](https://nix-community.github.io/NixOS-WSL/options.html#wsl.useWindowsDriver) と
 [WSLg の D3D12 自動選択の問題](https://github.com/microsoft/wslg/issues/1332) を参照してください。
@@ -185,6 +185,9 @@ NVIDIA カーネルドライバーを導入する構成ではありません。
 WSLg には Linux のデスクトップセッションマネージャーがないため、WSL host は
 `default.target` からユーザーの `graphical-session.target` を起動します。
 `xdg-desktop-portal` はこの target が停止していると D-Bus 経由でも起動できません。
+既に動いているユーザーマネージャーにも反映するため、rebuild 時に再起動される
+`nixos-activation.service` からも同じ target を起動し、target の起動後に activation を実行します。
+これにより、`WantedBy` の追加だけでは起動しない既存セッションでも WSL の再起動を必要としません。
 GTK backend が画面に接続できるよう、`DISPLAY=:0` と `WAYLAND_DISPLAY=wayland-0` を
 systemd の `environment.d` にも渡します。通常のシェルの表示環境は WSLg が設定します。
 

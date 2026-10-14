@@ -8,25 +8,12 @@
 {
   config,
   lib,
-  pkgs,
   ...
 }:
 
 let
   identity = import ../../shared/nixos/identity.nix { inherit lib; };
   inherit (identity) user stateVersion;
-  graphicsEnvironment = {
-    # Mesa dynamically loads the Windows bridge libraries from this directory.
-    LD_LIBRARY_PATH = "/run/opengl-driver/lib";
-    # https://github.com/microsoft/wslg/issues/1332
-    GALLIUM_DRIVER = "d3d12";
-  };
-  # WSLg exports these to shells, but the user manager starts without a
-  # desktop login and needs them for D-Bus-activated GTK portal backends.
-  wslgServiceEnvironment = graphicsEnvironment // {
-    DISPLAY = ":0";
-    WAYLAND_DISPLAY = "wayland-0";
-  };
 in
 
 {
@@ -41,25 +28,6 @@ in
 
   # Chrome's process locale is Japanese; keep the system's default language.
   i18n.extraLocales = [ "ja_JP.UTF-8/UTF-8" ];
-
-  # Cover both login shells and GUI apps activated by the user systemd manager.
-  environment.variables = graphicsEnvironment;
-  environment.etc."environment.d/60-wsl-graphics.conf".text =
-    lib.concatStringsSep "\n" (
-      lib.mapAttrsToList (name: value: "${name}=${value}") wslgServiceEnvironment
-    )
-    + "\n";
-
-  # WSLg has no desktop session manager to activate this target. Recent
-  # xdg-desktop-portal units require it even when activated through D-Bus.
-  systemd.user.targets.graphical-session.wantedBy = [ "default.target" ];
-
-  # XDG desktop portal: provides color-scheme and other settings queries via D-Bus.
-  xdg.portal = {
-    enable = true;
-    extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
-    config.common.default = "*";
-  };
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
