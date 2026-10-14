@@ -125,6 +125,12 @@ User PATH の保存・seed・復元を安定した Windows PowerShell 5.1 の親
 
 次の CI head `792f85b04f138cb993c41f69471dbdc1bf1372e9` で、5.1 の `-File` 起動では既定引数の評価時に `$PSScriptRoot` が空になることを確認しました。既定の repository 解決をスクリプト本文へ移し、実際の5.1プロセスで起動する回帰検査を追加しています。package 操作だけを無害な出力へ置換し、引数・起動処理は本番のまま検査しました。対象5件は5.1 / 7の両方で成功し、証跡は `%TEMP%/dotfiles-pr731-entrypoint-winps51-green.log` と `dotfiles-pr731-entrypoint-pwsh7-green.log`、同名の `.xml` です。
 
+## レビューの追加検証
+
+`nix/outputs.nix` だけを変更した場合も Windows / chezmoi の検査を選択するよう CI 分類を修正しました。実際の Git 差分と composite action を使う回帰検査で分類漏れを再現し、修正後は対象8件と Python のトップレベル52件が成功しています。
+
+PowerToys 用の managed file 置換には `-ErrorAction Stop` を指定しました。実 chezmoi で展開した配布スクリプトを隔離した子プロセスで実行し、action script と JSON の各配置先を実際にロックすると、修正前は成功終了してしまうことを再現しました。修正後は非0終了・PowerToys 同期の未実行・既存内容の保持・一時ファイル削除を確認しています。正常時の UTF-8 / BOM、再適用での更新時刻保持、Linux / Darwin の配布境界も含む5件が、Windows PowerShell 5.1 / 7 の両方で成功しました。同期先には fixture を使い、実ユーザーの PowerToys は変更していません。証跡は `%TEMP%/dotfiles-pr731-deployment-{winps51,pwsh7}-green.log` と同名の `.xml` です。
+
 ## Windows Dia
 
 Windows 用 manifest の `direct` source から公式 MSIX の Dia 1.1.0.6 を導入しました。実際の登録情報、package family / publisher / architecture / version、実行ファイル、`appxLaunchTarget` の検証に成功しています。再実行では導入済みとして追加ダウンロードを行いませんでした。

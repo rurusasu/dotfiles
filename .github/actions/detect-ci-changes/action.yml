@@ -114,8 +114,9 @@ runs:
                   wsl=true
                   windows=true
                   ;;
-                # Windows consumes the exported shared shortcuts through chezmoi.
-                nix/home/keybindings/bindings.nix|nix/home/keybindings/generated.json|nix/home/keybindings/ghostty.nix|nix/home/keybindings/ghostty-renderer.nix|nix/home/keybindings/ghostty-windows.nix|nix/home/keybindings/neovim.nix)
+                # Windows consumes the shared shortcuts exported by nix/outputs.nix
+                # through chezmoi.
+                nix/outputs.nix|nix/home/keybindings/bindings.nix|nix/home/keybindings/generated.json|nix/home/keybindings/ghostty.nix|nix/home/keybindings/ghostty-renderer.nix|nix/home/keybindings/ghostty-windows.nix|nix/home/keybindings/neovim.nix)
                   nix=true
                   chezmoi=true
                   linux=true

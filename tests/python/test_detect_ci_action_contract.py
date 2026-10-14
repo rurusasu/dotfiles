@@ -100,6 +100,10 @@ class DetectCiActionContractTests(unittest.TestCase):
             (("nix/modules/git/default.nix",), UNIX),
             (("nix/modules/1password/default.nix",), UNIX),
             (
+                ("nix/outputs.nix",),
+                UNIX | {"chezmoi", "windows"},
+            ),
+            (
                 ("nix/home/keybindings/bindings.nix",),
                 UNIX | {"chezmoi", "windows"},
             ),

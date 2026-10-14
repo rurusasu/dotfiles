@@ -15,7 +15,7 @@ function Write-DesktopManagedFile {
     $temporary = Join-Path (Split-Path -Parent $Path) ([guid]::NewGuid().ToString() + '.tmp')
     try {
         [IO.File]::WriteAllBytes($temporary, [byte[]]$bytes)
-        Move-Item -LiteralPath $temporary -Destination $Path -Force
+        Move-Item -LiteralPath $temporary -Destination $Path -Force -ErrorAction Stop
     }
     finally {
         if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
