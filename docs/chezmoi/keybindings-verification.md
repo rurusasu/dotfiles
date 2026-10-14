@@ -82,18 +82,18 @@
 
 ## 設定・自動検査
 
-| 対象                   | 結果                                                              | 確認範囲                                                                                                                                                                                                   |
-| ---------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Nix unit               | 185件成功                                                         | 共通定義、export、renderer、WSLg transport、WSL GUI package、日本語フォント配置、Chrome GTK3 cache などの値・契約                                                                                          |
-| Ghostty                | 28割り当ての設定検査成功                                          | 配置済み設定の構文・action。実キー入力の成功とは別                                                                                                                                                         |
-| Neovim                 | 配置済み17割り当てと Oil runtime を確認                           | 実際に配置した Neovim 設定を読み込む runtime 検査。全キーを GUI から押した検査ではない                                                                                                                     |
-| PowerShell 全体        | 900件成功・失敗0件・POSIX 境界1件 skip / 全901件、coverage 81.89% | Windows native の公式 runner を `MinimumCoverage=80` で実行し exit 0、195.48秒。対象10ファイルの command coverage は2686 / 3280、未カバー594。Dia installer・export・Files の WSLg 判定修正を含む作業 tree |
-| Windows action runtime | 155件成功                                                         | 中間 snapshot の対象 runtime 検査。後続の通知修正は下の61件 focused と最新の全件検査で確認                                                                                                                 |
-| 通知 focused           | 61件成功                                                          | 最新の通知削除・全削除と完了判定の対象検査                                                                                                                                                                 |
+| 対象                   | 結果                                                              | 確認範囲                                                                                                                                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nix unit               | 185件成功                                                         | 共通定義、export、renderer、WSLg transport、WSL GUI package、日本語フォント配置、Chrome GTK3 cache などの値・契約                                                                                                            |
+| Ghostty                | 28割り当ての設定検査成功                                          | 配置済み設定の構文・action。実キー入力の成功とは別                                                                                                                                                                           |
+| Neovim                 | 配置済み17割り当てと Oil runtime を確認                           | 実際に配置した Neovim 設定を読み込む runtime 検査。全キーを GUI から押した検査ではない                                                                                                                                       |
+| PowerShell 全体        | 914件成功・失敗0件・POSIX 境界1件 skip / 全915件、coverage 81.96% | Windows native の公式 runner を `MinimumCoverage=80` で実行し exit 0、191.4秒。対象10ファイルの command coverage は2689 / 3281、未カバー592。CI の MSI 中断検出、runtime 準備、更新失敗の厳格判定と PATH 隔離を含む作業 tree |
+| Windows action runtime | 155件成功                                                         | 中間 snapshot の対象 runtime 検査。後続の通知修正は下の61件 focused と最新の全件検査で確認                                                                                                                                   |
+| 通知 focused           | 61件成功                                                          | 最新の通知削除・全削除と完了判定の対象検査                                                                                                                                                                                   |
 
-最新の Nix unit は185件成功し、出力は /nix/store/zc90202skvxgjgy6hcz3hvrgrfq58mzh-nix-unit-check です。WSLg の UDEV 配置、GTK 3 / 4 と設定ポータル、dconf service、Nautilus の package 所有境界も含みます。
+Nix unit は185件成功し、構成の lint 修正後の出力は /nix/store/vq2k8hn4hh8gr4cidg56iqqydbg1ryzw-nix-unit-check です。WSLg の UDEV 配置、GTK 3 / 4 と設定ポータル、dconf service、Nautilus の package 所有境界も含みます。
 
-Windows native の最終全件検査は900件成功・失敗0件、coverage 81.89%で80%基準を満たし、exit 0 で成功しました。実行前後で `scripts/powershell/` と Windows manifest の source hash が一致しました。証跡は `%TEMP%/dotfiles-final-desktop-recovered-powershell80.log`、同名の `.xml`、`-coverage.xml`、`-source-before.json`、`-source-after.json` です。続いて AppX テストの行末空白だけを整え、文字コードと AppX の対象29件も成功しました。追加の証跡は `%TEMP%/dotfiles-final-desktop-encoding-appx.log` と同名の `.xml` です。WSL からの `task commit` では Windows PowerShell hook の Linux branch がテストを実行せず exit 0 となるため、Pester の結果は Windows native の公式 runner で取得します。
+Windows native の全件検査は914件成功・失敗0件、coverage 81.96%で80%基準を満たし、exit 0 で成功しました。実行前後で `scripts/powershell/` と Windows manifest の source hash が一致しました。証跡は `%TEMP%/dotfiles-pr731-strict-final-powershell80.log`、同名の `.xml`、`-coverage.xml`、`-source-before.json`、`-source-after.json` です。その後に PowerShell 5.1 の JSON 引数を修正したフォント検査9件も、5.1 / 7 の両方で成功しました。追加の証跡は `%TEMP%/dotfiles-pr731-font-winps51-green.log` と `dotfiles-pr731-font-pwsh7-green.log`、同名の `.xml` です。WSL からの `task commit` では Windows PowerShell hook の Linux branch がテストを実行せず exit 0 となるため、Pester の結果は Windows native の公式 runner で取得します。
 
 整形済み runtime を `task chezmoi` で再適用し、配置した runtime の正規化した内容がソースと一致することを確認しました。Ghostty の28割り当ては全て実キーで確認済みで、検査のために追加した tab は整理済みです。
 
@@ -110,6 +110,18 @@ WSLg system distro の読み取り調査では、当初 `fc-match` は FreeSans�
 恒久設定の `nix/hosts/x86_64-linux/wsl/fonts.nix` を含む `nixos-rebuild switch` が成功し、activation `wslgFonts` の実行を確認しました。`/usr/local/share/fonts/dotfiles-wslg/NotoSansCJK-VF.otf.ttc` は通常ファイル、32,682,580 bytes、mode `0644`、owner `root:root` で配置されています。SHA256 は `d3d8256cdec8dbcb3552284bc6b20c734dd60c2ee9df83b5758e34807c4bac32` で固定した Nix の入力と一致しました。WSLg system distro の `fc-cache` / `fc-match` でも、この本番配置先の Noto Sans CJK JP Bold を選択しています。一時検査用フォントは削除済みです。
 
 フォント反映時の system は `/nix/store/9fy43irl4bjahgrf93gj78las0670p68-nixos-system-nixos-26.11.20261011.7fd4004` です。activation 内では WSLg を再起動しません。実行中の Weston が古い Pango font map を保持していたため、ユーザーの承認後に `wsl --shutdown` で WSL 全体を再起動しました。その後 `Win+Shift+B` で WSLg Chrome を起動し、通常 X11 の灰色の server titlebar が「新しいタブ - Google Chrome」と日本語で正常表示されることを実 UI で確認しました。恒久フォント配置と再起動後の通常 titlebar の確認が完了しています。
+
+## CI の中断検出とテスト環境
+
+PR #731 の初回 head `4b3d6dbbb455f0646fff5a0cb563bf687bba9a3b` では、Windows の PowerShell MSI 更新で検証用の PowerShell 7 が終了し、子プロセスの後処理と成功検証が実行されませんでした。親が exit 0 だけを信頼したため工程が成功扱いになり、テスト用の長い User PATH が後続へ残りました。
+
+User PATH の保存・seed・復元を安定した Windows PowerShell 5.1 の親へ移し、子の完了証跡がない exit 0 も失敗にしました。MSI runtime の準備は同じ Windows manifest の PowerShell 宣言と通常の WinGet handler を使って先に行い、実 installer での全 package の検証義務は維持します。この準備では `WingetRequireSuccessfulUpdate` を有効にし、更新失敗後に古い実行環境を維持した場合も失敗として扱います。実インストールや実ユーザーのレジストリ変更を行わない fixture で、早期 exit 0 と強制終了後の復元を検査しています。
+
+長い PATH を注入した隔離 fixture では Winget / AppX の7件の失敗を再現し、unit test の PATH を実ユーザー環境から分離した後は158件成功しました。Bats の古い期待値も、管理ファイル3件と配布スクリプト4件の完全一致へ更新し、対象2件と `wezterm-config` build が成功しています。ローカル NixOS で Bash 全体を直接実行した際の43件の setup 失敗は Python / FHS tool の不足であり、Bash 全体の CI 判定は依存を備えた devcontainer の実行結果を使います。
+
+初回 CI の PowerShell 5.1 側は実 installer と User PATH の復元が完了し、後続のフォント検査9件だけが JSON の引用符で失敗しました。検査から chezmoi を起動する際に共通の引数処理ラッパーを使い、5.1 / 7 の両方で実 chezmoi による9件を確認しています。runtime 準備と中断検出、更新失敗の厳格判定を含む5.1の対象検査は211件成功・POSIX 境界1件 skipでした。
+
+修正後の Windows PowerShell 5.1 全体も907件成功・失敗0件・既存の runtime 境界8件 skip / 全915件、197.71秒、exit 0 で確認しました。実行前後の source hash は一致しています。証跡は `%TEMP%/dotfiles-pr731-release-winps51.log`、同名の `.xml`、`-source-before.json`、`-source-after.json` です。
 
 ## Windows Dia
 

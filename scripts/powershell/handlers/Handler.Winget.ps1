@@ -491,7 +491,10 @@ class WingetHandler : SetupHandlerBase {
             if ($deferred -gt 0) { $parts += "$deferred 個管理者フェーズ待ち" }
             $parts += "$skipped 個スキップ"
             $message = $parts -join ", "
-            if ($failed -gt 0 -or $verifyFailed -gt 0) {
+            # CI runtime preparation must consume an available MSI update
+            # before starting processes that the same update could terminate.
+            $requiredUpdateFailed = $preserved -gt 0 -and [bool]$ctx.GetOption('WingetRequireSuccessfulUpdate', $false)
+            if ($failed -gt 0 -or $verifyFailed -gt 0 -or $requiredUpdateFailed) {
                 return $this.CreateFailureResult($message)
             }
             return $this.CreateSuccessResult($message)

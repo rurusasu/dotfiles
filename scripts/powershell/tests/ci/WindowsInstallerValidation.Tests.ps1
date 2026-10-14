@@ -156,7 +156,7 @@
         $script:installerE2E | Should -Match 'Process PATH normalized: removed'
         $script:installerE2E | Should -Match 'Post-install PATH exceeds the cmd\.exe command environment limit'
         $script:installerE2E | Should -Not -Match 'User PATH repaired|remainingStaleUserPathEntries|runnerPnpmDirectories|PNPM_HOME'
-        $script:installerE2E | Should -Match 'SetValue\(''PATH'', \$originalUserPathRegistryValue, \$originalUserPathRegistryKind\)'
+        $script:installerE2E | Should -Match 'SetValue\(''PATH'', \$Snapshot.Value, \$Snapshot.Kind\)'
         $script:installerE2E | Should -Match 'DeleteValue\(''PATH'', \$false\)'
     }
 

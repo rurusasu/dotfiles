@@ -677,6 +677,12 @@ jobs:
             throw "winget source list failed (exit=$wingetSourcesExitCode): $($wingetSources -join ' ')"
           }
 
+      # Updating the MSI-managed runtime can terminate every process using it.
+      # Prepare it from stable Windows PowerShell before seeding E2E state.
+      - name: Prepare PowerShell 7 before installer E2E
+        shell: cmd
+        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts\powershell\ci\Initialize-WindowsInstallerRuntime.ps1
+
       - name: Run install.cmd strict user phase
         shell: cmd
         timeout-minutes: 180

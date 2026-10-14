@@ -12,10 +12,14 @@
 Describe 'WingetHandler direct AppX installer' {
     BeforeEach {
         $script:originalTemp = $env:TEMP
+        $script:originalPath = $env:PATH
         $script:originalArchitecture = $env:PROCESSOR_ARCHITECTURE
         $script:originalWowArchitecture = $env:PROCESSOR_ARCHITEW6432
         $script:originalTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
         $env:TEMP = Join-Path $TestDrive 'downloads'
+        # Real encoding/progress subprocesses need a bounded environment even
+        # if the surrounding machine has an oversized PATH.
+        $env:PATH = "$PSHOME;$env:SystemRoot\System32"
         $env:PROCESSOR_ARCHITECTURE = 'AMD64'
         $env:PROCESSOR_ARCHITEW6432 = $null
         $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $null
@@ -93,6 +97,7 @@ Describe 'WingetHandler direct AppX installer' {
 
     AfterEach {
         $env:TEMP = $script:originalTemp
+        $env:PATH = $script:originalPath
         $env:PROCESSOR_ARCHITECTURE = $script:originalArchitecture
         $env:PROCESSOR_ARCHITEW6432 = $script:originalWowArchitecture
         $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $script:originalTimeout

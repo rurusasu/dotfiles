@@ -1074,14 +1074,14 @@ in
           inherit inputs;
           inherit (wsl.pkgs) lib;
         }).home.packages;
+      legacyNativePackages =
+        ((import ../../../modules/tools.nix).nativeDesktop { inherit (wsl) pkgs; }).home.packages;
     in
     {
       expr = {
         darwin = builtins.any isNautilus darwin.config.home.packages;
         sharedCli = builtins.any isNautilus cliPackages;
-        legacyNativeDesktop = builtins.any isNautilus (
-          ((import ../../../modules/tools.nix).nativeDesktop { inherit (wsl) pkgs; }).home.packages
-        );
+        legacyNativeDesktop = builtins.any isNautilus legacyNativePackages;
       };
       expected = {
         darwin = false;

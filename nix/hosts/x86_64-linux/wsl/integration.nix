@@ -26,12 +26,25 @@ in
 {
   # Root evaluates the Windows-mounted, user-owned checkout during rebuild.
   # Own its exact trust declaration here, never by editing Home Manager files.
-  programs.git = {
-    enable = true;
-    config.safe.directory = [ repository ];
+  programs = {
+    git = {
+      enable = true;
+      config.safe.directory = [ repository ];
+    };
+    # Home Manager's GTK font setting is read through the settings portal.
+    dconf.enable = true;
+    # Allow running dynamically linked binaries in WSL (e.g. VS Code Server).
+    nix-ld = {
+      enable = true;
+      libraries = with pkgs; [
+        stdenv.cc.cc
+        zlib
+        openssl
+        wayland
+        libxkbcommon
+      ];
+    };
   };
-  # Home Manager's GTK font setting is read through the settings portal.
-  programs.dconf.enable = true;
   assertions = [
     {
       assertion = builtins.substring 0 1 repository == "/" && !(pkgs.lib.hasInfix "*" repository);
@@ -166,18 +179,6 @@ in
           --output /etc/cdi/nvidia.yaml 2>/dev/null || true
       '';
     };
-  };
-
-  # Allow running dynamically linked binaries in WSL (e.g. VS Code Server).
-  programs.nix-ld = {
-    enable = true;
-    libraries = with pkgs; [
-      stdenv.cc.cc
-      zlib
-      openssl
-      wayland
-      libxkbcommon
-    ];
   };
 
   # PAM integration for gnome-keyring: auto-unlocks the keyring on login when a

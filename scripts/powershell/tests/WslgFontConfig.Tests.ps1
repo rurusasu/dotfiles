@@ -1,4 +1,5 @@
 BeforeAll {
+    . (Join-Path $PSScriptRoot '../lib/Invoke-ExternalCommand.ps1')
     $script:repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
     $script:chezmoi = (Get-Command chezmoi -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
     if (-not $script:chezmoi -and $env:LOCALAPPDATA) {
@@ -40,7 +41,7 @@ BeforeAll {
         $arguments = @('--config', $Fixture.Config, '--config-format', 'toml', '--source', $Source,
             '--destination', $Fixture.Destination, '--cache', (Join-Path $Fixture.Root 'cache'),
             '--persistent-state', (Join-Path $Fixture.Root 'state.boltdb'), '--override-data', $override) + $Command
-        $output = @(& $script:chezmoi @arguments 2>&1)
+        $output = @(Invoke-ExternalCommandWithTimeout -Command $script:chezmoi -Arguments $arguments -TimeoutSeconds 30)
         $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
         $output -join "`n"
     }

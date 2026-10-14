@@ -221,13 +221,15 @@ assert builtins.length bindings == builtins.length (lib.unique (map chord bindin
     inherit lib;
     bindings = ghostty;
   };
-  windows.bindings = builtins.filter (binding: builtins.elem binding.action windowsActions) bindings;
-  windows.ghosttyTransport = ghosttyWindows.transport;
-  windows.ghosttyConfig = ghosttyWindows.config;
-  windows.disabledShortcuts = [
-    {
-      key = "d";
-      modifiers = super;
-    }
-  ];
+  windows = {
+    bindings = builtins.filter (binding: builtins.elem binding.action windowsActions) bindings;
+    ghosttyTransport = ghosttyWindows.transport;
+    ghosttyConfig = ghosttyWindows.config;
+    disabledShortcuts = [
+      {
+        key = "d";
+        modifiers = super;
+      }
+    ];
+  };
 }
