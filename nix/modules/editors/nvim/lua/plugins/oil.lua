@@ -1,3 +1,36 @@
+local allocation = require("config.key_allocation")
+local actions = require("config.oil_actions")
+local local_keymaps = {
+    ["<CR>"] = { callback = actions.select, desc = "Open entry" },
+    ["<C-s>"] = { "actions.select", opts = { vertical = true } },
+    ["<C-h>"] = { "actions.select", opts = { horizontal = true } },
+    ["<C-t>"] = { "actions.select", opts = { tab = true } },
+    ["<Esc>"] = { callback = actions.close, desc = "Close Oil" },
+    ["g."] = "actions.toggle_hidden",
+}
+local shared_actions = {
+    ["oil-add-file"] = {
+        function()
+            actions.add(false)
+        end,
+        "Add file",
+    },
+    ["oil-add-dir"] = {
+        function()
+            actions.add(true)
+        end,
+        "Add directory",
+    },
+    ["oil-delete"] = { actions.delete, "Delete entry (trash)" },
+    ["oil-move"] = { actions.move, "Move entry" },
+    ["oil-rename"] = { actions.rename, "Rename entry" },
+    ["oil-help"] = { require("oil.actions").show_help.callback, "Show Oil keymaps" },
+}
+for action, mapping in pairs(shared_actions) do
+    local binding = allocation.binding(action, "oil")
+    local_keymaps[binding.key] = { callback = mapping[1], desc = mapping[2], mode = binding.mode }
+end
+
 require("oil").setup({
     default_file_explorer = true,
     delete_to_trash = true,
@@ -5,23 +38,7 @@ require("oil").setup({
     view_options = {
         show_hidden = true,
     },
-    keymaps = {
-        ["<CR>"] = "actions.select",
-        ["<C-s>"] = {
-            "actions.select",
-            opts = { vertical = true },
-        },
-        ["<C-h>"] = {
-            "actions.select",
-            opts = { horizontal = true },
-        },
-        ["<C-t>"] = {
-            "actions.select",
-            opts = { tab = true },
-        },
-        ["<Esc>"] = "actions.close",
-        ["g."] = "actions.toggle_hidden",
-    },
+    keymaps = local_keymaps,
 })
 
 -- Windows のドライブ一覧 (oil:///) は上流でも wmic を使うため、不在時だけ PowerShell で補う。
@@ -68,6 +85,7 @@ end
 
 local keys = {
     { "-", "<cmd>Oil<cr>", desc = "Open Oil" },
+    { allocation.key("explorer"), actions.toggle_sidebar, desc = "Toggle Oil sidebar" },
 }
 
 for _, key in ipairs(keys) do

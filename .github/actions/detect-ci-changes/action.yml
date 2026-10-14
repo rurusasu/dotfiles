@@ -100,13 +100,22 @@ runs:
                 docs/*|README*|AGENTS.md|CLAUDE.md|*/README*|*/AGENTS.md|LICENSE*)
                   ;;
                 # Windows manifests are edited directly and validated by both
-                # platform workflows. Unix keybindings are owned by Nix.
+                # platform workflows.
                 windows/*)
                   nix=true
                   chezmoi=true
                   windows=true
                   ;;
                 flake.nix|flake.lock)
+                  nix=true
+                  chezmoi=true
+                  linux=true
+                  darwin=true
+                  wsl=true
+                  windows=true
+                  ;;
+                # Windows consumes the exported shared shortcuts through chezmoi.
+                nix/home/keybindings/bindings.nix|nix/home/keybindings/generated.json|nix/home/keybindings/ghostty.nix|nix/home/keybindings/ghostty-renderer.nix|nix/home/keybindings/ghostty-windows.nix|nix/home/keybindings/neovim.nix)
                   nix=true
                   chezmoi=true
                   linux=true

@@ -2,6 +2,7 @@
 let
   fixtures = import ../../fixtures/packages.nix { inherit inputs; };
   mkPkgs = system: fixtures.mkPkgs system;
+  configuredChrome = home: import ../../../modules/browsers/chrome { inherit (home) pkgs; };
 
   baseModule = _: {
     home = {
@@ -75,6 +76,21 @@ let
 
 in
 {
+  testWslAppKeybindingsUseWindowsExportAndNativeHomesKeepNix = {
+    expr =
+      map
+        (home: home.pkgs.lib.attrByPath [ "dotfiles" "keybindings" "fromWindowsExport" ] false home.config)
+        [
+          wsl
+          linux
+          darwin
+        ];
+    expected = [
+      true
+      false
+      false
+    ];
+  };
   testCodexConfigurationIsOwnedByHomeManagerAcrossHomes = {
     expr =
       map
@@ -928,13 +944,174 @@ in
     expr = {
       browser = wsl.config.home.sessionVariables.BROWSER;
       inputMethod = wsl.config.home.sessionVariables.GTK_IM_MODULE;
+      qtInputMethod = wsl.config.home.sessionVariables.QT_IM_MODULE;
+      xModifiers = wsl.config.home.sessionVariables.XMODIFIERS;
+      globalLanguage = wsl.config.home.sessionVariables.LANG or null;
+      globalLocale = wsl.config.home.sessionVariables.LC_ALL or null;
       zoxideExclusion = wsl.config.home.sessionVariables._ZO_EXCLUDE_DIRS;
+      onePasswordAccount = wsl.config.home.sessionVariables.OP_ACCOUNT;
+      windowsEnvironment = wsl.config.home.sessionVariables.WSLENV;
+      signer = wsl.config.programs.git.signing.signer;
+      signerBridge = {
+        source = wsl.config.home.file.".local/bin/op-ssh-sign-wsl".source;
+        executable = wsl.config.home.file.".local/bin/op-ssh-sign-wsl".executable;
+      };
     };
     expected = {
-      browser = "explorer.exe";
+      browser = "${configuredChrome wsl}/bin/google-chrome-stable";
       inputMethod = "fcitx";
+      qtInputMethod = "fcitx";
+      xModifiers = "@im=fcitx";
+      globalLanguage = null;
+      globalLocale = null;
       zoxideExclusion = "/mnt/wsl/*:/mnt/wslg/*";
+      onePasswordAccount = "EJLA3HRAVZBCXIQ7SRSFGQBTNU";
+      windowsEnvironment = "OP_ACCOUNT/u";
+      signer = "/home/test-user/.local/bin/op-ssh-sign-wsl";
+      signerBridge = {
+        source = ../../../hosts/x86_64-linux/wsl/op-ssh-sign-wsl;
+        executable = true;
+      };
     };
+  };
+
+  testWslDesktopAppsAreInstalledOnceAndNativeLinuxSelectionIsPreserved = {
+    expr =
+      map
+        (
+          home:
+          let
+            copies =
+              package:
+              builtins.length (
+                builtins.filter (candidate: candidate.drvPath == package.drvPath) home.config.home.packages
+              );
+          in
+          {
+            chrome = copies (configuredChrome home);
+            rawChrome = copies home.pkgs.google-chrome;
+            spotify = copies home.pkgs.spotify;
+            signal = copies home.pkgs.signal-desktop;
+            obsidian = copies home.pkgs.obsidian;
+            onePassword = copies home.pkgs._1password-gui;
+            browser = home.config.home.sessionVariables.BROWSER or null;
+          }
+        )
+        [
+          wsl
+          linux
+        ];
+    expected = [
+      {
+        chrome = 1;
+        rawChrome = 0;
+        spotify = 1;
+        signal = 1;
+        obsidian = 1;
+        onePassword = 1;
+        browser = "${configuredChrome wsl}/bin/google-chrome-stable";
+      }
+      {
+        chrome = 0;
+        rawChrome = 1;
+        spotify = 0;
+        signal = 0;
+        obsidian = 1;
+        onePassword = 1;
+        browser = null;
+      }
+    ];
+  };
+
+  testWslChromePackageWrapsJapaneseLocaleAndLanguage = {
+    expr = builtins.all (token: wsl.pkgs.lib.hasInfix token (configuredChrome wsl).postFixup) [
+      "wrapProgram"
+      "--set LANG "
+      "--set LC_ALL "
+      "--set LANGUAGE "
+      "--set GTK_IM_MODULE_FILE "
+      "ja_JP.UTF-8"
+      "--add-flags"
+      "--lang=ja"
+    ];
+    expected = true;
+  };
+
+  testWslChromeBuildsAnExplicitFcitxGtk3ModuleCache = {
+    expr =
+      let
+        inherit (wsl) pkgs;
+        markerStart = "__DOTFILES_GTK_CACHE_BEGIN__";
+        markerEnd = "__DOTFILES_GTK_CACHE_END__";
+        selected = import ../../../modules/browsers/chrome {
+          pkgs = pkgs // {
+            runCommand =
+              name: attrs: script:
+              markerStart
+              + builtins.toJSON {
+                inherit name script;
+                nativeBuildInputs = map toString attrs.nativeBuildInputs;
+                inherit (attrs) preferLocalBuild allowSubstitutes;
+                disallowedReferences = map toString attrs.disallowedReferences;
+              }
+              + markerEnd;
+          };
+        };
+        pieces = pkgs.lib.splitString markerStart selected.postFixup;
+      in
+      if builtins.length pieces == 2 then
+        builtins.fromJSON (
+          builtins.unsafeDiscardStringContext (
+            builtins.head (pkgs.lib.splitString markerEnd (builtins.elemAt pieces 1))
+          )
+        )
+      else
+        null;
+    expected = {
+      name = "chrome-fcitx-gtk3-immodules.cache";
+      nativeBuildInputs = [ (toString wsl.pkgs.gtk3) ];
+      preferLocalBuild = true;
+      allowSubstitutes = false;
+      disallowedReferences = [ (toString (wsl.pkgs.lib.getDev wsl.pkgs.gtk3)) ];
+      script = ''
+        gtk-query-immodules-3.0 "${wsl.pkgs.fcitx5-gtk}/lib/gtk-3.0/3.0.0/immodules/im-fcitx5.so" > "$out"
+      '';
+    };
+  };
+
+  testWslDesktopExtrasGuardUnsupportedPlatforms = {
+    expr =
+      map
+        (
+          system:
+          let
+            pkgs = mkPkgs system;
+          in
+          ((import ../../../modules/desktop.nix).wslDesktop {
+            inherit pkgs;
+            inherit (pkgs) lib;
+          }).home.packages
+        )
+        [
+          "aarch64-linux"
+          "aarch64-darwin"
+        ];
+    expected = [
+      [ ]
+      [ ]
+    ];
+  };
+
+  testLinuxDesktopModuleDoesNotInstallAppsOnDarwin = {
+    expr =
+      let
+        pkgs = mkPkgs "aarch64-darwin";
+      in
+      ((import ../../../modules/desktop.nix).linuxDesktop {
+        inherit pkgs;
+        inherit (pkgs) lib;
+      }).home.packages;
+    expected = [ ];
   };
 
   testWSLHomeModuleExcludesNativeDesktopPackages =
@@ -980,14 +1157,16 @@ in
 
   testObsidianIsSelectedByPlatformModules = {
     expr = {
-      windows = fixtures.windowsPackages."Obsidian.Obsidian".PackageIdentifier;
+      windows = fixtures.windowsPackages ? "Obsidian.Obsidian";
       darwin = darwinPackages.contains darwinPackages.pkgs.obsidian darwinPackages.system;
       linux = builtins.any (package: (package.pname or "") == "obsidian") linux.config.home.packages;
+      wsl = builtins.any (package: (package.pname or "") == "obsidian") wsl.config.home.packages;
     };
     expected = {
-      windows = "Obsidian.Obsidian";
+      windows = false;
       darwin = true;
       linux = true;
+      wsl = true;
     };
   };
 

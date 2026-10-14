@@ -15,6 +15,35 @@ let
   defaultConfig = mkWsl.config;
 in
 {
+  testWslgFontBridgeCopiesARegularFontWithoutRestartingApplications = {
+    expr =
+      let
+        activation = defaultConfig.system.activationScripts.wslgFonts or { };
+      in
+      {
+        deps = activation.deps or [ ];
+        text = activation.text or "";
+      };
+    expected = {
+      deps = [ "specialfs" ];
+      text = ''
+        ${mkWsl.pkgs.coreutils}/bin/install -d -m 0755 /usr/local/share/fonts/dotfiles-wslg
+        ${mkWsl.pkgs.coreutils}/bin/install --compare -m 0644 ${mkWsl.pkgs.noto-fonts-cjk-sans}/share/fonts/opentype/noto-cjk/NotoSansCJK-VF.otf.ttc /usr/local/share/fonts/dotfiles-wslg/NotoSansCJK-VF.otf.ttc
+      '';
+    };
+  };
+  testWslGeneratesJapaneseLocaleWithoutChangingDefaultOrInputMethod = {
+    expr = {
+      defaultLocale = defaultConfig.i18n.defaultLocale;
+      japanese = builtins.elem "ja_JP.UTF-8/UTF-8" defaultConfig.i18n.extraLocales;
+      inputMethod = defaultConfig.i18n.inputMethod.enable;
+    };
+    expected = {
+      defaultLocale = "en_US.UTF-8";
+      japanese = true;
+      inputMethod = false;
+    };
+  };
   testWslStartsGraphicalSessionForPortals = {
     expr = {
       sessionAtLogin = builtins.elem "default.target" (

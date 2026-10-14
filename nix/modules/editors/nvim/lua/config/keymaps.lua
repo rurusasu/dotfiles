@@ -1,6 +1,7 @@
 -- Keymaps
 
 local map = vim.keymap.set
+local allocation = require("config.key_allocation")
 
 -- Native Neovim window navigation
 map("n", "<C-h>", "<C-w>h", { desc = "Go to left window" })
@@ -11,8 +12,6 @@ map("n", "<C-l>", "<C-w>l", { desc = "Go to right window" })
 -- Resize windows
 map("n", "<C-Up>", "<cmd>resize +2<cr>", { desc = "Increase window height" })
 map("n", "<C-Down>", "<cmd>resize -2<cr>", { desc = "Decrease window height" })
-map("n", "<C-Left>", "<cmd>vertical resize -2<cr>", { desc = "Decrease window width" })
-map("n", "<C-Right>", "<cmd>vertical resize +2<cr>", { desc = "Increase window width" })
 
 -- Move lines
 map("n", "<A-j>", "<cmd>m .+1<cr>==", { desc = "Move line down" })
@@ -21,9 +20,28 @@ map("v", "<A-j>", ":m '>+1<cr>gv=gv", { desc = "Move selection down" })
 map("v", "<A-k>", ":m '<-2<cr>gv=gv", { desc = "Move selection up" })
 
 -- Buffer navigation
-map("n", "<S-h>", "<cmd>bprevious<cr>", { desc = "Prev buffer" })
-map("n", "<S-l>", "<cmd>bnext<cr>", { desc = "Next buffer" })
-map("n", "<leader>bd", "<cmd>bdelete<cr>", { desc = "Delete buffer" })
+local shared_keys = {
+    ["window-next"] = { "<C-w>w", "Go to next window" },
+    ["width-minus"] = {
+        function()
+            require("config.oil_actions").resize(-2)
+        end,
+        "Decrease sidebar width",
+    },
+    ["width-plus"] = {
+        function()
+            require("config.oil_actions").resize(2)
+        end,
+        "Increase sidebar width",
+    },
+    ["buffer-prev"] = { "<cmd>bprevious<cr>", "Prev buffer" },
+    ["buffer-next"] = { "<cmd>bnext<cr>", "Next buffer" },
+    ["buffer-delete"] = { "<cmd>bdelete<cr>", "Delete buffer" },
+}
+for action, mapping in pairs(shared_keys) do
+    local binding = allocation.binding(action)
+    map(binding.mode, binding.key, mapping[1], { desc = mapping[2] })
+end
 
 -- Clear search highlight
 map("n", "<Esc>", "<cmd>nohlsearch<cr>", { desc = "Clear search highlight" })
@@ -46,7 +64,7 @@ map("n", "<leader>q", "<cmd>q<cr>", { desc = "Quit" })
 map("n", "<leader>Q", "<cmd>qa!<cr>", { desc = "Quit all" })
 
 -- Diagnostics
-map("n", "<leader>e", vim.diagnostic.open_float, { desc = "Show diagnostic" })
+map("n", "<leader>de", vim.diagnostic.open_float, { desc = "Show diagnostic" })
 
 -- File explorer
 map("n", "-", "<cmd>Oil<cr>", { desc = "Open parent directory" })

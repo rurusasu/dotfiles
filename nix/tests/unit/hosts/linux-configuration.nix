@@ -8,6 +8,10 @@ let
   inherit (host) config pkgs;
 in
 {
+  testNativeLinuxDoesNotInstallWslgFontBridge = {
+    expr = config.system.activationScripts ? wslgFonts;
+    expected = false;
+  };
   testLinuxDockerModulePreservesDaemonAndCliConfiguration = {
     expr = {
       enabled = config.virtualisation.docker.enable;

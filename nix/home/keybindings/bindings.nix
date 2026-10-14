@@ -26,10 +26,42 @@ let
     (bind "terminal" "enter" super)
     (bind "browser" "enter" shifted)
     (bind "browser" "b" shifted)
+    (bind "browser-private" "b" (shifted ++ [ "alt" ]))
     (bind "files" "f" shifted)
+    (bind "activity" "t" shifted)
+    (bind "music" "m" shifted)
     (bind "notes" "o" shifted)
+    (bind "editor" "n" shifted)
+    (bind "calendar" "c" shifted)
+    (bind "email" "e" shifted)
     (bind "ai" "a" shifted)
     (bind "passwords" "slash" shifted)
+    (bind "messenger-signal" "g" shifted)
+    (bind "messenger-google" "g" (shifted ++ [ "ctrl" ]))
+    (bind "messenger-whatsapp" "g" (shifted ++ [ "alt" ]))
+    (bind "docker" "d" shifted)
+    (bind "copy" "c" super)
+    (bind "cut" "x" super)
+    (bind "paste" "v" super)
+    (bind "screenshot" "print" [ ])
+    (bind "screenshot-clipboard" "print" [ "shift" ])
+    (bind "record" "print" [ "alt" ])
+    (bind "color-picker" "print" super)
+    (bind "save-browser-url" "l" [
+      "alt"
+      "shift"
+    ])
+    (bind "notification-dismiss" "comma" super)
+    (bind "notification-dismiss-all" "comma" shifted)
+    (bind "notification-toggle" "comma" control)
+    (bind "notification-history" "comma" alt)
+    (bind "theme-cycle" "space" (control ++ [ "shift" ]))
+    (bind "background-cycle" "space" control)
+    (bind "transparency-toggle" "backspace" super)
+    (bind "idle-toggle" "i" control)
+    (bind "night-mode-toggle" "n" control)
+    (bind "bar-toggle" "space" shifted)
+    (bind "audio-output-cycle" "mute" super)
     (bind "launcher" "space" super)
     (bind "launcher" "space" alt)
     (bind "help" "k" super)
@@ -127,11 +159,75 @@ let
           modifiers = [ "ctrl" ];
         }
       ];
+  ghostty = import ./ghostty.nix { inherit lib directions; };
+  ghosttyWindows = import ./ghostty-windows.nix {
+    inherit lib;
+    bindings = ghostty;
+  };
+  neovim = import ./neovim.nix;
+  windowsActions = [
+    "terminal"
+    "browser"
+    "browser-private"
+    "files"
+    "activity"
+    "music"
+    "notes"
+    "editor"
+    "calendar"
+    "email"
+    "ai"
+    "passwords"
+    "messenger-signal"
+    "messenger-google"
+    "messenger-whatsapp"
+    "docker"
+    "copy"
+    "cut"
+    "paste"
+    "clipboard"
+    "screenshot"
+    "screenshot-clipboard"
+    "record"
+    "color-picker"
+    "save-browser-url"
+    "notification-dismiss"
+    "notification-dismiss-all"
+    "notification-toggle"
+    "notification-history"
+    "theme-cycle"
+    "background-cycle"
+    "transparency-toggle"
+    "idle-toggle"
+    "night-mode-toggle"
+    "bar-toggle"
+    "audio-output-cycle"
+  ];
   chord =
     binding:
     lib.concatStringsSep "+" ((lib.sort builtins.lessThan binding.modifiers) ++ [ binding.key ]);
 in
 assert builtins.length bindings == builtins.length (lib.unique (map chord bindings));
 {
-  inherit bindings directions workspaces;
+  inherit
+    bindings
+    directions
+    workspaces
+    ghostty
+    neovim
+    ;
+  neovimLeader = " ";
+  ghosttyConfig = import ./ghostty-renderer.nix {
+    inherit lib;
+    bindings = ghostty;
+  };
+  windows.bindings = builtins.filter (binding: builtins.elem binding.action windowsActions) bindings;
+  windows.ghosttyTransport = ghosttyWindows.transport;
+  windows.ghosttyConfig = ghosttyWindows.config;
+  windows.disabledShortcuts = [
+    {
+      key = "d";
+      modifiers = super;
+    }
+  ];
 }

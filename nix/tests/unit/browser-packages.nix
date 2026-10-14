@@ -15,8 +15,14 @@ in
       platforms = [ "aarch64-darwin" ];
     };
   };
-  testArcPreservesWindowsDistribution = {
-    expr = fixtures.windowsPackages."TheBrowserCompany.Arc".source;
-    expected = "winget";
+  testWslDesktopAppsAreAbsentFromWindowsManifest = {
+    expr = builtins.filter (name: builtins.hasAttr name fixtures.windowsPackages) [
+      "TheBrowserCompany.Arc"
+      "Google.Chrome"
+      "Spotify.Spotify"
+      "OpenWhisperSystems.Signal"
+      "Obsidian.Obsidian"
+    ];
+    expected = [ ];
   };
 }

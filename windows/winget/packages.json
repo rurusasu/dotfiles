@@ -4,48 +4,6 @@
     {
       "Packages": [
         {
-          "PackageIdentifier": "TheBrowserCompany.Arc",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["TheBrowserCompany.Arc_ttt1ap7aakyb4!Arc"],
-            "command": "TheBrowserCompany.Arc",
-            "type": "appxLaunchTarget"
-          }
-        },
-        {
-          "PackageIdentifier": "Google.Chrome",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "command": "Google Chrome",
-            "type": "windowsInstalledProduct",
-            "uninstallEntry": {
-              "displayName": "Google Chrome",
-              "executablePaths": [
-                "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe",
-                "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe",
-                "%LOCALAPPDATA%\\Google\\Chrome\\Application\\chrome.exe"
-              ],
-              "publisher": "Google LLC"
-            }
-          }
-        },
-        {
-          "PackageIdentifier": "Obsidian.Obsidian",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "command": "Obsidian",
-            "type": "windowsInstalledProduct",
-            "uninstallEntry": {
-              "displayName": "Obsidian",
-              "executablePaths": [
-                "%LOCALAPPDATA%\\Programs\\Obsidian\\Obsidian.exe",
-                "%ProgramFiles%\\Obsidian\\Obsidian.exe"
-              ],
-              "productCodes": ["bd400747-f0c1-5638-a859-982036102edf"]
-            }
-          }
-        },
-        {
           "PackageIdentifier": "Microsoft.PowerShell",
           "installArgs": ["--installer-type", "wix"],
           "installTimeoutSeconds": 3600,
@@ -161,6 +119,15 @@
     },
     {
       "Packages": [
+        {
+          "PackageIdentifier": "9PCFS5B6T72H",
+          "ciSkipInstall": true,
+          "installTimeoutSeconds": 3600,
+          "verifyCommand": {
+            "command": "Microsoft.Paint",
+            "type": "appxPackage"
+          }
+        },
         {
           "PackageIdentifier": "9PLM9XGG6VKS",
           "ciSkipInstall": true,

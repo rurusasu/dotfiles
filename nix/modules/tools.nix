@@ -1,4 +1,4 @@
-# Unix application installation. Feature modules own settings and integration.
+# Unix CLI installation and existing per-application desktop selectors.
 let
   chatgptCli =
     { inputs, pkgs, ... }:
@@ -83,6 +83,8 @@ in
           gh
           _1password-cli
           ghq
+          btop
+          lazydocker
           inputs.llm-agents.packages.${stdenv.hostPlatform.system}.dsh
           hermesBootstrap
           # Public Gmail OAuth task invokes npx; Hermes supplies its private Node runtime.
@@ -123,7 +125,6 @@ in
           prisma-language-server
         ]
         ++ neovimRuntimeDependencies
-        ++ lib.optionals stdenv.hostPlatform.isLinux [ _1password-gui ]
         ++ lib.optionals stdenv.hostPlatform.isDarwin [
           coreutils
           tart
@@ -135,19 +136,8 @@ in
 
   darwin = { pkgs, ... }: {
     environment.systemPackages = [
-      (import ./browsers/dia { inherit pkgs; })
-      pkgs.obsidian
-      pkgs.raycast
-      pkgs._1password-gui
       # Host integrations such as Orca need GitHub CLI outside the user profile.
       pkgs.gh
-    ];
-  };
-
-  linuxDesktop = { pkgs, ... }: {
-    home.packages = [
-      pkgs.google-chrome
-      pkgs.obsidian
     ];
   };
 

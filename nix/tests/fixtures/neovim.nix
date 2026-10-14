@@ -23,6 +23,13 @@ in
 {
   package = home.config.programs.neovim.finalPackage;
   plugins = home.config.xdg.dataFile."nvim/site/pack/hm".source;
-  lua = home.config.xdg.configFile."nvim/lua".source;
+  lua = pkgs.runCommand "neovim-config-lua" { } ''
+    mkdir -p "$out"
+    cp -r ${home.config.xdg.configFile."nvim/lua".source}/. "$out/"
+    chmod -R u+w "$out"
+    cp ${
+      home.config.xdg.configFile."nvim/lua/config/shared_keybindings.lua".source
+    } "$out/config/shared_keybindings.lua"
+  '';
   init = pkgs.writeText "neovim-init.lua" home.config.programs.neovim.initLua;
 }

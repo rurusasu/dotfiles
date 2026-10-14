@@ -86,11 +86,40 @@ class DetectCiActionContractTests(unittest.TestCase):
         cases = (
             (("chezmoi/config.tmpl",), {"chezmoi", "windows"}),
             (("nix/hosts/aarch64-darwin/system.nix",), {"nix", "darwin"}),
+            (("nix/hosts/x86_64-linux/wsl/fonts.nix",), {"nix", "wsl"}),
             (("nix/modules/tools.nix",), UNIX),
+            (("nix/modules/desktop.nix",), UNIX),
+            (("nix/modules/desktop-system.nix",), UNIX),
+            (("nix/modules/browsers/chrome/default.nix",), UNIX),
+            (("nix/modules/fonts/japanese.nix",), UNIX),
             (("nix/modules/discord/default.nix",), UNIX),
             (("nix/modules/git/default.nix",), UNIX),
             (("nix/modules/1password/default.nix",), UNIX),
-            (("nix/home/keybindings/bindings.nix",), UNIX),
+            (
+                ("nix/home/keybindings/bindings.nix",),
+                UNIX | {"chezmoi", "windows"},
+            ),
+            (
+                ("nix/home/keybindings/generated.json",),
+                UNIX | {"chezmoi", "windows"},
+            ),
+            (
+                ("nix/home/keybindings/ghostty.nix",),
+                UNIX | {"chezmoi", "windows"},
+            ),
+            (
+                ("nix/home/keybindings/ghostty-renderer.nix",),
+                UNIX | {"chezmoi", "windows"},
+            ),
+            (
+                ("nix/home/keybindings/ghostty-windows.nix",),
+                UNIX | {"chezmoi", "windows"},
+            ),
+            (
+                ("nix/home/keybindings/neovim.nix",),
+                UNIX | {"chezmoi", "windows"},
+            ),
+            (("nix/home/keybindings/hyprland-renderer.nix",), UNIX),
             (("windows/winget/packages.json",), {"nix", "chezmoi", "windows"}),
             (("scripts/sh/install-macos.sh",), OUTPUTS),
             ((".github/workflows/ci-chezmoi.yml",), OUTPUTS),

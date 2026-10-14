@@ -22,9 +22,9 @@
                     $node.GetCommandName() -eq 'Invoke-WindowsE2EValidation'
                 }, $true))
         $script:guiIds = @(
-            'TheBrowserCompany.Arc', 'Google.Chrome', 'Obsidian.Obsidian', 'wez.wezterm',
+            'wez.wezterm',
             'AgileBits.1Password', 'Discord.Discord', 'StablyAI.Orca', 'Microsoft.PowerToys',
-            'Microsoft.WindowsTerminal', '9PLM9XGG6VKS', 'Microsoft.PowerShell', 'Task.Task', 'twpayne.chezmoi'
+            'Microsoft.WindowsTerminal', '9PLM9XGG6VKS', '9PCFS5B6T72H', 'Microsoft.PowerShell', 'Task.Task', 'twpayne.chezmoi'
         )
         $script:validOutput = (@(
                 'Using PowerShell 7'
@@ -90,7 +90,7 @@
         ($script:validationErrors -join ' | ') | Should -Match 'stale PATH|forced Windows PowerShell'
     }
 
-    It 'should verify every GUI package including verify-only Orca and Store Codex' {
+    It 'should verify every GUI package including verify-only Orca and Store apps' {
         Invoke-ShippedValidation -Name 'WinGet package inventory'
         $script:validationErrors | Should -BeNullOrEmpty
     }
@@ -98,6 +98,7 @@
     It 'should reject missing GUI success evidence' -TestCases @(
         @{ PackageId = 'StablyAI.Orca' }
         @{ PackageId = '9PLM9XGG6VKS' }
+        @{ PackageId = '9PCFS5B6T72H' }
         @{ PackageId = 'AgileBits.1Password' }
     ) {
         param($PackageId)
@@ -119,13 +120,13 @@
     }
 
     It 'should reject partial extra or duplicate inventory IDs' -TestCases @(
-        @{ Inventory = 'Google.Chrome|Obsidian.Obsidian' }
+        @{ Inventory = 'Microsoft.PowerShell|Microsoft.PowerToys' }
         @{ Inventory = 'extra' }
         @{ Inventory = 'duplicate' }
     ) {
         param($Inventory)
         if ($Inventory -eq 'extra') { $Inventory = ($script:guiIds + @('OpenAI.Codex.CLI')) -join '|' }
-        if ($Inventory -eq 'duplicate') { $Inventory = ($script:guiIds + @('Google.Chrome')) -join '|' }
+        if ($Inventory -eq 'duplicate') { $Inventory = ($script:guiIds + @('Microsoft.PowerToys')) -join '|' }
         $script:out = $script:out -replace '(?m)(CI_VERIFICATION_INVENTORY: ).*$', ('$1' + $Inventory)
         Invoke-ShippedValidation -Name 'WinGet package inventory'
         ($script:validationErrors -join ' | ') | Should -Match 'missing from the verification inventory|outside the Windows E2E scope|duplicate package IDs'

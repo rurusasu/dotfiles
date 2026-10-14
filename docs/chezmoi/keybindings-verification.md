@@ -1,0 +1,120 @@
+# Omarchy キー配列の反映・確認記録
+
+2026-10-14 の Windows / NixOS-WSL 環境での記録です。設定の配置、設定ファイルの検査、実際のキー入力を区別します。macOS / native NixOS の実機確認はこの記録に含みません。
+
+## 反映対象
+
+- 正本: `nix/home/keybindings/{bindings,ghostty,neovim}.nix`、WSLg transport は `ghostty-windows.nix`
+- export: `nix/home/keybindings/generated.json`
+- Windows: PowerToys Keyboard Manager の38割り当て、`Win+D` 無効化、Color Picker の有効化・起動キー、WSLg resize の8件の app-specific remap
+- NixOS-WSL: Home Manager の loader と `~/.config/dotfiles/keybindings/` の Ghostty / Neovim export
+
+「配置済み・未確認」は実キーでの動作をまだ確認していない意味です。定義やファイルの存在だけを実機での成功とは扱いません。
+
+ブラウザと Spotify / Signal / Obsidian / 1Password GUI は WSLg 版へ起動先を変更し、実キーで起動 window を確認しました。旧 Windows 起動先で成功した観測は下に分離しています。アプリの認証・サービスへのログインは行っていません。起動直後は反映に遅延があり、後続 snapshot で window が現れたことを確認しています。
+
+## Windows の実キー確認
+
+| キー・操作                              | 状態                             | 観測・制約                                                                                                                                                                                         |
+| --------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Win+Enter`: Ghostty                    | 確認済み                         | NixOS-WSL の Ghostty が開いた                                                                                                                                                                      |
+| `Win+Shift+B`: ブラウザ                 | 確認済み                         | WSLg Chrome window を確認                                                                                                                                                                          |
+| `Win+Shift+Alt+B`: プライベートブラウザ | 確認済み                         | WSLg Chrome incognito window を確認                                                                                                                                                                |
+| `Win+Shift+F`: ファイルマネージャー     | 確認済み                         | Explorer が開いた                                                                                                                                                                                  |
+| `Win+Shift+T`: Btop                     | 確認済み                         | WSLg Ghostty の Btop window title を確認                                                                                                                                                           |
+| `Win+Shift+M`: Spotify                  | 確認済み                         | WSLg Spotify window を確認。認証なし                                                                                                                                                               |
+| `Win+Shift+/`: 1Password                | 確認済み                         | WSLg Welcome to 1Password window を確認。認証なし                                                                                                                                                  |
+| `Win+Shift+N`: Neovim                   | 確認済み                         | WSLg Ghostty の Neovim window title を確認                                                                                                                                                         |
+| `Win+Shift+C/E`: HEY Calendar / Email   | 確認済み                         | 実キーでそれぞれ別の WSL Chrome HEY login window を確認。ログインなし                                                                                                                              |
+| `Win+Shift+A`: ChatGPT                  | 確認済み                         | 実キーで WSL Chrome の ChatGPT web window title を確認。ログインなし                                                                                                                               |
+| `Win+Shift+G`: Signal                   | 確認済み                         | WSLg Signal window を確認。認証なし                                                                                                                                                                |
+| `Win+Shift+Ctrl+G`: Google Messenger    | 確認済み                         | 実キーで WSL Chrome の「PC版Googleメッセージ」window を確認                                                                                                                                        |
+| `Win+Shift+Alt+G`: WhatsApp             | 確認済み                         | 実キーで WSL Chrome の `web.whatsapp.com` window を確認                                                                                                                                            |
+| `Win+Shift+D`: LazyDocker               | 確認済み                         | WSLg Ghostty の LazyDocker window title を確認                                                                                                                                                     |
+| `Win+Shift+O`: Obsidian                 | 確認済み                         | WSLg Obsidian window を確認                                                                                                                                                                        |
+| `Win+C/V`: コピー・ペースト             | 確認済み                         | Explorer のファイルコピー・貼り付けと、Ghostty の選択文字 `nixos@nixos` の clipboard 完全一致・prompt への貼り付けを確認。貼り付けは実行せず `Ctrl+U` で消し、clipboard を撮影 PNG に復元          |
+| `Win+X/V`: カット・ペースト             | 一部確認済み                     | Explorer でファイルの移動を確認。Ghostty の `Win+X` はコピー扱いとして実装されているが、実キーでは未確認                                                                                           |
+| `Win+Ctrl+V`: 履歴                      | 初回画面を確認                   | Windows のクリップボード履歴を開いた。履歴が無効な場合の初回有効化はユーザー操作                                                                                                                   |
+| `PrintScreen`: スクリーンショット編集   | 画像取得・保存・編集起動確認済み | ユーザーの範囲選択後、12:45:18 に PNG 保存と clipboard の1387×813画像を確認。Paint 起動修正後、正式 helper で同じ保存 PNG を開き、Paint の title・Canvas Size 1387×813px・File Size 113.7KB を確認 |
+| `Shift+PrintScreen`: コピー             | overlay のみ確認                 | Snipping Tool の overlay は開いた。範囲選択がキャンセルされ、clipboard 画像は取得できず、撮影完了は未確認                                                                                          |
+| `Alt+PrintScreen`: 録画                 | overlay 確認済み                 | 実キーで video icon が選択された標準録画 overlay と「図形を描画して記録領域を選択する」を確認。native `Win+Shift+R` を使用。Start や録画ファイル作成は未実施                                       |
+| `Win+PrintScreen`: カラーピッカー       | 確認済み                         | PowerToys Color Picker overlay が開いた                                                                                                                                                            |
+| `Alt+Shift+L`: URL 保存                 | 確認済み                         | WSL 全体の再起動後、実キーで通常 WSL Chrome の `https://example.com/` が Windows の `saved-urls.jsonl` に保存されたことを確認。クリップボード復元の実機確認は未実施                                |
+| `Win+,`: 直近の通知削除                 | 確認済み                         | fixture 3件から最新 Tag3 が消え、所有する WinRT History は2件（Tag1/2）になった。13:29:09 の verified は `targetRemoved=true`。ログの `before=2, after=1` は UIA card 数で、実履歴件数とは別       |
+| `Win+Shift+,`: 全通知削除               | 確認済み                         | 続けて実キーで削除し、所有する WinRT History が0件になった。13:29:29 の verified は `before=2, after=0, clearAllEnabled=false`。誤エラー判定も解消                                                 |
+| `Win+Ctrl+,`: 応答不可                  | 確認済み                         | 11:16:16 に状態 `1→0`、11:16:38 に `0→1` の verified 記録。元に復元                                                                                                                                |
+| `Win+Alt+,`: 通知履歴                   | 確認済み                         | 通知履歴が開いた                                                                                                                                                                                   |
+| `Win+Ctrl+Shift+Space`: テーマ          | 確認済み                         | light/dark を切り替え、元の値 (`0/0`) に復元                                                                                                                                                       |
+| `Win+Ctrl+Space`: 背景                  | 確認済み                         | 実キーで `TranscodedWallpaper` から Windows Spotlight `img14` への変更を確認。API で元の壁紙に復元                                                                                                 |
+| `Win+Backspace`: 透明度                 | 確認済み                         | 前面ウィンドウで切り替え、元に復元                                                                                                                                                                 |
+| `Win+Ctrl+I`: アイドル・スリープ抑止    | 確認済み                         | helper process の開始・終了を確認                                                                                                                                                                  |
+| `Win+Ctrl+N`: 夜間モード                | 確認済み                         | UI Automation 修正後、11:12:07 に状態 `0→1`、11:12:41 に `1→0` の verified 記録。元に復元                                                                                                          |
+| `Win+Shift+Space`: バー                 | 確認済み                         | タスクバーの自動非表示を切り替え、元に復元                                                                                                                                                         |
+| `Win+Mute`: 音声出力                    | 1出力の判定確認済み              | computer-use が media key 非対応のため製品の native chord 送信で `Win+Mute` を入力し、他の出力がない旨の表示を確認。実 UI の1出力と一致。2出力以上の巡回は mock 検査のみ                           |
+| `Win+D`: 無効化                         | 確認済み                         | デスクトップ表示への切り替えが起きなかった                                                                                                                                                         |
+
+ブラウザの `Win+Shift+Enter` と Btop の `Win+Ctrl+T` は既存の別名として含みます。実キーでは未確認です。`Win+L` / `Ctrl+Alt+Del` などの Windows 予約操作は変更しません。
+
+### 起動先変更前の観測
+
+次は起動先が Windows 版だったときに、実キー入力で確認した記録です。WSLg アプリ・WSL Chrome の検証結果には含めません。
+
+- ブラウザ: Windows Edge Beta の通常 window と InPrivate window が開いた。
+- Spotify: 初回は起動が遅く、5秒待った後の2回目で Windows 版 window を確認した。
+- Signal / Obsidian: Windows 版 window を確認した。
+- 1Password: Windows 版の起動 process と MainWindow を確認した。computer-use の window 一覧で初期表示は確認できず、完全な GUI 操作成功とは扱わない。
+- ChatGPT: Windows native app が前面になった。
+- HEY Calendar / Email: Windows ブラウザでそれぞれ HEY の sign-in tab が開いた。サービスへのログインは行っていない。
+- Google Messages / WhatsApp: Windows ブラウザでそれぞれ web ページが開いた。
+
+## Ghostty の実キー確認
+
+| キー・操作                                 | 状態         | 観測・制約                                                                           |
+| ------------------------------------------ | ------------ | ------------------------------------------------------------------------------------ |
+| `Ctrl+Shift+E`: 上下分割                   | 確認済み     | pane が上下に分かれた                                                                |
+| `Ctrl+Shift+O`: 左右分割                   | 確認済み     | pane が左右に分かれた                                                                |
+| `Ctrl+Alt+矢印`: pane 移動                 | 一部確認済み | `Ctrl+Alt+Left` の移動を確認。他方向は未確認                                         |
+| `Win+Ctrl+Shift+矢印`: 10ピクセル変更      | 一部確認済み | Right / Up / Down で pane 境界の10ピクセル変更を確認。上下は元に復元。Left は未確認  |
+| `Win+Ctrl+Shift+Alt+矢印`: 100ピクセル変更 | 確認済み     | Right / Up / Down / Left の各方向で pane 境界の100ピクセル変更を確認。上下は元に復元 |
+| `Ctrl+Shift+T`: tab 追加                   | 確認済み     | 新しい tab が開いた                                                                  |
+| `Ctrl+Shift+矢印`: tab 移動                | 一部確認済み | `Ctrl+Shift+Right` で次の tab へ移動。他方向は未確認                                 |
+| `Alt+1..9`: tab 指定                       | 一部確認済み | `Alt+1` で指定 tab へ移動。2〜9は未確認                                              |
+
+## 設定・自動検査
+
+| 対象                   | 結果                                    | 確認範囲                                                                                                                    |
+| ---------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Nix unit               | 180件成功                               | 共通定義、export、renderer、WSLg transport、WSL GUI package、日本語フォント配置、Chrome GTK3 cache などの値・契約           |
+| Ghostty                | 28割り当ての設定検査成功                | 配置済み設定の構文・action。実キー入力の成功とは別                                                                          |
+| Neovim                 | 配置済み17割り当てと Oil runtime を確認 | 実際に配置した Neovim 設定を読み込む runtime 検査。全キーを GUI から押した検査ではない                                      |
+| PowerShell 全体        | 765件成功、失敗0件、POSIX 境界1件 skip  | 公式 runner で全体を実行。後続の通知判定 / Paint 起動修正前の結果。最終の全件結果は別途確認。GUI の実キー確認は上の表で記録 |
+| Windows action runtime | 155件成功                               | 対象 runtime の検査。後続の通知 scope 修正の最終結果は別途確認                                                              |
+| 通知 focused           | 61件成功                                | 最新の通知削除・全削除と完了判定の対象検査                                                                                  |
+
+179件成功時の Nix unit の出力は `/nix/store/kfmy6kr030n6qy0ndzv0rcksc52ncyhr-nix-unit-check` です。上表の180件は Chrome GTK3 cache の追加後に成功した結果です。設定の検査成功と、実行中の WSLg での表示・入力は別に確認します。
+
+夜間モードは修正後に状態変更を確認し、Ghostty の Win resize は10ピクセルの右・上・下と100ピクセルの全方向を確認しました。URL の JSONL 保存、録画 overlay の起動、撮影画像の PNG 保存・clipboard 取得、修正後の Paint 編集起動、Ghostty のコピー・貼り付け、直近の通知削除と全通知削除も確認しました。録画開始・ファイル作成、複数音声出力の巡回など、表で未確認とした操作は実機での成功として扱いません。後続変更の最終の全件検査は別途確認します。
+
+実機確認中にユーザーの物理 Escape 操作で computer-use が停止しました。その後、ユーザーが UI 検証の再開を承認し、上記の WSLg アプリ起動・resize・夜間モード・応答不可を確認しました。
+
+## 日本語表示
+
+WSL Chrome の client / headless で日本語 UTF-8 locale と CJK sans / serif の表示を確認しました。修正前の通常 X11 window は本文の日本語が正常で、WSLg の灰色の titlebar だけに tofu / hex 表示が残りました。X11 の client-side decoration を使う隔離 profile では title・本文・serif の日本語表示を確認しました。既存の Chrome profile は変更していません。
+
+WSLg system distro の読み取り調査では、当初 `fc-match` は FreeSans、`fc-list :lang=ja` は空でした。ユーザー distro の `/usr/local/share/fonts` に通常ファイルとして Noto Sans CJK を一時配置した後は、system distro の `fc-match` が Noto Sans CJK JP / Bold を選び、新しい Pango の `--no-display` PNG でも日本語を正常に描画しました。
+
+恒久設定の `nix/hosts/x86_64-linux/wsl/fonts.nix` を含む `nixos-rebuild switch` が成功し、activation `wslgFonts` の実行を確認しました。`/usr/local/share/fonts/dotfiles-wslg/NotoSansCJK-VF.otf.ttc` は通常ファイル、32,682,580 bytes、mode `0644`、owner `root:root` で配置されています。SHA256 は `d3d8256cdec8dbcb3552284bc6b20c734dd60c2ee9df83b5758e34807c4bac32` で固定した Nix の入力と一致しました。WSLg system distro の `fc-cache` / `fc-match` でも、この本番配置先の Noto Sans CJK JP Bold を選択しています。一時検査用フォントは削除済みです。
+
+フォント反映時の system は `/nix/store/9fy43irl4bjahgrf93gj78las0670p68-nixos-system-nixos-26.11.20261011.7fd4004` です。activation 内では WSLg を再起動しません。実行中の Weston が古い Pango font map を保持していたため、ユーザーの承認後に `wsl --shutdown` で WSL 全体を再起動しました。その後 `Win+Shift+B` で WSLg Chrome を起動し、通常 X11 の灰色の server titlebar が「新しいタブ - Google Chrome」と日本語で正常表示されることを実 UI で確認しました。恒久フォント配置と再起動後の通常 titlebar の確認が完了しています。
+
+## 日本語入力
+
+一時 GTK3 cache を明示した隔離 Chrome で、実キーの `Ctrl+Space` により「あ (Hiragana)」popup が開き、fcitx の状態2を確認しました。続けて `n i h o n g o` を入力すると「にほんご」、`Space` で「日本語」、`Enter` で確定することを実 UI で確認しました。
+
+原因は GTK3 が fcitx plugin を発見するための登録 cache が欠けていたことです。`nix/modules/browsers/chrome/default.nix` は `fcitx5-gtk` から immutable な `immodules.cache` を生成し、WSL 専用 Chrome wrapper の `GTK_IM_MODULE_FILE` に指定します。既存の X11 / fcitx 設定と入力切り替えキーは維持します。
+
+この修正を含む `nixos-rebuild switch` は成功し、system の store hash は `0zarpnnizn4cp7nw8hzbzvn3lnzl2a2v` です。通常の `BROWSER` command path が新 wrapper / cache を指すことも確認しました。
+
+旧検査用 Chrome window を閉じ、`Win+Shift+B` で通常 wrapper から新しく起動した Chrome（PID `5905`）でも再確認しました。入力欄のある検査用 HTML で `Ctrl+Space` により「あ (Hiragana)」popup と fcitx の状態2を確認し、実キー `a` で「あ」を入力して `Enter` で確定しました。最後に `Ctrl+Space` でもとの inactive 状態1へ復元しました。通常起動でひらがなの入力・確定を確認済みです。「にほんご → 日本語」の漢字変換は上記の隔離 Chrome で確認した結果です。
+
+Windows 操作の失敗は画面に表示し、`%LOCALAPPDATA%/dotfiles/keybindings/actions.log` に記録します。配布方法と各 OS での代替動作は [所有範囲と運用](./omarchy.md)、キー一覧は [キーバインド](./keybindings.md) を参照してください。

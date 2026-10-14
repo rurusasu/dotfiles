@@ -1,0 +1,13 @@
+version: "3"
+
+tasks:
+  keybindings:export:
+    desc: Export the canonical Nix desktop keybindings for Windows chezmoi
+    dir: "{{.ROOT_DIR}}"
+    cmds:
+      - |
+        {{if eq OS "windows"}}wsl -d {{.DISTRO}} --cd "{{.ROOT_DIR}}" --exec {{end}}bash -lc '
+          set -eu
+          keybindingsArtifact=$(nix build .#keybindings-json --no-link --print-out-paths --no-write-lock-file)
+          install -m 0644 "$keybindingsArtifact" nix/home/keybindings/generated.json
+        '

@@ -2,7 +2,11 @@
 let
   fixtures = import ../fixtures/packages.nix { inherit inputs; };
   fontContract =
-    system: modules:
+    {
+      system,
+      modules,
+      japanese ? false,
+    }:
     let
       pkgs = fixtures.mkPkgs system;
       home = inputs.home-manager.lib.homeManagerConfiguration {
@@ -28,6 +32,12 @@ let
         emojiPackage = builtins.any (
           package: package.drvPath == pkgs.noto-fonts-color-emoji.drvPath
         ) home.config.home.packages;
+        cjkSansPackage = builtins.any (
+          package: package.drvPath == pkgs.noto-fonts-cjk-sans.drvPath
+        ) home.config.home.packages;
+        cjkSerifPackage = builtins.any (
+          package: package.drvPath == pkgs.noto-fonts-cjk-serif.drvPath
+        ) home.config.home.packages;
         fontconfig = home.config.fonts.fontconfig.enable;
         defaultFonts = {
           inherit (home.config.fonts.fontconfig.defaultFonts)
@@ -41,11 +51,13 @@ let
       expected = {
         homePackages = true;
         emojiPackage = true;
+        cjkSansPackage = japanese;
+        cjkSerifPackage = japanese;
         fontconfig = true;
         defaultFonts = {
           monospace = [ "UDEV Gothic NF" ];
-          sansSerif = [ "UDEV Gothic NF" ];
-          serif = [ "UDEV Gothic NF" ];
+          sansSerif = [ "UDEV Gothic NF" ] ++ pkgs.lib.optional japanese "Noto Sans CJK JP";
+          serif = [ "UDEV Gothic NF" ] ++ pkgs.lib.optional japanese "Noto Serif CJK JP";
           emoji = [ "Noto Color Emoji" ];
         };
       };
@@ -84,10 +96,18 @@ in
     };
   };
 
-  testLinuxInstallsManagedFont = fontContract "x86_64-linux" [ ../../hosts/shared/linux-home.nix ];
-  testWSLInstallsManagedFont = fontContract "x86_64-linux" [ ../../hosts/x86_64-linux/wsl/home.nix ];
-  testStandaloneDarwinHomeProfileInstallsManagedFont = fontContract "aarch64-darwin" [
-    ../../hosts/aarch64-darwin/home.nix
-  ];
+  testLinuxInstallsManagedFont = fontContract {
+    system = "x86_64-linux";
+    modules = [ ../../hosts/shared/linux-home.nix ];
+  };
+  testWSLInstallsManagedFont = fontContract {
+    system = "x86_64-linux";
+    modules = [ ../../hosts/x86_64-linux/wsl/home.nix ];
+    japanese = true;
+  };
+  testStandaloneDarwinHomeProfileInstallsManagedFont = fontContract {
+    system = "aarch64-darwin";
+    modules = [ ../../hosts/aarch64-darwin/home.nix ];
+  };
 
 }

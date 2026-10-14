@@ -90,6 +90,7 @@ require("snacks").setup({
 })
 
 -- 公式例の keys は lazy.nvim 用なので、native package では末尾で登録する。
+local allocation = require("config.key_allocation")
 local keys = {
     {
         "<leader>ff",
@@ -142,7 +143,7 @@ local keys = {
     },
 
     {
-        "<leader><leader>",
+        allocation.key("smart-files"),
         function()
             local picker = require("snacks").picker
             local root = require("snacks.git").get_root()
@@ -166,7 +167,7 @@ local keys = {
     },
 
     {
-        "<leader>gg",
+        allocation.key("git"),
         function()
             local root = Snacks.git.get_root()
             if not root then
@@ -194,6 +195,14 @@ local keys = {
             end
         end,
         desc = "Lazygit",
+    },
+
+    {
+        allocation.key("files"),
+        function()
+            Snacks.picker.files()
+        end,
+        desc = "Open file",
     },
 
     {

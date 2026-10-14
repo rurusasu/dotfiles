@@ -1,0 +1,1226 @@
+{
+  "bindings": [
+    {
+      "action": "terminal",
+      "key": "enter",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "browser",
+      "key": "enter",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "browser",
+      "key": "b",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "browser-private",
+      "key": "b",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "files",
+      "key": "f",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "activity",
+      "key": "t",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "music",
+      "key": "m",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "notes",
+      "key": "o",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "editor",
+      "key": "n",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "calendar",
+      "key": "c",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "email",
+      "key": "e",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "ai",
+      "key": "a",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "passwords",
+      "key": "slash",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "messenger-signal",
+      "key": "g",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "messenger-google",
+      "key": "g",
+      "modifiers": ["super", "shift", "ctrl"]
+    },
+    {
+      "action": "messenger-whatsapp",
+      "key": "g",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "docker",
+      "key": "d",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "copy",
+      "key": "c",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "cut",
+      "key": "x",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "paste",
+      "key": "v",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "screenshot",
+      "key": "print",
+      "modifiers": []
+    },
+    {
+      "action": "screenshot-clipboard",
+      "key": "print",
+      "modifiers": ["shift"]
+    },
+    {
+      "action": "record",
+      "key": "print",
+      "modifiers": ["alt"]
+    },
+    {
+      "action": "color-picker",
+      "key": "print",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "save-browser-url",
+      "key": "l",
+      "modifiers": ["alt", "shift"]
+    },
+    {
+      "action": "notification-dismiss",
+      "key": "comma",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "notification-dismiss-all",
+      "key": "comma",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "notification-toggle",
+      "key": "comma",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "notification-history",
+      "key": "comma",
+      "modifiers": ["super", "alt"]
+    },
+    {
+      "action": "theme-cycle",
+      "key": "space",
+      "modifiers": ["super", "ctrl", "shift"]
+    },
+    {
+      "action": "background-cycle",
+      "key": "space",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "transparency-toggle",
+      "key": "backspace",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "idle-toggle",
+      "key": "i",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "night-mode-toggle",
+      "key": "n",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "bar-toggle",
+      "key": "space",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "audio-output-cycle",
+      "key": "mute",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "launcher",
+      "key": "space",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "launcher",
+      "key": "space",
+      "modifiers": ["super", "alt"]
+    },
+    {
+      "action": "help",
+      "key": "k",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "close",
+      "key": "w",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "close",
+      "key": "q",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "floating",
+      "key": "t",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "split",
+      "key": "j",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "fullscreen",
+      "key": "f",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "tiled-fullscreen",
+      "key": "f",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "group",
+      "key": "g",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "ungroup",
+      "key": "g",
+      "modifiers": ["super", "alt"]
+    },
+    {
+      "action": "window-next",
+      "key": "tab",
+      "modifiers": ["alt"]
+    },
+    {
+      "action": "window-prev",
+      "key": "tab",
+      "modifiers": ["alt", "shift"]
+    },
+    {
+      "action": "workspace-next",
+      "key": "tab",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "workspace-prev",
+      "key": "tab",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "workspace-back",
+      "key": "tab",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "monitor-next",
+      "key": "tab",
+      "modifiers": ["ctrl", "alt"]
+    },
+    {
+      "action": "monitor-prev",
+      "key": "tab",
+      "modifiers": ["ctrl", "alt", "shift"]
+    },
+    {
+      "action": "scratchpad",
+      "key": "s",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "scratchpad",
+      "key": "backtick",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "scratchpad-move",
+      "key": "s",
+      "modifiers": ["super", "alt"]
+    },
+    {
+      "action": "scratchpad-move",
+      "key": "backtick",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "capture",
+      "key": "c",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "calculator",
+      "key": "q",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "activity",
+      "key": "t",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "lock",
+      "key": "l",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "clipboard",
+      "key": "v",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "emoji",
+      "key": "e",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "audio",
+      "key": "a",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "bluetooth",
+      "key": "b",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "display",
+      "key": "d",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "network",
+      "key": "w",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "power",
+      "key": "p",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "passthrough",
+      "key": "escape",
+      "modifiers": ["super", "ctrl", "alt"]
+    },
+    {
+      "action": "workspace-1",
+      "key": "1",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "move-workspace-1",
+      "key": "1",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "send-workspace-1",
+      "key": "1",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "workspace-2",
+      "key": "2",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "move-workspace-2",
+      "key": "2",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "send-workspace-2",
+      "key": "2",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "workspace-3",
+      "key": "3",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "move-workspace-3",
+      "key": "3",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "send-workspace-3",
+      "key": "3",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "workspace-4",
+      "key": "4",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "move-workspace-4",
+      "key": "4",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "send-workspace-4",
+      "key": "4",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "workspace-5",
+      "key": "5",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "move-workspace-5",
+      "key": "5",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "send-workspace-5",
+      "key": "5",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "workspace-6",
+      "key": "6",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "move-workspace-6",
+      "key": "6",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "send-workspace-6",
+      "key": "6",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "workspace-7",
+      "key": "7",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "move-workspace-7",
+      "key": "7",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "send-workspace-7",
+      "key": "7",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "workspace-8",
+      "key": "8",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "move-workspace-8",
+      "key": "8",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "send-workspace-8",
+      "key": "8",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "workspace-9",
+      "key": "9",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "move-workspace-9",
+      "key": "9",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "send-workspace-9",
+      "key": "9",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "workspace-10",
+      "key": "0",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "move-workspace-10",
+      "key": "0",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "send-workspace-10",
+      "key": "0",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "focus-left",
+      "key": "left",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "swap-left",
+      "key": "left",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "move-monitor-left",
+      "key": "left",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "join-left",
+      "key": "left",
+      "modifiers": ["super", "alt"]
+    },
+    {
+      "action": "focus-down",
+      "key": "down",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "swap-down",
+      "key": "down",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "move-monitor-down",
+      "key": "down",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "join-down",
+      "key": "down",
+      "modifiers": ["super", "alt"]
+    },
+    {
+      "action": "focus-up",
+      "key": "up",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "swap-up",
+      "key": "up",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "move-monitor-up",
+      "key": "up",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "join-up",
+      "key": "up",
+      "modifiers": ["super", "alt"]
+    },
+    {
+      "action": "focus-right",
+      "key": "right",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "swap-right",
+      "key": "right",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "move-monitor-right",
+      "key": "right",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "join-right",
+      "key": "right",
+      "modifiers": ["super", "alt"]
+    },
+    {
+      "action": "width-minus-100",
+      "key": "minus",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "width-plus-100",
+      "key": "equal",
+      "modifiers": ["super"]
+    },
+    {
+      "action": "height-minus-100",
+      "key": "minus",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "height-plus-100",
+      "key": "equal",
+      "modifiers": ["super", "shift"]
+    },
+    {
+      "action": "width-minus-25",
+      "key": "minus",
+      "modifiers": ["super", "alt"]
+    },
+    {
+      "action": "width-plus-25",
+      "key": "equal",
+      "modifiers": ["super", "alt"]
+    },
+    {
+      "action": "height-minus-25",
+      "key": "minus",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "height-plus-25",
+      "key": "equal",
+      "modifiers": ["super", "shift", "alt"]
+    },
+    {
+      "action": "width-minus-300",
+      "key": "minus",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "width-plus-300",
+      "key": "equal",
+      "modifiers": ["super", "ctrl"]
+    },
+    {
+      "action": "height-minus-300",
+      "key": "minus",
+      "modifiers": ["super", "shift", "ctrl"]
+    },
+    {
+      "action": "height-plus-300",
+      "key": "equal",
+      "modifiers": ["super", "shift", "ctrl"]
+    }
+  ],
+  "directions": ["left", "down", "up", "right"],
+  "ghostty": [
+    {
+      "action": "split-down",
+      "key": "e",
+      "modifiers": ["ctrl", "shift"]
+    },
+    {
+      "action": "split-right",
+      "key": "o",
+      "modifiers": ["ctrl", "shift"]
+    },
+    {
+      "action": "new-tab",
+      "key": "t",
+      "modifiers": ["ctrl", "shift"]
+    },
+    {
+      "action": "previous-tab",
+      "key": "left",
+      "modifiers": ["ctrl", "shift"]
+    },
+    {
+      "action": "previous-tab",
+      "key": "up",
+      "modifiers": ["ctrl", "shift"]
+    },
+    {
+      "action": "next-tab",
+      "key": "right",
+      "modifiers": ["ctrl", "shift"]
+    },
+    {
+      "action": "next-tab",
+      "key": "down",
+      "modifiers": ["ctrl", "shift"]
+    },
+    {
+      "action": "focus-left",
+      "key": "left",
+      "modifiers": ["ctrl", "alt"]
+    },
+    {
+      "action": "resize-left",
+      "amount": 10,
+      "key": "left",
+      "modifiers": ["super", "ctrl", "shift"]
+    },
+    {
+      "action": "resize-left",
+      "amount": 100,
+      "key": "left",
+      "modifiers": ["super", "ctrl", "shift", "alt"]
+    },
+    {
+      "action": "focus-down",
+      "key": "down",
+      "modifiers": ["ctrl", "alt"]
+    },
+    {
+      "action": "resize-down",
+      "amount": 10,
+      "key": "down",
+      "modifiers": ["super", "ctrl", "shift"]
+    },
+    {
+      "action": "resize-down",
+      "amount": 100,
+      "key": "down",
+      "modifiers": ["super", "ctrl", "shift", "alt"]
+    },
+    {
+      "action": "focus-up",
+      "key": "up",
+      "modifiers": ["ctrl", "alt"]
+    },
+    {
+      "action": "resize-up",
+      "amount": 10,
+      "key": "up",
+      "modifiers": ["super", "ctrl", "shift"]
+    },
+    {
+      "action": "resize-up",
+      "amount": 100,
+      "key": "up",
+      "modifiers": ["super", "ctrl", "shift", "alt"]
+    },
+    {
+      "action": "focus-right",
+      "key": "right",
+      "modifiers": ["ctrl", "alt"]
+    },
+    {
+      "action": "resize-right",
+      "amount": 10,
+      "key": "right",
+      "modifiers": ["super", "ctrl", "shift"]
+    },
+    {
+      "action": "resize-right",
+      "amount": 100,
+      "key": "right",
+      "modifiers": ["super", "ctrl", "shift", "alt"]
+    },
+    {
+      "action": "goto-tab",
+      "amount": 1,
+      "key": "1",
+      "modifiers": ["alt"]
+    },
+    {
+      "action": "goto-tab",
+      "amount": 2,
+      "key": "2",
+      "modifiers": ["alt"]
+    },
+    {
+      "action": "goto-tab",
+      "amount": 3,
+      "key": "3",
+      "modifiers": ["alt"]
+    },
+    {
+      "action": "goto-tab",
+      "amount": 4,
+      "key": "4",
+      "modifiers": ["alt"]
+    },
+    {
+      "action": "goto-tab",
+      "amount": 5,
+      "key": "5",
+      "modifiers": ["alt"]
+    },
+    {
+      "action": "goto-tab",
+      "amount": 6,
+      "key": "6",
+      "modifiers": ["alt"]
+    },
+    {
+      "action": "goto-tab",
+      "amount": 7,
+      "key": "7",
+      "modifiers": ["alt"]
+    },
+    {
+      "action": "goto-tab",
+      "amount": 8,
+      "key": "8",
+      "modifiers": ["alt"]
+    },
+    {
+      "action": "goto-tab",
+      "amount": 9,
+      "key": "9",
+      "modifiers": ["alt"]
+    }
+  ],
+  "ghosttyConfig": "keybind = ctrl+shift+e=new_split:down\nkeybind = ctrl+shift+o=new_split:right\nkeybind = ctrl+shift+t=new_tab\nkeybind = ctrl+shift+left=previous_tab\nkeybind = ctrl+shift+up=previous_tab\nkeybind = ctrl+shift+right=next_tab\nkeybind = ctrl+shift+down=next_tab\nkeybind = ctrl+alt+left=goto_split:left\nkeybind = super+ctrl+shift+left=resize_split:left,10\nkeybind = super+ctrl+shift+alt+left=resize_split:left,100\nkeybind = ctrl+alt+down=goto_split:down\nkeybind = super+ctrl+shift+down=resize_split:down,10\nkeybind = super+ctrl+shift+alt+down=resize_split:down,100\nkeybind = ctrl+alt+up=goto_split:up\nkeybind = super+ctrl+shift+up=resize_split:up,10\nkeybind = super+ctrl+shift+alt+up=resize_split:up,100\nkeybind = ctrl+alt+right=goto_split:right\nkeybind = super+ctrl+shift+right=resize_split:right,10\nkeybind = super+ctrl+shift+alt+right=resize_split:right,100\nkeybind = alt+1=goto_tab:1\nkeybind = alt+2=goto_tab:2\nkeybind = alt+3=goto_tab:3\nkeybind = alt+4=goto_tab:4\nkeybind = alt+5=goto_tab:5\nkeybind = alt+6=goto_tab:6\nkeybind = alt+7=goto_tab:7\nkeybind = alt+8=goto_tab:8\nkeybind = alt+9=goto_tab:9\n",
+  "neovim": [
+    {
+      "action": "which-key",
+      "key": "<leader>",
+      "mode": "n",
+      "scope": "editor"
+    },
+    {
+      "action": "smart-files",
+      "key": "<leader><leader>",
+      "mode": "n",
+      "scope": "editor"
+    },
+    {
+      "action": "explorer",
+      "key": "<leader>e",
+      "mode": "n",
+      "scope": "editor"
+    },
+    {
+      "action": "git",
+      "key": "<leader>gg",
+      "mode": "n",
+      "scope": "editor"
+    },
+    {
+      "action": "files",
+      "key": "<leader>sg",
+      "mode": "n",
+      "scope": "editor"
+    },
+    {
+      "action": "window-next",
+      "key": "<C-w>w",
+      "mode": "n",
+      "scope": "editor"
+    },
+    {
+      "action": "width-minus",
+      "key": "<C-Left>",
+      "mode": "n",
+      "scope": "editor"
+    },
+    {
+      "action": "width-plus",
+      "key": "<C-Right>",
+      "mode": "n",
+      "scope": "editor"
+    },
+    {
+      "action": "buffer-prev",
+      "key": "<S-h>",
+      "mode": "n",
+      "scope": "editor"
+    },
+    {
+      "action": "buffer-next",
+      "key": "<S-l>",
+      "mode": "n",
+      "scope": "editor"
+    },
+    {
+      "action": "buffer-delete",
+      "key": "<leader>bd",
+      "mode": "n",
+      "scope": "editor"
+    },
+    {
+      "action": "oil-add-file",
+      "key": "a",
+      "mode": "n",
+      "scope": "oil"
+    },
+    {
+      "action": "oil-add-dir",
+      "key": "A",
+      "mode": "n",
+      "scope": "oil"
+    },
+    {
+      "action": "oil-delete",
+      "key": "d",
+      "mode": "n",
+      "scope": "oil"
+    },
+    {
+      "action": "oil-move",
+      "key": "m",
+      "mode": "n",
+      "scope": "oil"
+    },
+    {
+      "action": "oil-rename",
+      "key": "r",
+      "mode": "n",
+      "scope": "oil"
+    },
+    {
+      "action": "oil-help",
+      "key": "?",
+      "mode": "n",
+      "scope": "oil"
+    }
+  ],
+  "neovimLeader": " ",
+  "windows": {
+    "bindings": [
+      {
+        "action": "terminal",
+        "key": "enter",
+        "modifiers": ["super"]
+      },
+      {
+        "action": "browser",
+        "key": "enter",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "browser",
+        "key": "b",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "browser-private",
+        "key": "b",
+        "modifiers": ["super", "shift", "alt"]
+      },
+      {
+        "action": "files",
+        "key": "f",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "activity",
+        "key": "t",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "music",
+        "key": "m",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "notes",
+        "key": "o",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "editor",
+        "key": "n",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "calendar",
+        "key": "c",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "email",
+        "key": "e",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "ai",
+        "key": "a",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "passwords",
+        "key": "slash",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "messenger-signal",
+        "key": "g",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "messenger-google",
+        "key": "g",
+        "modifiers": ["super", "shift", "ctrl"]
+      },
+      {
+        "action": "messenger-whatsapp",
+        "key": "g",
+        "modifiers": ["super", "shift", "alt"]
+      },
+      {
+        "action": "docker",
+        "key": "d",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "copy",
+        "key": "c",
+        "modifiers": ["super"]
+      },
+      {
+        "action": "cut",
+        "key": "x",
+        "modifiers": ["super"]
+      },
+      {
+        "action": "paste",
+        "key": "v",
+        "modifiers": ["super"]
+      },
+      {
+        "action": "screenshot",
+        "key": "print",
+        "modifiers": []
+      },
+      {
+        "action": "screenshot-clipboard",
+        "key": "print",
+        "modifiers": ["shift"]
+      },
+      {
+        "action": "record",
+        "key": "print",
+        "modifiers": ["alt"]
+      },
+      {
+        "action": "color-picker",
+        "key": "print",
+        "modifiers": ["super"]
+      },
+      {
+        "action": "save-browser-url",
+        "key": "l",
+        "modifiers": ["alt", "shift"]
+      },
+      {
+        "action": "notification-dismiss",
+        "key": "comma",
+        "modifiers": ["super"]
+      },
+      {
+        "action": "notification-dismiss-all",
+        "key": "comma",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "notification-toggle",
+        "key": "comma",
+        "modifiers": ["super", "ctrl"]
+      },
+      {
+        "action": "notification-history",
+        "key": "comma",
+        "modifiers": ["super", "alt"]
+      },
+      {
+        "action": "theme-cycle",
+        "key": "space",
+        "modifiers": ["super", "ctrl", "shift"]
+      },
+      {
+        "action": "background-cycle",
+        "key": "space",
+        "modifiers": ["super", "ctrl"]
+      },
+      {
+        "action": "transparency-toggle",
+        "key": "backspace",
+        "modifiers": ["super"]
+      },
+      {
+        "action": "idle-toggle",
+        "key": "i",
+        "modifiers": ["super", "ctrl"]
+      },
+      {
+        "action": "night-mode-toggle",
+        "key": "n",
+        "modifiers": ["super", "ctrl"]
+      },
+      {
+        "action": "bar-toggle",
+        "key": "space",
+        "modifiers": ["super", "shift"]
+      },
+      {
+        "action": "audio-output-cycle",
+        "key": "mute",
+        "modifiers": ["super"]
+      },
+      {
+        "action": "activity",
+        "key": "t",
+        "modifiers": ["super", "ctrl"]
+      },
+      {
+        "action": "clipboard",
+        "key": "v",
+        "modifiers": ["super", "ctrl"]
+      }
+    ],
+    "disabledShortcuts": [
+      {
+        "key": "d",
+        "modifiers": ["super"]
+      }
+    ],
+    "ghosttyConfig": "keybind = ctrl+shift+e=new_split:down\nkeybind = ctrl+shift+o=new_split:right\nkeybind = ctrl+shift+t=new_tab\nkeybind = ctrl+shift+left=previous_tab\nkeybind = ctrl+shift+up=previous_tab\nkeybind = ctrl+shift+right=next_tab\nkeybind = ctrl+shift+down=next_tab\nkeybind = ctrl+alt+left=goto_split:left\nkeybind = ctrl+alt+shift+left=resize_split:left,10\nkeybind = ctrl+alt+shift+home=resize_split:left,100\nkeybind = ctrl+alt+down=goto_split:down\nkeybind = ctrl+alt+shift+down=resize_split:down,10\nkeybind = ctrl+alt+shift+page_down=resize_split:down,100\nkeybind = ctrl+alt+up=goto_split:up\nkeybind = ctrl+alt+shift+up=resize_split:up,10\nkeybind = ctrl+alt+shift+page_up=resize_split:up,100\nkeybind = ctrl+alt+right=goto_split:right\nkeybind = ctrl+alt+shift+right=resize_split:right,10\nkeybind = ctrl+alt+shift+end=resize_split:right,100\nkeybind = alt+1=goto_tab:1\nkeybind = alt+2=goto_tab:2\nkeybind = alt+3=goto_tab:3\nkeybind = alt+4=goto_tab:4\nkeybind = alt+5=goto_tab:5\nkeybind = alt+6=goto_tab:6\nkeybind = alt+7=goto_tab:7\nkeybind = alt+8=goto_tab:8\nkeybind = alt+9=goto_tab:9\n",
+    "ghosttyTransport": [
+      {
+        "action": "ghostty-resize-left-10",
+        "source": {
+          "action": "resize-left",
+          "amount": 10,
+          "key": "left",
+          "modifiers": ["super", "ctrl", "shift"]
+        },
+        "target": {
+          "key": "left",
+          "modifiers": ["ctrl", "alt", "shift"]
+        },
+        "targetApp": "msrdc.exe"
+      },
+      {
+        "action": "ghostty-resize-left-100",
+        "source": {
+          "action": "resize-left",
+          "amount": 100,
+          "key": "left",
+          "modifiers": ["super", "ctrl", "shift", "alt"]
+        },
+        "target": {
+          "key": "home",
+          "modifiers": ["ctrl", "alt", "shift"]
+        },
+        "targetApp": "msrdc.exe"
+      },
+      {
+        "action": "ghostty-resize-down-10",
+        "source": {
+          "action": "resize-down",
+          "amount": 10,
+          "key": "down",
+          "modifiers": ["super", "ctrl", "shift"]
+        },
+        "target": {
+          "key": "down",
+          "modifiers": ["ctrl", "alt", "shift"]
+        },
+        "targetApp": "msrdc.exe"
+      },
+      {
+        "action": "ghostty-resize-down-100",
+        "source": {
+          "action": "resize-down",
+          "amount": 100,
+          "key": "down",
+          "modifiers": ["super", "ctrl", "shift", "alt"]
+        },
+        "target": {
+          "key": "page_down",
+          "modifiers": ["ctrl", "alt", "shift"]
+        },
+        "targetApp": "msrdc.exe"
+      },
+      {
+        "action": "ghostty-resize-up-10",
+        "source": {
+          "action": "resize-up",
+          "amount": 10,
+          "key": "up",
+          "modifiers": ["super", "ctrl", "shift"]
+        },
+        "target": {
+          "key": "up",
+          "modifiers": ["ctrl", "alt", "shift"]
+        },
+        "targetApp": "msrdc.exe"
+      },
+      {
+        "action": "ghostty-resize-up-100",
+        "source": {
+          "action": "resize-up",
+          "amount": 100,
+          "key": "up",
+          "modifiers": ["super", "ctrl", "shift", "alt"]
+        },
+        "target": {
+          "key": "page_up",
+          "modifiers": ["ctrl", "alt", "shift"]
+        },
+        "targetApp": "msrdc.exe"
+      },
+      {
+        "action": "ghostty-resize-right-10",
+        "source": {
+          "action": "resize-right",
+          "amount": 10,
+          "key": "right",
+          "modifiers": ["super", "ctrl", "shift"]
+        },
+        "target": {
+          "key": "right",
+          "modifiers": ["ctrl", "alt", "shift"]
+        },
+        "targetApp": "msrdc.exe"
+      },
+      {
+        "action": "ghostty-resize-right-100",
+        "source": {
+          "action": "resize-right",
+          "amount": 100,
+          "key": "right",
+          "modifiers": ["super", "ctrl", "shift", "alt"]
+        },
+        "target": {
+          "key": "end",
+          "modifiers": ["ctrl", "alt", "shift"]
+        },
+        "targetApp": "msrdc.exe"
+      }
+    ]
+  },
+  "workspaces": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+}

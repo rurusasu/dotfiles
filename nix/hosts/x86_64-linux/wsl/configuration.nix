@@ -30,9 +30,7 @@ let
 in
 
 {
-  imports = [
-    # include NixOS-WSL modules
-  ];
+  imports = [ ./fonts.nix ];
 
   wsl = {
     enable = true;
@@ -40,6 +38,9 @@ in
     # Expose Windows D3D12/DXCore libraries through /run/opengl-driver/lib.
     useWindowsDriver = true;
   };
+
+  # Chrome's process locale is Japanese; keep the system's default language.
+  i18n.extraLocales = [ "ja_JP.UTF-8/UTF-8" ];
 
   # Cover both login shells and GUI apps activated by the user systemd manager.
   environment.variables = graphicsEnvironment;
