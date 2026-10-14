@@ -69,31 +69,35 @@
 
 ## Ghostty の実キー確認
 
-| キー・操作                                 | 状態         | 観測・制約                                                                           |
-| ------------------------------------------ | ------------ | ------------------------------------------------------------------------------------ |
-| `Ctrl+Shift+E`: 上下分割                   | 確認済み     | pane が上下に分かれた                                                                |
-| `Ctrl+Shift+O`: 左右分割                   | 確認済み     | pane が左右に分かれた                                                                |
-| `Ctrl+Alt+矢印`: pane 移動                 | 一部確認済み | `Ctrl+Alt+Left` の移動を確認。他方向は未確認                                         |
-| `Win+Ctrl+Shift+矢印`: 10ピクセル変更      | 一部確認済み | Right / Up / Down で pane 境界の10ピクセル変更を確認。上下は元に復元。Left は未確認  |
-| `Win+Ctrl+Shift+Alt+矢印`: 100ピクセル変更 | 確認済み     | Right / Up / Down / Left の各方向で pane 境界の100ピクセル変更を確認。上下は元に復元 |
-| `Ctrl+Shift+T`: tab 追加                   | 確認済み     | 新しい tab が開いた                                                                  |
-| `Ctrl+Shift+矢印`: tab 移動                | 一部確認済み | `Ctrl+Shift+Right` で次の tab へ移動。他方向は未確認                                 |
-| `Alt+1..9`: tab 指定                       | 一部確認済み | `Alt+1` で指定 tab へ移動。2〜9は未確認                                              |
+| キー・操作                                 | 状態     | 観測・制約                                                                                                             |
+| ------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `Ctrl+Shift+E`: 上下分割                   | 確認済み | pane が上下に分かれた                                                                                                  |
+| `Ctrl+Shift+O`: 左右分割                   | 確認済み | pane が左右に分かれた                                                                                                  |
+| `Ctrl+Alt+矢印`: pane 移動                 | 確認済み | 3 pane layout で Left / Right / Up / Down の全方向で active pane の移動を確認                                          |
+| `Win+Ctrl+Shift+矢印`: 10ピクセル変更      | 確認済み | Left / Right / Up / Down の全方向を確認。下段の縦 divider は Left で425→415px、Right で425pxへ復元。上下も変更後に復元 |
+| `Win+Ctrl+Shift+Alt+矢印`: 100ピクセル変更 | 確認済み | Right / Up / Down / Left の各方向で pane 境界の100ピクセル変更を確認。上下は元に復元                                   |
+| `Ctrl+Shift+T`: tab 追加                   | 確認済み | 新しい tab が開いた                                                                                                    |
+| `Ctrl+Shift+矢印`: tab 移動                | 確認済み | 9 tab で Left は9→8、Up は8→7、Right は7→8、Down は8→9へ移動し、全方向を確認                                           |
+| `Alt+1..9`: tab 指定                       | 確認済み | 9 tab を作成し、実キー Alt+1〜9 が表示順の該当 tab を選択することを確認。1番目は元の3 pane layout                      |
 
 ## 設定・自動検査
 
-| 対象                   | 結果                                    | 確認範囲                                                                                                                    |
-| ---------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Nix unit               | 180件成功                               | 共通定義、export、renderer、WSLg transport、WSL GUI package、日本語フォント配置、Chrome GTK3 cache などの値・契約           |
-| Ghostty                | 28割り当ての設定検査成功                | 配置済み設定の構文・action。実キー入力の成功とは別                                                                          |
-| Neovim                 | 配置済み17割り当てと Oil runtime を確認 | 実際に配置した Neovim 設定を読み込む runtime 検査。全キーを GUI から押した検査ではない                                      |
-| PowerShell 全体        | 765件成功、失敗0件、POSIX 境界1件 skip  | 公式 runner で全体を実行。後続の通知判定 / Paint 起動修正前の結果。最終の全件結果は別途確認。GUI の実キー確認は上の表で記録 |
-| Windows action runtime | 155件成功                               | 対象 runtime の検査。後続の通知 scope 修正の最終結果は別途確認                                                              |
-| 通知 focused           | 61件成功                                | 最新の通知削除・全削除と完了判定の対象検査                                                                                  |
+| 対象                   | 結果                                                              | 確認範囲                                                                                                                                                                                                                         |
+| ---------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nix unit               | 180件成功                                                         | 共通定義、export、renderer、WSLg transport、WSL GUI package、日本語フォント配置、Chrome GTK3 cache などの値・契約                                                                                                                |
+| Ghostty                | 28割り当ての設定検査成功                                          | 配置済み設定の構文・action。実キー入力の成功とは別                                                                                                                                                                               |
+| Neovim                 | 配置済み17割り当てと Oil runtime を確認                           | 実際に配置した Neovim 設定を読み込む runtime 検査。全キーを GUI から押した検査ではない                                                                                                                                           |
+| PowerShell 全体        | 817件成功・失敗0件・POSIX 境界1件 skip / 全818件、coverage 81.27% | Windows native の公式 runner を `MinimumCoverage=80` で実行し exit 0、211.33秒。対象10ファイルの command coverage は2495 / 3070、未カバー575。runtime commit `aeeca55c5b0cf5733af39aa2df7d044f0f2dd2be` に検査13件を追加した状態 |
+| Windows action runtime | 155件成功                                                         | 中間 snapshot の対象 runtime 検査。後続の通知修正は下の61件 focused と最新の全件検査で確認                                                                                                                                       |
+| 通知 focused           | 61件成功                                                          | 最新の通知削除・全削除と完了判定の対象検査                                                                                                                                                                                       |
 
 179件成功時の Nix unit の出力は `/nix/store/kfmy6kr030n6qy0ndzv0rcksc52ncyhr-nix-unit-check` です。上表の180件は Chrome GTK3 cache の追加後に成功した結果です。設定の検査成功と、実行中の WSLg での表示・入力は別に確認します。
 
-夜間モードは修正後に状態変更を確認し、Ghostty の Win resize は10ピクセルの右・上・下と100ピクセルの全方向を確認しました。URL の JSONL 保存、録画 overlay の起動、撮影画像の PNG 保存・clipboard 取得、修正後の Paint 編集起動、Ghostty のコピー・貼り付け、直近の通知削除と全通知削除も確認しました。録画開始・ファイル作成、複数音声出力の巡回など、表で未確認とした操作は実機での成功として扱いません。後続変更の最終の全件検査は別途確認します。
+Windows native の最終全件検査は coverage 81.27%で80%基準を満たし、exit 0 で成功しました。追加した13件は installer の起動・後処理を検査する `Install.Orchestrator.Tests.ps1` の検査で、同ファイルの対象検査は合計18件です。実行中に検査対象の source hash が変わらなかったことも確認しました。証跡は `%TEMP%/dotfiles-final-powershell80.log`、`dotfiles-final-powershell80.xml`、`dotfiles-final-powershell80-coverage.xml` です。WSL からの `task commit` では Windows PowerShell hook の Linux branch がテストを実行せず exit 0 となるため、Pester の結果は Windows native の公式 runner で取得します。
+
+整形済み runtime を `task chezmoi` で再適用し、配置した runtime の正規化した内容がソースと一致することを確認しました。Ghostty の28割り当ては全て実キーで確認済みで、検査のために追加した tab は整理済みです。
+
+夜間モードは修正後に状態変更を確認し、Ghostty の pane 移動・10 / 100ピクセル resize・tab 移動の全方向と Alt+1〜9 の tab 指定を確認しました。URL の JSONL 保存、録画 overlay の起動、撮影画像の PNG 保存・clipboard 取得、修正後の Paint 編集起動、Ghostty のコピー・貼り付け、直近の通知削除と全通知削除も確認しました。録画開始・ファイル作成、複数音声出力の巡回など、表で未確認とした操作は実機での成功として扱いません。
 
 実機確認中にユーザーの物理 Escape 操作で computer-use が停止しました。その後、ユーザーが UI 検証の再開を承認し、上記の WSLg アプリ起動・resize・夜間モード・応答不可を確認しました。
 
