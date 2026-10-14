@@ -685,6 +685,9 @@ jobs:
           DOTFILES_E2E_POWERSHELL_VERSION: ${{ matrix.version }}
         run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts\powershell\ci\Invoke-WindowsInstallerE2E.ps1
 
+      - name: Install chezmoi for rendering tests
+        uses: ./.github/actions/install-chezmoi
+
       - name: Run PowerShell test suite
         shell: pwsh
         working-directory: scripts/powershell

@@ -87,6 +87,10 @@ class DetectCiActionContractTests(unittest.TestCase):
             (("chezmoi/config.tmpl",), {"chezmoi", "windows"}),
             (("nix/hosts/aarch64-darwin/system.nix",), {"nix", "darwin"}),
             (("nix/hosts/x86_64-linux/wsl/fonts.nix",), {"nix", "wsl"}),
+            (
+                ("nix/hosts/x86_64-linux/wsl/fonts/fontconfig.conf",),
+                {"nix", "wsl", "chezmoi", "windows"},
+            ),
             (("nix/modules/tools.nix",), UNIX),
             (("nix/modules/desktop.nix",), UNIX),
             (("nix/modules/desktop-system.nix",), UNIX),

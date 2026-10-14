@@ -5,6 +5,21 @@ This source deploys the Windows WezTerm configuration at
 NF release for the current user. The font is registered under the current
 Windows account, so no administrator privileges are needed.
 
+Nix owns the font family defaults and WSLg fontconfig policy. Managed application
+defaults use UDEV Gothic NF; Noto CJK and color emoji remain missing-glyph
+fallbacks. NixOS-WSL places real UDEV regular/bold and fallback font files where
+the WSLg server can read them. chezmoi deploys the canonical Nix XML to
+`%USERPROFILE%/.config/dotfiles/wslg-fontconfig.conf` and configures
+`%USERPROFILE%/.wslgconfig` to select it through its Windows-mounted path.
+The XML reference therefore does not depend on a particular WSL distribution
+starting first. Windows system UI fonts and website CSS are not forced.
+
+Apply the Nix settings and Windows chezmoi settings before restarting WSLg to
+load its new font environment and titlebar font cache. This restart has not been
+performed as part of the new UDEV policy verification. See
+[WSLg font setup](../docs/nix/nixos-wsl-install.md#wslg-のフォント)
+for the ownership boundary and apply order.
+
 The PowerShell 7 profile at
 `%USERPROFILE%/Documents/PowerShell/Microsoft.PowerShell_profile.ps1` enables
 PSReadLine's history prediction in `ListView`. Suggestions narrow as you type;

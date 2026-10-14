@@ -2,6 +2,10 @@ README.md
 **/AGENTS.md
 **/AGENTS.override.md
 terminals/
+# Runtime-generated Python caches are not user configuration.
+**/__pycache__
+**/__pycache__/**
+**/*.py[co]
 
 {{ if ne .chezmoi.os "windows" }}
 *

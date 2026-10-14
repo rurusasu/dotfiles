@@ -14,6 +14,9 @@ in
     text = ''
       ${pkgs.coreutils}/bin/install -d -m 0755 ${fontDirectory}
       ${pkgs.coreutils}/bin/install --compare -m 0644 ${sourceFont} ${fontDirectory}/${fontFile}
+      ${pkgs.coreutils}/bin/install --compare -m 0644 ${pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Regular.ttf ${fontDirectory}/UDEVGothicNF-Regular.ttf
+      ${pkgs.coreutils}/bin/install --compare -m 0644 ${pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Bold.ttf ${fontDirectory}/UDEVGothicNF-Bold.ttf
+      ${pkgs.coreutils}/bin/install --compare -m 0644 ${pkgs.noto-fonts-color-emoji}/share/fonts/noto/NotoColorEmoji.ttf ${fontDirectory}/NotoColorEmoji.ttf
     '';
   };
 }

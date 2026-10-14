@@ -156,6 +156,16 @@ WSL 固有構成は `nix/hosts/x86_64-linux/wsl/`、
 `nix/hosts/shared/nixos/identity.nix` が読み取ります。
 native NixOS 用の `/etc/nixos/hardware-configuration.nix` は WSL では通常不要です。
 
+## WSLg のフォント
+
+管理するアプリの既定フォントは `UDEV Gothic NF` に統一します。フォントの選択・導入は Nix、Windows の配置・登録は chezmoi が担当します。Noto CJK と color emoji は不足グリフの fallback として残します。Windows 自体のシステム UI フォントや、Web サイトが CSS で指定したフォントは強制変更しません。
+
+`nix/hosts/x86_64-linux/wsl/fonts.nix` は WSLg server が読める通常ファイルとして UDEV の Regular / Bold と fallback を配置します。WSLg 用 fontconfig の正本は `nix/hosts/x86_64-linux/wsl/fonts/fontconfig.conf` です。server 標準の `/etc/fonts/fonts.conf` を読み込んだ後、解決された `sans-serif` に UDEV を優先指定し、Pango の titlebar にも適用します。
+
+chezmoi はこの XML を `%USERPROFILE%/.config/dotfiles/wslg-fontconfig.conf` に配置し、`%USERPROFILE%/.wslgconfig` の `FONTCONFIG_FILE` を Windows home の `/mnt/<drive>/...` パスへ向けます。XML の参照先を Windows 側に置くことで、特定の user distro 内の設定や起動順に依存させません。フォント方針を chezmoi 側へ重複定義しません。
+
+反映は WSL で `nrs`、Windows で `task chezmoi` の順です。WSLg の新しい環境変数と titlebar font cache は、次の WSLg 再起動時に読み込まれます。作業を保存して Linux GUI アプリを閉じた後、Windows で `wsl --shutdown` を実行し、通常どおりアプリを起動してください。新しい UDEV 方針の再起動後の実機確認はまだ記録していません。
+
 ## WSLg の GPU 描画
 
 WSL host は `wsl.useWindowsDriver = true` で Windows の D3D12 / DXCore ライブラリを

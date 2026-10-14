@@ -15,7 +15,7 @@ let
   defaultConfig = mkWsl.config;
 in
 {
-  testWslgFontBridgeCopiesARegularFontWithoutRestartingApplications = {
+  testWslgFontBridgeCopiesPrimaryAndFallbackFontsWithoutRestartingApplications = {
     expr =
       let
         activation = defaultConfig.system.activationScripts.wslgFonts or { };
@@ -29,7 +29,43 @@ in
       text = ''
         ${mkWsl.pkgs.coreutils}/bin/install -d -m 0755 /usr/local/share/fonts/dotfiles-wslg
         ${mkWsl.pkgs.coreutils}/bin/install --compare -m 0644 ${mkWsl.pkgs.noto-fonts-cjk-sans}/share/fonts/opentype/noto-cjk/NotoSansCJK-VF.otf.ttc /usr/local/share/fonts/dotfiles-wslg/NotoSansCJK-VF.otf.ttc
+        ${mkWsl.pkgs.coreutils}/bin/install --compare -m 0644 ${mkWsl.pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Regular.ttf /usr/local/share/fonts/dotfiles-wslg/UDEVGothicNF-Regular.ttf
+        ${mkWsl.pkgs.coreutils}/bin/install --compare -m 0644 ${mkWsl.pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Bold.ttf /usr/local/share/fonts/dotfiles-wslg/UDEVGothicNF-Bold.ttf
+        ${mkWsl.pkgs.coreutils}/bin/install --compare -m 0644 ${mkWsl.pkgs.noto-fonts-color-emoji}/share/fonts/noto/NotoColorEmoji.ttf /usr/local/share/fonts/dotfiles-wslg/NotoColorEmoji.ttf
       '';
+    };
+  };
+  testWslgServerFontconfigPrependsUdevAndPreservesFallbacks = {
+    expr =
+      let
+        inherit (inputs.nixpkgs) lib;
+        path = ../../../hosts/x86_64-linux/wsl/fonts/fontconfig.conf;
+        xml = if builtins.pathExists path then builtins.readFile path else "";
+        systemInclude = "<include>/etc/fonts/fonts.conf</include>";
+        pieces = lib.splitString systemInclude xml;
+      in
+      {
+        includesSystemDefaults = lib.hasInfix systemInclude xml;
+        systemDefaultsBeforeOverride =
+          builtins.length pieces == 2 && lib.hasInfix "<match target=\"pattern\">" (builtins.elemAt pieces 1);
+        targetsNormalizedSans = builtins.all (token: lib.hasInfix token xml) [
+          "<test name=\"family\">"
+          "<string>sans-serif</string>"
+        ];
+        prependsPrimaryFamily = builtins.all (token: lib.hasInfix token xml) [
+          "<edit name=\"family\" mode=\"prepend_first\" binding=\"strong\">"
+          "<string>UDEV Gothic NF</string>"
+        ];
+        editCount = builtins.length (lib.splitString "<edit " xml) - 1;
+        hasStorePaths = lib.hasInfix "/nix/store/" xml;
+      };
+    expected = {
+      includesSystemDefaults = true;
+      systemDefaultsBeforeOverride = true;
+      targetsNormalizedSans = true;
+      prependsPrimaryFamily = true;
+      editCount = 1;
+      hasStorePaths = false;
     };
   };
   testWslGeneratesJapaneseLocaleWithoutChangingDefaultOrInputMethod = {

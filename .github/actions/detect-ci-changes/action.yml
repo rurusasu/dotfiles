@@ -127,6 +127,13 @@ runs:
                   nix=true
                   darwin=true
                   ;;
+                # Windows chezmoi also distributes the WSLg fontconfig source.
+                nix/hosts/x86_64-linux/wsl/fonts/fontconfig.conf)
+                  nix=true
+                  chezmoi=true
+                  wsl=true
+                  windows=true
+                  ;;
                 nix/hosts/x86_64-linux/wsl/*)
                   nix=true
                   wsl=true

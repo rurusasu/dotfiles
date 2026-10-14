@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
+import sys
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -12,6 +16,104 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CiJobRoutingTests(unittest.TestCase):
+    def test_windows_render_tests_receive_chezmoi_after_installer_e2e(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci-nix.yml").read_text()
+        job = re.search(
+            r"(?ms)^  windows-installer:\n(?P<job>.*?)(?=^  [\w-]+:\n|\Z)",
+            workflow,
+        )
+        self.assertIsNotNone(job)
+        assert job is not None
+        steps = job.group("job")
+        installer = steps.index("- name: Run install.cmd strict user phase")
+        tests = steps.index("- name: Run PowerShell test suite")
+        helper = "uses: ./.github/actions/install-chezmoi"
+        self.assertEqual(steps.count(helper), 1)
+        self.assertLess(installer, steps.index(helper))
+        self.assertLess(steps.index(helper), tests)
+
+    def test_chezmoi_source_checks_rendered_wslg_font_configuration(self) -> None:
+        if shutil.which("pwsh") is None:
+            self.skipTest("requires PowerShell to execute the Windows workflow step")
+        workflow = (ROOT / ".github/workflows/ci-chezmoi.yml").read_text()
+        step = re.search(
+            r"(?ms)^      - name: Verify the managed Windows targets\n"
+            r"        shell: pwsh\n        run: \|\n(?P<script>.*?)"
+            r"(?=^      - name:|\Z)",
+            workflow,
+        )
+        self.assertIsNotNone(step)
+        assert step is not None
+        canonical = '<?xml version="1.0"?>\n<fontconfig><dir>/fixture/fonts</dir></fontconfig>\n'
+        for case, expected in (
+            ("valid", 0),
+            ("windows-home", 0),
+            ("bad-path", 1),
+            ("malformed-xml", 1),
+            ("different-xml", 1),
+            ("render-error", 1),
+        ):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary:
+                workspace = Path(temporary)
+                (workspace / "chezmoi").mkdir()
+                xml_path = workspace / "nix/hosts/x86_64-linux/wsl/fonts/fontconfig.conf"
+                xml_path.parent.mkdir(parents=True)
+                xml_path.write_text(canonical)
+                executable = workspace / "chezmoi-cli"
+                executable.mkdir()
+                chezmoi = executable / "chezmoi"
+                chezmoi.write_text(
+                    f"#!{sys.executable}\n"
+                    "import json, os, sys\n"
+                    "args = sys.argv[1:]\n"
+                    "case = os.environ['RENDER_CASE']\n"
+                    "data = json.loads(args[args.index('--override-data') + 1])['chezmoi']\n"
+                    "if case == 'windows-home' and data != "
+                    "{'os': 'windows', 'homeDir': 'C:/Users/ci'}: raise SystemExit(64)\n"
+                    "if 'managed' in args:\n"
+                    "    kind = args[args.index('--include') + 1]\n"
+                    "    if kind == 'files':\n"
+                    "        print('.config/dotfiles/wslg-fontconfig.conf\\n.wslgconfig\\n"
+                    "Documents/PowerShell/Microsoft.PowerShell_profile.ps1')\n"
+                    "    else:\n"
+                    "        print('.chezmoiscripts/deploy/keybindings/sync_powertoys_keyboard.ps1\\n"
+                    ".chezmoiscripts/deploy/keybindings/sync_wsl_keybindings.ps1\\n"
+                    ".chezmoiscripts/deploy/terminals/deploy.ps1\\n"
+                    ".chezmoiscripts/deploy/terminals/install_udev_gothic_nf.ps1')\n"
+                    "elif 'execute-template' in args:\n"
+                    "    if case == 'render-error': raise SystemExit(41)\n"
+                    "    path = args[args.index('--file') + 1]\n"
+                    "    if path.endswith('dot_wslgconfig.tmpl'):\n"
+                    "        mount = '/mnt//oot' if case == 'bad-path' else '/mnt/c/Users/ci'\n"
+                    "        print('[system-distro-env]\\nFONTCONFIG_FILE=' + mount + "
+                    "'/.config/dotfiles/wslg-fontconfig.conf')\n"
+                    "    else:\n"
+                    "        rendered = os.environ['CANONICAL_XML']\n"
+                    "        if case == 'malformed-xml': rendered = '<fontconfig>'\n"
+                    "        if case == 'different-xml': rendered = '<fontconfig><dir>/other</dir></fontconfig>'\n"
+                    "        print(rendered, end='')\n"
+                    "else: raise SystemExit(65)\n"
+                )
+                chezmoi.chmod(0o755)
+                script_path = workspace / "verify.ps1"
+                script_path.write_text(textwrap.dedent(step.group("script")))
+                result = subprocess.run(
+                    ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-File", str(script_path)],
+                    env=os.environ
+                    | {
+                        "PATH": f"{executable}{os.pathsep}{os.environ['PATH']}",
+                        "GITHUB_WORKSPACE": str(workspace),
+                        "RENDER_CASE": case,
+                        "CANONICAL_XML": canonical,
+                    },
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(
+                    result.returncode, expected, result.stdout + result.stderr
+                )
+
     def test_bootstrap_always_reports_on_pull_requests(self) -> None:
         workflow = (ROOT / ".github/workflows/ci-nix.yml").read_text()
         trigger = workflow.split("  pull_request:\n", 1)[1].split("\nconcurrency:", 1)[
