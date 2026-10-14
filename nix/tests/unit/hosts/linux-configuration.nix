@@ -8,6 +8,10 @@ let
   inherit (host) config pkgs;
 in
 {
+  testNativeLinuxRegistersDconfForGtkSettingsPersistence = {
+    expr = config.programs.dconf.enable;
+    expected = true;
+  };
   testNativeLinuxDoesNotInstallWslgFontBridge = {
     expr = config.system.activationScripts ? wslgFonts;
     expected = false;

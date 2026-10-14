@@ -15,6 +15,10 @@ let
   defaultConfig = mkWsl.config;
 in
 {
+  testWslRegistersDconfForGtkSettingsPersistence = {
+    expr = defaultConfig.programs.dconf.enable;
+    expected = true;
+  };
   testWslgFontBridgeCopiesPrimaryAndFallbackFontsWithoutRestartingApplications = {
     expr =
       let

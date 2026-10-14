@@ -169,7 +169,7 @@ if ($inventoryRecords.Count -ne 1) {
 $wingetManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json') -Raw | ConvertFrom-Json
 $wingetSources = @(
   $wingetManifest.Sources |
-    Where-Object { $_.SourceDetails.Name -in @('winget', 'msstore') }
+    Where-Object { $_.SourceDetails.Name -in @('winget', 'msstore', 'direct') }
 )
 if ($wingetSources.Count -eq 0) {
   throw 'Windows E2E manifest does not contain a supported WinGet source'

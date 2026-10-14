@@ -76,6 +76,46 @@ let
 
 in
 {
+  testLinuxDesktopGuiUsesUdevInGtkAndSettingsPortal = {
+    expr = {
+      homes =
+        map
+          (home: {
+            enabled = home.config.gtk.enable;
+            gtk3 = home.pkgs.lib.hasInfix "gtk-font-name=UDEV Gothic NF 11" (
+              home.config.xdg.configFile."gtk-3.0/settings.ini".text or ""
+            );
+            gtk4 = home.pkgs.lib.hasInfix "gtk-font-name=UDEV Gothic NF 11" (
+              home.config.xdg.configFile."gtk-4.0/settings.ini".text or ""
+            );
+            portalFont = home.config.dconf.settings."org/gnome/desktop/interface"."font-name" or null;
+          })
+          [
+            wsl
+            linux
+          ];
+      commonEnabled = common.config.gtk.enable;
+      darwinEnabled = darwin.config.gtk.enable;
+    };
+    expected = {
+      homes = [
+        {
+          enabled = true;
+          gtk3 = true;
+          gtk4 = true;
+          portalFont = "UDEV Gothic NF 11";
+        }
+        {
+          enabled = true;
+          gtk3 = true;
+          gtk4 = true;
+          portalFont = "UDEV Gothic NF 11";
+        }
+      ];
+      commonEnabled = false;
+      darwinEnabled = false;
+    };
+  };
   testWslAppKeybindingsUseWindowsExportAndNativeHomesKeepNix = {
     expr =
       map
@@ -834,7 +874,6 @@ in
               "hyprland"
               "fuzzel"
               "firefox"
-              "nautilus"
             ]
           ) (map (package: package.pname or package.name) home.config.home.packages);
         })

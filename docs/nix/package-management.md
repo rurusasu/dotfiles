@@ -126,6 +126,8 @@ Windows の package install timeout は 3600 秒を共通既定値とし、WinGe
 
 Windows の npm/pnpm manifest は空で、dsh、pnpm、Bun、Codex CLI の個別導入は行いません。Windows は Windows アプリ付属 CLI を、NixOS / WSL は Linux アプリ付属 CLI を使います。
 
+Windows Dia は WinGet / Microsoft Store 未登録のため、同じ manifest の `direct` source に公式 Windows 11 x64 MSIX を宣言します。URL・SHA256・package identity と依存関係を固定し、導入済みの同等以上の package を検証して利用します。Windows の export もこの宣言を保持します。更新時は公式配布から version・URL・hash と依存 metadata を確認して変更します。
+
 ## システム package と Home Manager の境界
 
 | 対象                                             | 管理先                                                           |

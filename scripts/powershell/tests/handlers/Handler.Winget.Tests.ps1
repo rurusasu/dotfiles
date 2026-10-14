@@ -1743,6 +1743,8 @@ Describe 'WingetHandler' {
             Mock Test-PathExist { return $true }
             Mock New-DirectorySafe { }
             Mock Invoke-Winget {
+                param($Arguments)
+                [IO.File]::WriteAllText($Arguments[2], '{"Sources":[]}')
                 $global:LASTEXITCODE = 0
                 return "Packages exported"
             }
@@ -1762,6 +1764,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 $script:wingetCalled = $true
                 $script:wingetArgs = $Arguments
+                [IO.File]::WriteAllText($Arguments[2], '{"Sources":[]}')
                 $global:LASTEXITCODE = 0
             }
 
@@ -1779,6 +1782,8 @@ Describe 'WingetHandler' {
             Mock Test-PathExist { return $false }
             Mock New-DirectorySafe { }
             Mock Invoke-Winget {
+                param($Arguments)
+                [IO.File]::WriteAllText($Arguments[2], '{"Sources":[]}')
                 $global:LASTEXITCODE = 0
                 return "Packages exported"
             }
@@ -1807,11 +1812,11 @@ Describe 'WingetHandler' {
             }
         }
 
-        It 'should return success with partial exclusion warning' {
+        It 'should report a failed export instead of claiming a partial inventory was saved' {
             $ctx.Options["WingetMode"] = "export"
             $result = $handler.Apply($ctx)
-            $result.Success | Should -Be $true
-            $result.Message | Should -Match "一部除外"
+            $result.Success | Should -Be $false
+            $result.Message | Should -Match "失敗"
         }
     }
 

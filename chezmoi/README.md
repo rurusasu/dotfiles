@@ -14,9 +14,11 @@ the WSLg server can read them. chezmoi deploys the canonical Nix XML to
 The XML reference therefore does not depend on a particular WSL distribution
 starting first. Windows system UI fonts and website CSS are not forced.
 
+Linux GUI GTK 3/4 and settings-portal fonts are configured by
+`nix/modules/fonts/gtk.nix`; the NixOS host registers dconf for persistence.
 Apply the Nix settings and Windows chezmoi settings before restarting WSLg to
-load its new font environment and titlebar font cache. This restart has not been
-performed as part of the new UDEV policy verification. See
+load its new font environment and titlebar font cache. The 2026-10-14 verification
+confirmed UDEV and Japanese text in the Chrome titlebar and Nautilus interface. See
 [WSLg font setup](../docs/nix/nixos-wsl-install.md#wslg-のフォント)
 for the ownership boundary and apply order.
 

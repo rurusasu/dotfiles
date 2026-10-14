@@ -164,7 +164,9 @@ native NixOS 用の `/etc/nixos/hardware-configuration.nix` は WSL では通常
 
 chezmoi はこの XML を `%USERPROFILE%/.config/dotfiles/wslg-fontconfig.conf` に配置し、`%USERPROFILE%/.wslgconfig` の `FONTCONFIG_FILE` を Windows home の `/mnt/<drive>/...` パスへ向けます。XML の参照先を Windows 側に置くことで、特定の user distro 内の設定や起動順に依存させません。フォント方針を chezmoi 側へ重複定義しません。
 
-反映は WSL で `nrs`、Windows で `task chezmoi` の順です。WSLg の新しい環境変数と titlebar font cache は、次の WSLg 再起動時に読み込まれます。作業を保存して Linux GUI アプリを閉じた後、Windows で `wsl --shutdown` を実行し、通常どおりアプリを起動してください。新しい UDEV 方針の再起動後の実機確認はまだ記録していません。
+GTK の画面内フォントは `nix/modules/fonts/gtk.nix` が GTK 3 / 4 と設定ポータルへ配布します。WSL host は `programs.dconf.enable` で永続設定に必要な service を登録します。
+
+反映は WSL で `nrs`、Windows で `task chezmoi` の順です。WSLg の新しい環境変数と titlebar font cache は、次の WSLg 再起動時に読み込まれます。作業を保存して Linux GUI アプリを閉じた後、Windows で `wsl --shutdown` を実行し、通常どおりアプリを起動してください。2026-10-14 に再起動後の通常 Chrome titlebar と Nautilus の UDEV・日本語表示を実機確認しました。
 
 ## WSLg の GPU 描画
 

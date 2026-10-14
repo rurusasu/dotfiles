@@ -4,6 +4,7 @@ let
     chromeProvider:
     { lib, pkgs, ... }:
     {
+      imports = [ ./fonts/gtk.nix ];
       home.packages = lib.optionals pkgs.stdenv.hostPlatform.isLinux [
         (chromeProvider pkgs)
         pkgs.obsidian

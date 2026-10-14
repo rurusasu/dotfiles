@@ -75,6 +75,8 @@ PowerToys の他の割り当てと設定を維持しながら Keyboard Manager /
 
 修飾キーなしの `PrintScreen` も Keyboard Manager の実行 engine に配置します。現行の PowerToys editor では、この割り当てを GUI でオフ・オンすると保持されない場合があるため、変更は Nix の正本から export / chezmoi で反映してください。
 
+Windows の追加ブラウザーは Dia を管理します。WinGet / Microsoft Store の登録がないため、Windows 11 x64 向けの公式 MSIX と依存パッケージを `windows/winget/packages.json` の `direct` source に URL・SHA256・package identity とともに固定し、既存 installer から導入・検証します。macOS は Nix 管理の Dia、WSL のブラウザーキーは Chrome を使用します。
+
 ## Export と反映手順
 
 ```powershell

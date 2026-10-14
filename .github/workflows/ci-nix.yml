@@ -861,12 +861,41 @@ jobs:
         shell: bash
         run: |
           jq -e '
+            def nonempty_string: if type == "string" then length > 0 else false end;
+            def https_url: if type == "string" then test("^https://[^[:space:]]+$") else false end;
+            def sha256_hash: if type == "string" then test("^[A-Fa-f0-9]{64}$") else false end;
             (.Sources | type == "array" and length > 0)
             and all(.Sources[];
               (.SourceDetails.Name | type == "string" and length > 0)
               and (.Packages | type == "array")
               and all(.Packages[];
-                .PackageIdentifier | type == "string" and length > 0))
+                .PackageIdentifier | type == "string" and length > 0)
+              and (if .SourceDetails.Name == "direct" then
+                .SourceDetails.Type == "Dotfiles.DirectInstaller"
+                and .SourceDetails.Identifier == "Dotfiles.DirectInstallers"
+                and (.SourceDetails.Argument | https_url)
+                and all(.Packages[];
+                  . as $package | .directInstaller |
+                  type == "object"
+                  and .type == "appx"
+                  and .name == $package.PackageIdentifier
+                  and (.packageFamilyName | nonempty_string)
+                  and (.version | if type == "string" then test("^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$") else false end)
+                  and .architecture == "x64"
+                  and (.executable | nonempty_string)
+                  and (.publisher | nonempty_string)
+                  and (.url | https_url)
+                  and (.sha256 | sha256_hash)
+                  and (.dependencies | type == "array"
+                    and all(.[];
+                      (.name | nonempty_string)
+                      and (.packageFamilyName | nonempty_string)
+                      and (.publisher | nonempty_string)
+                      and (.version | if type == "string" then test("^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$") else false end)
+                      and .architecture == "x64"
+                      and (.url | https_url)
+                      and (.sha256 | sha256_hash))))
+              else true end))
             and ([.Sources[].Packages[].PackageIdentifier] as $ids
               | ($ids | length) == ($ids | unique | length))
           ' windows/winget/packages.json

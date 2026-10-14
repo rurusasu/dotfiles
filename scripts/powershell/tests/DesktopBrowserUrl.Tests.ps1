@@ -3,6 +3,18 @@ BeforeAll {
     . $script:runtimePath -Action '__test_load_only__'
 }
 
+Describe 'Native Dia browser identity' {
+    It 'should accept the native Dia browser process without relying on its title' {
+        $identity = [pscustomobject]@{ ProcessName = 'Dia'; AppId = ''; Title = 'Example Domain' }
+        Test-DesktopBrowserWindow -Window ([IntPtr]42) -Identity $identity | Should -BeTrue
+    }
+
+    It 'should reject an unrelated process whose title names Dia' {
+        $identity = [pscustomobject]@{ ProcessName = 'Dia-helper'; AppId = ''; Title = 'Dia' }
+        Test-DesktopBrowserWindow -Window ([IntPtr]42) -Identity $identity | Should -BeFalse
+    }
+}
+
 Describe 'Desktop browser URL save' {
     BeforeEach {
         $script:window = [IntPtr]42

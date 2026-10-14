@@ -14,7 +14,7 @@
 - Unix のパッケージ導入・アプリ設定: `nix/modules/`。Unix CLI の PATH への導入は `tools.nix`、Linux / WSLg GUI は `desktop.nix`、Darwin system GUI は `desktop-system.nix` に定義し、個別アプリの設定・連携は各 module にまとめる
 - CLI の `programs.*.enable` と `home.packages`: `nix/modules/tools.nix`。各アプリ module は設定・連携・package override を担当する。新しい GUI の導入は `tools.nix` に追加しない
 - ホストのパッケージ構成: `tools.nix` / `desktop.nix` が公開する対象の module、Darwin の `desktop-system.nix`、各アプリ設定 module を imports で選択する
-- GUI の移行範囲: Chrome / Obsidian / Linux 1Password GUI と WSLg の Spotify / Signal は `desktop.nix`、Darwin の Dia / Obsidian / Raycast / 1Password GUI は `desktop-system.nix`。ChatGPT / Orca / Ghostty / WezTerm / Discord と `nativeDesktop` の既存選択子は現時点では `tools.nix` に残る
+- GUI の移行範囲: Chrome / Nautilus（Files）/ Obsidian / Linux 1Password GUI と WSLg の Spotify / Signal は `desktop.nix`、Darwin の Dia / Obsidian / Raycast / 1Password GUI は `desktop-system.nix`。ChatGPT / Orca / Ghostty / WezTerm / Discord と `nativeDesktop` の既存選択子は現時点では `tools.nix` に残る
 - Windows の導入情報: `windows/{winget,npm,pnpm}/packages.json` を直接管理し、Unix module から生成しない
 - 共通キー配列・設定生成関数・ユーザー設定: `nix/home/keybindings/`。host 配下には OS の service/有効化・競合解除を置く。純粋な関数を Home Manager module の imports に渡さない
 - flake wiring: root の `flake.nix`。custom package の出力は `nix/outputs.nix`、テスト登録は `nix/tests/default.nix`、formatter は `nix/formatter.nix`

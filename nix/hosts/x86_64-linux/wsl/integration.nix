@@ -30,6 +30,8 @@ in
     enable = true;
     config.safe.directory = [ repository ];
   };
+  # Home Manager's GTK font setting is read through the settings portal.
+  programs.dconf.enable = true;
   assertions = [
     {
       assertion = builtins.substring 0 1 repository == "/" && !(pkgs.lib.hasInfix "*" repository);

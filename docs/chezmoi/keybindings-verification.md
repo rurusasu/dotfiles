@@ -20,7 +20,7 @@
 | `Win+Enter`: Ghostty                    | 確認済み                         | NixOS-WSL の Ghostty が開いた                                                                                                                                                                      |
 | `Win+Shift+B`: ブラウザ                 | 確認済み                         | WSLg Chrome window を確認                                                                                                                                                                          |
 | `Win+Shift+Alt+B`: プライベートブラウザ | 確認済み                         | WSLg Chrome incognito window を確認                                                                                                                                                                |
-| `Win+Shift+F`: ファイルマネージャー     | 確認済み                         | Explorer が開いた                                                                                                                                                                                  |
+| `Win+Shift+F`: ファイルマネージャー     | 確認済み                         | WSLg の Nautilus（Files）が開いた。再起動後も確認                                                                                                                                                  |
 | `Win+Shift+T`: Btop                     | 確認済み                         | WSLg Ghostty の Btop window title を確認                                                                                                                                                           |
 | `Win+Shift+M`: Spotify                  | 確認済み                         | WSLg Spotify window を確認。認証なし                                                                                                                                                               |
 | `Win+Shift+/`: 1Password                | 確認済み                         | WSLg Welcome to 1Password window を確認。認証なし                                                                                                                                                  |
@@ -32,8 +32,8 @@
 | `Win+Shift+Alt+G`: WhatsApp             | 確認済み                         | 実キーで WSL Chrome の `web.whatsapp.com` window を確認                                                                                                                                            |
 | `Win+Shift+D`: LazyDocker               | 確認済み                         | WSLg Ghostty の LazyDocker window title を確認                                                                                                                                                     |
 | `Win+Shift+O`: Obsidian                 | 確認済み                         | WSLg Obsidian window を確認                                                                                                                                                                        |
-| `Win+C/V`: コピー・ペースト             | 確認済み                         | Explorer のファイルコピー・貼り付けと、Ghostty の選択文字 `nixos@nixos` の clipboard 完全一致・prompt への貼り付けを確認。貼り付けは実行せず `Ctrl+U` で消し、clipboard を撮影 PNG に復元          |
-| `Win+X/V`: カット・ペースト             | 一部確認済み                     | Explorer でファイルの移動を確認。Ghostty の `Win+X` はコピー扱いとして実装されているが、実キーでは未確認                                                                                           |
+| `Win+C/V`: コピー・ペースト             | 確認済み                         | Nautilus と Explorer のファイルコピー・貼り付け、Ghostty の選択文字 `nixos@nixos` の clipboard 完全一致・prompt への貼り付けを確認。Nautilus の日本語 fixture は内容の SHA256 も一致               |
+| `Win+X/V`: カット・ペースト             | 一部確認済み                     | Nautilus と Explorer でファイルの移動を確認。Nautilus は移動元の消失と内容の SHA256 も一致。Ghostty の `Win+X` はコピー扱いとして実装されているが、実キーでは未確認                                |
 | `Win+Ctrl+V`: 履歴                      | 初回画面を確認                   | Windows のクリップボード履歴を開いた。履歴が無効な場合の初回有効化はユーザー操作                                                                                                                   |
 | `PrintScreen`: スクリーンショット編集   | 画像取得・保存・編集起動確認済み | ユーザーの範囲選択後、12:45:18 に PNG 保存と clipboard の1387×813画像を確認。Paint 起動修正後、正式 helper で同じ保存 PNG を開き、Paint の title・Canvas Size 1387×813px・File Size 113.7KB を確認 |
 | `Shift+PrintScreen`: コピー             | overlay のみ確認                 | Snipping Tool の overlay は開いた。範囲選択がキャンセルされ、clipboard 画像は取得できず、撮影完了は未確認                                                                                          |
@@ -82,18 +82,18 @@
 
 ## 設定・自動検査
 
-| 対象                   | 結果                                                              | 確認範囲                                                                                                                                                                                                                         |
-| ---------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Nix unit               | 180件成功                                                         | 共通定義、export、renderer、WSLg transport、WSL GUI package、日本語フォント配置、Chrome GTK3 cache などの値・契約                                                                                                                |
-| Ghostty                | 28割り当ての設定検査成功                                          | 配置済み設定の構文・action。実キー入力の成功とは別                                                                                                                                                                               |
-| Neovim                 | 配置済み17割り当てと Oil runtime を確認                           | 実際に配置した Neovim 設定を読み込む runtime 検査。全キーを GUI から押した検査ではない                                                                                                                                           |
-| PowerShell 全体        | 817件成功・失敗0件・POSIX 境界1件 skip / 全818件、coverage 81.27% | Windows native の公式 runner を `MinimumCoverage=80` で実行し exit 0、211.33秒。対象10ファイルの command coverage は2495 / 3070、未カバー575。runtime commit `aeeca55c5b0cf5733af39aa2df7d044f0f2dd2be` に検査13件を追加した状態 |
-| Windows action runtime | 155件成功                                                         | 中間 snapshot の対象 runtime 検査。後続の通知修正は下の61件 focused と最新の全件検査で確認                                                                                                                                       |
-| 通知 focused           | 61件成功                                                          | 最新の通知削除・全削除と完了判定の対象検査                                                                                                                                                                                       |
+| 対象                   | 結果                                                              | 確認範囲                                                                                                                                                                                                   |
+| ---------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nix unit               | 185件成功                                                         | 共通定義、export、renderer、WSLg transport、WSL GUI package、日本語フォント配置、Chrome GTK3 cache などの値・契約                                                                                          |
+| Ghostty                | 28割り当ての設定検査成功                                          | 配置済み設定の構文・action。実キー入力の成功とは別                                                                                                                                                         |
+| Neovim                 | 配置済み17割り当てと Oil runtime を確認                           | 実際に配置した Neovim 設定を読み込む runtime 検査。全キーを GUI から押した検査ではない                                                                                                                     |
+| PowerShell 全体        | 900件成功・失敗0件・POSIX 境界1件 skip / 全901件、coverage 81.89% | Windows native の公式 runner を `MinimumCoverage=80` で実行し exit 0、195.48秒。対象10ファイルの command coverage は2686 / 3280、未カバー594。Dia installer・export・Files の WSLg 判定修正を含む作業 tree |
+| Windows action runtime | 155件成功                                                         | 中間 snapshot の対象 runtime 検査。後続の通知修正は下の61件 focused と最新の全件検査で確認                                                                                                                 |
+| 通知 focused           | 61件成功                                                          | 最新の通知削除・全削除と完了判定の対象検査                                                                                                                                                                 |
 
-179件成功時の Nix unit の出力は `/nix/store/kfmy6kr030n6qy0ndzv0rcksc52ncyhr-nix-unit-check` です。上表の180件は Chrome GTK3 cache の追加後に成功した結果です。設定の検査成功と、実行中の WSLg での表示・入力は別に確認します。
+最新の Nix unit は185件成功し、出力は /nix/store/zc90202skvxgjgy6hcz3hvrgrfq58mzh-nix-unit-check です。WSLg の UDEV 配置、GTK 3 / 4 と設定ポータル、dconf service、Nautilus の package 所有境界も含みます。
 
-Windows native の最終全件検査は coverage 81.27%で80%基準を満たし、exit 0 で成功しました。追加した13件は installer の起動・後処理を検査する `Install.Orchestrator.Tests.ps1` の検査で、同ファイルの対象検査は合計18件です。実行中に検査対象の source hash が変わらなかったことも確認しました。証跡は `%TEMP%/dotfiles-final-powershell80.log`、`dotfiles-final-powershell80.xml`、`dotfiles-final-powershell80-coverage.xml` です。WSL からの `task commit` では Windows PowerShell hook の Linux branch がテストを実行せず exit 0 となるため、Pester の結果は Windows native の公式 runner で取得します。
+Windows native の最終全件検査は900件成功・失敗0件、coverage 81.89%で80%基準を満たし、exit 0 で成功しました。実行前後で `scripts/powershell/` と Windows manifest の source hash が一致しました。証跡は `%TEMP%/dotfiles-final-desktop-recovered-powershell80.log`、同名の `.xml`、`-coverage.xml`、`-source-before.json`、`-source-after.json` です。続いて AppX テストの行末空白だけを整え、文字コードと AppX の対象29件も成功しました。追加の証跡は `%TEMP%/dotfiles-final-desktop-encoding-appx.log` と同名の `.xml` です。WSL からの `task commit` では Windows PowerShell hook の Linux branch がテストを実行せず exit 0 となるため、Pester の結果は Windows native の公式 runner で取得します。
 
 整形済み runtime を `task chezmoi` で再適用し、配置した runtime の正規化した内容がソースと一致することを確認しました。Ghostty の28割り当ては全て実キーで確認済みで、検査のために追加した tab は整理済みです。
 
@@ -110,6 +110,24 @@ WSLg system distro の読み取り調査では、当初 `fc-match` は FreeSans�
 恒久設定の `nix/hosts/x86_64-linux/wsl/fonts.nix` を含む `nixos-rebuild switch` が成功し、activation `wslgFonts` の実行を確認しました。`/usr/local/share/fonts/dotfiles-wslg/NotoSansCJK-VF.otf.ttc` は通常ファイル、32,682,580 bytes、mode `0644`、owner `root:root` で配置されています。SHA256 は `d3d8256cdec8dbcb3552284bc6b20c734dd60c2ee9df83b5758e34807c4bac32` で固定した Nix の入力と一致しました。WSLg system distro の `fc-cache` / `fc-match` でも、この本番配置先の Noto Sans CJK JP Bold を選択しています。一時検査用フォントは削除済みです。
 
 フォント反映時の system は `/nix/store/9fy43irl4bjahgrf93gj78las0670p68-nixos-system-nixos-26.11.20261011.7fd4004` です。activation 内では WSLg を再起動しません。実行中の Weston が古い Pango font map を保持していたため、ユーザーの承認後に `wsl --shutdown` で WSL 全体を再起動しました。その後 `Win+Shift+B` で WSLg Chrome を起動し、通常 X11 の灰色の server titlebar が「新しいタブ - Google Chrome」と日本語で正常表示されることを実 UI で確認しました。恒久フォント配置と再起動後の通常 titlebar の確認が完了しています。
+
+## Windows Dia
+
+Windows 用 manifest の `direct` source から公式 MSIX の Dia 1.1.0.6 を導入しました。実際の登録情報、package family / publisher / architecture / version、実行ファイル、`appxLaunchTarget` の検証に成功しています。再実行では導入済みとして追加ダウンロードを行いませんでした。
+
+初回の実機導入で、既に導入済みの VCLibs を再登録して使用中のアプリと競合する問題が判明しました。健全な同等以上の依存 package を検出して利用するよう修正した後、導入に成功しました。共有アプリの強制終了は行っていません。
+
+起動後に `Dia` の window が一覧へ現れたことを確認しました。その後、操作ツールが Dia の browser URL policy に未対応として停止したため、画面内の内容・認証操作は確認していません。WSL のブラウザーキーは引き続き Chrome を起動します。
+
+## Files と UDEV の追加確認
+
+`Win+Shift+F` で NixOS-WSL の Nautilus（Files）を起動し、承認済みの WSL 全体再起動後にも同じキーで開くことを確認しました。日本語のファイル名を含む専用 fixture で `Win+C/V` によるコピー、`Win+X/V` による移動を確認しています。内容の SHA256 はいずれも `a2f8068b7399d73a2f7ae9b776874d64d2a1754c4490310b188165fedaff1c50` と一致し、移動元のファイルが消えたことも確認しました。
+
+当初のコピー失敗は、WSLg metadata 内の別 window の負の AppID 応答が Nautilus の既知の識別結果を消していたためです。window ID を比較してから対象の結果だけを更新するよう修正しました。対象自身の負の応答や破棄、provider の再利用では識別結果を解除する契約を維持しています。
+
+UDEV 配置と chezmoi 反映後に WSL 全体を再起動し、Weston の実環境の `FONTCONFIG_FILE` を確認しました。同じ環境で Sans Regular / Bold、日本語、Nerd glyph が UDEV、emoji が Noto Color Emoji に解決されています。通常 Chrome の server titlebar は UDEV で「新しいタブ - Google Chrome」と正常表示されました。
+
+GTK 3 / 4 の配置済み設定と実行中の設定ポータルは `UDEV Gothic NF 11` を返し、Nautilus の画面内フォント・日本語ファイル名も確認しました。反映済み system は `/nix/store/5y68zhqsmb5zjp74k5440gl03ymidfkz-nixos-system-nixos-26.11.20261011.7fd4004` です。
 
 ## 日本語入力
 

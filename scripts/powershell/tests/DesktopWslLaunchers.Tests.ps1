@@ -225,6 +225,16 @@ Describe 'WSLg server window metadata identity' {
         ConvertFrom-DesktopWslgMetadata -Metadata $metadata -ServerWindowId $script:serverWindowId | Should -BeExactly 'com.mitchellh.ghostty'
     }
 
+    It 'should invalidate Nautilus only when a negative query identifies its exact window' -ForEach @(
+        @{ Query = 'WindowId:0x9 does not have appId, or not top level window.'; Expected = 'org.gnome.Nautilus' },
+        @{ Query = 'WindowId:0x50 does not have appId, or not top level window.'; Expected = 'org.gnome.Nautilus' },
+        @{ Query = 'WindowId:0x5 does not have appId, or not top level window.'; Expected = '' },
+        @{ Query = 'query unavailable without a window ID'; Expected = 'org.gnome.Nautilus' }
+    ) {
+        $metadata = $script:providerMetadata + "`n[15:58:24.888] Client: ClientGetAppidReq: pid:0 appId:org.gnome.Nautilus WindowId:0x5`n[15:58:25.888] Client: ClientGetAppidReq: $Query"
+        ConvertFrom-DesktopWslgMetadata -Metadata $metadata -ServerWindowId ([uint64]4294967301) | Should -BeExactly $Expected
+    }
+
     It 'should discard a prior match after malformed exact-window metadata or a new provider section' -ForEach @(
         @{ Kind = 'malformed' }, @{ Kind = 'new-provider' }
     ) {

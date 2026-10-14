@@ -528,7 +528,9 @@ function ConvertFrom-DesktopWslgMetadata {
             continue
         }
         if ($line -notmatch 'ClientGetAppidReq:') { continue }
-        if ($line -notmatch 'WindowId:0x(?<id>[A-Fa-f0-9]{1,8})\s*$') { $appId = ''; continue }
+        # Negative queries put explanatory text after the ID. Scope the record
+        # first so another window's failed query cannot erase this identity.
+        if ($line -notmatch '(?:^|\s)WindowId:0x(?<id>[A-Fa-f0-9]{1,8})(?=\s|$)') { continue }
         if ([uint32]::Parse($Matches.id, [Globalization.NumberStyles]::HexNumber) -ne $windowId) { continue }
         $appId = ''
         if ($line -match '^\[\d{2}:\d{2}:\d{2}\.\d{3}\] Client: ClientGetAppidReq: pid:\d+ appId:(?<app>[A-Za-z0-9._+-]{1,128}) WindowId:0x[A-Fa-f0-9]{1,8}\s*$') { $appId = $Matches.app }
@@ -554,7 +556,7 @@ function Resolve-DesktopWslgAppId {
 function Test-DesktopBrowserWindow {
     param([IntPtr]$Window, [AllowNull()][object]$Identity = $null)
     if ($null -eq $Identity) { $Identity = Get-DesktopWindowIdentity -Window $Window }
-    if ($Identity.ProcessName -match '^(chrome|msedge|firefox|brave|vivaldi|arc|opera)$') { return $true }
+    if ($Identity.ProcessName -match '^(chrome|msedge|firefox|brave|vivaldi|arc|opera|dia)$') { return $true }
     if ($Identity.ProcessName -notmatch '^(msrdc|mstsc|wslg|wslhost)$') { return $false }
     # Chromium's Linux desktop IDs include google-chrome(-stable) and web-app
     # shortcut IDs chrome-<extension-id>-<profile>. Neither uses window titles.
