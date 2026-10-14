@@ -3,6 +3,7 @@ BeforeAll {
     if (-not ('SetupContext' -as [type])) {
         . (Join-Path $script:repositoryRoot 'scripts/powershell/lib/SetupHandler.ps1')
     }
+    . (Join-Path $script:repositoryRoot 'scripts/powershell/lib/Invoke-ExternalCommand.ps1')
     . (Join-Path $script:repositoryRoot 'scripts/powershell/ci/Initialize-WindowsInstallerRuntime.ps1')
 }
 
@@ -72,5 +73,28 @@ Describe 'Windows installer runtime preparation' {
         [IO.File]::WriteAllText($script:preparationManifestPath, ($manifest | ConvertTo-Json -Depth 100))
         { Initialize-WindowsInstallerRuntime -RepositoryRoot $script:preparationRepository -TemporaryRoot $script:preparationTemporaryRoot -RuntimeHandler $script:runtimeHandler } | Should -Throw '*exactly one Microsoft.PowerShell*'
         $script:runtimeHandler.Calls | Should -Be 0
+    }
+
+    It 'should resolve the default repository during a real Windows PowerShell File invocation' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+        $sourcePath = Join-Path $script:repositoryRoot 'scripts/powershell/ci/Initialize-WindowsInstallerRuntime.ps1'
+        $tokens = $null
+        $parseErrors = $null
+        $ast = [Management.Automation.Language.Parser]::ParseFile($sourcePath, [ref]$tokens, [ref]$parseErrors)
+        $prepare = $ast.Find({ param($node)
+                $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Initialize-WindowsInstallerRuntime'
+            }, $true)
+        # Keep the shipped parameter defaults, root resolution, and entrypoint.
+        # Replace only the package operation so the real child cannot install.
+        $replacement = 'function Initialize-WindowsInstallerRuntime { param([string]$RepositoryRoot) Write-Output ("ENTRYPOINT_ROOT=" + $RepositoryRoot) }'
+        $source = [IO.File]::ReadAllText($sourcePath)
+        $fixtureSource = $source.Remove($prepare.Extent.StartOffset, $prepare.Extent.EndOffset - $prepare.Extent.StartOffset).Insert($prepare.Extent.StartOffset, $replacement)
+        $fixtureRepository = Join-Path $TestDrive 'entrypoint root with spaces'
+        $fixturePath = Join-Path $fixtureRepository 'scripts/powershell/ci/Initialize-WindowsInstallerRuntime.ps1'
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $fixturePath))
+        [IO.File]::WriteAllText($fixturePath, $fixtureSource, [Text.UTF8Encoding]::new($false))
+        $nativePowerShell = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
+        $output = @(Invoke-ExternalCommandWithTimeout -Command $nativePowerShell -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-OutputFormat', 'Text', '-File', $fixturePath) -TimeoutSeconds 30)
+        $LASTEXITCODE | Should -Be 0 -Because ($output -join "`n")
+        $output | Should -Contain ('ENTRYPOINT_ROOT=' + [IO.Path]::GetFullPath($fixtureRepository))
     }
 }

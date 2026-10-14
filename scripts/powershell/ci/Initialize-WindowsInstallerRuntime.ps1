@@ -1,5 +1,10 @@
 [CmdletBinding()]
-param([string]$RepositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..')))
+param([string]$RepositoryRoot)
+
+# Windows PowerShell 5.1 binds -File defaults before PSScriptRoot is available.
+if (-not $RepositoryRoot) {
+    $RepositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+}
 
 function Initialize-WindowsInstallerRuntime {
     [CmdletBinding()]

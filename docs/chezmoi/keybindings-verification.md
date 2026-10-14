@@ -123,6 +123,8 @@ User PATH の保存・seed・復元を安定した Windows PowerShell 5.1 の親
 
 修正後の Windows PowerShell 5.1 全体も907件成功・失敗0件・既存の runtime 境界8件 skip / 全915件、197.71秒、exit 0 で確認しました。実行前後の source hash は一致しています。証跡は `%TEMP%/dotfiles-pr731-release-winps51.log`、同名の `.xml`、`-source-before.json`、`-source-after.json` です。
 
+次の CI head `792f85b04f138cb993c41f69471dbdc1bf1372e9` で、5.1 の `-File` 起動では既定引数の評価時に `$PSScriptRoot` が空になることを確認しました。既定の repository 解決をスクリプト本文へ移し、実際の5.1プロセスで起動する回帰検査を追加しています。package 操作だけを無害な出力へ置換し、引数・起動処理は本番のまま検査しました。対象5件は5.1 / 7の両方で成功し、証跡は `%TEMP%/dotfiles-pr731-entrypoint-winps51-green.log` と `dotfiles-pr731-entrypoint-pwsh7-green.log`、同名の `.xml` です。
+
 ## Windows Dia
 
 Windows 用 manifest の `direct` source から公式 MSIX の Dia 1.1.0.6 を導入しました。実際の登録情報、package family / publisher / architecture / version、実行ファイル、`appxLaunchTarget` の検証に成功しています。再実行では導入済みとして追加ダウンロードを行いませんでした。
