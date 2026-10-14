@@ -31,7 +31,7 @@ Nix のテストは純粋な設定生成と実効値を検査します。実機�
 | NixOS-WSL                     | host が担当      | Windows キー       | guest に compositor を導入せず、Windows host の構成に従う                     |
 | standalone Linux Home Manager | 自動導入なし     | —                  | 共通 CLI module では desktop session を変更しない                             |
 
-GUI 導入は Linux / WSLg が `nix/modules/desktop.nix`、Darwin system GUI が `desktop-system.nix` を所有し、対応する host が選択します。Windows GUI の導入は `windows/winget/packages.json` が所有します。Hyprland のユーザー設定は `nix/home/keybindings/hyprland.nix` が管理します。Hyprland のセッションは native NixOS host がシステム側で有効化します。standalone / WSL には compositor を自動導入しません。
+GUI 導入は Linux / WSLg が `nix/modules/desktop.nix`、Darwin system GUI が `desktop-darwin.nix` を所有し、対応する host が選択します。Windows GUI の導入は `windows/winget/packages.json` が所有します。Hyprland のユーザー設定は `nix/home/keybindings/hyprland.nix` が管理します。Hyprland のセッションは native NixOS host がシステム側で有効化します。standalone / WSL には compositor を自動導入しません。
 
 native NixOS では window/workspace 操作と terminal/browser/files/notes/AI/passwords/launcher/help/activity の起動を生成します。capture、calculator、lock、clipboard、emoji、audio、bluetooth、display、network、power、passthrough は未対応です。対応する実装なしにキーを割り当てないため、macOS と完全同等ではありません。既存の display manager は変更せず、Hyprland セッションを選択するか TTY から `Hyprland` を起動します。
 

@@ -93,7 +93,7 @@ class DetectCiActionContractTests(unittest.TestCase):
             ),
             (("nix/modules/tools.nix",), UNIX),
             (("nix/modules/desktop.nix",), UNIX),
-            (("nix/modules/desktop-system.nix",), UNIX),
+            (("nix/modules/desktop-darwin.nix",), UNIX),
             (("nix/modules/browsers/chrome/default.nix",), UNIX),
             (("nix/modules/fonts/japanese.nix",), UNIX),
             (("nix/modules/discord/default.nix",), UNIX),

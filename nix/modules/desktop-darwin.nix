@@ -1,4 +1,4 @@
-# Darwin system GUI installation, selected by the Darwin host.
+# macOS GUI installation through nix-darwin, selected by the Darwin host.
 { pkgs, ... }:
 {
   environment.systemPackages = [

@@ -22,7 +22,7 @@ in
   imports = [
     ../../modules/docker.nix
     ./omarchy-keybindings.nix
-    ../../modules/desktop-system.nix
+    ../../modules/desktop-darwin.nix
     (import ../../modules/tools.nix).darwin
   ];
 
