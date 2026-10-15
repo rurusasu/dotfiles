@@ -346,10 +346,7 @@ in
         cliCopies = 1;
         desktopCopies = 1;
         signer = "/home/test-user/.local/bin/op-ssh-sign-wsl";
-        ghqRoot = [
-          "/mnt/d/my_programing"
-          "/mnt/d/ruru"
-        ];
+        ghqRoot = [ "/mnt/d" ];
         agent = ''"/home/test-user/.1password/agent.sock"'';
         agentEnvironment = "/home/test-user/.1password/agent.sock";
         opensshAgentEnabled = false;
