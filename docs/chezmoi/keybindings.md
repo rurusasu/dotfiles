@@ -66,19 +66,19 @@ Ghostty の `resize_split` の単位はピクセルで、行数ではありま�
 
 #### WezTerm
 
-WezTerm は split / tab / pane 移動を Ghostty と同じ直接キーで操作する。Windows WezTerm のサイズ変更キーは WSL Ghostty 向け export と同じ transport chord を使う。
+WezTerm は split / tab / pane 移動を Ghostty と同じ直接キーで操作する。Windows WezTerm のサイズ変更キーは WSL Ghostty 向け export と同じ transport chord を使う。サイズ変更の単位は Ghostty がピクセル、WezTerm がセルなので、WezTerm は小幅を1セル、大幅を10セルとして近い操作量にする。
 
-| キー                                      | 操作                             |
-| ----------------------------------------- | -------------------------------- |
-| `Ctrl+Shift+E`                            | 下に分割                         |
-| `Ctrl+Shift+O`                            | 右に分割                         |
-| `Ctrl+Shift+T`                            | 新しい tab                       |
-| `Ctrl+Shift+Left/Up`                      | 前の tab                         |
-| `Ctrl+Shift+Right/Down`                   | 次の tab                         |
-| `Ctrl+Alt+矢印`                           | その方向の pane に移動           |
-| `Ctrl+Alt+Shift+矢印`                     | その方向へ10ピクセルのサイズ変更 |
-| `Ctrl+Alt+Shift+Home/PageDown/PageUp/End` | 左 / 下 / 上 / 右へ100ピクセル   |
-| `Alt+1..9`                                | 指定した tab に移動              |
+| キー                                      | 操作                                                        |
+| ----------------------------------------- | ----------------------------------------------------------- |
+| `Ctrl+Shift+E`                            | 下に分割                                                    |
+| `Ctrl+Shift+O`                            | 右に分割                                                    |
+| `Ctrl+Shift+T`                            | 新しい tab                                                  |
+| `Ctrl+Shift+Left/Up`                      | 前の tab                                                    |
+| `Ctrl+Shift+Right/Down`                   | 次の tab                                                    |
+| `Ctrl+Alt+矢印`                           | その方向の pane に移動                                      |
+| `Ctrl+Alt+Shift+矢印`                     | WezTerm はその方向へ1セル、Ghostty は10ピクセルのサイズ変更 |
+| `Ctrl+Alt+Shift+Home/PageDown/PageUp/End` | WezTerm は10セル、Ghostty は100ピクセルのサイズ変更         |
+| `Alt+1..9`                                | 指定した tab に移動                                         |
 
 `Ctrl+Space` は WezTerm 固有の workspace / session 操作と pane / tab を閉じる操作に残す。WezTerm は組み込み leader を使い、prefix timeout は1秒。
 
