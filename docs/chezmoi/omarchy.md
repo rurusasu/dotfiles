@@ -90,7 +90,7 @@ task chezmoi
 
 ## ターミナルとの境界と検証
 
-デスクトップ配列は各 OS の desktop adapter が扱います。Ghostty は提示された直接キーによる分割・tab 操作を使い、WezTerm / Herdr は [キーバインド統一方針](./keybindings.md) の `Ctrl+Space` 契約を維持します。WSL のターミナル操作は Windows のデスクトップ操作から独立した層です。Ghostty のサイズ変更量は10 / 100ピクセルであり、行数ではありません。
+デスクトップ配列は各 OS の desktop adapter が扱います。Ghostty と WezTerm は split・tab・pane 移動に共通の直接キーを使い、WezTerm の固有操作と Herdr の操作には [キーバインド統一方針](./keybindings.md) の `Ctrl+Space` を使います。WSL のターミナル操作は Windows のデスクトップ操作から独立した層です。Ghostty / WezTerm のサイズ変更量は10 / 100ピクセルであり、行数ではありません。
 
 WSLg は Win キーを含む resize の組み合わせを Ghostty へ届けないため、`ghostty-windows.nix` が8件の transport remap と WSL 向け Ghostty 設定を生成します。正本の Win キー配列は変えず、PowerToys が `msrdc.exe` に対して内部用の Win を含まないキーへ変換します。この適用範囲は Ghostty だけでなく WSLg 全体です。同じ resize キーは他の WSLg アプリでも変換されます。Windows native アプリには適用しません。
 
