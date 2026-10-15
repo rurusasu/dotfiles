@@ -134,6 +134,19 @@ function M.setup()
     vim.lsp.config("gopls", {
         settings = { gopls = { gofumpt = true } },
     })
+    -- Rust ファイル保存時に rust-analyzer が全ターゲットの Clippy 診断を更新する。
+    vim.lsp.config("rust_analyzer", {
+        settings = {
+            ["rust-analyzer"] = {
+                checkOnSave = true,
+                check = {
+                    command = "clippy",
+                    allTargets = true,
+                    extraArgs = { "--locked", "--offline" },
+                },
+            },
+        },
+    })
     require("config.typescript").setup()
     local group = vim.api.nvim_create_augroup("DotfilesLsp", { clear = true })
     vim.api.nvim_create_autocmd("LspAttach", { group = group, callback = on_attach })
