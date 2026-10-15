@@ -27,10 +27,7 @@ in
   ];
   programs.git = {
     signing.signer = "${config.home.homeDirectory}/.local/bin/op-ssh-sign-wsl";
-    settings.ghq.root = [
-      "/mnt/d/my_programing"
-      "/mnt/d/ruru"
-    ];
+    settings.ghq.root = [ "/mnt/d" ];
   };
   home.file.".local/bin/op-ssh-sign-wsl" = {
     source = ./op-ssh-sign-wsl;
