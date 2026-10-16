@@ -47,7 +47,7 @@ nvim-lspconfig の標準サーバー定義を使い、起動は `vim.lsp.config`
 | ---------------------- | -------------------------- | ------------------------------------------------------------ |
 | Nix                    | nixd                       | nixfmt による保存時整形                                      |
 | Go                     | gopls                      | Nix で導入、gofumpt による整形                               |
-| Rust                   | rust-analyzer              | 標準設定、保存時整形                                         |
+| Rust                   | rust-analyzer              | 保存時整形、全ターゲットの Clippy 診断                       |
 | JS / TS                | tsc (TS7+) / ts_ls (TS5/6) | ネイティブ版優先、旧版の互換経路を維持                       |
 | JS / TS lint           | oxlint                     | 上流の project-local cmd、設定ファイル検出、Astro 対応を維持 |
 | YAML                   | yaml-language-server       | Nix                                                          |
@@ -73,6 +73,8 @@ TypeScript 7 の `tsc --lsp --stdio` を優先し、使用できない環境で�
 2026-09-06 の tsc 7.0.2 / Neovim 0.12.5 では、正常な shutdown 要求後にも `context canceled` と exit code 1 を観測しました。dotfiles をロードせず、上流 tsc 設定だけを有効化した隔離プローブでも再現しています。接続・補完は成功していますが、終了コードまで正常とはしていません。通知を隠す workaround は追加せず、必要なら上記の `ts_ls` 明示選択と TS5/6 を使ってください。[Microsoft の過去の類似ログ](https://github.com/microsoft/typescript-go/issues/3026) は参考であり、同一原因や現在の修正予定を証明するものではありません。
 
 拡張子などから判定した filetype に応じて、設定済み・実行可能な LSP を自動起動します。整形対応の LSP が接続していれば、保存前に自動整形します（同期、上限3秒）。フォーマッターがないファイルでは何もしません。Python は Ruff、Rust は rust-analyzer に限定し、それ以外も接続した整形対応 LSP 一つだけを使って二重整形を避けます。手動 `Space f` も同じ選択を使います。LSP が使用する外部整形コマンド（Nix の nixfmt など）は別途導入が必要です。
+
+Rust は保存時に rust-analyzer が Clippy を全ターゲット・locked・offline で実行し、診断を更新します。Clippy が利用できない Rustup toolchain では cargo check にフォールバックします。テストの実行は保存時には行いません。
 
 個人の `~/.dotfiles` や特定ホストの NixOS options を補完対象にする設定は追加しません。Nix フォーマットには nixfmt が別途必要です。
 

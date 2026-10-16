@@ -134,6 +134,20 @@ function M.setup()
     vim.lsp.config("gopls", {
         settings = { gopls = { gofumpt = true } },
     })
+    -- Clippy がない Rustup toolchain では cargo check に戻す。
+    local rust_check_command = vim.fn.executable("cargo-clippy") == 1 and "clippy" or "check"
+    vim.lsp.config("rust_analyzer", {
+        settings = {
+            ["rust-analyzer"] = {
+                checkOnSave = true,
+                check = {
+                    command = rust_check_command,
+                    allTargets = true,
+                    extraArgs = { "--locked", "--offline" },
+                },
+            },
+        },
+    })
     require("config.typescript").setup()
     local group = vim.api.nvim_create_augroup("DotfilesLsp", { clear = true })
     vim.api.nvim_create_autocmd("LspAttach", { group = group, callback = on_attach })
