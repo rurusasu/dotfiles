@@ -74,7 +74,7 @@ TypeScript 7 の `tsc --lsp --stdio` を優先し、使用できない環境で�
 
 拡張子などから判定した filetype に応じて、設定済み・実行可能な LSP を自動起動します。整形対応の LSP が接続していれば、保存前に自動整形します（同期、上限3秒）。フォーマッターがないファイルでは何もしません。Python は Ruff、Rust は rust-analyzer に限定し、それ以外も接続した整形対応 LSP 一つだけを使って二重整形を避けます。手動 `Space f` も同じ選択を使います。LSP が使用する外部整形コマンド（Nix の nixfmt など）は別途導入が必要です。
 
-Rust は保存時に rust-analyzer が Clippy を全ターゲット・locked・offline で実行し、診断を更新します。テストの実行は保存時には行いません。
+Rust は保存時に rust-analyzer が Clippy を全ターゲット・locked・offline で実行し、診断を更新します。Clippy が利用できない Rustup toolchain では cargo check にフォールバックします。テストの実行は保存時には行いません。
 
 個人の `~/.dotfiles` や特定ホストの NixOS options を補完対象にする設定は追加しません。Nix フォーマットには nixfmt が別途必要です。
 

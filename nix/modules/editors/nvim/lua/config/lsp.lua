@@ -134,13 +134,14 @@ function M.setup()
     vim.lsp.config("gopls", {
         settings = { gopls = { gofumpt = true } },
     })
-    -- Rust ファイル保存時に rust-analyzer が全ターゲットの Clippy 診断を更新する。
+    -- Clippy がない Rustup toolchain では cargo check に戻す。
+    local rust_check_command = vim.fn.executable("cargo-clippy") == 1 and "clippy" or "check"
     vim.lsp.config("rust_analyzer", {
         settings = {
             ["rust-analyzer"] = {
                 checkOnSave = true,
                 check = {
-                    command = "clippy",
+                    command = rust_check_command,
                     allTargets = true,
                     extraArgs = { "--locked", "--offline" },
                 },
