@@ -141,19 +141,31 @@ config.keys = {
             end),
         }),
     },
-    { key = "n", mods = "LEADER", action = act.SpawnTab("CurrentPaneDomain") },
     { key = "q", mods = "LEADER", action = act.CloseCurrentTab({ confirm = true }) },
-    { key = "Tab", mods = "LEADER", action = act.ActivateTabRelative(1) },
-    { key = "Tab", mods = "LEADER|SHIFT", action = act.ActivateTabRelative(-1) },
-    { key = "h", mods = "LEADER", action = act.ActivatePaneDirection("Left") },
-    { key = "j", mods = "LEADER", action = act.ActivatePaneDirection("Down") },
-    { key = "k", mods = "LEADER", action = act.ActivatePaneDirection("Up") },
-    { key = "l", mods = "LEADER", action = act.ActivatePaneDirection("Right") },
-    { key = "v", mods = "LEADER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
-    { key = "-", mods = "LEADER", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
     { key = "x", mods = "LEADER", action = act.CloseCurrentPane({ confirm = true }) },
     { key = "g", mods = "LEADER", action = act.ShowLauncherArgs({ flags = "FUZZY|WORKSPACES|TABS|DOMAINS" }) },
     { key = "d", mods = "LEADER", action = act.DetachDomain("CurrentPaneDomain") },
+
+    -- Match the WSL Ghostty keybindings for splits, tabs, and panes.
+    { key = "e", mods = "CTRL|SHIFT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+    { key = "o", mods = "CTRL|SHIFT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+    { key = "t", mods = "CTRL|SHIFT", action = act.SpawnTab("CurrentPaneDomain") },
+    { key = "LeftArrow", mods = "CTRL|SHIFT", action = act.ActivateTabRelative(-1) },
+    { key = "UpArrow", mods = "CTRL|SHIFT", action = act.ActivateTabRelative(-1) },
+    { key = "RightArrow", mods = "CTRL|SHIFT", action = act.ActivateTabRelative(1) },
+    { key = "DownArrow", mods = "CTRL|SHIFT", action = act.ActivateTabRelative(1) },
+    { key = "LeftArrow", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Left") },
+    { key = "DownArrow", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Down") },
+    { key = "UpArrow", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Up") },
+    { key = "RightArrow", mods = "CTRL|ALT", action = act.ActivatePaneDirection("Right") },
+    { key = "LeftArrow", mods = "CTRL|ALT|SHIFT", action = act.AdjustPaneSize({ "Left", 1 }) },
+    { key = "DownArrow", mods = "CTRL|ALT|SHIFT", action = act.AdjustPaneSize({ "Down", 1 }) },
+    { key = "UpArrow", mods = "CTRL|ALT|SHIFT", action = act.AdjustPaneSize({ "Up", 1 }) },
+    { key = "RightArrow", mods = "CTRL|ALT|SHIFT", action = act.AdjustPaneSize({ "Right", 1 }) },
+    { key = "Home", mods = "CTRL|ALT|SHIFT", action = act.AdjustPaneSize({ "Left", 10 }) },
+    { key = "PageDown", mods = "CTRL|ALT|SHIFT", action = act.AdjustPaneSize({ "Down", 10 }) },
+    { key = "PageUp", mods = "CTRL|ALT|SHIFT", action = act.AdjustPaneSize({ "Up", 10 }) },
+    { key = "End", mods = "CTRL|ALT|SHIFT", action = act.AdjustPaneSize({ "Right", 10 }) },
 
     -- Misc
     { key = "[", mods = "LEADER", action = act.ActivateCopyMode },
@@ -183,8 +195,15 @@ if is_macos then
     })
 end
 
--- Remove inherited tab/pane window-manager shortcuts. The shared Leader table
--- above is the only effective path for these actions; non-WM defaults remain.
+for tab = 1, 9 do
+    table.insert(config.keys, {
+        key = tostring(tab),
+        mods = "ALT",
+        action = act.ActivateTab(tab - 1),
+    })
+end
+
+-- Remove built-in tab/window-manager shortcuts that overlap the explicit bindings.
 local default_window_manager_bindings = {
     { key = "Tab", mods = "CTRL" },
     { key = "Tab", mods = "SHIFT|CTRL" },
@@ -268,7 +287,7 @@ for _, binding in ipairs(default_window_manager_bindings) do
     })
 end
 
--- GUI window focus stays direct and does not conflict with Leader+h/l.
+-- GUI window focus stays direct; pane navigation uses Ctrl+Alt+Arrow.
 -- Existing direct resize chords remain available on each platform.
 local direct_window_bindings
 if is_macos then
