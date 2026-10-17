@@ -6,7 +6,13 @@ Nix module also installs `hermes-bootstrap` and a manifest rooted at
 `~/.hermes`; `task hermes:sync` streams 1Password item data to that native
 transactional bootstrap and synchronizes profiles and shared repositories.
 
-The runtime uses the official upstream `packages.<system>.default` output with
+On macOS, the CLI and gateway use the official complete bundle pinned by Nix;
+see [Desktop installation](desktop.md#desktop-installation-and-launch).
+Bootstrap uses the same bundled Python, dependencies and profile API as the CLI.
+Profile ownership follows the current machine-local PM layout described in
+[Home/Profile Layout](profile-home-layout.md#machine-local-dependencies).
+
+On Linux, the runtime uses the official upstream `packages.<system>.default` output with
 the complete dependency graph from that pinned Hermes revision. Its nixpkgs,
 flake-parts, and Home Manager inputs do not follow this repository's inputs;
 runtime dependencies are not overridden or replaced with a reduced variant.

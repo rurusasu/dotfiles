@@ -6,7 +6,13 @@ let
     config.allowUnfree = true;
   };
   # Upstream otherwise replaces these binaries with its separate Codex package.
-  chatgpt = desktopPkgs.chatgpt.override { codex = null; };
+  chatgpt = (desktopPkgs.chatgpt.override { codex = null; }).overrideAttrs {
+    # Stripping Mach-O binaries replaces the official macOS application signature.
+    dontStrip = true;
+    # Executing the signed GUI before store normalization enables macOS App
+    # Management protection. The desktop check verifies the finalized package.
+    doInstallCheck = !pkgs.stdenv.hostPlatform.isDarwin;
+  };
   node = desktopPkgs.lib.getExe desktopPkgs.nodejs-slim;
   resources =
     if pkgs.stdenv.hostPlatform.isDarwin then

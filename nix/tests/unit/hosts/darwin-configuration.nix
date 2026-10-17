@@ -52,6 +52,65 @@ let
   hasPrefix = prefix: value: builtins.match "${prefix}.*" value != null;
 in
 {
+  testDarwinDockPinsManagedApplicationsInOrder = {
+    expr = {
+      applications = map (
+        tile: tile.tile-data.file-data._CFURLString
+      ) defaultConfig.system.defaults.dock.persistent-apps;
+      others = defaultConfig.system.defaults.dock.persistent-others;
+      recents = defaultConfig.system.defaults.dock.show-recents;
+    };
+    expected = {
+      applications = [
+        "/System/Applications/Apps.app"
+        "/Users/rurusasu/Applications/Home Manager Apps/ChatGPT.app"
+        "/Applications/Nix Apps/Dia.app"
+        "/Users/rurusasu/Applications/Home Manager Apps/Ghostty.app"
+        "/Applications/Nix Apps/Hermes Agent.app"
+        "/Applications/Nix Apps/Obsidian.app"
+      ];
+      others = [ ];
+      recents = false;
+    };
+  };
+
+  testDarwinDockPinsFollowTheConfiguredHome = {
+    expr = map (tile: tile.tile-data.file-data._CFURLString) (
+      builtins.filter (
+        tile: inputs.nixpkgs.lib.hasInfix "Home Manager Apps" tile.tile-data.file-data._CFURLString
+      ) nonstandardHomeConfig.system.defaults.dock.persistent-apps
+    );
+    expected = [
+      "/Volumes/Home/alice/Applications/Home Manager Apps/ChatGPT.app"
+      "/Volumes/Home/alice/Applications/Home Manager Apps/Ghostty.app"
+    ];
+  };
+
+  testDarwinCleanupOwnsOnlyOptionalAppleBundles = {
+    expr =
+      let
+        pkgs = import inputs.nixpkgs {
+          inherit system;
+          config.allowUnfree = true;
+        };
+        cleanup = import ../../../hosts/aarch64-darwin/remove-bundled-apps.nix { inherit pkgs; };
+      in
+      {
+        targets = map (app: app.name) cleanup.allowedApps;
+        activated = inputs.nixpkgs.lib.hasInfix (builtins.unsafeDiscardStringContext "${inputs.nixpkgs.lib.getExe cleanup} /Applications") defaultConfig.system.activationScripts.postActivation.text;
+      };
+    expected = {
+      targets = [
+        "GarageBand.app"
+        "iMovie.app"
+        "Pages.app"
+        "Numbers.app"
+        "Keynote.app"
+      ];
+      activated = true;
+    };
+  };
+
   testDarwinDoesNotInstallWslgFontBridge = {
     expr = defaultConfig.system.activationScripts ? wslgFonts;
     expected = false;
@@ -259,7 +318,7 @@ in
       discordAgent = builtins.hasAttr "discord-module-staging" defaultHome.launchd.agents;
     };
     expected = {
-      hermesDesktopHomePackage = true;
+      hermesDesktopHomePackage = false;
       dockerCask = true;
       chromeSystemPackage = false;
       discordHomePackage = true;

@@ -919,6 +919,7 @@ def _validate_profile_name(name: str) -> None:
 
 
 def _validate_path(path: PurePosixPath) -> None:
+    distributions._reject_unsupported_cron_path(path)
     for index, component in enumerate(path.parts):
         lowered = component.casefold()
         if not _PORTABLE_COMPONENT.fullmatch(component) or component.endswith((".", " ")):

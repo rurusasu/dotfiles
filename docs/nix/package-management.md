@@ -84,6 +84,25 @@ Windows のキー設定生成と Darwin custom package の出力は `nix/outputs
 
 macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Homebrew package を反映します。通常の CLI と Neovim・WezTerm は Nix 側で管理し、cask/formula は Darwin host に明示します。Nix パッケージの版は `flake.lock` に従います。
 
+### macOS のインストール時の権限
+
+`./install.sh` は flake 更新・ビルドの前に、既存の Nix 管理アプリを更新できるか確認します。
+Homebrew の `zap` が参照する「最近使った書類」のディレクトリも、実際の実行ユーザーで列挙できるか確認します。
+この確認では項目名を表示せず、ファイルの内容を読みません。対象ディレクトリが存在しない場合は省略します。
+権限が足りない場合は「システム設定 → プライバシーとセキュリティ」の「フルディスクアクセス」または
+「アプリ管理」を開き、それぞれ最大 120 秒待ちます。実行元の端末アプリ（Ghostty、ターミナルなど）を許可すると続行します。
+許可済みなら待たずに進みます。権限のリセットや許可済み状態の独自キャッシュは行いません。
+非対話実行、GUI セッション外、または時間切れでは、アクセスできなかったパスを示して終了します。
+リポジトリの flake 設定を許可する指定は、`darwin-rebuild` 内部の Nix 呼び出しにも渡します。
+
+初回の許可は macOS の設定画面で行ってください。端末アプリを変えたり許可を取り消したりした場合は、
+その端末アプリへの許可が必要です。「アプリ管理」と「フルディスクアクセス」は別の権限です。
+フルディスクアクセスを有効にした後、macOS が再起動を求めたら端末アプリを `⌘Q` で終了して開き直してください。
+事前確認は上記の実アクセスを対象とし、すべてのデータディレクトリへの権限を保証するものではありません。
+Homebrew の `zap` や設定ファイルの配置で停止した場合の再開方法は
+[Homebrew cask のトラブルシューティング](./homebrew-cask-troubleshooting.md#フルディスクアクセス)を参照してください。
+権限の説明は [Apple の「プライバシーとセキュリティ」設定](https://support.apple.com/ja-jp/guide/mac-help/mchl211c911f/mac)を参照してください。
+
 ### macOS の旧 provider サポート終了
 
 旧 Homebrew provider を検出し、Nix provider の検証後に uninstall する
@@ -103,6 +122,14 @@ macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Hom
   宣言から外す操作や module の無効化でデータを失う可能性があり、再インストールだけでは
   復元できません。手動インストールしたアプリや Mac App Store アプリは対象外です。
 - この設定は任意のユーザーファイルやアプリのデータ全般を走査・削除するものではありません。
+- macOS の activation は GarageBand・iMovie・Pages・Numbers・Keynote のアプリ本体も削除します。
+  `/Applications` 内の指定名と bundle ID が一致するものだけを対象とし、対象が存在しなければ何もしません。
+  symlink や異なるアプリを検出した場合は削除前に停止します。書類・設定・音源などのユーザーデータは削除しません。
+  `/System` 内のアプリと Safari は macOS の保護対象として削除対象に含めません。
+
+Dock の固定アプリと順序は `nix/hosts/aarch64-darwin/system.nix` で管理します。
+アプリ・ChatGPT・Dia・Ghostty・Hermes・Obsidian の順に固定し、追加の固定フォルダーと最近使ったアプリは表示しません。
+Finder・ゴミ箱・起動中のアプリの表示は固定アプリの一覧とは別です。
 
 通常インストールは Nix のビルド・activation、ユーザー設定の反映、環境の動作確認を行います。
 application identity、署名、CLI version を独自の期待値と比較する provider 検証は廃止しました。

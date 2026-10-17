@@ -26,7 +26,10 @@ in
               config.allowUnfree = true;
             };
           in
-          packages.chatgpt.drvPath == (upstream.chatgpt.override { codex = null; }).drvPath
+          packages.chatgpt.drvPath == ((upstream.chatgpt.override { codex = null; }).overrideAttrs {
+            dontStrip = true;
+            doInstallCheck = system != "aarch64-darwin";
+          }).drvPath
         )
         [
           "x86_64-linux"

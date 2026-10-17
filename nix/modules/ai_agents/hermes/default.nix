@@ -36,6 +36,9 @@ in
   };
   services.hermes-agent = {
     enable = true;
+    package = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin (
+      lib.mkDefault (pkgs.callPackage ./package.nix { })
+    );
     gateway.enable = true;
     inherit hermesHome;
     extraPackages = [ hermesBootstrap ];

@@ -59,6 +59,8 @@ let
     system = "aarch64-darwin";
     homeDirectory = "/Users/test-user";
   };
+  darwinHost = fixtures.darwin.config;
+  darwinHostHome = darwinHost.home-manager.users.test-user;
 
   hasPackage = needle: packages: builtins.any (item: item.drvPath == needle.drvPath) packages;
   hasHermesBootstrap =
@@ -148,7 +150,7 @@ in
     expected = true;
   };
 
-  testDarwinHermesDesktopIsInstalledByHomeManager = {
+  testDarwinHermesDesktopIsNotInstalledByHomeManager = {
     expr = {
       enabled = darwin.config.programs.hermes-agent.desktop.enable;
       installed = builtins.any (
@@ -156,8 +158,35 @@ in
       ) darwin.config.home.packages;
     };
     expected = {
-      enabled = true;
-      installed = true;
+      enabled = false;
+      installed = false;
+    };
+  };
+
+  testDarwinHermesUsesOfficialBundleForCliGatewayAndSystemGui = {
+    expr =
+      let
+        package = darwinHostHome.services.hermes-agent.package;
+      in
+      {
+        packageName = package.pname or null;
+        version = package.version or null;
+        sourceUrl = if package ? src && builtins.isAttrs package.src then package.src.url or null else null;
+        cliUsesGatewayPackage = darwinHostHome.programs.hermes-agent.package.drvPath == package.drvPath;
+        cliInstalled = hasPackage package darwinHostHome.home.packages;
+        gatewayUsesSelectedPackage = builtins.elem "${package}/bin/hermes" darwinHostHome.launchd.agents.hermes-agent.config.ProgramArguments;
+        desktopManagedByHomeManager = darwinHostHome.programs.hermes-agent.desktop.enable;
+        systemGuiUsesGatewayPackage = hasPackage package darwinHost.environment.systemPackages;
+      };
+    expected = {
+      packageName = "hermes-agent-bundled";
+      version = "0.22.0";
+      sourceUrl = "https://hermes-assets.nousresearch.com/releases/tag/rc.3-v0.22.0/HermesBundled-0.22.0-mac-arm64.zip";
+      cliUsesGatewayPackage = true;
+      cliInstalled = true;
+      gatewayUsesSelectedPackage = true;
+      desktopManagedByHomeManager = false;
+      systemGuiUsesGatewayPackage = true;
     };
   };
 
