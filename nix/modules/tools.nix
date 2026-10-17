@@ -70,7 +70,7 @@ in
         direnv.enable = true;
         hermes-agent = {
           enable = true;
-          desktop.enable = true;
+          desktop.enable = !pkgs.stdenv.hostPlatform.isDarwin;
         };
       };
 

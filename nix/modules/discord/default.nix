@@ -5,7 +5,6 @@
   ...
 }:
 let
-  bundledModulesPath = "Applications/Discord.app/Contents/Resources/modules";
   modulesPath = "share/discord/modules";
 in
 {
@@ -13,16 +12,11 @@ in
   programs.discord = {
     settings.SKIP_HOST_UPDATE = true;
     package = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin (
-      pkgs.discord.overrideAttrs (old: {
+      pkgs.discord.overrideAttrs {
         # Keep the official application signature intact, including its resources.
+        # Nixpkgs already installs native modules outside the application bundle.
         dontFixup = true;
-        postInstall = (old.postInstall or "") + ''
-          mkdir -p "$out/share/discord"
-          mv "$out/${bundledModulesPath}" "$out/${modulesPath}"
-          substituteInPlace "$out/bin/Discord" \
-            --replace-fail "$out/${bundledModulesPath}" "$out/${modulesPath}"
-        '';
-      })
+      }
     );
   };
 

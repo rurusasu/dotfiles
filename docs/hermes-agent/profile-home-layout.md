@@ -86,3 +86,37 @@ committed.
 See [Hermes Bootstrap Operations](bootstrap.md) for commands and recovery, and
 [Local-Authoritative Sync Design](profile-local-authoritative-sync-design.md)
 for the full sync contract.
+
+## Machine-local dependencies
+
+Hermes 0.22 reserves root-level `tools/`, `installs/`, and `cache/` in the root
+home and every named profile for PM-managed tools and dependency generations.
+They must not appear in `distribution_owned`, profile exports, or shared profile
+repositories. Bootstrap rejects such ownership before publishing snapshots or
+applying distributions, while preserving the original files.
+
+Place authored executable files in `scripts/` or `skills/<name>/scripts/`.
+Nested names such as `skills/<name>/tools/` remain ordinary portable content;
+the PM reservation applies to the first path component.
+
+For cron definitions, only `cron/jobs.json` is portable. Named-profile imports
+merge those definitions by job ID and start new jobs paused for review. The
+custom root distribution retains its explicit remote-authoritative ownership.
+Bootstrap
+rejects other root-level cron files before publication or installation, even
+when the manifest owns the whole `cron/` directory, because Hermes would omit
+them. Nested application assets such as `skills/<name>/cron/task.yaml` are
+unaffected. Convert legacy cron assets to supported job definitions or keep
+ordinary scripts under `scripts/` and update their references.
+
+For an older home, first back up authored files outside the Hermes home. Move
+only files explicitly owned by its distribution from `tools/` or `installs/`
+to `scripts/`, then update `distribution_owned` and references to those paths.
+Do not move entire PM directories: their facts and dependencies belong to the
+current machine, and PM garbage collection may remove unknown store entries.
+Do not rely on profile export/import to preserve legacy authored files in these
+directories; current Hermes deliberately excludes them. Keep the external
+backup until the updated profile and its commands have been verified.
+
+On a fresh machine with no `~/.hermes`, no data relocation is needed. The first
+bootstrap uses this layout and validates the configured profile distributions.

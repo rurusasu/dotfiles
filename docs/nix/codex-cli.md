@@ -28,7 +28,11 @@ Codex CLI を独立したパッケージとして導入しません。
 Darwin / Linux 対応済みの nixpkgs を `chatgpt-nixpkgs` input に固定します。システム全体の nixpkgs は
 更新せず、この input の package set をそのまま利用します。公式 `.deb` の取得・ELF 修正・
 プラグインキャッシュ・起動処理は upstream の package 定義が所有します。
-`chatgpt.override { codex = null; }` により、upstream の独立 Codex package への置換を無効化します。
+`chatgpt.override { codex = null; }` により、Linux の upstream が既定で行う独立 Codex package への置換を無効化します。
+macOS では `dontStrip = true` により、アプリ本体と同梱バイナリの公式署名を保持します。
+store 確定前に署名済み GUI を実行すると macOS のアプリ管理保護が Nix の属性変更を拒否するため、
+Darwin の package 内 install check は無効にします。専用のビルドテストが store 確定後に
+Home Manager と同じ方法でコピーしたアプリの署名・アプリの版・同梱 CLI の起動を検証します。
 端末の `codex` はアプリ内の実体を呼び出し、隣接する `codex-code-mode-host` を同じ配布物に保ちます。
 CLI wrapper は `writeShellApplication` で実行依存と OS 別 resource path を宣言します。
 Darwin は公式 launcher の `Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`、
