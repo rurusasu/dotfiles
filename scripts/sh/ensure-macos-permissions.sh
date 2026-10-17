@@ -78,6 +78,18 @@ probe_app() {
 
 check_apps() {
   local bundle
+  # nix-darwin removes these optional Apple bundles during postActivation.
+  # Probe each present cleanup target even on a first install, when the Nix app
+  # directories may still be empty.
+  for bundle in \
+    /Applications/GarageBand.app \
+    /Applications/iMovie.app \
+    /Applications/Pages.app \
+    /Applications/Numbers.app \
+    /Applications/Keynote.app; do
+    [[ -d $bundle ]] || continue
+    probe_app "$bundle" root || return 1
+  done
   for bundle in /Applications/Nix\ Apps/*.app; do
     [[ -d $bundle ]] || continue
     probe_app "$bundle" root || return 1
