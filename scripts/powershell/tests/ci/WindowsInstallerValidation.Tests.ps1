@@ -17,6 +17,16 @@
                 $node.Name -eq 'Invoke-WindowsE2EValidation'
             }, $true)
         . ([scriptblock]::Create($validationFunction.Extent.Text))
+        $seedBuilder = $outerAst.Find({ param($node)
+                $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+                $node.Name -eq 'New-WindowsInstallerUserPathSeed'
+            }, $true)
+        . ([scriptblock]::Create($seedBuilder.Extent.Text))
+        $helperPathAssertion = $innerAst.Find({ param($node)
+                $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+                $node.Name -eq 'Assert-WindowsInstallerPersistentHelperPath'
+            }, $true)
+        . ([scriptblock]::Create($helperPathAssertion.Extent.Text))
         $script:validationCalls = @($innerAst.FindAll({ param($node)
                     $node -is [Management.Automation.Language.CommandAst] -and
                     $node.GetCommandName() -eq 'Invoke-WindowsE2EValidation'
@@ -153,8 +163,7 @@
         $script:installerE2E | Should -Match '(?s)if\s*\(\$validationErrors.Count\s*-gt\s*0\).*?throw \$failureSummary'
     }
 
-    It 'should retain process PATH normalization evidence without requiring persisted repairs' {
-        $script:installerE2E | Should -Match 'oversizedUserPathEntries = 1\.\.1000'
+    It 'should retain process PATH normalization evidence and exact snapshot restoration' {
         $script:installerE2E | Should -Match 'Process PATH normalized: removed'
         $script:installerE2E | Should -Match 'Post-install PATH exceeds the cmd\.exe command environment limit'
         $script:installerE2E | Should -Not -Match 'User PATH repaired|remainingStaleUserPathEntries|runnerPnpmDirectories|PNPM_HOME'
@@ -162,10 +171,47 @@
         $script:installerE2E | Should -Match 'DeleteValue\(''PATH'', \$false\)'
     }
 
+    It 'should build a long valid User PATH seed with room for persisted helpers' -TestCases @(
+        @{ OriginalPath = '' }
+        @{ OriginalPath = 'C:\existing;C:\also-existing' }
+        @{ OriginalPath = ('C:\existing;' * 1000) }
+    ) {
+        param($OriginalPath)
+        $seed = New-WindowsInstallerUserPathSeed -UserPath $OriginalPath
+        $seed.Length | Should -BeGreaterThan 8191
+        $seed.Length | Should -BeGreaterOrEqual 16384
+        $seed.Length | Should -BeLessOrEqual 24576
+        $seed -split ';' | Should -Contain 'C:\dotfiles-ci-stale-path-entry-1'
+        foreach ($entry in @($OriginalPath -split ';' | Where-Object { $_ })) {
+            $seed -split ';' | Should -Contain $entry
+        }
+    }
+
+    It 'should reject a runner PATH seed without reserved installer headroom' {
+        { New-WindowsInstallerUserPathSeed -UserPath ('X' * 24577) } | Should -Throw '*headroom*'
+    }
+
+    It 'should allow upstream directories while requiring existing entries and one normalized helper directory' {
+        $packages = @([pscustomobject]@{ PackageIdentifier = 'Helper'; persistPathEntries = $true; pathEntries = @('C:\Helper\bin') })
+        { Assert-WindowsInstallerPersistentHelperPath -SeededPath 'C:\existing' `
+                -CurrentPath 'c:/EXISTING/;C:\HELPER\bin\;C:\upstream-added' -Packages $packages } | Should -Not -Throw
+    }
+
+    It 'should reject <Fault> in persisted helper PATH validation' -TestCases @(
+        @{ Fault = 'removed seed'; CurrentPath = 'C:\Helper\bin' }
+        @{ Fault = 'missing helper'; CurrentPath = 'C:\existing' }
+        @{ Fault = 'duplicate helper'; CurrentPath = 'C:\existing;C:\Helper\bin;c:/helper/bin/' }
+        @{ Fault = 'overflow'; CurrentPath = ('X' * 32768) }
+    ) {
+        param($Fault, $CurrentPath)
+        $packages = @([pscustomobject]@{ PackageIdentifier = 'Helper'; persistPathEntries = $true; pathEntries = @('C:\Helper\bin') })
+        { Assert-WindowsInstallerPersistentHelperPath -SeededPath 'C:\existing' -CurrentPath $CurrentPath -Packages $packages } | Should -Throw
+    }
+
     It 'should avoid self-update manifest mutations CLI probes and retired-package seed or removal' {
         $script:installerE2E | Should -Not -Match 'Add-Member|Set-Content|Invoke-Npm|Invoke-Pnpm|Assert-WingetCommandRecovery|node --version|op\.exe|herdr|@openai/codex|Codex CLI|9NT1R1C2HH7J|RETIRED_PACKAGE_CLEANUP'
         @($script:validationCalls | ForEach-Object { $_.CommandElements[2].Value }) | Should -Be @(
-            'installer evidence', 'WinGet package inventory', 'WezTerm install PATH and version'
+            'installer evidence', 'WinGet package inventory', 'persistent WSL helper PATH', 'WezTerm install PATH and version'
         )
     }
 

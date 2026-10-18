@@ -99,6 +99,20 @@ Describe 'WingetHandler package PATH persistence' {
         $script:userPathWrites | Should -Be 1
     }
 
+    It 'should retain ordinary GUI process-only behavior with an oversized persisted User PATH' {
+        $script:starshipEntry.persistPathEntries = $false
+        $script:userPathStore = 'C:\missing;' * 4000
+        $originalUserPath = $script:userPathStore
+        $originalUserPath.Length | Should -BeGreaterThan 32767
+
+        $result = $script:handler.Apply($script:context)
+
+        $result.Success | Should -BeTrue -Because $result.Message
+        $script:userPathStore | Should -Be $originalUserPath
+        $script:userPathWrites | Should -Be 0
+        $env:PATH -split ';' | Should -Contain $script:ordinaryDirectory
+    }
+
     It 'should retain ordinary package persistence outside the process-only profile' {
         $script:context.Options['WingetProcessOnlyPath'] = $false
 
