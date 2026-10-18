@@ -1,65 +1,84 @@
 { config, lib, ... }:
+let
+  cfg = config.dotfiles.starship;
+  osStyle = "bold white";
+  osPrefix = if cfg.osSymbol == null then "$os" else "[${cfg.osSymbol}](${osStyle}) ";
+in
 {
-  # Replace the previously deployed TOML when Home Manager takes ownership.
-  home.file = lib.mkIf config.programs.starship.enable {
-    ${config.programs.starship.configPath}.force = true;
+  options.dotfiles.starship.osSymbol = lib.mkOption {
+    type = lib.types.nullOr lib.types.str;
+    default = null;
+    example = "❄️ ";
+    description = ''
+      Static OS symbol selected by the host. When null, Starship detects the OS
+      at runtime instead.
+    '';
   };
 
-  programs.starship = {
-    enableZshIntegration = true;
-    # The preserved Bash configuration initializes Starship once.
-    enableBashIntegration = false;
+  config = {
+    # Replace the previously deployed TOML when Home Manager takes ownership.
+    home.file = lib.mkIf config.programs.starship.enable {
+      ${config.programs.starship.configPath}.force = true;
+    };
 
-    settings = {
-      add_newline = true;
-      scan_timeout = 500;
-      format = "$os$username$hostname$memory_usage$directory$git_branch$git_status$nix_shell$character";
+    programs.starship = {
+      enableZshIntegration = true;
+      # The preserved Bash configuration initializes Starship once.
+      enableBashIntegration = false;
 
-      character = {
-        success_symbol = "[>](bold green)";
-        error_symbol = "[x](bold red)";
-      };
+      settings = {
+        add_newline = true;
+        scan_timeout = 500;
+        format =
+          osPrefix + "$username$hostname$memory_usage$directory$git_branch$git_status$nix_shell$character";
 
-      os = {
-        disabled = false;
-        format = "[$symbol]($style) ";
-      };
+        character = {
+          success_symbol = "[>](bold green)";
+          error_symbol = "[x](bold red)";
+        };
 
-      username = {
-        show_always = true;
-        format = "[$user]($style)";
-      };
+        os = {
+          disabled = cfg.osSymbol != null;
+          format = "[$symbol]($style) ";
+          style = osStyle;
+        };
 
-      hostname = {
-        ssh_only = false;
-        format = "@[$hostname]($style) ";
-      };
+        username = {
+          show_always = true;
+          format = "[$user]($style)";
+        };
 
-      memory_usage = {
-        disabled = false;
-        threshold = 0;
-        format = "[$ram]($style) ";
-      };
+        hostname = {
+          ssh_only = false;
+          format = "@[$hostname]($style) ";
+        };
 
-      directory = {
-        truncation_length = 3;
-        truncate_to_repo = true;
-      };
+        memory_usage = {
+          disabled = false;
+          threshold = 0;
+          format = "[$ram]($style) ";
+        };
 
-      git_branch = {
-        symbol = " ";
-        format = "on [$symbol$branch]($style) ";
-      };
+        directory = {
+          truncation_length = 3;
+          truncate_to_repo = true;
+        };
 
-      git_status = {
-        ahead = "";
-        behind = "";
-        diverged = "";
-      };
+        git_branch = {
+          symbol = " ";
+          format = "on [$symbol$branch]($style) ";
+        };
 
-      nix_shell = {
-        symbol = " ";
-        format = "[$symbol$state]($style) ";
+        git_status = {
+          ahead = "";
+          behind = "";
+          diverged = "";
+        };
+
+        nix_shell = {
+          symbol = " ";
+          format = "[$symbol$state]($style) ";
+        };
       };
     };
   };

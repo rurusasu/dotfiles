@@ -8,6 +8,8 @@
 - `CanApply` が false の場合も、判定理由とスキップをログに表示する。検証に失敗した場合はコマンド・終了コード・出力を残す。
 - PATH 修復の回帰テストは `tests/lib/WindowsSetupPath.Tests.ps1`。実際のコマンド探索と子プロセスでの検証を使い、外部インストールと永続設定変更はモックする。Windows 以外では明示的にスキップする。
 - WinGet のコマンドリンクが欠落し `pathEntries` の明示設定もない場合は、対象 ID の WinGet パッケージディレクトリ内だけで検証コマンドと同名の exe を探す。候補が1件の場合に実体ディレクトリを PATH に追加し、DLL やデータファイルとの位置関係を保つ。候補が複数なら自動選択しない。
+- GUI phase の PATH 修復は原則としてプロセス内に限定する。manifest の boolean `persistPathEntries: true` は宣言した `pathEntries` をユーザー PATH に保存する明示例外で、WSL の Git 状態取得の補助コマンドとして `Starship.Starship` と `Git.MinGit` が指定する。未指定・false は従来の動作を維持し、同じ directory を重複追加しない。回帰検証は `tests/handlers/Handler.Winget.PathPersistence.Tests.ps1` が mock のユーザー PATH store で行う。
+- `verifyCommand.type: pathEntriesCommand` は宣言した `pathEntries` 内のコマンドだけを実行する。MinGit のように tree 全体が必要な package の実体を検証し、同名の別コマンドが PATH にあっても代替として使わない。回帰検証は `tests/handlers/Handler.Winget.PackagePathCommand.Tests.ps1` が担当する。
 
 ## WinGet の導入状態確認
 

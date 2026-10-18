@@ -29,6 +29,36 @@
           }
         },
         {
+          "PackageIdentifier": "Git.MinGit",
+          "installArgs": ["--scope", "user", "--installer-type", "zip"],
+          "installTimeoutSeconds": 3600,
+          "pathEntries": [
+            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Git.MinGit_Microsoft.Winget.Source_8wekyb3d8bbwe\\cmd"
+          ],
+          "persistPathEntries": true,
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "git",
+            "type": "pathEntriesCommand"
+          }
+        },
+        {
+          "PackageIdentifier": "Starship.Starship",
+          "installArgs": ["--scope", "user", "--installer-type", "zip"],
+          "installTimeoutSeconds": 3600,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
+          "persistPathEntries": true,
+          "portableLink": {
+            "linkName": "starship.exe",
+            "targetPattern": "starship.exe"
+          },
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "starship.exe",
+            "type": "portableLinkCommand"
+          }
+        },
+        {
           "PackageIdentifier": "wez.wezterm",
           "installTimeoutSeconds": 3600,
           "pathEntries": ["%ProgramFiles%\\WezTerm"],

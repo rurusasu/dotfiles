@@ -29,6 +29,8 @@ flake.nix -> hosts/configurations.nix -> hosts/<system>/ -> home/common.nix
   1Password の SSH agent socket は `../modules/1password/ssh.nix`、署名コマンドと WSL の署名 wrapper・`ghq.root` は各 host の `home.nix` に置く。
   Git の実設定は `~/.config/git/config` に生成し、以前の `~/.gitconfig` はコメントだけの管理ファイルに置き換えて設定の二重読み込み・上書きを防ぐ。対象設定の移行にはバックアップを作らない。
 - zsh の導入は `../modules/tools.nix`、補完プラグインは `../modules/shells/zsh/` が担当する。`common.nix` は `./shells/zsh/` からユーザー設定を読み込む。
+  kubectl / kind / helm / task の補完は Nix package が配布する `share/zsh/site-functions` を `fpath` から読み込み、起動時に各 CLI で生成しない。`compinit` は zsh-autocomplete が実行する。
+  Kubernetes の alias は CLI の有無に関係なく定義するため、起動後に `nix shell` で追加したコマンドにも使える。一時的な `nix shell` だけで導入したツールの補完は、この初期化の保証対象に含めない。
 - Bash の有効化は `../modules/tools.nix`、初期化・ログイン設定は `../modules/shells/bash/` が担当し、`common.nix` から読み込む。
 - 1Password の CLI / GUI は `../modules/tools.nix`、SSH agent 設定は `../modules/1password/` が担当する。Linux の GUI は Home Manager、macOS の GUI は nix-darwin に導入する。`ssh.nix` が `IdentityAgent` と `SSH_AUTH_SOCK` を同じ公式 socket に設定する。Bash は別の `ssh-agent` を起動しない。Git 署名・WSL interop の設定は各 host に残す。
 - lazygit は `../modules/tools.nix` で有効化し、`../modules/lazygit/` が Bash / Zsh の `lg` 標準連携を設定する。
@@ -44,6 +46,9 @@ flake.nix -> hosts/configurations.nix -> hosts/<system>/ -> home/common.nix
 - fd は `../modules/tools.nix` で導入し、fzf の `Alt+C` でディレクトリを列挙する。Starship は `../modules/tools.nix` で有効化し、`../modules/shells/plugins/starship/` が Zsh 標準連携と `programs.starship.settings` のプロンプト設定を管理し、Home Manager が `~/.config/starship.toml` を生成する。
 - fd の `find` alias と fzf の検索コマンド・`_fzf_compgen_path` / `_fzf_compgen_dir` は `./shells/plugins/fd.nix` で定義する。通常の Zsh 補完はパッケージ付属のものを共有 Zsh 設定から読み込む。fzf の通常検索・`Ctrl+T` はファイル、`Alt+C` はディレクトリを検索し、内容検索は ripgrep の `rfg` が担当する。
 - zsh-patina はシェル設定専用の実行依存として `./shells/plugins/zsh-patina.nix` が絶対 store path を参照し、Zsh 初期化の最後に公式の `activate` を実行する。外部のプラグインマネージャーは使わない。
+- WSL の `hosts/x86_64-linux/wsl/home.nix` は Patina の動的コマンド判定を無効にし、構文の色付けとファイル引数の下線を維持する。Windows PATH の同期探索を入力中に繰り返さないための設定で、native Linux / Darwin の判定は維持する。変更の反映後は共有 Patina daemon を一度再起動する。
+- Starship の OS アイコンは各 host が `dotfiles.starship.osSymbol` に指定する。共通 module が静的な表示を生成し、プロンプトごとの OS 検出を省く。未知の OS では未指定のまま実行時検出を利用できる。
+- WSL の Git 状態は Windows drive 上では Windows の `starship.exe` に委譲し、Linux filesystem 上では Linux の処理を使う。Windows が Home Manager の絶対 symlink を辿れないため、WSL の `STARSHIP_CONFIG` は生成した store file の実体を直接参照する。Windows の導入情報と PATH の宣言は `windows/winget/packages.json` が所有する。WSL の自動補完は入力停止後 150ms・2文字以上から更新し、明示的な Tab 補完は既定の条件で利用する。
 - Neovim 本体・補助 CLI・LSP・プラグイン実行依存は `../modules/tools.nix` が導入する。Darwin / WSL の `home.nix` と `hosts/shared/linux-home.nix` は `nix/modules/editors/nvim` を import し、設定とプラグインを適用する。
 - Orca は `../modules/tools.nix` が `../modules/editors/orca/package.nix` を選択し、Home Manager の `home.packages` で導入する。macOS は公式 DMG、Linux（x86_64 / ARM64）は公式 AppImage を使用する。Linux の CLI は公式と同じ `orca-ide`、macOS は `orca`。Windows は引き続き WinGet が管理する。
 - `common.nix` から OS 固有ファイルを import しない。

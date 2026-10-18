@@ -20,6 +20,28 @@ in
   ];
 
   dotfiles.keybindings.fromWindowsExport = true;
+  dotfiles.starship.osSymbol = "❄️ ";
+
+  # Use the native Windows helper only for repositories on Windows drives.
+  # Starship retains its Linux implementation for the WSL filesystem.
+  programs.starship.settings.git_status.windows_starship = "starship.exe";
+  # Windows cannot follow Home Manager's absolute symlink over the WSL share.
+  # Export its generated store file so the helper reads the same configuration.
+  home.sessionVariables.STARSHIP_CONFIG = lib.mkForce (
+    toString config.home.file.${config.programs.starship.configPath}.source
+  );
+
+  # Missing/partial commands otherwise trigger synchronous Windows PATH scans.
+  xdg.configFile."zsh-patina/config.toml".text = ''
+    [highlighting]
+    dynamic = { callables = false, paths = "complete" }
+  '';
+
+  programs.zsh.initContent = lib.mkBefore ''
+    # Coalesce automatic suggestions while typing; explicit Tab keeps its defaults.
+    zstyle ':autocomplete:' delay 0.15
+    zstyle ':autocomplete:list-choices:' min-input 2
+  '';
 
   fonts.fontconfig = lib.mkMerge [
     fonts.fontconfig

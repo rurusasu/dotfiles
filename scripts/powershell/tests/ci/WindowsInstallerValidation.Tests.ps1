@@ -24,7 +24,7 @@
         $script:guiIds = @(
             'wez.wezterm',
             'AgileBits.1Password', 'Discord.Discord', 'StablyAI.Orca', 'Microsoft.PowerToys',
-            'Microsoft.WindowsTerminal', '9PLM9XGG6VKS', '9PCFS5B6T72H', 'Microsoft.PowerShell', 'Task.Task', 'twpayne.chezmoi', 'TheBrowserCompany.Dia'
+            'Microsoft.WindowsTerminal', '9PLM9XGG6VKS', '9PCFS5B6T72H', 'Microsoft.PowerShell', 'Task.Task', 'twpayne.chezmoi', 'TheBrowserCompany.Dia', 'Starship.Starship', 'Git.MinGit'
         )
         $script:validOutput = (@(
                 'Using PowerShell 7'
@@ -102,12 +102,14 @@
         ($script:validationErrors -join ' | ') | Should -Match 'missing from the verification inventory:.*TheBrowserCompany\.Dia'
     }
 
-    It 'should reject missing GUI success evidence' -TestCases @(
+    It 'should reject missing Windows package success evidence' -TestCases @(
         @{ PackageId = 'StablyAI.Orca' }
         @{ PackageId = '9PLM9XGG6VKS' }
         @{ PackageId = '9PCFS5B6T72H' }
         @{ PackageId = 'AgileBits.1Password' }
         @{ PackageId = 'TheBrowserCompany.Dia' }
+        @{ PackageId = 'Starship.Starship' }
+        @{ PackageId = 'Git.MinGit' }
     ) {
         param($PackageId)
         $script:out = ($script:out -split "`n" | Where-Object { $_ -ne "[Winget] $([char]0x2713) $PackageId" }) -join "`n"
@@ -226,22 +228,22 @@ Describe 'Windows direct installer manifest validation' {
                         Name = 'direct'; Identifier = 'Dotfiles.DirectInstallers'
                         Argument = 'https://releases.diabrowser.com'; Type = 'Dotfiles.DirectInstaller'
                     }
-                    Packages = @(@{
+                    Packages      = @(@{
                             PackageIdentifier = 'TheBrowserCompany.Dia'
-                            directInstaller = @{
+                            directInstaller   = @{
                                 type = 'appx'; name = 'TheBrowserCompany.Dia'
                                 packageFamilyName = 'TheBrowserCompany.Dia_ttt1ap7aakyb4'
                                 version = '1.1.0.6'; architecture = 'x64'; executable = 'Dia.exe'
-                                publisher = 'CN=The Browser Company of New York Inc.'
-                                url = 'https://releases.diabrowser.com/windows/release/1.1.0.6/Dia.x64.msix'
-                                sha256 = 'b83e1e696cd5e479da7b8b580efc107e673fffec3a400011212a050aed61800e'
-                                dependencies = @(@{
-                                        name = 'Microsoft.VCLibs.140.00.UWPDesktop'
+                                publisher         = 'CN=The Browser Company of New York Inc.'
+                                url               = 'https://releases.diabrowser.com/windows/release/1.1.0.6/Dia.x64.msix'
+                                sha256            = 'b83e1e696cd5e479da7b8b580efc107e673fffec3a400011212a050aed61800e'
+                                dependencies      = @(@{
+                                        name              = 'Microsoft.VCLibs.140.00.UWPDesktop'
                                         packageFamilyName = 'Microsoft.VCLibs.140.00.UWPDesktop_8wekyb3d8bbwe'
-                                        publisher = 'CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'
+                                        publisher         = 'CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'
                                         version = '14.0.33728.0'; architecture = 'x64'
-                                        url = 'https://releases.diabrowser.com/windows/dependencies/x64/Microsoft.VCLibs.x64.14.00.Desktop.14.0.33728.0.appx'
-                                        sha256 = '077a3d1a5d0622bd3004dca85f5e192d6e98ec79b83d4aa06766759ea6c09c3d'
+                                        url               = 'https://releases.diabrowser.com/windows/dependencies/x64/Microsoft.VCLibs.x64.14.00.Desktop.14.0.33728.0.appx'
+                                        sha256            = '077a3d1a5d0622bd3004dca85f5e192d6e98ec79b83d4aa06766759ea6c09c3d'
                                     })
                             }
                         })
@@ -252,6 +254,18 @@ Describe 'Windows direct installer manifest validation' {
     It 'should accept complete direct AppX metadata using the shipped jq filter' {
         if (-not $script:jqAvailable) { Set-ItResult -Skipped -Because 'Real jq is unavailable in Windows or optional WSL'; return }
         Invoke-ShippedManifestValidation $script:directManifest | Should -Be 0
+    }
+
+    It 'should accept boolean and reject nonboolean package PATH persistence metadata (<Setting>)' -TestCases @(
+        @{ Setting = 'true'; Value = $true; ExpectedExitCode = 0 }
+        @{ Setting = 'false'; Value = $false; ExpectedExitCode = 0 }
+        @{ Setting = 'string'; Value = 'true'; ExpectedExitCode = 1 }
+        @{ Setting = 'number'; Value = 1; ExpectedExitCode = 1 }
+    ) {
+        param($Setting, $Value, $ExpectedExitCode)
+        if (-not $script:jqAvailable) { Set-ItResult -Skipped -Because 'Real jq is unavailable in Windows or optional WSL'; return }
+        $script:directManifest.Sources[0].Packages[0].persistPathEntries = $Value
+        Invoke-ShippedManifestValidation $script:directManifest | Should -Be $ExpectedExitCode
     }
 
     It 'should reject <Fault> in direct installer metadata using the shipped jq filter' -TestCases @(
