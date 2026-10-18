@@ -603,6 +603,69 @@ class DistributionTests(unittest.TestCase):
             )
         )
 
+    def test_root_and_profile_reject_non_job_cron_payload_before_any_writes(self) -> None:
+        for is_root in (True, False):
+            for owned in ("cron/task.yaml", "cron"):
+                with self.subTest(root=is_root, owned=owned):
+                    case = f"cron-{is_root}-{owned.replace('/', '-')}"
+                    self.stage_root = self.root / f"{case}-stage"
+                    self.stage_root.mkdir()
+                    self.data_root = self.root / f"{case}-data"
+                    self.data_root.mkdir()
+                    staged_cron = self.stage_root / "cron"
+                    staged_cron.mkdir()
+                    task_content = b"task: staged\n"
+                    (staged_cron / "task.yaml").write_bytes(task_content)
+                    (staged_cron / "jobs.json").write_bytes(b'{"jobs": []}\n')
+                    if is_root:
+                        self.write_root_manifest([owned])
+                        target = self.data_root
+                    else:
+                        self.write_profile_manifest("rick", [owned])
+                        target = self.data_root / "profiles" / "rick"
+                    (target / "cron").mkdir(parents=True)
+                    original = target / "cron" / "task.yaml"
+                    original.write_bytes(b"task: local\n")
+                    tx = RecordingTransaction()
+
+                    with self.assertRaises(ApplyError):
+                        if is_root:
+                            apply_root_distribution(self.source("default", root=True), self.data_root, tx)
+                        else:
+                            apply_profile_distribution(self.source("rick"), self.data_root, tx)
+
+                    self.assertEqual(tx.snapshots, [])
+                    self.assertEqual(tx.reservations, [])
+                    self.assertEqual(original.read_bytes(), b"task: local\n")
+                    self.assertEqual((staged_cron / "task.yaml").read_bytes(), task_content)
+                    self.assertFalse((self.data_root / ".bootstrap").exists())
+                    self.assertFalse((target / "distribution.yaml").exists())
+
+    def test_root_and_profile_accept_job_store_and_nested_skill_cron_payload(self) -> None:
+        nested = "skills/example/cron/task.yaml"
+        for is_root in (True, False):
+            with self.subTest(root=is_root):
+                self.stage_root = self.root / f"allowed-cron-{is_root}-stage"
+                self.stage_root.mkdir()
+                self.data_root = self.root / f"allowed-cron-{is_root}-data"
+                self.data_root.mkdir()
+                (self.stage_root / "cron").mkdir()
+                (self.stage_root / "cron" / "jobs.json").write_bytes(b'{"jobs": []}\n')
+                task = self.stage_root / nested
+                task.parent.mkdir(parents=True)
+                task.write_bytes(b"task: portable\n")
+                if is_root:
+                    self.write_root_manifest(["cron/jobs.json", nested])
+                    target = self.data_root
+                    apply_root_distribution(self.source("default", root=True), self.data_root, RecordingTransaction())
+                else:
+                    self.write_profile_manifest("rick", ["cron/jobs.json", nested])
+                    target = self.data_root / "profiles" / "rick"
+                    apply_profile_distribution(self.source("rick"), self.data_root, RecordingTransaction())
+
+                self.assertEqual(json.loads((target / "cron" / "jobs.json").read_bytes())["jobs"], [])
+                self.assertEqual((target / nested).read_bytes(), b"task: portable\n")
+
     def test_sanitized_profile_source_rejects_raw_absolute_and_duplicate_owned_paths(self) -> None:
         (self.stage_root / "config.yaml").write_text("config\n", encoding="utf-8")
         manifests = (
@@ -628,9 +691,10 @@ class DistributionTests(unittest.TestCase):
                 (self.stage_root / name / "payload").write_text("blocked\n", encoding="utf-8")
                 self.assert_apply_error(lambda: build_sanitized_profile_source(self.source("rick"), self.root / "scratch"))
 
-        for name in ("skills", "cron"):
-            (self.stage_root / name).mkdir(exist_ok=True)
-            (self.stage_root / name / "payload").write_text("allowed\n", encoding="utf-8")
+        for relative, content in (("skills/payload", b"allowed\n"), ("cron/jobs.json", b'{"jobs": []}\n')):
+            path = self.stage_root / relative
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(content)
         self.write_root_manifest(["skills", "cron"])
         self.assertEqual(load_root_manifest(self.stage_root).distribution_owned, (PurePosixPath("cron"), PurePosixPath("skills")))
 

@@ -1,4 +1,7 @@
 { config, lib, ... }:
+let
+  home = config.users.users.${config.system.primaryUser}.home;
+in
 {
   # システムのタイムゾーンを日本時間にする。
   time.timeZone = "Asia/Tokyo";
@@ -20,6 +23,15 @@
       show-process-indicators = true;
       # 最近使ったアプリを Dock に表示しない。
       show-recents = false;
+      persistent-apps = [
+        "/System/Applications/Apps.app"
+        "${home}/Applications/Home Manager Apps/ChatGPT.app"
+        "/Applications/Nix Apps/Dia.app"
+        "${home}/Applications/Home Manager Apps/Ghostty.app"
+        "/Applications/Nix Apps/Hermes Agent.app"
+        "/Applications/Nix Apps/Obsidian.app"
+      ];
+      persistent-others = [ ];
       # 4 本指で広げてデスクトップを表示する。
       showDesktopGestureEnabled = true;
       # 4 本指で上下にスワイプして Mission Control を表示する。

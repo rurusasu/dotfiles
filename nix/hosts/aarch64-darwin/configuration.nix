@@ -17,6 +17,7 @@ let
       throw "Unable to determine the macOS user: SUDO_USER and USER are both empty.";
   home = "/Users/${user}";
   gibibyte = 1024 * 1024 * 1024;
+  bundledAppCleanup = import ./remove-bundled-apps.nix { inherit pkgs; };
 in
 {
   imports = [
@@ -31,6 +32,9 @@ in
     stateVersion = 6;
     tools.darwin-uninstaller.enable = false;
     activationScripts = {
+      postActivation.text = lib.mkBefore ''
+        ${lib.getExe bundledAppCleanup} /Applications
+      '';
       globalZoomShortcut.text = ''
         uid="$(id -u -- ${lib.escapeShellArg user})"
         runAsUser() {
@@ -45,7 +49,16 @@ in
 
   nix = {
     # Keep the daemon and CLI on Lix after bootstrapping with the Lix installer.
-    package = pkgs.lixPackageSets.stable.lix;
+    package =
+      let
+        lix = pkgs.lixPackageSets.stable.lix;
+      in
+      lix.overrideAttrs (old: {
+        # The mimalloc Meson option was introduced in Lix 2.96.
+        mesonFlags = lib.filter (
+          flag: lib.versionAtLeast lix.version "2.96" || !(lib.hasPrefix "-Dmimalloc=" flag)
+        ) old.mesonFlags;
+      });
 
     # Collect weekly, keeping only the current generation of each profile.
     gc = {

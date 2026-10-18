@@ -17,6 +17,8 @@
       chatgpt-desktop = import ./build/chatgpt-desktop.nix { inherit inputs pkgs; };
     }
     // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
+      darwin-bundled-app-cleanup = import ./build/darwin-bundled-app-cleanup.nix { inherit pkgs; };
+      hermes-bundled = import ./build/hermes-bundled.nix { inherit inputs pkgs; };
       standalone-darwin-home = import ./build/standalone-darwin-home.nix {
         inherit inputs pkgs;
       };

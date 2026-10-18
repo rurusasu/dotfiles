@@ -44,6 +44,8 @@ Windows の `task test` は PowerShell テストを実行します。
 Darwin / Linux の `custom-package-builds` は `chatgpt-desktop` check も含み、公式アプリと同梱 CLI の
 ビルド・CLI 起動、および Linux の desktop entry と upstream tmpfiles 規則の一致を確認します。
 GUI の起動・ログイン・操作はこの check の対象外で、各 OS の実機で確認します。
+Darwin の `darwin-bundled-app-cleanup` は、一時ディレクトリ内のアプリを使って
+付属アプリの削除・bundle ID の検証・対象外データの保持・再実行を検証します。
 
 ```bash
 # 全 system の flake 出力を評価する。テスト本体は実行しない

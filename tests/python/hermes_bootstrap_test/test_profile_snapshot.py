@@ -438,6 +438,89 @@ class ProfileSnapshotTests(unittest.TestCase):
                 scratch.mkdir(mode=0o700)
                 prepare_profile_snapshots(self.manifest(self.profile("rick")), scratch, allow_missing=False)
 
+    def test_rejects_machine_local_package_roots_before_creating_a_snapshot(self) -> None:
+        for index, owned in enumerate(("tools/helper", "installs/helper")):
+            with self.subTest(owned=owned):
+                name = f"package{index}"
+                home = self.write_profile(name, [owned])
+                original = home / owned
+                original.parent.mkdir(parents=True)
+                content = b"#!/bin/sh\nprintf 'machine-local helper\\n'\n"
+                original.write_bytes(content)
+                original.chmod(0o755)
+                scratch = self.root / f"package-scratch-{index}"
+                scratch.mkdir(mode=0o700)
+
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    prepare_profile_snapshots(
+                        self.manifest(self.profile(name)), scratch, allow_missing=False
+                    )
+
+                self.assertEqual(caught.exception.category, "invalid_local_profile")
+                self.assertEqual(list(scratch.iterdir()), [])
+                self.assertEqual(original.read_bytes(), content)
+                self.assertEqual(stat.S_IMODE(original.stat().st_mode), 0o755)
+
+    def test_preserves_tools_nested_below_a_portable_skill(self) -> None:
+        owned = "skills/example/tools/helper"
+        home = self.write_profile("rick", [owned])
+        original = home / owned
+        original.parent.mkdir(parents=True)
+        content = b"#!/bin/sh\nprintf 'portable helper\\n'\n"
+        original.write_bytes(content)
+        original.chmod(0o755)
+
+        snapshot = prepare_profile_snapshots(
+            self.manifest(self.profile("rick")), self.scratch, allow_missing=False
+        ).snapshots[0]
+
+        self.assertEqual([entry.path.as_posix() for entry in snapshot.entries], [owned])
+        self.assertEqual(snapshot.entries[0].mode, 0o755)
+        self.assertEqual((snapshot.root / owned).read_bytes(), content)
+        self.assertEqual(stat.S_IMODE((snapshot.root / owned).stat().st_mode), 0o755)
+
+    def test_rejects_non_job_cron_payload_before_snapshot_publication(self) -> None:
+        for index, owned in enumerate(("cron/task.yaml", "cron")):
+            with self.subTest(owned=owned):
+                name = f"cron{index}"
+                home = self.write_profile(name, [owned])
+                cron = home / "cron"
+                cron.mkdir()
+                (cron / "task.yaml").write_bytes(b"task: local\n")
+                (cron / "jobs.json").write_bytes(b'{"jobs": []}\n')
+                scratch = self.root / f"cron-scratch-{index}"
+                scratch.mkdir(mode=0o700)
+
+                with self.assertRaises(ProfileSnapshotError) as caught:
+                    prepare_profile_snapshots(
+                        self.manifest(self.profile(name)), scratch, allow_missing=False
+                    )
+
+                self.assertEqual(caught.exception.category, "invalid_local_profile")
+                self.assertEqual(list(scratch.iterdir()), [])
+                self.assertEqual((cron / "task.yaml").read_bytes(), b"task: local\n")
+                self.assertEqual((cron / "jobs.json").read_bytes(), b'{"jobs": []}\n')
+
+    def test_accepts_job_store_and_nested_skill_cron_payload(self) -> None:
+        nested = "skills/example/cron/task.yaml"
+        home = self.write_profile("rick", ["cron/jobs.json", nested])
+        (home / "cron").mkdir()
+        (home / "cron" / "jobs.json").write_bytes(b'{"jobs": []}\n')
+        task = home / nested
+        task.parent.mkdir(parents=True)
+        task.write_bytes(b"task: portable\n")
+
+        snapshot = prepare_profile_snapshots(
+            self.manifest(self.profile("rick")), self.scratch, allow_missing=False
+        ).snapshots[0]
+
+        self.assertEqual(
+            [entry.path.as_posix() for entry in snapshot.entries],
+            ["cron/jobs.json", nested],
+        )
+        self.assertEqual((snapshot.root / "cron" / "jobs.json").read_bytes(), b'{"jobs": []}\n')
+        self.assertEqual((snapshot.root / nested).read_bytes(), b"task: portable\n")
+
     def test_rejects_credential_stems_in_every_path_component(self) -> None:
         unsafe_paths = (
             "api-key.json/payload.txt",
@@ -1644,14 +1727,14 @@ class ProfileSnapshotTests(unittest.TestCase):
                 self.assertEqual(list(scratch.iterdir()), [])
 
     def test_rejects_an_external_target_and_preserves_executable_git_mode(self) -> None:
-        home = self.write_profile("rick", ["tools/sync"])
-        executable = home / "tools" / "sync"
+        home = self.write_profile("rick", ["scripts/sync"])
+        executable = home / "scripts" / "sync"
         executable.parent.mkdir()
         executable.write_text("#!/bin/sh\n", encoding="utf-8")
         executable.chmod(0o755)
         snapshot = prepare_profile_snapshots(self.manifest(self.profile("rick")), self.scratch, allow_missing=False).snapshots[0]
         self.assertEqual(snapshot.entries[0].mode, 0o755)
-        self.assertEqual(stat.S_IMODE((snapshot.root / "tools" / "sync").stat().st_mode), 0o755)
+        self.assertEqual(stat.S_IMODE((snapshot.root / "scripts" / "sync").stat().st_mode), 0o755)
 
         external = DistributionSource("rick", "https://github.com/rurusasu/hermes-profile-rick.git", "main", self.root / "outside", "distribution.yaml")
         external_scratch = self.root / "external"
