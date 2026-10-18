@@ -75,12 +75,13 @@ _RUNTIME_DATABASES = frozenset(
         "state.db-wal",
     }
 )
-_ROOT_RESERVED_TOP_LEVEL = _RESERVED_TOP_LEVEL | frozenset(
+_PM_RUNTIME_ROOT_DIRS = frozenset({"tools", "installs", "cache"})
+_ROOT_RESERVED_TOP_LEVEL = _RESERVED_TOP_LEVEL | _PM_RUNTIME_ROOT_DIRS | frozenset(
     name.lower() for name in profile_distribution.USER_OWNED_EXCLUDE
 )
 _PROFILE_RESERVED_TOP_LEVEL = frozenset(
     name.lower() for name in profile_distribution.USER_OWNED_EXCLUDE
-) | frozenset({".bootstrap-reservation"})
+) | _PM_RUNTIME_ROOT_DIRS | frozenset({".bootstrap-reservation"})
 
 
 class Transaction(Protocol):
@@ -711,19 +712,28 @@ def _normalize_owned_paths(
         if require_sources:
             if stage is None:
                 raise ValueError("missing source stage")
-            _validate_source_path(stage.joinpath(*candidate.parts))
+            _validate_source_path(stage.joinpath(*candidate.parts), owned_path=candidate)
         normalized.append(candidate)
         destinations.append(destination)
     return tuple(sorted(normalized, key=lambda path: path.as_posix()))
 
 
 def _reject_reserved_path(path: PurePosixPath, *, profile: bool = False) -> None:
+    _reject_unsupported_cron_path(path)
     lowered = tuple(part.lower() for part in path.parts)
     reserved_top_level = _PROFILE_RESERVED_TOP_LEVEL if profile else _ROOT_RESERVED_TOP_LEVEL
     if lowered[0] in reserved_top_level or any(part in _RESERVED_ANYWHERE for part in lowered):
         raise ValueError("reserved distribution owned path")
     if any(part in _RUNTIME_DATABASES for part in lowered):
         raise ValueError("reserved distribution owned path")
+
+
+def _reject_unsupported_cron_path(path: PurePosixPath) -> None:
+    # Current Hermes imports only the job store, never arbitrary cron siblings.
+    if path.parts[0].lower() == "cron" and path not in {
+        PurePosixPath("cron"), PurePosixPath("cron/jobs.json")
+    }:
+        raise ValueError("unsupported cron distribution path")
 
 
 def _valid_git_ref(ref: str) -> bool:
@@ -741,12 +751,17 @@ def _valid_git_ref(ref: str) -> bool:
     )
 
 
-def _validate_source_path(path: Path) -> None:
+def _validate_source_path(path: Path, *, owned_path: PurePosixPath | None = None) -> None:
+    if owned_path is not None:
+        _reject_unsupported_cron_path(owned_path)
     _require_regular_or_directory(path)
     if path.is_dir():
         with os.scandir(path) as entries:
             for entry in entries:
-                _validate_source_path(Path(entry.path))
+                _validate_source_path(
+                    Path(entry.path),
+                    owned_path=owned_path / entry.name if owned_path is not None else None,
+                )
 
 
 def _copy_source_path(source: Path, destination: Path) -> None:

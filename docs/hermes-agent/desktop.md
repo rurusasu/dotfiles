@@ -26,9 +26,18 @@ removed adapters and the helpers retained by the current sidecars.
 
 ## Desktop installation and launch
 
-The upstream Hermes Home Manager module installs Hermes Desktop on macOS and
-Linux, including native NixOS, WSLg, and standalone Home Manager, and sets its
-`HERMES_HOME` to the same state directory as the CLI and gateway.
+On macOS, `desktop-darwin.nix` installs the official complete Apple Silicon
+bundle through Nix. `nix/modules/ai_agents/hermes/sources.json` pins its URL and
+SHA-512. The CLI and launchd gateway use the same bundle, including its Python
+3.14 runtime and ready dependencies; Nix only extracts the archive and installs
+launchers, without compiling Hermes or its native dependencies.
+The signed app is preserved unchanged. Use Nix rebuilds for updates, rather
+than the app's manual update button. The vendor disables unattended downloads
+and installation, but its GUI still performs update checks.
+
+The upstream Home Manager module continues to install Desktop on Linux,
+including native NixOS, WSLg, and standalone Home Manager.
+All platforms retain `~/.hermes` and the managed gateway configuration.
 Windows does not install Hermes natively; Windows Task commands delegate to
 the NixOS-WSL installation.
 `task hermes:desktop:install` verifies the Desktop package and Nix-managed CLI.
@@ -57,3 +66,10 @@ runtime storage. Nix activation does not copy Docker volume contents into
 legacy Docker data into the native runtime, that is a separate migration that
 must be planned and verified before running; this setup intentionally leaves
 both data stores untouched.
+
+On macOS, the former Python 3.12 build graph (including h5py, ONNX Runtime,
+Torch and CTranslate2) is no longer required. Nix garbage collection can reclaim
+unreferenced build dependencies after switching; retained generations may still
+reference them. Do not delete store paths manually. Bootstrap shares the bundled
+Python and current profile API. Nix's configuration merge helper still needs a
+lightweight Python runtime, and shared tools such as Git and Node.js remain.

@@ -1,0 +1,8 @@
+{
+  "version": "0.22.0",
+  "python": "3.14.7+20260901",
+  "source": {
+    "url": "https://hermes-assets.nousresearch.com/releases/tag/rc.3-v0.22.0/HermesBundled-0.22.0-mac-arm64.zip",
+    "hash": "sha512-/yJW3pbB9+1By97TUSY2xgv0S2O56QMQeoxs5v+8Z17MiVV5XWFVsTfd8RND7D9rFnQ1Eha8ThUWSOC1F9SF4Q=="
+  }
+}

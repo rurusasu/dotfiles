@@ -37,8 +37,11 @@ load_nix() {
     /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh \
     "$HOME/.nix-profile/etc/profile.d/nix.sh"; do
     if [[ -r $profile ]]; then
+      # Nix profiles probe optional shell variables and are not nounset-safe.
+      set +u
       # shellcheck source=/dev/null
       . "$profile"
+      set -u
       command -v nix >/dev/null 2>&1 && return 0
     fi
   done
