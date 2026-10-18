@@ -11,7 +11,7 @@ Describe 'Windows application and setup-tool package catalog' {
         $expected = @(
             'AgileBits.1Password', 'Discord.Discord',
             'Microsoft.PowerToys', 'Microsoft.PowerShell', 'Microsoft.WindowsTerminal', 'Task.Task', 'twpayne.chezmoi',
-            'StablyAI.Orca', 'wez.wezterm', '9PLM9XGG6VKS', '9PCFS5B6T72H', 'TheBrowserCompany.Dia'
+            'StablyAI.Orca', 'wez.wezterm', '9PLM9XGG6VKS', '9PCFS5B6T72H', 'TheBrowserCompany.Dia', 'Starship.Starship', 'Git.MinGit'
         )
         (@($script:packages.PackageIdentifier | Sort-Object) -join '|') |
             Should -Be (($expected | Sort-Object) -join '|')
@@ -38,6 +38,35 @@ Describe 'Windows application and setup-tool package catalog' {
             $manifest = Get-Content -LiteralPath (Join-Path $script:repoRoot "windows/$manager/packages.json") -Raw | ConvertFrom-Json
             @($manifest.globalPackages).Count | Should -Be 0
         }
+    }
+
+    It 'should install the WSL git-status helper as a user-scoped portable command' {
+        $starship = @($script:packages | Where-Object PackageIdentifier -EQ 'Starship.Starship')
+        $starship.Count | Should -Be 1
+        @($starship[0].installArgs) | Should -Be @('--scope', 'user', '--installer-type', 'zip')
+        $starship[0].portableLink.linkName | Should -Be 'starship.exe'
+        $starship[0].portableLink.targetPattern | Should -Be 'starship.exe'
+        @($starship[0].pathEntries) | Should -Be @('%LOCALAPPDATA%\Microsoft\WinGet\Links')
+        $starship[0].persistPathEntries | Should -BeTrue
+        @($script:packages | Where-Object persistPathEntries).Count | Should -Be 2
+        $starship[0].verifyCommand.type | Should -Be 'portableLinkCommand'
+        $starship[0].verifyCommand.command | Should -Be 'starship.exe'
+        @($starship[0].verifyCommand.args) | Should -Be @('--version')
+        $starship[0].PSObject.Properties.Name | Should -Not -Contain 'ciSkipInstall'
+        $retired = Get-Content -LiteralPath (Join-Path $script:repoRoot 'windows/winget/retired-packages.json') -Raw | ConvertFrom-Json
+        @($retired.packages | Where-Object id -EQ 'Starship.Starship').Count | Should -Be 0
+    }
+
+    It 'should retain the complete MinGit tree and verify its declared cmd directory' {
+        $git = @($script:packages | Where-Object PackageIdentifier -EQ 'Git.MinGit')
+        $git.Count | Should -Be 1
+        @($git[0].installArgs) | Should -Be @('--scope', 'user', '--installer-type', 'zip')
+        @($git[0].pathEntries) | Should -Be @('%LOCALAPPDATA%\Microsoft\WinGet\Packages\Git.MinGit_Microsoft.Winget.Source_8wekyb3d8bbwe\cmd')
+        $git[0].persistPathEntries | Should -BeTrue
+        $git[0].PSObject.Properties.Name | Should -Not -Contain 'portableLink'
+        $git[0].verifyCommand.type | Should -Be 'pathEntriesCommand'
+        $git[0].verifyCommand.command | Should -Be 'git'
+        @($git[0].verifyCommand.args) | Should -Be @('--version')
     }
 
     It 'should retain unique package identities and source-specific verifiers' {

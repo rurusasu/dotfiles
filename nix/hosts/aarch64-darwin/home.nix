@@ -41,6 +41,8 @@ in
 
   fonts.fontconfig = fonts.fontconfig;
 
+  dotfiles.starship.osSymbol = "🍎 ";
+
   programs.git.signing.signer = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
 
   programs.zsh.shellAliases = {

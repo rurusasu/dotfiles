@@ -875,7 +875,10 @@ jobs:
               (.SourceDetails.Name | type == "string" and length > 0)
               and (.Packages | type == "array")
               and all(.Packages[];
-                .PackageIdentifier | type == "string" and length > 0)
+                (.PackageIdentifier | type == "string" and length > 0)
+                and (if has("persistPathEntries") then
+                  (.persistPathEntries | type == "boolean")
+                else true end))
               and (if .SourceDetails.Name == "direct" then
                 .SourceDetails.Type == "Dotfiles.DirectInstaller"
                 and .SourceDetails.Identifier == "Dotfiles.DirectInstallers"

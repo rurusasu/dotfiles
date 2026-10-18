@@ -30,6 +30,8 @@ in
 
   fonts.fontconfig = fonts.fontconfig;
 
+  dotfiles.starship.osSymbol = "❄️ ";
+
   programs.git.signing.signer = "/opt/1Password/op-ssh-sign";
 
   programs.zsh.shellAliases = {
