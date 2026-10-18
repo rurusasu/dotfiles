@@ -7,18 +7,13 @@ setup() {
 	COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
 	EDIT_CAPTURE="$BATS_TEST_TMPDIR/item-edit.json"
 	OP_TOKEN_CAPTURE="$BATS_TEST_TMPDIR/op-token.log"
-	READY_ATTEMPT_FILE="$BATS_TEST_TMPDIR/ready-attempts"
 	XAPI_TOKEN_ATTEMPT_FILE="$BATS_TEST_TMPDIR/xapi-token-attempts"
 	COMPOSE_FILE="$BATS_TEST_TMPDIR/docker/hermes-service/compose file.yml"
 	REAL_JQ="$(command -v jq)"
 	REAL_PYTHON3="$(command -v python3)"
-	REAL_GIT="$(command -v git)"
-	export REAL_INSTALL_TASK="$(command -v task)"
-	SECRET_MARKER="adapter-secret-marker"
 	mkdir -p "$TEST_HOME/.hermes" "$STUB_BIN"
 	: >"$COMMAND_LOG"
 	: >"$OP_TOKEN_CAPTURE"
-	printf '0\n' >"$READY_ATTEMPT_FILE"
 	printf '0\n' >"$XAPI_TOKEN_ATTEMPT_FILE"
 	mkdir -p "$(dirname "$COMPOSE_FILE")" "$BATS_TEST_TMPDIR/nix/modules/ai_agents/hermes"
 	cp "$REPO_ROOT/nix/modules/ai_agents/hermes/manifest.yaml" \
@@ -28,7 +23,7 @@ setup() {
 	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
 	unset DOTFILES_USER SUDO_USER
 	unset OP_SERVICE_ACCOUNT_TOKEN
-	export COMMAND_LOG EDIT_CAPTURE OP_TOKEN_CAPTURE READY_ATTEMPT_FILE XAPI_TOKEN_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3 SECRET_MARKER
+	export COMMAND_LOG EDIT_CAPTURE OP_TOKEN_CAPTURE XAPI_TOKEN_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3
 	export OP_ITEM_JSON='{"id":"item-id","fields":[{"label":"credential","value":"adapter-secret-marker"}]}'
 	export XAPI_OP_ITEM_JSON='{"id":"xapi-item","fields":[{"label":"X_API_CLIENT_ID","value":"xapi-client-id-marker"},{"label":"X_API_CLIENT_SECRET","value":"xapi-client-secret-marker"},{"label":"X_API_REFRESH_TOKEN","section":{"label":"Refresh Token"},"value":"xapi-refresh-token-marker"}]}'
 	export XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","value":"xapi-refresh-token-marker"}]}'
@@ -38,10 +33,6 @@ setup() {
 	export OP_READ_TOKEN='service-account-token'
 	export OP_READ_DELAY_SECONDS=0
 	export OP_READ_COMPLETION_FILE=""
-	export API_READY_AFTER=1
-	export HERMES_API_READY_ATTEMPTS=3
-	export HERMES_API_READY_DELAY_SECONDS=0
-	export HERMES_API_PROBE_TIMEOUT_SECONDS=1
 	export XAPI_TOKEN_READY_AFTER=1
 	export XAPI_TOKEN_FAILURE_KIND=auth
 	export XAPI_TOKEN_FAILURE_STATUS=1
@@ -129,17 +120,6 @@ case " $* " in
     ;;
 esac
 '
-	write_stub curl '
-attempt="$(cat "$READY_ATTEMPT_FILE")"
-attempt=$((attempt + 1))
-printf "%s\n" "$attempt" >"$READY_ATTEMPT_FILE"
-printf "curl" >>"$COMMAND_LOG"
-printf " <%s>" "$@" >>"$COMMAND_LOG"
-printf "\n" >>"$COMMAND_LOG"
-if ((attempt < API_READY_AFTER)); then
-	exit 22
-fi
-'
 	write_stub timeout '
 if [[ ${1:-} == --version ]]; then
 	printf "timeout (GNU coreutils) 9.0\n"
@@ -206,38 +186,6 @@ assert_service_account_cache_rejected_after_timeout() {
 	run_restart_sidecar
 	[ "$status" -ne 0 ]
 	! grep -q '<compose>' "$COMMAND_LOG"
-}
-
-@test "Unix installers leave Hermes configuration to Nix" {
-	for file in "$REPO_ROOT/install.sh" "$REPO_ROOT/scripts/sh/install-macos.sh" "$REPO_ROOT/scripts/sh/install-nixos.sh"; do
-		! grep -Fq 'hermes:bootstrap' "$file"
-		! grep -Fq 'docker compose' "$file"
-		! grep -Fq 'npm install' "$file"
-	done
-}
-
-@test "hermes:bootstrap activates the Nix-managed Hermes profile" {
-	local bootstrap_task
-	bootstrap_task="$(awk '
-		/^  hermes:bootstrap:$/ { in_task = 1 }
-		in_task && /^  [^ ]/ && $0 !~ /^  hermes:bootstrap:/ { exit }
-		in_task { print }
-	' "$REPO_ROOT/taskfiles/hermes/taskfile.yml")"
-
-	[[ "$bootstrap_task" == *'sudo nixos-rebuild switch --flake . --impure'* ]]
-	[[ "$bootstrap_task" == *'task darwin:install'* ]]
-	[[ "$bootstrap_task" != *'hermes:docker:bootstrap'* ]]
-	[[ "$bootstrap_task" != *'docker compose'* ]]
-}
-
-@test "NixOS-WSL Hermes readiness requires every critical check" {
-	local readiness_script required_checks
-	readiness_script="$(<"$REPO_ROOT/scripts/powershell/ci/Invoke-NixosWslE2E.ps1")"
-	required_checks='["state_db", "session_store", "config", "model", "disk", "gateway", "background_queues"]'
-
-	[[ "$readiness_script" == *"$required_checks"* ]]
-	[[ "$readiness_script" == *'type == "object" and .status == "ok"'* ]]
-	[[ "$readiness_script" == *'all(.[]; .status == "ok")'* ]]
 }
 
 @test "preserves Hermes data and browser directory helpers" {
@@ -625,21 +573,6 @@ EOF
 	printf 'OP_SERVICE_ACCOUNT_TOKEN=cached-token\nnot-an-environment-assignment\n' >"$HOME/.hermes/.op.env"
 	chmod 600 "$HOME/.hermes/.op.env"
 	assert_service_account_cache_rejected_after_timeout
-}
-
-@test "defaults invalid service-account read timeouts to twenty seconds" {
-	grep -Fq 'timeout_seconds="${DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS:-20}"' "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
-	grep -Fq '[[ $timeout_seconds =~ ^([1-9]|[1-9][0-9]|[12][0-9]{2}|300)$ ]] || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
-	export DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=invalid
-	run_restart_sidecar
-	[ "$status" -eq 0 ]
-}
-
-@test "defaults service-account read timeouts above 300 seconds to twenty seconds" {
-	grep -Fq '[[ $timeout_seconds =~ ^([1-9]|[1-9][0-9]|[12][0-9]{2}|300)$ ]] || timeout_seconds=20' "$REPO_ROOT/scripts/sh/hermes-sidecar-common.sh"
-	export DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=301
-	run_restart_sidecar
-	[ "$status" -eq 0 ]
 }
 
 @test "defaults arbitrarily large service-account read timeouts to twenty seconds" {

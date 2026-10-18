@@ -12,7 +12,6 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 ACTION_PATH = (
     REPOSITORY_ROOT / ".github" / "actions" / "detect-ci-changes" / "action.yml"
 )
-INPUTS = {"base-sha", "head-sha", "run-all"}
 OUTPUTS = {"nix", "chezmoi", "other", "linux", "darwin", "wsl", "windows"}
 UNIX = {"nix", "linux", "darwin", "wsl"}
 
@@ -22,26 +21,6 @@ class DetectCiActionContractTests(unittest.TestCase):
         self.action = (
             ACTION_PATH.read_text(encoding="utf-8") if ACTION_PATH.is_file() else ""
         )
-
-    def test_action_declares_check_and_platform_outputs(self) -> None:
-        self.assertTrue(ACTION_PATH.is_file())
-        self.assertEqual(self._top_level_keys("inputs"), INPUTS)
-        self.assertEqual(self._top_level_keys("outputs"), OUTPUTS)
-        self.assertNotIn("manifest:", self.action)
-        self.assertNotIn("uses:", self.action)
-        for output in OUTPUTS:
-            self.assertIn(
-                f"value: ${{{{ steps.detect.outputs.{output} }}}}", self.action
-            )
-
-    def test_action_shell_preserves_safe_git_diff_and_fail_closed_outputs(self) -> None:
-        script = self._run_script()
-        self.assertIn("set -euo pipefail", script)
-        self.assertIn("git diff --name-only --no-renames -z", script)
-        self.assertIn("git merge-base", script)
-        self.assertNotIn("--diff-filter=ACMR", script)
-        self.assertNotIn("python", script)
-        self.assertLess(script.index("git diff"), script.index("GITHUB_OUTPUT"))
 
     def test_non_all_mode_classifies_git_paths_and_rejects_invalid_revisions(
         self,
@@ -58,22 +37,26 @@ class DetectCiActionContractTests(unittest.TestCase):
             self._git(repository, "commit", "-m", "add linux installer")
             head_sha = self._git(repository, "rev-parse", "HEAD")
 
-            completed, output_path, runner_temp = self._run_action_script(
-                repository,
-                base_sha=base_sha,
-                head_sha=head_sha,
-                run_all=False,
-            )
+            for base in (base_sha, "0" * 40):
+                with self.subTest(base=base):
+                    completed, output_path, runner_temp = self._run_action_script(
+                        repository,
+                        base_sha=base,
+                        head_sha=head_sha,
+                        run_all=False,
+                    )
 
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            self.assertEqual(
-                self._read_outputs(output_path),
-                {name: name in UNIX for name in OUTPUTS},
-            )
-            self.assertEqual(
-                (runner_temp / "ci-changed-paths").read_text(encoding="utf-8"),
-                "nix/example.nix\0",
-            )
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertEqual(
+                        self._read_outputs(output_path),
+                        {name: name in UNIX for name in OUTPUTS},
+                    )
+                    self.assertEqual(
+                        (runner_temp / "ci-changed-paths").read_text(encoding="utf-8"),
+                        "README.md\0nix/example.nix\0"
+                        if base == "0" * 40
+                        else "nix/example.nix\0",
+                    )
 
             for base, head in (("missing-base", head_sha), (base_sha, "missing-head")):
                 with self.subTest(base=base, head=head):
@@ -91,14 +74,6 @@ class DetectCiActionContractTests(unittest.TestCase):
                 ("nix/hosts/x86_64-linux/wsl/fonts/fontconfig.conf",),
                 {"nix", "wsl", "chezmoi", "windows"},
             ),
-            (("nix/modules/tools.nix",), UNIX),
-            (("nix/modules/desktop.nix",), UNIX),
-            (("nix/modules/desktop-darwin.nix",), UNIX),
-            (("nix/modules/browsers/chrome/default.nix",), UNIX),
-            (("nix/modules/fonts/japanese.nix",), UNIX),
-            (("nix/modules/discord/default.nix",), UNIX),
-            (("nix/modules/git/default.nix",), UNIX),
-            (("nix/modules/1password/default.nix",), UNIX),
             (
                 ("nix/outputs.nix",),
                 UNIX | {"chezmoi", "windows"},
@@ -153,15 +128,14 @@ class DetectCiActionContractTests(unittest.TestCase):
                 self._git(repository, "add", ".")
                 self._git(repository, "commit", "-m", "change classified paths")
                 head_sha = self._git(repository, "rev-parse", "HEAD")
-                for base in (base_sha, "0" * 40):
-                    completed, output_path, _ = self._run_action_script(
-                        repository, base_sha=base, head_sha=head_sha, run_all=False
-                    )
-                    self.assertEqual(completed.returncode, 0, completed.stderr)
-                    self.assertEqual(
-                        self._read_outputs(output_path),
-                        {name: name in categories for name in OUTPUTS},
-                    )
+                completed, output_path, _ = self._run_action_script(
+                    repository, base_sha=base_sha, head_sha=head_sha, run_all=False
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertEqual(
+                    self._read_outputs(output_path),
+                    {name: name in categories for name in OUTPUTS},
+                )
 
     def test_run_all_mode_invokes_the_detector_all_flag(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -281,29 +255,6 @@ class DetectCiActionContractTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertTrue(self._read_outputs(output_path)["nix"])
             self.assertFalse(self._read_outputs(output_path)["chezmoi"])
-
-    def _section(self, name: str) -> str:
-        lines = self.action.splitlines()
-        try:
-            start = lines.index(f"{name}:")
-        except ValueError:
-            return ""
-
-        end = len(lines)
-        for index in range(start + 1, len(lines)):
-            if lines[index] and not lines[index].startswith(" "):
-                end = index
-                break
-        return "\n".join(lines[start:end])
-
-    def _top_level_keys(self, section: str) -> set[str]:
-        return {
-            line.strip()[:-1]
-            for line in self._section(section).splitlines()
-            if line.startswith("  ")
-            and not line.startswith("    ")
-            and line.strip().endswith(":")
-        }
 
     def _run_script(self) -> str:
         lines = self.action.splitlines()

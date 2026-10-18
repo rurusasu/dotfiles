@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import re
 import stat
 import tempfile
@@ -12,6 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Literal
+from urllib.parse import quote
 
 import yaml
 
@@ -22,20 +22,16 @@ from .git import (
     _git_environment,
     _remote_identity,
     _run_git_bytes,
-    _same_remote_identity,
     _valid_auth,
     _valid_ref,
 )
 from .github import GitAuth
 from .models import BootstrapManifest, DistributionSource
 from .profile_snapshot import (
-    PreparedProfiles,
     ProfileSnapshot,
     ProfileSnapshotError,
     prepare_profile_snapshots,
 )
-from .repositories import _LockBusy, _RepositoryLock
-
 
 SyncStatus = Literal["changed", "unchanged", "failed"]
 
@@ -57,7 +53,6 @@ class ProfileSyncResult:
     name: str
     status: SyncStatus
     commit: str | None
-    snapshot: str
     diff: ProfileDiff
     category: str
     message: str
@@ -70,7 +65,6 @@ class ProfileSyncResult:
             "name": self.name,
             "status": self.status,
             "commit": self.commit,
-            "snapshot": self.snapshot,
             "added": added,
             "modified": modified,
             "deleted": deleted,
@@ -114,10 +108,6 @@ class _PushRejected(Exception):
     pass
 
 
-class _PushRaceExhausted(Exception):
-    pass
-
-
 class _DeletionLimitExceeded(Exception):
     pass
 
@@ -137,7 +127,6 @@ def failed_profile_report(
                 name=profile.name,
                 status="failed",
                 commit=None,
-                snapshot="",
                 diff=ProfileDiff(),
                 category=category,
                 message=message,
@@ -149,27 +138,13 @@ def failed_profile_report(
 
 
 def synchronize_prepared_profiles(
-    prepared: PreparedProfiles, auth: GitAuth, *, dry_run: bool
+    snapshots: tuple[ProfileSnapshot, ...], auth: GitAuth, *, dry_run: bool
 ) -> ProfileSyncReport:
     """Synchronize each immutable profile projection in prepared order."""
 
-    if not isinstance(prepared, PreparedProfiles):
-        return ProfileSyncReport(dry_run, (), _REPOSITORY_EXIT_CODE)
-    if prepared.missing:
-        declarations = (
-            *(snapshot.declaration for snapshot in prepared.snapshots),
-            *prepared.missing,
-        )
-        return failed_profile_report(
-            declarations,
-            dry_run=dry_run,
-            category="aggregate_preflight_blocked",
-            message="profile snapshot preparation is incomplete",
-            exit_code=_REPOSITORY_EXIT_CODE,
-        )
     results = tuple(
         _synchronize_one_boundary(snapshot, auth, dry_run)
-        for snapshot in prepared.snapshots
+        for snapshot in snapshots
     )
     exit_code = (
         _REPOSITORY_EXIT_CODE
@@ -189,29 +164,20 @@ def synchronize_profiles(
     report: ProfileSyncReport
     try:
         _validate_manifest_profiles(manifest)
-        # Keep the read-only publication snapshot off the bind-mounted Hermes
-        # home. Docker Desktop can remap ownership on that mount while a
-        # profile gateway is active, which makes the descriptor-backed
-        # snapshot fail its ownership attestation.
+        # Staging lives outside Hermes home and is removed after publication.
         scratch = create_private_directory(
             _profile_snapshot_scratch_parent(manifest.data_root),
             prefix=".hermes-profile-snapshots-",
         )
-        prepared = prepare_profile_snapshots(
-            manifest,
-            scratch.path,
-            allow_missing=False,
-        )
+        prepared = prepare_profile_snapshots(manifest, scratch.path)
         report = synchronize_prepared_profiles(prepared, auth, dry_run=dry_run)
     except ProfileSnapshotError as error:
         invalid_profile = error.profile
         invalid_category = error.category
-        error = _scrub_exception_graph(error)
         report = _profile_preflight_failure(
             profiles, invalid_profile, invalid_category, dry_run=dry_run
         )
-    except Exception as error:
-        error = _scrub_exception_graph(error)
+    except Exception:
         report = failed_profile_report(
             profiles,
             dry_run=dry_run,
@@ -274,7 +240,6 @@ def _profile_preflight_failure(
             name=profile.name,
             status="failed",
             commit=None,
-            snapshot="",
             diff=ProfileDiff(),
             category=(
                 invalid_category
@@ -297,120 +262,97 @@ def _synchronize_one_boundary(
 ) -> ProfileSyncResult:
     declaration = snapshot.declaration
     data_root = declaration.target.parent.parent
-    lock_path = data_root / "locks" / "repositories" / f"profile-{declaration.name}.lock"
     repository: PrivateDirectory | None = None
     askpass: Path | None = None
     try:
         _validate_snapshot_declaration(snapshot, auth, data_root)
-        with _RepositoryLock(lock_path, data_root) as repository_lock:
-            repository_lock.require_held()
-            repository = create_private_directory(
-                Path(tempfile.gettempdir()),
-                prefix=".hermes-profile-sync-",
+        repository = create_private_directory(
+            Path(tempfile.gettempdir()),
+            prefix=".hermes-profile-sync-",
+        )
+        repository_path = repository.path
+        askpass = _create_askpass(Path(tempfile.gettempdir()))
+        environment = _git_environment(auth, askpass)
+        attempt = _exact_tree_attempt(
+            snapshot,
+            repository_path,
+            environment,
+        )
+        remote_tree = _git_ascii(
+            ("rev-parse", "FETCH_HEAD^{tree}"),
+            repository_path,
+            environment,
+        )
+        if remote_tree is None:
+            raise ValueError("remote tree unavailable")
+        if attempt.tree == remote_tree:
+            outcome = ProfileSyncResult(
+                name=declaration.name,
+                status="unchanged",
+                commit=attempt.remote_commit,
+                diff=ProfileDiff(),
+                category="unchanged",
+                message="profile snapshot already published",
             )
-            repository_path = repository.path
-            askpass = _create_askpass(Path(tempfile.gettempdir()))
-            environment = _git_environment(auth, askpass)
-            attempt = _exact_tree_attempt(
-                snapshot,
+        else:
+            diff = _profile_diff(
+                repository_path,
+                environment,
+                auth,
+                attempt.remote_commit,
+            )
+            bootstrap_config_only = _is_bootstrap_config_only_difference(
+                diff,
+                attempt.remote_commit,
                 repository_path,
                 environment,
             )
-            repository_lock.require_held()
-            remote_tree = _git_ascii(
-                ("rev-parse", "FETCH_HEAD^{tree}"),
-                repository_path,
-                environment,
-            )
-            if remote_tree is None:
-                raise ValueError("remote tree unavailable")
-            if attempt.tree == remote_tree:
+            if bootstrap_config_only:
                 outcome = ProfileSyncResult(
                     name=declaration.name,
                     status="unchanged",
                     commit=attempt.remote_commit,
-                    snapshot=snapshot.digest,
                     diff=ProfileDiff(),
                     category="unchanged",
-                    message="profile snapshot already published",
+                    message="profile snapshot only differs by bootstrap configuration",
                 )
+            elif dry_run:
+                commit = attempt.remote_commit
+                category = "dry_run"
+                message = "profile snapshot changes detected"
             else:
-                diff = _profile_diff(
-                    repository_path,
-                    environment,
-                    auth,
-                    attempt.remote_commit,
-                )
-                bootstrap_config_only = _is_bootstrap_config_only_difference(
-                    diff,
-                    attempt.remote_commit,
+                if len(diff.deleted) > declaration.max_deleted_paths:
+                    raise _DeletionLimitExceeded
+                commit = _commit_and_push(
+                    snapshot,
+                    attempt,
                     repository_path,
                     environment,
                 )
-                if bootstrap_config_only:
-                    outcome = ProfileSyncResult(
-                        name=declaration.name,
-                        status="unchanged",
-                        commit=attempt.remote_commit,
-                        snapshot=snapshot.digest,
-                        diff=ProfileDiff(),
-                        category="unchanged",
-                        message="profile snapshot only differs by bootstrap configuration",
-                    )
-                elif dry_run:
-                    commit = attempt.remote_commit
-                    category = "dry_run"
-                    message = "profile snapshot changes detected"
-                else:
-                    if len(diff.deleted) > declaration.max_deleted_paths:
-                        raise _DeletionLimitExceeded
-                    commit, final_parent = _commit_and_push(
-                        snapshot,
-                        attempt,
-                        repository_path,
-                        environment,
-                    )
-                    if final_parent != attempt.remote_commit:
-                        diff = _profile_diff(
-                            repository_path,
-                            environment,
-                            auth,
-                            final_parent,
-                        )
-                    category = "published"
-                    message = "profile snapshot published"
-                if not bootstrap_config_only:
-                    outcome = ProfileSyncResult(
-                        name=declaration.name,
-                        status="changed",
-                        commit=commit,
-                        snapshot=snapshot.digest,
-                        diff=diff,
-                        category=category,
-                        message=message,
-                    )
-    except _LockBusy as error:
-        error = _scrub_exception_graph(error)
-        outcome = _failed(snapshot, "lock_busy", "profile publication lock is busy")
-    except _PushRejected as error:
-        error = _scrub_exception_graph(error)
-        outcome = _failed(snapshot, "push_rejected", "profile publication was rejected")
-    except _PushRaceExhausted as error:
-        error = _scrub_exception_graph(error)
+                category = "published"
+                message = "profile snapshot published"
+            if not bootstrap_config_only:
+                outcome = ProfileSyncResult(
+                    name=declaration.name,
+                    status="changed",
+                    commit=commit,
+                    diff=diff,
+                    category=category,
+                    message=message,
+                )
+    except _PushRejected:
         outcome = _failed(
             snapshot,
-            "push_race_exhausted",
-            "profile publication changed repeatedly",
+            "push_rejected",
+            "profile publication was rejected; rerun sync-profiles",
         )
-    except _DeletionLimitExceeded as error:
-        error = _scrub_exception_graph(error)
+    except _DeletionLimitExceeded:
         outcome = _failed(
             snapshot,
             "deletion_limit_exceeded",
             "profile publication exceeded the configured deletion limit",
         )
-    except Exception as error:
-        error = _scrub_exception_graph(error)
+    except Exception:
         outcome = _failed(snapshot, "repository", "profile snapshot synchronization failed")
 
     resources: list[tuple[Callable, object]] = []
@@ -433,21 +375,11 @@ def _exact_tree_attempt(
 ) -> _Attempt:
     declaration = snapshot.declaration
     _require_git(("init", "--quiet"), repository, environment)
-    _require_git(
-        ("remote", "add", "origin", "--", declaration.source),
-        repository,
-        environment,
-    )
-    observed = _git_ascii(
-        ("config", "--get", "remote.origin.url"), repository, environment
-    )
-    if observed is None or not _same_remote_identity(declaration.source, observed):
-        raise ValueError("remote identity mismatch")
     branch_ref = _validated_branch_ref(
         declaration.ref, repository, environment
     )
     _require_git(
-        ("fetch", "--no-tags", "origin", "--", branch_ref),
+        ("fetch", "--no-tags", "--", declaration.source, branch_ref),
         repository,
         environment,
     )
@@ -457,7 +389,6 @@ def _exact_tree_attempt(
     _require_git(("read-tree", "--empty"), repository, environment)
     _copy_snapshot(snapshot, repository)
     _require_git(("add", "-A", "--", "."), repository, environment)
-    _validate_staged_paths(snapshot, repository, environment)
     tree = _git_object_id(("write-tree",), repository, environment)
     return _Attempt(remote_commit, tree)
 
@@ -542,7 +473,8 @@ def _reported_path(raw: bytes, auth: GitAuth) -> PurePosixPath:
         or path.as_posix() != text
         or any(part in {"", ".", ".."} for part in path.parts)
         or not _visible_path_text(text)
-        or auth.redactor.redact(text) != text
+        or auth.token in text
+        or quote(auth.token, safe="") in text
     ):
         return _escaped_reported_path(raw)
     return path
@@ -569,82 +501,13 @@ def _commit_and_push(
     attempt: _Attempt,
     repository: Path,
     environment: dict[str, str],
-) -> tuple[str, str]:
-    declaration = snapshot.declaration
-    _validated_branch_ref(declaration.ref, repository, environment)
-    parent = attempt.remote_commit
-    for publication_attempt in range(2):
-        if publication_attempt:
-            rebuilt_tree = _rebuild_snapshot_tree(
-                snapshot, repository, environment
-            )
-            if rebuilt_tree != attempt.tree:
-                raise ValueError("profile snapshot tree changed during retry")
-        if (
-            _staged_deleted_path_count(parent, repository, environment)
-            > declaration.max_deleted_paths
-        ):
-            raise _DeletionLimitExceeded
-        commit = _create_commit(
-            snapshot, attempt.tree, parent, repository, environment
-        )
-        pushed = _push_commit(snapshot, commit, repository, environment)
-        remote_commit, remote_tree = _fetch_remote(
-            snapshot, repository, environment
-        )
-        if _publication_matches(
-            commit,
-            attempt.tree,
-            remote_commit,
-            remote_tree,
-            pushed=pushed,
-            repository=repository,
-            environment=environment,
-        ):
-            return remote_commit, parent
-        if not pushed and remote_commit == parent:
-            raise _PushRejected
-        if publication_attempt:
-            raise _PushRaceExhausted
-        parent = remote_commit
-    raise _PushRaceExhausted
-
-
-def _staged_deleted_path_count(
-    base_commit: str,
-    repository: Path,
-    environment: dict[str, str],
-) -> int:
-    raw = _git_bytes(
-        (
-            "diff",
-            "--cached",
-            "--name-status",
-            "-z",
-            "--no-renames",
-            base_commit,
-        ),
-        repository,
-        environment,
-        max_output_bytes=_INDEX_OUTPUT_MAX_BYTES,
-    )
-    records = _nul_records(raw)
-    if len(records) % 2:
-        raise ValueError("invalid staged profile diff")
-    return sum(
-        records[index] == b"D" for index in range(0, len(records), 2)
-    )
-
-
-def _rebuild_snapshot_tree(
-    snapshot: ProfileSnapshot,
-    repository: Path,
-    environment: dict[str, str],
 ) -> str:
-    _require_git(("read-tree", "--empty"), repository, environment)
-    _require_git(("add", "-A", "--", "."), repository, environment)
-    _validate_staged_paths(snapshot, repository, environment)
-    return _git_object_id(("write-tree",), repository, environment)
+    commit = _create_commit(
+        snapshot, attempt.tree, attempt.remote_commit, repository, environment
+    )
+    if not _push_commit(snapshot, commit, repository, environment):
+        raise _PushRejected
+    return commit
 
 
 def _create_commit(
@@ -712,130 +575,20 @@ def _validated_branch_ref(
     return f"refs/heads/{branch}"
 
 
-def _publication_matches(
-    commit: str,
-    expected_tree: str,
-    remote_commit: str,
-    remote_tree: str,
-    *,
-    pushed: bool,
-    repository: Path,
-    environment: dict[str, str],
-) -> bool:
-    if remote_tree != expected_tree:
-        return False
-    if remote_commit == commit or not pushed:
-        return True
-    return _run_git_bytes(
-        ("merge-base", "--is-ancestor", commit, remote_commit),
-        repository,
-        environment,
-        max_output_bytes=_COMMAND_OUTPUT_MAX_BYTES,
-    ) is not None
-
-
-def _fetch_remote(
-    snapshot: ProfileSnapshot,
-    repository: Path,
-    environment: dict[str, str],
-) -> tuple[str, str]:
-    declaration = snapshot.declaration
-    branch_ref = _validated_branch_ref(
-        declaration.ref, repository, environment
-    )
-    _require_git(
-        ("fetch", "--no-tags", "origin", "--", branch_ref),
-        repository,
-        environment,
-    )
-    commit = _git_object_id(
-        ("rev-parse", "--verify", "FETCH_HEAD^{commit}"), repository, environment
-    )
-    tree = _git_object_id(
-        ("rev-parse", "--verify", "FETCH_HEAD^{tree}"), repository, environment
-    )
-    return commit, tree
-
-
 def _copy_snapshot(snapshot: ProfileSnapshot, repository: Path) -> None:
     _write_file(repository / ".gitignore", snapshot.gitignore_bytes, 0o644)
     _write_file(repository / "distribution.yaml", snapshot.manifest_bytes, 0o644)
     for entry in snapshot.entries:
         source = snapshot.root.joinpath(*entry.path.parts)
         destination = repository.joinpath(*entry.path.parts)
-        try:
-            metadata = source.lstat()
-        except OSError:
-            raise ValueError("snapshot entry unavailable") from None
-        if (
-            not stat.S_ISREG(metadata.st_mode)
-            or stat.S_ISLNK(metadata.st_mode)
-            or stat.S_IMODE(metadata.st_mode) != entry.mode
-            or metadata.st_size != entry.size
-        ):
-            raise ValueError("snapshot entry changed")
         content = source.read_bytes()
-        if (
-            len(content) != entry.size
-            or hashlib.sha256(content).hexdigest() != entry.sha256
-        ):
-            raise ValueError("snapshot entry changed")
         _write_file(destination, content, entry.mode)
 
 
 def _write_file(path: Path, content: bytes, mode: int) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    descriptor = os.open(
-        path,
-        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
-        mode,
-    )
-    try:
-        with os.fdopen(descriptor, "wb", closefd=False) as handle:
-            handle.write(content)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.fchmod(descriptor, mode)
-    finally:
-        os.close(descriptor)
-
-
-def _validate_staged_paths(
-    snapshot: ProfileSnapshot, repository: Path, environment: dict[str, str]
-) -> None:
-    raw = _git_bytes(
-        ("ls-files", "--stage", "-z"),
-        repository,
-        environment,
-        max_output_bytes=_INDEX_OUTPUT_MAX_BYTES,
-    )
-    expected = {
-        b".gitignore": b"100644",
-        b"distribution.yaml": b"100644",
-        **{
-            entry.path.as_posix().encode("ascii"): f"100{entry.mode:o}".encode(
-                "ascii"
-            )
-            for entry in snapshot.entries
-        },
-    }
-    observed: dict[bytes, bytes] = {}
-    for record in _nul_records(raw):
-        metadata, separator, path = record.partition(b"\t")
-        fields = metadata.split(b" ")
-        if (
-            not separator
-            or len(fields) != 3
-            or fields[0] != expected.get(path)
-            or _OBJECT_ID.fullmatch(fields[1]) is None
-            or fields[2] != b"0"
-            or not path
-            or path in observed
-        ):
-            raise ValueError("unsafe staged profile entry")
-        observed[path] = fields[0]
-    if observed != expected:
-        raise ValueError("staged profile paths do not match snapshot")
+    path.write_bytes(content)
+    path.chmod(mode)
 
 
 def _validate_snapshot_declaration(
@@ -850,7 +603,6 @@ def _validate_snapshot_declaration(
         or declaration.target != data_root / "profiles" / declaration.name
         or not data_root.is_absolute()
         or not _safe_directory(data_root)
-        or not _safe_directory(snapshot.root)
     ):
         raise ValueError("invalid profile publication declaration")
 
@@ -907,7 +659,6 @@ def _failed(snapshot: ProfileSnapshot, category: str, message: str) -> ProfileSy
         name=snapshot.declaration.name,
         status="failed",
         commit=None,
-        snapshot=snapshot.digest,
         diff=ProfileDiff(),
         category=category,
         message=message,
@@ -922,76 +673,9 @@ def _cleanup_resources(
         try:
             if not cleanup(path):
                 failed = True
-        except Exception as error:
-            error = _scrub_exception_graph(error)
+        except Exception:
             failed = True
     return failed
-
-
-def _scrub_exception_graph(error: BaseException) -> BaseException:
-    sanitized: BaseException = RuntimeError("sanitized exception")
-    try:
-        sanitized = _sanitized_exception_clone(error)
-    except BaseException:
-        pass
-    _best_effort_scrub_exception_graph(error)
-    return sanitized
-
-
-def _sanitized_exception_clone(error: BaseException) -> BaseException:
-    if isinstance(error, BaseExceptionGroup):
-        children = BaseException.__getattribute__(error, "exceptions")
-        sanitized_children = [
-            _sanitized_exception_clone(child)
-            for child in children
-            if isinstance(child, BaseException)
-        ]
-        if sanitized_children:
-            return BaseExceptionGroup(
-                "sanitized exception group", sanitized_children
-            )
-    return RuntimeError("sanitized exception")
-
-
-def _best_effort_scrub_exception_graph(error: BaseException) -> None:
-    try:
-        pending = [error]
-        visited: set[int] = set()
-        while pending:
-            current = pending.pop()
-            if id(current) in visited:
-                continue
-            visited.add(id(current))
-            for attribute in ("__cause__", "__context__"):
-                try:
-                    linked = BaseException.__getattribute__(current, attribute)
-                except BaseException:
-                    linked = None
-                if isinstance(linked, BaseException):
-                    pending.append(linked)
-            if isinstance(current, BaseExceptionGroup):
-                try:
-                    children = BaseException.__getattribute__(
-                        current, "exceptions"
-                    )
-                except BaseException:
-                    children = ()
-                pending.extend(
-                    child for child in children if isinstance(child, BaseException)
-                )
-            for attribute, value in (
-                ("args", ()),
-                ("__notes__", []),
-                ("__traceback__", None),
-                ("__cause__", None),
-                ("__context__", None),
-            ):
-                try:
-                    BaseException.__setattr__(current, attribute, value)
-                except BaseException:
-                    pass
-    except BaseException:
-        pass
 
 
 def _safe_directory(path: Path) -> bool:

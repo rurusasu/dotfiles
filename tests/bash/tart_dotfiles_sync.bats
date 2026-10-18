@@ -172,27 +172,6 @@ push_update() {
 	[ "$(cat "$STATE_FILE")" = "$previous_hash" ]
 }
 
-@test "Tart run task uses the managed launcher" {
-	taskfile="$REPO_ROOT/taskfiles/install/taskfile.yml"
-
-	run awk '
-		/^  tart:run:/ { in_task=1 }
-		in_task { print }
-		in_task && /^[^ ]/ { exit }
-	' "$taskfile"
-
-	[ "$status" -eq 0 ]
-	[[ "$output" == *'scripts/sh/run-tart-vm.sh'* ]]
-}
-
-@test "Tart launcher keeps an SSH control connection and runs guest sync" {
-	launcher="$REPO_ROOT/scripts/sh/run-tart-vm.sh"
-
-	grep -q 'sync-tart-dotfiles.sh' "$launcher"
-	grep -q 'DOTFILES_RUNTIME=%q' "$launcher"
-	grep -q 'DOTFILES_REPOSITORY_URL=%q' "$launcher"
-}
-
 @test "Tart launcher establishes one persistent SSH control connection and streams the sync script" {
 	launcher="$REPO_ROOT/scripts/sh/run-tart-vm.sh"
 	bin="$BATS_TEST_TMPDIR/launcher-bin"

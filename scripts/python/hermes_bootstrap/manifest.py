@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Literal, TypeVar
+from typing import TypeVar
 
 import yaml
 
@@ -67,7 +66,6 @@ def load_manifest(path: Path) -> BootstrapManifest:
 
     try:
         content = path.read_bytes()
-        manifest_sha256 = hashlib.sha256(content).hexdigest()
         raw = yaml.load(content.decode("utf-8"), Loader=_UniqueKeySafeLoader)
     except (OSError, UnicodeError, yaml.YAMLError) as error:
         raise ValidationError(f"cannot load bootstrap manifest: {path}") from error
@@ -123,10 +121,6 @@ def load_manifest(path: Path) -> BootstrapManifest:
     )
 
     _validate_target_namespaces(profiles, repositories, data_root)
-    canonical_targets = tuple(
-        source.target for source in (*profiles, *repositories)
-    )
-    _validate_non_overlapping(canonical_targets, "canonical managed targets")
 
     _unique((item.key for item in onepassword_items), "1Password item keys")
     _unique((item.item for item in onepassword_items), "1Password item names")
@@ -134,11 +128,6 @@ def load_manifest(path: Path) -> BootstrapManifest:
         (source.name for source in (root_distribution, *profiles, *repositories)),
         "managed source names",
     )
-    distribution_names = {root_distribution.name, *(profile.name for profile in profiles)}
-    for repository in repositories:
-        if repository.sync_owner is not None and repository.sync_owner not in distribution_names:
-            _invalid(f"shared repository {repository.name!r} has an unknown sync_owner")
-
     return BootstrapManifest(
         schema_version=schema_version,
         data_root=data_root,
@@ -146,7 +135,6 @@ def load_manifest(path: Path) -> BootstrapManifest:
         root_distribution=root_distribution,
         profiles=profiles,
         shared_repositories=repositories,
-        manifest_sha256=manifest_sha256,
     )
 
 
@@ -288,35 +276,14 @@ def _repository(value: object, context: str, data_root: Path) -> SharedRepositor
     repository = _mapping(value, context)
     _keys(
         repository,
-        {"name", "source", "ref", "target", "mode"},
+        {"name", "source", "ref", "target"},
         context,
-        optional={"sync_owner", "commit"},
     )
-    name = _name(repository["name"], f"{context}.name")
-    mode = _text(repository["mode"], f"{context}.mode")
-    if mode not in {"read-only", "read-write"}:
-        _invalid(f"{context}.mode is unsupported")
-
-    sync_owner: str | None = None
-    if "sync_owner" in repository and repository["sync_owner"] is not None:
-        sync_owner = _name(repository["sync_owner"], f"{context}.sync_owner")
-    if mode == "read-write" and sync_owner is None:
-        _invalid(f"{context}.sync_owner is required for read-write repositories")
-    if mode == "read-write" and "commit" in repository:
-        _invalid(f"{context}.commit is only valid for read-only repositories")
-
     return SharedRepository(
-        name=name,
+        name=_name(repository["name"], f"{context}.name"),
         source=_github_source(repository["source"], f"{context}.source"),
         ref=_ref(repository["ref"], f"{context}.ref"),
         target=_managed_path(repository["target"], f"{context}.target", data_root),
-        mode=mode,
-        sync_owner=sync_owner,
-        source_commit=(
-            _commit(repository["commit"], f"{context}.commit")
-            if "commit" in repository
-            else None
-        ),
     )
 
 
@@ -331,25 +298,6 @@ def _validate_target_namespaces(
     for repository in repositories:
         if repository.target != data_root / "shared" / repository.name:
             _invalid(f"shared repository {repository.name!r} target must use its repository namespace")
-
-
-
-def _validate_non_overlapping(paths: Sequence[Path], context: str) -> None:
-    for index, path in enumerate(paths):
-        if any(_paths_overlap(path, other) for other in paths[:index]):
-            _invalid(f"{context} must not overlap")
-
-
-def _paths_overlap(left: Path, right: Path) -> bool:
-    return _is_within(left, right) or _is_within(right, left)
-
-
-def _is_within(path: Path, ancestor: Path) -> bool:
-    try:
-        path.relative_to(ancestor)
-    except ValueError:
-        return False
-    return True
 
 
 def _mapping(value: object, context: str) -> Mapping[str, object]:

@@ -1,55 +1,91 @@
 from __future__ import annotations
 
+import os
+import subprocess
 import unittest
+from dataclasses import replace
 from pathlib import Path
+from unittest import mock
 
+from hermes_bootstrap import onepassword
+from hermes_bootstrap.errors import CredentialError
 from hermes_bootstrap.manifest import load_manifest
-from hermes_bootstrap.onepassword import build_onepassword_config
+from hermes_bootstrap.models import (
+    OnePasswordField,
+    OnePasswordItem,
+)
 
 
 MANIFEST = Path(__file__).resolve().parents[3] / "nix/modules/ai_agents/hermes/manifest.yaml"
 
 
 class OnePasswordConfigTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.manifest = load_manifest(MANIFEST)
+    def setUp(self) -> None:
+        self.manifest = load_manifest(MANIFEST)
 
-    def test_default_config_maps_shared_and_default_discord_references(self) -> None:
-        config = build_onepassword_config(self.manifest, "default")
-
-        self.assertEqual(config["enabled"], True)
-        self.assertEqual(config["account"], "my.1password.com")
-        self.assertEqual(config["service_account_token_env"], "OP_SERVICE_ACCOUNT_TOKEN")
-        self.assertEqual(config["binary_path"], "/usr/bin/op")
-        self.assertEqual(config["override_existing"], True)
-        self.assertEqual(
-            config["env"],
-            {
-                "HERMES_DASHBOARD_BASIC_AUTH_USERNAME": (
-                    "op://openclaw/Hermes Agent Dashboard/username"
-                ),
-                "GITHUB_PERSONAL_ACCESS_TOKEN": (
-                    "op://openclaw/GitHubUsedOpenClawPAT/credential"
-                ),
-                "GH_TOKEN": "op://openclaw/GitHubUsedOpenClawPAT/credential",
-                "GITHUB_TOKEN": "op://openclaw/GitHubUsedOpenClawPAT/credential",
-                "XAI_API_KEY": "op://openclaw/xAI-Grok-Twitter/console/apikey",
-                "DISCORD_BOT_TOKEN": "op://openclaw/Master/Discord/bot_token",
-                "DISCORD_ALLOWED_USERS": "op://openclaw/Master/Discord/allowed_users",
-            },
+    def test_github_token_uses_the_declared_reference_and_process_auth(self) -> None:
+        item = OnePasswordItem(
+            key="github",
+            account="example.1password.com",
+            vault="test-vault",
+            item="GitHub API",
+            fields=(
+                OnePasswordField("credential", ("token",), reference_name="API/token"),
+            ),
         )
+        manifest = replace(self.manifest, onepassword_items=(item,))
+        supplied_environment = {
+            "DOTFILES_HERMES_OP_EXECUTABLE": "/nix/store/test-op/bin/op",
+            "OP_SERVICE_ACCOUNT_TOKEN": "service-account-marker",
+        }
+        with (
+            mock.patch.dict(os.environ, {"OP_CONFIG_DIR": "/fixture/op"}),
+            mock.patch(
+                "subprocess.run",
+                return_value=subprocess.CompletedProcess(
+                    [], 0, "github-token-marker\n", ""
+                ),
+            ) as run,
+        ):
+            token = onepassword.read_github_token(manifest, supplied_environment)
 
-    def test_named_profile_uses_its_discord_item(self) -> None:
-        config = build_onepassword_config(self.manifest, "rick")
-
+        self.assertEqual(token, "github-token-marker")
+        arguments = run.call_args.args[0]
         self.assertEqual(
-            config["env"]["DISCORD_BOT_TOKEN"],
-            "op://openclaw/Rick/Discord/bot_token",
+            arguments,
+            [
+                "/nix/store/test-op/bin/op", "read", "--account",
+                "example.1password.com", "--", "op://test-vault/GitHub API/API/token",
+            ],
         )
-        self.assertNotIn("API_SERVER_KEY", config["env"])
-        self.assertNotIn("HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH", config["env"])
-        self.assertNotIn("HERMES_DASHBOARD_BASIC_AUTH_SECRET", config["env"])
+        self.assertNotIn(token, arguments)
+        self.assertNotIn("service-account-marker", arguments)
+        self.assertEqual(run.call_args.kwargs["env"]["OP_CONFIG_DIR"], "/fixture/op")
+        self.assertEqual(
+            run.call_args.kwargs["env"]["OP_SERVICE_ACCOUNT_TOKEN"],
+            "service-account-marker",
+        )
+        self.assertLessEqual(run.call_args.kwargs["timeout"], 30)
+        self.assertIs(run.call_args.kwargs["stdin"], subprocess.DEVNULL)
+
+    def test_github_token_failures_hide_cli_output(self) -> None:
+        item = OnePasswordItem(
+            key="github", account="example.1password.com", vault="test-vault",
+            item="GitHub API", fields=(OnePasswordField("credential", ("token",)),),
+        )
+        manifest = replace(self.manifest, onepassword_items=(item,))
+        marker = "private-cli-output-marker"
+        with (
+            mock.patch(
+                "subprocess.run",
+                return_value=subprocess.CompletedProcess([], 1, marker, marker),
+            ),
+            self.assertRaises(CredentialError) as raised,
+        ):
+            onepassword.read_github_token(manifest, {})
+
+        self.assertEqual(str(raised.exception), "GitHub credentials are unavailable")
+        self.assertNotIn(marker, str(raised.exception))
 
 
 if __name__ == "__main__":

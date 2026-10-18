@@ -23,16 +23,8 @@ class RepositoryError(BootstrapError):
     exit_code = 4
 
 
-class MigrationError(BootstrapError):
-    exit_code = 5
-
-
 class ApplyError(BootstrapError):
     exit_code = 6
-
-
-class RollbackError(BootstrapError):
-    exit_code = 7
 
 
 class ValidationError(BootstrapError):

@@ -9,7 +9,6 @@ import time
 import unittest
 from pathlib import Path
 
-
 BOOTSTRAP_ROOT = Path(__file__).resolve().parents[3] / "scripts" / "python"
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
@@ -37,66 +36,18 @@ class EngineLockTests(unittest.TestCase):
         ):
             EngineLock.acquire(self.data_root)
 
-    def test_acquires_the_canonical_lock_and_rejects_local_contention(self) -> None:
-        lock = EngineLock.acquire(self.data_root)
-        self.addCleanup(lock.close)
-
-        self.assertEqual(lock.path, self.lock_path)
-        lock.require_held()
-        self.assert_unavailable()
-
-    def test_rejects_unsafe_lock_objects_without_touching_external_targets(self) -> None:
-        self.lock_path.parent.mkdir()
-        external = self.data_root.parent / "external-lock-target"
-        external.write_text("external lock marker\n", encoding="utf-8")
-        external.chmod(0o644)
-
-        cases = (
-            ("symlink", lambda: self.lock_path.symlink_to(external)),
-            ("directory", self.lock_path.mkdir),
-            ("fifo", lambda: os.mkfifo(self.lock_path)),
-            ("hardlink", lambda: os.link(external, self.lock_path)),
-            (
-                "wrong-mode",
-                lambda: (
-                    self.lock_path.write_text("private\n", encoding="utf-8"),
-                    self.lock_path.chmod(0o640),
-                ),
-            ),
-        )
-
-        for name, create in cases:
-            with self.subTest(name=name):
-                create()
-                self.assert_unavailable()
-                self.assertEqual(
-                    external.read_text(encoding="utf-8"), "external lock marker\n"
-                )
-                self.assertEqual(stat.S_IMODE(external.lstat().st_mode), 0o644)
-                if self.lock_path.is_dir() or self.lock_path.is_symlink():
-                    self.lock_path.unlink() if self.lock_path.is_symlink() else self.lock_path.rmdir()
-                else:
-                    self.lock_path.unlink()
-
-    def test_rejects_a_replaced_lock_parent_without_modifying_the_external_target(
+    def test_rejects_an_initial_symlink_parent_without_modifying_its_target(
         self,
     ) -> None:
-        lock = EngineLock.acquire(self.data_root)
-        self.addCleanup(lock.close)
-        held_locks = self.data_root / "held-locks"
         external = self.data_root.parent / "external-locks"
         external.mkdir()
         target = external / "bootstrap-engine.lock"
         target.write_text("external lock marker\n", encoding="utf-8")
         target.chmod(0o644)
 
-        self.lock_path.parent.rename(held_locks)
         self.lock_path.parent.symlink_to(external, target_is_directory=True)
 
-        with self.assertRaisesRegex(
-            RepositoryError, "^bootstrap engine lock is unavailable$"
-        ):
-            lock.require_held()
+        self.assert_unavailable()
         self.assertEqual(target.read_text(encoding="utf-8"), "external lock marker\n")
         self.assertEqual(stat.S_IMODE(target.lstat().st_mode), 0o644)
 

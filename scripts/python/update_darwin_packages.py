@@ -1,4 +1,3 @@
-#!/usr/bin/env -S uv run --no-project --managed-python --python 3.14 python
 """Update reviewed custom Darwin derivations and test nixpkgs candidates.
 
 The updater is intentionally conservative. It only edits reviewed source
@@ -17,35 +16,45 @@ import sys
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-REGISTRY_PATH = ROOT / "nix" / "modules" / "browsers" / "dia" / "provider-candidates.nix"
+REGISTRY_PATH = (
+    ROOT / "nix" / "modules" / "browsers" / "dia" / "provider-candidates.nix"
+)
 DERIVATIONS = {
     "dia-browser": ROOT / "nix" / "modules" / "browsers" / "dia" / "package.nix",
     "orca-editor": ROOT / "nix" / "modules" / "editors" / "orca" / "package.nix",
 }
-ORCA_SOURCES = DERIVATIONS["orca-editor"].with_name("sources.json")
 ORCA_ASSETS = {
     "aarch64-darwin": "orca-macos-arm64.dmg",
     "x86_64-linux": "orca-linux.AppImage",
     "aarch64-linux": "orca-linux-arm64.AppImage",
 }
+_NIX_LITERAL = r'(?:(?!\$\{)[^"\\\r\n])+'
+_INLINE_RELEASE = re.compile(
+    r"(?m)^[ \t]*release\s*=\s*\{\s*"
+    rf'version\s*=\s*"(?P<version>{_NIX_LITERAL})";\s*'
+    r"sources\s*=\s*\{(?P<sources>(?:[^{}]|\{[^{}]*\})*)\};\s*\};"
+)
+_INLINE_SOURCE = re.compile(
+    r"\s*(?P<system>[A-Za-z0-9_-]+)\s*=\s*\{\s*"
+    rf'url\s*=\s*"(?P<url>{_NIX_LITERAL})";\s*'
+    rf'hash\s*=\s*"(?P<hash>{_NIX_LITERAL})";\s*\}};'
+)
 
 
 @dataclass(frozen=True)
 class RegistryEntry:
     source: str
-    nix_attr: str | None
     candidates: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class PromotionResult:
-    entry: RegistryEntry
     promoted: bool
     reason: str | None = None
     nix_attr: str | None = None
@@ -60,7 +69,6 @@ class Release:
 
 @dataclass(frozen=True)
 class PackageProfile:
-    package_id: str
     feed_url: str
     derivation: Path
     parse_release: Callable[[bytes], Release | None]
@@ -72,16 +80,14 @@ def load_candidate_registry(path: Path = REGISTRY_PATH) -> dict[str, RegistryEnt
     pattern = re.compile(
         r"(?ms)^\s*(?P<name>[A-Za-z0-9_-]+)\s*=\s*\{\s*"
         r"source\s*=\s*\"(?P<source>[^\"]+)\";\s*"
-        r"nixAttr\s*=\s*(?P<nix_attr>null|\"[^\"]+\")\s*;\s*"
+        r"nixAttr\s*=\s*(?:null|\"[^\"]+\")\s*;\s*"
         r"candidates\s*=\s*\[(?P<candidates>.*?)\];\s*\};"
     )
     entries: dict[str, RegistryEntry] = {}
     for match in pattern.finditer(text):
         candidates = tuple(re.findall(r'"([^"\\]+)"', match.group("candidates")))
-        nix_attr = match.group("nix_attr")
         entries[match.group("name")] = RegistryEntry(
             source=match.group("source"),
-            nix_attr=None if nix_attr == "null" else nix_attr[1:-1],
             candidates=candidates,
         )
     if not entries:
@@ -106,11 +112,61 @@ def update_derivation_literals(
     return updated
 
 
-def update_registry_entry(text: str, package_id: str, *, source: str, nix_attr: str) -> str:
+def _inline_release_literals(
+    text: str,
+) -> tuple[re.Match[str], dict[str, re.Match[str]]]:
+    """Read only Orca's reviewed literal release/source attribute-set format."""
+    releases = list(_INLINE_RELEASE.finditer(text))
+    if len(releases) != 1 or len(re.findall(r"(?m)^\s*release\s*=", text)) != 1:
+        raise ValueError("expected one literal release attribute set")
+    release = releases[0]
+    body = release.group("sources")
+    sources: dict[str, re.Match[str]] = {}
+    position = 0
+    for source in _INLINE_SOURCE.finditer(body):
+        system = source.group("system")
+        if body[position : source.start()].strip() or system in sources:
+            raise ValueError("malformed or duplicate release source")
+        sources[system] = source
+        position = source.end()
+    if body[position:].strip() or set(sources) != set(ORCA_ASSETS):
+        raise ValueError("expected exactly the supported Orca release sources")
+    return release, sources
+
+
+def update_release_sources(text: str, *, version: str, sources: object) -> str:
+    """Validate all sources before replacing their literals in a single result."""
+    release, current_sources = _inline_release_literals(text)
+    if not isinstance(sources, dict) or set(sources) != set(ORCA_ASSETS):
+        raise ValueError("expected exactly the supported Orca update sources")
+    values = [version]
+    for system, source in sources.items():
+        if not isinstance(source, dict) or set(source) != {"url", "hash"}:
+            raise ValueError(f"expected a URL and hash for {system}")
+        values.extend((source["url"], source["hash"]))
+    if any(
+        not isinstance(value, str) or not re.fullmatch(_NIX_LITERAL, value)
+        for value in values
+    ):
+        raise ValueError("update values must be nonempty plain Nix string literals")
+    replacements = [(release.span("version"), version)]
+    offset = release.start("sources")
+    for system, source in current_sources.items():
+        for field in ("url", "hash"):
+            start, end = source.span(field)
+            replacements.append(
+                ((offset + start, offset + end), sources[system][field])
+            )
+    for (start, end), value in sorted(replacements, reverse=True):
+        text = text[:start] + value + text[end:]
+    return text
+
+
+def update_registry_entry(
+    text: str, package_id: str, *, source: str, nix_attr: str
+) -> str:
     """Update only one registry record after a successful promotion."""
-    entry = re.compile(
-        rf"(?ms)(^\s*{re.escape(package_id)}\s*=\s*\{{.*?^\s*\}};)"
-    )
+    entry = re.compile(rf"(?ms)(^\s*{re.escape(package_id)}\s*=\s*\{{.*?^\s*\}};)")
     match = entry.search(text)
     if match is None:
         raise ValueError(f"candidate registry entry is missing: {package_id}")
@@ -151,7 +207,16 @@ class NixRunner:
         self.repository = repository
 
     def evaluate_candidate(self, nix_attr: str) -> None:
-        self._run(["nix", "eval", "--impure", "--no-write-lock-file", "--expr", self._candidate_expr(nix_attr)])
+        self._run(
+            [
+                "nix",
+                "eval",
+                "--impure",
+                "--no-write-lock-file",
+                "--expr",
+                self._candidate_expr(nix_attr),
+            ]
+        )
 
     def build_candidate(self, nix_attr: str) -> None:
         result = subprocess.run(
@@ -178,7 +243,7 @@ class NixRunner:
     def _candidate_expr(nix_attr: str) -> str:
         return (
             "let flake = builtins.getFlake (toString ./.); "
-            "pkgs = import flake.inputs.nixpkgs { system = \"aarch64-darwin\"; "
+            'pkgs = import flake.inputs.nixpkgs { system = "aarch64-darwin"; '
             "config.allowUnfree = true; }; "
             f"in builtins.getAttr {json.dumps(nix_attr)} pkgs"
         )
@@ -187,12 +252,7 @@ class NixRunner:
         subprocess.run(command, cwd=self.repository, check=True)
 
 
-def try_promote(
-    package_id: str,
-    current: RegistryEntry,
-    nix_attr: str,
-    runner: Any,
-) -> PromotionResult:
+def try_promote(nix_attr: str, runner: Any) -> PromotionResult:
     """Promote only after all candidate checks succeed; retain custom on failure."""
     try:
         runner.evaluate_candidate(nix_attr)
@@ -204,13 +264,8 @@ def try_promote(
         subprocess.CalledProcessError,
         subprocess.TimeoutExpired,
     ) as error:
-        return PromotionResult(current, False, str(error), None)
-    return PromotionResult(
-        RegistryEntry("nixpkgs", nix_attr, current.candidates),
-        True,
-        None,
-        nix_attr,
-    )
+        return PromotionResult(False, str(error))
+    return PromotionResult(True, nix_attr=nix_attr)
 
 
 def promote_candidates(
@@ -222,9 +277,9 @@ def promote_candidates(
         entry = registry[package_id]
         if entry.source != "custom":
             continue
-        result = PromotionResult(entry, False, "no candidate passed")
+        result = PromotionResult(False, "no candidate passed")
         for candidate in entry.candidates:
-            result = try_promote(package_id, entry, candidate, runner)
+            result = try_promote(candidate, runner)
             if result.promoted:
                 break
         results[package_id] = result
@@ -270,15 +325,13 @@ def _orca_release(payload: bytes) -> Release | None:
 
 PROFILES = {
     "dia-browser": PackageProfile(
-        "dia-browser",
         "https://releases.diabrowser.com/BoostBrowser-updates.xml",
         DERIVATIONS["dia-browser"],
         _dia_release,
     ),
     "orca-editor": PackageProfile(
-        "orca-editor",
         "https://api.github.com/repos/stablyai/orca/releases/latest",
-        ORCA_SOURCES,
+        DERIVATIONS["orca-editor"],
         _orca_release,
     ),
 }
@@ -299,7 +352,8 @@ class ReleaseRedirectHandler(urllib.request.HTTPRedirectHandler):
         redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
         target = urllib.parse.urlsplit(newurl)
         if redirected is not None and (target.scheme, target.netloc) != (
-            "https", "api.github.com"
+            "https",
+            "api.github.com",
         ):
             redirected.remove_header("Authorization")
         return redirected
@@ -334,11 +388,11 @@ def prefetch_hash(url: str) -> str:
 
 
 def current_literals(path: Path) -> tuple[str, str, str]:
-    if path.suffix == ".json":
-        release = json.loads(path.read_text(encoding="utf-8"))
-        source = release["sources"]["aarch64-darwin"]
-        return release["version"], source["url"], source["hash"]
     text = path.read_text(encoding="utf-8")
+    if re.search(r"(?m)^\s*release\s*=", text):
+        release, sources = _inline_release_literals(text)
+        source = sources["aarch64-darwin"]
+        return release.group("version"), source.group("url"), source.group("hash")
     values = []
     for field in ("version", "url", "hash"):
         match = re.search(rf"(?m)^\s*{field}\s*=\s*\"([^\"]+)\";", text)
@@ -355,25 +409,41 @@ def collect_updates(
     for package_id in package_ids:
         profile = PROFILES[package_id]
         version, old_url, old_hash = current_literals(profile.derivation)
-        print(f"Checking {package_id} (current definition: {version}): {profile.feed_url}", file=sys.stderr, flush=True)
+        print(
+            f"Checking {package_id} (current definition: {version}): {profile.feed_url}",
+            file=sys.stderr,
+            flush=True,
+        )
         try:
             release = profile.parse_release(fetcher(profile.feed_url))
         except (OSError, ET.ParseError, json.JSONDecodeError) as error:
             print(f"Failed to check {package_id}: {error}", file=sys.stderr, flush=True)
-            updates.append({"package": package_id, "status": "error", "reason": str(error)})
+            updates.append(
+                {"package": package_id, "status": "error", "reason": str(error)}
+            )
             continue
         if release is None:
-            print(f"Failed to check {package_id}: No compatible release asset found", file=sys.stderr, flush=True)
-            updates.append({
-                "package": package_id,
-                "status": "error",
-                "reason": "No compatible release asset found",
-            })
+            print(
+                f"Failed to check {package_id}: No compatible release asset found",
+                file=sys.stderr,
+                flush=True,
+            )
+            updates.append(
+                {
+                    "package": package_id,
+                    "status": "error",
+                    "reason": "No compatible release asset found",
+                }
+            )
             continue
         if release.version == version:
             print(f"Up to date: {package_id} {version}", file=sys.stderr, flush=True)
             continue
-        print(f"Downloading {package_id} {release.version} to acquire its hash: {release.url}", file=sys.stderr, flush=True)
+        print(
+            f"Downloading {package_id} {release.version} to acquire its hash: {release.url}",
+            file=sys.stderr,
+            flush=True,
+        )
         try:
             sources = {
                 system: {"url": url, "hash": prefetch_hash(url)}
@@ -391,10 +461,20 @@ def collect_updates(
             json.JSONDecodeError,
             ValueError,
         ) as error:
-            print(f"Failed to download {package_id} {release.version}: {error}", file=sys.stderr, flush=True)
-            updates.append({"package": package_id, "status": "error", "reason": str(error)})
+            print(
+                f"Failed to download {package_id} {release.version}: {error}",
+                file=sys.stderr,
+                flush=True,
+            )
+            updates.append(
+                {"package": package_id, "status": "error", "reason": str(error)}
+            )
             continue
-        print(f"Hash acquired: {package_id} {release.version}", file=sys.stderr, flush=True)
+        print(
+            f"Hash acquired: {package_id} {release.version}",
+            file=sys.stderr,
+            flush=True,
+        )
         updates.append(
             {
                 "package": package_id,
@@ -417,11 +497,12 @@ def apply_updates(updates: list[dict[str, Any]]) -> None:
             continue
         path = PROFILES[update["package"]].derivation
         original = path.read_text(encoding="utf-8")
-        if path.suffix == ".json":
-            updated = json.dumps(
-                {"version": update["version"], "sources": update["sources"]},
-                indent=2,
-            ) + "\n"
+        if update["package"] == "orca-editor":
+            updated = update_release_sources(
+                original,
+                version=update["version"],
+                sources=update.get("sources"),
+            )
         else:
             updated = update_derivation_literals(
                 original,
@@ -436,11 +517,23 @@ def apply_updates(updates: list[dict[str, Any]]) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--check", action="store_true", help="report changes without writing derivations")
-    mode.add_argument("--write", action="store_true", help="apply safe derivation literal updates")
-    parser.add_argument("--package", dest="packages", action="append", choices=sorted(PROFILES))
-    parser.add_argument("--promote", action="store_true", help="build explicit nixpkgs candidates")
-    parser.add_argument("--output", type=Path, default=ROOT / "darwin-package-update.json")
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="report changes without writing derivations",
+    )
+    mode.add_argument(
+        "--write", action="store_true", help="apply safe derivation literal updates"
+    )
+    parser.add_argument(
+        "--package", dest="packages", action="append", choices=sorted(PROFILES)
+    )
+    parser.add_argument(
+        "--promote", action="store_true", help="build explicit nixpkgs candidates"
+    )
+    parser.add_argument(
+        "--output", type=Path, default=ROOT / "darwin-package-update.json"
+    )
     args = parser.parse_args(argv)
 
     package_ids = args.packages or list(PROFILES)
@@ -455,7 +548,11 @@ def main(argv: list[str] | None = None) -> int:
         for update in updates:
             if update.get("status") == "error":
                 reason = " ".join(update["reason"].splitlines())
-                print(f"[ERROR] {update['package']}: {reason}", file=sys.stderr, flush=True)
+                print(
+                    f"[ERROR] {update['package']}: {reason}",
+                    file=sys.stderr,
+                    flush=True,
+                )
         return 1
     promotion_results = (
         promote_candidates(

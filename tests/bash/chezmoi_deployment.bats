@@ -10,11 +10,6 @@
     cp "$REPO_ROOT/nix/home/keybindings/generated.json" "$fixture_root/nix/home/keybindings/generated.json"
     cp "$REPO_ROOT/scripts/powershell/Sync-PowerToysKeyboard.ps1" "$fixture_root/scripts/powershell/Sync-PowerToysKeyboard.ps1"
     cp "$REPO_ROOT/scripts/powershell/Invoke-DesktopAction.ps1" "$fixture_root/scripts/powershell/Invoke-DesktopAction.ps1"
-    script="$source_dir/.chezmoiscripts/deploy/terminals/run_onchange_deploy.ps1.tmpl"
-    [[ -f "$script" ]]
-    [[ "$(<"$script")" == *'.config/wezterm/wezterm.lua'* ]]
-    [[ "$(<"$script")" != *'Windows Terminal'* ]]
-    [[ "$(<"$script")" != *'LOCALAPPDATA'* ]]
 
     for os in linux darwin windows; do
         destination="$BATS_TEST_TMPDIR/$os/home"

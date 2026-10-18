@@ -1,16 +1,6 @@
 schema_version: 1
 data_root: /opt/data
 onepassword_items:
-  - key: dashboard
-    account: my.1password.com
-    vault: openclaw
-    item: Hermes Agent Dashboard
-    fields:
-      - canonical_name: username
-        labels: [username, user name]
-        environment: [HERMES_DASHBOARD_BASIC_AUTH_USERNAME]
-      - canonical_name: password
-        labels: [password]
   - key: github
     account: my.1password.com
     vault: openclaw
@@ -145,5 +135,3 @@ shared_repositories:
     source: https://github.com/rurusasu/lifelog.git
     ref: main
     target: /opt/data/shared/lifelog
-    mode: read-write
-    sync_owner: default

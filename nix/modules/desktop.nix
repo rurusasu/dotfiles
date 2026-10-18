@@ -5,12 +5,17 @@ let
     { lib, pkgs, ... }:
     {
       imports = [ ./fonts/gtk.nix ];
-      home.packages = lib.optionals pkgs.stdenv.hostPlatform.isLinux [
-        (chromeProvider pkgs)
-        pkgs.obsidian
-        pkgs._1password-gui
-        pkgs.nautilus
-      ];
+      home.packages =
+        lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+          (chromeProvider pkgs)
+          pkgs.obsidian
+          pkgs._1password-gui
+          pkgs.nautilus
+        ]
+        # Upstream currently publishes the Linux Desktop binary only for x86_64.
+        ++ lib.optionals (pkgs.stdenv.hostPlatform.system == "x86_64-linux") [
+          (pkgs.callPackage ./comfyui/package.nix { })
+        ];
     };
 in
 {

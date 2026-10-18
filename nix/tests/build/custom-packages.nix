@@ -13,6 +13,18 @@ let
       path = buildPkgs.callPackage ../../modules/editors/orca/package.nix { };
     }
   ]
+  ++
+    buildPkgs.lib.optionals
+      (builtins.elem buildPkgs.stdenv.hostPlatform.system [
+        "aarch64-darwin"
+        "x86_64-linux"
+      ])
+      [
+        {
+          name = "comfyui-desktop";
+          path = buildPkgs.callPackage ../../modules/comfyui/package.nix { };
+        }
+      ]
   ++ buildPkgs.lib.optionals (chatgptDesktopCheck != null) [
     {
       name = "chatgpt-desktop";

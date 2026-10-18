@@ -4,7 +4,7 @@ On macOS and Linux/WSL, the pinned `hermes-agent` flake and Home Manager module
 manage the Hermes CLI and native gateway service. On Windows, the installer applies that Nix-managed runtime in the configured NixOS WSL distribution. The
 Nix module also installs `hermes-bootstrap` and a manifest rooted at
 `~/.hermes`; `task hermes:sync` streams 1Password item data to that native
-transactional bootstrap and synchronizes profiles and shared repositories.
+bootstrap and synchronizes profiles and shared repositories.
 
 On macOS, the CLI and gateway use the official complete bundle pinned by Nix;
 see [Desktop installation](desktop.md#desktop-installation-and-launch).
@@ -82,14 +82,13 @@ Its CLI uses the existing package entrypoint (`python -P -m hermes_bootstrap`),
 with the local package before upstream on `PYTHONPATH`; no separate CLI Python
 file or unused upstream source patch is needed.
 
-Chrome, X API, Calendar and Gmail share one MCP configuration writer. Their
-adapters keep the existing error policy: Chrome/X API reject invalid configs;
-Calendar/Gmail defer replacement-race errors to final installed-layout validation.
-LCM uses one pure merge for both ordinary and reserved profile directories,
-while keeping the transaction snapshots and FD-relative writes separate.
+Chrome, X API, Calendar and Gmail share one MCP configuration writer.
+LCM uses one pure merge for both ordinary and newly created profile directories.
+Individual configuration files use private temporary files and atomic
+replacement, followed by final installed-layout validation.
 
 Removing the remaining bootstrap requires replacements for all three runtime
-responsibilities above, including rollback, unmanaged-file preservation and
+responsibilities above, including safe retries, unmanaged-file preservation and
 every named or locally added profile. The pinned upstream Home Manager merge
 targets only the root config and replaces lists, so copying complete profile
 configs with `hermesHomeFiles` is not an equivalent migration. Secrets must
@@ -110,7 +109,7 @@ task hermes:sync       # re-apply secrets, profiles, and repositories
 The native script reads the Service Account token into process memory, fetches
 the planned 1Password items, and streams the JSON payload directly to
 `hermes-bootstrap apply` over stdin. Secrets are not written to `.op.env`, a
-temporary file, or command arguments. The transactional apply synchronizes
+temporary file, or command arguments. The apply synchronizes
 profile distributions and shared repositories, installs private credentials,
 and reconciles every managed Hermes profile before the gateway restarts.
 
@@ -141,26 +140,23 @@ native host wrapper
   -> fetch the declared 1Password items
   -> stream header + item records + end as NDJSON over stdin
   -> hermes-bootstrap apply
-  -> recover any transaction journal and validate payload/source access
+  -> refuse unresolved transaction data from an earlier implementation
+  -> validate payload, credentials, and source access
   -> synchronize profile distributions and shared repositories
   -> reconcile root/profile config, credentials, and managed environment
-  -> commit transaction under ~/.hermes
+  -> validate the installed layout under ~/.hermes
   -> restart the Nix-managed native gateway
 ```
 
 Each item record embeds the full `op item get <title> --account
 my.1password.com --vault openclaw --format json` object. The stdin stream is
-never stored, logged, or placed in a process argument. All ten items are
-mandatory: `Hermes Agent Dashboard`, `GitHubUsedOpenClawPAT`,
-`Master`, `Rick`, `Hoffman`,
-`RisaRisa`, `Nancy`, `Kuroda`, `Shiraishi`, and `Google Calendar MCP` in account
-`my.1password.com`, vault `openclaw`.
+never stored, logged, or placed in a process argument. Bootstrap reads only
+`GitHubUsedOpenClawPAT` and `Google Calendar MCP` from account
+`my.1password.com`, vault `openclaw`. Other manifest items supply runtime
+1Password references rather than raw bootstrap payload values.
 
-Required labels are `username` or `user name` and `password` for the dashboard;
-`credential`, `token`, `PAT`, or `password` for the GitHub item; and
-`DISCORD_BOT_TOKEN`/`bot_token`/`bot token`, and
-`DISCORD_ALLOWED_USERS`/`allowed_users`/`allowed users`/`allowFrom`/`allow_from`
-for each Discord item. The Calendar item requires `oauth_credentials_json` and
+Required labels are `credential`, `token`, `PAT`, or `password` for the GitHub
+item. The Calendar item requires `oauth_credentials_json` and
 `tokens_json`; bootstrap installs both as mode `0600` files in the shared
 `${HERMES_HOME}/google-calendar-mcp` directory, independently of named-profile
 synchronization.
@@ -170,15 +166,16 @@ Gmail reuses the Calendar OAuth client in the shared
 preserved across bootstrap runs and shared by all profiles; it is not added to
 the 1Password item plan.
 
-Bootstrap validates GitHub authentication and all remote
-access after crash-journal recovery and before it begins new staging or
-transaction writes. Recovery may restore or delete previously journaled managed
-paths before secrets and credentials are validated. Managed `.env` keys include
-the three GitHub aliases, dashboard username/hash/signing secret, and profile
-Discord credentials plus `DISCORD_ALLOW_BOTS=mentions`; root also owns
-`API_SERVER_KEY`, which is removed from named profile `.env` files. The bot
-message gate is written to every profile `.env` so bot mentions can reach the
-intended profile Gateway.
+Bootstrap checks source access through the Git fetch used for staging, before
+managed-path writes. It does not create, read, merge, or
+delete runtime `.env` files. Existing files remain user data. Dashboard password
+hashes, signing secrets, and API keys are not generated by bootstrap.
+
+Each managed config contains native `secrets.onepassword.env` references for
+GitHub, xAI, and the profile's Discord credentials. The runtime resolves these
+through an authenticated 1Password CLI; the Nix bootstrap wrapper supplies its
+absolute executable path. Discord bot mentions use the non-secret
+`platforms.discord.allow_bots: mentions` setting in each applicable config.
 
 The seven profile-named items keep service credentials in separate sections.
 Discord uses `Discord/bot_token` and `Discord/allowed_users`; additional
@@ -191,19 +188,22 @@ consumes only the `Discord` section for messaging.
 
 The native profile sync resolves repository credentials in this order:
 
-1. an existing `GH_TOKEN` process variable;
-2. the active profile's `${HERMES_HOME}/.env`;
-3. the root `${HERMES_HOME}/.env` fallback.
+1. a nonempty `GH_TOKEN`, `GITHUB_TOKEN`, or `GITHUB_PERSONAL_ACCESS_TOKEN`
+   process variable, in that order;
+2. the manifest's GitHub credential reference, read directly with `op read`.
 
 The token is passed only to the scoped Git operation and is not written into
-Git configuration or a separate `hosts.yml`. If no token is available, rerun
-`task hermes:sync` after repairing the configured GitHub item.
+Git configuration, an `.env` file, or a separate `hosts.yml`. If no token is
+available, repair the configured GitHub item and 1Password CLI authentication,
+then rerun the failed command.
 
 ## Sync Shared Lifelog
 
 Lifelog remains a normal read-write shared Git repository, not a named-profile
-exact mirror. The manifest assigns `sync_owner: default`; all profiles use the
-same canonical checkout at `${HERMES_HOME}/shared/lifelog`.
+exact mirror. All profiles use the same canonical checkout at
+`${HERMES_HOME}/shared/lifelog`, with the shared engine lock serializing updates.
+Shared repository declarations contain only a name, source, branch, and target;
+there is no read-only mode, pinned shared commit, or sync-owner metadata.
 
 The native owner operation is:
 
@@ -211,11 +211,9 @@ The native owner operation is:
 task hermes:repository:sync
 ```
 
-It resolves the token as process `GH_TOKEN`, then the safe active
-`${HERMES_HOME}/.env`, then `${HERMES_HOME}/.env`. Env files are parsed as data and
-never executed; unsafe, duplicate, symlinked, hard-linked, or special-file
-sources fail closed. The command validates the canonical repository, acquires
-`${HERMES_HOME}/locks/repositories/lifelog.lock`, and runs the ordinary read-write
+It uses the same process-variable and 1Password lookup as profile sync, without
+reading `.env` files. The command acquires the engine lock, validates the
+canonical repository, and runs the ordinary read-write
 commit/rebase/push workflow. Its success JSON reports `status`, `name`,
 `commit`, and `pushed`.
 
@@ -240,10 +238,11 @@ these commands with a clone or checkout inside a profile home.
 
 For every existing valid named profile, the local `distribution.yaml` and
 `distribution_owned` allowlist are authoritative. The service creates a private
-immutable snapshot, projects it into a temporary Git repository, and pushes a
-normal fast-forward update. It then stages the same reported commit and uses
-the official Hermes distribution API during bootstrap. The profile home itself
-stays non-Git and both dry runs and real sync preserve local bytes and modes.
+snapshot, projects it into a temporary Git repository, and pushes a normal
+fast-forward update. Existing profiles are preserved during bootstrap; only
+missing profiles are installed through the official Hermes distribution API.
+The profile home itself stays non-Git and both dry runs and real sync preserve
+local bytes and modes.
 
 The remote tree is exact: canonical `.gitignore`, canonical
 `distribution.yaml`, and declared owned paths only. Stale remote README files,
@@ -256,18 +255,17 @@ projection because Git cannot represent it.
 Hermes installs an exactly top-level declared `.env.template` as
 `.env.EXAMPLE`. Snapshotting reverses only that mapping: it reads the safe
 installed `.env.EXAMPLE` bytes and publishes them as `.env.template`, while the
-canonical manifest and `.gitignore` retain the declared source name. The raw
-manifest value must be spelled exactly `.env.template`; normalized aliases such
-as `./.env.template` or a trailing slash are invalid. The installed directory
-entry must likewise be spelled exactly `.env.EXAMPLE`; lowercase or mixed-case
-aliases and casefold collisions are invalid even on a case-insensitive host.
-Snapshotting binds the enumerated entry identity to the descriptor opened for
-copying and rechecks both spelling and identity afterward. Missing,
-symbolic-link, non-regular, concurrently replaced, or secret-like installed
+canonical manifest and `.gitignore` retain the normalized source name. Path
+normalization and the host filesystem determine spelling; bootstrap does not
+add a separate raw-spelling or directory-entry-case requirement.
+Missing, symbolic-link, hard-linked, non-regular, or secret-like installed
 content fails preflight. `.env`, nested `.env.template`, explicitly owned
-`.env.EXAMPLE`, and every other `.env*` path remain invalid. The pre-transaction
-snapshot revalidation repeats the same mapping, so a late `.env.EXAMPLE` change
-fails with `local_profile_changed`.
+`.env.EXAMPLE`, and every other `.env*` path remain invalid. Snapshot creation
+validates the allowlist and initial source types, scans file contents for
+secrets, and preserves file contents and executable modes. The resulting Git
+commit identifies a publication; bootstrap does not keep parallel per-file
+checksums or recheck private snapshot contents for later modification. Avoid editing a profile
+while bootstrap or profile synchronization is running.
 
 The configured manifest currently includes `rick`, `hoffman`, `risarisa`,
 `nancy`, `kuroda`, and `shiraishi`. Do not use an obsolete profile list in a
@@ -279,121 +277,90 @@ Task 5 fixtures cover declared assets for Rick, Hoffman, and Nancy and no
 
 ## First Install And Bootstrap Ordering
 
-Bootstrap validates credentials and repository access, snapshots all existing
-profiles, and stages only truly missing profiles. Existing named profiles remain
+Bootstrap validates the payload and existing profile layout, then stages the
+root distribution and only truly missing profiles. Git fetch checks source access.
+Existing named profiles remain
 local-authoritative and are not published or replaced by `apply`; publication is
 owned by the explicit `sync-profiles` command. Bootstrap then stages the
 remote-authoritative root distribution, stages each missing profile in manifest
 order using its configured branch and optional pinned commit, runs
 `validate_chrome_mcp_sources` over the staged root and profiles, synchronizes
-shared repositories including lifelog, and only then calls `Transaction.begin`.
-Inside the transaction it applies root, missing profiles in manifest order,
-shared working trees, and managed environment files. If a staged validation
-fails, no profile publication has occurred and bootstrap fails before
-shared-repository synchronization or local transaction mutation.
+shared repositories including lifelog, and then applies root, missing profiles
+in manifest order, shared working trees, and managed environment files. If a
+staged validation fails, no profile publication has occurred and bootstrap fails
+before shared-repository synchronization or managed-path writes.
 
 `apply` holds the canonical nonblocking `EngineLock` at
-`${HERMES_HOME}/locks/bootstrap-engine.lock` from before crash-journal recovery
-through transaction and private-scratch cleanup. The same cooperative lock
-wraps `sync-profiles` and `sync-repository`; repository locks are subordinate
-to it. Read-only `secret-plan` and `validate` do not acquire it. Lock
+`${HERMES_HOME}/locks/bootstrap-engine.lock` from before payload processing
+through apply and private-scratch cleanup. The same cooperative lock
+wraps `sync-profiles` and `sync-repository`. Read-only `secret-plan` and `validate`
+do not acquire it. Lock
 contention fails through the redacted repository error boundary.
 
-After root/profile staging, staged Chrome validation, and shared-repository
-synchronization, `apply` recreates every profile snapshot before
-`Transaction.begin`. It compares the target set, canonical manifests,
-`.gitignore`, path inventory, regular-file modes and sizes, per-file SHA-256
-values, and aggregate digest. Any drift, including a missing target created
-during apply, fails with `local_profile_changed` before local distribution or
-environment mutation. Remote commits from the original immutable snapshot
-remain valid. A final named-profile apply guard permits remote installation
-only for a missing target; an existing target that differs from the staged
-local projection fails closed and is never force-overwritten.
+The engine lock serializes cooperating bootstrap commands. It does not lock
+out editors or other programs that modify profile files; stop those writes
+while an operation runs. Source files are validated and copied once; bootstrap
+does not repeat that validation before applying the staged content. A final
+named-profile apply guard permits remote installation only for a missing target
+and refuses an existing target.
 
 A target directory that is truly absent is seeded from its configured remote
 for the first official Hermes install. An existing malformed or incomplete
-profile is not absent: bootstrap fails before its transaction and never falls
-back to a remote overwrite.
+profile is not absent: bootstrap fails before managed-path writes and never
+falls back to a remote overwrite.
 
 If explicit synchronization fails, the report contains per-profile failures;
 completed pushes remain valid because independent profile repositories are not
 cross-repository atomic. Repair the failed local boundary and retry it. A
 normal `apply` does not publish existing profiles and therefore does not fail
-because a profile push failed. There are two public diagnostics for the
-explicit synchronization command:
+because a profile push failed. Public snapshot preparation and secret scanning
+run only during `sync-profiles`. Standalone `sync-profiles --dry-run` identifies the invalid profile
+and category in its JSON; a real `sync-profiles` run also reports publication
+failures there.
 
-- Snapshot preflight can fail before a `profile_report` is created. `apply`
-  writes `profile snapshot rejected (<category>)` to stderr, without a profile
-  name or report. Standalone `sync-profiles --dry-run` identifies the invalid
-  profile and category in its JSON.
-- A nonzero post-preflight publication report writes
-  `named profile repository sync failed: <failed names>` to stderr. The Python
-  exception can retain the report internally.
-
-Every cleanup failure requires the guarded profile and private
-shared-repository stage artifact inventories in the cleanup runbook before any
-retry or closure. Profile snapshot, revalidation, Git staging, and askpass
-artifacts are under the container's private `/tmp` (for example,
-`/tmp/.hermes-profile-sync-*`), not the `${HERMES_HOME}` bind mount. The CLI-hidden
-category could be `cleanup_failed`; neither an expected push diagnosis nor a
-later successful sync excludes that possibility.
-
-Snapshot-preflight rejection is a different trigger. Publication has not begun,
-and `profile snapshot rejected (<category>)` exposes its category. If the inner
-category is `cleanup_failed` but that exact message reaches the CLI, the final
-outer apply scratch cleanup did not fail; otherwise the outer cleanup error
-would replace it with `could not clean bootstrap staging resources`. That
-exact snapshot message alone does not trigger the direct-child publication
-inventory because publication resources were not created. A non-cleanup
-snapshot category likewise does not activate the post-publication inventory
-trigger.
-
-`could not clean bootstrap staging resources` is itself an indeterminate
-cleanup trigger. Final outer cleanup can replace a snapshot-preflight,
-staging, transaction, validation, or other primary failure. Before retry or
-closure, inventory `/tmp/.hermes-profile-snapshots-*`,
-`/tmp/.hermes-profile-sync-*`, `/tmp/askpass-*`, and private
-`${HERMES_HOME}/shared/.hermes-repository-*` stages. A candidate or indeterminate
-determination activates the same full-window quiescent quarantine procedure; a
-later successful command does not waive any inventory.
+Cleanup failures report `cleanup_failed` or
+`could not clean bootstrap staging resources`. Each run cleans its own private
+scratch directories; a later run does not clean artifacts left by an earlier
+one. Follow [Scratch cleanup](#scratch-cleanup) before treating the failure as
+resolved.
 
 The `apply` command does not create a profile publication report because it
 does not publish existing profiles. By default every failed `apply` has empty
 stdout and exactly one safe error message on stderr. With
-`HERMES_BOOTSTRAP_DEBUG=1`, a sanitized traceback from the public CLI boundary
-may follow that message; it contains neither tokens nor the raw internal
-exception graph.
+`HERMES_BOOTSTRAP_DEBUG=1`, a sanitized traceback may follow that message.
+Internal exception chains and local variables are not printed. Bootstrap does
+not erase exceptions or traceback locals retained by calling Python code.
 
 Use dry-run only for aggregate preflight and diff inspection. It never pushes,
 so a changed entry reports category `dry_run`; it cannot reproduce
-`push_rejected`, `push_race_exhausted`, or another push-only failure. To obtain
+`push_rejected` or another push-only failure. To obtain
 a push-only category, run standalone real `sync-profiles` and inspect its JSON.
 The real synchronizer also enforces each profile's `max_deleted_paths` limit;
 an over-limit result uses category `deletion_limit_exceeded` and does not push.
 The real aggregate processes every manifest profile and may push changes for
-profiles other than the original failure. Successful pushes remain valid and
-cannot be rolled back; a subsequent run reports them as `unchanged` when the
+profiles other than the original failure. Successful pushes remain on the
+remote; a subsequent run reports them as `unchanged` when the
 remote tree matches the same local snapshot.
 
 Root `hermes-home` remains remote-authoritative. `shared/lifelog` remains the
-normal locked read-write Git repository owned for synchronization by the default
-profile. The local-first named-profile policy does not change either model.
+normal locked read-write Git repository. The local-first named-profile policy
+does not change either model.
 
 ## Reading Results And Exit Codes
 
-`sync-profiles` writes one compact, sorted JSON result line to stdout for both
+`sync-profiles` writes one JSON result line to stdout for both
 success and handled sync failure; stderr is empty in those cases. The object
 has `schema_version: 1`, `command: "sync-profiles"`, a boolean `dry_run`, an
 aggregate `status`, and ordered `profiles` entries. Aggregate status is
 `changed`, `unchanged`, or `failed`, not `success`.
 
-Each profile entry includes `name`, `status`, `commit`, `snapshot`, `added`,
+Each profile entry includes `name`, `status`, `commit`, `added`,
 `modified`, `deleted`, `paths`, `category`, and `message`. The three diff
 fields and `paths` are arrays of relative paths; `paths` is the sorted combined
 list. Treat `category` and `message` as redacted diagnostics.
 
-For `unchanged`, `commit` is the current remote head, `snapshot` is the local
-snapshot digest, all diff arrays are empty, and the category/message are
+For `unchanged`, `commit` is the current remote head, all diff arrays are empty,
+and the category/message are
 `unchanged` / `profile snapshot already published`. A changed dry run also
 reports the current remote head because it creates no commit; it includes the
 actual diff with `dry_run` / `profile snapshot changes detected`. A changed
@@ -401,23 +368,21 @@ real run reports the resulting remote commit and uses
 `published` / `profile snapshot published`.
 
 An ordinary per-profile Git or publication failure after snapshot preparation
-does not replace other completed profile results; their available snapshots,
-commits, and diffs remain in the aggregate. The failed entry retains its
-profile snapshot digest, while an unavailable commit is `null` and unavailable
-diff arrays are empty. Credential failures and aggregate pre-snapshot failures,
-including a missing or malformed profile, report an empty snapshot for every
-profile.
+does not replace other completed profile results; their commits and diffs remain
+in the aggregate. An unavailable commit is `null` and unavailable diff arrays
+are empty. Credential failures and aggregate preflight failures, including a
+missing or malformed profile, report failed entries for every profile.
 
 Final top-level snapshot scratch cleanup is a separate aggregate failure. If it
 fails after profile processing, the command replaces all completed results
-with `cleanup_failed` entries whose snapshots are empty, commits are `null`,
+with `cleanup_failed` entries whose commits are `null`,
 and diff arrays are empty. Standalone `sync-profiles` never installs a missing
 target: it exits `4` with a failed aggregate. Only bootstrap `apply` uses the
 missing-target first-install exception.
 
 | Exit | Meaning                                          | Operator action                                                      |
 | ---- | ------------------------------------------------ | -------------------------------------------------------------------- |
-| `0`  | Every profile is `changed` or `unchanged`        | Continue; cleanup recovery uses the quiescent quarantine runbook     |
+| `0`  | Every profile is `changed` or `unchanged`        | Continue                                                             |
 | `3`  | Credentials unavailable                          | Repair the runtime GitHub credential source, then rerun              |
 | `4`  | Missing target, preflight, or repository failure | Repair the reported profile/category or repository state, then rerun |
 
@@ -425,10 +390,10 @@ Invalid arguments exit `2`, manifest validation exits `8`, and unexpected
 command failures exit `6`. Those errors use the safe stderr path and do not
 emit a `sync-profiles` JSON document. A successful JSON parse is not enough:
 after a normal complete stdout write, use the report's process exit status as
-the aggregate success signal. The existing BrokenPipe contract is an exception:
-if stdout closes while the JSON is written, the CLI returns `0` even for a
-failure report. Automation must consume stdout through EOF and must not
-interpret an early-closing pipe's `0` as successful synchronization.
+the aggregate success signal. If stdout closes while the JSON is written or
+flushed, the CLI preserves that result code: successful synchronization returns
+`0`, and a failed synchronization still returns its nonzero code. A broken pipe
+inside command execution is reported as a command failure.
 
 ## Failure And Recovery
 
@@ -437,10 +402,12 @@ preflight failure reports the invalid profile with its redacted category and
 reports all other profile entries as `aggregate_preflight_blocked`; no remote
 tree was compared or modified.
 
-After preflight, profile publication is sequential and independently locked.
-One Git failure does not stop later profiles from being attempted. A push race
-gets one fetch-and-rebuild retry. A matching-tree remote descendant is accepted;
-a second race failure is reported as `push_race_exhausted`.
+After preflight, profile publication is sequential under the engine lock.
+One Git failure does not stop later profiles from being attempted. Each profile
+fetches once and attempts one non-force push. A rejected push or lost response
+reports `push_rejected`; repair the cause and rerun `sync-profiles`. The next
+run compares the remote tree with a fresh local snapshot, so an already
+completed publication can report `unchanged`.
 
 For a snapshot-preflight repair handoff, take the failed profile and redacted
 category from standalone dry-run JSON. Correct the local authoritative profile
@@ -448,139 +415,61 @@ or its owning engine/environment, then rerun dry-run until aggregate preflight
 is green. Run real `sync-profiles` next. If publication fails, take the failed
 profile and push-only category from that real JSON report; do not infer it from
 dry-run. The real aggregate can publish other profiles, and successful pushes
-are not rolled back. Accept the repair only when the real aggregate exits `0`
+remain on the remote. Accept the repair only when the real aggregate exits `0`
 and the repaired profile is `changed` or `unchanged`. Do not use remote content
 to repair an existing local profile.
 
-### Bootstrap Scratch Cleanup Recovery
+### Scratch Cleanup
 
-A `cleanup_failed` result is not closed by a later successful run alone. Each
-invocation cleans only artifacts it created and still tracks; it does not scan
-for private artifacts left by an earlier invocation. The engine lock serializes
-cooperating bootstrap commands, but a one-time process or lock check is not a
-safe cleanup proof by itself.
+If private scratch cleanup fails, confirm that the affected command has exited
+and no bootstrap operation is still running. Inspect the diagnostic and repair
+the filesystem problem, such as insufficient permissions or an unavailable path.
+Review any directories left by that invocation before removing them: profile
+snapshots, Git staging, bootstrap staging and askpass files use the host's
+temporary directory; private first-clone stages use
+`${HERMES_HOME}/shared/.hermes-repository-*`; initial profile installation uses
+`.hermes-profile-home-*` beside `${HERMES_HOME}`. Use the exact identified paths and
+preserve anything whose ownership or contents are uncertain. Scratch data can
+contain private profile content or credentials, so keep it private until it is
+removed.
 
-The supported threat model covers malformed remotes, malformed or concurrently
-edited local content, crashes, cooperating concurrent bootstrap commands,
-symlinks, special files, unexpected mounts, and accidental pathname
-replacement. It trusts the kernel, filesystem, container runtime, and bootstrap
-execution context. An actively malicious same-UID process that deliberately
-bypasses `EngineLock` is outside this model; cleanup does not claim an atomic
-identity-check-and-delete guarantee against that actor.
+The command uses ordinary recursive removal for its private scratch directories.
+It does not provide mount isolation or protection against another program
+replacing files during cleanup.
+After repair and cleanup, rerun the failed command. For `sync-profiles`, inspect
+the complete JSON report and require exit `0`; completed remote pushes remain
+valid and a retry can report them as `unchanged`.
 
-The full procedure is mandatory for an explicit standalone `cleanup_failed`
-report or `could not clean bootstrap staging resources`. These messages must
-complete the unified quiescent inventory and decision steps below even when
-the suspected cause is an ordinary push failure.
+## Apply Failure And Retry
 
-1. Establish one named maintenance owner. Stop and disable every launch path
-   for the entire recovery window: the Hermes gateway and scheduler, any
-   deployed profile-sync cron or scheduled task, bootstrap Compose runs, host
-   installers and Taskfile entrypoints, and manual `apply`, `sync-profiles`, or
-   `sync-repository` commands. Confirm existing runs have exited and no
-   transaction or repository lock has an owner. Lock files may persist while
-   unlocked. Do not re-enable any launcher until the final step; only the
-   maintenance owner may run the controlled verification commands below.
-2. From a maintenance environment that sees the same `${HERMES_HOME}` and `/tmp`
-   mount namespaces, inventory only direct children whose complete names match
-   `.hermes-profile-snapshots-*`, `.hermes-profile-sync-*`,
-   `.hermes-bootstrap-*`, or `askpass-*` under canonical `/tmp`. Separately
-   inventory only direct children of canonical `${HERMES_HOME}/shared` whose
-   complete names match `.hermes-repository-*`; `repositories.py` creates
-   these private first-clone stages in the shared repository target's parent.
-   Always inventory both groups, even when the public error names only one
-   phase. Separately inventory any prior quarantine in each relevant parent.
-   An existing quarantine is unresolved recovery evidence: do not reuse or
-   remove it; stop and escalate.
-3. Inspect every candidate individually with no symlink following. All
-   `.hermes-profile-*`, `.hermes-bootstrap-*`, and `askpass-*` candidates must
-   be directly beneath `/tmp`, owned by the maintenance service UID/GID, and
-   use the expected type, mode, link count, and prefix. A
-   `.hermes-repository-*` candidate must meet the same directory, owner, and
-   mode checks directly under canonical `${HERMES_HOME}/shared`. Any unexpected
-   path, descendant mount, type, owner, mode, link count, prefix, or location
-   is an escalation, not a deletion candidate.
-4. Capture an authoritative mount inventory for that maintenance namespace,
-   such as Linux `/proc/self/mountinfo` or reliable mountpoint tooling. Compare
-   its canonical mount targets against each canonical candidate subtree.
-   Reject a candidate if it or any descendant is a mountpoint or bind mount.
-   `find -xdev` is not a mountpoint detector. If canonicalization, mount
-   inventory, or subtree comparison is unavailable or ambiguous, do not remove
-   anything; preserve evidence and escalate.
-5. Record the decision for all candidate groups before any retry. For a
-   hidden-category apply publication failure, reliably empty profile and outer
-   inventories, an empty private shared-repository stage inventory, and
-   complete mount determination return to ordinary push-failure recovery in
-   step 8 without creating quarantine. An explicit standalone `cleanup_failed`,
-   or an outer
-   `could not clean bootstrap staging resources`, keeps its cleanup diagnosis
-   even when all candidate inventories are empty and proceeds to controlled
-   verification only after its owning cleanup fault is repaired. If any
-   candidate exists, activate the quarantine path in steps 6 and 7. If any
-   determination is unavailable, the full recovery path is active but cannot
-   safely proceed; preserve evidence and escalate. A later dry-run or real
-   aggregate exit `0` never substitutes for this pre-retry inventory because
-   old artifacts are not revisited.
-6. Create a unique `.hermes-profile-cleanup-quarantine-<incident-id>` directory
-   in `/tmp` for `/tmp` candidates and a separate quarantine in the candidate's
-   `${HERMES_HOME}/shared` parent for shared-repository candidates. Verify each is
-   owner-created, non-symlink, mode `0700`, contains no mountpoint, and has the
-   same filesystem device as the candidates it receives. Revalidate each
-   candidate immediately before moving it, then atomically rename each exact
-   candidate into its same-parent quarantine without using globs. Any rename
-   failure, including `EXDEV` or `EBUSY`, aborts the operation; leave the
-   quarantine untouched and escalate.
-7. After every candidate is isolated, refresh the mount inventory and recheck
-   the quarantine and every descendant. Confirm the quarantined entries match
-   the reviewed candidate set and remain mount-free. Only then remove the
-   quarantine with a no-follow, type-aware procedure that refuses mount
-   crossings. Do not use blind `rm -rf`, wildcard `rm`, a broad `.hermes-*`
-   pattern, or `find -delete`.
-8. While all ordinary launch paths remain disabled, require zero direct
-   profile-scratch and outer-bootstrap names under `/tmp`, zero private
-   `.hermes-repository-*` stage names under `${HERMES_HOME}/shared`, zero quarantine
-   names, and no related mount issue. The maintenance owner then runs
-   standalone dry-run and real `sync-profiles`, consumes both JSON reports
-   completely, and requires both aggregates to exit `0` with the repaired
-   profile `changed` or `unchanged`. Refresh all candidate groups plus the
-   quarantine and mount inventories once more and require them to remain clean.
-9. Record the evidence and only then re-enable the gateway, scheduler,
-   `profile-local-sync` when its ordered `hermes-home` dependency branch has
-   merged and the root distribution has been applied, installers, and other
-   launch paths.
+Bootstrap applies staged changes in order and validates the installed layout at
+the end. It does not create recovery backups or restore earlier steps if a later
+step fails. A failure returns an error and keeps completed local updates and
+remote pushes. Repair the reported cause, then rerun `task hermes:sync` to
+complete the remaining work and reconcile managed configuration. The gateway
+restarts only after the apply succeeds.
 
-Cleanup recovery is accepted only when the entire quiescent procedure,
-quarantine removal, dry-run/real verification, and final zero profile-scratch,
-outer-bootstrap, private shared-repository stage, quarantine, and mount
-inventories succeed. A later aggregate `0` without this evidence does not close
-the incident.
+Individual configuration and credential files use private
+temporary files and atomic replacement. Distribution installation does not
+synchronize the entire file tree for power-loss durability. Secret files use
+mode `0600`. Existing `.env` files remain untouched. Root updates
+are limited to declared owned paths; existing named-profile declarative content
+and unmanaged files remain protected. A retry reuses valid managed credentials
+and completes the desired configuration without replacing an existing profile
+from its remote.
 
-## Transaction And Rollback
+After a crash, `SIGKILL`, or power loss, inspect the reported or interrupted step
+and repair its cause before rerunning. There is no whole-apply commit or
+automatic restoration guarantee; partially completed changes can remain.
 
-After manifest loading and before reading or validating a new secret payload,
-`apply` calls `Transaction.recover_if_needed` for journals under
-`${HERMES_HOME}/.bootstrap/transactions/`. A single-writer transaction lock prevents
-two local applies from mutating managed paths concurrently. Recovery may restore
-or remove previously journaled managed paths; it is intentionally not covered
-by validation-before-new-write claims.
+### Data From The Former Transaction Implementation
 
-After recovery completes, credential validation, root/profile staging, staged
-`validate_chrome_mcp_sources`, and shared remote synchronization finish before
-`Transaction.begin`. `apply` does not publish existing named profiles: those
-local-authoritative snapshots are published only by the explicit
-`sync-profiles` command. Inside the new transaction, bootstrap snapshots
-root-owned paths, named profile targets,
-shared working-tree publication, deprecated-path cleanup, and managed `.env`
-files before replacement. Environment files use atomic rename and mode `0600`,
-preserve unmanaged keys, and replace only managed keys.
-
-If apply or final validation fails, bootstrap restores ready journal entries in
-reverse order and leaves the gateway stopped. A rollback failure exits `7`; do
-not delete its journal or manually overwrite managed paths until the failure is
-understood. A normal failed apply can be rerun after repair, and the next apply
-recovers any interrupted active journal before beginning new work. Remote
-profile or lifelog pushes completed before the transaction remain valid and are
-not reversed.
+Current bootstrap creates no transaction directories, backup files, or recovery
+journals. It ignores old data under `${HERMES_HOME}/.bootstrap/transactions/`
+and never deletes or migrates it. Preserve any old journals or backups until
+you have inspected the affected managed paths and decided whether to restore
+or keep the current data. Keep it private because it can contain runtime
+secrets.
 
 Home Manager enables `gateway.multiplex_profiles` for the native user service.
 The root gateway serves managed profiles with profile-scoped credentials,
@@ -588,14 +477,12 @@ adapters, routes, and sessions. Use `hermes gateway status` and
 `hermes -p <name> gateway status` to verify readiness. The retired Docker
 Dashboard/API ports and per-profile s6 services are not part of this flow.
 
-## Repository Locks And Diagnostics
+## Engine Lock And Repository Diagnostics
 
-Shared repository commands use
-`${HERMES_HOME}/locks/repositories/<name>.lock`; profile publication uses
-`${HERMES_HOME}/locks/repositories/profile-<name>.lock`. Lock acquisition is
-nonblocking. For lifelog publication, bootstrap reacquires the same repository
-lock and keeps it while publishing the verified working tree. After confirming the competing process has exited,
-rerun the same command.
+All mutating bootstrap commands share
+`${HERMES_HOME}/locks/bootstrap-engine.lock`. Lock acquisition is nonblocking,
+and the lock remains held through staging, publication, and cleanup. After
+confirming the competing process has exited, rerun the same command.
 
 Git status, index, staged-path, and unpushed-history inspection is bounded to
 8 MiB per command and fails closed above that limit. Shared repository
@@ -636,42 +523,37 @@ checkout or delete repository data as part of this procedure. Remove
 validation succeeds.
 
 Existing canonical checkouts still undergo origin validation, locked remote
-synchronization, conflict detection, and validation before transactional
-publication. First-clone publication is rolled back when a later local apply
-fails; a completed remote push remains outside that rollback boundary.
+synchronization, conflict detection, and validation before publication. A
+published first clone remains available if a later apply step fails; retry uses
+that canonical checkout. Completed remote pushes also remain valid.
 
 ## Apply Conflicts
 
 - Existing root files are replaced only when declared by
   `root-distribution.yaml`. Existing named profiles follow the local-authority
   rules above and are never repaired by forced remote replacement.
-- Existing `.env` files preserve unmanaged keys. Repeat apply reuses a valid
-  dashboard hash, signing secret, and bootstrap-issued root API key; invalid
-  managed material is replaced, and named-profile API keys are removed.
+- Existing `.env` files are unmanaged and remain untouched. Bootstrap updates
+  native 1Password references without persisting resolved GitHub, Discord, or
+  xAI values to runtime environment files.
 
 ## Complete Exit Codes
 
-| Code | Meaning                                                                    | Operator action                                                                                                                                                                         |
-| ---- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`  | Success                                                                    | Continue; cleanup recovery uses the quiescent quarantine runbook                                                                                                                        |
-| `1`  | Host secret-plan or payload production failed                              | Fix `op` or adapter input and rerun                                                                                                                                                     |
-| `2`  | Invalid command arguments, payload, or managed env input                   | Correct input; no Compose restart                                                                                                                                                       |
-| `3`  | Missing, invalid, or unauthorized credential                               | Repair 1Password or GitHub access                                                                                                                                                       |
-| `4`  | Repository access, identity, lock, profile preflight, or sync failure      | Repair the reported repository/profile state                                                                                                                                            |
-| `5`  | Retired migration status (reserved for compatibility)                      | Current bootstrap does not emit this for old-layout conflicts; follow the manual migration procedure before apply                                                                       |
-| `6`  | Apply, cleanup, or unexpected command failure                              | Inspect safe diagnostics and rerun                                                                                                                                                      |
-| `7`  | Rollback failure                                                           | Preserve the journal and inspect managed paths before retrying                                                                                                                          |
-| `8`  | Manifest, staged Chrome source-contract, or final layout validation failed | Repair the manifest, owning root/profile source, or final layout; for an existing local-authoritative profile, repair local declarative config and rerun the documented sync/apply flow |
+| Code | Meaning                                                               | Operator action                                                                                                   |
+| ---- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `0`  | Success                                                               | Continue                                                                                                          |
+| `1`  | Host secret-plan or payload production failed                         | Fix `op` or adapter input and rerun                                                                               |
+| `2`  | Invalid command arguments, payload, or managed env input              | Correct input and rerun                                                                                           |
+| `3`  | Missing, invalid, or unauthorized credential                          | Repair 1Password or GitHub access                                                                                 |
+| `4`  | Repository access, identity, lock, profile preflight, or sync failure | Repair the reported repository/profile state                                                                      |
+| `5`  | Retired migration status (reserved for compatibility)                 | Current bootstrap does not emit this for old-layout conflicts; follow the manual migration procedure before apply |
+| `6`  | Apply, cleanup, or unexpected command failure                         | Inspect safe diagnostics and rerun                                                                                |
+| `8`  | Manifest, staged source, or final layout validation failed            | Repair the reported input/layout and rerun                                                                        |
 
 `sync-profiles` uses its JSON route only for handled exits `0`, `3`, and `4`.
 Its argument error `2`, manifest validation error `8`, and unexpected error `6`
 use stderr without a result document. Failed `apply` likewise uses stderr.
-Snapshot-preflight rejection occurs before a profile report exists. After
-synchronization creates one, publication, staging, transaction, validation,
-cleanup, and rollback failures may retain it on the internal Python exception.
-The CLI does not serialize that report. Its default output is the single safe
-error described above; debug mode may append only the sanitized public-boundary
-traceback.
+Its default output is the single safe error described above; debug mode may
+append only the sanitized public-boundary traceback.
 
 ## Future Handoff
 
@@ -694,7 +576,7 @@ rebuild job を通して行います。
 
 The same source validation requires every root and managed profile distribution
 to own `config.yaml`. Bootstrap validates the Chrome MCP guardrails, then
-synthesizes the non-secret `mcp_servers.xapi` entry in the staged runtime copy
+reconciles the non-secret `mcp_servers.xapi` entry in each installed runtime config
 with URL `http://127.0.0.1:8766/mcp` and `connect_timeout: 300`. The generated
 entry is not written back to source repositories.
 
@@ -723,3 +605,15 @@ failed check set; failure after two rounds is `FIX_FAILED`, while an
 
 Changes are verified by the selected platform's real configuration activation in
 `Bootstrap CI`. The workflow does not run the Python unittest suite.
+
+Local Python regression tests focus on this personal dotfiles workflow:
+
+- End-to-end bootstrap and profile publication use real local Git repositories
+  to check installation, user-data preservation, safe output, and recovery by rerun.
+- Focused unit tests cover secret handling, atomic-write failure recovery,
+  existing-target protection, non-force push, deletion limits, and the engine lock.
+- Nix configuration values and generated manifests are covered by the Nix checks.
+
+Keep these representative checks small. Add a focused regression test for an
+observed bug when the existing operation tests do not detect it; avoid duplicating
+their successful paths or exhaustively testing private helper inputs.

@@ -2,11 +2,16 @@
 
 ## Status
 
-This document is a historical design record. The Docker Hermes Agent backend,
-bootstrap service, and Docker-prefixed gateway tasks have been removed. Current
-operation is documented in [bootstrap.md](bootstrap.md) and
-[desktop.md](desktop.md). Independent browser and X API sidecars
-remain separate services; existing Docker volumes are not deleted or imported.
+This document is a historical design record. Its Docker backend and detailed
+journal, file-identity, and crash-recovery mechanisms have been retired. The
+current native bootstrap keeps partial updates after failure and converges by
+rerunning after repair; it creates no recovery backups or global rollback.
+Retained data from the former transaction implementation requires manual review.
+Use [bootstrap.md](bootstrap.md) for current commands and recovery procedures, and
+[desktop.md](desktop.md) for runtime installation. Independent browser and X API
+sidecars remain separate services; existing Docker volumes are not deleted or
+imported. The remaining sections record the former design, not current
+implementation guarantees.
 
 ## Problem
 

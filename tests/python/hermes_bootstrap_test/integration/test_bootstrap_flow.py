@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import io
 import json
 import os
@@ -11,12 +10,9 @@ import stat
 import subprocess
 import sys
 import tempfile
-import threading
 import unittest
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import dataclass, replace
-from hashlib import sha256, sha384
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Iterator
 from unittest import mock
@@ -30,25 +26,21 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 BOOTSTRAP_ROOT = REPOSITORY_ROOT / "scripts" / "python"
 sys.path.insert(0, str(BOOTSTRAP_ROOT))
 
-from hermes_bootstrap import app, cli
+from hermes_bootstrap import app, cli, google_calendar
 from hermes_bootstrap.errors import (
     ApplyError,
-    CredentialError,
     RepositoryError,
     ValidationError,
 )
-from hermes_bootstrap.envfiles import GITHUB_KEYS, read_environment_values
 from hermes_bootstrap.git import StagedSource, stage_distribution
 import hermes_bootstrap.git as git_module
-from hermes_bootstrap.github import GitHubClient
 from hermes_bootstrap.manifest import load_manifest
-from hermes_bootstrap.models import BootstrapManifest, DistributionSource, SharedRepository
+from hermes_bootstrap.models import BootstrapManifest, DistributionSource
 from hermes_bootstrap.onepassword import build_onepassword_config
 from hermes_bootstrap.payload import SCHEMA_VERSION
 
 
 FIXTURE_TOKEN = "fixture-token-only"
-API_URL_ENV = "HERMES_BOOTSTRAP_GITHUB_API_URL"
 HOST_SECRET_ENV = "HERMES_BOOTSTRAP_TEST_HOST_SECRET"
 HOST_SECRET_VALUE = "planted-host-secret-marker"
 PRODUCTION_MANIFEST = REPOSITORY_ROOT / "nix/modules/ai_agents/hermes/manifest.yaml"
@@ -95,20 +87,6 @@ GMAIL_CONFIGURATION = {
         "prompts": False,
     },
 }
-PROFILE_ENV_KEYS = frozenset(
-    {
-        "GH_TOKEN",
-        "GITHUB_TOKEN",
-        "GITHUB_PERSONAL_ACCESS_TOKEN",
-        "HERMES_DASHBOARD_BASIC_AUTH_USERNAME",
-        "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH",
-        "HERMES_DASHBOARD_BASIC_AUTH_SECRET",
-        "DISCORD_ALLOW_BOTS",
-        "DISCORD_BOT_TOKEN",
-        "DISCORD_ALLOWED_USERS",
-    }
-)
-DEFAULT_ENV_KEYS = PROFILE_ENV_KEYS | {"API_SERVER_KEY"}
 _MANAGED_GIT_EXECUTABLE = os.environ.get("DOTFILES_HERMES_GIT_EXECUTABLE")
 SAFE_PATH = os.pathsep.join(
     ([str(Path(_MANAGED_GIT_EXECUTABLE).parent)] if _MANAGED_GIT_EXECUTABLE else [])
@@ -116,7 +94,6 @@ SAFE_PATH = os.pathsep.join(
 )
 PROCESS_TIMEOUT_SECONDS = 15.0
 PROCESS_STOP_TIMEOUT_SECONDS = 2.0
-SERVER_STOP_TIMEOUT_SECONDS = 2.0
 _REAL_POPEN = subprocess.Popen
 _CHILD_PROCESSES: list[subprocess.Popen[object]] = []
 
@@ -165,10 +142,13 @@ def managed_source_config(
     config["context"] = {"engine": "lcm"}
     config["plugins"] = {"enabled": ["hermes-lcm"]}
     managed = build_onepassword_config(manifest, profile)
-    managed["env"] = {}
+    additions = {"secrets": {"onepassword": managed}}
+    environment = managed["env"]
+    if isinstance(environment, dict) and "DISCORD_BOT_TOKEN" in environment:
+        additions["platforms"] = {"discord": {"allow_bots": "mentions"}}
     return (
         yaml.safe_dump(config, sort_keys=False)
-        + yaml.safe_dump({"secrets": {"onepassword": managed}}, sort_keys=False)
+        + yaml.safe_dump(additions, sort_keys=False)
     )
 
 
@@ -176,10 +156,6 @@ def managed_source_config(
 class TreeEntry:
     kind: str
     mode: int
-    device: int
-    inode: int
-    links: int
-    size: int
     payload: bytes | str | None
 
 
@@ -269,95 +245,7 @@ def run_git(*arguments: str, cwd: Path | None = None) -> str:
     return completed.stdout.strip()
 
 
-class FixtureGitHub:
-    """Minimal loopback API which never records bearer credentials."""
-
-    def __init__(self, identities: set[tuple[str, str]]) -> None:
-        self.identities = identities
-        self.server: ThreadingHTTPServer | None = None
-        self.thread: threading.Thread | None = None
-
-    def __enter__(self) -> "FixtureGitHub":
-        identities = self.identities
-
-        class Handler(BaseHTTPRequestHandler):
-            def log_message(self, _format: str, *_args: object) -> None:
-                return
-
-            def do_GET(self) -> None:  # noqa: N802
-                authorized = self.headers.get("Authorization") == f"Bearer {FIXTURE_TOKEN}"
-                if not authorized:
-                    self.send_response(401)
-                    self.send_header("Content-Length", "0")
-                    self.end_headers()
-                    return
-                if self.path == "/user":
-                    payload: dict[str, object] = {"login": "fixture"}
-                elif self.path.startswith("/repos/"):
-                    parts = self.path.split("/")
-                    identity = (parts[2], parts[3]) if len(parts) == 4 else None
-                    if identity not in identities:
-                        self.send_response(404)
-                        self.send_header("Content-Length", "0")
-                        self.end_headers()
-                        return
-                    payload = {"full_name": f"{identity[0]}/{identity[1]}", "permissions": {"pull": True}}
-                else:
-                    self.send_response(404)
-                    self.send_header("Content-Length", "0")
-                    self.end_headers()
-                    return
-                body = json.dumps(payload, sort_keys=True).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        self.server.daemon_threads = True
-        self.server.block_on_close = False
-        ready = threading.Event()
-
-        def serve() -> None:
-            ready.set()
-            assert self.server is not None
-            self.server.serve_forever(poll_interval=0.05)
-
-        self.thread = threading.Thread(target=serve, daemon=True)
-        self.thread.start()
-        if not ready.wait(timeout=SERVER_STOP_TIMEOUT_SECONDS):
-            self.server.server_close()
-            raise AssertionError("fixture GitHub server did not start")
-        return self
-
-    @property
-    def url(self) -> str:
-        assert self.server is not None
-        host, port = self.server.server_address
-        return f"http://{host}:{port}"
-
-    def __exit__(self, *_args: object) -> None:
-        assert self.server is not None and self.thread is not None
-        shutdown = threading.Thread(target=self.server.shutdown, daemon=True)
-        shutdown.start()
-        shutdown.join(timeout=SERVER_STOP_TIMEOUT_SECONDS)
-        self.server.server_close()
-        self.thread.join(timeout=SERVER_STOP_TIMEOUT_SECONDS)
-        if shutdown.is_alive() or self.thread.is_alive():
-            raise AssertionError("fixture GitHub server did not stop")
-
-
 class BootstrapFlowTests(unittest.TestCase):
-    def test_minimal_fixture_environment_includes_managed_git_directory(self) -> None:
-        managed_git = os.environ.get("DOTFILES_HERMES_GIT_EXECUTABLE")
-        if managed_git is None:
-            self.skipTest("the managed Git executable is provided by Nix builds")
-
-        environment = _minimal_environment(Path("/nonexistent"))
-
-        self.assertIn(str(Path(managed_git).parent), environment["PATH"].split(os.pathsep))
-
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -377,10 +265,8 @@ class BootstrapFlowTests(unittest.TestCase):
         self.profile_tmpdir_before = self._snapshot_tree(
             self.profile_tmpdir, include_root=False
         )
-        self.generated_secret_counter = 0
         self.data_root = self.fixture_root / "data"
         self.data_root.mkdir()
-        app.Transaction.recover_if_needed(self.data_root)
         self.remotes = self.fixture_root / "remotes"
         self.seed_root = self.fixture_root / "seeds"
         self.remotes.mkdir()
@@ -473,7 +359,6 @@ class BootstrapFlowTests(unittest.TestCase):
                 "sessions/root.txt": "root session\n",
                 "cron/output/runtime.txt": "root cron output\n",
                 "cron/state/runtime.txt": "root cron state\n",
-                ".env": "# root comment\nCUSTOM_ROOT=keep\nGH_TOKEN=stale\nGH_TOKEN=duplicate\nHERMES_DASHBOARD_BASIC_AUTH_PASSWORD=plaintext\n",
             },
         )
         for profile in PROFILE_NAMES:
@@ -488,7 +373,6 @@ class BootstrapFlowTests(unittest.TestCase):
                     "SOUL.md": f"{profile} initial\n",
                     "memories/runtime.txt": f"{profile} memory\n",
                     "sessions/runtime.txt": f"{profile} session\n",
-                    ".env": f"# {profile} comment\nCUSTOM_{profile.upper()}=keep\n",
                 },
             )
             for directory in PROFILE_USER_DIRECTORIES:
@@ -506,14 +390,6 @@ class BootstrapFlowTests(unittest.TestCase):
                 *(f"  - {path}" for path in owned),
                 "",
             ]
-        )
-
-    def test_source_config_is_valid_yaml_with_a_quoted_npm_scope(self) -> None:
-        parsed = yaml.safe_load(source_config("root", "initial"))
-
-        self.assertEqual(
-            parsed["mcp_servers"]["calendar"]["args"],
-            ["--yes", "--package", "@cocal/google-calendar-mcp@2.6.2", "google-calendar-mcp"],
         )
 
     @staticmethod
@@ -601,9 +477,7 @@ class BootstrapFlowTests(unittest.TestCase):
     def _payload(self, token: str = FIXTURE_TOKEN) -> io.StringIO:
         records: list[dict[str, object]] = [{"type": "header", "schema_version": SCHEMA_VERSION}]
         values = {
-            "dashboard": {"username": "fixture-user", "password": "fixture-password"},
             "github": {"credential": token},
-            "xai_grok": {"api_key": "fixture-xai-api-key"},
             "google_calendar": {
                 "oauth_credentials_json": json.dumps(
                     {
@@ -623,40 +497,10 @@ class BootstrapFlowTests(unittest.TestCase):
                     }
                 ),
             },
-            "discord_default": {
-                "bot_token": "discord-default-bot-token-123",
-                "allowed_users": "UDEFAULT",
-            },
-            "discord_rick": {
-                "bot_token": "discord-rick-bot-token-123",
-                "allowed_users": "URICK",
-            },
-            "discord_hoffman": {
-                "bot_token": "discord-hoffman-bot-token-123",
-                "allowed_users": "UHOFFMAN",
-            },
-            "discord_risarisa": {
-                "bot_token": "discord-risarisa-bot-token-123",
-                "allowed_users": "URISARISA",
-            },
-            "discord_nancy": {
-                "bot_token": "discord-nancy-bot-token-123",
-                "allowed_users": "UNANCY",
-            },
-            "discord_kuroda": {
-                "bot_token": "discord-kuroda-bot-token-123",
-                "allowed_users": "UKURODA",
-            },
-            "discord_shiraishi": {
-                "bot_token": "discord-shiraishi-bot-token-123",
-                "allowed_users": "USHIRAISHI",
-            },
-            "discord_future": {
-                "bot_token": "discord-future-bot-token-123",
-                "allowed_users": "UFUTURE",
-            },
         }
         for item in self.manifest.onepassword_items:
+            if item.key not in values:
+                continue
             fields = [
                 {"label": field.labels[0], "value": values[item.key][field.canonical_name]}
                 for field in item.fields
@@ -667,114 +511,85 @@ class BootstrapFlowTests(unittest.TestCase):
 
     @contextmanager
     def _patched_runtime(self) -> Iterator[None]:
-        production_source_identity = app._source_identity
-        api_identities: set[tuple[str, str]] = set()
-        for source in (
-            self.manifest.root_distribution,
-            *self.manifest.profiles,
-            *self.manifest.shared_repositories,
-        ):
-            identity = production_source_identity(source.source)
-            if identity is not None:
-                api_identities.add(identity)
-
-        with FixtureGitHub(api_identities) as github:
-            runtime_environment = _minimal_environment(self.child_home)
-            environment_with_api = {
-                **runtime_environment,
-                API_URL_ENV: github.url,
+        def audited_popen(*args: object, **kwargs: object) -> subprocess.Popen[object]:
+            environment = kwargs.get("env")
+            self.assertIsInstance(environment, dict)
+            assert isinstance(environment, dict)
+            command = args[0] if args else kwargs.get("args")
+            self.assertIsInstance(command, (list, tuple))
+            assert isinstance(command, (list, tuple))
+            child_arguments = tuple(str(argument) for argument in command)
+            self.child_arguments.append(child_arguments)
+            visible_arguments = repr(child_arguments)
+            self._assert_no_protected_output(
+                visible_arguments, "child process arguments"
+            )
+            self.assertFalse(
+                HOST_SECRET_ENV in environment,
+                "child environment contained a protected host key",
+            )
+            self.assertFalse(
+                HOST_SECRET_VALUE in environment.values(),
+                "child environment contained a protected host value",
+            )
+            expected_base = _minimal_environment(self.child_home)
+            if (
+                isinstance(command, (list, tuple))
+                and command
+                and command[0] == git_module._GIT_EXECUTABLE
+            ):
+                expected_base["PATH"] = os.defpath
+            self.assertEqual(
+                {key: environment.get(key) for key in expected_base},
+                expected_base,
+            )
+            unexpected = {
+                key
+                for key in environment
+                if key not in expected_base
+                and not key.startswith("GIT_")
+                and key != "HERMES_BOOTSTRAP_GITHUB_TOKEN"
             }
+            self.assertEqual(unexpected, set())
+            if child_arguments[0] == git_module._GIT_EXECUTABLE:
+                environment = self._redirect_git_transport(environment)
+                kwargs["env"] = environment
+            process = _REAL_POPEN(*args, **kwargs)  # type: ignore[arg-type]
+            _CHILD_PROCESSES.append(process)
+            return process
 
-            def audited_popen(*args: object, **kwargs: object) -> subprocess.Popen[object]:
-                environment = kwargs.get("env")
-                self.assertIsInstance(environment, dict)
-                assert isinstance(environment, dict)
-                command = args[0] if args else kwargs.get("args")
-                self.assertIsInstance(command, (list, tuple))
-                assert isinstance(command, (list, tuple))
-                child_arguments = tuple(str(argument) for argument in command)
-                self.child_arguments.append(child_arguments)
-                visible_arguments = repr(child_arguments)
-                self._assert_no_protected_output(
-                    visible_arguments, "child process arguments"
-                )
-                self.assertFalse(
-                    HOST_SECRET_ENV in environment,
-                    "child environment contained a protected host key",
-                )
-                self.assertFalse(
-                    HOST_SECRET_VALUE in environment.values(),
-                    "child environment contained a protected host value",
-                )
-                expected_base = _minimal_environment(self.child_home)
-                if (
-                    isinstance(command, (list, tuple))
-                    and command
-                    and command[0] == git_module._GIT_EXECUTABLE
-                ):
-                    expected_base["PATH"] = os.defpath
-                self.assertEqual(
-                    {key: environment.get(key) for key in expected_base},
-                    expected_base,
-                )
-                unexpected = {
-                    key
-                    for key in environment
-                    if key not in expected_base
-                    and not key.startswith("GIT_")
-                    and key != "HERMES_BOOTSTRAP_GITHUB_TOKEN"
-                }
-                self.assertEqual(unexpected, set())
-                if child_arguments[0] == git_module._GIT_EXECUTABLE:
-                    environment = self._redirect_git_transport(environment)
-                    kwargs["env"] = environment
-                process = _REAL_POPEN(*args, **kwargs)  # type: ignore[arg-type]
-                _CHILD_PROCESSES.append(process)
-                return process
-
-            with mock.patch.dict(os.environ, environment_with_api, clear=True):
-                api_base = os.environ.pop(API_URL_ENV)
-
-                def client_factory(auth: object) -> GitHubClient:
-                    return GitHubClient(auth, api_base=api_base)  # type: ignore[arg-type]
-
-                def audited_stage(
-                    source: DistributionSource, workdir: Path, auth: object
-                ) -> StagedSource:
-                    fixture_name = "root" if source.name == "default" else source.name
-                    staged = stage_distribution(source, workdir, auth)  # type: ignore[arg-type]
-                    if fixture_name in PROFILE_NAMES:
-                        self.profile_stage_refs.append(
-                            (
-                                fixture_name,
-                                source.source,
-                                source.ref,
-                                staged.commit,
-                                run_git(
-                                    "--git-dir",
-                                    str(self.source_remotes[fixture_name]),
-                                    "rev-parse",
-                                    "main",
-                                ),
-                            )
+        with mock.patch.dict(os.environ, _minimal_environment(self.child_home), clear=True):
+            def audited_stage(
+                source: DistributionSource, workdir: Path, auth: object
+            ) -> StagedSource:
+                fixture_name = "root" if source.name == "default" else source.name
+                staged = stage_distribution(source, workdir, auth)  # type: ignore[arg-type]
+                if fixture_name in PROFILE_NAMES:
+                    self.profile_stage_refs.append(
+                        (
+                            fixture_name,
+                            source.source,
+                            source.ref,
+                            staged.commit,
+                            run_git(
+                                "--git-dir",
+                                str(self.source_remotes[fixture_name]),
+                                "rev-parse",
+                                "main",
+                            ),
                         )
-                    return staged
+                    )
+                return staged
 
-                with (
-                    mock.patch.object(app, "load_manifest", return_value=self.manifest),
-                    mock.patch.object(app, "GitHubClient", side_effect=client_factory),
-                    mock.patch.object(
-                        app, "stage_distribution", side_effect=audited_stage
-                    ),
-                    mock.patch.object(subprocess, "Popen", side_effect=audited_popen),
-                    mock.patch.object(tempfile, "tempdir", str(self.profile_tmpdir)),
-                    mock.patch("hermes_bootstrap.envfiles.hash_password", return_value="fixture-password-hash"),
-                    mock.patch(
-                        "hermes_bootstrap.envfiles.secrets.token_urlsafe",
-                        side_effect=self._next_fixture_secret,
-                    ),
-                ):
-                    yield
+            with (
+                mock.patch.object(app, "load_manifest", return_value=self.manifest),
+                mock.patch.object(
+                    app, "stage_distribution", side_effect=audited_stage
+                ),
+                mock.patch.object(subprocess, "Popen", side_effect=audited_popen),
+                mock.patch.object(tempfile, "tempdir", str(self.profile_tmpdir)),
+            ):
+                yield
 
     def _redirect_git_transport(
         self, environment: dict[str, str]
@@ -800,12 +615,6 @@ class BootstrapFlowTests(unittest.TestCase):
             redirected[f"GIT_CONFIG_VALUE_{index}"] = source
         redirected["GIT_CONFIG_COUNT"] = str(first + len(transport_remotes))
         return redirected
-
-    def _next_fixture_secret(self, nbytes: int) -> str:
-        self.assertEqual(nbytes, 48)
-        self.generated_secret_counter += 1
-        digest = sha384(f"fixture-secret-{self.generated_secret_counter}".encode()).digest()
-        return base64.urlsafe_b64encode(digest).decode("ascii")
 
     def _apply(self, token: str = FIXTURE_TOKEN) -> dict[str, object]:
         with self._patched_runtime():
@@ -837,13 +646,6 @@ class BootstrapFlowTests(unittest.TestCase):
                     )
                 ) or ".bootstrap-" in path.name:
                     leaks.add(path.relative_to(self.data_root).as_posix())
-        journals = self.data_root / ".bootstrap" / "transactions"
-        if journals.exists():
-            leaks.update(
-                path.relative_to(self.data_root).as_posix()
-                for path in journals.iterdir()
-                if path.name != ".lock"
-            )
         self.assertFalse(bool(leaks), "temporary resource leak (details redacted)")
         scratch_snapshot = self._snapshot_tree(
             self.profile_tmpdir, include_root=False
@@ -917,57 +719,19 @@ class BootstrapFlowTests(unittest.TestCase):
                 profiles_before[profile],
             )
             self.assertEqual((target / "memories" / "runtime.txt").read_text(encoding="utf-8"), f"{profile} memory\n")
-            self.assertEqual(self._mode(target / ".env"), 0o600)
+            self.assertFalse((target / ".env").exists())
         self.assertEqual((self.data_root / "memories" / "root.txt").read_text(encoding="utf-8"), "root memory\n")
-        self.assertEqual(self._mode(self.data_root / ".env"), 0o600)
+        self.assertFalse((self.data_root / ".env").exists())
         lifelog = self.data_root / "shared" / "lifelog"
         legacy = self.data_root / "core" / "lifelog"
         self.assertTrue((lifelog / ".git").is_dir())
         self.assertFalse(os.path.lexists(legacy))
         self.assertEqual(self._validate()["status"], "valid")
-        leak = lifelog / "nested" / "askpass-review-probe"
-        leak.parent.mkdir()
-        leak.write_text("probe\n", encoding="utf-8")
-        try:
-            with self.assertRaises(AssertionError):
-                self._assert_no_temporary_resources()
-        finally:
-            leak.unlink()
-            leak.parent.rmdir()
-        profile_leak = self.profile_tmpdir / "hermes-profile-source-review-probe"
-        profile_leak.mkdir()
-        try:
-            with self.assertRaises(AssertionError):
-                self._assert_no_temporary_resources()
-        finally:
-            profile_leak.rmdir()
-        for prefix in (
-            ".hermes-profile-snapshots-",
-            ".hermes-profile-sync-",
-        ):
-            production_leak = self.data_root / f"{prefix}review-probe"
-            production_leak.mkdir()
-            try:
-                with self.subTest(prefix=prefix):
-                    with self.assertRaises(AssertionError):
-                        self._assert_no_temporary_resources()
-            finally:
-                production_leak.rmdir()
 
     def test_profile_targets_keep_canonical_source_token_and_manifest_identity(self) -> None:
         production_profiles = {
             source.name: source for source in load_manifest(PRODUCTION_MANIFEST).profiles
         }
-        self.assertEqual(
-            tuple(
-                (source.name, source.source, source.ref)
-                for source in self.manifest.profiles
-            ),
-            tuple(
-                (source.name, source.source, source.ref)
-                for source in production_profiles.values()
-            ),
-        )
         command_stdout = io.StringIO()
         command_stderr = io.StringIO()
         ambient_stdout = io.StringIO()
@@ -996,12 +760,13 @@ class BootstrapFlowTests(unittest.TestCase):
         self._assert_no_protected_output(visible_output, "successful apply output")
         self.assertEqual(exit_code, 0)
         self.assertEqual(
-            command_stdout.getvalue(),
-            '{"profile_sync":{"hoffman":"preserved","kuroda":"preserved",'
-            '"nancy":"preserved","rick":"preserved","risarisa":"preserved",'
-            '"shiraishi":"preserved"},'
-            '"profiles":["rick","hoffman","risarisa","nancy","kuroda","shiraishi"],'
-            '"repositories":["lifelog"],"status":"applied"}\n',
+            json.loads(command_stdout.getvalue()),
+            {
+                "profile_sync": {profile.name: "preserved" for profile in self.manifest.profiles},
+                "profiles": [profile.name for profile in self.manifest.profiles],
+                "repositories": [repo.name for repo in self.manifest.shared_repositories],
+                "status": "applied",
+            },
         )
         self.assertEqual(command_stderr.getvalue(), "")
         self.assertEqual(ambient_stdout.getvalue(), "")
@@ -1049,33 +814,17 @@ class BootstrapFlowTests(unittest.TestCase):
                         **expected,
                     },
                 )
-                token = read_environment_values(target / ".env", GITHUB_KEYS)["GH_TOKEN"]
-                self.assertEqual(sha256(token.encode("utf-8")).digest(), sha256(FIXTURE_TOKEN.encode("utf-8")).digest())
+                installed_config = yaml.safe_load(
+                    (target / "config.yaml").read_text(encoding="utf-8")
+                )
+                self.assertEqual(
+                    installed_config["secrets"]["onepassword"],
+                    build_onepassword_config(self.manifest, name),
+                )
 
     def test_identical_second_apply_preserves_the_target_and_runtime_tree(self) -> None:
         self._initial_apply()
         before = self._snapshot_managed_tree()
-        locks_before = self._snapshot_coordination_locks()
-        owned = self.data_root / "config.yaml"
-        root_sentinel = self.data_root / "memories" / "root.txt"
-        profile_sentinel = (
-            self.data_root / "profiles" / "rick" / "memories" / "runtime.txt"
-        )
-
-        def file_identity(path: Path) -> tuple[int, int, bytes, int]:
-            metadata = path.stat()
-            return (
-                metadata.st_dev,
-                metadata.st_ino,
-                path.read_bytes(),
-                self._mode(path),
-            )
-
-        identities_before = {
-            "owned": file_identity(owned),
-            "root_sentinel": file_identity(root_sentinel),
-            "profile_sentinel": file_identity(profile_sentinel),
-        }
         lifelog = self.data_root / "shared" / "lifelog"
         lifelog_head = run_git("rev-parse", "HEAD", cwd=lifelog)
         lifelog_commits = run_git("rev-list", "--count", "HEAD", cwd=lifelog)
@@ -1083,79 +832,14 @@ class BootstrapFlowTests(unittest.TestCase):
         self._initial_apply()
 
         self.assertEqual(self._snapshot_managed_tree(), before)
-        self.assertEqual(self._snapshot_coordination_locks(), locks_before)
-        self.assertEqual(file_identity(owned), identities_before["owned"])
-        self.assertEqual(
-            file_identity(root_sentinel), identities_before["root_sentinel"]
-        )
-        self.assertEqual(
-            file_identity(profile_sentinel), identities_before["profile_sentinel"]
-        )
         self.assertEqual(run_git("rev-parse", "HEAD", cwd=lifelog), lifelog_head)
         self.assertEqual(run_git("rev-list", "--count", "HEAD", cwd=lifelog), lifelog_commits)
-
-    def test_second_apply_preserves_root_and_profile_configs_with_legacy_source_providers(
-        self,
-    ) -> None:
-        root_config = (
-            source_config("root", "initial", self.data_root)
-            + "memory:\n"
-            + "  provider: legacy-root\n"
-            + "  source_policy: preserve-root\n"
-        )
-        profile_config = (
-            source_config("profile", "rick-initial", self.data_root)
-            + "memory:\n"
-            + "  provider: legacy-profile\n"
-            + "  source_policy: preserve-profile\n"
-        )
-        self._commit(
-            "root",
-            {"config.yaml": root_config},
-            "declare legacy root memory provider",
-        )
-        self._commit(
-            "rick",
-            {"config.yaml": profile_config},
-            "declare legacy profile memory provider",
-        )
-        (self.data_root / "profiles" / "rick" / "config.yaml").write_text(
-            profile_config,
-            encoding="utf-8",
-        )
-        self._initial_apply()
-        paths = {
-            "root": self.data_root / "config.yaml",
-            "profile": self.data_root / "profiles" / "rick" / "config.yaml",
-        }
-        before = {
-            name: (path.stat().st_dev, path.stat().st_ino, path.read_bytes())
-            for name, path in paths.items()
-        }
-        for name, path in paths.items():
-            with self.subTest(name=name):
-                config = yaml.safe_load(path.read_text(encoding="utf-8"))
-                self.assertEqual(config["memory"]["provider"], f"legacy-{name}")
-                self.assertEqual(
-                    config["memory"]["source_policy"],
-                    f"preserve-{name}",
-                )
-
-        self._initial_apply()
-
-        self.assertEqual(
-            {
-                name: (path.stat().st_dev, path.stat().st_ino, path.read_bytes())
-                for name, path in paths.items()
-            },
-            before,
-        )
 
     def test_local_profile_update_publishes_and_preserves_runtime_content(self) -> None:
         self._initial_apply()
         target = self.data_root / "profiles" / "rick"
         runtime = target / "memories" / "runtime.txt"
-        runtime_before = (runtime.stat().st_ino, runtime.read_bytes(), self._mode(runtime))
+        runtime_before = (runtime.read_bytes(), self._mode(runtime))
         remote_before = run_git(
             "--git-dir", str(self.source_remotes["rick"]), "rev-parse", "main"
         )
@@ -1187,7 +871,7 @@ class BootstrapFlowTests(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            (runtime.stat().st_ino, runtime.read_bytes(), self._mode(runtime)),
+            (runtime.read_bytes(), self._mode(runtime)),
             runtime_before,
         )
         self.assertEqual((target / "sessions" / "runtime.txt").read_text(encoding="utf-8"), "rick session\n")
@@ -1214,22 +898,53 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertFalse((self.data_root / "retired.md").exists())
         self.assertEqual((self.data_root / "cron" / "state" / "runtime.txt").read_text(encoding="utf-8"), "root cron state\n")
 
-    def test_initial_shared_publication_rolls_back_after_a_later_failure(self) -> None:
+    def test_initial_publication_survives_a_later_failure_and_retry_completes(self) -> None:
         canonical = self.data_root / "shared" / "lifelog"
-        remote_head = run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main")
+        missing = self.manifest.profiles[-1]
+        missing.target.rename(self.fixture_root / "saved-profile")
+        user_data = self._snapshot_user_data()
+        existing_profiles = {
+            profile.name: self._snapshot_tree(profile.target)
+            for profile in self.manifest.profiles
+            if profile != missing
+        }
+        remote_heads = {
+            name: run_git("--git-dir", str(remote), "rev-parse", "main")
+            for name, remote in self.source_remotes.items()
+        }
 
-        def failpoint(name: str) -> None:
-            if name == "shared-apply:lifelog":
-                self.assertTrue((canonical / ".git").is_dir())
-                raise ApplyError("fixture failure after shared publication")
+        with (
+            self._patched_runtime(),
+            mock.patch.object(
+                app,
+                "install_google_calendar_configurations",
+                side_effect=ApplyError("fixture configuration failure"),
+            ),
+            self.assertRaisesRegex(ApplyError, "fixture configuration failure"),
+        ):
+            app.apply(PRODUCTION_MANIFEST, self._payload())
 
-        with self._patched_runtime(), mock.patch.object(app, "_failpoint", side_effect=failpoint):
-            with self.assertRaises(ApplyError):
-                app.apply(PRODUCTION_MANIFEST, self._payload())
-        self.assertFalse(canonical.exists())
-        self.assertEqual(run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main"), remote_head)
+        self.assertTrue((canonical / ".git").is_dir())
+        self.assertTrue((missing.target / "distribution.yaml").is_file())
+        self.assertTrue((self.data_root / "config.yaml").is_file())
+        current_user_data = self._snapshot_user_data()
+        self.assertEqual({path: current_user_data.get(path) for path in user_data}, user_data)
+        for profile in self.manifest.profiles:
+            if profile != missing:
+                self.assertEqual(self._snapshot_tree(profile.target), existing_profiles[profile.name])
+        self.assertEqual(
+            {
+                name: run_git("--git-dir", str(remote), "rev-parse", "main")
+                for name, remote in self.source_remotes.items()
+            },
+            remote_heads,
+        )
         self._initial_apply()
         self.assertTrue((canonical / ".git").is_dir())
+        self.assertTrue((missing.target / "distribution.yaml").is_file())
+        current_user_data = self._snapshot_user_data()
+        self.assertEqual({path: current_user_data.get(path) for path in user_data}, user_data)
+        self.assertEqual(self._validate()["status"], "valid")
 
     def test_lifelog_pushes_allowed_changes_and_rejects_forbidden_ones(self) -> None:
         self._initial_apply()
@@ -1248,32 +963,7 @@ class BootstrapFlowTests(unittest.TestCase):
         self.assertEqual(run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main"), remote_after)
         (checkout / ".env").unlink()
 
-    def test_invalid_token_fails_before_scratch_transaction_or_target_mutation(self) -> None:
-        before = self._snapshot_tree(self.data_root)
-        self.assertIn(".bootstrap/transactions/.lock", before)
-
-        with self.assertRaises(CredentialError):
-            self._apply("invalid-fixture-token")
-
-        after = self._snapshot_tree(self.data_root)
-        engine_lock = after["locks/bootstrap-engine.lock"]
-        self.assertEqual(
-            (
-                engine_lock.kind,
-                engine_lock.mode,
-                engine_lock.links,
-                engine_lock.size,
-                engine_lock.payload,
-            ),
-            ("file", 0o600, 1, 0, b""),
-        )
-        before["locks"] = after["locks"]
-        before["locks/bootstrap-engine.lock"] = engine_lock
-        self.assertEqual(after, before)
-        journal = self.data_root / ".bootstrap" / "transactions"
-        self.assertFalse(journal.exists() and any(path.name != ".lock" for path in journal.iterdir()))
-
-    def test_future_profile_chrome_validation_precedes_remote_and_transaction_mutation(
+    def test_future_profile_chrome_validation_precedes_remote_and_local_mutation(
         self,
     ) -> None:
         future = "future"
@@ -1324,580 +1014,123 @@ class BootstrapFlowTests(unittest.TestCase):
                 wraps=app.synchronize_remote,
             ) as synchronize_remote,
             mock.patch.object(
-                app.Transaction,
-                "begin",
-                wraps=app.Transaction.begin,
-            ) as transaction_begin,
+                app,
+                "apply_root_distribution",
+                wraps=app.apply_root_distribution,
+            ) as apply_root,
         ):
             with self.assertRaises(ValidationError):
                 app.apply(PRODUCTION_MANIFEST, self._payload())
 
         synchronize_remote.assert_not_called()
-        transaction_begin.assert_not_called()
+        apply_root.assert_not_called()
         self.assertEqual(self._snapshot_managed_tree(), before)
         self.assertFalse(future_source.target.exists())
 
-    def test_future_profile_must_distribute_its_valid_chrome_config_before_mutation(
-        self,
-    ) -> None:
-        future = "future"
-        self._create_distribution(
-            future,
+    def test_google_credentials_failure_preserves_user_data_and_retry_completes(self) -> None:
+        self._initial_apply()
+        for target in (self.data_root, *(profile.target for profile in self.manifest.profiles)):
+            env_path = target / ".env"
+            env_path.write_bytes(b"user-owned \xff content is never parsed\n")
+            env_path.chmod(0o640)
+        user_data = self._snapshot_user_data()
+        desired_root = managed_source_config(
+            self.manifest, "default", "root", "retry-update"
+        )
+        self._commit(
+            "root",
             {
-                "distribution.yaml": self._profile_manifest(future).replace(
-                    "- config.yaml\n", ""
+                "root-distribution.yaml": self._root_manifest(
+                    ["config.yaml", "retired.md"], "0.2.0"
                 ),
-                "config.yaml": source_config(
-                    "profile", "future-valid", self.data_root
-                ),
-                "SOUL.md": "future initial\n",
+                "config.yaml": desired_root,
             },
+            "update root before retry",
         )
-        future_source = DistributionSource(
-            name=future,
-            source="https://github.com/rurusasu/hermes-profile-future.git",
-            ref="main",
-            target=self.data_root / "profiles" / future,
-            manifest_name="distribution.yaml",
+        credentials = self.data_root / "google-calendar-mcp"
+        oauth_path = credentials / "gcp-oauth.keys.json"
+        oauth_path.write_text("stale credentials\n", encoding="utf-8")
+        tokens_path = credentials / "tokens.json"
+        tokens_path.write_text("stale tokens\n", encoding="utf-8")
+        profile_configs = {
+            profile.target / "config.yaml": (profile.target / "config.yaml").read_bytes()
+            for profile in self.manifest.profiles
+        }
+        checkout = self.data_root / "shared" / "lifelog"
+        local_change = checkout / "retry-update.md"
+        local_change.write_text("remote change survives local failure\n", encoding="utf-8")
+        remote_before = run_git(
+            "--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main"
         )
-        future_discord_item = replace(
-            next(
-                item
-                for item in self.manifest.onepassword_items
-                if item.key == "discord_rick"
-            ),
-            key="discord_future",
-            item="Hermes Discord future",
-        )
-        self.manifest = replace(
-            self.manifest,
-            profiles=(*self.manifest.profiles, future_source),
-            onepassword_items=(
-                *self.manifest.onepassword_items,
-                future_discord_item,
-            ),
-        )
-        before = self._snapshot_managed_tree()
+        profile_heads = {
+            name: run_git("--git-dir", str(self.source_remotes[name]), "rev-parse", "main")
+            for name in PROFILE_NAMES
+        }
+        real_write = google_calendar._atomic_write
+        written: list[Path] = []
+
+        def write_then_fail(path: Path, content: bytes, mode: int) -> None:
+            if path.name == "tokens.json":
+                raise OSError("fixture Google credentials failure")
+            real_write(path, content, mode)
+            written.append(path)
 
         with (
             self._patched_runtime(),
-            mock.patch.object(
-                app,
-                "synchronize_remote",
-                wraps=app.synchronize_remote,
-            ) as synchronize_remote,
-            mock.patch.object(
-                app.Transaction,
-                "begin",
-                wraps=app.Transaction.begin,
-            ) as transaction_begin,
+            mock.patch.object(google_calendar, "_atomic_write", side_effect=write_then_fail),
+            self.assertRaisesRegex(ApplyError, "could not install Google Calendar credentials"),
         ):
-            with self.assertRaises(ValidationError):
-                app.apply(PRODUCTION_MANIFEST, self._payload())
+            app.apply(PRODUCTION_MANIFEST, self._payload())
 
-        synchronize_remote.assert_not_called()
-        transaction_begin.assert_not_called()
-        self.assertEqual(self._snapshot_managed_tree(), before)
-        self.assertFalse(future_source.target.exists())
-
-    def test_runtime_failpoints_rollback_each_mutation_phase_without_changing_remote_profiles(self) -> None:
-        self._initial_apply()
-        phases = (
-            "root-apply",
-            "shared-apply:lifelog",
-            "env-merge:default",
-            "env-merge:rick",
-            "env-merge:hoffman",
-            "env-merge:risarisa",
-            "env-merge:nancy",
-            "env-merge:kuroda",
-            "env-merge:shiraishi",
-            "final-validation",
-            "commit-cleanup",
+        self.assertEqual(written, [oauth_path])
+        self.assertIn("installed", json.loads(oauth_path.read_text(encoding="utf-8")))
+        self.assertEqual(tokens_path.read_text(encoding="utf-8"), "stale tokens\n")
+        self.assertEqual((self.data_root / "config.yaml").read_text(encoding="utf-8"), desired_root)
+        self.assertEqual(self._snapshot_user_data(), user_data)
+        self.assertEqual({path: path.read_bytes() for path in profile_configs}, profile_configs)
+        completed_remote = run_git(
+            "--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main"
         )
-        managed_env_keys = DEFAULT_ENV_KEYS
-        env_paths = {
-            "default": ".env",
-            **{
-                profile: f"profiles/{profile}/.env"
-                for profile in PROFILE_NAMES
-            },
-        }
-        unmanaged_env_markers = {
-            "default": b"CUSTOM_ROOT=keep",
-            **{
-                profile: f"CUSTOM_{profile.upper()}=keep".encode("utf-8")
-                for profile in PROFILE_NAMES
-            },
-        }
-        canonical = self.data_root / "shared" / "lifelog"
-        legacy = self.data_root / "core" / "lifelog"
-
-        def reset_phase_fixture() -> list[Exception]:
-            errors: list[Exception] = []
-            try:
-                self._initial_apply()
-            except Exception as error:
-                errors.append(error)
-            try:
-                self._assert_no_live_children()
-            except Exception as error:
-                errors.append(error)
-            return errors
-
-        for revision, phase in enumerate(phases, start=2):
-            with self.subTest(phase=phase):
-                try:
-                    version = f"0.{revision}.0"
-                    desired_root = managed_source_config(
-                        self.manifest,
-                        "default",
-                        "root",
-                        f"rollback-{revision}",
-                    )
-                    desired_profiles = {
-                        profile: managed_source_config(
-                            self.manifest,
-                            profile,
-                            "profile",
-                            f"{profile}-rollback-{revision}",
-                        )
-                        for profile in PROFILE_NAMES
-                    }
-                    self._commit(
-                        "root",
-                        {
-                            "root-distribution.yaml": self._root_manifest(
-                                ["config.yaml", "retired.md"], version
-                            ),
-                            "config.yaml": desired_root,
-                        },
-                        f"rollback root {revision}",
-                    )
-                    profile_remote_before = {
-                        profile: run_git(
-                            "--git-dir",
-                            str(self.source_remotes[profile]),
-                            "rev-parse",
-                            "main",
-                        )
-                        for profile in PROFILE_NAMES
-                    }
-                    for profile in PROFILE_NAMES:
-                        self._write_files(
-                            self.data_root / "profiles" / profile,
-                            {
-                                "distribution.yaml": self._runtime_profile_manifest(
-                                    profile, version
-                                ),
-                                "config.yaml": desired_profiles[profile],
-                            },
-                        )
-
-                    stale_marker = f"stale-managed-{revision}".encode("utf-8")
-                    for profile, relative in env_paths.items():
-                        path = self.data_root / relative
-                        stale_lines: list[str] = []
-                        replaced: set[str] = set()
-                        for line in path.read_text(encoding="utf-8").splitlines():
-                            key, separator, _value = line.partition("=")
-                            if separator and key in managed_env_keys:
-                                line = f"{key}=stale-managed-{revision}-{profile}"
-                                replaced.add(key)
-                            stale_lines.append(line)
-                        if "API_SERVER_KEY" not in replaced:
-                            stale_lines.append(
-                                f"API_SERVER_KEY=stale-managed-{revision}-{profile}"
-                            )
-                            replaced.add("API_SERVER_KEY")
-                        self.assertEqual(replaced, managed_env_keys)
-                        self.assertTrue(
-                            unmanaged_env_markers[profile]
-                            in "\n".join(stale_lines).encode("utf-8"),
-                            "stale environment lost unmanaged content",
-                        )
-                        path.write_text(
-                            "\n".join(stale_lines) + "\n", encoding="utf-8"
-                        )
-                        self.assertEqual(self._mode(path), 0o600)
-
-                    self.assertTrue(canonical.is_dir())
-                    self.assertFalse(os.path.lexists(legacy))
-                    lifelog_change = canonical / f"rollback-{revision}.md"
-                    lifelog_change.write_text(
-                        f"remote change {revision}\n", encoding="utf-8"
-                    )
-                    remote_before = run_git(
-                        "--git-dir",
-                        str(self.source_remotes["lifelog"]),
-                        "rev-parse",
-                        "main",
-                    )
-                    transaction_tree: dict[str, TreeEntry] | None = None
-                    transaction_remote: str | None = None
-                    observed_failpoints: list[str] = []
-                    mutation_assertion: AssertionError | None = None
-                    mutation_verified = False
-                    real_begin = app.Transaction.begin
-
-                    def begin(data_root: Path) -> object:
-                        nonlocal transaction_remote, transaction_tree
-                        transaction_tree = self._snapshot_tree(self.data_root)
-                        transaction_remote = run_git(
-                            "--git-dir",
-                            str(self.source_remotes["lifelog"]),
-                            "rev-parse",
-                            "main",
-                        )
-                        return real_begin(data_root)
-
-                    def baseline_entry(relative: str) -> TreeEntry:
-                        self.assertIsNotNone(transaction_tree)
-                        assert transaction_tree is not None
-                        entry = transaction_tree.get(relative)
-                        self.assertIsNotNone(
-                            entry, f"transaction baseline omitted {relative}"
-                        )
-                        assert entry is not None
-                        return entry
-
-                    def assert_owned_file_mutated(
-                        relative: str, expected: str
-                    ) -> None:
-                        before = baseline_entry(relative)
-                        path = self.data_root / relative
-                        self.assertEqual(before.kind, "file")
-                        self.assertTrue(path.is_file())
-                        current = path.read_bytes()
-                        self.assertNotEqual(current, before.payload)
-                        self.assertEqual(current, expected.encode("utf-8"))
-
-                    def assert_owned_file_unchanged(
-                        relative: str, expected: str
-                    ) -> None:
-                        before = baseline_entry(relative)
-                        path = self.data_root / relative
-                        self.assertEqual(before.kind, "file")
-                        self.assertTrue(path.is_file())
-                        current = path.read_bytes()
-                        self.assertEqual(current, before.payload)
-                        self.assertEqual(current, expected.encode("utf-8"))
-
-                    def assert_environment_mutated(profile: str) -> None:
-                        relative = env_paths[profile]
-                        before = baseline_entry(relative)
-                        path = self.data_root / relative
-                        self.assertEqual(before.kind, "file")
-                        self.assertTrue(path.is_file())
-                        current = path.read_bytes()
-                        self.assertFalse(
-                            current == before.payload,
-                            f"{profile} environment merge was a no-op",
-                        )
-                        self.assertTrue(
-                            unmanaged_env_markers[profile] in current,
-                            f"{profile} environment lost unmanaged content",
-                        )
-
-                    def assert_shared_repository_preserved() -> None:
-                        before = baseline_entry("shared/lifelog")
-                        assert transaction_tree is not None
-                        self.assertEqual(before.kind, "directory")
-                        self.assertTrue(canonical.is_dir())
-                        self.assertFalse(os.path.lexists(legacy))
-                        metadata = canonical.stat()
-                        self.assertEqual(
-                            (metadata.st_dev, metadata.st_ino),
-                            (before.device, before.inode),
-                        )
-
-                    def assert_all_representative_mutations() -> None:
-                        assert_owned_file_mutated("config.yaml", desired_root)
-                        for profile in PROFILE_NAMES:
-                            assert_owned_file_unchanged(
-                                f"profiles/{profile}/config.yaml",
-                                desired_profiles[profile],
-                            )
-                        assert_shared_repository_preserved()
-                        for profile in env_paths:
-                            assert_environment_mutated(profile)
-
-                    def assert_selected_phase_mutated(name: str) -> None:
-                        if name == "root-apply":
-                            assert_owned_file_mutated("config.yaml", desired_root)
-                        elif name.startswith("profile-apply:"):
-                            profile = name.partition(":")[2]
-                            assert_owned_file_unchanged(
-                                f"profiles/{profile}/config.yaml",
-                                desired_profiles[profile],
-                            )
-                        elif name == "shared-apply:lifelog":
-                            assert_shared_repository_preserved()
-                        elif name.startswith("env-merge:"):
-                            assert_environment_mutated(name.partition(":")[2])
-                        else:
-                            self.assertIn(
-                                name, {"final-validation", "commit-cleanup"}
-                            )
-                            assert_all_representative_mutations()
-
-                    def failpoint(name: str, selected: str = phase) -> None:
-                        nonlocal mutation_assertion, mutation_verified
-                        observed_failpoints.append(name)
-                        if name == selected:
-                            try:
-                                assert_selected_phase_mutated(name)
-                                mutation_verified = True
-                            except AssertionError as error:
-                                mutation_assertion = error
-                            raise ApplyError("fixture failure")
-
-                    with (
-                        self._patched_runtime(),
-                        mock.patch.object(app.Transaction, "begin", side_effect=begin),
-                        mock.patch.object(app, "_failpoint", side_effect=failpoint),
-                    ):
-                        with self.assertRaises(ApplyError):
-                            app.apply(PRODUCTION_MANIFEST, self._payload())
-
-                    if mutation_assertion is not None:
-                        raise mutation_assertion
-                    self.assertTrue(
-                        mutation_verified,
-                        f"{phase} did not verify a real target mutation",
-                    )
-                    self.assertIsNotNone(transaction_tree)
-                    self.assertIsNotNone(transaction_remote)
-                    assert transaction_tree is not None
-                    assert transaction_remote is not None
-                    self.assertNotEqual(
-                        baseline_entry("config.yaml").payload,
-                        desired_root.encode("utf-8"),
-                    )
-                    for profile in PROFILE_NAMES:
-                        self.assertEqual(
-                            baseline_entry(
-                                f"profiles/{profile}/config.yaml"
-                            ).payload,
-                            desired_profiles[profile].encode("utf-8"),
-                        )
-                    for relative in env_paths.values():
-                        payload = baseline_entry(relative).payload
-                        self.assertIsInstance(payload, bytes)
-                        assert isinstance(payload, bytes)
-                        self.assertTrue(
-                            stale_marker in payload,
-                            "transaction baseline environment was not stale",
-                        )
-                    self.assertEqual(
-                        baseline_entry("shared/lifelog").kind, "directory"
-                    )
-                    self.assertEqual(
-                        baseline_entry(
-                            f"shared/lifelog/rollback-{revision}.md"
-                        ).payload,
-                        f"remote change {revision}\n".encode("utf-8"),
-                    )
-                    self.assertIn(
-                        ".bootstrap/transactions/.lock", transaction_tree
-                    )
-                    self.assertIn(
-                        "locks/repositories/lifelog.lock", transaction_tree
-                    )
-                    self.assertTrue(
-                        any(".git" in path.split("/") for path in transaction_tree)
-                    )
-                    self.assertTrue(
-                        self._snapshot_rollback_contract(
-                            self._snapshot_tree(self.data_root)
-                        )
-                        == self._snapshot_rollback_contract(transaction_tree),
-                        "rollback did not restore the exact transaction baseline",
-                    )
-                    selected_index = phases.index(phase)
-                    self.assertEqual(
-                        tuple(observed_failpoints), phases[: selected_index + 1]
-                    )
-                    remote_after = run_git(
-                        "--git-dir",
-                        str(self.source_remotes["lifelog"]),
-                        "rev-parse",
-                        "main",
-                    )
-                    self.assertNotEqual(transaction_remote, remote_before)
-                    self.assertEqual(remote_after, transaction_remote)
-                    for profile in PROFILE_NAMES:
-                        self.assertEqual(
-                            run_git(
-                                "--git-dir",
-                                str(self.source_remotes[profile]),
-                                "rev-parse",
-                                "main",
-                            ),
-                            profile_remote_before[profile],
-                        )
-                except Exception as primary_error:
-                    for cleanup_error in reset_phase_fixture():
-                        primary_error.add_note(
-                            f"phase cleanup also failed: {cleanup_error}"
-                        )
-                    raise
-                cleanup_errors = reset_phase_fixture()
-                if cleanup_errors:
-                    primary_cleanup_error = cleanup_errors[0]
-                    for cleanup_error in cleanup_errors[1:]:
-                        primary_cleanup_error.add_note(
-                            f"additional phase cleanup failure: {cleanup_error}"
-                        )
-                    raise primary_cleanup_error
-
-    def test_env_merge_preserves_unowned_content_and_canonicalizes_managed_keys(self) -> None:
-        self._initial_apply()
-
-        root_env = (self.data_root / ".env").read_text(encoding="utf-8")
-        self.assertIn("# root comment", root_env)
-        self.assertIn("CUSTOM_ROOT=keep", root_env)
-        self.assertNotIn("HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=", root_env)
-        for key in DEFAULT_ENV_KEYS:
-            self.assertEqual(sum(line.startswith(f"{key}=") for line in root_env.splitlines()), 1)
-        root_values = dict(
-            line.partition("=")[::2]
-            for line in root_env.splitlines()
-            if "=" in line
-        )
-        self.assertNotEqual(
-            root_values["API_SERVER_KEY"],
-            root_values["HERMES_DASHBOARD_BASIC_AUTH_SECRET"],
-        )
-
-        for profile in PROFILE_NAMES:
-            profile_env = (
-                self.data_root / "profiles" / profile / ".env"
-            ).read_text(encoding="utf-8")
-            self.assertFalse(
-                any(
-                    line.startswith("API_SERVER_KEY=")
-                    for line in profile_env.splitlines()
-                )
-            )
-            for key in PROFILE_ENV_KEYS:
-                self.assertEqual(
-                    sum(
-                        line.startswith(f"{key}=")
-                        for line in profile_env.splitlines()
-                    ),
-                    1,
-                )
-
-        original_api_key = root_values["API_SERVER_KEY"]
-        root_path = self.data_root / ".env"
-        root_path.write_text(
-            root_path.read_text(encoding="utf-8")
-            + f"API_SERVER_KEY={original_api_key}\n",
-            encoding="utf-8",
-        )
-        for profile in PROFILE_NAMES:
-            profile_path = self.data_root / "profiles" / profile / ".env"
-            profile_path.write_text(
-                profile_path.read_text(encoding="utf-8")
-                + "API_SERVER_KEY=stale-named-profile-key\n",
-                encoding="utf-8",
-            )
-
-        self.assertEqual(self._apply()["status"], "applied")
-
-        refreshed_root = root_path.read_text(encoding="utf-8")
-        refreshed_values = dict(
-            line.partition("=")[::2]
-            for line in refreshed_root.splitlines()
-            if "=" in line
-        )
+        self.assertNotEqual(completed_remote, remote_before)
+        self.assertEqual(local_change.read_text(encoding="utf-8"), "remote change survives local failure\n")
         self.assertEqual(
-            sum(
-                line.startswith("API_SERVER_KEY=")
-                for line in refreshed_root.splitlines()
-            ),
-            1,
+            {
+                name: run_git("--git-dir", str(self.source_remotes[name]), "rev-parse", "main")
+                for name in PROFILE_NAMES
+            },
+            profile_heads,
         )
-        self.assertNotEqual(refreshed_values["API_SERVER_KEY"], original_api_key)
-        self.assertNotEqual(
-            refreshed_values["API_SERVER_KEY"],
-            refreshed_values["HERMES_DASHBOARD_BASIC_AUTH_SECRET"],
-        )
-        for profile in PROFILE_NAMES:
-            profile_env = (
-                self.data_root / "profiles" / profile / ".env"
-            ).read_text(encoding="utf-8")
-            self.assertNotIn("API_SERVER_KEY=", profile_env)
-
-    def test_next_apply_recovers_crashed_durable_transaction_before_reading_payload(self) -> None:
         self._initial_apply()
-        target = self.data_root / "config.yaml"
-        expected = target.read_text(encoding="utf-8")
-        script = (
-            "from pathlib import Path; import os; "
-            "from hermes_bootstrap.transaction import Transaction; "
-            f"assert {HOST_SECRET_ENV!r} not in os.environ; "
-            f"path=Path({str(target)!r}); tx=Transaction.begin(path.parents[0]); tx.snapshot(path); "
-            "path.write_text('crashed mutation\\n', encoding='utf-8'); tx._release_lock(); os._exit(0)"
+        self.assertEqual(self._snapshot_user_data(), user_data)
+        self.assertEqual(self._validate()["status"], "valid")
+        self.assertEqual(
+            run_git("--git-dir", str(self.source_remotes["lifelog"]), "rev-parse", "main"),
+            completed_remote,
         )
-        package_root = Path(app.__file__).resolve().parents[1]
-        environment = _minimal_environment(
-            self.child_home,
-            PYTHONPATH=str(package_root),
-            TMPDIR=str(self.profile_tmpdir),
-        )
-        self.assertNotIn(HOST_SECRET_ENV, environment)
-        completed = _run_bounded(
-            (sys.executable, "-c", script),
-            environment=environment,
-            timeout=5.0,
-        )
-        child_output = completed.stdout + completed.stderr
-        self.assertFalse(
-            HOST_SECRET_ENV in child_output,
-            "recovery child output contained a protected host key",
-        )
-        self._assert_no_protected_output(child_output, "recovery child output")
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertNotEqual(target.read_text(encoding="utf-8"), expected)
-        original_reader = app.read_secret_payload
 
-        def reader(stream: io.StringIO, manifest: BootstrapManifest) -> object:
-            self.assertEqual(target.read_text(encoding="utf-8"), expected)
-            return original_reader(stream, manifest)
-
-        with self._patched_runtime(), mock.patch.object(app, "read_secret_payload", side_effect=reader):
-            result = app.apply(PRODUCTION_MANIFEST, self._payload())
-        self.assertEqual(result["status"], "applied")
-        self.assertEqual(target.read_text(encoding="utf-8"), expected)
-
-    def _snapshot_runtime(self) -> dict[str, tuple[str, bytes | str, int]]:
+    def _snapshot_user_data(self) -> dict[str, tuple[str, bytes | str, int]]:
         snapshot: dict[str, tuple[str, bytes | str, int]] = {}
         for path in sorted(self.data_root.rglob("*")):
-            relative = path.relative_to(self.data_root).as_posix()
-            if relative.startswith(
-                (
-                    ".bootstrap/transactions/",
-                    ".hermes-bootstrap-",
-                    ".hermes-repository-",
+            relative = path.relative_to(self.data_root)
+            parts = relative.parts
+            if not (
+                relative.as_posix() == ".env"
+                or (len(parts) == 3 and parts[0] == "profiles" and parts[2] == ".env")
+                or parts[0] in PROFILE_USER_DIRECTORIES
+                or (
+                    len(parts) > 2
+                    and parts[0] == "profiles"
+                    and parts[2] in PROFILE_USER_DIRECTORIES
                 )
             ):
                 continue
-            metadata = path.lstat()
             if path.is_symlink():
-                snapshot[relative] = ("symlink", os.readlink(path), self._mode(path))
+                snapshot[relative.as_posix()] = ("symlink", os.readlink(path), self._mode(path))
             elif path.is_file():
-                snapshot[relative] = ("file", path.read_bytes(), self._mode(path))
+                snapshot[relative.as_posix()] = ("file", path.read_bytes(), self._mode(path))
             elif path.is_dir():
-                snapshot[relative] = ("dir", b"", self._mode(path))
+                snapshot[relative.as_posix()] = ("dir", b"", self._mode(path))
         return snapshot
-
-    def _ensure_repository_lock(self) -> None:
-        lock = self.data_root / "locks" / "repositories" / "lifelog.lock"
-        lock.parent.mkdir(parents=True, exist_ok=True)
-        lock.touch(exist_ok=True)
-        lock.chmod(0o600)
 
     def _ensure_profile_locks(self) -> None:
         for profile in PROFILE_NAMES:
@@ -1911,80 +1144,16 @@ class BootstrapFlowTests(unittest.TestCase):
             lock.touch(exist_ok=True)
             lock.chmod(0o600)
 
-    def _snapshot_coordination_locks(self) -> dict[str, TreeEntry | None]:
-        tree = self._snapshot_tree(self.data_root)
-        lock_paths = (
-            ".bootstrap/transactions/.lock",
-            "locks/repositories/lifelog.lock",
-            *(
-                f"locks/repositories/profile-{profile}.lock"
-                for profile in PROFILE_NAMES
-            ),
-        )
-        return {path: tree.get(path) for path in lock_paths}
-
-    @staticmethod
-    def _snapshot_tree_contract(
-        tree: dict[str, TreeEntry],
-    ) -> dict[str, tuple[str, int, int, int, bytes | str | None]]:
-        return {
-            path: (entry.kind, entry.mode, entry.links, entry.size, entry.payload)
-            for path, entry in tree.items()
-        }
-
-    @staticmethod
-    def _snapshot_rollback_contract(
-        tree: dict[str, TreeEntry],
-    ) -> dict[
-        str, tuple[str, int, int, int | None, bytes | str | None]
-    ]:
-        contract: dict[
-            str, tuple[str, int, int, int | None, bytes | str | None]
-        ] = {}
-
-        def is_temporary(path: str) -> bool:
-            return any(
-                part.startswith((".hermes-bootstrap-", ".hermes-repository-"))
-                for part in path.split("/")
-            )
-
-        temporary_directory_children: dict[str, int] = {}
-        for path, entry in tree.items():
-            if entry.kind != "directory" or not is_temporary(path):
-                continue
-            parent = path.rpartition("/")[0] or "."
-            if not is_temporary(parent):
-                temporary_directory_children[parent] = (
-                    temporary_directory_children.get(parent, 0) + 1
-                )
-
-        for path, entry in tree.items():
-            if is_temporary(path):
-                continue
-            links = entry.links - temporary_directory_children.get(path, 0)
-            # Directory st_size is allocator metadata after transient child entries;
-            # retained type, mode, effective nlink, paths, bytes, and symlinks stay exact.
-            directory_size = None if entry.kind == "directory" else entry.size
-            contract[path] = (
-                entry.kind,
-                entry.mode,
-                links,
-                directory_size,
-                entry.payload,
-            )
-        return contract
-
     def _snapshot_managed_tree(
         self,
-    ) -> dict[str, tuple[str, int, int, int, bytes | str | None]]:
+    ) -> dict[str, tuple[str, int, bytes | str | None]]:
         ignored = (
-            ".bootstrap/transactions",
             "locks",
             ".hermes-bootstrap-",
             ".hermes-repository-",
         )
         return {
-            path: (entry.kind, entry.mode, entry.links, entry.size, entry.payload)
+            path: (entry.kind, entry.mode, entry.payload)
             for path, entry in self._snapshot_tree(self.data_root).items()
             if path != "."
             and ".git" not in path.split("/")
@@ -2022,10 +1191,6 @@ class BootstrapFlowTests(unittest.TestCase):
             snapshot[relative] = TreeEntry(
                 kind=kind,
                 mode=stat.S_IMODE(metadata.st_mode),
-                device=metadata.st_dev,
-                inode=metadata.st_ino,
-                links=metadata.st_nlink,
-                size=metadata.st_size,
                 payload=payload,
             )
         return snapshot

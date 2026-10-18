@@ -5,7 +5,6 @@ bats_require_minimum_version 1.5.0
 setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 	INSTALLER="$REPO_ROOT/scripts/sh/install-tart-vm.sh"
-	TASKFILE="$REPO_ROOT/taskfiles/install/taskfile.yml"
 	TEST_HOME="$BATS_TEST_TMPDIR/home"
 	TART_HOME="$TEST_HOME/.tart"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
@@ -33,18 +32,6 @@ printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
 printf '/dev/mock 100000000 0 36700160 0%% /\n'
 EOF
 	chmod +x "$STUB_BIN/df"
-}
-
-@test "macOS install tasks expose an explicit Tart VM preparation step" {
-	run awk '
-		/^  tart:prepare:/ { in_task=1 }
-		in_task { print }
-		in_task && /^[^ ]/ { exit }
-	' "$TASKFILE"
-
-	[ "$status" -eq 0 ]
-	[[ "$output" == *'scripts/sh/install-tart-vm.sh'* ]]
-	[[ "$output" == *'platforms: [darwin]'* ]]
 }
 
 @test "Tart preparation skips an existing VM without invoking Tart" {

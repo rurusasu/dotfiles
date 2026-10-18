@@ -20,21 +20,21 @@ Windows の導入情報は `windows/winget/packages.json` を直接管理しま�
 
 Unix CLI の導入は `tools.nix`、Linux / WSLg GUI は `desktop.nix`、Darwin system GUI は `desktop-darwin.nix`、設定・連携はアプリ・機能ごとの module にまとめます。Windows の manifest、OS の service、有効化、ユーザー設定は、それぞれを適用する層が管理します。
 
-| 編集先                                               | 責務                                                                                 |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `nix/modules/tools.nix`                              | Unix CLI の導入。既存の未分離 GUI selector も現在ここに残る                          |
-| `nix/modules/desktop.nix`                            | Linux の Chrome / Obsidian / 1Password GUI、WSL の Spotify / Signal                  |
-| `nix/modules/desktop-darwin.nix`                     | Darwin system GUI の Dia / Obsidian / Raycast / 1Password                            |
-| `nix/modules/<app>/`                                 | アプリの設定・連携・package override、custom package 定義                            |
-| `nix/modules/ai_agents/hermes/bootstrap.nix`         | Hermes bootstrap の package 構築。CLI の導入は tools、サービス用依存は Hermes module |
-| `nix/modules/browsers/dia/`                          | Dia の package 選択関数、`package.nix`、更新用 `provider-candidates.nix`             |
-| `nix/modules/shells/powershell/psscriptanalyzer.nix` | formatter が使用する PSScriptAnalyzer の package 定義                                |
-| `nix/hosts/`                                         | module の選択、OS の service / 有効化・競合解除                                      |
-| `nix/home/`                                          | OS 非依存の Home Manager 共通設定と module の読み込み                                |
-| `nix/home/keybindings/`                              | 共通キー配置・設定生成関数・ユーザー設定                                             |
-| `windows/winget/packages.json`                       | Windows GUI の package ID、導入・検証情報                                            |
-| `windows/{npm,pnpm}/packages.json`                   | 独立した Node package manifest。現在は空                                             |
-| `nix/outputs.nix`                                    | Darwin custom package の build 出力                                                  |
+| 編集先                                               | 責務                                                                                  |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `nix/modules/tools.nix`                              | Unix CLI の導入。既存の未分離 GUI selector も現在ここに残る                           |
+| `nix/modules/desktop.nix`                            | Linux の Chrome / Obsidian / 1Password GUI / ComfyUI Desktop、WSL の Spotify / Signal |
+| `nix/modules/desktop-darwin.nix`                     | Darwin system GUI の Dia / Obsidian / Raycast / 1Password / ComfyUI Desktop           |
+| `nix/modules/<app>/`                                 | アプリの設定・連携・package override、custom package 定義                             |
+| `nix/modules/ai_agents/hermes/bootstrap.nix`         | Hermes bootstrap の package 構築。CLI の導入は tools、サービス用依存は Hermes module  |
+| `nix/modules/browsers/dia/`                          | Dia の package 選択関数、`package.nix`、更新用 `provider-candidates.nix`              |
+| `nix/modules/shells/powershell/psscriptanalyzer.nix` | formatter が使用する PSScriptAnalyzer の package 定義                                 |
+| `nix/hosts/`                                         | module の選択、OS の service / 有効化・競合解除                                       |
+| `nix/home/`                                          | OS 非依存の Home Manager 共通設定と module の読み込み                                 |
+| `nix/home/keybindings/`                              | 共通キー配置・設定生成関数・ユーザー設定                                              |
+| `windows/winget/packages.json`                       | Windows GUI の package ID、導入・検証情報                                             |
+| `windows/{npm,pnpm}/packages.json`                   | 独立した Node package manifest。現在は空                                              |
+| `nix/outputs.nix`                                    | Darwin custom package の build 出力                                                   |
 
 各 host の `home.nix` は `nix/home/common.nix` を通じて CLI 導入とアプリ設定を読み込みます。Darwin host は `tools.nix` の `darwin` と `desktop-darwin.nix`、Linux host は `desktop.nix` の `linuxDesktop`、NixOS-WSL は `wslDesktop` を読み込みます。Darwin のブラウザーは Dia、Linux / WSLg は Chrome を使います。WSL は Chrome / Spotify / Signal / Obsidian / 1Password GUI を Nix で導入し、デスクトップキーから WSLg で開きます。Windows の 1Password CLI / Git signer 連携は維持します。
 
@@ -84,24 +84,13 @@ Windows のキー設定生成と Darwin custom package の出力は `nix/outputs
 
 macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Homebrew package を反映します。通常の CLI と Neovim・WezTerm は Nix 側で管理し、cask/formula は Darwin host に明示します。Nix パッケージの版は `flake.lock` に従います。
 
-### macOS のインストール時の権限
+### macOS の権限エラー
 
-`./install.sh` は flake 更新・ビルドの前に、既存の Nix 管理アプリを更新できるか確認します。
-Homebrew の `zap` が参照する「最近使った書類」のディレクトリも、実際の実行ユーザーで列挙できるか確認します。
-この確認では項目名を表示せず、ファイルの内容を読みません。対象ディレクトリが存在しない場合は省略します。
-権限が足りない場合は「システム設定 → プライバシーとセキュリティ」の「フルディスクアクセス」または
-「アプリ管理」を開き、それぞれ最大 120 秒待ちます。実行元の端末アプリ（Ghostty、ターミナルなど）を許可すると続行します。
-許可済みなら待たずに進みます。権限のリセットや許可済み状態の独自キャッシュは行いません。
-非対話実行、GUI セッション外、または時間切れでは、アクセスできなかったパスを示して終了します。
-リポジトリの flake 設定を許可する指定は、`darwin-rebuild` 内部の Nix 呼び出しにも渡します。
-
-初回の許可は macOS の設定画面で行ってください。端末アプリを変えたり許可を取り消したりした場合は、
-その端末アプリへの許可が必要です。「アプリ管理」と「フルディスクアクセス」は別の権限です。
-フルディスクアクセスを有効にした後、macOS が再起動を求めたら端末アプリを `⌘Q` で終了して開き直してください。
-事前確認は上記の実アクセスを対象とし、すべてのデータディレクトリへの権限を保証するものではありません。
-Homebrew の `zap` や設定ファイルの配置で停止した場合の再開方法は
+Nix / Home Manager / Homebrew の適用で権限エラーが出た場合は、macOS の設定画面で
+実行元の端末アプリに必要な「アプリ管理」または「フルディスクアクセス」を許可してください。
+macOS が再起動を求めたら端末アプリを `⌘Q` で終了して開き直し、`./install.sh` を再実行します。
+Homebrew の `zap` や設定ファイルの配置で停止した場合の詳細は
 [Homebrew cask のトラブルシューティング](./homebrew-cask-troubleshooting.md#フルディスクアクセス)を参照してください。
-権限の説明は [Apple の「プライバシーとセキュリティ」設定](https://support.apple.com/ja-jp/guide/mac-help/mchl211c911f/mac)を参照してください。
 
 ### macOS の旧 provider サポート終了
 
@@ -140,6 +129,20 @@ application identity、署名、CLI version を独自の期待値と比較する
 macOS で Homebrew cask の適用に失敗する場合は、
 [Homebrew cask のトラブルシューティング](./homebrew-cask-troubleshooting.md)
 を参照してください。
+
+## ComfyUI Desktop
+
+ComfyUI Desktop は Apple Silicon macOS と x86_64 Linux / WSLg に導入します。
+`nix/modules/comfyui/package.nix` に公式バイナリのバージョン・ビルド固定 URL・ハッシュを記録します。
+macOS は署名済み `.app` を維持し、Linux は AppImage を FHS 環境で起動します。
+公式の ARM64 Linux バイナリがないため、aarch64-linux には追加しません。
+配布元は [Comfy Desktop](https://github.com/Comfy-Org/Comfy-Desktop) です。
+
+アプリ本体の更新は `package.nix` の配布情報の更新と通常の Nix 設定反映で行います。
+モデル・カスタムノード・ComfyUI の実行環境は、Desktop が管理する書き込み可能なユーザーデータです。
+これらの内容やバージョンは Nix で固定しません。アプリ内更新は Nix store に書き込めないため、
+アプリの設定で自動インストールを無効にし、Nix 側で更新してください。
+GUI 起動と GPU 推論の確認には対象 OS の実機が必要です。
 
 ## Windows manifest
 
@@ -180,7 +183,7 @@ Git / ghq の導入は `nix/modules/tools.nix`、設定は `nix/modules/git/` �
 
 lazygit / Herdr の有効化は `nix/modules/tools.nix` に置きます。`nix/modules/lazygit/` は Bash / Zsh の `lg` 連携、`nix/modules/herdr/` は標準 `programs.herdr.settings` に Nix で設定値を直接定義します。Windows の既存 Herdr installer・chezmoi 設定は維持します。
 
-エディタの設定は `nix/modules/editors/` にまとめます。Neovim 本体・補助 CLI・LSP・プラグイン実行依存の導入は `nix/modules/tools.nix`、設定とプラグインは `nvim/` が管理します。プラグインが宣言する実行依存も tools が Home Manager の設定から集め、通常の PATH に導入します。Orca の導入は `tools.nix`、`editors/orca/package.nix` が macOS の公式 DMG と Linux の公式 AppImage を選択します。Linux の FHS 環境・デスクトップ登録・公式 `orca-ide` CLI は `linux.nix`、バージョン・URL・ハッシュは `sources.json` が管理します。LSP・整形ツールは全エディタ共通で `nix/modules/tools.nix` から PATH に導入します。運用は [Neovim](../chezmoi/neovim.md) を参照してください。
+エディタの設定は `nix/modules/editors/` にまとめます。Neovim 本体・補助 CLI・LSP・プラグイン実行依存の導入は `nix/modules/tools.nix`、設定とプラグインは `nvim/` が管理します。プラグインが宣言する実行依存も tools が Home Manager の設定から集め、通常の PATH に導入します。Orca の導入は `tools.nix`、`editors/orca/package.nix` が macOS の公式 DMG と Linux の公式 AppImage を選択し、バージョン・URL・ハッシュも同じファイルで管理します。Linux の FHS 環境・デスクトップ登録・公式 `orca-ide` CLI は `linux.nix` が担当します。LSP・整形ツールは全エディタ共通で `nix/modules/tools.nix` から PATH に導入します。運用は [Neovim](../chezmoi/neovim.md) を参照してください。
 
 zoxide / fzf / eza / bat / ripgrep の導入は `nix/modules/tools.nix`、ユーザー設定は `nix/home/shells/plugins/` に置きます。zoxide は標準連携の `--cmd cd` で `cd` / `cdi` を使い、WSL の除外ディレクトリは host が管理します。fzf の Zsh は標準 integration の Ctrl+T/R・Alt+C を使い、Unix の Bash integration は無効です。ripgrep の設定ファイルと `RIPGREP_CONFIG_PATH` は Home Manager が生成します。Windows の Bash 設定は chezmoi の既存設定を使います。
 

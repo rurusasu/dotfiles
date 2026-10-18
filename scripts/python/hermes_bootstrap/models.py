@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -42,9 +41,6 @@ class SharedRepository:
     source: str
     ref: str
     target: Path
-    mode: Literal["read-only", "read-write"]
-    sync_owner: str | None
-    source_commit: str | None = None
 
 
 @dataclass(frozen=True)
@@ -55,4 +51,3 @@ class BootstrapManifest:
     root_distribution: DistributionSource
     profiles: tuple[DistributionSource, ...]
     shared_repositories: tuple[SharedRepository, ...]
-    manifest_sha256: str = ""

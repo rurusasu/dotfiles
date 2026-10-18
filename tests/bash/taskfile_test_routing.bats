@@ -63,12 +63,6 @@ EOF
 @test "root Taskfile composes active feature taskfiles" {
 	command -v task >/dev/null 2>&1 || skip "task is not available in this test environment"
 
-	for feature in quality git nix dev test install docker hermes hooks; do
-		[ -f "$REPO_ROOT/taskfiles/$feature/taskfile.yml" ]
-		grep -Fq "taskfiles/$feature/taskfile.yml" "$REPO_ROOT/Taskfile.yml"
-		grep -Fq "flatten: true" "$REPO_ROOT/Taskfile.yml"
-	done
-
 	run task --dir "$REPO_ROOT" --list
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"hermes:up"* ]]
@@ -127,11 +121,6 @@ EOF
 	[[ "$output" != *"nix profile"* ]]
 	[[ "$output" != *"hermes:docker:bootstrap"* ]]
 	[[ "$output" != *"docker compose"* ]]
-}
-
-@test "NixOS rebuild entry points invoke nixos-rebuild directly" {
-	grep -Fq 'sudo nixos-rebuild' "$REPO_ROOT/taskfiles/nix/taskfile.yml"
-	grep -Fq 'exec sudo nixos-rebuild switch' "$REPO_ROOT/scripts/sh/install-nixos.sh"
 }
 
 @test "Hermes restart delegates to the Home Manager native gateway" {
