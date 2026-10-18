@@ -20,11 +20,24 @@ function Get-WindowsInstallerUserPathSnapshot {
     return $snapshot
 }
 
+function New-WindowsInstallerUserPathSeed {
+    param([AllowEmptyString()][string]$UserPath = '')
+    $staleEntries = [Collections.Generic.List[string]]::new()
+    do {
+        $staleEntries.Add("C:\dotfiles-ci-stale-path-entry-$($staleEntries.Count + 1)")
+        $seededUserPath = (@($staleEntries) + @($UserPath -split ';' | Where-Object { $_ })) -join ';'
+    } while ($seededUserPath.Length -lt 16384)
+    # Exercise cmd.exe's 8191 boundary while reserving at least 8191 characters
+    # for explicit helper paths and additions made by upstream installers.
+    if ($seededUserPath.Length -le 8191 -or $seededUserPath.Length -gt 24576) {
+        throw 'Installer E2E User PATH seed must exceed 8191 characters and leave 8191 characters of headroom below 32767'
+    }
+    return $seededUserPath
+}
+
 function Set-WindowsInstallerUserPathSeed {
     param([Parameter(Mandatory)]$Snapshot)
-    $oversizedUserPathEntries = 1..1000 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
-    $seededUserPath = (@($oversizedUserPathEntries) + @([string]$Snapshot.Value -split ';' | Where-Object { $_ })) -join ';'
-    if ($seededUserPath.Length -le 32767) { throw 'Could not seed an over-limit User PATH for the installer E2E' }
+    $seededUserPath = New-WindowsInstallerUserPathSeed -UserPath ([string]$Snapshot.Value)
     $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
     if (-not $key) { throw 'Could not open the current user Environment registry key for the PATH E2E' }
     try { $key.SetValue('PATH', $seededUserPath, [Microsoft.Win32.RegistryValueKind]::ExpandString) }
@@ -65,6 +78,29 @@ function Invoke-WindowsE2EValidation {
   }
 }
 
+function Assert-WindowsInstallerPersistentHelperPath {
+  param([string]$SeededPath, [string]$CurrentPath, [object[]]$Packages)
+  if ($CurrentPath.Length -gt 32767) { throw 'Post-install User PATH exceeds the Windows 32767-character limit' }
+  $normalize = {
+    param([string]$Path)
+    [Environment]::ExpandEnvironmentVariables($Path.Trim().Trim('"')).Replace('/', '\').TrimEnd([char[]]@('\', '/')).ToLowerInvariant()
+  }
+  $currentEntries = @($CurrentPath -split ';' | Where-Object { $_ } | ForEach-Object { & $normalize $_ })
+  foreach ($entry in @($SeededPath -split ';' | Where-Object { $_ })) {
+    if ($currentEntries -notcontains (& $normalize $entry)) { throw 'Installer removed an existing seeded User PATH entry' }
+  }
+  foreach ($package in $Packages) {
+    $persist = $package.PSObject.Properties['persistPathEntries']
+    if ($null -eq $persist -or $persist.Value -isnot [bool] -or -not $persist.Value) { continue }
+    foreach ($entry in @($package.pathEntries)) {
+      $identity = & $normalize $entry
+      if (@($currentEntries | Where-Object { $_ -eq $identity }).Count -ne 1) {
+        throw "Expected exactly one persisted helper PATH entry for $($package.PackageIdentifier): $entry"
+      }
+    }
+  }
+}
+
 try {
 $expectedVersion = $env:DOTFILES_E2E_POWERSHELL_VERSION
 $expectedMajorVersion = if ($expectedVersion -eq '5.1') { 5 } else { 7 }
@@ -73,6 +109,7 @@ if ($PSVersionTable.PSVersion.Major -ne $expectedMajorVersion) {
 }
 
 $originalPath = $env:PATH
+$seededUserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
 $originalPs7Dir = $env:DOTFILES_PS7_DIR
 $originalForceWindowsPowerShell = $env:DOTFILES_FORCE_WINDOWS_POWERSHELL
 $isWindowsPowerShell = $expectedVersion -eq '5.1'
@@ -192,6 +229,12 @@ if ($expectedWindowsPackageIds.Count -eq 0) {
   throw 'Windows E2E manifest has no eligible packages to install and verify'
 }
 Assert-WingetInstallSuccess -Output $out -ExpectedPackageIds $expectedWindowsPackageIds
+}
+
+Invoke-WindowsE2EValidation -Name 'persistent WSL helper PATH' -Validation {
+$helperManifest = Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'windows/winget/packages.json') -Raw | ConvertFrom-Json
+Assert-WindowsInstallerPersistentHelperPath -SeededPath $seededUserPath `
+  -CurrentPath (Get-UserEnvironmentPath) -Packages @($helperManifest.Sources | ForEach-Object { $_.Packages })
 }
 
 Invoke-WindowsE2EValidation -Name 'WezTerm install PATH and version' -Validation {

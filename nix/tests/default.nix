@@ -62,6 +62,7 @@
       (import ./unit/home/import-boundary.nix)
       // (import ./unit/home/platform-boundary.nix)
       // (import ./unit/home/composition.nix { inherit inputs; })
+      // (import ./unit/home/starship.nix { inherit inputs; })
       // (import ./unit/home/standalone-darwin-identity.nix { inherit inputs; })
       // (import ./unit/home/rebuild-aliases.nix { inherit inputs; })
       // (import ./unit/ghostty.nix { inherit inputs; })

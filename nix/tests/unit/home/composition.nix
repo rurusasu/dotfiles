@@ -917,7 +917,6 @@ in
             builtins.elem line [
               "source ${../../../home/shells/zsh/bindings.zsh}"
               "source ${../../../home/shells/zsh/aliases.zsh}"
-              "source ${../../../home/shells/zsh/plugins.zsh}"
               "source ${../../../home/shells/zsh/prompt.zsh}"
             ]
           ) (inputs.nixpkgs.lib.splitString "\n" home.config.programs.zsh.initContent);
@@ -952,10 +951,74 @@ in
       sources = [
         "source ${../../../home/shells/zsh/bindings.zsh}"
         "source ${../../../home/shells/zsh/aliases.zsh}"
-        "source ${../../../home/shells/zsh/plugins.zsh}"
         "source ${../../../home/shells/zsh/prompt.zsh}"
       ];
     }) 3;
+  };
+
+  testPatinaCallableLookupsAreDisabledOnlyForWsl = {
+    expr = {
+      wsl = builtins.fromTOML wsl.config.xdg.configFile."zsh-patina/config.toml".text;
+      linuxConfigured = linux.config.xdg.configFile ? "zsh-patina/config.toml";
+      darwinConfigured = darwin.config.xdg.configFile ? "zsh-patina/config.toml";
+    };
+    expected = {
+      wsl.highlighting.dynamic = {
+        callables = false;
+        paths = "complete";
+      };
+      linuxConfigured = false;
+      darwinConfigured = false;
+    };
+  };
+
+  testHostPromptsUseKnownOperatingSystems = {
+    expr =
+      map
+        (home: {
+          symbol = home.config.dotfiles.starship.osSymbol;
+          runtimeOsDetection = !home.config.programs.starship.settings.os.disabled;
+          windowsStarship = home.config.programs.starship.settings.git_status.windows_starship or null;
+        })
+        [
+          linux
+          wsl
+          darwin
+        ];
+    expected = [
+      {
+        symbol = "❄️ ";
+        runtimeOsDetection = false;
+        windowsStarship = null;
+      }
+      {
+        symbol = "❄️ ";
+        runtimeOsDetection = false;
+        windowsStarship = "starship.exe";
+      }
+      {
+        symbol = "🍎 ";
+        runtimeOsDetection = false;
+        windowsStarship = null;
+      }
+    ];
+  };
+
+  testWslWindowsPromptReadsTheGeneratedConfigDirectly = {
+    expr = {
+      wslUsesSource =
+        wsl.config.home.sessionVariables.STARSHIP_CONFIG
+        == toString wsl.config.home.file.${wsl.config.programs.starship.configPath}.source;
+      linuxUsesConfigPath =
+        linux.config.home.sessionVariables.STARSHIP_CONFIG == linux.config.programs.starship.configPath;
+      darwinUsesConfigPath =
+        darwin.config.home.sessionVariables.STARSHIP_CONFIG == darwin.config.programs.starship.configPath;
+    };
+    expected = {
+      wslUsesSource = true;
+      linuxUsesConfigPath = true;
+      darwinUsesConfigPath = true;
+    };
   };
 
   testNRShellAliasUsesPlatformInstallCommand = {

@@ -156,6 +156,21 @@ Windows の package install timeout は 3600 秒を共通既定値とし、WinGe
 
 Windows の npm/pnpm manifest は空で、dsh、pnpm、Bun、Codex CLI の個別導入は行いません。Windows は Windows アプリ付属 CLI を、NixOS / WSL は Linux アプリ付属 CLI を使います。
 
+Windows の `Starship.Starship` は、WSL から Windows drive 上の Git 状態を取得する補助コマンドとして宣言します。[公式の `git_status.windows_starship`](https://starship.rs/config/#git-status) が呼ぶ Windows 実行ファイルを、WinGet のユーザー scope・ZIP portable 版で導入します。既存 handler の `portableLink` が `%LOCALAPPDATA%\Microsoft\WinGet\Links\starship.exe` を作成し、リンク作成に権限が必要な環境では同じ場所へコピーします。検証はこの実行ファイルの `--version` で行います。これは Windows GUI 中心の導入方針に対する WSL 連携用の例外で、Windows PowerShell のプロンプト設定は変更しません。
+
+通常の `install.cmd` に含まれます。補助コマンドだけを先に導入する場合は、Windows で次を実行します。
+
+```powershell
+winget install --id Git.MinGit --exact --source winget --scope user --installer-type zip --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+winget install --id Starship.Starship --exact --source winget --scope user --installer-type zip --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+```
+
+WSL の `git_status.windows_starship` は `starship.exe` を PATH から探します。上記の WinGet Links ディレクトリを含む Windows PATH が WSL に取り込まれ、`command -v starship.exe` が成功することを確認します。通常 installer はコマンドリンクを修復します。上記の個別コマンドでリンクが作成されなかった場合も、通常 installer を再実行して修復します。
+
+`Git.MinGit` はこの Starship 補助コマンドが Windows Git を呼ぶ場合の依存として導入します。ユーザー scope の ZIP portable 版を使い、`%LOCALAPPDATA%\Microsoft\WinGet\Packages\Git.MinGit_Microsoft.Winget.Source_8wekyb3d8bbwe\cmd` を公開します。隣接する実行ファイルやライブラリが必要なので、MinGit の tree を保持します。`pathEntriesCommand` 検証はこの directory の `git.exe --version` を実行し、Codex cache などの別の Git を検証結果として採用しません。
+
+この2 package の `persistPathEntries: true` は、補助コマンドの PATH を次回の WSL 起動に引き継ぐための明示例外です。通常 installer は GUI phase でも宣言した WinGet Links と MinGit の `cmd` ディレクトリを Windows のユーザー PATH に保存し、繰り返し実行しても重複追加しません。他の package の GUI phase は実行中のプロセスだけの PATH 修復を維持します。既に起動している Windows terminal / Codex は古い PATH を保持するため、環境変数の更新後に起動したプロセスで `command -v starship.exe` を確認します。
+
 Windows Dia は WinGet / Microsoft Store 未登録のため、同じ manifest の `direct` source に公式 Windows 11 x64 MSIX を宣言します。URL・SHA256・package identity と依存関係を固定し、導入済みの同等以上の package を検証して利用します。Windows の export もこの宣言を保持します。更新時は公式配布から version・URL・hash と依存 metadata を確認して変更します。
 
 ## システム package と Home Manager の境界

@@ -23,7 +23,6 @@
     initContent = ''
       source ${./bindings.zsh}
       source ${./aliases.zsh}
-      source ${./plugins.zsh}
       source ${./prompt.zsh}
     '';
   };

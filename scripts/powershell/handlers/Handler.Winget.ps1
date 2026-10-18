@@ -169,6 +169,10 @@ class WingetHandler : SetupHandlerBase {
                                 if ($pkg.PSObject.Properties.Name -contains "pathEntries") {
                                     $pathEntries = @($pkg.pathEntries)
                                 }
+                                $persistPathEntries = $false
+                                if ($pkg.PSObject.Properties.Name -contains "persistPathEntries") {
+                                    $persistPathEntries = ($pkg.persistPathEntries -is [bool]) -and $pkg.persistPathEntries
+                                }
                                 $skipInstall = $false
                                 if ($pkg.PSObject.Properties.Name -contains "skipInstall") {
                                     $skipInstall = [bool]$pkg.skipInstall
@@ -192,6 +196,7 @@ class WingetHandler : SetupHandlerBase {
                                     CiSkipInstall         = $ciSkipInstall
                                     PortableLink          = $portableLink
                                     PathEntries           = $pathEntries
+                                    PersistPathEntries    = $persistPathEntries
                                     SkipInstall           = $skipInstall
                                     SkipReason            = $skipReason
                                     RequiresAdmin         = $requiresAdmin
@@ -539,6 +544,7 @@ class WingetHandler : SetupHandlerBase {
             CiSkipInstall         = $pkg.CiSkipInstall
             PortableLink          = $pkg.PortableLink
             PathEntries           = $pkg.PathEntries
+            PersistPathEntries    = $pkg.PersistPathEntries
             Force                 = $force
             WasInstalled          = $wasInstalled
             WasVerified           = $wasVerified
@@ -1574,7 +1580,13 @@ class WingetHandler : SetupHandlerBase {
             $resolvedCommand = Get-Command -Name $command -CommandType Application -ErrorAction SilentlyContinue |
                 Select-Object -First 1
             $commandPaths = @()
-            if ($resolvedCommand) {
+            if ($type -eq 'pathEntriesCommand') {
+                # Package-specific helpers must not pass through an unrelated
+                # application with the same command name earlier on PATH.
+                $commandPaths = @($this.GetPackageCommandPaths([string]$command, $pathEntries))
+                if ($commandPaths.Count -eq 0) { return $false }
+            }
+            elseif ($resolvedCommand) {
                 if ($discoveredCommand -and $discoveredCommand.CommandType -eq [System.Management.Automation.CommandTypes]::Alias) {
                     $commandPath = if (-not [string]::IsNullOrWhiteSpace([string]$resolvedCommand.Path)) {
                         [string]$resolvedCommand.Path
@@ -2125,7 +2137,11 @@ class WingetHandler : SetupHandlerBase {
     }
 
     hidden [void] EnsurePathEntriesInternal([object]$pkg, [bool]$quiet) {
-        $this.EnsurePathEntriesInternal($pkg, $quiet, (-not $this.ProcessOnlyPath))
+        # Explicit WSL helpers need their declared directory in future WSL
+        # sessions even when the GUI profile only repairs the process PATH.
+        $persistPathEntries = ($pkg.PSObject.Properties.Name -contains 'PersistPathEntries') -and
+        ($pkg.PersistPathEntries -is [bool]) -and $pkg.PersistPathEntries
+        $this.EnsurePathEntriesInternal($pkg, $quiet, ((-not $this.ProcessOnlyPath) -or $persistPathEntries))
     }
 
     hidden [void] EnsurePathEntriesInternal([object]$pkg, [bool]$quiet, [bool]$persist) {

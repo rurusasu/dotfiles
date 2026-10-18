@@ -1,4 +1,9 @@
-{ pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 {
   # ── Shell: zsh ────────────────────────────────────────────────────────
   programs.zsh = {
@@ -14,4 +19,10 @@
       }
     ];
   };
+
+  # zsh-autocomplete writes recent cd locations under XDG_DATA_HOME/zsh.
+  # The plugin does not create that parent directory itself.
+  home.activation.createZshDataDirectory = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run mkdir -p -- ${lib.escapeShellArg "${config.xdg.dataHome}/zsh"}
+  '';
 }
