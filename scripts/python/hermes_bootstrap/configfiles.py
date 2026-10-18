@@ -173,6 +173,10 @@ def reconcile_onepassword_configurations(
                 key: value
                 for key, value in existing_env.items()
                 if key not in managed_names
+                and not (
+                    key == "HERMES_DASHBOARD_BASIC_AUTH_USERNAME"
+                    and value == "op://openclaw/Hermes Agent Dashboard/username"
+                )
             }
             managed_config = build_onepassword_config(manifest, profile)
             managed_env = managed_config["env"]

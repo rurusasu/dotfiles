@@ -37,7 +37,8 @@ class OnePasswordConfigFileTests(unittest.TestCase):
             "secrets:\n"
             "  onepassword:\n"
             "    env:\n"
-            "      OPENAI_API_KEY: op://Private/OpenAI/credential\n",
+            "      OPENAI_API_KEY: op://Private/OpenAI/credential\n"
+            "      HERMES_DASHBOARD_BASIC_AUTH_USERNAME: op://openclaw/Hermes Agent Dashboard/username\n",
             encoding="utf-8",
         )
 
@@ -58,6 +59,17 @@ class OnePasswordConfigFileTests(unittest.TestCase):
         self.assertEqual(
             onepassword["env"]["OPENAI_API_KEY"],
             "op://Private/OpenAI/credential",
+        )
+        self.assertNotIn("HERMES_DASHBOARD_BASIC_AUTH_USERNAME", onepassword["env"])
+
+        custom_reference = "op://Private/My Dashboard/username"
+        onepassword["env"]["HERMES_DASHBOARD_BASIC_AUTH_USERNAME"] = custom_reference
+        path.write_text(yaml.safe_dump(config), encoding="utf-8")
+        reconcile_onepassword_configurations(self.manifest, (("default", self.root),))
+        updated = yaml.safe_load(path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            updated["secrets"]["onepassword"]["env"]["HERMES_DASHBOARD_BASIC_AUTH_USERNAME"],
+            custom_reference,
         )
 
     def test_xapi_reconciliation_can_retry_after_an_unsafe_profile(self) -> None:

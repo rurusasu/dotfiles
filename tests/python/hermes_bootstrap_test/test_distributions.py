@@ -111,6 +111,7 @@ class DistributionTests(unittest.TestCase):
         (self.stage_root / "config.yaml").write_bytes(b"model: example\n")
         (self.stage_root / ".github").mkdir()
         (self.stage_root / ".github" / "workflow.yml").write_bytes(b"unowned\n")
+        (self.stage_root / "unlisted.txt").write_bytes(b"not distribution-owned\n")
         self.write_profile_manifest("rick", ["config.yaml"])
         other = self.data_root / "profiles" / "local"
         other.mkdir(parents=True)
@@ -126,6 +127,7 @@ class DistributionTests(unittest.TestCase):
         target = self.data_root / "profiles" / "rick"
         self.assertEqual((target / "config.yaml").read_bytes(), b"model: example\n")
         self.assertFalse((target / ".github").exists())
+        self.assertFalse((target / "unlisted.txt").exists())
         self.assertEqual((other / "notes.md").read_bytes(), b"user data\n")
         manifest = (target / "distribution.yaml").read_text(encoding="utf-8")
         self.assertIn("source: https://github.com/rurusasu/hermes-profile-rick.git", manifest)
