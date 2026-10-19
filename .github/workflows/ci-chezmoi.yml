@@ -71,6 +71,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "chezmoi managed files failed with exit $LASTEXITCODE" }
           $expectedFiles = @(
             '.config/dotfiles/wslg-fontconfig.conf'
+            '.config/git/config'
             '.wslgconfig'
             'Documents/PowerShell/Microsoft.PowerShell_profile.ps1'
           )
