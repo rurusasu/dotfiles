@@ -3,6 +3,15 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 entrypoint="$repo_root/docker/hermes-browser/entrypoint.sh"
+dockerfile="$repo_root/docker/hermes-browser/Dockerfile"
+
+grep -Eq '^ARG TARGETARCH$' "$dockerfile"
+grep -Fq 'case "$TARGETARCH" in' "$dockerfile"
+if ! sed -n '/^[[:space:]]*arm64)/,/;;/p' "$dockerfile" |
+  grep -Fq 'apt-get install -y --no-install-recommends chromium;'; then
+  echo "The arm64 browser image must install Chromium" >&2
+  exit 1
+fi
 
 for argument in \
   "--disable-background-timer-throttling" \

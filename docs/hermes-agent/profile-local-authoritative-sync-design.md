@@ -2,10 +2,14 @@
 
 ## Status
 
-Implemented in the `dotfiles` Hermes bootstrap service. This document replaces
-the named-profile source-of-truth statements in
-`bootstrap-design.md`; the root Hermes distribution and shared repositories
-retain their separate ownership rules.
+This document records the earlier local-authoritative synchronization design.
+The authority and projection rules remain in use, but its descriptor retention,
+identity revalidation, snapshot revalidation, and crash-recovery details have
+been superseded by a simpler implementation. Failed applies retain partial
+updates and are completed by rerunning after repair, without recovery backups
+or global rollback. Use [bootstrap.md](bootstrap.md) for current operation,
+validation boundaries, and manual recovery procedures.
+The remaining sections are historical and do not define current guarantees.
 
 ## Authority Model
 

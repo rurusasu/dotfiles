@@ -27,6 +27,8 @@ Windows の install / verifier metadata は独立した `windows/winget/packages
 
 - `tests/bash/` は shell / installer の順序、外部コマンドの stub、runtime / artifact 契約を検証します。
 - Nix の値 assertion を Bats 内の `nix eval` に追加せず、`unit/` に記載します。
+- Nix の構成・package 選択・生成設定の検証はすべて `unit/` / `build/` が担当します。
+  `tests/python/` は Python の処理や外部コマンドの実行を検証し、本番設定の一覧や値を複製しません。
 - 実機の activation、service 起動、secret、network は nix-unit の対象外です。
   ビルド・CLI double の成功だけで実機の動作確認が完了したとは扱いません。
 
@@ -46,6 +48,9 @@ Darwin / Linux の `custom-package-builds` は `chatgpt-desktop` check も含み
 GUI の起動・ログイン・操作はこの check の対象外で、各 OS の実機で確認します。
 Darwin の `darwin-bundled-app-cleanup` は、一時ディレクトリ内のアプリを使って
 付属アプリの削除・bundle ID の検証・対象外データの保持・再実行を検証します。
+`hermes-configuration` は Linux / Darwin 向けに生成した bootstrap manifest を実際の parser で検証し、
+Compose sidecar の localhost 公開・接続先・要求 timeout・認証データの mount を確認します。
+プロファイル名・commit 値・1Password item の一覧はテスト側に複製しません。
 
 ```bash
 # 全 system の flake 出力を評価する。テスト本体は実行しない

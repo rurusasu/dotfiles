@@ -2,11 +2,14 @@
 
 ## Status
 
-Approved design amendment for the local-authoritative named-profile
-synchronization described in
-`profile-local-authoritative-sync-design.md`. This amendment resolves the final
-review findings for concurrent bootstrap operations, post-snapshot local drift,
-and scratch cleanup guarantees.
+This document is a historical design amendment. The cooperative engine and
+repository locks remain in use, but the snapshot revalidation, descriptor-based
+cleanup, quarantine, and crash-recovery guarantees below have been superseded.
+The bootstrap now uses ordinary private scratch cleanup and completes failed
+applies by rerunning after repair; it creates no recovery backups or global
+rollback. Retained transaction data requires manual review. Use
+[bootstrap.md](bootstrap.md) for current behavior and recovery procedures. The
+remaining sections record the former design, not current guarantees.
 
 ## Decision
 

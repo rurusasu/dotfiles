@@ -17,8 +17,6 @@ let
       bundled
     else
       pkgs.python3.withPackages (pythonPackages: [
-        pythonPackages.httpx
-        pythonPackages.python-dotenv
         pythonPackages.pyyaml
       ]);
 in
@@ -34,6 +32,7 @@ pkgs.writeShellApplication {
     export HERMES_HOME=${lib.escapeShellArg hermesHome}
     export HERMES_BOOTSTRAP_MANIFEST=${bootstrapManifest}
     export DOTFILES_HERMES_GIT_EXECUTABLE=${pkgs.git}/bin/git
+    export DOTFILES_HERMES_OP_EXECUTABLE=${pkgs._1password-cli}/bin/op
     # Select our package even inside the upstream checkout or a conflicting cwd.
     ${
       if isDarwin then

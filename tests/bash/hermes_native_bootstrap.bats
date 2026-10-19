@@ -19,7 +19,7 @@ setup() {
   write_stub hermes-bootstrap '
 case "${1:-}" in
   secret-plan)
-    printf "%s\\n" "{\"schema_version\":1,\"manifest_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"items\":[{\"key\":\"discord_rick\",\"account\":\"my.1password.com\",\"vault\":\"openclaw\",\"item\":\"Rick\",\"fields\":[{\"canonical_name\":\"bot_token\",\"labels\":[\"bot_token\"]}]}]}"
+    printf "%s\\n" "{\"schema_version\":1,\"items\":[{\"key\":\"github\",\"account\":\"my.1password.com\",\"vault\":\"openclaw\",\"item\":\"GitHub\"}]}"
     ;;
   apply)
     cat >"$SECRET_CAPTURE"
@@ -32,9 +32,9 @@ esac
   write_stub op '
 if [[ " $* " == *" read "* ]]; then
   printf "%s\\n" "service-token"
-elif [[ " $* " == *" item get Rick "* ]]; then
+elif [[ " $* " == *" item get GitHub "* ]]; then
   [[ ${OP_SERVICE_ACCOUNT_TOKEN:-} == service-token ]]
-  printf "%s\\n" "{\"fields\":[{\"label\":\"bot_token\",\"value\":\"private-test-value\"}]}"
+  printf "%s\\n" "{\"fields\":[{\"label\":\"credential\",\"value\":\"private-test-value\"}]}"
 else
   exit 64
 fi
@@ -49,7 +49,7 @@ write_stub() {
   chmod +x "$STUB_BIN/$name"
 }
 
-@test "native bootstrap passes 1Password values to the transactional apply over stdin" {
+@test "native bootstrap passes 1Password values to apply over stdin" {
   run "$REPO_ROOT/scripts/sh/hermes-bootstrap.sh" apply
 
   [ "$status" -eq 0 ]

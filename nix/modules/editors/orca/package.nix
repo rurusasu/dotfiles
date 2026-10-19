@@ -6,7 +6,23 @@
   callPackage,
 }:
 let
-  release = builtins.fromJSON (builtins.readFile ./sources.json);
+  release = {
+    version = "1.4.223";
+    sources = {
+      aarch64-darwin = {
+        url = "https://github.com/stablyai/orca/releases/download/v1.4.223/orca-macos-arm64.dmg";
+        hash = "sha256-z4mOSjQpW4G+twMNNuT1F08WvDx9skHrW7j0E+gy3LI=";
+      };
+      x86_64-linux = {
+        url = "https://github.com/stablyai/orca/releases/download/v1.4.223/orca-linux.AppImage";
+        hash = "sha256-Dhis/lwH7Rk6/2A/tja6H8WQeBEgOad5pUQ6jVNIPUs=";
+      };
+      aarch64-linux = {
+        url = "https://github.com/stablyai/orca/releases/download/v1.4.223/orca-linux-arm64.AppImage";
+        hash = "sha256-2n/S5dzTfyWCSA7c+gpLdILXxVXfWYvrrs0nhdTLD0A=";
+      };
+    };
+  };
   system = stdenvNoCC.hostPlatform.system;
   source = release.sources.${system} or (throw "Orca Editor does not support ${system}");
 in

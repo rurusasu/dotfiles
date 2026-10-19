@@ -8,7 +8,6 @@ import os
 import sys
 import traceback
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
@@ -20,14 +19,6 @@ DEFAULT_MANIFEST = os.environ.get(
     "HERMES_BOOTSTRAP_MANIFEST",
     str(Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser() / "bootstrap-manifest.yaml"),
 )
-
-
-@dataclass(frozen=True)
-class _CommandOutcome:
-    result: object | None = None
-    exit_code: int = 0
-    error_type: type[BootstrapError] | None = None
-    message: str | None = None
 
 
 def main(
@@ -51,35 +42,8 @@ def main(
         _write_error(stderr, str(error))
         return error.exit_code
     debug = environ.get("HERMES_BOOTSTRAP_DEBUG") == "1"
-    outcome = _dispatch_boundary(args, stdin, environ)
-    del stdin, environ
     try:
-        if outcome.error_type is not None:
-            error_type = outcome.error_type
-            message = outcome.message or "bootstrap command failed"
-            del outcome
-            raise error_type(message) from None
-        exit_code = outcome.exit_code
-        result = outcome.result
-        del outcome
-        _write_json(stdout, result)
-        return exit_code
-    except BrokenPipeError:
-        return 0
-    except BootstrapError as error:
-        _write_error(stderr, str(error))
-        _write_debug(stderr, error, debug)
-        return error.exit_code
-    except Exception as error:
-        _write_error(stderr, "bootstrap command failed")
-        _write_debug(stderr, error, debug)
-        return 6
-
-
-def _dispatch_boundary(
-    args: argparse.Namespace, stdin: TextIO, environ: Mapping[str, str]
-) -> _CommandOutcome:
-    try:
+        exit_code = 0
         if args.command == "secret-plan":
             result = app.secret_plan(args.manifest)
         elif args.command == "apply":
@@ -95,19 +59,20 @@ def _dispatch_boundary(
                 environ=environ,
             )
             result = report.as_dict()
-            return _CommandOutcome(result=result, exit_code=report.exit_code)
+            exit_code = report.exit_code
         else:
-            return _CommandOutcome(
-                error_type=InputError,
-                message="invalid command arguments",
-            )
-        return _CommandOutcome(result=result, exit_code=0)
+            raise InputError("invalid command arguments")
+        _write_json(stdout, result)
+        return exit_code
     except BootstrapError as error:
-        outcome = _CommandOutcome(error_type=type(error), message=str(error))
-        del error
-        return outcome
+        _write_error(stderr, str(error))
+        _write_debug(stderr, error, debug)
+        return error.exit_code
     except Exception:
-        return _CommandOutcome(error_type=ApplyError, message="bootstrap command failed")
+        error = ApplyError("bootstrap command failed")
+        _write_error(stderr, str(error))
+        _write_debug(stderr, error, debug)
+        return error.exit_code
 
 
 class _Parser(argparse.ArgumentParser):
@@ -137,8 +102,12 @@ def _path(value: str):
 
 
 def _write_json(stream: TextIO, value: object) -> None:
-    stream.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
-    stream.flush()
+    record = json.dumps(value) + "\n"
+    try:
+        stream.write(record)
+        stream.flush()
+    except BrokenPipeError:
+        pass
 
 
 def _write_error(stream: TextIO, message: str) -> None:
@@ -149,11 +118,11 @@ def _write_error(stream: TextIO, message: str) -> None:
         pass
 
 
-def _write_debug(stream: TextIO, error: BaseException, enabled: bool) -> None:
+def _write_debug(stream: TextIO, error: BootstrapError, enabled: bool) -> None:
     if not enabled:
         return
     try:
-        stream.write("".join(traceback.format_exception(type(error), error, error.__traceback__)))
+        stream.write("".join(traceback.format_exception(type(error), error, error.__traceback__, chain=False)))
         stream.flush()
     except BrokenPipeError:
         pass

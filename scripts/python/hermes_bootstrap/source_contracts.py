@@ -9,50 +9,17 @@ import yaml
 
 from .errors import ValidationError
 from .git import StagedSource
+from .manifest import _UniqueKeySafeLoader
 
 
 _CHROME_MCP = {
     "url": "http://127.0.0.1:8765/mcp",
     "connect_timeout": 120,
 }
-_XAPI_MCP = {
-    "url": "http://127.0.0.1:8766/mcp",
-    "connect_timeout": 300,
-}
-
-
-class _UniqueKeySafeLoader(yaml.SafeLoader):
-    """Safe YAML loader that rejects duplicate keys in every mapping."""
-
-    def construct_mapping(
-        self, node: yaml.MappingNode, deep: bool = False
-    ) -> dict[object, object]:
-        self.flatten_mapping(node)
-        mapping: dict[object, object] = {}
-        for key_node, value_node in node.value:
-            key = self.construct_object(key_node, deep=deep)
-            try:
-                duplicate = key in mapping
-            except TypeError as error:
-                raise yaml.constructor.ConstructorError(
-                    "while constructing a mapping",
-                    node.start_mark,
-                    "found unacceptable key",
-                    key_node.start_mark,
-                ) from error
-            if duplicate:
-                raise yaml.constructor.ConstructorError(
-                    "while constructing a mapping",
-                    node.start_mark,
-                    "found duplicate key",
-                    key_node.start_mark,
-                )
-            mapping[key] = self.construct_object(value_node, deep=deep)
-        return mapping
 
 
 def validate_chrome_mcp_sources(staged: Sequence[StagedSource]) -> None:
-    """Require Chrome MCP and install the canonical X API MCP entry."""
+    """Require owned Chrome MCP configuration with the native browser disabled."""
 
     for source in staged:
         try:
@@ -73,7 +40,7 @@ def validate_chrome_mcp_sources(staged: Sequence[StagedSource]) -> None:
             or "config.yaml" not in distribution_owned
         ):
             _invalid_ownership(source)
-        if not isinstance(config, Mapping):
+        if not isinstance(config, dict):
             _invalid(source)
         agent = config.get("agent")
         if not isinstance(agent, Mapping):
@@ -95,44 +62,12 @@ def validate_chrome_mcp_sources(staged: Sequence[StagedSource]) -> None:
             or dict(chrome) != _CHROME_MCP
         ):
             _invalid(source)
-        _install_xapi_mcp(source, config, mcp_servers)
-
-
-def _install_xapi_mcp(
-    source: StagedSource,
-    config: Mapping[object, object],
-    mcp_servers: dict[object, object],
-) -> None:
-    xapi = mcp_servers.get("xapi")
-    if (
-        isinstance(xapi, Mapping)
-        and type(xapi.get("connect_timeout")) is int
-        and dict(xapi) == _XAPI_MCP
-    ):
-        return
-
-    if not isinstance(config, dict):
-        _invalid_xapi(source)
-    mcp_servers["xapi"] = dict(_XAPI_MCP)
-    try:
-        (source.path / "config.yaml").write_text(
-            yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
-        )
-    except (OSError, UnicodeError):
-        _invalid_xapi(source)
 
 
 def _invalid(source: StagedSource) -> NoReturn:
     name = source.declaration.name
     raise ValidationError(
         f"distribution {name!r} config.yaml has invalid Chrome MCP configuration"
-    ) from None
-
-
-def _invalid_xapi(source: StagedSource) -> NoReturn:
-    name = source.declaration.name
-    raise ValidationError(
-        f"distribution {name!r} config.yaml has invalid X API MCP configuration"
     ) from None
 
 

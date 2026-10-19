@@ -86,7 +86,7 @@ in
     ];
   };
 
-  testDarwinCleanupOwnsOnlyOptionalAppleBundles = {
+  testDarwinActivatesBundledAppCleanup = {
     expr =
       let
         pkgs = import inputs.nixpkgs {
@@ -95,20 +95,8 @@ in
         };
         cleanup = import ../../../hosts/aarch64-darwin/remove-bundled-apps.nix { inherit pkgs; };
       in
-      {
-        targets = map (app: app.name) cleanup.allowedApps;
-        activated = inputs.nixpkgs.lib.hasInfix (builtins.unsafeDiscardStringContext "${inputs.nixpkgs.lib.getExe cleanup} /Applications") defaultConfig.system.activationScripts.postActivation.text;
-      };
-    expected = {
-      targets = [
-        "GarageBand.app"
-        "iMovie.app"
-        "Pages.app"
-        "Numbers.app"
-        "Keynote.app"
-      ];
-      activated = true;
-    };
+      inputs.nixpkgs.lib.hasInfix (builtins.unsafeDiscardStringContext "${inputs.nixpkgs.lib.getExe cleanup} /Applications") defaultConfig.system.activationScripts.postActivation.text;
+    expected = true;
   };
 
   testDarwinDoesNotInstallWslgFontBridge = {

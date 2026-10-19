@@ -35,7 +35,6 @@ let
 in
 pkgs.writeShellApplication {
   name = "remove-bundled-apple-apps";
-  derivationArgs.passthru = { inherit allowedApps; };
   text = ''
     fail() {
       printf 'Apple app cleanup: %s\n' "$*" >&2

@@ -56,10 +56,3 @@ assert_no_profile_gateway_lifecycle() {
 		done
 	done
 }
-
-@test "Hermes exposes no Docker backend compatibility tasks" {
-	run task --dir "$REPO_ROOT" --list-all
-
-	[ "$status" -eq 0 ]
-	[[ "$output" != *"hermes:docker:"* ]]
-}

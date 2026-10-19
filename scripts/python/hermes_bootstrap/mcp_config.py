@@ -1,4 +1,4 @@
-"""Shared I/O for transactionally merging managed MCP server entries."""
+"""Shared I/O for merging managed MCP server entries."""
 
 from __future__ import annotations
 
@@ -8,8 +8,6 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import yaml
-
-from .transaction import Transaction
 
 
 def load_managed_config(
@@ -43,7 +41,6 @@ def install_mcp_configurations(
     targets: Sequence[Path],
     name: str,
     configuration: dict[str, object],
-    transaction: Transaction,
     *,
     skip_invalid: bool,
     create_servers: bool = False,
@@ -58,14 +55,13 @@ def install_mcp_configurations(
         if candidate is None:
             if not skip_invalid:
                 raise ValueError("invalid managed MCP configuration")
-            # Credential installers defer replacement-race errors to final validation.
+            # Credential installers leave invalid entries for final validation.
             continue
         metadata, config, servers = candidate
         if servers.get(name) == configuration:
             continue
         # YAML aliases may share this mapping with an unmanaged section.
         candidate = {**config, "mcp_servers": {**servers, name: configuration}}
-        transaction.snapshot(path)
         _atomic_write(
             path,
             yaml.safe_dump(candidate, sort_keys=False).encode("utf-8"),

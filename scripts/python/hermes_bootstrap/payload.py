@@ -1,42 +1,20 @@
-"""Versioned, redacted 1Password payload handling for Hermes bootstrap."""
+"""Bounded 1Password payload handling for Hermes bootstrap."""
 
 from __future__ import annotations
 
-import base64
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import BinaryIO, TextIO
-from types import MappingProxyType
-from urllib.parse import quote
 
-from .errors import BootstrapError, CredentialError, InputError, ValidationError
+from .errors import CredentialError, InputError, ValidationError
 from .models import BootstrapManifest, OnePasswordItem
-from .onepassword import managed_environment_bindings
 
 
 SCHEMA_VERSION = 1
 MAX_LINE_BYTES = 1024 * 1024
 MAX_TOTAL_BYTES = 8 * 1024 * 1024
-_REDACTED = "[REDACTED]"
-
-
-@dataclass(frozen=True, repr=False)
-class DiscordSecret:
-    bot_token: str
-    allowed_users: str
-
-    def __repr__(self) -> str:
-        return "DiscordSecret(<redacted>)"
-
-
-@dataclass(frozen=True, repr=False)
-class DashboardSecret:
-    username: str
-    password: str
-
-    def __repr__(self) -> str:
-        return "DashboardSecret(<redacted>)"
+_BOOTSTRAP_ITEM_KEYS = frozenset({"github", "google_calendar"})
 
 
 @dataclass(frozen=True, repr=False)
@@ -51,135 +29,34 @@ class GoogleCalendarSecret:
 @dataclass(frozen=True, repr=False)
 class SecretBundle:
     github_token: str
-    dashboard: DashboardSecret
     google_calendar: GoogleCalendarSecret
-    discord_by_profile: Mapping[str, DiscordSecret]
-    redactor: "SecretRedactor"
-    environment_by_profile: Mapping[str, Mapping[str, str]] = field(
-        default_factory=lambda: MappingProxyType({})
-    )
 
     def __repr__(self) -> str:
         return "SecretBundle(<redacted>)"
 
 
-@dataclass(frozen=True)
-class _PayloadFailure:
-    """A non-sensitive description of a payload validation failure."""
-
-    error_type: type[BootstrapError]
-    message: str
-
-
-class SecretRedactor:
-    """Redact all parsed secret values and credential encodings from text."""
-
-    def __init__(
-        self,
-        values: tuple[str, ...],
-        basic_credentials: tuple[tuple[str, str], ...] = (),
-    ) -> None:
-        replacements = {value for value in values if value}
-        for value in tuple(replacements):
-            replacements.add(quote(value, safe=""))
-            replacements.add(f"Bearer {value}")
-            replacements.add(f"bearer {value}")
-        for username, password in basic_credentials:
-            raw = f"{username}:{password}"
-            encoded = base64.b64encode(raw.encode("utf-8")).decode("ascii")
-            quoted_username = quote(username, safe="")
-            quoted_password = quote(password, safe="")
-            replacements.update(
-                {
-                    raw,
-                    encoded,
-                    f"Basic {encoded}",
-                    f"basic {encoded}",
-                    f"://{username}:{password}@",
-                    f"://{quoted_username}:{quoted_password}@",
-                }
-            )
-        self._replacements = tuple(sorted(replacements, key=len, reverse=True))
-
-    def redact(self, text: str) -> str:
-        """Return text suitable for exceptions and command summaries."""
-
-        return _replace_all(text, self._replacements)
-
-    def __repr__(self) -> str:
-        return "SecretRedactor(<redacted>)"
-
-
 def build_secret_plan(manifest: BootstrapManifest) -> dict[str, object]:
-    """Build the deterministic, non-secret item lookup plan for host adapters."""
+    """Plan only the item lookups needed by bootstrap itself."""
 
     return {
         "schema_version": SCHEMA_VERSION,
-        "manifest_sha256": manifest.manifest_sha256,
         "items": [
             {
                 "key": item.key,
                 "account": item.account,
                 "vault": item.vault,
                 "item": item.item,
-                "fields": [
-                    {
-                        "canonical_name": field.canonical_name,
-                        "labels": list(field.labels),
-                        **(
-                            {"environment": list(field.environment_names)}
-                            if field.environment_names
-                            else {}
-                        ),
-                        **(
-                            {"reference": field.reference_name}
-                            if field.reference_name is not None
-                            else {}
-                        ),
-                    }
-                    for field in item.fields
-                ],
             }
-            for item in manifest.onepassword_items
+            for item in _bootstrap_secret_items(manifest)
         ],
     }
 
 
 def read_secret_payload(stream: TextIO, manifest: BootstrapManifest) -> SecretBundle:
-    """Read bounded NDJSON from stdin and immediately extract typed secrets.
+    """Read bounded NDJSON from stdin and extract typed secrets."""
 
-    The parser works behind an exception boundary because caught exceptions retain
-    traceback frames (and their sensitive payload locals).  Only an error class
-    and fixed message cross that boundary on failure.
-    """
-
-    outcome = _read_secret_payload_boundary(stream, manifest)
-    del stream
-    if isinstance(outcome, _PayloadFailure):
-        error_type = outcome.error_type
-        message = outcome.message
-        del outcome
-        raise error_type(message)
-    return outcome
-
-
-def _read_secret_payload_boundary(
-    stream: TextIO, manifest: BootstrapManifest
-) -> SecretBundle | _PayloadFailure:
-    """Contain payload-bearing tracebacks before exposing a public error."""
-
-    try:
-        return _read_secret_payload(stream, manifest)
-    except BootstrapError as error:
-        return _PayloadFailure(type(error), str(error))
-
-
-def _read_secret_payload(stream: TextIO, manifest: BootstrapManifest) -> SecretBundle:
-    """Parse secrets while kept inside the sensitive exception boundary."""
-
-    declared = {item.key: item for item in manifest.onepassword_items}
+    declared = {item.key: item for item in _bootstrap_secret_items(manifest)}
     parsed: dict[str, dict[str, str]] = {}
-    discovered_values: list[str] = []
     reader = _binary_reader(stream)
     total_bytes = 0
 
@@ -200,18 +77,26 @@ def _read_secret_payload(stream: TextIO, manifest: BootstrapManifest) -> SecretB
             break
         if record_type != "item":
             raise InputError("secret payload contains an invalid record type")
-        key, fields, values = _parse_item_record(record, declared)
+        key, fields = _parse_item_record(record, declared)
         if key in parsed:
             raise InputError("secret payload contains a duplicate item key")
         parsed[key] = fields
-        discovered_values.extend(values)
 
     if set(parsed) != set(declared):
         raise InputError("secret payload does not contain every declared item")
     if _read_record(reader, total_bytes) is not None:
         raise InputError("secret payload contains a trailing record")
 
-    return _bundle_from_fields(manifest, parsed, tuple(discovered_values))
+    return _bundle_from_fields(parsed)
+
+
+def _bootstrap_secret_items(manifest: BootstrapManifest) -> tuple[OnePasswordItem, ...]:
+    items = tuple(
+        item for item in manifest.onepassword_items if item.key in _BOOTSTRAP_ITEM_KEYS
+    )
+    if {item.key for item in items} != _BOOTSTRAP_ITEM_KEYS:
+        raise ValidationError("manifest is missing a required Hermes credential declaration")
+    return items
 
 
 def _binary_reader(stream: TextIO) -> TextIO | BinaryIO:
@@ -233,16 +118,12 @@ def _read_record(reader: TextIO | BinaryIO, total_bytes: int) -> tuple[dict[str,
         try:
             text = line.decode("utf-8")
         except UnicodeDecodeError:
-            text = None
-        if text is None:
-            raise InputError("secret payload is not valid UTF-8")
+            raise InputError("secret payload is not valid UTF-8") from None
     elif isinstance(line, str):
         try:
             size = len(line.encode("utf-8"))
         except UnicodeEncodeError:
-            size = None
-        if size is None:
-            raise InputError("secret payload is not valid UTF-8")
+            raise InputError("secret payload is not valid UTF-8") from None
         if size > MAX_LINE_BYTES:
             raise InputError("secret payload line exceeds the maximum size")
         total_bytes += size
@@ -253,12 +134,8 @@ def _read_record(reader: TextIO | BinaryIO, total_bytes: int) -> tuple[dict[str,
         raise InputError("secret payload stream is invalid")
     try:
         value = json.loads(text)
-    except (TypeError, ValueError, json.JSONDecodeError):
-        parsed_json = False
-    else:
-        parsed_json = True
-    if not parsed_json:
-        raise InputError("secret payload contains invalid JSON")
+    except (TypeError, ValueError):
+        raise InputError("secret payload contains invalid JSON") from None
     if not isinstance(value, dict):
         raise InputError("secret payload record must be an object")
     return value, total_bytes
@@ -286,7 +163,7 @@ def _record_type(record: dict[str, object]) -> str:
 
 def _parse_item_record(
     record: dict[str, object], declared: Mapping[str, OnePasswordItem]
-) -> tuple[str, dict[str, str], tuple[str, ...]]:
+) -> tuple[str, dict[str, str]]:
     _exact_keys(record, {"type", "key", "item"}, "item")
     key = record.get("key")
     if not isinstance(key, str) or key not in declared:
@@ -300,42 +177,25 @@ def _parse_item_record(
         raise ValidationError("secret payload item id is invalid")
     if not isinstance(fields, list):
         raise ValidationError("secret payload item fields are invalid")
-    section_labels = _item_section_labels(item)
-
     extracted: dict[str, list[str]] = {field.canonical_name: [] for field in declared[key].fields}
     aliases = _field_aliases(declared[key])
-    unreferenced = {
-        field.canonical_name
-        for field in declared[key].fields
-        if field.reference_name is None
-    }
-    discovered: list[str] = []
     for raw_field in fields:
         if not isinstance(raw_field, dict):
             raise ValidationError("secret payload item field is invalid")
         field_id = raw_field.get("id")
         label = raw_field.get("label")
-        section = raw_field.get("section")
         value = raw_field.get("value")
         if (field_id is not None and not isinstance(field_id, str)) or not isinstance(label, str):
             raise ValidationError("secret payload item field is invalid")
-        if section is not None and not isinstance(section, dict):
-            raise ValidationError("secret payload item field is invalid")
-        matches = _reference_matches(declared[key], raw_field, section_labels)
-        alias_matches = set(aliases.get(_normalize_label(label), ()))
+        matches = set(aliases.get(_normalize_label(label), ()))
         if field_id:
-            alias_matches.update(aliases.get(_normalize_label(field_id), ()))
-        if section is None:
-            matches.update(alias_matches)
-        else:
-            matches.update(alias_matches.intersection(unreferenced))
+            matches.update(aliases.get(_normalize_label(field_id), ()))
         if len(matches) > 1:
             raise ValidationError("secret payload item field label is ambiguous")
         if value is None:
             continue
         if not isinstance(value, str):
             raise ValidationError("secret payload item field is invalid")
-        discovered.append(value)
         if matches:
             extracted[next(iter(matches))].append(value)
 
@@ -346,7 +206,7 @@ def _parse_item_record(
         if len(values) != 1:
             raise ValidationError("secret payload contains duplicate matching credential fields")
         result[canonical_name] = values[0]
-    return key, result, tuple(discovered)
+    return key, result
 
 
 def _field_aliases(item: OnePasswordItem) -> dict[str, tuple[str, ...]]:
@@ -357,92 +217,12 @@ def _field_aliases(item: OnePasswordItem) -> dict[str, tuple[str, ...]]:
     return {label: tuple(sorted(names)) for label, names in aliases.items()}
 
 
-def _item_section_labels(item: Mapping[str, object]) -> dict[str, str]:
-    raw_sections = item.get("sections")
-    if raw_sections is None:
-        return {}
-    if not isinstance(raw_sections, list):
-        raise ValidationError("secret payload item sections are invalid")
-
-    labels: dict[str, str] = {}
-    for raw_section in raw_sections:
-        if not isinstance(raw_section, Mapping):
-            raise ValidationError("secret payload item section is invalid")
-        section_id = raw_section.get("id")
-        label = raw_section.get("label")
-        if (
-            not isinstance(section_id, str)
-            or not section_id
-            or not isinstance(label, str)
-            or not label
-            or section_id in labels
-        ):
-            raise ValidationError("secret payload item section is invalid")
-        labels[section_id] = label
-    return labels
-
-
-def _reference_matches(
-    item: OnePasswordItem,
-    raw_field: Mapping[str, object],
-    section_labels: Mapping[str, str],
-) -> set[str]:
-    return {
-        field.canonical_name
-        for field in item.fields
-        if field.reference_name is not None
-        and _raw_field_matches_reference(
-            raw_field,
-            field.reference_name,
-            section_labels,
-        )
-    }
-
-
-def _raw_field_matches_reference(
-    raw_field: Mapping[str, object],
-    reference_name: str,
-    section_labels: Mapping[str, str],
-) -> bool:
-    section_name, separator, field_name = reference_name.rpartition("/")
-    field_candidates = {
-        _normalize_label(value)
-        for key in ("id", "label")
-        if isinstance((value := raw_field.get(key)), str)
-    }
-    if _normalize_label(field_name) not in field_candidates:
-        return False
-    if not separator:
-        return True
-
-    section = raw_field.get("section")
-    if not isinstance(section, Mapping):
-        return False
-    section_candidates = {
-        _normalize_label(value)
-        for key in ("id", "label")
-        if isinstance((value := section.get(key)), str)
-    }
-    section_id = section.get("id")
-    if isinstance(section_id, str) and section_id in section_labels:
-        section_candidates.add(_normalize_label(section_labels[section_id]))
-    return _normalize_label(section_name) in section_candidates
-
-
 def _normalize_label(label: str) -> str:
     return "".join(character for character in label.casefold() if character not in " -_")
 
 
-def _bundle_from_fields(
-    manifest: BootstrapManifest,
-    parsed: Mapping[str, Mapping[str, str]],
-    discovered_values: tuple[str, ...],
-) -> SecretBundle:
+def _bundle_from_fields(parsed: Mapping[str, Mapping[str, str]]) -> SecretBundle:
     try:
-        dashboard = DashboardSecret(
-            username=parsed["dashboard"]["username"],
-            password=parsed["dashboard"]["password"],
-        )
         github_token = parsed["github"]["credential"]
         calendar_fields = parsed["google_calendar"]
         google_calendar = GoogleCalendarSecret(
@@ -453,70 +233,31 @@ def _bundle_from_fields(
         raise ValidationError("manifest is missing a required Hermes credential declaration") from error
     validate_google_calendar_secret(google_calendar)
 
-    environment_by_profile: dict[str, Mapping[str, str]] = {}
-    discord_by_profile: dict[str, DiscordSecret] = {}
-    required_profiles = ("default", *(profile.name for profile in manifest.profiles))
-    for profile in required_profiles:
-        profile_environment: dict[str, str] = {}
-        for environment_name, item, field in managed_environment_bindings(
-            manifest, profile
-        ):
-            try:
-                profile_environment[environment_name] = parsed[item.key][
-                    field.canonical_name
-                ]
-            except KeyError as error:
-                raise ValidationError(
-                    "manifest is missing a required environment credential declaration"
-                ) from error
-        environment_by_profile[profile] = MappingProxyType(profile_environment)
-        if {
-            "DISCORD_BOT_TOKEN",
-            "DISCORD_ALLOWED_USERS",
-        }.issubset(profile_environment):
-            discord_by_profile[profile] = DiscordSecret(
-                bot_token=profile_environment["DISCORD_BOT_TOKEN"],
-                allowed_users=profile_environment["DISCORD_ALLOWED_USERS"],
-            )
-
-    redactor = SecretRedactor(
-        discovered_values,
-        basic_credentials=((dashboard.username, dashboard.password),),
-    )
     return SecretBundle(
         github_token=github_token,
-        dashboard=dashboard,
         google_calendar=google_calendar,
-        discord_by_profile=MappingProxyType(discord_by_profile),
-        redactor=redactor,
-        environment_by_profile=MappingProxyType(environment_by_profile),
     )
 
 
 def validate_google_calendar_secret(secret: GoogleCalendarSecret) -> None:
-    _google_calendar_oauth_client_values(secret)
+    validate_google_oauth_client(secret.oauth_credentials_json)
     try:
         tokens = json.loads(secret.tokens_json)
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    except (TypeError, ValueError):
         raise CredentialError("Google Calendar credentials are invalid") from None
-    if (
-        not isinstance(tokens, dict)
-        or not _contains_refresh_token(tokens)
-    ):
+    if not isinstance(tokens, dict) or not _contains_refresh_token(tokens):
         raise CredentialError("Google Calendar credentials are invalid") from None
 
 
-def _google_calendar_oauth_client_values(
-    secret: GoogleCalendarSecret,
-) -> tuple[str, str]:
-    """Extract the validated OAuth client values from the shared Calendar secret."""
+def validate_google_oauth_client(credentials_json: str) -> None:
+    """Validate the OAuth client shared by Calendar and Gmail."""
 
     try:
-        oauth = json.loads(secret.oauth_credentials_json)
+        oauth = json.loads(credentials_json)
         installed = oauth["installed"]
         client_id = installed["client_id"]
         client_secret = installed["client_secret"]
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    except (KeyError, TypeError, ValueError):
         raise CredentialError("Google Calendar credentials are invalid") from None
     if (
         not isinstance(oauth, dict)
@@ -527,7 +268,6 @@ def _google_calendar_oauth_client_values(
         or not client_secret
     ):
         raise CredentialError("Google Calendar credentials are invalid") from None
-    return client_id, client_secret
 
 
 def _contains_refresh_token(value: object) -> bool:
@@ -544,10 +284,3 @@ def _contains_refresh_token(value: object) -> bool:
 def _exact_keys(record: Mapping[str, object], expected: set[str], context: str) -> None:
     if set(record) != expected:
         raise InputError(f"secret payload {context} record has an invalid shape")
-
-
-def _replace_all(text: str, replacements: tuple[str, ...]) -> str:
-    for replacement in replacements:
-        if replacement:
-            text = text.replace(replacement, _REDACTED)
-    return text

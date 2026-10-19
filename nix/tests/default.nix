@@ -15,6 +15,7 @@
         formatter = config.treefmt.settings.formatter.powershell;
       };
       chatgpt-desktop = import ./build/chatgpt-desktop.nix { inherit inputs pkgs; };
+      hermes-configuration = import ./build/hermes-configuration.nix { inherit pkgs; };
     }
     // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
       darwin-bundled-app-cleanup = import ./build/darwin-bundled-app-cleanup.nix { inherit pkgs; };
@@ -78,6 +79,7 @@
       // (import ./unit/devcontainer-packages.nix { inherit inputs; })
       // (import ./unit/orca-packages.nix { inherit inputs; })
       // (import ./unit/browser-packages.nix { inherit inputs; })
+      // (import ./unit/comfyui-packages.nix { inherit inputs; })
       // (import ./unit/chatgpt-packages.nix { inherit inputs; })
       // (import ./unit/docker-packages.nix { inherit inputs; })
       // (import ./unit/tart-package-selection.nix { inherit inputs; })

@@ -1,18 +1,16 @@
-"""Transactional Hermes context-engine configuration."""
+"""Hermes context-engine configuration."""
 
 from __future__ import annotations
 
 import os
 import stat
-import uuid
 from collections.abc import Sequence
 from pathlib import Path
 
 import yaml
 
-from .distributions import _atomic_write as _atomic_write_path
+from .distributions import _atomic_write
 from .errors import ApplyError, ValidationError
-from .transaction import Transaction
 
 CONTEXT_ENGINE_NAME = "lcm"
 CONTEXT_PLUGIN_NAME = "hermes-lcm"
@@ -23,18 +21,13 @@ _VALIDATION_ERROR = "installed Hermes context engine configuration is invalid"
 
 def install_context_engine_configurations(
     targets: Sequence[tuple[str, Path]],
-    transaction: Transaction,
 ) -> None:
     """Enable the LCM engine and plugin in every managed Hermes config."""
 
     try:
         for _profile, target in targets:
             _require_real_directory_chain(target)
-            with transaction.bind_reserved_directory(target) as reserved:
-                if reserved is None:
-                    _reconcile_config(target / "config.yaml", transaction)
-                else:
-                    _reconcile_reserved_configuration(reserved)
+            _reconcile_config(target / "config.yaml")
     except (
         ApplyError,
         OSError,
@@ -49,7 +42,7 @@ def install_context_engine_configurations(
 def validate_context_engine_installation(
     targets: Sequence[tuple[str, Path]],
 ) -> None:
-    """Require LCM activation without inspecting memory-provider settings."""
+    """Require the LCM context engine and enabled plugin."""
 
     try:
         for _profile, target in targets:
@@ -78,26 +71,13 @@ def validate_context_engine_installation(
         raise ValidationError(_VALIDATION_ERROR) from None
 
 
-def _reconcile_config(path: Path, transaction: Transaction) -> None:
-    metadata, original, config = _load_yaml_mapping_with_content(path)
-    content = _merged_configuration(config)
-    if original == content and stat.S_IMODE(metadata.st_mode) == 0o600:
-        return
-
-    transaction.snapshot(path)
-    _atomic_write(path, content, 0o600)
-
-
-def _reconcile_reserved_configuration(directory: int) -> None:
-    metadata, original, config = _load_yaml_mapping_at(directory, "config.yaml")
-    content = _merged_configuration(config)
-    if original == content and stat.S_IMODE(metadata.st_mode) == 0o600:
-        return
-    _atomic_write((directory, "config.yaml"), content, 0o600)
+def _reconcile_config(path: Path) -> None:
+    _metadata, config = _load_yaml_mapping(path)
+    _atomic_write(path, _merged_configuration(config), 0o600)
 
 
 def _merged_configuration(config: dict[object, object]) -> bytes:
-    """Use the same LCM merge for ordinary and reserved profile directories."""
+    """Merge LCM settings while preserving unrelated configuration."""
 
     context = config.get("context")
     if context is None:
@@ -146,143 +126,16 @@ def _merged_configuration(config: dict[object, object]) -> bytes:
     candidate = dict(config)
     candidate["context"] = merged_context
     candidate["plugins"] = merged_plugins
-    memory = config.get("memory")
-    if isinstance(memory, dict) and memory.get("provider") == "hindsight":
-        candidate["memory"] = {**memory, "provider": "builtin"}
     return yaml.safe_dump(candidate, sort_keys=False).encode("utf-8")
 
 
-def _atomic_write(
-    destination: Path | tuple[int, str],
-    content: bytes,
-    mode: int,
-) -> None:
-    if isinstance(destination, Path):
-        _atomic_write_path(destination, content, mode)
-        return
-    parent, name = destination
-    _atomic_write_at(parent, name, content, mode)
-
-
-def _atomic_write_at(
-    parent: int,
-    name: str,
-    content: bytes,
-    mode: int,
-) -> None:
-    _require_child_name(name)
-    temporary = f".{name}.hermes-bootstrap-{uuid.uuid4()}"
-    descriptor: int | None = None
-    try:
-        descriptor = os.open(
-            temporary,
-            os.O_WRONLY
-            | os.O_CREAT
-            | os.O_EXCL
-            | os.O_CLOEXEC
-            | getattr(os, "O_NOFOLLOW", 0),
-            0o600,
-            dir_fd=parent,
-        )
-        remaining = memoryview(content)
-        while remaining:
-            written = os.write(descriptor, remaining)
-            if written <= 0:
-                raise OSError
-            remaining = remaining[written:]
-        os.fchmod(descriptor, mode)
-        os.fsync(descriptor)
-        os.close(descriptor)
-        descriptor = None
-        os.replace(
-            temporary,
-            name,
-            src_dir_fd=parent,
-            dst_dir_fd=parent,
-        )
-        os.fsync(parent)
-        temporary = ""
-    finally:
-        if descriptor is not None:
-            os.close(descriptor)
-        if temporary:
-            try:
-                os.unlink(temporary, dir_fd=parent)
-            except FileNotFoundError:
-                pass
-
-
-def _load_yaml_mapping_at(
-    parent: int,
-    name: str,
-) -> tuple[os.stat_result, bytes, dict[object, object]]:
-    metadata, content = _read_regular_file_at(parent, name)
-    value = yaml.safe_load(content.decode("utf-8"))
-    if not isinstance(value, dict):
-        raise TypeError
-    return metadata, content, value
-
-
-def _read_regular_file_at(
-    parent: int,
-    name: str,
-) -> tuple[os.stat_result, bytes]:
-    _require_child_name(name)
-    before = os.stat(name, dir_fd=parent, follow_symlinks=False)
-    if (
-        stat.S_ISLNK(before.st_mode)
-        or not stat.S_ISREG(before.st_mode)
-        or before.st_nlink != 1
-    ):
-        raise ValueError
-    descriptor: int | None = None
-    try:
-        descriptor = os.open(
-            name,
-            os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
-            dir_fd=parent,
-        )
-        opened = os.fstat(descriptor)
-        after = os.stat(name, dir_fd=parent, follow_symlinks=False)
-        identities = {
-            (before.st_dev, before.st_ino),
-            (opened.st_dev, opened.st_ino),
-            (after.st_dev, after.st_ino),
-        }
-        if (
-            len(identities) != 1
-            or not stat.S_ISREG(opened.st_mode)
-            or opened.st_nlink != 1
-            or after.st_nlink != 1
-        ):
-            raise ValueError
-        chunks: list[bytes] = []
-        while chunk := os.read(descriptor, 65536):
-            chunks.append(chunk)
-        return opened, b"".join(chunks)
-    finally:
-        if descriptor is not None:
-            os.close(descriptor)
-
-
-def _require_child_name(name: str) -> None:
-    if not name or name in {".", ".."} or "/" in name or "\\" in name:
-        raise ValueError
-
-
-def _load_yaml_mapping_with_content(
+def _load_yaml_mapping(
     path: Path,
-) -> tuple[os.stat_result, bytes, dict[object, object]]:
+) -> tuple[os.stat_result, dict[object, object]]:
     metadata = _require_regular_file(path)
-    content = path.read_bytes()
-    value = yaml.safe_load(content.decode("utf-8"))
+    value = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise TypeError
-    return metadata, content, value
-
-
-def _load_yaml_mapping(path: Path) -> tuple[os.stat_result, dict[object, object]]:
-    metadata, _content, value = _load_yaml_mapping_with_content(path)
     return metadata, value
 
 

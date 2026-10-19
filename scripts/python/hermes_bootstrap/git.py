@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import ctypes
-import errno
-import functools
 import os
 import re
 import selectors
@@ -12,7 +9,6 @@ import signal
 import shutil
 import stat
 import subprocess
-import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -20,7 +16,6 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .errors import RepositoryError
-from .filesystem import open_absolute_directory, verify_absolute_directory
 from .github import GitAuth
 from .models import DistributionSource
 
@@ -28,11 +23,6 @@ from .models import DistributionSource
 _GIT_TIMEOUT_SECONDS = 60.0
 _MAX_GIT_OUTPUT_BYTES = 4096
 _MAX_GIT_RAW_OUTPUT_BYTES = 8 * 1024 * 1024
-_GIT_TERMINATION_TIMEOUT_SECONDS = 1.0
-_MAX_GIT_DIRECT_WAIT_ATTEMPTS = 2
-_MAX_GIT_REAP_ATTEMPTS = 32
-_MAX_GIT_REAPS_PER_ATTEMPT = 64
-_PR_SET_CHILD_SUBREAPER = 36
 _GIT_EXECUTABLE = os.path.realpath(
     os.environ.get("DOTFILES_HERMES_GIT_EXECUTABLE")
     or shutil.which("git")
@@ -43,7 +33,6 @@ _GITHUB_OWNER_REPOSITORY_PATH = re.compile(
     r"/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"
     r"/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?(?:\.git)?\Z"
 )
-_child_subreaper_enabled: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -53,79 +42,47 @@ class StagedSource:
     commit: str
 
 
-@dataclass(frozen=True)
-class _StageFailure:
-    message: str
-
-
-@dataclass(frozen=True)
-class _TreeFailure:
-    message: str
-
-
 def stage_distribution(source: DistributionSource, workdir: Path, auth: GitAuth) -> StagedSource:
     """Clone and verify an exact immutable source snapshot beneath ``workdir``."""
-
-    result = _stage_distribution_boundary(source, workdir, auth)
-    if isinstance(result, _StageFailure):
-        message = result.message
-        del result
-        del source
-        del workdir
-        del auth
-        raise RepositoryError(message)
-    return result
-
-
-def _stage_distribution_boundary(
-    source: DistributionSource, workdir: Path, auth: GitAuth
-) -> StagedSource | _StageFailure:
-    """Perform all sensitive subprocess work without leaking its tracebacks."""
 
     stage: Path | None = None
     askpass: Path | None = None
     try:
         if not _valid_auth(auth) or _remote_identity(source.source) is None or not _valid_ref(source.ref):
-            return _StageFailure("could not stage the declared Git source")
+            raise RepositoryError("could not stage the declared Git source")
         workdir.mkdir(mode=0o700, parents=True, exist_ok=True)
         if not _is_directory(workdir):
-            return _StageFailure("could not create a private Git staging directory")
+            raise RepositoryError("could not create a private Git staging directory")
         stage = Path(tempfile.mkdtemp(prefix="stage-", dir=workdir))
         os.chmod(stage, 0o700)
         askpass = _create_askpass(workdir)
         environment = _git_environment(auth, askpass)
 
         if _run_git(("init", "--quiet"), stage, environment) is None:
-            return _StageFailure("could not stage the declared Git source")
-        if _run_git(("remote", "add", "origin", "--", source.source), stage, environment) is None:
-            return _StageFailure("could not stage the declared Git source")
-        remote = _run_git(("config", "--get", "remote.origin.url"), stage, environment)
-        if remote is None or not _same_remote_identity(source.source, remote):
-            return _StageFailure("the staged Git source does not match its declaration")
-        if _run_git(("fetch", "--no-tags", "origin", "--", source.ref), stage, environment) is None:
-            return _StageFailure("could not fetch the declared Git ref")
+            raise RepositoryError("could not stage the declared Git source")
+        if _run_git(("fetch", "--no-tags", "--", source.source, source.ref), stage, environment) is None:
+            raise RepositoryError("could not fetch the declared Git ref")
         commit = _run_git(("rev-parse", "--verify", "FETCH_HEAD^{commit}"), stage, environment)
         if commit is None or _OBJECT_ID.fullmatch(commit) is None:
-            return _StageFailure("the declared Git ref does not resolve to a commit")
+            raise RepositoryError("the declared Git ref does not resolve to a commit")
         commit = commit.lower()
         if (
             source.source_commit is not None
             and commit != source.source_commit.lower()
         ):
-            return _StageFailure("the staged Git source does not match its pinned commit")
+            raise RepositoryError("the staged Git source does not match its pinned commit")
         if _run_git(("checkout", "--detach", commit), stage, environment) is None:
-            return _StageFailure("could not check out the declared Git commit")
-        head = _run_git(("rev-parse", "HEAD"), stage, environment)
-        if head is None or head.lower() != commit:
-            return _StageFailure("the staged Git checkout does not match its resolved commit")
+            raise RepositoryError("could not check out the declared Git commit")
         _remove_git_metadata(stage)
         staged = StagedSource(declaration=source, path=stage, commit=commit)
         _require_manifest(staged)
         assert_safe_distribution_tree(staged)
         stage = None
         return staged
+    except RepositoryError:
+        raise
     except Exception:
-        return _StageFailure("could not stage the declared Git source")
+        raise RepositoryError("could not stage the declared Git source") from None
     finally:
         if askpass is not None:
             _safe_unlink(askpass)
@@ -136,31 +93,17 @@ def _stage_distribution_boundary(
 def assert_safe_distribution_tree(stage: StagedSource) -> None:
     """Require a distribution tree made exclusively from regular files and directories."""
 
-    failure = _safe_distribution_tree_boundary(stage)
-    if failure is None:
-        return
-    message = failure.message
-    del failure
-    del stage
-    raise RepositoryError(message)
-
-
-def _safe_distribution_tree_boundary(stage: StagedSource) -> _TreeFailure | None:
-    """Keep staged paths and declarations out of public exception tracebacks."""
-
     try:
         root = stage.path
         root_stat = root.lstat()
         if not stat.S_ISDIR(root_stat.st_mode) or stat.S_ISLNK(root_stat.st_mode):
             raise RepositoryError("staged Git source contains an unsafe filesystem entry")
-        resolved_root = root.resolve(strict=True)
-        _walk_safe_tree(root, resolved_root)
+        _walk_safe_tree(root)
     except Exception:
-        return _TreeFailure("staged Git source contains an unsafe filesystem entry")
-    return None
+        raise RepositoryError("staged Git source contains an unsafe filesystem entry") from None
 
 
-def _walk_safe_tree(directory: Path, resolved_root: Path) -> None:
+def _walk_safe_tree(directory: Path) -> None:
     try:
         entries = list(os.scandir(directory))
     except OSError:
@@ -169,14 +112,12 @@ def _walk_safe_tree(directory: Path, resolved_root: Path) -> None:
         path = Path(entry.path)
         try:
             mode = path.lstat().st_mode
-            resolved = path.resolve(strict=False)
-            resolved.relative_to(resolved_root)
-        except (OSError, ValueError):
+        except OSError:
             raise RepositoryError("staged Git source contains an unsafe filesystem entry") from None
         if stat.S_ISLNK(mode) or not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
             raise RepositoryError("staged Git source contains an unsafe filesystem entry")
         if stat.S_ISDIR(mode):
-            _walk_safe_tree(path, resolved_root)
+            _walk_safe_tree(path)
 
 
 def _require_manifest(stage: StagedSource) -> None:
@@ -212,8 +153,6 @@ def _create_askpass(workdir: Path) -> Path:
                 "  *) printf '%s\\n' \"$HERMES_BOOTSTRAP_GITHUB_TOKEN\" ;;\n"
                 "esac\n"
             )
-            handle.flush()
-            os.fsync(handle.fileno())
         return path
     except Exception:
         if descriptor >= 0:
@@ -282,17 +221,14 @@ def _run_git_bytes(
     selector: selectors.BaseSelector | None = None
     output = bytearray()
     succeeded = False
-    cwd_descriptor: int | None = None
     try:
         if type(max_output_bytes) is not int or not 0 < max_output_bytes <= _MAX_GIT_RAW_OUTPUT_BYTES:
             return None
-        if not _ensure_linux_child_subreaper():
-            return None
-        git_executable = _trusted_git_executable(environment)
+        git_executable = _trusted_git_executable()
         if git_executable is None:
             return None
-        cwd_descriptor = open_absolute_directory(cwd)
-        verify_absolute_directory(cwd, cwd_descriptor)
+        if not _safe_git_directory(cwd):
+            return None
         process = subprocess.Popen(
             (git_executable, *arguments),
             env=environment,
@@ -300,8 +236,7 @@ def _run_git_bytes(
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             close_fds=True,
-            pass_fds=(cwd_descriptor,),
-            preexec_fn=functools.partial(os.fchdir, cwd_descriptor),
+            cwd=cwd,
             start_new_session=True,
         )
         output_stream = process.stdout
@@ -348,14 +283,19 @@ def _run_git_bytes(
                 output_stream.close()
             except OSError:
                 pass
-        if cwd_descriptor is not None:
-            _safe_close(cwd_descriptor)
 
 
-def _trusted_git_executable(environment: dict[str, str]) -> str | None:
+def _safe_git_directory(path: Path) -> bool:
+    """Check the initial working path without retaining directory descriptors."""
+
+    if not path.is_absolute() or path != Path(os.path.normpath(path)):
+        return False
+    return all(_is_directory(directory) for directory in (*reversed(path.parents), path))
+
+
+def _trusted_git_executable() -> str | None:
     """Use only a root-owned or immutable Nix-store Git executable."""
 
-    del environment
     executable = Path(_GIT_EXECUTABLE)
     try:
         metadata = executable.lstat()
@@ -380,98 +320,19 @@ def _trusted_git_executable(environment: dict[str, str]) -> str | None:
 
 
 def _stop_git_process(process: subprocess.Popen[bytes]) -> None:
-    """Kill and reap a failed Git process tree without touching other children."""
-
-    pgid = process.pid
-    _kill_git_process_group(process, pgid)
-    _wait_for_git_process(process, pgid)
-    _reap_git_process_group(process, pgid)
-
-
-def _ensure_linux_child_subreaper() -> bool:
-    """Make this Linux bootstrap process reap orphaned Git descendants."""
-
-    global _child_subreaper_enabled
-    if sys.platform != "linux":
-        return True
-    if _child_subreaper_enabled is True:
-        return True
-    try:
-        libc = ctypes.CDLL(None, use_errno=True)
-        prctl = libc.prctl
-        prctl.argtypes = (
-            ctypes.c_int,
-            ctypes.c_ulong,
-            ctypes.c_ulong,
-            ctypes.c_ulong,
-            ctypes.c_ulong,
-        )
-        prctl.restype = ctypes.c_int
-        if prctl(_PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
-            return False
-    except (AttributeError, OSError, TypeError):
-        return False
-    _child_subreaper_enabled = True
-    return True
-
-
-def _kill_git_process_group(process: subprocess.Popen[bytes], pgid: int) -> None:
-    """Send SIGKILL to the isolated Git group, with a direct-child fallback."""
+    """Kill this Git process group and wait for the direct child."""
 
     try:
-        if os.name == "posix":
-            os.killpg(pgid, signal.SIGKILL)
-            return
+        os.killpg(process.pid, signal.SIGKILL)
     except OSError:
-        pass
-    if process.poll() is None:
         try:
             process.kill()
         except OSError:
             pass
-
-
-def _wait_for_git_process(process: subprocess.Popen[bytes], pgid: int) -> None:
-    """Give the direct Git child finite chances to report its termination."""
-
-    for _ in range(_MAX_GIT_DIRECT_WAIT_ATTEMPTS):
-        try:
-            process.wait(timeout=_GIT_TERMINATION_TIMEOUT_SECONDS)
-            return
-        except subprocess.TimeoutExpired:
-            _kill_git_process_group(process, pgid)
-        except (OSError, subprocess.SubprocessError):
-            _kill_git_process_group(process, pgid)
-
-
-def _reap_git_process_group(process: subprocess.Popen[bytes], pgid: int) -> None:
-    """Reap adopted children only from the failed Git process group."""
-
-    if os.name != "posix":
-        return
-    for attempt in range(_MAX_GIT_REAP_ATTEMPTS):
-        _kill_git_process_group(process, pgid)
-        if _drain_git_process_group(pgid):
-            return
-        if attempt + 1 < _MAX_GIT_REAP_ATTEMPTS:
-            time.sleep(_GIT_TERMINATION_TIMEOUT_SECONDS / _MAX_GIT_REAP_ATTEMPTS)
-
-
-def _drain_git_process_group(pgid: int) -> bool:
-    """Return when no child remains in ``pgid``; every polling pass is finite."""
-
-    for _ in range(_MAX_GIT_REAPS_PER_ATTEMPT):
-        try:
-            pid, _status = os.waitpid(-pgid, os.WNOHANG)
-        except ChildProcessError:
-            return True
-        except OSError as error:
-            if error.errno == errno.ECHILD:
-                return True
-            return False
-        if pid == 0:
-            return False
-    return False
+    try:
+        process.wait()
+    except OSError:
+        pass
 
 
 def _remove_git_metadata(stage: Path) -> None:

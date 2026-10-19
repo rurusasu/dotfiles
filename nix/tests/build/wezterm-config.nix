@@ -45,18 +45,24 @@ pkgs.runCommand "wezterm-config-check"
     lua - ${windowsWezTerm} \
       ${pkgs.lib.escapeShellArg "UDEV Gothic NF"} \
       ${toString settings.font_size} \
-      ${pkgs.lib.escapeShellArg settings.color_scheme} <<'LUA'
+      ${pkgs.lib.escapeShellArg settings.color_scheme} \
+      ${terminals}/wezterm/wezterm.lua <<'LUA'
+    local target_triple = "x86_64-pc-windows-msvc"
     package.loaded.wezterm = nil
     package.preload.wezterm = function()
       return {
-        target_triple = "x86_64-pc-windows-msvc",
+        target_triple = target_triple,
         default_wsl_domains = function()
           return { { name = "WSL:NixOS", distribution = "NixOS" } }
         end,
         config_builder = function() return {} end,
         font = function(family) return family end,
         action_callback = function(callback) return callback end,
-        action = setmetatable({}, { __index = function() return function() return {} end end }),
+        action = setmetatable({}, {
+          __index = function(_, name)
+            return function(value) return { [name] = value } end
+          end,
+        }),
       }
     end
     local config = dofile(arg[1])
@@ -83,6 +89,31 @@ pkgs.runCommand "wezterm-config-check"
     end
     assert(has_nixos_launcher, "launch menu must expose NixOS WSL")
     print("Windows WezTerm default shell and NixOS WSL launcher are valid")
+
+    target_triple = "aarch64-apple-darwin"
+    package.loaded.wezterm = nil
+    local getenv = os.getenv
+    os.getenv = function(name)
+      if name == "USER" then return "test-user" end
+      if name == "TERMINFO_DIRS" then return "/inherited/terminfo" end
+      return getenv(name)
+    end
+    config = dofile(arg[5])
+    os.getenv = getenv
+    assert(config.set_environment_variables.TERMINFO_DIRS
+      == "/etc/profiles/per-user/test-user/share/terminfo:/usr/share/terminfo:/inherited/terminfo",
+      "Darwin child shells must receive user, system and inherited terminfo paths")
+    assert(config.use_ime == true, "Darwin IME support must remain enabled")
+    local backspace, leader_backspace
+    for _, binding in ipairs(config.keys) do
+      if binding.key == "Backspace" and binding.mods == "NONE" then backspace = binding.action end
+      if binding.key == "Backspace" and binding.mods == "LEADER" then leader_backspace = binding.action end
+    end
+    assert(backspace and backspace.SendString == string.char(127), "Darwin Backspace must send DEL")
+    assert(leader_backspace and leader_backspace.SendKey
+      and leader_backspace.SendKey.key == "Backspace" and leader_backspace.SendKey.mods == nil,
+      "Backspace after the leader must send an unmodified Backspace key")
+    print("Darwin WezTerm terminfo inheritance, IME and Backspace bindings are valid")
     LUA
     WEZTERM_TEST_REPO_ROOT=${../../..} bats ${../../../tests/bash/wezterm_config.bats}
 

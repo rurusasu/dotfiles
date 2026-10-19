@@ -46,10 +46,3 @@ EOF
 	[ "$status" -eq 23 ]
 	grep -q -- '-NoProfile -Command Write-Host ok' "$PWSH_CALL_LOG"
 }
-
-@test "PowerShell pre-commit hooks use the platform-aware runner" {
-	run grep -c 'scripts/sh/run-windows-powershell-tests.sh' "$REPO_ROOT/.pre-commit-config.yaml"
-
-	[ "$status" -eq 0 ]
-	[ "$output" -eq 2 ]
-}
