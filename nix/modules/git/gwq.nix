@@ -10,7 +10,7 @@ let
 in
 {
   options.dotfiles.gwq.settings = lib.mkOption {
-    type = format.type;
+    inherit (format) type;
     default = { };
     description = "Declarative gwq configuration, with host-specific worktree locations.";
   };
