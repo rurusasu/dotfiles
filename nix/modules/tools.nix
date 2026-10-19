@@ -79,10 +79,11 @@ in
         [
           # Applications without native Home Manager installation options.
           (pkgs.callPackage ./editors/orca/package.nix { })
-          # Install CLI packages directly when their configuration remains user-managed.
+          # CLI packages without a native Home Manager installation option.
           gh
           _1password-cli
           ghq
+          gwq
           btop
           lazydocker
           inputs.llm-agents.packages.${stdenv.hostPlatform.system}.dsh

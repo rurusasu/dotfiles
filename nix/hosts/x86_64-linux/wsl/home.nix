@@ -21,6 +21,8 @@ in
 
   dotfiles.keybindings.fromWindowsExport = true;
   dotfiles.starship.osSymbol = "❄️ ";
+  # Relative links must stay on the same Windows drive to work from both OSes.
+  dotfiles.gwq.settings.worktree.basedir = "/mnt/d/worktrees";
 
   programs = {
     git = {

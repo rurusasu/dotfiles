@@ -250,6 +250,10 @@ in
           ghqCopies = builtins.length (
             builtins.filter (package: package.drvPath == home.pkgs.ghq.drvPath) home.config.home.packages
           );
+          gwqCopies = builtins.length (
+            builtins.filter (package: package.drvPath == home.pkgs.gwq.drvPath) home.config.home.packages
+          );
+          relativeWorktrees = home.config.programs.git.settings.worktree.useRelativePaths or false;
           identity = home.config.programs.git.settings.user;
           core = home.config.programs.git.settings.core;
           credentials = home.config.programs.git.settings.credential;
@@ -267,6 +271,8 @@ in
       enabled = true;
       gitCopies = 1;
       ghqCopies = 1;
+      gwqCopies = 1;
+      relativeWorktrees = true;
       identity = {
         name = "rurusasu";
         email = "36875744+rurusasu@users.noreply.github.com";
@@ -284,8 +290,33 @@ in
         key = "~/.ssh/signing_key.pub";
         signByDefault = false;
       };
-      gtrAlias = ''!f() { [ -z "$1" ] && echo 'Usage: git gtr <branch>' && return 1; root=$(git worktree list --porcelain | grep '^worktree ' | head -1 | sed 's/^worktree //'); git worktree add "$root/.worktrees/$1" "$1"; }; f'';
+      gtrAlias = "!gwq add";
     }) 3;
+  };
+
+  testGwqKeepsWslWorktreesOnTheWindowsDrive = {
+    expr = map (home: home.config.dotfiles.gwq.settings) [
+      linux
+      wsl
+      darwin
+    ];
+    expected = [
+      {
+        worktree.basedir = "/home/test-user/worktrees";
+        worktree.auto_mkdir = true;
+        cd.launch_shell = false;
+      }
+      {
+        worktree.basedir = "/mnt/d/worktrees";
+        worktree.auto_mkdir = true;
+        cd.launch_shell = false;
+      }
+      {
+        worktree.basedir = "/home/test-user/worktrees";
+        worktree.auto_mkdir = true;
+        cd.launch_shell = false;
+      }
+    ];
   };
 
   testHomeGitHasNoMutableCheckoutTrustIncludes = {

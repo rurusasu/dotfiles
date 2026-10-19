@@ -55,6 +55,7 @@ task lint:all
 
 ## コミット前ルール
 
+- worktree の作成・移動・一覧・削除は `gwq` を使う。Windows / WSL 共用では同じ Windows ドライブに置き、相対リンクを使う。既存リンクの修復だけは `task worktree:repair REPO=... WORKTREE=...` を使う（[運用手順](docs/git/worktrees.md)）。
 - Windows から直接 `git commit` しない。
 - `task commit -- "message"` を使う。
 - 必要に応じて `pre-commit run --all-files` を実行する。

@@ -12,7 +12,7 @@
 - `fonts.nix`: Darwin / NixOS 共通のフォントパッケージと fontconfig の既定フォント
 - `fonts/gtk.nix`: Linux GUI の GTK 3 / 4 と設定ポータルの既定フォント。dconf service の登録は NixOS host が担当する
 - `1password/`: CLI の導入は `tools.nix`、Linux / WSLg GUI は `desktop.nix`、Darwin system GUI は `desktop-darwin.nix`。`default.nix` が SSH 設定を読み込み、`ssh.nix` が公式 agent socket の `IdentityAgent` / `SSH_AUTH_SOCK` と activation 時の公開鍵取得、`sync-ssh-public-key.sh` が timeout・検証・既存鍵保持を担当する。Git signer / Windows の `op.exe` を使う WSL interop の OS 固有設定は `nix/hosts/` に置く
-- `git/`: Git 共通設定を `default.nix`、ghq の共通保存先を `ghq.nix`、既存の `git gtr` alias を `gtr.nix` にまとめる。Git / ghq の導入は `tools.nix`、署名コマンドと WSL の保存先は `nix/hosts/` が担当する
+- `git/`: Git 共通設定と相対 worktree リンクを `default.nix`、ghq の共通保存先を `ghq.nix`、gwq 設定とシェル連携を `gwq.nix`、`gwq add` へ転送する既存 alias を `gtr.nix` にまとめる。Git / ghq / gwq の導入は `tools.nix`、署名コマンドと WSL の保存先は `nix/hosts/` が担当する
 - `ssh.nix`: SSH の共通 Home Manager 設定。1Password agent の接続設定は `1password/ssh.nix` が担当する
 - `discord/`: Home Manager 標準 `programs.discord` と macOS の native module staging。Darwin / native Linux から読み込み、WSL には導入しない
 - `lazygit/`: Bash / Zsh の `lg` 連携。CLI の有効化は `tools.nix` が担当する

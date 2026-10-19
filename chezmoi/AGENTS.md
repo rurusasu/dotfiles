@@ -2,6 +2,7 @@
 
 - chezmoi deploys `%USERPROFILE%/.config/wezterm/wezterm.lua` on Windows and installs the pinned UDEV Gothic NF font for the current user.
 - chezmoi also manages the PowerShell 7 profile in `%USERPROFILE%/Documents/PowerShell/` for WezTerm completion and PSReadLine history prediction.
+- Windows Git's relative worktree links are configured in `dot_config/git/config`. Unix Git and gwq belong to Home Manager; use `task worktree:repair` for existing links.
 - chezmoi applies the exported desktop shortcuts and conflict overrides to PowerToys Keyboard Manager through `scripts/powershell/Sync-PowerToysKeyboard.ps1`; Windows actions stay in `Invoke-DesktopAction.ps1`.
 - Keep copy/cut/paste in the foreground-aware Windows action runtime so terminal copy does not become `Ctrl+C` / SIGINT in WSLg Ghostty. Windows clipboard history has its own first-use activation.
 - Browser/URL actions and Spotify, Signal, Obsidian, and 1Password GUI launch in NixOS-WSL. Linux/WSLg packages belong to `nix/modules/desktop.nix`; Windows PowerToys and existing 1Password CLI/signing integration remain host responsibilities. Do not reintroduce Windows app fallbacks for these WSL launchers.
