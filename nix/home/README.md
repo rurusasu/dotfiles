@@ -25,7 +25,8 @@ flake.nix -> hosts/configurations.nix -> hosts/<system>/ -> home/common.nix
   `home.packages` に追加し、Home Manager 標準機能で `$HOME/Library/Fonts/HomeManager` に配布する。
   nix-darwin 統合ではシステム側がフォントを導入し、Home Manager は fontconfig 設定を担当する。
 - 各環境の設定は `nix/home/common.nix` を import する。Linux の各 system の `home.nix` は `hosts/shared/linux-home.nix` を読み込むだけにする。
-- Git は `../modules/git/` の `programs.git.settings` / `signing`、SSH は `../modules/ssh.nix` の `programs.ssh.settings` で生成する。`common.nix` が両方の module を読み込む。Git module 内の `ghq.nix` が共通保存先、`gtr.nix` が既存の `git gtr` alias を管理する。
+- Git は `../modules/git/` の `programs.git.settings` / `signing`、SSH は `../modules/ssh.nix` の `programs.ssh.settings` で生成する。`common.nix` が両方の module を読み込む。Git module 内の `ghq.nix` が共通保存先、`gwq.nix` が worktree の設定とシェル連携、`gtr.nix` が `gwq add` へ転送する既存 alias を管理する。
+  Windows / WSL 共用のため worktree は相対リンクを使い、WSL の gwq 保存先を `/mnt/d/worktrees` に置く。Windows 設定と既存リンクの修復は [worktree の管理](../../docs/git/worktrees.md) を参照する。
   1Password の SSH agent socket は `../modules/1password/ssh.nix`、署名コマンドと WSL の署名 wrapper・`ghq.root` は各 host の `home.nix` に置く。
   Git の実設定は `~/.config/git/config` に生成し、以前の `~/.gitconfig` はコメントだけの管理ファイルに置き換えて設定の二重読み込み・上書きを防ぐ。対象設定の移行にはバックアップを作らない。
 - zsh の導入は `../modules/tools.nix`、補完プラグインは `../modules/shells/zsh/` が担当する。`common.nix` は `./shells/zsh/` からユーザー設定を読み込む。

@@ -1,6 +1,19 @@
 version: "3"
 
 tasks:
+  worktree:repair:
+    desc: Repair an existing worktree's links using portable relative paths (keeps files and branches)
+    requires:
+      vars: [REPO, WORKTREE]
+    env:
+      DOTFILES_WORKTREE_REPO: "{{.REPO}}"
+      DOTFILES_WORKTREE_PATH: "{{.WORKTREE}}"
+    preconditions:
+      - sh: test -f "$DOTFILES_WORKTREE_PATH/.git"
+        msg: WORKTREE must be the actual linked worktree directory in the current OS
+    cmds:
+      - git -c safe.directory="$DOTFILES_WORKTREE_REPO" -C "$DOTFILES_WORKTREE_REPO" worktree repair --relative-paths "$DOTFILES_WORKTREE_PATH"
+
   commit:
     desc: Format, lint, and commit
     vars:

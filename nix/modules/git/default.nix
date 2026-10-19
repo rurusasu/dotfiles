@@ -7,6 +7,7 @@
   imports = [
     ./ghq.nix
     ./gtr.nix
+    ./gwq.nix
   ];
 
   programs.git = {
@@ -25,6 +26,8 @@
         editor = "nvim";
         sshCommand = "ssh";
       };
+      # Keep links readable by both Windows Git and WSL Git on a shared drive.
+      worktree.useRelativePaths = true;
       credential = lib.genAttrs [ "https://github.com" "https://gist.github.com" ] (_: {
         helper = "!gh auth git-credential";
       });

@@ -19,8 +19,12 @@ in
     ../../../home/keybindings/windows-export.nix
   ];
 
-  dotfiles.keybindings.fromWindowsExport = true;
-  dotfiles.starship.osSymbol = "❄️ ";
+  dotfiles = {
+    keybindings.fromWindowsExport = true;
+    starship.osSymbol = "❄️ ";
+    # Relative links must stay on the same Windows drive to work from both OSes.
+    gwq.settings.worktree.basedir = "/mnt/d/worktrees";
+  };
 
   programs = {
     git = {
