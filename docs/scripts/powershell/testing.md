@@ -46,6 +46,19 @@ installer E2E は追加されたコマンドパスを `GITHUB_PATH` に渡し、
 テスト用の User PATH を復元した後も後続 step で実行ファイルを検出できるようにします。
 workflow の構造やテストの配置先を Pester の文字列 assertion で固定しません。
 
+GitHub hosted Windows runner は、イメージ作成時に Windows Update の接続制限と
+`wuauserv` の無効化を設定しています。CI は WinGet の前に
+`ci/Initialize-WindowsStore.ps1` で状態を表示し、Store のオンデマンド導入に必要な
+接続とサービスを準備します。変更は2つの接続制限値と `wuauserv` に限定し、
+`NoAutoUpdate` / `AUOptions` は保持・検証します。この初期化は GitHub hosted Windows
+runner 以外では書き込み前にエラーにします。テストでは registry とサービスの操作を
+メモリー上の fixture に差し替え、実環境を変更しません。
+`-DiagnosticsOnly` は状態と直近の Store / Windows Update / AppX イベントを標準出力へ
+表示し、診断用の `.log` は作りません。接続制限の存在だけで Store エラーの原因とは
+断定せず、変更前後の状態と実際の installer 結果を確認します。
+根拠は [runner image の設定](https://github.com/actions/runner-images/blob/aee0669dd04510a11756664eb77f5630debabed3/images/windows/scripts/build/Configure-System.ps1)
+と [Microsoft の Store 接続に関する説明](https://learn.microsoft.com/en-us/windows/deployment/update/waas-manage-updates-wsus)です。
+
 `Integration.Tests.ps1` は次を実コマンドで検証します。
 
 - Windows が管理する4つの CLI の起動と終了コード。
