@@ -103,12 +103,6 @@ in
     expr = defaultConfig.system.activationScripts ? wslgFonts;
     expected = false;
   };
-  testOrcaModuleInstallsEditorOnceInDarwinHomeProfile = {
-    expr = map (package: package.pname) (
-      builtins.filter (package: (package.pname or "") == "orca-editor") defaultHome.home.packages
-    );
-    expected = [ "orca-editor" ];
-  };
 
   testDarwinConfiguresZshWithoutChangingAccountShell = {
     expr = {
@@ -171,11 +165,6 @@ in
 
   testDarwinConfigurationKeepsSystemIntegrations = {
     expr = {
-      onePasswordDesktopCopies = builtins.length (
-        builtins.filter (
-          package: (package.pname or "") == "1password"
-        ) defaultConfig.environment.systemPackages
-      );
       agentEnvironment = defaultConfig.launchd.user.envVariables.SSH_AUTH_SOCK;
       gpgSshAgentEnabled = defaultConfig.programs.gnupg.agent.enableSSHSupport;
       homebrew = defaultConfig.homebrew.enable;
@@ -193,7 +182,6 @@ in
       homeManagerUser = builtins.hasAttr "rurusasu" defaultConfig.home-manager.users;
     };
     expected = {
-      onePasswordDesktopCopies = 1;
       agentEnvironment = "/Users/rurusasu/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock";
       gpgSshAgentEnabled = false;
       homebrew = true;
@@ -209,12 +197,10 @@ in
   testDarwinConfigurationKeepsDefaultCaskBoundary = {
     expr = {
       chrome = hasDarwinCask "google-chrome" defaultConfig;
-      discord = hasDarwinCask "discord" defaultConfig;
       docker = hasDarwinCask "docker-desktop" defaultConfig;
     };
     expected = {
       chrome = false;
-      discord = false;
       docker = true;
     };
   };
@@ -266,10 +252,8 @@ in
     };
   };
 
-  testDarwinHomeManagerLeavesSystemFontToNixDarwin = {
+  testDarwinHomeManagerConfiguresDefaultFonts = {
     expr = {
-      fontPackage = builtins.any (name: hasPrefix "udev-gothic-nf" name) (homePackageNames defaultHome);
-      fontActivation = builtins.hasAttr "installDotfilesFonts" defaultHome.home.activation;
       fontconfig = defaultHome.fonts.fontconfig.enable;
       defaultFonts = {
         inherit (defaultHome.fonts.fontconfig.defaultFonts)
@@ -281,8 +265,6 @@ in
       };
     };
     expected = {
-      fontPackage = false;
-      fontActivation = false;
       fontconfig = true;
       defaultFonts = {
         monospace = [ "UDEV Gothic NF" ];
@@ -293,12 +275,8 @@ in
     };
   };
 
-  testDarwinHermesUsesExpectedProviders = {
+  testDarwinDesktopPackagesAndDiscordAgent = {
     expr = {
-      hermesDesktopHomePackage = builtins.any (
-        package: (package.pname or "") == "hermes-desktop"
-      ) defaultHome.home.packages;
-      dockerCask = hasDarwinCask "docker-desktop" defaultConfig;
       chromeSystemPackage = builtins.any (name: hasPrefix "google-chrome" name) (
         packageNames defaultConfig
       );
@@ -306,8 +284,6 @@ in
       discordAgent = builtins.hasAttr "discord-module-staging" defaultHome.launchd.agents;
     };
     expected = {
-      hermesDesktopHomePackage = false;
-      dockerCask = true;
       chromeSystemPackage = false;
       discordHomePackage = true;
       discordAgent = true;

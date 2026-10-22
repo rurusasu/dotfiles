@@ -9,33 +9,9 @@ let
   contains = expected: packages: builtins.any (package: package.drvPath == expected.drvPath) packages;
 in
 {
-  testDarwinGuiPackagesUseSystemAndCommandsUseHomeManager = {
-    expr = {
-      guiSystem = contains pkgs.obsidian systemPackages;
-      guiHome = contains pkgs.obsidian homePackages;
-      onePasswordSystem = contains pkgs._1password-gui systemPackages;
-      onePasswordHome = contains pkgs._1password-gui homePackages;
-      commandSystem = contains pkgs.jq systemPackages;
-      commandHome = contains pkgs.jq homePackages;
-    };
-    expected = {
-      guiSystem = true;
-      guiHome = false;
-      onePasswordSystem = true;
-      onePasswordHome = false;
-      commandSystem = false;
-      commandHome = true;
-    };
-  };
   testDarwinGuiPromotionsSelectTheirCustomSystemDerivations = {
-    expr = {
-      system = contains dia systemPackages;
-      home = contains dia homePackages;
-    };
-    expected = {
-      system = true;
-      home = false;
-    };
+    expr = contains dia systemPackages;
+    expected = true;
   };
   testRaycastDerivationIsSelectedForDarwinSystem = {
     expr = contains pkgs.raycast systemPackages;

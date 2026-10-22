@@ -10,16 +10,6 @@ let
   linuxPackages = system: scope: (fixtures.mkHome system [ scope ]).config.home.packages;
 in
 {
-  testComfyDesktopUsesDarwinSystemGuiInstallation = {
-    expr = {
-      system = selected fixtures.darwin.config.environment.systemPackages;
-      home = selected fixtures.darwin.config.home-manager.users.test-user.home.packages;
-    };
-    expected = {
-      system = [ "comfyui-desktop" ];
-      home = [ ];
-    };
-  };
   testComfyDesktopIsInstalledForNativeLinuxAndWslg = {
     expr = {
       native = selected (linuxPackages "x86_64-linux" desktop.linuxDesktop);

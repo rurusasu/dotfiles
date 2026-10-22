@@ -24,7 +24,7 @@ Unix CLI の導入は `tools.nix`、Linux / WSLg GUI は `desktop.nix`、Darwin 
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `nix/modules/tools.nix`                              | Unix CLI の導入。既存の未分離 GUI selector も現在ここに残る                           |
 | `nix/modules/desktop.nix`                            | Linux の Chrome / Obsidian / 1Password GUI / ComfyUI Desktop、WSL の Spotify / Signal |
-| `nix/modules/desktop-darwin.nix`                     | Darwin system GUI の Dia / Obsidian / Raycast / 1Password / ComfyUI Desktop           |
+| `nix/modules/desktop-darwin.nix`                     | Darwin system GUI の Dia / Obsidian / Raycast / 1Password                             |
 | `nix/modules/<app>/`                                 | アプリの設定・連携・package override、custom package 定義                             |
 | `nix/modules/ai_agents/hermes/bootstrap.nix`         | Hermes bootstrap の package 構築。CLI の導入は tools、サービス用依存は Hermes module  |
 | `nix/modules/browsers/dia/`                          | Dia の package 選択関数、`package.nix`、更新用 `provider-candidates.nix`              |
@@ -133,15 +133,23 @@ macOS で Homebrew cask の適用に失敗する場合は、
 ## ComfyUI Desktop
 
 ComfyUI Desktop は Apple Silicon macOS と x86_64 Linux / WSLg に導入します。
-`nix/modules/comfyui/package.nix` に公式バイナリのバージョン・ビルド固定 URL・ハッシュを記録します。
-macOS は署名済み `.app` を維持し、Linux は AppImage を FHS 環境で起動します。
+macOS は Darwin host の `homebrew.casks` に宣言した公式 cask `comfy` で管理し、
+`/Applications/Comfy Desktop.app` に配置します。app bundle を Nix store に置かないため、
+Comfy の更新・削除のために Nix daemon へフルディスクアクセスを許可する必要はありません。
+Nix 本体を更新しても、Comfy のために新しい Nix 実体へ権限を登録し直す運用は不要です。
+Homebrew がアプリ管理権限を要求した場合は、実行元の端末アプリに「アプリ管理」を許可します。
+Linux は `nix/modules/comfyui/package.nix` に公式バイナリのバージョン・ビルド固定 URL・ハッシュを記録し、
+AppImage を FHS 環境で起動します。
 公式の ARM64 Linux バイナリがないため、aarch64-linux には追加しません。
 配布元は [Comfy Desktop](https://github.com/Comfy-Org/Comfy-Desktop) です。
 
-アプリ本体の更新は `package.nix` の配布情報の更新と通常の Nix 設定反映で行います。
+macOS のアプリ本体は通常の `nrs` に含まれる Homebrew Bundle で更新します。
+Linux は `package.nix` の配布情報の更新と通常の Nix 設定反映で更新します。
 モデル・カスタムノード・ComfyUI の実行環境は、Desktop が管理する書き込み可能なユーザーデータです。
-これらの内容やバージョンは Nix で固定しません。アプリ内更新は Nix store に書き込めないため、
+これらの内容やバージョンは Nix で固定しません。Linux のアプリ内更新は Nix store に書き込めないため、
 アプリの設定で自動インストールを無効にし、Nix 側で更新してください。
+macOS 版の旧 Nix 出力で `chmod ... Comfy Desktop.app ... Operation not permitted` が出る場合は、
+[旧 Comfy Desktop 出力の復旧手順](./homebrew-cask-troubleshooting.md#旧-comfy-desktop-の-nix-出力)を参照してください。
 GUI 起動と GPU 推論の確認には対象 OS の実機が必要です。
 
 ## Windows manifest

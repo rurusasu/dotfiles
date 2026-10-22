@@ -23,6 +23,36 @@ Home Manager の `Library/Application Support/discord` 作成が同時に拒否�
 同じ実行元アプリへのフルディスクアクセスを確認してください。
 「アプリ管理」だけを許可しても、このデータアクセスの許可にはなりません。
 
+## 旧 Comfy Desktop の Nix 出力
+
+macOS の Comfy Desktop は Homebrew cask `comfy` に移しました。
+新しい構成は旧 Nix package をビルドしないため、通常は `nrs` でそのまま反映できます。
+Nix daemon へのフルディスクアクセスは追加しません。
+
+以前の失敗で未登録の app bundle が Nix store に残っている場合、後の GC が
+`chmod ... Comfy Desktop.app ... Operation not permitted` で停止することがあります。
+この場合だけ、installer や build が動いていない状態で、
+「アプリ管理」を許可した端末から一度だけ復旧します。
+以下はエラーで確認した 1.1.7 の出力です。別の出力の場合は、エラーに表示された
+Comfy Desktop の package 出力パスに置き換えてください。
+
+```sh
+comfy_store_path=/nix/store/62klm2k7aynh364jfn6ga0cfwyc7p31v-comfyui-desktop-1.1.7
+nix path-info --json "$comfy_store_path"
+```
+
+**`"valid": false` と確認できた出力だけを対象にします。次のコマンドは、
+失敗して残った指定出力の中身を削除します。** 有効な出力や別の store path には実行しません。
+
+```sh
+sudo --set-home "$(command -v nix)" --store local store delete "$comfy_store_path"
+test ! -e "$comfy_store_path"
+```
+
+`--store local` は daemon に依頼せず、端末から起動した Nix で指定出力を削除します。
+Nix の参照保護は維持し、`--ignore-liveness` や `--delete-closure` は使いません。
+この旧出力の復旧は Nix の更新ごとに行う処理ではありません。
+
 ## WezTerm
 
 WezTerm は Nix provider で管理します。旧 cask `wezterm@nightly` の

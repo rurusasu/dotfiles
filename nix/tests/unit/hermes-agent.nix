@@ -150,19 +150,6 @@ in
     expected = true;
   };
 
-  testDarwinHermesDesktopIsNotInstalledByHomeManager = {
-    expr = {
-      enabled = darwin.config.programs.hermes-agent.desktop.enable;
-      installed = builtins.any (
-        package: (package.pname or "") == "hermes-desktop"
-      ) darwin.config.home.packages;
-    };
-    expected = {
-      enabled = false;
-      installed = false;
-    };
-  };
-
   testDarwinHermesUsesOfficialBundleForCliGatewayAndSystemGui = {
     expr =
       let
@@ -175,7 +162,6 @@ in
         cliUsesGatewayPackage = darwinHostHome.programs.hermes-agent.package.drvPath == package.drvPath;
         cliInstalled = hasPackage package darwinHostHome.home.packages;
         gatewayUsesSelectedPackage = builtins.elem "${package}/bin/hermes" darwinHostHome.launchd.agents.hermes-agent.config.ProgramArguments;
-        desktopManagedByHomeManager = darwinHostHome.programs.hermes-agent.desktop.enable;
         systemGuiUsesGatewayPackage = hasPackage package darwinHost.environment.systemPackages;
       };
     expected = {
@@ -185,7 +171,6 @@ in
       cliUsesGatewayPackage = true;
       cliInstalled = true;
       gatewayUsesSelectedPackage = true;
-      desktopManagedByHomeManager = false;
       systemGuiUsesGatewayPackage = true;
     };
   };

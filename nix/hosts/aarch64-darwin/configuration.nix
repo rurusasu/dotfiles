@@ -106,6 +106,9 @@ in
     enable = true;
     brews = [ ];
     casks = [
+      # Keep Comfy's signed app outside the Nix store so daemon GC/build cleanup
+      # never needs macOS permission to modify this app bundle.
+      "comfy"
       "docker-desktop"
       "steam"
     ];

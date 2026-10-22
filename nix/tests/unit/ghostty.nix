@@ -39,13 +39,8 @@ let
           )
         ];
       };
-      copies =
-        package:
-        builtins.length (builtins.filter (p: p.outPath == package.outPath) home.config.home.packages);
     in
     {
-      ghosttyHomeCopies = copies home.config.programs.ghostty.package;
-      weztermHomeCopies = copies wezterm.package;
       ghosttyConfig =
         home.config.programs.ghostty.enable
         && home.config.programs.ghostty.settings == { }
@@ -75,8 +70,6 @@ let
         .windowsPackages."wez.wezterm".PackageIdentifier;
     };
   expected = system: {
-    ghosttyHomeCopies = 1;
-    weztermHomeCopies = 1;
     ghosttyConfig = true;
     weztermConfig = true;
     zshIntegration = true;

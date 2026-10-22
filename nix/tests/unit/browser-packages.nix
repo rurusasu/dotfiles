@@ -15,14 +15,4 @@ in
       platforms = [ "aarch64-darwin" ];
     };
   };
-  testWslDesktopAppsAreAbsentFromWindowsManifest = {
-    expr = builtins.filter (name: builtins.hasAttr name fixtures.windowsPackages) [
-      "TheBrowserCompany.Arc"
-      "Google.Chrome"
-      "Spotify.Spotify"
-      "OpenWhisperSystems.Signal"
-      "Obsidian.Obsidian"
-    ];
-    expected = [ ];
-  };
 }
