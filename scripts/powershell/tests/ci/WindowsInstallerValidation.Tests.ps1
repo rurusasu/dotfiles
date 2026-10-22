@@ -245,7 +245,18 @@ Describe 'Windows direct installer manifest validation' {
         if (-not $script:jqCommand) {
             $script:wslCommand = Get-Command wsl.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($script:wslCommand) {
-                $script:wslJqPath = (& $script:wslCommand.Source --exec sh -c 'command -v jq' 2>$null | Out-String).Trim()
+                # Probe installed profiles without running login initialization.
+                $wslJqProbe = @'
+command -v jq && exit 0
+for candidate in "$HOME/.nix-profile/bin/jq" "$HOME/.local/state/nix/profile/bin/jq" /nix/profile/bin/jq "/etc/profiles/per-user/$USER/bin/jq" /nix/var/nix/profiles/default/bin/jq /run/current-system/sw/bin/jq; do
+    if [ -x "$candidate" ]; then
+        printf "%s\n" "$candidate"
+        exit 0
+    fi
+done
+exit 1
+'@ -replace "`r", ''
+                $script:wslJqPath = (($wslJqProbe + "`n") | & $script:wslCommand.Source --exec sh -s 2>$null | Out-String).Trim()
                 if ($LASTEXITCODE -ne 0) { $script:wslJqPath = $null }
             }
         }
