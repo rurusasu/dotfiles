@@ -6,8 +6,8 @@
 }:
 stdenvNoCC.mkDerivation {
   name = "psscriptanalyzer";
-  # The version-free Gallery input is refreshed by nix flake update.
-  # flake.lock records its content hash; no runtime download is needed.
+  # The flake input selects an upstream release asset and records its content
+  # hash in flake.lock; no runtime download is needed.
   inherit src;
 
   nativeBuildInputs = [ unzip ];

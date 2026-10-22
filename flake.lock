@@ -430,11 +430,11 @@
       "locked": {
         "narHash": "sha256-wzOs2+G7ug1VSClciqd6f+R61ow0YV8EmE5o82qiAlg=",
         "type": "file",
-        "url": "https://www.powershellgallery.com/api/v2/package/PSScriptAnalyzer"
+        "url": "https://github.com/PowerShell/PSScriptAnalyzer/releases/download/1.25.0/PSScriptAnalyzer.1.25.0.nupkg"
       },
       "original": {
         "type": "file",
-        "url": "https://www.powershellgallery.com/api/v2/package/PSScriptAnalyzer"
+        "url": "https://github.com/PowerShell/PSScriptAnalyzer/releases/download/1.25.0/PSScriptAnalyzer.1.25.0.nupkg"
       }
     },
     "pyproject-build-systems": {

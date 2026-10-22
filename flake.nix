@@ -49,7 +49,9 @@
     };
     psscriptanalyzer = {
       type = "file";
-      url = "https://www.powershellgallery.com/api/v2/package/PSScriptAnalyzer";
+      # Use a versioned release locator alongside the content hash. This is
+      # byte-identical to the Gallery package already recorded in flake.lock.
+      url = "https://github.com/PowerShell/PSScriptAnalyzer/releases/download/1.25.0/PSScriptAnalyzer.1.25.0.nupkg";
       flake = false;
     };
     hermes-agent = {
