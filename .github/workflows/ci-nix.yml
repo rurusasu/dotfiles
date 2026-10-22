@@ -599,6 +599,16 @@ jobs:
             Import-Module -Name (Join-Path $modulePath "$Name.psd1") -Force
           }
 
+          # Provision the disposable CI user before the installed-only test runner.
+          Invoke-WithRetry {
+            if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              Register-PSRepository -Default -ErrorAction Stop
+            }
+            if (-not (Get-PSRepository -Name PSGallery -ErrorAction Stop)) {
+              throw 'CI provisioning could not register PSGallery.'
+            }
+          }
+
           Install-GalleryModuleArchive -Name Pester
           Install-GalleryModuleArchive -Name PSScriptAnalyzer
 
