@@ -163,54 +163,66 @@ function M.move()
             return
         end
         oil.open(destination, {}, function()
-            if not unchanged(ctx) then
-                return
-            end
             local destination_buf = vim.api.nvim_get_current_buf()
-            if destination_buf == ctx.buf or vim.bo[destination_buf].filetype ~= "oil" then
-                return
-            end
-            if not vim.bo[destination_buf].modifiable then
-                vim.notify("Destination directory is read-only", vim.log.levels.WARN)
-                return
-            end
-            local snapshots = {}
-            for _, buf in ipairs({ ctx.buf, destination_buf }) do
-                snapshots[#snapshots + 1] = {
-                    buf = buf,
-                    lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false),
-                    modified = vim.bo[buf].modified,
-                }
-            end
-            -- Moving the original ID between Oil buffers makes this a move, not a copy.
-            -- Append first so an unwritable destination can never stage source deletion.
-            local ok, err = pcall(function()
-                vim.api.nvim_buf_set_lines(destination_buf, -1, -1, false, { ctx.line })
-                vim.api.nvim_buf_set_lines(ctx.buf, ctx.row - 1, ctx.row, false, {})
-            end)
-            if not ok then
-                for _, snapshot in ipairs(snapshots) do
-                    local restored, restore_err = pcall(function()
-                        local was_modifiable = vim.bo[snapshot.buf].modifiable
-                        vim.bo[snapshot.buf].modifiable = true
-                        local written, write_err = pcall(vim.api.nvim_buf_call, snapshot.buf, function()
-                            pcall(vim.cmd, "undojoin")
-                            vim.api.nvim_buf_set_lines(snapshot.buf, 0, -1, false, snapshot.lines)
-                        end)
-                        vim.bo[snapshot.buf].modifiable = was_modifiable
-                        if not written then
-                            error(write_err)
-                        end
-                        vim.bo[snapshot.buf].modified = snapshot.modified
-                    end)
-                    if not restored then
-                        err = tostring(err) .. "; could not restore Oil buffer: " .. tostring(restore_err)
-                    end
+            local function stage_move(load_err)
+                if load_err then
+                    vim.notify("Could not load move destination: " .. tostring(load_err), vim.log.levels.ERROR)
+                    return
                 end
-                vim.notify("Move was not staged: " .. tostring(err), vim.log.levels.ERROR)
-                return
+                if not unchanged(ctx) or vim.api.nvim_get_current_buf() ~= destination_buf then
+                    return
+                end
+                if destination_buf == ctx.buf or vim.bo[destination_buf].filetype ~= "oil" then
+                    return
+                end
+                if not vim.bo[destination_buf].modifiable then
+                    vim.notify("Destination directory is read-only", vim.log.levels.WARN)
+                    return
+                end
+                local snapshots = {}
+                for _, buf in ipairs({ ctx.buf, destination_buf }) do
+                    snapshots[#snapshots + 1] = {
+                        buf = buf,
+                        lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false),
+                        modified = vim.bo[buf].modified,
+                    }
+                end
+                -- Moving the original ID between Oil buffers makes this a move, not a copy.
+                -- Append first so an unwritable destination can never stage source deletion.
+                local ok, err = pcall(function()
+                    vim.api.nvim_buf_set_lines(destination_buf, -1, -1, false, { ctx.line })
+                    vim.api.nvim_buf_set_lines(ctx.buf, ctx.row - 1, ctx.row, false, {})
+                end)
+                if not ok then
+                    for _, snapshot in ipairs(snapshots) do
+                        local restored, restore_err = pcall(function()
+                            local was_modifiable = vim.bo[snapshot.buf].modifiable
+                            vim.bo[snapshot.buf].modifiable = true
+                            local written, write_err = pcall(vim.api.nvim_buf_call, snapshot.buf, function()
+                                pcall(vim.cmd, "undojoin")
+                                vim.api.nvim_buf_set_lines(snapshot.buf, 0, -1, false, snapshot.lines)
+                            end)
+                            vim.bo[snapshot.buf].modifiable = was_modifiable
+                            if not written then
+                                error(write_err)
+                            end
+                            vim.bo[snapshot.buf].modified = snapshot.modified
+                        end)
+                        if not restored then
+                            err = tostring(err) .. "; could not restore Oil buffer: " .. tostring(restore_err)
+                        end
+                    end
+                    vim.notify("Move was not staged: " .. tostring(err), vim.log.levels.ERROR)
+                    return
+                end
+                oil.save({ confirm = true })
             end
-            oil.save({ confirm = true })
+            if vim.b[destination_buf].oil_rendering then
+                -- oil.open treats cached oil_ready buffers as loaded even during a refresh.
+                require("oil.view").render_buffer_async(destination_buf, { refetch = false }, stage_move)
+            else
+                stage_move()
+            end
         end)
     end)
 end
