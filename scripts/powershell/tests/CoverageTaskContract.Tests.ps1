@@ -24,14 +24,6 @@ Describe 'PowerShell coverage task contract' {
         $runner | Should -Match 'if\s*\(\$coverage\s+-lt\s+\$MinimumCoverage\)'
     }
 
-    It 'should resolve the latest stable Pester without a version pin' {
-        $runner = Get-Content -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/tests/Invoke-Tests.ps1') -Raw
-
-        $runner | Should -Match 'Find-Module\s+-Name\s+Pester\s+-Repository\s+PSGallery'
-        $runner | Should -Match 'Import-Module\s+-Name\s+\$pesterModule\.Path'
-        $runner | Should -Not -Match '-(?:Required|Minimum|Maximum)Version'
-    }
-
     It 'should exercise the coverage-requested true path and emit coverage XML' {
         $smokePath = Join-Path $TestDrive 'CoverageSmoke.Tests.ps1'
         $coveragePath = Join-Path $TestDrive 'coverage.xml'

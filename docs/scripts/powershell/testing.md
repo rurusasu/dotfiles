@@ -23,15 +23,23 @@ pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -ShowCoverage -M
 
 ## 前提と環境境界
 
-ランナーは PSGallery の最新安定版 Pester を確認し、必要ならインストールします。
-PSScriptAnalyzer も事前に用意してください。取得失敗を古い版へのフォールバックで隠しません。
+ランナーと静的解析テストは、インストール済みの Pester / PSScriptAnalyzer から、現在の
+PowerShell と互換性がある安定版の最高バージョンを使用します。必要な module がなければ、
+事前準備を求めるエラーで終了します。Pester は 5.9 以上が必要です。
+テスト中に PSGallery のバージョン照会、パッケージの
+ダウンロード、インストールは行いません。
+PowerShellGet / PackageManagement の暗黙の provider 導入やリポジトリ設定の更新も行いません。
 
-```powershell
-Install-Module PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force
-```
+テスト用の `USERPROFILE` / `LOCALAPPDATA` に切り替えるだけでは、HKCU の保存先は
+隔離されません。User PATH の取得・保存は共通のモックで遮断し、保存動作を検証する
+ケースだけがメモリー上の値へ差し替えます。子プロセスを使う fixture にも同じ境界を
+設けます。環境変数は成功・失敗のどちらでも復元します。一時ディレクトリには、必要な
+fixture と検証結果だけを作成します。本番 installer の自動取得処理は、通信と保存先を
+fixture に置き換えて検証します。
 
-Windows の全テストには、installer が導入する `winget`、`pwsh`、`chezmoi`、
-`wezterm` が必要です。CI の Windows installer matrix は PowerShell 5.1 / 7 の
+Windows の全テストには、インストール済みで PATH から利用できる `task`、`winget`、
+`pwsh`、`chezmoi`、`wezterm` が必要です。Task を含む CLI が不足する場合、テストは
+自動取得せず、前提条件のエラーで終了します。CI の Windows installer matrix は PowerShell 5.1 / 7 の
 それぞれで実際の `install.cmd -UserPhaseOnly` を適用した後に全スイートを実行します。
 PowerShell 7 では同じ job で PSScriptAnalyzer も実行します。
 installer E2E は追加されたコマンドパスを `GITHUB_PATH` に渡し、

@@ -17,8 +17,13 @@ BeforeAll {
 
 Describe 'ChezmoiHandler' {
     BeforeEach {
+        $script:originalPathForChezmoiTests = $env:PATH
         $script:handler = [ChezmoiHandler]::new()
         $script:ctx = [SetupContext]::new("D:\dotfiles")
+    }
+
+    AfterEach {
+        $env:PATH = $script:originalPathForChezmoiTests
     }
 
     Context 'Constructor' {

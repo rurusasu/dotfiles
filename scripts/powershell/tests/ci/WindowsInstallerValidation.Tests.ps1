@@ -245,7 +245,7 @@ Describe 'Windows direct installer manifest validation' {
         if (-not $script:jqCommand) {
             $script:wslCommand = Get-Command wsl.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($script:wslCommand) {
-                $script:wslJqPath = (& $script:wslCommand.Source --exec sh -lc 'command -v jq' 2>$null | Out-String).Trim()
+                $script:wslJqPath = (& $script:wslCommand.Source --exec sh -c 'command -v jq' 2>$null | Out-String).Trim()
                 if ($LASTEXITCODE -ne 0) { $script:wslJqPath = $null }
             }
         }

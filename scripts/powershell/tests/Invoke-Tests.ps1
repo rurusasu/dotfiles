@@ -148,22 +148,9 @@ function Write-SafeJUnitReport {
     }
 }
 
-# PSGallery の最新安定版を確認し、古いインストールへフォールバックしない。
-$latestPester = Find-Module -Name Pester -Repository PSGallery -ErrorAction Stop
-$pesterModule = Get-Module -ListAvailable -Name Pester |
-    Where-Object { $_.Version -eq [Version]$latestPester.Version } |
-    Select-Object -First 1
-
-if (-not $pesterModule) {
-    Write-Host "Pester の最新安定版をインストールします..." -ForegroundColor Yellow
-    Install-Module -Name Pester -Repository PSGallery -Scope CurrentUser -Force -SkipPublisherCheck -ErrorAction Stop
-    $pesterModule = Get-Module -ListAvailable -Name Pester |
-        Where-Object { $_.Version -eq [Version]$latestPester.Version } |
-        Select-Object -First 1
-    if (-not $pesterModule) {
-        throw "最新の Pester が見つかりません。Install-Module -Name Pester -Repository PSGallery -Scope CurrentUser -Force を実行してください。"
-    }
-}
+# インストール済みの互換性のある安定版を使い、不足時は準備不足として失敗する。
+. (Join-Path $scriptRoot 'support/Resolve-TestModule.ps1')
+$pesterModule = Resolve-TestModule -Name Pester
 
 if (Get-Module -Name Pester) {
     Remove-Module -Name Pester -Force -ErrorAction Stop

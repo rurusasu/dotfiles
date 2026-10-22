@@ -485,6 +485,9 @@ Describe 'Start-SleepSafe' {
 Describe 'Update-ProcessEnvironmentPath' {
     BeforeEach {
         $script:originalPath = $env:PATH
+        Mock Set-UserEnvironmentPath {
+            throw 'PATH normalization tests must explicitly mock persisted User PATH writes.'
+        }
     }
 
     AfterEach {

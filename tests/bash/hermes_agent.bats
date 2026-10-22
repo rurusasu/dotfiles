@@ -20,7 +20,8 @@ setup() {
 		"$BATS_TEST_TMPDIR/nix/modules/ai_agents/hermes/manifest.yaml"
 	: >"$COMPOSE_FILE"
 
-	export REPO_ROOT HOME="$TEST_HOME" PATH="$STUB_BIN:/usr/bin:/bin"
+	export REPO_ROOT PATH="$STUB_BIN:/usr/bin:/bin"
+	isolate_hermes_test_environment
 	unset DOTFILES_USER SUDO_USER
 	unset OP_SERVICE_ACCOUNT_TOKEN
 	export COMMAND_LOG EDIT_CAPTURE OP_TOKEN_CAPTURE XAPI_TOKEN_ATTEMPT_FILE COMPOSE_FILE REAL_JQ REAL_PYTHON3
@@ -138,6 +139,13 @@ printf "sleep <%s>\n" "$*" >>"$COMMAND_LOG"
 '
 }
 
+isolate_hermes_test_environment() {
+	export HOME="$TEST_HOME"
+	export HERMES_DATA_DIR="$TEST_HOME/.hermes"
+	export HERMES_BROWSER_DATA_DIR="$TEST_HOME/.hermes/.browser"
+	unset USERPROFILE DOTFILES_HERMES_OP_EXECUTABLE
+}
+
 write_stub() {
 	local name="$1"
 	local body="$2"
@@ -207,6 +215,36 @@ dotfiles_hermes_prepare_runtime_home
 	[ -d "$TEST_HOME/custom-browser" ]
 }
 
+@test "Hermes test setup isolates inherited host paths and the 1Password executable" {
+	local inherited_root="$BATS_TEST_TMPDIR/inherited"
+	mkdir -p "$inherited_root"
+	cat >"$inherited_root/op" <<'EOF'
+#!/usr/bin/env bash
+printf 'called\n' >"$(dirname "$0")/op-called"
+exit 97
+EOF
+	chmod +x "$inherited_root/op"
+	export HOME="$inherited_root/home" USERPROFILE="$inherited_root/profile"
+	export HERMES_DATA_DIR="$inherited_root/data"
+	export HERMES_BROWSER_DATA_DIR="$inherited_root/browser"
+	export DOTFILES_HERMES_OP_EXECUTABLE="$inherited_root/op"
+
+	isolate_hermes_test_environment
+	run_restart_sidecar
+
+	[ "$status" -eq 0 ]
+	[ "$HOME" = "$TEST_HOME" ]
+	[ -z "${USERPROFILE+x}" ]
+	[ ! -e "$inherited_root/op-called" ]
+	[ ! -e "$inherited_root/home" ]
+	[ ! -e "$inherited_root/profile" ]
+	[ ! -e "$inherited_root/data" ]
+	[ ! -e "$inherited_root/browser" ]
+	[ -f "$TEST_HOME/.hermes/.op.env" ]
+	[ -f "$TEST_HOME/.hermes/.xurl/auth.yml" ]
+	[ -d "$TEST_HOME/.hermes/.browser" ]
+}
+
 @test "X API up only recreates the current browser and MCP sidecars" {
 	run env HERMES_COMPOSE_FILE="$COMPOSE_FILE" bash "$REPO_ROOT/scripts/sh/hermes-xapi.sh" up
 
@@ -226,6 +264,7 @@ dotfiles_hermes_prepare_runtime_home
 
 @test "uses the Hermes data directory for the default browser directory" {
 	export HERMES_DATA_DIR="$TEST_HOME/custom-data"
+	unset HERMES_BROWSER_DATA_DIR
 
 	run bash -c '
 set -euo pipefail

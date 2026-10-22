@@ -9,6 +9,7 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/ci-nix.yml"
@@ -16,6 +17,14 @@ WORKFLOW = ROOT / ".github/workflows/ci-nix.yml"
 
 class BootstrapCiImageTests(unittest.TestCase):
     def test_authentication_uses_nix_config_home_and_keeps_tokens_private(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            inherited_environment = Path(directory) / "inherited-github-env"
+            inherited_environment.write_text("OUTER_ENV=preserved\n")
+            with mock.patch.dict(os.environ, {"GITHUB_ENV": str(inherited_environment)}):
+                self._assert_authentication_uses_private_config_homes()
+            self.assertEqual(inherited_environment.read_text(), "OUTER_ENV=preserved\n")
+
+    def _assert_authentication_uses_private_config_homes(self) -> None:
         for use_xdg, wsl, owned_home in (
             (True, False, True),
             (False, False, True),
@@ -59,6 +68,7 @@ class BootstrapCiImageTests(unittest.TestCase):
                     EXPECTED_CONFIG=str(config),
                     GITHUB_TOKEN="fixture-token-not-a-real-secret",
                     GITHUB_WORKSPACE=str(root / "checkout"),
+                    GITHUB_ENV=str(root / "github-env"),
                     GIT_CONFIG_SYSTEM=str(root / "gitconfig"),
                     PATH=f"{tools}{os.pathsep}{os.environ['PATH']}",
                 )
@@ -78,6 +88,14 @@ class BootstrapCiImageTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertNotIn(
                         environment["GITHUB_TOKEN"], result.stdout + result.stderr
+                    )
+                environment_file = Path(environment["GITHUB_ENV"])
+                if owned_home:
+                    self.assertFalse(environment_file.exists())
+                else:
+                    self.assertEqual(
+                        environment_file.read_text(),
+                        f"HOME={home}\nXDG_CONFIG_HOME=\n" * 2,
                     )
                 secret_file = config / "nix/bootstrap-ci.conf"
                 self.assertEqual(secret_file.stat().st_mode & 0o777, 0o600)

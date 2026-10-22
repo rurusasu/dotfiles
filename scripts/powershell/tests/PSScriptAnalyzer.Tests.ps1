@@ -2,22 +2,8 @@
     $projectRoot = Split-Path -Parent $PSScriptRoot
     $settingsPath = Join-Path $projectRoot "PSScriptAnalyzerSettings.psd1"
 
-    # PowerShell Gallery の最新安定版を使用する。
-    $latestAnalyzer = Find-Module -Name PSScriptAnalyzer -Repository PSGallery -ErrorAction Stop
-    $analyzerModule = Get-Module -ListAvailable -Name PSScriptAnalyzer |
-        Where-Object { $_.Version -eq [Version]$latestAnalyzer.Version } | Select-Object -First 1
-    if (-not $analyzerModule) {
-        Write-Host "PSScriptAnalyzer の最新安定版をインストールしています..." -ForegroundColor Yellow
-        try {
-            Install-Module -Name PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force -ErrorAction Stop
-            $analyzerModule = Get-Module -ListAvailable -Name PSScriptAnalyzer |
-                Where-Object { $_.Version -eq [Version]$latestAnalyzer.Version } | Select-Object -First 1
-            if (-not $analyzerModule) { throw 'Latest PSScriptAnalyzer module was not found after installation' }
-        }
-        catch {
-            throw "PSScriptAnalyzer の自動インストールに失敗しました: $($_.Exception.Message). 手動でインストールしてください: Install-Module PSScriptAnalyzer -Scope CurrentUser -Force"
-        }
-    }
+    . (Join-Path $PSScriptRoot 'support/Resolve-TestModule.ps1')
+    $analyzerModule = Resolve-TestModule -Name PSScriptAnalyzer
 
     try {
         Import-Module -Name $analyzerModule.Path -Force -ErrorAction Stop
@@ -53,7 +39,7 @@ Describe 'PSScriptAnalyzer - 静的解析' {
             ) | ForEach-Object {
                 $relativePath = "$($_.Directory.Name)\$($_.Name)"
                 @{
-                    RelativePath = $relativePath
+                    RelativePath       = $relativePath
                     # この 2 ファイルは従来どおり TypeNotFound も失敗にする。
                     IgnoreTypeNotFound = $relativePath -notin @(
                         'lib\SetupHandler.ps1'
