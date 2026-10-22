@@ -114,6 +114,82 @@ function Initialize-WindowsStore {
     Write-Host 'WINDOWS_STORE_PREREQUISITES_READY'
 }
 
+function ConvertTo-WindowsStoreDiagnosticText {
+    param([AllowNull()][string]$Text, [string]$FieldName, [int]$MaximumLength = 4096)
+
+    $sensitive = 'token|cookie|password|secret|authorization|credential|ticket'
+    if ($FieldName -match $sensitive) { return '<redacted>' }
+    # Consume the rest of a labeled secret's line, including bearer tokens,
+    # quoted values, and cookies containing spaces or semicolons.
+    $safe = [string]$Text -replace ('(?im)(?<!\w)["'']?[\w.-]*(?:' + $sensitive + ')[\w.-]*["'']?\s*[:=][^\r\n]*'), '<redacted>'
+    $safe = $safe -replace '(?i)\b[a-z][a-z0-9+.-]*://[^\s<>"'']+', '[URL redacted]'
+    $marker = '<truncated>'
+    if ($safe.Length -gt $MaximumLength) { $safe = $safe.Substring(0, $MaximumLength - $marker.Length) + $marker }
+    return $safe
+}
+
+function Get-WindowsStoreEventData {
+    param([Parameter(Mandatory)][object]$Event)
+
+    $result = [pscustomobject]@{ Text = '<unavailable>'; ActivityId = $null; StoreFailure = $false }
+    # Keep raw classification text private. Only the boolean and sanitized,
+    # bounded display data leave this function.
+    $classificationText = ''
+    try { $classificationText = [string]$Event.Message } catch { }
+    if ($Event.PSObject.Methods['ToXml']) {
+        try {
+            $xml = New-Object System.Xml.XmlDocument
+            $xml.XmlResolver = $null
+            $xml.LoadXml($Event.ToXml())
+            $correlation = $xml.SelectSingleNode('/*[local-name()="Event"]/*[local-name()="System"]/*[local-name()="Correlation"]')
+            if ($correlation) {
+                $activity = $correlation.GetAttribute('ActivityID')
+                $parsedActivity = [guid]::Empty
+                if ([guid]::TryParse($activity, [ref]$parsedActivity)) { $result.ActivityId = $activity }
+            }
+            $nodes = @($xml.SelectNodes('/*[local-name()="Event"]/*[local-name()="EventData"]/*[local-name()="Data"][@Name]'))
+            if ($nodes.Count -eq 0) { $nodes = @($xml.SelectNodes('/*[local-name()="Event"]/*[local-name()="UserData"]//*[not(*)]')) }
+            foreach ($node in $nodes) {
+                $name = if ($node.HasAttribute('Name')) { $node.GetAttribute('Name') } else { $node.LocalName }
+                $classificationText += ' ' + $name + '=' + $node.InnerText
+            }
+            $fields = [Collections.Generic.List[string]]::new()
+            foreach ($node in ($nodes | Select-Object -First 64)) {
+                $name = if ($node.HasAttribute('Name')) { $node.GetAttribute('Name') } else { $node.LocalName }
+                $value = ConvertTo-WindowsStoreDiagnosticText -Text $node.InnerText -FieldName $name -MaximumLength 2048
+                $name = ConvertTo-WindowsStoreDiagnosticText -Text $name -MaximumLength 128
+                $fields.Add($name + '=' + $value)
+            }
+            $result.Text = $fields -join '; '
+            $marker = '<truncated>'
+            if ($nodes.Count -gt 64) { $result.Text += '; ' + $marker }
+            if ($result.Text.Length -gt 8192) { $result.Text = $result.Text.Substring(0, 8192 - $marker.Length) + $marker }
+        }
+        catch { $result.Text = '<unavailable>' } # Never print XML or its exception.
+    }
+    $excluded = $classificationText -match '(?i)\bcancel\w*|\bclean(?:up|ing\s*up)\b'
+    $errorLevel = ($null -ne $Event.Level -and [int]$Event.Level -le 2)
+    $result.StoreFailure = -not $excluded -and ($errorLevel -or $classificationText -match '(?i)80244007|-2145107961|\binto\s+Error\b|\bNewState=Error\b|SOAP\s*fault|download\w*\s*fail\w*|\bDiagError\b')
+    return $result
+}
+
+function Get-WindowsStoreEventMessage {
+    param([object]$Event)
+    try { return ConvertTo-WindowsStoreDiagnosticText -Text ([string]$Event.Message) }
+    catch { return '<unavailable>' }
+}
+
+function Write-WindowsStoreDiagnosticEvent {
+    param([object]$Event, [string]$Channel, [string]$Bucket, [object]$EventData)
+
+    if (-not $EventData) { $EventData = Get-WindowsStoreEventData -Event $Event }
+    $activity = $EventData.ActivityId
+    if ($Event.ActivityId) { $activity = ConvertTo-WindowsStoreDiagnosticText -Text ([string]$Event.ActivityId) -MaximumLength 128 }
+    $time = if ($Event.TimeCreated) { ([datetime]$Event.TimeCreated).ToUniversalTime().ToString('o') } else { '<unavailable>' }
+    $message = Get-WindowsStoreEventMessage -Event $Event
+    Write-Host "WINDOWS_STORE_EVENT: Bucket=$Bucket Channel=$Channel Id=$($Event.Id) RecordId=$($Event.RecordId) TimeUtc=$time ActivityId=$activity Level=$($Event.LevelDisplayName) Message=$message EventData=$($EventData.Text)"
+}
+
 function Write-WindowsStoreDiagnostics {
     [CmdletBinding()]
     param()
@@ -122,25 +198,44 @@ function Write-WindowsStoreDiagnostics {
     # Postmortem diagnostics must not replace the installer failure with a missing
     # channel or an unavailable state reader. Preparation above remains strict.
     try { Write-WindowsStoreState -Label 'Diagnostics' }
-    catch { Write-Warning "Windows Store state diagnostics unavailable: $($_.Exception.Message)" }
+    catch { Write-Warning ('Windows Store state diagnostics unavailable: ' + (ConvertTo-WindowsStoreDiagnosticText -Text $_.Exception.Message)) }
     $startTime = [datetime]::Now.AddMinutes(-60)
-    foreach ($channel in @(
-            'Microsoft-Windows-WindowsUpdateClient/Operational'
-            'Microsoft-Windows-Store/Operational'
-            'Microsoft-Windows-AppXDeploymentServer/Operational'
+    $windowsUpdate = 'Microsoft-Windows-WindowsUpdateClient/Operational'
+    $store = 'Microsoft-Windows-Store/Operational'
+    foreach ($query in @(
+            @{ Channel = $windowsUpdate; Bucket = 'Recent'; ReadLimit = 20; OutputLimit = 20 }
+            @{ Channel = $store; Bucket = 'Recent'; ReadLimit = 20; OutputLimit = 20 }
+            @{ Channel = 'Microsoft-Windows-AppXDeploymentServer/Operational'; Bucket = 'Recent'; ReadLimit = 20; OutputLimit = 20 }
+            @{ Channel = $windowsUpdate; Bucket = 'WindowsUpdateFailure'; ReadLimit = 30; OutputLimit = 30; Id = @(20, 24, 25, 31) }
+            @{ Channel = $store; Bucket = 'StoreFailure'; ReadLimit = 500; OutputLimit = 20 }
         )) {
+        $channel = $query.Channel
         try {
-            $events = @(Get-WinEvent -FilterHashtable @{ LogName = $channel; StartTime = $startTime } -MaxEvents 20 -ErrorAction Stop)
-            Write-Host "WINDOWS_STORE_EVENTS: $channel Count=$($events.Count)"
-            foreach ($event in $events) {
-                $message = [string]$event.Message -replace '(?i)\bhttps?://\S+', '[URL redacted]'
-                if ($message.Length -gt 4096) { $message = $message.Substring(0, 4096) + ' <truncated>' }
-                Write-Host "WINDOWS_STORE_EVENT: Channel=$channel Time=$($event.TimeCreated) Id=$($event.Id) Level=$($event.LevelDisplayName) Message=$message"
+            $filter = @{ LogName = $channel; StartTime = $startTime }
+            if ($query.ContainsKey('Id')) { $filter.Id = $query.Id }
+            $events = @(Get-WinEvent -FilterHashtable $filter -MaxEvents $query.ReadLimit -ErrorAction Stop)
+            $candidates = @(
+                foreach ($event in $events) {
+                    $data = Get-WindowsStoreEventData -Event $event
+                    if ($query.Bucket -eq 'StoreFailure' -and -not $data.StoreFailure) { continue }
+                    [pscustomobject]@{ Event = $event; Data = $data }
+                }
+            )
+            if ($query.Bucket -eq 'StoreFailure') {
+                $candidates = @($candidates | Sort-Object @{ Expression = { $_.Event.RecordId } }, @{ Expression = { $_.Event.TimeCreated } })
+            }
+            $readLimitReached = $events.Count -ge $query.ReadLimit
+            $outputLimitReached = $candidates.Count -gt $query.OutputLimit
+            Write-Host "WINDOWS_STORE_EVENTS: Bucket=$($query.Bucket) Channel=$channel ReadCount=$($events.Count) MatchedFailureCount=$($candidates.Count) ReadLimitReached=$readLimitReached OutputLimitReached=$outputLimitReached"
+            foreach ($match in ($candidates | Select-Object -First $query.OutputLimit)) {
+                Write-WindowsStoreDiagnosticEvent -Event $match.Event -Channel $channel -Bucket $query.Bucket -EventData $match.Data
             }
         }
         catch {
-            if ($_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') { Write-Host "WINDOWS_STORE_EVENTS: $channel Count=0" }
-            else { Write-Warning "Windows Store event channel unavailable ($channel): $($_.Exception.Message)" }
+            if ($_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') {
+                Write-Host "WINDOWS_STORE_EVENTS: Bucket=$($query.Bucket) Channel=$channel ReadCount=0 MatchedFailureCount=0 ReadLimitReached=False OutputLimitReached=False"
+            }
+            else { Write-Warning ("Windows Store event channel unavailable ($channel): " + (ConvertTo-WindowsStoreDiagnosticText -Text $_.Exception.Message)) }
         }
     }
 }

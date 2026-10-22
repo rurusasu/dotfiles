@@ -47,14 +47,19 @@ installer E2E は追加されたコマンドパスを `GITHUB_PATH` に渡し、
 workflow の構造やテストの配置先を Pester の文字列 assertion で固定しません。
 
 GitHub hosted Windows runner は、イメージ作成時に Windows Update の接続制限と
-`wuauserv` の無効化を設定しています。CI は WinGet の前に
+`wuauserv` の無効化を設定しています。provisioner が開始時点までに設定を変更する
+場合もあるため、CI は実行時の状態を確認します。WinGet の前に
 `ci/Initialize-WindowsStore.ps1` で状態を表示し、Store のオンデマンド導入に必要な
 接続とサービスを準備します。変更は2つの接続制限値と `wuauserv` に限定し、
 `NoAutoUpdate` / `AUOptions` は保持・検証します。この初期化は GitHub hosted Windows
 runner 以外では書き込み前にエラーにします。テストでは registry とサービスの操作を
 メモリー上の fixture に差し替え、実環境を変更しません。
 `-DiagnosticsOnly` は状態と直近の Store / Windows Update / AppX イベントを標準出力へ
-表示し、診断用の `.log` は作りません。接続制限の存在だけで Store エラーの原因とは
+表示し、診断用の `.log` は作りません。本文に詳細が表示されない Windows Update の
+失敗は EventData も表示します。Store は直近500件から起点となる失敗を選び、
+古い順に20件まで表示します。各 channel の直近20件の文脈も保持し、読み取り・表示の
+上限到達を明示します。URL と認証情報に相当する値を伏せ、イベント内のフィールド数と
+文字数も制限します。接続制限の存在だけで Store エラーの原因とは
 断定せず、変更前後の状態と実際の installer 結果を確認します。
 根拠は [runner image の設定](https://github.com/actions/runner-images/blob/aee0669dd04510a11756664eb77f5630debabed3/images/windows/scripts/build/Configure-System.ps1)
 と [Microsoft の Store 接続に関する説明](https://learn.microsoft.com/en-us/windows/deployment/update/waas-manage-updates-wsus)です。

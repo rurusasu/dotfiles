@@ -1,6 +1,15 @@
 BeforeAll {
     $script:storeScript = Join-Path $PSScriptRoot '../../ci/Initialize-WindowsStore.ps1'
     if (Test-Path -LiteralPath $script:storeScript) { . $script:storeScript }
+    function New-StoreDiagnosticEvent {
+        param([int]$Id = 31, [long]$RecordId = 1, [string]$Message = 'fixture event', [int]$Level = 3, [string]$Xml = '<Event />')
+        $event = [pscustomobject]@{
+            Id = $Id; RecordId = $RecordId; TimeCreated = [datetime]'2026-10-23T00:01:00Z'
+            ActivityId = $null; Level = $Level; LevelDisplayName = 'fixture level'; Message = $Message; Xml = $Xml
+        }
+        $event | Add-Member -MemberType ScriptMethod -Name ToXml -Value { $this.Xml }
+        return $event
+    }
 }
 
 Describe 'Hosted Windows Store prerequisites' {
@@ -211,14 +220,178 @@ Describe 'Hosted Windows Store prerequisites' {
 
         $script:changes.Count | Should -Be 0
         $script:policyValues[$script:wuPath]['DisableWindowsUpdateAccess'] | Should -Be 1
-        $script:eventQueries.Count | Should -Be 3
+        $script:eventQueries.Count | Should -Be 5
+        $contextQueries = @($script:eventQueries | Where-Object { $_.Limit -eq 20 })
+        $contextQueries.Count | Should -Be 3
+        foreach ($query in $contextQueries) {
+            $query.Limit | Should -BeLessOrEqual 20
+            $query.Filter.ContainsKey('Id') | Should -BeFalse
+        }
         foreach ($query in $script:eventQueries) {
             $query.Limit | Should -BeGreaterThan 0
-            $query.Limit | Should -BeLessOrEqual 20
             $query.Filter.StartTime | Should -BeGreaterThan ([datetime]::Now.AddMinutes(-61))
             $query.Filter.LogName | Should -BeIn @('Microsoft-Windows-WindowsUpdateClient/Operational', 'Microsoft-Windows-Store/Operational', 'Microsoft-Windows-AppXDeploymentServer/Operational')
         }
+        $wuFailureQuery = @($script:eventQueries | Where-Object { $_.Limit -eq 30 })
+        $wuFailureQuery.Count | Should -Be 1
+        ($wuFailureQuery[0].Filter.Id -join ',') | Should -BeExactly '20,24,25,31'
+        $wuFailureQuery[0].Filter.LogName | Should -Be 'Microsoft-Windows-WindowsUpdateClient/Operational'
+        $storeFailureQuery = @($script:eventQueries | Where-Object { $_.Limit -eq 500 })
+        $storeFailureQuery.Count | Should -Be 1
+        $storeFailureQuery[0].Filter.LogName | Should -Be 'Microsoft-Windows-Store/Operational'
         ($script:messages -join "`n") | Should -Match 'fixture update event'
+    }
+
+    It 'should expose named Windows Update failure data and UTC correlation metadata behind a generic message' {
+        $script:failureEvent = New-StoreDiagnosticEvent -RecordId 3001 -Message 'A generic Windows Update failure occurred.' -Xml @'
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><System><Correlation ActivityID="{12345678-1234-1234-1234-123456789abc}" /></System><EventData><Data Name="errorCode">0x80244007</Data><Data Name="updateGuid">update-fixture-guid</Data><Data Name="serviceGuid">service-fixture-guid</Data></EventData></Event>
+'@
+        Mock Get-WinEvent {
+            param($FilterHashtable)
+            if ($FilterHashtable.ContainsKey('Id')) { return $script:failureEvent }
+        }
+
+        Write-WindowsStoreDiagnostics
+
+        $output = $script:messages -join "`n"
+        $output | Should -Match 'Bucket=WindowsUpdateFailure.*RecordId=3001.*TimeUtc=2026-10-23T00:01:00.0000000Z'
+        $output | Should -Match 'ActivityId=\{12345678-1234-1234-1234-123456789abc\}'
+        $output | Should -Match 'errorCode=0x80244007'
+        $output | Should -Match 'updateGuid=update-fixture-guid'
+        $output | Should -Match 'serviceGuid=service-fixture-guid'
+        $output | Should -Not -Match '<Event|<Data'
+    }
+
+    It 'should retain older originating Store failures when newer cleanup events fill the context window' {
+        $script:origin = New-StoreDiagnosticEvent -Id 2006 -RecordId 10 -Message 'Transition INTO Error: -2145107961' -Xml '<Event><EventData><Data Name="NewState">Error</Data></EventData></Event>'
+        $script:cleanup = @(11..40 | ForEach-Object { New-StoreDiagnosticEvent -Id 2007 -RecordId $_ -Level 2 -Message 'Cleanup after 0x80244007' })
+        $script:nonFailures = @(
+            (New-StoreDiagnosticEvent -RecordId 41 -Message 'Transition from Error INTO Cancel'),
+            (New-StoreDiagnosticEvent -RecordId 42 -Message 'Transition from Error INTO Completed')
+        )
+        Mock Get-WinEvent {
+            param($FilterHashtable, $MaxEvents)
+            if ($FilterHashtable.LogName -eq 'Microsoft-Windows-Store/Operational') {
+                if ($MaxEvents -eq 500) { return @($script:nonFailures) + @($script:cleanup) + @($script:origin) }
+                return $script:cleanup | Select-Object -Last 20
+            }
+        }
+
+        Write-WindowsStoreDiagnostics
+
+        $priority = @($script:messages | Where-Object { $_ -like 'WINDOWS_STORE_EVENT:*Bucket=StoreFailure*' })
+        $priority.Count | Should -Be 1
+        $priority[0] | Should -Match 'Id=2006.*RecordId=10'
+        $priority[0] | Should -Not -Match 'Cleanup|Cancel|Completed'
+        @($script:messages | Where-Object { $_ -like 'WINDOWS_STORE_EVENT:*Bucket=Recent*' -and $_ -match 'Cleanup' }).Count | Should -Be 20
+        ($script:messages -join "`n") | Should -Match 'Bucket=StoreFailure.*ReadCount=33.*MatchedFailureCount=1.*ReadLimitReached=False.*OutputLimitReached=False'
+    }
+
+    It 'should order and cap prioritized Store errors while reporting read and output limits' {
+        $script:storeEvents = @(
+            @(23..500 | ForEach-Object { New-StoreDiagnosticEvent -RecordId $_ -Message 'Cleaning up download failure' })
+            @(22..1 | ForEach-Object { New-StoreDiagnosticEvent -RecordId $_ -Message 'DiagError: fixture method failed' })
+        )
+        Mock Get-WinEvent {
+            param($FilterHashtable, $MaxEvents)
+            if ($FilterHashtable.LogName -eq 'Microsoft-Windows-Store/Operational' -and $MaxEvents -eq 500) { return $script:storeEvents }
+        }
+
+        Write-WindowsStoreDiagnostics
+
+        $priority = @($script:messages | Where-Object { $_ -like 'WINDOWS_STORE_EVENT:*Bucket=StoreFailure*' })
+        $priority.Count | Should -Be 20
+        $priority[0] | Should -Match 'RecordId=1 '
+        $priority[19] | Should -Match 'RecordId=20 '
+        ($script:messages -join "`n") | Should -Match 'Bucket=StoreFailure.*ReadCount=500.*MatchedFailureCount=22.*ReadLimitReached=True.*OutputLimitReached=True'
+    }
+
+    It 'should classify errors beyond display limits without returning or printing raw diagnostic text' {
+        $script:tailEvents = @(
+            (New-StoreDiagnosticEvent -RecordId 101 -Message (('m' * 4100) + ' 0x80244007 raw-message-tail-sentinel')),
+            (New-StoreDiagnosticEvent -RecordId 102 -Xml ('<Event><EventData><Data Name="Details">' + ('v' * 2100) + ' -2145107961 raw-field-tail-sentinel</Data></EventData></Event>'))
+        )
+        Mock Get-WinEvent {
+            param($FilterHashtable, $MaxEvents)
+            if ($FilterHashtable.LogName -eq 'Microsoft-Windows-Store/Operational' -and $MaxEvents -eq 500) { return $script:tailEvents }
+        }
+
+        Write-WindowsStoreDiagnostics
+
+        $priority = @($script:messages | Where-Object { $_ -like 'WINDOWS_STORE_EVENT:*Bucket=StoreFailure*' })
+        $priority.Count | Should -Be 2
+        $priority[0] | Should -Match 'RecordId=101 '
+        $priority[1] | Should -Match 'RecordId=102 '
+        ($script:messages -join "`n") | Should -Not -Match 'raw-message-tail-sentinel|raw-field-tail-sentinel'
+        (Get-WindowsStoreEventData -Event $script:tailEvents[1] | ConvertTo-Json) | Should -Not -Match 'raw-field-tail-sentinel'
+    }
+
+    It 'should exclude cancellation and cleanup suffixes beyond display limits from priority output' {
+        $script:tailEvents = @(
+            (New-StoreDiagnosticEvent -RecordId 101 -Level 2 -Message ('0x80244007 ' + ('m' * 4100) + ' Cleanup')),
+            (New-StoreDiagnosticEvent -RecordId 102 -Level 2 -Xml ('<Event><EventData><Data Name="Details">0x80244007 ' + ('v' * 2100) + ' Cancel</Data></EventData></Event>'))
+        )
+        Mock Get-WinEvent {
+            param($FilterHashtable, $MaxEvents)
+            if ($FilterHashtable.LogName -eq 'Microsoft-Windows-Store/Operational' -and $MaxEvents -eq 500) { return $script:tailEvents }
+        }
+
+        Write-WindowsStoreDiagnostics
+
+        @($script:messages | Where-Object { $_ -like 'WINDOWS_STORE_EVENT:*Bucket=StoreFailure*' }).Count | Should -Be 0
+        ($script:messages -join "`n") | Should -Match 'Bucket=StoreFailure.*ReadCount=2.*MatchedFailureCount=0'
+    }
+
+    It 'should redact sensitive names URLs and labeled secrets in event data and messages' {
+        $script:sensitiveEvent = New-StoreDiagnosticEvent -Message 'failure at https://user:sentinel-url@example.invalid/path?token=sentinel-query password="sentinel-password"' -Xml @'
+<Event><EventData><Data Name="AccessToken">sentinel-token</Data><Data Name="Cookie">sentinel-cookie</Data><Data Name="Password">sentinel-field-password</Data><Data Name="ClientSecret">sentinel-secret</Data><Data Name="Authorization">Bearer sentinel-bearer</Data><Data Name="Credential">sentinel-credential</Data><Data Name="Ticket">sentinel-ticket</Data><Data Name="ErrorMessage">failure token=sentinel-labeled</Data><Data Name="Details">Authorization: Bearer sentinel-authorization</Data><Data Name="Request">Cookie: a=sentinel-a; b=sentinel-b</Data><Data Name="Url">https://example.invalid/sentinel-path</Data></EventData></Event>
+'@
+        Mock Get-WinEvent { $script:sensitiveEvent }
+
+        Write-WindowsStoreDiagnostics
+
+        $output = $script:messages -join "`n"
+        $output | Should -Match '<redacted>'
+        $output | Should -Match '\[URL redacted\]'
+        $output | Should -Not -Match 'sentinel-|example.invalid|https://|<Event'
+    }
+
+    It 'should cap event field count each value and total rendered data with truncation markers' {
+        $event = New-StoreDiagnosticEvent -Xml ('<Event><EventData><Data Name="Details">' + ('a' * 3000) + '</Data></EventData></Event>')
+        $data = Get-WindowsStoreEventData -Event $event
+        $data.Text | Should -Match '<truncated>'
+        ($data.Text -replace '^Details=', '').Length | Should -BeLessOrEqual 2048
+
+        $fields = (1..65 | ForEach-Object { '<Data Name="Field' + $_ + '">value</Data>' }) -join ''
+        $data = Get-WindowsStoreEventData -Event (New-StoreDiagnosticEvent -Xml ('<Event><EventData>' + $fields + '</EventData></Event>'))
+        @([regex]::Matches($data.Text, 'Field\d+=')).Count | Should -Be 64
+        $data.Text | Should -Not -Match 'Field65='
+        $data.Text | Should -Match '<truncated>'
+
+        $fields = (1..64 | ForEach-Object { '<Data Name="Field' + $_ + '">' + ('b' * 3000) + '</Data>' }) -join ''
+        $data = Get-WindowsStoreEventData -Event (New-StoreDiagnosticEvent -Xml ('<Event><EventData>' + $fields + '</EventData></Event>'))
+        $data.Text.Length | Should -BeLessOrEqual 8192
+        $data.Text | Should -Match '<truncated>'
+    }
+
+    It 'should read UserData leaves and tolerate unavailable event XML without echoing its exception' {
+        $event = New-StoreDiagnosticEvent -Xml '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><UserData><Payload xmlns="fixture"><ErrorCode>0x80244007</ErrorCode><Nested><UpdateId>fixture-update</UpdateId></Nested></Payload></UserData></Event>'
+        $data = Get-WindowsStoreEventData -Event $event
+        $data.Text | Should -Match 'ErrorCode=0x80244007'
+        $data.Text | Should -Match 'UpdateId=fixture-update'
+        $event | Add-Member -MemberType ScriptMethod -Name ToXml -Force -Value { throw 'sentinel-xml-secret https://example.invalid' }
+
+        { Get-WindowsStoreEventData -Event $event } | Should -Not -Throw
+        (Get-WindowsStoreEventData -Event $event).Text | Should -Not -Match 'sentinel-|example.invalid'
+    }
+
+    It 'should report empty event queries without failing the diagnostic step' {
+        Mock Get-WinEvent { Write-Error -Message 'No events' -ErrorId NoMatchingEventsFound -ErrorAction Stop }
+
+        { Write-WindowsStoreDiagnostics } | Should -Not -Throw
+
+        $script:warnings.Count | Should -Be 0
+        @($script:messages | Where-Object { $_ -like 'WINDOWS_STORE_EVENTS:*ReadCount=0*' }).Count | Should -Be 5
     }
 
     It 'should warn about unavailable diagnostic channels without failing the diagnostic step' {
@@ -227,7 +400,7 @@ Describe 'Hosted Windows Store prerequisites' {
         { & ([scriptblock]::Create([IO.File]::ReadAllText($script:storeScript))) -DiagnosticsOnly } | Should -Not -Throw
 
         $script:changes.Count | Should -Be 0
-        $script:warnings.Count | Should -Be 3
+        $script:warnings.Count | Should -Be 5
         ($script:warnings -join "`n") | Should -Match 'channel unavailable'
     }
 }
