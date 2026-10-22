@@ -6,7 +6,6 @@
     pkgs.obsidian
     pkgs.raycast
     pkgs._1password-gui
-    (pkgs.callPackage ./comfyui/package.nix { })
     (pkgs.callPackage ./ai_agents/hermes/package.nix { })
   ];
 }

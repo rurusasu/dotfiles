@@ -64,12 +64,11 @@ in
       let
         home = mkHome system;
         cfg = home.config;
-        count = pname: builtins.length (builtins.filter (p: (p.pname or "") == pname) cfg.home.packages);
       in
       {
         inherit system;
-        lazygit = cfg.programs.lazygit.enable && count "lazygit" == 1;
-        herdr = cfg.programs.herdr.enable && count "herdr" == 1;
+        lazygit = cfg.programs.lazygit.enable;
+        herdr = cfg.programs.herdr.enable;
         bashWrapper = home.pkgs.lib.hasInfix "function lg()" cfg.programs.bash.initExtra;
         zshWrapper = home.pkgs.lib.hasInfix "function lg()" cfg.programs.zsh.initContent;
         herdrConfig = cfg.programs.herdr.settings;

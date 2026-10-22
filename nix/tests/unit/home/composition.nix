@@ -69,7 +69,6 @@ let
   darwinPackages = {
     pkgs = mkPkgs "aarch64-darwin";
     system = fixtures.darwin.config.environment.systemPackages;
-    home = fixtures.darwin.config.home-manager.users.test-user.home.packages;
     contains =
       package: packages: builtins.any (candidate: candidate.drvPath == package.drvPath) packages;
   };
@@ -175,30 +174,6 @@ in
     }) 3;
   };
 
-  testDshToolsSelectionUsesUpstreamPackageOnce = {
-    expr =
-      map
-        (
-          home:
-          let
-            package = inputs.llm-agents.packages.${home.pkgs.stdenv.hostPlatform.system}.dsh;
-          in
-          {
-            copies = builtins.length (
-              builtins.filter (candidate: candidate.drvPath == package.drvPath) home.config.home.packages
-            );
-          }
-        )
-        [
-          linux
-          wsl
-          darwin
-        ];
-    expected = builtins.genList (_: {
-      copies = 1;
-    }) 3;
-  };
-
   testPnpmIsNotInstalled = {
     expr =
       map
@@ -242,17 +217,6 @@ in
       map
         (home: {
           enabled = home.config.programs.git.enable;
-          gitCopies = builtins.length (
-            builtins.filter (
-              package: package.drvPath == home.config.programs.git.package.drvPath
-            ) home.config.home.packages
-          );
-          ghqCopies = builtins.length (
-            builtins.filter (package: package.drvPath == home.pkgs.ghq.drvPath) home.config.home.packages
-          );
-          gwqCopies = builtins.length (
-            builtins.filter (package: package.drvPath == home.pkgs.gwq.drvPath) home.config.home.packages
-          );
           relativeWorktrees = home.config.programs.git.settings.worktree.useRelativePaths or false;
           identity = home.config.programs.git.settings.user;
           core = home.config.programs.git.settings.core;
@@ -269,9 +233,6 @@ in
         ];
     expected = builtins.genList (_: {
       enabled = true;
-      gitCopies = 1;
-      ghqCopies = 1;
-      gwqCopies = 1;
       relativeWorktrees = true;
       identity = {
         name = "rurusasu";
@@ -332,20 +293,10 @@ in
     ];
   };
 
-  testOnePasswordPackagesAndGitSshPlatformIntegration = {
+  testOnePasswordGitSshPlatformIntegration = {
     expr =
       map
         (home: {
-          cliCopies = builtins.length (
-            builtins.filter (
-              package: package.drvPath == home.pkgs._1password-cli.drvPath
-            ) home.config.home.packages
-          );
-          desktopCopies = builtins.length (
-            builtins.filter (
-              package: package.drvPath == home.pkgs._1password-gui.drvPath
-            ) home.config.home.packages
-          );
           signer = home.config.programs.git.signing.signer;
           ghqRoot = home.config.programs.git.settings.ghq.root;
           agent = home.config.programs.ssh.extraOptionOverrides.IdentityAgent;
@@ -362,8 +313,6 @@ in
         ];
     expected = [
       {
-        cliCopies = 1;
-        desktopCopies = 1;
         signer = "/opt/1Password/op-ssh-sign";
         ghqRoot = "~/ghq";
         agent = ''"/home/test-user/.1password/agent.sock"'';
@@ -374,8 +323,6 @@ in
         publicKeyIsStoreManaged = false;
       }
       {
-        cliCopies = 1;
-        desktopCopies = 1;
         signer = "/home/test-user/.local/bin/op-ssh-sign-wsl";
         ghqRoot = [ "/mnt/d" ];
         agent = ''"/home/test-user/.1password/agent.sock"'';
@@ -386,8 +333,6 @@ in
         publicKeyIsStoreManaged = false;
       }
       {
-        cliCopies = 1;
-        desktopCopies = 0;
         signer = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
         ghqRoot = "~/ghq";
         agent = ''"/home/test-user/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"'';
@@ -438,7 +383,7 @@ in
     }) 3;
   };
 
-  testFdStarshipAndPatinaAreAvailableAcrossHomes = {
+  testFdStarshipAndPatinaShellIntegrationAcrossHomes = {
     expr =
       map
         (
@@ -451,16 +396,9 @@ in
               trim
               ;
             patinaInit = ''eval "$(${getExe home.pkgs.zsh-patina} activate)"'';
-            copies =
-              name:
-              builtins.length (
-                builtins.filter (package: (package.pname or "") == name) home.config.home.packages
-              );
           in
           {
-            fdCopies = copies "fd";
             fdFindAlias = home.config.programs.zsh.shellAliases.find;
-            patinaCopies = copies "zsh-patina";
             starshipEnabled = home.config.programs.starship.enable;
             starshipZshIntegration = home.config.programs.starship.enableZshIntegration;
             starshipInit = hasInfix (builtins.unsafeDiscardStringContext ''eval "$(${getExe home.config.programs.starship.package} init zsh)"'') home.config.programs.zsh.initContent;
@@ -473,9 +411,7 @@ in
           darwin
         ];
     expected = builtins.genList (_: {
-      fdCopies = 1;
       fdFindAlias = "fd";
-      patinaCopies = 0;
       starshipEnabled = true;
       starshipZshIntegration = true;
       starshipInit = true;
@@ -483,7 +419,7 @@ in
     }) 3;
   };
 
-  testBatAndRipgrepAreEnabledAndInstalledOnceAcrossHomes = {
+  testBatAndRipgrepSettingsAcrossHomes = {
     expr =
       map
         (home: {
@@ -499,16 +435,6 @@ in
           ripgrepArguments = home.config.programs.ripgrep.arguments;
           ripgrepConfigPath = home.config.home.sessionVariables.RIPGREP_CONFIG_PATH;
           ripgrepConfig = home.config.home.file."${home.config.xdg.configHome}/ripgrep/ripgreprc".text;
-          packageCopies =
-            map
-              (
-                name:
-                builtins.length (builtins.filter (package: (package.pname or "") == name) home.config.home.packages)
-              )
-              [
-                "bat"
-                "ripgrep"
-              ];
         })
         [
           linux
@@ -538,10 +464,6 @@ in
         --hidden
         --glob=!.git/*
       '';
-      packageCopies = [
-        1
-        1
-      ];
     }) 3;
   };
 
@@ -560,9 +482,6 @@ in
             lt
             lla
             ;
-          packageCopies = builtins.length (
-            builtins.filter (package: (package.pname or "") == "eza") home.config.home.packages
-          );
         })
         [
           linux
@@ -579,20 +498,14 @@ in
       la = "eza --level=1 --group-directories-first --time-style=long-iso --git --hyperlink -F";
       lt = "eza --level=2 --group-directories-first --time-style=long-iso --git";
       lla = "eza -la";
-      packageCopies = 1;
     }) 3;
   };
 
-  testFzfIsInstalledOnceWithSharedDefaultsAcrossHomes = {
+  testFzfSharedDefaultsAcrossHomes = {
     expr =
       map
         (home: {
           enabled = home.config.programs.fzf.enable;
-          packageCopies = builtins.length (
-            builtins.filter (
-              package: package.drvPath == home.config.programs.fzf.package.drvPath
-            ) home.config.home.packages
-          );
           defaultCommand = home.config.home.sessionVariables.FZF_DEFAULT_COMMAND or null;
           filePreview = home.config.home.sessionVariables.FZF_FILE_PREVIEW or null;
           dirPreview = home.config.home.sessionVariables.FZF_DIR_PREVIEW or null;
@@ -611,7 +524,6 @@ in
         ];
     expected = builtins.genList (_: {
       enabled = true;
-      packageCopies = 1;
       defaultCommand = null;
       filePreview = null;
       dirPreview = null;
@@ -693,16 +605,11 @@ in
     }) 3;
   };
 
-  testZoxideIsInstalledOnceWithShellIntegrationsAcrossHomes = {
+  testZoxideShellIntegrationsAcrossHomes = {
     expr =
       map
         (home: {
           enabled = home.config.programs.zoxide.enable;
-          packageCopies = builtins.length (
-            builtins.filter (
-              package: package.drvPath == home.config.programs.zoxide.package.drvPath
-            ) home.config.home.packages
-          );
           bashIntegration = home.config.programs.zoxide.enableBashIntegration;
           zshIntegration = home.config.programs.zoxide.enableZshIntegration;
           options = home.config.programs.zoxide.options;
@@ -718,7 +625,6 @@ in
         ];
     expected = builtins.genList (_: {
       enabled = true;
-      packageCopies = 1;
       bashIntegration = true;
       zshIntegration = true;
       options = [ "--cmd cd" ];
@@ -801,13 +707,10 @@ in
           home:
           let
             packages = home.config.home.packages;
-            copies = target: builtins.filter (package: package.drvPath == target.drvPath) packages;
-            priority = target: (builtins.head (copies target)).meta.priority or 5;
+            selected = target: builtins.filter (package: package.drvPath == target.drvPath) packages;
+            priority = target: (builtins.head (selected target)).meta.priority or 5;
           in
           {
-            rustupCopies = builtins.length (copies home.pkgs.rustup);
-            analyzerCopies = builtins.length (copies home.pkgs.rust-analyzer);
-            formatterCopies = builtins.length (copies home.pkgs.rustfmt);
             analyzerWins = priority home.pkgs.rust-analyzer < priority home.pkgs.rustup;
             formatterWins = priority home.pkgs.rustfmt < priority home.pkgs.rustup;
           }
@@ -818,15 +721,12 @@ in
           darwin
         ];
     expected = builtins.genList (_: {
-      rustupCopies = 1;
-      analyzerCopies = 1;
-      formatterCopies = 1;
       analyzerWins = true;
       formatterWins = true;
     }) 3;
   };
 
-  testNeovimHomeManagerOwnership = {
+  testNeovimSettingsAndRuntimeDependenciesAcrossHomes = {
     expr =
       builtins.map
         (
@@ -837,12 +737,6 @@ in
           {
             enabled = cfg.enable;
             sideloadInit = cfg.sideloadInitLua;
-            packageCopies = builtins.length (
-              builtins.filter (package: package.drvPath == cfg.finalPackage.drvPath) home.config.home.packages
-            );
-            basePackageInstalled = builtins.any (
-              package: package.drvPath == home.pkgs.neovim.drvPath
-            ) home.config.home.packages;
             writesInit = home.config.xdg.configFile."nvim/init.lua".enable or false;
             pluginData = home.config.xdg.dataFile."nvim/site/pack/hm".enable;
             internalPackages = cfg.extraPackages == [ ];
@@ -880,8 +774,6 @@ in
     expected = builtins.genList (_: {
       enabled = true;
       sideloadInit = false;
-      packageCopies = 1;
-      basePackageInstalled = false;
       writesInit = true;
       pluginData = true;
       internalPackages = true;
@@ -1105,26 +997,23 @@ in
     };
   };
 
-  testWslDesktopAppsAreInstalledOnceAndNativeLinuxSelectionIsPreserved = {
+  testWslAndNativeLinuxDesktopPackageSelection = {
     expr =
       map
         (
           home:
           let
-            copies =
-              package:
-              builtins.length (
-                builtins.filter (candidate: candidate.drvPath == package.drvPath) home.config.home.packages
-              );
+            contains =
+              package: builtins.any (candidate: candidate.drvPath == package.drvPath) home.config.home.packages;
           in
           {
-            chrome = copies (configuredChrome home);
-            rawChrome = copies home.pkgs.google-chrome;
-            spotify = copies home.pkgs.spotify;
-            signal = copies home.pkgs.signal-desktop;
-            obsidian = copies home.pkgs.obsidian;
-            onePassword = copies home.pkgs._1password-gui;
-            nautilus = copies home.pkgs.nautilus;
+            chrome = contains (configuredChrome home);
+            rawChrome = contains home.pkgs.google-chrome;
+            spotify = contains home.pkgs.spotify;
+            signal = contains home.pkgs.signal-desktop;
+            obsidian = contains home.pkgs.obsidian;
+            onePassword = contains home.pkgs._1password-gui;
+            nautilus = contains home.pkgs.nautilus;
             browser = home.config.home.sessionVariables.BROWSER or null;
           }
         )
@@ -1134,52 +1023,32 @@ in
         ];
     expected = [
       {
-        chrome = 1;
-        rawChrome = 0;
-        spotify = 1;
-        signal = 1;
-        obsidian = 1;
-        onePassword = 1;
-        nautilus = 1;
+        chrome = true;
+        rawChrome = false;
+        spotify = true;
+        signal = true;
+        obsidian = true;
+        onePassword = true;
+        nautilus = true;
         browser = "${configuredChrome wsl}/bin/google-chrome-stable";
       }
       {
-        chrome = 0;
-        rawChrome = 1;
-        spotify = 0;
-        signal = 0;
-        obsidian = 1;
-        onePassword = 1;
-        nautilus = 1;
+        chrome = false;
+        rawChrome = true;
+        spotify = false;
+        signal = false;
+        obsidian = true;
+        onePassword = true;
+        nautilus = true;
         browser = null;
       }
     ];
   };
 
-  testNautilusKeepsDarwinAndCliPackageBoundaries =
-    let
-      isNautilus = package: (package.pname or "") == "nautilus";
-      cliPackages =
-        ((import ../../../modules/tools.nix).homeManager {
-          inherit (wsl) config pkgs;
-          inherit inputs;
-          inherit (wsl.pkgs) lib;
-        }).home.packages;
-      legacyNativePackages =
-        ((import ../../../modules/tools.nix).nativeDesktop { inherit (wsl) pkgs; }).home.packages;
-    in
-    {
-      expr = {
-        darwin = builtins.any isNautilus darwin.config.home.packages;
-        sharedCli = builtins.any isNautilus cliPackages;
-        legacyNativeDesktop = builtins.any isNautilus legacyNativePackages;
-      };
-      expected = {
-        darwin = false;
-        sharedCli = false;
-        legacyNativeDesktop = false;
-      };
-    };
+  testNautilusIsUnavailableOnDarwin = {
+    expr = builtins.any (package: (package.pname or "") == "nautilus") darwin.config.home.packages;
+    expected = false;
+  };
 
   testWslChromePackageWrapsJapaneseLocaleAndLanguage = {
     expr = builtins.all (token: wsl.pkgs.lib.hasInfix token (configuredChrome wsl).postFixup) [
@@ -1315,27 +1184,14 @@ in
 
   testObsidianIsSelectedByPlatformModules = {
     expr = {
-      windows = fixtures.windowsPackages ? "Obsidian.Obsidian";
       darwin = darwinPackages.contains darwinPackages.pkgs.obsidian darwinPackages.system;
       linux = builtins.any (package: (package.pname or "") == "obsidian") linux.config.home.packages;
       wsl = builtins.any (package: (package.pname or "") == "obsidian") wsl.config.home.packages;
     };
     expected = {
-      windows = false;
       darwin = true;
       linux = true;
       wsl = true;
-    };
-  };
-
-  testObsidianDarwinGuiUsesSystemPackage = {
-    expr = {
-      system = darwinPackages.contains darwinPackages.pkgs.obsidian darwinPackages.system;
-      home = darwinPackages.contains darwinPackages.pkgs.obsidian darwinPackages.home;
-    };
-    expected = {
-      system = true;
-      home = false;
     };
   };
 

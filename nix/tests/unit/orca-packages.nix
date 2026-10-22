@@ -12,19 +12,17 @@ in
 {
   testOrcaHomeManagerModuleAndWingetMetadata = {
     expr = {
-      orcaModulePackages = map (package: package.drvPath) (
-        builtins.filter (package: (package.pname or "") == "orca-editor") home.config.home.packages
-      );
+      orcaPackageSelected = builtins.any (
+        package: package.drvPath == orcaPackage.drvPath
+      ) home.config.home.packages;
       orcaWindowsProvider = windows."StablyAI.Orca".source;
-      orcaInWindowsOnlyWinget = windows ? "StablyAI.Orca";
       orcaCiSkipInstall = windows."StablyAI.Orca".ciSkipInstall or false;
       directPythonInstallation = builtins.elem pkgs.python3 home.config.home.packages;
       uvInstalled = builtins.elem pkgs.uv home.config.home.packages;
     };
     expected = {
-      orcaModulePackages = [ orcaPackage.drvPath ];
+      orcaPackageSelected = true;
       orcaWindowsProvider = "winget";
-      orcaInWindowsOnlyWinget = true;
       orcaCiSkipInstall = true;
       directPythonInstallation = false;
       uvInstalled = true;

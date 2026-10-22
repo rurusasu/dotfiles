@@ -4,8 +4,8 @@
 
 - `tools.nix`: Unix CLI の PATH への導入を管理する。CLI の Home Manager 標準 `programs.*.enable`、設定をユーザーが管理する CLI・標準 module のない CLI・LSP・プラグイン実行依存の `home.packages` をここに宣言する。ChatGPT / Orca / Ghostty / WezTerm / Discord と `nativeDesktop` の既存 GUI 選択子は現時点では残るが、新しい GUI の導入はここに追加しない
 - `desktop.nix`: Linux / WSLg GUI の導入。属性セットの `linuxDesktop` が Chrome / Nautilus（Files）/ Obsidian / 1Password GUI と x86_64 の ComfyUI Desktop を宣言し、`wslDesktop` が `linuxDesktop` を imports して Spotify / Signal を追加する
-- `desktop-darwin.nix`: Darwin system GUI の導入を宣言する通常の module。Dia / Obsidian / Raycast / 1Password GUI / ComfyUI Desktop を管理する
-- `comfyui/`: ComfyUI Desktop の公式 macOS / Linux バイナリの package 定義。バージョン・ビルド固定 URL・ハッシュは `package.nix` に集約する。モデル・カスタムノード・実行環境は Desktop が管理するユーザーデータとして扱う
+- `desktop-darwin.nix`: Darwin system GUI の Nix package 導入を宣言する通常の module。Dia / Obsidian / Raycast / 1Password GUI を管理する。ComfyUI Desktop は app bundle を Nix store に置かず、Darwin host の Homebrew cask `comfy` で管理する
+- `comfyui/`: ComfyUI Desktop の公式 Linux バイナリの package 定義。バージョン・ビルド固定 URL・ハッシュは `package.nix` に集約する。モデル・カスタムノード・実行環境は Desktop が管理するユーザーデータとして扱う
 - `browsers/dia/`: Dia の package 選択関数・公式バイナリの package 定義・更新用 candidate 情報
 - `shells/powershell/psscriptanalyzer.nix`: formatter 用 PSScriptAnalyzer の package 定義
 - `ai_agents/chatgpt/`: `tools.nix` が Darwin / native NixOS のアプリを `home.packages`、同梱 CLI を標準 `programs.codex.package` で宣言する。専用 `chatgpt-nixpkgs` input を利用する `packages.nix` を両 OS で共有し、同ディレクトリの `desktop.nix` が Linux のキャッシュ cleanup を標準 `systemd.user.tmpfiles.rules` で管理する。WSL は同じ Linux 同梱 CLI を選び、GUI アプリは直接配布しない。標準 `programs.codex` で設定・context・rules・hooks を管理する。`mutableSettings` でアプリの設定追記を保持し、公式 desktop worktree cleanup を宣言する。Windows の導入は `windows/winget/packages.json`、ユーザー設定は chezmoi が所有する

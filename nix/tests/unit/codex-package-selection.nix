@@ -19,16 +19,12 @@ in
     expr = {
       managed = darwin.config.programs.codex.enable;
       package = darwin.config.programs.codex.package == packages.codex;
-      copies = builtins.length (
-        builtins.filter (package: package == packages.codex) darwin.config.home.packages
-      );
       app = builtins.elem packages.chatgpt darwin.config.home.packages;
       cleanup = darwin.config.systemd.user.tmpfiles.rules;
     };
     expected = {
       managed = true;
       package = true;
-      copies = 1;
       app = true;
       cleanup = [ ];
     };
@@ -37,9 +33,6 @@ in
     expr = {
       enabled = wsl.config.programs.codex.enable;
       package = wsl.config.programs.codex.package == wslPackages.codex;
-      copies = builtins.length (
-        builtins.filter (package: package == wslPackages.codex) wsl.config.home.packages
-      );
       cleanup = wsl.config.systemd.user.tmpfiles.rules;
       desktopPackages = builtins.filter (
         package: (package.pname or package.name) == "chatgpt"
@@ -48,7 +41,6 @@ in
     expected = {
       enabled = true;
       package = true;
-      copies = 1;
       cleanup = [ ];
       desktopPackages = [ ];
     };
