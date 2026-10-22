@@ -11,10 +11,10 @@ BeforeAll {
             Set-Content -LiteralPath (Join-Path $fixture 'Fixture.Tests.ps1')
         $bootstrap = Join-Path $fixture 'bootstrap.ps1'
         @'
-param($Runner, $Fixture, $ModulePaths, $MissingDependency)
+param($Runner, $Fixture, $ModulePathsBase64, $MissingDependency)
 $ErrorActionPreference = 'Stop'
 Import-Module Microsoft.PowerShell.Management, Microsoft.PowerShell.Utility
-$env:PSModulePath = $ModulePaths
+$env:PSModulePath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($ModulePathsBase64))
 $env:FIXTURE_NETWORK_MARKER = Join-Path $Fixture 'unexpected-acquisition.txt'
 function Stop-UnexpectedAcquisition {
     Set-Content -LiteralPath $env:FIXTURE_NETWORK_MARKER 'called'
@@ -47,8 +47,12 @@ exit $LASTEXITCODE
         $previousPreference = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'
+            # Exercise native quoting with spaces and a trailing path separator.
+            $modulePaths = $env:PSModulePath + [IO.Path]::PathSeparator +
+                (Join-Path $fixture 'Modules with spaces') + [IO.Path]::DirectorySeparatorChar
+            $modulePathsBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($modulePaths))
             $arguments = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $bootstrap,
-                '-Runner', $script:runner, '-Fixture', $fixture, '-ModulePaths', $env:PSModulePath)
+                '-Runner', $script:runner, '-Fixture', $fixture, '-ModulePathsBase64', $modulePathsBase64)
             if ($MissingDependency) { $arguments += @('-MissingDependency', $MissingDependency) }
             $output = @(& $script:runtime @arguments 2>&1)
             $exitCode = $LASTEXITCODE
