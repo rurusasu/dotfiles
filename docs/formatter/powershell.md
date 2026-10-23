@@ -86,10 +86,15 @@ function Get-Something {
 この repository の `nix fmt` / `checks.<system>.treefmt` は、PowerShell と
 PSScriptAnalyzer を宣言済みの依存として使用します。
 [`nix/modules/shells/powershell/psscriptanalyzer.nix`](../../nix/modules/shells/powershell/psscriptanalyzer.nix) が
-PowerShell Gallery の最新版入力を使い、formatter は store の manifest を直接 import します。
-コードにバージョンを固定せず、`flake.lock` に取得した内容の hash を記録します。
-最新版への更新は `nix flake update psscriptanalyzer` で行います。
-HOME の module cache に依存せず、整形中の PowerShell Gallery download はありません。
+公式 GitHub release のバージョン付き asset を Nix input として使い、
+formatter は store の manifest を直接 import します。
+現在は 1.25.0 に固定し、`flake.lock` に取得内容の hash を記録します。
+更新時は `flake.nix` の `psscriptanalyzer` URL を選んだ upstream バージョンの asset に変更し、
+`nix flake update psscriptanalyzer` でその input の lock を更新します。
+HOME の module cache に依存せず、整形中のダウンロードはありません。
+
+Windows テストは、インストール済みの互換性がある stable module を選択します。
+必要な module が不足していればエラーにし、テスト中にダウンロードしません。
 
 PowerShell 自体を単独で使う場合:
 
@@ -122,7 +127,7 @@ Invoke-ScriptAnalyzer -Path "." -Recurse -Settings "PSScriptAnalyzerSettings.psd
 ## treefmt 設定
 
 `nix/formatter.nix` の PowerShell 定義を更新します。
-PSScriptAnalyzer にバージョン制約は設けず、対象は `.ps1`、`.psm1`、`.psd1` です。
+対象は `.ps1`、`.psm1`、`.psd1` です。
 formatter は UTF-8 として読み、CRLF に正規化してから、対象パス・非 ASCII 文字・
 既存 BOM をもとに出力形式を決めます。本文の差分だけでなく BOM 不足も書き込み条件です。
 

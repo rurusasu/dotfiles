@@ -23,20 +23,46 @@ pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -ShowCoverage -M
 
 ## 前提と環境境界
 
-ランナーは PSGallery の最新安定版 Pester を確認し、必要ならインストールします。
-PSScriptAnalyzer も事前に用意してください。取得失敗を古い版へのフォールバックで隠しません。
+ランナーと静的解析テストは、インストール済みの Pester / PSScriptAnalyzer から、現在の
+PowerShell と互換性がある安定版の最高バージョンを使用します。必要な module がなければ、
+事前準備を求めるエラーで終了します。Pester は 5.9 以上が必要です。
+テスト中に PSGallery のバージョン照会、パッケージの
+ダウンロード、インストールは行いません。
+PowerShellGet / PackageManagement の暗黙の provider 導入やリポジトリ設定の更新も行いません。
 
-```powershell
-Install-Module PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force
-```
+テスト用の `USERPROFILE` / `LOCALAPPDATA` に切り替えるだけでは、HKCU の保存先は
+隔離されません。User PATH の取得・保存は共通のモックで遮断し、保存動作を検証する
+ケースだけがメモリー上の値へ差し替えます。子プロセスを使う fixture にも同じ境界を
+設けます。環境変数は成功・失敗のどちらでも復元します。一時ディレクトリには、必要な
+fixture と検証結果だけを作成します。本番 installer の自動取得処理は、通信と保存先を
+fixture に置き換えて検証します。
 
-Windows の全テストには、installer が導入する `winget`、`pwsh`、`chezmoi`、
-`wezterm` が必要です。CI の Windows installer matrix は PowerShell 5.1 / 7 の
+Windows の全テストには、インストール済みで PATH から利用できる `task`、`winget`、
+`pwsh`、`chezmoi`、`wezterm` が必要です。Task を含む CLI が不足する場合、テストは
+自動取得せず、前提条件のエラーで終了します。CI の Windows installer matrix は PowerShell 5.1 / 7 の
 それぞれで実際の `install.cmd -UserPhaseOnly` を適用した後に全スイートを実行します。
 PowerShell 7 では同じ job で PSScriptAnalyzer も実行します。
 installer E2E は追加されたコマンドパスを `GITHUB_PATH` に渡し、
 テスト用の User PATH を復元した後も後続 step で実行ファイルを検出できるようにします。
 workflow の構造やテストの配置先を Pester の文字列 assertion で固定しません。
+
+GitHub hosted Windows runner は、イメージ作成時に Windows Update の接続制限と
+`wuauserv` の無効化を設定しています。provisioner が開始時点までに設定を変更する
+場合もあるため、CI は実行時の状態を確認します。WinGet の前に
+`ci/Initialize-WindowsStore.ps1` で状態を表示し、Store のオンデマンド導入に必要な
+接続とサービスを準備します。変更は2つの接続制限値と `wuauserv` に限定し、
+`NoAutoUpdate` / `AUOptions` は保持・検証します。この初期化は GitHub hosted Windows
+runner 以外では書き込み前にエラーにします。テストでは registry とサービスの操作を
+メモリー上の fixture に差し替え、実環境を変更しません。
+`-DiagnosticsOnly` は状態と直近の Store / Windows Update / AppX イベントを標準出力へ
+表示し、診断用の `.log` は作りません。本文に詳細が表示されない Windows Update の
+失敗は EventData も表示します。Store は直近500件から起点となる失敗を選び、
+古い順に20件まで表示します。各 channel の直近20件の文脈も保持し、読み取り・表示の
+上限到達を明示します。URL と認証情報に相当する値を伏せ、イベント内のフィールド数と
+文字数も制限します。接続制限の存在だけで Store エラーの原因とは
+断定せず、変更前後の状態と実際の installer 結果を確認します。
+根拠は [runner image の設定](https://github.com/actions/runner-images/blob/aee0669dd04510a11756664eb77f5630debabed3/images/windows/scripts/build/Configure-System.ps1)
+と [Microsoft の Store 接続に関する説明](https://learn.microsoft.com/en-us/windows/deployment/update/waas-manage-updates-wsus)です。
 
 `Integration.Tests.ps1` は次を実コマンドで検証します。
 

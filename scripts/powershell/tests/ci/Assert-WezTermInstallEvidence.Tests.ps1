@@ -62,6 +62,30 @@ $out = Get-Content -LiteralPath $OutputPath -Raw
 # normalization without allowing a test to repair this machine's User PATH.
 function Get-UserEnvironmentPath { return $FixtureBin }
 function Set-UserEnvironmentPath { throw 'The WezTerm fixture must not persist PATH changes' }
+$script:fixturePathNormalizer = (Get-Command Update-ProcessEnvironmentPath -CommandType Function).ScriptBlock
+function Update-ProcessEnvironmentPath {
+    [CmdletBinding()]
+    param(
+        [string[]]$ExcludePath = @(),
+        [switch]$ReportStatus,
+        [switch]$ProcessOnly
+    )
+
+    if ([string]::IsNullOrWhiteSpace($FixtureBin)) { throw 'The WezTerm fixture directory is required' }
+    & $script:fixturePathNormalizer @PSBoundParameters
+    # The real refresh imports Machine PATH first; restore fixture precedence
+    # and reject a different executable before validation can start it.
+    $separator = [string][System.IO.Path]::PathSeparator
+    $pathItems = @($env:PATH -split [regex]::Escape($separator) | Where-Object { $_ -and $_ -ne $FixtureBin })
+    $env:PATH = (@($FixtureBin) + $pathItems) -join $separator
+    $fixtureName = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) { 'wezterm.exe' } else { 'wezterm' }
+    $expectedPath = [System.IO.Path]::GetFullPath((Join-Path $FixtureBin $fixtureName))
+    $resolved = Get-Command -Name 'wezterm' -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    $comparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    if (-not [string]::Equals([System.IO.Path]::GetFullPath($resolved.Source), $expectedPath, $comparison)) {
+        throw "The WezTerm command resolved outside the fixture: $($resolved.Source)"
+    }
+}
 '@
         @($harness, $validationFunction.Extent.Text, $inventory.Extent.Text, $wezterm.Extent.Text,
             'if ($validationErrors.Count -gt 0) { throw ($validationErrors -join " | ") }') -join "`n" |

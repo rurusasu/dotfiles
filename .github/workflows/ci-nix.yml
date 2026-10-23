@@ -599,6 +599,16 @@ jobs:
             Import-Module -Name (Join-Path $modulePath "$Name.psd1") -Force
           }
 
+          # Provision the disposable CI user before the installed-only test runner.
+          Invoke-WithRetry {
+            if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              Register-PSRepository -Default -ErrorAction Stop
+            }
+            if (-not (Get-PSRepository -Name PSGallery -ErrorAction Stop)) {
+              throw 'CI provisioning could not register PSGallery.'
+            }
+          }
+
           Install-GalleryModuleArchive -Name Pester
           Install-GalleryModuleArchive -Name PSScriptAnalyzer
 
@@ -617,6 +627,10 @@ jobs:
             $errors | ForEach-Object { Write-Error "$($_.ScriptPath):$($_.Line) $($_.RuleName): $($_.Message)" }
             throw "PSScriptAnalyzer found $($errors.Count) error(s)"
           }
+
+      - name: Prepare Windows Store prerequisites
+        shell: powershell
+        run: .\scripts\powershell\ci\Initialize-WindowsStore.ps1
 
       - name: Bootstrap winget
         shell: pwsh
@@ -671,11 +685,13 @@ jobs:
           if ($wingetVersionExitCode -ne 0) {
             throw "winget --version failed (exit=$wingetVersionExitCode): $($wingetVersion -join ' ')"
           }
+          $wingetVersion | ForEach-Object { Write-Host $_ }
           $wingetSources = @(winget source list 2>&1)
           $wingetSourcesExitCode = $LASTEXITCODE
           if ($wingetSourcesExitCode -ne 0) {
             throw "winget source list failed (exit=$wingetSourcesExitCode): $($wingetSources -join ' ')"
           }
+          $wingetSources | ForEach-Object { Write-Host $_ }
 
       # Updating the MSI-managed runtime can terminate every process using it.
       # Prepare it from stable Windows PowerShell before seeding E2E state.
@@ -706,6 +722,11 @@ jobs:
             $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
           }
           & $env:PS_TEST_EXECUTABLE -NoProfile -File .\tests\Invoke-Tests.ps1 -MinimumCoverage 0
+
+      - name: Show Windows Store diagnostics
+        if: always()
+        shell: powershell
+        run: .\scripts\powershell\ci\Initialize-WindowsStore.ps1 -DiagnosticsOnly
 
       - name: Collect Windows installer diagnostics
         if: always()

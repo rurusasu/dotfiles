@@ -214,11 +214,36 @@ confirm()
 wait_for(function()
     return vim.fn.filereadable(root .. "/destination/renamed.txt") == 0
 end, "d must trash temporary file")
+local destination_buf = vim.api.nvim_get_current_buf()
 open_dir(root)
 entry("renamed-dir")
+-- A cached Oil buffer stays oil_ready while refreshing, but is temporarily nomodifiable.
+-- Hold its real directory listing so the move must wait for that refresh to finish.
+local files = require("oil.adapters.files")
+local original_list = files.list
+local resume_listing
+files.list = function(url, columns, callback)
+    if url == vim.api.nvim_buf_get_name(destination_buf) then
+        files.list = original_list
+        resume_listing = function()
+            original_list(url, columns, callback)
+        end
+    else
+        return original_list(url, columns, callback)
+    end
+end
+vim.b[destination_buf].oil_dirty = {}
 answer("destination", function()
     press("m")
 end)
+wait_for(function()
+    return resume_listing ~= nil
+end, "move destination must start its pending refresh")
+assert(vim.b[destination_buf].oil_ready and vim.b[destination_buf].oil_rendering)
+assert(not vim.bo[destination_buf].modifiable)
+assert(vim.fn.isdirectory(root .. "/renamed-dir") == 1, "refresh must not stage source deletion")
+assert(vim.fn.isdirectory(root .. "/destination/renamed-dir") == 0)
+resume_listing()
 confirm()
 wait_for(function()
     return vim.fn.isdirectory(root .. "/destination/renamed-dir") == 1
@@ -247,8 +272,9 @@ answer(read_only, function()
     press("m")
 end)
 wait_for(function()
-    return oil.get_current_dir() == read_only .. "/"
+    return oil.get_current_dir() == read_only .. "/" and vim.b.oil_ready and not vim.b.oil_rendering
 end, "read-only move destination must be inspected")
+assert(not vim.bo.modifiable, "read-only destination must remain uneditable after loading")
 assert(vim.fn.filereadable(root .. "/original.txt") == 1)
 assert(vim.fn.filereadable(read_only .. "/original.txt") == 0)
 assert(not vim.bo.modified, "read-only move must not modify destination")

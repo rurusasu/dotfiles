@@ -5,7 +5,9 @@ BeforeAll {
     . "$script:repoRoot/scripts/powershell/lib/Invoke-ExternalCommand.ps1"
     . "$script:repoRoot/scripts/powershell/lib/Invoke-WindowsInstallTask.ps1"
     $script:previousPath = $env:PATH
-    $taskRuntime = Resolve-WindowsInstallTask
+    $taskCommand = Get-Command task -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $taskCommand) { throw "Required test dependency 'task' is not installed or not on PATH. Prepare Task before running this suite." }
+    $taskRuntime = $taskCommand.Source
     $env:PATH = (Split-Path -Parent $taskRuntime) + ';' + $env:PATH
     function Invoke-WslInstallerFixture {
         param(

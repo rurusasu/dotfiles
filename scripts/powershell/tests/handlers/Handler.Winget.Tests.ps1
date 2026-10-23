@@ -801,8 +801,9 @@ Describe 'WingetHandler' {
         It 'should classify a locked stale cache and redact local user paths' {
             $logDir = Join-Path $TestDrive 'winget-logs'
             New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-            $env:DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR = $logDir
+            $originalDiagnosticLogDirectory = $env:DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR
             try {
+                $env:DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR = $logDir
                 $logPath = Join-Path $logDir 'WinGet-test.log'
                 [System.IO.File]::WriteAllText($logPath, @'
 2026-09-23 [CLI ] Found one app. App id: hadolint.hadolint
@@ -820,20 +821,21 @@ Describe 'WingetHandler' {
                 $diagnosis | Should -Not -Match 'token=secret'
             }
             finally {
-                Remove-Item Env:\DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR -ErrorAction SilentlyContinue
+                $env:DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR = $originalDiagnosticLogDirectory
             }
         }
 
         It 'should report an unknown diagnosis if no matching package log exists' {
             $logDir = Join-Path $TestDrive 'empty-winget-logs'
             New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-            $env:DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR = $logDir
+            $originalDiagnosticLogDirectory = $env:DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR
             try {
+                $env:DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR = $logDir
                 $diagnosis = $handler.GetWingetTimeoutDiagnosis('unknown.package', [DateTime]::UtcNow.AddMinutes(-1))
                 $diagnosis | Should -Match 'class=unknown confidence=low'
             }
             finally {
-                Remove-Item Env:\DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR -ErrorAction SilentlyContinue
+                $env:DOTFILES_WINGET_DIAGNOSTIC_LOG_DIR = $originalDiagnosticLogDirectory
             }
         }
     }

@@ -5,9 +5,10 @@ BeforeAll {
 Describe 'Discord process termination runtime' {
     It 'should terminate and confirm exit of a real process before returning' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
         $originalLocalAppData = $env:LOCALAPPDATA
-        $env:LOCALAPPDATA = Join-Path $TestDrive 'RuntimeLocalAppData'
-        $nativeProcess = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 60') -WindowStyle Hidden -PassThru
+        $nativeProcess = $null
         try {
+            $env:LOCALAPPDATA = Join-Path $TestDrive 'RuntimeLocalAppData'
+            $nativeProcess = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 60') -WindowStyle Hidden -PassThru
             # Substitute only discovery metadata. Stop-Process and the native
             # Process.WaitForExit remain real; no user applications are touched.
             $script:discordNativeFixture = [pscustomobject]@{
@@ -28,9 +29,15 @@ Describe 'Discord process termination runtime' {
             $nativeProcess.HasExited | Should -BeTrue
         }
         finally {
-            if (-not $nativeProcess.HasExited) { Stop-Process -Id $nativeProcess.Id -Force }
-            $nativeProcess.Dispose()
             $env:LOCALAPPDATA = $originalLocalAppData
+            if ($null -ne $nativeProcess) {
+                try {
+                    if (-not $nativeProcess.HasExited) { Stop-Process -Id $nativeProcess.Id -Force }
+                }
+                finally {
+                    $nativeProcess.Dispose()
+                }
+            }
         }
     }
 }
