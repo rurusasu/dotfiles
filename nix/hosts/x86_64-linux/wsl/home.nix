@@ -51,9 +51,6 @@ in
     };
   };
 
-  # Use the native Windows helper only for repositories on Windows drives.
-  # Starship retains its Linux implementation for the WSL filesystem.
-  programs.starship.settings.git_status.windows_starship = "starship.exe";
   # Windows cannot follow Home Manager's absolute symlink over the WSL share.
   # Export its generated store file so the helper reads the same configuration.
   home.sessionVariables.STARSHIP_CONFIG = lib.mkForce (
