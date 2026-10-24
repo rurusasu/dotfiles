@@ -662,7 +662,12 @@ in
             fzf = programs.fzf.enableZshIntegration;
             eza = programs.eza.enableZshIntegration;
             zoxide = programs.zoxide.enableZshIntegration;
-            fzfInit = hasInfix (builtins.unsafeDiscardStringContext "source <(${getExe programs.fzf.package} --zsh)") programs.zsh.initContent;
+            fzfInit =
+              let
+                fzfPackage = builtins.unsafeDiscardStringContext (toString programs.fzf.package);
+              in
+              hasInfix "source ${fzfPackage}/share/fzf/key-bindings.zsh" programs.zsh.initContent
+              && hasInfix "source ${fzfPackage}/share/fzf/completion.zsh" programs.zsh.initContent;
             zoxideInit = hasInfix (builtins.unsafeDiscardStringContext "${getExe programs.zoxide.package} init zsh") programs.zsh.initContent;
             completionsEnabled = programs.zsh.enableCompletion;
             packageCompletions = hasInfix "$profile/share/zsh/site-functions" programs.zsh.initContent;
