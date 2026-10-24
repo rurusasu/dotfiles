@@ -217,6 +217,17 @@ in
       map
         (home: {
           enabled = home.config.programs.git.enable;
+          gitCopies = builtins.length (
+            builtins.filter (
+              package: package.drvPath == home.config.programs.git.package.drvPath
+            ) home.config.home.packages
+          );
+          ghqCopies = builtins.length (
+            builtins.filter (package: package.drvPath == home.pkgs.ghq.drvPath) home.config.home.packages
+          );
+          gwqCopies = builtins.length (
+            builtins.filter (package: package.drvPath == home.pkgs.gwq.drvPath) home.config.home.packages
+          );
           relativeWorktrees = home.config.programs.git.settings.worktree.useRelativePaths or false;
           identity = home.config.programs.git.settings.user;
           core = home.config.programs.git.settings.core;
@@ -233,6 +244,9 @@ in
         ];
     expected = builtins.genList (_: {
       enabled = true;
+      gitCopies = 1;
+      ghqCopies = 1;
+      gwqCopies = 1;
       relativeWorktrees = true;
       identity = {
         name = "rurusasu";
@@ -648,7 +662,12 @@ in
             fzf = programs.fzf.enableZshIntegration;
             eza = programs.eza.enableZshIntegration;
             zoxide = programs.zoxide.enableZshIntegration;
-            fzfInit = hasInfix (builtins.unsafeDiscardStringContext "source <(${getExe programs.fzf.package} --zsh)") programs.zsh.initContent;
+            fzfInit =
+              let
+                fzfPackage = builtins.unsafeDiscardStringContext (toString programs.fzf.package);
+              in
+              hasInfix "source ${fzfPackage}/share/fzf/key-bindings.zsh" programs.zsh.initContent
+              && hasInfix "source ${fzfPackage}/share/fzf/completion.zsh" programs.zsh.initContent;
             zoxideInit = hasInfix (builtins.unsafeDiscardStringContext "${getExe programs.zoxide.package} init zsh") programs.zsh.initContent;
             completionsEnabled = programs.zsh.enableCompletion;
             packageCompletions = hasInfix "$profile/share/zsh/site-functions" programs.zsh.initContent;
