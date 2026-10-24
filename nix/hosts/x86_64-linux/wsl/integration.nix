@@ -31,8 +31,8 @@ in
         # custom widget name when built with Qt 6.12. Upstream fixed this in
         # google/mozc#1594; keep the fix local until nixpkgs updates Mozc.
         postPatch = (old.postPatch or "") + ''
-          substituteInPlace src/gui/dictionary_tool/dictionary_tool.ui \\
-            --replace-fail '::mozc::gui::DictionaryContentTableWidget' \\
+          substituteInPlace src/gui/dictionary_tool/dictionary_tool.ui \
+            --replace-fail '::mozc::gui::DictionaryContentTableWidget' \
               'mozc::gui::DictionaryContentTableWidget'
         '';
       });
