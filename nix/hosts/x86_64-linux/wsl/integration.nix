@@ -24,6 +24,20 @@ let
 in
 
 {
+  nixpkgs.overlays = [
+    (_final: prev: {
+      mozc = prev.mozc.overrideAttrs (old: {
+        # Mozc 2.30.5544.102's Qt UI compiler rejects the leading :: in this
+        # custom widget name when built with Qt 6.12. Upstream fixed this in
+        # google/mozc#1594; keep the fix local until nixpkgs updates Mozc.
+        postPatch = (old.postPatch or "") + ''
+          substituteInPlace src/gui/dictionary_tool/dictionary_tool.ui \\
+            --replace-fail '::mozc::gui::DictionaryContentTableWidget' \\
+              'mozc::gui::DictionaryContentTableWidget'
+        '';
+      });
+    })
+  ];
   # Root evaluates the Windows-mounted, user-owned checkout during rebuild.
   # Own its exact trust declaration here, never by editing Home Manager files.
   programs = {
