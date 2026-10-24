@@ -4,7 +4,10 @@ BeforeAll {
     # These tests exercise the inline encoding policy; the Nix build check also
     # executes its wrapper with the declared store module and an empty HOME.
     $script:oldPssaModule = $env:DOTFILES_PSSA_MODULE
-    $module = Get-Module -ListAvailable PSScriptAnalyzer | Sort-Object Version -Descending | Select-Object -First 1
+    $module = Get-Module PSScriptAnalyzer | Select-Object -First 1
+    if (-not $module) {
+        $module = Get-Module -ListAvailable PSScriptAnalyzer | Sort-Object Version -Descending | Select-Object -First 1
+    }
     if (-not $module) { throw 'Preprovision latest PSScriptAnalyzer before running formatter tests' }
     $env:DOTFILES_PSSA_MODULE = Join-Path $module.ModuleBase 'PSScriptAnalyzer.psd1'
 }

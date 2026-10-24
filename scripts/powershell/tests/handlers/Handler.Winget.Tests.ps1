@@ -1909,12 +1909,13 @@ Describe 'WingetHandler' {
                     return [pscustomobject]@{ Sources = @(
                             [pscustomobject]@{
                                 SourceDetails = [pscustomobject]@{ Name = 'winget' }
-                                Packages = @([pscustomobject]@{
+                                Packages      = @([pscustomobject]@{
                                         PackageIdentifier = 'wez.wezterm'
-                                        pathEntries = @($script:guiDirectory)
-                                        verifyCommand = [pscustomobject]@{ command = 'gui-fixture'; args = @('--version') }
+                                        pathEntries       = @($script:guiDirectory)
+                                        verifyCommand     = [pscustomobject]@{ command = 'gui-fixture'; args = @('--version') }
                                     })
-                            }) }
+                            })
+                    }
                 }
                 Mock Get-UserEnvironmentPath { return ('C:\missing;' * 4000) }
                 Mock Set-UserEnvironmentPath { throw 'User PATH exceeds the Windows 32767-character limit' }

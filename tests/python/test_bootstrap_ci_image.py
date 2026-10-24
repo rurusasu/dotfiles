@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import os
 import re
 import subprocess
@@ -16,6 +17,20 @@ WORKFLOW = ROOT / ".github/workflows/ci-nix.yml"
 
 
 class BootstrapCiImageTests(unittest.TestCase):
+    def test_nix_runs_statix_directly_without_sarif_permissions(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci-nix.yml").read_text()
+        lint_job = workflow.split("  nix:\n", 1)[1].split("  linux-build:\n", 1)[0]
+        self.assertIn("run: statix check .", lint_job)
+        self.assertNotIn("security-events:", lint_job)
+        self.assertNotIn("SARIF", lint_job)
+
+    def test_tool_image_changes_trigger_contract_checks_on_push(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci-nix.yml").read_text()
+        push_trigger = workflow.split("  push:\n", 1)[1].split("\nenv:\n", 1)[0]
+        self.assertIn("branches: [main]", push_trigger)
+        self.assertNotIn("paths:", push_trigger)
+        self.assertIn("uses: ./.github/actions/detect-ci-changes", workflow)
+
     def test_authentication_uses_nix_config_home_and_keeps_tokens_private(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             inherited_environment = Path(directory) / "inherited-github-env"
@@ -25,12 +40,7 @@ class BootstrapCiImageTests(unittest.TestCase):
             self.assertEqual(inherited_environment.read_text(), "OUTER_ENV=preserved\n")
 
     def _assert_authentication_uses_private_config_homes(self) -> None:
-        for use_xdg, wsl, owned_home in (
-            (True, False, True),
-            (False, False, True),
-            (True, False, False),
-            (False, True, True),
-        ):
+        for use_xdg, wsl, owned_home in itertools.product((True, False), repeat=3):
             with (
                 self.subTest(use_xdg=use_xdg, wsl=wsl, owned_home=owned_home),
                 tempfile.TemporaryDirectory() as directory,
@@ -48,7 +58,7 @@ class BootstrapCiImageTests(unittest.TestCase):
                         '  "config show access-tokens") field=access-tokens ;;\n'
                         '  "config show substituters") field=extra-substituters ;;\n'
                         '  "config show trusted-public-keys") field=extra-trusted-public-keys ;;\n'
-                        "  *) exit 64 ;;\nesac\n"
+                        '  *) exit 64 ;;\nesac\n'
                         'grep "^$field = " "$EXPECTED_CONFIG/nix/bootstrap-ci.conf" | cut -d= -f2-\n'
                     ),
                 }

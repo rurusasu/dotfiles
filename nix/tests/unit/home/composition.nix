@@ -217,6 +217,17 @@ in
       map
         (home: {
           enabled = home.config.programs.git.enable;
+          gitCopies = builtins.length (
+            builtins.filter (
+              package: package.drvPath == home.config.programs.git.package.drvPath
+            ) home.config.home.packages
+          );
+          ghqCopies = builtins.length (
+            builtins.filter (package: package.drvPath == home.pkgs.ghq.drvPath) home.config.home.packages
+          );
+          gwqCopies = builtins.length (
+            builtins.filter (package: package.drvPath == home.pkgs.gwq.drvPath) home.config.home.packages
+          );
           relativeWorktrees = home.config.programs.git.settings.worktree.useRelativePaths or false;
           identity = home.config.programs.git.settings.user;
           core = home.config.programs.git.settings.core;
@@ -233,6 +244,9 @@ in
         ];
     expected = builtins.genList (_: {
       enabled = true;
+      gitCopies = 1;
+      ghqCopies = 1;
+      gwqCopies = 1;
       relativeWorktrees = true;
       identity = {
         name = "rurusasu";
