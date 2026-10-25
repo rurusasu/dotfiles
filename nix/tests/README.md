@@ -13,6 +13,11 @@ nix-unit と競合する別のテストフレームワークではありませ�
 | `fixtures/` | テスト用 pkgs、NixOS hardware module などの共有入力                             | テストから import                           |
 
 Home Manager の構成テストは `unit/home/`、host の構成テストは `unit/hosts/` に置きます。
+`unit/home/` はアプリケーションごとにファイルを分け、`composition.nix` はホスト間の結合と
+OS 境界だけを検証します。共通の Home Manager 評価は `fixtures/home-configurations.nix` を使います。
+登録側で一度作った `homeConfigurations` を各テストへ渡し、同じホスト構成の評価を共有します。
+設定値の期待値は共通設定や正本ファイルから取り、各ホストへの反映・生成を比較します。
+同じ評価対象の値を期待値として再利用せず、OS 境界・所有権・生成処理の契約は独立した assertion にします。
 unit のファイルは `test...` 属性を持つ nix-unit 形式にし、ファイル名は kebab-case にします。
 `unit/ownership.nix` が unit / build の登録漏れ・重複と Bats の責務分類を検査します。
 

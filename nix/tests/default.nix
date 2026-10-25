@@ -1,4 +1,7 @@
 { inputs, ... }:
+let
+  homeConfigurations = import ./fixtures/home-configurations.nix { inherit inputs; };
+in
 {
   perSystem = { pkgs, config, ... }: {
     checks = {
@@ -61,8 +64,33 @@
     nix-unit.tests =
       (import ./unit/home/import-boundary.nix)
       // (import ./unit/home/platform-boundary.nix)
-      // (import ./unit/home/composition.nix { inherit inputs; })
-      // (import ./unit/home/starship.nix { inherit inputs; })
+      // (import ./unit/home/composition.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/bash.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/bat.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/chrome.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/codex.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/eza.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/fd.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/fzf.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/ghostty.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/ghq.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/git.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/gtk.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/gwq.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/nautilus.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/neovim.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/nix-gc.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/obsidian.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/onepassword.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/pnpm.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/ripgrep.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/rust.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/ssh.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/starship.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/wezterm.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/zoxide.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/zsh-patina.nix { inherit inputs homeConfigurations; })
+      // (import ./unit/home/zsh.nix { inherit inputs homeConfigurations; })
       // (import ./unit/home/standalone-darwin-identity.nix { inherit inputs; })
       // (import ./unit/home/rebuild-aliases.nix { inherit inputs; })
       // (import ./unit/ghostty.nix { inherit inputs; })
