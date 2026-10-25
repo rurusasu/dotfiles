@@ -72,7 +72,7 @@ exit $LASTEXITCODE
             $ErrorActionPreference = 'Continue'
             # Exercise native quoting with spaces and a trailing path separator.
             $modulePaths = $env:PSModulePath + [IO.Path]::PathSeparator +
-                (Join-Path $fixture 'Modules with spaces') + [IO.Path]::DirectorySeparatorChar
+            (Join-Path $fixture 'Modules with spaces') + [IO.Path]::DirectorySeparatorChar
             $modulePathsBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($modulePaths))
             $arguments = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $bootstrap,
                 '-Runner', $script:runner, '-Fixture', $fixture, '-ModulePathsBase64', $modulePathsBase64)
@@ -83,7 +83,8 @@ exit $LASTEXITCODE
         finally { $ErrorActionPreference = $previousPreference }
         return [pscustomobject]@{
             ExitCode            = $exitCode
-            Output              = $output -join [Environment]::NewLine
+            # Child PowerShell can interleave ANSI styling with wrapped diagnostics.
+            Output              = [regex]::Replace(($output -join [Environment]::NewLine), '\x1B\[[0-9;]*m', '')
             AcquisitionOccurred = Test-Path -LiteralPath (Join-Path $fixture 'unexpected-acquisition.txt')
         }
     }
