@@ -38,7 +38,7 @@ function Invoke-NixosWslSetup {
         throw 'Could not resolve the Windows checkout inside WSL.'
     }
 
-    $currentUserOutput = @(Invoke-Wsl -Arguments @('-d', $Context.DistroName, '--exec', 'id', '-un'))
+    $currentUserOutput = @(Invoke-Wsl -Arguments @('-d', $Context.DistroName, '--exec', '/run/current-system/sw/bin/id', '-un'))
     $currentUser = [string]($currentUserOutput | Where-Object { [string]$_ -match '^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$' } | Select-Object -Last 1)
     if ($LASTEXITCODE -ne 0 -or -not $currentUser) { throw 'Could not resolve the current WSL default user.' }
     $accountOutput = @(Invoke-SetupCommand "getent passwd $(ConvertTo-WslArgument $currentUser)")

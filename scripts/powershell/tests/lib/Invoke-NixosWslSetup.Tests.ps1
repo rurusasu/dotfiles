@@ -13,13 +13,26 @@ Describe 'Invoke-NixosWslSetup' {
         $script:configuredUser = 'nixos'
         $script:existingConfiguredUser = 'nixos'
         $script:currentUser = 'nixos'
+        $script:wslPathHasCoreutils = $true
         $script:accountHome = $null
         $script:setupCommands = @()
         Mock Invoke-Wsl {
             param($Arguments)
             $global:LASTEXITCODE = 0
             if ($Arguments -contains 'wslpath') { return '/mnt/d/dotfiles' }
-            if (($Arguments -contains 'id') -and ($Arguments -contains '-un')) { return $script:currentUser }
+            if ($Arguments -contains '-un') {
+                $executable = $Arguments[[Array]::IndexOf($Arguments, '--exec') + 1]
+                if ($executable -eq 'id' -and -not $script:wslPathHasCoreutils) {
+                    $global:LASTEXITCODE = 1
+                    return 'execvpe(id) failed: No such file or directory'
+                }
+                if ($executable -notin @('id', '/run/current-system/sw/bin/id')) {
+                    $global:LASTEXITCODE = 1
+                    return "execvpe($executable) failed: No such file or directory"
+                }
+                if ($Arguments -contains '-u') { return $Arguments[[Array]::IndexOf($Arguments, '-u') + 1] }
+                return $script:currentUser
+            }
             $command = [string]$Arguments[-1]
             $script:setupCommands += $command
             if ($command -match 'eval --raw .*wsl.defaultUser') {
@@ -51,6 +64,19 @@ Describe 'Invoke-NixosWslSetup' {
         Invoke-NixosWslSetup -Context $script:context
         ($script:setupCommands -join "`n") | Should -Match "getent passwd 'alice'"
         ($script:setupCommands -join "`n") | Should -Match "nixos-rebuild switch"
+    }
+
+    It 'should resolve the current default user when inherited WSL PATH has no coreutils' {
+        $script:wslPathHasCoreutils = $false
+        $script:configuredUser = 'alice'
+        $script:currentUser = 'alice'
+
+        Invoke-NixosWslSetup -Context $script:context
+
+        $commands = $script:setupCommands -join "`n"
+        $commands | Should -Match "getent passwd 'alice'"
+        $commands | Should -Match "chown -h -- 'alice:users'"
+        $commands | Should -Match 'nixos-rebuild switch'
     }
 
     It 'requires the official boot procedure before changing the default user' {
