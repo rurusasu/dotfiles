@@ -124,6 +124,28 @@ EOF
 	grep -q '^target=install-macos.sh args=--example$' "$DISPATCH_LOG"
 }
 
+@test "Linux bootstraps with the Lix installer and activates its profile" {
+	write_uname_stub
+	write_dispatch_repo
+	write_nix_profile_fixture
+	export TEST_UNAME_S=Linux TEST_UNAME_M=x86_64
+	cat >"$TEST_BIN/curl" <<'EOF'
+#!/usr/bin/env bash
+[[ "$*" == '-fsSL https://install.lix.systems/lix' ]] || exit 93
+cat <<'INSTALLER'
+[ "$*" = 'install --no-confirm' ] || exit 94
+cp "$TEST_NIX_PROFILE_FIXTURE" "$TEST_NIX_DAEMON_PROFILE"
+INSTALLER
+EOF
+	chmod +x "$TEST_BIN/curl"
+
+	run_installer_checking_nounset
+
+	[ "$status" -eq 0 ]
+	[ -f "$TEST_NIX_DAEMON_PROFILE" ]
+	grep -q 'home-manager -- switch' "$DISPATCH_LOG"
+}
+
 @test "NixOS dispatches to the native installer" {
 	write_uname_stub
 	write_dispatch_repo

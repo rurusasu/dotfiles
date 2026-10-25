@@ -29,17 +29,17 @@ let
 
   linux = mkHome {
     system = "x86_64-linux";
-    module = (import ../../hosts { inherit inputs; }).linuxHome;
+    module = (import ../../default.nix { inherit inputs; }).homeModules.linux;
   };
 
   wsl = mkHome {
     system = "x86_64-linux";
-    module = ../../home/wsl.nix;
+    module = (import ../../default.nix { }).homeModules.wsl;
   };
 
   darwin = mkHome {
     system = "aarch64-darwin";
-    module = ../../home/darwin.nix;
+    module = (import ../../default.nix { }).homeModules.darwin;
   };
 
 in
@@ -55,9 +55,9 @@ in
   configuredChrome = home: (import ../../modules/browsers/chrome).package { inherit (home) pkgs; };
   common = mkHome {
     system = "x86_64-linux";
-    module = ../../home/common.nix;
+    module = (import ../../default.nix { }).homeModules.common;
   };
-  wslDeclarations = import ../../home/wsl.nix {
+  wslDeclarations = (import ../../default.nix { }).homeModules.wsl {
     inherit inputs;
     inherit (wsl) config pkgs;
     inherit (wsl.pkgs) lib;

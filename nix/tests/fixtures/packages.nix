@@ -50,7 +50,7 @@ in
       inputs.nix-homebrew.darwinModules.nix-homebrew
       inputs.home-manager.darwinModules.home-manager
       { nixpkgs.pkgs = mkPkgs "aarch64-darwin"; }
-      ../../hosts/darwin.nix
+      (import ../../default.nix { }).hostModules.darwin
     ];
   };
 }

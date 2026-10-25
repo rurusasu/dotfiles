@@ -147,7 +147,7 @@ in
           {
             linuxPackage =
               builtins.any (package: (package.pname or "") == "aerospace")
-                (fixtures.mkHome system [ (import ../../hosts { inherit inputs; }).linuxHome ])
+                (fixtures.mkHome system [ (import ../../default.nix { inherit inputs; }).homeModules.linux ])
                 .config.home.packages;
             windowsPackage = fixtures.windowsPackages ? "aerospace";
           }

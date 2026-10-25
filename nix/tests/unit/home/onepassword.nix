@@ -71,7 +71,7 @@ in
       (homeConfigurations.mkHome {
         system = "x86_64-linux";
         module = {
-          imports = [ ../../../home/wsl.nix ];
+          imports = [ (import ../../../default.nix { }).homeModules.wsl ];
           dotfiles.onePassword.account = "fixture-wsl-account";
         };
       }).config.home.sessionVariables.OP_ACCOUNT;

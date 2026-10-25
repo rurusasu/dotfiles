@@ -13,7 +13,7 @@ let
         home.username = "test-user";
         home.homeDirectory = "/home/test-user";
       }
-      ../../../home/wsl.nix
+      (import ../../../default.nix { }).homeModules.wsl
     ];
   };
 in

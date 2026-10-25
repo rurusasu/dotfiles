@@ -42,7 +42,7 @@ let
           # this local derivation without forcing the upstream Python package.
           services.hermes-agent.package = testPackage;
         }
-        ../../home/common.nix
+        (import ../../default.nix { }).homeModules.common
       ];
     })
     // {

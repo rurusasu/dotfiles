@@ -109,7 +109,7 @@ WSLg system distro の読み取り調査では、当初 `fc-match` は FreeSans�
 
 恒久設定の `nix/hosts/x86_64-linux/wsl/fonts.nix` を含む `nixos-rebuild switch` が成功し、activation `wslgFonts` の実行を確認しました。`/usr/local/share/fonts/dotfiles-wslg/NotoSansCJK-VF.otf.ttc` は通常ファイル、32,682,580 bytes、mode `0644`、owner `root:root` で配置されています。SHA256 は `d3d8256cdec8dbcb3552284bc6b20c734dd60c2ee9df83b5758e34807c4bac32` で固定した Nix の入力と一致しました。WSLg system distro の `fc-cache` / `fc-match` でも、この本番配置先の Noto Sans CJK JP Bold を選択しています。一時検査用フォントは削除済みです。
 
-上記は検証当時の配置です。現在のフォント配置処理は `nix/hosts/wsl.nix`、WSLg 用 fontconfig は `nix/modules/fonts/wsl-fontconfig.conf` にあります。この再配置後の実機反映は、この記録では検証していません。
+上記は検証当時の配置です。現在は Noto CJK の追加導入とフォールバック指定を廃止し、UDEV Gothic NF と絵文字を配布します。`nix/default.nix:hostModules.wsl` は以前配布した Noto CJK のコピーを反映時に整理します。WSLg 用 fontconfig は `nix/modules/fonts/wsl-fontconfig.conf` にあります。この変更後の実機反映は、この記録では検証していません。
 
 フォント反映時の system は `/nix/store/9fy43irl4bjahgrf93gj78las0670p68-nixos-system-nixos-26.11.20261011.7fd4004` です。activation 内では WSLg を再起動しません。実行中の Weston が古い Pango font map を保持していたため、ユーザーの承認後に `wsl --shutdown` で WSL 全体を再起動しました。その後 `Win+Shift+B` で WSLg Chrome を起動し、通常 X11 の灰色の server titlebar が「新しいタブ - Google Chrome」と日本語で正常表示されることを実 UI で確認しました。恒久フォント配置と再起動後の通常 titlebar の確認が完了しています。
 
@@ -129,7 +129,7 @@ User PATH の保存・seed・復元を安定した Windows PowerShell 5.1 の親
 
 ## レビューの追加検証
 
-`nix/outputs.nix` だけを変更した場合も Windows / chezmoi の検査を選択するよう CI 分類を修正しました。実際の Git 差分と composite action を使う回帰検査で分類漏れを再現し、修正後は対象8件と Python のトップレベル52件が成功しています。
+`nix/default.nix` だけを変更した場合も Windows / chezmoi の検査を選択するよう CI 分類を修正しました。実際の Git 差分と composite action を使う回帰検査で分類漏れを再現し、修正後は対象8件と Python のトップレベル52件が成功しています。
 
 PowerToys 用の managed file 置換には `-ErrorAction Stop` を指定しました。実 chezmoi で展開した配布スクリプトを隔離した子プロセスで実行し、action script と JSON の各配置先を実際にロックすると、修正前は成功終了してしまうことを再現しました。修正後は非0終了・PowerToys 同期の未実行・既存内容の保持・一時ファイル削除を確認しています。正常時の UTF-8 / BOM、再適用での更新時刻保持、Linux / Darwin の配布境界も含む5件が、Windows PowerShell 5.1 / 7 の両方で成功しました。同期先には fixture を使い、実ユーザーの PowerToys は変更していません。証跡は `%TEMP%/dotfiles-pr731-deployment-{winps51,pwsh7}-green.log` と同名の `.xml` です。
 

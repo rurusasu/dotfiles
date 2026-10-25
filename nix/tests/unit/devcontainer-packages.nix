@@ -10,7 +10,7 @@ in
           system:
           builtins.elem (fixtures.mkPkgs system).devcontainer
             (fixtures.mkHome system [
-              ../../home/common.nix
+              (import ../../default.nix { }).homeModules.common
               ../../modules/editors/nvim
             ]).config.home.packages
         )

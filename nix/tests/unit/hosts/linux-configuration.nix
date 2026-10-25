@@ -4,13 +4,18 @@ let
     (inputs.nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       specialArgs = { inherit inputs; };
-      modules = [ ../../../hosts/linux.nix ];
+      modules = [ (import ../../../default.nix { }).hostModules.linux ];
     })
     config
     pkgs
     ;
 in
 {
+  testNativeLinuxUsesStableLix = {
+    expr = config.nix.package == pkgs.lixPackageSets.stable.lix;
+    expected = true;
+  };
+
   testNativeLinuxRegistersDconfForGtkSettingsPersistence = {
     expr = config.programs.dconf.enable;
     expected = true;

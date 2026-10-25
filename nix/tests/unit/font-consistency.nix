@@ -4,7 +4,6 @@ let
     {
       system,
       modules,
-      japanese ? false,
     }:
     let
       pkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
@@ -51,13 +50,13 @@ let
       expected = {
         homePackages = true;
         emojiPackage = true;
-        cjkSansPackage = japanese;
-        cjkSerifPackage = japanese;
+        cjkSansPackage = false;
+        cjkSerifPackage = false;
         fontconfig = true;
         defaultFonts = {
           monospace = [ "UDEV Gothic NF" ];
-          sansSerif = [ "UDEV Gothic NF" ] ++ pkgs.lib.optional japanese "Noto Sans CJK JP";
-          serif = [ "UDEV Gothic NF" ] ++ pkgs.lib.optional japanese "Noto Serif CJK JP";
+          sansSerif = [ "UDEV Gothic NF" ];
+          serif = [ "UDEV Gothic NF" ];
           emoji = [ "Noto Color Emoji" ];
         };
       };
@@ -71,7 +70,7 @@ in
           system = "x86_64-linux";
           specialArgs = { inherit inputs; };
           modules = [
-            ../../hosts/nixos.nix
+            (import ../../default.nix { }).hostModules.nixos
           ];
         };
       in
@@ -97,16 +96,15 @@ in
 
   testLinuxInstallsManagedFont = fontContract {
     system = "x86_64-linux";
-    modules = [ (import ../../hosts { inherit inputs; }).linuxHome ];
+    modules = [ (import ../../default.nix { inherit inputs; }).homeModules.linux ];
   };
   testWSLInstallsManagedFont = fontContract {
     system = "x86_64-linux";
-    modules = [ ../../home/wsl.nix ];
-    japanese = true;
+    modules = [ (import ../../default.nix { }).homeModules.wsl ];
   };
   testStandaloneDarwinHomeProfileInstallsManagedFont = fontContract {
     system = "aarch64-darwin";
-    modules = [ ../../home/darwin.nix ];
+    modules = [ (import ../../default.nix { }).homeModules.darwin ];
   };
 
 }

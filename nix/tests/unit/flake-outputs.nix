@@ -7,18 +7,17 @@ let
     {
       system,
       isDarwin,
-      isLinux,
     }:
-    (import ../../hosts {
+    (import ../../default.nix {
       inputs = {
         nix-darwin.packages.${system}.darwin-rebuild.executable = "darwin-rebuild";
         home-manager.packages.${system}.home-manager.executable = "home-manager";
       };
-    }).mkApps
+    }).perSystem
       {
         inherit system;
         pkgs.stdenv.hostPlatform = {
-          inherit isDarwin isLinux;
+          inherit isDarwin;
         };
         lib = {
           getExe = package: package.executable;
@@ -26,22 +25,6 @@ let
           optionalAttrs = condition: attrs: if condition then attrs else { };
         };
       };
-
-  homeOutputs =
-    (import ../../hosts/configurations.nix {
-      inputs = {
-        nixpkgs = {
-          outPath = builtins.toFile "flake-outputs-nixpkgs-fixture.nix" ''
-            { system, ... }:
-            {
-              stdenv.hostPlatform.system = system;
-            }
-          '';
-          lib.optionals = condition: values: if condition then values else [ ];
-        };
-        home-manager.lib.homeManagerConfiguration = args: args;
-      };
-    }).homeConfigurations;
 
   treefmtCheck =
     (
@@ -72,86 +55,41 @@ let
       builtins.filter builtins.isString (builtins.split "\n" script)
     );
 
-  # Capture constructor arguments to assert generated wiring without claiming
-  # evaluation of the complete NixOS module graph.
-  hostLib = import ../../hosts/default.nix {
-    inputs = {
-      nixpkgs.lib = {
-        nixosSystem = args: args;
-        optionals = condition: values: if condition then values else [ ];
-      };
-      home-manager.nixosModules.home-manager = "home-manager-module";
-    };
-  };
-  wslNixosArguments = {
-    system = "x86_64-linux";
-    hostPath = ../../hosts/wsl.nix;
-    homeModule = ../../home/wsl.nix;
-    configuredUser = "nixos";
-  };
-  findHomeManagerModule =
-    arguments:
-    builtins.head (
-      builtins.filter (module: builtins.isAttrs module && module ? "home-manager") arguments.modules
-    );
-  homeManagerModule = findHomeManagerModule (hostLib.mkNixos wslNixosArguments);
-  customUserHomeManagerModule = findHomeManagerModule (
-    hostLib.mkNixos (wslNixosArguments // { configuredUser = "alice"; })
-  );
-
-  hostSpecsWithoutHardware = hostLib.mkNixosHostSpecs {
-    hardwareConfig = "";
-    requestedSystem = "";
-  };
-  hostSpecsWithHardware = hostLib.mkNixosHostSpecs {
-    hardwareConfig = "/etc/nixos/hardware-configuration.nix";
-    requestedSystem = "";
-  };
-  hostSpecsWithRequestedSystem = hostLib.mkNixosHostSpecs {
-    hardwareConfig = "/etc/nixos/hardware-configuration.nix";
-    requestedSystem = "aarch64-linux";
-  };
-  linuxHomeDescription =
-    module:
-    let
-      declarations = module {
-        config = { };
-        lib = { };
-      };
-    in
-    {
-      imports = map (
-        imported: if builtins.isPath imported then toString imported else builtins.typeOf imported
-      ) declarations.imports;
-      inherit (declarations.programs.git.signing) signer;
-    };
-  expectedLinuxHome = {
-    imports = [
-      "lambda"
-      "lambda"
-      (toString ../../modules/discord)
-      (toString ../../home/common.nix)
-    ];
-    signer = "/opt/1Password/op-ssh-sign";
-  };
-
 in
 {
+  testConsolidatedDefaultsPublishGeneratedAndDarwinPackages = {
+    expr = builtins.mapAttrs (_: packages: builtins.attrNames packages) inputs.self.packages;
+    expected = {
+      aarch64-darwin = [
+        "darwin-dia-browser"
+        "keybindings-json"
+      ];
+      aarch64-linux = [ "keybindings-json" ];
+      x86_64-linux = [ "keybindings-json" ];
+    };
+  };
+
   testFlakeHasNoIntermediateLibOrFlakesDirectories = {
     expr = {
       oldLib = builtins.pathExists ../../lib;
       oldFlakes = builtins.pathExists ../../flakes;
-      hostConstruction = builtins.pathExists ../../hosts/default.nix;
+      consolidatedDefaults = builtins.pathExists ../../default.nix;
+      splitHostDefinitions = builtins.pathExists ../../hosts/default.nix;
+      splitRegistrations = builtins.pathExists ../../hosts/configurations.nix;
+      splitHomeDefinitions = builtins.pathExists ../../home/common.nix;
       registryPresent = builtins.pathExists ../default.nix;
-      packageOutputs = builtins.pathExists ../../outputs.nix;
+      splitPackageOutputs = builtins.pathExists ../../outputs.nix;
       formatter = builtins.pathExists ../../formatter.nix;
     };
     expected = {
       oldLib = false;
       oldFlakes = false;
-      hostConstruction = true;
+      consolidatedDefaults = true;
+      splitHostDefinitions = false;
+      splitRegistrations = false;
+      splitHomeDefinitions = false;
       registryPresent = true;
-      packageOutputs = true;
+      splitPackageOutputs = false;
       formatter = true;
     };
   };
@@ -226,25 +164,16 @@ in
         (mkApps {
           system = "aarch64-darwin";
           isDarwin = true;
-          isLinux = false;
         }).apps.darwin-rebuild.program;
       linux =
         (mkApps {
           system = "x86_64-linux";
           isDarwin = false;
-          isLinux = true;
         }).apps;
-      unsupportedPlatformHasNoRunnerApps =
-        (mkApps {
-          system = "x86_64-freebsd";
-          isDarwin = false;
-          isLinux = false;
-        }).apps == { };
     };
     expected = {
       darwin = "darwin-rebuild";
       linux.home-manager.program = "home-manager";
-      unsupportedPlatformHasNoRunnerApps = true;
     };
   };
 
@@ -263,76 +192,38 @@ in
     };
   };
 
-  testNixOSHostSpecsHonorExplicitHardwareAndSystemOverrides = {
-    expr = {
-      wsl = hostSpecsWithoutHardware.nixos;
-      nativeLinuxOmittedWithoutHardware = !(hostSpecsWithoutHardware ? linux);
-      nativeLinux = hostSpecsWithHardware.linux // {
-        homeModule = linuxHomeDescription hostSpecsWithHardware.linux.homeModule;
-      };
-      defaultNativeLinuxSystem = hostSpecsWithHardware.linux.system;
-      requestedNativeLinuxSystem = hostSpecsWithRequestedSystem.linux.system;
-      requestedNativeLinuxHost = hostSpecsWithRequestedSystem.linux.hostPath;
-      requestedNativeLinuxHome = linuxHomeDescription hostSpecsWithRequestedSystem.linux.homeModule;
-    };
+  testStandaloneHomeOutputsSelectOsSpecificSigners = {
+    expr = builtins.mapAttrs (
+      _: home: home.config.programs.git.signing.signer
+    ) inputs.self.homeConfigurations;
     expected = {
-      wsl = {
-        system = "x86_64-linux";
-        hostPath = ../../hosts/wsl.nix;
-        homeModule = ../../home/wsl.nix;
-      };
-      nativeLinuxOmittedWithoutHardware = true;
-      nativeLinux = {
-        system = "x86_64-linux";
-        hostPath = ../../hosts/linux.nix;
-        homeModule = expectedLinuxHome;
-        hardwareConfig = "/etc/nixos/hardware-configuration.nix";
-      };
-      defaultNativeLinuxSystem = "x86_64-linux";
-      requestedNativeLinuxSystem = "aarch64-linux";
-      requestedNativeLinuxHost = ../../hosts/linux.nix;
-      requestedNativeLinuxHome = expectedLinuxHome;
+      aarch64-darwin = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
+      aarch64-linux = "/opt/1Password/op-ssh-sign";
+      x86_64-linux = "/opt/1Password/op-ssh-sign";
     };
   };
 
-  testStandaloneHomeOutputsUseCanonicalOsModules = {
-    expr = {
-      darwin = map toString (builtins.filter builtins.isPath homeOutputs."aarch64-darwin".modules);
-      x86Linux = linuxHomeDescription (builtins.head homeOutputs."x86_64-linux".modules);
-      armLinux = linuxHomeDescription (builtins.head homeOutputs."aarch64-linux".modules);
-    };
+  testRegisteredWslIntegratesHomeManagerWithItsDefaultUser = {
+    expr =
+      let
+        cfg = inputs.self.nixosConfigurations.nixos.config;
+        home = cfg.home-manager.users.${cfg.wsl.defaultUser};
+      in
+      {
+        system = cfg.nixpkgs.hostPlatform.system;
+        user = home.home.username;
+        directory = home.home.homeDirectory;
+        nix = home.nix.package == cfg.nix.package;
+        globalPackages = cfg.home-manager.useGlobalPkgs;
+        userPackages = cfg.home-manager.useUserPackages;
+      };
     expected = {
-      darwin = [
-        (toString ../../home/darwin.nix)
-      ];
-      x86Linux = expectedLinuxHome;
-      armLinux = expectedLinuxHome;
-    };
-  };
-
-  testNixOSHomeManagerGeneratedWiringUsesNixosDefaultUser = {
-    expr = {
-      user = homeManagerModule."home-manager".users.nixos.imports;
-      selectedUser = builtins.attrNames homeManagerModule."home-manager".users;
-      usesGlobalPackages = homeManagerModule."home-manager".useGlobalPkgs;
-      usesUserPackages = homeManagerModule."home-manager".useUserPackages;
-    };
-    expected = {
-      user = [ ../../home/wsl.nix ];
-      selectedUser = [ "nixos" ];
-      usesGlobalPackages = true;
-      usesUserPackages = true;
-    };
-  };
-
-  testNixOSHomeManagerGeneratedWiringHonorsExplicitUserOverride = {
-    expr = {
-      configuredUserModule = customUserHomeManagerModule."home-manager".users.alice.imports;
-      configuredUserList = builtins.attrNames customUserHomeManagerModule."home-manager".users;
-    };
-    expected = {
-      configuredUserModule = [ ../../home/wsl.nix ];
-      configuredUserList = [ "alice" ];
+      system = "x86_64-linux";
+      user = "nixos";
+      directory = "/home/nixos";
+      nix = true;
+      globalPackages = true;
+      userPackages = true;
     };
   };
 

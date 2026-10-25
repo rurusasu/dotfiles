@@ -7,7 +7,7 @@ let
     };
     modules = [
       inputs.nixos-wsl.nixosModules.wsl
-      ../../../hosts/wsl.nix
+      (import ../../../default.nix { }).hostModules.wsl
     ];
   };
 
@@ -15,11 +15,48 @@ let
   home = (import ../../fixtures/home-configurations.nix { inherit inputs; }).wsl;
 in
 {
+  testWslUsesTheDeclaredDefaultUserWithoutBootstrapMetadata = {
+    expr =
+      let
+        inherit
+          (mkWsl.extendModules {
+            modules = [ { wsl.defaultUser = "alice"; } ];
+          })
+          config
+          ;
+      in
+      {
+        user = config.wsl.defaultUser;
+        uid = config.users.users.alice.uid;
+        home = config.users.users.alice.home;
+        homeManagerUser = config.home-manager.users.alice.home.username;
+        homeManagerHome = config.home-manager.users.alice.home.homeDirectory;
+        persistedIdentity = config.system.activationScripts ? dotfilesHostState;
+        trustedCheckouts = builtins.concatMap (
+          gitConfig: gitConfig.safe.directory or [ ]
+        ) config.programs.git.config;
+      };
+    expected = {
+      user = "alice";
+      uid = 1000;
+      home = "/home/alice";
+      homeManagerUser = "alice";
+      homeManagerHome = "/home/alice";
+      persistedIdentity = false;
+      trustedCheckouts = [ "/home/alice/.dotfiles" ];
+    };
+  };
+
+  testWslUsesStableLix = {
+    expr = defaultConfig.nix.package == mkWsl.pkgs.lixPackageSets.stable.lix;
+    expected = true;
+  };
+
   testWslRegistersDconfForGtkSettingsPersistence = {
     expr = defaultConfig.programs.dconf.enable;
     expected = true;
   };
-  testWslgFontBridgeCopiesPrimaryAndFallbackFontsWithoutRestartingApplications = {
+  testWslgFontBridgeCopiesUdevAndEmojiAndRetiresNoto = {
     expr =
       let
         activation = defaultConfig.system.activationScripts.wslgFonts or { };
@@ -32,7 +69,8 @@ in
       deps = [ "specialfs" ];
       text = ''
         ${mkWsl.pkgs.coreutils}/bin/install -d -m 0755 /usr/local/share/fonts/dotfiles-wslg
-        ${mkWsl.pkgs.coreutils}/bin/install --compare -m 0644 ${mkWsl.pkgs.noto-fonts-cjk-sans}/share/fonts/opentype/noto-cjk/NotoSansCJK-VF.otf.ttc /usr/local/share/fonts/dotfiles-wslg/NotoSansCJK-VF.otf.ttc
+        # Retire the Noto CJK file previously distributed by this module.
+        ${mkWsl.pkgs.coreutils}/bin/rm -f -- /usr/local/share/fonts/dotfiles-wslg/NotoSansCJK-VF.otf.ttc
         ${mkWsl.pkgs.coreutils}/bin/install --compare -m 0644 ${mkWsl.pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Regular.ttf /usr/local/share/fonts/dotfiles-wslg/UDEVGothicNF-Regular.ttf
         ${mkWsl.pkgs.coreutils}/bin/install --compare -m 0644 ${mkWsl.pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Bold.ttf /usr/local/share/fonts/dotfiles-wslg/UDEVGothicNF-Bold.ttf
         ${mkWsl.pkgs.coreutils}/bin/install --compare -m 0644 ${mkWsl.pkgs.noto-fonts-color-emoji}/share/fonts/noto/NotoColorEmoji.ttf /usr/local/share/fonts/dotfiles-wslg/NotoColorEmoji.ttf

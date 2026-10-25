@@ -7,7 +7,7 @@
           system:
           builtins.any (package: (package.pname or "") == "tart")
             ((import ../fixtures/packages.nix { inherit inputs; }).mkHome system [
-              ../../home/common.nix
+              (import ../../default.nix { }).homeModules.common
               ../../modules/editors/nvim
             ]).config.home.packages
         )

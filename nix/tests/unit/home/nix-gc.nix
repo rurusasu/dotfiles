@@ -3,25 +3,26 @@ let
   lib = inputs.nixpkgs.lib;
   # Preserve the production registration and module lists, overriding only
   # process-derived Darwin identity for deterministic sandbox evaluation.
-  registered = import ../../../hosts/configurations.nix {
-    inputs = inputs // {
-      nix-darwin = inputs.nix-darwin // {
-        lib = inputs.nix-darwin.lib // {
-          darwinSystem =
-            args:
-            inputs.nix-darwin.lib.darwinSystem (
-              args
-              // {
-                specialArgs = (args.specialArgs or { }) // {
-                  sudoUser = "test-user";
-                  currentUser = "test-user";
-                };
-              }
-            );
+  registered =
+    (import ../../../default.nix {
+      inputs = inputs // {
+        nix-darwin = inputs.nix-darwin // {
+          lib = inputs.nix-darwin.lib // {
+            darwinSystem =
+              args:
+              inputs.nix-darwin.lib.darwinSystem (
+                args
+                // {
+                  specialArgs = (args.specialArgs or { }) // {
+                    sudoUser = "test-user";
+                    currentUser = "test-user";
+                  };
+                }
+              );
+          };
         };
       };
-    };
-  };
+    }).configurations;
   homes = map (system: registered.homeConfigurations.${system}) [
     "x86_64-linux"
     "aarch64-linux"
@@ -30,37 +31,18 @@ let
   nixos = registered.nixosConfigurations.nixos;
   darwin = registered.darwinConfigurations.macos;
   darwinHome = darwin.config.home-manager.users.${darwin.config.system.primaryUser};
-  declarations = {
-    common = import ../../../home/common.nix {
-      inherit lib;
-      config = { };
-    };
-    nixos = import ../../../hosts/nixos.nix {
-      inherit inputs lib;
-      pkgs = { };
-    };
-    darwin = import ../../../hosts/darwin.nix {
-      inherit inputs lib;
-      pkgs = { };
-      sudoUser = "test-user";
-      currentUser = "test-user";
-    };
-  };
+
 in
 {
-  testHostRegistrationsOwnGarbageCollectionDeclarations = {
-    expr = {
-      gc = lib.mapAttrs (_: module: lib.hasAttrByPath [ "nix" "gc" ] module) declarations;
-      darwinMinFree = lib.hasAttrByPath [ "nix" "settings" "min-free" ] declarations.darwin;
-    };
-    expected = {
-      gc = {
-        common = false;
-        nixos = false;
-        darwin = false;
-      };
-      darwinMinFree = false;
-    };
+  testStandaloneHomesInstallStableLixAndUseItForGarbageCollection = {
+    expr = map (home: {
+      selected = home.config.nix.package == home.pkgs.lixPackageSets.stable.lix;
+      installed = builtins.elem home.pkgs.lixPackageSets.stable.lix home.config.home.packages;
+    }) homes;
+    expected = map (_: {
+      selected = true;
+      installed = true;
+    }) homes;
   };
 
   testRegisteredStandaloneHomesUseNativeUserGarbageCollection = {

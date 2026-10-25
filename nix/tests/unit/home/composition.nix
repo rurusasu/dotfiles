@@ -10,7 +10,7 @@ let
     darwin
     configuredChrome
     ;
-  darwinDeclarations = import ../../../home/darwin.nix {
+  darwinDeclarations = (import ../../../default.nix { }).homeModules.darwin {
     inherit inputs;
     inherit (darwin) pkgs;
     inherit (darwin.pkgs) lib;

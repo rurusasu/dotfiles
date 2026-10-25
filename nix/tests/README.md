@@ -13,9 +13,9 @@ nix-unit と競合する別のテストフレームワークではありませ�
 | `fixtures/` | テスト用 pkgs、NixOS hardware module などの共有入力                             | テストから import                           |
 
 Home Manager の構成テストは `unit/home/`、host の構成テストは `unit/hosts/` に置きます。
-本番の system module は `nix/hosts/*.nix`、OS ごとの Home Manager module は
-Darwin / WSL の `nix/home/{darwin,wsl}.nix` と native / standalone Linux 共通の
-`nix/hosts/default.nix` の `linuxHome` を参照し、CPU architecture は `system` 引数で選択します。
+本番の system module は `nix/default.nix:hostModules`、OS ごとの Home Manager module は
+Darwin / WSL の `nix/default.nix:homeModules` と native / standalone Linux 共通の
+`nix/default.nix:homeModules.linux` を参照し、CPU architecture は `system` 引数で選択します。
 `unit/home/` はアプリケーションごとにファイルを分け、`composition.nix` はホスト間の結合と
 OS 境界だけを検証します。共通の Home Manager 評価は `fixtures/home-configurations.nix` を使います。
 登録側で一度作った `homeConfigurations` を各テストへ渡し、同じホスト構成の評価を共有します。
@@ -96,9 +96,9 @@ Nix formatter は host module ではなく固定した store module を使いま
 `activationPackage` を checks に登録すれば Home Manager の構成ビルドも検証できますが、
 それ自体は activation の実行や、設定値を比較する nix-unit テストを意味しません。
 
-Linux bootstrap CI は `x86_64-linux`（`ubuntu-24.04`）で `nix/hosts/linux.nix` の本番 NixOS system と standalone Home Manager activation package を build します。両構成のユーザー設定は `nix/hosts/default.nix` の `linuxHome` を共有します。
-Darwin CI は `aarch64-darwin`（`macos-15`）の runner で `nix/hosts/darwin.nix` を使う `darwin-rebuild switch` と全 flake checks を実行します。
-WSL CI も `nix/hosts/wsl.nix` を使う本番経路の `nixos-rebuild switch` を実行します。Darwin cask artifact check は CI で実行しません。
+Linux bootstrap CI は `x86_64-linux`（`ubuntu-24.04`）で `nix/default.nix:hostModules.linux` の本番 NixOS system と standalone Home Manager activation package を build します。両構成のユーザー設定は `nix/default.nix:homeModules.linux` を共有します。
+Darwin CI は `aarch64-darwin`（`macos-15`）の runner で `nix/default.nix:hostModules.darwin` を使う `darwin-rebuild switch` と全 flake checks を実行します。
+WSL CI も `nix/default.nix:hostModules.wsl` を使う本番経路の `nixos-rebuild switch` を実行します。Darwin cask artifact check は CI で実行しません。
 Python unittest suite は CI の gate から外し、workflow 検証は `actionlint`、設定適用は対象 platform の rebuild で行います。
 共通の `nix` job は statix の lint を確認し、事前の `nix eval` / `nix flake check --no-build` は実行しません。
 `aarch64-linux` は flake の support/output には含まれますが、この workflow には ARM64 Linux runner の native build がありません。

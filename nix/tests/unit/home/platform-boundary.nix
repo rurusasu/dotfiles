@@ -1,10 +1,10 @@
 let
-  contains =
-    needle:
-    builtins.any (line: builtins.match ".*${needle}.*" line != null) (
-      builtins.filter builtins.isString (builtins.split "\n" (builtins.readFile ../../../home/common.nix))
-    );
-
+  defaults = import ../../../default.nix { };
+  common = defaults.homeModules.common {
+    config = { };
+    lib.mkDefault = value: value;
+    pkgs = { };
+  };
 in
 {
   testSharedGitAndSshDoNotDeclareOSSpecificProgramsOrAgents = {
@@ -27,53 +27,28 @@ in
       agent = false;
     };
   };
-
-  testCommonHomeModuleDoesNotRequireWSLSpecialArg = {
-    expr = contains "isWSL";
-    expected = false;
-  };
-
-  testCommonHomeModuleDoesNotContainDarwinBranch = {
-    expr = contains "isDarwin";
-    expected = false;
-  };
-
-  testCommonHomeModuleDoesNotContainDarwinPath = {
-    expr = contains "/opt/homebrew";
-    expected = false;
-  };
-
-  testCommonHomeModuleDoesNotContainDarwinEnvironment = {
-    expr =
-      contains "HOMEBREW_AUTO_UPDATE_SECS"
-      || contains "OP_BIOMETRIC_UNLOCK_ENABLED"
-      || contains "TERMINFO_DIRS";
-    expected = false;
-  };
-
-  testOSHomeEntrypointsKeepCommonImport = {
-    expr =
-      builtins.map
-        (
-          module:
-          builtins.elem (../../../home/common.nix) (
-            (module {
-              pkgs = { };
-              lib = { };
-              inputs.nixos-vscode-server.homeModules.default = { };
-              config.home.username = "test-user";
-            }).imports or [ ]
-          )
-        )
-        [
-          (import ../../../home/darwin.nix)
-          (import ../../../hosts { inputs = { }; }).linuxHome
-          (import ../../../home/wsl.nix)
-        ];
+  testCommonHomeModuleDoesNotRequireOSSpecialArgs = {
+    expr = builtins.attrNames (builtins.functionArgs defaults.homeModules.common);
     expected = [
-      true
-      true
-      true
+      "config"
+      "lib"
+      "pkgs"
     ];
+  };
+  testCommonHomeKeepsPlatformPathsAndEnvironmentInOsModules = {
+    expr = {
+      homebrewPath = builtins.elem "/opt/homebrew/bin" common.home.sessionPath;
+      variables = builtins.attrNames (common.home.sessionVariables or { });
+      darwin = common ? targets;
+      wsl = common ? systemd;
+      signer = common.programs.git.signing.signer or null;
+    };
+    expected = {
+      homebrewPath = false;
+      variables = [ ];
+      darwin = false;
+      wsl = false;
+      signer = null;
+    };
   };
 }

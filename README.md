@@ -44,7 +44,7 @@ nix flake update
 
 Codex CLI の個別インストールは行わず、ChatGPT アプリ付属の CLI を使います。
 Unix の dsh を含む CLI は `nix/modules/tools.nix` が導入します。
-Python は同じファイルが導入する uv で管理し、interpreter を直接インストールしません。
+ユーザー環境の Python は Hermes 同梱の interpreter を使います。uv はプロジェクトの依存管理に使い、Python を別途インストールしません。
 Windows の GUI profile は Node.js/npm や dsh を導入しません。
 pnpm と Bun は導入しません。
 
@@ -92,11 +92,21 @@ macOS / NixOS / WSL の Docker 設定は [`nix/modules/docker.nix`](./nix/module
 Docker の設定は同モジュールが所有し、installer に Docker 用の環境変数はありません。
 1Password の環境変数は Home Manager が管理します。
 
-macOS の初回導入には Lix installer を使い、nix-darwin の `nix.package` も
-`pkgs.lixPackageSets.stable.lix` に統一します。既存の Nix 環境は nix-darwin の反映で
-Lix に切り替わります。nix-darwin がシステムを収束させ、nix-homebrew が選択した
+macOS / Linux の初回導入には [Lix installer](https://lix.systems/install/) を使います。
+macOS / NixOS / WSL の `nix.package` と standalone Home Manager の CLI・GC は
+`pkgs.lixPackageSets.stable.lix` に統一します。既存のシステム管理下の Nix は
+nix-darwin / NixOS の反映で Lix に切り替わります。
+nix-darwin がシステムを収束させ、nix-homebrew が選択した
 Homebrew formula/cask を管理します。Home Manager も同じコマンド内で
 適用します。macOS では WSL や NixOS を導入しません。
+
+macOS では `darwin-uninstaller` を有効にします。
+Lix installer で新規導入した macOS / Linux では `/nix/lix-installer` と receipt が保持され、
+[installer の uninstall](https://git.lix.systems/lix-project/lix-installer#uninstalling) を利用できます。
+アンインストールは Nix 環境を削除するため、実行前に必要な設定・データを退避してください。
+macOS では nix-darwin を先に解除します。NixOS / WSL は OS が Nix を管理するため、
+Lix installer のアンインストール対象ではありません。
+既存の standalone Linux では Home Manager が CLI を切り替え、既存 daemon は元の導入方法で管理します。
 
 macOS / Linux 構成では、Hermes Desktop と native gateway は upstream の Home Manager
 module、Agent CLI の有効化は `nix/modules/tools.nix` で管理します。Linux は native NixOS、WSLg、standalone Home Manager で利用できます。
@@ -155,7 +165,7 @@ cd dotfiles
 ```
 
 - NixOS: `nixos-rebuild switch` に Home Manager と rootful Docker を含めます。
-- その他の Linux（Ubuntu / Debian など）: Nix を必要に応じて導入し、Home Manager を適用します。ユーザー環境のみを管理し、Docker・systemd・既存アカウントは変更しません。
+- その他の Linux（Ubuntu / Debian など）: Lix を必要に応じて導入し、Home Manager を適用します。初回の Lix installer は管理者権限で daemon・ビルド用アカウントを構成します。その後の Home Manager はユーザー環境を管理し、Docker・OS のサービス・既存アカウントは変更しません。
 
 NixOS は現在の `/etc/nixos/hardware-configuration.nix` を必須の host profile として読み込みます。固定ディスク構成はリポジトリに持たず、このファイルが存在しない場合は activation 前に停止します。
 
@@ -169,13 +179,13 @@ Unix のシステム統合 installer は必須 CLI を acceptance で確認し�
 
 Unix の導入とアプリ設定は `nix/modules/`、Windows の導入情報は `windows/winget/packages.json` で管理します。chezmoi は Windows 専用の設定を配布します。Unix の Codex、shell、Git、terminal、editor などは Home Manager が管理します。
 
-- ユーザー設定: Unix は `nix/home/` と `nix/modules/`、Linux 共通の Home Manager module は `nix/hosts/default.nix` の `linuxHome`、Windows は `chezmoi/`
-- Home Manager: `nix/home/common.nix`
-- macOS system: `nix/hosts/darwin.nix`、ユーザー設定: `nix/home/darwin.nix`
-- 非 NixOS Linux: `nix/hosts/default.nix` の `linuxHome` と standalone Home Manager
-- NixOS 共通: `nix/hosts/nixos.nix` がアカウント、Home Manager 統合、Docker と `system.stateVersion = "26.05"` を管理
-- native Linux のセッション: `nix/hosts/linux.nix`、WSL 固有の OS 連携: `nix/hosts/wsl.nix`
-- Linux 共通ユーザー設定: `nix/hosts/default.nix` の Home Manager module `linuxHome`、WSL ユーザー設定: `nix/home/wsl.nix`
+- ユーザー設定: Unix は `nix/default.nix` と `nix/modules/`、Linux 共通の Home Manager module は `nix/default.nix:homeModules.linux`、Windows は `chezmoi/`
+- Home Manager: `nix/default.nix:homeModules.common`
+- macOS system: `nix/default.nix:hostModules.darwin`、ユーザー設定: `nix/default.nix:homeModules.darwin`
+- 非 NixOS Linux: `nix/default.nix:homeModules.linux` と standalone Home Manager
+- NixOS 共通: `nix/default.nix:hostModules.nixos` がアカウント、Home Manager 統合、Docker と `system.stateVersion = "26.05"` を管理
+- native Linux のセッション: `nix/default.nix:hostModules.linux`、WSL 固有の OS 連携: `nix/default.nix:hostModules.wsl`
+- Linux 共通ユーザー設定: `nix/default.nix:homeModules.linux`、WSL ユーザー設定: `nix/default.nix:homeModules.wsl`
 - Unix CLI / GUI の導入: `nix/modules/tools.nix`、アプリ設定: 各 `nix/modules/`、Windows の GUI 導入: `windows/winget/packages.json`
 
 Unix CLI / GUI の導入は `nix/modules/tools.nix` にまとめ、各アプリ module は固有設定・連携・package 定義を担当します。host は tools の対象 OS selector と OS service を選択します。
@@ -201,25 +211,19 @@ dotfiles/
 └── flake.nix               # Nix flake entry point
 ```
 
-システム設定は `nix/hosts/` の OS 別ファイル、共有・Darwin・WSL のユーザー設定は `nix/home/`、
-Linux 共通の Home Manager module `linuxHome` は `nix/hosts/default.nix` に置きます。
-hosts 配下に OS・CPU 別ディレクトリを作らず、CPU は `system` 引数で選択します。
+システム設定、Home Manager の共通・OS 別設定、ホスト情報、公開構成は
+`nix/default.nix` に集約します。CPU architecture は `system` 引数で選択します。
 
-```
-nix/hosts/
-├── default.nix             # host constructors / Linux Home Manager module
-├── configurations.nix      # flake configuration registration
-├── darwin.nix              # nix-darwin system / services / Homebrew
-├── darwin-app-cleanup.nix  # bundled application cleanup factory
-├── identity.nix            # NixOS user identity
-├── nixos.nix               # common NixOS / WSL system configuration
-├── linux.nix               # native Linux session
-└── wsl.nix                 # WSL system integration
+```text
+nix/default.nix
+├── hostModules                # darwin / nixos / linux / wsl system modules
+├── homeModules                # common / darwin / linux / wsl user modules
+├── perSystem                  # apps and packages
+└── configurations             # public Darwin / NixOS / Home Manager outputs
 ```
 
-Home Manager の OS 別設定は Darwin / WSL が `nix/home/{darwin,wsl}.nix`、
-native / standalone Linux が `nix/hosts/default.nix` の `linuxHome` を使います。
-共有設定は `nix/home/common.nix`、Darwin のユーザーキー設定は `nix/home/keybindings/darwin.nix` が管理します。
+`nix/home/keybindings/` は共通キー配列と設定生成関数、`nix/home/op-ssh-sign-wsl` は
+WSL の署名スクリプトを保持します。アプリ固有設定は `nix/modules/` が所有します。
 
 ## 日常の使い方
 

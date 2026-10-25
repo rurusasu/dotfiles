@@ -8,15 +8,15 @@
 
 ## 編集先の目安
 
-- システム設定: `nix/hosts/{darwin,nixos,linux,wsl}.nix`。OS・CPU 別のサブディレクトリは作らず、CPU は `system` 引数で選択する
+- システム設定: `nix/default.nix:hostModules`。OS・CPU 別のサブディレクトリは作らず、CPU は `system` 引数で選択する
 - 再利用モジュール: `nix/modules/`
-- Home Manager: 共通設定は `nix/home/common.nix`、Darwin / WSL は `nix/home/{darwin,wsl}.nix`、native / standalone Linux は `nix/hosts/default.nix` の `linuxHome`
+- Home Manager: 共通設定は `nix/default.nix:homeModules.common`、Darwin / WSL は `nix/default.nix:homeModules`、native / standalone Linux は `nix/default.nix:homeModules.linux`
 - Unix のパッケージ導入・アプリ設定: `nix/modules/`。CLI・GUI の導入宣言は `tools.nix`、各アプリ固有の設定・連携・package 定義は各 module にまとめる
 - CLI・GUI の `programs.*.enable` と `home.packages`: `nix/modules/tools.nix`。各アプリ module は設定・連携・package override を担当する
-- ホストのパッケージ構成: GUI は `tools.linuxDesktop` / `tools.wslDesktop` / `tools.darwin` を import して選択する。共有 CLI は `nix/home/common.nix` が `tools.homeManager` を選択する
+- ホストのパッケージ構成: GUI は `tools.linuxDesktop` / `tools.wslDesktop` / `tools.darwin` を import して選択する。共有 CLI は `nix/default.nix:homeModules.common` が `tools.homeManager` を選択する
 - Windows の導入情報: `windows/{winget,npm,pnpm}/packages.json` を直接管理し、Unix module から生成しない
-- 共通キー配列・設定生成関数・ユーザー設定: `nix/home/keybindings/`。Darwin の AeroSpace とユーザー shortcut は `darwin.nix`、native NixOS の OS service・セッション有効化は `nix/hosts/linux.nix` に置く。純粋な関数を Home Manager module の imports に渡さない
-- flake wiring: root の `flake.nix`。custom package の出力は `nix/outputs.nix`、テスト登録は `nix/tests/default.nix`、formatter は `nix/formatter.nix`
+- 共通キー配列・設定生成関数・ユーザー設定: `nix/home/keybindings/`。Darwin の AeroSpace とユーザー shortcut は `darwin.nix`、native NixOS の OS service・セッション有効化は `nix/default.nix:hostModules.linux` に置く。純粋な関数を Home Manager module の imports に渡さない
+- flake wiring: root の `flake.nix`。custom package の出力は `nix/default.nix`、テスト登録は `nix/tests/default.nix`、formatter は `nix/formatter.nix`
 - nix-unit の値テスト: `nix/tests/unit/`
 - ビルド・実行テストの derivation: `nix/tests/build/`
 - テスト用の共有入力: `nix/tests/fixtures/`

@@ -80,11 +80,13 @@
 
   outputs =
     { flake-parts, ... }@inputs:
+    let
+      defaults = import ./nix/default.nix { inherit inputs; };
+    in
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         inputs.nix-unit.modules.flake.default
         inputs.treefmt-nix.flakeModule
-        ./nix/outputs.nix
         ./nix/tests
         ./nix/formatter.nix
       ];
@@ -92,8 +94,8 @@
       # Current nixpkgs supports Apple Silicon macOS, not x86_64-darwin.
       systems = builtins.filter (system: system != "x86_64-darwin") (import inputs.systems);
 
-      perSystem = (import ./nix/hosts { inherit inputs; }).mkApps;
+      inherit (defaults) perSystem;
 
-      flake = import ./nix/hosts/configurations.nix { inherit inputs; };
+      flake = defaults.configurations;
     };
 }

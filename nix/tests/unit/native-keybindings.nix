@@ -1,35 +1,38 @@
 { inputs }:
 let
-  hosts = import ../../hosts { inherit inputs; };
   pkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs "x86_64-linux";
   inherit (pkgs) lib;
   cfg =
-    (hosts.mkNixos {
+    (inputs.nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
-      hostPath = ../../hosts/linux.nix;
-      configuredUser = "test";
-      homeModule = hosts.linuxHome;
-      extraModules = [
+      specialArgs = { inherit inputs; };
+      modules = [
+        (import ../../default.nix { inherit inputs; }).hostModules.linux
         {
           nixpkgs.pkgs = pkgs;
-          users.users.test.isNormalUser = true;
-          home-manager = {
-            useGlobalPkgs = true;
-            extraSpecialArgs = { inherit inputs; };
-            users.test = {
-              home = {
-                username = "test";
-                homeDirectory = "/home/test";
-                stateVersion = "25.05";
-              };
-            };
-          };
+          users.users.nixos.home = "/srv/nixos";
         }
       ];
     }).config;
-  home = cfg.home-manager.users.test;
+  home = cfg.home-manager.users.nixos;
 in
 {
+  testNativeHomeInheritsHostIdentityAndNix = {
+    expr = {
+      user = home.home.username;
+      directory = home.home.homeDirectory;
+      nix = home.nix.package == cfg.nix.package;
+      globalPackages = cfg.home-manager.useGlobalPkgs;
+      userPackages = cfg.home-manager.useUserPackages;
+    };
+    expected = {
+      user = "nixos";
+      directory = "/srv/nixos";
+      nix = true;
+      globalPackages = true;
+      userPackages = true;
+    };
+  };
   testNativeHostSelectsHyprlandUserModule = {
     expr = cfg.programs.hyprland.enable;
     expected = true;

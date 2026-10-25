@@ -10,13 +10,13 @@
 
 - Unix のパッケージ導入とアプリ設定: `nix/modules/`。CLI・GUI の導入宣言はすべて `tools.nix`、各アプリ固有の設定・連携・package 定義は各 module にまとめる。
 - CLI・GUI の `programs.*.enable` と `home.packages` は `nix/modules/tools.nix` に宣言し、各 module は設定・連携・package override を担当する。OS service、フォント、ビルド用依存はそれぞれの所有先に置く。
-- Python のユーザー環境は uv で管理し、interpreter を直接 `home.packages` に追加しない。公開コマンドは uv 経由で実行する。Nix 内部専用の Python 依存は各 module が管理する。
-- ホストは `tools.linuxDesktop` / `tools.wslDesktop` / `tools.darwin` を import して GUI 構成を選択する。共有 CLI は `nix/home/common.nix` が `tools.homeManager` を選択する。Windows のインストール情報は Nix module と分離する。詳細は [パッケージ管理](docs/nix/package-management.md#分割の理由と編集先)。
-- OS のシステム設定: `nix/hosts/{darwin,nixos,linux,wsl}.nix`。hosts 配下に OS・CPU 別のディレクトリを作らず、CPU は `system` 引数で選択する。共通 NixOS のアカウント・module・stateVersion は `nixos.nix`、native Linux のセッションは `linux.nix` が担当する。
-- Home Manager module の選択・OS 固有設定: Darwin / WSL は `nix/home/{darwin,wsl}.nix`、native / standalone Linux は `nix/hosts/default.nix` の `linuxHome`。`nix/home/common.nix` は OS 非依存の共有設定を担当する。
-- デスクトップの共通キー配列・ユーザー設定: `nix/home/keybindings/`。Darwin のユーザー設定と AeroSpace は `darwin.nix`、native NixOS の OS service・セッション有効化は `nix/hosts/linux.nix` が担当する。純粋な設定生成関数と Home Manager module を区別する（[責務と対応範囲・移行状況](docs/chezmoi/omarchy.md)）。
+- Hermes は同梱 Python を使う。Python interpreter を別途導入したり、直接 `home.packages` に追加したりしない。プロジェクト依存は uv で管理する。Nix 内部専用の Python 依存は各 module が管理する。
+- ホストは `tools.linuxDesktop` / `tools.wslDesktop` / `tools.darwin` を import して GUI 構成を選択する。共有 CLI は `nix/default.nix:homeModules.common` が `tools.homeManager` を選択する。Windows のインストール情報は Nix module と分離する。詳細は [パッケージ管理](docs/nix/package-management.md#分割の理由と編集先)。
+- OS のシステム設定: `nix/default.nix:hostModules`。CPU は `system` 引数で選択する。共通 NixOS は `hostModules.nixos`、native Linux のセッションは `hostModules.linux` が担当する。
+- Home Manager module の選択・OS 固有設定: Darwin / WSL は `nix/default.nix:homeModules`、native / standalone Linux は `nix/default.nix:homeModules.linux`。`nix/default.nix:homeModules.common` は OS 非依存の共有設定を担当する。
+- デスクトップの共通キー配列・ユーザー設定: `nix/home/keybindings/`。Darwin のユーザー設定と AeroSpace は `darwin.nix`、native NixOS の OS service・セッション有効化は `nix/default.nix:hostModules.linux` が担当する。純粋な設定生成関数と Home Manager module を区別する（[責務と対応範囲・移行状況](docs/chezmoi/omarchy.md)）。
 - Windows manifest: `windows/{winget,npm,pnpm}/packages.json`（直接管理する独立した正本。通常導入は WinGet の GUI のみ）
-- ユーザー設定: Unix は `nix/modules/` と `nix/home/`、Linux 共通の Home Manager module は `nix/hosts/default.nix` の `linuxHome`、Windows は `chezmoi/` 以下。Unix の対応する設定ファイルは標準 Home Manager option の XDG 機能を使い、直接配置する場合は `xdg.configFile` に宣言する。Nix 管理のデスクトップキー設定は `nix/home/keybindings/` に置き、同じ設定を二重配布しない。
+- ユーザー設定: Unix は `nix/modules/` と `nix/default.nix`、Linux 共通の Home Manager module は `nix/default.nix:homeModules.linux`、Windows は `chezmoi/` 以下。Unix の対応する設定ファイルは標準 Home Manager option の XDG 機能を使い、直接配置する場合は `xdg.configFile` に宣言する。Nix 管理のデスクトップキー設定は `nix/home/keybindings/` に置き、同じ設定を二重配布しない。
 - Windows 実行ロジック: `scripts/powershell/`
 - CLI の実行順序・依存関係・公開コマンドは `Taskfile.yml` と `taskfiles/` に実装する。
 - Bash/PowerShell は Taskfile から呼ばれる platform adapter、secret 処理、複雑な検証に限定し、CLI の処理順序を重複定義しない。

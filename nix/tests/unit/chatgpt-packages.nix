@@ -4,7 +4,12 @@ let
     system:
     builtins.any (package: (package.pname or "") == "chatgpt")
       ((import ../fixtures/packages.nix { inherit inputs; }).mkHome system [
-        (if system == "aarch64-darwin" then ../../home/darwin.nix else ../../home/common.nix)
+        (
+          if system == "aarch64-darwin" then
+            (import ../../default.nix { }).homeModules.darwin
+          else
+            (import ../../default.nix { }).homeModules.common
+        )
         ../../modules/editors/nvim
       ]).config.home.packages;
 in

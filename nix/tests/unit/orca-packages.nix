@@ -4,7 +4,7 @@ let
   fixtures = import ../fixtures/packages.nix { inherit inputs; };
   windows = fixtures.windowsPackages;
   home = fixtures.mkHome "aarch64-darwin" [
-    ../../home/common.nix
+    (import ../../default.nix { }).homeModules.common
     ../../modules/editors/nvim
   ];
   orcaPackage = inputs.llm-agents.packages.aarch64-darwin.orca;

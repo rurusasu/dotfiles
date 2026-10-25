@@ -68,14 +68,14 @@ class DetectCiActionContractTests(unittest.TestCase):
 
         cases = (
             (("chezmoi/config.tmpl",), {"chezmoi", "windows"}),
-            (("nix/hosts/darwin.nix",), {"nix", "darwin"}),
-            (("nix/hosts/wsl.nix",), {"nix", "wsl"}),
+            (("nix/home/keybindings/darwin.nix",), {"nix", "darwin"}),
+            (("nix/home/op-ssh-sign-wsl",), {"nix", "wsl"}),
             (
                 ("nix/modules/fonts/wsl-fontconfig.conf",),
                 {"nix", "wsl", "chezmoi", "windows"},
             ),
             (
-                ("nix/outputs.nix",),
+                ("nix/default.nix",),
                 UNIX | {"chezmoi", "windows"},
             ),
             (

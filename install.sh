@@ -49,10 +49,7 @@ load_nix() {
 }
 
 if ! load_nix; then
-  case "$os" in
-  Darwin) curl -fsSL https://install.lix.systems/lix | sh -s -- install --no-confirm ;;
-  Linux) curl -fsSL https://nixos.org/nix/install | sh -s -- --no-daemon ;;
-  esac
+  curl -fsSL https://install.lix.systems/lix | sh -s -- install --no-confirm
   load_nix || {
     printf 'Nix is unavailable after installation.\n' >&2
     exit 1

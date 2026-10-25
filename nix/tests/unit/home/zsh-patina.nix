@@ -19,7 +19,7 @@ in
     expected = {
       wsl =
         builtins.fromTOML
-          (import ../../../home/wsl.nix {
+          ((import ../../../default.nix { }).homeModules.wsl {
             inherit inputs lib;
             inherit (wsl) pkgs;
             inherit (wsl) config;

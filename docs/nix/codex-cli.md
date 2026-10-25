@@ -20,8 +20,8 @@ nix/modules/ai_agents/
 Darwin と native / standalone Linux ではアプリと同梱 CLI へのリンクを `home.packages` に指定します。
 WSL は同じ Linux package の CLI へのリンクだけを選びます。CLI の PATH 配置は Home Manager に任せます。
 `common.nix` は `homeManager` を読み込み、`programs.codex` で設定を管理します。
-WSL には Linux GUI を導入しません。`nix/home/darwin.nix` と `nix/hosts/default.nix` の Home Manager module `linuxHome` は `tools.nix` の `chatgpt` module、
-`nix/home/wsl.nix` は `chatgptCli` を選択します。
+WSL には Linux GUI を導入しません。`nix/default.nix:homeModules.darwin` と `nix/default.nix:homeModules.linux` は `tools.nix` の `chatgpt` module、
+`nix/default.nix:homeModules.wsl` は `chatgptCli` を選択します。
 Windows の Store 導入・検証情報は `windows/winget/packages.json` で直接管理します。
 Codex CLI を独立したパッケージとして導入しません。
 

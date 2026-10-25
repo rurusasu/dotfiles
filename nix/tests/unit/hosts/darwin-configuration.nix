@@ -1,7 +1,5 @@
 { inputs }:
 let
-  system = "aarch64-darwin";
-
   mkDarwin =
     {
       sudoUser ? "rurusasu",
@@ -9,7 +7,7 @@ let
       extraModules ? [ ],
     }:
     inputs.nix-darwin.lib.darwinSystem {
-      inherit system;
+      system = "aarch64-darwin";
       specialArgs = {
         inherit inputs;
         inherit sudoUser currentUser;
@@ -20,7 +18,7 @@ let
         {
           nixpkgs.config.allowUnfree = true;
         }
-        ../../../hosts/darwin.nix
+        (import ../../../default.nix { }).hostModules.darwin
       ]
       ++ extraModules;
     };
@@ -51,6 +49,24 @@ let
   hasPrefix = prefix: value: builtins.match "${prefix}.*" value != null;
 in
 {
+  testDarwinUsesStableLix = {
+    expr = defaultConfig.nix.package == (mkDarwin { }).pkgs.lixPackageSets.stable.lix;
+    expected = true;
+  };
+
+  testDarwinInstallsUninstaller = {
+    expr = {
+      enabled = defaultConfig.system.tools.darwin-uninstaller.enable;
+      installed = builtins.any (
+        package: (package.pname or package.name) == "darwin-uninstaller"
+      ) defaultConfig.environment.systemPackages;
+    };
+    expected = {
+      enabled = true;
+      installed = true;
+    };
+  };
+
   testDarwinDockPinsManagedApplicationsInOrder = {
     expr = {
       applications = defaultHome.targets.darwin.defaults."com.apple.dock".persistent-apps;

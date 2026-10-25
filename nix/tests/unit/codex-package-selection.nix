@@ -1,8 +1,8 @@
 { inputs }:
 let
   fixtures = import ../fixtures/packages.nix { inherit inputs; };
-  darwin = fixtures.mkHome "aarch64-darwin" [ ../../home/darwin.nix ];
-  wsl = fixtures.mkHome "x86_64-linux" [ ../../home/wsl.nix ];
+  darwin = fixtures.mkHome "aarch64-darwin" [ (import ../../default.nix { }).homeModules.darwin ];
+  wsl = fixtures.mkHome "x86_64-linux" [ (import ../../default.nix { }).homeModules.wsl ];
   packages = (import ../../modules/ai_agents/chatgpt).packages {
     pkgs = fixtures.mkPkgs "aarch64-darwin";
   };

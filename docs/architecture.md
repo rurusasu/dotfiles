@@ -14,7 +14,7 @@
 2. **ユーザー設定は Unix と Windows の責務を分離**
    - Unix の Codex、shell、Git、terminal、editor は Home Manager が管理
    - chezmoi は Windows 専用で、Unix にはファイルもスクリプトも配布しない
-   - デスクトップの共通 action/key・設定生成関数・ユーザー設定は `nix/home/keybindings/` に置く。Darwin の AeroSpace とユーザー shortcut は `darwin.nix`、native Linux の OS service・セッション有効化は `nix/hosts/linux.nix` が管理する。macOS/native NixOS の設定は Nix が所有する。Windows は標準デスクトップを使用し、Nix からデスクトップ設定を生成・配布しない（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
+   - デスクトップの共通 action/key・設定生成関数・ユーザー設定は `nix/home/keybindings/` に置く。Darwin の AeroSpace とユーザー shortcut は `darwin.nix`、native Linux の OS service・セッション有効化は `nix/default.nix:hostModules.linux` が管理する。macOS/native NixOS の設定は Nix が所有する。Windows は標準デスクトップを使用し、Nix からデスクトップ設定を生成・配布しない（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
 3. **システム収束は OS に適した宣言レイヤーへ分離**
    - Windows: PowerShell handlers + winget
    - macOS: nix-darwin + nix-homebrew
@@ -29,13 +29,12 @@
 ```
 dotfiles/
 ├── nix/                    # Cross-platform declarative configuration
-│   ├── home/               # Shared, Darwin and WSL Home Manager configuration
+│   ├── home/               # Keybinding helpers and WSL signing script
 │   │   └── keybindings/    # Shared keys and user settings
 │   ├── formatter.nix       # treefmt-nix and formatter dependencies
-│   ├── hosts/              # Flat system modules, constructors and Linux Home Manager module
+│   ├── default.nix        # System/Home Manager definitions, constructors and registrations
 │   ├── modules/            # Unix packages and app configuration
 │   │   └── tools.nix       # Unix CLI / GUI installation and dependencies
-│   ├── outputs.nix         # Custom package build outputs
 │   └── tests/
 │       ├── unit/           # nix-unit: Nix expressions and configuration values
 │       ├── build/          # Build, runtime, and artifact checks
@@ -78,21 +77,16 @@ flake inputs だけを更新する場合は `nix flake update` を使います�
 
 ## 役割分担
 
-構成登録は `nix/hosts/configurations.nix` に集約し、`flake.nix` から読み込みます。
-`nix/hosts/` は OS ごとのファイルを並べ、OS・CPU 別のサブディレクトリは作りません。
-CPU architecture は構築関数の `system` 引数で選択します。
-Darwin の system / service / Homebrew は `nix/hosts/darwin.nix`、共通 NixOS は
-`nix/hosts/nixos.nix`、native Linux のセッションは `nix/hosts/linux.nix`、WSL の OS
-連携は `nix/hosts/wsl.nix` が所有します。アカウント情報は `nix/hosts/identity.nix`
-から読み取り、NixOS のアカウント、Home Manager 統合、Docker と
-`system.stateVersion = "26.05"` は native / WSL 共通の `nixos.nix` が一度だけ宣言します。
-Home Manager の OS 固有設定は Darwin / WSL が `nix/home/{darwin,wsl}.nix`、
-native / standalone Linux が `nix/hosts/default.nix` の `linuxHome` にまとめます。
-`linuxHome` は Home Manager の scope でユーザー情報・GUI 選択・Git 署名を設定します。
-Darwin のユーザー defaults と cache maintenance は `darwin.nix`、AeroSpace とユーザーキー設定は
-`keybindings/darwin.nix`、WSL のユーザー環境 / VS Code Server / `op` wrapper は
-`wsl.nix` が所有します。OS 非依存の設定と共通 terminal module は `common.nix`
-から一度だけ読み込みます。
+`nix/default.nix` にホスト定義と Home Manager 設定、構成生成・登録を集約し、
+`flake.nix` は `perSystem` と `configurations` を公開します。CPU は `system` 引数で選択します。
+`hostModules` は Darwin / NixOS 共通 / native Linux / WSL の system 設定、
+`homeModules` は共通・Darwin・Linux・WSL のユーザー設定を担当します。
+`hostModules.nixos` 内の検出処理 が native アカウント情報を読み取り、`systemDefaults` が Lix・OS GC・Home Manager 接続を共有します。
+GC 日時は各 OS module、standalone GC と 1Password の既定値は `homeModules.common`、公開構成は `configurations` に宣言します。
+統合 Home Manager は OS からユーザー名・ホーム・Nix package を標準継承します。
+Darwin の AeroSpace とユーザーキー設定などの補助定義は `nix/home/keybindings/`、
+WSL の署名スクリプトは `nix/home/op-ssh-sign-wsl` に残します。
+アプリの導入と固有設定は `nix/modules/` が所有します。
 共通フォント package は NixOS / nix-darwin 統合時には system、standalone 時には Home Manager が供給します。
 
 | 役割                    | ツール                  | 説明                                                          |
@@ -176,9 +170,8 @@ nix/modules/ ───── host が imports で選択
 ├── tools.nix ─────────── Unix CLI / GUI の有効化・導入・LSP/実行依存
 └── 各アプリ module ───── 固有設定・連携・package 定義
 
-nix/hosts/{darwin,nixos,linux,wsl}.nix ── OS service・システム設定・Homebrew
-nix/home/{darwin,wsl}.nix ───────────── tools の対象 scope・Darwin/WSL ユーザー設定
-nix/hosts/default.nix:linuxHome ─────── tools の対象 scope・Linux 共通 Home Manager 設定
+nix/default.nix:hostModules ── OS service・システム設定・Homebrew
+nix/default.nix:homeModules ── tools の対象 scope・全 Unix ユーザー設定
 
 windows/winget/packages.json ── Windows GUI を直接宣言
 windows/{npm,pnpm}/packages.json ── 独立した空 manifest

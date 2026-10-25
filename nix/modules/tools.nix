@@ -79,7 +79,7 @@ in
           btop
           lazydocker
           inputs.llm-agents.packages.${stdenv.hostPlatform.system}.dsh
-          # User Python runtimes are managed by uv, without a global Python installation.
+          # Hermes bundles Python; uv manages project dependencies without a global interpreter.
           uv
           # Repository Taskfile commands and developer hooks.
           go-task
@@ -114,6 +114,7 @@ in
           astro-language-server
           prisma-language-server
         ]
+        ++ lib.optionals (!config.submoduleSupport.enable) [ config.nix.package ]
         ++ (pkgs.neovimUtils.makeVimPackageInfo (
           map (
             plugin: if plugin ? plugin then builtins.removeAttrs plugin [ "runtime" ] else plugin

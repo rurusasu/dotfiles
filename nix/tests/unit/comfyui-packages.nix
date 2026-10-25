@@ -13,9 +13,11 @@ in
 {
   testComfyIsInstalledAcrossUnixHomes = {
     expr = {
-      native = selected (homePackages "x86_64-linux" (import ../../hosts { inherit inputs; }).linuxHome);
-      wsl = selected (homePackages "x86_64-linux" ../../home/wsl.nix);
-      darwin = selected (homePackages "aarch64-darwin" ../../home/darwin.nix);
+      native = selected (
+        homePackages "x86_64-linux" (import ../../default.nix { inherit inputs; }).homeModules.linux
+      );
+      wsl = selected (homePackages "x86_64-linux" (import ../../default.nix { }).homeModules.wsl);
+      darwin = selected (homePackages "aarch64-darwin" (import ../../default.nix { }).homeModules.darwin);
     };
     expected = {
       native = [ "comfyui" ];
@@ -24,7 +26,7 @@ in
     };
   };
   testComfyIsInstalledForArmLinux = {
-    expr = selected (homePackages "aarch64-linux" ../../home/common.nix);
+    expr = selected (homePackages "aarch64-linux" (import ../../default.nix { }).homeModules.common);
     expected = [ "comfyui" ];
   };
 }
