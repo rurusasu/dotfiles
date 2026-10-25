@@ -11,48 +11,20 @@ assert_no_profile_gateway_lifecycle() {
 	[[ ! "$plan" =~ -p[[:space:]]+[^[:space:]]+[[:space:]]+gateway[[:space:]]+(start|run|stop|restart) ]]
 }
 
-@test "generic profile lifecycle uses the root multiplexer and profile status" {
-	for action in up down restart; do
-		run task --dir "$REPO_ROOT" --dry --force "hermes:profile:$action" PROFILE=personal-ops
+@test "Hermes down stops the Home Manager native gateway" {
+	run task --dir "$REPO_ROOT" --dry --force hermes:down
 
-		[ "$status" -eq 0 ]
-		assert_no_profile_gateway_lifecycle "$output"
-		case "$action" in
-		up)
-			[[ "$output" == *"task: [hermes:up]"* ]]
-			[[ "$output" == *"-p personal-ops gateway status"* ]]
-			;;
-		restart)
-			[[ "$output" == *"task: [hermes:restart]"* ]]
-			[[ "$output" == *"-p personal-ops gateway status"* ]]
-			;;
-		down)
-			[[ "$output" == *"hermes gateway stop"* ]]
-			;;
-		esac
-	done
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"systemctl --user stop hermes-agent.service"* ||
+		("$output" == *"org.nix-community.home.hermes-agent"* && "$output" == *'launchctl bootout "$target"'*) ]]
+	assert_no_profile_gateway_lifecycle "$output"
 }
 
-@test "named profile lifecycle aliases never dispatch named gateways" {
-	for profile in rick hoffman risarisa nancy; do
-		for action in up down restart; do
-			run task --dir "$REPO_ROOT" --dry --force "hermes:$profile:$action"
+@test "profile status inspects the selected profile without changing gateway lifecycle" {
+	run task --dir "$REPO_ROOT" --dry --force hermes:profile:status PROFILE=personal-ops
 
-			[ "$status" -eq 0 ]
-			assert_no_profile_gateway_lifecycle "$output"
-			case "$action" in
-			up)
-				[[ "$output" == *"task: [hermes:up]"* ]]
-				[[ "$output" == *"-p $profile gateway status"* ]]
-				;;
-			restart)
-				[[ "$output" == *"task: [hermes:restart]"* ]]
-				[[ "$output" == *"-p $profile gateway status"* ]]
-				;;
-			down)
-				[[ "$output" == *"hermes gateway stop"* ]]
-				;;
-			esac
-		done
-	done
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"hermes -p personal-ops gateway status"* ]]
+	[[ "$output" != *"systemctl"* && "$output" != *"launchctl"* ]]
+	assert_no_profile_gateway_lifecycle "$output"
 }
