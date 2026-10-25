@@ -100,7 +100,7 @@ Cargo の global cache は標準の自動 GC に任せる。Go の build cache �
 system 設定は `nix/hosts/darwin.nix` / `linux.nix` / `wsl.nix`、native NixOS と WSL の共通設定は
 `nix/hosts/nixos.nix` が所有し、`nix/hosts/configurations.nix` と `nix/hosts/default.nix` が構成を選びます。
 Darwin の system font・loginwindow defaults・timezone・account・サービス・Homebrew・system activation は
-`nix/hosts/darwin.nix`、同梱アプリの整理は `nix/hosts/darwin-app-cleanup.nix` に置きます。
+`nix/hosts/darwin.nix` に置きます。
 Dock・Finder・trackpad などのユーザー defaults と反映 activation は `darwin.nix`、AeroSpace と
 ユーザーキー設定は `keybindings/darwin.nix`、cache 整理は `darwin.nix` が管理します。
 WSL のユーザー環境変数・VS Code server・`op` 連携は `wsl.nix`、署名スクリプトは `op-ssh-sign-wsl`、

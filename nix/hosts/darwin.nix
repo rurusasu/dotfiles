@@ -1,6 +1,5 @@
 {
   pkgs,
-  lib,
   inputs,
   sudoUser,
   currentUser,
@@ -40,11 +39,6 @@ in
     defaults.loginwindow = {
       GuestEnabled = false;
       SHOWFULLNAME = false;
-    };
-    activationScripts = {
-      postActivation.text = lib.mkBefore ''
-        ${lib.getExe (import ./darwin-app-cleanup.nix { inherit pkgs; })} /Applications
-      '';
     };
   };
 

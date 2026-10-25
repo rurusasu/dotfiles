@@ -5,7 +5,6 @@
 - `default.nix`: host 構築関数と OS 別 runner、native / standalone Linux 共通の Home Manager module `linuxHome`。CPU architecture は `system` 引数で選択する。
 - `configurations.nix`: Darwin / NixOS / standalone Home Manager の構成登録と GC 方針。実行間隔・削除オプション・Darwin の空き容量条件をここに集約し、統合構成は system GC、standalone は user GC に渡す。root の `flake.nix` から読み込む。
 - `darwin.nix`: macOS の system、account、service、Homebrew、system font、activation と Home Manager 統合。
-- `darwin-app-cleanup.nix`: macOS の同梱アプリを整理する package factory。
 - `nixos.nix`: native NixOS / WSL 共通の account、system module、Docker、Home Manager 統合と `system.stateVersion = "26.05"`。
 - `identity.nix`: NixOS のユーザー・UID/GID・ホーム・checkout などのホスト情報。
 - `linux.nix`: native NixOS のデスクトップセッションと Hyprland の選択。
@@ -18,7 +17,6 @@ nix/hosts/
 ├── default.nix
 ├── configurations.nix
 ├── darwin.nix
-├── darwin-app-cleanup.nix
 ├── nixos.nix
 ├── identity.nix
 ├── linux.nix

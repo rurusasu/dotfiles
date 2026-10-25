@@ -57,6 +57,30 @@
         ''
       );
 
+      # The mutable merge retains omitted keys, including removed managed roles.
+      home.activation.codexPruneManagedAgents =
+        lib.hm.dag.entryBetween [ "codexMutableSettings" ] [ "linkGeneration" ]
+          (
+            lib.hm.generators.mkImpureConfigMerger {
+              inherit pkgs;
+              format = "toml";
+              empty = "{}";
+              jqOperation = ''
+                $dynamic | reduce ["fast_worker", "python_coding"][] as $name (.;
+                  if .agents[$name].config_file? == (${builtins.toJSON "${config.home.homeDirectory}/.codex/agents/"} + $name + ".toml")
+                  then del(.agents[$name]) else . end)
+              '';
+              path = "${
+                if config.home.preferXdgDirectories then
+                  "${config.xdg.configHome}/codex"
+                else
+                  "${config.home.homeDirectory}/.codex"
+              }/config.toml";
+              staticSettings = pkgs.writeText "codex-agent-migration.toml" "";
+              mode = "600";
+            }
+          );
+
       programs.codex = {
         enable = true;
         enableMcpIntegration = true;

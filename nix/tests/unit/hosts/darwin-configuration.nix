@@ -107,20 +107,6 @@ in
     ];
   };
 
-  testDarwinActivatesBundledAppCleanup = {
-    expr = inputs.nixpkgs.lib.hasInfix (builtins.unsafeDiscardStringContext "${
-      inputs.nixpkgs.lib.getExe (
-        import ../../../hosts/darwin-app-cleanup.nix {
-          pkgs = import inputs.nixpkgs {
-            inherit system;
-            config.allowUnfree = true;
-          };
-        }
-      )
-    } /Applications") defaultConfig.system.activationScripts.postActivation.text;
-    expected = true;
-  };
-
   testDarwinDoesNotInstallWslgFontBridge = {
     expr = defaultConfig.system.activationScripts ? wslgFonts;
     expected = false;

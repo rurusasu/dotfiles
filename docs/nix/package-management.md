@@ -116,10 +116,6 @@ Homebrew の `zap` や設定ファイルの配置で停止した場合の詳細�
   宣言から外す操作や module の無効化でデータを失う可能性があり、再インストールだけでは
   復元できません。手動インストールしたアプリや Mac App Store アプリは対象外です。
 - この設定は任意のユーザーファイルやアプリのデータ全般を走査・削除するものではありません。
-- macOS の activation は GarageBand・iMovie・Pages・Numbers・Keynote のアプリ本体も削除します。
-  `/Applications` 内の指定名と bundle ID が一致するものだけを対象とし、対象が存在しなければ何もしません。
-  symlink や異なるアプリを検出した場合は削除前に停止します。書類・設定・音源などのユーザーデータは削除しません。
-  `/System` 内のアプリと Safari は macOS の保護対象として削除対象に含めません。
 
 Dock の固定アプリと順序は `nix/home/darwin.nix` で管理します。
 アプリ・ChatGPT・Dia・Ghostty・Obsidian の順に固定し、追加の固定フォルダーと最近使ったアプリは表示しません。

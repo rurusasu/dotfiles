@@ -62,7 +62,6 @@ native NixOS と WSL の `system.stateVersion = "26.05"` と共通 OS 設定は
 `nix/hosts/nixos.nix` が所有し、Hyprland は `nix/hosts/linux.nix` だけが有効化します。
 Darwin の system font・loginwindow defaults・timezone は `nix/hosts/darwin.nix`、
 Dock・Finder・trackpad などのユーザー defaults は `nix/home/darwin.nix` が管理します。
-同梱アプリの cleanup factory は `nix/hosts/darwin-app-cleanup.nix` に置きます。
 `nix/modules/` には OS 別ディレクトリを置かず、アプリ・機能単位の共通設定だけを残します。
 
 ## Codex CLI

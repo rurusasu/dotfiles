@@ -40,6 +40,9 @@ in
           || lib.hasPrefix "${configDir}/agents/" name
         ) (builtins.attrNames home.config.home.file);
         mergeActivation = home.config.home.activation ? codexMutableSettings;
+        prunesManagedAgentsBeforeMerge =
+          builtins.elem "codexMutableSettings" home.config.home.activation.codexPruneManagedAgents.before
+          && builtins.elem "linkGeneration" home.config.home.activation.codexPruneManagedAgents.after;
         mutableTarget = lib.hasInfix (
           "display_path=" + lib.escapeShellArg "${codexHome}/config.toml"
         ) activation;
@@ -97,6 +100,7 @@ in
       hooksFeatureConfigured = false;
       managedAgentRuleAndHookFiles = [ ];
       mergeActivation = true;
+      prunesManagedAgentsBeforeMerge = true;
       mutableTarget = true;
       mergesToml = true;
       declaredSettings = true;

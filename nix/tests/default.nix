@@ -37,10 +37,10 @@ in
         chatgpt-desktop = import ./build/chatgpt-desktop.nix {
           pkgs = (import ./fixtures/packages.nix { inherit inputs; }).mkPkgs pkgs.stdenv.hostPlatform.system;
         };
+        codex-config-migration = import ./build/codex-config-migration.nix { inherit inputs pkgs; };
         hermes-configuration = import ./build/hermes-configuration.nix { inherit inputs pkgs; };
       }
       // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
-        darwin-bundled-app-cleanup = import ./build/darwin-bundled-app-cleanup.nix { inherit pkgs; };
         standalone-darwin-home = import ./build/standalone-darwin-home.nix {
           inherit inputs pkgs;
         };
