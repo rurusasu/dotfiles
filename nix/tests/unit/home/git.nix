@@ -3,11 +3,37 @@
   homeConfigurations ? import ../../fixtures/home-configurations.nix { inherit inputs; },
 }:
 let
-  inherit (homeConfigurations) homes sharedConfig;
-  sharedGit = sharedConfig.programs.git;
+  inherit (homeConfigurations) homes;
 in
 {
-  testGitNativeSettingsAreSharedAcrossHomes = {
+  testGitSettingsAreRenderedForEachHome = {
+    expr = map (home: home.config.xdg.configFile."git/config".text) homes;
+    expected = map (
+      home:
+      let
+        inherit (home.pkgs) lib;
+        git = home.config.programs.git;
+        inherit (git) signing;
+        signingDefaults =
+          lib.optionalAttrs (signing.key != null) {
+            user.signingKey = signing.key;
+          }
+          // lib.optionalAttrs (signing.signByDefault != null) {
+            commit.gpgSign = signing.signByDefault;
+            tag.gpgSign = signing.signByDefault;
+          }
+          // lib.optionalAttrs (signing.format != null) {
+            gpg = {
+              inherit (signing) format;
+              ${signing.format}.program = signing.signer;
+            };
+          };
+      in
+      lib.generators.toGitINI (lib.recursiveUpdate signingDefaults git.settings)
+    ) homes;
+  };
+
+  testGitIsInstalledOnceWithRelativeWorktrees = {
     expr = map (
       home:
       let
@@ -20,26 +46,12 @@ in
         enabled = git.enable;
         gitCopies = countPackageEntries git.package;
         relativeWorktrees = settings.worktree.useRelativePaths or false;
-        identity = settings.user;
-        inherit (settings) core;
-        credentials = settings.credential;
-        signing = {
-          inherit (git.signing) format key signByDefault;
-        };
-        gtrAlias = settings.alias.gtr;
       }
     ) homes;
     expected = map (_: {
-      enabled = sharedGit.enable;
+      enabled = true;
       gitCopies = 1;
       relativeWorktrees = true;
-      identity = sharedGit.settings.user;
-      core = sharedGit.settings.core;
-      credentials = sharedGit.settings.credential;
-      signing = {
-        inherit (sharedGit.signing) format key signByDefault;
-      };
-      gtrAlias = sharedGit.settings.alias.gtr;
     }) homes;
   };
 
@@ -53,15 +65,11 @@ in
       gitForce = home.config.xdg.configFile."git/config".force;
       legacyGitForce = home.config.home.file.".gitconfig".force;
       legacyGitHasNoSettings = !(home.pkgs.lib.hasInfix "[" home.config.home.file.".gitconfig".text);
-      gitTextHasIdentity =
-        home.pkgs.lib.hasInfix "email = ${builtins.toJSON sharedGit.settings.user.email}"
-          home.config.xdg.configFile."git/config".text;
     }) homes;
     expected = map (_: {
       gitForce = true;
       legacyGitForce = true;
       legacyGitHasNoSettings = true;
-      gitTextHasIdentity = true;
     }) homes;
   };
 }

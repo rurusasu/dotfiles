@@ -8,6 +8,7 @@ let
     linux
     wsl
     darwin
+    lib
     ;
   expectedIntegration =
     {
@@ -18,6 +19,7 @@ let
       inherit signer;
       agent = ''"${agentSocket}"'';
       agentEnvironment = agentSocket;
+      sshAgentRendered = true;
       opensshAgentEnabled = false;
       gpgSshAgentEnabled = false;
       publicKeyActivationAfter = [ "writeBoundary" ];
@@ -30,6 +32,10 @@ in
       signer = home.config.programs.git.signing.signer;
       agent = home.config.programs.ssh.extraOptionOverrides.IdentityAgent;
       agentEnvironment = home.config.home.sessionVariables.SSH_AUTH_SOCK;
+      sshAgentRendered =
+        lib.hasInfix
+          (builtins.unsafeDiscardStringContext "IdentityAgent ${home.config.programs.ssh.extraOptionOverrides.IdentityAgent}")
+          home.config.home.file.".ssh/config".text;
       opensshAgentEnabled = home.config.services.ssh-agent.enable;
       gpgSshAgentEnabled = home.config.services.gpg-agent.enableSshSupport;
       publicKeyActivationAfter = home.config.home.activation.onePasswordSshPublicKey.after;

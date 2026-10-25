@@ -16,8 +16,10 @@ Home Manager の構成テストは `unit/home/`、host の構成テストは `un
 `unit/home/` はアプリケーションごとにファイルを分け、`composition.nix` はホスト間の結合と
 OS 境界だけを検証します。共通の Home Manager 評価は `fixtures/home-configurations.nix` を使います。
 登録側で一度作った `homeConfigurations` を各テストへ渡し、同じホスト構成の評価を共有します。
-設定値の期待値は共通設定や正本ファイルから取り、各ホストへの反映・生成を比較します。
-同じ評価対象の値を期待値として再利用せず、OS 境界・所有権・生成処理の契約は独立した assertion にします。
+アプリ設定は各 OS の実効 option や正本ファイルを入力とし、生成された設定ファイルや shell 連携へ
+反映されることを検証します。共通設定を別途評価して期待値にせず、各 OS の override も対象にします。
+同じ option 同士の自己比較を避け、OS 境界・有効化・所有権は独立した assertion にします。
+生成ファイルが derivation の場合、unit は生成入力と配線を検証し、実際の生成処理の実行は build が担当します。
 unit のファイルは `test...` 属性を持つ nix-unit 形式にし、ファイル名は kebab-case にします。
 `unit/ownership.nix` が unit / build の登録漏れ・重複と Bats の責務分類を検査します。
 

@@ -3,35 +3,63 @@
   homeConfigurations ? import ../../fixtures/home-configurations.nix { inherit inputs; },
 }:
 let
-  inherit (homeConfigurations) homes sharedConfig;
-  codex = sharedConfig.programs.codex;
+  inherit (homeConfigurations) homes lib;
 in
 {
   testCodexConfigurationIsOwnedByHomeManagerAcrossHomes = {
-    expr = map (home: {
-      enabled = home.config.programs.codex.enable;
-      appProvided =
-        home.config.programs.codex.package == null || home.config.programs.codex.package ? chatgpt;
-      mutable = home.config.programs.codex.mutableSettings;
-      cleanup = home.config.programs.codex.settings.desktop;
-      agents = home.config.programs.codex.settings.agents.fast_worker.config_file;
-      hookCount = builtins.length (builtins.head home.config.programs.codex.hooks.PreToolUse).hooks;
-      rules = builtins.attrNames home.config.programs.codex.rules;
-      contextTakeover = home.config.home.file.".codex/AGENTS.override.md".force;
-      mergeActivation = home.config.home.activation ? codexMutableSettings;
-      noImmutableConfig = !(home.config.home.file ? ".codex/config.toml");
-    }) homes;
-    expected = map (_: {
-      enabled = codex.enable;
-      appProvided = true;
-      mutable = codex.mutableSettings;
-      cleanup = codex.settings.desktop;
-      agents = codex.settings.agents.fast_worker.config_file;
-      hookCount = builtins.length (builtins.head codex.hooks.PreToolUse).hooks;
-      rules = builtins.attrNames codex.rules;
-      contextTakeover = sharedConfig.home.file.".codex/AGENTS.override.md".force;
-      mergeActivation = true;
-      noImmutableConfig = true;
-    }) homes;
+    expr = map (
+      home:
+      let
+        cfg = home.config.programs.codex;
+        agentFile = lib.removePrefix "${home.config.home.homeDirectory}/" cfg.settings.agents.fast_worker.config_file;
+        activation = home.config.home.activation.codexMutableSettings.data;
+        settingsToml = (home.pkgs.formats.toml { }).generate "codex-config" cfg.settings;
+        settingsSource = home.pkgs.runCommand "codex-config.toml" { } ''
+          settings="$(${lib.getExe home.pkgs.jaq} --from toml --to toml '.' ${settingsToml})"
+          printf '%s\n' "$settings" > "$out"
+        '';
+      in
+      {
+        enabled = cfg.enable;
+        appProvided = cfg.package == null || cfg.package ? chatgpt;
+        mutable = cfg.mutableSettings;
+        contextSource = home.config.home.file.".codex/AGENTS.override.md".source;
+        contextTakeover = home.config.home.file.".codex/AGENTS.override.md".force;
+        hooksSource = home.config.home.file.".codex/hooks.json".source.drvPath;
+        ruleSources = lib.mapAttrs (
+          name: _: home.config.home.file.".codex/rules/${name}.rules".source
+        ) cfg.rules;
+        agentSource = home.config.home.file.${agentFile}.source;
+        mergeActivation = home.config.home.activation ? codexMutableSettings;
+        mutableTarget = lib.hasInfix (
+          "display_path=" + lib.escapeShellArg "${home.config.home.homeDirectory}/.codex/config.toml"
+        ) activation;
+        mergesToml = lib.hasInfix "--from toml" activation;
+        declaredSettings = lib.hasInfix (builtins.unsafeDiscardStringContext (toString settingsSource)) activation;
+        noImmutableConfig = !(home.config.home.file ? ".codex/config.toml");
+      }
+    ) homes;
+    expected = map (
+      home:
+      let
+        cfg = home.config.programs.codex;
+      in
+      {
+        enabled = true;
+        appProvided = true;
+        mutable = true;
+        contextSource = cfg.contextOverride;
+        contextTakeover = true;
+        hooksSource =
+          ((home.pkgs.formats.json { }).generate "codex-hooks" { inherit (cfg) hooks; }).drvPath;
+        ruleSources = cfg.rules;
+        agentSource = ../../../modules/ai_agents/chatgpt/agents/fast_worker.toml;
+        mergeActivation = true;
+        mutableTarget = true;
+        mergesToml = true;
+        declaredSettings = true;
+        noImmutableConfig = true;
+      }
+    ) homes;
   };
 }

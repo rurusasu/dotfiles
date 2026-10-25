@@ -9,13 +9,12 @@ let
     homes
     lib
     linux
-    sharedConfig
     wsl
     ;
   wslSettings = import ../../../hosts/x86_64-linux/wsl/home.nix {
     inherit inputs lib;
     inherit (wsl) pkgs;
-    config = sharedConfig;
+    inherit (wsl) config;
   };
 in
 {
@@ -35,9 +34,11 @@ in
   testPatinaActivatesAfterOtherZshIntegrationsAcrossHomes = {
     expr = map (
       home:
-      lib.hasSuffix ''eval "$(${lib.getExe home.pkgs.zsh-patina} activate)"'' (
-        lib.trim home.config.programs.zsh.initContent
-      )
+      let
+        zshrc =
+          home.config.home.file."${lib.removePrefix "${home.config.home.homeDirectory}/" home.config.programs.zsh.dotDir}/.zshrc".text;
+      in
+      lib.hasSuffix ''eval "$(${lib.getExe home.pkgs.zsh-patina} activate)"'' (lib.trim zshrc)
     ) homes;
     expected = map (_: true) homes;
   };

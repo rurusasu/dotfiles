@@ -5,7 +5,6 @@
 let
   inherit (homeConfigurations)
     homes
-    sharedConfig
     lib
     ;
   configuredIntegration =
@@ -17,22 +16,36 @@ let
 in
 {
   testFdFindAliasAcrossHomes = {
-    expr = map (home: home.config.programs.zsh.shellAliases.find) homes;
-    expected = map (_: sharedConfig.programs.zsh.shellAliases.find) homes;
+    expr = map (
+      home:
+      let
+        inherit (home.config) programs;
+        zshrc =
+          home.config.home.file."${lib.removePrefix "${home.config.home.homeDirectory}/" programs.zsh.dotDir}/.zshrc".text;
+      in
+      lib.hasInfix "alias -- find=${lib.escapeShellArg programs.zsh.shellAliases.find}" zshrc
+    ) homes;
+    expected = map (_: true) homes;
   };
 
   testFdFzfIntegrationIsGeneratedAcrossHomes = {
-    expr = map (home: {
-      # The source block includes the guard, default and widget commands,
-      # and both completion functions with the configured fd options.
-      configuredIntegration =
-        lib.trim configuredIntegration != ""
-        && lib.hasInfix (lib.trim configuredIntegration) home.config.programs.zsh.initContent;
-      guarded = lib.hasInfix "if command -v fzf >/dev/null 2>&1; then" home.config.programs.zsh.initContent;
-      pathCompletion = lib.hasInfix "_fzf_compgen_path() {" home.config.programs.zsh.initContent;
-      directoryCompletion = lib.hasInfix "_fzf_compgen_dir() {" home.config.programs.zsh.initContent;
-      obsoleteRipgrepDefault = lib.hasInfix "export FZF_DEFAULT_COMMAND='rg --files'" home.config.programs.zsh.initContent;
-    }) homes;
+    expr = map (
+      home:
+      let
+        zshrc =
+          home.config.home.file."${lib.removePrefix "${home.config.home.homeDirectory}/" home.config.programs.zsh.dotDir}/.zshrc".text;
+      in
+      {
+        # The source block includes the guard, default and widget commands,
+        # and both completion functions with the configured fd options.
+        configuredIntegration =
+          lib.trim configuredIntegration != "" && lib.hasInfix (lib.trim configuredIntegration) zshrc;
+        guarded = lib.hasInfix "if command -v fzf >/dev/null 2>&1; then" zshrc;
+        pathCompletion = lib.hasInfix "_fzf_compgen_path() {" zshrc;
+        directoryCompletion = lib.hasInfix "_fzf_compgen_dir() {" zshrc;
+        obsoleteRipgrepDefault = lib.hasInfix "export FZF_DEFAULT_COMMAND='rg --files'" zshrc;
+      }
+    ) homes;
     expected = map (_: {
       configuredIntegration = true;
       guarded = true;

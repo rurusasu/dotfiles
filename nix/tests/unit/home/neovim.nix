@@ -3,7 +3,7 @@
   homeConfigurations ? import ../../fixtures/home-configurations.nix { inherit inputs; },
 }:
 let
-  inherit (homeConfigurations) homes sharedConfig;
+  inherit (homeConfigurations) homes;
 in
 {
   testNeovimSettingsAndRuntimeDependenciesAcrossHomes = {
@@ -14,7 +14,7 @@ in
       in
       {
         enabled = cfg.enable;
-        sideloadInit = cfg.sideloadInitLua;
+        initText = home.config.xdg.configFile."nvim/init.lua".text or null;
         writesInit = home.config.xdg.configFile."nvim/init.lua".enable or false;
         pluginData = home.config.xdg.dataFile."nvim/site/pack/hm".enable;
         internalPackages = cfg.extraPackages == [ ];
@@ -44,15 +44,21 @@ in
         ) home.config.home.packages;
       }
     ) homes;
-    expected = map (_: {
-      enabled = sharedConfig.programs.neovim.enable;
-      sideloadInit = false;
-      writesInit = true;
-      pluginData = true;
-      internalPackages = true;
-      serverDependencies = true;
-      remoteInstalled = true;
-      globalServerPackages = true;
-    }) homes;
+    expected = map (
+      home:
+      let
+        cfg = home.config.programs.neovim;
+      in
+      {
+        enabled = true;
+        initText = if cfg.initLua == "" then null else cfg.initLua;
+        writesInit = cfg.initLua != "" && !cfg.sideloadInitLua;
+        pluginData = cfg.plugins != [ ];
+        internalPackages = true;
+        serverDependencies = true;
+        remoteInstalled = true;
+        globalServerPackages = true;
+      }
+    ) homes;
   };
 }

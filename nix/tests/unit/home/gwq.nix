@@ -6,13 +6,10 @@ let
   inherit (homeConfigurations)
     homes
     wsl
-    wslDeclarations
-    sharedConfig
     ;
-  sharedSettings = sharedConfig.dotfiles.gwq.settings;
 in
 {
-  testGwqKeepsWslWorktreesOnTheWindowsDrive = {
+  testGwqSettingsGenerateEachHomesConfiguration = {
     expr = map (
       home:
       let
@@ -21,27 +18,14 @@ in
       in
       {
         packageEntries = countPackageEntries home.pkgs.gwq;
-        settings = home.config.dotfiles.gwq.settings;
+        configSource = home.config.xdg.configFile."gwq/config.toml".source.drvPath;
       }
     ) homes;
-    expected =
-      map
-        (settings: {
-          packageEntries = 1;
-          inherit settings;
-        })
-        [
-          sharedSettings
-          (
-            sharedSettings
-            // {
-              worktree = sharedSettings.worktree // {
-                basedir = wslDeclarations.dotfiles.gwq.settings.worktree.basedir;
-              };
-            }
-          )
-          sharedSettings
-        ];
+    expected = map (home: {
+      packageEntries = 1;
+      configSource =
+        ((home.pkgs.formats.toml { }).generate "gwq-config.toml" home.config.dotfiles.gwq.settings).drvPath;
+    }) homes;
   };
 
   testWslGwqWorktreesUseAWindowsDrive = {

@@ -13,19 +13,18 @@ let
     darwin
     configuredChrome
     darwinPackages
-    sharedConfig
     ;
   linuxDeclarations = import ../../../hosts/shared/linux-home.nix {
     inherit inputs;
     inherit (linux) pkgs;
     inherit (linux.pkgs) lib;
-    config = sharedConfig;
+    inherit (linux) config;
   };
   darwinDeclarations = import ../../../hosts/aarch64-darwin/home.nix {
     inherit inputs;
     inherit (darwin) pkgs;
     inherit (darwin.pkgs) lib;
-    config = sharedConfig;
+    inherit (darwin) config;
   };
 in
 {

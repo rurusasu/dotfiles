@@ -60,9 +60,8 @@ let
 
   wslDeclarations = import ../../hosts/x86_64-linux/wsl/home.nix {
     inherit inputs;
-    inherit (wsl) pkgs;
+    inherit (wsl) config pkgs;
     inherit (wsl.pkgs) lib;
-    inherit (common) config;
   };
 
   darwin = mkHome {
@@ -95,6 +94,5 @@ in
     wsl
     darwin
   ];
-  sharedConfig = common.config;
   lib = inputs.nixpkgs.lib;
 }

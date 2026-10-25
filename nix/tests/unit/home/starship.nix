@@ -3,109 +3,108 @@
   homeConfigurations ? import ../../fixtures/home-configurations.nix { inherit inputs; },
 }:
 let
+  inherit (homeConfigurations)
+    homes
+    lib
+    linux
+    wsl
+    darwin
+    ;
   fixtures = import ../../fixtures/packages.nix { inherit inputs; };
-  mkSettings =
-    system: extraConfig:
-    (fixtures.mkHome system [
+  fallback =
+    (fixtures.mkHome "x86_64-linux" [
       ../../../modules/shells/plugins/starship
       { programs.starship.enable = true; }
-      extraConfig
     ]).config.programs.starship.settings;
-  nixos = mkSettings "x86_64-linux" { dotfiles.starship.osSymbol = "❄️ "; };
-  darwin = mkSettings "aarch64-darwin" { dotfiles.starship.osSymbol = "🍎 "; };
-  fallback = mkSettings "x86_64-linux" { };
-  homeFixtures = homeConfigurations;
-  inherit (homeFixtures) homes lib;
-  declaredHostSettings =
-    module: pkgs:
-    import module {
-      inherit inputs lib pkgs;
-      config = homeFixtures.sharedConfig;
-    };
-  hostSettings = [
-    (declaredHostSettings ../../../hosts/shared/linux-home.nix homeFixtures.linux.pkgs)
-    (declaredHostSettings ../../../hosts/x86_64-linux/wsl/home.nix homeFixtures.wsl.pkgs)
-    (declaredHostSettings ../../../hosts/aarch64-darwin/home.nix homeFixtures.darwin.pkgs)
-  ];
+  generatedSettings =
+    home:
+    builtins.fromJSON home.config.home.file.${home.config.programs.starship.configPath}.source.value;
 in
 {
-  testStarshipStaticNixOSSymbolReplacesRuntimeOsModule = {
-    expr = {
-      inherit (nixos) format;
-      osDisabled = nixos.os.disabled;
-    };
-    expected = {
-      format = "[❄️ ](bold white) $username$hostname$memory_usage$directory$git_branch$git_status$nix_shell$character";
-      osDisabled = true;
-    };
-  };
-
-  testStarshipStaticDarwinSymbolReplacesRuntimeOsModule = {
-    expr = {
-      inherit (darwin) format;
-      osDisabled = darwin.os.disabled;
-    };
-    expected = {
-      format = "[🍎 ](bold white) $username$hostname$memory_usage$directory$git_branch$git_status$nix_shell$character";
-      osDisabled = true;
-    };
-  };
-
-  testStarshipUnknownOsKeepsRuntimeDetection = {
-    expr = {
-      inherit (fallback) format;
-      osDisabled = fallback.os.disabled;
-      osFormat = fallback.os.format;
-    };
-    expected = {
-      format = "$os$username$hostname$memory_usage$directory$git_branch$git_status$nix_shell$character";
-      osDisabled = false;
-      osFormat = "[$symbol]($style) ";
-    };
-  };
-
-  testStarshipShellIntegrationAcrossHomes = {
+  testStarshipEnabled = {
     expr = map (home: {
-      starshipEnabled = home.config.programs.starship.enable;
-      starshipZshIntegration = home.config.programs.starship.enableZshIntegration;
-      starshipInit = lib.hasInfix (builtins.unsafeDiscardStringContext ''eval "$(${lib.getExe home.config.programs.starship.package} init zsh)"'') home.config.programs.zsh.initContent;
+      enabled = home.config.programs.starship.enable;
+      ownsConfig = home.config.home.file.${home.config.programs.starship.configPath}.force;
     }) homes;
     expected = map (_: {
-      starshipEnabled = homeFixtures.sharedConfig.programs.starship.enable;
-      starshipZshIntegration = homeFixtures.sharedConfig.programs.starship.enableZshIntegration;
-      starshipInit = true;
+      enabled = true;
+      ownsConfig = true;
     }) homes;
   };
 
-  testHostPromptsUseKnownOperatingSystems = {
-    expr = map (home: {
-      symbol = home.config.dotfiles.starship.osSymbol;
-      runtimeOsDetection = !home.config.programs.starship.settings.os.disabled;
-      windowsStarship = home.config.programs.starship.settings.git_status.windows_starship or null;
-    }) homes;
-    expected = map (settings: {
-      symbol = settings.dotfiles.starship.osSymbol;
-      runtimeOsDetection = false;
-      windowsStarship = settings.programs.starship.settings.git_status.windows_starship or null;
-    }) hostSettings;
+  testStarshipConfiguration = {
+    expr = map generatedSettings homes;
+    expected = map (home: home.config.programs.starship.settings) homes;
   };
 
-  testWslWindowsPromptReadsTheGeneratedConfigDirectly = {
+  testStarshipOperatingSystems = {
+    expr = map (
+      home:
+      let
+        settings = generatedSettings home;
+        symbol = home.config.dotfiles.starship.osSymbol;
+      in
+      {
+        known = symbol != null;
+        runtimeDetection = !settings.os.disabled;
+        staticPrefix = lib.hasPrefix "[${symbol}](${settings.os.style}) " settings.format;
+        windowsHelper = settings.git_status.windows_starship or null;
+      }
+    ) homes;
+    expected =
+      map
+        (windowsHelper: {
+          known = true;
+          runtimeDetection = false;
+          staticPrefix = true;
+          inherit windowsHelper;
+        })
+        [
+          null
+          "starship.exe"
+          null
+        ];
+  };
+
+  testStarshipZshIntegration = {
+    expr = map (
+      home:
+      let
+        zshrc =
+          home.config.home.file."${lib.removePrefix "${home.config.home.homeDirectory}/" home.config.programs.zsh.dotDir}/.zshrc".text;
+      in
+      {
+        enabled = home.config.programs.starship.enableZshIntegration;
+        initialization = lib.hasInfix (builtins.unsafeDiscardStringContext ''eval "$(${lib.getExe home.config.programs.starship.package} init zsh)"'') zshrc;
+      }
+    ) homes;
+    expected = map (home: {
+      enabled = true;
+      initialization = home.config.programs.starship.enableZshIntegration;
+    }) homes;
+  };
+
+  testStarshipConfigLocation = {
     expr = {
-      wslUsesSource =
-        homeFixtures.wsl.config.home.sessionVariables.STARSHIP_CONFIG == toString
-          homeFixtures.wsl.config.home.file.${homeFixtures.wsl.config.programs.starship.configPath}.source;
-      linuxUsesConfigPath =
-        homeFixtures.linux.config.home.sessionVariables.STARSHIP_CONFIG
-        == homeFixtures.linux.config.programs.starship.configPath;
-      darwinUsesConfigPath =
-        homeFixtures.darwin.config.home.sessionVariables.STARSHIP_CONFIG
-        == homeFixtures.darwin.config.programs.starship.configPath;
+      wsl = wsl.config.home.sessionVariables.STARSHIP_CONFIG;
+      linux = linux.config.home.sessionVariables.STARSHIP_CONFIG;
+      darwin = darwin.config.home.sessionVariables.STARSHIP_CONFIG;
     };
     expected = {
-      wslUsesSource = true;
-      linuxUsesConfigPath = true;
-      darwinUsesConfigPath = true;
+      wsl = toString wsl.config.home.file.${wsl.config.programs.starship.configPath}.source;
+      linux = linux.config.programs.starship.configPath;
+      darwin = darwin.config.programs.starship.configPath;
+    };
+  };
+
+  testStarshipUnknownOs = {
+    expr = {
+      runtimeDetection = !fallback.os.disabled;
+      runtimePrefix = lib.hasPrefix "$os" fallback.format;
+    };
+    expected = {
+      runtimeDetection = true;
+      runtimePrefix = true;
     };
   };
 }

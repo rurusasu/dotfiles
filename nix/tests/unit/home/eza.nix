@@ -3,7 +3,7 @@
   homeConfigurations ? import ../../fixtures/home-configurations.nix { inherit inputs; },
 }:
 let
-  inherit (homeConfigurations) homes sharedConfig;
+  inherit (homeConfigurations) homes lib;
   aliasNames = [
     "eza"
     "ls"
@@ -12,28 +12,52 @@ let
     "lt"
     "lla"
   ];
-  aliases =
-    config:
-    builtins.listToAttrs (
-      map (name: {
-        inherit name;
-        value = config.programs.zsh.shellAliases.${name};
-      }) aliasNames
-    );
 in
 {
   testEzaZshAliasesUseConfiguredListingOptionsAcrossHomes = {
-    expr = map (home: {
-      enabled = home.config.programs.eza.enable;
-      zshIntegration = home.config.programs.eza.enableZshIntegration;
-      packageName = home.config.programs.eza.package.pname;
-      aliases = aliases home.config;
-    }) homes;
-    expected = map (_: {
-      enabled = sharedConfig.programs.eza.enable;
-      zshIntegration = sharedConfig.programs.eza.enableZshIntegration;
-      packageName = sharedConfig.programs.eza.package.pname;
-      aliases = aliases sharedConfig;
-    }) homes;
+    expr = map (
+      home:
+      let
+        inherit (home.config) programs;
+        zshrc =
+          home.config.home.file."${lib.removePrefix "${home.config.home.homeDirectory}/" programs.zsh.dotDir}/.zshrc".text;
+      in
+      {
+        enabled = programs.eza.enable;
+        zshIntegration = programs.eza.enableZshIntegration;
+        packageName = programs.eza.package.pname;
+        optionsAlias = programs.zsh.shellAliases.eza;
+        aliasesGenerated = map (
+          name:
+          lib.hasInfix "alias -- ${lib.escapeShellArg name}=${lib.escapeShellArg programs.zsh.shellAliases.${name}}" zshrc
+        ) aliasNames;
+      }
+    ) homes;
+    expected = map (
+      home:
+      let
+        cfg = home.config.programs.eza;
+      in
+      {
+        enabled = true;
+        zshIntegration = true;
+        packageName = "eza";
+        optionsAlias = "eza ${
+          lib.escapeShellArgs (
+            lib.optionals (cfg.icons != null) [
+              "--icons"
+              cfg.icons
+            ]
+            ++ lib.optionals (cfg.colors != null) [
+              "--color"
+              cfg.colors
+            ]
+            ++ lib.optional cfg.git "--git"
+            ++ cfg.extraOptions
+          )
+        }";
+        aliasesGenerated = map (_: true) aliasNames;
+      }
+    ) homes;
   };
 }
