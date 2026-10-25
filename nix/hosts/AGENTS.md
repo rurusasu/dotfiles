@@ -1,15 +1,16 @@
 # nix/hosts: 統合済みのホスト定義
 
-ホスト定義、ユーザー情報の検出、公開構成は `../default.nix` に統合しています。
+ホスト定義と公開構成は `../defaults.nix` に統合しています。
 このディレクトリに Nix 定義や転送用 wrapper を追加しません。
 
-- `hostModules`: Darwin / NixOS 共通 / native Linux / WSL のシステム設定。
-- native NixOS のアカウントは`hostModules.nixos` 内の検出処理、WSL は標準の `wsl.defaultUser` から決める。
-- `homeModules`: 共通・Darwin・Linux・WSL の Home Manager 設定。
+- ユーザー名・stateVersion は `systemDefaults` 内の `defaults` で一元管理し、`_module.args` と Home Manager 共通設定から参照する。
+- `systemDefaults`: 共通設定と末尾の OS 別 system imports。Home Manager の共通・OS 別設定は同じ `home-manager.sharedModules` にまとめる。
 - `configurations`: 標準の NixOS / nix-darwin / Home Manager 構成。
 - `perSystem`: 公開 app と package。
 
-共通の Lix・OS GC・Home Manager 接続は内部の `systemDefaults`、GC 日時は OS module、standalone GC は `homeModules.common` が担当する。
+末尾の構成登録が `specialArgs.platform` を選択し、standalone Home Manager も同じ `sharedModules` を再利用する。
 
-CPU は `system` 引数で選択します。外部の実機 hardware configuration は従来どおり検出して読み込みます。
-アプリ固有設定は `../modules/`、キー配列の補助 module と生成関数は `../home/keybindings/` が所有します。
+共有宣言を先に置き、OS 別宣言、公開構成の順に記載します。CPU は `system` 引数で選択します。
+native 構成は `/etc/nixos/hardware-configuration.nix` がある場合だけ公開します。
+アプリ固有の設定・サービス・activation・キー設定生成関数は `../modules/` に置きます。
+`../defaults.nix` は OS 基盤設定と module 選択、`../home/keybindings/` は共通配列と Windows export を所有します。

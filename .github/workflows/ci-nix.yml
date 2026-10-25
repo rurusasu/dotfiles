@@ -241,8 +241,8 @@ jobs:
 
       - name: Build Linux configurations and checks
         run: |
-          # Native NixOS build uses a hardware fixture inside this container.
-          export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"
+          install -D -m 0644 "$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix" \
+            /etc/nixos/hardware-configuration.nix
           nix build --impure --no-link --print-build-logs \
             .#nixosConfigurations.linux.config.system.build.toplevel \
             .#homeConfigurations.x86_64-linux.activationPackage
@@ -326,12 +326,21 @@ jobs:
 
       - name: Apply macOS configuration
         run: |
-          # Root is trusted by the Nix daemon; SUDO_USER still identifies the
-          # hosted runner user for nix-darwin's primaryUser configuration.
+          mkdir -p "$RUNNER_TEMP/darwin"
+          cat > "$RUNNER_TEMP/darwin/flake.nix" <<EOF
+          {
+            inputs.dotfiles.url = "path:$GITHUB_WORKSPACE";
+            outputs = { dotfiles, ... }: {
+              darwinConfigurations.macos = dotfiles.darwinConfigurations.macos.extendModules {
+                modules = [ ({ lib, ... }: { system.primaryUser = lib.mkForce "$(id -un)"; }) ];
+              };
+            };
+          }
+          EOF
           sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
             nix --accept-flake-config \
             --extra-experimental-features 'nix-command flakes' \
-            run .#darwin-rebuild -- switch --flake .#macos --impure
+            run .#darwin-rebuild -- switch --flake "$RUNNER_TEMP/darwin#macos" --impure
 
       - name: Keep private build dependencies through checks
         run: python3 scripts/python/prepare_ci_nix_cache.py root "$RUNNER_TEMP/ci-build-dependencies"

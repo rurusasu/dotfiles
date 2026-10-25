@@ -72,7 +72,7 @@ Describe 'PowerShell formatter encoding' {
             Set-ItResult -Skipped -Because 'treefmt runs its formatter under pwsh'
             return
         }
-        foreach ($config in @('nix/formatter.nix')) {
+        foreach ($config in @('nix/treefmt.nix')) {
             $line = Get-Content (Join-Path $script:repoRoot $config) | Where-Object { $_ -match '^\s*"& \{ \$ErrorActionPreference' }
             $command = $line.Trim().TrimEnd(',') | ConvertFrom-Json
             $formatter = [scriptblock]::Create($command + ' @args')
@@ -106,7 +106,7 @@ Describe 'PowerShell formatter encoding' {
             Set-ItResult -Skipped -Because 'treefmt runs its formatter under pwsh'
             return
         }
-        foreach ($config in @('nix/formatter.nix')) {
+        foreach ($config in @('nix/treefmt.nix')) {
             $line = Get-Content (Join-Path $script:repoRoot $config) | Where-Object { $_ -match '^\s*"& \{ \$ErrorActionPreference' }
             $command = $line.Trim().TrimEnd(',') | ConvertFrom-Json
             $formatter = [scriptblock]::Create($command)

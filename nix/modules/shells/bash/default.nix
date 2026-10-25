@@ -5,8 +5,15 @@ let
     "eza -lhaT --level=${toString level} --icons=auto --hyperlink -F --group-directories-first --color=auto";
 in
 {
+  home.sessionPath = [
+    "$HOME/.bun/bin"
+    "$HOME/.local/bin"
+    "$HOME/bin"
+    "$HOME/.local/npm/bin"
+  ];
   # Bash configuration is generated together with terminal shell integrations.
   programs.bash = {
+    enable = true;
     historyFile = "$HOME/.bash_history";
     historySize = 1000;
     historyFileSize = 2000;

@@ -59,15 +59,23 @@ let
   ) backends;
 in
 {
+  programs.mcp.enable = true;
+  home = {
+    packages = [
+      packages.xurl
+      packages.hermes-xapi
+    ];
+    file.".xurl".source = config.lib.file.mkOutOfStoreSymlink "${config.xdg.configHome}/xurl";
+    activation.prepareXurlDirectory =
+      lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ]
+        ''
+          run ${pkgs.coreutils}/bin/install -d -m 0700 ${lib.escapeShellArg "${hermesHome}/.xurl"}
+        '';
+  };
+
   # xurl fixes its credential path at ~/.xurl. Keep the existing private cache
   # behind an XDG configuration link; Home Manager refuses conflicting files.
   xdg.configFile.xurl.source = config.lib.file.mkOutOfStoreSymlink "${hermesHome}/.xurl";
-  home.file.".xurl".source = config.lib.file.mkOutOfStoreSymlink "${config.xdg.configHome}/xurl";
-  home.activation.prepareXurlDirectory =
-    lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ]
-      ''
-        run ${pkgs.coreutils}/bin/install -d -m 0700 ${lib.escapeShellArg "${hermesHome}/.xurl"}
-      '';
 
   # Both clients share one browser profile and one in-memory OAuth token store.
   # Home Manager starts these services after installing their configuration links.

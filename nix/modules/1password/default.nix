@@ -1,5 +1,12 @@
-{ lib, ... }: {
+{ lib, pkgs, ... }: {
   imports = [ ./ssh.nix ];
+
+  config.home.packages = [ pkgs._1password-cli ];
+
+  config.dotfiles.onePassword = {
+    account = lib.mkDefault "EJLA3HRAVZBCXIQ7SRSFGQBTNU";
+    ssh.publicKey = lib.mkDefault "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFMpL8l17Y0Lci3Y0ZsgnUz75XiHUrQn5vC6XyHZp7wC";
+  };
 
   options.dotfiles.onePassword = {
     account = lib.mkOption {

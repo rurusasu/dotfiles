@@ -8,8 +8,8 @@ let
   discordPackage = pkgs.discord.override { disableUpdates = false; };
 in
 {
-  imports = [ (import ../tools.nix).discord ];
   programs.discord = {
+    enable = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.discord;
     package =
       if pkgs.stdenv.hostPlatform.isDarwin then
         discordPackage.overrideAttrs {

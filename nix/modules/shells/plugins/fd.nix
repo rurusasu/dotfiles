@@ -5,6 +5,7 @@ let
 in
 {
   programs = {
+    fd.enable = true;
     fzf = {
       fileWidget.zsh.command = "fd --type f ${followOptions}";
       changeDirWidget.zsh.command = "fd --type d ${fdOptions}";

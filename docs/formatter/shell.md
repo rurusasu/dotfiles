@@ -69,13 +69,11 @@ treefmt
 
 ## treefmt-nix 設定
 
-[nix/formatter.nix](../../nix/formatter.nix) で設定:
+[nix/treefmt.nix](../../nix/treefmt.nix) で設定:
 
 ```nix
 {
-  treefmt = {
-    programs.shfmt.enable = true;
-  };
+  programs.shfmt.enable = true;
 }
 ```
 

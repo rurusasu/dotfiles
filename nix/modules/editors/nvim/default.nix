@@ -11,10 +11,12 @@ in
   # プラグインの導入と設定を専用モジュールにまとめる。
   imports = [
     ./plugins.nix
+    ./runtime.nix
   ];
 
   programs.neovim = {
-    # Use the unwrapped package; tools.nix owns CLI enablement.
+    enable = true;
+    # Use the unwrapped package and expose runtime dependencies on the user PATH.
     package = pkgs.neovim-unwrapped;
     # プラグインの実行依存も内部 PATH ではなく通常のユーザー環境へ導入する。
     autowrapRuntimeDeps = false;

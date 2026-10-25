@@ -43,7 +43,7 @@ nix flake update
 ```
 
 Codex CLI の個別インストールは行わず、ChatGPT アプリ付属の CLI を使います。
-Unix の dsh を含む CLI は `nix/modules/tools.nix` が導入します。
+単純な CLI の有効化・package 宣言は `nix/defaults.nix` に直接書きます。設定・package override・生成・連携を持つアプリは `nix/modules/` にまとめます。
 ユーザー環境の Python は Hermes 同梱の interpreter を使います。uv はプロジェクトの依存管理に使い、Python を別途インストールしません。
 Windows の GUI profile は Node.js/npm や dsh を導入しません。
 pnpm と Bun は導入しません。
@@ -108,8 +108,8 @@ macOS では nix-darwin を先に解除します。NixOS / WSL は OS が Nix �
 Lix installer のアンインストール対象ではありません。
 既存の standalone Linux では Home Manager が CLI を切り替え、既存 daemon は元の導入方法で管理します。
 
-macOS / Linux 構成では、Hermes Desktop と native gateway は upstream の Home Manager
-module、Agent CLI の有効化は `nix/modules/tools.nix` で管理します。Linux は native NixOS、WSLg、standalone Home Manager で利用できます。
+macOS / Linux 構成では、`nix/modules/ai_agents/hermes/` が upstream の Home Manager
+module を使い、Hermes CLI・Desktop・native gateway の導入と設定を管理します。Linux は native NixOS、WSLg、standalone Home Manager で利用できます。
 gateway は Nix/Home Manager が管理する native per-user service として起動します。
 Codex と root Hermes は共通の MCP 定義から、native `mcp-chrome` / `mcp-xapi`
 service に HTTP で接続します。各 service が1つの stdio process を保持し、既存の
@@ -167,7 +167,7 @@ cd dotfiles
 - NixOS: `nixos-rebuild switch` に Home Manager と rootful Docker を含めます。
 - その他の Linux（Ubuntu / Debian など）: Lix を必要に応じて導入し、Home Manager を適用します。初回の Lix installer は管理者権限で daemon・ビルド用アカウントを構成します。その後の Home Manager はユーザー環境を管理し、Docker・OS のサービス・既存アカウントは変更しません。
 
-NixOS は現在の `/etc/nixos/hardware-configuration.nix` を必須の host profile として読み込みます。固定ディスク構成はリポジトリに持たず、このファイルが存在しない場合は activation 前に停止します。
+native NixOS 構成は `/etc/nixos/hardware-configuration.nix` がある場合だけ公開します。ユーザー名と各 stateVersion は `nix/defaults.nix:systemDefaults` 内の `defaults` で管理します。
 
 ### 成功条件と CI
 
@@ -179,17 +179,14 @@ Unix のシステム統合 installer は必須 CLI を acceptance で確認し�
 
 Unix の導入とアプリ設定は `nix/modules/`、Windows の導入情報は `windows/winget/packages.json` で管理します。chezmoi は Windows 専用の設定を配布します。Unix の Codex、shell、Git、terminal、editor などは Home Manager が管理します。
 
-- ユーザー設定: Unix は `nix/default.nix` と `nix/modules/`、Linux 共通の Home Manager module は `nix/default.nix:homeModules.linux`、Windows は `chezmoi/`
-- Home Manager: `nix/default.nix:homeModules.common`
-- macOS system: `nix/default.nix:hostModules.darwin`、ユーザー設定: `nix/default.nix:homeModules.darwin`
-- 非 NixOS Linux: `nix/default.nix:homeModules.linux` と standalone Home Manager
-- NixOS 共通: `nix/default.nix:hostModules.nixos` がアカウント、Home Manager 統合、Docker と `system.stateVersion = "26.05"` を管理
-- native Linux のセッション: `nix/default.nix:hostModules.linux`、WSL 固有の OS 連携: `nix/default.nix:hostModules.wsl`
-- Linux 共通ユーザー設定: `nix/default.nix:homeModules.linux`、WSL ユーザー設定: `nix/default.nix:homeModules.wsl`
-- Unix CLI / GUI の導入: `nix/modules/tools.nix`、アプリ設定: 各 `nix/modules/`、Windows の GUI 導入: `windows/winget/packages.json`
+- 共通・OS 別の system / ユーザー設定: `nix/defaults.nix:systemDefaults`
+- Home Manager: 同じ `home-manager.sharedModules` を統合構成と standalone で共有
+- OS 選択: 末尾の構成登録で `specialArgs.platform` を指定
+- Windows のユーザー設定: `chezmoi/`
+- Unix CLI / GUI の導入・設定・連携・専用の実行依存: `nix/modules/` のアプリごとの module。enable・単純な package list・単一代入は必要な構成へ直接記載。Windows の GUI 導入: `windows/winget/packages.json`
 
-Unix CLI / GUI の導入は `nix/modules/tools.nix` にまとめ、各アプリ module は固有設定・連携・package 定義を担当します。host は tools の対象 OS selector と OS service を選択します。
-Windows の manifest と OS service は、それぞれを適用する層が所有します。
+Unix CLI / GUI はアプリごとの module が package 選択・設定・連携・専用の実行依存を所有します。enable・単純な package list・単一代入だけなら module を作らず必要な構成へ直接書きます。共通・OS 別構成は module の外で明示的な imports により組み立てます。
+通常の CLI・GUI とユーザー設定は Home Manager、OS 固有の設定・権限・システムサービス・連携は `nix/defaults.nix`、Windows の導入情報は独立した manifest が管理します。
 詳細は [パッケージ管理の分割方針](./docs/nix/package-management.md#分割の理由と編集先) を参照してください。
 
 ## ディレクトリ構造
@@ -212,18 +209,17 @@ dotfiles/
 ```
 
 システム設定、Home Manager の共通・OS 別設定、ホスト情報、公開構成は
-`nix/default.nix` に集約します。CPU architecture は `system` 引数で選択します。
+`nix/defaults.nix` に集約します。CPU architecture は `system` 引数で選択します。
 
 ```text
-nix/default.nix
-├── hostModules                # darwin / nixos / linux / wsl system modules
-├── homeModules                # common / darwin / linux / wsl user modules
+nix/defaults.nix
+├── systemDefaults             # shared OS / Home Manager settings and metadata
 ├── perSystem                  # apps and packages
 └── configurations             # public Darwin / NixOS / Home Manager outputs
 ```
 
-`nix/home/keybindings/` は共通キー配列と設定生成関数、`nix/home/op-ssh-sign-wsl` は
-WSL の署名スクリプトを保持します。アプリ固有設定は `nix/modules/` が所有します。
+`nix/home/keybindings/` は共通キー配列と Windows export、`nix/modules/` はアプリの設定・サービス・生成関数を保持します。
+`nix/defaults.nix` は OS 基盤設定と module 選択を担当します。
 
 ## 日常の使い方
 
@@ -283,7 +279,7 @@ PowerShell (.ps1) の整形は PSScriptAnalyzer の `Invoke-Formatter` を使用
 pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser"
 ```
 
-TOML・Lua・JSON/YAML・Markdown の整形設定は [nix/formatter.nix](nix/formatter.nix) に宣言します。
+TOML・Lua・JSON/YAML・Markdown の整形設定は [nix/treefmt.nix](nix/treefmt.nix) に宣言します。
 設定ファイルは Nix store に生成され、`nix fmt` と `nix develop` 内の `treefmt` が直接参照します。
 
 ## WSL 設定 (.wslconfig)

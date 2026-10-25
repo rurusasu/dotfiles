@@ -114,9 +114,8 @@ runs:
                   wsl=true
                   windows=true
                   ;;
-                # Windows consumes the shared shortcuts exported by nix/default.nix
-                # through chezmoi.
-                nix/default.nix|nix/home/keybindings/bindings.nix|nix/home/keybindings/generated.json|nix/home/keybindings/ghostty.nix|nix/home/keybindings/ghostty-renderer.nix|nix/home/keybindings/ghostty-windows.nix|nix/home/keybindings/neovim.nix)
+                # Windows consumes the committed shortcuts through chezmoi.
+                nix/defaults.nix|nix/home/keybindings/bindings.nix|nix/home/keybindings/generated.json|nix/modules/terminals/ghostty/ghostty.nix|nix/modules/terminals/ghostty/ghostty-renderer.nix|nix/modules/terminals/ghostty/ghostty-windows.nix|nix/modules/editors/nvim/neovim.nix)
                   nix=true
                   chezmoi=true
                   linux=true
@@ -124,7 +123,7 @@ runs:
                   wsl=true
                   windows=true
                   ;;
-                nix/home/keybindings/darwin*.nix)
+                nix/modules/aerospace/*)
                   nix=true
                   darwin=true
                   ;;
@@ -135,7 +134,11 @@ runs:
                   wsl=true
                   windows=true
                   ;;
-                nix/home/op-ssh-sign-wsl)
+                nix/modules/hyprland/*)
+                  nix=true
+                  linux=true
+                  ;;
+                nix/modules/1password/op-ssh-sign-wsl|nix/modules/fcitx5.nix|nix/modules/gnome-keyring/*|nix/modules/editors/vscode.nix|nix/modules/nvidia.nix)
                   nix=true
                   wsl=true
                   ;;

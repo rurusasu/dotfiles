@@ -44,9 +44,9 @@ See the
 for platform equivalents and requirements.
 
 The key allocation is defined in `nix/home/keybindings/bindings.nix`,
-`ghostty.nix`, and `neovim.nix`.
-`task keybindings:export` builds `.#keybindings-json` and updates the committed
-`nix/home/keybindings/generated.json` export. chezmoi reads this export without
+`nix/modules/terminals/ghostty/ghostty.nix`, and `nix/modules/editors/nvim/neovim.nix`.
+`task keybindings:export` directly evaluates those definitions with locked Nix
+inputs and jq to update the committed `nix/home/keybindings/generated.json` export. chezmoi reads this export without
 running Nix during apply. `scripts/powershell/Sync-PowerToysKeyboard.ps1` owns
 PowerToys serialization; `Invoke-DesktopAction.ps1` implements Windows actions.
 Copy, cut, and paste go through this runtime so Windows applications receive

@@ -1,4 +1,4 @@
-{
+rec {
   # Native desktop and the CLI shipped in the same official distribution.
   packages =
     { pkgs }:
@@ -23,6 +23,20 @@
           "bin/bwrap" = pkgs.lib.getExe pkgs.bubblewrap;
         }
       );
+    };
+
+  cli =
+    { pkgs, ... }:
+    {
+      imports = [ homeManager ];
+      home.packages = [ (packages { inherit pkgs; }).codex ];
+    };
+
+  desktop =
+    { pkgs, ... }:
+    {
+      imports = [ cli ];
+      home.packages = [ (packages { inherit pkgs; }).chatgpt ];
     };
 
   homeManager =
@@ -84,7 +98,7 @@
       programs.codex = {
         enable = true;
         enableMcpIntegration = true;
-        # tools.nix exposes the bundled CLI; Home Manager only manages settings.
+        # The cli module exposes the bundled CLI; this option manages settings.
         package = lib.mkDefault null;
         # Preserve application settings and project trust in a writable user file.
         mutableSettings = true;

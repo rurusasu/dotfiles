@@ -68,14 +68,16 @@ class DetectCiActionContractTests(unittest.TestCase):
 
         cases = (
             (("chezmoi/config.tmpl",), {"chezmoi", "windows"}),
-            (("nix/home/keybindings/darwin.nix",), {"nix", "darwin"}),
-            (("nix/home/op-ssh-sign-wsl",), {"nix", "wsl"}),
+            (("nix/modules/aerospace/default.nix",), {"nix", "darwin"}),
+            (("nix/modules/1password/op-ssh-sign-wsl",), {"nix", "wsl"}),
+            (("nix/modules/editors/vscode.nix",), {"nix", "wsl"}),
+            (("nix/modules/1password/default.nix",), UNIX),
             (
                 ("nix/modules/fonts/wsl-fontconfig.conf",),
                 {"nix", "wsl", "chezmoi", "windows"},
             ),
             (
-                ("nix/default.nix",),
+                ("nix/defaults.nix",),
                 UNIX | {"chezmoi", "windows"},
             ),
             (
@@ -87,22 +89,22 @@ class DetectCiActionContractTests(unittest.TestCase):
                 UNIX | {"chezmoi", "windows"},
             ),
             (
-                ("nix/home/keybindings/ghostty.nix",),
+                ("nix/modules/terminals/ghostty/ghostty.nix",),
                 UNIX | {"chezmoi", "windows"},
             ),
             (
-                ("nix/home/keybindings/ghostty-renderer.nix",),
+                ("nix/modules/terminals/ghostty/ghostty-renderer.nix",),
                 UNIX | {"chezmoi", "windows"},
             ),
             (
-                ("nix/home/keybindings/ghostty-windows.nix",),
+                ("nix/modules/terminals/ghostty/ghostty-windows.nix",),
                 UNIX | {"chezmoi", "windows"},
             ),
             (
-                ("nix/home/keybindings/neovim.nix",),
+                ("nix/modules/editors/nvim/neovim.nix",),
                 UNIX | {"chezmoi", "windows"},
             ),
-            (("nix/home/keybindings/hyprland-renderer.nix",), UNIX),
+            (("nix/modules/hyprland/hyprland-renderer.nix",), {"nix", "linux"}),
             (("windows/winget/packages.json",), {"nix", "chezmoi", "windows"}),
             (("scripts/sh/install-macos.sh",), OUTPUTS),
             ((".github/workflows/ci-chezmoi.yml",), OUTPUTS),

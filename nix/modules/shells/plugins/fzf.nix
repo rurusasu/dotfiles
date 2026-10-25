@@ -1,6 +1,7 @@
 { config, lib, ... }:
 {
   programs.fzf = {
+    enable = true;
     # Zsh uses standard Ctrl+T/R and Alt+C bindings.
     enableBashIntegration = false;
     enableZshIntegration = true;

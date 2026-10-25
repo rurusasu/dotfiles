@@ -81,14 +81,13 @@
   outputs =
     { flake-parts, ... }@inputs:
     let
-      defaults = import ./nix/default.nix { inherit inputs; };
+      defaults = import ./nix/defaults.nix inputs;
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         inputs.nix-unit.modules.flake.default
         inputs.treefmt-nix.flakeModule
         ./nix/tests
-        ./nix/formatter.nix
       ];
 
       # Current nixpkgs supports Apple Silicon macOS, not x86_64-darwin.

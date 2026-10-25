@@ -2,7 +2,7 @@
 
 setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
-	WRAPPER="$REPO_ROOT/nix/home/op-ssh-sign-wsl"
+	WRAPPER="$REPO_ROOT/nix/modules/1password/op-ssh-sign-wsl"
 	STUB_BIN="$BATS_TEST_TMPDIR/bin"
 	BUFFER="$BATS_TEST_TMPDIR/signing buffer"
 	WSLPATH_ARGS="$BATS_TEST_TMPDIR/wslpath-args"

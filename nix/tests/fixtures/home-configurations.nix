@@ -1,7 +1,7 @@
 { inputs }:
 let
   fixtures = import ./packages.nix { inherit inputs; };
-  mkPkgs = system: fixtures.mkPkgs system;
+  inherit (fixtures) mkPkgs;
 
   testHome = {
     username = "test-user";
@@ -29,17 +29,17 @@ let
 
   linux = mkHome {
     system = "x86_64-linux";
-    module = (import ../../default.nix { inherit inputs; }).homeModules.linux;
+    module = fixtures.homeModule "linux";
   };
 
   wsl = mkHome {
     system = "x86_64-linux";
-    module = (import ../../default.nix { }).homeModules.wsl;
+    module = fixtures.homeModule "wsl";
   };
 
   darwin = mkHome {
     system = "aarch64-darwin";
-    module = (import ../../default.nix { }).homeModules.darwin;
+    module = fixtures.homeModule "darwin";
   };
 
 in
@@ -52,21 +52,14 @@ in
     wsl
     darwin
     ;
+  linuxArm = mkHome {
+    system = "aarch64-linux";
+    module = fixtures.homeModule "linux";
+  };
   configuredChrome = home: (import ../../modules/browsers/chrome).package { inherit (home) pkgs; };
   common = mkHome {
     system = "x86_64-linux";
-    module = (import ../../default.nix { }).homeModules.common;
-  };
-  wslDeclarations = (import ../../default.nix { }).homeModules.wsl {
-    inherit inputs;
-    inherit (wsl) config pkgs;
-    inherit (wsl.pkgs) lib;
-  };
-  darwinPackages = {
-    pkgs = mkPkgs "aarch64-darwin";
-    system = fixtures.darwin.config.environment.systemPackages;
-    contains =
-      package: packages: builtins.any (candidate: candidate.drvPath == package.drvPath) packages;
+    module = fixtures.homeModule "common";
   };
   homes = [
     linux

@@ -94,6 +94,6 @@ flake checks、shell / installer 境界は Bats が担当します。
 handler の単体テストでは外部コマンドの `Invoke-*` wrapper を mock し、
 成功・失敗・適用できない条件を検証します。実 OS とコマンドの接続は integration / E2E で確認します。
 
-PowerShell の formatter は `nix/formatter.nix` に宣言し、`nix fmt` から実行します。
+PowerShell の formatter は `nix/treefmt.nix` に宣言し、`nix fmt` から実行します。
 `scripts/powershell/` の非 ASCII ソースは Windows PowerShell 5.1 用に UTF-8 BOM 付きで保存します。
 詳細は [文字コード方針](../../formatter/powershell.md) を参照してください。

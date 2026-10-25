@@ -1,4 +1,5 @@
 _: {
+  programs.herdr.enable = true;
   programs.herdr.settings = {
     onboarding = false;
     terminal = {

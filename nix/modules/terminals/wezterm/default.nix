@@ -13,9 +13,9 @@ let
   '';
 in
 {
-  imports = [ (import ../../tools.nix).wezterm ];
   programs = {
     wezterm = {
+      enable = true;
       package = pkgs.wezterm;
       settings = {
         color_scheme = appearance.theme;

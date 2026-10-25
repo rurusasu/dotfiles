@@ -9,6 +9,22 @@ let
 in
 {
   inherit mkPkgs;
+  homeModule =
+    requested:
+    { pkgs, lib, ... }:
+    let
+      base = (import ../../defaults.nix inputs).systemDefaults {
+        inherit inputs pkgs;
+        platform = if requested == "common" then "linux" else requested;
+      };
+    in
+    {
+      imports =
+        if requested == "common" then
+          [ (builtins.head base.home-manager.sharedModules) ]
+        else
+          lib.reverseList base.home-manager.sharedModules;
+    };
   windowsPackages = builtins.listToAttrs (
     builtins.concatMap (
       source:
@@ -43,14 +59,14 @@ in
     system = "aarch64-darwin";
     specialArgs = {
       inherit inputs;
-      sudoUser = "test-user";
-      currentUser = "test-user";
+      platform = "darwin";
     };
     modules = [
-      inputs.nix-homebrew.darwinModules.nix-homebrew
-      inputs.home-manager.darwinModules.home-manager
-      { nixpkgs.pkgs = mkPkgs "aarch64-darwin"; }
-      (import ../../default.nix { }).hostModules.darwin
+      {
+        nixpkgs.pkgs = mkPkgs "aarch64-darwin";
+        system.primaryUser = "test-user";
+      }
+      (import ../../defaults.nix inputs).systemDefaults
     ];
   };
 }

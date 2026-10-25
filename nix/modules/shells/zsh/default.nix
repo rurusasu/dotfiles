@@ -7,6 +7,7 @@
 {
   # ── Shell: zsh ────────────────────────────────────────────────────────
   programs.zsh = {
+    enable = true;
     package = pkgs.zsh;
     dotDir = "${config.xdg.configHome}/zsh";
     setOptions = [

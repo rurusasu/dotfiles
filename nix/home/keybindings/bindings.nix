@@ -159,8 +159,8 @@ let
           modifiers = [ "ctrl" ];
         }
       ];
-  ghostty = import ./ghostty.nix { inherit lib directions; };
-  ghosttyWindows = import ./ghostty-windows.nix {
+  ghostty = import ../../modules/terminals/ghostty/ghostty.nix { inherit lib directions; };
+  ghosttyWindows = import ../../modules/terminals/ghostty/ghostty-windows.nix {
     inherit lib;
     bindings = ghostty;
   };
@@ -181,9 +181,9 @@ assert
     workspaces
     ghostty
     ;
-  neovim = import ./neovim.nix;
+  neovim = import ../../modules/editors/nvim/neovim.nix;
   neovimLeader = " ";
-  ghosttyConfig = import ./ghostty-renderer.nix {
+  ghosttyConfig = import ../../modules/terminals/ghostty/ghostty-renderer.nix {
     inherit lib;
     bindings = ghostty;
   };

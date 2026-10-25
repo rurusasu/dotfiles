@@ -8,8 +8,8 @@ let
   appearance = import ../appearance.nix;
 in
 {
-  imports = [ (import ../../tools.nix).ghostty ];
   programs.ghostty = {
+    enable = true;
     package = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin pkgs.ghostty-bin;
     systemd.enable = pkgs.stdenv.hostPlatform.isLinux;
     settings = {
@@ -24,7 +24,7 @@ in
         { config-file = "?${config.xdg.configHome}/dotfiles/keybindings/ghostty.conf"; }
       else
         {
-          keybind = import ../../../home/keybindings/ghostty-renderer.nix {
+          keybind = import ./ghostty-renderer.nix {
             inherit lib;
             bindings = (import ../../../home/keybindings/bindings.nix { inherit lib; }).ghostty;
             asList = true;

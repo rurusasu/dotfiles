@@ -7,7 +7,7 @@ let
     };
     extraSpecialArgs = { inherit inputs; };
     modules = [
-      (import ../../default.nix { }).homeModules.common
+      ((import ./packages.nix { inherit inputs; }).homeModule "common")
       ../../modules/editors/nvim
       {
         home = {

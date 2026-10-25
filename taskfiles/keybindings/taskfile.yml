@@ -7,7 +7,7 @@ tasks:
     cmds:
       - |
         {{if eq OS "windows"}}wsl -d {{.DISTRO}} --cd "{{.ROOT_DIR}}" --exec {{end}}bash -lc '
-          set -eu
-          keybindingsArtifact=$(nix build .#keybindings-json --no-link --print-out-paths --no-write-lock-file)
-          install -m 0644 "$keybindingsArtifact" nix/home/keybindings/generated.json
+          set -euo pipefail
+          keybindings=$(nix eval --json --impure --expr "import ./nix/home/keybindings/bindings.nix { lib = (builtins.getFlake (toString ./.)).inputs.nixpkgs.lib; }" | jq .)
+          printf "%s\n" "$keybindings" > nix/home/keybindings/generated.json
         '

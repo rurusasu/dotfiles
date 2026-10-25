@@ -15,13 +15,11 @@ nix/modules/ai_agents/
 └── hermes/   # Hermes の公式 Home Manager 設定
 ```
 
-`chatgpt/default.nix` が `packages`・`homeManager` を公開します。
-`nix/modules/tools.nix` が `packages { inherit pkgs; }` の返す `chatgpt` と `codex` を選択し、
-Darwin と native / standalone Linux ではアプリと同梱 CLI へのリンクを `home.packages` に指定します。
-WSL は同じ Linux package の CLI へのリンクだけを選びます。CLI の PATH 配置は Home Manager に任せます。
-`common.nix` は `homeManager` を読み込み、`programs.codex` で設定を管理します。
-WSL には Linux GUI を導入しません。`nix/default.nix:homeModules.darwin` と `nix/default.nix:homeModules.linux` は `tools.nix` の `chatgpt` module、
-`nix/default.nix:homeModules.wsl` は `chatgptCli` を選択します。
+`chatgpt/default.nix` が `packages`・`homeManager` と、導入用の `cli`・`desktop` を公開します。
+`desktop` は `packages { inherit pkgs; }` が返すアプリと同梱 CLI へのリンクを Home Manager に導入し、
+`cli` は同じ Linux package の CLI へのリンクだけを導入します。CLI の PATH 配置は Home Manager に任せます。
+両方とも `homeManager` を読み込み、`programs.codex` で設定を管理します。
+`nix/defaults.nix:systemDefaults` は Darwin / native・standalone Linux で `desktop`、WSL で `cli` を選択します。WSL には Linux GUI を導入しません。
 Windows の Store 導入・検証情報は `windows/winget/packages.json` で直接管理します。
 Codex CLI を独立したパッケージとして導入しません。
 
@@ -56,7 +54,7 @@ Unix の `CODEX_HOME` は `${config.xdg.configHome}/codex`（既定 `~/.config/c
 `home.preferXdgDirectories = true` により標準 module が XDG 配置を選びます。
 Unix の config は `nix/modules/ai_agents/chatgpt/` の
 Home Manager `programs.codex` が管理します。`programs.codex.enable = true` と `package = null` を指定し、
-CLI のバージョン判定に依存せず設定を生成します。CLI の導入は `tools.nix` の `home.packages` が担当します。
+CLI のバージョン判定に依存せず設定を生成します。CLI の導入は同じアプリ module の `cli` が担当します。
 WSL は Linux 版を使い、Windows は Windows 側のアプリを使います。
 `mutableSettings = true` で既存の UI 設定や project trust を保持して宣言値をマージします。
 認証ファイル・履歴・セッションは Home Manager の管理対象にしません。
@@ -70,7 +68,7 @@ Google 連携は Pipedream に統一し、Codex の Google curated plugins は�
 ユーザーが `codex mcp login pipedream` で OAuth を実行してください。
 設定と認証の範囲は [Google MCP](../hermes-agent/gmail-mcp.md) を参照してください。
 
-Unix の dsh の導入は `nix/modules/tools.nix` で管理します。
+Unix の dsh の導入は `nix/defaults.nix` で管理します。
 Windows の npm/pnpm manifest は空で、dsh を導入しません。pnpm と Bun は導入しません。
 
 ## 反映

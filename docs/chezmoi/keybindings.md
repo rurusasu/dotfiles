@@ -29,7 +29,7 @@ Nix で管理するデスクトップ・Ghostty・Neovim 配列と、chezmoi が
 
 配置方針は `nix/home/keybindings/` に共通 action とキーを定義し、macOS の AeroSpace と native NixOS の Hyprland 設定を生成する。Windows は PowerToys で提示された Omarchy 配列を反映します。Windows の GlazeWM 設定生成と配布機能は削除しました。WSL guest に Hyprland は導入しません。責務・OS ごとの代替動作は [共通定義と OS 別実装](./omarchy.md) を参照してください。
 
-キー配列の正本は `nix/home/keybindings/bindings.nix` と、それが読み込む `ghostty.nix` / `neovim.nix` です。`task keybindings:export` が Nix output `.#keybindings-json` をビルドし、コミット対象の `generated.json` を更新します。chezmoi は Windows 向け38割り当てを PowerToys に反映し、Ghostty / Neovim の export を NixOS-WSL の `~/.config/dotfiles/keybindings/` に配置します。Windows の apply は Nix を呼びません。WSL の Home Manager は export を読む loader を所有し、native Unix は同じ Nix 定義を直接読みます。Nix の単体テストは生成済み JSON と正本の一致を検査します。
+キー配列の正本は `nix/home/keybindings/bindings.nix` と、それが読み込む `nix/modules/terminals/ghostty/ghostty.nix` / `nix/modules/editors/nvim/neovim.nix` です。`task keybindings:export` がロック済み Nix 入力で正本を直接評価し、jq でコミット対象の `generated.json` を更新します。chezmoi は Windows 向け38割り当てを PowerToys に反映し、Ghostty / Neovim の export を NixOS-WSL の `~/.config/dotfiles/keybindings/` に配置します。Windows の apply は Nix を呼びません。WSL の Home Manager は export を読む loader を所有し、native Unix は同じ Nix 定義を直接読みます。Nix の単体テストは生成済み JSON と正本の一致を検査します。
 
 Windows では `Super=Win` とし、同じキーの標準操作を remap で上書きします。`Win+D` は無効化します。Windows キーの全機能を無効化する `NoWinKeys` は使わず、`Win+L` や `Ctrl+Alt+Del` などの OS 予約操作は維持します。初回の loader 導入は `nrs`、以後の反映は `task chezmoi` です。[install.cmd と export の手順](./omarchy.md#export-と反映手順) を参照してください。
 

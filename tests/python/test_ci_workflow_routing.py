@@ -33,7 +33,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         self.assertIsNotNone(job, f"missing {name} job")
         return job.group("job") if job is not None else ""
 
-    def test_linux_build_leaves_identity_resolution_to_nix(
+    def test_linux_build_installs_declared_hardware_without_identity_inference(
         self,
     ) -> None:
         workflow = self._named_workflow("ci-nix.yml")
@@ -58,11 +58,20 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                 "print('/nix/store/' + 'b' * 32 + '-system')\n"
             )
             nix.chmod(0o755)
+            installer = directory / "install"
+            installer.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, sys\n"
+                "with open(os.environ['INSTALL_LOG'], 'w') as log:\n"
+                "    json.dump(sys.argv[1:], log)\n"
+            )
+            installer.chmod(0o755)
             environment = dict(os.environ)
             environment.update(
                 PATH=f"{directory}:{environment['PATH']}",
                 GITHUB_WORKSPACE=temporary,
                 INVOCATION_LOG=str(directory / "invocation.json"),
+                INSTALL_LOG=str(directory / "install.json"),
             )
             for variable in (
                 "DOTFILES_USER",
@@ -86,6 +95,16 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                 check=True,
             )
             invocation = json.loads((directory / "invocation.json").read_text())
+            self.assertEqual(
+                json.loads((directory / "install.json").read_text()),
+                [
+                    "-D",
+                    "-m",
+                    "0644",
+                    f"{temporary}/nix/tests/fixtures/hardware-configuration.nix",
+                    "/etc/nixos/hardware-configuration.nix",
+                ],
+            )
         self.assertEqual(invocation["argv"][:2], ["build", "--impure"])
         self.assertIn(
             ".#nixosConfigurations.linux.config.system.build.toplevel",

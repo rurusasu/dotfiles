@@ -1,6 +1,6 @@
 # デスクトップキー設定の所有範囲
 
-共通キー設定とユーザー設定、macOS のユーザーサービスは `nix/home/keybindings/`、OS service と有効化は `nix/default.nix:hostModules` が所有します。macOS は AeroSpace、native NixOS は Hyprland を使います。NixOS-WSL には compositor を導入しません。
+共通キー配列は `nix/home/keybindings/`、アプリの設定・サービスは `nix/modules/`、OS 別選択は `nix/defaults.nix:systemDefaults` が所有します。macOS は AeroSpace、native NixOS は Hyprland を使います。NixOS-WSL には compositor を導入しません。
 
 Windows は PowerToys Keyboard Manager を使い、提示された Omarchy 配列のアプリ起動、クリップボード、撮影、通知、外観、アイドル、ナイトモード、バー、音声出力操作を chezmoi で管理します。`Super=Win` です。キーの正本は `nix/home/keybindings/` に置き、デスクトップは `bindings.nix`、Ghostty は `ghostty.nix`、Neovim は `neovim.nix` が所有します。chezmoi は Nix が export した `generated.json` を読み、キー定義を別に持ちません。
 
@@ -16,10 +16,10 @@ Nix のテストは純粋な設定生成と実効値を検査します。実機�
 
 ## 読み込みと設定の所有者
 
-- `nix/home/keybindings/darwin.nix` は `aerospace.nix` を通常の Nix `import` で呼び、生成結果を `programs.aerospace.settings.mode.main.binding` に渡します。設定ファイルと launchd は Home Manager が所有します。
-- native NixOS は共通設定の `nix/default.nix:hostModules.nixos` と native Linux 用の `nix/default.nix:hostModules.linux` を使います。`hostModules.linux` が `programs.hyprland.enable` と Home Manager module の選択を担当します。`nix/home/keybindings/hyprland.nix` が `configType = "lua"` を明示し、ユーザー設定を配置します。architecture は `system` 引数で選択します。
-- `nix/default.nix:homeModules.linux` は native NixOS と standalone Linux が共有します。Hyprland module を無条件に読み込まず、native host のみが選択します。
-- home 配下でも、共通データと純粋な設定生成関数は Home Manager module ではありません。これらを module の `imports` に渡しません。
+- `nix/modules/aerospace/default.nix` は `aerospace.nix` を通常の Nix `import` で呼び、生成結果を `programs.aerospace.settings.mode.main.binding` に渡します。設定ファイルと launchd は Home Manager が所有します。
+- native NixOS は `platform = "linux"` の `systemDefaults` がセッションと Home Manager を接続します。`nix/modules/hyprland/default.nix` が `configType = "lua"` を明示し、ユーザー設定を配置します。architecture は `system` 引数で選択します。
+- native NixOS と standalone Linux は同じ Home Manager の `sharedModules` を使い、Hyprland の system 設定は native 構成だけが有効化します。
+- 共通データと純粋な設定生成関数は Home Manager module ではありません。これらを module の `imports` に渡しません。
 
 ## 対象範囲と実装状況
 
@@ -31,7 +31,7 @@ Nix のテストは純粋な設定生成と実効値を検査します。実機�
 | NixOS-WSL                     | host が担当      | Windows キー       | guest に compositor を導入せず、Windows host の構成に従う                     |
 | standalone Linux Home Manager | 自動導入なし     | —                  | 共通 CLI module では desktop session を変更しない                             |
 
-Unix GUI の導入は `nix/modules/tools.nix` が所有し、host が対象 OS の selector を import します。Windows GUI の導入は `windows/winget/packages.json` が所有します。Hyprland のユーザー設定は `nix/home/keybindings/hyprland.nix` が管理します。Hyprland のセッションは native NixOS host がシステム側で有効化します。standalone / WSL には compositor を自動導入しません。
+Unix GUI の導入・設定はアプリごとの Home Manager module が所有し、共通・OS 別構成が対象 module を明示的に import します。Windows GUI の導入は `windows/winget/packages.json` が所有します。Hyprland のユーザー設定は `nix/modules/hyprland/default.nix` が管理します。Hyprland のセッションは `nix/defaults.nix` の native Linux 設定で有効化します。standalone / WSL には compositor を自動導入しません。
 
 native NixOS では window/workspace 操作と terminal/browser/files/notes/AI/passwords/launcher/help/activity の起動を生成します。capture、calculator、lock、clipboard、emoji、audio、bluetooth、display、network、power、passthrough は未対応です。対応する実装なしにキーを割り当てないため、macOS と完全同等ではありません。既存の display manager は変更せず、Hyprland セッションを選択するか TTY から `Hyprland` を起動します。
 
