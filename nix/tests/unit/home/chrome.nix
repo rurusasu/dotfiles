@@ -6,11 +6,11 @@ let
   inherit (homeConfigurations)
     wsl
     configuredChrome
-    lib
     ;
-  selectedChrome = lib.findFirst (
+  selectedChrome = homeConfigurations.lib.findFirst (
     package: (package.pname or "") == wsl.pkgs.google-chrome.pname
   ) null wsl.config.home.packages;
+  immodulesCache = (configuredChrome wsl).gtk3ImmodulesCache;
 in
 {
   testWslChromePackageUsesDeclaredLocaleAndLanguage = {
@@ -19,43 +19,24 @@ in
   };
 
   testWslChromeBuildsAnExplicitFcitxGtk3ModuleCache = {
-    expr =
-      let
-        inherit (wsl) pkgs;
-        markerStart = "__DOTFILES_GTK_CACHE_BEGIN__";
-        markerEnd = "__DOTFILES_GTK_CACHE_END__";
-        selected = import ../../../modules/browsers/chrome {
-          pkgs = pkgs // {
-            runCommand =
-              name: attrs: script:
-              markerStart
-              + builtins.toJSON {
-                inherit name script;
-                nativeBuildInputs = map toString attrs.nativeBuildInputs;
-                inherit (attrs) preferLocalBuild allowSubstitutes;
-                disallowedReferences = map toString attrs.disallowedReferences;
-              }
-              + markerEnd;
-          };
-        };
-        pieces = pkgs.lib.splitString markerStart selected.postFixup;
-      in
-      if builtins.length pieces == 2 then
-        builtins.fromJSON (
-          builtins.unsafeDiscardStringContext (
-            builtins.head (pkgs.lib.splitString markerEnd (builtins.elemAt pieces 1))
-          )
-        )
-      else
-        null;
+    expr = {
+      inherit (immodulesCache) name preferLocalBuild allowSubstitutes;
+      nativeBuildInputs = map toString immodulesCache.nativeBuildInputs;
+      disallowedReferences = map toString immodulesCache.disallowedReferences;
+      script = immodulesCache.buildCommand;
+    };
     expected = {
       name = "chrome-fcitx-gtk3-immodules.cache";
-      nativeBuildInputs = [ (toString wsl.pkgs.gtk3) ];
+      nativeBuildInputs = map toString [
+        (wsl.pkgs.lib.getDev wsl.pkgs.gtk3)
+        wsl.pkgs.pkg-config
+      ];
       preferLocalBuild = true;
       allowSubstitutes = false;
       disallowedReferences = [ (toString (wsl.pkgs.lib.getDev wsl.pkgs.gtk3)) ];
       script = ''
-        gtk-query-immodules-3.0 "${wsl.pkgs.fcitx5-gtk}/lib/gtk-3.0/3.0.0/immodules/im-fcitx5.so" > "$out"
+        gtk_binary_version="$(pkg-config --variable=gtk_binary_version gtk+-3.0)"
+        gtk-query-immodules-3.0 "${wsl.pkgs.fcitx5-gtk}/lib/gtk-3.0/$gtk_binary_version/immodules/im-fcitx5.so" > "$out"
       '';
     };
   };

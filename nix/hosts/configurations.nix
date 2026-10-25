@@ -6,68 +6,66 @@
 { inputs, ... }:
 let
   hosts = import ./. { inherit inputs; };
-  hostSpecs = hosts.mkNixosHostSpecs { };
-  mkHome = system: {
-    pkgs = import inputs.nixpkgs {
-      inherit system;
-      config.allowUnfree = true;
-    };
-    extraSpecialArgs = {
-      inherit inputs;
-    };
+  garbageCollection = {
+    automatic = true;
+    options = "--delete-old";
   };
-  mkDarwinHome =
-    system:
-    inputs.home-manager.lib.homeManagerConfiguration {
-      inherit (mkHome system) pkgs extraSpecialArgs;
-      modules = [
-        ./aarch64-darwin/home.nix
-        ../modules/shells/zsh
-        ../modules/terminals/ghostty/defaults.nix
-        ../hosts/aarch64-darwin/ghostty.nix
-        ../modules/terminals/wezterm/defaults.nix
-        ../hosts/aarch64-darwin/wezterm.nix
-      ];
+  weeklyGarbageCollection = garbageCollection // {
+    dates = "weekly";
+  };
+  homeGarbageCollection =
+    { config, ... }:
+    {
+      # Integrated homes use the system collector; standalone homes use a user timer.
+      nix.gc = weeklyGarbageCollection // {
+        automatic = !config.submoduleSupport.enable;
+      };
     };
-  mkLinuxHome =
+  nativeIdentity = import ./identity.nix { lib = inputs.nixpkgs.lib; };
+  mkHome =
     system:
     inputs.home-manager.lib.homeManagerConfiguration {
-      inherit (mkHome system) pkgs extraSpecialArgs;
+      pkgs = import inputs.nixpkgs {
+        inherit system;
+        config.allowUnfree = true;
+      };
+      extraSpecialArgs = { inherit inputs; };
       modules = [
-        ./${system}/home.nix
-        ../modules/shells/zsh
-        ../modules/terminals/ghostty/defaults.nix
-        ../hosts/shared/linux-ghostty.nix
-        ../modules/terminals/wezterm/defaults.nix
+        (if builtins.match ".*-darwin" system != null then ../home/darwin.nix else hosts.linuxHome)
+        homeGarbageCollection
       ];
     };
 in
 {
   homeConfigurations = {
-    "aarch64-darwin" = mkDarwinHome "aarch64-darwin";
-    "x86_64-linux" = mkLinuxHome "x86_64-linux";
-    "aarch64-linux" = mkLinuxHome "aarch64-linux";
+    "aarch64-darwin" = mkHome "aarch64-darwin";
+    "x86_64-linux" = mkHome "x86_64-linux";
+    "aarch64-linux" = mkHome "aarch64-linux";
   };
   nixosConfigurations = inputs.nixpkgs.lib.mapAttrs (
     _: spec:
-    let
-      nativeIdentity = import ./shared/nixos/identity.nix { lib = inputs.nixpkgs.lib; };
-    in
     hosts.mkNixos (
       {
-        inherit (spec) system hostPath homeModulePath;
+        inherit (spec) system hostPath homeModule;
         inherit nativeIdentity;
-        extraModules =
+        extraModules = [
+          {
+            nix.gc = weeklyGarbageCollection;
+            home-manager.sharedModules = [ homeGarbageCollection ];
+          }
+        ]
+        ++ (
           if spec ? hardwareConfig then
             [ (/. + spec.hardwareConfig) ]
           else
-            [ inputs.nixos-wsl.nixosModules.wsl ];
+            [ inputs.nixos-wsl.nixosModules.wsl ]
+        );
       }
       // inputs.nixpkgs.lib.optionalAttrs (nativeIdentity != null) {
         configuredUser = nativeIdentity.user;
       }
     )
-  ) hostSpecs;
+  ) (hosts.mkNixosHostSpecs { });
   darwinConfigurations.macos = inputs.nix-darwin.lib.darwinSystem {
     system = "aarch64-darwin";
     specialArgs = {
@@ -78,8 +76,22 @@ in
     modules = [
       inputs.nix-homebrew.darwinModules.nix-homebrew
       inputs.home-manager.darwinModules.home-manager
-      { nixpkgs.config.allowUnfree = true; }
-      ./aarch64-darwin
+      {
+        nixpkgs.config.allowUnfree = true;
+        nix.gc = garbageCollection // {
+          interval = [
+            {
+              Weekday = 7;
+              Hour = 3;
+              Minute = 15;
+            }
+          ];
+        };
+        # Collect unreferenced paths during builds when free space falls below 10 GiB.
+        nix.settings.min-free = 10 * 1024 * 1024 * 1024;
+        home-manager.sharedModules = [ homeGarbageCollection ];
+      }
+      ./darwin.nix
     ];
   };
 }

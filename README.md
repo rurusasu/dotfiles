@@ -30,7 +30,7 @@ Unix の Docker profile では最後に runtime acceptance も実行します。
 macOS / Linux の `./install.sh` は、Nix が未導入なら初回だけ導入し、
 その後は flake inputs を最新に更新して OS の Nix 構成を `switch` します。
 WSL も `switch` 前に inputs を更新します。更新に失敗した場合は反映しません。
-リポジトリの pull / merge と独自パッケージの更新は別途行います。
+リポジトリの pull / merge は別途行います。
 
 - macOS: flake inputs を更新してから、nix-darwin / Home Manager と Homebrew パッケージを反映します。
 - Linux / NixOS: flake inputs を更新し、その OS の構成と Home Manager を反映します。
@@ -38,13 +38,12 @@ WSL も `switch` 前に inputs を更新します。更新に失敗した場合�
   Windows の CLI パッケージと chezmoi は導入・適用しません。WSL 基盤の有効化だけ管理者権限で行います。
 
 ```bash
-# macOS の独自パッケージを更新するとき
-task darwin:update
-./install.sh
+# flake inputs だけを更新するとき
+nix flake update
 ```
 
 Codex CLI の個別インストールは行わず、ChatGPT アプリ付属の CLI を使います。
-Unix の Node.js/npm と dsh を含む CLI は `nix/modules/tools.nix` が導入します。
+Unix の dsh を含む CLI は `nix/modules/tools.nix` が導入します。
 Python は同じファイルが導入する uv で管理し、interpreter を直接インストールしません。
 Windows の GUI profile は Node.js/npm や dsh を導入しません。
 pnpm と Bun は導入しません。
@@ -100,12 +99,19 @@ Homebrew formula/cask を管理します。Home Manager も同じコマンド内
 適用します。macOS では WSL や NixOS を導入しません。
 
 macOS / Linux 構成では、Hermes Desktop と native gateway は upstream の Home Manager
-module、Agent CLI の有効化は `nix/modules/tools.nix` で管理します。Linuxはnative NixOS、WSLg、standalone Home Managerで利用できます。
+module、Agent CLI の有効化は `nix/modules/tools.nix` で管理します。Linux は native NixOS、WSLg、standalone Home Manager で利用できます。
 gateway は Nix/Home Manager が管理する native per-user service として起動します。
-Docker Compose は Chromium / Browser MCP / X API MCP の sidecar を提供します。
-旧 Docker Agent / Dashboard とその bootstrap の実行経路は削除済みです。
-既存の Docker volume は変更せず、Hermes の設定や runtime state は Nix store
-に保存しません。
+Codex と root Hermes は共通の MCP 定義から、native `mcp-chrome` / `mcp-xapi`
+service に HTTP で接続します。各 service が1つの stdio process を保持し、既存の
+`http://127.0.0.1:8765/mcp` / `http://127.0.0.1:8766/mcp` を使います。ブラウザは
+headless のため display や WSLg は不要です。Chrome DevTools MCP は `mcp-servers` input の
+既製 Nix package、xurl は `xurl` input に固定した upstream source を使い、
+通常の `nix flake update` で更新します。
+既存の `~/.hermes/.browser` と `~/.hermes/.xurl` は保持します。native xurl の
+`~/.xurl` は Home Manager が XDG 経由で既存 cache へリンクし、既存実体との衝突では
+反映を停止します。MCP service は Linux の systemd user service / macOS の launchd が
+管理します。Hermes 用 Docker Agent / Dashboard / browser / X API sidecar は
+削除済みです。既存の Docker volume と Hermes の runtime state はそのまま保持します。
 
 詳細は [Hermes Desktop の運用](./docs/hermes-agent/desktop.md) を参照してください。
 
@@ -163,14 +169,16 @@ Unix のシステム統合 installer は必須 CLI を acceptance で確認し�
 
 Unix の導入とアプリ設定は `nix/modules/`、Windows の導入情報は `windows/winget/packages.json` で管理します。chezmoi は Windows 専用の設定を配布します。Unix の Codex、shell、Git、terminal、editor などは Home Manager が管理します。
 
-- ユーザー設定: Unix は `nix/home/` と `nix/modules/`、Windows は `chezmoi/`
+- ユーザー設定: Unix は `nix/home/` と `nix/modules/`、Linux 共通の Home Manager module は `nix/hosts/default.nix` の `linuxHome`、Windows は `chezmoi/`
 - Home Manager: `nix/home/common.nix`
-- macOS system: `nix/hosts/aarch64-darwin/default.nix` が entrypoint、`configuration.nix` が system/cask/activation の実体
-- 非 NixOS Linux: `nix/hosts/<system>/home.nix` と standalone Home Manager
-- NixOS / WSL: `nix/hosts/<system>/<environment>/default.nix` が entrypoint、`configuration.nix` が host 固有設定
-- Unix CLI の導入: `nix/modules/tools.nix`、アプリ設定・GUI: 各 `nix/modules/`、Windows の GUI 導入: `windows/winget/packages.json`
+- macOS system: `nix/hosts/darwin.nix`、ユーザー設定: `nix/home/darwin.nix`
+- 非 NixOS Linux: `nix/hosts/default.nix` の `linuxHome` と standalone Home Manager
+- NixOS 共通: `nix/hosts/nixos.nix` がアカウント、Home Manager 統合、Docker と `system.stateVersion = "26.05"` を管理
+- native Linux のセッション: `nix/hosts/linux.nix`、WSL 固有の OS 連携: `nix/hosts/wsl.nix`
+- Linux 共通ユーザー設定: `nix/hosts/default.nix` の Home Manager module `linuxHome`、WSL ユーザー設定: `nix/home/wsl.nix`
+- Unix CLI / GUI の導入: `nix/modules/tools.nix`、アプリ設定: 各 `nix/modules/`、Windows の GUI 導入: `windows/winget/packages.json`
 
-Unix CLI の導入は `nix/modules/tools.nix` にまとめ、各アプリ module は設定・連携を担当します。GUI と OS service はそれぞれの module / host が管理します。
+Unix CLI / GUI の導入は `nix/modules/tools.nix` にまとめ、各アプリ module は固有設定・連携・package 定義を担当します。host は tools の対象 OS selector と OS service を選択します。
 Windows の manifest と OS service は、それぞれを適用する層が所有します。
 詳細は [パッケージ管理の分割方針](./docs/nix/package-management.md#分割の理由と編集先) を参照してください。
 
@@ -193,20 +201,25 @@ dotfiles/
 └── flake.nix               # Nix flake entry point
 ```
 
-ホスト設定は全 OS で同じ分割を標準とします。`default.nix` は import の入口に限定し、system、service、user、cask、activation などのホスト固有設定は `configuration.nix` に置きます。
+システム設定は `nix/hosts/` の OS 別ファイル、共有・Darwin・WSL のユーザー設定は `nix/home/`、
+Linux 共通の Home Manager module `linuxHome` は `nix/hosts/default.nix` に置きます。
+hosts 配下に OS・CPU 別ディレクトリを作らず、CPU は `system` 引数で選択します。
 
 ```
 nix/hosts/
-├── darwin/
-│   ├── default.nix          # nix-darwin entrypoint
-│   └── configuration.nix    # macOS system/cask/activation
-├── linux/
-│   ├── default.nix          # NixOS entrypoint
-│   └── configuration.nix    # native NixOS configuration
-└── wsl/
-    ├── default.nix          # NixOS-WSL entrypoint
-    └── configuration.nix    # WSL configuration
+├── default.nix             # host constructors / Linux Home Manager module
+├── configurations.nix      # flake configuration registration
+├── darwin.nix              # nix-darwin system / services / Homebrew
+├── darwin-app-cleanup.nix  # bundled application cleanup factory
+├── identity.nix            # NixOS user identity
+├── nixos.nix               # common NixOS / WSL system configuration
+├── linux.nix               # native Linux session
+└── wsl.nix                 # WSL system integration
 ```
+
+Home Manager の OS 別設定は Darwin / WSL が `nix/home/{darwin,wsl}.nix`、
+native / standalone Linux が `nix/hosts/default.nix` の `linuxHome` を使います。
+共有設定は `nix/home/common.nix`、Darwin のユーザーキー設定は `nix/home/keybindings/darwin.nix` が管理します。
 
 ## 日常の使い方
 
@@ -297,7 +310,7 @@ wsl --shutdown
 
 ### WezTerm
 
-- 設定ソース: `chezmoi/terminals/wezterm/wezterm.lua`
+- 設定ソース: Windows は `chezmoi/terminals/wezterm/wezterm.lua`、Unix は `nix/modules/terminals/wezterm/default.nix` と `wezterm.lua`
 - Leader key: `Ctrl+Space`
 - prefix に続けて `v` で左右分割、`-` で上下分割、`x` でペインを閉じる
 
@@ -315,7 +328,8 @@ sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
 同じ installer を再実行すると、完了済みの宣言状態を再利用して停止した phase から収束できます。runtime だけを再確認する場合:
 
 ```bash
-docker compose -f docker/hermes-service/compose.yml ps
+hermes gateway status
+docker info
 ```
 
 NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations`、`systemctl status docker.service docker.socket` を確認します。非 NixOS Linux は `home-manager generations` で適用済みのユーザー環境を確認します。Docker は管理対象外です。macOS は `darwin-rebuild --list-generations` と Docker Desktop の起動状態を確認します。Windows は PowerShell / WinGet / WSL とエラー内容を確認して installer を再実行します。WSL の個別 setup は [NixOS-WSL インストール](./docs/nix/nixos-wsl-install.md)を参照してください。
@@ -324,11 +338,10 @@ NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations`�
 .\install.cmd -NoPause
 ```
 
-### macOS の WezTerm nightly cask
+### macOS の WezTerm
 
-`wezterm@nightly` は nix-darwin の Homebrew cask として管理されます。
-Homebrew cask の適用に失敗する場合は、[Homebrew cask のトラブルシューティング](./docs/nix/homebrew-cask-troubleshooting.md)
-を参照してください。
+WezTerm は Nix package として管理します。旧 `wezterm@nightly` cask が残っている場合は、
+[WezTerm の旧 provider](./docs/nix/homebrew-cask-troubleshooting.md#wezterm) を参照してください。
 
 ### Windows Terminal 設定が反映されない
 

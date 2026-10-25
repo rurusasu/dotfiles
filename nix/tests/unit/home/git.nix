@@ -14,7 +14,9 @@ in
         inherit (home.pkgs) lib;
         git = home.config.programs.git;
         inherit (git) signing;
-        signingDefaults =
+      in
+      lib.generators.toGitINI (
+        lib.recursiveUpdate (
           lib.optionalAttrs (signing.key != null) {
             user.signingKey = signing.key;
           }
@@ -27,9 +29,9 @@ in
               inherit (signing) format;
               ${signing.format}.program = signing.signer;
             };
-          };
-      in
-      lib.generators.toGitINI (lib.recursiveUpdate signingDefaults git.settings)
+          }
+        ) git.settings
+      )
     ) homes;
   };
 
@@ -38,11 +40,10 @@ in
       home:
       let
         git = home.config.programs.git;
-        inherit (git) settings;
       in
       {
         enabled = git.enable;
-        relativeWorktrees = settings.worktree.useRelativePaths or false;
+        relativeWorktrees = git.settings.worktree.useRelativePaths or false;
       }
     ) homes;
     expected = map (_: {

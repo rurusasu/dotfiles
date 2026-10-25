@@ -17,7 +17,7 @@ in
     expected = map (
       home:
       let
-        configuredBat = import ../../../home/shells/plugins/bat.nix {
+        configuredBat = import ../../../modules/shells/plugins/bat.nix {
           inherit (home) config pkgs;
           inherit (home.pkgs) lib;
         };

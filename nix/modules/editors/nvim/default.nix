@@ -6,11 +6,6 @@
 }:
 let
   allocation = import ../../../home/keybindings/bindings.nix { inherit lib; };
-  sharedKeys = {
-    leader = allocation.neovimLeader;
-    bindings = allocation.neovim;
-  };
-  fromWindowsExport = lib.attrByPath [ "dotfiles" "keybindings" "fromWindowsExport" ] false config;
 in
 {
   # プラグインの導入と設定を専用モジュールにまとめる。
@@ -53,7 +48,7 @@ in
     recursive = true;
   };
   xdg.configFile."nvim/lua/config/shared_keybindings.lua".text =
-    lib.optionalString fromWindowsExport ''
+    lib.optionalString (lib.attrByPath [ "dotfiles" "keybindings" "fromWindowsExport" ] false config) ''
       -- WSL receives exported key data through Windows chezmoi.
       local path = ${builtins.toJSON "${config.xdg.configHome}/dotfiles/keybindings/generated.json"}
       if vim.fn.filereadable(path) == 1 then
@@ -63,6 +58,11 @@ in
     ''
     + ''
       -- Bootstrap fallback until the first Windows chezmoi apply.
-      return vim.json.decode([==[${builtins.toJSON sharedKeys}]==])
+      return vim.json.decode([==[${
+        builtins.toJSON {
+          leader = allocation.neovimLeader;
+          bindings = allocation.neovim;
+        }
+      }]==])
     '';
 }

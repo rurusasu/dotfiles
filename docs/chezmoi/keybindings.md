@@ -152,8 +152,7 @@ Window Manager 契約外の WezTerm 操作として、pane resize、window focus
   - `Alt+Q`: zoxide interactive jump (`zoxide query -i`)
   - `Ctrl+T/R`・`Alt+C`: 標準 fzf ウィジェット（ファイル・履歴・ディレクトリ選択）
 - bash
-  - `Alt+Q`: zoxide interactive jump (`zoxide query -i`)
-  - `Alt+D/T/R`: fzf ウィジェット
+  - zoxide の標準 `cd` / `cdi` を使い、fzf のキー連携は無効
 - PowerShell
   - `Shift+Enter`: PSReadLine `AddLine`
   - `Alt+Q`: zoxide interactive jump (`zoxide query -i`)
@@ -166,11 +165,11 @@ Window Manager 契約外の WezTerm 操作として、pane resize、window focus
 
 ### zoxide + fzf integration
 
-- `Alt+Q` は各 shell で `zoxide query -i` を呼び出し、履歴ベースのディレクトリ候補をインタラクティブ選択する
+- `Alt+Q` は zsh / PowerShell で `zoxide query -i` を呼び出し、履歴ベースのディレクトリ候補をインタラクティブ選択する
 - zsh は標準 integration を使い、`Ctrl+T` でファイル選択、`Ctrl+R` で履歴検索、`Alt+C` でディレクトリ選択して `cd`
-- Bash / PowerShell の `Alt+D` は `fd --absolute-path` + `fzf` でディレクトリ検索して `cd`
-- Bash / PowerShell の `Alt+T` は `fd` + `fzf` でファイル/ディレクトリを選択してコマンドラインへ挿入
-- Bash / PowerShell の `Alt+R` は履歴を `fzf` で選択してコマンドラインへ反映
+- PowerShell の `Alt+D` は `fd --absolute-path` + `fzf` でディレクトリ検索して `cd`
+- PowerShell の `Alt+T` は `fd` + `fzf` でファイル/ディレクトリを選択してコマンドラインへ挿入
+- PowerShell の `Alt+R` は履歴を `fzf` で選択してコマンドラインへ反映
 
 ## 運用ルール
 

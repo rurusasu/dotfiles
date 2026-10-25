@@ -11,10 +11,6 @@ let
     commands.terminal = "terminal --new-window";
   };
   chord = binding: lib.concatStringsSep "+" (binding.modifiers ++ [ binding.key ]);
-  resizeBindings = builtins.filter (
-    binding: lib.hasPrefix "resize-" binding.action
-  ) allocation.ghostty;
-  nativeGhosttyLines = lib.splitString "\n" allocation.ghosttyConfig;
   windowsGhosttyLines = lib.splitString "\n" allocation.windows.ghosttyConfig;
 in
 {
@@ -83,7 +79,7 @@ in
       ) allocation.windows.ghosttyTransport;
     };
     expected = {
-      sources = resizeBindings;
+      sources = builtins.filter (binding: lib.hasPrefix "resize-" binding.action) allocation.ghostty;
       uniqueSources = true;
       onlyWslg = true;
     };
@@ -138,7 +134,9 @@ in
         "keybind = ctrl+alt+shift+right=resize_split:right,10"
         "keybind = ctrl+alt+shift+end=resize_split:right,100"
       ];
-      otherLines = builtins.filter (line: !(lib.hasInfix "=resize_split:" line)) nativeGhosttyLines;
+      otherLines = builtins.filter (line: !(lib.hasInfix "=resize_split:" line)) (
+        lib.splitString "\n" allocation.ghosttyConfig
+      );
     };
   };
   testSharedKeysTranslateModifiersAndWorkspaceZero = {

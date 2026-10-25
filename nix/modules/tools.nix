@@ -1,27 +1,27 @@
-# Unix CLI installation and existing per-application desktop selectors.
+# Unix package installation and platform-specific desktop selectors.
 let
-  chatgptCli =
-    { inputs, pkgs, ... }:
-    let
-      packages = import ./ai_agents/chatgpt/packages.nix { inherit inputs pkgs; };
-    in
+  linuxDesktop =
     {
-      programs.codex = {
-        enable = true;
-        package = packages.codex;
-      };
-    };
-  chatgptDesktop =
-    { inputs, pkgs, ... }:
-    let
-      packages = import ./ai_agents/chatgpt/packages.nix { inherit inputs pkgs; };
-    in
+      lib,
+      pkgs,
+      ...
+    }:
     {
       imports = [
-        ./ai_agents/chatgpt/desktop.nix
-        chatgptCli
+        (import ./browsers/chrome).homeManager
       ];
-      home.packages = [ packages.chatgpt ];
+      home.packages = lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+        pkgs.obsidian
+        pkgs._1password-gui
+        pkgs.nautilus
+      ];
+    };
+  chatgptModule = import ./ai_agents/chatgpt;
+  chatgptCli =
+    { pkgs, ... }:
+    {
+      programs.codex.enable = true;
+      home.packages = [ (chatgptModule.packages { inherit pkgs; }).codex ];
     };
 in
 {
@@ -34,20 +34,7 @@ in
       ...
     }:
     let
-      hermesBootstrap = import ./ai_agents/hermes/bootstrap.nix {
-        inherit
-          config
-          inputs
-          lib
-          pkgs
-          ;
-      };
-      neovimRuntimeDependencies =
-        (pkgs.neovimUtils.makeVimPackageInfo (
-          map (
-            plugin: if plugin ? plugin then builtins.removeAttrs plugin [ "runtime" ] else plugin
-          ) config.programs.neovim.plugins
-        )).runtimeDeps;
+      mcpPackages = import ./ai_agents/mcp-packages.nix { inherit inputs pkgs; };
     in
     {
       programs = {
@@ -68,9 +55,10 @@ in
         herdr.enable = true;
         neovim.enable = true;
         direnv.enable = true;
+        mcp.enable = true;
         hermes-agent = {
           enable = true;
-          desktop.enable = !pkgs.stdenv.hostPlatform.isDarwin;
+          desktop.enable = true;
         };
       };
 
@@ -78,18 +66,19 @@ in
         with pkgs;
         [
           # Applications without native Home Manager installation options.
-          (pkgs.callPackage ./editors/orca/package.nix { })
+          inputs.llm-agents.packages.${stdenv.hostPlatform.system}.orca
+          comfyui
           # CLI packages without a native Home Manager installation option.
           gh
+          yq-go
+          mcpPackages.xurl
+          mcpPackages.hermes-xapi
           _1password-cli
           ghq
           gwq
           btop
           lazydocker
           inputs.llm-agents.packages.${stdenv.hostPlatform.system}.dsh
-          hermesBootstrap
-          # Public Gmail OAuth task invokes npx; Hermes supplies its private Node runtime.
-          nodejs
           # User Python runtimes are managed by uv, without a global Python installation.
           uv
           # Repository Taskfile commands and developer hooks.
@@ -120,37 +109,67 @@ in
           (lib.hiPrio rust-analyzer)
           (lib.hiPrio rustfmt)
           oxlint
-          (pkgs.callPackage ./typescript-language-server/package.nix { })
+          typescript-language-server
           typescript
           astro-language-server
           prisma-language-server
         ]
-        ++ neovimRuntimeDependencies
+        ++ (pkgs.neovimUtils.makeVimPackageInfo (
+          map (
+            plugin: if plugin ? plugin then builtins.removeAttrs plugin [ "runtime" ] else plugin
+          ) config.programs.neovim.plugins
+        )).runtimeDeps
         ++ lib.optionals stdenv.hostPlatform.isDarwin [
           coreutils
           tart
         ];
     };
 
-  chatgpt = chatgptDesktop;
-  inherit chatgptCli;
+  chatgpt =
+    { pkgs, ... }:
+    {
+      imports = [
+        chatgptCli
+      ];
+      home.packages = [ (chatgptModule.packages { inherit pkgs; }).chatgpt ];
+    };
+  inherit chatgptCli linuxDesktop;
 
-  darwin = { pkgs, ... }: {
+  wslDesktop = { lib, pkgs, ... }: {
+    imports = [
+      linuxDesktop
+      (import ./browsers/chrome).wsl
+    ];
+    home.packages = lib.optionals (pkgs.stdenv.hostPlatform.system == "x86_64-linux") [
+      pkgs.spotify
+      pkgs.signal-desktop
+    ];
+  };
+
+  darwin = { inputs, pkgs, ... }: {
     environment.systemPackages = [
       # Host integrations such as Orca need GitHub CLI outside the user profile.
       pkgs.gh
+      pkgs.obsidian
+      pkgs.raycast
+      pkgs._1password-gui
+      (import ./browsers/dia { inherit inputs pkgs; })
     ];
   };
 
   nativeDesktop = { pkgs, ... }: {
-    imports = [ chatgptDesktop ];
     home.packages = [
       pkgs.firefox
       pkgs.fuzzel
     ];
   };
 
-  discord = _: { programs.discord.enable = true; };
+  discord =
+    { pkgs, lib, ... }:
+    {
+      programs.discord.enable = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.discord;
+    };
+  aerospace = _: { programs.aerospace.enable = true; };
   ghostty = _: { programs.ghostty.enable = true; };
   wezterm = _: { programs.wezterm.enable = true; };
 }

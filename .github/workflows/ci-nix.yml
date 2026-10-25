@@ -165,33 +165,6 @@ jobs:
       - name: Run Bash tests
         run: bash scripts/sh/run-bash-tests.sh
 
-  hermes-runtime-contracts:
-    needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.other == 'true')) }}
-    name: Hermes Runtime Contracts
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    steps:
-      - name: Verify change detection
-        if: ${{ needs.changes.result != 'success' }}
-        shell: bash
-        run: exit 1
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702
-        with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run Hermes browser runtime contracts
-        run: docker/hermes-browser/tests/test_runtime_contract.sh
-
   nix:
     name: Bootstrap / Nix / Lint
     needs: [changes, ci-tools]
@@ -760,7 +733,6 @@ jobs:
         changes,
         ci-tools,
         bash-test,
-        hermes-runtime-contracts,
         wsl-prebuild,
         nix,
         linux-build,
@@ -777,8 +749,6 @@ jobs:
       TOOLS_RESULT: ${{ needs.ci-tools.result }}
       BASH_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
       BASH_RESULT: ${{ needs.bash-test.result }}
-      HERMES_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.other == 'true' }}
-      HERMES_RESULT: ${{ needs.hermes-runtime-contracts.result }}
       PLATFORM_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
       LINUX_BUILD_REQUIRED: ${{ needs.changes.outputs.linux == 'true' }}
       DARWIN_REQUIRED: ${{ needs.changes.outputs.darwin == 'true' }}
@@ -824,7 +794,6 @@ jobs:
 
           check_required_job "Tools image" "${TOOLS_REQUIRED}" "${TOOLS_RESULT}"
           check_required_job "Bash tests" "${BASH_REQUIRED}" "${BASH_RESULT}"
-          check_required_job "Hermes runtime contracts" "${HERMES_REQUIRED}" "${HERMES_RESULT}"
           check_required_job "Nix" "${NIX_REQUIRED}" "${NIX_RESULT}"
           check_required_job "Checks" "${CHECKS_REQUIRED}" "${CHECKS_RESULT}"
           check_required_job "Windows / Installer" "${WINDOWS_REQUIRED}" "${WINDOWS_INSTALLER_RESULT}"

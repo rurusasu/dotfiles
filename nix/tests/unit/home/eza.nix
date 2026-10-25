@@ -19,8 +19,6 @@ in
       home:
       let
         inherit (home.config) programs;
-        zshrc =
-          home.config.home.file."${lib.removePrefix "${home.config.home.homeDirectory}/" programs.zsh.dotDir}/.zshrc".text;
       in
       {
         enabled = programs.eza.enable;
@@ -29,7 +27,9 @@ in
         optionsAlias = programs.zsh.shellAliases.eza;
         aliasesGenerated = map (
           name:
-          lib.hasInfix "alias -- ${lib.escapeShellArg name}=${lib.escapeShellArg programs.zsh.shellAliases.${name}}" zshrc
+          lib.hasInfix
+            "alias -- ${lib.escapeShellArg name}=${lib.escapeShellArg programs.zsh.shellAliases.${name}}"
+            home.config.home.file."${lib.removePrefix "${home.config.home.homeDirectory}/" programs.zsh.dotDir}/.zshrc".text
         ) aliasNames;
       }
     ) homes;

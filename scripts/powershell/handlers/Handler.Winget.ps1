@@ -23,7 +23,6 @@ class WingetHandler : SetupHandlerBase {
     hidden [bool]$LastInstallTimedOut
     hidden [bool]$LastInstallSucceeded
     hidden [int]$LastInstallExitCode
-    hidden [bool]$LastInstallCrashRecoveryAttempted
     hidden [bool]$ProcessOnlyPath
 
     WingetHandler() {
@@ -388,14 +387,6 @@ class WingetHandler : SetupHandlerBase {
                     }
                 }
 
-                # A failed crash-recovery attempt must not be converted into a
-                # successful no-op or preservation of an older installation.
-                if ($this.LastInstallCrashRecoveryAttempted -and $this.LastInstallExitCode -ne 0) {
-                    $failed++
-                    $this.LogWarning("✗ $($pkg.Id) のクラッシュ回復に失敗しました (exit code: $($this.LastInstallExitCode))")
-                    continue
-                }
-
                 if ($this.LastInstallTimedOut) {
                     if ($this.LastInstallSucceeded) {
                         Update-ProcessEnvironmentPath -ProcessOnly
@@ -611,7 +602,6 @@ class WingetHandler : SetupHandlerBase {
         $this.LastInstallTimedOut = $false
         $this.LastInstallSucceeded = $false
         $this.LastInstallExitCode = 1
-        $this.LastInstallCrashRecoveryAttempted = $false
 
         if ($pkg.Id -eq 'Discord.Discord') {
             try {
@@ -683,39 +673,15 @@ class WingetHandler : SetupHandlerBase {
         $startedAt = [DateTime]::UtcNow
         $installTimer = [System.Diagnostics.Stopwatch]::StartNew()
         $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=install status=started timeoutSeconds=$installTimeoutSeconds utc=$($startedAt.ToString('o'))", "Gray")
-        $attemptTimeoutSeconds = $installTimeoutSeconds
-        $output = @()
-        for ($attempt = 1; $attempt -le 2; $attempt++) {
-            if ($attemptTimeoutSeconds -gt 0) {
-                $output = @(Invoke-Winget -Arguments $installArgs -TimeoutSeconds $attemptTimeoutSeconds)
-            }
-            else {
-                $output = @(Invoke-Winget -Arguments $installArgs)
-            }
-            $this.LastInstallExitCode = [int]$LASTEXITCODE
-            $exitCodeHex = [BitConverter]::ToUInt32([BitConverter]::GetBytes($this.LastInstallExitCode), 0).ToString('X8')
-            $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=install status=completed elapsedMs=$($installTimer.ElapsedMilliseconds) exitCode=$($this.LastInstallExitCode) exitCodeHex=$exitCodeHex attempt=$attempt", "Gray")
-
-            # Observed with WinGet 1.11.510 after Arc dependency installation.
-            # The internal crash cause is unknown. Retry the identical request
-            # in a fresh process once, never skipping dependencies/verification.
-            if ($attempt -ne 1 -or $this.LastInstallExitCode -ne -1073740791 -or
-                $pkg.Id -ne 'TheBrowserCompany.Arc' -or $pkg.SourceName -ne 'winget') {
-                break
-            }
-            $this.LastInstallCrashRecoveryAttempted = $true
-            foreach ($line in $output) {
-                $this.Log("  WinGet crash attempt 1: $line", "Gray")
-            }
-            if ($installTimeoutSeconds -gt 0) {
-                $attemptTimeoutSeconds = [int][Math]::Floor($installTimeoutSeconds - $installTimer.Elapsed.TotalSeconds)
-                if ($attemptTimeoutSeconds -lt 1) {
-                    $this.LogWarning("WinGet crash recovery skipped: package=$($pkg.Id) original timeout budget exhausted")
-                    break
-                }
-            }
-            $this.LogWarning("WinGet crash recovery: package=$($pkg.Id) exitCodeHex=$exitCodeHex retry=1 remainingTimeoutSeconds=$attemptTimeoutSeconds")
+        if ($installTimeoutSeconds -gt 0) {
+            $output = @(Invoke-Winget -Arguments $installArgs -TimeoutSeconds $installTimeoutSeconds)
         }
+        else {
+            $output = @(Invoke-Winget -Arguments $installArgs)
+        }
+        $this.LastInstallExitCode = [int]$LASTEXITCODE
+        $exitCodeHex = [BitConverter]::ToUInt32([BitConverter]::GetBytes($this.LastInstallExitCode), 0).ToString('X8')
+        $this.Log("PACKAGE_PHASE: package=$($pkg.Id) phase=install status=completed elapsedMs=$($installTimer.ElapsedMilliseconds) exitCode=$($this.LastInstallExitCode) exitCodeHex=$exitCodeHex", "Gray")
         $installTimer.Stop()
         if ($this.LastInstallExitCode -eq 124) {
             $diagnosis = $this.GetWingetTimeoutDiagnosis([string]$pkg.Id, $startedAt)
@@ -1569,10 +1535,6 @@ class WingetHandler : SetupHandlerBase {
                 return $this.TestWindowsInstalledProduct($verifyCmd)
             }
 
-            if ($type -eq "visualStudioInstanceVersion") {
-                return $this.TestVisualStudioInstanceVersion($verifyCmd)
-            }
-
             # Resolve applications explicitly so PowerShell aliases cannot
             # shadow them. If PATH has no executable, search only this package's
             # manifest pathEntries; verification itself must not publish PATH.
@@ -1828,62 +1790,6 @@ class WingetHandler : SetupHandlerBase {
                 }
             }
         }
-        return $false
-    }
-
-    hidden [bool] TestVisualStudioInstanceVersion([object]$verifyCmd) {
-        $vswhere = Get-Command -Name "vswhere.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-        $vswherePath = if ($vswhere) { [string]$vswhere.Source } else { $null }
-        if ([string]::IsNullOrWhiteSpace($vswherePath)) {
-            $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
-            if ($programFilesX86) {
-                $candidate = Join-Path $programFilesX86 "Microsoft Visual Studio\Installer\vswhere.exe"
-                if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-                    $vswherePath = $candidate
-                }
-            }
-        }
-        if ([string]::IsNullOrWhiteSpace($vswherePath)) {
-            $this.Log("Visual Studio Installer の vswhere.exe が見つかりません", "Yellow")
-            return $false
-        }
-
-        $arguments = @(
-            "-all",
-            "-products", [string]$verifyCmd.productId,
-            "-requires", [string]$verifyCmd.requiredComponent,
-            "-format", "json",
-            "-utf8"
-        )
-        $output = @(Invoke-VerifyCommand -Command $vswherePath -Arguments $arguments -TimeoutSeconds 120)
-        if ($LASTEXITCODE -ne 0) {
-            $this.Log("vswhere が Visual Studio インスタンスを確認できませんでした (exit code: $LASTEXITCODE)", "Yellow")
-            return $false
-        }
-
-        try {
-            $instances = @((($output -join [Environment]::NewLine) | ConvertFrom-Json))
-        }
-        catch {
-            $this.Log("vswhere の JSON 出力を解析できません: $($_.Exception.Message)", "Yellow")
-            return $false
-        }
-
-        foreach ($instance in $instances) {
-            $version = $null
-            if (-not [version]::TryParse([string]$instance.installationVersion, [ref]$version)) { continue }
-            $minimumVersion = $null
-            if (-not [version]::TryParse([string]$verifyCmd.minimumVersion, [ref]$minimumVersion) -or
-                $version -lt $minimumVersion) { continue }
-            if ([string]::IsNullOrWhiteSpace([string]$instance.installationPath)) { continue }
-
-            $compilerPattern = Join-Path ([string]$instance.installationPath) ([string]$verifyCmd.compilerRelativePath)
-            if (Get-ChildItem -Path $compilerPattern -File -ErrorAction SilentlyContinue | Select-Object -First 1) {
-                return $true
-            }
-        }
-
-        $this.Log("VCTools を含む Build Tools の cl.exe が見つかりません: $($verifyCmd.compilerRelativePath)", "Yellow")
         return $false
     }
 

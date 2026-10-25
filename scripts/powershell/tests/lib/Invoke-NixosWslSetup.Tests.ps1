@@ -20,7 +20,6 @@ Describe 'Invoke-NixosWslSetup' {
             $command = [string]$Arguments[-1]
             if ($command -match 'getent passwd') { return 'user:x:1000:100:/home/user:/bin/bash' }
             if ($command -match 'id -gn') { return 'users' }
-            if ($command -match 'cat /etc/nixos/dotfiles\.json') { return '' }
             if ($command -match 'flake update --flake') { $script:flakeUpdateCommand = $command }
             if ($command -match 'nixos-rebuild switch') { $script:rebuildCommand = $command }
             return ''

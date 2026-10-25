@@ -5,7 +5,6 @@
 let
   inherit (homeConfigurations)
     homes
-    wsl
     ;
 in
 {
@@ -18,7 +17,9 @@ in
   };
 
   testWslGwqWorktreesUseAWindowsDrive = {
-    expr = builtins.match "/mnt/[a-z]/.+" wsl.config.dotfiles.gwq.settings.worktree.basedir != null;
+    expr =
+      builtins.match "/mnt/[a-z]/.+" homeConfigurations.wsl.config.dotfiles.gwq.settings.worktree.basedir
+      != null;
     expected = true;
   };
 }

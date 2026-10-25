@@ -10,9 +10,11 @@ in
     expr = map (
       home:
       let
-        packages = home.config.home.packages;
-        selected = target: builtins.filter (package: package.drvPath == target.drvPath) packages;
-        priority = target: (builtins.head (selected target)).meta.priority or 5;
+        priority =
+          target:
+          (builtins.head (
+            builtins.filter (package: package.drvPath == target.drvPath) home.config.home.packages
+          )).meta.priority or 5;
       in
       {
         analyzerWins = priority home.pkgs.rust-analyzer < priority home.pkgs.rustup;

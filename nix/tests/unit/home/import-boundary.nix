@@ -1,8 +1,4 @@
 let
-  nixRoot = ../../..;
-  homeRoot = ../../../home;
-  testsRoot = ./.;
-
   filesUnder =
     dir:
     let
@@ -27,92 +23,80 @@ let
     root: path:
     let
       rootText = toString root;
-      pathText = toString path;
     in
-    builtins.substring 0 (builtins.stringLength rootText) pathText == rootText;
+    builtins.substring 0 (builtins.stringLength rootText) (toString path) == rootText;
 
   contains = pattern: content: builtins.length (builtins.split pattern content) > 1;
 
   # Inspect declarations without evaluating caller modules. Mask strings first
   # so example text cannot be mistaken for an import declaration.
-  stripStrings =
-    content:
-    builtins.concatStringsSep "\n" (
-      builtins.filter builtins.isString (builtins.split "\"[^\"]*\"|''[^']*''" content)
-    );
-  stripBlockComments =
-    content:
-    (builtins.foldl'
-      (
-        state: token:
-        if builtins.isString token then
-          {
-            inherit (state) inComment;
-            text = state.text + (if state.inComment then "" else token);
-          }
-        else
-          {
-            inherit (state) text;
-            inComment = builtins.head token == "/*";
-          }
-      )
-      {
-        inComment = false;
-        text = "";
-      }
-      (builtins.split "(/\\*|\\*/)" content)
-    ).text;
-  stripLineComments =
-    content:
-    let
-      uncommented = stripBlockComments (stripStrings content);
-    in
-    builtins.concatStringsSep " " (
-      builtins.filter builtins.isString (builtins.split "#[^[:cntrl:]]*" uncommented)
-    );
   containsImport =
     target: content:
     builtins.match ".*imports[[:space:]]*=[[:space:]]*\\[[^]]*([^]]*/|[.]/)${target}\\.nix.*" (
-      stripLineComments content
+      builtins.concatStringsSep " " (
+        builtins.filter builtins.isString (
+          builtins.split "#[^[:cntrl:]]*"
+            (builtins.foldl'
+              (
+                state: token:
+                if builtins.isString token then
+                  {
+                    inherit (state) inComment;
+                    text = state.text + (if state.inComment then "" else token);
+                  }
+                else
+                  {
+                    inherit (state) text;
+                    inComment = builtins.head token == "/*";
+                  }
+              )
+              {
+                inComment = false;
+                text = "";
+              }
+              (
+                builtins.split "(/\\*|\\*/)" (
+                  builtins.concatStringsSep "\n" (
+                    builtins.filter builtins.isString (builtins.split "\"[^\"]*\"|''[^']*''" content)
+                  )
+                )
+              )
+            ).text
+        )
+      )
     ) != null;
 
   entryModules = [
-    ../../../hosts/aarch64-darwin/home.nix
-    ../../../hosts/shared/linux-home.nix
-    ../../../hosts/x86_64-linux/wsl/home.nix
+    ../../../home/darwin.nix
+    ../../../hosts/default.nix
+    ../../../home/wsl.nix
   ];
 
   homeLayout = {
     required = [
       ../../../home/README.md
       ../../../home/common.nix
-      ../../../hosts/aarch64-darwin/home.nix
-      ../../../hosts/shared/linux-home.nix
-      ../../../hosts/x86_64-linux/wsl/home.nix
+      ../../../home/darwin.nix
+      ../../../hosts/default.nix
+      ../../../home/wsl.nix
     ];
     removed = [
       ../../../home/default.nix
       ../../../home/users
-      ../../../home/darwin.nix
-      ../../../home/linux.nix
-      ../../../home/wsl.nix
       ../../../home/nixos.nix
+      ../../../home/linux.nix
     ];
   };
 
-  externalNixFiles = builtins.filter (path: !(isUnder homeRoot path) && !(isUnder testsRoot path)) (
-    filesUnder nixRoot
-  );
-
-  externalDirectImports = builtins.filter (
-    path: !(builtins.elem path entryModules) && containsImport "common" (builtins.readFile path)
-  ) externalNixFiles;
 in
 {
-  testHomeManagerUsesHostOwnedOSModuleLayout = {
+  testHomeManagerUsesSharedUserAndHostEntrypointLayout = {
     expr = {
       required = builtins.map builtins.pathExists homeLayout.required;
       removed = builtins.map builtins.pathExists homeLayout.removed;
+      hostDirectories = builtins.filter (name: (builtins.readDir ../../../hosts).${name} == "directory") (
+        builtins.attrNames (builtins.readDir ../../../hosts)
+      );
     };
     expected = {
       required = [
@@ -127,9 +111,8 @@ in
         false
         false
         false
-        false
-        false
       ];
+      hostDirectories = [ ];
     };
   };
 
@@ -156,7 +139,13 @@ in
   };
 
   testOnlyHostHomeModulesImportCommonOutsideHome = {
-    expr = externalDirectImports;
+    expr =
+      builtins.filter
+        (path: !(builtins.elem path entryModules) && containsImport "common" (builtins.readFile path))
+        (
+          # Test fixtures and expected module lists are not production imports.
+          builtins.filter (path: !(isUnder ../../../home path) && !(isUnder ../.. path)) (filesUnder ../../..)
+        );
     expected = [ ];
   };
 

@@ -8,7 +8,7 @@ let
     lib
     ;
   configuredIntegration =
-    (import ../../../home/shells/plugins/ripgrep.nix {
+    (import ../../../modules/shells/plugins/ripgrep.nix {
       lib = lib // {
         mkBefore = value: value;
       };

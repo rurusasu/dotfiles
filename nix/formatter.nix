@@ -9,27 +9,6 @@
 {
   perSystem =
     { pkgs, config, ... }:
-    let
-      oxfmtConfig = (pkgs.formats.json { }).generate "oxfmtrc.json" {
-        printWidth = 100;
-        tabWidth = 2;
-        useTabs = false;
-        semi = true;
-        singleQuote = false;
-        trailingComma = "es5";
-        bracketSpacing = true;
-        arrowParens = "always";
-        proseWrap = "preserve";
-        endOfLine = "lf";
-      };
-      psscriptanalyzer = pkgs.callPackage ./modules/shells/powershell/psscriptanalyzer.nix {
-        src = inputs.psscriptanalyzer;
-      };
-      powershellFormatter = pkgs.writeShellScript "dotfiles-powershell-formatter" ''
-        export DOTFILES_PSSA_MODULE="${psscriptanalyzer}/share/powershell/Modules/PSScriptAnalyzer/PSScriptAnalyzer.psd1"
-        exec ${pkgs.powershell}/bin/pwsh "$@"
-      '';
-    in
     {
       # devShell with treefmt formatters + Nix linters
       devShells.default = pkgs.mkShell {
@@ -145,7 +124,20 @@
             options = [
               "--write"
               "--config"
-              (toString oxfmtConfig)
+              (toString (
+                (pkgs.formats.json { }).generate "oxfmtrc.json" {
+                  printWidth = 100;
+                  tabWidth = 2;
+                  useTabs = false;
+                  semi = true;
+                  singleQuote = false;
+                  trailingComma = "es5";
+                  bracketSpacing = true;
+                  arrowParens = "always";
+                  proseWrap = "preserve";
+                  endOfLine = "lf";
+                }
+              ))
             ];
             excludes = [
             ];
@@ -153,7 +145,16 @@
 
           # PowerShell (no built-in support)
           powershell = {
-            command = toString powershellFormatter;
+            command = toString (
+              pkgs.writeShellScript "dotfiles-powershell-formatter" ''
+                export DOTFILES_PSSA_MODULE="${
+                  pkgs.callPackage ./modules/shells/powershell/psscriptanalyzer.nix {
+                    src = inputs.psscriptanalyzer;
+                  }
+                }/share/powershell/Modules/PSScriptAnalyzer/PSScriptAnalyzer.psd1"
+                exec ${pkgs.powershell}/bin/pwsh "$@"
+              ''
+            );
             options = [
               "-NoProfile"
               "-Command"

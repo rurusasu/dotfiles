@@ -1,8 +1,10 @@
 { inputs }:
 let
   fixtures = import ../fixtures/packages.nix { inherit inputs; };
-  pkgs = fixtures.mkPkgs "aarch64-darwin";
-  package = import ../../modules/browsers/dia { inherit pkgs; };
+  package = import ../../modules/browsers/dia {
+    inherit inputs;
+    pkgs = fixtures.mkPkgs "aarch64-darwin";
+  };
 in
 {
   testDiaUsesTheCustomDarwinPackage = {

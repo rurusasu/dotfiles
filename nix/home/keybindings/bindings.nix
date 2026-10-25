@@ -164,65 +164,71 @@ let
     inherit lib;
     bindings = ghostty;
   };
-  neovim = import ./neovim.nix;
-  windowsActions = [
-    "terminal"
-    "browser"
-    "browser-private"
-    "files"
-    "activity"
-    "music"
-    "notes"
-    "editor"
-    "calendar"
-    "email"
-    "ai"
-    "passwords"
-    "messenger-signal"
-    "messenger-google"
-    "messenger-whatsapp"
-    "docker"
-    "copy"
-    "cut"
-    "paste"
-    "clipboard"
-    "screenshot"
-    "screenshot-clipboard"
-    "record"
-    "color-picker"
-    "save-browser-url"
-    "notification-dismiss"
-    "notification-dismiss-all"
-    "notification-toggle"
-    "notification-history"
-    "theme-cycle"
-    "background-cycle"
-    "transparency-toggle"
-    "idle-toggle"
-    "night-mode-toggle"
-    "bar-toggle"
-    "audio-output-cycle"
-  ];
-  chord =
-    binding:
-    lib.concatStringsSep "+" ((lib.sort builtins.lessThan binding.modifiers) ++ [ binding.key ]);
 in
-assert builtins.length bindings == builtins.length (lib.unique (map chord bindings));
+assert
+  builtins.length bindings == builtins.length (
+    lib.unique (
+      map (
+        binding:
+        lib.concatStringsSep "+" ((lib.sort builtins.lessThan binding.modifiers) ++ [ binding.key ])
+      ) bindings
+    )
+  );
 {
   inherit
     bindings
     directions
     workspaces
     ghostty
-    neovim
     ;
+  neovim = import ./neovim.nix;
   neovimLeader = " ";
   ghosttyConfig = import ./ghostty-renderer.nix {
     inherit lib;
     bindings = ghostty;
   };
   windows = {
-    bindings = builtins.filter (binding: builtins.elem binding.action windowsActions) bindings;
+    bindings = builtins.filter (
+      binding:
+      builtins.elem binding.action [
+        "terminal"
+        "browser"
+        "browser-private"
+        "files"
+        "activity"
+        "music"
+        "notes"
+        "editor"
+        "calendar"
+        "email"
+        "ai"
+        "passwords"
+        "messenger-signal"
+        "messenger-google"
+        "messenger-whatsapp"
+        "docker"
+        "copy"
+        "cut"
+        "paste"
+        "clipboard"
+        "screenshot"
+        "screenshot-clipboard"
+        "record"
+        "color-picker"
+        "save-browser-url"
+        "notification-dismiss"
+        "notification-dismiss-all"
+        "notification-toggle"
+        "notification-history"
+        "theme-cycle"
+        "background-cycle"
+        "transparency-toggle"
+        "idle-toggle"
+        "night-mode-toggle"
+        "bar-toggle"
+        "audio-output-cycle"
+      ]
+    ) bindings;
     ghosttyTransport = ghosttyWindows.transport;
     ghosttyConfig = ghosttyWindows.config;
     disabledShortcuts = [

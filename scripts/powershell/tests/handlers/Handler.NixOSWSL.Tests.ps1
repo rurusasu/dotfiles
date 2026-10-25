@@ -21,6 +21,7 @@ Describe 'NixOSWSLHandler' {
         $script:ctx = [SetupContext]::new("D:\dotfiles")
         $script:ctx.DistroName = "NixOS"
         $script:ctx.InstallDir = Join-Path $TestDrive "NixOS"
+        $script:releaseTag = 'fixture-release'
     }
 
     Context 'Constructor' {
@@ -83,7 +84,7 @@ Describe 'NixOSWSLHandler' {
             # すべての依存関数をモック（AssertAdmin は削除済み - RequiresAdmin = $false）
             $handler | Add-Member -MemberType ScriptMethod -Name EnsureWslReady -Value { } -Force
             $handler | Add-Member -MemberType ScriptMethod -Name GetRelease -Value {
-                return @{ tag_name = "v24.5.1"; assets = @() }
+                return @{ tag_name = $script:releaseTag; assets = @() }
             } -Force
             $handler | Add-Member -MemberType ScriptMethod -Name SelectAsset -Value {
                 return @{ name = "nixos.wsl"; browser_download_url = "http://example.com/nixos.wsl" }
@@ -148,7 +149,7 @@ Describe 'NixOSWSLHandler' {
             $script:getReleaseCalled = $false
             $handler | Add-Member -MemberType ScriptMethod -Name GetRelease -Value {
                 $script:getReleaseCalled = $true
-                return @{ tag_name = "v24.5.1"; assets = @() }
+                return @{ tag_name = $script:releaseTag; assets = @() }
             } -Force
 
             $handler.Apply($ctx)
@@ -167,14 +168,14 @@ Describe 'NixOSWSLHandler' {
     Context 'Apply - error handling' {
         It 'should return the unsupported release error before downloading or installing' {
             $handler | Add-Member -MemberType ScriptMethod -Name EnsureWslReady -Value { } -Force
-            $ctx.Options["ReleaseTag"] = "2405.5.4"
+            $ctx.Options["ReleaseTag"] = $script:releaseTag
             $script:requestedTag = ""
             $script:downloadCalled = $false
             $script:installCalled = $false
             Mock Invoke-RestMethodSafe {
                 param($Uri)
                 $script:requestedTag = $Uri
-                return @{ tag_name = "2405.5.4"; assets = @(@{ name = "nixos-wsl.tar.gz" }) }
+                return @{ tag_name = $script:releaseTag; assets = @(@{ name = "nixos-wsl.tar.gz" }) }
             }
             $handler | Add-Member -MemberType ScriptMethod -Name DownloadAsset -Value {
                 $script:downloadCalled = $true
@@ -189,8 +190,8 @@ Describe 'NixOSWSLHandler' {
             $result = $handler.Apply($ctx)
 
             $result.Success | Should -Be $false
-            $result.Message | Should -Match 'Release 2405.5.4.*nixos\.wsl'
-            $script:requestedTag | Should -Be 'https://api.github.com/repos/nix-community/NixOS-WSL/releases/tags/2405.5.4'
+            $result.Message | Should -Match "Release $script:releaseTag.*nixos\.wsl"
+            $script:requestedTag | Should -Be "https://api.github.com/repos/nix-community/NixOS-WSL/releases/tags/$script:releaseTag"
             $script:downloadCalled | Should -Be $false
             $script:installCalled | Should -Be $false
         }
@@ -206,79 +207,6 @@ Describe 'NixOSWSLHandler' {
 
             $result.Success | Should -Be $false
             $result.Message | Should -Match "WSL が有効化されていません"
-        }
-    }
-
-    Context 'SupportsFromFileInstall' {
-        It 'should recognize a current Japanese WSL version without falling back to import' {
-            Mock Invoke-Wsl {
-                param($Arguments)
-                $global:LASTEXITCODE = 0
-                if ($Arguments -contains '--version') {
-                    return @("WSL バージョン: 3.0.3.0", "カーネル バージョン: 6.18.54.1-1")
-                }
-                return @('    --install [Distro] [Options...]', '        --from-file <Path>')
-            }
-
-            $handler.GetWslVersion() | Should -Be ([version]'3.0.3.0')
-            $handler.SupportsFromFileInstall() | Should -BeTrue
-        }
-
-        It 'should recognize null-padded WSL version output' {
-            Mock Invoke-Wsl {
-                $global:LASTEXITCODE = 0
-                return 'WSL version: 3.0.3.0'.ToCharArray() -join "`0"
-            }
-
-            $handler.GetWslVersion() | Should -Be ([version]'3.0.3.0')
-        }
-
-        It 'should recognize from-file on a separate help line' {
-            $handler | Add-Member -MemberType ScriptMethod -Name GetWslVersion -Value { return $null } -Force
-            Mock Invoke-Wsl {
-                $global:LASTEXITCODE = -1
-                return @('    --install [Distro] [Options...]', '        --from-file <Path>')
-            }
-
-            $handler.SupportsFromFileInstall() | Should -BeTrue
-        }
-
-        It 'should return true when WSL version is 2.4.4+' {
-            $handler | Add-Member -MemberType ScriptMethod -Name GetWslVersion -Value {
-                return [version]"2.4.4.0"
-            } -Force
-
-            $result = $handler.SupportsFromFileInstall()
-
-            $result | Should -Be $true
-        }
-
-        It 'should check help text when WSL version is below 2.4.4' {
-            $handler | Add-Member -MemberType ScriptMethod -Name GetWslVersion -Value {
-                return [version]"2.0.0.0"
-            } -Force
-            Mock Invoke-Wsl {
-                $global:LASTEXITCODE = 0
-                return "--install --from-file"
-            }
-
-            $result = $handler.SupportsFromFileInstall()
-
-            $result | Should -Be $true
-        }
-
-        It 'should return false when help text does not contain --from-file' {
-            $handler | Add-Member -MemberType ScriptMethod -Name GetWslVersion -Value {
-                return [version]"2.0.0.0"
-            } -Force
-            Mock Invoke-Wsl {
-                $global:LASTEXITCODE = 0
-                return "Usage: wsl [Argument]"
-            }
-
-            $result = $handler.SupportsFromFileInstall()
-
-            $result | Should -Be $false
         }
     }
 
@@ -345,7 +273,7 @@ Describe 'NixOSWSLHandler' {
 
             try {
                 Mock Invoke-RestMethodSafe {
-                    return @{ tag_name = "v24.5.1"; assets = @() }
+                    return @{ tag_name = $script:releaseTag; assets = @() }
                 }
                 Mock Write-Host { }
 
@@ -369,7 +297,7 @@ Describe 'NixOSWSLHandler' {
         It 'should fetch latest release from GitHub API' {
             Mock Invoke-RestMethodSafe {
                 return @{
-                    tag_name = "v24.5.1"
+                    tag_name = $script:releaseTag
                     assets   = @()
                 }
             }
@@ -377,7 +305,7 @@ Describe 'NixOSWSLHandler' {
 
             $result = $handler.GetRelease("")
 
-            $result.tag_name | Should -Be "v24.5.1"
+            $result.tag_name | Should -Be $script:releaseTag
             Should -Invoke Invoke-RestMethodSafe -ParameterFilter {
                 $Uri -match "/releases/latest"
             }
@@ -386,16 +314,16 @@ Describe 'NixOSWSLHandler' {
         It 'should fetch specific tag when specified' {
             Mock Invoke-RestMethodSafe {
                 return @{
-                    tag_name = "2605.7.2"
+                    tag_name = $script:releaseTag
                     assets   = @()
                 }
             }
             Mock Write-Host { }
 
-            $null = $handler.GetRelease("2605.7.2")
+            $null = $handler.GetRelease($script:releaseTag)
 
             Should -Invoke Invoke-RestMethodSafe -ParameterFilter {
-                $Uri -match "/releases/tags/2605.7.2"
+                $Uri -eq "https://api.github.com/repos/nix-community/NixOS-WSL/releases/tags/$script:releaseTag"
             }
         }
     }
@@ -403,7 +331,7 @@ Describe 'NixOSWSLHandler' {
     Context 'SelectAsset' {
         It 'should select nixos.wsl instead of ARM or checksum assets' {
             $release = @{
-                tag_name = "2605.7.2"
+                tag_name = $script:releaseTag
                 assets   = @(
                     @{ name = "nixos.aarch64.wsl" },
                     @{ name = "nixos.wsl.sha256" },
@@ -417,12 +345,12 @@ Describe 'NixOSWSLHandler' {
             $result.name | Should -Be "nixos.wsl"
         }
 
-        It 'should reject a release containing only the old <assetName> asset' -ForEach @(
-            @{ tag = "2405.5.4"; assetName = "nixos-wsl.tar.gz" }
-            @{ tag = "2311.5.3"; assetName = "nixos-wsl-legacy.tar.gz" }
+        It 'should reject a release containing only the unsupported <assetName> asset' -ForEach @(
+            @{ assetName = "nixos-wsl.tar.gz" }
+            @{ assetName = "nixos-wsl-legacy.tar.gz" }
         ) {
             $release = @{
-                tag_name = $tag
+                tag_name = $script:releaseTag
                 assets   = @(
                     @{ name = $assetName },
                     @{ name = "other.txt" }
@@ -430,7 +358,7 @@ Describe 'NixOSWSLHandler' {
             }
             Mock Write-Host { }
 
-            { $handler.SelectAsset($release) } | Should -Throw "*Release $tag*nixos.wsl*2411.6.0*ReleaseTag*"
+            { $handler.SelectAsset($release) } | Should -Throw "*Release $script:releaseTag*nixos.wsl*ReleaseTag*"
         }
 
         It 'should identify a current release missing nixos.wsl' -ForEach @(
@@ -438,11 +366,11 @@ Describe 'NixOSWSLHandler' {
             @{ assets = @(@{ name = "nixos.aarch64.wsl" }, @{ name = "nixos.wsl.sha256" }) }
         ) {
             $release = @{
-                tag_name = "2605.7.2"
+                tag_name = $script:releaseTag
                 assets   = $assets
             }
 
-            { $handler.SelectAsset($release) } | Should -Throw "*Release 2605.7.2*nixos.wsl*"
+            { $handler.SelectAsset($release) } | Should -Throw "*Release $script:releaseTag*nixos.wsl*"
         }
     }
 
@@ -571,44 +499,34 @@ Describe 'NixOSWSLHandler' {
     }
 
     Context 'InstallDistro' {
-        BeforeEach {
-            $script:asset = @{ name = "nixos.wsl" }
-            $handler | Add-Member -MemberType ScriptMethod -Name SupportsFromFileInstall -Value { return $true } -Force
-        }
+        It 'should use InstallFromFile for the selected archive' {
+            $script:installArguments = @()
+            $handler | Add-Member -MemberType ScriptMethod -Name InstallFromFile -Value {
+                $script:installArguments = @($args)
+            } -Force
 
-        It 'should use InstallFromFile for .wsl file' {
-            $script:callCount = 0
-            $handler | Add-Member -MemberType ScriptMethod -Name InstallFromFile -Value { $script:callCount++ } -Force
+            $handler.InstallDistro($ctx, "C:\Temp\nixos.wsl")
 
-            $handler.InstallDistro($ctx, $script:asset, "C:\Temp\nixos.wsl")
-
-            $script:callCount | Should -Be 1
-        }
-
-        It 'should use ImportDistro directly for .tar.gz asset even with new WSL' {
-            $tarAsset = @{ name = "nixos-wsl.tar.gz" }
-            $script:importCalled = $false
-            $script:installFromFileCalled = $false
-            $handler | Add-Member -MemberType ScriptMethod -Name ImportDistro -Value { $script:importCalled = $true } -Force
-            $handler | Add-Member -MemberType ScriptMethod -Name InstallFromFile -Value { $script:installFromFileCalled = $true } -Force
-
-            $handler.InstallDistro($ctx, $tarAsset, "C:\Temp\nixos-wsl.tar.gz")
-
-            $script:importCalled | Should -Be $true
-            $script:installFromFileCalled | Should -Be $false
+            $script:installArguments | Should -Be @($ctx.DistroName, "C:\Temp\nixos.wsl", $ctx.InstallDir)
         }
 
         It 'should fallback to ImportDistro when InstallFromFile fails' {
+            $script:installCalls = @()
+            $script:importArguments = @()
             $handler | Add-Member -MemberType ScriptMethod -Name InstallFromFile -Value {
+                $script:installCalls += 'install'
                 throw "Failed"
             } -Force
-            $script:callCount = 0
-            $handler | Add-Member -MemberType ScriptMethod -Name ImportDistro -Value { $script:callCount++ } -Force
+            $handler | Add-Member -MemberType ScriptMethod -Name ImportDistro -Value {
+                $script:installCalls += 'import'
+                $script:importArguments = @($args)
+            } -Force
             Mock Write-Host { }
 
-            $handler.InstallDistro($ctx, $script:asset, "C:\Temp\nixos.wsl")
+            $handler.InstallDistro($ctx, "C:\Temp\nixos.wsl")
 
-            $script:callCount | Should -Be 1
+            $script:installCalls | Should -Be @('install', 'import')
+            $script:importArguments | Should -Be @($ctx.DistroName, $ctx.InstallDir, "C:\Temp\nixos.wsl")
         }
     }
 

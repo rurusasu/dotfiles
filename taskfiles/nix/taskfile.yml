@@ -10,26 +10,6 @@ tasks:
     cmds:
       - ./install.sh
 
-  darwin:update:check:
-    desc: Check official feeds for Darwin package updates
-    cmds:
-      - "uv run --no-project --managed-python --python 3.14 python scripts/python/update_darwin_packages.py --check --output darwin-package-update.json"
-
-  darwin:update:
-    desc: Apply safe Darwin package version, URL, and hash updates
-    cmds:
-      - "uv run --no-project --managed-python --python 3.14 python scripts/python/update_darwin_packages.py --write --output darwin-package-update.json"
-
-  darwin:promote:
-    desc: Build and promote explicit nixpkgs Darwin candidates
-    cmds:
-      - "uv run --no-project --managed-python --python 3.14 python scripts/python/update_darwin_packages.py --write --promote --output darwin-package-update.json"
-
-  darwin:update:promote:
-    desc: Update custom Darwin packages and build provider candidates in one report
-    cmds:
-      - "uv run --no-project --managed-python --python 3.14 python scripts/python/update_darwin_packages.py --write --promote --output darwin-package-update.json"
-
   nrs:
     desc: Update inputs and activate OS-managed applications and configuration
     cmds:

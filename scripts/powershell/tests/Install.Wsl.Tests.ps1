@@ -84,8 +84,7 @@ function Invoke-Wsl {
         if ($env:FIXTURE_INSTALL_FAILURE -eq 'True') { $global:LASTEXITCODE = 1 }
         else { Set-Content "$root/installed.txt" 'registered' }
     }
-    elseif ($Arguments -contains '--version') { return 'WSL version: 2.4.4.0' }
-    elseif ($Arguments -contains '--help') { return '--install --from-file' }
+    elseif ($Arguments -contains '--version') { return 'WSL available' }
 }
 function Invoke-RestMethodSafe {
     param($Uri, $Headers)
@@ -151,7 +150,6 @@ Describe 'Windows installer WSL integration' -Skip:($env:OS -ne 'Windows_NT') {
         $result = Invoke-WslInstallerFixture
         $result.ExitCode | Should -Be 0 -Because $result.Output
         ($result.Events -join ',') | Should -Be 'gui,setup,nrs,chezmoi'
-        $result.Context.Options.PSObject.Properties.Name | Should -Not -Contain 'StateVersion'
         $result.Output | Should -Match 'Setup Complete!'
     }
 
@@ -161,12 +159,11 @@ Describe 'Windows installer WSL integration' -Skip:($env:OS -ne 'Windows_NT') {
         ($result.Events -join ',') | Should -Be 'gui,install,setup,nrs,chezmoi'
     }
 
-    It 'should forward synchronization and explicit state version options' {
-        $result = Invoke-WslInstallerFixture -Arguments '-SyncMode none -SyncBack none -StateVersion 25.05 -ForcePostInstall'
+    It 'should forward synchronization and force options' {
+        $result = Invoke-WslInstallerFixture -Arguments '-SyncMode none -SyncBack none -ForcePostInstall'
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $result.Context.Options.SyncMode | Should -Be 'none'
         $result.Context.Options.SyncBack | Should -Be 'none'
-        $result.Context.Options.StateVersion | Should -Be '25.05'
         $result.Context.Options.ForcePostInstall | Should -BeTrue
     }
 
@@ -233,10 +230,9 @@ Describe 'Windows installer WSL integration' -Skip:($env:OS -ne 'Windows_NT') {
     }
 
     It 'should apply an existing distro with explicit options through Windows PowerShell 5.1' {
-        $result = Invoke-WslInstallerFixture -WindowsPowerShell -Arguments '-SyncMode none -SyncBack none -StateVersion 25.05'
+        $result = Invoke-WslInstallerFixture -WindowsPowerShell -Arguments '-SyncMode none -SyncBack none'
         $result.ExitCode | Should -Be 0 -Because $result.Output
         ($result.Events -join ',') | Should -Be 'gui,setup,nrs,chezmoi'
-        $result.Context.Options.StateVersion | Should -Be '25.05'
         $result.Context.Options.SyncMode | Should -Be 'none'
         $result.Output | Should -Match 'Using Windows PowerShell'
     }

@@ -60,18 +60,17 @@ let
         "100"
         "300"
       ];
-  keyName = key: if key == "escape" then "esc" else key;
-  key =
-    binding:
-    lib.concatStringsSep "-" (
-      map (modifier: if modifier == "super" then "cmd" else modifier) binding.modifiers
-      ++ [ (keyName binding.key) ]
-    );
   supported = builtins.filter (binding: builtins.hasAttr binding.action actions) contract.bindings;
 in
 {
   bindings = builtins.listToAttrs (
-    map (binding: lib.nameValuePair (key binding) actions.${binding.action}) supported
+    map (
+      binding:
+      lib.nameValuePair (lib.concatStringsSep "-" (
+        map (modifier: if modifier == "super" then "cmd" else modifier) binding.modifiers
+        ++ [ (if binding.key == "escape" then "esc" else binding.key) ]
+      )) actions.${binding.action}
+    ) supported
   );
   unsupported = builtins.filter (
     binding: !(builtins.hasAttr binding.action actions)

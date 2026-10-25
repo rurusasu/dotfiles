@@ -27,10 +27,6 @@ function Invoke-NixosWslSetup {
     if ($syncMode -eq 'nix' -and $syncBack -eq 'repo') {
         throw 'SyncMode nix requires SyncBack lock or none.'
     }
-    $stateVersion = [string]$Context.GetOption('StateVersion', '')
-    if ($stateVersion -and $stateVersion -notmatch '^\d{2}\.\d{2}$') {
-        throw 'StateVersion must use YY.MM format.'
-    }
 
     $sourceOutput = @(Invoke-Wsl -Arguments @(
             '-d', $Context.DistroName, '-u', 'root', '--', 'wslpath', '-a',
@@ -83,18 +79,6 @@ function Invoke-NixosWslSetup {
     $settings = @{
         user = $user; home = $userHome; uid = $account[2]; gid = $account[3]
         group = [string]$group; repository = $target
-    }
-    if ($stateVersion) { $settings.stateVersion = $stateVersion }
-    # Preserve any prior explicit stateVersion if this invocation omits it.
-    $existing = @(Invoke-SetupCommand 'if [ -f /etc/nixos/dotfiles.json ]; then cat /etc/nixos/dotfiles.json; fi')
-    if ($existing.Count -gt 0) {
-        $prior = ($existing -join "`n") | ConvertFrom-Json -ErrorAction Stop
-        $settings = @{}
-        foreach ($property in $prior.PSObject.Properties) { $settings[$property.Name] = $property.Value }
-        $settings.user = $user; $settings.home = $userHome
-        $settings.uid = $account[2]; $settings.gid = $account[3]
-        $settings.group = [string]$group; $settings.repository = $target
-        if ($stateVersion) { $settings.stateVersion = $stateVersion }
     }
     $json = ConvertTo-WslArgument ($settings | ConvertTo-Json -Compress)
     Invoke-SetupCommand "install -d -m 0755 /etc/nixos; printf '%s\n' $json > /etc/nixos/dotfiles.json; chmod 0644 /etc/nixos/dotfiles.json" | Out-Host

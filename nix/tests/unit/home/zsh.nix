@@ -9,16 +9,11 @@ let
     let
       dotDir = home.config.programs.zsh.dotDir;
       homeDir = home.config.home.homeDirectory;
-      relativeDir = if dotDir == homeDir then "." else lib.removePrefix "${homeDir}/" dotDir;
     in
-    home.config.home.file."${relativeDir}/.zshrc".text;
+    home.config.home.file."${
+      if dotDir == homeDir then "." else lib.removePrefix "${homeDir}/" dotDir
+    }/.zshrc".text;
   line = prefix: text: lib.findFirst (lib.hasPrefix prefix) null (lib.splitString "\n" text);
-  userSources =
-    home:
-    let
-      userZsh = import ../../../home/shells/zsh { inherit (home) config; };
-    in
-    builtins.filter (lib.hasPrefix "source ") (lib.splitString "\n" userZsh.programs.zsh.initContent);
 in
 {
   testZshEnabled = {
@@ -34,9 +29,17 @@ in
       options = lib.hasInfix (builtins.unsafeDiscardStringContext (home.config.lib.zsh.define "set_opts" home.config.programs.zsh.setOptions)) (
         rc home
       );
-      sources = builtins.filter (source: builtins.elem source (userSources home)) (
-        lib.splitString "\n" (rc home)
-      );
+      customInit =
+        let
+          blocks =
+            map (block: if builtins.isAttrs block then block.content else block)
+              (import ../../../modules/shells/zsh {
+                inherit (home) config pkgs;
+                inherit (home.pkgs) lib;
+              }).programs.zsh.initContent.contents;
+        in
+        blocks != [ ]
+        && builtins.all (block: lib.trim block != "" && lib.hasInfix (lib.trim block) (rc home)) blocks;
       aliases = lib.mapAttrsToList (
         name: value:
         lib.hasInfix (builtins.unsafeDiscardStringContext "alias -- ${lib.escapeShellArg name}=${lib.escapeShellArg value}") (
@@ -54,7 +57,7 @@ in
         historySave = ''SAVEHIST="${toString zsh.history.save}"'';
         historyPath = ''HISTFILE="${lib.removeSuffix "/" zsh.history.path}"'';
         options = true;
-        sources = userSources home;
+        customInit = true;
         aliases = lib.mapAttrsToList (_: _: true) zsh.shellAliases;
       }
     ) homes;
@@ -72,8 +75,6 @@ in
       home:
       let
         zsh = home.config.programs.zsh;
-        pluginsDir =
-          zsh.dotDir + lib.optionalString (zsh.dotDir == home.config.home.homeDirectory) "/.zsh" + "/plugins";
       in
       {
         enabled = zsh.enableCompletion;
@@ -82,7 +83,11 @@ in
           home.config.lib.zsh.define "plugins" (map (plugin: "${plugin.name}/${plugin.file}") zsh.plugins)
         )) (rc home);
         pluginSources = map (
-          plugin: toString home.config.home.file."${pluginsDir}/${plugin.name}".source
+          plugin:
+          toString
+            home.config.home.file."${
+              zsh.dotDir + lib.optionalString (zsh.dotDir == home.config.home.homeDirectory) "/.zsh" + "/plugins"
+            }/${plugin.name}".source
         ) zsh.plugins;
       }
     ) homes;

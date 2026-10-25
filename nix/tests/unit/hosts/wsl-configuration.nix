@@ -7,12 +7,12 @@ let
     };
     modules = [
       inputs.nixos-wsl.nixosModules.wsl
-      ../../../hosts/shared/nixos/platform.nix
-      ../../../hosts/x86_64-linux/wsl
+      ../../../hosts/wsl.nix
     ];
   };
 
   defaultConfig = mkWsl.config;
+  home = (import ../../fixtures/home-configurations.nix { inherit inputs; }).wsl;
 in
 {
   testWslRegistersDconfForGtkSettingsPersistence = {
@@ -43,7 +43,7 @@ in
     expr =
       let
         inherit (inputs.nixpkgs) lib;
-        path = ../../../hosts/x86_64-linux/wsl/fonts/fontconfig.conf;
+        path = ../../../modules/fonts/wsl-fontconfig.conf;
         xml = if builtins.pathExists path then builtins.readFile path else "";
         systemInclude = "<include>/etc/fonts/fonts.conf</include>";
         pieces = lib.splitString systemInclude xml;
@@ -87,7 +87,7 @@ in
   testWslStartsGraphicalSessionForPortals = {
     expr = {
       sessionAtLogin = builtins.elem "default.target" (
-        defaultConfig.systemd.user.targets.graphical-session.wantedBy or [ ]
+        home.config.systemd.user.targets.graphical-session.Install.WantedBy or [ ]
       );
       sessionOnSwitch = builtins.elem "graphical-session.target" (
         defaultConfig.systemd.user.services.nixos-activation.wants or [ ]
@@ -95,24 +95,19 @@ in
       activationAfterSession = builtins.elem "graphical-session.target" (
         defaultConfig.systemd.user.services.nixos-activation.after or [ ]
       );
-      displayEnvironment =
-        builtins.all
-          (
-            value:
-            inputs.nixpkgs.lib.hasInfix value
-              defaultConfig.environment.etc."environment.d/60-wsl-graphics.conf".text
-          )
-          [
-            "DISPLAY=:0\n"
-            "WAYLAND_DISPLAY=wayland-0\n"
-          ];
+      displayEnvironment = {
+        inherit (home.config.systemd.user.sessionVariables) DISPLAY WAYLAND_DISPLAY;
+      };
       portal = defaultConfig.xdg.portal.enable;
     };
     expected = {
       sessionAtLogin = true;
       sessionOnSwitch = true;
       activationAfterSession = true;
-      displayEnvironment = true;
+      displayEnvironment = {
+        DISPLAY = ":0";
+        WAYLAND_DISPLAY = "wayland-0";
+      };
       portal = true;
     };
   };
@@ -122,10 +117,16 @@ in
       graphics = defaultConfig.hardware.graphics.enable;
       windowsDriver = defaultConfig.wsl.useWindowsDriver;
       driverLibraries = builtins.elem defaultConfig.wsl.wslLib defaultConfig.hardware.graphics.extraPackages;
-      galliumDriver = defaultConfig.environment.variables.GALLIUM_DRIVER or null;
-      libraryPath = defaultConfig.environment.variables.LD_LIBRARY_PATH or null;
-      serviceEnvironment =
-        defaultConfig.environment.etc."environment.d/60-wsl-graphics.conf".text or null;
+      galliumDriver = home.config.home.sessionVariables.GALLIUM_DRIVER or null;
+      libraryPath = home.config.home.sessionVariables.LD_LIBRARY_PATH or null;
+      wayland = home.config.home.sessionVariables.WARP_ENABLE_WAYLAND or null;
+      serviceEnvironment = {
+        inherit (home.config.systemd.user.sessionVariables)
+          GALLIUM_DRIVER
+          LD_LIBRARY_PATH
+          WARP_ENABLE_WAYLAND
+          ;
+      };
     };
     expected = {
       graphics = true;
@@ -133,7 +134,12 @@ in
       driverLibraries = true;
       galliumDriver = "d3d12";
       libraryPath = "/run/opengl-driver/lib";
-      serviceEnvironment = "DISPLAY=:0\nGALLIUM_DRIVER=d3d12\nLD_LIBRARY_PATH=/run/opengl-driver/lib\nWAYLAND_DISPLAY=wayland-0\n";
+      wayland = "1";
+      serviceEnvironment = {
+        GALLIUM_DRIVER = "d3d12";
+        LD_LIBRARY_PATH = "/run/opengl-driver/lib";
+        WARP_ENABLE_WAYLAND = "1";
+      };
     };
   };
 

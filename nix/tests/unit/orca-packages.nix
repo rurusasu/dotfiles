@@ -7,7 +7,7 @@ let
     ../../home/common.nix
     ../../modules/editors/nvim
   ];
-  orcaPackage = pkgs.callPackage ../../modules/editors/orca/package.nix { };
+  orcaPackage = inputs.llm-agents.packages.aarch64-darwin.orca;
 in
 {
   testOrcaHomeManagerModuleAndWingetMetadata = {
@@ -34,8 +34,7 @@ in
         (
           system:
           let
-            linuxPkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
-            package = linuxPkgs.callPackage ../../modules/editors/orca/package.nix { };
+            package = inputs.llm-agents.packages.${system}.orca;
           in
           {
             inherit system;
@@ -51,7 +50,7 @@ in
       map
         (system: {
           inherit system;
-          pname = "orca-editor";
+          pname = "orca";
           inherit (orcaPackage) version;
           mainProgram = "orca-ide";
         })

@@ -1,10 +1,9 @@
 { inputs }:
-let
-  windows = (import ../fixtures/packages.nix { inherit inputs; }).windowsPackages;
-in
 {
   testDiscordPreservesWindowsDistribution = {
-    expr = windows."Discord.Discord".verifyCommand;
+    expr =
+      (import ../fixtures/packages.nix { inherit inputs; })
+      .windowsPackages."Discord.Discord".verifyCommand;
     expected = {
       command = "Discord";
       type = "windowsInstalledProduct";

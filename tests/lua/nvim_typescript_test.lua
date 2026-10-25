@@ -173,23 +173,24 @@ check(buffer({ root = "/virtual/deno/node", deno = "/virtual/deno" }), "tsc", "t
 check(buffer({ root = "/virtual/equal-lock", deno_lock = "/virtual/equal-lock" }), "tsc", "tsc")
 check(buffer({}), "tsc", "tsc") -- upstream loose-file cwd fallback
 
--- A FileType event is already in flight, so vim.lsp.enable() alone cannot
--- replay it for the current buffer. Verify the explicit native start path.
+-- Native enable replays FileType for existing buffers, including the current
+-- event's buffer. No separate start request should be necessary.
 local start = vim.lsp.start
 local started = {}
 vim.lsp.start = function(config, opts)
     started[#started + 1] = { config = config, opts = opts }
 end
 bins = { ["lua-language-server"] = {} }
-vim.bo.filetype = "lua"
+vim.cmd("noautocmd setlocal filetype=lua")
 vim.api.nvim_exec_autocmds("FileType", { buffer = vim.api.nvim_get_current_buf() })
 assert(vim.lsp.is_enabled("lua_ls"), "later PATH availability must be reconsidered")
 assert(
     vim.wait(1000, function()
         return #started > 0
     end),
-    "newly available server must start for the current buffer"
+    "native enable must start a newly available server for the current buffer"
 )
+assert(#started == 1, "native enable must not duplicate the current buffer's start request")
 assert(started[1].config.name == "lua_ls", "current buffer must start the newly available server")
 assert(started[1].opts.bufnr == vim.api.nvim_get_current_buf(), "server must attach to the current buffer")
 vim.lsp.start = start

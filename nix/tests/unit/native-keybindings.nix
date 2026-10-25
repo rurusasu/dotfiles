@@ -1,29 +1,32 @@
 { inputs }:
 let
+  hosts = import ../../hosts { inherit inputs; };
   pkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs "x86_64-linux";
   inherit (pkgs) lib;
-  native = inputs.nixpkgs.lib.nixosSystem {
-    system = "x86_64-linux";
-    modules = [
-      inputs.home-manager.nixosModules.home-manager
-      ../../hosts/shared/nixos/configuration.nix
-      {
-        nixpkgs.pkgs = pkgs;
-        home-manager = {
-          useGlobalPkgs = true;
-          extraSpecialArgs = { inherit inputs; };
-          users.test = {
-            home = {
-              username = "test";
-              homeDirectory = "/home/test";
-              stateVersion = "25.05";
+  cfg =
+    (hosts.mkNixos {
+      system = "x86_64-linux";
+      hostPath = ../../hosts/linux.nix;
+      configuredUser = "test";
+      homeModule = hosts.linuxHome;
+      extraModules = [
+        {
+          nixpkgs.pkgs = pkgs;
+          users.users.test.isNormalUser = true;
+          home-manager = {
+            useGlobalPkgs = true;
+            extraSpecialArgs = { inherit inputs; };
+            users.test = {
+              home = {
+                username = "test";
+                homeDirectory = "/home/test";
+                stateVersion = "25.05";
+              };
             };
           };
-        };
-      }
-    ];
-  };
-  cfg = native.config;
+        }
+      ];
+    }).config;
   home = cfg.home-manager.users.test;
 in
 {
@@ -36,7 +39,7 @@ in
       chatgpt = builtins.elem "chatgpt" (map lib.getName home.home.packages);
       codex = builtins.elem "codex" (map lib.getName home.home.packages);
       aiShortcut = lib.hasInfix "chatgpt" home.wayland.windowManager.hyprland.extraConfig;
-      cliManaged = home.programs.codex.package != null;
+      cliManaged = home.programs.codex.enable && home.programs.codex.package == null;
       cleanup = home.systemd.user.tmpfiles.rules;
     };
     expected = {
@@ -44,7 +47,7 @@ in
       codex = true;
       aiShortcut = true;
       cliManaged = true;
-      cleanup = [ "e %C/chatgpt/bundled-plugins-v2 - - - 0" ];
+      cleanup = [ ];
     };
   };
   testNativeHomeGeneratesLuaFromSharedKeys = {

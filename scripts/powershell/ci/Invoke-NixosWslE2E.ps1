@@ -230,7 +230,6 @@ try {
         $context.Options["PostInstallTimeoutSeconds"] = $PostInstallTimeoutSeconds
         $context.Options["SyncMode"] = "repo"
         $context.Options["SyncBack"] = "none"
-        $context.Options["StateVersion"] = "25.05"
         $context.Options["UpdateFlakeInputs"] = $false
         # Import CI's prebuilt system closures before executing the production
         # setup so unchanged dependencies can reuse the imported closures.

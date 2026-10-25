@@ -1,11 +1,14 @@
 { inputs }:
 let
-  host = inputs.nixpkgs.lib.nixosSystem {
-    system = "x86_64-linux";
-    specialArgs = { inherit inputs; };
-    modules = [ ../../../hosts/x86_64-linux/nixos ];
-  };
-  inherit (host) config pkgs;
+  inherit
+    (inputs.nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      specialArgs = { inherit inputs; };
+      modules = [ ../../../hosts/linux.nix ];
+    })
+    config
+    pkgs
+    ;
 in
 {
   testNativeLinuxRegistersDconfForGtkSettingsPersistence = {
@@ -21,8 +24,8 @@ in
       enabled = config.virtualisation.docker.enable;
       logDriver = config.virtualisation.docker.daemon.settings."log-driver";
       logOptions = config.virtualisation.docker.daemon.settings."log-opts";
-      compose = builtins.elem pkgs.docker-compose config.environment.systemPackages;
-      buildx = builtins.elem pkgs.docker-buildx config.environment.systemPackages;
+      compose = builtins.elem pkgs.docker-compose config.virtualisation.docker.package.buildInputs;
+      buildx = builtins.elem pkgs.docker-buildx config.virtualisation.docker.package.buildInputs;
       userGroup = builtins.elem "docker" config.users.users.nixos.extraGroups;
       insecureRegistries = config.virtualisation.docker.daemon.settings.insecure-registries or [ ];
     };
@@ -54,19 +57,6 @@ in
       installed = true;
       opensshAgentStarted = false;
       gpgSshAgentEnabled = false;
-    };
-  };
-
-  testLinuxRunsWeeklySystemGarbageCollection = {
-    expr = {
-      automatic = config.nix.gc.automatic;
-      dates = config.systemd.services.nix-gc.startAt;
-      options = config.nix.gc.options;
-    };
-    expected = {
-      automatic = true;
-      dates = [ "weekly" ];
-      options = "--delete-old";
     };
   };
 }

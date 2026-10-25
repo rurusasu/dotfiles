@@ -1,6 +1,5 @@
 { inputs }:
 let
-  fixtures = import ../fixtures/packages.nix { inherit inputs; };
   fontContract =
     {
       system,
@@ -8,7 +7,7 @@ let
       japanese ? false,
     }:
     let
-      pkgs = fixtures.mkPkgs system;
+      pkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
       home = inputs.home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
         extraSpecialArgs = {
@@ -24,11 +23,12 @@ let
           }
         ];
       };
-      containsFont = builtins.any (package: package.drvPath == pkgs.udev-gothic-nf.drvPath);
     in
     {
       expr = {
-        homePackages = containsFont home.config.home.packages;
+        homePackages = builtins.any (
+          package: package.drvPath == pkgs.udev-gothic-nf.drvPath
+        ) home.config.home.packages;
         emojiPackage = builtins.any (
           package: package.drvPath == pkgs.noto-fonts-color-emoji.drvPath
         ) home.config.home.packages;
@@ -71,8 +71,7 @@ in
           system = "x86_64-linux";
           specialArgs = { inherit inputs; };
           modules = [
-            inputs.home-manager.nixosModules.home-manager
-            ../../hosts/shared/nixos/platform.nix
+            ../../hosts/nixos.nix
           ];
         };
       in
@@ -98,16 +97,16 @@ in
 
   testLinuxInstallsManagedFont = fontContract {
     system = "x86_64-linux";
-    modules = [ ../../hosts/shared/linux-home.nix ];
+    modules = [ (import ../../hosts { inherit inputs; }).linuxHome ];
   };
   testWSLInstallsManagedFont = fontContract {
     system = "x86_64-linux";
-    modules = [ ../../hosts/x86_64-linux/wsl/home.nix ];
+    modules = [ ../../home/wsl.nix ];
     japanese = true;
   };
   testStandaloneDarwinHomeProfileInstallsManagedFont = fontContract {
     system = "aarch64-darwin";
-    modules = [ ../../hosts/aarch64-darwin/home.nix ];
+    modules = [ ../../home/darwin.nix ];
   };
 
 }

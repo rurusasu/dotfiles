@@ -37,6 +37,7 @@ RUN nix profile install --profile /opt/ci-tools --option sandbox false \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#python314" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#ruby" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#statix" \
+      "github:NixOS/nixpkgs/${NIXPKGS_REV}#yq-go" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#xz"
 
 # PowerShell expands these variables, not the Docker build shell.

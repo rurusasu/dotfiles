@@ -7,12 +7,6 @@ let
     homes
     lib
     ;
-  configuredPreview =
-    (import ../../../home/shells/plugins/fzf.nix {
-      lib = lib // {
-        mkBefore = value: value;
-      };
-    }).programs.zsh.initContent;
 in
 {
   testFzfConfigurationAndShellIntegrationAcrossHomes = {
@@ -23,6 +17,12 @@ in
         fzfPackage = builtins.unsafeDiscardStringContext (toString programs.fzf.package);
         variables = home.config.home.sessionVariables;
         fzfVariables = lib.filterAttrs (name: _: lib.hasPrefix "FZF_" name) variables;
+        widgetVariables = {
+          FZF_CTRL_T_COMMAND = programs.fzf.fileWidget.zsh.command;
+          FZF_CTRL_T_OPTS = programs.fzf.fileWidget.zsh.options;
+          FZF_ALT_C_COMMAND = programs.fzf.changeDirWidget.zsh.command;
+          FZF_ALT_C_OPTS = programs.fzf.changeDirWidget.zsh.options;
+        };
         zshrc =
           home.config.home.file."${lib.removePrefix "${home.config.home.homeDirectory}/" programs.zsh.dotDir}/.zshrc".text;
       in
@@ -48,8 +48,9 @@ in
           "FZF_ALT_C_COMMAND"
           "FZF_ALT_C_OPTS"
         ];
-        previewGenerated =
-          lib.trim configuredPreview != "" && lib.hasInfix (lib.trim configuredPreview) zshrc;
+        previewGenerated = builtins.all (
+          name: lib.hasInfix (home.config.lib.shell.export name widgetVariables.${name}) zshrc
+        ) (builtins.attrNames widgetVariables);
         fzfInit =
           lib.hasInfix "source ${fzfPackage}/share/fzf/key-bindings.zsh" zshrc
           && lib.hasInfix "source ${fzfPackage}/share/fzf/completion.zsh" zshrc;

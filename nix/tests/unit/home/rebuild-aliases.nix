@@ -1,11 +1,10 @@
 { inputs }:
 let
-  pkgs = import inputs.nixpkgs {
-    system = "x86_64-linux";
-    config.allowUnfree = true;
-  };
   home = inputs.home-manager.lib.homeManagerConfiguration {
-    inherit pkgs;
+    pkgs = import inputs.nixpkgs {
+      system = "x86_64-linux";
+      config.allowUnfree = true;
+    };
     extraSpecialArgs = {
       inherit inputs;
     };
@@ -14,7 +13,7 @@ let
         home.username = "test-user";
         home.homeDirectory = "/home/test-user";
       }
-      ../../../hosts/x86_64-linux/wsl/home.nix
+      ../../../home/wsl.nix
     ];
   };
 in

@@ -14,8 +14,6 @@ param(
     [string]$SyncMode = 'link',
     [ValidateSet('repo', 'lock', 'none')]
     [string]$SyncBack = 'lock',
-    [ValidatePattern('^$|^\d{2}\.\d{2}$')]
-    [string]$StateVersion = '',
     [switch]$ForcePostInstall,
     [switch]$UserPhaseOnly,
     [switch]$WingetVerifyCommandOnly,
@@ -46,7 +44,7 @@ if ($UserPhaseOnly) {
     Write-Host "User Phase Complete!" -ForegroundColor Green
 }
 else {
-    foreach ($name in 'ReleaseTag', 'SyncMode', 'SyncBack', 'StateVersion', 'ForcePostInstall') {
+    foreach ($name in 'ReleaseTag', 'SyncMode', 'SyncBack', 'ForcePostInstall') {
         if ($PSBoundParameters.ContainsKey($name)) {
             $Options[$name] = Get-Variable -Name $name -ValueOnly
             if ($name -eq 'ForcePostInstall') { $Options[$name] = [bool]$ForcePostInstall }

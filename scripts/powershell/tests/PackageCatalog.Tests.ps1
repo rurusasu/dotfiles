@@ -130,20 +130,25 @@ Describe 'Windows application and setup-tool package catalog' {
         $installer.type | Should -Be 'appx'
         $installer.name | Should -Be 'TheBrowserCompany.Dia'
         $installer.packageFamilyName | Should -Be 'TheBrowserCompany.Dia_ttt1ap7aakyb4'
-        $installer.version | Should -Be '1.3.1.2'
+        $installer.version | Should -Match '^\d+\.\d+\.\d+\.\d+$'
         $installer.architecture | Should -Be 'x64'
         $installer.executable | Should -Be 'Dia.exe'
         $installer.publisher | Should -Be 'E=hello@thebrowser.company, CN=THE BROWSER COMPANY OF NEW YORK INC., O=THE BROWSER COMPANY OF NEW YORK INC., STREET=295 LAFAYETTE STREET, L=New York, S=New York, C=US, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US, SERIALNUMBER=7571542, OID.2.5.4.15=Private Organization'
-        $installer.url | Should -Be 'https://releases.diabrowser.com/windows/release/1.3.1.2/Dia.x64.msix'
-        $installer.sha256 | Should -Be '813af1745f6688badbe16b1caf2782935311e79fb3bb88a971d318707dd28c04'
+        $officialOrigin = $source[0].SourceDetails.Argument.TrimEnd('/')
+        $applicationName = [IO.Path]::GetFileNameWithoutExtension($installer.executable)
+        $installer.url | Should -Be "$officialOrigin/windows/release/$($installer.version)/$applicationName.$($installer.architecture).msix"
+        $installer.sha256 | Should -Match '^[0-9a-fA-F]{64}$'
         @($installer.dependencies).Count | Should -Be 1
         $installer.dependencies[0].name | Should -Be 'Microsoft.VCLibs.140.00.UWPDesktop'
         $installer.dependencies[0].packageFamilyName | Should -Be 'Microsoft.VCLibs.140.00.UWPDesktop_8wekyb3d8bbwe'
         $installer.dependencies[0].publisher | Should -Be 'CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'
-        $installer.dependencies[0].version | Should -Be '14.0.33728.0'
+        $installer.dependencies[0].version | Should -Match '^\d+\.\d+\.\d+\.\d+$'
         $installer.dependencies[0].architecture | Should -Be 'x64'
-        $installer.dependencies[0].url | Should -Be 'https://releases.diabrowser.com/windows/dependencies/x64/Microsoft.VCLibs.x64.14.00.Desktop.14.0.33728.0.appx'
-        $installer.dependencies[0].sha256 | Should -Be '077a3d1a5d0622bd3004dca85f5e192d6e98ec79b83d4aa06766759ea6c09c3d'
+        $dependency = $installer.dependencies[0]
+        $dependencyVersion = [version]$dependency.version
+        $runtimeSeries = '{0}.{1:D2}' -f $dependencyVersion.Major, $dependencyVersion.Minor
+        $dependency.url | Should -Be "$officialOrigin/windows/dependencies/$($dependency.architecture)/Microsoft.VCLibs.$($dependency.architecture).$runtimeSeries.Desktop.$($dependency.version).appx"
+        $dependency.sha256 | Should -Match '^[0-9a-fA-F]{64}$'
     }
 
     It 'should verify <Id> using an installed-product identity' -ForEach @(

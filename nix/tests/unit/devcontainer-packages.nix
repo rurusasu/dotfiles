@@ -8,14 +8,11 @@ in
       map
         (
           system:
-          let
-            pkgs = fixtures.mkPkgs system;
-            home = fixtures.mkHome system [
+          builtins.elem (fixtures.mkPkgs system).devcontainer
+            (fixtures.mkHome system [
               ../../home/common.nix
               ../../modules/editors/nvim
-            ];
-          in
-          builtins.elem pkgs.devcontainer home.config.home.packages
+            ]).config.home.packages
         )
         [
           "aarch64-darwin"

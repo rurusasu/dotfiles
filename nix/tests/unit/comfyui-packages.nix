@@ -1,27 +1,30 @@
 { inputs }:
 let
-  fixtures = import ../fixtures/packages.nix { inherit inputs; };
-  desktop = import ../../modules/desktop.nix;
   selected =
     packages:
     map (package: package.pname) (
-      builtins.filter (package: (package.pname or "") == "comfyui-desktop") packages
+      builtins.filter (package: (package.pname or "") == "comfyui") packages
     );
-  linuxPackages = system: scope: (fixtures.mkHome system [ scope ]).config.home.packages;
+  homePackages =
+    system: scope:
+    ((import ../fixtures/packages.nix { inherit inputs; }).mkHome system [ scope ])
+    .config.home.packages;
 in
 {
-  testComfyDesktopIsInstalledForNativeLinuxAndWslg = {
+  testComfyIsInstalledAcrossUnixHomes = {
     expr = {
-      native = selected (linuxPackages "x86_64-linux" desktop.linuxDesktop);
-      wsl = selected (linuxPackages "x86_64-linux" desktop.wslDesktop);
+      native = selected (homePackages "x86_64-linux" (import ../../hosts { inherit inputs; }).linuxHome);
+      wsl = selected (homePackages "x86_64-linux" ../../home/wsl.nix);
+      darwin = selected (homePackages "aarch64-darwin" ../../home/darwin.nix);
     };
     expected = {
-      native = [ "comfyui-desktop" ];
-      wsl = [ "comfyui-desktop" ];
+      native = [ "comfyui" ];
+      wsl = [ "comfyui" ];
+      darwin = [ "comfyui" ];
     };
   };
-  testComfyDesktopDoesNotSelectAnUnavailableArmLinuxBinary = {
-    expr = selected (linuxPackages "aarch64-linux" desktop.linuxDesktop);
-    expected = [ ];
+  testComfyIsInstalledForArmLinux = {
+    expr = selected (homePackages "aarch64-linux" ../../home/common.nix);
+    expected = [ "comfyui" ];
   };
 }

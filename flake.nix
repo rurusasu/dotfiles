@@ -12,9 +12,6 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    # Linux ChatGPT support has not reached nixos-unstable yet. Keep its package
-    # set separate so adding the desktop app does not update the entire system.
-    chatgpt-nixpkgs.url = "github:NixOS/nixpkgs/2a8c86bc625fe3f592181e47efd8b4c9930b61d3";
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
@@ -43,29 +40,46 @@
     };
     # Use the upstream package set unchanged so its binary cache can be used.
     llm-agents.url = "github:numtide/llm-agents.nix";
+    mcp-servers.url = "github:natsukium/mcp-servers-nix";
+    xurl = {
+      url = "github:xdevplatform/xurl";
+      flake = false;
+    };
+    dia = {
+      type = "file";
+      url = "https://releases.diabrowser.com/release/Dia-latest.dmg";
+      flake = false;
+    };
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    modes-nvim = {
+      url = "github:mvllow/modes.nvim";
+      flake = false;
+    };
+    devcontainer-cli-nvim = {
+      url = "github:erichlf/devcontainer-cli.nvim";
+      flake = false;
+    };
+    hermes-lcm = {
+      url = "github:stephenschoettler/hermes-lcm";
+      flake = false;
+    };
     psscriptanalyzer = {
       type = "file";
-      # Use a versioned release locator alongside the content hash. This is
-      # byte-identical to the Gallery package already recorded in flake.lock.
-      url = "https://github.com/PowerShell/PSScriptAnalyzer/releases/download/1.25.0/PSScriptAnalyzer.1.25.0.nupkg";
+      url = "https://www.powershellgallery.com/api/v2/package/PSScriptAnalyzer";
       flake = false;
     };
     hermes-agent = {
       # Keep the upstream package and its complete locked dependency graph intact.
       # Following this repository's nixpkgs changes derivations and cache identities.
-      url = "github:NousResearch/hermes-agent/d337b736aa1e8ebecfab043842d13e4a2d2f48a3";
+      url = "github:NousResearch/hermes-agent";
     };
   };
 
   outputs =
     { flake-parts, ... }@inputs:
-    let
-      hosts = import ./nix/hosts { inherit inputs; };
-    in
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         inputs.nix-unit.modules.flake.default
@@ -78,7 +92,7 @@
       # Current nixpkgs supports Apple Silicon macOS, not x86_64-darwin.
       systems = builtins.filter (system: system != "x86_64-darwin") (import inputs.systems);
 
-      perSystem = hosts.mkApps;
+      perSystem = (import ./nix/hosts { inherit inputs; }).mkApps;
 
       flake = import ./nix/hosts/configurations.nix { inherit inputs; };
     };

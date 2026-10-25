@@ -1,35 +1,26 @@
 { inputs }:
 let
-  darwin = inputs.nix-darwin.lib.darwinSystem {
-    system = "aarch64-darwin";
-    modules = [
-      ../../hosts/aarch64-darwin/omarchy-keybindings.nix
-      {
-        system.primaryUser = "keybinding-test";
-        system.stateVersion = 6;
-        users.users.keybinding-test.home = "/Users/keybinding-test";
-        nixpkgs.pkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs "aarch64-darwin";
-      }
-    ];
-  };
-  inherit (darwin) config pkgs;
+  home = (import ../fixtures/packages.nix { inherit inputs; }).mkHome "aarch64-darwin" [
+    ../../home/keybindings/darwin.nix
+  ];
+  inherit (home) config pkgs;
   inherit (pkgs) lib;
-  service = config.services.aerospace;
+  service = config.programs.aerospace;
   keys = service.settings.mode.main.binding;
-  agent = config.launchd.user.agents.aerospace;
+  agent = config.launchd.agents.aerospace;
 in
 {
   testOmarchyDisabledDoesNotChangeSystemShortcuts = {
     expr =
       let
-        disabled = darwin.extendModules {
-          modules = [ { services.aerospace.enable = lib.mkForce false; } ];
+        disabled = home.extendModules {
+          modules = [ { programs.aerospace.enable = lib.mkForce false; } ];
         };
       in
       {
-        activation = disabled.config.system.activationScripts.omarchySymbolicHotkeys.text or "";
-        dockOrder = disabled.config.system.defaults.dock.mru-spaces;
-        dockGrouping = disabled.config.system.defaults.dock.expose-group-apps;
+        activation = disabled.config.home.activation.omarchySymbolicHotkeys.data or "";
+        dockOrder = disabled.config.targets.darwin.defaults."com.apple.dock".mru-spaces or null;
+        dockGrouping = disabled.config.targets.darwin.defaults."com.apple.dock".expose-group-apps;
       };
     expected = {
       activation = "";
@@ -37,21 +28,23 @@ in
       dockGrouping = null;
     };
   };
-  testOmarchyAerospaceIsOwnedByDarwin = {
+  testOmarchyAerospaceIsOwnedByHomeManager = {
     expr = {
       enabled = service.enable;
       configVersion = service.settings.config-version;
       selectedPackage = service.package == pkgs.aerospace;
-      systemPackage = builtins.elem service.package config.environment.systemPackages;
+      homePackage = builtins.elem service.package config.home.packages;
       launchdOwnsStartup =
-        !service.settings.start-at-login && agent.serviceConfig.RunAtLoad && agent.serviceConfig.KeepAlive;
-      explicitImmutableConfig = lib.hasInfix "--config-path /nix/store/" agent.command;
+        !service.settings.start-at-login && agent.config.RunAtLoad && agent.config.KeepAlive;
+      explicitImmutableConfig =
+        builtins.elemAt agent.config.ProgramArguments 1 == "--config-path"
+        && lib.hasPrefix "/nix/store/" (builtins.elemAt agent.config.ProgramArguments 2);
     };
     expected = {
       enabled = true;
       configVersion = 2;
       selectedPackage = true;
-      systemPackage = true;
+      homePackage = true;
       launchdOwnsStartup = true;
       explicitImmutableConfig = true;
     };
@@ -120,10 +113,10 @@ in
   testOmarchySymbolicShortcutUpdatesPreserveOtherKeys = {
     expr =
       let
-        script = config.system.activationScripts.omarchySymbolicHotkeys.text;
+        script = config.home.activation.omarchySymbolicHotkeys.data;
       in
       {
-        scopedUser = lib.hasInfix "--user=keybinding-test" script;
+        userActivation = !(lib.hasInfix "sudo" script) && !(lib.hasInfix "launchctl asuser" script);
         collisionsDisabled = builtins.all (id: lib.hasInfix "-dict-add ${id} " script) [
           "27"
           "28"
@@ -137,7 +130,7 @@ in
         noDictionaryReplacement = !(lib.hasInfix "-dict " script);
       };
     expected = {
-      scopedUser = true;
+      userActivation = true;
       collisionsDisabled = true;
       noDictionaryReplacement = true;
     };
@@ -150,12 +143,12 @@ in
           system:
           let
             fixtures = import ../fixtures/packages.nix { inherit inputs; };
-            home = fixtures.mkHome system [ ../../hosts/shared/linux-home.nix ];
           in
           {
-            linuxPackage = builtins.any (
-              package: (package.pname or "") == "aerospace"
-            ) home.config.home.packages;
+            linuxPackage =
+              builtins.any (package: (package.pname or "") == "aerospace")
+                (fixtures.mkHome system [ (import ../../hosts { inherit inputs; }).linuxHome ])
+                .config.home.packages;
             windowsPackage = fixtures.windowsPackages ? "aerospace";
           }
         )

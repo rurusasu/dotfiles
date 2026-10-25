@@ -25,7 +25,8 @@ Home Manager の `Library/Application Support/discord` 作成が同時に拒否�
 
 ## 旧 Comfy Desktop の Nix 出力
 
-macOS の Comfy Desktop は Homebrew cask `comfy` に移しました。
+macOS の Comfy Desktop は一時期 Homebrew cask `comfy` で管理していました。
+現在は `tools.homeManager` から標準の `pkgs.comfyui` の Web UI 版を導入します。
 新しい構成は旧 Nix package をビルドしないため、通常は `nrs` でそのまま反映できます。
 Nix daemon へのフルディスクアクセスは追加しません。
 

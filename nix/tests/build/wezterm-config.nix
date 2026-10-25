@@ -3,7 +3,7 @@ let
   terminals = ../../modules/terminals;
   windowsWezTerm = ../../../chezmoi/terminals/wezterm/wezterm.lua;
   settings =
-    (import (terminals + "/wezterm/defaults.nix") {
+    (import (terminals + "/wezterm") {
       inherit pkgs;
       inherit (pkgs) lib;
       inherit (terminalHome) config;
@@ -11,7 +11,7 @@ let
   terminalHome = inputs.home-manager.lib.homeManagerConfiguration {
     inherit pkgs;
     modules = [
-      (terminals + "/wezterm/defaults.nix")
+      (terminals + "/wezterm")
       {
         home = {
           username = "test-user";
@@ -26,8 +26,7 @@ let
       }
     ];
   };
-  bashInit = pkgs.writeText "wezterm-bash-init" terminalHome.config.programs.bash.initExtra;
-  zshInit = pkgs.writeText "wezterm-zsh-init" terminalHome.config.programs.zsh.initContent;
+  terminfoDirectory = "${terminalHome.config.programs.wezterm.package.terminfo}/share/terminfo";
 in
 pkgs.runCommand "wezterm-config-check"
   {
@@ -46,7 +45,11 @@ pkgs.runCommand "wezterm-config-check"
       ${pkgs.lib.escapeShellArg "UDEV Gothic NF"} \
       ${toString settings.font_size} \
       ${pkgs.lib.escapeShellArg settings.color_scheme} \
-      ${terminals}/wezterm/wezterm.lua <<'LUA'
+      ${pkgs.writeText "wezterm-darwin-config.lua" ''
+        local dotfiles_terminfo_directory = ${pkgs.lib.generators.toLua { } terminfoDirectory}
+        ${builtins.readFile (terminals + "/wezterm/wezterm.lua")}
+      ''} \
+      ${pkgs.lib.escapeShellArg terminfoDirectory} <<'LUA'
     local target_triple = "x86_64-pc-windows-msvc"
     package.loaded.wezterm = nil
     package.preload.wezterm = function()
@@ -94,15 +97,14 @@ pkgs.runCommand "wezterm-config-check"
     package.loaded.wezterm = nil
     local getenv = os.getenv
     os.getenv = function(name)
-      if name == "USER" then return "test-user" end
       if name == "TERMINFO_DIRS" then return "/inherited/terminfo" end
       return getenv(name)
     end
     config = dofile(arg[5])
     os.getenv = getenv
     assert(config.set_environment_variables.TERMINFO_DIRS
-      == "/etc/profiles/per-user/test-user/share/terminfo:/usr/share/terminfo:/inherited/terminfo",
-      "Darwin child shells must receive user, system and inherited terminfo paths")
+      == arg[6] .. ":/usr/share/terminfo:/inherited/terminfo",
+      "Darwin child shells must receive package, system and inherited terminfo paths")
     assert(config.use_ime == true, "Darwin IME support must remain enabled")
     local backspace, leader_backspace
     for _, binding in ipairs(config.keys) do
@@ -122,8 +124,8 @@ pkgs.runCommand "wezterm-config-check"
     for terminal in ghostty WezTerm; do
       for shell in bash zsh; do
         case "$shell" in
-          bash) executable=${pkgs.bash}/bin/bash; init=${bashInit}; args="--noprofile --norc" ;;
-          zsh) executable=${pkgs.zsh}/bin/zsh; init=${zshInit}; args="-d -f" ;;
+          bash) executable=${pkgs.bash}/bin/bash; init=${pkgs.writeText "wezterm-bash-init" terminalHome.config.programs.bash.initExtra}; args="--noprofile --norc" ;;
+          zsh) executable=${pkgs.zsh}/bin/zsh; init=${pkgs.writeText "wezterm-zsh-init" terminalHome.config.programs.zsh.initContent}; args="-d -f" ;;
         esac
         TERM=xterm-256color TERM_PROGRAM="$terminal" "$executable" $args -ic '
           source "$1"

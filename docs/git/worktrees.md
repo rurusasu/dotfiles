@@ -14,7 +14,7 @@ Git の `worktree.useRelativePaths = true` を次の場所で管理する。
 | Windows             | `chezmoi/dot_config/git/config` | `%USERPROFILE%/.config/git/config`（chezmoi） |
 
 Git 2.48 以降が必要。Windows / WSL の両方で有効にしてから新しい worktree を作成する。
-WSL の gwq 保存先は `nix/hosts/x86_64-linux/wsl/home.nix` で `/mnt/d/worktrees` に設定する。
+WSL の gwq 保存先は `nix/home/wsl.nix` で `/mnt/d/worktrees` に設定する。
 Windows からは `D:/worktrees` に見える。同じ D ドライブ内にリポジトリと worktree を配置する。
 `worktree.auto_mkdir = true` により、保存先がなければ初回の `gwq add` で自動作成される。
 WSL 内の `~/worktrees` や別ドライブに置くと、相対リンクでも Windows と共用できない。

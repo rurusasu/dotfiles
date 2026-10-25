@@ -124,26 +124,26 @@ runs:
                   wsl=true
                   windows=true
                   ;;
-                nix/hosts/aarch64-darwin/*)
+                nix/hosts/darwin.nix|nix/hosts/darwin-app-cleanup.nix|nix/home/darwin.nix|nix/home/keybindings/darwin*.nix)
                   nix=true
                   darwin=true
                   ;;
                 # Windows chezmoi also distributes the WSLg fontconfig source.
-                nix/hosts/x86_64-linux/wsl/fonts/fontconfig.conf)
+                nix/modules/fonts/wsl-fontconfig.conf)
                   nix=true
                   chezmoi=true
                   wsl=true
                   windows=true
                   ;;
-                nix/hosts/x86_64-linux/wsl/*)
+                nix/hosts/wsl.nix|nix/home/wsl.nix|nix/home/op-ssh-sign-wsl)
                   nix=true
                   wsl=true
                   ;;
-                nix/hosts/x86_64-linux/nixos/*|nix/hosts/aarch64-linux/*|nix/hosts/x86_64-linux/home.nix)
+                nix/hosts/linux.nix)
                   nix=true
                   linux=true
                   ;;
-                nix/hosts/shared/*)
+                nix/hosts/nixos.nix|nix/hosts/identity.nix)
                   nix=true
                   linux=true
                   wsl=true

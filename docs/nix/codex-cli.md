@@ -10,59 +10,67 @@ AI エージェントの設定はアプリ単位でまとめます。
 
 ```text
 nix/modules/ai_agents/
+├── mcp.nix   # 共通 MCP 定義
 ├── chatgpt/  # ChatGPT アプリ・同梱 Codex の設定
-└── hermes/   # Hermes gateway・CLI 設定・bootstrap manifest
+└── hermes/   # Hermes の公式 Home Manager 設定
 ```
 
-`nix/modules/tools.nix` がアプリと CLI を選択します。Darwin と native NixOS は同じ
-`chatgpt/packages.nix` からアプリと同梱 CLI を選び、WSL は同じ Linux package の CLI だけを選びます。
-アプリは `home.packages`、CLI は標準 `programs.codex.package` で宣言し、CLI の PATH 配置と設定生成を
-Home Manager に任せます。`chatgpt/desktop.nix` が Linux desktop のキャッシュ cleanup を設定します。
-WSL には Linux GUI を導入しません。Darwin host は `tools.nix` の `chatgpt` module、native NixOS は
-`nativeDesktop`、WSL は `chatgptCli` を選択します。
+`chatgpt/default.nix` が `packages`・`homeManager` を公開します。
+`nix/modules/tools.nix` が `packages { inherit pkgs; }` の返す `chatgpt` と `codex` を選択し、
+Darwin と native / standalone Linux ではアプリと同梱 CLI へのリンクを `home.packages` に指定します。
+WSL は同じ Linux package の CLI へのリンクだけを選びます。CLI の PATH 配置は Home Manager に任せます。
+`common.nix` は `homeManager` を読み込み、`programs.codex` で設定を管理します。
+WSL には Linux GUI を導入しません。`nix/home/darwin.nix` と `nix/hosts/default.nix` の Home Manager module `linuxHome` は `tools.nix` の `chatgpt` module、
+`nix/home/wsl.nix` は `chatgptCli` を選択します。
 Windows の Store 導入・検証情報は `windows/winget/packages.json` で直接管理します。
 Codex CLI を独立したパッケージとして導入しません。
 
-## Darwin / native NixOS の公式版
+## Darwin / Linux の公式版
 
-Darwin / Linux 対応済みの nixpkgs を `chatgpt-nixpkgs` input に固定します。システム全体の nixpkgs は
-更新せず、この input の package set をそのまま利用します。公式 `.deb` の取得・ELF 修正・
-プラグインキャッシュ・起動処理は upstream の package 定義が所有します。
-`chatgpt.override { codex = null; }` により、Linux の upstream が既定で行う独立 Codex package への置換を無効化します。
-macOS では `dontStrip = true` により、アプリ本体と同梱バイナリの公式署名を保持します。
-store 確定前に署名済み GUI を実行すると macOS のアプリ管理保護が Nix の属性変更を拒否するため、
-Darwin の package 内 install check は無効にします。専用のビルドテストが store 確定後に
+共通の locked nixpkgs から `pkgs.chatgpt.override { codex = null; }` を利用します。
+公式 `.deb` の取得・ELF 修正・プラグインキャッシュ・起動処理と、Darwin の公式署名保持・
+package 内 install check の扱いは upstream の package 定義が所有します。
+`codex = null` により、Linux の upstream が既定で行う独立 Codex package への置換を無効化します。
+専用のビルドテストが store 確定後に
 Home Manager と同じ方法でコピーしたアプリの署名・アプリの版・同梱 CLI の起動を検証します。
-端末の `codex` はアプリ内の実体を呼び出し、隣接する `codex-code-mode-host` を同じ配布物に保ちます。
-CLI wrapper は `writeShellApplication` で実行依存と OS 別 resource path を宣言します。
+`codex` は `pkgs.linkFarm` で `bin/codex` と `bin/codex-code-mode-host` を
+アプリ内の実体への symlink として公開します。Linux では `bin/bwrap` も提供します。
 Darwin は公式 launcher の `Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`、
-Linux は `lib/chatgpt/resources/codex` を使います。wrapper の package version は同梱 CLI の
-実バージョンを宣言し、Home Manager のバージョン別設定生成に利用します。
-Linux のキャッシュ cleanup は upstream の規則を `systemd.user.tmpfiles.rules` に渡し、
-設定ファイルの生成・反映と systemd 連携を Home Manager に任せます。Darwin に systemd 設定は生成しません。
+Linux は `lib/chatgpt/resources/codex` を使います。
 
 Hyprland の AI キーと application launcher から起動できます。通常は XWayland を使い、
 native Wayland を試す場合は `chatgpt --ozone-platform=wayland` で起動します。
 OpenAI の Linux 版はプレビューで、NixOS は正式サポート対象外です。Linux の Computer Use と
 native Wayland には制約があります。最新の範囲は [公式 Linux 版案内](https://learn.chatgpt.com/docs/linux/linux-app) を参照してください。
 
-更新時は `flake.nix` の `chatgpt-nixpkgs` revision を対応済みの upstream revision に変更し、
-`nix flake lock` を実行します。同梱 CLI の更新時は `packages.nix` の version も更新します。
+更新時は `nix flake update nixpkgs` で共通の nixpkgs lock を更新します。
+同梱 CLI もアプリとともに更新されます。
 通常の `task test:nix` は `custom-package-builds` 経由で
-両 OS のアプリのビルド・同梱 CLI の起動と宣言 version の一致、Linux の desktop entry と tmpfiles を検証します。
+両 OS のアプリのビルド・同梱 CLI の起動、Linux の desktop entry を検証します。
 単独では `nix build .#checks.x86_64-linux.chatgpt-desktop --no-link --no-write-lock-file` を使えます。
 `aarch64-linux` のビルドには対応する builder が必要です。GUI のログイン・権限・操作は実機で確認します。
 
 ## 設定の所有
 
-Unix の config・agents・rules・hooks は `nix/modules/ai_agents/chatgpt/` の
-Home Manager `programs.codex` が管理します。Darwin / NixOS / WSL の `package` は各 OS 向け同梱 CLI の
-wrapper を指定し、独立した Codex 配布物は導入しません。WSL は Linux 版を使い、Windows は Windows 側のアプリを使います。
+Unix の `CODEX_HOME` は `${config.xdg.configHome}/codex`（既定 `~/.config/codex`）です。
+`home.preferXdgDirectories = true` により標準 module が XDG 配置を選びます。
+Unix の config は `nix/modules/ai_agents/chatgpt/` の
+Home Manager `programs.codex` が管理します。`programs.codex.enable = true` と `package = null` を指定し、
+CLI のバージョン判定に依存せず設定を生成します。CLI の導入は `tools.nix` の `home.packages` が担当します。
+WSL は Linux 版を使い、Windows は Windows 側のアプリを使います。
 `mutableSettings = true` で既存の UI 設定や project trust を保持して宣言値をマージします。
 認証ファイル・履歴・セッションは Home Manager の管理対象にしません。
 Windows の設定は chezmoi が管理します。
 
-Unix の Node.js/npm と dsh の導入は `nix/modules/tools.nix` で管理します。
+Home Manager activation の `codexXdgHome` は、既存の認証・履歴を引き継ぐため、旧 `~/.codex` の実ディレクトリを XDG 配置先へ移し、旧パスに互換 symlink を作成します。新規環境では配置先と互換 symlink を作成します。両方に実ディレクトリがある場合や、旧 symlink が別のディレクトリを指す場合は、上書きせず反映を停止します。この処理は activation 時にのみ実行します。
+
+共通 MCP は `nix/modules/ai_agents/mcp.nix` の `programs.mcp.servers` を正本とし、
+Codex は `enableMcpIntegration = true` で取り込みます。
+Google 連携は Pipedream に統一し、Codex の Google curated plugins は宣言しません。
+ユーザーが `codex mcp login pipedream` で OAuth を実行してください。
+設定と認証の範囲は [Google MCP](../hermes-agent/gmail-mcp.md) を参照してください。
+
+Unix の dsh の導入は `nix/modules/tools.nix` で管理します。
 Windows の npm/pnpm manifest は空で、dsh を導入しません。pnpm と Bun は導入しません。
 
 ## 反映

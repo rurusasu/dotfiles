@@ -1,6 +1,7 @@
 # デフォルトの動作: すべてのテキストファイルはLFに正規化
 * text=auto
 .gitattributes text eol=lf
+/.python-version text eol=lf
 
 # PowerShell は CRLF。scripts/powershell/ の非 ASCII ソースは UTF-8 BOM 付き。
 *.ps1 text eol=crlf working-tree-encoding=UTF-8
@@ -18,6 +19,7 @@
 *.bats text eol=lf
 # Home Manager reads this extensionless Bash source on Windows/WSL checkouts too.
 nix/modules/shells/bash/bashrc text eol=lf
+nix/home/op-ssh-sign-wsl text eol=lf
 
 # PowerShellテンプレートはCRLFを使用
 *.ps1.tmpl text eol=crlf working-tree-encoding=UTF-8

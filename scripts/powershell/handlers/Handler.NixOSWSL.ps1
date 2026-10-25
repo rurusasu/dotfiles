@@ -109,7 +109,7 @@ class NixOSWSLHandler : SetupHandlerBase {
                 $release = $this.GetRelease($releaseTag)
                 $asset = $this.SelectAsset($release)
                 $archivePath = $this.DownloadAsset($asset)
-                $this.InstallDistro($ctx, $asset, $archivePath)
+                $this.InstallDistro($ctx, $archivePath)
             }
 
             # Post-install セットアップ
@@ -170,42 +170,6 @@ class NixOSWSLHandler : SetupHandlerBase {
         throw "WSL の有効化を完了するため、Windows を再起動してから再度このスクリプトを実行してください。"
     }
 
-    <#
-    .SYNOPSIS
-        WSL のバージョン番号を取得
-    #>
-    hidden [version] GetWslVersion() {
-        $output = Invoke-Wsl -Arguments @("--version")
-        if ($LASTEXITCODE -ne 0) {
-            return $null
-        }
-        $text = ($output -join "`n") -replace "`0", '' -replace [char]0xFEFF, ''
-        if ($text -match '(?im)^\s*WSL\s+[^:\r\n]+:\s*(\d+\.\d+\.\d+(?:\.\d+)?)') {
-            try {
-                return [version]$Matches[1]
-            }
-            catch {
-                return $null
-            }
-        }
-        return $null
-    }
-
-    <#
-    .SYNOPSIS
-        WSL が --install --from-file をサポートしているか確認
-    #>
-    hidden [bool] SupportsFromFileInstall() {
-        $ver = $this.GetWslVersion()
-        if ($ver -and $ver -ge [version]"2.4.4.0") {
-            return $true
-        }
-        # Fallback: ヘルプテキストを確認
-        $help = Invoke-Wsl -Arguments @("--help")
-        $text = ($help -join "`n") -replace "`0", '' -replace [char]0xFEFF, ''
-        return ($text -match '(?:^|\s)--from-file(?:\s|$)')
-    }
-
     # ========================================
     # NixOS-WSL Download
     # ========================================
@@ -240,7 +204,7 @@ class NixOSWSLHandler : SetupHandlerBase {
             $this.Log("アセットを選択: nixos.wsl")
             return $asset
         }
-        throw "Release $($release.tag_name) に必要なアセット nixos.wsl が見つかりません。この installer は現行 .wsl 形式のリリース（2411.6.0 以降）のみ対応しています。ReleaseTag を外して latest を使うか、nixos.wsl を配布する tag を指定してください。"
+        throw "Release $($release.tag_name) に必要なアセット nixos.wsl が見つかりません。ReleaseTag を外して latest を使うか、nixos.wsl を配布する tag を指定してください。"
     }
 
     <#
@@ -325,20 +289,13 @@ class NixOSWSLHandler : SetupHandlerBase {
     .SYNOPSIS
         ディストリビューションをインストール
     #>
-    hidden [void] InstallDistro([SetupContext]$ctx, [object]$asset, [string]$archivePath) {
-        $supportsFromFile = $this.SupportsFromFileInstall() -and ($asset.name -like "*.wsl")
-
-        if ($supportsFromFile) {
-            try {
-                $this.InstallFromFile($ctx.DistroName, $archivePath, $ctx.InstallDir)
-            }
-            catch {
-                $this.LogWarning("wsl --install --from-file に失敗しました。wsl --import にフォールバックします。")
-                $this.LogWarning($_.Exception.Message)
-                $this.ImportDistro($ctx.DistroName, $ctx.InstallDir, $archivePath)
-            }
+    hidden [void] InstallDistro([SetupContext]$ctx, [string]$archivePath) {
+        try {
+            $this.InstallFromFile($ctx.DistroName, $archivePath, $ctx.InstallDir)
         }
-        else {
+        catch {
+            $this.LogWarning("wsl --install --from-file に失敗しました。wsl --import にフォールバックします。")
+            $this.LogWarning($_.Exception.Message)
             $this.ImportDistro($ctx.DistroName, $ctx.InstallDir, $archivePath)
         }
     }
@@ -354,7 +311,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         $this.WaitForWslReady()
         $vhdPath = Join-Path $ctx.InstallDir "ext4.vhdx"
 
-        # まず --import-in-place を試みる（WSL 2.4.4+ の新形式 VHD 用、コピー不要で高速）
+        # まず --import-in-place を試みる（既存 VHD をコピーせず登録する）
         $this.Log("wsl --import-in-place $($ctx.DistroName) $($ctx.InstallDir)")
         Invoke-Wsl -Arguments @("--import-in-place", $ctx.DistroName, $ctx.InstallDir)
         if ($LASTEXITCODE -eq 0) {
@@ -409,7 +366,7 @@ class NixOSWSLHandler : SetupHandlerBase {
         wsl --install --from-file でディストリビューションをインストール
     #>
     hidden [void] InstallFromFile([string]$name, [string]$archive, [string]$location) {
-        $this.Log("WSL 2.4.4+ の手順で登録します: wsl --install --from-file")
+        $this.Log("wsl --install --from-file で登録します")
         $this.WaitForWslReady()
         $wslArgs = @("--install", "--from-file", $archive, "--name", $name, "--no-launch")
         if ($location) {
@@ -477,10 +434,6 @@ class NixOSWSLHandler : SetupHandlerBase {
             $cmd += " --force"
         }
         $cmd += " --sync-mode $syncMode --sync-back $syncBack"
-        $stateVersion = [string]$ctx.GetOption("StateVersion", "")
-        if (-not [string]::IsNullOrWhiteSpace($stateVersion)) {
-            $cmd += " --state-version $stateVersion"
-        }
         $output = @(
             Invoke-Wsl -TimeoutSeconds $timeoutSeconds -Arguments @("-d", $ctx.DistroName, "-u", "root", "--", "sh", "-lc", $cmd)
         )

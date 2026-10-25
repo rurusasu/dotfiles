@@ -1,11 +1,10 @@
 { inputs }:
 let
-  fixtures = import ../fixtures/packages.nix { inherit inputs; };
   installed =
     system:
     builtins.any (package: (package.pname or "") == "chatgpt")
-      (fixtures.mkHome system [
-        (if system == "aarch64-darwin" then ../../hosts/aarch64-darwin/home.nix else ../../home/common.nix)
+      ((import ../fixtures/packages.nix { inherit inputs; }).mkHome system [
+        (if system == "aarch64-darwin" then ../../home/darwin.nix else ../../home/common.nix)
         ../../modules/editors/nvim
       ]).config.home.packages;
 in
@@ -17,19 +16,10 @@ in
           system:
           let
             modulePkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
-            packages = import ../../modules/ai_agents/chatgpt/packages.nix {
-              inherit inputs;
-              pkgs = modulePkgs;
-            };
-            upstream = import inputs.chatgpt-nixpkgs {
-              inherit system;
-              config.allowUnfree = true;
-            };
           in
-          packages.chatgpt.drvPath == ((upstream.chatgpt.override { codex = null; }).overrideAttrs {
-            dontStrip = true;
-            doInstallCheck = system != "aarch64-darwin";
-          }).drvPath
+          ((import ../../modules/ai_agents/chatgpt).packages {
+            pkgs = modulePkgs;
+          }).chatgpt.drvPath == (modulePkgs.chatgpt.override { codex = null; }).drvPath
         )
         [
           "x86_64-linux"

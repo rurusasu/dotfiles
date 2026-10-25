@@ -66,23 +66,28 @@ let
         "100"
         "300"
       ];
-  keyName =
-    key:
-    {
-      enter = "RETURN";
-      backtick = "grave";
-    }
-    .${key} or (lib.toUpper key);
-  chord =
-    binding:
-    lib.concatStringsSep " + " (map lib.toUpper binding.modifiers ++ [ (keyName binding.key) ]);
   supported = builtins.filter (binding: builtins.hasAttr binding.action actions) contract.bindings;
 in
 {
   config =
     lib.concatMapStringsSep "\n" (
       binding:
-      "hl.bind(${quote (chord binding)}, ${actions.${binding.action}}, { description = ${quote binding.action} })"
+      "hl.bind(${
+        quote (
+          lib.concatStringsSep " + " (
+            map lib.toUpper binding.modifiers
+            ++ [
+              (
+                {
+                  enter = "RETURN";
+                  backtick = "grave";
+                }
+                .${binding.key} or (lib.toUpper binding.key)
+              )
+            ]
+          )
+        )
+      }, ${actions.${binding.action}}, { description = ${quote binding.action} })"
     ) supported
     + "\n";
   unsupported = builtins.filter (

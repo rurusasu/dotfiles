@@ -86,11 +86,11 @@ function Get-Something {
 この repository の `nix fmt` / `checks.<system>.treefmt` は、PowerShell と
 PSScriptAnalyzer を宣言済みの依存として使用します。
 [`nix/modules/shells/powershell/psscriptanalyzer.nix`](../../nix/modules/shells/powershell/psscriptanalyzer.nix) が
-公式 GitHub release のバージョン付き asset を Nix input として使い、
+PowerShell Gallery のバージョン指定なし URL
+(`https://www.powershellgallery.com/api/v2/package/PSScriptAnalyzer`) を Nix input として使い、
 formatter は store の manifest を直接 import します。
-現在は 1.25.0 に固定し、`flake.lock` に取得内容の hash を記録します。
-更新時は `flake.nix` の `psscriptanalyzer` URL を選んだ upstream バージョンの asset に変更し、
-`nix flake update psscriptanalyzer` でその input の lock を更新します。
+input URL は `flake.nix` に宣言し、取得した配布物と内容の hash は `flake.lock` で固定します。
+更新時は `nix flake update psscriptanalyzer` で input を再解決し、lock を更新します。
 HOME の module cache に依存せず、整形中のダウンロードはありません。
 
 Windows テストは、インストール済みの互換性がある stable module を選択します。

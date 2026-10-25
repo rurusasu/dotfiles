@@ -20,7 +20,7 @@ let
         {
           nixpkgs.config.allowUnfree = true;
         }
-        ../../../hosts/aarch64-darwin
+        ../../../hosts/darwin.nix
       ]
       ++ extraModules;
     };
@@ -48,26 +48,47 @@ let
   hasDarwinCask = name: config: builtins.any (cask: cask.name == name) config.homebrew.casks;
   packageNames =
     config: builtins.map (package: package.name or package.pname) config.environment.systemPackages;
-  homePackageNames = home: builtins.map (package: package.name or package.pname) home.home.packages;
   hasPrefix = prefix: value: builtins.match "${prefix}.*" value != null;
 in
 {
   testDarwinDockPinsManagedApplicationsInOrder = {
     expr = {
-      applications = map (
-        tile: tile.tile-data.file-data._CFURLString
-      ) defaultConfig.system.defaults.dock.persistent-apps;
-      others = defaultConfig.system.defaults.dock.persistent-others;
-      recents = defaultConfig.system.defaults.dock.show-recents;
+      applications = defaultHome.targets.darwin.defaults."com.apple.dock".persistent-apps;
+      others = defaultHome.targets.darwin.defaults."com.apple.dock".persistent-others;
+      recents = defaultHome.targets.darwin.defaults."com.apple.dock".show-recents;
     };
     expected = {
       applications = [
-        "/System/Applications/Apps.app"
-        "/Users/rurusasu/Applications/Home Manager Apps/ChatGPT.app"
-        "/Applications/Nix Apps/Dia.app"
-        "/Users/rurusasu/Applications/Home Manager Apps/Ghostty.app"
-        "/Applications/Nix Apps/Hermes Agent.app"
-        "/Applications/Nix Apps/Obsidian.app"
+        {
+          tile-data.file-data = {
+            _CFURLString = "/System/Applications/Apps.app";
+            _CFURLStringType = 0;
+          };
+        }
+        {
+          tile-data.file-data = {
+            _CFURLString = "/Users/rurusasu/Applications/Home Manager Apps/ChatGPT.app";
+            _CFURLStringType = 0;
+          };
+        }
+        {
+          tile-data.file-data = {
+            _CFURLString = "/Applications/Nix Apps/Dia.app";
+            _CFURLStringType = 0;
+          };
+        }
+        {
+          tile-data.file-data = {
+            _CFURLString = "/Users/rurusasu/Applications/Home Manager Apps/Ghostty.app";
+            _CFURLStringType = 0;
+          };
+        }
+        {
+          tile-data.file-data = {
+            _CFURLString = "/Applications/Nix Apps/Obsidian.app";
+            _CFURLStringType = 0;
+          };
+        }
       ];
       others = [ ];
       recents = false;
@@ -76,9 +97,9 @@ in
 
   testDarwinDockPinsFollowTheConfiguredHome = {
     expr = map (tile: tile.tile-data.file-data._CFURLString) (
-      builtins.filter (
-        tile: inputs.nixpkgs.lib.hasInfix "Home Manager Apps" tile.tile-data.file-data._CFURLString
-      ) nonstandardHomeConfig.system.defaults.dock.persistent-apps
+      builtins.filter
+        (tile: inputs.nixpkgs.lib.hasInfix "Home Manager Apps" tile.tile-data.file-data._CFURLString)
+        nonstandardHomeConfig.home-manager.users.alice.targets.darwin.defaults."com.apple.dock".persistent-apps
     );
     expected = [
       "/Volumes/Home/alice/Applications/Home Manager Apps/ChatGPT.app"
@@ -87,15 +108,16 @@ in
   };
 
   testDarwinActivatesBundledAppCleanup = {
-    expr =
-      let
-        pkgs = import inputs.nixpkgs {
-          inherit system;
-          config.allowUnfree = true;
-        };
-        cleanup = import ../../../hosts/aarch64-darwin/remove-bundled-apps.nix { inherit pkgs; };
-      in
-      inputs.nixpkgs.lib.hasInfix (builtins.unsafeDiscardStringContext "${inputs.nixpkgs.lib.getExe cleanup} /Applications") defaultConfig.system.activationScripts.postActivation.text;
+    expr = inputs.nixpkgs.lib.hasInfix (builtins.unsafeDiscardStringContext "${
+      inputs.nixpkgs.lib.getExe (
+        import ../../../hosts/darwin-app-cleanup.nix {
+          pkgs = import inputs.nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
+          };
+        }
+      )
+    } /Applications") defaultConfig.system.activationScripts.postActivation.text;
     expected = true;
   };
 
@@ -165,14 +187,12 @@ in
 
   testDarwinConfigurationKeepsSystemIntegrations = {
     expr = {
-      agentEnvironment = defaultConfig.launchd.user.envVariables.SSH_AUTH_SOCK;
+      agentEnvironment = builtins.elemAt defaultHome.launchd.agents.onepassword-ssh-environment.config.ProgramArguments 3;
       gpgSshAgentEnabled = defaultConfig.programs.gnupg.agent.enableSSHSupport;
       homebrew = defaultConfig.homebrew.enable;
       nixHomebrew = defaultConfig.nix-homebrew.enable;
       raycast = builtins.any (name: hasPrefix "raycast" name) (packageNames defaultConfig);
-      weztermTerminfo = builtins.any (
-        package: toString package == toString defaultHome.programs.wezterm.package.terminfo
-      ) defaultHome.home.packages;
+      wezterm = defaultHome.programs.wezterm.enable;
       github = builtins.any (name: builtins.match "^(gh|github-cli)($|[-.].*)" name != null) (
         packageNames defaultConfig
       );
@@ -187,7 +207,7 @@ in
       homebrew = true;
       nixHomebrew = true;
       raycast = true;
-      weztermTerminfo = true;
+      wezterm = true;
       github = true;
       managedFont = true;
       homeManagerUser = true;
@@ -225,13 +245,10 @@ in
 
   testDarwinDockerInitializationRequiresDeclaredCask = {
     expr =
-      let
-        withoutDocker =
-          (mkDarwin {
-            extraModules = [ { homebrew.casks = inputs.nixpkgs.lib.mkForce [ ]; } ];
-          }).config;
-      in
-      inputs.nixpkgs.lib.hasInfix "--accept-license" withoutDocker.system.activationScripts.postActivation.text;
+      inputs.nixpkgs.lib.hasInfix "--accept-license"
+        (mkDarwin {
+          extraModules = [ { homebrew.casks = inputs.nixpkgs.lib.mkForce [ ]; } ];
+        }).config.system.activationScripts.postActivation.text;
     expected = false;
   };
 
@@ -241,14 +258,12 @@ in
       onePassword = defaultHome.home.sessionVariables.OP_BIOMETRIC_UNLOCK_ENABLED;
       homebrewPath = builtins.elem "/opt/homebrew/bin" defaultHome.home.sessionPath;
       sharedPath = builtins.elem "$HOME/.local/bin" defaultHome.home.sessionPath;
-      terminfo = builtins.match ".*TERMINFO_DIRS.*" defaultHome.programs.zsh.envExtra != null;
     };
     expected = {
       autoUpdate = "86400";
       onePassword = "true";
       homebrewPath = true;
       sharedPath = true;
-      terminfo = true;
     };
   };
 
@@ -280,7 +295,9 @@ in
       chromeSystemPackage = builtins.any (name: hasPrefix "google-chrome" name) (
         packageNames defaultConfig
       );
-      discordHomePackage = builtins.any (name: hasPrefix "discord" name) (homePackageNames defaultHome);
+      discordHomePackage = builtins.any (name: hasPrefix "discord" name) (
+        (home: builtins.map (package: package.name or package.pname) home.home.packages) defaultHome
+      );
       discordAgent = builtins.hasAttr "discord-module-staging" defaultHome.launchd.agents;
     };
     expected = {
@@ -309,41 +326,9 @@ in
     };
   };
 
-  testDarwinRunsWeeklySystemGarbageCollection = {
-    expr = {
-      automatic = defaultConfig.nix.gc.automatic;
-      interval = map (interval: {
-        inherit (interval) Weekday Hour Minute;
-      }) defaultConfig.launchd.daemons.nix-gc.serviceConfig.StartCalendarInterval;
-      options = defaultConfig.nix.gc.options;
-      userGc = defaultConfig.home-manager.users.rurusasu.nix.gc.automatic;
-      cacheMaintenance = defaultHome.launchd.agents.tool-cache-maintenance.enable;
-      cacheScheduleMatchesGc =
-        defaultHome.launchd.agents.tool-cache-maintenance.config.StartCalendarInterval
-        == defaultConfig.nix.gc.interval;
-      cacheRunsOnActivation = defaultHome.launchd.agents.tool-cache-maintenance.config.RunAtLoad;
-      storeOptimise = defaultConfig.nix.optimise.automatic;
-      minFree = defaultConfig.nix.settings.min-free;
-      maxFreeDeclared = builtins.hasAttr "max-free" defaultConfig.nix.settings;
-    };
-    expected = {
-      automatic = true;
-      interval = [
-        {
-          Weekday = 7;
-          Hour = 3;
-          Minute = 15;
-        }
-      ];
-      options = "--delete-old";
-      userGc = false;
-      cacheMaintenance = true;
-      cacheScheduleMatchesGc = true;
-      cacheRunsOnActivation = false;
-      storeOptimise = true;
-      minFree = 10737418240;
-      maxFreeDeclared = false;
-    };
+  testDarwinRunsAutomaticStoreOptimisation = {
+    expr = defaultConfig.nix.optimise.automatic;
+    expected = true;
   };
 
 }

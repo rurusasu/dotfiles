@@ -35,7 +35,7 @@ Home Manager が `init.lua` を生成し、基本設定の後に `plugins.nix` �
 
 Nix は継承先のクエリ（ecma、jsx、html_tags など）も閉包に含めます。「プラグインコードをロードしない」と「Nix store に nvim-treesitter 由来のパッケージが一切存在しない」は別です。ファイルタイプ `sh` / `javascriptreact` / `typescriptreact` は対応する grammar に明示登録します。
 
-データの更新は lock/package の更新と OS に合う Nix activation を使います。
+`modes.nvim` / `devcontainer-cli.nvim` のソースは flake input の `modes-nvim` / `devcontainer-cli-nvim` で管理します。更新は `nix flake update modes-nvim devcontainer-cli-nvim` と通常の Nix 反映を使います。
 
 インデントは標準 filetype indent / smartindent を使います。旧 nvim-treesitter の `indent = { enable = true }` と完全に同一の動作ではありません。パーサー未導入時は従来 syntax にフォールバックしますが、ABI 不一致や壊れた query は隠しません。
 
@@ -60,13 +60,11 @@ nvim-lspconfig の標準サーバー定義を使い、起動は `vim.lsp.config`
 
 TypeScript 7 の `tsc --lsp --stdio` を優先し、使用できない環境では typescript-language-server へフォールバックします。両方を同じバッファへ起動しません。旧サーバーには TS5/6 の `tsserver.js` が必要です。global TypeScript を7に更新しただけでは旧サーバーの依存は満たせません。必要な旧プロジェクトには対応する TS5/6 を project-local に保持してください。TS 用の上流設定は Deno 判定も行います。
 
-`typescript-language-server` 6.0.2 の pnpm 依存ハッシュが古い Nixpkgs に対しては、`nix/modules/typescript-language-server/package.nix` が上流の修正値を適用します。通常のセットアップ時の flake inputs 更新と Nix のハッシュ検証は継続します。修正済みのハッシュまたは別バージョンには補正を適用せず、lock 更新で上流修正を取り込んだらこの一時対応を削除します。
-
 未導入 executable は起動対象から外し、後から別の project-local executable があるプロジェクトを開くケースも再評価します。実行ファイルが存在しても server 初期化やプロジェクト設定の成功までは保証しません。`:checkhealth vim.lsp`、`:messages`、`:lua vim.print(vim.lsp.get_clients({bufnr=0}))` を確認します。
 
 選択順は project-local tsc → PATH tsc → project-local tsgo → PATH tsgo → local/PATH の従来サーバーです。バージョン確認は候補ごとに最大3秒。成功した選択は root ごとにセッション中固定し、不在はキャッシュしません。特定の旧機能のため従来サーバーを明示指定する場合は、LSP 起動前に `vim.g.dotfiles_typescript_server = "ts_ls"` を設定します。`"tsc"` を指定すると native のみに限定します。選択変更・依存更新後は再起動してください。
 
-旧 nvim-lspconfig に tsc 定義がなくても、TS の filetypes を引き継いで無関係な言語へ起動しないようにしています。現行上流が持つ settings/commands は保持します。plugin 更新は nixpkgs の更新と Nix の再反映で行います。起動・配布の互換テストは現行 checkout と Nix 固定2.11.0の両方を使います。
+旧 nvim-lspconfig に tsc 定義がなくても、TS の filetypes を引き継いで無関係な言語へ起動しないようにしています。現行上流が持つ settings/commands は保持します。plugin 更新は nixpkgs の更新と Nix の再反映で行います。起動・配布の互換テストは現行 checkout と [Nixpkgs が選択した nvim-lspconfig](../../nix/modules/editors/nvim/plugins.nix) の両方を使います。
 
 ### TS7 終了時の未解決警告
 
@@ -102,6 +100,8 @@ WezTerm / Herdr の terminal prefix も `Ctrl+Space` です。Neovim に届か�
 `Space e` は Oil サイドバー、`Space d e` は診断表示です。`Space Space` は fuzzy file search、`Space g g` は Lazygit、`Space s g` はファイル検索です。Oil 内では `a/A` でファイル / ディレクトリ追加、`d` で削除、`m` で移動、`r` で名前変更、`?` でヘルプを開きます。名前・移動先の prompt と Oil の確認・保存処理を使い、削除は trash に送ります。Sidekick を含むキー一覧は [キーバインド](./keybindings.md) を参照してください。
 
 ## 画像・ターミナル
+
+作業ディレクトリの OSC 7 通知は `lua/config/osc7.lua` が `vim.api.nvim_ui_send` で送信します。Oil 内では表示中のディレクトリを使います。
 
 Snacks は端末の画像対応を自動判定します。PDF は公式の [`picker.preview` と `picker.config`](https://github.com/folke/snacks.nvim/blob/main/docs/picker.md#️-config) で Poppler の変換処理を指定し、通常のファイル表示とソース別の専用プレビューを維持します。`VimEnter` での内部関数の差し替えは行いません。外部プロセスは `vim.system` で終了コード・10秒上限を確認します。ただし変換待ちは同期なので、大きな PDF の UI 停止を完全には解消していません。
 

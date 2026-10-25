@@ -1,25 +1,10 @@
 let
-  common = builtins.readFile ../../../home/common.nix;
   contains =
     needle:
     builtins.any (line: builtins.match ".*${needle}.*" line != null) (
-      builtins.filter builtins.isString (builtins.split "\n" common)
+      builtins.filter builtins.isString (builtins.split "\n" (builtins.readFile ../../../home/common.nix))
     );
 
-  osEntrypoints = [
-    ../../../hosts/aarch64-darwin/home.nix
-    ../../../hosts/shared/linux-home.nix
-    ../../../hosts/x86_64-linux/wsl/home.nix
-  ];
-  moduleImports =
-    path:
-    (import path {
-      pkgs = { };
-      lib = { };
-      inputs = { };
-      config.home.username = "test-user";
-    }).imports or [ ];
-  importsCommon = path: builtins.elem (../../../home/common.nix) (moduleImports path);
 in
 {
   testSharedGitAndSshDoNotDeclareOSSpecificProgramsOrAgents = {
@@ -67,7 +52,24 @@ in
   };
 
   testOSHomeEntrypointsKeepCommonImport = {
-    expr = builtins.map importsCommon osEntrypoints;
+    expr =
+      builtins.map
+        (
+          module:
+          builtins.elem (../../../home/common.nix) (
+            (module {
+              pkgs = { };
+              lib = { };
+              inputs.nixos-vscode-server.homeModules.default = { };
+              config.home.username = "test-user";
+            }).imports or [ ]
+          )
+        )
+        [
+          (import ../../../home/darwin.nix)
+          (import ../../../hosts { inputs = { }; }).linuxHome
+          (import ../../../home/wsl.nix)
+        ];
     expected = [
       true
       true

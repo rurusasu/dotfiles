@@ -5,12 +5,11 @@ let
   cfg = fixtures.darwin.config;
   homePackages = cfg.home-manager.users.test-user.home.packages;
   systemPackages = cfg.environment.systemPackages;
-  dia = import ../../modules/browsers/dia { inherit pkgs; };
   contains = expected: packages: builtins.any (package: package.drvPath == expected.drvPath) packages;
 in
 {
   testDarwinGuiPromotionsSelectTheirCustomSystemDerivations = {
-    expr = contains dia systemPackages;
+    expr = contains (import ../../modules/browsers/dia { inherit inputs pkgs; }) systemPackages;
     expected = true;
   };
   testRaycastDerivationIsSelectedForDarwinSystem = {
@@ -19,7 +18,7 @@ in
   };
   testDarwinTerminalGuiPackagesUseNativeWindowManagerAndTerminals = {
     expr = {
-      aerospace = contains pkgs.aerospace systemPackages;
+      aerospace = contains pkgs.aerospace homePackages;
       ghostty = contains cfg.home-manager.users.test-user.programs.ghostty.package homePackages;
       wezterm = contains cfg.home-manager.users.test-user.programs.wezterm.package homePackages;
     };

@@ -599,41 +599,5 @@ claude plugin install qmd@qmd
 
 ## このリポジトリでの設定
 
-### インストール
-
-- QMD は自動導入対象ではありません。必要な場合のみ上記の手順で個別に導入します。
-- Windows の pnpm グローバルパッケージは `dsh` のみです。配布情報の正本は `nix/packages/install/node.nix` とし、PnpmHandler が生成された `windows/pnpm/packages.json` を読みます。
-- **Linux/macOS**: dotfiles は pnpm を導入しない。QMD を pnpm で導入する場合は pnpm を別途用意する
-
-Node の配布 metadata は package/provider 選択から分離し、重複定義せず既存の export を維持します。
-理由と編集先は [パッケージ管理](../nix/package-management.md#分割の理由と編集先) を参照してください。
-
-### モデル構成 (8GB VRAM)
-
-シェル設定 (`zshrc`, `bashrc`, `PowerShell_profile.ps1`) で以下を設定:
-
-```bash
-export QMD_EMBED_MODEL="hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf"
-export QMD_RERANK_MODEL="hf:giladgd/Qwen3-Reranker-4B-GGUF:Q8_0"
-```
-
-| スロット   | モデル                   | VRAM       | 選定理由                                           |
-| ---------- | ------------------------ | ---------- | -------------------------------------------------- |
-| Embedding  | Qwen3-Embedding-0.6B     | ~0.7GB     | 日本語対応 (119 言語), MTEB 上位                   |
-| Reranker   | Qwen3-Reranker-4B        | ~4GB       | giladgd (node-llama-cpp 作者) 版 GGUF で信頼性確保 |
-| Generation | qmd-query-expansion-1.7B | ~1.1GB     | 専用ファインチューニング (変更不可)                |
-| **合計**   |                          | **~5.8GB** |                                                    |
-
-**注意**:
-
-- 埋め込みモデル変更後は `qmd embed -f` で再インデックスが必須
-- Reranker GGUF はコミュニティ変換版に `cls.output.weight` 欠落の既知問題があるため、giladgd 版を使用
-
-### 関連ファイル
-
-| ファイル                        | 役割                                           |
-| ------------------------------- | ---------------------------------------------- |
-| `nix/packages/install/node.nix` | Node 配布 metadata (`pnpmGlobal`)              |
-| `nix/packages/sets.nix`         | consumer 向けの公開入口                        |
-| `nix/home/common.nix`           | 環境変数設定 (Unix)                            |
-| PowerShell profile              | Windows は chezmoi（QMD 固有設定は含みません） |
+QMD は現在の導入・MCP 登録・環境変数設定の対象外です。
+上記は個別に利用する場合の参考情報です。

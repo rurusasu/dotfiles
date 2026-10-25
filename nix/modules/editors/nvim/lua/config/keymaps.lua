@@ -73,9 +73,6 @@ map("n", "-", "<cmd>Oil<cr>", { desc = "Open parent directory" })
 require("config.marp").setup()
 map("n", "<leader>marp", "<cmd>MarpToggle<cr>", { desc = "Toggle Marp preview" })
 
--- Terminal mode
-map("t", "jk", "<C-\\><C-n>", { desc = "Exit terminal mode" })
-
 -- Float terminal resize (Alt+ 単キー)。nvim の terminal mode は prefix mapping
 -- が動作しにくいため、確実に届く single keystroke の Alt 系を採用。
 -- Shift キーが必要な記号 (`+` / `_`) を使うことで、視覚的にも拡大/縮小と

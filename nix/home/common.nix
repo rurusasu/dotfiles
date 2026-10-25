@@ -1,60 +1,56 @@
 # Shared Home Manager module for all platforms.
 #
 # Used by:
-#   - nix/hosts/aarch64-darwin/home.nix → nix-darwin Home Manager integration
-#   - nix/hosts/shared/linux-home.nix  → native NixOS Home Manager integration
-#   - nix/hosts/x86_64-linux/wsl/home.nix    → WSL Home Manager integration
+#   - nix/home/darwin.nix → nix-darwin Home Manager integration
+#   - nix/hosts/default.nix linuxHome → native / standalone Linux Home Manager
+#   - nix/home/wsl.nix → WSL Home Manager integration
 #   - nix/hosts/configurations.nix → standalone homeConfigurations
 {
-  config,
   lib,
   ...
 }:
 {
   imports = [
     (import ../modules/tools.nix).homeManager
-    ../modules/1password
-    ../modules/ai_agents/chatgpt
+    ./1password.nix
+    ../modules/ai_agents/mcp.nix
+    (import ../modules/ai_agents/chatgpt).homeManager
     ../modules/ai_agents/hermes
+    ../modules/editors/nvim
+    ../modules/fonts
     ../modules/git
     ../modules/lazygit
     ../modules/ssh.nix
     ../modules/herdr
     ../modules/shells/bash
     ../modules/shells/plugins/starship
-    ./shells/plugins/bat.nix
-    ./shells/plugins/eza.nix
-    ./shells/plugins/fd.nix
-    ./shells/plugins/fzf.nix
-    ./shells/plugins/ripgrep.nix
-    ./shells/plugins/zoxide.nix
-    ./shells/plugins/zsh-patina.nix
-    ./shells/zsh
+    ../modules/shells/plugins/bat.nix
+    ../modules/shells/plugins/eza.nix
+    ../modules/shells/plugins/fd.nix
+    ../modules/shells/plugins/fzf.nix
+    ../modules/shells/plugins/ripgrep.nix
+    ../modules/shells/plugins/zoxide.nix
+    ../modules/shells/plugins/zsh-patina.nix
+    ../modules/shells/zsh
+    ../modules/terminals/ghostty
+    ../modules/terminals/wezterm
   ];
-
-  # Integrated configurations use the system GC; standalone uses the native user timer.
-  nix.gc = {
-    automatic = !config.submoduleSupport.enable;
-    dates = "weekly";
-    options = "--delete-old";
-  };
 
   home = {
     username = lib.mkDefault "rurusasu";
     stateVersion = lib.mkDefault "26.05";
+    preferXdgDirectories = true;
 
-    sessionVariables = {
-      # qmd (markdown search engine)
-      QMD_EMBED_MODEL = "hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf";
-      QMD_RERANK_MODEL = "hf:giladgd/Qwen3-Reranker-4B-GGUF:Q8_0";
-    };
-
-    # PATH: user-local commands and npm global binaries
+    # Shared user commands, preserving the previous Bash login precedence.
     sessionPath = [
+      "$HOME/.bun/bin"
       "$HOME/.local/bin"
+      "$HOME/bin"
       "$HOME/.local/npm/bin"
     ];
   };
+
+  xdg.enable = true;
 
   programs = {
     # ── direnv ─────────────────────────────────────────────────────────────

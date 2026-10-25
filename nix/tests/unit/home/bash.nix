@@ -4,7 +4,6 @@
 }:
 let
   inherit (homeConfigurations) homes lib;
-  bashrc = builtins.readFile ../../../modules/shells/bash/bashrc;
 in
 {
   testBashEnabled = {
@@ -18,12 +17,23 @@ in
       let
         bash = home.config.programs.bash;
         rc = home.config.home.file.".bashrc".source.text;
-        profile = home.config.home.file.".profile".source.text;
       in
       {
-        userConfiguration = lib.hasInfix (builtins.unsafeDiscardStringContext bashrc) rc;
+        history = {
+          inherit (bash)
+            historyFile
+            historySize
+            historyFileSize
+            historyControl
+            historyIgnore
+            shellOptions
+            ;
+        };
+        starshipIntegration = home.config.programs.starship.enableBashIntegration;
         initialization = lib.hasInfix (builtins.unsafeDiscardStringContext bash.initExtra) rc;
-        loginConfiguration = lib.hasInfix (builtins.unsafeDiscardStringContext bash.profileExtra) profile;
+        loginConfiguration =
+          lib.hasInfix (builtins.unsafeDiscardStringContext bash.profileExtra)
+            home.config.home.file.".profile".source.text;
         aliases = lib.mapAttrsToList (
           name: value:
           lib.hasInfix (builtins.unsafeDiscardStringContext "alias -- ${name}=${lib.escapeShellArg value}") rc
@@ -31,7 +41,25 @@ in
       }
     ) homes;
     expected = map (home: {
-      userConfiguration = true;
+      history = {
+        historyFile = "$HOME/.bash_history";
+        historySize = 1000;
+        historyFileSize = 2000;
+        historyControl = [ "ignoreboth" ];
+        historyIgnore = [
+          "ls"
+          "cd"
+          "exit"
+        ];
+        shellOptions = [
+          "histappend"
+          "extglob"
+          "globstar"
+          "checkjobs"
+          "checkwinsize"
+        ];
+      };
+      starshipIntegration = true;
       initialization = true;
       loginConfiguration = true;
       aliases = lib.mapAttrsToList (_: _: true) home.config.programs.bash.shellAliases;

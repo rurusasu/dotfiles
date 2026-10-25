@@ -1,6 +1,6 @@
 { pkgs }:
 let
-  cleanup = import ../../hosts/aarch64-darwin/remove-bundled-apps.nix { inherit pkgs; };
+  cleanup = import ../../hosts/darwin-app-cleanup.nix { inherit pkgs; };
 in
 pkgs.runCommand "darwin-bundled-app-cleanup-check" { } ''
   fixture="$TMPDIR/mac with spaces"

@@ -1,11 +1,10 @@
 { inputs, pkgs }:
 let
-  testPkgs = import pkgs.path {
-    system = pkgs.stdenv.hostPlatform.system;
-    config.allowUnfree = true;
-  };
   home = inputs.home-manager.lib.homeManagerConfiguration {
-    pkgs = testPkgs;
+    pkgs = import pkgs.path {
+      system = pkgs.stdenv.hostPlatform.system;
+      config.allowUnfree = true;
+    };
     extraSpecialArgs = { inherit inputs; };
     modules = [
       ../../home/common.nix

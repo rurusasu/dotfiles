@@ -4,42 +4,59 @@
 }:
 let
   inherit (homeConfigurations)
-    linux
-    wsl
-    darwin
     homes
     lib
     ;
-  ghosttyBase = builtins.readFile ../../../modules/terminals/ghostty/config.ghostty;
-  allocation = import ../../../home/keybindings/bindings.nix { inherit lib; };
+  appearance = import ../../../modules/terminals/appearance.nix;
+  ghosttyBase = {
+    theme = [ appearance.theme ];
+    font-family = [ appearance.font_family ];
+    font-size = [ appearance.font_size ];
+    macos-option-as-alt = [ true ];
+  };
   fromWindowsExport =
     home: lib.attrByPath [ "dotfiles" "keybindings" "fromWindowsExport" ] false home.config;
   keybindingConfig =
     home:
     if fromWindowsExport home then
-      "config-file = ?${home.config.xdg.configHome}/dotfiles/keybindings/ghostty.conf\n"
+      { config-file = [ "?${home.config.xdg.configHome}/dotfiles/keybindings/ghostty.conf" ]; }
     else
-      allocation.ghosttyConfig;
+      {
+        keybind = import ../../../home/keybindings/ghostty-renderer.nix {
+          inherit lib;
+          bindings = (import ../../../home/keybindings/bindings.nix { inherit lib; }).ghostty;
+          asList = true;
+        };
+      };
 in
 {
   testGhosttyConfigurationUsesEachHomesOptionsAndCanonicalSources = {
     expr = map (home: {
       enabled = home.config.programs.ghostty.enable;
-      config = home.config.xdg.configFile."ghostty/config".text;
+      config = home.config.programs.ghostty.settings;
+      source = toString home.config.xdg.configFile."ghostty/config".source;
       validateCommand = home.config.xdg.configFile."ghostty/config".onChange;
     }) homes;
     expected = map (home: {
       enabled = true;
-      config = ghosttyBase + "\n" + keybindingConfig home;
+      config = ghosttyBase // keybindingConfig home;
+      source = toString (
+        (home.pkgs.formats.keyValue {
+          listsAsDuplicateKeys = true;
+          mkKeyValue = lib.generators.mkKeyValueDefault { } " = ";
+        }).generate
+          "ghostty-config"
+          (ghosttyBase // keybindingConfig home)
+      );
       validateCommand = "${home.config.programs.ghostty.package}/bin/ghostty +validate-config --config-file=${home.config.xdg.configHome}/ghostty/config";
     }) homes;
   };
 
   testGhosttyKeybindingSourcesKeepTheirPlatformAllocation = {
     expr = {
-      wsl = fromWindowsExport wsl;
-      linux = fromWindowsExport linux;
-      darwin = fromWindowsExport darwin;
+      wsl = fromWindowsExport homeConfigurations.wsl;
+      linux = fromWindowsExport homeConfigurations.linux;
+      darwin = fromWindowsExport homeConfigurations.darwin;
     };
     expected = {
       wsl = true;
@@ -53,7 +70,6 @@ in
       home:
       let
         inherit (home) config;
-        zshDirectory = lib.removePrefix "${config.home.homeDirectory}/" config.programs.zsh.dotDir;
       in
       {
         bashGhostty =
@@ -61,7 +77,7 @@ in
             config.home.file.".bashrc".source.text;
         zshGhostty =
           lib.hasInfix "shell-integration/zsh/ghostty-integration"
-            config.home.file."${zshDirectory}/.zshrc".text;
+            config.home.file."${lib.removePrefix "${config.home.homeDirectory}/" config.programs.zsh.dotDir}/.zshrc".text;
       }
     ) homes;
     expected = map (home: {

@@ -4,23 +4,13 @@
 }:
 let
   inherit (homeConfigurations)
-    common
-    mkPkgs
-    testHome
     linux
     wsl
     wslDeclarations
     darwin
     configuredChrome
-    darwinPackages
     ;
-  linuxDeclarations = import ../../../hosts/shared/linux-home.nix {
-    inherit inputs;
-    inherit (linux) pkgs;
-    inherit (linux.pkgs) lib;
-    inherit (linux) config;
-  };
-  darwinDeclarations = import ../../../hosts/aarch64-darwin/home.nix {
+  darwinDeclarations = import ../../../home/darwin.nix {
     inherit inputs;
     inherit (darwin) pkgs;
     inherit (darwin.pkgs) lib;
@@ -58,8 +48,8 @@ in
     ];
   };
   testCommonHomeModuleEvaluatesWithoutOSSpecialArgs = {
-    expr = common.config.home.username;
-    expected = testHome.username;
+    expr = homeConfigurations.common.config.home.username;
+    expected = homeConfigurations.testHome.username;
   };
 
   testNRShellAliasUsesPlatformInstallCommand = {
@@ -70,8 +60,8 @@ in
     };
     expected = {
       wsl = wslDeclarations.programs.zsh.shellAliases.nrs;
-      linux = linuxDeclarations.programs.zsh.shellAliases.nrs;
-      darwin = darwinDeclarations.programs.zsh.shellAliases.nrs;
+      linux = "~/.dotfiles/install.sh";
+      darwin = "~/.dotfiles/install.sh";
     };
   };
 
@@ -98,10 +88,10 @@ in
       };
     };
     expected = {
-      browser = wslDeclarations.home.sessionVariables.BROWSER;
-      inputMethod = wslDeclarations.home.sessionVariables.GTK_IM_MODULE;
-      qtInputMethod = wslDeclarations.home.sessionVariables.QT_IM_MODULE;
-      xModifiers = wslDeclarations.home.sessionVariables.XMODIFIERS;
+      browser = "${configuredChrome wsl}/bin/google-chrome-stable";
+      inputMethod = "fcitx";
+      qtInputMethod = "fcitx";
+      xModifiers = "@im=fcitx";
       globalLanguage = null;
       globalLocale = null;
       zoxideExclusion = wslDeclarations.home.sessionVariables._ZO_EXCLUDE_DIRS;
@@ -147,7 +137,7 @@ in
         obsidian = true;
         onePassword = true;
         nautilus = true;
-        browser = wslDeclarations.home.sessionVariables.BROWSER;
+        browser = "${configuredChrome wsl}/bin/google-chrome-stable";
       }
       {
         chrome = false;
@@ -167,13 +157,17 @@ in
       map
         (
           system:
-          let
-            pkgs = mkPkgs system;
-          in
-          ((import ../../../modules/desktop.nix).wslDesktop {
-            inherit pkgs;
-            inherit (pkgs) lib;
-          }).home.packages
+          builtins.filter
+            (
+              package:
+              builtins.elem (package.pname or package.name) [
+                "spotify"
+                "signal-desktop"
+              ]
+            )
+            ((import ../../fixtures/packages.nix { inherit inputs; }).mkHome system [
+              (import ../../../modules/tools.nix).wslDesktop
+            ]).config.home.packages
         )
         [
           "aarch64-linux"
@@ -185,32 +179,31 @@ in
     ];
   };
 
-  testLinuxDesktopModuleDoesNotInstallAppsOnDarwin = {
-    expr =
-      let
-        pkgs = mkPkgs "aarch64-darwin";
-      in
-      ((import ../../../modules/desktop.nix).linuxDesktop {
-        inherit pkgs;
-        inherit (pkgs) lib;
-      }).home.packages;
+  testDarwinHomeDoesNotInstallLinuxGuiPackages = {
+    expr = builtins.filter (
+      package:
+      builtins.elem (package.pname or package.name) [
+        "google-chrome"
+        "nautilus"
+      ]
+    ) darwin.config.home.packages;
     expected = [ ];
   };
 
   testWSLHomeModuleExcludesNativeDesktopPackages =
     let
-      pkgs = mkPkgs "x86_64-linux";
-      tools =
-        ((import ../../../modules/tools.nix).homeManager {
-          inherit (wsl) config;
-          inherit inputs pkgs;
-          inherit (pkgs) lib;
-        }).home.packages;
+      pkgs = homeConfigurations.mkPkgs "x86_64-linux";
       contains = needle: packages: builtins.any (package: package.drvPath == needle.drvPath) packages;
     in
     {
       expr = {
-        sharedTools = builtins.all (package: contains package wsl.config.home.packages) tools;
+        sharedTools =
+          builtins.all (package: contains package wsl.config.home.packages)
+            ((import ../../../modules/tools.nix).homeManager {
+              inherit (wsl) config;
+              inherit inputs pkgs;
+              inherit (pkgs) lib;
+            }).home.packages;
         excludesDiscord = !(contains pkgs.discord wsl.config.home.packages);
         excludesCompositor = !(contains pkgs.hyprland wsl.config.home.packages);
         excludesLauncher = !(contains pkgs.fuzzel wsl.config.home.packages);
@@ -230,24 +223,24 @@ in
       homebrewPaths = builtins.all (
         path: builtins.elem path darwin.config.home.sessionPath
       ) darwinDeclarations.home.sessionPath;
-      terminfo = builtins.match ".*TERMINFO_DIRS.*" darwin.config.programs.zsh.envExtra != null;
     };
     expected = {
       homebrew = darwinDeclarations.home.sessionVariables.HOMEBREW_AUTO_UPDATE_SECS;
       onePassword = darwinDeclarations.home.sessionVariables.OP_BIOMETRIC_UNLOCK_ENABLED;
       homebrewPaths = true;
-      terminfo = true;
     };
   };
 
   testTerminalKeybindingHelpersHavePlatformScopedPackages = {
     expr = {
-      darwinSystem = darwinPackages.contains darwinPackages.pkgs.aerospace darwinPackages.system;
+      darwinHome = builtins.any (
+        package: package.drvPath == darwin.pkgs.aerospace.drvPath
+      ) darwin.config.home.packages;
       linuxHome = builtins.any (package: (package.pname or "") == "aerospace") linux.config.home.packages;
       wslHome = builtins.any (package: (package.pname or "") == "aerospace") wsl.config.home.packages;
     };
     expected = {
-      darwinSystem = true;
+      darwinHome = true;
       linuxHome = false;
       wslHome = false;
     };

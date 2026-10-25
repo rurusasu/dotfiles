@@ -1,28 +1,4 @@
-{ pkgs, ... }:
-let
-  # nixpkgs にないプラグインは、現在利用しているコミットとハッシュで固定する。
-  modes = pkgs.vimUtils.buildVimPlugin {
-    pname = "modes.nvim";
-    version = "8022c7345e51";
-    src = pkgs.fetchFromGitHub {
-      owner = "mvllow";
-      repo = "modes.nvim";
-      rev = "8022c7345e51423b4cc6333971f3cbfb7e6035bc";
-      hash = "sha256-17Rwm2QYMAgeavYFUTVy2gbCv3mgD89FKMKndqCbb3A=";
-    };
-  };
-  devcontainer = pkgs.vimUtils.buildVimPlugin {
-    pname = "devcontainer-cli.nvim";
-    version = "00b08c1dd2b2";
-    src = pkgs.fetchFromGitHub {
-      owner = "erichlf";
-      repo = "devcontainer-cli.nvim";
-      rev = "00b08c1dd2b272b5b56b265de148c38d12ea0597";
-      hash = "sha256-5ASPCFzVOndi8wbLpmxNJcHpmWGaqC1qgmT7bptZ3+A=";
-    };
-    dependencies = [ pkgs.vimPlugins.toggleterm-nvim ];
-  };
-in
+{ inputs, pkgs, ... }:
 {
   programs.neovim.plugins = [
     # 構文解析に使う言語を指定し、Tree-sitter を標準オプションで導入する。
@@ -68,7 +44,11 @@ in
     }
     # 編集モードに応じてカーソル行の色を変える。
     {
-      plugin = modes;
+      # nixpkgs にないプラグインのソースは flake.lock で固定する。
+      plugin = pkgs.vimUtils.buildVimPlugin {
+        name = "modes.nvim";
+        src = inputs.modes-nvim;
+      };
       type = "lua";
       config = ''require("plugins.modes")'';
     }
@@ -104,7 +84,11 @@ in
     }
     # Devcontainer の起動・接続・終了を Neovim から操作する。
     {
-      plugin = devcontainer;
+      plugin = pkgs.vimUtils.buildVimPlugin {
+        name = "devcontainer-cli.nvim";
+        src = inputs.devcontainer-cli-nvim;
+        dependencies = [ pkgs.vimPlugins.toggleterm-nvim ];
+      };
       type = "lua";
       config = ''require("plugins.devcontainer")'';
     }

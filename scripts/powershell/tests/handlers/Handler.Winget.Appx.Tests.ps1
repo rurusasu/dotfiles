@@ -7,6 +7,14 @@
     if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) {
         function global:Get-AppxPackage { param([string]$Name) $null = $Name; return $null }
     }
+    function Get-DirectInstallerFixtureVersion {
+        param(
+            [version]$DeclaredVersion,
+            [ValidateSet('current', 'newer', 'older')][string]$Relation
+        )
+        $revisionChange = @{ current = 0; newer = 1; older = -1 }[$Relation]
+        return [version]::new($DeclaredVersion.Major, $DeclaredVersion.Minor, $DeclaredVersion.Build, $DeclaredVersion.Revision + $revisionChange).ToString()
+    }
 }
 
 Describe 'WingetHandler direct AppX installer' {
@@ -28,11 +36,6 @@ Describe 'WingetHandler direct AppX installer' {
         New-Item -ItemType Directory -Path $script:appLocation -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $script:appLocation 'Dia.exe') -Value 'fixture'
         Set-Content -LiteralPath (Join-Path $script:appLocation 'AppxManifest.xml') -Value '<Package><Applications><Application Id="Dia" Executable="Dia.exe" /></Applications></Package>'
-        $script:registration = [pscustomobject]@{
-            Name = 'Example.Dia'; PackageFamilyName = 'Example.Dia_testpublisher'
-            Publisher = 'CN=Fixture'; Version = '1.1.0.6'; Architecture = 'X64'
-            InstallLocation = $script:appLocation
-        }
         $script:registered = $false
         $script:dependencyRegistration = $null
         $script:registerAfterInstall = $true
@@ -50,11 +53,16 @@ Describe 'WingetHandler direct AppX installer' {
             Id = 'Example.Dia'; SourceName = 'direct'; InstallTimeoutSeconds = 73
             DirectInstaller = [pscustomobject]@{
                 type = 'appx'; name = 'Example.Dia'; packageFamilyName = 'Example.Dia_testpublisher'
-                publisher = 'CN=Fixture'; version = '1.1.0.6'; architecture = 'x64'; executable = 'Dia.exe'
+                publisher = 'CN=Fixture'; version = '1.0.0.1'; architecture = 'x64'; executable = 'Dia.exe'
                 url = 'https://example.invalid/Dia.x64.msix'; sha256 = ('ab' * 32)
                 dependencies = @([pscustomobject]@{ url = 'https://example.invalid/vclibs.appx'; sha256 = ('cd' * 32) })
             }
             VerifyCommand   = [pscustomobject]@{ type = 'appxLaunchTarget'; command = 'Example.Dia'; args = @('Example.Dia_testpublisher!Dia') }
+        }
+        $script:registration = [pscustomobject]@{
+            Name = 'Example.Dia'; PackageFamilyName = 'Example.Dia_testpublisher'
+            Publisher = 'CN=Fixture'; Version = $script:package.DirectInstaller.version; Architecture = 'X64'
+            InstallLocation = $script:appLocation
         }
         Mock Write-Host {}
         Mock Get-AppxPackage {
@@ -106,11 +114,11 @@ Describe 'WingetHandler direct AppX installer' {
     It 'should accept only the matching registered package with a current version and real executable' {
         $script:registered = $true
         $script:handler.TestDirectInstallerCurrent($script:package) | Should -BeTrue
-        $script:registration.Version = '1.2.0.0'
+        $script:registration.Version = Get-DirectInstallerFixtureVersion $script:package.DirectInstaller.version 'newer'
         $script:handler.TestDirectInstallerCurrent($script:package) | Should -BeTrue
-        $script:registration.Version = '1.0.0.0'
+        $script:registration.Version = Get-DirectInstallerFixtureVersion $script:package.DirectInstaller.version 'older'
         $script:handler.TestDirectInstallerCurrent($script:package) | Should -BeFalse
-        $script:registration.Version = '1.1.0.6'
+        $script:registration.Version = $script:package.DirectInstaller.version
         $script:registration.Publisher = 'CN=Other'
         $script:handler.TestDirectInstallerCurrent($script:package) | Should -BeFalse
         $script:registration.Publisher = 'CN=Fixture'
@@ -169,19 +177,19 @@ Describe 'WingetHandler direct AppX installer' {
             $script:package.DirectInstaller.dependencies[0] = [pscustomobject]@{
                 url = 'https://example.invalid/vclibs.appx'; sha256 = ('cd' * 32)
                 name = 'Example.Framework'; packageFamilyName = 'Example.Framework_fixture'
-                publisher = 'CN=Framework'; version = '14.0.33728.0'; architecture = 'x64'
+                publisher = 'CN=Framework'; version = '2.0.0.1'; architecture = 'x64'
             }
             $script:dependencyRegistration = [pscustomobject]@{
                 Name = 'Example.Framework'; PackageFamilyName = 'Example.Framework_fixture'
-                Publisher = 'CN=Framework'; Version = '14.0.33728.0'; Architecture = 'X64'; Status = 'Ok'
+                Publisher = 'CN=Framework'; Version = $script:package.DirectInstaller.dependencies[0].version; Architecture = 'X64'; Status = 'Ok'
             }
         }
 
-        It 'should skip downloading and redeploying a matching dependency version <Version>' -TestCases @(
-            @{ Version = '14.0.33728.0' }; @{ Version = '14.0.40000.0' }
+        It 'should skip downloading and redeploying a matching dependency with a <Relation> version' -TestCases @(
+            @{ Relation = 'current' }; @{ Relation = 'newer' }
         ) {
-            param($Version)
-            $script:dependencyRegistration.Version = $Version
+            param($Relation)
+            $script:dependencyRegistration.Version = Get-DirectInstallerFixtureVersion $script:package.DirectInstaller.dependencies[0].version $Relation
             $null = $script:handler.InvokePackageInstall($script:package, @())
             $global:LASTEXITCODE | Should -Be 0
             $script:downloaded.Count | Should -Be 1
@@ -190,7 +198,7 @@ Describe 'WingetHandler direct AppX installer' {
         }
 
         It 'should download the pinned dependency when the registered dependency has <Fault>' -TestCases @(
-            @{ Fault = 'an older version'; Property = 'Version'; Value = '14.0.10000.0' }
+            @{ Fault = 'an older version'; Property = 'Version'; Value = 'older' }
             @{ Fault = 'a different architecture'; Property = 'Architecture'; Value = 'Arm64' }
             @{ Fault = 'a different publisher'; Property = 'Publisher'; Value = 'CN=Other' }
             @{ Fault = 'a different family'; Property = 'PackageFamilyName'; Value = 'Example.Framework_other' }
@@ -198,7 +206,10 @@ Describe 'WingetHandler direct AppX installer' {
             @{ Fault = 'an unhealthy status'; Property = 'Status'; Value = 'Modified' }
         ) {
             param($Fault, $Property, $Value)
-            $script:dependencyRegistration.$Property = $Value
+            $script:dependencyRegistration.$Property = if ($Property -eq 'Version') {
+                Get-DirectInstallerFixtureVersion $script:package.DirectInstaller.dependencies[0].version $Value
+            }
+            else { $Value }
             $null = $script:handler.InvokePackageInstall($script:package, @())
             $global:LASTEXITCODE | Should -Be 0
             $script:downloaded.Count | Should -Be 2
@@ -214,12 +225,12 @@ Describe 'WingetHandler direct AppX installer' {
         }
     }
 
-    It 'should skip download and deployment when the matching AppX version <Version> is already current' -TestCases @(
-        @{ Version = '1.1.0.6' }; @{ Version = '1.2.0.0' }
+    It 'should skip download and deployment when the matching AppX has a <Relation> version' -TestCases @(
+        @{ Relation = 'current' }; @{ Relation = 'newer' }
     ) {
-        param($Version)
+        param($Relation)
         $script:registered = $true
-        $script:registration.Version = $Version
+        $script:registration.Version = Get-DirectInstallerFixtureVersion $script:package.DirectInstaller.version $Relation
         $null = $script:handler.InvokeDirectInstaller($script:package)
         $global:LASTEXITCODE | Should -Be 0
         Should -Invoke Invoke-WebRequest -Times 0

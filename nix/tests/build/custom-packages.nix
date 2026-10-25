@@ -1,4 +1,5 @@
 {
+  inputs,
   pkgs,
   chatgptDesktopCheck ? null,
 }:
@@ -7,16 +8,12 @@ let
     system = pkgs.stdenv.hostPlatform.system;
     config.allowUnfree = true;
   };
-  customPackages = [
+in
+buildPkgs.linkFarm "custom-package-builds" (
+  [
     {
       name = "orca-editor";
-      path = buildPkgs.callPackage ../../modules/editors/orca/package.nix { };
-    }
-  ]
-  ++ buildPkgs.lib.optionals (buildPkgs.stdenv.hostPlatform.system == "x86_64-linux") [
-    {
-      name = "comfyui-desktop";
-      path = buildPkgs.callPackage ../../modules/comfyui/package.nix { };
+      path = inputs.llm-agents.packages.${buildPkgs.stdenv.hostPlatform.system}.orca;
     }
   ]
   ++ buildPkgs.lib.optionals (chatgptDesktopCheck != null) [
@@ -28,8 +25,10 @@ let
   ++ buildPkgs.lib.optionals buildPkgs.stdenv.hostPlatform.isDarwin [
     {
       name = "dia-browser";
-      path = buildPkgs.callPackage ../../modules/browsers/dia/package.nix { };
+      path = import ../../modules/browsers/dia {
+        inherit inputs;
+        pkgs = buildPkgs;
+      };
     }
-  ];
-in
-buildPkgs.linkFarm "custom-package-builds" customPackages
+  ]
+)

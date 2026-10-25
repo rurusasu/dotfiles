@@ -17,7 +17,6 @@ let
       modules = [
         ../../home/common.nix
         ../../modules/editors/nvim
-        ../../modules/terminals/wezterm/defaults.nix
         {
           home = {
             username = "test-user";
@@ -42,11 +41,12 @@ in
       system:
       let
         cfg = (mkHome system).config.programs.wezterm;
-        appearance = import ../../modules/terminals/appearance.nix;
       in
       {
         inherit system;
-        font = (mkPkgs system).lib.hasInfix appearance.font_family cfg.extraConfig;
+        font =
+          cfg.settings.font
+          == (mkPkgs system).lib.generators.mkLuaInline "wezterm.font(${builtins.toJSON (import ../../modules/terminals/appearance.nix).font_family})";
         font_size = cfg.settings.font_size;
         color_scheme = cfg.settings.color_scheme;
       }

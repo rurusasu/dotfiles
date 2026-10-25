@@ -3,11 +3,11 @@
 共通のキー割り当てを `nix/home/keybindings/bindings.nix` に置き、
 `nix/home/keybindings/aerospace.nix` の純粋な関数で AeroSpace の設定へ変換する。
 アプリ選択・起動コマンドは同ディレクトリの `darwin-commands.nix` が所有する。
-`nix/hosts/aarch64-darwin/omarchy-keybindings.nix` はサービス、macOS の既存ショートカットとの競合、
-OS 固有の有効化を担当する。home 側の生成結果を通常の Nix import で受け取り、
-nix-darwin の `services.aerospace` へ渡す。Home Manager 側で同じサービスを管理しない。
-nix-darwin の `services.aerospace` が設定ファイルを
-Nix store に生成し、launchd で起動する。chezmoi で AeroSpace 設定を配布しない。
+`nix/home/keybindings/darwin.nix` はユーザーサービス、macOS の既存ショートカットとの競合、
+ユーザー設定を担当する。同ディレクトリの生成結果を通常の Nix import で受け取り、
+Home Manager の `programs.aerospace` へ渡す。Home Manager が設定ファイルを
+Nix store に生成し、launchd のユーザーエージェントで起動する。`nix/home/darwin.nix` が
+この module を選択し、`nix/hosts/darwin.nix` が nix-darwin の OS 設定を担当する。
 
 Unix のパッケージ導入・アプリ設定は `nix/modules/` にまとめ、host は必要な module を
 import する。Windows の導入は `windows/winget/packages.json` を直接管理する。
@@ -61,7 +61,7 @@ native NixOS、Windows デスクトップ、WSL の対応範囲は [共通定義
 | ⌘Ctrl Option Escape                     | キーの横取りを一時停止 / 再開                                |
 
 Spotlight、ウィンドウ巡回、⌘Shift 数字のスクリーンショットの競合を
-nix-darwin activation で無効化する。他のシステムショートカットの設定は保持する。
+Home Manager activation で無効化する。他のシステムショートカットの設定は保持する。
 Raycast などでユーザーが追加したグローバルキーは別途競合確認が必要。
 
 ## macOS での差異
@@ -79,23 +79,23 @@ Hyprland の scrolling/dwindle 切り替え、pseudo、sticky、透明度、マ�
 
 ## 反映と検証
 
-確認済みの範囲は設定のビルドとパーサー検査です。nix-darwin の実機反映、Accessibility 許可、実際のキー入力は未検証です。
+Home Manager への移行後の実機反映、Accessibility 許可、実際のキー入力は未検証です。
 
 通常は `nrs` で適用する。ブランチから適用する場合は対象 checkout 内で
 `./install.sh` を使う。
 初回はシステム設定 → プライバシーとセキュリティ → アクセシビリティで
-AeroSpace を許可する。この許可は nix-darwin では付与できない。
+AeroSpace を許可する。この許可は実機で設定する。
 システムショートカットの無効化が反映されない場合はログアウト・ログインする。
 
 ```sh
 aerospace reload-config --dry-run
 aerospace list-workspaces --all
-launchctl print gui/$(id -u)/org.nixos.aerospace
+launchctl print gui/$(id -u)/org.nix-community.home.aerospace
 ```
 
 実際のキー入力で ⌘Enter、⌘F、⌘T、⌘1/2、⌘Shift 2、⌘Tab を確認する。
 キー一覧・設定検査の成功だけでは macOS によるキー横取りや Accessibility 許可を検証できない。
 回復時は ⌘Ctrl Option Escape、または `aerospace mode passthrough` を使う。
-完全に無効化する場合は `services.aerospace.enable = lib.mkForce false` を宣言して再反映する。
-無効化中は標準ショートカットの無効化処理と専用 Dock 設定も生成しない。
+完全に無効化する場合は `programs.aerospace.enable = lib.mkForce false` を Home Manager に宣言して再反映する。
+無効化中は標準ショートカットの無効化処理と AeroSpace 用の Dock 設定（`mru-spaces` / `expose-group-apps`）を生成しない。`nix/home/darwin.nix` の共通 Dock 設定は引き続き適用する。
 無効化した macOS システムショートカットはシステム設定から必要に応じて再度有効にする。

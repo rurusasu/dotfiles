@@ -8,15 +8,14 @@
 
 ## 編集先の目安
 
-- ホスト固有: `nix/hosts/`
+- システム設定: `nix/hosts/{darwin,nixos,linux,wsl}.nix`。OS・CPU 別のサブディレクトリは作らず、CPU は `system` 引数で選択する
 - 再利用モジュール: `nix/modules/`
-- Home Manager: `nix/home/`
-- Unix のパッケージ導入・アプリ設定: `nix/modules/`。Unix CLI の PATH への導入は `tools.nix`、Linux / WSLg GUI は `desktop.nix`、Darwin system GUI は `desktop-darwin.nix` に定義し、個別アプリの設定・連携は各 module にまとめる
-- CLI の `programs.*.enable` と `home.packages`: `nix/modules/tools.nix`。各アプリ module は設定・連携・package override を担当する。新しい GUI の導入は `tools.nix` に追加しない
-- ホストのパッケージ構成: `tools.nix` / `desktop.nix` が公開する対象の module、Darwin の `desktop-darwin.nix`、各アプリ設定 module を imports で選択する
-- GUI の移行範囲: Chrome / Nautilus（Files）/ Obsidian / Linux 1Password GUI と WSLg の Spotify / Signal は `desktop.nix`、Darwin の Dia / Obsidian / Raycast / 1Password GUI は `desktop-darwin.nix`。ChatGPT / Orca / Ghostty / WezTerm / Discord と `nativeDesktop` の既存選択子は現時点では `tools.nix` に残る
+- Home Manager: 共通設定は `nix/home/common.nix`、Darwin / WSL は `nix/home/{darwin,wsl}.nix`、native / standalone Linux は `nix/hosts/default.nix` の `linuxHome`
+- Unix のパッケージ導入・アプリ設定: `nix/modules/`。CLI・GUI の導入宣言は `tools.nix`、各アプリ固有の設定・連携・package 定義は各 module にまとめる
+- CLI・GUI の `programs.*.enable` と `home.packages`: `nix/modules/tools.nix`。各アプリ module は設定・連携・package override を担当する
+- ホストのパッケージ構成: GUI は `tools.linuxDesktop` / `tools.wslDesktop` / `tools.darwin` を import して選択する。共有 CLI は `nix/home/common.nix` が `tools.homeManager` を選択する
 - Windows の導入情報: `windows/{winget,npm,pnpm}/packages.json` を直接管理し、Unix module から生成しない
-- 共通キー配列・設定生成関数・ユーザー設定: `nix/home/keybindings/`。host 配下には OS の service/有効化・競合解除を置く。純粋な関数を Home Manager module の imports に渡さない
+- 共通キー配列・設定生成関数・ユーザー設定: `nix/home/keybindings/`。Darwin の AeroSpace とユーザー shortcut は `darwin.nix`、native NixOS の OS service・セッション有効化は `nix/hosts/linux.nix` に置く。純粋な関数を Home Manager module の imports に渡さない
 - flake wiring: root の `flake.nix`。custom package の出力は `nix/outputs.nix`、テスト登録は `nix/tests/default.nix`、formatter は `nix/formatter.nix`
 - nix-unit の値テスト: `nix/tests/unit/`
 - ビルド・実行テストの derivation: `nix/tests/build/`
@@ -25,7 +24,7 @@
 テストの登録は `nix/tests/default.nix`、配置・実行方法は [tests/README.md](tests/README.md) を参照する。
 flake の `checks` は nix-unit とビルドテストの公開入口であり、ディレクトリの分類名ではない。
 
-Unix CLI の導入は `tools.nix`、Linux / WSLg GUI は `desktop.nix`、Darwin system GUI は `desktop-darwin.nix`、設定・連携は機能ごとの module、Windows の導入情報は独立した manifest、OS の動作は host に分ける。詳細は [分割の理由と編集先](../docs/nix/package-management.md#分割の理由と編集先)。
+Unix の CLI・GUI 導入は `tools.nix`、各アプリ固有の設定・連携・package 定義は各 module、Windows の導入情報は独立した manifest、OS の動作と `tools.nix` の選択子の import は host に分ける。詳細は [分割の理由と編集先](../docs/nix/package-management.md#分割の理由と編集先)。
 キー配列も同じ境界で分割する。native NixOS と WSL を同じデスクトップとして扱わない。詳細は [対応範囲](../docs/chezmoi/omarchy.md)。
 
 ## 実行

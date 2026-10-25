@@ -1,18 +1,19 @@
 { inputs, pkgs }:
 let
-  darwin = inputs.nix-darwin.lib.darwinSystem {
-    system = "aarch64-darwin";
-    modules = [
-      ../../modules/docker.nix
-      {
-        system.primaryUser = "test-user";
-        users.users.test-user.home = "/Users/test-user";
-        homebrew.enable = true;
-        homebrew.casks = [ "docker-desktop" ];
-      }
-    ];
-  };
-  activation = pkgs.writeText "docker-desktop-activation" darwin.config.system.activationScripts.postActivation.text;
+  activation =
+    pkgs.writeText "docker-desktop-activation"
+      (inputs.nix-darwin.lib.darwinSystem {
+        system = "aarch64-darwin";
+        modules = [
+          ../../modules/docker.nix
+          {
+            system.primaryUser = "test-user";
+            users.users.test-user.home = "/Users/test-user";
+            homebrew.enable = true;
+            homebrew.casks = [ "docker-desktop" ];
+          }
+        ];
+      }).config.system.activationScripts.postActivation.text;
 in
 pkgs.runCommand "docker-desktop-activation-check"
   {

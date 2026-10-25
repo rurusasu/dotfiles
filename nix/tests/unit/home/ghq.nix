@@ -5,8 +5,6 @@
 let
   inherit (homeConfigurations)
     homes
-    wsl
-    lib
     ;
 in
 {
@@ -23,7 +21,7 @@ in
   testWslGhqRootsUseWindowsDrives = {
     expr =
       let
-        roots = lib.toList wsl.config.programs.git.settings.ghq.root;
+        roots = homeConfigurations.lib.toList homeConfigurations.wsl.config.programs.git.settings.ghq.root;
       in
       roots != [ ] && builtins.all (root: builtins.match "/mnt/[a-z](/.*)?" root != null) roots;
     expected = true;

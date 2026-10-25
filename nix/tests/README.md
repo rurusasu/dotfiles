@@ -13,6 +13,9 @@ nix-unit と競合する別のテストフレームワークではありませ�
 | `fixtures/` | テスト用 pkgs、NixOS hardware module などの共有入力                             | テストから import                           |
 
 Home Manager の構成テストは `unit/home/`、host の構成テストは `unit/hosts/` に置きます。
+本番の system module は `nix/hosts/*.nix`、OS ごとの Home Manager module は
+Darwin / WSL の `nix/home/{darwin,wsl}.nix` と native / standalone Linux 共通の
+`nix/hosts/default.nix` の `linuxHome` を参照し、CPU architecture は `system` 引数で選択します。
 `unit/home/` はアプリケーションごとにファイルを分け、`composition.nix` はホスト間の結合と
 OS 境界だけを検証します。共通の Home Manager 評価は `fixtures/home-configurations.nix` を使います。
 登録側で一度作った `homeConfigurations` を各テストへ渡し、同じホスト構成の評価を共有します。
@@ -54,10 +57,11 @@ Darwin / Linux の `custom-package-builds` は `chatgpt-desktop` check も含み
 ビルド・CLI 起動、および Linux の desktop entry と upstream tmpfiles 規則の一致を確認します。
 GUI の起動・ログイン・操作はこの check の対象外で、各 OS の実機で確認します。
 Darwin の `darwin-bundled-app-cleanup` は、一時ディレクトリ内のアプリを使って
-付属アプリの削除・bundle ID の検証・対象外データの保持・再実行を検証します。
-`hermes-configuration` は Linux / Darwin 向けに生成した bootstrap manifest を実際の parser で検証し、
-Compose sidecar の localhost 公開・接続先・要求 timeout・認証データの mount を確認します。
-プロファイル名・commit 値・1Password item の一覧はテスト側に複製しません。
+`nix/hosts/darwin-app-cleanup.nix` の付属アプリの削除・bundle ID の検証・対象外データの保持・再実行を検証します。
+Codex / Hermes の unit は公式 Home Manager 設定と共通 MCP の配線を検証します。
+`hermes-configuration` は Home Manager の MCP 定義を client 向け JSON に変換し、
+Chrome / X API の localhost HTTP 接続先と Pipedream の OAuth 設定を確認します。
+共有する native ユーザーサービスの起動、headless browser の操作、API 認証は実機で確認します。
 
 ```bash
 # 全 system の flake 出力を評価する。テスト本体は実行しない
@@ -75,11 +79,11 @@ nix build .#checks.aarch64-darwin.nix-unit --no-link --no-write-lock-file
 
 `nix flake check --no-build` は評価確認です。nix-unit assertion や実行テストの成功は、
 対象 check の build 結果で確認します。Nix が既存の成功済み出力を再利用する場合もあります。
-`powershell-formatter` と `treefmt` は、PSScriptAnalyzer の公式 GitHub release asset を
-バージョン付き URL の Nix input として取得し、Nix store の module manifest を直接 import します。
-現在は 1.25.0 に固定し、`flake.lock` が取得内容の hash を記録します。
-更新時は `flake.nix` の `psscriptanalyzer` URL を選んだ upstream バージョンの asset に変更し、
-`nix flake update psscriptanalyzer` でその input の lock を更新します。
+`powershell-formatter` と `treefmt` は、PSScriptAnalyzer の PowerShell Gallery 配布パッケージを
+Nix input として取得し、Nix store の module manifest を直接 import します。
+`flake.nix` の `psscriptanalyzer` URL はバージョンを指定せず、取得済みの配布物と内容の hash は
+`flake.lock` で固定します。更新時は `nix flake update psscriptanalyzer` で input を再解決し、
+その lock を更新します。
 依存 input の取得は build に先行し、formatter の実行中に `Install-Module` を呼びません。
 空の HOME でも同じ依存を使用します。`powershell-formatter` は未整形 fixture を整形し、
 CRLF・日本語の BOM と二度目の実行で byte / 更新時刻が変わらないことを検証します。
@@ -94,9 +98,9 @@ Nix formatter は host module ではなく固定した store module を使いま
 `activationPackage` を checks に登録すれば Home Manager の構成ビルドも検証できますが、
 それ自体は activation の実行や、設定値を比較する nix-unit テストを意味しません。
 
-Linux bootstrap CI は `x86_64-linux`（`ubuntu-24.04`）で本番 NixOS system と standalone Home Manager activation package を build します。
-Darwin CI は `aarch64-darwin`（`macos-15`）の runner で `darwin-rebuild switch` と全 flake checks を実行します。
-WSL CI も本番経路の `nixos-rebuild switch` を実行します。個別の Hermes Python suite や Darwin cask artifact check は CI で実行しません。
+Linux bootstrap CI は `x86_64-linux`（`ubuntu-24.04`）で `nix/hosts/linux.nix` の本番 NixOS system と standalone Home Manager activation package を build します。両構成のユーザー設定は `nix/hosts/default.nix` の `linuxHome` を共有します。
+Darwin CI は `aarch64-darwin`（`macos-15`）の runner で `nix/hosts/darwin.nix` を使う `darwin-rebuild switch` と全 flake checks を実行します。
+WSL CI も `nix/hosts/wsl.nix` を使う本番経路の `nixos-rebuild switch` を実行します。Darwin cask artifact check は CI で実行しません。
 Python unittest suite は CI の gate から外し、workflow 検証は `actionlint`、設定適用は対象 platform の rebuild で行います。
 共通の `nix` job は statix の lint を確認し、事前の `nix eval` / `nix flake check --no-build` は実行しません。
 `aarch64-linux` は flake の support/output には含まれますが、この workflow には ARM64 Linux runner の native build がありません。

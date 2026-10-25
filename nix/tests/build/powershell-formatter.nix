@@ -1,15 +1,20 @@
 # Exercise the configured formatter with no user modules and forbidden downloads.
 { pkgs, formatter }:
-let
-  quotePowerShell = value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] value + "'";
-  probe = pkgs.writeText "powershell-formatter-probe.ps1" ''
+pkgs.runCommand "powershell-formatter-check" { } ''
+  export HOME="$TMPDIR/empty-home"
+  mkdir -p "$HOME"
+  ${formatter.command} -NoProfile -NonInteractive -File ${pkgs.writeText "powershell-formatter-probe.ps1" ''
     $ErrorActionPreference = 'Stop'
     $env:PSModulePath = Join-Path $PSHOME 'Modules'
     function global:Install-Module { throw 'Runtime module installation is forbidden' }
     function global:Save-Module { throw 'Runtime module downloads are forbidden' }
     function global:Invoke-WebRequest { throw 'Runtime network access is forbidden' }
     function global:Invoke-RestMethod { throw 'Runtime network access is forbidden' }
-    $formatter = [scriptblock]::Create(${quotePowerShell (builtins.elemAt formatter.options 2)} + ' @args')
+    $formatter = [scriptblock]::Create(${
+      (value: "'" + builtins.replaceStrings [ "'" ] [ "''" ] value + "'") (
+        builtins.elemAt formatter.options 2
+      )
+    } + ' @args')
     $directory = Join-Path $args[0] 'scripts/powershell'
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
     $target = Join-Path $directory 'fixture.ps1'
@@ -29,11 +34,6 @@ let
     if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($target)) -cne $first) { throw 'Formatter is not byte-idempotent' }
     if ([IO.File]::GetLastWriteTimeUtc($target) -ne $modified) { throw 'Formatter rewrote an unchanged file' }
     Write-Output 'Empty-HOME PowerShell formatting, BOM, CRLF, and idempotence passed without downloads'
-  '';
-in
-pkgs.runCommand "powershell-formatter-check" { } ''
-  export HOME="$TMPDIR/empty-home"
-  mkdir -p "$HOME"
-  ${formatter.command} -NoProfile -NonInteractive -File ${probe} "$TMPDIR/fixture"
+  ''} "$TMPDIR/fixture"
   touch "$out"
 ''

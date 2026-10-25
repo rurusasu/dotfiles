@@ -104,7 +104,7 @@ jobs:
           if ($parsedXml.DocumentElement.Name -cne 'fontconfig') {
             throw 'The rendered fontconfig XML must have a fontconfig root'
           }
-          $canonicalXml = [IO.File]::ReadAllText((Join-Path $env:GITHUB_WORKSPACE 'nix/hosts/x86_64-linux/wsl/fonts/fontconfig.conf'))
+          $canonicalXml = [IO.File]::ReadAllText((Join-Path $env:GITHUB_WORKSPACE 'nix/modules/fonts/wsl-fontconfig.conf'))
           if ($renderedXml -cne (($canonicalXml -replace "`r", '').TrimEnd())) {
             throw 'The rendered fontconfig XML differs from its Nix source'
           }

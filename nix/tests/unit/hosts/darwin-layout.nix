@@ -1,9 +1,8 @@
 let
-  entrypoint = ../../../hosts/aarch64-darwin/default.nix;
-  configuration = ../../../hosts/aarch64-darwin/configuration.nix;
-  entrypointText = builtins.readFile entrypoint;
-  configurationText =
-    if builtins.pathExists configuration then builtins.readFile configuration else "";
+  hostModule = ../../../hosts/darwin.nix;
+  homeModule = ../../../home/darwin.nix;
+  hostText = builtins.readFile hostModule;
+  homeText = builtins.readFile homeModule;
   hasLine =
     pattern: content:
     builtins.any (line: builtins.match ".*${pattern}.*" line != null) (
@@ -11,53 +10,66 @@ let
     );
 in
 {
-  testDarwinHostProvidesConfigurationFile = {
-    expr = builtins.pathExists configuration;
+  testDarwinHostProvidesFlatModule = {
+    expr = builtins.pathExists hostModule;
     expected = true;
   };
 
-  testDarwinHostEntrypointImportsConfiguration = {
-    expr =
-      hasLine "imports[[:space:]]*=[[:space:]]*\\[" entrypointText
-      && hasLine "\\./configuration\\.nix" entrypointText;
-    expected = true;
-  };
-
-  testDarwinHostEntrypointImportsRequiredModules = {
-    expr =
-      let
-        inherit ((import entrypoint { })) imports;
-      in
-      builtins.all (module: builtins.elem module imports) [
-        configuration
-        ../../../hosts/aarch64-darwin/platform.nix
-        ../../../hosts/aarch64-darwin/system.nix
-      ];
-    expected = true;
-  };
-
-  testDarwinFlakeConsumesHostDirectory = {
-    expr =
-      let
-        flakeText = builtins.readFile ../../../hosts/configurations.nix;
-      in
-      hasLine "\\./aarch64-darwin" flakeText;
-    expected = true;
-  };
-
-  testDarwinSystemOptionsBelongToConfiguration = {
+  testDarwinHostUsesFlatHomeModule = {
     expr = {
-      entrypointHasSystemOptions =
-        hasLine "system[[:space:]]*=[[:space:]]*\\{" entrypointText
-        || hasLine "homebrew[[:space:]]*=[[:space:]]*\\{" entrypointText
-        || hasLine "launchd\\.user" entrypointText;
-      configurationHasSystemOptions =
-        hasLine "system[[:space:]]*=[[:space:]]*\\{" configurationText
-        && hasLine "homebrew[[:space:]]*=[[:space:]]*\\{" configurationText;
+      hostModuleIsFile = (builtins.readDir ../../../hosts)."darwin.nix" == "regular";
+      homeModuleExists = builtins.pathExists homeModule;
+      importsHomeModule = hasLine "\\.\\./home/darwin\\.nix" hostText;
     };
     expected = {
-      entrypointHasSystemOptions = false;
-      configurationHasSystemOptions = true;
+      hostModuleIsFile = true;
+      homeModuleExists = true;
+      importsHomeModule = true;
+    };
+  };
+
+  testDarwinHostImportsRequiredModules = {
+    expr =
+      let
+        host = import hostModule {
+          pkgs = { };
+          lib = { };
+          inputs = { };
+          sudoUser = "";
+          currentUser = "test-user";
+        };
+      in
+      {
+        directModuleImports = builtins.filter builtins.isPath host.imports;
+        importsDarwinTools = hasLine "import \\.\\./modules/tools\\.nix.*\\.darwin" hostText;
+        homeImports = host.home-manager.users.test-user.imports;
+      };
+    expected = {
+      directModuleImports = [ ../../../modules/docker.nix ];
+      importsDarwinTools = true;
+      homeImports = [ homeModule ];
+    };
+  };
+
+  testDarwinFlakeConsumesFlatHostModule = {
+    expr = hasLine "\\./darwin\\.nix" (builtins.readFile ../../../hosts/configurations.nix);
+    expected = true;
+  };
+
+  testDarwinModulesOwnSystemAndUserOptions = {
+    expr = {
+      hostHasSystemOptions =
+        hasLine "system[[:space:]]*=[[:space:]]*\\{" hostText
+        && hasLine "homebrew[[:space:]]*=[[:space:]]*\\{" hostText;
+      homeHasSystemOptions =
+        hasLine "system[[:space:]]*=[[:space:]]*\\{" homeText
+        || hasLine "homebrew[[:space:]]*=[[:space:]]*\\{" homeText;
+      homeHasUserLaunchd = hasLine "launchd\\.agents" homeText;
+    };
+    expected = {
+      hostHasSystemOptions = true;
+      homeHasSystemOptions = false;
+      homeHasUserLaunchd = true;
     };
   };
 }

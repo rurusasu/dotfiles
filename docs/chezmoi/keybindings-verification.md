@@ -109,6 +109,8 @@ WSLg system distro の読み取り調査では、当初 `fc-match` は FreeSans�
 
 恒久設定の `nix/hosts/x86_64-linux/wsl/fonts.nix` を含む `nixos-rebuild switch` が成功し、activation `wslgFonts` の実行を確認しました。`/usr/local/share/fonts/dotfiles-wslg/NotoSansCJK-VF.otf.ttc` は通常ファイル、32,682,580 bytes、mode `0644`、owner `root:root` で配置されています。SHA256 は `d3d8256cdec8dbcb3552284bc6b20c734dd60c2ee9df83b5758e34807c4bac32` で固定した Nix の入力と一致しました。WSLg system distro の `fc-cache` / `fc-match` でも、この本番配置先の Noto Sans CJK JP Bold を選択しています。一時検査用フォントは削除済みです。
 
+上記は検証当時の配置です。現在のフォント配置処理は `nix/hosts/wsl.nix`、WSLg 用 fontconfig は `nix/modules/fonts/wsl-fontconfig.conf` にあります。この再配置後の実機反映は、この記録では検証していません。
+
 フォント反映時の system は `/nix/store/9fy43irl4bjahgrf93gj78las0670p68-nixos-system-nixos-26.11.20261011.7fd4004` です。activation 内では WSLg を再起動しません。実行中の Weston が古い Pango font map を保持していたため、ユーザーの承認後に `wsl --shutdown` で WSL 全体を再起動しました。その後 `Win+Shift+B` で WSLg Chrome を起動し、通常 X11 の灰色の server titlebar が「新しいタブ - Google Chrome」と日本語で正常表示されることを実 UI で確認しました。恒久フォント配置と再起動後の通常 titlebar の確認が完了しています。
 
 ## CI の中断検出とテスト環境

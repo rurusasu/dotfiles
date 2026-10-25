@@ -6,7 +6,9 @@ let
       inherit system;
       config.allowUnfree = true;
     };
-  windowsManifest = builtins.fromJSON (builtins.readFile ../../../windows/winget/packages.json);
+in
+{
+  inherit mkPkgs;
   windowsPackages = builtins.listToAttrs (
     builtins.concatMap (
       source:
@@ -16,11 +18,8 @@ let
           source = source.SourceDetails.Name;
         };
       }) source.Packages
-    ) windowsManifest.Sources
+    ) (builtins.fromJSON (builtins.readFile ../../../windows/winget/packages.json)).Sources
   );
-in
-{
-  inherit mkPkgs windowsPackages;
   pnpmManifest = builtins.fromJSON (builtins.readFile ../../../windows/pnpm/packages.json);
   mkHome =
     system: modules:
@@ -51,7 +50,7 @@ in
       inputs.nix-homebrew.darwinModules.nix-homebrew
       inputs.home-manager.darwinModules.home-manager
       { nixpkgs.pkgs = mkPkgs "aarch64-darwin"; }
-      ../../hosts/aarch64-darwin
+      ../../hosts/darwin.nix
     ];
   };
 }

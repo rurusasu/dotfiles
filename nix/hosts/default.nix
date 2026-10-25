@@ -1,9 +1,38 @@
 { inputs }:
 let
   selectHomeManagerUser = configuredUser: if configuredUser == "" then "nixos" else configuredUser;
+  linuxHome =
+    args@{
+      config,
+      lib,
+      ...
+    }:
+    let
+      currentUser = builtins.getEnv "USER";
+      currentHome = builtins.getEnv "HOME";
+      # NixOS supplies account identity through Home Manager osConfig.
+      hasCurrentUser = !(args ? osConfig) && currentUser != "" && currentUser != "root";
+    in
+    {
+      home = {
+        username = lib.mkIf hasCurrentUser currentUser;
+        homeDirectory = lib.mkDefault (
+          if hasCurrentUser && currentHome != "" then currentHome else "/home/${config.home.username}"
+        );
+      };
+
+      imports = [
+        (import ../modules/tools.nix).linuxDesktop
+        (import ../modules/tools.nix).chatgpt
+        ../modules/discord
+        ../home/common.nix
+      ];
+
+      programs.git.signing.signer = "/opt/1Password/op-ssh-sign";
+    };
 in
 {
-  inherit selectHomeManagerUser;
+  inherit selectHomeManagerUser linuxHome;
 
   mkApps =
     {
@@ -39,8 +68,8 @@ in
     {
       nixos = {
         system = "x86_64-linux";
-        hostPath = ./x86_64-linux/wsl;
-        homeModulePath = ./x86_64-linux/wsl/home.nix;
+        hostPath = ./wsl.nix;
+        homeModule = ../home/wsl.nix;
       };
     }
     // (
@@ -48,10 +77,10 @@ in
         { }
       else
         {
-          linux = rec {
+          linux = {
             system = if requestedSystem == "" then "x86_64-linux" else requestedSystem;
-            hostPath = ./${system}/nixos;
-            homeModulePath = ./${system}/home.nix;
+            hostPath = ./linux.nix;
+            homeModule = linuxHome;
             inherit hardwareConfig;
           };
         }
@@ -61,16 +90,13 @@ in
     {
       system,
       hostPath,
-      configuredUser ? (import ./shared/nixos/identity.nix { lib = inputs.nixpkgs.lib; }).user,
-      homeModulePath ? null,
+      configuredUser ? (import ./identity.nix { lib = inputs.nixpkgs.lib; }).user,
+      homeModule ? null,
       extraModules ? [ ],
       overlays ? [ ],
       homeExtraSpecialArgs ? { },
       nativeIdentity ? null,
     }:
-    let
-      user = selectHomeManagerUser configuredUser;
-    in
     inputs.nixpkgs.lib.nixosSystem {
       specialArgs = {
         inherit inputs system nativeIdentity;
@@ -79,12 +105,10 @@ in
         { nixpkgs.hostPlatform = system; }
         hostPath
         { nixpkgs.overlays = overlays; }
-        ../hosts/shared/nixos/platform.nix
       ]
       ++ (
-        if homeModulePath != null then
+        if homeModule != null then
           [
-            inputs.home-manager.nixosModules.home-manager
             {
               home-manager = {
                 useGlobalPkgs = true;
@@ -93,8 +117,8 @@ in
                   inherit inputs;
                 }
                 // homeExtraSpecialArgs;
-                users.${user} = {
-                  imports = [ homeModulePath ];
+                users.${selectHomeManagerUser configuredUser} = {
+                  imports = [ homeModule ];
                 }
                 // (
                   if nativeIdentity == null then

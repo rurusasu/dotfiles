@@ -64,23 +64,17 @@ if ! have chezmoi && have curl; then
     log "chezmoi install failed; chezmoi apply will be skipped"
 fi
 
-# ── Neovim >= 0.12 (native LSP/completion and parser installer APIs) ────
-# Read the complete, short --version output instead of quitting sed early.
-# This avoids SIGPIPE under `set -o pipefail` and stays portable to BSD sed.
+# ── Neovim package installer capability ────────────────────────────────
+# Inspect the API without loading user configuration or installing packages.
 need_nvim=1
 if have nvim; then
-  ver=$(nvim --version 2>/dev/null | sed -n '1s/^NVIM v\([0-9]*\.[0-9]*\).*/\1/p')
-  if [ -z "$ver" ]; then
-    log "Neovim present but version string unparseable; will reinstall"
+  if nvim --headless --clean -u NONE -i NONE \
+    -c 'lua if type(vim.pack) ~= "table" or type(vim.pack.add) ~= "function" then vim.cmd("cquit 1") end' \
+    -c 'qa!' >/dev/null 2>&1; then
+    need_nvim=0
+    log "Neovim package installer API already present"
   else
-    major=${ver%.*}
-    minor=${ver#*.}
-    if [ "$major" -gt 0 ] || { [ "$major" -eq 0 ] && [ "$minor" -ge 12 ]; }; then
-      need_nvim=0
-      log "Neovim $ver already present"
-    else
-      log "Neovim $ver is too old (need >= 0.12); will reinstall"
-    fi
+    log "Neovim vim.pack.add is unavailable; will reinstall"
   fi
 fi
 

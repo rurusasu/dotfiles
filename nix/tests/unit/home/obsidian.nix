@@ -4,8 +4,6 @@
 }:
 let
   inherit (homeConfigurations)
-    linux
-    wsl
     darwinPackages
     ;
 in
@@ -13,8 +11,12 @@ in
   testObsidianIsSelectedByPlatformModules = {
     expr = {
       darwin = darwinPackages.contains darwinPackages.pkgs.obsidian darwinPackages.system;
-      linux = builtins.any (package: (package.pname or "") == "obsidian") linux.config.home.packages;
-      wsl = builtins.any (package: (package.pname or "") == "obsidian") wsl.config.home.packages;
+      linux = builtins.any (
+        package: (package.pname or "") == "obsidian"
+      ) homeConfigurations.linux.config.home.packages;
+      wsl = builtins.any (
+        package: (package.pname or "") == "obsidian"
+      ) homeConfigurations.wsl.config.home.packages;
     };
     expected = {
       darwin = true;

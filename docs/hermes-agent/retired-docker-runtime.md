@@ -1,30 +1,22 @@
-# Retired Docker Hermes runtime
+# Retired Docker Hermes Runtime
 
-Hermes CLI, profile bootstrap, and the messaging gateway run natively under
-Nix/Home Manager. `docker/hermes-service/compose.yml` defines only `chromium`,
-`browser-mcp`, and `xapi-mcp`. It does not provide an Agent, Dashboard,
-`hermes-bootstrap` service, or a Docker CLI backend.
+The Hermes Agent and gateway use the official Nix/Home Manager module.
+Chrome and X API MCP use shared native Home Manager services, each keeping one
+stdio child behind `mcp-proxy`. Their loopback HTTP endpoints remain
+`http://127.0.0.1:8765/mcp` and `http://127.0.0.1:8766/mcp`.
+The former Browser/noVNC and X API Compose services, images and Docker-specific
+lifecycle adapters have been removed. The native browser runs headless.
 
-The remaining runtime routes were audited and removed:
+The former Docker Agent, Dashboard and custom bootstrap engine are retired.
+Existing Docker volumes are not imported or deleted automatically. Preserve
+sessions, credentials and local changes when planning any manual migration.
+The existing `~/.hermes/.browser` browser profile and `~/.hermes/.xurl` OAuth
+cache also remain in place. Native xurl reaches the cache through Home Manager's
+`~/.xurl` and XDG configuration links, and conflicting existing paths stop
+activation.
 
-| Former route                                                                                                                                                                 | Current ownership                                                                                                                  |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/sh/hermes-agent.sh` Docker storage locks, volume seed/ownership, container secret-plan/apply, stack recovery, API readiness, gateway convergence, and image pruning | Removed; native `hermes-bootstrap.sh` and the Nix-managed `hermes-bootstrap` command apply profiles and secrets                    |
-| `scripts/sh/hermes-docker.sh` container CLI                                                                                                                                  | Removed; use `hermes` or `task hermes:cli`                                                                                         |
-| PowerShell `lib/HermesGateway.ps1` container gateway convergence                                                                                                             | Removed; WSL E2E validates the native NixOS WSL service and CLI after the public `nrs` task                                        |
-| Docker Agent/Dashboard tasks                                                                                                                                                 | Already absent; `task hermes:up`, `down`, `restart`, and `logs` operate the native gateway                                         |
-| X API shell host helpers formerly sourced from `hermes-agent.sh`                                                                                                             | Preserved in `hermes-sidecar-common.sh`; OAuth, service-account cache, token sync/rotation, rollback, and restart remain supported |
-| Browser and X API Compose routes                                                                                                                                             | Preserved; the X API `up` adapter names the three supported sidecars explicitly                                                    |
+`MCP_DOCKER` is a separate shared MCP definition and remains available.
+`docker/bootstrap-ci-tools` remains the CI tools image, and MLflow retains its
+independent Compose configuration in `docker/local-ai-services`.
 
-Tests for removed Docker Agent implementation details were removed with their
-implementations. Native installer routing, X API authentication and token cache
-contracts remain tested. PowerShell `HermesXApi.ps1` and the WSL native setup
-handler retain their current responsibilities.
-
-Deleting repository routes does not stop an existing container or remove any
-Docker volume, profile, session, browser data, or credentials. An old `hermes`
-container may still be running from a former Compose project. Its lifecycle and
-data migration require an explicit operator decision and its original project
-configuration; the current sidecar Compose project cannot manage that backend.
-See [native bootstrap operations](bootstrap.md) for the migration boundary and
-[Desktop operations](desktop.md) for the supported CLI/gateway entrypoints.
+Use [Hermes Operations](bootstrap.md) and [Desktop operations](desktop.md).

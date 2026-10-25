@@ -5,19 +5,20 @@
   ...
 }:
 let
-  modulesPath = "share/discord/modules";
+  discordPackage = pkgs.discord.override { disableUpdates = false; };
 in
 {
   imports = [ (import ../tools.nix).discord ];
   programs.discord = {
-    settings.SKIP_HOST_UPDATE = true;
-    package = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin (
-      pkgs.discord.overrideAttrs {
-        # Keep the official application signature intact, including its resources.
-        # Nixpkgs already installs native modules outside the application bundle.
-        dontFixup = true;
-      }
-    );
+    package =
+      if pkgs.stdenv.hostPlatform.isDarwin then
+        discordPackage.overrideAttrs {
+          # Keep the official application signature intact, including its resources.
+          # Nixpkgs already installs native modules outside the application bundle.
+          dontFixup = true;
+        }
+      else
+        discordPackage;
   };
 
   # Launching the app bundle directly does not run nixpkgs' CLI wrapper.
@@ -26,7 +27,7 @@ in
     config = {
       ProgramArguments = [
         "${config.programs.discord.package.passthru.stageModules}"
-        "${config.programs.discord.package}/${modulesPath}"
+        "${config.programs.discord.package}/share/discord/modules"
       ];
       RunAtLoad = true;
       KeepAlive.PathState = {

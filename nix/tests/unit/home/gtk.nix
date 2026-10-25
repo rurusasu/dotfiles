@@ -3,16 +3,10 @@
   homeConfigurations ? import ../../fixtures/home-configurations.nix { inherit inputs; },
 }:
 let
-  inherit (homeConfigurations)
-    common
-    linux
-    wsl
-    darwin
-    ;
   fontName = home: "${home.config.gtk.font.name} ${toString home.config.gtk.font.size}";
   desktopHomes = [
-    wsl
-    linux
+    homeConfigurations.wsl
+    homeConfigurations.linux
   ];
 in
 {
@@ -28,8 +22,8 @@ in
             (home.config.xdg.configFile."gtk-4.0/settings.ini".text or "");
         portalFont = home.config.dconf.settings."org/gnome/desktop/interface"."font-name" or null;
       }) desktopHomes;
-      commonEnabled = common.config.gtk.enable;
-      darwinEnabled = darwin.config.gtk.enable;
+      commonEnabled = homeConfigurations.common.config.gtk.enable;
+      darwinEnabled = homeConfigurations.darwin.config.gtk.enable;
     };
     expected = {
       homes = map (home: {
@@ -38,7 +32,7 @@ in
         gtk4 = true;
         portalFont = fontName home;
       }) desktopHomes;
-      commonEnabled = false;
+      commonEnabled = true;
       darwinEnabled = false;
     };
   };

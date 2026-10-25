@@ -1,26 +1,22 @@
 local wezterm = require("wezterm")
 local act = wezterm.action
 local config = wezterm.config_builder()
-config.font = wezterm.font("UDEV Gothic NF")
+
+local is_windows = wezterm.target_triple:find("windows") ~= nil
+local is_macos = wezterm.target_triple:find("darwin") ~= nil
 
 -- Window focus: h=left, l=right
 -- Same-process: WezTerm native. Cross-process: Win32 SetForegroundWindow via PowerShell.
 local function focus_adjacent_window(direction)
+    local offset = direction == "right" and 1 or -1
+    if not is_windows then
+        return act.ActivateWindowRelative(offset)
+    end
     return wezterm.action_callback(function(window, pane)
-        local wins = wezterm.gui.gui_windows()
-        table.sort(wins, function(a, b)
-            return a:window_id() < b:window_id()
-        end)
-        if #wins > 1 then
-            for i, w in ipairs(wins) do
-                if w:window_id() == window:window_id() then
-                    local ni = direction == "left" and ((i - 2) % #wins) + 1 or (i % #wins) + 1
-                    window:perform_action(act.ActivateWindow(ni - 1), pane)
-                    return
-                end
-            end
+        if #wezterm.gui.gui_windows() > 1 then
+            window:perform_action(act.ActivateWindowRelative(offset), pane)
+            return
         end
-        local offset = direction == "right" and "1" or "-1"
         local ps = table.concat({
             "Add-Type -TypeDef 'using System;using System.Runtime.InteropServices;",
             "public class U{",
@@ -28,7 +24,7 @@ local function focus_adjacent_window(direction)
             '[DllImport("user32")]public static extern bool SetForegroundWindow(IntPtr h);',
             '[DllImport("user32")]public static extern bool ShowWindow(IntPtr h,int n);',
             '[DllImport("user32")]public static extern bool IsIconic(IntPtr h);}\';',
-            "$d=" .. offset .. ";",
+            "$d=" .. tostring(offset) .. ";",
             "$p=@(Get-Process wezterm-gui -EA 0|Where-Object{$_.MainWindowHandle -ne 0}|Sort-Object Id);",
             "if($p.Count -lt 2){exit};",
             "$h=@($p|ForEach-Object{[IntPtr]$_.MainWindowHandle});",
@@ -44,8 +40,6 @@ local function focus_adjacent_window(direction)
 end
 
 -- Detect Windows for default shell
-local is_windows = wezterm.target_triple:find("windows") ~= nil
-local is_macos = wezterm.target_triple:find("darwin") ~= nil
 if is_windows then
     config.default_prog = { "pwsh.exe", "-NoLogo" }
     config.exit_behavior = "Close"
@@ -89,19 +83,15 @@ config.set_environment_variables = {
     SNACKS_WEZTERM = "true",
 }
 
--- zsh resolves TERM=wezterm while it starts, before .zshenv can restore
--- Home Manager's terminfo path. Provide the Darwin path to child shells
--- directly from WezTerm so startup never begins without a definition.
+-- zsh resolves TERM=wezterm before .zshenv loads Home Manager's terminfo path.
+-- The Home Manager module provides the package's terminfo path before this Lua.
 if is_macos then
-    local terminfo_user = os.getenv("USER")
-    if terminfo_user and terminfo_user ~= "" then
-        local inherited_terminfo_dirs = os.getenv("TERMINFO_DIRS")
-        local terminfo_dirs = "/etc/profiles/per-user/" .. terminfo_user .. "/share/terminfo:/usr/share/terminfo"
-        if inherited_terminfo_dirs and inherited_terminfo_dirs ~= "" then
-            terminfo_dirs = terminfo_dirs .. ":" .. inherited_terminfo_dirs
-        end
-        config.set_environment_variables.TERMINFO_DIRS = terminfo_dirs
+    local inherited_terminfo_dirs = os.getenv("TERMINFO_DIRS")
+    local terminfo_dirs = dotfiles_terminfo_directory .. ":/usr/share/terminfo"
+    if inherited_terminfo_dirs and inherited_terminfo_dirs ~= "" then
+        terminfo_dirs = terminfo_dirs .. ":" .. inherited_terminfo_dirs
     end
+    config.set_environment_variables.TERMINFO_DIRS = terminfo_dirs
 end
 
 -- Alt key sends escape sequence for fzf Alt+C support
@@ -203,7 +193,8 @@ for tab = 1, 9 do
     })
 end
 
--- Remove built-in tab/window-manager shortcuts that overlap the explicit bindings.
+-- Disable unused built-in tab/window-manager shortcuts. Chords assigned above
+-- already override defaults; disabling them here would erase those assignments.
 local default_window_manager_bindings = {
     { key = "Tab", mods = "CTRL" },
     { key = "Tab", mods = "SHIFT|CTRL" },
@@ -247,8 +238,6 @@ local default_window_manager_bindings = {
     { key = "9", mods = "SUPER" },
     { key = "@", mods = "CTRL" },
     { key = "@", mods = "SHIFT|CTRL" },
-    { key = "T", mods = "CTRL" },
-    { key = "T", mods = "SHIFT|CTRL" },
     { key = "W", mods = "CTRL" },
     { key = "Z", mods = "CTRL" },
     { key = "Z", mods = "SHIFT|CTRL" },
@@ -256,7 +245,6 @@ local default_window_manager_bindings = {
     { key = "]", mods = "SHIFT|SUPER" },
     { key = "^", mods = "CTRL" },
     { key = "^", mods = "SHIFT|CTRL" },
-    { key = "t", mods = "SHIFT|CTRL" },
     { key = "t", mods = "SUPER" },
     { key = "w", mods = "CTRL|SHIFT" },
     { key = "w", mods = "SUPER" },
@@ -269,14 +257,6 @@ local default_window_manager_bindings = {
     { key = "PageUp", mods = "SHIFT|CTRL" },
     { key = "PageDown", mods = "CTRL" },
     { key = "PageDown", mods = "SHIFT|CTRL" },
-    { key = "LeftArrow", mods = "SHIFT|CTRL" },
-    { key = "LeftArrow", mods = "SHIFT|ALT|CTRL" },
-    { key = "RightArrow", mods = "SHIFT|CTRL" },
-    { key = "RightArrow", mods = "SHIFT|ALT|CTRL" },
-    { key = "UpArrow", mods = "SHIFT|CTRL" },
-    { key = "UpArrow", mods = "SHIFT|ALT|CTRL" },
-    { key = "DownArrow", mods = "SHIFT|CTRL" },
-    { key = "DownArrow", mods = "SHIFT|ALT|CTRL" },
 }
 
 for _, binding in ipairs(default_window_manager_bindings) do

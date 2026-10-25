@@ -1,6 +1,6 @@
 # Custom packages and generated configuration outputs.
 # Application installation is owned by modules/.
-_: {
+{ inputs, ... }: {
   perSystem =
     { pkgs, lib, ... }:
     {
@@ -11,6 +11,7 @@ _: {
       }
       // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
         darwin-dia-browser = import ./modules/browsers/dia {
+          inherit inputs;
           pkgs = import pkgs.path {
             system = pkgs.stdenv.hostPlatform.system;
             config.allowUnfree = true;

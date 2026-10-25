@@ -3,6 +3,8 @@
     . $PSScriptRoot/../../lib/SetupHandler.ps1
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
     . $PSScriptRoot/../../handlers/Handler.Winget.ps1
+    $script:artifactVersion = [version]::new(1, 0, 0, 0)
+    $script:wingetVersionOutput = 'v1.0'
 
     if (-not (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue)) {
         function global:Get-AppxPackage {
@@ -27,19 +29,34 @@ Describe 'WingetHandler' {
             }
         }
 
-        It 'should retain native install output and exit <ExitCode> in elapsed phase evidence' -TestCases @(
-            @{ ExitCode = 0 }
-            @{ ExitCode = -1978335189 }
-            @{ ExitCode = 124 }
+        It 'should retain native install output and exit <ExitCode> with budget <Budget> in elapsed phase evidence' -TestCases @(
+            @{ ExitCode = 0; Budget = 30 }
+            @{ ExitCode = -1073740791; Budget = 30 }
+            @{ ExitCode = 124; Budget = 30 }
+            @{ ExitCode = 0; Budget = 0 }
         ) {
-            param($ExitCode)
+            param($ExitCode, $Budget)
             $script:phaseExitCode = $ExitCode
-            Mock Invoke-Winget { $global:LASTEXITCODE = $script:phaseExitCode; 'native installer evidence' }
+            $script:phaseTimeoutBudget = $Budget
+            $script:phaseInstallCalls = 0
+            $script:phaseTimeoutArgument = $null
+            $script:phaseHandler | Add-Member -MemberType ScriptMethod -Name GetInstallTimeoutSeconds -Value {
+                return $script:phaseTimeoutBudget
+            } -Force
+            Mock Invoke-Winget {
+                param($Arguments, $TimeoutSeconds)
+                $script:phaseInstallCalls++
+                $script:phaseTimeoutArgument = $TimeoutSeconds
+                $global:LASTEXITCODE = $script:phaseExitCode
+                'native installer evidence'
+            }
             $script:phasePackage.Id = 'Diagnostic.Fixture'
             $output = @($script:phaseHandler.InvokeWingetInstall($script:phasePackage, @('install', '--id', 'Diagnostic.Fixture')))
 
             $output | Should -Be @('native installer evidence')
             $script:phaseHandler.LastInstallExitCode | Should -Be $ExitCode
+            $script:phaseInstallCalls | Should -Be 1
+            $script:phaseTimeoutArgument | Should -Be $(if ($Budget -gt 0) { $Budget } else { $null })
             ($script:phaseLogs -join "`n") | Should -Match 'PACKAGE_PHASE: package=Diagnostic\.Fixture phase=install status=started'
             ($script:phaseLogs -join "`n") | Should -Match "PACKAGE_PHASE: package=Diagnostic\.Fixture phase=install status=completed elapsedMs=\d+ exitCode=$ExitCode"
         }
@@ -291,8 +308,8 @@ Describe 'WingetHandler' {
 
                 $global:LASTEXITCODE = 0
                 return @(
-                    '名前    ID           バージョン    ソース'
-                    'ChatGPT 9NT1R1C2HH7J 1.0.0         msstore'
+                    '名前    ID           ソース'
+                    'ChatGPT 9NT1R1C2HH7J msstore'
                 )
             }
 
@@ -406,7 +423,7 @@ Describe 'WingetHandler' {
                 $script:verifiedCommandPath = [string]$Command
                 if ($script:verifiedCommandPath -eq $script:expectedFallbackCommandPath -and $Arguments -contains '--version') {
                     $global:LASTEXITCODE = 0
-                    return '1.0.0'
+                    return 'verified'
                 }
 
                 $global:LASTEXITCODE = 127
@@ -469,7 +486,7 @@ Describe 'WingetHandler' {
                 $script:verifiedCommand = $Command
                 $script:verifiedArguments = $Arguments
                 $global:LASTEXITCODE = 0
-                return 'rust-analyzer 1.0.0'
+                return 'verified'
             }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
@@ -506,14 +523,14 @@ Describe 'WingetHandler' {
                 if ($Name -eq 'AgileBits.1Password') {
                     return [PSCustomObject]@{
                         PackageFamilyName = 'Agilebits.1Password_amwd9z03whsfe'
-                        Version           = [version]'8.12.36.40'
+                        Version           = $script:artifactVersion
                         InstallLocation   = 'C:\Apps\1Password'
                     }
                 }
                 return $null
             }
             Mock Get-ChildItem {
-                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '8.12.36.40' } }
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = $script:artifactVersion.ToString() } }
             } -ParameterFilter { $Path -eq 'C:\Apps\1Password\1Password.exe' }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
@@ -540,12 +557,12 @@ Describe 'WingetHandler' {
                 $LiteralPath -like '*\Uninstall'
             }
             Mock Get-ItemProperty {
-                return [PSCustomObject]@{ DisplayVersion = '1.13.7'; DisplayName = 'Obsidian'; Publisher = 'Dynalist Inc.' }
+                return [PSCustomObject]@{ DisplayName = 'Obsidian'; Publisher = 'Dynalist Inc.' }
             } -ParameterFilter {
                 $LiteralPath -eq $registryKey.PSPath
             }
             Mock Get-ChildItem {
-                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '1.13.7' } }
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = $script:artifactVersion.ToString() } }
             } -ParameterFilter { $Path -eq 'C:\Apps\Obsidian.exe' }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
@@ -588,7 +605,7 @@ Describe 'WingetHandler' {
                 }
             } -ParameterFilter { $LiteralPath -eq $registryKey.PSPath }
             Mock Get-ChildItem {
-                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '0.101.2362.0' } }
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = $script:artifactVersion.ToString() } }
             } -ParameterFilter { $Path -eq 'C:\Users\test\AppData\Local\PowerToys\PowerToys.exe' }
 
             $verified = $handler.TestPackageVerification($verifyCommand)
@@ -611,7 +628,6 @@ Describe 'WingetHandler' {
             }
             Mock Get-ItemProperty {
                 return [PSCustomObject]@{
-                    DisplayVersion  = '1.0.0'
                     DisplayName     = 'Discord'
                     Publisher       = 'Discord Inc.'
                     UninstallString = 'C:\Apps\Discord\Update.exe --uninstall'
@@ -620,7 +636,7 @@ Describe 'WingetHandler' {
                 $LiteralPath -eq $registryKey.PSPath
             }
             Mock Get-ChildItem {
-                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '1.0.0' } }
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = $script:artifactVersion.ToString() } }
             } -ParameterFilter { $Path -eq 'C:\Apps\Discord.exe' }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
@@ -649,14 +665,13 @@ Describe 'WingetHandler' {
             }
             Mock Get-ItemProperty {
                 return [PSCustomObject]@{
-                    DisplayVersion = '1.4.205'
                     DisplayName    = 'Orca'
                     Publisher      = 'Stably AI'
                     DisplayIcon    = "$orcaExecutable,0"
                 }
             } -ParameterFilter { $LiteralPath -eq $registryKey.PSPath }
             Mock Get-ChildItem {
-                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '1.4.205.0' } }
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = $script:artifactVersion.ToString() } }
             } -ParameterFilter { $Path -eq $orcaExecutable }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
@@ -691,7 +706,7 @@ Describe 'WingetHandler' {
             } -ParameterFilter { $LiteralPath -eq $registryKey.PSPath }
             Mock Get-ChildItem { }
             Mock Get-ChildItem {
-                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '14.40.33810.0' } }
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = $script:artifactVersion.ToString() } }
             } -ParameterFilter { $Path -eq $displayIconExecutable }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
@@ -709,7 +724,7 @@ Describe 'WingetHandler' {
             Should -Invoke Get-ChildItem -Times 1 -ParameterFilter { $Path -eq $displayIconExecutable }
         }
 
-        It 'should reject an uninstall registration with no valid installed version' {
+        It 'should reject an uninstall registration when its executable has no valid product or file version' {
             $registryKey = [PSCustomObject]@{
                 Name   = 'Discord'
                 PSPath = 'Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\Discord'
@@ -719,10 +734,13 @@ Describe 'WingetHandler' {
                 $LiteralPath -like '*\Uninstall'
             }
             Mock Get-ItemProperty {
-                return [PSCustomObject]@{ DisplayVersion = 'unknown'; DisplayName = 'Discord'; Publisher = 'Discord Inc.' }
+                return [PSCustomObject]@{ DisplayName = 'Discord'; Publisher = 'Discord Inc.' }
             } -ParameterFilter {
                 $LiteralPath -eq $registryKey.PSPath
             }
+            Mock Get-ChildItem {
+                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = 'unknown'; FileVersion = 'unknown' } }
+            } -ParameterFilter { $Path -eq 'C:\Apps\Discord.exe' }
 
             $verified = $handler.TestPackageVerification([PSCustomObject]@{
                     command        = 'Discord'
@@ -736,65 +754,9 @@ Describe 'WingetHandler' {
                 })
 
             $verified | Should -BeFalse
+            Should -Invoke Get-ChildItem -ParameterFilter { $Path -eq 'C:\Apps\Discord.exe' }
         }
 
-        It 'should require an installed Visual Studio Build Tools instance and the configured compiler component' {
-            Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe' } } -ParameterFilter {
-                $Name -eq 'vswhere.exe'
-            }
-            Mock Test-Path { return $true } -ParameterFilter {
-                $LiteralPath -like '*\\VC\\Tools\\MSVC\\*\\bin\\Hostx64\\x64\\cl.exe'
-            }
-            Mock Get-ChildItem {
-                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '19.44.35222' } }
-            } -ParameterFilter {
-                $Path -like '*VC\Tools\MSVC*\bin\Hostx64\x64\cl.exe'
-            }
-            Mock Invoke-VerifyCommand {
-                $global:LASTEXITCODE = 0
-                return '[{"installationVersion":"17.14.41","installationPath":"C:\\BuildTools"}]'
-            } -ParameterFilter {
-                $Command -like '*vswhere.exe'
-            }
-
-            $verified = $handler.TestPackageVerification([PSCustomObject]@{
-                    command              = 'Microsoft.VisualStudio.Product.BuildTools'
-                    type                 = 'visualStudioInstanceVersion'
-                    productId            = 'Microsoft.VisualStudio.Product.BuildTools'
-                    minimumVersion       = '17.0'
-                    requiredComponent    = 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
-                    compilerRelativePath = 'VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe'
-                })
-
-            $verified | Should -BeTrue
-            Should -Invoke Invoke-VerifyCommand -Times 1 -ParameterFilter {
-                $Arguments -contains '-requires' -and $Arguments -contains 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
-            }
-        }
-
-        It 'should reject an older Visual Studio Build Tools instance even when the C++ compiler exists' {
-            Mock Get-Command { return [PSCustomObject]@{ Source = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe' } } -ParameterFilter {
-                $Name -eq 'vswhere.exe'
-            }
-            Mock Get-ChildItem {
-                return [PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '19.44.35222' } }
-            } -ParameterFilter { $Path -like '*VC\Tools\MSVC*\bin\Hostx64\x64\cl.exe' }
-            Mock Invoke-VerifyCommand {
-                $global:LASTEXITCODE = 0
-                return '[{"installationVersion":"16.11.35","installationPath":"C:\\BuildTools"}]'
-            } -ParameterFilter { $Command -like '*vswhere.exe' }
-
-            $verified = $handler.TestPackageVerification([PSCustomObject]@{
-                    command              = 'Microsoft.VisualStudio.Product.BuildTools'
-                    type                 = 'visualStudioInstanceVersion'
-                    productId            = 'Microsoft.VisualStudio.Product.BuildTools'
-                    minimumVersion       = '17.0'
-                    requiredComponent    = 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
-                    compilerRelativePath = 'VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe'
-                })
-
-            $verified | Should -BeFalse
-        }
     }
 
     Context 'WinGet timeout diagnostics' {
@@ -860,7 +822,7 @@ Describe 'WingetHandler' {
         BeforeEach {
             Mock Get-ExternalCommand { return $null }
             Mock Test-PathExist { return $true }
-            Mock Invoke-Winget { $global:LASTEXITCODE = 0; return "v1.6.0" }
+            Mock Invoke-Winget { $global:LASTEXITCODE = 0; return $script:wingetVersionOutput }
         }
 
         It 'should return false' {
@@ -872,7 +834,7 @@ Describe 'WingetHandler' {
     Context 'CanApply - import mode without package file' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Invoke-Winget { $global:LASTEXITCODE = 0; return "v1.6.0" }
+            Mock Invoke-Winget { $global:LASTEXITCODE = 0; return $script:wingetVersionOutput }
             Mock Test-PathExist { return $false }
         }
 
@@ -886,7 +848,7 @@ Describe 'WingetHandler' {
     Context 'CanApply - import mode with all conditions met' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Invoke-Winget { $global:LASTEXITCODE = 0; return "v1.6.0" }
+            Mock Invoke-Winget { $global:LASTEXITCODE = 0; return $script:wingetVersionOutput }
             Mock Test-PathExist { return $true }
         }
 
@@ -900,7 +862,7 @@ Describe 'WingetHandler' {
     Context 'CanApply - export mode with winget available' {
         BeforeEach {
             Mock Get-ExternalCommand { return @{ Source = "C:\winget.exe" } }
-            Mock Invoke-Winget { $global:LASTEXITCODE = 0; return "v1.6.0" }
+            Mock Invoke-Winget { $global:LASTEXITCODE = 0; return $script:wingetVersionOutput }
         }
 
         It 'should return true even without package file' {
@@ -927,7 +889,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 $global:LASTEXITCODE = 0
                 if ($Arguments -contains 'list') {
-                    return @('Name Id Version Source', 'Discord Discord.Discord 1.0.9259 winget')
+                    return @('Name Id Source', 'Discord Discord.Discord winget')
                 }
                 if ($Arguments -contains 'install') {
                     $script:discordInstallCalls++
@@ -999,7 +961,7 @@ Describe 'WingetHandler' {
         It 'should keep CanApply free of process termination' {
             Mock Get-ExternalCommand { @{ Source = 'C:\winget.exe' } }
             Mock Test-PathExist { $true }
-            Mock Invoke-Winget { $global:LASTEXITCODE = 0; 'v1.6.0' }
+            Mock Invoke-Winget { $global:LASTEXITCODE = 0; $script:wingetVersionOutput }
             Mock Get-Process { throw 'CanApply must not inspect running applications' }
 
             $handler.CanApply($ctx) | Should -BeTrue
@@ -1034,7 +996,7 @@ Describe 'WingetHandler' {
             }
             Mock Invoke-VerifyCommand {
                 $global:LASTEXITCODE = 0
-                return "1.0.0"
+                return 'verified'
             }
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
@@ -1119,9 +1081,9 @@ Describe 'WingetHandler' {
                     # GetInstalledPackageIds 用: winget list の出力を模倣
                     $global:LASTEXITCODE = 0
                     return @(
-                        "Name          Id         Version  Source",
+                        "Name          Id         Source",
                         "-------------------------------------------",
-                        "Git           Git.Git    2.43.0   winget"
+                        "Git           Git.Git winget"
                     )
                 }
                 $global:LASTEXITCODE = 0
@@ -1139,9 +1101,9 @@ Describe 'WingetHandler' {
                 if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
                     $global:LASTEXITCODE = 0
                     return @(
-                        "Name          Id         Version  Source",
+                        "Name          Id         Source",
                         "-------------------------------------------",
-                        "Git           Git.Git    2.43.0   winget"
+                        "Git           Git.Git winget"
                     )
                 }
                 $global:LASTEXITCODE = 0
@@ -1213,16 +1175,16 @@ Describe 'WingetHandler' {
             Mock Invoke-VerifyCommand {
                 $script:verifyCalls++
                 $global:LASTEXITCODE = 0
-                return "git version 2.43.0"
+                return 'verified'
             }
             Mock Invoke-Winget {
                 param($Arguments)
                 if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
                     $global:LASTEXITCODE = 0
                     return @(
-                        "Name          Id         Version  Source",
+                        "Name          Id         Source",
                         "-------------------------------------------",
-                        "Git           Git.Git    2.43.0   winget"
+                        "Git           Git.Git winget"
                     )
                 }
                 $global:LASTEXITCODE = 0
@@ -1248,9 +1210,9 @@ Describe 'WingetHandler' {
                 if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
                     $global:LASTEXITCODE = 0
                     return @(
-                        "Name          Id         Version  Source",
+                        "Name          Id         Source",
                         "-------------------------------------------",
-                        "Git           Git.Git    2.43.0   winget"
+                        "Git           Git.Git winget"
                     )
                 }
                 $global:LASTEXITCODE = 0
@@ -1277,9 +1239,9 @@ Describe 'WingetHandler' {
                 if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
                     $global:LASTEXITCODE = 0
                     return @(
-                        "Name          Id         Version  Source",
+                        "Name          Id         Source",
                         "-------------------------------------------",
-                        "Git           Git.Git    2.43.0   winget"
+                        "Git           Git.Git winget"
                     )
                 }
                 $global:LASTEXITCODE = 0
@@ -1297,7 +1259,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains 'list' -and $Arguments -notcontains '--id') {
                     $global:LASTEXITCODE = 0
-                    return @('Name Id Version Source', '-------------------')
+                    return @('Name Id Source', '-------------------')
                 }
                 if ($Arguments -contains 'list' -and $Arguments -contains '--id') {
                     $global:LASTEXITCODE = 1
@@ -1348,16 +1310,16 @@ Describe 'WingetHandler' {
                     throw "chezmoi not found"
                 }
                 $global:LASTEXITCODE = 0
-                return "2.70.5"
+                return 'verified'
             }
             Mock Invoke-Winget {
                 param($Arguments)
                 if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
                     $global:LASTEXITCODE = 0
                     return @(
-                        "Name     Id              Version Source",
+                        "Name     Id              Source",
                         "----------------------------------------",
-                        "chezmoi  twpayne.chezmoi 2.70.5  winget"
+                        "chezmoi  twpayne.chezmoi winget"
                     )
                 }
                 $global:LASTEXITCODE = 0
@@ -1372,9 +1334,9 @@ Describe 'WingetHandler' {
                 if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
                     $global:LASTEXITCODE = 0
                     return @(
-                        "Name     Id              Version Source",
+                        "Name     Id              Source",
                         "----------------------------------------",
-                        "chezmoi  twpayne.chezmoi 2.70.5  winget"
+                        "chezmoi  twpayne.chezmoi winget"
                     )
                 }
                 if ($Arguments -contains "install") {
@@ -1552,7 +1514,7 @@ Describe 'WingetHandler' {
                 return [PSCustomObject]@{
                     Name              = "OpenAI.Codex"
                     PackageFamilyName = "OpenAI.Codex_2p2nqsd0c76g0"
-                    Version           = [version]"1.0.0.0"
+                    Version           = $script:artifactVersion
                     InstallLocation   = $script:codexInstallLocation
                 }
             }
@@ -1609,7 +1571,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains 'list' -and $Arguments -notcontains '--id') {
                     $global:LASTEXITCODE = 0
-                    return @('Name Id Version Source', '-------------------', 'Contoso Contoso.Tool 1.0.0 winget')
+                    return @('Name Id Source', '-------------------', 'Contoso Contoso.Tool winget')
                 }
                 if ($Arguments -contains 'install') {
                     $global:LASTEXITCODE = 1
@@ -1620,7 +1582,7 @@ Describe 'WingetHandler' {
             }
             Mock Invoke-VerifyCommand {
                 $global:LASTEXITCODE = 0
-                return 'contoso 1.0.0'
+                return 'verified'
             }
         }
 
@@ -1643,7 +1605,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains 'list') {
                     $global:LASTEXITCODE = 0
-                    return @('Name Id Version Source', '-------------------', 'Contoso Contoso.Tool 1.0.0 winget')
+                    return @('Name Id Source', '-------------------', 'Contoso Contoso.Tool winget')
                 }
                 $global:LASTEXITCODE = $script:strictUpdateExitCode
                 if ($script:strictUpdateExitCode -eq 124) { return 'Network update timed out' }
@@ -1677,9 +1639,9 @@ Describe 'WingetHandler' {
                 if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
                     $global:LASTEXITCODE = 0
                     return @(
-                        "Name              Id            Version  Source",
+                        "Name              Id            Source",
                         "-------------------------------------------------",
-                        "Contoso Store App  Contoso.StoreApp  1.19.0   msstore"
+                        "Contoso Store App  Contoso.StoreApp msstore"
                     )
                 }
                 $global:LASTEXITCODE = 0
@@ -1697,9 +1659,9 @@ Describe 'WingetHandler' {
                 if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
                     $global:LASTEXITCODE = 0
                     return @(
-                        "Name              Id            Version  Source",
+                        "Name              Id            Source",
                         "-------------------------------------------------",
-                        "Contoso Store App  Contoso.StoreApp  1.19.0   msstore"
+                        "Contoso Store App  Contoso.StoreApp msstore"
                     )
                 }
                 $global:LASTEXITCODE = 0
@@ -1884,7 +1846,7 @@ Describe 'WingetHandler' {
                 }
             }
             Mock Invoke-Winget { $global:LASTEXITCODE = 0; return '' }
-            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return '1.0.0' }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return 'verified' }
             Mock Test-Path { return $true } -ParameterFilter { $Path -like '*\.cargo\bin' }
             Mock Get-UserEnvironmentPath { return 'C:\Windows' }
             Mock Set-UserEnvironmentPath { throw 'GUI setup must not configure Cargo' }
@@ -1921,7 +1883,7 @@ Describe 'WingetHandler' {
                 Mock Set-UserEnvironmentPath { throw 'User PATH exceeds the Windows 32767-character limit' }
                 Mock Invoke-VerifyCommand {
                     $global:LASTEXITCODE = if (($env:PATH -split ';') -contains $script:guiDirectory) { 0 } else { 1 }
-                    return 'GUI fixture 1.0'
+                    return 'verified'
                 }
                 $ctx.Options['WingetProcessOnlyPath'] = $true
 
@@ -2143,7 +2105,7 @@ Describe 'WingetHandler' {
             }
             Mock Invoke-VerifyCommand {
                 $global:LASTEXITCODE = 0
-                return "1.0.0"
+                return 'verified'
             }
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
@@ -2177,16 +2139,16 @@ Describe 'WingetHandler' {
         }
 
         It 'should skip install when an installed package verifyCommand already works' {
-            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return 'verified' }
             $script:installIds = @()
             Mock Invoke-Winget {
                 param($Arguments)
                 if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
                     $global:LASTEXITCODE = 0
                     return @(
-                        "Name       Id        Version Source",
+                        "Name       Id        Source",
                         "------------------------------------",
-                        "CLI.Tool   CLI.Tool  1.0.0   winget"
+                        "CLI.Tool   CLI.Tool winget"
                     )
                 }
                 elseif ($Arguments -contains "install") {
@@ -2232,7 +2194,7 @@ Describe 'WingetHandler' {
             }
             Mock Invoke-VerifyCommand {
                 $global:LASTEXITCODE = 0
-                return "PowerShell 7.6.2"
+                return 'verified'
             }
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
@@ -2265,7 +2227,7 @@ Describe 'WingetHandler' {
                             Packages      = @(
                                 [PSCustomObject]@{
                                     PackageIdentifier = "Versioned.Tool"
-                                    Version           = "1.2.3"
+                                    Version           = $script:artifactVersion.ToString()
                                 }
                             )
                         }
@@ -2285,7 +2247,7 @@ Describe 'WingetHandler' {
 
             $result.Success | Should -Be $true
             $script:capturedArgs | Should -Not -Contain "--version"
-            $script:capturedArgs | Should -Not -Contain "1.2.3"
+            $script:capturedArgs | Should -Not -Contain $script:artifactVersion.ToString()
         }
     }
 
@@ -2313,7 +2275,7 @@ Describe 'WingetHandler' {
             }
             Mock Invoke-VerifyCommand {
                 $global:LASTEXITCODE = 0
-                return "Google Cloud SDK 1.2.3"
+                return 'verified'
             }
             Mock Invoke-Winget {
                 param($Arguments, $TimeoutSeconds)
@@ -2370,7 +2332,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
             }
-            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return 'verified' }
             Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
             Mock Set-UserEnvironmentPath { }
             Mock New-Item { } -ParameterFilter { $ItemType -eq "Directory" }
@@ -2438,7 +2400,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
             }
-            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return 'verified' }
             Mock Get-UserEnvironmentPath { return "C:\Windows\System32" }
             Mock Set-UserEnvironmentPath { }
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
@@ -2557,9 +2519,9 @@ Describe 'WingetHandler' {
                 if ($Arguments -contains 'list') {
                     $global:LASTEXITCODE = 0
                     return @(
-                        'Name       Id          Version Source'
+                        'Name       Id          Source'
                         '--------------------------------------'
-                        'Sample Tool Sample.Tool 1.0.0   winget'
+                        'Sample Tool Sample.Tool winget'
                     )
                 }
 
@@ -2570,7 +2532,7 @@ Describe 'WingetHandler' {
                 param($Command, $Arguments)
                 if ([string]$Command -eq $script:packageCommandPath -and $Arguments -contains '--version') {
                     $global:LASTEXITCODE = 0
-                    return '1.0.0'
+                    return 'verified'
                 }
 
                 $global:LASTEXITCODE = 127
@@ -2673,7 +2635,7 @@ Describe 'WingetHandler' {
                     throw "winget install, repair, and uninstall should be skipped when WSL is deferred to admin phase"
                 }
                 $global:LASTEXITCODE = 0
-                return "Linux 用 Windows サブシステム Microsoft.WSL 2.7.3.0 winget"
+                return "Linux 用 Windows サブシステム Microsoft.WSL winget"
             }
 
             $ctx.Options["WingetMode"] = "import"
@@ -2691,7 +2653,7 @@ Describe 'WingetHandler' {
             Mock Test-WslAvailable { return $false }
             Mock Invoke-VerifyCommand {
                 $global:LASTEXITCODE = 0
-                return "WSL version: 2.7.8.0"
+                return 'verified'
             }
             Mock Invoke-Winget {
                 param($Arguments)
@@ -2705,7 +2667,7 @@ Describe 'WingetHandler' {
                 }
 
                 $global:LASTEXITCODE = 0
-                return "Name Id Version Source"
+                return "Name Id Source"
             }
 
             $ctx.Options["WingetMode"] = "import"
@@ -2745,7 +2707,7 @@ Describe 'WingetHandler' {
                     return "アンインストールが完了しました"
                 }
                 $global:LASTEXITCODE = 0
-                return "Linux 用 Windows サブシステム Microsoft.WSL 2.7.3.0 winget"
+                return "Linux 用 Windows サブシステム Microsoft.WSL winget"
             }
 
             $ctx.Options["WingetMode"] = "import"
@@ -2767,7 +2729,7 @@ Describe 'WingetHandler' {
         It 'should install Microsoft.WSL only when it is not installed and then require wsl --version to pass' {
             Mock Invoke-VerifyCommand {
                 $global:LASTEXITCODE = 0
-                return "WSL version: 2.7.3.0"
+                return 'verified'
             }
             Mock Invoke-Winget {
                 param($Arguments)
@@ -2844,7 +2806,7 @@ Describe 'WingetHandler' {
                     return "検証コマンドがタイムアウトしました (30s): wsl --version"
                 }
                 $global:LASTEXITCODE = 0
-                return "WSL version: 2.7.3.0"
+                return 'verified'
             }
             Mock Invoke-Winget {
                 param($Arguments)
@@ -2856,7 +2818,7 @@ Describe 'WingetHandler' {
                     return "修復が完了しました"
                 }
                 $global:LASTEXITCODE = 0
-                return "Linux 用 Windows サブシステム Microsoft.WSL 2.7.3.0 winget"
+                return "Linux 用 Windows サブシステム Microsoft.WSL winget"
             }
 
             $ctx.Options["WingetMode"] = "import"
@@ -2878,7 +2840,7 @@ Describe 'WingetHandler' {
                     return "検証コマンドがタイムアウトしました (30s): wsl --version"
                 }
                 $global:LASTEXITCODE = 0
-                return "WSL version: 2.7.3.0"
+                return 'verified'
             }
             Mock Invoke-Winget {
                 param($Arguments)
@@ -2895,7 +2857,7 @@ Describe 'WingetHandler' {
                     return "インストールが完了しました"
                 }
                 $global:LASTEXITCODE = 0
-                return "Linux 用 Windows サブシステム Microsoft.WSL 2.7.3.0 winget"
+                return "Linux 用 Windows サブシステム Microsoft.WSL winget"
             }
 
             $ctx.Options["WingetMode"] = "import"
@@ -2923,7 +2885,7 @@ Describe 'WingetHandler' {
                     return "検証コマンドがタイムアウトしました (30s): wsl --version"
                 }
                 $global:LASTEXITCODE = 0
-                return "WSL version: 2.7.3.0"
+                return 'verified'
             }
             Mock Invoke-Winget {
                 param($Arguments)
@@ -2999,7 +2961,7 @@ Describe 'WingetHandler' {
                     throw "verification must be skipped after a failed install"
                 }
                 $global:LASTEXITCODE = 0
-                return "1.0.0"
+                return 'verified'
             }
         }
 
@@ -3087,10 +3049,10 @@ Describe 'WingetHandler' {
                     if ($Arguments -contains 'list') {
                         $global:LASTEXITCODE = 0
                         return @(
-                            'Name Id Version Source',
+                            'Name Id Source',
                             '-------------------',
-                            'Task Task.Task 3.44.1 winget',
-                            'hadolint hadolint.hadolint 2.14.0 winget'
+                            'Task Task.Task winget',
+                            'hadolint hadolint.hadolint winget'
                         )
                     }
                     $script:wingetInstallCalls++
@@ -3273,12 +3235,12 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -notcontains 'list') { throw 'manual packages must not be installed' }
                 $global:LASTEXITCODE = 0
-                @('Name Id Version Source', '----------------------', 'Manual Manual.Verified 1.0.0 winget')
+                @('Name Id Source', '----------------------', 'Manual Manual.Verified winget')
             }
             Mock Invoke-VerifyCommand {
                 $script:manualVerificationCalls++
                 $global:LASTEXITCODE = 0
-                'manual-tool 1.0.0'
+                'verified'
             }
 
             $result = $handler.Apply($ctx)
@@ -3359,7 +3321,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list") { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
             }
-            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "1.0.0" }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return 'verified' }
             Mock Test-Path { return $false } -ParameterFilter { $Path -like "*\.cargo\bin" }
         }
 
@@ -3443,7 +3405,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list") {
                     $global:LASTEXITCODE = 0
-                    return @("Name Id Version Source", "-------------------")
+                    return @("Name Id Source", "-------------------")
                 }
                 if ($Arguments -contains "install") {
                     $global:LASTEXITCODE = 124
@@ -3458,7 +3420,7 @@ Describe 'WingetHandler' {
                     throw "bun not found"
                 }
                 $global:LASTEXITCODE = 0
-                return "1.4.2"
+                return 'verified'
             }
             Mock Invoke-WebRequest {
                 param($OutFile)
@@ -3530,7 +3492,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains 'list' -and $Arguments -notcontains '--id') {
                     $global:LASTEXITCODE = 0
-                    return @('Name Id Version Source', '-------------------', 'Codex OpenAI.Codex 1.0 winget')
+                    return @('Name Id Source', '-------------------', 'Codex OpenAI.Codex winget')
                 }
                 if ($Arguments -contains 'install') {
                     $global:LASTEXITCODE = 1
@@ -3542,7 +3504,7 @@ Describe 'WingetHandler' {
             Mock Invoke-VerifyCommand {
                 $script:verifyCalls++
                 $global:LASTEXITCODE = 0
-                return 'codex 1.0.0'
+                return 'verified'
             }
             Mock Invoke-WebRequest {
                 param($OutFile)
@@ -3637,7 +3599,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list") {
                     $global:LASTEXITCODE = 0
-                    return @("Name Id Version Source", "-------------------")
+                    return @("Name Id Source", "-------------------")
                 }
                 if ($Arguments -contains "install") {
                     $global:LASTEXITCODE = 1
@@ -3653,7 +3615,7 @@ Describe 'WingetHandler' {
                     throw "codex not found before installation"
                 }
                 $global:LASTEXITCODE = 0
-                return "codex 0.156.1"
+                return 'verified'
             }
             Mock Invoke-WebRequest {
                 param($OutFile)
@@ -3713,7 +3675,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains 'list' -and $Arguments -notcontains '--id') {
                     $global:LASTEXITCODE = 0
-                    return @('Name Id Version Source', '-------------------', 'Codex OpenAI.Codex 1.0 winget')
+                    return @('Name Id Source', '-------------------', 'Codex OpenAI.Codex winget')
                 }
                 if ($Arguments -contains 'install') {
                     $global:LASTEXITCODE = 0
@@ -3722,7 +3684,7 @@ Describe 'WingetHandler' {
                 $global:LASTEXITCODE = 0
                 return @()
             }
-            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return 'codex 1.0.0' }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return 'verified' }
             Mock Invoke-WebRequest { $script:archiveDownloads++; Set-Content -LiteralPath $OutFile -Value 'archive' -Encoding ASCII }
             Mock Get-FileHash { [PSCustomObject]@{ Hash = $script:codexHash } }
             Mock Expand-Archive {
@@ -3780,7 +3742,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
                     $global:LASTEXITCODE = 0
-                    return @("Name Id Version Source", "-------------------", "Codex OpenAI.Codex 1.0 winget")
+                    return @("Name Id Source", "-------------------", "Codex OpenAI.Codex winget")
                 }
                 if ($Arguments -contains "install") {
                     $script:installCalls++
@@ -3790,7 +3752,7 @@ Describe 'WingetHandler' {
                 $global:LASTEXITCODE = 1
                 return @()
             }
-            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "codex 1.0.0" }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return 'verified' }
             Mock Invoke-WebRequest { $script:webRequestCalls++ }
 
             $ctx.Options["WingetMode"] = "import"
@@ -3837,7 +3799,7 @@ Describe 'WingetHandler' {
                 param($Arguments)
                 if ($Arguments -contains "list" -and $Arguments -notcontains "--id") {
                     $global:LASTEXITCODE = 0
-                    return @("Name Id Version Source", "-------------------", "Codex OpenAI.Codex 1.0 winget")
+                    return @("Name Id Source", "-------------------", "Codex OpenAI.Codex winget")
                 }
                 if ($Arguments -contains "install") {
                     $script:installCalls++
@@ -3847,7 +3809,7 @@ Describe 'WingetHandler' {
                 $global:LASTEXITCODE = 1
                 return @()
             }
-            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return "codex 1.0.0" }
+            Mock Invoke-VerifyCommand { $global:LASTEXITCODE = 0; return 'verified' }
             Mock Invoke-WebRequest { $script:webRequestCalls++ }
             Mock Write-Host {
                 param($Object)
@@ -3959,7 +3921,7 @@ Describe 'WingetHandler' {
             }
             Mock Invoke-VerifyCommand {
                 $global:LASTEXITCODE = 0
-                return "2.37.1"
+                return 'verified'
             }
 
             $ctx.Options["WingetMode"] = "import"

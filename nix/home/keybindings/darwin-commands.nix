@@ -7,13 +7,9 @@
 let
   launch = app: "/usr/bin/open -a ${lib.escapeShellArg app}";
   openUrl = url: "/usr/bin/open ${lib.escapeShellArg url}";
-  help = pkgs.writeText "omarchy-macos-keybindings.txt" (
-    builtins.readFile ../../../docs/chezmoi/omarchy-macos.md
-  );
-  contract = import ./bindings.nix { inherit lib; };
   cycles = import ./aerospace-cycle.nix {
     inherit lib;
-    inherit (contract) workspaces;
+    inherit (import ./bindings.nix { inherit lib; }) workspaces;
     executable = lib.getExe' aerospace "aerospace";
   };
 in
@@ -27,7 +23,7 @@ in
   ai = launch "ChatGPT";
   passwords = launch "1Password";
   launcher = openUrl "raycast://";
-  help = "${launch "TextEdit"} ${help}";
+  help = "${launch "TextEdit"} ${pkgs.writeText "omarchy-macos-keybindings.txt" (builtins.readFile ../../../docs/chezmoi/omarchy-macos.md)}";
   calculator = launch "Calculator";
   activity = launch "Activity Monitor";
   clipboard = openUrl "raycast://extensions/raycast/clipboard-history/clipboard-history";

@@ -26,7 +26,7 @@ in
               home.pkgs.ruff
               home.pkgs.ty
               home.pkgs.lua-language-server
-              (home.pkgs.callPackage ../../../modules/typescript-language-server/package.nix { })
+              home.pkgs.typescript-language-server
               home.pkgs.nixfmt
             ];
         remoteInstalled = builtins.any (

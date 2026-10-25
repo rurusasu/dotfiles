@@ -6,20 +6,46 @@ function Resolve-TestModule {
         [string]$Name
     )
 
-    # Pester's output/coverage configuration requires the modern configuration
-    # API; the Windows inbox Pester 3.x does not provide it.
-    $minimumVersion = if ($Name -eq 'Pester') { [Version]'5.9.0' } else { [Version]'1.0.0' }
+    $requiredCommands = if ($Name -eq 'Pester') {
+        @('New-PesterConfiguration', 'Invoke-Pester')
+    }
+    else { @('Invoke-ScriptAnalyzer') }
     $module = Get-Module -ListAvailable -Name $Name |
         Where-Object {
-            $psData = if ($_.PrivateData -is [Collections.IDictionary]) { $_.PrivateData['PSData'] } else { $null }
+            $candidate = $_
+            $exportsRequiredCommands = @($requiredCommands | Where-Object {
+                    -not $candidate.ExportedCommands.ContainsKey($_)
+                }).Count -eq 0
+            $psData = if ($candidate.PrivateData -is [Collections.IDictionary]) { $candidate.PrivateData['PSData'] } else { $null }
             $prerelease = if ($psData -is [Collections.IDictionary]) { $psData['Prerelease'] } else { $null }
             $edition = if ($PSVersionTable.ContainsKey('PSEdition')) { $PSVersionTable.PSEdition } else { 'Desktop' }
-            $_.Version -ge $minimumVersion -and [string]::IsNullOrWhiteSpace([string]$prerelease) -and
-            (-not $_.PowerShellVersion -or $_.PowerShellVersion -le $PSVersionTable.PSVersion) -and
-            (-not $_.CompatiblePSEditions.Count -or $_.CompatiblePSEditions -contains $edition)
+            $exportsRequiredCommands -and [string]::IsNullOrWhiteSpace([string]$prerelease) -and
+            (-not $candidate.PowerShellVersion -or $candidate.PowerShellVersion -le $PSVersionTable.PSVersion) -and
+            (-not $candidate.CompatiblePSEditions.Count -or $candidate.CompatiblePSEditions -contains $edition)
         } | Sort-Object Version -Descending | Select-Object -First 1
     if (-not $module) {
-        throw "Required test dependency '$Name' (stable version >= $minimumVersion) is not installed. Prepare dependencies separately; tests do not download or install them."
+        throw "Required test dependency '$Name' (stable module exporting $($requiredCommands -join ', ')) is not installed. Prepare dependencies separately; tests do not download or install them."
     }
     return $module
+}
+
+function Assert-PesterCoverageConfiguration {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Configuration,
+        [Parameter(Mandatory)][System.Management.Automation.PSModuleInfo]$Module
+    )
+
+    $coverageConfiguration = $Configuration.PSObject.Properties['CodeCoverage']
+    if (-not $coverageConfiguration -or $null -eq $coverageConfiguration.Value -or
+        -not $coverageConfiguration.Value.PSObject.Properties['UseBreakpoints']) {
+        throw "Required test dependency 'Pester' does not provide CodeCoverage.UseBreakpoints. Prepare dependencies separately; tests do not download or install them."
+    }
+
+    $coberturaExporter = & $Module {
+        Get-Command -Name Get-CoberturaReportXml -CommandType Function -ErrorAction SilentlyContinue
+    }
+    if (-not $coberturaExporter) {
+        throw "Required test dependency 'Pester' does not provide the Cobertura coverage exporter. Prepare dependencies separately; tests do not download or install them."
+    }
 }

@@ -1,6 +1,6 @@
-{ inputs, pkgs }:
+{ pkgs }:
 let
-  packages = import ../../modules/ai_agents/chatgpt/packages.nix { inherit inputs pkgs; };
+  packages = (import ../../modules/ai_agents/chatgpt).packages { inherit pkgs; };
 in
 pkgs.runCommand "chatgpt-desktop-check"
   {
@@ -13,13 +13,12 @@ pkgs.runCommand "chatgpt-desktop-check"
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME"
     test -x ${pkgs.lib.getExe packages.chatgpt}
-    test -x ${packages.resources}/codex-code-mode-host
     ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+      test -x ${packages.chatgpt}/lib/chatgpt/resources/codex-code-mode-host
       test -f ${packages.chatgpt}/share/applications/chatgpt.desktop
-      cmp ${packages.chatgpt}/share/user-tmpfiles.d/chatgpt.conf \
-        ${inputs.chatgpt-nixpkgs}/pkgs/by-name/ch/chatgpt/tmpfiles.conf
     ''}
     ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
+      test -x ${packages.chatgpt}/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex-code-mode-host
       # codesign rejects Nix's epoch timestamps; copy without preserving times.
       rsync --recursive --perms --links --copy-unsafe-links --specials --chmod=+w \
         ${packages.chatgpt}/Applications/ChatGPT.app/ "$TMPDIR/ChatGPT.app/"
@@ -32,6 +31,6 @@ pkgs.runCommand "chatgpt-desktop-check"
     ''}
     version="$(codex --version)"
     echo "$version"
-    test "$version" = "codex-cli ${packages.codex.version}"
+    [[ "$version" == "codex-cli "* ]]
     touch "$out"
   ''

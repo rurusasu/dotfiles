@@ -10,9 +10,8 @@ let
     wsl
     darwin
     ;
-  fixtures = import ../../fixtures/packages.nix { inherit inputs; };
-  fallback =
-    (fixtures.mkHome "x86_64-linux" [
+  standalone =
+    ((import ../../fixtures/packages.nix { inherit inputs; }).mkHome "x86_64-linux" [
       ../../../modules/shells/plugins/starship
       { programs.starship.enable = true; }
     ]).config.programs.starship.settings;
@@ -42,19 +41,24 @@ in
       home:
       let
         settings = generatedSettings home;
-        symbol = home.config.dotfiles.starship.osSymbol;
+        platform = home.pkgs.stdenv.hostPlatform;
       in
       {
-        known = symbol != null;
         runtimeDetection = !settings.os.disabled;
-        staticPrefix = lib.hasPrefix "[${symbol}](${settings.os.style}) " settings.format;
+        staticPrefix = lib.hasPrefix "[${
+          if platform.isLinux then
+            "❄️ "
+          else if platform.isDarwin then
+            "🍎 "
+          else
+            null
+        }](${settings.os.style}) " settings.format;
         windowsHelper = settings.git_status.windows_starship or null;
       }
     ) homes;
     expected =
       map
         (windowsHelper: {
-          known = true;
           runtimeDetection = false;
           staticPrefix = true;
           inherit windowsHelper;
@@ -67,17 +71,13 @@ in
   };
 
   testStarshipZshIntegration = {
-    expr = map (
-      home:
-      let
-        zshrc =
+    expr = map (home: {
+      enabled = home.config.programs.starship.enableZshIntegration;
+      initialization =
+        lib.hasInfix
+          (builtins.unsafeDiscardStringContext ''eval "$(${lib.getExe home.config.programs.starship.package} init zsh)"'')
           home.config.home.file."${lib.removePrefix "${home.config.home.homeDirectory}/" home.config.programs.zsh.dotDir}/.zshrc".text;
-      in
-      {
-        enabled = home.config.programs.starship.enableZshIntegration;
-        initialization = lib.hasInfix (builtins.unsafeDiscardStringContext ''eval "$(${lib.getExe home.config.programs.starship.package} init zsh)"'') zshrc;
-      }
-    ) homes;
+    }) homes;
     expected = map (home: {
       enabled = true;
       initialization = home.config.programs.starship.enableZshIntegration;
@@ -97,14 +97,14 @@ in
     };
   };
 
-  testStarshipUnknownOs = {
+  testStarshipStandaloneLinux = {
     expr = {
-      runtimeDetection = !fallback.os.disabled;
-      runtimePrefix = lib.hasPrefix "$os" fallback.format;
+      runtimeDetection = !standalone.os.disabled;
+      staticPrefix = lib.hasPrefix "[❄️ ](${standalone.os.style}) " standalone.format;
     };
     expected = {
-      runtimeDetection = true;
-      runtimePrefix = true;
+      runtimeDetection = false;
+      staticPrefix = true;
     };
   };
 }

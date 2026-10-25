@@ -1,30 +1,26 @@
 { inputs }:
-let
-  pkgs = import inputs.nixpkgs {
-    system = "aarch64-darwin";
-    config.allowUnfree = true;
-  };
-  packages = {
-    dia-browser = pkgs.callPackage ../../modules/browsers/dia/package.nix { };
-    orca-editor = pkgs.callPackage ../../modules/editors/orca/package.nix { };
-  };
-in
 {
   testCustomDarwinPackagesPreserveVendorBundleDerivationAttributes = {
-    expr = builtins.mapAttrs (_: package: {
-      dontFixup = package.dontFixup or false;
-      sourceUrl = package.src.url;
-      platforms = package.meta.platforms;
-    }) packages;
+    expr =
+      builtins.mapAttrs
+        (_: package: {
+          dontFixup = package.dontFixup or false;
+          source = toString package.src;
+          platforms = package.meta.platforms;
+        })
+        {
+          dia-browser = import ../../modules/browsers/dia {
+            inherit inputs;
+            pkgs = import inputs.nixpkgs {
+              system = "aarch64-darwin";
+              config.allowUnfree = true;
+            };
+          };
+        };
     expected = {
       dia-browser = {
         dontFixup = true;
-        sourceUrl = "https://releases.diabrowser.com/release/Dia-${packages.dia-browser.version}.zip";
-        platforms = [ "aarch64-darwin" ];
-      };
-      orca-editor = {
-        dontFixup = true;
-        sourceUrl = "https://github.com/stablyai/orca/releases/download/v${packages.orca-editor.version}/orca-macos-arm64.dmg";
+        source = toString inputs.dia;
         platforms = [ "aarch64-darwin" ];
       };
     };

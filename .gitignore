@@ -56,4 +56,3 @@ docker/**/.env
 windows/.wslconfig
 result
 .admin-phase.log
-darwin-package-update.json

@@ -1,6 +1,5 @@
 { inputs }:
 let
-  fixtures = import ../fixtures/packages.nix { inherit inputs; };
   repositoryLock = builtins.fromJSON (builtins.readFile ../../../flake.lock);
   upstreamLock = builtins.fromJSON (builtins.readFile "${inputs.hermes-agent}/flake.lock");
   hermesNode =
@@ -13,7 +12,7 @@ let
       homeDirectory,
     }:
     let
-      pkgs = fixtures.mkPkgs system;
+      pkgs = (import ../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
       testPackage =
         pkgs.runCommand "hermes-agent-test-package"
           {
@@ -44,7 +43,6 @@ let
           services.hermes-agent.package = testPackage;
         }
         ../../home/common.nix
-        ../../modules/editors/nvim
       ];
     })
     // {
@@ -59,12 +57,7 @@ let
     system = "aarch64-darwin";
     homeDirectory = "/Users/test-user";
   };
-  darwinHost = fixtures.darwin.config;
-  darwinHostHome = darwinHost.home-manager.users.test-user;
 
-  hasPackage = needle: packages: builtins.any (item: item.drvPath == needle.drvPath) packages;
-  hasHermesBootstrap =
-    home: builtins.any (item: (item.pname or item.name) == "hermes-bootstrap") home;
   hasNodejs = home: builtins.any (item: (item.pname or item.name) == "nodejs") home;
 in
 {
@@ -74,14 +67,14 @@ in
       let
         binding = hermesNode.inputs.${name};
         upstreamNode = upstreamLock.nodes.${upstreamInputs.${name}};
-        expectedEdges = builtins.mapAttrs (
-          _: edge: if builtins.isList edge then [ "hermes-agent" ] ++ edge else hermesNode.inputs.${edge}
-        ) (upstreamNode.inputs or { });
       in
       builtins.isString binding
       && repositoryLock.nodes.${binding}.locked == upstreamNode.locked
       && repositoryLock.nodes.${binding}.original == upstreamNode.original
-      && (repositoryLock.nodes.${binding}.inputs or { }) == expectedEdges
+      &&
+        (repositoryLock.nodes.${binding}.inputs or { }) == builtins.mapAttrs (
+          _: edge: if builtins.isList edge then [ "hermes-agent" ] ++ edge else hermesNode.inputs.${edge}
+        ) (upstreamNode.inputs or { })
     ) (builtins.attrNames upstreamInputs);
     expected = true;
   };
@@ -103,7 +96,9 @@ in
 
   testLinuxHermesUsesInjectedPackageAndSystemdContract = {
     expr = {
-      package = hasPackage linux.testPackage linux.config.home.packages;
+      package =
+        (needle: packages: builtins.any (item: item.drvPath == needle.drvPath) packages) linux.testPackage
+          linux.config.home.packages;
       home = linux.config.home.sessionVariables.HERMES_HOME;
       multiplexProfiles = linux.config.services.hermes-agent.settings.gateway.multiplex_profiles;
       serviceUsesInjectedPackage = builtins.any (
@@ -113,35 +108,28 @@ in
     expected = {
       package = true;
       home = "/home/test-user/.hermes";
-      multiplexProfiles = true;
+      multiplexProfiles = null;
       serviceUsesInjectedPackage = true;
     };
   };
 
-  testNativeBootstrapIsNixManagedAndTargetsHermesHome = {
+  testHermesRuntimeAndPluginsAreConfigured = {
     expr = {
-      installed = hasHermesBootstrap linux.config.home.packages;
       nodeRuntimeInstalled = hasNodejs linux.config.home.packages;
-      availableToGateway = hasHermesBootstrap linux.config.services.hermes-agent.extraPackages;
       nodeRuntimeInServiceExtraPackages = hasNodejs linux.config.services.hermes-agent.extraPackages;
-      profileSyncWrapper = builtins.hasAttr "scripts/profile_sync.sh" linux.config.services.hermes-agent.hermesHomeFiles;
-      profileSyncActivation = builtins.hasAttr "hermesProfileSyncWrapperExecutable" linux.config.home.activation;
+      mcpServers = builtins.attrNames linux.config.services.hermes-agent.mcpServers;
       plugins = map (plugin: plugin.name) linux.config.services.hermes-agent.extraPlugins;
-      manifest = import ../../modules/ai_agents/hermes/manifest.nix {
-        hermesHome = "/home/test-user/.hermes";
-      };
     };
     expected = {
-      installed = true;
-      nodeRuntimeInstalled = true;
-      availableToGateway = true;
+      nodeRuntimeInstalled = false;
       nodeRuntimeInServiceExtraPackages = false;
-      profileSyncWrapper = true;
-      profileSyncActivation = true;
+      mcpServers = [
+        "MCP_DOCKER"
+        "chrome"
+        "pipedream"
+        "xapi"
+      ];
       plugins = [ "hermes-lcm" ];
-      manifest = builtins.replaceStrings [ "/opt/data" ] [ "/home/test-user/.hermes" ] (
-        builtins.readFile ../../modules/ai_agents/hermes/manifest.yaml
-      );
     };
   };
 
@@ -150,50 +138,33 @@ in
     expected = true;
   };
 
-  testDarwinHermesUsesOfficialBundleForCliGatewayAndSystemGui = {
+  testHermesDesktopIsInstalledByHomeManagerAcrossPlatforms = {
     expr =
-      let
-        package = darwinHostHome.services.hermes-agent.package;
-      in
+      map
+        (home: {
+          enabled = home.config.programs.hermes-agent.desktop.enable;
+          installed = builtins.any (
+            package: (package.pname or "") == "hermes-desktop"
+          ) home.config.home.packages;
+        })
+        [
+          linux
+          darwin
+        ];
+    expected = [
       {
-        packageName = package.pname or null;
-        version = package.version or null;
-        sourceUrl = if package ? src && builtins.isAttrs package.src then package.src.url or null else null;
-        cliUsesGatewayPackage = darwinHostHome.programs.hermes-agent.package.drvPath == package.drvPath;
-        cliInstalled = hasPackage package darwinHostHome.home.packages;
-        gatewayUsesSelectedPackage = builtins.elem "${package}/bin/hermes" darwinHostHome.launchd.agents.hermes-agent.config.ProgramArguments;
-        systemGuiUsesGatewayPackage = hasPackage package darwinHost.environment.systemPackages;
-      };
-    expected = {
-      packageName = "hermes-agent-bundled";
-      version = "0.22.0";
-      sourceUrl = "https://hermes-assets.nousresearch.com/releases/tag/rc.3-v0.22.0/HermesBundled-0.22.0-mac-arm64.zip";
-      cliUsesGatewayPackage = true;
-      cliInstalled = true;
-      gatewayUsesSelectedPackage = true;
-      systemGuiUsesGatewayPackage = true;
-    };
-  };
-
-  testLinuxHermesDesktopIsInstalledByHomeManager = {
-    expr = {
-      enabled = linux.config.programs.hermes-agent.desktop.enable;
-      installed = builtins.any (
-        package: (package.pname or "") == "hermes-desktop"
-      ) linux.config.home.packages;
-    };
-    expected = {
-      enabled = true;
-      installed = true;
-    };
+        enabled = true;
+        installed = true;
+      }
+      {
+        enabled = true;
+        installed = true;
+      }
+    ];
   };
 
   testDarwinHermesLaunchAgentTargetsGateway = {
-    expr =
-      let
-        arguments = darwin.config.launchd.agents.hermes-agent.config.ProgramArguments;
-      in
-      builtins.elem "gateway" arguments;
+    expr = builtins.elem "gateway" darwin.config.launchd.agents.hermes-agent.config.ProgramArguments;
     expected = true;
   };
 

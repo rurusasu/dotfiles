@@ -7,8 +7,7 @@ local function emit_osc7(path)
 
     -- vim.uri_from_fname handles spaces and Windows paths safely.
     local uri = vim.uri_from_fname(path)
-    io.write(string.format("\27]7;%s\27\\", uri))
-    io.flush()
+    vim.api.nvim_ui_send(string.format("\27]7;%s\27\\", uri))
 end
 
 function M.sync_cwd_to_terminal()

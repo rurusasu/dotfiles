@@ -2,22 +2,22 @@
 { pkgs }:
 let
   inherit (pkgs) lib;
-  cli = pkgs.writeShellScript "aerospace-test-cli" ''
-    case "$1" in
-      list-workspaces)
-        [ "$2" = --focused ] || exit 64
-        [ "$FOCUSED" != FAIL ] || exit 7
-        printf '%s\n' "$FOCUSED"
-        ;;
-      workspace) printf '%s\n' "$2" ;;
-      *) exit 64 ;;
-    esac
-  '';
-  contract = import ../../home/keybindings/bindings.nix { inherit lib; };
   scripts = import ../../home/keybindings/aerospace-cycle.nix {
     inherit lib;
-    inherit (contract) workspaces;
-    executable = toString cli;
+    inherit (import ../../home/keybindings/bindings.nix { inherit lib; }) workspaces;
+    executable = toString (
+      pkgs.writeShellScript "aerospace-test-cli" ''
+        case "$1" in
+          list-workspaces)
+            [ "$2" = --focused ] || exit 64
+            [ "$FOCUSED" != FAIL ] || exit 7
+            printf '%s\n' "$FOCUSED"
+            ;;
+          workspace) printf '%s\n' "$2" ;;
+          *) exit 64 ;;
+        esac
+      ''
+    );
   };
   next = pkgs.writeShellScript "workspace-next-test" scripts.next;
   prev = pkgs.writeShellScript "workspace-prev-test" scripts.prev;
