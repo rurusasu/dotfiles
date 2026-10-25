@@ -1,7 +1,7 @@
 # Git worktree の管理
 
 worktree の作成・移動・一覧・削除には [gwq](https://github.com/d-kuro/gwq) を使う。
-Unix CLI の導入は `nix/modules/tools.nix`、設定と Bash / Zsh の補完・移動連携は
+Unix CLI の導入、設定と Bash / Zsh の補完・移動連携は
 `nix/modules/git/gwq.nix` が管理する。既存の `git gtr` も `gwq add` に転送する。
 
 ## Windows と WSL の共用
@@ -14,7 +14,7 @@ Git の `worktree.useRelativePaths = true` を次の場所で管理する。
 | Windows             | `chezmoi/dot_config/git/config` | `%USERPROFILE%/.config/git/config`（chezmoi） |
 
 Git 2.48 以降が必要。Windows / WSL の両方で有効にしてから新しい worktree を作成する。
-WSL の gwq 保存先は `nix/hosts/x86_64-linux/wsl/home.nix` で `/mnt/d/worktrees` に設定する。
+WSL の gwq 保存先は `nix/defaults.nix` の WSL 設定で `/mnt/d/worktrees` に設定する。
 Windows からは `D:/worktrees` に見える。同じ D ドライブ内にリポジトリと worktree を配置する。
 `worktree.auto_mkdir = true` により、保存先がなければ初回の `gwq add` で自動作成される。
 WSL 内の `~/worktrees` や別ドライブに置くと、相対リンクでも Windows と共用できない。

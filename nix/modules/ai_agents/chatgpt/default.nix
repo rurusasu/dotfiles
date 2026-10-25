@@ -1,156 +1,151 @@
-{
-  config,
-  lib,
-  pkgs,
-  ...
-}:
-let
-  codexHome = "${config.home.homeDirectory}/.codex";
-  rules = lib.mapAttrs' (
-    name: _: lib.nameValuePair (lib.removeSuffix ".rules" name) (./rules + "/${name}")
-  ) (builtins.readDir ./rules);
-  agents = {
-    fast_worker = "Fast scoped implementation agent.";
-    python_coding = "Python implementation-only agent (no test execution).";
-  };
-  scripts = {
-    "command_permission_policy.py" = "Checking command policy";
-    "deny_protected_branch_commit.py" = "Checking protected branch policy";
-  };
-  enabledPlugins = [
-    "slack"
-    "github"
-    "hugging-face"
-    "codex-security"
-    "gmail"
-    "google-drive"
-    "openai-developers"
-    "google-calendar"
-  ];
-  managedFiles = [
-    ".codex/AGENTS.override.md"
-    ".codex/hooks.json"
-  ]
-  ++ map (name: ".codex/rules/${name}.rules") (builtins.attrNames rules);
-in
-{
-  programs.codex = {
-    enable = true;
-    # tools.nix selects the app-bundled Linux/macOS CLI where appropriate.
-    package = lib.mkDefault null;
-    # Preserve application settings and project trust in a writable user file.
-    mutableSettings = true;
-    contextOverride = ./AGENTS.override.md;
-    inherit rules;
-    hooks.PreToolUse = [
-      {
-        matcher = "^Bash$";
-        hooks = lib.mapAttrsToList (name: statusMessage: {
-          type = "command";
-          command = "${pkgs.python3}/bin/python3 ${lib.escapeShellArg "${codexHome}/hooks/${name}"}";
-          timeout = 30;
-          inherit statusMessage;
-        }) scripts;
-      }
-    ];
-    settings = {
-      model = "gpt-6-luna";
-      model_reasoning_effort = "high";
-      plan_mode_reasoning_effort = "high";
-      model_reasoning_summary = "auto";
-      model_verbosity = "low";
-      approval_policy = "never";
-      default_permissions = ":danger-full-access";
-      web_search = "live";
-      shell_environment_policy = {
-        "inherit" = "all";
-        exclude = [
-          "*KEY*"
-          "*TOKEN*"
-          "*SECRET*"
-          "*PASSWORD*"
-          "*CREDENTIAL*"
-        ];
-        set.TERM = "xterm-256color";
-      };
-      features = {
-        # The app-bundled CLI lacks the complete package layout required by
-        # the managed daemon; keep interactive sessions in embedded mode.
-        daemon_auto_start = false;
-        hooks = true;
-        unified_exec = true;
-        apps = true;
-      };
-      tui.keymap.editor.insert_newline = [
-        "shift-enter"
-        "ctrl-enter"
-        "ctrl-j"
-      ];
-      tools.view_image = true;
-      skills.config =
-        map
-          (name: {
-            inherit name;
-            path = "~/.codex/skills/${name}";
-            enabled = true;
-          })
-          [
-            "python-clean-architecture"
-            "python-docstring"
+rec {
+  # Native desktop and the CLI shipped in the same official distribution.
+  packages =
+    { pkgs }:
+    let
+      # Upstream otherwise replaces these binaries with its separate Codex package.
+      chatgpt = pkgs.chatgpt.override { codex = null; };
+      resources =
+        if pkgs.stdenv.hostPlatform.isDarwin then
+          "${chatgpt}/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin"
+        else
+          "${chatgpt}/lib/chatgpt/resources";
+    in
+    assert pkgs.stdenv.hostPlatform.isLinux || pkgs.stdenv.hostPlatform.isDarwin;
+    {
+      inherit chatgpt;
+      codex = pkgs.linkFarm "codex" (
+        {
+          "bin/codex" = "${resources}/codex";
+          "bin/codex-code-mode-host" = "${resources}/codex-code-mode-host";
+        }
+        // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          "bin/bwrap" = pkgs.lib.getExe pkgs.bubblewrap;
+        }
+      );
+    };
+
+  cli =
+    { pkgs, ... }:
+    {
+      imports = [ homeManager ];
+      home.packages = [ (packages { inherit pkgs; }).codex ];
+    };
+
+  desktop =
+    { pkgs, ... }:
+    {
+      imports = [ cli ];
+      home.packages = [ (packages { inherit pkgs; }).chatgpt ];
+    };
+
+  homeManager =
+    {
+      config,
+      lib,
+      pkgs,
+      ...
+    }:
+    {
+      home.activation.codexXdgHome = lib.mkIf config.home.preferXdgDirectories (
+        lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ] ''
+          legacy=${lib.escapeShellArg "${config.home.homeDirectory}/.codex"}
+          target=${lib.escapeShellArg "${config.xdg.configHome}/codex"}
+          if [[ -L "$legacy" ]]; then
+            if [[ "$(${pkgs.coreutils}/bin/readlink -m -- "$legacy")" != "$(${pkgs.coreutils}/bin/readlink -m -- "$target")" ]]; then
+              errorEcho "Codex legacy directory points elsewhere: $legacy; reconcile it with $target before activating."
+              exit 1
+            fi
+          elif [[ -e "$legacy" ]]; then
+            if [[ ! -d "$legacy" || -e "$target" || -L "$target" ]]; then
+              errorEcho "Cannot migrate Codex state from $legacy to $target without overwriting existing data."
+              exit 1
+            fi
+            run ${pkgs.coreutils}/bin/mkdir -p -- "$(${pkgs.coreutils}/bin/dirname -- "$target")"
+            run ${pkgs.coreutils}/bin/mv --no-target-directory --update=none-fail -- "$legacy" "$target"
+          fi
+          if [[ ! -e "$legacy" && ! -L "$legacy" ]]; then
+            run ${pkgs.coreutils}/bin/mkdir -p -- "$target"
+            run ${pkgs.coreutils}/bin/ln -s -- "$target" "$legacy"
+          fi
+        ''
+      );
+
+      # The mutable merge retains omitted keys, including removed managed roles.
+      home.activation.codexPruneManagedAgents =
+        lib.hm.dag.entryBetween [ "codexMutableSettings" ] [ "linkGeneration" ]
+          (
+            lib.hm.generators.mkImpureConfigMerger {
+              inherit pkgs;
+              format = "toml";
+              empty = "{}";
+              jqOperation = ''
+                $dynamic | reduce ["fast_worker", "python_coding"][] as $name (.;
+                  if .agents[$name].config_file? == (${builtins.toJSON "${config.home.homeDirectory}/.codex/agents/"} + $name + ".toml")
+                  then del(.agents[$name]) else . end)
+              '';
+              path = "${
+                if config.home.preferXdgDirectories then
+                  "${config.xdg.configHome}/codex"
+                else
+                  "${config.home.homeDirectory}/.codex"
+              }/config.toml";
+              staticSettings = pkgs.writeText "codex-agent-migration.toml" "";
+              mode = "600";
+            }
+          );
+
+      programs.codex = {
+        enable = true;
+        enableMcpIntegration = true;
+        # The cli module exposes the bundled CLI; this option manages settings.
+        package = lib.mkDefault null;
+        # Preserve application settings and project trust in a writable user file.
+        mutableSettings = true;
+        settings = {
+          model = "gpt-6.1-sol";
+          model_reasoning_effort = "high";
+          plan_mode_reasoning_effort = "high";
+          model_reasoning_summary = "auto";
+          model_verbosity = "low";
+          approval_policy = "never";
+          default_permissions = ":danger-full-access";
+          web_search = "live";
+          features = {
+            # The app-bundled CLI lacks the complete package layout required by
+            # the managed daemon; keep interactive sessions in embedded mode.
+            daemon_auto_start = false;
+            unified_exec = true;
+            apps = true;
+          };
+          tui.keymap.editor.insert_newline = [
+            "shift-enter"
+            "ctrl-enter"
+            "ctrl-j"
           ];
-      agents = {
-        max_threads = 12;
-        max_depth = 2;
-        job_max_runtime_seconds = 3600;
-      }
-      // lib.mapAttrs (name: description: {
-        inherit description;
-        config_file = "${codexHome}/agents/${name}.toml";
-      }) agents;
-      mcp_servers.MCP_DOCKER = {
-        command = "docker";
-        args = [
-          "mcp"
-          "gateway"
-          "run"
-          "--profile"
-          "dotfiles"
-        ];
-        startup_timeout_sec = 30;
-      };
-      plugins =
-        lib.genAttrs (map (name: "${name}@openai-curated") enabledPlugins) (_: {
-          enabled = true;
-        })
-        // {
-          "linear@openai-curated".enabled = false;
-          "notion@openai-curated".enabled = false;
+          tools.view_image = true;
+          plugins =
+            lib.genAttrs
+              (map (name: "${name}@openai-curated") [
+                "slack"
+                "github"
+                "hugging-face"
+                "codex-security"
+                "openai-developers"
+              ])
+              (_: {
+                enabled = true;
+              })
+            // {
+              "linear@openai-curated".enabled = false;
+              "notion@openai-curated".enabled = false;
+            };
+          # Native desktop cleanup: protected worktrees and snapshots remain upstream-owned.
+          desktop = {
+            worktree-auto-cleanup-enabled = true;
+            worktree-keep-count = 15;
+          };
         };
-      # Native desktop cleanup: protected worktrees and snapshots remain upstream-owned.
-      desktop = {
-        worktree-auto-cleanup-enabled = true;
-        worktree-keep-count = 15;
       };
     };
-  };
-
-  # Take over previously chezmoi-managed files, without touching auth or sessions.
-  home.file =
-    lib.genAttrs managedFiles (_: {
-      force = true;
-    })
-    // lib.mapAttrs' (
-      name: _:
-      lib.nameValuePair ".codex/agents/${name}.toml" {
-        source = ./agents + "/${name}.toml";
-        force = true;
-      }
-    ) agents
-    // lib.mapAttrs' (
-      name: _:
-      lib.nameValuePair ".codex/hooks/${name}" {
-        source = ./hooks + "/${name}";
-        force = true;
-      }
-    ) scripts;
 }

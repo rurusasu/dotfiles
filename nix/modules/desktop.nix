@@ -1,34 +1,48 @@
-# Linux GUI installation. Hosts select the native or WSLg package set.
+{ config, lib, ... }:
 let
-  linuxDesktopWith =
-    chromeProvider:
-    { lib, pkgs, ... }:
-    {
-      imports = [ ./fonts/gtk.nix ];
-      home.packages =
-        lib.optionals pkgs.stdenv.hostPlatform.isLinux [
-          (chromeProvider pkgs)
-          pkgs.obsidian
-          pkgs._1password-gui
-          pkgs.nautilus
-        ]
-        # Upstream currently publishes the Linux Desktop binary only for x86_64.
-        ++ lib.optionals (pkgs.stdenv.hostPlatform.system == "x86_64-linux") [
-          (pkgs.callPackage ./comfyui/package.nix { })
-        ];
-    };
+  trackpad = {
+    Clicking = true;
+    TrackpadRightClick = true;
+  };
 in
 {
-  linuxDesktop = linuxDesktopWith (pkgs: pkgs.google-chrome);
+  imports = [
+    ./dock.nix
+    ./finder.nix
+  ];
 
-  wslDesktop =
-    { lib, pkgs, ... }:
-    {
-      imports = [ (linuxDesktopWith (pkgs: import ./browsers/chrome { inherit pkgs; })) ];
-      # The WSL host is x86_64; Spotify's Linux binary is not available for ARM.
-      home.packages = lib.optionals (pkgs.stdenv.hostPlatform.system == "x86_64-linux") [
-        pkgs.spotify
-        pkgs.signal-desktop
-      ];
+  targets.darwin.defaults = {
+    "com.apple.AppleMultitouchTrackpad" = trackpad;
+    "com.apple.driver.AppleBluetoothMultitouch.trackpad" = trackpad;
+    NSGlobalDomain = {
+      AppleShowAllExtensions = true;
+      "com.apple.swipescrolldirection" = true;
+      AppleInterfaceStyle = "Dark";
+      NSAutomaticCapitalizationEnabled = false;
+      NSAutomaticDashSubstitutionEnabled = false;
+      NSAutomaticPeriodSubstitutionEnabled = false;
+      NSAutomaticQuoteSubstitutionEnabled = false;
+      NSAutomaticSpellingCorrectionEnabled = false;
     };
+  };
+
+  # Dictionary additions preserve unrelated application-specific shortcuts.
+  home.activation.globalZoomShortcut = lib.hm.dag.entryAfter [ "setDarwinDefaults" ] ''
+    run /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "Zoom" "@^m"
+    run /usr/bin/defaults write -g NSUserKeyEquivalents -dict-add "拡大／縮小" "@^m"
+  '';
+
+  home.activation.refreshDarwinSettings =
+    lib.hm.dag.entryAfter
+      [
+        "setDarwinDefaults"
+        "globalZoomShortcut"
+        "omarchySymbolicHotkeys"
+      ]
+      ''
+        if /usr/bin/pgrep -u "$UID" -x Dock >/dev/null; then
+          run /usr/bin/killall -qu ${lib.escapeShellArg config.home.username} Dock
+        fi
+        run /System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings -u
+      '';
 }

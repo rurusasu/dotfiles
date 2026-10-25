@@ -35,12 +35,35 @@ if ($MissingDependency -eq 'PSScriptAnalyzer') {
     Resolve-TestModule -Name PSScriptAnalyzer | Out-Null
     exit 0
 }
+if ($MissingDependency -eq 'PesterCoverageConfiguration') {
+    function global:New-FixturePesterConfiguration {
+        [pscustomobject]@{
+            Run = [pscustomobject]@{ Path = @(); Exit = $false; PassThru = $false }
+            Output = [pscustomobject]@{ Verbosity = '' }
+            CodeCoverage = [pscustomobject]@{
+                Enabled = $false; Path = @(); CoveragePercentTarget = 0
+                OutputFormat = ''; ExcludeTests = $false
+            }
+        }
+    }
+    # Keep the real installed Pester import, but expose a configuration without UseBreakpoints.
+    Set-Alias -Name New-PesterConfiguration -Value New-FixturePesterConfiguration -Scope Global
+}
+if ($MissingDependency -eq 'PesterCoberturaExporter') {
+    . (Join-Path (Split-Path -Parent $Runner) 'support/Resolve-TestModule.ps1')
+    $pesterModule = Resolve-TestModule -Name Pester
+    Import-Module -Name $pesterModule.Path -Force
+    $moduleWithoutExporter = New-Module -Name CoverageExporterFixture -ScriptBlock {}
+    Assert-PesterCoverageConfiguration -Configuration (New-PesterConfiguration) -Module $moduleWithoutExporter
+    exit 0
+}
 $target = Join-Path $Fixture 'Fixture.Tests.ps1'
 if ($MissingDependency -eq 'task') {
     $env:PATH = $PSHOME + ';' + (Join-Path $env:SystemRoot 'System32')
     $target = Join-Path (Split-Path -Parent $Runner) 'Install.Wsl.Tests.ps1'
 }
-& $Runner -Path $target -MinimumCoverage 0
+$coverageArguments = if ($MissingDependency -eq 'PesterCoverageConfiguration') { @{ ShowCoverage = $true } } else { @{} }
+& $Runner -Path $target -MinimumCoverage 0 @coverageArguments
 exit $LASTEXITCODE
 '@ | Set-Content -LiteralPath $bootstrap
 
@@ -49,7 +72,7 @@ exit $LASTEXITCODE
             $ErrorActionPreference = 'Continue'
             # Exercise native quoting with spaces and a trailing path separator.
             $modulePaths = $env:PSModulePath + [IO.Path]::PathSeparator +
-                (Join-Path $fixture 'Modules with spaces') + [IO.Path]::DirectorySeparatorChar
+            (Join-Path $fixture 'Modules with spaces') + [IO.Path]::DirectorySeparatorChar
             $modulePathsBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($modulePaths))
             $arguments = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $bootstrap,
                 '-Runner', $script:runner, '-Fixture', $fixture, '-ModulePathsBase64', $modulePathsBase64)
@@ -60,7 +83,8 @@ exit $LASTEXITCODE
         finally { $ErrorActionPreference = $previousPreference }
         return [pscustomobject]@{
             ExitCode            = $exitCode
-            Output              = $output -join [Environment]::NewLine
+            # Child PowerShell can interleave ANSI styling with wrapped diagnostics.
+            Output              = [regex]::Replace(($output -join [Environment]::NewLine), '\x1B\[[0-9;]*m', '')
             AcquisitionOccurred = Test-Path -LiteralPath (Join-Path $fixture 'unexpected-acquisition.txt')
         }
     }
@@ -72,6 +96,24 @@ Describe 'PowerShell test prerequisites' {
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $result.AcquisitionOccurred | Should -BeFalse
         $result.Output | Should -Match 'SUCCESS: All tests passed!'
+    }
+
+    It 'should report missing Pester coverage configuration without downloading it' {
+        $result = Invoke-TestPrerequisiteProbe -MissingDependency 'PesterCoverageConfiguration'
+        $result.ExitCode | Should -Be 1 -Because $result.Output
+        $result.Output | Should -Match ([regex]::Escape("Required test dependency 'Pester'"))
+        $result.Output | Should -Match ([regex]::Escape('CodeCoverage.UseBreakpoints'))
+        $result.Output | Should -Match 'Prepare dependencies(?:\s|\|)+separately'
+        $result.AcquisitionOccurred | Should -BeFalse
+    }
+
+    It 'should report an unsupported Cobertura exporter without downloading it' {
+        $result = Invoke-TestPrerequisiteProbe -MissingDependency 'PesterCoberturaExporter'
+        $result.ExitCode | Should -Be 1 -Because $result.Output
+        $result.Output | Should -Match ([regex]::Escape("Required test dependency 'Pester'"))
+        $result.Output | Should -Match 'Cobertura coverage exporter'
+        $result.Output | Should -Match 'Prepare dependencies(?:\s|\|)+separately'
+        $result.AcquisitionOccurred | Should -BeFalse
     }
 
     It 'should report missing <Dependency> without downloading it' -ForEach @(

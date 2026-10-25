@@ -2,25 +2,25 @@
 
 ## 所有境界
 
-| パス                    | 所有範囲                                                                          |
-| ----------------------- | --------------------------------------------------------------------------------- |
-| `nix/hosts/`            | system/host サービス、OS ユーザー、hardware、OS 固有の system / Home Manager 設定 |
-| `nix/modules/`          | Unix のパッケージ導入・アプリ設定・custom package 定義                            |
-| `windows/winget/`       | Windows GUI の独立した install manifest                                           |
-| `nix/home/keybindings/` | 共通 action/key、純粋な設定生成関数、Home Manager のユーザー設定                  |
-| `nix/home/`             | OS 非依存の Home Manager ユーザー設定・共有サービス                               |
-| `nix/tests/unit/`       | nix-unit による Nix 式・実効設定値のテスト                                        |
-| `nix/tests/build/`      | ビルド・生成物比較・外部プロセス・VM テストの derivation                          |
-| `nix/tests/fixtures/`   | テスト用の共有入力・補助 module                                                   |
-| `chezmoi/`              | Windows の dotfile、テンプレート、アプリ設定。Unix 設定は配布しない               |
+| パス                    | 所有範囲                                                            |
+| ----------------------- | ------------------------------------------------------------------- |
+| `nix/defaults.nix`      | OS 基盤設定、module 選択、公開構成、GC                              |
+| `nix/modules/`          | Unix のパッケージ導入・アプリ設定・custom package 定義              |
+| `windows/winget/`       | Windows GUI の独立した install manifest                             |
+| `nix/home/keybindings/` | 共通 action/key と Windows export                                   |
+| `nix/home/`             | 共通キー配列と Windows export                                       |
+| `nix/tests/unit/`       | nix-unit による Nix 式・実効設定値のテスト                          |
+| `nix/tests/build/`      | ビルド・生成物比較・外部プロセス・VM テストの derivation            |
+| `nix/tests/fixtures/`   | テスト用の共有入力・補助 module                                     |
+| `chezmoi/`              | Windows の dotfile、テンプレート、アプリ設定。Unix 設定は配布しない |
 
 - host / hardware 設定を `nix/home/` に置かない。
 - Home Manager と chezmoi で同じファイルを所有しない。
 
-Unix CLI / GUI の導入は `nix/modules/tools.nix`、設定・連携は機能ごとの module、Windows の導入情報は独立した manifest、OS の動作は host に分けます。
+Unix CLI / GUI はアプリごとの module が導入・package 選択・設定・連携・専用の実行依存を所有します。enable・単純な package list・単一代入だけなら必要な構成へ直接書きます。共通・OS 別構成は module の外で組み立て、Windows の導入情報は独立した manifest が所有します。
 詳細は [分割の理由と編集先](../docs/nix/package-management.md#分割の理由と編集先) を参照してください。
-キー配列は home のユーザー設定と hosts の OS 統合に分けます。Darwin は home の生成結果を
-nix-darwin のサービス設定へ渡し、native NixOS は host から Home Manager module を選択します。
+キー配列は `home/keybindings/bindings.nix`、AeroSpace と Hyprland の設定・生成関数は
+`modules/aerospace/` と `modules/hyprland/` が管理し、`defaults.nix` が OS ごとの module を選択します。
 Windows は標準デスクトップを使用し、Nix から設定を生成・配布しません。WSL guest と standalone Linux へ
 Hyprland を自動導入しない設計です。[対応範囲・移行状況と検証](../docs/chezmoi/omarchy.md) を参照してください。
 
@@ -29,18 +29,16 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
 
 ## 設定の配置
 
-1. OS 固有の Home Manager 設定と module の選択は `nix/hosts/<system>/<environment>/home.nix` に追加する。
-   nix-darwin、NixOS、standalone Home Manager は同じ host の `home.nix` を利用する。
-   Darwin の standalone 用 font package は `nix/hosts/aarch64-darwin/home.nix` から選択し、
-   `$HOME/Library/Fonts` への配布は Home Manager 標準機能が担当する。
-2. system、host サービス、ユーザー、hardware は `nix/hosts/<system>/<environment>/configuration.nix` に追加する。
-   責務別に分離した host module がある場合は、その module に追加する。Darwin の system font は
-   `nix/modules/fonts.nix` の定義を `nix/hosts/aarch64-darwin/platform.nix` から配布し、OS-wide defaults、timezone、defaults の反映 activation は
-   `nix/hosts/aarch64-darwin/system.nix` が所有する。host identity、サービス、Homebrew、統合固有の
-   activation は `configuration.nix` に置く。各 host の `default.nix` は `configuration.nix` と
-   責務別 module を import する entrypoint として維持する。Darwin の `default.nix` は配線専用とする。
-3. 各 host の `home.nix` は `nix/home/common.nix` を直接、または `shared/linux-home.nix` を通じて import する。`nix/home/` に OS 別の入口を置かず、共通設定から host の設定を import しない。
-4. Unix のパッケージは `nix/modules/` に宣言する。Unix CLI / GUI の導入はすべて `tools.nix`、GUI の OS 別選択も `tools.nix` にまとめ、個別アプリの設定・連携は各 module にまとめる。CLI / GUI の `programs.*.enable` と `home.packages` をアプリ module へ分散させない。Windows は `windows/winget/packages.json` を直接編集する。
+1. アプリの設定・サービス・activation は `modules/`、OS 基盤設定と module の選択は `defaults.nix` に置く。
+   統合構成と standalone は同じ OS の Home Manager module を使う。
+   基本フォントは統合時にはシステム、standalone 時には Home Manager が導入する。
+2. system、アカウント、OS 別 module の選択は `defaults.nix` の `systemDefaults` にまとめる。
+   アカウントは各 OS ブロックに明示し、公開構成は末尾の `configurations` に登録する。
+   共通設定を先に、OS 別 imports を後に記載し、末尾の構成登録で `specialArgs.platform` を選択する。
+   共通の Lix・OS GC・Home Manager 接続は `systemDefaults`、GC 日時は各 OS ブロックに置く。
+   CPU は `system` 引数で選択する。
+3. Home Manager の共通・OS 別設定は同じ `systemDefaults.home-manager.sharedModules` に宣言し、standalone も再利用する。
+4. Unix のパッケージは `nix/modules/` のアプリごとの module に宣言し、標準の `programs.*.enable` または `home.packages` と設定・連携を一緒に管理する。enable・単純な package list・単一代入だけなら `defaults.nix` の必要な構成へ直接書く。設定・package override・生成・連携を持つアプリは module にまとめる。Neovim の LSP・整形ツール・toolchain は Neovim が所有する。通常の CLI・GUI は Home Manager、OS 固有の設定・権限・システムサービス・連携は `defaults.nix`、Homebrew と cask は `defaults.nix` が担当する。Windows は `windows/winget/packages.json` を直接編集する。
 5. Unix の dotfile は Home Manager、Windows は `chezmoi/`、秘密情報は既存の secret 経路を使い、所有を重複させない。
 6. Nix 設定の変更は `nix flake check --all-systems --no-build --no-write-lock-file` で評価し、
    対象 system の `nix-unit` と関連 build check を build して検証する。
@@ -55,11 +53,12 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
    テストの登録は `nix/tests/default.nix` が担当する。nix-unit も flake の `checks` 経由で実行する。
    `--no-build` の成功はテスト実行の成功を意味しない。[配置と実行方法](tests/README.md) を参照する。
 
-ホストの標準レイアウトでは `nix/hosts/<system>/<environment>/default.nix` と
-`nix/hosts/<system>/<environment>/configuration.nix` を必須の基本構成とし、必要に応じて `default.nix` が
-責務別 module を import します。Darwin、native NixOS、NixOS-WSL はいずれもこの構成を使い、
-Darwin ではフォント配布を `platform.nix`、OS-wide defaults を `system.nix` に分離しています。
-`nix/modules/` には OS 別ディレクトリを置かず、アプリ・機能単位の共通設定だけを残します。
+構成登録は `nix/defaults.nix:configurations`、app と package は `perSystem` にまとめます。
+ユーザー名・stateVersion は `systemDefaults` 内の `defaults` で一元管理します。
+OS 設定は `systemDefaults` が所有し、Hyprland は native Linux 構成だけが有効化します。
+
+Dock・Finder・trackpad の設定と反映は `modules/desktop.nix`、Dock の固定アプリは `modules/dock.nix` が管理します。
+`nix/modules/` は共通のアプリ・機能単位に分け、OS 固有の設定は `defaults.nix` の各 OS ブロックに置きます。構成の組み立ては `defaults.nix` が明示的な imports で行います。
 
 ## Codex CLI
 

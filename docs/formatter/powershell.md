@@ -35,7 +35,7 @@
 システムの ANSI コードページで読み、日本語の閉じ引用符まで誤読する場合があります。
 `chcp 65001` や `$OutputEncoding` では、このファイル読み込みの問題は解消しません。
 
-[`nix/formatter.nix`](../../nix/formatter.nix) は本文が変わらない場合も
+[`nix/treefmt.nix`](../../nix/treefmt.nix) は本文が変わらない場合も
 必要な BOM を補い、既存 BOM を維持します。ASCII のみのファイルには必須ではありません。
 `chezmoi/` テンプレートには BOM を追加しません。
 
@@ -86,11 +86,11 @@ function Get-Something {
 この repository の `nix fmt` / `checks.<system>.treefmt` は、PowerShell と
 PSScriptAnalyzer を宣言済みの依存として使用します。
 [`nix/modules/shells/powershell/psscriptanalyzer.nix`](../../nix/modules/shells/powershell/psscriptanalyzer.nix) が
-公式 GitHub release のバージョン付き asset を Nix input として使い、
+PowerShell Gallery のバージョン指定なし URL
+(`https://www.powershellgallery.com/api/v2/package/PSScriptAnalyzer`) を Nix input として使い、
 formatter は store の manifest を直接 import します。
-現在は 1.25.0 に固定し、`flake.lock` に取得内容の hash を記録します。
-更新時は `flake.nix` の `psscriptanalyzer` URL を選んだ upstream バージョンの asset に変更し、
-`nix flake update psscriptanalyzer` でその input の lock を更新します。
+input URL は `flake.nix` に宣言し、取得した配布物と内容の hash は `flake.lock` で固定します。
+更新時は `nix flake update psscriptanalyzer` で input を再解決し、lock を更新します。
 HOME の module cache に依存せず、整形中のダウンロードはありません。
 
 Windows テストは、インストール済みの互換性がある stable module を選択します。
@@ -126,7 +126,7 @@ Invoke-ScriptAnalyzer -Path "." -Recurse -Settings "PSScriptAnalyzerSettings.psd
 
 ## treefmt 設定
 
-`nix/formatter.nix` の PowerShell 定義を更新します。
+`nix/treefmt.nix` の PowerShell 定義を更新します。
 対象は `.ps1`、`.psm1`、`.psd1` です。
 formatter は UTF-8 として読み、CRLF に正規化してから、対象パス・非 ASCII 文字・
 既存 BOM をもとに出力形式を決めます。本文の差分だけでなく BOM 不足も書き込み条件です。

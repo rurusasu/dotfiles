@@ -4,7 +4,7 @@
 
 ## 設定ファイル
 
-[nix/formatter.nix](../../nix/formatter.nix) に設定値を宣言します。以下は生成される設定の内容です。
+[nix/treefmt.nix](../../nix/treefmt.nix) に設定値を宣言します。以下は生成される設定の内容です。
 
 ```json
 {
@@ -89,13 +89,11 @@ treefmt
 
 ## treefmt-nix 設定
 
-[nix/formatter.nix](../../nix/formatter.nix) で設定:
+[nix/treefmt.nix](../../nix/treefmt.nix) で設定:
 
 ```nix
 {
-  treefmt = {
-    programs.oxfmt.enable = true;
-  };
+  programs.oxfmt.enable = true;
 }
 ```
 

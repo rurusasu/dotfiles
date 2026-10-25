@@ -39,9 +39,7 @@ class CiJobRoutingTests(unittest.TestCase):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary:
                 workspace = Path(temporary)
                 (workspace / "chezmoi").mkdir()
-                xml_path = (
-                    workspace / "nix/hosts/x86_64-linux/wsl/fonts/fontconfig.conf"
-                )
+                xml_path = workspace / "nix/modules/fonts/wsl-fontconfig.conf"
                 xml_path.parent.mkdir(parents=True)
                 xml_path.write_text(canonical)
                 executable = workspace / "chezmoi-cli"
@@ -133,9 +131,6 @@ class CiJobRoutingTests(unittest.TestCase):
             ({"BASH_REQUIRED": "true", "BASH_RESULT": "failure"}, 1),
             ({"BASH_REQUIRED": "true", "BASH_RESULT": "success"}, 0),
             ({"BASH_RESULT": "success"}, 1),
-            ({"HERMES_REQUIRED": "true"}, 1),
-            ({"HERMES_REQUIRED": "true", "HERMES_RESULT": "success"}, 0),
-            ({"HERMES_RESULT": "success"}, 1),
             (
                 {
                     "TOOLS_REQUIRED": "true",

@@ -1,75 +1,57 @@
 # Hermes Desktop and Agent
 
-## Runtime ownership
+## Installation and launch
 
-macOS `./install.sh`, NixOS/WSL `task nrs`, and standalone Linux Home Manager
-flows install and activate Hermes Agent through the shared Home Manager
-configuration. `task hermes:bootstrap` selects `nixos-rebuild` on NixOS and
-`home-manager switch` on standalone Linux. The gateway is a native per-user
-service: systemd on Linux and launchd on macOS.
-Use `task hermes:up`, `task hermes:down`, `task hermes:restart`, and
-`task hermes:logs` to control that service through the Hermes CLI.
+`nix/modules/ai_agents/hermes/default.nix` imports the official Home Manager
+module and declares `services.hermes-agent` settings. The official module owns
+the Agent package, Desktop application, and native gateway service
+(systemd on Linux, launchd on macOS). Desktop is enabled on all supported OSes.
+`settings.gateway.multiplex_profiles = null` clears a previous explicit value
+and restores the upstream AUTO safety decision at gateway startup.
 
-The Hermes Desktop application is installed separately. It does not make the
-Docker Compose gateway the owner of the Agent runtime. The standard Hermes
-setup does not start Docker, bootstrap a Docker gateway, or modify the existing
-`hermes-data` volume.
-
-The old Docker gateway tasks and backend have been removed. The old named
-`hermes-data` volume is intentionally left untouched; Nix setup neither imports
-nor deletes its contents.
-
-The browser and MCP support containers remain separately available through
-their dedicated Compose tasks; they are not the Hermes Agent runtime.
-The [retired Docker runtime inventory](retired-docker-runtime.md) records the
-removed adapters and the helpers retained by the current sidecars.
-
-## Desktop installation and launch
-
-On macOS, `desktop-darwin.nix` installs the official complete Apple Silicon
-bundle through Nix. `nix/modules/ai_agents/hermes/sources.json` pins its URL and
-SHA-512. The CLI and launchd gateway use the same bundle, including its Python
-3.14 runtime and ready dependencies; Nix only extracts the archive and installs
-launchers, without compiling Hermes or its native dependencies.
-The signed app is preserved unchanged. Use Nix rebuilds for updates, rather
-than the app's manual update button. The vendor disables unattended downloads
-and installation, but its GUI still performs update checks.
-
-The upstream Home Manager module continues to install Desktop on Linux,
-including native NixOS, WSLg, and standalone Home Manager.
-All platforms retain `~/.hermes` and the managed gateway configuration.
-Windows does not install Hermes natively; Windows Task commands delegate to
-the NixOS-WSL installation.
-`task hermes:desktop:install` verifies the Desktop package and Nix-managed CLI.
-Launch the GUI with:
+Apply the usual Nix/Home Manager configuration, then launch Desktop:
 
 ```bash
-task hermes:desktop
-```
-
-The Desktop app's own backend/remote connection settings are separate from the
-native messaging gateway service. Nix setup does not publish a Docker dashboard.
-
-For the native CLI, use the Hermes command directly or pass arguments through
-the Taskfile:
-
-```bash
-task hermes:cli -- --help
+hermes-desktop
 hermes gateway status
 ```
 
-## Existing data and migration boundary
+The official Darwin Nix output has no `.app` bundle; use `hermes-desktop`.
+Windows uses the NixOS/WSL installation. The external LCM plugin is supplied
+through `extraPlugins = [ inputs.hermes-lcm ]` because it is not bundled with Hermes.
+Update its source with `nix flake update hermes-lcm`.
+Hermes root settings convert the shared `programs.mcp.servers` definitions in
+`nix/modules/ai_agents/mcp.nix` into the official typed
+`services.hermes-agent.mcpServers` option.
 
-Hermes API keys, profiles, sessions, and memory remain in their current
-runtime storage. Nix activation does not copy Docker volume contents into
-`~/.hermes`, and it does not delete or rewrite that volume. If you want to move
-legacy Docker data into the native runtime, that is a separate migration that
-must be planned and verified before running; this setup intentionally leaves
-both data stores untouched.
+## Profiles
 
-On macOS, the former Python 3.12 build graph (including h5py, ONNX Runtime,
-Torch and CTranslate2) is no longer required. Nix garbage collection can reclaim
-unreferenced build dependencies after switching; retained generations may still
-reference them. Do not delete store paths manually. Bootstrap shares the bundled
-Python and current profile API. Nix's configuration merge helper still needs a
-lightweight Python runtime, and shared tools such as Git and Node.js remain.
+Home Manager manages root settings. Each named profile's Git source owns its
+`config.yaml` and individual `op://` references. Use the official
+`hermes profile install <source>` command with a Git URL or a local profile
+directory, including a profile subdirectory in a local monorepo. The installer
+uses `manifest.name`; subsequent updates use `hermes profile update`.
+Named profiles do not inherit root MCP settings. Their Git configuration must
+reference the shared gateway or declare the corresponding MCP server URL.
+The Chrome and X API loopback URLs are unchanged by the native service migration.
+
+```bash
+hermes profile install --help
+hermes profile update --help
+```
+
+A shared profile monorepo has not been created or migrated; its URL is undecided.
+Git uses the existing SSH configuration. See [1Password](onepassword.md) for
+secret references and Pipedream OAuth.
+
+## Runtime data
+
+Hermes `.env`, authentication, sessions, and memory remain in their current
+storage. Chrome and X API MCP run as shared native `mcp-chrome` and `mcp-xapi`
+services, independent of the Hermes gateway. Clients connect to their loopback
+HTTP endpoints; each service keeps one stdio child. Chrome runs headless using
+the root Hermes `.browser` profile; native xurl accesses
+the existing root `.xurl` cache through Home Manager's `~/.xurl` and XDG links.
+Conflicting existing xurl paths stop activation. Legacy Docker data is not
+migrated or deleted automatically; see the
+[retired runtime inventory](retired-docker-runtime.md).

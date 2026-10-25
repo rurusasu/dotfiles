@@ -155,7 +155,7 @@ $pesterModule = Resolve-TestModule -Name Pester
 if (Get-Module -Name Pester) {
     Remove-Module -Name Pester -Force -ErrorAction Stop
 }
-Import-Module -Name $pesterModule.Path -Force -ErrorAction Stop
+$activePesterModule = Import-Module -Name $pesterModule.Path -Force -PassThru -ErrorAction Stop
 
 $loadedVersion = (Get-Module -Name Pester).Version
 Write-Host "Pester v$loadedVersion を使用します" -ForegroundColor Cyan
@@ -187,12 +187,8 @@ $pesterConfig.Run.Path = $Path
 $pesterConfig.Run.Exit = $false
 $pesterConfig.Run.PassThru = $true
 
-# 出力設定。JUnit XML を生成する CI 実行では ANSI 制御文字を出力しない。
-# Pester 5.9 は CIFormat=Auto と JUnitXml を併用すると、色付きのログを XML
-# 属性へそのまま書き込み、結果ファイル自体を壊すことがある。
+# 出力設定
 $pesterConfig.Output.Verbosity = if ($OutputFile) { "Normal" } else { "Detailed" }
-$pesterConfig.Output.CIFormat = if ($OutputFile) { "None" } else { "Auto" }
-$pesterConfig.Output.RenderMode = if ($OutputFile) { "Plaintext" } else { "Auto" }
 
 # カバレッジ設定
 if ($coverageRequested) {
@@ -200,6 +196,7 @@ if ($coverageRequested) {
         $pesterConfig.CodeCoverage.Enabled = $false
     }
     else {
+        Assert-PesterCoverageConfiguration -Configuration $pesterConfig -Module $activePesterModule
         $pesterConfig.CodeCoverage.Enabled = $true
         $pesterConfig.CodeCoverage.Path = $sourceFiles
         $pesterConfig.CodeCoverage.CoveragePercentTarget = $MinimumCoverage
@@ -221,8 +218,7 @@ else {
 
 # JUnit XML 出力
 if ($OutputFile) {
-    # Pester 5.9's JUnit exporter can fail on ANSI ESC in failure details. Write
-    # the report after the run so invalid XML controls are represented, not lost.
+    # Write the report after the run so invalid XML controls are represented, not lost.
     $pesterConfig.TestResult.Enabled = $false
 }
 

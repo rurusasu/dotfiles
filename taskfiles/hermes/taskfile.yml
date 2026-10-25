@@ -1,39 +1,34 @@
 version: "3"
 
 tasks:
-  hermes:setup:
-    desc: Run the native Hermes setup wizard
-    interactive: true
-    cmds:
-      - cmd: hermes setup
-        platforms: [darwin]
-      - cmd: '{{.WSL}}bash -lc "hermes setup"'
-        platforms: [linux, windows]
-      - task: hermes:sync
-
   hermes:sync:
-    desc: Synchronize native Hermes profiles, secrets, and shared repositories
-    interactive: true
+    desc: Restart the Nix-managed Hermes Gateway service
     cmds:
-      - cmd: scripts/sh/hermes-bootstrap.sh apply && hermes gateway restart
-        platforms: [linux, darwin]
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && scripts/sh/hermes-bootstrap.sh apply && hermes gateway restart"'
-        platforms: [windows]
+      - task: hermes:restart
 
   hermes:profiles:sync:
-    desc: Publish local Hermes profile allowlists and synchronize managed profiles
+    desc: Update one installed profile and replace its distribution configuration
+    vars:
+      PROFILE: '{{.PROFILE | default ""}}'
+    preconditions:
+      - sh: test -n {{.PROFILE | shellQuote}}
+        msg: "Set PROFILE to an installed distribution profile name."
     cmds:
-      - cmd: hermes-bootstrap sync-profiles {{range .CLI_ARGS_LIST}}{{. | shellQuote}} {{end}}
+      - cmd: hermes profile update {{.PROFILE | shellQuote}} --force-config --yes
         platforms: [linux, darwin]
-      - cmd: '{{.WSL}}bash -lc "hermes-bootstrap sync-profiles {{range .CLI_ARGS_LIST}}{{. | shellQuote}} {{end}}"'
+      - cmd: '{{.WSL}}bash -lc "hermes profile update {{.PROFILE | shellQuote}} --force-config --yes"'
         platforms: [windows]
 
   hermes:repository:sync:
-    desc: Synchronize the shared lifelog repository
+    desc: Pull and push shared lifelog commits without committing working changes
     cmds:
-      - cmd: hermes-bootstrap sync-repository lifelog
+      - cmd: |-
+          set -eu
+          repository="${HERMES_HOME:-${HOME:?HOME is not set}/.hermes}/shared/lifelog"
+          git -C "$repository" pull --ff-only origin main
+          git -C "$repository" push origin main
         platforms: [linux, darwin]
-      - cmd: '{{.WSL}}bash -lc "hermes-bootstrap sync-repository lifelog"'
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && task hermes:repository:sync"'
         platforms: [windows]
 
   hermes:bootstrap:
@@ -55,97 +50,71 @@ tasks:
       - cmd: task darwin:install && task hermes:sync
         platforms: [darwin]
 
-  hermes:pull:
-    desc: Rebuild the Hermes browser and MCP sidecar images
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull chromium browser-mcp xapi-mcp
-
   hermes:xapi:auth:
     desc: Authenticate the X MCP bridge with the headless OAuth flow
     interactive: true
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
     cmds:
-      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} bash scripts/sh/hermes-xapi.sh auth
-        platforms: [linux, darwin]
-      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-xapi.ps1 -Action auth -ComposeFile "{{.HERMES_COMPOSE_FILE}}"
+      - cmd: |-
+          set -eu
+          systemctl --user stop mcp-xapi.service
+          hermes-xapi auth
+        platforms: [linux]
+      - cmd: |-
+          set -eu
+          target="gui/$(id -u)/org.nix-community.home.mcp-xapi"
+          if launchctl print "$target" >/dev/null 2>&1; then
+            launchctl bootout "$target"
+          fi
+          hermes-xapi auth
+        platforms: [darwin]
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && task hermes:xapi:auth"'
         platforms: [windows]
 
   hermes:xapi:setup:
-    desc: Authenticate, sync the X API refresh token, and restart the MCP bridge
+    desc: Authenticate and sync the X API refresh token for native MCP sessions
     interactive: true
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-      - sh: test -f {{.HERMES_COMPOSE_FILE}}
-        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
     cmds:
       - task: hermes:xapi:auth
       - task: hermes:xapi:sync-token
-      - task: hermes:xapi:restart
 
   hermes:xapi:sync-token:
     desc: Sync the local xurl refresh token into the shared 1Password item
-    preconditions:
-      - sh: test -f {{.HERMES_COMPOSE_FILE}}
-        msg: "Hermes compose file not found: {{.HERMES_COMPOSE_FILE}}"
     cmds:
-      - cmd: bash scripts/sh/hermes-xapi.sh sync-token
-        platforms: [linux, darwin]
-      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-xapi.ps1 -Action sync-token
-        platforms: [windows]
-
-  hermes:xapi:restart:
-    desc: Recreate the Hermes X MCP container
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} bash scripts/sh/hermes-xapi.sh restart
-        platforms: [linux, darwin]
-      - cmd: pwsh -NoProfile -File scripts/powershell/hermes-xapi.ps1 -Action restart -ComposeFile "{{.HERMES_COMPOSE_FILE}}"
-        platforms: [windows]
-
-  hermes:xapi:logs:
-    desc: Follow Hermes X MCP logs
-    interactive: true
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 xapi-mcp
-
-  hermes:gmail:auth:
-    desc: Authenticate the shared Gmail MCP account
-    interactive: true
-    preconditions: []
-    cmds:
-      - cmd: HERMES_COMPOSE_FILE={{.HERMES_COMPOSE_FILE}} bash scripts/sh/hermes-gmail.sh auth
-        platforms: [linux, darwin]
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && task hermes:gmail:auth"'
-        platforms: [windows]
-
-  hermes:gmail:test:
-    desc: Test Gmail MCP for one authenticated Hermes profile
-    preconditions:
-      - sh: test -n "{{.PROFILE}}"
-        msg: "Set PROFILE to an installed Hermes profile name."
-    cmds:
-      - cmd: hermes -p {{.PROFILE | shellQuote}} mcp test gmail
-        platforms: [darwin, linux]
-      - cmd: '{{.WSL}}bash -lc "hermes -p {{.PROFILE | shellQuote}} mcp test gmail"'
+      - cmd: |-
+          set -eu
+          hermes-xapi sync-token
+          systemctl --user restart mcp-xapi.service
+        platforms: [linux]
+      - cmd: |-
+          set -eu
+          hermes-xapi sync-token
+          domain="gui/$(id -u)"
+          target="$domain/org.nix-community.home.mcp-xapi"
+          if launchctl print "$target" >/dev/null 2>&1; then
+            launchctl kickstart -k "$target"
+          else
+            launchctl bootstrap "$domain" "$HOME/Library/LaunchAgents/org.nix-community.home.mcp-xapi.plist"
+          fi
+        platforms: [darwin]
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && task hermes:xapi:sync-token"'
         platforms: [windows]
 
   hermes:up:
     desc: Start the Nix-managed native Hermes Gateway service
     cmds:
-      - cmd: hermes gateway start
-        platforms: [linux, darwin]
-      - cmd: '{{.WSL}}bash -lc "hermes gateway start"'
+      - cmd: systemctl --user start hermes-agent.service
+        platforms: [linux]
+      - cmd: |-
+          set -eu
+          domain="gui/$(id -u)"
+          target="$domain/org.nix-community.home.hermes-agent"
+          if launchctl print "$target" >/dev/null 2>&1; then
+            launchctl kickstart "$target"
+          else
+            launchctl bootstrap "$domain" "$HOME/Library/LaunchAgents/org.nix-community.home.hermes-agent.plist"
+          fi
+        platforms: [darwin]
+      - cmd: '{{.WSL}}bash -lc "systemctl --user start hermes-agent.service"'
         platforms: [windows]
 
   hermes:desktop:
@@ -154,14 +123,6 @@ tasks:
       - cmd: hermes-desktop
         platforms: [darwin, linux]
       - cmd: '{{.WSL}}bash -lc "hermes-desktop"'
-        platforms: [windows]
-
-  hermes:desktop:install:
-    desc: Verify the Home Manager Hermes Desktop package and Hermes CLI
-    cmds:
-      - cmd: scripts/sh/hermes-desktop-install.sh
-        platforms: [darwin, linux]
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && scripts/sh/hermes-desktop-install.sh"'
         platforms: [windows]
 
   hermes:cli:
@@ -186,56 +147,37 @@ tasks:
       - cmd: '{{.WSL}}bash -lc "hermes -p {{.PROFILE | shellQuote}} gateway status"'
         platforms: [windows]
 
-  hermes:profile:up:
-    desc: Start the Nix-managed gateway and show one Hermes profile status
-    vars:
-      PROFILE: '{{.PROFILE | default ""}}'
-    preconditions:
-      - sh: test -n {{.PROFILE | shellQuote}}
-        msg: "Set PROFILE to an installed Hermes profile name."
-    cmds:
-      - task: hermes:up
-      - task: hermes:profile:status
-        vars:
-          PROFILE: "{{.PROFILE}}"
-
-  hermes:profile:down:
-    desc: Stop the shared Nix-managed gateway for all Hermes profiles
-    vars:
-      PROFILE: '{{.PROFILE | default ""}}'
-    preconditions:
-      - sh: test -n {{.PROFILE | shellQuote}}
-        msg: "Set PROFILE to an installed Hermes profile name."
-    cmds:
-      - task: hermes:down
-
-  hermes:profile:restart:
-    desc: Restart the Nix-managed gateway and show one Hermes profile status
-    vars:
-      PROFILE: '{{.PROFILE | default ""}}'
-    preconditions:
-      - sh: test -n {{.PROFILE | shellQuote}}
-        msg: "Set PROFILE to an installed Hermes profile name."
-    cmds:
-      - task: hermes:restart
-      - task: hermes:profile:status
-        vars:
-          PROFILE: "{{.PROFILE}}"
-
   hermes:down:
     desc: Stop the Nix-managed native Hermes Gateway service
     cmds:
-      - cmd: hermes gateway stop
-        platforms: [linux, darwin]
-      - cmd: '{{.WSL}}bash -lc "hermes gateway stop"'
+      - cmd: systemctl --user stop hermes-agent.service
+        platforms: [linux]
+      - cmd: |-
+          set -eu
+          target="gui/$(id -u)/org.nix-community.home.hermes-agent"
+          if launchctl print "$target" >/dev/null 2>&1; then
+            launchctl bootout "$target"
+          fi
+        platforms: [darwin]
+      - cmd: '{{.WSL}}bash -lc "systemctl --user stop hermes-agent.service"'
         platforms: [windows]
 
   hermes:restart:
     desc: Restart the Nix-managed native Hermes Gateway service
     cmds:
-      - cmd: hermes gateway restart
-        platforms: [linux, darwin]
-      - cmd: '{{.WSL}}bash -lc "hermes gateway restart"'
+      - cmd: systemctl --user restart hermes-agent.service
+        platforms: [linux]
+      - cmd: |-
+          set -eu
+          domain="gui/$(id -u)"
+          target="$domain/org.nix-community.home.hermes-agent"
+          if launchctl print "$target" >/dev/null 2>&1; then
+            launchctl kickstart -k "$target"
+          else
+            launchctl bootstrap "$domain" "$HOME/Library/LaunchAgents/org.nix-community.home.hermes-agent.plist"
+          fi
+        platforms: [darwin]
+      - cmd: '{{.WSL}}bash -lc "systemctl --user restart hermes-agent.service"'
         platforms: [windows]
 
   hermes:logs:
@@ -247,154 +189,13 @@ tasks:
       - cmd: '{{.WSL}}bash -lc "hermes logs -f"'
         platforms: [windows]
 
-  hermes:browser:pull:
-    desc: Rebuild Hermes browser and Browser MCP Docker images
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} build --pull chromium browser-mcp
-
-  hermes:browser:restart:
-    desc: Recreate Hermes browser and Browser MCP containers
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} up -d --force-recreate chromium browser-mcp
-
-  hermes:browser:logs:
-    desc: Follow Hermes browser and Browser MCP Docker logs
-    interactive: true
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} logs -f --tail=100 chromium browser-mcp
-
-  hermes:browser:ps:
-    desc: Show Hermes browser and Browser MCP container status
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
-    cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} ps chromium browser-mcp
-
-  hermes:rick:up:
-    desc: Start the root multiplex gateway and show Rick profile status
-    cmds:
-      - task: hermes:profile:up
-        vars:
-          PROFILE: rick
-
-  hermes:rick:down:
-    desc: Stop the root multiplex gateway for all profiles
-    cmds:
-      - task: hermes:profile:down
-        vars:
-          PROFILE: rick
-
-  hermes:rick:restart:
-    desc: Restart the root multiplex gateway and show Rick profile status
-    cmds:
-      - task: hermes:profile:restart
-        vars:
-          PROFILE: rick
-
-  hermes:rick:logs:
-    desc: Follow Rick Hermes gateway logs
-    interactive: true
-    cmds:
-      - task: hermes:logs
-
-  hermes:hoffman:up:
-    desc: Start the root multiplex gateway and show Hoffman profile status
-    cmds:
-      - task: hermes:profile:up
-        vars:
-          PROFILE: hoffman
-
-  hermes:hoffman:down:
-    desc: Stop the root multiplex gateway for all profiles
-    cmds:
-      - task: hermes:profile:down
-        vars:
-          PROFILE: hoffman
-
-  hermes:hoffman:restart:
-    desc: Restart the root multiplex gateway and show Hoffman profile status
-    cmds:
-      - task: hermes:profile:restart
-        vars:
-          PROFILE: hoffman
-
-  hermes:hoffman:logs:
-    desc: Follow Hoffman Hermes gateway logs
-    interactive: true
-    cmds:
-      - task: hermes:logs
-
-  hermes:risarisa:up:
-    desc: Start the root multiplex gateway and show RisaRisa profile status
-    cmds:
-      - task: hermes:profile:up
-        vars:
-          PROFILE: risarisa
-
-  hermes:risarisa:down:
-    desc: Stop the root multiplex gateway for all profiles
-    cmds:
-      - task: hermes:profile:down
-        vars:
-          PROFILE: risarisa
-
-  hermes:risarisa:restart:
-    desc: Restart the root multiplex gateway and show RisaRisa profile status
-    cmds:
-      - task: hermes:profile:restart
-        vars:
-          PROFILE: risarisa
-
-  hermes:risarisa:logs:
-    desc: Follow RisaRisa Hermes gateway logs
-    interactive: true
-    cmds:
-      - task: hermes:logs
-
-  hermes:nancy:up:
-    desc: Start the root multiplex gateway and show Nancy profile status
-    cmds:
-      - task: hermes:profile:up
-        vars:
-          PROFILE: nancy
-
-  hermes:nancy:down:
-    desc: Stop the root multiplex gateway for all profiles
-    cmds:
-      - task: hermes:profile:down
-        vars:
-          PROFILE: nancy
-
-  hermes:nancy:restart:
-    desc: Restart the root multiplex gateway and show Nancy profile status
-    cmds:
-      - task: hermes:profile:restart
-        vars:
-          PROFILE: nancy
-
-  hermes:nancy:logs:
-    desc: Follow Nancy Hermes gateway logs
-    interactive: true
-    cmds:
-      - task: hermes:logs
-
   hermes:ps:
-    desc: Show Hermes browser and MCP sidecar container status
-    preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start Docker Desktop and try again."
+    desc: Show the native Hermes Gateway status
     cmds:
-      - docker compose -f {{.HERMES_COMPOSE_FILE}} ps chromium browser-mcp xapi-mcp
+      - cmd: hermes gateway status
+        platforms: [linux, darwin]
+      - cmd: '{{.WSL}}bash -lc "hermes gateway status"'
+        platforms: [windows]
 
   hermes:upgrade:
     desc: Update the Hermes flake input and activate the Nix-managed Hermes Agent

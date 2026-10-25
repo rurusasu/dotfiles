@@ -24,7 +24,7 @@ BeforeAll {
             Copy-Item -LiteralPath $original -Destination $copy
         }
         Copy-Item -LiteralPath (Join-Path $script:repoRoot 'chezmoi/.chezmoiignore.tmpl') -Destination $source
-        $canonical = Join-Path $root 'repo/nix/hosts/x86_64-linux/wsl/fonts/fontconfig.conf'
+        $canonical = Join-Path $root 'repo/nix/modules/fonts/wsl-fontconfig.conf'
         [void][IO.Directory]::CreateDirectory((Split-Path -Parent $canonical))
         $xml = "<?xml version=`"1.0`"?>`n<fontconfig><!-- canonical fixture --><dir>/fixture/fonts</dir></fontconfig>`n"
         [IO.File]::WriteAllText($canonical, $xml, (New-Object Text.UTF8Encoding($false)))
@@ -68,14 +68,14 @@ Describe 'WSLg Windows font configuration rendering' {
         ($rendered -replace "`r", '').TrimEnd() | Should -BeExactly $fixture.Canonical.TrimEnd()
         [void][xml]$rendered
         $template = [IO.File]::ReadAllText((Join-Path $script:repoRoot ('chezmoi/' + $relative)))
-        $template | Should -Match 'include\s+"\.\./nix/hosts/x86_64-linux/wsl/fonts/fontconfig\.conf"'
+        $template | Should -Match 'include\s+"\.\./nix/modules/fonts/wsl-fontconfig\.conf"'
         $template | Should -Not -Match '<fontconfig|<family>'
     }
 
     It 'should render the actual canonical fontconfig file unchanged' {
         if (-not $script:chezmoi) { Set-ItResult -Skipped -Because 'Native chezmoi is not installed; isolated rendering requires its real template engine'; return }
         $fixture = New-WslgFontRenderFixture
-        $canonical = Join-Path $script:repoRoot 'nix/hosts/x86_64-linux/wsl/fonts/fontconfig.conf'
+        $canonical = Join-Path $script:repoRoot 'nix/modules/fonts/wsl-fontconfig.conf'
         Test-Path -LiteralPath $canonical -PathType Leaf | Should -BeTrue
         $source = Join-Path $script:repoRoot 'chezmoi'
         $rendered = Invoke-WslgFontRender -Fixture $fixture -Source $source -Command @('execute-template', '--file', (Join-Path $source 'dot_config/dotfiles/wslg-fontconfig.conf.tmpl'))

@@ -15,7 +15,7 @@ The XML reference therefore does not depend on a particular WSL distribution
 starting first. Windows system UI fonts and website CSS are not forced.
 
 Linux GUI GTK 3/4 and settings-portal fonts are configured by
-`nix/modules/fonts/gtk.nix`; the NixOS host registers dconf for persistence.
+`nix/modules/fonts/default.nix`; the NixOS host registers dconf for persistence.
 Apply the Nix settings and Windows chezmoi settings before restarting WSLg to
 load its new font environment and titlebar font cache. The 2026-10-14 verification
 confirmed UDEV and Japanese text in the Chrome titlebar and Nautilus interface. See
@@ -26,7 +26,8 @@ The PowerShell 7 profile at
 `%USERPROFILE%/Documents/PowerShell/Microsoft.PowerShell_profile.ps1` enables
 PSReadLine's history prediction in `ListView`. Suggestions narrow as you type;
 commands that have not been used remain available through ordinary Tab completion.
-This setting works on Windows without WSL and requires PSReadLine 2.2.2 or later.
+This setting works on Windows without WSL and is enabled when PSReadLine exposes
+the `PredictionViewStyle` option in an interactive console.
 
 PowerToys Keyboard Manager applies the Omarchy desktop shortcuts with
 `Super=Win`: application launchers, clipboard, capture, notifications, appearance,
@@ -43,9 +44,9 @@ See the
 for platform equivalents and requirements.
 
 The key allocation is defined in `nix/home/keybindings/bindings.nix`,
-`ghostty.nix`, and `neovim.nix`.
-`task keybindings:export` builds `.#keybindings-json` and updates the committed
-`nix/home/keybindings/generated.json` export. chezmoi reads this export without
+`nix/modules/terminals/ghostty/ghostty.nix`, and `nix/modules/editors/nvim/neovim.nix`.
+`task keybindings:export` directly evaluates those definitions with locked Nix
+inputs and jq to update the committed `nix/home/keybindings/generated.json` export. chezmoi reads this export without
 running Nix during apply. `scripts/powershell/Sync-PowerToysKeyboard.ps1` owns
 PowerToys serialization; `Invoke-DesktopAction.ps1` implements Windows actions.
 Copy, cut, and paste go through this runtime so Windows applications receive

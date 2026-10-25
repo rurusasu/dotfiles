@@ -7,15 +7,15 @@
 **「OS ごとに 1 コマンドで同じ開発環境へ収束する」** を目標に、以下の原則で管理する。
 
 1. **Unix の導入・設定は Nix module、Windows の導入情報は独立した manifest**
-   - Unix CLI / GUI の導入は `nix/modules/tools.nix`、設定・連携は各アプリ module にまとめ、host は必要な module を import して構成を選択
-   - Unix CLI / GUI の導入はすべて `tools.nix`、GUI の OS 別選択も `tools.nix` にまとめ、個別アプリの設定・連携は各 module に宣言
-   - Unix 系 CLI は Home Manager、macOS cask は nix-homebrew、Linux system package は NixOS が管理
+   - Unix CLI / GUI の導入・package 選択・設定・連携・専用の実行依存をアプリごとの module にまとめ、共通・OS 別構成は module の外で imports を明示
+   - enable・単純な package list・単一代入は `nix/defaults.nix` の必要な構成へ直接記載。設定・package override・生成・連携を持つアプリは module にまとめる
+   - 通常の CLI・GUI とユーザー設定は Home Manager、OS 固有の設定・権限・システムサービス・連携は `nix/defaults.nix` の各 OS ブロックが管理。Homebrew と cask は `nix/defaults.nix` に宣言
    - Windows は `windows/winget/packages.json` を直接管理し、GUI アプリを導入。npm/pnpm manifest は空
    - 機能と OS の所有境界は [分割の理由と編集先](./nix/package-management.md#分割の理由と編集先) を参照
 2. **ユーザー設定は Unix と Windows の責務を分離**
    - Unix の Codex、shell、Git、terminal、editor は Home Manager が管理
    - chezmoi は Windows 専用で、Unix にはファイルもスクリプトも配布しない
-   - デスクトップキー配列は例外として、共通 action/key・設定生成関数・ユーザー設定を `nix/home/keybindings/`、OS の service/有効化・競合解除を `nix/hosts/` に分ける。macOS/native NixOS の設定は Nix が所有する。Windows は標準デスクトップを使用し、Nix からデスクトップ設定を生成・配布しない（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
+   - 共通 action/key は `nix/home/keybindings/bindings.nix`、アプリの設定・生成関数は `nix/modules/`、OS 基盤設定と module 選択は `nix/defaults.nix` に置く。macOS/native NixOS の設定は Nix が所有する。Windows は標準デスクトップを使用し、Nix からデスクトップ設定を生成・配布しない（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
 3. **システム収束は OS に適した宣言レイヤーへ分離**
    - Windows: PowerShell handlers + winget
    - macOS: nix-darwin + nix-homebrew
@@ -30,13 +30,12 @@
 ```
 dotfiles/
 ├── nix/                    # Cross-platform declarative configuration
-│   ├── home/               # Shared Home Manager configuration
-│   │   └── keybindings/    # Shared keys and user settings
-│   ├── formatter.nix       # treefmt-nix and formatter dependencies
-│   ├── hosts/              # OS-specific system and Home Manager configuration
-│   ├── modules/            # Unix packages and app configuration
-│   │   └── tools.nix       # Unix CLI / GUI installation and dependencies
-│   ├── outputs.nix         # Custom package build outputs
+│   ├── home/               # Shared keybindings and Windows export
+│   │   └── keybindings/    # Shared keys and Windows export
+│   ├── treefmt.nix         # project treefmt configuration and formatter dependencies
+│   ├── defaults.nix        # OS settings, module selection and outputs
+│   ├── modules/            # App-owned packages, settings, integrations and dependencies
+│   │   └── editors/nvim/   # Neovim, plugins, LSPs and runtime/toolchains
 │   └── tests/
 │       ├── unit/           # nix-unit: Nix expressions and configuration values
 │       ├── build/          # Build, runtime, and artifact checks
@@ -68,26 +67,31 @@ dotfiles/
 | Other Linux | `./install.sh` | none                                     | Home Manager             | not managed                    |
 | NixOS       | `./install.sh` | NixOS generation + host hardware profile | Home Manager             | rootful Docker                 |
 
-Windows の通常セットアップは `install.cmd` から GUI/Winget と WSL/NixOS-WSL のフェーズを順に実行し、既存アプリを自動アンインストールしません。`-UserPhaseOnly` を指定すると GUI アプリ導入だけを実行します。WSL 基盤が未導入なら UAC 昇格と Windows の再起動が必要になることがあり、再起動後に同じ入口を再実行します。distro の登録と NixOS/Home Manager の適用は元のユーザーで行います。Unix の Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → Compose → runtime acceptance` です。macOS では Docker Desktop と native Hermes の宣言済み構成を適用します。失敗時はその phase で停止し、同じ入口を再実行します。
+Windows の通常セットアップは `install.cmd` から GUI/Winget と WSL/NixOS-WSL のフェーズを順に実行し、既存アプリを自動アンインストールしません。`-UserPhaseOnly` を指定すると GUI アプリ導入だけを実行します。WSL 基盤が未導入なら UAC 昇格と Windows の再起動が必要になることがあり、再起動後に同じ入口を再実行します。distro の登録と NixOS/Home Manager の適用は元のユーザーで行います。Unix の Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → runtime acceptance` です。macOS では Docker Desktop と native Hermes の宣言済み構成を適用します。失敗時はその phase で停止し、同じ入口を再実行します。
 
 非 NixOS Linux は `Nix/bootstrap → Home Manager` のみを実行します。
 
 `./install.sh` は必要に応じて Nix を導入し、毎回 flake input を更新してから
 OS の rebuild または Home Manager の switch を実行します。進捗とエラーは
 各コマンドの出力をそのまま表示し、更新や反映に失敗した場合は終了します。
-macOS のカスタムパッケージ更新は `task darwin:update` で実行します。
+flake inputs だけを更新する場合は `nix flake update` を使います。
 
 ## 役割分担
 
-構成登録は `nix/hosts/configurations.nix` に集約し、`flake.nix` から読み込みます。
-ホストは system 名で分類し、同じ system 内の native NixOS と WSL は `nixos/` と `wsl/` に分けます。
-Darwin は `nix/hosts/aarch64-darwin/`、Linux は `nix/hosts/{x86_64-linux,aarch64-linux}/` に置きます。
-Linux の共通設定は `nix/hosts/shared/linux-home.nix` と `shared/nixos/` に置き、CPU ごとに複製しません。
-OS 固有の Home Manager 設定と module の選択は `hosts/` が所有し、OS 非依存のユーザー設定は `nix/home/` に残します。
+`nix/defaults.nix` にホスト定義と Home Manager 設定、構成生成・登録を集約し、
+`flake.nix` は `perSystem` と `configurations` を公開します。CPU は `system` 引数で選択します。
+`systemDefaults` に共通設定と末尾の OS 別 system imports をまとめます。
+`home-manager.sharedModules` に共通・OS 別ユーザー設定をまとめ、構成登録の `specialArgs.platform` で OS を選択します。
+Lix・GC・Home Manager 接続と共通ユーザー設定を一つの `systemDefaults` に宣言し、standalone も同じ `sharedModules` を再利用します。
+GC 日時は各 OS ブロック、standalone GC は `systemDefaults.home-manager.sharedModules`、公開構成は `configurations` に宣言します。
+ユーザー名・stateVersion の変更先は `systemDefaults` 内の `defaults` です。
+Darwin は `system.primaryUser`、WSL は上書き可能な `wsl.defaultUser` を使い、統合 Home Manager は OS のユーザー名・ホーム・Nix package を標準継承します。
+共通配列と Windows export は `nix/home/keybindings/`、アプリの導入・設定・サービス・生成関数は `nix/modules/` が所有します。
+共通フォント package は NixOS / nix-darwin 統合時には system、standalone 時には Home Manager が供給します。
 
 | 役割                    | ツール                  | 説明                                                          |
 | ----------------------- | ----------------------- | ------------------------------------------------------------- |
-| Unix CLI 定義           | Nix / Home Manager      | 導入は `tools.nix`、設定・連携は各アプリ module に宣言        |
+| Unix CLI / GUI 定義     | Nix / Home Manager      | アプリごとの module が導入・設定・連携・専用の実行依存を所有  |
 | Unix ユーザーパッケージ | Home Manager            | macOS、NixOS、Ubuntu、Debian で共通の `home.packages`         |
 | Windows パッケージ      | winget                  | 独立した GUI manifest を WingetHandler が適用                 |
 | macOS システム          | nix-darwin/nix-homebrew | Homebrew、Docker Desktop、Home Manager を 1 generation で適用 |
@@ -112,63 +116,60 @@ installer は `/Applications/Docker.app` への正確なリンクだけを管理
 
 ## Hermes Runtime and Bootstrap Ownership
 
-On macOS and Linux/WSL, the pinned `hermes-agent` flake input and Home Manager
-module manage the Hermes gateway as a native user service: systemd on
-Linux/WSL and launchd on macOS. `nix/modules/tools.nix` enables the Hermes CLI;
-`nix/modules/ai_agents/hermes/` owns its settings and bootstrap. On Windows, Hermes is managed through the
-configured NixOS WSL distribution. Nix/Home Manager installs it directly in
-NixOS. The public `nrs` task applies rebuilds; WSL E2E validates the Linux user service and CLI. No Hermes package or separate Hermes handler is installed on Windows.
-Docker Desktop integration is opt-in through `EnableDockerDesktopIntegration`;
-NixOS uses its native Docker engine for container workloads independently.
-Native state remains at `~/.hermes` in the Linux user's home.
+macOS と Linux/WSL の Hermes は、固定した `hermes-agent` flake input の公式 Home
+Manager module を使います。gateway は Linux/WSL の systemd、macOS の launchd が
+native user service として管理します。Windows は指定した NixOS-WSL 内の同じ
+CLI と service を使います。runtime state は root Hermes home（既定値 `~/.hermes`）
+に保持します。
 
-`docker/hermes-service/compose.yml` provides only Chromium, Browser MCP, and
-X API MCP sidecars. Browser state is bind-mounted from `~/.hermes/.browser`
-(or `HERMES_BROWSER_DATA_DIR`); X API credentials use `~/.hermes/.xurl`
-(or `HERMES_DATA_DIR/.xurl`). These sidecars do not mount `hermes-data`.
-The retired Docker Agent, Dashboard, container bootstrap, and Docker CLI
-adapters have no supported execution path. Existing Docker volumes are left
-untouched. Root and named-profile homes are applied by native bootstrap from
-source repositories; secrets, memories, sessions, and logs remain local runtime
-data. An operator-led migration requires a verified backup and an explicit
-policy for resolving conflicting paths before data is copied.
+| 所有者        | 正本                                       | 責務                                                                              |
+| ------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
+| Hermes root   | `nix/modules/ai_agents/hermes/default.nix` | 公式 Home Manager module による導入、Desktop、gateway、root 設定、外部 LCM plugin |
+| 共通 MCP      | `nix/modules/ai_agents/mcp.nix`            | Codex と root Hermes が共有する `MCP_DOCKER` / `chrome` / `xapi` / `pipedream`    |
+| MCP package   | `nix/modules/ai_agents/mcp-packages.nix`   | `mcp-servers` の Chrome 既製 package と、`xurl` の upstream source を使う         |
+| Named profile | 各 profile の Git source                   | `config.yaml` と個別 secret refs。公式 `hermes profile install` / `update` で反映 |
+| 運用コマンド  | `taskfiles/hermes/taskfile.yml`            | gateway 操作、公式 profile 更新、lifelog の Git 同期、X API 認証                  |
 
-| Owner                  | Source                                                                                    | Responsibility                                                                                         |
-| ---------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Dotfiles               | [rurusasu/dotfiles](https://github.com/rurusasu/dotfiles)                                 | Sidecar Compose wiring, native bootstrap, manifest, host adapters, operator Taskfile and documentation |
-| Nix + Home Manager     | `nix/modules/tools.nix`, `nix/modules/ai_agents/hermes/`                                  | Pinned CLI package and native gateway user service on macOS and Linux/WSL                              |
-| Root distribution      | [rurusasu/hermes-profile-alfred](https://github.com/rurusasu/hermes-profile-alfred)       | `root-distribution.yaml` and root declarative config, policy, cron, scripts, and MCP blocks            |
-| Rick distribution      | [rurusasu/hermes-profile-rick](https://github.com/rurusasu/hermes-profile-rick)           | Official `distribution.yaml` and Rick declarative content                                              |
-| Hoffman distribution   | [rurusasu/hermes-profile-hoffman](https://github.com/rurusasu/hermes-profile-hoffman)     | Official `distribution.yaml` and Hoffman declarative content                                           |
-| Risarisa distribution  | [rurusasu/hermes-profile-risarisa](https://github.com/rurusasu/hermes-profile-risarisa)   | Official `distribution.yaml` and Risarisa declarative content                                          |
-| Nancy distribution     | [rurusasu/hermes-profile-nancy](https://github.com/rurusasu/hermes-profile-nancy)         | Official `distribution.yaml` and Nancy declarative content                                             |
-| Kuroda distribution    | [rurusasu/hermes-profile-kuroda](https://github.com/rurusasu/hermes-profile-kuroda)       | Official `distribution.yaml` and Kuroda declarative content                                            |
-| Shiraishi distribution | [rurusasu/hermes-profile-shiraishi](https://github.com/rurusasu/hermes-profile-shiraishi) | Official `distribution.yaml` and Shiraishi declarative content                                         |
-| Shared data            | [rurusasu/lifelog](https://github.com/rurusasu/lifelog)                                   | The one locked read-write checkout at `${HERMES_HOME}/shared/lifelog`                                  |
+Chrome と X API MCP は、独立した native Home Manager service `mcp-chrome` /
+`mcp-xapi` が管理します。各 service は `mcp-proxy` で1つの persistent stdio child を
+保持し、client は `http://127.0.0.1:8765/mcp` / `http://127.0.0.1:8766/mcp` に
+接続します。Linux/WSL は systemd user service、macOS は launchd agent を使います。
+Chrome は Nix 管理のブラウザを headless で起動し、display や WSLg は不要です。
+root Hermes home の `.browser` は `mcp-chrome`、`.xurl` cache は `mcp-xapi` が保持します。
+xurl の固定 path `~/.xurl` は Home Manager が XDG configuration を経由して既存 cache
+へリンクし、既存実体との衝突では反映を
+停止します。named profile は root の MCP 設定を継承しないため、各 Git source に
+gateway 参照または対応する URL の定義が必要です。既存の loopback URL は保持します。
+Pipedream の OAuth は client ごとに行います。
 
-`${HERMES_HOME}/shared/lifelog` is canonical; `${HERMES_HOME}/core/lifelog` is unmanaged.
-Bootstrap neither migrates nor deletes the old checkout. If it contains data,
-follow the [manual migration procedure](hermes-agent/bootstrap.md#shared-repository-layout-and-manual-migration)
-before running bootstrap, verifying that the canonical checkout retains local
-changes and commits. Profile homes are never Git repositories. The default
-profile owns shared-lifelog synchronization through the common bootstrap command.
+X API 認証 task は `mcp-xapi` を停止してから interactive OAuth を行い、token の
+同期成功後に service を再起動します。これにより認証中の同時 cache 更新を避けます。
+
+旧 Hermes Docker Agent / Dashboard、Browser/noVNC、X API sidecar の
+Compose 設定、image、Docker 固有 adapter は削除済みです。既存 Docker volume、
+browser profile、OAuth cache、secret、session、memory、log は自動移行・削除しません。
+`MCP_DOCKER` と system の Docker 管理は独立して維持します。
+
+lifelog の正規 path は `${HERMES_HOME}/shared/lifelog` です。
+`hermes:repository:sync` はこの既存 checkout の commit を native Git で pull/push
+します。旧 `${HERMES_HOME}/core/lifelog` の自動移行や削除は行いません。
 
 ## Local MLflow service
 
 `docker/local-ai-services/compose.yml` manages the pinned MLflow tracking server.
 `task mlflow:up` starts it; `task mlflow:verify` checks its HTTP health endpoint.
 Persistent state remains under `MLFLOW_DATA_DIR` (default: `~/.local/share/mlflow`).
-The `local-ai-services` bridge network is independent of the Hermes browser and
-MCP sidecars. No inference provider or model download is configured here.
+The `local-ai-services` bridge network is independent of the native Hermes
+runtime. No inference provider or model download is configured here.
 
 ## パッケージ管理フロー
 
 ```text
-nix/modules/ ───── host が imports で選択
-├── tools.nix ─────────── Unix CLI / GUI の有効化・導入・LSP/実行依存
-└── 各アプリ module ───── 設定・連携・package override・GUI
+nix/modules/ ───── 共通・OS 別構成が imports で選択
+├── 各アプリ module ───── 有効化・package 選択・設定・連携・専用の実行依存
+└── editors/nvim/ ─────── Neovim・LSP・整形ツール・toolchain・プラグイン
 
-nix/hosts/ ────────────── tools の対象 scope を選択・OS service・Homebrew
+nix/defaults.nix:systemDefaults ── 共通 OS / Home Manager 設定と有効化だけの標準宣言
 
 windows/winget/packages.json ── Windows GUI を直接宣言
 windows/{npm,pnpm}/packages.json ── 独立した空 manifest
@@ -176,8 +177,8 @@ windows/{npm,pnpm}/packages.json ── 独立した空 manifest
 
 ### ツール追加手順
 
-1. Unix CLI はすべて `nix/modules/tools.nix` に宣言する。設定・連携も管理する CLI は標準の `programs.<name>.enable`、設定をユーザーが管理する CLI・標準 module のない CLI・LSP・実行依存は `home.packages` に追加する。設定・連携・package override は対応するアプリ module に置く。
-2. GUI も `tools.nix` の対象 scope に宣言する。Homebrew と OS service は host に定義する。
+1. enable・単純な package list・単一代入は `nix/defaults.nix` の必要な構成へ直接書く。設定・package override・生成・連携を持つ場合はアプリ module にまとめる。設定・連携も管理するアプリは標準の `programs.<name>.enable`、設定をユーザーが管理するアプリや標準 module のないアプリは `home.packages` を使う。Neovim の LSP・整形ツール・toolchain・プラグイン実行依存は `editors/nvim/` に置く。
+2. アプリ module を追加した場合は共通・OS 別構成の明示的な imports に登録する。通常の GUI も Home Manager が管理し、OS 固有の設定・サービス・連携と Homebrew / nix-homebrew・cask は `nix/defaults.nix` の各 OS ブロックに定義する。
 3. Windows に追加する場合は `windows/winget/packages.json` の既存 schema に合わせ、package ID・導入・検証情報を直接記述する。
 4. 各 OS の通常インストーラーで反映する。具体的な入口と所有境界は [パッケージ管理](./nix/package-management.md) を参照する。
 

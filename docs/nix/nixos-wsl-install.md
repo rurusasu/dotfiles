@@ -2,6 +2,7 @@
 
 Windows の `install.cmd` は GUI アプリ導入後に NixOS-WSL をセットアップします。
 既存 distro は再利用し、未登録なら公式の `nixos.wsl` を取得して登録します。
+登録には `wsl --install --from-file` を試し、失敗した場合は `wsl --import` に切り替えます。
 `scripts/powershell/lib/Invoke-NixosWslSetup.ps1` が checkout を同期して NixOS/Home Manager を適用します。
 
 ## 推奨: Windows installer から実行する
@@ -22,15 +23,16 @@ Task がなければ installer 専用 cache に取得します。WSL 基盤の�
 再起動待ちはエラー表示せず終了コード `3010` を返し、`Setup Complete!` は表示しません。
 初回導入で設定適用を二重実行しません。失敗時は非ゼロ終了し、`Setup Complete!` は表示しません。
 
-`-DistroName`、`-InstallDir`、`-ReleaseTag`、`-SyncMode`、`-SyncBack`、`-StateVersion`、
-`-ForcePostInstall` を指定できます。`StateVersion` は省略時に既存の値を保持します。
+`-DistroName`、`-InstallDir`、`-ReleaseTag`、`-SyncMode`、`-SyncBack`、
+`-ForcePostInstall` を指定できます。`system.stateVersion` は
+`nix/defaults.nix:systemDefaults` 内の `defaults.stateVersion` を使います。
 同期オプションと既存環境のバックアップについては後述を参照してください。
 以下は distro の手動導入と、設定適用だけを独立して実行する場合の手順です。
 
 ## 前提
 
 - Windows 10 version 2004 (build 19041) 以降、または Windows 11
-- WSL 2（以下の `--from-file` 手順には WSL 2.4.4 以降）
+- WSL 2（手動の `--from-file` 手順に対応しているかは `wsl --help` で確認）
 - 管理者権限の PowerShell（WSL 基盤を初めて有効化するときだけ）
 - Git
 
@@ -97,15 +99,14 @@ Invoke-NixosWslSetup -Context $context
 ```
 
 `SetupContext` は PowerShell class のため、新しいセッションで一度だけ読み込んでください。
-既存の stateVersion は省略時に保持します。新規構成で 26.05 を明示する場合だけ、
-実行前に `$context.Options['StateVersion'] = '26.05'` を設定します。
+NixOS の stateVersion は共通 entrypoint が設定し、setup context への指定は不要です。
 
 設定適用だけを独立して呼び出すこともできます。
 
 ```text
 公式 nixos.wsl を手動導入
   -> Invoke-NixosWslSetup -Context $context
-  -> checkout 同期と /etc/nixos/dotfiles.json 保存
+  -> checkout 同期（公式既定ユーザー nixos）
   -> nix flake update --flake path:<checkout>
   -> nixos-rebuild switch --flake path:<checkout>#nixos --impure
 ```
@@ -113,9 +114,9 @@ Invoke-NixosWslSetup -Context $context
 初期 NixOS-WSL イメージには Git CLI がないため、ローカル checkout は明示的な `path:` flake として扱います。
 通常のファイルシステムパスを渡すと Git flake として自動判定され、Git CLI が必要になるためです。
 
-保存済みの選択ユーザーを再利用し、なければ UID 1000 の通常ユーザーを検出します。
-名前・home・UID・GID・primary group・正確な checkout パスを
-`/etc/nixos/dotfiles.json` に保存し、Nix の identity module が読み取ります。
+[公式手順](https://nix-community.github.io/NixOS-WSL/install.html)の標準アカウントは `nixos` です。セットアップは flake の `wsl.defaultUser` を読み取り、WSL の現在の既定ユーザーと一致することを確認します。設定済みのカスタムユーザーも利用できます。`nix/defaults.nix:systemDefaults` は
+`wsl.defaultUser` を使って Home Manager を接続し、アカウント名と UID の既定値は NixOS-WSL module に任せます。
+ユーザー名・UID/GID・checkout を独自 JSON に保存する処理はありません。
 
 ## 同期オプション
 
@@ -125,7 +126,6 @@ Invoke-NixosWslSetup -Context $context
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `SyncMode`                  | `link`（既定）: Windows checkout への symlink、`repo`: 完全コピー、`nix`: 既存 checkout の nix/ だけ同期、`none`: 既存 WSL checkout を使用 |
 | `SyncBack`                  | `lock`（既定）: flake.lock だけ戻す、`none`: 戻さない、`repo`: checkout を戻す                                                             |
-| `StateVersion`              | 明示する場合は `YY.MM`。省略時は既存の明示値を維持                                                                                         |
 | `ForcePostInstall`          | 既存 checkout が競合した場合、隣接する `.backup-<ID>` へ移動して同期を許可                                                                 |
 | `PostInstallTimeoutSeconds` | 各 WSL setup コマンドのタイムアウト（既定 1800 秒）                                                                                        |
 
@@ -151,20 +151,21 @@ setup 済みの WSL では次を実行します。
 ~/.dotfiles/install.sh
 ```
 
-WSL 固有構成は `nix/hosts/x86_64-linux/wsl/`、
-ユーザー・stateVersion は `/etc/nixos/dotfiles.json` を
-`nix/hosts/shared/nixos/identity.nix` が読み取ります。
+WSL の system / ユーザー設定と module 選択は `nix/defaults.nix:systemDefaults`、アプリ設定は `nix/modules/` に置きます。
+WSL のユーザーは `wsl.defaultUser`、ホームは `users.users.<name>.home` から取得し、
+ユーザー名と stateVersion の既定値は `nix/defaults.nix:systemDefaults` 内の `defaults` で管理します。
+architecture は構成の `system` 引数で指定し、CPU 別ディレクトリは設けません。
 native NixOS 用の `/etc/nixos/hardware-configuration.nix` は WSL では通常不要です。
 
 ## WSLg のフォント
 
-管理するアプリの既定フォントは `UDEV Gothic NF` に統一します。フォントの選択・導入は Nix、Windows の配置・登録は chezmoi が担当します。Noto CJK と color emoji は不足グリフの fallback として残します。Windows 自体のシステム UI フォントや、Web サイトが CSS で指定したフォントは強制変更しません。
+管理するアプリの既定フォントは `UDEV Gothic NF` に統一します。フォントの選択・導入は Nix、Windows の配置・登録は chezmoi が担当します。不足グリフ用には color emoji を残します。Windows 自体のシステム UI フォントや、Web サイトが CSS で指定したフォントは強制変更しません。
 
-`nix/hosts/x86_64-linux/wsl/fonts.nix` は WSLg server が読める通常ファイルとして UDEV の Regular / Bold と fallback を配置します。WSLg 用 fontconfig の正本は `nix/hosts/x86_64-linux/wsl/fonts/fontconfig.conf` です。server 標準の `/etc/fonts/fonts.conf` を読み込んだ後、解決された `sans-serif` に UDEV を優先指定し、Pango の titlebar にも適用します。
+`nix/defaults.nix` の WSL 設定は WSLg server が読める通常ファイルとして UDEV の Regular / Bold と color emoji を配置します。WSLg 用 fontconfig の正本は `nix/modules/fonts/wsl-fontconfig.conf` です。server 標準の `/etc/fonts/fonts.conf` を読み込んだ後、解決された `sans-serif` に UDEV を優先指定し、Pango の titlebar にも適用します。
 
 chezmoi はこの XML を `%USERPROFILE%/.config/dotfiles/wslg-fontconfig.conf` に配置し、`%USERPROFILE%/.wslgconfig` の `FONTCONFIG_FILE` を Windows home の `/mnt/<drive>/...` パスへ向けます。XML の参照先を Windows 側に置くことで、特定の user distro 内の設定や起動順に依存させません。フォント方針を chezmoi 側へ重複定義しません。
 
-GTK の画面内フォントは `nix/modules/fonts/gtk.nix` が GTK 3 / 4 と設定ポータルへ配布します。WSL host は `programs.dconf.enable` で永続設定に必要な service を登録します。
+GTK の画面内フォントは `nix/modules/fonts/default.nix` が GTK 3 / 4 と設定ポータルへ配布します。WSL host は `programs.dconf.enable` で永続設定に必要な service を登録します。
 
 反映は WSL で `nrs`、Windows で `task chezmoi` の順です。WSLg の新しい環境変数と titlebar font cache は、次の WSLg 再起動時に読み込まれます。作業を保存して Linux GUI アプリを閉じた後、Windows で `wsl --shutdown` を実行し、通常どおりアプリを起動してください。2026-10-14 に再起動後の通常 Chrome titlebar と Nautilus の UDEV・日本語表示を実機確認しました。
 
@@ -174,8 +175,8 @@ WSL host は `wsl.useWindowsDriver = true` で Windows の D3D12 / DXCore ライ
 `/run/opengl-driver/lib` に接続します。`LD_LIBRARY_PATH` にそのディレクトリを設定し、
 `GALLIUM_DRIVER=d3d12` で Mesa の描画経路を選択します。
 Ghostty などの OpenGL アプリが CPU 描画の `llvmpipe` にフォールバックするのを防ぎます。
-描画環境とポータルの連携は `nix/hosts/x86_64-linux/wsl/integration.nix` が所有します。
-シェルには `environment.variables`、systemd 経由の GUI 起動には `environment.d` で渡します。
+`platform = "wsl"` の `systemDefaults` が Windows driver・ポータル・ユーザーの描画環境を管理します。
+シェルには `home.sessionVariables`、systemd 経由の GUI 起動には `systemd.user.sessionVariables` で渡します。
 詳細は [NixOS-WSL の option](https://nix-community.github.io/NixOS-WSL/options.html#wsl.useWindowsDriver) と
 [WSLg の D3D12 自動選択の問題](https://github.com/microsoft/wslg/issues/1332) を参照してください。
 
@@ -194,12 +195,8 @@ NVIDIA カーネルドライバーを導入する構成ではありません。
 
 ## WSLg のデスクトップポータル
 
-WSLg には Linux のデスクトップセッションマネージャーがないため、WSL host は
-`default.target` からユーザーの `graphical-session.target` を起動します。
-`xdg-desktop-portal` はこの target が停止していると D-Bus 経由でも起動できません。
-既に動いているユーザーマネージャーにも反映するため、rebuild 時に再起動される
-`nixos-activation.service` からも同じ target を起動し、target の起動後に activation を実行します。
-これにより、`WantedBy` の追加だけでは起動しない既存セッションでも WSL の再起動を必要としません。
+WSLg にはデスクトップセッションマネージャーがないため、`nixos-activation.service` の依存で
+標準の `graphical-session.target` を起動し、ポータルを利用可能にします。
 GTK backend が画面に接続できるよう、`DISPLAY=:0` と `WAYLAND_DISPLAY=wayland-0` を
 systemd の `environment.d` にも渡します。通常のシェルの表示環境は WSLg が設定します。
 
@@ -232,13 +229,13 @@ Ghostty 1.3.1 の起動ログには、設定で解決する警告と upstream �
 
 ## system version と system.stateVersion
 
-`system.stateVersion` はパッケージの更新版ではなく、永続データの互換性を決める schema です。
-既存の 25.05 WSL 環境を単なるパッケージ更新で 26.05 に変更しないでください。
-通常の反映では保存値を維持します。`install.cmd` も `-StateVersion` を省略すれば既存の値を維持します。
-
-明示的に移行する場合は VHD、Docker、データベース、各種 `/var/lib` のデータをバックアップし、
-使用中のモジュールの移行可否を確認してください。反映後は generation、
-`/run/current-system`、Docker とデータベースなどの状態を確認します。
+`system.stateVersion` は永続データの形式やサービスの既定値に使う設定値です。
+ユーザーは `wsl.defaultUser` で上書きでき、既定値と stateVersion は `nix/defaults.nix:systemDefaults` 内の `defaults` で管理します。
+既存環境でユーザー名を変更する場合は、[公式の変更手順](https://nix-community.github.io/NixOS-WSL/how-to/change-username.html)に従います。
+通常の `switch` で改名せず、`boot` で構成を作り、WSL の停止・root での起動・再停止を行って反映します。
+Windows / WSL の installer はアカウント名の不一致を検出すると `switch` 前に停止し、この公式の変更手順を案内します。
+Home Manager の `home.stateVersion` も同じ `defaults.stateVersion` を参照します。
+稼働する NixOS のリリースは `nixos-version`、反映後の generation は次のコマンドで確認できます。
 
 ```bash
 nixos-rebuild list-generations

@@ -69,20 +69,24 @@ EOF
 	[[ "$output" == *"hermes:xapi:auth"* ]]
 	[[ "$output" == *"hermes:xapi:setup"* ]]
 	[[ "$output" == *"hermes:xapi:sync-token"* ]]
+	[[ "$output" != *"hermes:xapi:restart"* ]]
+	[[ "$output" != *"hermes:xapi:logs"* ]]
+	[[ "$output" != *"hermes:browser:"* ]]
+	[[ "$output" != *"hermes:pull"* ]]
 	[[ "$output" == *"nrs"* ]]
 	[[ "$output" == *"test:bash"* ]]
 }
 
-@test "xapi token sync task uses the platform adapter" {
+@test "xapi token sync task uses the native adapter" {
 	command -v task >/dev/null || skip "go-task is unavailable"
 
 	run task --dir "$REPO_ROOT" --dry hermes:xapi:sync-token
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"scripts/sh/hermes-xapi.sh sync-token"* ]]
+	[[ "$output" == *"hermes-xapi sync-token"* ]]
 }
 
-@test "xapi setup runs auth, token sync, and restart in order" {
+@test "xapi setup runs auth then token sync" {
 	command -v task >/dev/null || skip "go-task is unavailable"
 
 	run task --dir "$REPO_ROOT" --dry --force hermes:xapi:setup
@@ -90,12 +94,11 @@ EOF
 	[ "$status" -eq 0 ]
 	auth_line="$(grep -n 'task: \[hermes:xapi:auth\]' <<<"$output" | cut -d: -f1)"
 	sync_line="$(grep -n 'task: \[hermes:xapi:sync-token\]' <<<"$output" | cut -d: -f1)"
-	restart_line="$(grep -n 'task: \[hermes:xapi:restart\]' <<<"$output" | cut -d: -f1)"
 	[ -n "$auth_line" ]
 	[ -n "$sync_line" ]
-	[ -n "$restart_line" ]
 	[ "$auth_line" -lt "$sync_line" ]
-	[ "$sync_line" -lt "$restart_line" ]
+	[[ "$output" != *"hermes:xapi:restart"* ]]
+	[[ "$output" != *"docker"* ]]
 }
 
 @test "Hermes up starts the Home Manager native gateway" {
@@ -104,7 +107,7 @@ EOF
 	run task --dir "$REPO_ROOT" --dry --force hermes:up
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"hermes gateway start"* ]]
+	[[ "$output" == *"systemctl --user start hermes-agent.service"* || "$output" == *'launchctl kickstart "$target"'* ]]
 	[[ "$output" != *"docker compose"* ]]
 	[[ "$output" != *"hermes:docker:bootstrap"* ]]
 }
@@ -129,6 +132,6 @@ EOF
 	run task --dir "$REPO_ROOT" --dry --force hermes:restart
 
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"hermes gateway restart"* ]]
+	[[ "$output" == *"systemctl --user restart hermes-agent.service"* || "$output" == *'launchctl kickstart -k "$target"'* ]]
 	[[ "$output" != *"docker compose"* ]]
 }

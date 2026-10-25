@@ -2,12 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
 
 . "$SCRIPT_DIR/install-common.sh"
-. "$SCRIPT_DIR/hermes-sidecar-common.sh"
+. "$SCRIPT_DIR/hermes-xapi-common.sh"
 
-compose_file="${HERMES_COMPOSE_FILE:-$REPO_ROOT/docker/hermes-service/compose.yml}"
 command_name="${1:-}"
 
 case "$command_name" in
@@ -15,8 +13,7 @@ auth)
   dotfiles_hermes_require_xapi_tools
   dotfiles_hermes_prepare_runtime_home
   dotfiles_hermes_with_xapi_credentials \
-    docker compose -f "$compose_file" run --rm --no-deps --entrypoint /bin/sh xapi-mcp \
-    -lc 'CLIENT_ID="$X_API_CLIENT_ID" CLIENT_SECRET="$X_API_CLIENT_SECRET" node_modules/.bin/xurl auth oauth2 --headless'
+    xurl auth oauth2 --headless
   ;;
 sync-token)
   dotfiles_hermes_require_xapi_tools
@@ -25,22 +22,14 @@ sync-token)
     dotfiles_die "Hermes 1Password Service Account is unavailable."
   dotfiles_hermes_sync_xapi_refresh_token_to_onepassword
   ;;
-restart)
+mcp)
   dotfiles_hermes_require_xapi_tools
   dotfiles_hermes_prepare_runtime_home
-  dotfiles_hermes_ensure_xapi_auth docker "$compose_file"
-  dotfiles_hermes_with_xapi_credentials_and_cache \
-    docker compose -f "$compose_file" up -d --force-recreate xapi-mcp
-  ;;
-up)
-  dotfiles_hermes_require_xapi_tools
-  dotfiles_hermes_prepare_runtime_home
-  dotfiles_hermes_ensure_xapi_auth docker "$compose_file"
-  dotfiles_hermes_with_xapi_credentials_and_cache \
-    docker compose -f "$compose_file" up -d --force-recreate chromium browser-mcp xapi-mcp
+  dotfiles_hermes_ensure_xapi_auth >&2
+  dotfiles_hermes_with_xapi_credentials xurl mcp https://api.x.com/mcp
   ;;
 *)
-  printf 'Usage: %s {auth|sync-token|restart|up}\n' "$0" >&2
+  printf 'Usage: %s {auth|sync-token|mcp}\n' "$0" >&2
   exit 64
   ;;
 esac

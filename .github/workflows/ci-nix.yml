@@ -165,33 +165,6 @@ jobs:
       - name: Run Bash tests
         run: bash scripts/sh/run-bash-tests.sh
 
-  hermes-runtime-contracts:
-    needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.other == 'true')) }}
-    name: Hermes Runtime Contracts
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    steps:
-      - name: Verify change detection
-        if: ${{ needs.changes.result != 'success' }}
-        shell: bash
-        run: exit 1
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702
-        with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run Hermes browser runtime contracts
-        run: docker/hermes-browser/tests/test_runtime_contract.sh
-
   nix:
     name: Bootstrap / Nix / Lint
     needs: [changes, ci-tools]
@@ -268,8 +241,8 @@ jobs:
 
       - name: Build Linux configurations and checks
         run: |
-          # Native NixOS build uses a hardware fixture inside this container.
-          export DOTFILES_NIXOS_HARDWARE_CONFIG="$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix"
+          install -D -m 0644 "$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix" \
+            /etc/nixos/hardware-configuration.nix
           nix build --impure --no-link --print-build-logs \
             .#nixosConfigurations.linux.config.system.build.toplevel \
             .#homeConfigurations.x86_64-linux.activationPackage
@@ -353,12 +326,21 @@ jobs:
 
       - name: Apply macOS configuration
         run: |
-          # Root is trusted by the Nix daemon; SUDO_USER still identifies the
-          # hosted runner user for nix-darwin's primaryUser configuration.
+          mkdir -p "$RUNNER_TEMP/darwin"
+          cat > "$RUNNER_TEMP/darwin/flake.nix" <<EOF
+          {
+            inputs.dotfiles.url = "path:$GITHUB_WORKSPACE";
+            outputs = { dotfiles, ... }: {
+              darwinConfigurations.macos = dotfiles.darwinConfigurations.macos.extendModules {
+                modules = [ ({ lib, ... }: { system.primaryUser = lib.mkForce "$(id -un)"; }) ];
+              };
+            };
+          }
+          EOF
           sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
             nix --accept-flake-config \
             --extra-experimental-features 'nix-command flakes' \
-            run .#darwin-rebuild -- switch --flake .#macos --impure
+            run .#darwin-rebuild -- switch --flake "$RUNNER_TEMP/darwin#macos" --impure
 
       - name: Keep private build dependencies through checks
         run: python3 scripts/python/prepare_ci_nix_cache.py root "$RUNNER_TEMP/ci-build-dependencies"
@@ -760,7 +742,6 @@ jobs:
         changes,
         ci-tools,
         bash-test,
-        hermes-runtime-contracts,
         wsl-prebuild,
         nix,
         linux-build,
@@ -777,8 +758,6 @@ jobs:
       TOOLS_RESULT: ${{ needs.ci-tools.result }}
       BASH_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
       BASH_RESULT: ${{ needs.bash-test.result }}
-      HERMES_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.other == 'true' }}
-      HERMES_RESULT: ${{ needs.hermes-runtime-contracts.result }}
       PLATFORM_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
       LINUX_BUILD_REQUIRED: ${{ needs.changes.outputs.linux == 'true' }}
       DARWIN_REQUIRED: ${{ needs.changes.outputs.darwin == 'true' }}
@@ -824,7 +803,6 @@ jobs:
 
           check_required_job "Tools image" "${TOOLS_REQUIRED}" "${TOOLS_RESULT}"
           check_required_job "Bash tests" "${BASH_REQUIRED}" "${BASH_RESULT}"
-          check_required_job "Hermes runtime contracts" "${HERMES_REQUIRED}" "${HERMES_RESULT}"
           check_required_job "Nix" "${NIX_REQUIRED}" "${NIX_RESULT}"
           check_required_job "Checks" "${CHECKS_REQUIRED}" "${CHECKS_RESULT}"
           check_required_job "Windows / Installer" "${WINDOWS_REQUIRED}" "${WINDOWS_INSTALLER_RESULT}"

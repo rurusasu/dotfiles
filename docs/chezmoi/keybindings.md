@@ -29,7 +29,7 @@ Nix で管理するデスクトップ・Ghostty・Neovim 配列と、chezmoi が
 
 配置方針は `nix/home/keybindings/` に共通 action とキーを定義し、macOS の AeroSpace と native NixOS の Hyprland 設定を生成する。Windows は PowerToys で提示された Omarchy 配列を反映します。Windows の GlazeWM 設定生成と配布機能は削除しました。WSL guest に Hyprland は導入しません。責務・OS ごとの代替動作は [共通定義と OS 別実装](./omarchy.md) を参照してください。
 
-キー配列の正本は `nix/home/keybindings/bindings.nix` と、それが読み込む `ghostty.nix` / `neovim.nix` です。`task keybindings:export` が Nix output `.#keybindings-json` をビルドし、コミット対象の `generated.json` を更新します。chezmoi は Windows 向け38割り当てを PowerToys に反映し、Ghostty / Neovim の export を NixOS-WSL の `~/.config/dotfiles/keybindings/` に配置します。Windows の apply は Nix を呼びません。WSL の Home Manager は export を読む loader を所有し、native Unix は同じ Nix 定義を直接読みます。Nix の単体テストは生成済み JSON と正本の一致を検査します。
+キー配列の正本は `nix/home/keybindings/bindings.nix` と、それが読み込む `nix/modules/terminals/ghostty/ghostty.nix` / `nix/modules/editors/nvim/neovim.nix` です。`task keybindings:export` がロック済み Nix 入力で正本を直接評価し、jq でコミット対象の `generated.json` を更新します。chezmoi は Windows 向け38割り当てを PowerToys に反映し、Ghostty / Neovim の export を NixOS-WSL の `~/.config/dotfiles/keybindings/` に配置します。Windows の apply は Nix を呼びません。WSL の Home Manager は export を読む loader を所有し、native Unix は同じ Nix 定義を直接読みます。Nix の単体テストは生成済み JSON と正本の一致を検査します。
 
 Windows では `Super=Win` とし、同じキーの標準操作を remap で上書きします。`Win+D` は無効化します。Windows キーの全機能を無効化する `NoWinKeys` は使わず、`Win+L` や `Ctrl+Alt+Del` などの OS 予約操作は維持します。初回の loader 導入は `nrs`、以後の反映は `task chezmoi` です。[install.cmd と export の手順](./omarchy.md#export-と反映手順) を参照してください。
 
@@ -152,8 +152,7 @@ Window Manager 契約外の WezTerm 操作として、pane resize、window focus
   - `Alt+Q`: zoxide interactive jump (`zoxide query -i`)
   - `Ctrl+T/R`・`Alt+C`: 標準 fzf ウィジェット（ファイル・履歴・ディレクトリ選択）
 - bash
-  - `Alt+Q`: zoxide interactive jump (`zoxide query -i`)
-  - `Alt+D/T/R`: fzf ウィジェット
+  - zoxide の標準 `cd` / `cdi` を使い、fzf のキー連携は無効
 - PowerShell
   - `Shift+Enter`: PSReadLine `AddLine`
   - `Alt+Q`: zoxide interactive jump (`zoxide query -i`)
@@ -166,11 +165,11 @@ Window Manager 契約外の WezTerm 操作として、pane resize、window focus
 
 ### zoxide + fzf integration
 
-- `Alt+Q` は各 shell で `zoxide query -i` を呼び出し、履歴ベースのディレクトリ候補をインタラクティブ選択する
+- `Alt+Q` は zsh / PowerShell で `zoxide query -i` を呼び出し、履歴ベースのディレクトリ候補をインタラクティブ選択する
 - zsh は標準 integration を使い、`Ctrl+T` でファイル選択、`Ctrl+R` で履歴検索、`Alt+C` でディレクトリ選択して `cd`
-- Bash / PowerShell の `Alt+D` は `fd --absolute-path` + `fzf` でディレクトリ検索して `cd`
-- Bash / PowerShell の `Alt+T` は `fd` + `fzf` でファイル/ディレクトリを選択してコマンドラインへ挿入
-- Bash / PowerShell の `Alt+R` は履歴を `fzf` で選択してコマンドラインへ反映
+- PowerShell の `Alt+D` は `fd --absolute-path` + `fzf` でディレクトリ検索して `cd`
+- PowerShell の `Alt+T` は `fd` + `fzf` でファイル/ディレクトリを選択してコマンドラインへ挿入
+- PowerShell の `Alt+R` は履歴を `fzf` で選択してコマンドラインへ反映
 
 ## 運用ルール
 

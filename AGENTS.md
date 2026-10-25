@@ -8,14 +8,18 @@
 
 ## 変更先の原則
 
-- Unix のパッケージ導入とアプリ設定: `nix/modules/`。Unix CLI の PATH への導入はすべて `tools.nix`、Linux / WSLg GUI は `desktop.nix`、Darwin system GUI は `desktop-darwin.nix`、個別アプリの設定・連携は各 module にまとめる。
-- CLI の `programs.*.enable` と `home.packages` は `nix/modules/tools.nix` に宣言し、各 module は設定・連携・package override を担当する。GUI、OS service、フォント、ビルド用依存はそれぞれの所有先に置く。
-- Python のユーザー環境は uv で管理し、interpreter を直接 `home.packages` に追加しない。公開コマンドは uv 経由で実行する。Nix 内部専用の Python 依存は各 module が管理する。
-- ホストは必要な module を import して構成を選択する。Windows のインストール情報は Nix module と分離する。詳細は [パッケージ管理](docs/nix/package-management.md#分割の理由と編集先)。
-- Home Manager module の選択・OS 固有設定: `nix/hosts/<system>/<environment>/home.nix`。`nix/home/common.nix` は OS 非依存の共有設定を担当する。
-- デスクトップの共通キー配列・ユーザー設定: `nix/home/keybindings/`。OS の service/有効化・競合解除は `nix/hosts/<system>/<environment>/` が担当する。純粋な設定生成関数と Home Manager module を区別する（[責務と対応範囲・移行状況](docs/chezmoi/omarchy.md)）。
+- Unix のアプリ本体は原則として共通の `nixpkgs` から取得する。Home Manager で設定・連携も管理するアプリは標準の `programs.<name>.enable` と package 既定値を優先し、その他は `pkgs.<name>` を導入する。対象 OS の nixpkgs に同じアプリがない場合に限り、追加 flake や upstream 配布物を使い、理由を [パッケージ管理](docs/nix/package-management.md#nixpkgs-を使わない例外) に記載する。
+- Unix のパッケージ導入とアプリ設定: `nix/modules/`。アプリごとの module が標準の `programs.*.enable`、package 選択、設定・連携、専用の実行依存をまとめて管理する。
+- 設定・package override・生成・連携を持つアプリは module にまとめる。Neovim の LSP・整形ツール・toolchain・プラグイン実行依存は Neovim module が所有する。
+- enable・単純な package list・単一代入だけの module は作らず、`nix/defaults.nix` の必要な構成へ直接書く。
+- Hermes は同梱 Python を使う。Python interpreter を別途導入したり、直接 `home.packages` に追加したりしない。プロジェクト依存は uv で管理する。Nix 内部専用の Python 依存は各 module が管理する。
+- 共通・OS 別の module 選択はアプリ module の外で組み立てる。現在の配線は `nix/defaults.nix:systemDefaults` が管理し、Home Manager の共通・OS 別 imports を明示する。Windows のインストール情報は Nix module と分離する。詳細は [パッケージ管理](docs/nix/package-management.md#分割の理由と編集先)。
+- Homebrew / nix-homebrew・cask・ユーザー PATH は `nix/defaults.nix` にまとめる。通常の CLI・GUI とユーザー設定は Home Manager が管理し、OS 固有の設定・権限・システムサービス・連携は `defaults.nix` の各 OS ブロックに置く。
+- OS / Home Manager 設定は `nix/defaults.nix:systemDefaults` にまとめ、末尾の構成登録で `specialArgs.platform` と CPU の `system` を選択する。
+- 共通の OS / Home Manager 設定は `nix/defaults.nix:systemDefaults` にまとめ、Home Manager 共通設定は同 module の `home-manager.sharedModules` に置く。OS 別ユーザー設定も同じ `sharedModules` 内で選択し、standalone と共有する。
+- 共通キー配列は `nix/home/keybindings/bindings.nix`、各アプリの生成関数・設定は `nix/modules/`。OS 基盤設定と module 選択は `nix/defaults.nix` が担当する。純粋な設定生成関数を Home Manager module の imports に渡さない。
 - Windows manifest: `windows/{winget,npm,pnpm}/packages.json`（直接管理する独立した正本。通常導入は WinGet の GUI のみ）
-- ユーザー設定: Unix は `nix/modules/` と `nix/home/`、Windows は `chezmoi/` 以下。Nix 管理のデスクトップキー設定は `nix/home/keybindings/` に置き、同じ設定を二重配布しない。
+- アプリのユーザー設定・サービス・activation は `nix/modules/`、OS 基盤設定と module 選択は `nix/defaults.nix`、Windows は `chezmoi/` に置く。Unix の設定ファイルは標準 Home Manager option と `xdg.configFile` で管理し、二重配布しない。
 - Windows 実行ロジック: `scripts/powershell/`
 - CLI の実行順序・依存関係・公開コマンドは `Taskfile.yml` と `taskfiles/` に実装する。
 - Bash/PowerShell は Taskfile から呼ばれる platform adapter、secret 処理、複雑な検証に限定し、CLI の処理順序を重複定義しない。

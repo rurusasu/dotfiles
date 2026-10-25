@@ -27,10 +27,6 @@ function Invoke-NixosWslSetup {
     if ($syncMode -eq 'nix' -and $syncBack -eq 'repo') {
         throw 'SyncMode nix requires SyncBack lock or none.'
     }
-    $stateVersion = [string]$Context.GetOption('StateVersion', '')
-    if ($stateVersion -and $stateVersion -notmatch '^\d{2}\.\d{2}$') {
-        throw 'StateVersion must use YY.MM format.'
-    }
 
     $sourceOutput = @(Invoke-Wsl -Arguments @(
             '-d', $Context.DistroName, '-u', 'root', '--', 'wslpath', '-a',
@@ -42,16 +38,29 @@ function Invoke-NixosWslSetup {
         throw 'Could not resolve the Windows checkout inside WSL.'
     }
 
-    # Reuse the previously selected account; rootfs images initially provide UID 1000.
-    $accountOutput = @(Invoke-SetupCommand 'user=$(cat /var/lib/dotfiles/user 2>/dev/null || true); if [ -n "$user" ]; then getent passwd "$user"; else getent passwd 1000; fi')
+    $currentUserOutput = @(Invoke-Wsl -Arguments @('-d', $Context.DistroName, '--exec', '/run/current-system/sw/bin/id', '-un'))
+    $currentUser = [string]($currentUserOutput | Where-Object { [string]$_ -match '^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$' } | Select-Object -Last 1)
+    if ($LASTEXITCODE -ne 0 -or -not $currentUser) { throw 'Could not resolve the current WSL default user.' }
+    $accountOutput = @(Invoke-SetupCommand "getent passwd $(ConvertTo-WslArgument $currentUser)")
     $accountLine = $accountOutput | Where-Object { $_ -match '^[^:]+:[^:]*:[0-9]+:[0-9]+:' } | Select-Object -First 1
     if (-not $accountLine) { throw 'Could not resolve the NixOS-WSL user account.' }
     $account = ([string]$accountLine).Split(':')
     $user = $account[0]
     $userHome = $account[5]
     if ($userHome -notmatch '^/') { throw 'The NixOS user home must be an absolute path.' }
-    $group = @(Invoke-SetupCommand "id -gn $(ConvertTo-WslArgument $user)") | Select-Object -Last 1
     $repo = "$userHome/.dotfiles"
+
+    # Validate the declaration being applied; none retains the independent WSL checkout.
+    $userFlake = if ($syncMode -eq 'none') { $repo } else { $source }
+    $userAttribute = ConvertTo-WslArgument ('path:' + $userFlake + '#nixosConfigurations.nixos.config.wsl.defaultUser')
+    $userOutput = @(Invoke-SetupCommand "nix --accept-flake-config --extra-experimental-features 'nix-command flakes' eval --raw $userAttribute --impure --no-write-lock-file")
+    $declaredUser = [string]($userOutput | Where-Object { [string]$_ -match '^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$' } | Select-Object -Last 1)
+    if (-not $declaredUser) { throw 'Could not resolve the declared wsl.defaultUser.' }
+    if ($currentUser -ne $declaredUser) {
+        throw "WSL user '$currentUser' differs from declared wsl.defaultUser '$declaredUser'. Change it using nixos-rebuild boot and the official WSL restart procedure before running setup: https://nix-community.github.io/NixOS-WSL/how-to/change-username.html"
+    }
+
+    $group = @(Invoke-SetupCommand "id -gn $(ConvertTo-WslArgument $user)") | Select-Object -Last 1
     $qRepo = ConvertTo-WslArgument $repo
     $qSource = ConvertTo-WslArgument $source
     $qOwner = ConvertTo-WslArgument "${user}:$group"
@@ -80,24 +89,6 @@ function Invoke-NixosWslSetup {
     $qFlakeTarget = ConvertTo-WslArgument ('path:' + $target)
     Invoke-SetupCommand "test -f $qTarget/flake.nix; test -f $qTarget/flake.lock" | Out-Host
 
-    $settings = @{
-        user = $user; home = $userHome; uid = $account[2]; gid = $account[3]
-        group = [string]$group; repository = $target
-    }
-    if ($stateVersion) { $settings.stateVersion = $stateVersion }
-    # Preserve any prior explicit stateVersion if this invocation omits it.
-    $existing = @(Invoke-SetupCommand 'if [ -f /etc/nixos/dotfiles.json ]; then cat /etc/nixos/dotfiles.json; fi')
-    if ($existing.Count -gt 0) {
-        $prior = ($existing -join "`n") | ConvertFrom-Json -ErrorAction Stop
-        $settings = @{}
-        foreach ($property in $prior.PSObject.Properties) { $settings[$property.Name] = $property.Value }
-        $settings.user = $user; $settings.home = $userHome
-        $settings.uid = $account[2]; $settings.gid = $account[3]
-        $settings.group = [string]$group; $settings.repository = $target
-        if ($stateVersion) { $settings.stateVersion = $stateVersion }
-    }
-    $json = ConvertTo-WslArgument ($settings | ConvertTo-Json -Compress)
-    Invoke-SetupCommand "install -d -m 0755 /etc/nixos; printf '%s\n' $json > /etc/nixos/dotfiles.json; chmod 0644 /etc/nixos/dotfiles.json" | Out-Host
     $updateFlakeInputs = [bool]$Context.GetOption('UpdateFlakeInputs', $true)
     if ($updateFlakeInputs) {
         Invoke-SetupCommand "nix --accept-flake-config --extra-experimental-features 'nix-command flakes' flake update --flake $qFlakeTarget" | Out-Host

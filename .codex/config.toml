@@ -1,4 +1,4 @@
-model = "gpt-6-luna"
+model = "gpt-6.1-sol"
 model_reasoning_effort = "high"
 plan_mode_reasoning_effort = "high"
 model_reasoning_summary = "auto"
@@ -10,24 +10,9 @@ mcp_oauth_credentials_store = "auto"
 hide_agent_reasoning = false
 show_raw_agent_reasoning = false
 
-[shell_environment_policy]
-inherit = "all"
-exclude = [
-  "*KEY*",
-  "*TOKEN*",
-  "*SECRET*",
-  "*PASSWORD*",
-  "*CREDENTIAL*",
-]
-
-[shell_environment_policy.set]
-TERM = "xterm-256color"
-
 [features]
 elevated_windows_sandbox = true
 shell_snapshot = true
-multi_agent = true
-hooks = true
 unified_exec = true
 undo = true
 memories = true
@@ -38,46 +23,6 @@ apps = true
 
 [tools]
 view_image = true
-
-[[hooks.PreToolUse]]
-matcher = "^Bash$"
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/command_permission_policy.py"'
-command_windows = "pwsh -NoLogo -NoProfile -NonInteractive -Command \"$root = git rev-parse --show-toplevel; python (Join-Path $root '.codex/hooks/command_permission_policy.py')\""
-timeout = 30
-statusMessage = "Checking command policy"
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/deny_protected_branch_commit.py"'
-command_windows = "pwsh -NoLogo -NoProfile -NonInteractive -Command \"$root = git rev-parse --show-toplevel; python (Join-Path $root '.codex/hooks/deny_protected_branch_commit.py')\""
-timeout = 30
-statusMessage = "Checking protected branch policy"
-
-[[skills.config]]
-name = "python-clean-architecture"
-path = "~/.codex/skills/python-clean-architecture"
-enabled = true
-
-[[skills.config]]
-name = "python-docstring"
-path = "~/.codex/skills/python-docstring"
-enabled = true
-
-[agents]
-max_threads = 12
-max_depth = 2
-job_max_runtime_seconds = 3600
-
-[agents.fast_worker]
-description = "Fast scoped implementation agent."
-config_file = "agents/fast_worker.toml"
-
-[agents.python_coding]
-description = "Python implementation-only agent (no test execution)."
-config_file = "agents/python_coding.toml"
 
 # [mcp_servers.linear]
 # url = "https://mcp.linear.app/mcp"

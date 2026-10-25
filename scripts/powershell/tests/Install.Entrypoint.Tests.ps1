@@ -305,7 +305,6 @@ param(
     [string]$InstallDir,
     [string]$ReleaseTag,
     [string]$PostInstallScript,
-    [string]$StateVersion,
     [hashtable]$Options = @{},
     [string]$SyncMode,
     [string]$SyncBack

@@ -7,7 +7,7 @@ tasks:
       - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix fmt"'
 
   fmt:check:
-    desc: Check formatting without changes
+    desc: Format files and fail if changes are needed
     cmds:
       - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix fmt -- --fail-on-change"'
 

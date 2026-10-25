@@ -16,6 +16,7 @@ in
   };
 
   config = {
+    home.packages = [ pkgs.gwq ];
     dotfiles.gwq.settings = {
       worktree = {
         basedir = lib.mkDefault "${config.home.homeDirectory}/worktrees";
@@ -27,12 +28,15 @@ in
     xdg.configFile."gwq/config.toml".source =
       format.generate "gwq-config.toml" config.dotfiles.gwq.settings;
 
-    # Completion also provides the wrapper used by `gwq cd` in the current shell.
-    programs.bash.initExtra = ''
-      source <(${executable} completion bash)
-    '';
-    programs.zsh.initContent = ''
-      source <(${executable} completion zsh)
-    '';
+    programs = {
+      git.settings.alias.gtr = "!gwq add";
+      # Completion also provides the wrapper used by `gwq cd` in the current shell.
+      bash.initExtra = ''
+        source <(${executable} completion bash)
+      '';
+      zsh.initContent = ''
+        source <(${executable} completion zsh)
+      '';
+    };
   };
 }
