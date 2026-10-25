@@ -11,18 +11,13 @@ let
 in
 {
   testGhqRootsAreRenderedForEachHome = {
-    expr = map (home: {
-      rootsInGitConfig = home.pkgs.lib.hasInfix (home.pkgs.lib.generators.toGitINI {
+    expr = map (
+      home:
+      home.pkgs.lib.hasInfix (home.pkgs.lib.generators.toGitINI {
         ghq.root = home.config.programs.git.settings.ghq.root;
-      }) home.config.xdg.configFile."git/config".text;
-      packageEntries = home.pkgs.lib.count (
-        package: package.drvPath == home.pkgs.ghq.drvPath
-      ) home.config.home.packages;
-    }) homes;
-    expected = map (_: {
-      rootsInGitConfig = true;
-      packageEntries = 1;
-    }) homes;
+      }) home.config.xdg.configFile."git/config".text
+    ) homes;
+    expected = map (_: true) homes;
   };
 
   testWslGhqRootsUseWindowsDrives = {

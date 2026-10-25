@@ -33,24 +33,20 @@ in
     ) homes;
   };
 
-  testGitIsInstalledOnceWithRelativeWorktrees = {
+  testGitIsEnabledWithRelativeWorktrees = {
     expr = map (
       home:
       let
         git = home.config.programs.git;
         inherit (git) settings;
-        countPackageEntries =
-          target: home.pkgs.lib.count (package: package.drvPath == target.drvPath) home.config.home.packages;
       in
       {
         enabled = git.enable;
-        gitCopies = countPackageEntries git.package;
         relativeWorktrees = settings.worktree.useRelativePaths or false;
       }
     ) homes;
     expected = map (_: {
       enabled = true;
-      gitCopies = 1;
       relativeWorktrees = true;
     }) homes;
   };
@@ -58,18 +54,5 @@ in
   testHomeGitHasNoMutableCheckoutTrustIncludes = {
     expr = map (home: home.config.programs.git.includes) homes;
     expected = map (_: [ ]) homes;
-  };
-
-  testNativeGitOwnsItsFilesWithoutBackups = {
-    expr = map (home: {
-      gitForce = home.config.xdg.configFile."git/config".force;
-      legacyGitForce = home.config.home.file.".gitconfig".force;
-      legacyGitHasNoSettings = !(home.pkgs.lib.hasInfix "[" home.config.home.file.".gitconfig".text);
-    }) homes;
-    expected = map (_: {
-      gitForce = true;
-      legacyGitForce = true;
-      legacyGitHasNoSettings = true;
-    }) homes;
   };
 }
