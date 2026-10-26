@@ -1,0 +1,5 @@
+# Superfile's built-in theme and keybindings; pins remain application-managed.
+theme = "catppuccin-mocha"
+editor = "notepad"
+default_open_file_preview = true
+nerdfont = true

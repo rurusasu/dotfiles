@@ -14,6 +14,11 @@ Hermes は同梱 Python を使い、プロジェクト依存は `uv` で管理�
 
 Windows の導入情報は `windows/winget/packages.json` を直接管理します。Unix の Nix module と独立した正本で、Nix から生成しません。通常の Windows セットアップは GUI アプリだけを導入し、`windows/npm/packages.json` と `windows/pnpm/packages.json` は空です。
 
+明示的な CLI 例外として、Windows PowerShell 用の Superfile (`spf`) も WinGet で導入します。
+WSL の Superfile は Home Manager が導入・設定を管理します。
+OpenCode (`opencode`)、Pi coding agent (`pi`)、TUIOS (`tuios`) は
+`nix/defaults.nix` の Home Manager package 宣言から WSL / Darwin にのみ導入します。
+
 フォントパッケージと fontconfig 設定は `nix/modules/fonts.nix` の `fonts.packages` / `fonts.fontconfig` に一度だけ定義します。`nix/defaults.nix:systemDefaults` が OS 固有の option と配線を管理します。WSLg へのフォント配布も同ファイルの WSL 設定が担当します。NixOS は共通 module を import し、NixOS 専用の `fonts.fontDir.enable` を設定します。Darwin は `fonts.packages` を nix-darwin に渡します。各 OS の Home Manager は `nix/defaults.nix:systemDefaults.home-manager.sharedModules` を通じて `nix/modules/fonts/default.nix` を読み込み、共通の `fonts.fontconfig` を設定します。standalone Home Manager のフォント配布も同 module が担当します。
 
 WSL の Noto CJK の追加導入・フォールバック指定は行いません。WSLg の配布フォントも UDEV Gothic NF と絵文字に揃えます。

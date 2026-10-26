@@ -68,6 +68,22 @@
           }
         },
         {
+          "PackageIdentifier": "yorukot.superfile",
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 3600,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
+          "persistPathEntries": true,
+          "portableLink": {
+            "linkName": "spf.exe",
+            "targetPattern": "spf.exe"
+          },
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "spf.exe",
+            "type": "portableLinkCommand"
+          }
+        },
+        {
           "PackageIdentifier": "AgileBits.1Password",
           "installTimeoutSeconds": 3600,
           "verifyCommand": {

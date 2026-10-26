@@ -57,6 +57,7 @@ class CiJobRoutingTests(unittest.TestCase):
                     "    kind = args[args.index('--include') + 1]\n"
                     "    if kind == 'files':\n"
                     "        print('.config/dotfiles/wslg-fontconfig.conf\\n.config/git/config\\n.wslgconfig\\n"
+                    "AppData/Local/superfile/config.toml\\n"
                     "Documents/PowerShell/Microsoft.PowerShell_profile.ps1')\n"
                     "    else:\n"
                     "        print('.chezmoiscripts/deploy/keybindings/sync_powertoys_keyboard.ps1\\n"

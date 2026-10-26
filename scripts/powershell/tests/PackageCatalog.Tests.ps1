@@ -11,7 +11,7 @@ Describe 'Windows application and setup-tool package catalog' {
         $expected = @(
             'AgileBits.1Password', 'Discord.Discord',
             'Microsoft.PowerToys', 'Microsoft.PowerShell', 'Microsoft.WindowsTerminal', 'Task.Task', 'twpayne.chezmoi',
-            'StablyAI.Orca', 'wez.wezterm', '9PLM9XGG6VKS', '9PCFS5B6T72H', 'TheBrowserCompany.Dia', 'Starship.Starship', 'Git.MinGit'
+            'StablyAI.Orca', 'wez.wezterm', 'yorukot.superfile', '9PLM9XGG6VKS', '9PCFS5B6T72H', 'TheBrowserCompany.Dia', 'Starship.Starship', 'Git.MinGit'
         )
         (@($script:packages.PackageIdentifier | Sort-Object) -join '|') |
             Should -Be (($expected | Sort-Object) -join '|')
@@ -48,7 +48,7 @@ Describe 'Windows application and setup-tool package catalog' {
         $starship[0].portableLink.targetPattern | Should -Be 'starship.exe'
         @($starship[0].pathEntries) | Should -Be @('%LOCALAPPDATA%\Microsoft\WinGet\Links')
         $starship[0].persistPathEntries | Should -BeTrue
-        @($script:packages | Where-Object persistPathEntries).Count | Should -Be 2
+        @($script:packages | Where-Object persistPathEntries).Count | Should -Be 3
         $starship[0].verifyCommand.type | Should -Be 'portableLinkCommand'
         $starship[0].verifyCommand.command | Should -Be 'starship.exe'
         @($starship[0].verifyCommand.args) | Should -Be @('--version')
