@@ -9,6 +9,19 @@ let
   fixtures = import ../../../fixtures/packages.nix { inherit inputs; };
 in
 {
+  testWslOnePasswordUsesNativeCliWithoutWindowsForwarder = {
+    expr = {
+      forwardsToWindows = wsl.config.home.file ? ".local/bin/op";
+      nativeCliInstalled = builtins.any (
+        package: (package.pname or "") == "1password-cli"
+      ) wsl.config.home.packages;
+    };
+    expected = {
+      forwardsToWindows = false;
+      nativeCliInstalled = true;
+    };
+  };
+
   testOnePasswordExplicitlyUnmanagedPublicKeyPreservesExistingFile = {
     expr =
       let

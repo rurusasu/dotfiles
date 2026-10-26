@@ -45,6 +45,14 @@ in
         hermes-configuration = import ./build/modules/ai_agents/hermes/configuration.nix {
           inherit inputs pkgs;
         };
+        hermes-version = import ./build/modules/ai_agents/hermes/version.nix {
+          inherit inputs pkgs;
+        };
+      }
+      // pkgs.lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
+        strata-applications = import ./build/modules/ai_agents/strata/default.nix {
+          inherit inputs pkgs;
+        };
       }
       // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
         standalone-darwin-home = import ./build/defaults/standalone-darwin-home.nix {
@@ -86,6 +94,7 @@ in
           nixos-wsl
           nixpkgs
           psscriptanalyzer
+          strata-release
           systems
           treefmt-nix
           xurl
@@ -152,6 +161,7 @@ in
         // (import ./unit/windows/codex-desktop-verifier.nix { inherit inputs; })
         // (import ./unit/windows/wezterm-install-policy.nix { inherit inputs; })
         // (import ./unit/modules/ai_agents/hermes/default.nix { inherit inputs; })
+        // (import ./unit/modules/ai_agents/strata/default.nix { inherit inputs; })
         // (import ./unit/windows/pnpm.nix { inherit inputs; })
         // (import ./unit/defaults/github-cli-package-selection.nix { inherit inputs; })
         // (import ./unit/defaults/darwin-configuration.nix { inherit inputs; })

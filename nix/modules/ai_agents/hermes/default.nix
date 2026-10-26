@@ -15,6 +15,13 @@
 
   services.hermes-agent = {
     enable = true;
+    package = lib.mkDefault (
+      import ./package.nix {
+        inherit pkgs;
+        source = inputs.hermes-agent;
+        package = inputs.hermes-agent.packages.${pkgs.stdenv.hostPlatform.system}.default;
+      }
+    );
     gateway.enable = true;
     extraPackages = [ pkgs._1password-cli ];
     extraPlugins = [ (inputs.hermes-lcm // { name = "hermes-lcm"; }) ];
@@ -47,6 +54,10 @@
       }
     ) config.programs.mcp.servers;
     settings = {
+      model = {
+        provider = "openai-codex";
+        default = "gpt-6.1-sol";
+      };
       # Null also replaces the old explicit true in the mutable config, so the
       # upstream boot-time guard decides whether profile multiplexing is safe.
       gateway.multiplex_profiles = null;

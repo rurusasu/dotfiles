@@ -75,6 +75,12 @@ let
               ./modules/shells/zsh
               ./modules/terminals/ghostty
               ./modules/terminals/wezterm
+              (
+                { pkgs, inputs, ... }:
+                lib.mkIf (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (
+                  (import ./modules/ai_agents/strata).homeManager { inherit pkgs inputs; }
+                )
+              )
             ];
 
             home = {
@@ -121,6 +127,7 @@ let
               direnv.enable = true;
               jq.enable = true;
             };
+            services.ollama.enable = true;
             nix = {
               package = lib.mkDefault nixPackage;
               gc = gc // {
@@ -242,25 +249,6 @@ let
                           );
                         };
                         file = {
-                          ".local/bin/op" = {
-                            executable = true;
-                            text = ''
-                              #!${pkgs.runtimeShell}
-                              # Linux processes need native secret injection; never re-enter this wrapper.
-                              if [ "''${1:-}" = "run" ]; then
-                                exec ${pkgs._1password-cli}/bin/op "$@"
-                              fi
-
-                              # Windows op.exe authenticates through the desktop app's named pipe.
-                              OP_EXE=$(command -v op.exe) || {
-                                echo "[ERROR] op.exe not found in PATH" >&2
-                                exit 1
-                              }
-                              OP_VARS=$(${pkgs.coreutils}/bin/env | ${pkgs.gnugrep}/bin/grep ^OP_ | ${pkgs.coreutils}/bin/cut -d= -f1 | ${pkgs.coreutils}/bin/tr '\n' ':')
-                              export WSLENV="''${WSLENV}:''${OP_VARS%:}"
-                              exec "$OP_EXE" "$@"
-                            '';
-                          };
                           ".local/bin/op-ssh-sign-wsl" = {
                             source = ./modules/1password/op-ssh-sign-wsl;
                             executable = true;
@@ -466,6 +454,33 @@ let
                   ]
               );
               fonts.fontDir.enable = true;
+              # Desktop CLI integration authenticates the setgid native op wrapper.
+              programs._1password.enable = true;
+              home-manager.sharedModules = [
+                (
+                  { config, lib, ... }:
+                  let
+                    hermes = config.services.hermes-agent;
+                  in
+                  {
+                    # The service PATH contains store packages, which bypass setgid.
+                    services.hermes-agent.settings.secrets.onepassword.binary_path = "/run/wrappers/bin/op";
+                    # Native desktop authentication needs op's setgid transition.
+                    # NoNewPrivileges would suppress it even with the wrapper path.
+                    # PrivateTmp also creates a user namespace without op's host GID.
+                    systemd.user.services = lib.mkIf hermes.enable (
+                      lib.optionalAttrs hermes.gateway.enable {
+                        hermes-agent.Service.NoNewPrivileges = lib.mkForce false;
+                        hermes-agent.Service.PrivateTmp = lib.mkForce false;
+                      }
+                      // lib.optionalAttrs (hermes.backend.mode != "none") {
+                        hermes-backend.Service.NoNewPrivileges = lib.mkForce false;
+                        hermes-backend.Service.PrivateTmp = lib.mkForce false;
+                      }
+                    );
+                  }
+                )
+              ];
               system.stateVersion = defaults.stateVersion;
               users.users.${user} = {
                 isNormalUser = true;

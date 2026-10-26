@@ -59,8 +59,75 @@ let
   };
 
   hasNodejs = home: builtins.any (item: (item.pname or item.name) == "nodejs") home;
+  versionPackage =
+    kind:
+    let
+      factory = ../../../../../modules/ai_agents/hermes/package.nix;
+      upstream = inputs.hermes-agent.packages.x86_64-linux.default;
+      package = if kind != "legacy" then upstream.overrideAttrs { version = "0.0.0"; } else upstream;
+      source = inputs.hermes-agent // {
+        outPath = ../../../../fixtures/hermes-version + "/${kind}";
+        rev = "0123456789abcdef0123456789abcdef01234567";
+        lastModifiedDate = "20261026122553";
+      };
+    in
+    if builtins.pathExists factory then
+      import factory {
+        inherit package source;
+        pkgs = (import ../../../../fixtures/packages.nix { inherit inputs; }).mkPkgs "x86_64-linux";
+      }
+    else
+      package;
 in
 {
+  testHermesVersionMetadataPreservesKnownReleaseAndRuntime = {
+    expr = {
+      inherit (versionPackage "legacy") version;
+      samePackage =
+        (versionPackage "legacy").drvPath == inputs.hermes-agent.packages.x86_64-linux.default.drvPath;
+      sameRuntime =
+        (versionPackage "legacy").hermesVenv.drvPath
+        == inputs.hermes-agent.packages.x86_64-linux.default.hermesVenv.drvPath;
+      knownDesktopPreserved =
+        (versionPackage "legacy").hermesDesktop.version
+        == inputs.hermes-agent.packages.x86_64-linux.default.hermesDesktop.version;
+    };
+    expected = {
+      version = "0.21.4";
+      samePackage = true;
+      sameRuntime = true;
+      knownDesktopPreserved = true;
+    };
+  };
+
+  testHermesDevelopmentVersionIdentifiesDateAndRevision = {
+    expr = (versionPackage "stamped").version;
+    expected = "unstable-2026-10-26-01234567";
+  };
+
+  testHermesStaticPlaceholderIsNotAReleaseVersion = {
+    expr = (versionPackage "placeholder").version;
+    expected = "unstable-2026-10-26-01234567";
+  };
+
+  testHermesVersionCorrectionFollowsRuntimeOverrides = {
+    expr =
+      let
+        original = versionPackage "stamped";
+        customized = original.override { extraDependencyGroups = [ "dev" ]; };
+      in
+      {
+        changedRuntime = customized.hermesVenv.drvPath != original.hermesVenv.drvPath;
+        followsRuntime = inputs.nixpkgs.lib.hasInfix (builtins.unsafeDiscardStringContext "${customized.hermesVenv}/bin/hermes") customized.postInstall;
+        staleRuntime = inputs.nixpkgs.lib.hasInfix (builtins.unsafeDiscardStringContext "${original.hermesVenv}/bin/hermes") customized.postInstall;
+      };
+    expected = {
+      changedRuntime = true;
+      followsRuntime = true;
+      staleRuntime = false;
+    };
+  };
+
   testHermesRuntimeUsesOfficialDependencyPins = {
     expr = builtins.all (
       name:
@@ -101,6 +168,7 @@ in
           linux.config.home.packages;
       home = linux.config.home.sessionVariables.HERMES_HOME;
       multiplexProfiles = linux.config.services.hermes-agent.settings.gateway.multiplex_profiles;
+      model = linux.config.services.hermes-agent.settings.model or { };
       serviceUsesInjectedPackage = builtins.any (
         command: inputs.nixpkgs.lib.hasPrefix "${linux.testPackage}/bin/hermes" command
       ) (inputs.nixpkgs.lib.toList linux.config.systemd.user.services.hermes-agent.Service.ExecStart);
@@ -109,6 +177,10 @@ in
       package = true;
       home = "/home/test-user/.hermes";
       multiplexProfiles = null;
+      model = {
+        provider = "openai-codex";
+        default = "gpt-6.1-sol";
+      };
       serviceUsesInjectedPackage = true;
     };
   };

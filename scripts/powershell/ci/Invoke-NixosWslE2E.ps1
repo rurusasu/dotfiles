@@ -452,7 +452,7 @@ hermes --version
             Invoke-WslChecked -Arguments @(
                 "-d", $DistroName, "-u", "nixos", "--",
                 "bash", "-lc",
-                "test `$(stat -c '%a' /home/nixos/.hermes/.env) = 600 && grep -qx 'OPENROUTER_API_KEY=ci' /home/nixos/.hermes/.env && grep -qx 'API_SERVER_ENABLED=true' /home/nixos/.hermes/.env && grep -qx 'API_SERVER_PORT=18642' /home/nixos/.hermes/.env && test `$(stat -c '%a' /home/nixos/.hermes/config.yaml) = 600 && grep -qx '  default: openrouter/auto' /home/nixos/.hermes/config.yaml && grep -qx 'preserve-existing-hermes-state' /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
+                "test `$(stat -c '%a' /home/nixos/.hermes/.env) = 600 && grep -qx 'OPENROUTER_API_KEY=ci' /home/nixos/.hermes/.env && grep -qx 'API_SERVER_ENABLED=true' /home/nixos/.hermes/.env && grep -qx 'API_SERVER_PORT=18642' /home/nixos/.hermes/.env && test `$(stat -c '%a' /home/nixos/.hermes/config.yaml) = 600 && grep -qx '  provider: openai-codex' /home/nixos/.hermes/config.yaml && grep -qx '  default: gpt-6.1-sol' /home/nixos/.hermes/config.yaml && grep -qx 'preserve-existing-hermes-state' /home/nixos/.hermes/memories/dotfiles-ci-state-preservation.txt"
             ) -TimeoutSeconds 60 | Out-Null
 
             Invoke-WslChecked -Arguments @(

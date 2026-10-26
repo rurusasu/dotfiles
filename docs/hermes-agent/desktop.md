@@ -9,6 +9,21 @@ the Agent package, Desktop application, and native gateway service
 `settings.gateway.multiplex_profiles = null` clears a previous explicit value
 and restores the upstream AUTO safety decision at gateway startup.
 
+The root provider and default model are declared in
+`services.hermes-agent.settings.model`: `openai-codex` and `gpt-6.1-sol`.
+Hermes keeps its OAuth credentials in its private runtime auth store. In a
+Home Manager installation, the model picker may authenticate successfully but
+refuse to save the default model; update the Nix settings and apply them instead.
+An unset model can fail local-session policy validation as `storage_unavailable`.
+
+Nix builds preserve a source-declared release number when one is available.
+When upstream ships placeholder version metadata, the package reports
+`unstable-YYYY-MM-DD-REVISION` and uses the source date in the CLI banner.
+This identifies a development build without assigning it a published release
+number. Placeholder Agent and Desktop builds share this identity; an existing
+Desktop release number is preserved. The correction retains upstream's bundled
+Python and locked runtime dependencies.
+
 Apply the usual Nix/Home Manager configuration, then launch Desktop:
 
 ```bash
