@@ -9,6 +9,13 @@ the Agent package, Desktop application, and native gateway service
 `settings.gateway.multiplex_profiles = null` clears a previous explicit value
 and restores the upstream AUTO safety decision at gateway startup.
 
+The root provider and default model are declared in
+`services.hermes-agent.settings.model`: `openai-codex` and `gpt-6.1-sol`.
+Hermes keeps its OAuth credentials in its private runtime auth store. In a
+Home Manager installation, the model picker may authenticate successfully but
+refuse to save the default model; update the Nix settings and apply them instead.
+An unset model can fail local-session policy validation as `storage_unavailable`.
+
 Apply the usual Nix/Home Manager configuration, then launch Desktop:
 
 ```bash

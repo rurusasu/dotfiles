@@ -1,47 +1,24 @@
 # 1Password CLI on WSL
 
-## 結論
+## Linux ネイティブ CLI を使う
 
-WSL で Windows の 1Password app を使う場合は、Linux native の `op` ではなく
-Windows 側の `op.exe` を使う。
-
-この場合、実体は Windows CLI なので、非対話実行では Windows と同じく
-`--cache=false` を付ける。
-
-```bash
-op.exe --cache=false read "op://Private/Example/credential" --account my.1password.com
-```
+WSL の `op` は Home Manager が `pkgs._1password-cli` から導入する Linux 実行ファイルです。
+NixOS は `programs._1password.enable` で CLI 連携に必要な setgid wrapper を作成します。
+通常の `op` は `/run/wrappers/bin/op` を使います。
+Hermes の `secrets.onepassword.binary_path` もこのパスに固定し、サービスの PATH から
+権限なしの store 内 CLI を直接起動しないようにします。
+Linux 版 1Password の認証と app integration を使い、Windows の `op.exe` や Windows PATH に依存しません。
+`~/.local/bin/op` に Windows へ転送する wrapper は配布しません。
 
 ```bash
-printf '%s\n' "$template" | op.exe --cache=false inject --account my.1password.com
+command -v op
+op --version
+op account list
 ```
 
-## env 継承
-
-Windows launcher から WSL shell へ secret env を渡す場合は `WSLENV` を使う。
-
-```cmd
-set WSLENV=GITHUB_PAT_TOKEN:TAVILY_API_KEY:GITHUB_WORK_TOKEN
-```
-
-この repo の shell loader は、env が既に入っていれば抜ける。
-env が不足していても `DOTFILES_FORCE_SECRET_LOAD` が無ければ、shell 起動時には
-`op.exe` を呼ばない。`codex` などの wrapper が明示的に force したときだけ
-`op.exe --cache=false read` で不足分を読む。
-
-## 出力の CRLF
-
-`op.exe` の出力を WSL shell の環境変数へ入れる場合は CR を落とす。
-
-```bash
-value="$(op.exe --cache=false read "$secret_ref" --account "$account")"
-value="$(printf '%s' "$value" | tr -d '\r')"
-```
-
-## Native Linux `op` を使う場合
-
-WSL 内に Linux 版 1Password と native `op` を入れている場合は [linux.md](./linux.md)
-として扱う。Windows の 1Password app integration とは別の認証状態になる。
+Linux 版 1Password へのサインインと CLI integration の設定は [Linux](./linux.md) を参照してください。
+`op read` / `op inject` / `op run` は同じ Linux CLI を使います。
+Windows CLI 固有の `--cache=false` や出力の CRLF 除去は WSL の標準経路では不要です。
 
 ## SSH / Git
 

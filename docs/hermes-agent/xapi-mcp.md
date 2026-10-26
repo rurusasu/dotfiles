@@ -38,7 +38,7 @@ The shell adapter uses `scripts/sh/hermes-xapi-common.sh` for 1Password
 credentials, private service-account caching, token validation and refresh-token
 synchronization. Windows tasks forward to the same native command in WSL, so
 authentication and MCP use the same Linux root cache. Initial interactive
-`hermes:xapi:auth` / `setup` can use the Windows `op.exe` bridge to populate
+`hermes:xapi:auth` / `setup` use Linux-native `op` on WSL to populate
 the root `.op.env` Service Account cache. The running service always selects
 Nix's native `op` on every OS and reads 1Password items with the cached
 `OP_SERVICE_ACCOUNT_TOKEN`; Windows PATH and interop are not needed by the

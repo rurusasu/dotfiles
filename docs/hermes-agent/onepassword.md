@@ -17,6 +17,8 @@ hermes -p rick secrets onepassword status
 ```
 
 読み取りに失敗した場合は、`op` のサインイン状態と対象項目の権限を確認してください。
+WSL も Nix の Linux ネイティブ `op` と Linux 版 1Password を使います。
+Windows の `op.exe` へ転送する `~/.local/bin/op` は配布しません。
 Grok の X Search には `op://openclaw/xAI-Grok-Twitter/console/apikey` の読み取り権限が必要です。
 
 ## Pipedream MCP の認証

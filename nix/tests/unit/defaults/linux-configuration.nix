@@ -19,6 +19,23 @@ in
     expected = true;
   };
 
+  testNativeLinuxOnePasswordCliHasDesktopIntegrationPermissions = {
+    expr = {
+      enabled = config.programs._1password.enable;
+      group = config.security.wrappers.op.group or null;
+      setgid = config.security.wrappers.op.setgid or false;
+      hermesBinary =
+        config.home-manager.users.nixos.services.hermes-agent.settings.secrets.onepassword.binary_path
+          or null;
+    };
+    expected = {
+      enabled = true;
+      group = "onepassword-cli";
+      setgid = true;
+      hermesBinary = "/run/wrappers/bin/op";
+    };
+  };
+
   testNativeLinuxRegistersDconfForGtkSettingsPersistence = {
     expr = config.programs.dconf.enable;
     expected = true;

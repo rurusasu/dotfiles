@@ -52,6 +52,23 @@ in
     expected = true;
   };
 
+  testWslOnePasswordCliHasDesktopIntegrationPermissions = {
+    expr = {
+      enabled = defaultConfig.programs._1password.enable;
+      group = defaultConfig.security.wrappers.op.group or null;
+      setgid = defaultConfig.security.wrappers.op.setgid or false;
+      hermesBinary =
+        defaultConfig.home-manager.users.nixos.services.hermes-agent.settings.secrets.onepassword.binary_path
+          or null;
+    };
+    expected = {
+      enabled = true;
+      group = "onepassword-cli";
+      setgid = true;
+      hermesBinary = "/run/wrappers/bin/op";
+    };
+  };
+
   testWslRegistersDconfForGtkSettingsPersistence = {
     expr = defaultConfig.programs.dconf.enable;
     expected = true;

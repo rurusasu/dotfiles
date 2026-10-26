@@ -242,25 +242,6 @@ let
                           );
                         };
                         file = {
-                          ".local/bin/op" = {
-                            executable = true;
-                            text = ''
-                              #!${pkgs.runtimeShell}
-                              # Linux processes need native secret injection; never re-enter this wrapper.
-                              if [ "''${1:-}" = "run" ]; then
-                                exec ${pkgs._1password-cli}/bin/op "$@"
-                              fi
-
-                              # Windows op.exe authenticates through the desktop app's named pipe.
-                              OP_EXE=$(command -v op.exe) || {
-                                echo "[ERROR] op.exe not found in PATH" >&2
-                                exit 1
-                              }
-                              OP_VARS=$(${pkgs.coreutils}/bin/env | ${pkgs.gnugrep}/bin/grep ^OP_ | ${pkgs.coreutils}/bin/cut -d= -f1 | ${pkgs.coreutils}/bin/tr '\n' ':')
-                              export WSLENV="''${WSLENV}:''${OP_VARS%:}"
-                              exec "$OP_EXE" "$@"
-                            '';
-                          };
                           ".local/bin/op-ssh-sign-wsl" = {
                             source = ./modules/1password/op-ssh-sign-wsl;
                             executable = true;
@@ -466,6 +447,14 @@ let
                   ]
               );
               fonts.fontDir.enable = true;
+              # Desktop CLI integration authenticates the setgid native op wrapper.
+              programs._1password.enable = true;
+              home-manager.sharedModules = [
+                {
+                  # The service PATH contains store packages, which bypass setgid.
+                  services.hermes-agent.settings.secrets.onepassword.binary_path = "/run/wrappers/bin/op";
+                }
+              ];
               system.stateVersion = defaults.stateVersion;
               users.users.${user} = {
                 isNormalUser = true;

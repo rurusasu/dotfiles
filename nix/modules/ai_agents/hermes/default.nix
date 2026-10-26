@@ -47,6 +47,10 @@
       }
     ) config.programs.mcp.servers;
     settings = {
+      model = {
+        provider = "openai-codex";
+        default = "gpt-6.1-sol";
+      };
       # Null also replaces the old explicit true in the mutable config, so the
       # upstream boot-time guard decides whether profile multiplexing is safe.
       gateway.multiplex_profiles = null;

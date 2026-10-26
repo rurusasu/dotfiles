@@ -6,6 +6,14 @@ Linux native の `op` は UNIX-like 環境として扱う。
 CLI help 上、caching は UNIX-like では既定で有効であり、Windows の
 `--cache=false` ルールをそのまま適用しない。
 
+NixOS は `programs._1password.enable` で `onepassword-cli` group と
+`/run/wrappers/bin/op` の setgid wrapper を管理する。Home Manager の package 導入だけでは
+デスクトップ連携に必要な権限が不足する。
+
+Linux 版 1Password にサインインし、「設定 → 開発者 → CLI 連携」を有効にする。
+`op read` の初回実行時にアクセス確認やロック解除が表示されたら、Linux 版アプリで操作する。
+Hermes は NixOS の設定から `secrets.onepassword.binary_path` に wrapper を指定する。
+
 ```bash
 op read "op://Private/Example/credential" --account my.1password.com
 ```

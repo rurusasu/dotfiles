@@ -101,6 +101,7 @@ in
           linux.config.home.packages;
       home = linux.config.home.sessionVariables.HERMES_HOME;
       multiplexProfiles = linux.config.services.hermes-agent.settings.gateway.multiplex_profiles;
+      model = linux.config.services.hermes-agent.settings.model or { };
       serviceUsesInjectedPackage = builtins.any (
         command: inputs.nixpkgs.lib.hasPrefix "${linux.testPackage}/bin/hermes" command
       ) (inputs.nixpkgs.lib.toList linux.config.systemd.user.services.hermes-agent.Service.ExecStart);
@@ -109,6 +110,10 @@ in
       package = true;
       home = "/home/test-user/.hermes";
       multiplexProfiles = null;
+      model = {
+        provider = "openai-codex";
+        default = "gpt-6.1-sol";
+      };
       serviceUsesInjectedPackage = true;
     };
   };
