@@ -6,6 +6,7 @@
 - `Sources[].Packages[]` に `PackageIdentifier` と必要な `verifyCommand`、`pathEntries`、`installTimeoutSeconds`、`ciSkipInstall` などをまとめる。
 - 現在の installer は Windows GUI アプリを管理する。Unix の CLI パッケージは `nix/modules/` 側で管理し、Windows manifest に自動追加しない。
 - `yorukot.superfile` は Windows PowerShell からも使うための明示的な CLI 例外。ユーザー scope に導入し、WinGet の Links を PATH に保存する。OpenCode・Pi coding agent・TUIOS は Windows に追加せず、`nix/defaults.nix` で WSL / Darwin に導入する。
+- `eza-community.eza`、`sharkdp.fd`、`BurntSushi.ripgrep.MSVC`、`JesseDuffield.lazygit` も Windows PowerShell の共通エイリアス用の明示的な CLI 例外。ユーザー scope・portableLink・永続 Links PATH を使う。エイリアスと関数は chezmoi の PowerShell profile が管理し、Unix の設定とは別に配布する。
 - `Starship.Starship` は WSL の Windows drive 上で `git_status.windows_starship` が使う補助コマンドとして管理する。ユーザー scope の ZIP portable 版を選び、`%LOCALAPPDATA%\Microsoft\WinGet\Links\starship.exe` を維持する。`persistPathEntries: true` はこの補助コマンドの PATH を次回の WSL 起動に引き継ぐための明示例外で、GUI phase でも宣言した directory をユーザー PATH に保存する。Windows PowerShell のプロンプト初期化は追加しない。
 - `Git.MinGit` はこの補助コマンドが Git を呼ぶ場合の依存として管理する。ユーザー scope の ZIP portable 版の tree を保ち、同じ WinGet package directory の `cmd` を `persistPathEntries: true` で公開する。`git.exe` だけのコピーは作成しない。`pathEntriesCommand` 検証は宣言した directory の実行ファイルを使い、Codex cache などに含まれる別の Git で成功扱いにしない。
 - `retired-packages.json` は既存の引退パッケージ cleanup 用 manifest。通常の追加・更新は `packages.json` を編集する。

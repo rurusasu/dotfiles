@@ -168,6 +168,8 @@ macOS で Homebrew cask の適用に失敗する場合は、
 
 `windows/winget/packages.json` は直接編集する独立した正本です。package ID、Store source、PATH、検証条件、個別 timeout などは、このファイルの既存 schema に合わせます。Unix module に Windows の install metadata は置きません。
 
+Windows PowerShell で使う superfile と、共通エイリアス用の eza・fd・ripgrep・lazygit は CLI の明示例外です。ユーザー scope の portable executable を導入し、Links を PATH に保存します。エイリアスと関数は chezmoi の PowerShell profile に定義し、WSL へ転送しません。
+
 Chrome / Spotify / Signal / Obsidian の通常導入とキーからの起動先は NixOS-WSL に統一します。これらを Windows manifest から外しても、導入済みの Windows 版は自動 uninstall しません。Windows の PowerToys は host のキー操作、Windows 版 1Password は既存の `op.exe` / Git signer 連携のため維持します。1Password GUI の通常起動先は WSLg です。
 
 Windows の package install timeout は 3600 秒を共通既定値とし、WinGet manifest と direct installer に使います。npm/pnpm/WinGet/WSL の runtime adapter も既定 3600 秒で、`DOTFILES_INSTALL_TIMEOUT_SECONDS` による上書きを維持します。direct installer でも環境変数を manifest の値より優先し、0 はダウンロードと外部プロセスのタイムアウトを無効にします。不正な環境変数値や負数は無視し、manifest の個別 timeout、未指定なら共通既定値を使います。
