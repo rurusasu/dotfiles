@@ -26,7 +26,7 @@ setup() {
             --destination "$HOME" --cache "$BATS_TEST_TMPDIR/cache" --persistent-state "$BATS_TEST_TMPDIR/state.boltdb" \
             --override-data "{\"chezmoi\":{\"os\":\"$os\"}}" managed --include files --path-style relative)
         if [[ $os == windows ]]; then
-            [ "$managed" = $'.config/dotfiles/wslg-fontconfig.conf\n.config/git/config\n.wslgconfig\nDocuments/PowerShell/Microsoft.PowerShell_profile.ps1' ]
+            [ "$managed" = $'.config/dotfiles/wslg-fontconfig.conf\n.config/git/config\n.wslgconfig\nAppData/Local/superfile/config.toml\nDocuments/PowerShell/Microsoft.PowerShell_profile.ps1' ]
             scripts=$(chezmoi --config /dev/null --config-format toml --source "$REPO_ROOT/chezmoi" \
                 --destination "$HOME" --cache "$BATS_TEST_TMPDIR/scripts-cache" --persistent-state "$BATS_TEST_TMPDIR/scripts-state.boltdb" \
                 --override-data "{\"chezmoi\":{\"os\":\"$os\"}}" managed --include scripts --path-style relative)

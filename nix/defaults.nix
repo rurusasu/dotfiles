@@ -102,6 +102,17 @@ let
                       deepseek-harness
                   )
                 ]
+                ++
+                  lib.optionals
+                    (builtins.elem platform [
+                      "wsl"
+                      "darwin"
+                    ])
+                    [
+                      opencode
+                      pi-coding-agent
+                      tuios
+                    ]
                 ++ lib.optionals (!config.submoduleSupport.enable) [ config.nix.package ];
             };
             xdg.enable = true;
@@ -176,6 +187,7 @@ let
                 wsl = [
                   (import ./modules/browsers/chrome).wsl
                   (import ./modules/ai_agents/chatgpt).cli
+                  ./modules/superfile
                   ./home/keybindings/windows-export.nix
                   ./modules/fcitx5.nix
                   ./modules/gnome-keyring

@@ -73,6 +73,7 @@ jobs:
             '.config/dotfiles/wslg-fontconfig.conf'
             '.config/git/config'
             '.wslgconfig'
+            'AppData/Local/superfile/config.toml'
             'Documents/PowerShell/Microsoft.PowerShell_profile.ps1'
           )
           if ($managedFiles.Count -ne $expectedFiles.Count -or

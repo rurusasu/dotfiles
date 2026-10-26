@@ -32,7 +32,7 @@
                     $node.GetCommandName() -eq 'Invoke-WindowsE2EValidation'
                 }, $true))
         $script:guiIds = @(
-            'wez.wezterm',
+            'wez.wezterm', 'yorukot.superfile',
             'AgileBits.1Password', 'Discord.Discord', 'StablyAI.Orca', 'Microsoft.PowerToys',
             'Microsoft.WindowsTerminal', '9PLM9XGG6VKS', '9PCFS5B6T72H', 'Microsoft.PowerShell', 'Task.Task', 'twpayne.chezmoi', 'TheBrowserCompany.Dia', 'Starship.Starship', 'Git.MinGit'
         )
