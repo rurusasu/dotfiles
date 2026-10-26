@@ -33,6 +33,7 @@
                 }, $true))
         $script:guiIds = @(
             'wez.wezterm', 'yorukot.superfile',
+            'eza-community.eza', 'sharkdp.fd', 'BurntSushi.ripgrep.MSVC', 'JesseDuffield.lazygit',
             'AgileBits.1Password', 'Discord.Discord', 'StablyAI.Orca', 'Microsoft.PowerToys',
             'Microsoft.WindowsTerminal', '9PLM9XGG6VKS', '9PCFS5B6T72H', 'Microsoft.PowerShell', 'Task.Task', 'twpayne.chezmoi', 'TheBrowserCompany.Dia', 'Starship.Starship', 'Git.MinGit'
         )

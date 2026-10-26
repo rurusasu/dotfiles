@@ -2,6 +2,7 @@
 
 - chezmoi deploys `%USERPROFILE%/.config/wezterm/wezterm.lua` on Windows and installs the pinned UDEV Gothic NF font for the current user.
 - chezmoi also manages the PowerShell 7 profile in `%USERPROFILE%/Documents/PowerShell/` for WezTerm completion and PSReadLine history prediction.
+- The same profile owns Windows-native common shell aliases and functions matching Zsh (`eza`, `ls`/`ll`/`la`/`lt`/`lla`, `grep`, `find`, `lg`, `k` shortcuts, and `dotf`). Keep these in chezmoi; do not route them through WSL. `dotf` resolves the repository from `chezmoi source-path`. CLI install metadata remains in `windows/winget/packages.json`.
 - Superfile's Windows configuration is managed in `AppData/Local/superfile/config.toml`; its hotkeys, pins, and runtime state remain application-managed.
 - Windows Git's relative worktree links are configured in `dot_config/git/config`. Unix Git and gwq belong to Home Manager; use `task worktree:repair` for existing links.
 - chezmoi applies the exported desktop shortcuts and conflict overrides to PowerToys Keyboard Manager through `scripts/powershell/Sync-PowerToysKeyboard.ps1`; Windows actions stay in `Invoke-DesktopAction.ps1`.

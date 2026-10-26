@@ -84,6 +84,70 @@
           }
         },
         {
+          "PackageIdentifier": "eza-community.eza",
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 3600,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
+          "persistPathEntries": true,
+          "portableLink": {
+            "linkName": "eza.exe",
+            "targetPattern": "eza.exe"
+          },
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "eza.exe",
+            "type": "portableLinkCommand"
+          }
+        },
+        {
+          "PackageIdentifier": "sharkdp.fd",
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 3600,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
+          "persistPathEntries": true,
+          "portableLink": {
+            "linkName": "fd.exe",
+            "targetPattern": "fd.exe"
+          },
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "fd.exe",
+            "type": "portableLinkCommand"
+          }
+        },
+        {
+          "PackageIdentifier": "BurntSushi.ripgrep.MSVC",
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 3600,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
+          "persistPathEntries": true,
+          "portableLink": {
+            "linkName": "rg.exe",
+            "targetPattern": "rg.exe"
+          },
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "rg.exe",
+            "type": "portableLinkCommand"
+          }
+        },
+        {
+          "PackageIdentifier": "JesseDuffield.lazygit",
+          "installArgs": ["--scope", "user"],
+          "installTimeoutSeconds": 3600,
+          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
+          "persistPathEntries": true,
+          "portableLink": {
+            "linkName": "lazygit.exe",
+            "targetPattern": "lazygit.exe"
+          },
+          "verifyCommand": {
+            "args": ["--version"],
+            "command": "lazygit.exe",
+            "type": "portableLinkCommand"
+          }
+        },
+        {
           "PackageIdentifier": "AgileBits.1Password",
           "installTimeoutSeconds": 3600,
           "verifyCommand": {
