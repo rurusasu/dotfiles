@@ -81,12 +81,14 @@ in
         (
           settings:
           let
-            config =
+            inherit
               (mkWsl.extendModules {
                 modules = [
                   { home-manager.users.nixos.services.hermes-agent = inputs.nixpkgs.lib.mkForce settings; }
                 ];
-              }).config;
+              })
+              config
+              ;
             services = config.home-manager.users.nixos.systemd.user.services;
           in
           {
