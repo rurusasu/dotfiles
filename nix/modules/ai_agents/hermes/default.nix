@@ -15,6 +15,13 @@
 
   services.hermes-agent = {
     enable = true;
+    package = lib.mkDefault (
+      import ./package.nix {
+        inherit pkgs;
+        source = inputs.hermes-agent;
+        package = inputs.hermes-agent.packages.${pkgs.stdenv.hostPlatform.system}.default;
+      }
+    );
     gateway.enable = true;
     extraPackages = [ pkgs._1password-cli ];
     extraPlugins = [ (inputs.hermes-lcm // { name = "hermes-lcm"; }) ];

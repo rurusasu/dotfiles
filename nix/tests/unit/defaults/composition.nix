@@ -12,6 +12,58 @@ let
 
 in
 {
+  testStrataInstallsNativeDesktopAndCommandLineApplications = {
+    expr =
+      map
+        (home: {
+          desktop = builtins.any (p: (p.pname or "") == "strata-desktop") home.config.home.packages;
+          cli = builtins.any (p: (p.pname or "") == "strata-control") home.config.home.packages;
+        })
+        [
+          linux
+          wsl
+        ];
+    expected =
+      map
+        (_: {
+          desktop = true;
+          cli = true;
+        })
+        [
+          linux
+          wsl
+        ];
+  };
+
+  testOllamaUsesStandardHomeManagerPackageAndLoopbackService = {
+    expr =
+      map
+        (home: {
+          enabled = home.config.services.ollama.enable;
+          installed = builtins.any (p: p.drvPath == home.pkgs.ollama.drvPath) home.config.home.packages;
+          host = home.config.services.ollama.host;
+          port = home.config.services.ollama.port;
+        })
+        [
+          linux
+          wsl
+          darwin
+        ];
+    expected =
+      map
+        (_: {
+          enabled = true;
+          installed = true;
+          host = "127.0.0.1";
+          port = 11434;
+        })
+        [
+          linux
+          wsl
+          darwin
+        ];
+  };
+
   testHeadlessHomesDoNotEnableNativeCompositor = {
     expr =
       map

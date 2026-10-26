@@ -75,6 +75,12 @@ let
               ./modules/shells/zsh
               ./modules/terminals/ghostty
               ./modules/terminals/wezterm
+              (
+                { pkgs, inputs, ... }:
+                lib.mkIf (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (
+                  (import ./modules/ai_agents/strata).homeManager { inherit pkgs inputs; }
+                )
+              )
             ];
 
             home = {
@@ -121,6 +127,7 @@ let
               direnv.enable = true;
               jq.enable = true;
             };
+            services.ollama.enable = true;
             nix = {
               package = lib.mkDefault nixPackage;
               gc = gc // {

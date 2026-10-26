@@ -41,6 +41,12 @@
     # Use the upstream package set unchanged so its binary cache can be used.
     llm-agents.url = "github:numtide/llm-agents.nix";
     mcp-servers.url = "github:natsukium/mcp-servers-nix";
+    # Strata is not in nixpkgs. Pin a versioned feed, without mutable API counters.
+    strata-release = {
+      type = "file";
+      url = "https://github.com/Niko1221/Strata/releases/download/v0.2.6/strata-feed.json";
+      flake = false;
+    };
     xurl = {
       url = "github:xdevplatform/xurl";
       flake = false;

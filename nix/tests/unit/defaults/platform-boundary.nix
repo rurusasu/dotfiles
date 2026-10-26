@@ -42,7 +42,7 @@ in
   testCommonHomeOnlyDeclaresApplicationEnableFlags = {
     expr = {
       inherit (common) programs;
-      services = common ? services;
+      inherit (common) services;
       agents = common ? launchd;
       sessionVariables = common.home ? sessionVariables;
       sessionPath = common.home ? sessionPath;
@@ -53,7 +53,7 @@ in
         home-manager.enable = true;
         jq.enable = true;
       };
-      services = false;
+      services.ollama.enable = true;
       agents = false;
       sessionVariables = false;
       sessionPath = false;

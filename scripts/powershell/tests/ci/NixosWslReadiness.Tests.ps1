@@ -11,9 +11,10 @@ Describe 'NixOS WSL Hermes readiness verifier transport' {
         $script:verifier | Should -Not -Match '"bash", "-lc",\s*\$readinessCommand\b'
     }
 
-    It 'seeds and preserves an explicit model for Hermes readiness' {
+    It 'should migrate the legacy model to the declared Codex configuration' {
         $script:verifier | Should -Match 'default: openrouter/auto'
-        $script:verifier | Should -Match "grep -qx '  default: openrouter/auto' /home/nixos/\.hermes/config\.yaml"
+        $script:verifier | Should -Match "grep -qx '  provider: openai-codex' /home/nixos/\.hermes/config\.yaml"
+        $script:verifier | Should -Match "grep -qx '  default: gpt-6\.1-sol' /home/nixos/\.hermes/config\.yaml"
         $script:verifier | Should -Match 'config\.yaml.*chmod 600'
     }
 }

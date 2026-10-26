@@ -29,17 +29,22 @@ WSL の Noto CJK の追加導入・フォールバック指定は行いません
 
 固定中の nixpkgs に同じアプリがないものは、現在の取得元を使います。nixpkgs へ収録された場合は標準パッケージへ切り替えます。
 
-| アプリ                          | 取得元と理由                                                                                                            |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| dsh（macOS）                    | `llm-agents` の package。`pkgs.deepseek-harness` は Linux のみ対応するため。Linux では `pkgs.deepseek-harness` を使う。 |
-| Orca IDE                        | `llm-agents` の package。`pkgs.orca` は GNOME のスクリーンリーダーで、別のアプリ。                                      |
-| Hermes Agent / Desktop          | 公式 `hermes-agent` flake の package と Home Manager module。対応する nixpkgs package がないため。                      |
-| Dia ブラウザー                  | `dia` input の公式 DMG。`pkgs.dia` は図表エディターで、別のアプリ。                                                     |
-| Chrome DevTools MCP             | `mcp-servers` flake の package。対応する nixpkgs package がないため。                                                   |
-| xurl                            | `xurl` input の upstream source を `buildGoModule` で構築。対応する nixpkgs package がないため。                        |
-| Docker Desktop / Steam（macOS） | Homebrew cask。対象 OS 用の同じ GUI アプリを nixpkgs から導入できないため。                                             |
+| アプリ                                   | 取得元と理由                                                                                                                                                        |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| dsh（macOS）                             | `llm-agents` の package。`pkgs.deepseek-harness` は Linux のみ対応するため。Linux では `pkgs.deepseek-harness` を使う。                                             |
+| Orca IDE                                 | `llm-agents` の package。`pkgs.orca` は GNOME のスクリーンリーダーで、別のアプリ。                                                                                  |
+| Hermes Agent / Desktop                   | 公式 `hermes-agent` flake の package と Home Manager module。対応する nixpkgs package がないため。                                                                  |
+| Strata Desktop / Control（Linux x86_64） | 公式 `Niko1221/Strata` の AppImage と Control archive。同じアプリが nixpkgs にないため。`strata-release` input の release metadata と asset の SHA-256 を固定する。 |
+| Dia ブラウザー                           | `dia` input の公式 DMG。`pkgs.dia` は図表エディターで、別のアプリ。                                                                                                 |
+| Chrome DevTools MCP                      | `mcp-servers` flake の package。対応する nixpkgs package がないため。                                                                                               |
+| xurl                                     | `xurl` input の upstream source を `buildGoModule` で構築。対応する nixpkgs package がないため。                                                                    |
+| Docker Desktop / Steam（macOS）          | Homebrew cask。対象 OS 用の同じ GUI アプリを nixpkgs から導入できないため。                                                                                         |
 
 ChatGPT は `pkgs.chatgpt` を使います。同梱 Codex CLI を使う設定も、この nixpkgs package 内のバイナリーを参照します。`hermes-xapi` はリポジトリ内の連携スクリプトです。
+
+Ollama は共通 Home Manager の `services.ollama.enable` で標準 package とユーザーサービスを導入します。API は既定の `127.0.0.1:11434` で待ち受けます。モデルの自動取得や GPU backend の変更は行いません。`ollama pull <model>` で使用するモデルを選択します。
+
+Strata は Linux x86_64 / WSLg に `strata`（CLI）と `strata-desktop`（GUI）を導入します。[公式 release](https://github.com/Niko1221/Strata/releases) の版付き feed (`v0.2.6/strata-feed.json`) を input として固定し、Desktop と Control は同じ release の asset から取得します。新しい安定版へ更新するときは `flake.nix` の feed URL を変更し、`nix flake update strata-release` と package build を実行します。`nrs` は固定された版を導入します。Desktop の製品版と Control の内部 build 番号は異なります。Nix が管理する実行ファイルからユーザーディレクトリの別版 Control への自動引き継ぎは無効にします。モデルと推論エンジンは初回設定時に選び、ユーザーのデータディレクトリに取得します。macOS / ARM 用の独自 package は追加しません。
 
 Neovim / Hermes の追加プラグインと formatter の入力は、アプリ本体とは別の依存です。標準 module の有効化では、こうした source input やローカル設定 module の import は置き換わりません。
 

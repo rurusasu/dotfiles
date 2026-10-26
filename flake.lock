@@ -579,9 +579,22 @@
         "nixos-wsl": "nixos-wsl",
         "nixpkgs": "nixpkgs_4",
         "psscriptanalyzer": "psscriptanalyzer",
+        "strata-release": "strata-release",
         "systems": "systems_2",
         "treefmt-nix": "treefmt-nix_3",
         "xurl": "xurl"
+      }
+    },
+    "strata-release": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-zle+SRe4qFklysG3tIrI3S+QxtqodGFJPqkKpZrgDII=",
+        "type": "file",
+        "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.6/strata-feed.json"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.6/strata-feed.json"
       }
     },
     "systems": {
