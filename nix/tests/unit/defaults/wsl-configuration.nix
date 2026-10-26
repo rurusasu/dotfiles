@@ -57,6 +57,10 @@ in
       enabled = defaultConfig.programs._1password.enable;
       group = defaultConfig.security.wrappers.op.group or null;
       setgid = defaultConfig.security.wrappers.op.setgid or false;
+      privateTmp =
+        defaultConfig.home-manager.users.nixos.systemd.user.services.hermes-agent.Service.PrivateTmp;
+      noNewPrivileges =
+        defaultConfig.home-manager.users.nixos.systemd.user.services.hermes-agent.Service.NoNewPrivileges;
       hermesBinary =
         defaultConfig.home-manager.users.nixos.services.hermes-agent.settings.secrets.onepassword.binary_path
           or null;
@@ -65,8 +69,54 @@ in
       enabled = true;
       group = "onepassword-cli";
       setgid = true;
+      privateTmp = false;
+      noNewPrivileges = false;
       hermesBinary = "/run/wrappers/bin/op";
     };
+  };
+
+  testWslOnePasswordPermissionsFollowEnabledHermesServices = {
+    expr =
+      map
+        (
+          settings:
+          let
+            config =
+              (mkWsl.extendModules {
+                modules = [
+                  { home-manager.users.nixos.services.hermes-agent = inputs.nixpkgs.lib.mkForce settings; }
+                ];
+              }).config;
+            services = config.home-manager.users.nixos.systemd.user.services;
+          in
+          {
+            gatewayExists = services ? hermes-agent;
+            backendExists = services ? hermes-backend;
+            backendNoNewPrivileges = services.hermes-backend.Service.NoNewPrivileges or null;
+            backendPrivateTmp = services.hermes-backend.Service.PrivateTmp or null;
+          }
+        )
+        [
+          {
+            gateway.enable = false;
+            backend.mode = "serve";
+          }
+          { enable = false; }
+        ];
+    expected = [
+      {
+        gatewayExists = false;
+        backendExists = true;
+        backendNoNewPrivileges = false;
+        backendPrivateTmp = false;
+      }
+      {
+        gatewayExists = false;
+        backendExists = false;
+        backendNoNewPrivileges = null;
+        backendPrivateTmp = null;
+      }
+    ];
   };
 
   testWslRegistersDconfForGtkSettingsPersistence = {

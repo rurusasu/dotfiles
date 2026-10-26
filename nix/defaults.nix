@@ -450,10 +450,29 @@ let
               # Desktop CLI integration authenticates the setgid native op wrapper.
               programs._1password.enable = true;
               home-manager.sharedModules = [
-                {
-                  # The service PATH contains store packages, which bypass setgid.
-                  services.hermes-agent.settings.secrets.onepassword.binary_path = "/run/wrappers/bin/op";
-                }
+                (
+                  { config, lib, ... }:
+                  let
+                    hermes = config.services.hermes-agent;
+                  in
+                  {
+                    # The service PATH contains store packages, which bypass setgid.
+                    services.hermes-agent.settings.secrets.onepassword.binary_path = "/run/wrappers/bin/op";
+                    # Native desktop authentication needs op's setgid transition.
+                    # NoNewPrivileges would suppress it even with the wrapper path.
+                    # PrivateTmp also creates a user namespace without op's host GID.
+                    systemd.user.services = lib.mkIf hermes.enable (
+                      lib.optionalAttrs hermes.gateway.enable {
+                        hermes-agent.Service.NoNewPrivileges = lib.mkForce false;
+                        hermes-agent.Service.PrivateTmp = lib.mkForce false;
+                      }
+                      // lib.optionalAttrs (hermes.backend.mode != "none") {
+                        hermes-backend.Service.NoNewPrivileges = lib.mkForce false;
+                        hermes-backend.Service.PrivateTmp = lib.mkForce false;
+                      }
+                    );
+                  }
+                )
               ];
               system.stateVersion = defaults.stateVersion;
               users.users.${user} = {

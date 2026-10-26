@@ -24,6 +24,9 @@ in
       enabled = config.programs._1password.enable;
       group = config.security.wrappers.op.group or null;
       setgid = config.security.wrappers.op.setgid or false;
+      privateTmp = config.home-manager.users.nixos.systemd.user.services.hermes-agent.Service.PrivateTmp;
+      noNewPrivileges =
+        config.home-manager.users.nixos.systemd.user.services.hermes-agent.Service.NoNewPrivileges;
       hermesBinary =
         config.home-manager.users.nixos.services.hermes-agent.settings.secrets.onepassword.binary_path
           or null;
@@ -32,6 +35,8 @@ in
       enabled = true;
       group = "onepassword-cli";
       setgid = true;
+      privateTmp = false;
+      noNewPrivileges = false;
       hermesBinary = "/run/wrappers/bin/op";
     };
   };
