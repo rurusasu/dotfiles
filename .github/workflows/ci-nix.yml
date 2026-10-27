@@ -607,7 +607,8 @@ jobs:
           $moduleRoot = Join-Path $HOME "Documents\$env:PS_MODULE_DIRECTORY\Modules"
           New-Item -ItemType Directory -Force -Path $moduleRoot | Out-Null
           $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
-          Save-PSResource -Name Pester,PSScriptAnalyzer -Repository PSGallery -Path $moduleRoot -TrustRepository
+          # Avoid the IsLatestVersion query that PSGallery intermittently rejects.
+          Save-Module -Name Pester,PSScriptAnalyzer -Repository PSGallery -Path $moduleRoot -Force -AcceptLicense
           . .\scripts\powershell\tests\support\Resolve-TestModule.ps1
           Resolve-TestModule -Name Pester | Out-Null
           Resolve-TestModule -Name PSScriptAnalyzer | Out-Null
