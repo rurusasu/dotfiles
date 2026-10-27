@@ -74,20 +74,16 @@ let
   versionPackage =
     kind: package:
     let
-      factory = ../../../../../modules/ai_agents/hermes/package.nix;
       source = inputs.hermes-agent // {
         outPath = ../../../../fixtures/hermes-version + "/${kind}";
         rev = "0123456789abcdef0123456789abcdef01234567";
         lastModifiedDate = "20261026122553";
       };
     in
-    if builtins.pathExists factory then
-      import factory {
-        inherit package source;
-        pkgs = (import ../../../../fixtures/packages.nix { inherit inputs; }).mkPkgs "x86_64-linux";
-      }
-    else
-      package;
+    import ../../../../../modules/ai_agents/hermes/package.nix {
+      inherit package source;
+      pkgs = (import ../../../../fixtures/packages.nix { inherit inputs; }).mkPkgs "x86_64-linux";
+    };
 in
 {
   testHermesVersionMetadataPreservesKnownReleaseAndRuntime = {

@@ -51,7 +51,6 @@ Describe 'Import-WindowsPackage' {
         $script:nativeExitCode = 0
         $script:nativeArguments = @()
         $script:logs = [Collections.Generic.List[string]]::new()
-        Mock Get-Command { [pscustomobject]@{ Source = 'C:\WinGet\winget.exe' } } -ParameterFilter { $Name -eq 'winget' }
         Mock Get-Content { throw 'Pass the standard manifest directly to WinGet' }
         Mock Invoke-ExternalCommandWithTimeout {
             param($Command, $Arguments, $TimeoutSeconds)
@@ -88,7 +87,7 @@ Describe 'Import-WindowsPackage' {
     }
 
     It 'should stop immediately on native exit <ExitCode> without refreshing PATH or claiming completion' -ForEach @(
-        @{ ExitCode = 1 }, @{ ExitCode = 124 }
+        @{ ExitCode = 1 }, @{ ExitCode = 124 }, @{ ExitCode = 127 }
     ) {
         $script:nativeExitCode = $ExitCode
 
@@ -98,19 +97,6 @@ Describe 'Import-WindowsPackage' {
         ($script:logs -join "`n") | Should -Not -Match 'WINGET_IMPORT_COMPLETED'
     }
 
-    It 'should reject a missing <Dependency> before native import' -ForEach @(
-        @{ Dependency = 'manifest' }, @{ Dependency = 'executable' }
-    ) {
-        if ($Dependency -eq 'manifest') {
-            Remove-Item -LiteralPath $script:manifestPath
-        }
-        else {
-            Mock Get-Command { $null } -ParameterFilter { $Name -eq 'winget' }
-        }
-        { Import-WindowsPackage -ManifestPath $script:manifestPath } | Should -Throw '*not found*'
-        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 0
-        Should -Invoke Update-ProcessEnvironmentPath -Times 0
-    }
 }
 
 Describe 'Get-PackageInstallTimeoutSecond' {

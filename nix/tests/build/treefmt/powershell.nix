@@ -30,12 +30,33 @@ pkgs.runCommand "powershell-formatter-check" { } ''
     $bytes = [IO.File]::ReadAllBytes($target)
     if ([BitConverter]::ToString($bytes[0..2]) -ne 'EF-BB-BF') { throw 'Formatter did not add the required Unicode BOM' }
     $first = [Convert]::ToBase64String($bytes)
-    $modified = [IO.File]::GetLastWriteTimeUtc($target)
+    [IO.File]::WriteAllText($target, $expected, [Text.UTF8Encoding]::new($false))
     $env:FILENAME = $target
+    & $formatter
+    if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($target)) -cne $first) { throw 'Formatter did not repair a missing BOM without changing formatted text' }
+    $modified = [IO.File]::GetLastWriteTimeUtc($target)
     & $formatter
     if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($target)) -cne $first) { throw 'Formatter is not byte-idempotent' }
     if ([IO.File]::GetLastWriteTimeUtc($target) -ne $modified) { throw 'Formatter rewrote an unchanged file' }
-    Write-Output 'Empty-HOME PowerShell formatting, BOM, CRLF, and idempotence passed without downloads'
+    $env:FILENAME = $null
+    foreach ($case in @(
+      @{ Path = 'scripts/powershell/ascii.ps1'; Unicode = $false; Bom = $false; Expected = $false },
+      @{ Path = 'scripts/powershell/data.psd1'; Unicode = $true; Bom = $false; Expected = $true },
+      @{ Path = 'scripts/powershell/module.psm1'; Unicode = $true; Bom = $false; Expected = $true },
+      @{ Path = 'chezmoi/unicode.ps1'; Unicode = $true; Bom = $false; Expected = $false },
+      @{ Path = 'scripts/powershell/existing.ps1'; Unicode = $false; Bom = $true; Expected = $true }
+    )) {
+      $target = Join-Path (Join-Path $args[0] 'path with spaces') $case.Path
+      New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+      $value = if ($case.Unicode) { $label } else { 'value' }
+      $content = "@{ Name = '$value' }`r`n"
+      [IO.File]::WriteAllText($target, $content, [Text.UTF8Encoding]::new($case.Bom))
+      & $formatter $target
+      $hasBom = [BitConverter]::ToString([IO.File]::ReadAllBytes($target)[0..2]) -eq 'EF-BB-BF'
+      if ($hasBom -ne $case.Expected) { throw "Unexpected BOM for $($case.Path)" }
+      if ([IO.File]::ReadAllText($target) -cne $content) { throw "Formatter changed formatted text in $($case.Path)" }
+    }
+    Write-Output 'Empty-HOME PowerShell formatting, encoding boundaries, BOM repair, CRLF, and idempotence passed without downloads'
   ''} "$TMPDIR/fixture"
   touch "$out"
 ''

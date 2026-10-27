@@ -79,13 +79,6 @@ function Import-WindowsPackage {
         [string]$ManifestPath
     )
 
-    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
-        throw "WinGet manifest not found: $ManifestPath"
-    }
-    if (-not (Get-Command winget -CommandType Application -ErrorAction SilentlyContinue)) {
-        throw 'WinGet executable not found.'
-    }
-
     Write-Host "[Winget] Running winget import: $ManifestPath"
     Invoke-ExternalCommandWithTimeout -Command 'winget' -Arguments @(
         'import', '--import-file', $ManifestPath, '--ignore-versions',
@@ -136,9 +129,7 @@ function Get-UserEnvironmentPath {
 #>
 function Update-ProcessEnvironmentPath {
     [CmdletBinding()]
-    param(
-        [switch]$ReportStatus
-    )
+    param()
 
     $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
     $userPath = Get-UserEnvironmentPath
@@ -154,7 +145,6 @@ function Update-ProcessEnvironmentPath {
     $items = [System.Collections.Generic.List[string]]::new()
     $pathLength = 0
     $omittedEntries = 0
-    $missingEntries = 0
     # Preserve the machine PATH and entries already available to this process
     # before importing new registry User PATH entries.
     foreach ($pathValue in @($machinePath, $processPath, $userPath, $windowsApps)) {
@@ -170,7 +160,6 @@ function Update-ProcessEnvironmentPath {
             if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT -and
                 -not $hasUnresolvedVariable -and
                 -not [System.IO.Directory]::Exists($expandedPath)) {
-                $missingEntries++
                 continue
             }
 
@@ -187,9 +176,6 @@ function Update-ProcessEnvironmentPath {
     }
 
     $env:PATH = $items -join ";"
-    if ($ReportStatus -and ($missingEntries -gt 0 -or $omittedEntries -gt 0)) {
-        Write-Host "[INFO] Process PATH normalized: removed $missingEntries missing directories and omitted $omittedEntries over-limit entries; final length $pathLength/$maxPathLength."
-    }
     if ($omittedEntries -gt 0) {
         Write-Warning "Process PATH refresh omitted $omittedEntries entries to stay within the Windows cmd.exe limit of $maxPathLength characters. Trim stale entries from the User PATH if required commands are missing."
     }

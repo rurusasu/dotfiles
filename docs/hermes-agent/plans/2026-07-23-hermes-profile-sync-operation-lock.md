@@ -562,8 +562,6 @@ git commit -m "refactor: bound Hermes private cleanup guarantees"
   `docs/hermes-agent/profile-local-authoritative-sync-design.md`
 - Modify:
   `docs/hermes-agent/plans/2026-07-23-hermes-profile-local-sync.md`
-- Update execution evidence (git-ignored):
-  `.superpowers/sdd/final-whole-branch-fix-report.md`
 - Modify:
   `docker/hermes-agent/bootstrap/tests/test_hermes_home_wrapper_contract.py`
 

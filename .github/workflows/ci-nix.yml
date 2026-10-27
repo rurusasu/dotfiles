@@ -420,7 +420,7 @@ jobs:
           mv "$export_dir" "$DOTFILES_CI_BINARY_CACHE"
           # Hard links avoid copying gigabytes; pruning unlinks only the transport files.
           cp -al "$DOTFILES_CI_BINARY_CACHE/." "$cache_dir/"
-          python3 scripts/python/prepare_wsl_nix_cache.py "$cache_dir" "$system_path"
+          python3 scripts/python/prepare_ci_nix_cache.py transport "$cache_dir" "$system_path"
           du -sh "$cache_dir"
           echo "::endgroup::"
           tar -cf "$artifact_dir/wsl-nix-cache.tar" -C "$cache_dir" .
@@ -651,61 +651,10 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-
-          # Ensure winget is available on the runner
-          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-            Write-Host "winget not found — installing Microsoft.WinGet.Client..."
-            $ErrorActionPreference = 'Continue'
-            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue
-            $ErrorActionPreference = 'Stop'
-            Install-Module -Name Microsoft.WinGet.Client -RequiredVersion '1.29.280' -Scope CurrentUser -Force -Repository PSGallery
+          if (-not (Get-Command winget -CommandType Application -ErrorAction SilentlyContinue)) {
+            Install-PSResource -Name Microsoft.WinGet.Client -Scope CurrentUser -Repository PSGallery -TrustRepository
             Repair-WinGetPackageManager
           }
-          function Invoke-WingetSourceUpdate {
-            param([int]$Attempts = 3)
-
-            for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
-              Write-Host "winget source update attempt $attempt/$Attempts"
-              $ErrorActionPreference = 'Continue'
-              $sourceOutput = winget source update 2>&1 | ForEach-Object {
-                $line = [string]$_
-                Write-Host $line
-                $line
-              }
-              $sourceUpdateExit = $LASTEXITCODE
-              $ErrorActionPreference = 'Stop'
-
-              $sourceText = $sourceOutput -join [Environment]::NewLine
-              if ($sourceUpdateExit -eq 0 -and $sourceText -notmatch '(?im)\bCancelled\b') {
-                return
-              }
-
-              Write-Warning "winget source update did not complete cleanly (exit=$sourceUpdateExit). Retrying after source reset."
-              $ErrorActionPreference = 'Continue'
-              winget source reset --force
-              $ErrorActionPreference = 'Stop'
-              Start-Sleep -Seconds 5
-            }
-
-            throw "winget source update did not complete after $Attempts attempts"
-          }
-
-          # Validate winget sources before proceeding. A textual "Cancelled"
-          # with exit 0 still leaves later winget install calls unable to resolve
-          # packages, so detect it explicitly.
-          Invoke-WingetSourceUpdate
-          $wingetVersion = @(winget --version 2>&1)
-          $wingetVersionExitCode = $LASTEXITCODE
-          if ($wingetVersionExitCode -ne 0) {
-            throw "winget --version failed (exit=$wingetVersionExitCode): $($wingetVersion -join ' ')"
-          }
-          $wingetVersion | ForEach-Object { Write-Host $_ }
-          $wingetSources = @(winget source list 2>&1)
-          $wingetSourcesExitCode = $LASTEXITCODE
-          if ($wingetSourcesExitCode -ne 0) {
-            throw "winget source list failed (exit=$wingetSourcesExitCode): $($wingetSources -join ' ')"
-          }
-          $wingetSources | ForEach-Object { Write-Host $_ }
 
       - name: Run install.cmd strict user phase
         shell: powershell

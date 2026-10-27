@@ -68,7 +68,7 @@ if ($Phase -eq 'Wsl') {
     return
 }
 
-Update-ProcessEnvironmentPath -ReportStatus
+Update-ProcessEnvironmentPath
 Import-WindowsPackage -ManifestPath (Join-Path $repository 'windows/winget/packages.json')
 if ($PSBoundParameters.ContainsKey('Phase')) { return }
 $task = Get-Command task -CommandType Application -ErrorAction Stop | Select-Object -First 1

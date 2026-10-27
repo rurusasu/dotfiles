@@ -154,9 +154,15 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
         expected_paths = [
             f"/nix/store/{'b' * 32}-hermes",
         ]
-        for copy_exit in (0, 47):
+        for copy_exit, nar_url, references, expected_exit, diagnostic in (
+            (0, "nar/private.nar.zst", "", 0, ""),
+            (47, "nar/private.nar.zst", "", 47, ""),
+            (0, "../outside.nar", "", 1, "Invalid NAR location"),
+            (0, "nar/missing.nar", "", 1, "Missing NAR payload"),
+            (0, "nar/private.nar.zst", "outside-closure", 1, "Incomplete reference closure"),
+        ):
             with (
-                self.subTest(copy_exit=copy_exit),
+                self.subTest(copy_exit=copy_exit, nar_url=nar_url, references=references),
                 tempfile.TemporaryDirectory() as temporary,
             ):
                 directory = Path(temporary)
@@ -185,7 +191,7 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                     "    (cache / 'nar').mkdir(exist_ok=True)\n"
                     "    (cache / 'nar/private.nar.zst').write_text('cache')\n"
                     "    (cache / (paths[0].split('/')[-1].split('-')[0] + '.narinfo')).write_text(\n"
-                    "        f'StorePath: {paths[0]}\\nURL: nar/private.nar.zst\\nReferences: \\n')\n"
+                    "        f'StorePath: {paths[0]}\\nURL: {os.environ[\"NAR_URL\"]}\\nReferences: {os.environ[\"NAR_REFS\"]}\\n')\n"
                     "elif sys.argv[1:3] == ['path-info', '--recursive']:\n"
                     "    print(paths[0])\n"
                     "else:\n"
@@ -206,6 +212,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                     RUNNER_TEMP=str(runner_temp),
                     GITHUB_OUTPUT=str(output),
                     COPY_EXIT=str(copy_exit),
+                    NAR_URL=nar_url,
+                    NAR_REFS=references,
                     DOTFILES_CI_BINARY_CACHE=str(runner_temp / "persistent-cache"),
                 )
                 (runner_temp / "persistent-cache").mkdir()
@@ -226,9 +234,11 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                     check=False,
                 )
                 self.assertEqual(
-                    result.returncode, copy_exit, result.stdout + result.stderr
+                    result.returncode, expected_exit, result.stdout + result.stderr
                 )
-                if copy_exit:
+                if expected_exit:
+                    if diagnostic:
+                        self.assertIn(diagnostic, result.stderr)
                     self.assertEqual(
                         output.read_text(),
                         "",
@@ -239,6 +249,8 @@ class CiWorkflowRoutingContractTests(unittest.TestCase):
                             runner_temp / "wsl-nix-cache-artifact/wsl-nix-cache.tar"
                         ).exists()
                     )
+                    if not copy_exit:
+                        self.assertTrue((runner_temp / "persistent-cache/nar/private.nar.zst").is_file())
                     continue
                 self.assertTrue(
                     output.is_file(),

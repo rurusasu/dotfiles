@@ -417,7 +417,7 @@ Context 'Windows installer Task visibility' -Skip:($env:OS -ne 'Windows_NT') {
 Describe 'Windows installer phases' {
 BeforeAll {
     function Invoke-WindowsPhaseFixture {
-        param([bool]$Available = $true, [bool]$Success = $true, [string]$Phase = 'Winget')
+        param([bool]$Success = $true, [string]$Phase = 'Winget')
 
         $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         $adapter = Join-Path $root 'scripts/powershell'
@@ -435,16 +435,6 @@ BeforeAll {
         New-Item -ItemType Directory -Path "$root/chezmoi", "$root/home" -Force | Out-Null
         Set-Content -LiteralPath "$root/chezmoi/dot_fixture" -Value 'managed fixture'
         $fixture = @'
-function Get-Command {
-    [CmdletBinding()]
-    param([string[]]$Name, [Management.Automation.CommandTypes]$CommandType = 'All')
-    if ($Name -eq 'winget') {
-        if (__AVAILABLE__) { return [pscustomobject]@{ Source = 'fixture-winget.exe' } }
-        return $null
-    }
-    $cmdlet = $ExecutionContext.InvokeCommand.GetCommand('Get-Command', [Management.Automation.CommandTypes]::Cmdlet)
-    & $cmdlet -Name $Name -CommandType $CommandType -ErrorAction SilentlyContinue
-}
 function Invoke-ExternalCommandWithTimeout {
     param($Command, $Arguments, $TimeoutSeconds)
     if ($Arguments[0] -ne 'import') { throw 'Only native import is allowed' }
@@ -468,7 +458,7 @@ function chezmoi {
     return 'CHEZMOI_FIXTURE_FAILED'
 }
 '@
-        $fixture = $fixture.Replace('__AVAILABLE__', ('$' + $Available.ToString().ToLowerInvariant())).Replace('__SUCCESS__', ('$' + $Success.ToString().ToLowerInvariant()))
+        $fixture = $fixture.Replace('__SUCCESS__', ('$' + $Success.ToString().ToLowerInvariant()))
         Add-Content -LiteralPath (Join-Path $library 'Invoke-ExternalCommand.ps1') -Value $fixture -Encoding UTF8
         $info = New-Object System.Diagnostics.ProcessStartInfo
         $info.FileName = 'cmd.exe'
@@ -536,12 +526,6 @@ Context 'GUI-only Windows setup execution' {
 
 
 
-    It 'should fail when WinGet cannot run instead of reporting a successful skip' {
-        $result = Invoke-WindowsPhaseFixture -Available $false
-        $result.ExitCode | Should -Not -Be 0
-        $result.Output | Should -Match 'WinGet.*(unavailable|not available|not found)'
-        $result.Output | Should -Not -Match 'Setup Complete!'
-    }
 }
 }
 
