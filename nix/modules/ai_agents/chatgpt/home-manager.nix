@@ -1,52 +1,32 @@
-rec {
-  # Native desktop and the CLI shipped in the same official distribution.
-  packages =
-    { pkgs }:
-    let
-      # Upstream otherwise replaces these binaries with its separate Codex package.
-      chatgpt = pkgs.chatgpt.override { codex = null; };
-      resources =
-        if pkgs.stdenv.hostPlatform.isDarwin then
-          "${chatgpt}/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin"
-        else
-          "${chatgpt}/lib/chatgpt/resources";
-    in
-    assert pkgs.stdenv.hostPlatform.isLinux || pkgs.stdenv.hostPlatform.isDarwin;
-    {
-      inherit chatgpt;
-      codex = pkgs.linkFarm "codex" (
-        {
-          "bin/codex" = "${resources}/codex";
-          "bin/codex-code-mode-host" = "${resources}/codex-code-mode-host";
-        }
-        // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-          "bin/bwrap" = pkgs.lib.getExe pkgs.bubblewrap;
-        }
-      );
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+let
+  packages = import ./package.nix {
+    inherit pkgs;
+    chatgpt = config.programs.chatgpt.package;
+  };
+in
+{
+  options.programs.chatgpt = {
+    enable = lib.mkEnableOption "ChatGPT desktop with its bundled Codex CLI";
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = (import ./package.nix { inherit pkgs; }).chatgpt;
+      defaultText = lib.literalExpression "(pkgs.chatgpt.override { codex = null; })";
+      description = "ChatGPT desktop distribution providing the bundled Codex CLI.";
     };
-
-  cli =
-    { pkgs, ... }:
-    {
-      imports = [ homeManager ];
-      home.packages = [ (packages { inherit pkgs; }).codex ];
-    };
-
-  desktop =
-    { pkgs, ... }:
-    {
-      imports = [ cli ];
-      home.packages = [ (packages { inherit pkgs; }).chatgpt ];
-    };
-
-  homeManager =
-    {
-      config,
-      lib,
-      pkgs,
-      ...
-    }:
-    {
+  };
+  config = lib.mkMerge [
+    (lib.mkIf config.programs.chatgpt.enable {
+      programs.codex.enable = true;
+      home.packages = [ config.programs.chatgpt.package ];
+    })
+    (lib.mkIf config.programs.codex.enable {
+      home.packages = [ packages.codex ];
       home.activation.codexXdgHome = lib.mkIf config.home.preferXdgDirectories (
         lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ] ''
           legacy=${lib.escapeShellArg "${config.home.homeDirectory}/.codex"}
@@ -96,9 +76,8 @@ rec {
           );
 
       programs.codex = {
-        enable = true;
         enableMcpIntegration = true;
-        # The cli module exposes the bundled CLI; this option manages settings.
+        # Install the CLI from ChatGPT; this option manages its settings.
         package = lib.mkDefault null;
         # Preserve application settings and project trust in a writable user file.
         mutableSettings = true;
@@ -147,5 +126,6 @@ rec {
           };
         };
       };
-    };
+    })
+  ];
 }

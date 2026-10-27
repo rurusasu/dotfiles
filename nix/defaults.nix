@@ -55,16 +55,8 @@ let
           ({ config, lib, ... }: {
             imports = [
               ./modules/1password
-              ./modules/ai_agents/mcp.nix
-              ./modules/ai_agents/hermes
               ./modules/fonts
               ./modules/ssh.nix
-              (
-                { pkgs, inputs, ... }:
-                lib.mkIf (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (
-                  (import ./modules/ai_agents/strata).homeManager { inherit pkgs inputs; }
-                )
-              )
             ]
             ++ discoverModules "home-manager" ./modules;
 
@@ -128,8 +120,20 @@ let
               gwq.enable = true;
               lazygit.enable = true;
               herdr.enable = true;
+              codex.enable = true;
+              mcp.enable = true;
+              hermes-agent = {
+                enable = true;
+                desktop.enable = true;
+              };
             };
-            services.ollama.enable = true;
+            services = {
+              ollama.enable = true;
+              hermes-agent = {
+                enable = true;
+                gateway.enable = true;
+              };
+            };
             nix = {
               package = lib.mkDefault nixPackage;
               gc = gc // {
@@ -146,9 +150,9 @@ let
             imports =
               {
                 darwin = [
-                  (import ./modules/ai_agents/chatgpt).desktop
                   {
                     programs.pi-coding-agent.enable = true;
+                    programs.chatgpt.enable = true;
                     home = {
                       packages = with pkgs; [
                         coreutils
@@ -187,16 +191,16 @@ let
                 ];
                 linux = [
                   (import ./modules/browsers/chrome).homeManager
-                  (import ./modules/ai_agents/chatgpt).desktop
                   ./modules/discord
                   {
                     home.packages = [ pkgs.nautilus ];
+                    programs.chatgpt.enable = true;
+                    programs.strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
                     programs.git.signing.signer = "/opt/1Password/op-ssh-sign";
                   }
                 ];
                 wsl = [
                   (import ./modules/browsers/chrome).wsl
-                  (import ./modules/ai_agents/chatgpt).cli
                   ./modules/superfile
                   ./modules/fcitx5.nix
                   ./modules/gnome-keyring
@@ -216,6 +220,7 @@ let
                       };
                       programs = {
                         pi-coding-agent.enable = true;
+                        strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
                         git = {
                           signing.signer = "${config.home.homeDirectory}/.local/bin/op-ssh-sign-wsl";
                           settings.ghq.root = [ "/mnt/d" ];

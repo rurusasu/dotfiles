@@ -7,15 +7,16 @@ pkgs.runCommand "codex-config-migration-check"
     ];
     activation = pkgs.writeText "codex-agent-migration-activation" ''
       source ${inputs.home-manager}/lib/bash/home-manager.sh
-      ${((import ../../../../../modules/ai_agents/chatgpt).homeManager {
-        inherit pkgs;
-        lib = import "${inputs.home-manager}/modules/lib/stdlib-extended.nix" pkgs.lib;
-        config = {
-          home.homeDirectory = "@TEST HOME@";
-          home.preferXdgDirectories = true;
-          xdg.configHome = "@TEST HOME@/.config";
-        };
-      }).home.activation.codexPruneManagedAgents.data
+      ${((import ../../../../fixtures/packages.nix { inherit inputs; }).mkHome
+        pkgs.stdenv.hostPlatform.system
+        [
+          ({ lib, ... }: {
+            home.homeDirectory = lib.mkForce "@TEST HOME@";
+            home.preferXdgDirectories = true;
+            programs.codex.enable = true;
+          })
+        ]
+      ).config.home.activation.codexPruneManagedAgents.data
       }
     '';
   }

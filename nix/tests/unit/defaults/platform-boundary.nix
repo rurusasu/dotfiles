@@ -14,6 +14,15 @@ let
     config = { };
     lib.mkDefault = value: value;
   };
+  onlyEnableFlags =
+    tree:
+    builtins.all (
+      name:
+      if name == "enable" then
+        builtins.isBool tree.${name}
+      else
+        builtins.isAttrs tree.${name} && onlyEnableFlags tree.${name}
+    ) (builtins.attrNames tree);
 in
 {
   testCommonGitAndSshUseTheSharedSignerAndAgent = {
@@ -35,17 +44,15 @@ in
   };
   testCommonHomeOnlyDeclaresApplicationEnableFlags = {
     expr = {
-      programs = builtins.all (
-        program: builtins.attrNames program == [ "enable" ] && builtins.isBool program.enable
-      ) (builtins.attrValues common.programs);
-      inherit (common) services;
+      programs = onlyEnableFlags common.programs;
+      services = onlyEnableFlags common.services;
       agents = common ? launchd;
       sessionVariables = common.home ? sessionVariables;
       sessionPath = common.home ? sessionPath;
     };
     expected = {
       programs = true;
-      services.ollama.enable = true;
+      services = true;
       agents = false;
       sessionVariables = false;
       sessionPath = false;

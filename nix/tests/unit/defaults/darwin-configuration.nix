@@ -67,9 +67,7 @@ in
             };
           })
           [
-            "${
-              ((import ../../../modules/ai_agents/chatgpt).packages { inherit (defaultSystem) pkgs; }).chatgpt
-            }/Applications/ChatGPT.app"
+            "${defaultHome.programs.chatgpt.package}/Applications/ChatGPT.app"
             "${
               import ../../../modules/browsers/dia {
                 inherit inputs;

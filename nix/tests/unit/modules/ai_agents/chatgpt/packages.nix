@@ -15,7 +15,7 @@ in
           let
             modulePkgs = (import ../../../../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
           in
-          ((import ../../../../../modules/ai_agents/chatgpt).packages {
+          ((import ../../../../../modules/ai_agents/chatgpt/package.nix) {
             pkgs = modulePkgs;
           }).chatgpt.drvPath == (modulePkgs.chatgpt.override { codex = null; }).drvPath
         )

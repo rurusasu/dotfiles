@@ -40,7 +40,16 @@ let
           # The upstream module closes over inputs.self for its package
           # default. Pin its supported package option here so evaluation uses
           # this local derivation without forcing the upstream Python package.
-          services.hermes-agent.package = testPackage;
+          programs.hermes-agent = {
+            enable = true;
+            desktop.enable = true;
+          };
+          services.hermes-agent = {
+            enable = true;
+            gateway.enable = true;
+            package = testPackage;
+          };
+          programs.mcp.enable = true;
         }
         ((import ../../../../fixtures/packages.nix { inherit inputs; }).homeModule "common")
       ];

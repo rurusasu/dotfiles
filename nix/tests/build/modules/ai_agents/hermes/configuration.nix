@@ -31,7 +31,6 @@ pkgs.runCommand "hermes-configuration-check"
                   ((import ../../../../fixtures/packages.nix { inherit inputs; }).mkHome
                     pkgs.stdenv.hostPlatform.system
                     [
-                      ../../../../../modules/ai_agents/mcp.nix
                       {
                         xdg.enable = true;
                         programs.mcp.enable = true;

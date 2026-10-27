@@ -1,6 +1,6 @@
 { pkgs }:
 let
-  packages = (import ../../../../../modules/ai_agents/chatgpt).packages { inherit pkgs; };
+  packages = (import ../../../../../modules/ai_agents/chatgpt/package.nix) { inherit pkgs; };
 in
 pkgs.runCommand "chatgpt-desktop-check"
   {
