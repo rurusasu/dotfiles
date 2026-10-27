@@ -16,7 +16,7 @@ in
           let
             modulePkgs = fixtures.mkPkgs system;
           in
-          ((code.nix.modules.ai_agents.chatgpt.package) {
+          (code.nix.modules.ai_agents.chatgpt.package {
             pkgs = modulePkgs;
           }).chatgpt.drvPath == (modulePkgs.chatgpt.override { codex = null; }).drvPath
         )

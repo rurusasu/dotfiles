@@ -5,10 +5,12 @@ let
     let
       home = fixtures.mkHome "x86_64-linux" [
         {
-          programs.bash.enable = true;
-          programs.zsh.enable = true;
-          programs.ripgrep.enable = enabled;
-          programs.fd.enable = enabled;
+          programs = {
+            bash.enable = true;
+            zsh.enable = true;
+            ripgrep.enable = enabled;
+            fd.enable = enabled;
+          };
         }
       ];
     in

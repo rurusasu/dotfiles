@@ -1,6 +1,4 @@
 { fixtures }:
-let
-in
 {
   testHostModulesIncludeGitHubCliForDarwinAndLinux = {
     expr = {

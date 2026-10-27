@@ -1,7 +1,7 @@
 # Exercise generated scripts against a process-boundary CLI double.
 { pkgs, code }:
 {
-  aerospace-workspace-cycle = (
+  aerospace-workspace-cycle =
     let
       inherit (pkgs) lib;
       scripts = code.nix.modules.aerospace.aerospace-cycle {
@@ -38,6 +38,5 @@
       fi
       echo "24 workspace cycle assertions passed"
       touch "$out"
-    ''
-  );
+    '';
 }

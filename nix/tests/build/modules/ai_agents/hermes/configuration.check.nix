@@ -4,7 +4,7 @@
   upstream,
 }:
 {
-  hermes-configuration = (
+  hermes-configuration =
     let
       inherit (pkgs) lib;
     in
@@ -46,6 +46,5 @@
           )
         }
         touch "$out"
-      ''
-  );
+      '';
 }

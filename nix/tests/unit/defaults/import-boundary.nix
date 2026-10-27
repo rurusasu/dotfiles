@@ -10,7 +10,7 @@ in
 {
   testHostAndHomeDefinitionsAreConsolidated = {
     expr = {
-      defaultsPresent = (files.nix ? defaults);
+      defaultsPresent = files.nix ? defaults;
       hostFiles = nixFiles files.nix.hosts.__path;
       homeFiles = nixFiles files.nix.home.__path;
     };

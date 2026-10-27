@@ -4,7 +4,7 @@
   upstream,
 }:
 {
-  codex-config-migration = (
+  codex-config-migration =
     pkgs.runCommand "codex-config-migration-check"
       {
         nativeBuildInputs = [
@@ -107,6 +107,5 @@
         fi
         cmp "$config" "$TMPDIR/malformed.toml"
         touch "$out"
-      ''
-  );
+      '';
 }

@@ -1,6 +1,6 @@
 { pkgs, fixtures }:
 {
-  docker-desktop-activation = (
+  docker-desktop-activation =
     let
       activation =
         pkgs.writeText "docker-desktop-activation"
@@ -111,6 +111,5 @@
 
         echo 'Docker Desktop initialization, retry, idempotence, and conflict checks passed'
         touch "$out"
-      ''
-  );
+      '';
 }

@@ -49,16 +49,16 @@ in
 
   testFlakeHasNoIntermediateLibOrFlakesDirectories = {
     expr = {
-      oldLib = (files.nix ? lib);
-      oldFlakes = (files.nix ? flakes);
-      consolidatedDefaults = (files.nix ? defaults);
-      splitHostDefinitions = (files.nix.hosts ? default);
-      splitRegistrations = (files.nix.hosts ? configurations);
-      splitHomeDefinitions = (files.nix.home ? common);
-      registryPresent = (files.nix.tests ? default);
-      splitPackageOutputs = (files.nix ? outputs);
-      treefmtConfig = (files.nix ? treefmt);
-      legacyFormatter = (files.nix ? formatter);
+      oldLib = files.nix ? lib;
+      oldFlakes = files.nix ? flakes;
+      consolidatedDefaults = files.nix ? defaults;
+      splitHostDefinitions = files.nix.hosts ? default;
+      splitRegistrations = files.nix.hosts ? configurations;
+      splitHomeDefinitions = files.nix.home ? common;
+      registryPresent = files.nix.tests ? default;
+      splitPackageOutputs = files.nix ? outputs;
+      treefmtConfig = files.nix ? treefmt;
+      legacyFormatter = files.nix ? formatter;
     };
     expected = {
       oldLib = false;

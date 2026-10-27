@@ -4,7 +4,7 @@
   code,
 }:
 pkgs.lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
-  strata-applications = (
+  strata-applications =
     let
       packages = code.nix.modules.ai_agents.strata.package {
         inherit pkgs;
@@ -25,6 +25,5 @@ pkgs.lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
         desktop-file-validate ${packages.desktop}/share/applications/Strata.desktop
         test -s ${packages.desktop}/share/pixmaps/strata-desktop.png
         touch "$out"
-      ''
-  );
+      '';
 }

@@ -115,8 +115,8 @@ in
             nixFilesUnder files.nix.tests.build.__path
           )
         && builtins.length (builtins.attrNames build.values) > 0;
-      hardwareFixtureExists = (files.nix.tests.fixtures ? hardware-configuration);
-      sharedPackageFixtureExists = (files.nix.tests.fixtures ? packages);
+      hardwareFixtureExists = files.nix.tests.fixtures ? hardware-configuration;
+      sharedPackageFixtureExists = files.nix.tests.fixtures ? packages;
     };
     expected = {
       buildChecksDiscoveredExactlyOnce = true;
@@ -133,7 +133,7 @@ in
         };
       in
       {
-        files = relativeFiles (discoveryFixtures.valid.__path) found.files;
+        files = relativeFiles discoveryFixtures.valid.__path found.files;
         names = builtins.attrNames found.values;
         argument = found.values.testWithArgument.expr;
       };

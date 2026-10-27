@@ -26,35 +26,35 @@ in
       home.packages = [ config.programs.chatgpt.package ];
     })
     (lib.mkIf config.programs.codex.enable {
-      home.packages = [ packages.codex ];
-      home.activation.codexXdgHome = lib.mkIf config.home.preferXdgDirectories (
-        lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ] ''
-          legacy=${lib.escapeShellArg "${config.home.homeDirectory}/.codex"}
-          target=${lib.escapeShellArg "${config.xdg.configHome}/codex"}
-          if [[ -L "$legacy" ]]; then
-            if [[ "$(${pkgs.coreutils}/bin/readlink -m -- "$legacy")" != "$(${pkgs.coreutils}/bin/readlink -m -- "$target")" ]]; then
-              errorEcho "Codex legacy directory points elsewhere: $legacy; reconcile it with $target before activating."
-              exit 1
-            fi
-          elif [[ -e "$legacy" ]]; then
-            if [[ ! -d "$legacy" || -e "$target" || -L "$target" ]]; then
-              errorEcho "Cannot migrate Codex state from $legacy to $target without overwriting existing data."
-              exit 1
-            fi
-            run ${pkgs.coreutils}/bin/mkdir -p -- "$(${pkgs.coreutils}/bin/dirname -- "$target")"
-            run ${pkgs.coreutils}/bin/mv --no-target-directory --update=none-fail -- "$legacy" "$target"
-          fi
-          if [[ ! -e "$legacy" && ! -L "$legacy" ]]; then
-            run ${pkgs.coreutils}/bin/mkdir -p -- "$target"
-            run ${pkgs.coreutils}/bin/ln -s -- "$target" "$legacy"
-          fi
-        ''
-      );
+      home = {
+        packages = [ packages.codex ];
+        activation = {
+          codexXdgHome = lib.mkIf config.home.preferXdgDirectories (
+            lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ] ''
+              legacy=${lib.escapeShellArg "${config.home.homeDirectory}/.codex"}
+              target=${lib.escapeShellArg "${config.xdg.configHome}/codex"}
+              if [[ -L "$legacy" ]]; then
+                if [[ "$(${pkgs.coreutils}/bin/readlink -m -- "$legacy")" != "$(${pkgs.coreutils}/bin/readlink -m -- "$target")" ]]; then
+                  errorEcho "Codex legacy directory points elsewhere: $legacy; reconcile it with $target before activating."
+                  exit 1
+                fi
+              elif [[ -e "$legacy" ]]; then
+                if [[ ! -d "$legacy" || -e "$target" || -L "$target" ]]; then
+                  errorEcho "Cannot migrate Codex state from $legacy to $target without overwriting existing data."
+                  exit 1
+                fi
+                run ${pkgs.coreutils}/bin/mkdir -p -- "$(${pkgs.coreutils}/bin/dirname -- "$target")"
+                run ${pkgs.coreutils}/bin/mv --no-target-directory --update=none-fail -- "$legacy" "$target"
+              fi
+              if [[ ! -e "$legacy" && ! -L "$legacy" ]]; then
+                run ${pkgs.coreutils}/bin/mkdir -p -- "$target"
+                run ${pkgs.coreutils}/bin/ln -s -- "$target" "$legacy"
+              fi
+            ''
+          );
 
-      # The mutable merge retains omitted keys, including removed managed roles.
-      home.activation.codexPruneManagedAgents =
-        lib.hm.dag.entryBetween [ "codexMutableSettings" ] [ "linkGeneration" ]
-          (
+          # The mutable merge retains omitted keys, including removed managed roles.
+          codexPruneManagedAgents = lib.hm.dag.entryBetween [ "codexMutableSettings" ] [ "linkGeneration" ] (
             lib.hm.generators.mkImpureConfigMerger {
               inherit pkgs;
               format = "toml";
@@ -74,6 +74,8 @@ in
               mode = "600";
             }
           );
+        };
+      };
 
       programs.codex = {
         enableMcpIntegration = true;

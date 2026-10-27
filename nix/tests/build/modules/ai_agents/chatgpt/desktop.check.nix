@@ -4,14 +4,13 @@
   code,
 }:
 {
-  chatgpt-desktop = (
+  chatgpt-desktop =
     let
       outerPkgs = pkgs;
     in
     let
       pkgs = fixtures.mkPkgs outerPkgs.stdenv.hostPlatform.system;
-    in
-    let
+
       packages = code.nix.modules.ai_agents.chatgpt.package { inherit pkgs; };
     in
     pkgs.runCommand "chatgpt-desktop-check"
@@ -45,6 +44,5 @@
         echo "$version"
         [[ "$version" == "codex-cli "* ]]
         touch "$out"
-      ''
-  );
+      '';
 }

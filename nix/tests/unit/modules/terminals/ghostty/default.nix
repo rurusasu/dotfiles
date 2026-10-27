@@ -26,10 +26,12 @@ in
         pkgs = fixtures.mkPkgs system;
         home = fixtures.mkHome system [
           {
-            programs.ghostty.enable = true;
-            programs.wezterm.enable = true;
-            programs.zsh.enable = true;
-            programs.bash.enable = true;
+            programs = {
+              ghostty.enable = true;
+              wezterm.enable = true;
+              zsh.enable = true;
+              bash.enable = true;
+            };
             xdg.configHome =
               if pkgs.stdenv.hostPlatform.isDarwin then
                 "/Users/test-user/custom config"

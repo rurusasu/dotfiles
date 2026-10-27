@@ -1,7 +1,7 @@
 # Exercise the configured formatter with no user modules and forbidden downloads.
 { pkgs, config }:
 {
-  powershell-formatter = (
+  powershell-formatter =
     let
       formatter = config.treefmt.settings.formatter.powershell;
     in
@@ -41,6 +41,5 @@
         Write-Output 'Empty-HOME PowerShell formatting, BOM, CRLF, and idempotence passed without downloads'
       ''} "$TMPDIR/fixture"
       touch "$out"
-    ''
-  );
+    '';
 }

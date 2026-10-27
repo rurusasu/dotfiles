@@ -9,7 +9,7 @@ let
   key = name: if isNix name then builtins.substring 0 (builtins.stringLength name - 4) name else name;
   children = builtins.listToAttrs (
     map (name: {
-      name = name;
+      inherit name;
       value = import ./source-tree.nix (root + "/${name}");
     }) (builtins.filter (name: entries.${name} == "directory") names)
   );

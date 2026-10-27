@@ -149,11 +149,13 @@ let
               {
                 darwin = [
                   {
-                    programs.pi-coding-agent.enable = true;
-                    programs.chatgpt.enable = true;
-                    programs.dia.enable = true;
-                    programs.aerospace.enable = true;
-                    programs.discord.enable = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.discord;
+                    programs = {
+                      pi-coding-agent.enable = true;
+                      chatgpt.enable = true;
+                      dia.enable = true;
+                      aerospace.enable = true;
+                      discord.enable = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.discord;
+                    };
                     dotfiles.desktop.enable = true;
                     home = {
                       packages = with pkgs; [
@@ -190,11 +192,13 @@ let
                 linux = [
                   {
                     home.packages = [ pkgs.nautilus ];
-                    programs.chatgpt.enable = true;
-                    programs.chromium.enable = true;
-                    programs.discord.enable = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.discord;
-                    programs.strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
-                    programs.git.signing.signer = "/opt/1Password/op-ssh-sign";
+                    programs = {
+                      chatgpt.enable = true;
+                      chromium.enable = true;
+                      discord.enable = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.discord;
+                      strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
+                      git.signing.signer = "/opt/1Password/op-ssh-sign";
+                    };
                   }
                 ];
                 wsl = [

@@ -5,11 +5,10 @@
   code,
 }:
 {
-  custom-package-builds = (
+  custom-package-builds =
     let
       chatgptDesktopCheck = config.checks.chatgpt-desktop or null;
-    in
-    let
+
       buildPkgs = import pkgs.path {
         system = pkgs.stdenv.hostPlatform.system;
         config.allowUnfree = true;
@@ -37,6 +36,5 @@
           };
         }
       ]
-    )
-  );
+    );
 }

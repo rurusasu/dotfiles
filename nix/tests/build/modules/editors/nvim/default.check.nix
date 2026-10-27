@@ -6,7 +6,7 @@
   files,
 }:
 {
-  neovim-native = (
+  neovim-native =
     let
       neovim = code.nix.tests.fixtures.neovim { inherit inputs pkgs; };
     in
@@ -50,6 +50,5 @@
         DOTFILES_NVIM_LSPCONFIG=${pkgs.vimPlugins.nvim-lspconfig} \
           nvim --headless -u NONE -i NONE -l ${files.tests.lua."nvim_typescript_test.lua"}
         touch "$out"
-      ''
-  );
+      '';
 }

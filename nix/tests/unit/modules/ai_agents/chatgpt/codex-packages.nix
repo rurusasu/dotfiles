@@ -9,7 +9,7 @@ let
   disabled = fixtures.mkHome "aarch64-darwin" [ ];
   cliOnly = fixtures.mkHome "aarch64-darwin" [ { programs.codex.enable = true; } ];
   desktopOnly = fixtures.mkHome "aarch64-darwin" [ { programs.chatgpt.enable = true; } ];
-  packages = (code.nix.modules.ai_agents.chatgpt.package) {
+  packages = code.nix.modules.ai_agents.chatgpt.package {
     pkgs = fixtures.mkPkgs "aarch64-darwin";
   };
 in
@@ -73,7 +73,7 @@ in
         wsl.config.programs.codex.package == null
         &&
           builtins.elem
-            ((code.nix.modules.ai_agents.chatgpt.package) {
+            (code.nix.modules.ai_agents.chatgpt.package {
               pkgs = fixtures.mkPkgs "x86_64-linux";
             }).codex
             wsl.config.home.packages;

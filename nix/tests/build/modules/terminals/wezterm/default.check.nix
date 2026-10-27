@@ -4,7 +4,7 @@
   files,
 }:
 {
-  wezterm-config = (
+  wezterm-config =
     let
       unixWezTerm = files.nix.modules.terminals.wezterm."wezterm.lua";
       windowsWezTerm = files.chezmoi.terminals.wezterm."wezterm.lua";
@@ -16,10 +16,10 @@
             homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
             stateVersion = "25.05";
           };
-          programs.wezterm.enable = true;
-          programs.bash.enable = true;
-          programs.zsh = {
-            enable = true;
+          programs = {
+            wezterm.enable = true;
+            bash.enable = true;
+            zsh.enable = true;
           };
         }
       ];
@@ -137,6 +137,5 @@
           done
         done
         touch "$out"
-      ''
-  );
+      '';
 }
