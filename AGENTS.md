@@ -13,13 +13,13 @@
 - 設定・package override・生成・連携を持つアプリは module にまとめる。Neovim の LSP・整形ツール・toolchain・プラグイン実行依存は Neovim module が所有する。
 - enable・単純な package list・単一代入だけの module は作らず、`nix/defaults.nix` の必要な構成へ直接書く。
 - Hermes は同梱 Python を使う。Python interpreter を別途導入したり、直接 `home.packages` に追加したりしない。プロジェクト依存は uv で管理する。Nix 内部専用の Python 依存は各 module が管理する。
-- Home Manager の新しいアプリ module は `nix/modules/` 配下の `home-manager.nix` として置き、自動検出させる。アプリごとの import パス登録や公開一覧は追加しない。有効化は `nix/defaults.nix:systemDefaults` の `programs.<name>.enable` などの option で指定し、設定は enable に従わせる。既存の明示的な imports と Windows の独立したインストール情報は維持する。詳細は [パッケージ管理](docs/nix/package-management.md#分割の理由と編集先)。
+- すべての実アプリ module は `nix/modules/` 配下の `default.nix` として置き、自動検出させる。通常は Home Manager、`nixos/` / `darwin/` / `system/` ディレクトリ配下はそれぞれ NixOS / nix-darwin / 両 OS 共通の scope とし、`nix/discover-modules.nix` が対応する評価へ読み込む。アプリごとの import パス登録・公開一覧は作らない。有効化は `nix/defaults.nix:systemDefaults` の標準 `programs.<name>.enable` などの型付き option で選び、設定・package・service・activation を enable に従わせる。純粋な factory・renderer は通常の関数として利用し、`default.nix` を付けて自動検出させない。Windows のインストール情報は独立して管理する。詳細は [パッケージ管理](docs/nix/package-management.md#分割の理由と編集先)。
 - Homebrew / nix-homebrew・cask・ユーザー PATH は `nix/defaults.nix` にまとめる。通常の CLI・GUI とユーザー設定は Home Manager が管理し、OS 固有の設定・権限・システムサービス・連携は `defaults.nix` の各 OS ブロックに置く。
 - OS / Home Manager 設定は `nix/defaults.nix:systemDefaults` にまとめ、末尾の構成登録で `specialArgs.platform` と CPU の `system` を選択する。
 - 共通の OS / Home Manager 設定は `nix/defaults.nix:systemDefaults` にまとめ、Home Manager 共通設定は同 module の `home-manager.sharedModules` に置く。OS 別ユーザー設定も同じ `sharedModules` 内で選択し、standalone と共有する。
-- 共通キー配列は `nix/home/keybindings/bindings.nix`、各アプリの生成関数・設定は `nix/modules/`。OS 基盤設定と module 選択は `nix/defaults.nix` が担当する。純粋な設定生成関数を Home Manager module の imports に渡さない。
+- 共通キー配列は `nix/home/keybindings/bindings.nix`、各アプリの生成関数・設定は `nix/modules/`。OS 基盤設定と型付き option による有効化は `nix/defaults.nix` が担当する。純粋な設定生成関数を Home Manager module の imports に渡さない。
 - Windows manifest: `windows/{winget,npm,pnpm}/packages.json`（直接管理する独立した正本。通常導入は WinGet の GUI のみ）
-- アプリのユーザー設定・サービス・activation は `nix/modules/`、OS 基盤設定と module 選択は `nix/defaults.nix`、Windows は `chezmoi/` に置く。Unix の設定ファイルは標準 Home Manager option と `xdg.configFile` で管理し、二重配布しない。
+- アプリのユーザー設定・サービス・activation は `nix/modules/`、OS 基盤設定と型付き option による有効化は `nix/defaults.nix`、Windows は `chezmoi/` に置く。Unix の設定ファイルは標準 Home Manager option と `xdg.configFile` で管理し、二重配布しない。
 - Windows 実行ロジック: `scripts/powershell/`
 - CLI の実行順序・依存関係・公開コマンドは `Taskfile.yml` と `taskfiles/` に実装する。
 - Bash/PowerShell は Taskfile から呼ばれる platform adapter、secret 処理、複雑な検証に限定し、CLI の処理順序を重複定義しない。
@@ -27,7 +27,8 @@
 ## テスト責務
 
 - Nix expression、Home Manager option、flake output、Nix package 選択の値テストは `nix/tests/unit/` に nix-unit 形式で記載する。ビルド・実行テストの derivation は `nix/tests/build/`、共有入力は `nix/tests/fixtures/` に置く。
-- `nix/tests/default.nix` が単体テストとビルドテストを登録する。nix-unit も flake の `checks` 経由で実行する。`nix flake check --no-build` は評価確認であり、テスト実行の代わりにはならない。詳細は [Nix テスト](nix/tests/README.md)。
+- `nix/tests/discover.nix` が `unit/**/*.nix` と `build/**/*.check.nix` を再帰的に自動検出し、`nix/tests/default.nix` が flake に接続する。個別テストの登録パス一覧は作らない。unit は `test...` 属性の集合、build は check 名をキーとする derivation の集合を返す。OS 条件による build ファイル単位の空集合は許可するが、空の unit ファイル・全体で 0 件・名前の重複は失敗させる。nix-unit も flake の `checks` 経由で実行する。`nix flake check --no-build` は評価確認であり、テスト実行の代わりにはならない。詳細は [Nix テスト](nix/tests/README.md)。
+- テスト定義は共通 context の `fixtures` / `homeConfigurations` / `code` / `files` から必要な引数だけを受け取る。fixture・純粋な helper・asset を含め、リポジトリ内のファイルパスや import をテストへ書かない。`nix/tests/context.nix` と `source-tree.nix` が資源を自動索引し、手書きの公開 catalog や個別パス登録は作らない。Home Manager は `fixtures.mkHome` などと型付き option、helper は `code.*`、asset は `files.*` で参照する。
 - Bats は shell、installer、外部コマンド、runtime/integration 契約に限定する。Nix option を `nix eval` するだけの Bats テストは追加しない。Windows manifest は CI で JSON を直接検証する。テストの分類は `nix/tests/README.md` に従う。WSL の初回同期は PowerShell ハンドラー、NixOS rebuild は直接コマンドを境界として検証する。
 
 ## フォーマット・テスト・実行時間の境界

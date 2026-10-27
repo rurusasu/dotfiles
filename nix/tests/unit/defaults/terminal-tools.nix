@@ -1,6 +1,5 @@
-{ inputs }:
+{ fixtures }:
 let
-  fixtures = import ../../fixtures/packages.nix { inherit inputs; };
   systems = [
     "aarch64-darwin"
     "x86_64-linux"

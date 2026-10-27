@@ -1,4 +1,4 @@
-{ inputs }:
+{ inputs, code }:
 let
   mkDarwin =
     primaryUser: extraModules:
@@ -13,7 +13,7 @@ let
           nixpkgs.config.allowUnfree = true;
           system.primaryUser = primaryUser;
         }
-        (import ../../../defaults.nix inputs).systemDefaults
+        (code.nix.defaults inputs).systemDefaults
       ]
       ++ extraModules;
     };

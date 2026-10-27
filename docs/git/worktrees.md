@@ -2,7 +2,7 @@
 
 worktree の作成・移動・一覧・削除には [gwq](https://github.com/d-kuro/gwq) を使う。
 Unix CLI の導入、設定と Bash / Zsh の補完・移動連携は
-`nix/modules/git/gwq.nix` が管理する。既存の `git gtr` も `gwq add` に転送する。
+`nix/modules/git/gwq/default.nix` が管理する。既存の `git gtr` も `gwq add` に転送する。
 
 ## Windows と WSL の共用
 

@@ -1,6 +1,6 @@
-{ inputs }:
+{ fixtures, code }:
 let
-  pkgs = (import ../../../../fixtures/packages.nix { inherit inputs; }).mkPkgs "x86_64-linux";
+  pkgs = fixtures.mkPkgs "x86_64-linux";
   release = {
     tag_name = "v9.8.7";
     assets = [
@@ -18,7 +18,7 @@ let
   };
   packages =
     selected:
-    import ../../../../../modules/ai_agents/strata/package.nix {
+    code.nix.modules.ai_agents.strata.package {
       inherit pkgs;
       release = selected;
     };
@@ -38,7 +38,7 @@ let
 in
 {
   testStrataFeedResolvesAssetsToItsVersionedRelease = {
-    expr = import ../../../../../modules/ai_agents/strata/release.nix {
+    expr = code.nix.modules.ai_agents.strata.release {
       app = {
         version = "9.8.7";
         platforms.linux-x86_64 = {

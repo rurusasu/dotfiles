@@ -1,7 +1,4 @@
-{
-  inputs,
-  homeConfigurations ? import ../../../../fixtures/home-configurations.nix { inherit inputs; },
-}:
+{ fixtures, homeConfigurations }:
 let
   inherit (homeConfigurations)
     darwin
@@ -12,7 +9,7 @@ let
   disabled = mkHome {
     system = "x86_64-linux";
     module = { lib, ... }: {
-      imports = [ ((import ../../../../fixtures/packages.nix { inherit inputs; }).homeModule "wsl") ];
+      imports = [ (fixtures.homeModule "wsl") ];
       programs.pi-coding-agent.enable = lib.mkForce false;
     };
   };

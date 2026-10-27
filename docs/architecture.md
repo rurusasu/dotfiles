@@ -7,7 +7,7 @@
 **「OS ごとに 1 コマンドで同じ開発環境へ収束する」** を目標に、以下の原則で管理する。
 
 1. **Unix の導入・設定は Nix module、Windows の導入情報は独立した manifest**
-   - Unix CLI / GUI の導入・package 選択・設定・連携・専用の実行依存をアプリごとの module にまとめ、共通・OS 別構成は module の外で imports を明示
+   - Unix CLI / GUI の導入・package 選択・設定・連携・専用の実行依存をアプリごとの module にまとめ、すべての実 module の `default.nix` を自動検出し、構成側の型付き option で有効化
    - enable・単純な package list・単一代入は `nix/defaults.nix` の必要な構成へ直接記載。設定・package override・生成・連携を持つアプリは module にまとめる
    - 通常の CLI・GUI とユーザー設定は Home Manager、OS 固有の設定・権限・システムサービス・連携は `nix/defaults.nix` の各 OS ブロックが管理。Homebrew と cask は `nix/defaults.nix` に宣言
    - Windows は `windows/winget/packages.json` を直接管理し、GUI アプリを導入。npm/pnpm manifest は空
@@ -15,7 +15,7 @@
 2. **ユーザー設定は Unix と Windows の責務を分離**
    - Unix の Codex、shell、Git、terminal、editor は Home Manager が管理
    - chezmoi は Windows 専用で、Unix にはファイルもスクリプトも配布しない
-   - 共通 action/key は `nix/home/keybindings/bindings.nix`、アプリの設定・生成関数は `nix/modules/`、OS 基盤設定と module 選択は `nix/defaults.nix` に置く。macOS/native NixOS の設定は Nix が所有する。Windows は標準デスクトップを使用し、Nix からデスクトップ設定を生成・配布しない（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
+   - 共通 action/key は `nix/home/keybindings/bindings.nix`、アプリの設定・生成関数は `nix/modules/`、OS 基盤設定と型付き option による有効化は `nix/defaults.nix` に置く。macOS/native NixOS の設定は Nix が所有する。Windows は標準デスクトップを使用し、Nix からデスクトップ設定を生成・配布しない（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
 3. **システム収束は OS に適した宣言レイヤーへ分離**
    - Windows: PowerShell handlers + winget
    - macOS: nix-darwin + nix-homebrew
@@ -33,12 +33,14 @@ dotfiles/
 │   ├── home/               # Shared keybindings and Windows export
 │   │   └── keybindings/    # Shared keys and Windows export
 │   ├── treefmt.nix         # project treefmt configuration and formatter dependencies
-│   ├── defaults.nix        # OS settings, module selection and outputs
+│   ├── defaults.nix        # OS settings, typed enable options and outputs
+│   ├── discover-modules.nix # Recursive default.nix discovery by evaluation scope
 │   ├── modules/            # App-owned packages, settings, integrations and dependencies
 │   │   └── editors/nvim/   # Neovim, plugins, LSPs and runtime/toolchains
 │   └── tests/
-│       ├── unit/           # nix-unit: Nix expressions and configuration values
-│       ├── build/          # Build, runtime, and artifact checks
+│       ├── discover.nix    # Recursive unit/build discovery, no per-test registry
+│       ├── unit/           # *.nix: nix-unit expressions and configuration values
+│       ├── build/          # *.check.nix: named build, runtime, and artifact checks
 │       └── fixtures/       # Shared test inputs
 ├── chezmoi/                # User dotfiles (shell/git/terminal/VS Code/LLM)
 ├── scripts/                # All scripts
@@ -80,7 +82,7 @@ flake inputs だけを更新する場合は `nix flake update` を使います�
 
 `nix/defaults.nix` にホスト定義と Home Manager 設定、構成生成・登録を集約し、
 `flake.nix` は `perSystem` と `configurations` を公開します。CPU は `system` 引数で選択します。
-`systemDefaults` に共通設定と末尾の OS 別 system imports をまとめます。
+`systemDefaults` に共通設定と OS 別の基盤設定・enable option をまとめます。`nix/discover-modules.nix` が実 module の `default.nix` を自動検出し、通常は Home Manager、`nixos/` / `darwin/` / `system/` 配下はそれぞれ対応する OS の評価へ接続します。アプリごとの import パス登録・公開 catalog は作りません。
 `home-manager.sharedModules` に共通・OS 別ユーザー設定をまとめ、構成登録の `specialArgs.platform` で OS を選択します。
 Lix・GC・Home Manager 接続と共通ユーザー設定を一つの `systemDefaults` に宣言し、standalone も同じ `sharedModules` を再利用します。
 GC 日時は各 OS ブロック、standalone GC は `systemDefaults.home-manager.sharedModules`、公開構成は `configurations` に宣言します。
@@ -125,7 +127,7 @@ CLI と service を使います。runtime state は root Hermes home（既定値
 | 所有者        | 正本                                       | 責務                                                                              |
 | ------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
 | Hermes root   | `nix/modules/ai_agents/hermes/default.nix` | 公式 Home Manager module による導入、Desktop、gateway、root 設定、外部 LCM plugin |
-| 共通 MCP      | `nix/modules/ai_agents/mcp.nix`            | Codex と root Hermes が共有する `MCP_DOCKER` / `chrome` / `xapi` / `pipedream`    |
+| 共通 MCP      | `nix/modules/ai_agents/mcp/default.nix`    | Codex と root Hermes が共有する `MCP_DOCKER` / `chrome` / `xapi` / `pipedream`    |
 | MCP package   | `nix/modules/ai_agents/mcp-packages.nix`   | `mcp-servers` の Chrome 既製 package と、`xurl` の upstream source を使う         |
 | Named profile | 各 profile の Git source                   | `config.yaml` と個別 secret refs。公式 `hermes profile install` / `update` で反映 |
 | 運用コマンド  | `taskfiles/hermes/taskfile.yml`            | gateway 操作、公式 profile 更新、lifelog の Git 同期、X API 認証                  |
@@ -165,8 +167,8 @@ runtime. No inference provider or model download is configured here.
 ## パッケージ管理フロー
 
 ```text
-nix/modules/ ───── 共通・OS 別構成が imports で選択
-├── 各アプリ module ───── 有効化・package 選択・設定・連携・専用の実行依存
+nix/modules/**/default.nix ── scope ごとに自動検出
+├── 各アプリ module ───── enable に従う package 選択・設定・連携・専用の実行依存
 └── editors/nvim/ ─────── Neovim・LSP・整形ツール・toolchain・プラグイン
 
 nix/defaults.nix:systemDefaults ── 共通 OS / Home Manager 設定と有効化だけの標準宣言
@@ -178,7 +180,7 @@ windows/{npm,pnpm}/packages.json ── 独立した空 manifest
 ### ツール追加手順
 
 1. enable・単純な package list・単一代入は `nix/defaults.nix` の必要な構成へ直接書く。設定・package override・生成・連携を持つ場合はアプリ module にまとめる。設定・連携も管理するアプリは標準の `programs.<name>.enable`、設定をユーザーが管理するアプリや標準 module のないアプリは `home.packages` を使う。Neovim の LSP・整形ツール・toolchain・プラグイン実行依存は `editors/nvim/` に置く。
-2. アプリ module を追加した場合は共通・OS 別構成の明示的な imports に登録する。通常の GUI も Home Manager が管理し、OS 固有の設定・サービス・連携と Homebrew / nix-homebrew・cask は `nix/defaults.nix` の各 OS ブロックに定義する。
+2. 設定を持つ実 module はアプリ配下の `default.nix` とし、自動検出させる。OS module は `nixos/` / `darwin/` / `system/` 配下に置く。`nix/defaults.nix` には型付き enable option を指定し、個別の import パス登録・公開 catalog は追加しない。純粋な factory・renderer は通常の関数として維持する。Homebrew / nix-homebrew・cask と OS 基盤設定は `defaults.nix` の各 OS ブロックが担当する。
 3. Windows に追加する場合は `windows/winget/packages.json` の既存 schema に合わせ、package ID・導入・検証情報を直接記述する。
 4. 各 OS の通常インストーラーで反映する。具体的な入口と所有境界は [パッケージ管理](./nix/package-management.md) を参照する。
 

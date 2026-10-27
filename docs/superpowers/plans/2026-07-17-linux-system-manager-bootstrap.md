@@ -169,7 +169,7 @@ system = let requested = builtins.getEnv "DOTFILES_SYSTEM"; in
   if requested == "" then "x86_64-linux" else requested;
 mkConfig = inputs.system-manager.lib.makeSystemConfig {
   modules = [
-    inputs.home-manager.nixosModules.home-manager
+    inputs/default.nixosModules.home-manager
     { nixpkgs.hostPlatform = system; }
     ../system-manager/default.nix
     ../system-manager/docker.nix

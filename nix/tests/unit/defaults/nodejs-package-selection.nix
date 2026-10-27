@@ -1,10 +1,10 @@
-{ inputs }:
+{ fixtures }:
 {
   testNodejsIsNotInstalledAsAStandalonePackage = {
     expr = map (package: package.drvPath) (
       builtins.filter (package: (package.pname or null) == "nodejs")
-        ((import ../../fixtures/packages.nix { inherit inputs; }).mkHome "x86_64-linux" [
-          ((import ../../fixtures/packages.nix { inherit inputs; }).homeModule "common")
+        (fixtures.mkHome "x86_64-linux" [
+          (fixtures.homeModule "common")
           { programs.neovim.enable = true; }
         ]).config.home.packages
     );

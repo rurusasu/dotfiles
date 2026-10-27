@@ -1,10 +1,7 @@
-{
-  inputs,
-  homeConfigurations ? import ../../fixtures/home-configurations.nix { inherit inputs; },
-}:
+{ fixtures, homeConfigurations }:
 let
   inherit (homeConfigurations) homes lib;
-  fixtures = import ../../fixtures/packages.nix { inherit inputs; };
+
 in
 {
   testDisabledSshLeavesUserConfigurationUnmanaged = {

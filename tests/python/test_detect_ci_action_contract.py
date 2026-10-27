@@ -70,7 +70,9 @@ class DetectCiActionContractTests(unittest.TestCase):
             (("chezmoi/config.tmpl",), {"chezmoi", "windows"}),
             (("nix/modules/aerospace/default.nix",), {"nix", "darwin"}),
             (("nix/modules/1password/op-ssh-sign-wsl",), {"nix", "wsl"}),
-            (("nix/modules/editors/vscode.nix",), {"nix", "wsl"}),
+            (("nix/modules/editors/vscode/default.nix",), {"nix", "wsl"}),
+            (("nix/modules/fcitx5/default.nix",), {"nix", "wsl"}),
+            (("nix/modules/nvidia/nixos/default.nix",), {"nix", "wsl"}),
             (("nix/modules/1password/default.nix",), UNIX),
             (
                 ("nix/modules/fonts/wsl-fontconfig.conf",),

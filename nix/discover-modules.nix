@@ -1,23 +1,29 @@
-# Discover only module entrypoints for the requested evaluation scope.
-# Attribute names give deterministic order; symlinks and ordinary Nix helpers
-# are deliberately excluded.
-scope: directory:
+# A module is a default.nix entrypoint. Home Manager is the default scope;
+# generic nixos/darwin/system directories select the OS evaluation scope.
+scope: root:
 let
-  entries = builtins.readDir directory;
-  discover = import ./discover-modules.nix;
+  scopes = [
+    "home-manager"
+    "nixos"
+    "darwin"
+    "system"
+  ];
+  collect =
+    currentScope: directory:
+    let
+      entries = builtins.readDir directory;
+    in
+    builtins.concatMap (
+      name:
+      let
+        path = directory + "/${name}";
+      in
+      if entries.${name} == "directory" then
+        collect (if builtins.elem name scopes then name else currentScope) path
+      else if entries.${name} == "regular" && name == "default.nix" && currentScope == scope then
+        [ path ]
+      else
+        [ ]
+    ) (builtins.attrNames entries);
 in
-builtins.concatMap (
-  name:
-  let
-    path = directory + "/${name}";
-  in
-  if entries.${name} == "directory" then
-    discover scope path
-  else if
-    entries.${name} == "regular"
-    && (name == "${scope}.nix" || builtins.match ".*[.]${scope}[.]nix" name != null)
-  then
-    [ path ]
-  else
-    [ ]
-) (builtins.attrNames entries)
+collect "home-manager" root

@@ -3,8 +3,8 @@
 `ghostty/default.nix` と `wezterm/default.nix` は、package と設定を直接宣言する Home Manager module です。
 theme/size は各 `default.nix` の標準 `programs.*.settings` に定義します。Ghostty は共通キー配列も `programs.ghostty.settings.keybind` に集約し、WSL では Windows export の `ghostty.conf` を読み込みます。WezTerm のフォントは `programs.wezterm.settings.font`、追加の動作・キー設定は `wezterm/wezterm.lua` の `extraConfig` で管理します。
 
-- `nix/defaults.nix:systemDefaults.home-manager.sharedModules` が両方の `default.nix` を一度だけ読み込み、統合・standalone Home Manager で共有します。
-- Ghostty の Bash / zsh integration は Home Manager で有効化します。Unix の Bash 起動設定は `nix/modules/shells/bash/default.nix`、zsh の設定は `nix/modules/shells/zsh/default.nix` が管理します。両 module は `nix/defaults.nix:systemDefaults.home-manager.sharedModules` から読み込みます。OSC 7 は各 terminal の公式 shell integration が送信します。
+- `nix/discover-modules.nix` が両方の `default.nix` を自動検出し、統合・standalone Home Manager で同じ module を使います。`nix/defaults.nix` の `programs.ghostty.enable` / `programs.wezterm.enable` で有効化し、個別の import パスや公開一覧は登録しません。
+- Ghostty の Bash / zsh integration は Home Manager で有効化します。Unix の Bash 起動設定は `nix/modules/shells/bash/default.nix`、zsh の設定は `nix/modules/shells/zsh/default.nix` が管理します。両 module も自動検出し、標準の `programs.bash.enable` / `programs.zsh.enable` に従います。OSC 7 は各 terminal の公式 shell integration が送信します。
 - Ghostty の `default.nix` が Linux の systemd / D-Bus 連携を有効化し、macOS の package に `pkgs.ghostty-bin` を指定します。Linux は Home Manager の既定 package を使います。
 - Darwin の WezTerm は `programs.wezterm.package.terminfo` の store path を Lua に渡し、起動する shell の `TERMINFO_DIRS` に設定します。
 - WSL の Ghostty GUI は WSLg が必要です。

@@ -1,28 +1,17 @@
-{ inputs }:
+{
+  inputs,
+  fixtures,
+  code,
+}:
 let
-  fixtures = import ../../../fixtures/packages.nix { inherit inputs; };
   fontContract =
     {
       system,
       modules,
     }:
     let
-      pkgs = (import ../../../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
-      home = inputs.home-manager.lib.homeManagerConfiguration {
-        inherit pkgs;
-        extraSpecialArgs = {
-          inherit inputs;
-        };
-        modules = modules ++ [
-          {
-            home = {
-              username = "test-user";
-              homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
-              stateVersion = "25.05";
-            };
-          }
-        ];
-      };
+      home = fixtures.mkHome system modules;
+      inherit (home) pkgs;
     in
     {
       expr = {
@@ -97,7 +86,7 @@ in
             platform = "linux";
           };
           modules = [
-            (import ../../../../defaults.nix inputs).systemDefaults
+            (code.nix.defaults inputs).systemDefaults
           ];
         };
       in
@@ -123,15 +112,15 @@ in
 
   testLinuxInstallsManagedFont = fontContract {
     system = "x86_64-linux";
-    modules = [ ((import ../../../fixtures/packages.nix { inherit inputs; }).homeModule "linux") ];
+    modules = [ (fixtures.homeModule "linux") ];
   };
   testWSLInstallsManagedFont = fontContract {
     system = "x86_64-linux";
-    modules = [ ((import ../../../fixtures/packages.nix { inherit inputs; }).homeModule "wsl") ];
+    modules = [ (fixtures.homeModule "wsl") ];
   };
   testStandaloneDarwinHomeProfileInstallsManagedFont = fontContract {
     system = "aarch64-darwin";
-    modules = [ ((import ../../../fixtures/packages.nix { inherit inputs; }).homeModule "darwin") ];
+    modules = [ (fixtures.homeModule "darwin") ];
   };
 
 }

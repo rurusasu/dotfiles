@@ -1,7 +1,7 @@
-{ inputs }:
+{ fixtures }:
 {
   testNoPnpmPackagesAreDeclared = {
-    expr = (import ../../fixtures/packages.nix { inherit inputs; }).pnpmManifest.globalPackages;
+    expr = fixtures.pnpmManifest.globalPackages;
     expected = [ ];
   };
 }

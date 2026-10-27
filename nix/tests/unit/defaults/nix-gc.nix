@@ -1,7 +1,11 @@
-{ inputs, ... }:
+{
+  inputs,
+  code,
+  upstream,
+}:
 let
   lib = inputs.nixpkgs.lib;
-  registered = (import ../../../defaults.nix inputs).configurations;
+  registered = (code.nix.defaults inputs).configurations;
   homes = map (system: registered.homeConfigurations.${system}) [
     "x86_64-linux"
     "aarch64-linux"
@@ -14,7 +18,7 @@ let
       inherit inputs;
       platform = "linux";
     };
-    modules = [ (import ../../../defaults.nix inputs).systemDefaults ];
+    modules = [ (code.nix.defaults inputs).systemDefaults ];
   };
   darwin = registered.darwinConfigurations.macos;
   darwinHome = darwin.config.home-manager.users.${darwin.config.system.primaryUser};
@@ -98,9 +102,9 @@ in
           if home.pkgs.stdenv.hostPlatform.isDarwin then
             {
               enable = true;
-              schedule =
-                (import "${inputs.home-manager}/modules/lib/darwin.nix" { inherit lib; }).mkCalendarInterval
-                  (builtins.head cfg.dates);
+              schedule = (upstream.home-manager.code.modules.lib.darwin { inherit lib; }).mkCalendarInterval (
+                builtins.head cfg.dates
+              );
               command = [
                 "${nixPackage}/bin/nix-collect-garbage"
                 cfg.options

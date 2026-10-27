@@ -1,12 +1,9 @@
-{
-  inputs,
-  homeConfigurations ? import ../../../fixtures/home-configurations.nix { inherit inputs; },
-}:
+{ fixtures, homeConfigurations }:
 let
   inherit (homeConfigurations)
     wsl
     ;
-  fixtures = import ../../../fixtures/packages.nix { inherit inputs; };
+
 in
 {
   testDisabledOnePasswordDoesNotInstallOrConfigureAgent = {

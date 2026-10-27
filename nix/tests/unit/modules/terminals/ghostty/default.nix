@@ -1,7 +1,10 @@
-{ inputs }:
+{
+  fixtures,
+  code,
+  files,
+}:
 let
-  fixtures = import ../../../../fixtures/packages.nix { inherit inputs; };
-  appearance = import ../../../../../modules/terminals/appearance.nix;
+  appearance = code.nix.modules.terminals.appearance;
   ghosttyBase = {
     theme = [ appearance.theme ];
     font-family = [ appearance.font_family ];
@@ -42,16 +45,18 @@ in
             home.config.programs.ghostty.settings == (
               ghosttyBase
               // {
-                keybind = import ../../../../../modules/terminals/ghostty/ghostty-renderer.nix {
+                keybind = code.nix.modules.terminals.ghostty.ghostty-renderer {
                   inherit (pkgs) lib;
-                  bindings = (import ../../../../../home/keybindings/bindings.nix { inherit (pkgs) lib; }).ghostty;
+                  bindings = (code.nix.home.keybindings.bindings { inherit (pkgs) lib; }).ghostty;
                   asList = true;
                 };
               }
             );
         weztermConfig =
           home.config.programs.wezterm.enable
-          && pkgs.lib.hasSuffix (builtins.readFile ../../../../../modules/terminals/wezterm/wezterm.lua) home.config.programs.wezterm.extraConfig
+          && pkgs.lib.hasSuffix (builtins.readFile
+            files.nix.modules.terminals.wezterm."wezterm.lua"
+          ) home.config.programs.wezterm.extraConfig
           && home.config.programs.wezterm.settings.font_size == appearance.font_size
           && home.config.programs.wezterm.settings.color_scheme == appearance.theme;
         zshIntegration =

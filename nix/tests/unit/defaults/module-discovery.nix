@@ -1,6 +1,7 @@
+{ code, files }:
 let
-  discover = import ../../../discover-modules.nix;
-  root = ../../fixtures/module-discovery;
+  discover = code.nix.discover-modules;
+  root = files.nix.tests.fixtures.module-discovery.__path;
   relativePaths =
     scope:
     map (path: builtins.substring (builtins.stringLength (toString root) + 1) 1000 (toString path)) (
@@ -11,8 +12,8 @@ in
   testHomeModulesAreDiscoveredRecursivelyWithoutImportingFactories = {
     expr = relativePaths "home-manager";
     expected = [
-      "app/home-manager.nix"
-      "app/nested/integration.home-manager.nix"
+      "app/default.nix"
+      "app/nested/integration/default.nix"
     ];
   };
   testModuleDiscoverySeparatesEvaluationScopes = {
@@ -21,7 +22,7 @@ in
       darwin = relativePaths "darwin";
     };
     expected = {
-      nixos = [ "app/nixos.nix" ];
+      nixos = [ "app/nixos/default.nix" ];
       darwin = [ ];
     };
   };

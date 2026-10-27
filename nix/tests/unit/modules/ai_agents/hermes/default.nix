@@ -1,7 +1,13 @@
-{ inputs }:
+{
+  inputs,
+  fixtures,
+  code,
+  files,
+  upstream,
+}:
 let
-  repositoryLock = builtins.fromJSON (builtins.readFile ../../../../../../flake.lock);
-  upstreamLock = builtins.fromJSON (builtins.readFile "${inputs.hermes-agent}/flake.lock");
+  repositoryLock = builtins.fromJSON (builtins.readFile files."flake.lock");
+  upstreamLock = builtins.fromJSON (builtins.readFile upstream.hermes-agent.files."flake.lock");
   hermesNode =
     repositoryLock.nodes.${repositoryLock.nodes.${repositoryLock.root}.inputs.hermes-agent};
   upstreamInputs = upstreamLock.nodes.${upstreamLock.root}.inputs;
@@ -12,7 +18,7 @@ let
       homeDirectory,
     }:
     let
-      pkgs = (import ../../../../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
+      pkgs = fixtures.mkPkgs system;
       testPackage =
         pkgs.runCommand "hermes-agent-test-package"
           {
@@ -25,35 +31,25 @@ let
             touch "$out/bin/hermes"
           '';
     in
-    (inputs.home-manager.lib.homeManagerConfiguration {
-      inherit pkgs;
-      extraSpecialArgs = {
-        inherit inputs;
-      };
-      modules = [
-        {
-          home = {
-            username = "test-user";
-            inherit homeDirectory;
-            stateVersion = "25.05";
-          };
-          # The upstream module closes over inputs.self for its package
-          # default. Pin its supported package option here so evaluation uses
-          # this local derivation without forcing the upstream Python package.
-          programs.hermes-agent = {
-            enable = true;
-            desktop.enable = true;
-          };
-          services.hermes-agent = {
-            enable = true;
-            gateway.enable = true;
-            package = testPackage;
-          };
-          programs.mcp.enable = true;
-        }
-        ((import ../../../../fixtures/packages.nix { inherit inputs; }).homeModule "common")
-      ];
-    })
+    (fixtures.mkHome system [
+      {
+        home.homeDirectory = homeDirectory;
+        # The upstream module closes over inputs.self for its package
+        # default. Pin its supported package option here so evaluation uses
+        # this local derivation without forcing the upstream Python package.
+        programs.hermes-agent = {
+          enable = true;
+          desktop.enable = true;
+        };
+        services.hermes-agent = {
+          enable = true;
+          gateway.enable = true;
+          package = testPackage;
+        };
+        programs.mcp.enable = true;
+      }
+      (fixtures.homeModule "common")
+    ])
     // {
       inherit testPackage;
     };
@@ -71,19 +67,19 @@ let
   versionPackage =
     kind:
     let
-      factory = ../../../../../modules/ai_agents/hermes/package.nix;
+      factory = code.nix.modules.ai_agents.hermes.package;
       upstream = inputs.hermes-agent.packages.x86_64-linux.default;
       package = if kind != "legacy" then upstream.overrideAttrs { version = "0.0.0"; } else upstream;
       source = inputs.hermes-agent // {
-        outPath = ../../../../fixtures/hermes-version + "/${kind}";
+        outPath = files.nix.tests.fixtures.hermes-version.${kind}.__path;
         rev = "0123456789abcdef0123456789abcdef01234567";
         lastModifiedDate = "20261026122553";
       };
     in
-    if builtins.pathExists factory then
-      import factory {
+    if files.nix.modules.ai_agents.hermes ? package then
+      factory {
         inherit package source;
-        pkgs = (import ../../../../fixtures/packages.nix { inherit inputs; }).mkPkgs "x86_64-linux";
+        pkgs = fixtures.mkPkgs "x86_64-linux";
       }
     else
       package;

@@ -1,0 +1,42 @@
+{
+  inputs,
+  pkgs,
+  config,
+  code,
+}:
+{
+  custom-package-builds = (
+    let
+      chatgptDesktopCheck = config.checks.chatgpt-desktop or null;
+    in
+    let
+      buildPkgs = import pkgs.path {
+        system = pkgs.stdenv.hostPlatform.system;
+        config.allowUnfree = true;
+      };
+    in
+    buildPkgs.linkFarm "custom-package-builds" (
+      [
+        {
+          name = "orca-editor";
+          path = inputs.llm-agents.packages.${buildPkgs.stdenv.hostPlatform.system}.orca;
+        }
+      ]
+      ++ buildPkgs.lib.optionals (chatgptDesktopCheck != null) [
+        {
+          name = "chatgpt-desktop";
+          path = chatgptDesktopCheck;
+        }
+      ]
+      ++ buildPkgs.lib.optionals buildPkgs.stdenv.hostPlatform.isDarwin [
+        {
+          name = "dia-browser";
+          path = code.nix.modules.browsers.dia.package {
+            inherit inputs;
+            pkgs = buildPkgs;
+          };
+        }
+      ]
+    )
+  );
+}

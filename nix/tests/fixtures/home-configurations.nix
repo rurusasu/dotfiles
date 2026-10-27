@@ -15,13 +15,10 @@ let
       module,
       specialArgs ? { },
     }:
-    inputs.home-manager.lib.homeManagerConfiguration {
-      pkgs = mkPkgs system;
-      extraSpecialArgs = {
-        inherit inputs;
-      }
-      // specialArgs;
-      modules = (import ../../discover-modules.nix "home-manager" ../../modules) ++ [
+    fixtures.mkHomeWith {
+      inherit system;
+      extraSpecialArgs = specialArgs;
+      modules = [
         (_: { home = testHome; })
         module
       ];

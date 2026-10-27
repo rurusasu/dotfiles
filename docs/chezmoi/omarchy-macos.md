@@ -7,7 +7,7 @@
 ユーザー設定を担当する。同ディレクトリの生成結果を通常の Nix import で受け取り、
 Home Manager の `programs.aerospace` へ渡す。Home Manager が設定ファイルを
 Nix store に生成し、launchd のユーザーエージェントで起動する。`nix/defaults.nix:systemDefaults` が
-`platform = "darwin"` でこの module と nix-darwin の OS 設定を選択する。
+module は自動検出し、`platform = "darwin"` の構成で `programs.aerospace.enable` などの型付き option と nix-darwin の OS 設定を選択する。
 
 Unix のパッケージ導入・アプリ設定は `nix/modules/` にまとめ、host は必要な module を
 import する。Windows の導入は `windows/winget/packages.json` を直接管理する。
@@ -97,5 +97,5 @@ launchctl print gui/$(id -u)/org.nix-community.home.aerospace
 キー一覧・設定検査の成功だけでは macOS によるキー横取りや Accessibility 許可を検証できない。
 回復時は ⌘Ctrl Option Escape、または `aerospace mode passthrough` を使う。
 完全に無効化する場合は `programs.aerospace.enable = lib.mkForce false` を Home Manager に宣言して再反映する。
-無効化中は標準ショートカットの無効化処理と AeroSpace 用の Dock 設定（`mru-spaces` / `expose-group-apps`）を生成しない。`nix/modules/dock.nix` の共通 Dock 設定は引き続き適用する。
+無効化中は標準ショートカットの無効化処理と AeroSpace 用の Dock 設定（`mru-spaces` / `expose-group-apps`）を生成しない。`nix/modules/dock/default.nix` の共通 Dock 設定は引き続き適用する。
 無効化した macOS システムショートカットはシステム設定から必要に応じて再度有効にする。

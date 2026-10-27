@@ -1,11 +1,12 @@
 {
   inputs,
-  homeConfigurations ? import ../../fixtures/home-configurations.nix { inherit inputs; },
+  homeConfigurations,
+  code,
 }:
 let
   sharedHome =
     builtins.head
-      ((import ../../../defaults.nix { }).systemDefaults {
+      ((code.nix.defaults { }).systemDefaults {
         inputs = { };
         pkgs = { };
         platform = "linux";

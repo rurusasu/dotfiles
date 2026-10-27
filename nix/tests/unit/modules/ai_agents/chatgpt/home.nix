@@ -1,7 +1,4 @@
-{
-  inputs,
-  homeConfigurations ? import ../../../../fixtures/home-configurations.nix { inherit inputs; },
-}:
+{ homeConfigurations, upstream }:
 let
   inherit (homeConfigurations) homes lib;
 in
@@ -57,7 +54,7 @@ in
                     mcp_servers =
                       (lib.mapAttrs (
                         _: server:
-                        (import "${inputs.home-manager}/modules/lib/mcp.nix" { inherit lib; }).transformMcpServer {
+                        (upstream.home-manager.code.modules.lib.mcp { inherit lib; }).transformMcpServer {
                           inherit server;
                           exclude = [
                             "headers"

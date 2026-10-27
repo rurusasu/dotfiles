@@ -13,4 +13,4 @@
 共有宣言を先に置き、OS 別宣言、公開構成の順に記載します。CPU は `system` 引数で選択します。
 native 構成は `/etc/nixos/hardware-configuration.nix` がある場合だけ公開します。
 アプリ固有の設定・サービス・activation・キー設定生成関数は `../modules/` に置きます。
-`../defaults.nix` は OS 基盤設定と module 選択、`../home/keybindings/` は共通配列と Windows export を所有します。
+`../defaults.nix` は OS 基盤設定と型付き option による有効化、`../home/keybindings/` は共通配列と Windows export を所有します。

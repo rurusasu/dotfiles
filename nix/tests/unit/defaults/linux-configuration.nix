@@ -1,4 +1,4 @@
-{ inputs }:
+{ inputs, code }:
 let
   inherit
     (inputs.nixpkgs.lib.nixosSystem {
@@ -7,7 +7,7 @@ let
         inherit inputs;
         platform = "linux";
       };
-      modules = [ (import ../../../defaults.nix inputs).systemDefaults ];
+      modules = [ (code.nix.defaults inputs).systemDefaults ];
     })
     config
     pkgs

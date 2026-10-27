@@ -1,7 +1,7 @@
-{ inputs }:
+{ fixtures }:
 let
-  home = (import ../../../../fixtures/packages.nix { inherit inputs; }).mkHome "x86_64-linux" [
-    ((import ../../../../fixtures/packages.nix { inherit inputs; }).homeModule "wsl")
+  home = fixtures.mkHome "x86_64-linux" [
+    (fixtures.homeModule "wsl")
   ];
 in
 {

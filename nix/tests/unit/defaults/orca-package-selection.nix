@@ -1,7 +1,6 @@
-{ inputs }:
+{ inputs, fixtures }:
 let
-  pkgs = (import ../../fixtures/packages.nix { inherit inputs; }).mkPkgs "aarch64-darwin";
-  fixtures = import ../../fixtures/packages.nix { inherit inputs; };
+  pkgs = fixtures.mkPkgs "aarch64-darwin";
   windows = fixtures.windowsPackages;
   home = fixtures.mkHome "aarch64-darwin" [
     (fixtures.homeModule "common")

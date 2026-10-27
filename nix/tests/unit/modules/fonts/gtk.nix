@@ -1,7 +1,4 @@
-{
-  inputs,
-  homeConfigurations ? import ../../../fixtures/home-configurations.nix { inherit inputs; },
-}:
+{ homeConfigurations }:
 let
   fontName = home: "${home.config.gtk.font.name} ${toString home.config.gtk.font.size}";
   desktopHomes = [

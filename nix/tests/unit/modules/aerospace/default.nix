@@ -1,6 +1,6 @@
-{ inputs }:
+{ fixtures }:
 let
-  home = (import ../../../fixtures/packages.nix { inherit inputs; }).mkHome "aarch64-darwin" [
+  home = fixtures.mkHome "aarch64-darwin" [
     { programs.aerospace.enable = true; }
   ];
   inherit (home) config pkgs;
@@ -143,9 +143,7 @@ in
       map
         (
           system:
-          let
-            fixtures = import ../../../fixtures/packages.nix { inherit inputs; };
-          in
+
           {
             linuxPackage =
               builtins.any (package: (package.pname or "") == "aerospace")
@@ -153,8 +151,7 @@ in
                   (fixtures.homeModule "linux")
                 ]).config.home.packages;
             windowsPackage = fixtures.windowsPackages ? "aerospace";
-          }
-        )
+          })
         [
           "aarch64-linux"
           "x86_64-linux"

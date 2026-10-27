@@ -1,6 +1,10 @@
-{ inputs }:
+{
+  inputs,
+  fixtures,
+  code,
+}:
 let
-  pkgs = (import ../../../fixtures/packages.nix { inherit inputs; }).mkPkgs "x86_64-linux";
+  pkgs = fixtures.mkPkgs "x86_64-linux";
   home =
     (inputs.nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
@@ -9,7 +13,7 @@ let
         platform = "linux";
       };
       modules = [
-        (import ../../../../defaults.nix inputs).systemDefaults
+        (code.nix.defaults inputs).systemDefaults
         {
           nixpkgs.pkgs = pkgs;
           users.users.nixos.home = "/srv/nixos";

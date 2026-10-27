@@ -1,6 +1,10 @@
-{ inputs }:
+{
+  inputs,
+  code,
+  files,
+}:
 let
-  lock = builtins.fromJSON (builtins.readFile ../../../../flake.lock);
+  lock = builtins.fromJSON (builtins.readFile files."flake.lock");
   rootInputs = lock.nodes.${lock.root}.inputs;
 
   mkApps =
@@ -8,7 +12,7 @@ let
       system,
       isDarwin,
     }:
-    (import ../../../defaults.nix {
+    (code.nix.defaults {
       nix-darwin.packages.${system}.darwin-rebuild.executable = "darwin-rebuild";
       home-manager.packages.${system}.home-manager.executable = "home-manager";
     }).perSystem
@@ -45,16 +49,16 @@ in
 
   testFlakeHasNoIntermediateLibOrFlakesDirectories = {
     expr = {
-      oldLib = builtins.pathExists ../../../lib;
-      oldFlakes = builtins.pathExists ../../../flakes;
-      consolidatedDefaults = builtins.pathExists ../../../defaults.nix;
-      splitHostDefinitions = builtins.pathExists ../../../hosts/default.nix;
-      splitRegistrations = builtins.pathExists ../../../hosts/configurations.nix;
-      splitHomeDefinitions = builtins.pathExists ../../../home/common.nix;
-      registryPresent = builtins.pathExists ../../default.nix;
-      splitPackageOutputs = builtins.pathExists ../../../outputs.nix;
-      treefmtConfig = builtins.pathExists ../../../treefmt.nix;
-      legacyFormatter = builtins.pathExists ../../../formatter.nix;
+      oldLib = (files.nix ? lib);
+      oldFlakes = (files.nix ? flakes);
+      consolidatedDefaults = (files.nix ? defaults);
+      splitHostDefinitions = (files.nix.hosts ? default);
+      splitRegistrations = (files.nix.hosts ? configurations);
+      splitHomeDefinitions = (files.nix.home ? common);
+      registryPresent = (files.nix.tests ? default);
+      splitPackageOutputs = (files.nix ? outputs);
+      treefmtConfig = (files.nix ? treefmt);
+      legacyFormatter = (files.nix ? formatter);
     };
     expected = {
       oldLib = false;

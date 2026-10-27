@@ -6,7 +6,7 @@ Unix のアプリ本体は、共通の `nixpkgs` から取得することを原�
 
 設定・package override・生成・連携を持つアプリは、導入と専用の実行依存も同じ module にまとめます。enable・単純な package list・単一代入だけなら module を作らず、`nix/defaults.nix` の必要な構成へ直接書きます。Home Manager 標準の package 既定値を優先します。
 
-共通・OS 別構成はアプリ module の外で組み立てます。新しい Home Manager module は `nix/modules/` 配下の `home-manager.nix` を再帰的に自動検出し、構成側には `programs.<name>.enable` などの option を書きます。アプリごとのパス登録や公開一覧の更新は不要です。統合・standalone Home Manager は同じ `home-manager.sharedModules` を使います。既存の明示的な imports と OS module の配線も同じ `nix/defaults.nix:systemDefaults` が管理します。
+共通・OS 別構成はアプリ module の外で組み立てます。すべての実 module は `nix/modules/` 配下の `default.nix` を入口とし、`nix/discover-modules.nix` が再帰的に自動検出します。通常のディレクトリは Home Manager、`nixos/` / `darwin/` / `system/` 配下は NixOS / nix-darwin / 両 OS 共通の scope です。構成側には `programs.<name>.enable` などの型付き option だけを書き、アプリごとの import パス登録や公開一覧は作りません。統合・standalone Home Manager は同じ `home-manager.sharedModules` と自動検出入口を使います。
 
 Hermes は同梱 Python を使い、プロジェクト依存は `uv` で管理します。`nix/defaults.nix` が uv を導入し、Python interpreter は直接 `home.packages` に追加しません。X API 同期の公開コマンドは `uv run --no-project --managed-python` を使い、Python の選択は共通の [.python-version](../../.python-version) に従います。Nix 内部専用の Python 依存は各 module が管理します。
 
@@ -16,10 +16,9 @@ Windows の導入情報は `windows/winget/packages.json` を直接管理しま�
 
 明示的な CLI 例外として、Windows PowerShell 用の Superfile (`spf`) も WinGet で導入します。
 WSL の Superfile は Home Manager が導入・設定を管理します。
-OpenCode (`opencode`)、Pi coding agent (`pi`)、TUIOS (`tuios`) は
-`nix/defaults.nix` の Home Manager package 宣言から WSL / Darwin にのみ導入します。
+OpenCode (`opencode`) と TUIOS (`tuios`) は `nix/defaults.nix` の Home Manager package 宣言から WSL / Darwin に導入します。Pi coding agent (`pi`) は同じ platform で `programs.pi-coding-agent.enable = true` を指定し、自動検出される Pi module が設定を管理します。
 
-フォントパッケージと fontconfig 設定は `nix/modules/fonts.nix` の `fonts.packages` / `fonts.fontconfig` に一度だけ定義します。`nix/defaults.nix:systemDefaults` が OS 固有の option と配線を管理します。WSLg へのフォント配布も同ファイルの WSL 設定が担当します。NixOS は共通 module を import し、NixOS 専用の `fonts.fontDir.enable` を設定します。Darwin は `fonts.packages` を nix-darwin に渡します。各 OS の Home Manager は `nix/defaults.nix:systemDefaults.home-manager.sharedModules` を通じて `nix/modules/fonts/default.nix` を読み込み、共通の `fonts.fontconfig` を設定します。standalone Home Manager のフォント配布も同 module が担当します。
+フォントパッケージと fontconfig 設定の値は `nix/modules/fonts/settings.nix` の通常の関数に一度だけ定義します。`fonts/default.nix`、`fonts/nixos/default.nix`、`fonts/darwin/default.nix` を対応する scope で自動検出し、`nix/defaults.nix:systemDefaults` の `dotfiles.fonts.enable` で有効化します。NixOS / nix-darwin 統合時は各 OS がフォントを導入し、standalone Home Manager の配布と共通 fontconfig・Linux GTK 設定は Home Manager module が管理します。WSLg への配布と dconf service の登録は `defaults.nix` の WSL 設定が担当します。
 
 WSL の Noto CJK の追加導入・フォールバック指定は行いません。WSLg の配布フォントも UDEV Gothic NF と絵文字に揃えます。
 
@@ -46,7 +45,7 @@ Ollama は共通 Home Manager の `services.ollama.enable` で標準 package と
 
 Strata は Linux x86_64 / WSLg に `strata`（CLI）と `strata-desktop`（GUI）を導入します。[公式 release](https://github.com/Niko1221/Strata/releases) の版付き feed (`v0.2.6/strata-feed.json`) を input として固定し、Desktop と Control は同じ release の asset から取得します。新しい安定版へ更新するときは `flake.nix` の feed URL を変更し、`nix flake update strata-release` と package build を実行します。`nrs` は固定された版を導入します。Desktop の製品版と Control の内部 build 番号は異なります。Nix が管理する実行ファイルからユーザーディレクトリの別版 Control への自動引き継ぎは無効にします。モデルと推論エンジンは初回設定時に選び、ユーザーのデータディレクトリに取得します。macOS / ARM 用の独自 package は追加しません。
 
-Neovim / Hermes の追加プラグインと formatter の入力は、アプリ本体とは別の依存です。標準 module の有効化では、こうした source input やローカル設定 module の import は置き換わりません。
+Neovim / Hermes の追加プラグインと formatter の入力は、アプリ本体とは別の依存です。source input は引き続き `flake.lock` で固定し、設定を持つ実 module は `default.nix` として自動検出します。
 
 ## 分割の理由と編集先
 
@@ -54,26 +53,26 @@ Neovim / Hermes の追加プラグインと formatter の入力は、アプリ�
 
 このリポジトリでは、設定・package override・生成・連携の責務をアプリ・機能単位でまとめます。単純な有効化・package list・単一代入は `nix/defaults.nix` に直接書きます。以下のパスはリポジトリの配置方針であり、公式資料が必須のディレクトリ構成を定めているわけではありません。
 
-| 編集先                                               | 責務                                                                           |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `nix/modules/<app>/` / `<app>.nix`                   | アプリの有効化・package 選択・設定・連携・専用の実行依存                       |
-| `nix/modules/editors/nvim/runtime.nix`               | Neovim の補助 CLI・LSP・整形ツール・toolchain・プラグイン実行依存              |
-| `nix/modules/ai_agents/hermes/default.nix`           | 公式 Hermes Home Manager の root・Desktop・gateway 設定、外部 LCM plugin       |
-| `nix/modules/ai_agents/mcp.nix`                      | Codex / root Hermes が使う共通 `programs.mcp.servers` 定義                     |
-| `nix/modules/browsers/dia/`                          | `inputs.dia` を使う package 定義と Home Manager への導入                       |
-| `nix/modules/shells/powershell/psscriptanalyzer.nix` | formatter が使用する PSScriptAnalyzer の package 定義                          |
-| `nix/defaults.nix`                                   | OS 基盤設定、module 選択、単純な有効化・package 宣言、アカウント、GC、公開出力 |
-| `nix/home/`                                          | 共通キー配置と Windows export                                                  |
-| `nix/home/keybindings/`                              | 共通キー配置と Windows export                                                  |
-| `windows/winget/packages.json`                       | Windows GUI の package ID、導入・検証情報                                      |
-| `windows/{npm,pnpm}/packages.json`                   | 独立した Node package manifest。現在は空                                       |
+| 編集先                                               | 責務                                                                                          |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `nix/modules/<app>/default.nix`                      | アプリの有効化・package 選択・設定・連携・専用の実行依存                                      |
+| `nix/modules/editors/nvim/runtime/default.nix`       | Neovim の補助 CLI・LSP・整形ツール・toolchain・プラグイン実行依存                             |
+| `nix/modules/ai_agents/hermes/default.nix`           | 公式 Hermes Home Manager の root・Desktop・gateway 設定、外部 LCM plugin                      |
+| `nix/modules/ai_agents/mcp/default.nix`              | Codex / root Hermes が使う共通 `programs.mcp.servers` 定義                                    |
+| `nix/modules/browsers/dia/`                          | `inputs.dia` を使う package 定義と Home Manager への導入                                      |
+| `nix/modules/shells/powershell/psscriptanalyzer.nix` | formatter が使用する PSScriptAnalyzer の package 定義                                         |
+| `nix/defaults.nix`                                   | OS 基盤設定、型付き option による有効化、単純な有効化・package 宣言、アカウント、GC、公開出力 |
+| `nix/home/`                                          | 共通キー配置と Windows export                                                                 |
+| `nix/home/keybindings/`                              | 共通キー配置と Windows export                                                                 |
+| `windows/winget/packages.json`                       | Windows GUI の package ID、導入・検証情報                                                     |
+| `windows/{npm,pnpm}/packages.json`                   | 独立した Node package manifest。現在は空                                                      |
 
 Hermes の root・Desktop・gateway は公式 Home Manager module、named profile は Git 正本と公式 CLI で管理します。
 外部 LCM は `extraPlugins` に追加します。操作は [Hermes](../hermes-agent/bootstrap.md) を参照してください。
 
-OS 基盤設定、module 選択、公開構成は `nix/defaults.nix`、アプリの導入・設定・サービス・activation は `nix/modules/` に置きます。共通 OS / Home Manager 設定は一つの `systemDefaults`、OS 別の Home Manager module 選択も同じ `sharedModules` に宣言し、末尾の構成登録で `specialArgs.platform` と CPU の `system` を指定します。`configurations` が公開構成、`systemDefaults` が共通の Lix・OS GC・Home Manager 接続を宣言します。GC 日時は各 OS ブロック、standalone GC は `systemDefaults.home-manager.sharedModules` に置きます。
+OS 基盤設定、型付き option による有効化、公開構成は `nix/defaults.nix`、アプリの導入・設定・サービス・activation は `nix/modules/` に置きます。共通 OS / Home Manager 設定は一つの `systemDefaults`、OS 別の Home Manager enable option も同じ `sharedModules` に宣言し、末尾の構成登録で `specialArgs.platform` と CPU の `system` を指定します。`configurations` が公開構成、`systemDefaults` が共通の Lix・OS GC・Home Manager 接続を宣言します。GC 日時は各 OS ブロック、standalone GC は `systemDefaults.home-manager.sharedModules` に置きます。
 
-統合・standalone Home Manager は同じ `systemDefaults.home-manager.sharedModules` を使います。CPU 別の wrapper は設けません。GUI も各 OS の構成が対応するアプリ module を選択します。Darwin のブラウザーは Dia、Linux / WSLg は Chrome を使います。WSL は Chrome / Spotify / Signal / Obsidian / 1Password GUI を Nix で導入し、デスクトップキーから WSLg で開きます。Windows の 1Password CLI / Git signer 連携は維持します。
+統合・standalone Home Manager は同じ `systemDefaults.home-manager.sharedModules` を使います。CPU 別の wrapper は設けません。GUI も各 OS の構成が対応するアプリの enable option を選択します。Darwin のブラウザーは Dia、Linux / WSLg は Chrome を使います。WSL は Chrome / Spotify / Signal / Obsidian / 1Password GUI を Nix で導入し、デスクトップキーから WSLg で開きます。Windows の 1Password CLI / Git signer 連携は維持します。
 
 Homebrew / nix-homebrew・Docker Desktop / Steam の cask・ユーザー PATH は `nix/defaults.nix` に宣言します。native NixOS の Hyprland は Linux ブロックが有効化し、単純な GUI package は `defaults.nix` の Home Manager 設定が導入します。WSL / standalone へ compositor を自動導入しません。Discord も Darwin / native Linux の既存 Home Manager module から導入し、WSL では Windows のアプリを利用します。
 
@@ -81,14 +80,16 @@ Homebrew / nix-homebrew・Docker Desktop / Steam の cask・ユーザー PATH �
 
 ## パッケージの追加
 
-enable・package list・単一代入だけなら `nix/defaults.nix` の必要な構成へ直接書きます。設定・連携・package override・生成処理を持つ場合は `nix/modules/<app>.nix` または `<app>/` にまとめます。GitHub CLI の設定ファイルは引き続きユーザーが管理します。
+enable・package list・単一代入だけなら `nix/defaults.nix` の必要な構成へ直接書きます。設定・連携・package override・生成処理を持つ場合は `nix/modules/<app>/default.nix` にまとめます。GitHub CLI の設定ファイルは引き続きユーザーが管理します。
 
 ```nix
 # nix/defaults.nix の Home Manager 設定
 home.packages = [ pkgs.gh ];
 ```
 
-新しい Home Manager のアプリ module は `nix/modules/<app>/home-manager.nix` として置き、設定を `lib.mkIf config.programs.<name>.enable` などで条件付けます。`defaults.nix` の共通・OS 別設定では標準の `programs.<name>.enable` などで選択します。自動検出は通常ファイルの `home-manager.nix` だけを対象とし、package factory や OS module など、他の Nix ファイルは読み込みません。Pi はこの方式で macOS / WSL に有効化します。通常の GUI も Home Manager に導入し、OS 固有の設定・サービス・連携と Homebrew・cask は `nix/defaults.nix` に定義します。Windows の導入は `windows/winget/packages.json` に記述します。
+Home Manager のアプリ module は `nix/modules/<app>/default.nix` として置き、設定を `lib.mkIf config.programs.<name>.enable` などで条件付けます。構成側の `defaults.nix` には標準 `programs.<name>.enable` などの型付き option を書きます。この二点だけで読み込みと有効化を追加でき、import パスや公開 catalog の追記は不要です。標準 option がないアプリ・機能だけ独自の型付き option を定義し、同じ機能の enable alias は増やしません。
+
+アプリ固有の OS module は `<app>/nixos/default.nix`、`<app>/darwin/default.nix`、両 OS 共通なら `<app>/system/default.nix` に置きます。scanner は通常ファイルの `default.nix` だけを対応する scope へ読み込み、`package.nix`・`settings.nix`・renderer などの通常の関数は読み込みません。Pi を含むすべての実 module が同じ規則を使います。Windows の導入は独立した `windows/winget/packages.json` に記述します。
 
 ## OS ごとの反映
 
@@ -146,7 +147,7 @@ Homebrew の `zap` や設定ファイルの配置で停止した場合の詳細�
   復元できません。手動インストールしたアプリや Mac App Store アプリは対象外です。
 - この設定は任意のユーザーファイルやアプリのデータ全般を走査・削除するものではありません。
 
-Dock の固定アプリと順序は `nix/modules/dock.nix` が Nix package の `.app` を参照して管理します。
+Dock の固定アプリと順序は `nix/modules/dock/default.nix` が Nix package の `.app` を参照して管理します。
 ChatGPT・Dia・Ghostty・Obsidian の順に固定し、追加の固定フォルダーと最近使ったアプリは表示しません。
 Finder・ゴミ箱・起動中のアプリの表示は固定アプリの一覧とは別です。
 
@@ -206,7 +207,7 @@ Windows Dia は WinGet / Microsoft Store 未登録のため、同じ manifest �
 | ------------------------------------------------ | ---------------------------------------------------------------------- |
 | shell / editor から使う Unix CLI                 | アプリごとの Home Manager module。有効化だけの標準宣言は構成へ直接記載 |
 | Linux / WSLg / Darwin の通常 GUI                 | アプリごとの Home Manager module                                       |
-| Neovim の LSP・整形ツール・toolchain             | `nix/modules/editors/nvim/runtime.nix`                                 |
+| Neovim の LSP・整形ツール・toolchain             | `nix/modules/editors/nvim/runtime/default.nix`                         |
 | Docker daemon/socket、ユーザー group、OS service | アプリごとの NixOS / nix-darwin module                                 |
 | macOS CLI                                        | 原則 Nix/Home Manager、明示例外は Homebrew formula                     |
 | macOS の例外 cask                                | `nix/defaults.nix`                                                     |
@@ -219,13 +220,13 @@ dsh は `nix/defaults.nix` が導入します。Linux は `pkgs.deepseek-harness
 
 `nix/modules/ai_agents/chatgpt/` が ChatGPT アプリと同梱 Codex CLI の OS ごとの package 選択・導入・設定を管理します。WSL は Linux CLI のみを選び、GUI を導入しません。Windows の Store ID・導入・検証情報は `windows/winget/packages.json` が所有します。
 
-1Password CLI / GUI の導入と連携は `nix/modules/1password/` が管理します。通常の CLI / GUI は Home Manager が導入し、`ssh.nix` が公式 SSH agent socket の `IdentityAgent` / `SSH_AUTH_SOCK`、OS 別の Git 署名・WSL 連携と GUI package は `nix/defaults.nix` に直接宣言します。WSLg GUI の起動先を変えても、Windows `op.exe` / signer 連携の認証方式は変更しません。
+1Password CLI / GUI の導入と連携は `nix/modules/1password/` が管理します。通常の CLI / GUI は Home Manager が導入し、`ssh/default.nix` が公式 SSH agent socket の `IdentityAgent` / `SSH_AUTH_SOCK`、OS 別の Git 署名・WSL 連携と GUI package は `nix/defaults.nix` に直接宣言します。WSLg GUI の起動先を変えても、Windows `op.exe` / signer 連携の認証方式は変更しません。
 
-Git / ghq / gwq の導入・設定は `nix/modules/git/` にまとめます。`default.nix` は Home Manager 標準 `programs.git` の有効化と設定、`ghq.nix` は共通の `ghq.root`、既存の Git alias は Git 本体の module が管理します。署名と WSL の保存先は `nix/defaults.nix` の各 OS 設定が管理します。
+Git / ghq / gwq の導入・設定は `nix/modules/git/` にまとめます。`default.nix` は Home Manager 標準 `programs.git` の設定、`ghq/default.nix` は共通の `ghq.root`、既存の Git alias は Git 本体の module が管理します。署名と WSL の保存先は `nix/defaults.nix` の各 OS 設定が管理します。
 
 lazygit / Herdr はそれぞれ `nix/modules/lazygit/` / `nix/modules/herdr/` が有効化・設定を管理します。lazygit は Bash / Zsh の `lg` 連携、Herdr は標準 `programs.herdr.settings` に Nix で設定値を直接定義します。Windows の既存 Herdr installer・chezmoi 設定は維持します。
 
-エディタの導入・設定は `nix/modules/editors/` にまとめます。`nvim/` は Neovim 本体・設定・プラグインを所有し、`runtime.nix` が補助 CLI・LSP・整形ツール・toolchain とプラグインの実行依存を通常の PATH に導入します。これらを全エディタ共通の集約 module に移しません。Orca は `nix/defaults.nix` が `inputs.llm-agents.packages.${system}.orca` を導入します。CLI は `orca`、GUI は `orca-ide` です。運用は [Neovim](../chezmoi/neovim.md) を参照してください。
+エディタの導入・設定は `nix/modules/editors/` にまとめます。`nvim/` は Neovim 本体・設定・プラグインを所有し、`runtime/default.nix` が補助 CLI・LSP・整形ツール・toolchain とプラグインの実行依存を通常の PATH に導入します。これらを全エディタ共通の集約 module に移しません。Orca は `nix/defaults.nix` が `inputs.llm-agents.packages.${system}.orca` を導入します。CLI は `orca`、GUI は `orca-ide` です。運用は [Neovim](../chezmoi/neovim.md) を参照してください。
 
 zoxide / fzf / eza / bat / ripgrep / fd の導入・設定と zsh-patina の連携は `nix/modules/shells/plugins/` の各アプリ module に置きます。zoxide は標準連携の `--cmd cd` で `cd` / `cdi` を使い、WSL の除外ディレクトリは `nix/defaults.nix` の WSL ユーザー設定に置きます。fzf の Zsh は標準 integration の Ctrl+T/R・Alt+C を使い、検索コマンド・プレビューは `programs.fzf` の widget option に定義します。Unix の Bash integration は無効です。ripgrep の設定ファイルと `RIPGREP_CONFIG_PATH` は Home Manager が生成します。
 

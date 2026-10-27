@@ -90,7 +90,7 @@ cd dotfiles
 Home Manager と Homebrew にも使用します。スクリプト自体に `sudo` は付けません。
 Docker Desktop のライセンス同意と初期設定も nix-darwin の activation で管理するため、
 実行前の環境変数設定は不要です。初期設定済みの環境では既存の完了マーカーを引き継ぎます。
-macOS / NixOS / WSL の Docker 設定は [`nix/modules/docker.nix`](./nix/modules/docker.nix) に集約しています。
+macOS / NixOS / WSL の Docker 設定は [`nix/modules/docker/`](./nix/modules/docker/) の OS 別 module にまとめています。
 Docker の設定は同モジュールが所有し、installer に Docker 用の環境変数はありません。
 1Password の環境変数は Home Manager が管理します。
 

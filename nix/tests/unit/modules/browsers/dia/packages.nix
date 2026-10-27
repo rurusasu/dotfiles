@@ -1,9 +1,12 @@
-{ inputs }:
+{
+  inputs,
+  fixtures,
+  code,
+}:
 let
-  fixtures = import ../../../../fixtures/packages.nix { inherit inputs; };
   disabled = fixtures.mkHome "aarch64-darwin" [ ];
   enabled = fixtures.mkHome "aarch64-darwin" [ { programs.dia.enable = true; } ];
-  package = import ../../../../../modules/browsers/dia/package.nix {
+  package = code.nix.modules.browsers.dia.package {
     inherit inputs;
     pkgs = fixtures.mkPkgs "aarch64-darwin";
   };

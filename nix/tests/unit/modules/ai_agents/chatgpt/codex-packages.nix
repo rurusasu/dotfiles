@@ -1,6 +1,5 @@
-{ inputs }:
+{ fixtures, code }:
 let
-  fixtures = import ../../../../fixtures/packages.nix { inherit inputs; };
   darwin = fixtures.mkHome "aarch64-darwin" [
     (fixtures.homeModule "darwin")
   ];
@@ -10,7 +9,7 @@ let
   disabled = fixtures.mkHome "aarch64-darwin" [ ];
   cliOnly = fixtures.mkHome "aarch64-darwin" [ { programs.codex.enable = true; } ];
   desktopOnly = fixtures.mkHome "aarch64-darwin" [ { programs.chatgpt.enable = true; } ];
-  packages = (import ../../../../../modules/ai_agents/chatgpt/package.nix) {
+  packages = (code.nix.modules.ai_agents.chatgpt.package) {
     pkgs = fixtures.mkPkgs "aarch64-darwin";
   };
 in
@@ -74,7 +73,7 @@ in
         wsl.config.programs.codex.package == null
         &&
           builtins.elem
-            ((import ../../../../../modules/ai_agents/chatgpt/package.nix) {
+            ((code.nix.modules.ai_agents.chatgpt.package) {
               pkgs = fixtures.mkPkgs "x86_64-linux";
             }).codex
             wsl.config.home.packages;

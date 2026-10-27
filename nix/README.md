@@ -4,13 +4,13 @@
 
 | パス                    | 所有範囲                                                            |
 | ----------------------- | ------------------------------------------------------------------- |
-| `nix/defaults.nix`      | OS 基盤設定、module 選択、公開構成、GC                              |
+| `nix/defaults.nix`      | OS 基盤設定、型付き option による有効化、公開構成、GC               |
 | `nix/modules/`          | Unix のパッケージ導入・アプリ設定・custom package 定義              |
 | `windows/winget/`       | Windows GUI の独立した install manifest                             |
 | `nix/home/keybindings/` | 共通 action/key と Windows export                                   |
 | `nix/home/`             | 共通キー配列と Windows export                                       |
 | `nix/tests/unit/`       | nix-unit による Nix 式・実効設定値のテスト                          |
-| `nix/tests/build/`      | ビルド・生成物比較・外部プロセス・VM テストの derivation            |
+| `nix/tests/build/`      | `*.check.nix` による named derivation の属性セット                  |
 | `nix/tests/fixtures/`   | テスト用の共有入力・補助 module                                     |
 | `chezmoi/`              | Windows の dotfile、テンプレート、アプリ設定。Unix 設定は配布しない |
 
@@ -20,7 +20,7 @@
 Unix CLI / GUI はアプリごとの module が導入・package 選択・設定・連携・専用の実行依存を所有します。enable・単純な package list・単一代入だけなら必要な構成へ直接書きます。共通・OS 別構成は module の外で組み立て、Windows の導入情報は独立した manifest が所有します。
 詳細は [分割の理由と編集先](../docs/nix/package-management.md#分割の理由と編集先) を参照してください。
 キー配列は `home/keybindings/bindings.nix`、AeroSpace と Hyprland の設定・生成関数は
-`modules/aerospace/` と `modules/hyprland/` が管理し、`defaults.nix` が OS ごとの module を選択します。
+`modules/aerospace/` と `modules/hyprland/` が管理し、`defaults.nix` が OS ごとの型付き enable option を指定します。
 Windows は標準デスクトップを使用し、Nix から設定を生成・配布しません。WSL guest と standalone Linux へ
 Hyprland を自動導入しない設計です。[対応範囲・移行状況と検証](../docs/chezmoi/omarchy.md) を参照してください。
 
@@ -29,12 +29,12 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
 
 ## 設定の配置
 
-1. アプリの設定・サービス・activation は `modules/`、OS 基盤設定と module の選択は `defaults.nix` に置く。
+1. アプリの設定・サービス・activation は `modules/`、OS 基盤設定と型付き option による有効化は `defaults.nix` に置く。
    統合構成と standalone は同じ OS の Home Manager module を使う。
    基本フォントは統合時にはシステム、standalone 時には Home Manager が導入する。
-2. system、アカウント、OS 別 module の選択は `defaults.nix` の `systemDefaults` にまとめる。
+2. system、アカウント、OS 別の enable optionは `defaults.nix` の `systemDefaults` にまとめる。
    アカウントは各 OS ブロックに明示し、公開構成は末尾の `configurations` に登録する。
-   共通設定を先に、OS 別 imports を後に記載し、末尾の構成登録で `specialArgs.platform` を選択する。
+   共通設定と OS 別の enable option を記載し、末尾の構成登録で `specialArgs.platform` を選択する。
    共通の Lix・OS GC・Home Manager 接続は `systemDefaults`、GC 日時は各 OS ブロックに置く。
    CPU は `system` 引数で選択する。
 3. Home Manager の共通・OS 別設定は同じ `systemDefaults.home-manager.sharedModules` に宣言し、standalone も再利用する。
@@ -50,15 +50,15 @@ Hyprland を自動導入しない設計です。[対応範囲・移行状況と�
    この check は Dia、Neovim、Orca の supported system だけを対象にし、
    upstream nixpkgs package 全体や privileged activation は実行しない。
 
-   テストの登録は `nix/tests/default.nix` が担当する。nix-unit も flake の `checks` 経由で実行する。
+   `nix/tests/discover.nix` が unit `*.nix` / build `*.check.nix` を自動検出し、`nix/tests/default.nix` が flake に接続する。個別のテスト登録は不要。nix-unit も flake の `checks` 経由で実行する。
    `--no-build` の成功はテスト実行の成功を意味しない。[配置と実行方法](tests/README.md) を参照する。
 
 構成登録は `nix/defaults.nix:configurations`、app と package は `perSystem` にまとめます。
 ユーザー名・stateVersion は `systemDefaults` 内の `defaults` で一元管理します。
 OS 設定は `systemDefaults` が所有し、Hyprland は native Linux 構成だけが有効化します。
 
-Dock・Finder・trackpad の設定と反映は `modules/desktop.nix`、Dock の固定アプリは `modules/dock.nix` が管理します。
-`nix/modules/` は共通のアプリ・機能単位に分け、OS 固有の設定は `defaults.nix` の各 OS ブロックに置きます。構成の組み立ては `defaults.nix` が明示的な imports で行います。
+Dock・Finder・trackpad の設定と反映は `modules/desktop/default.nix`、Dock の固定アプリは `modules/dock/default.nix` が管理します。
+`nix/modules/` は共通のアプリ・機能単位に分け、OS 固有の設定は `defaults.nix` の各 OS ブロックに置きます。すべての実 module の `default.nix` を `discover-modules.nix` が自動検出し、`defaults.nix` は型付き option で有効化します。通常は Home Manager、`nixos/` / `darwin/` / `system/` 配下はそれぞれの OS scope とし、アプリごとの import パス登録・公開一覧は不要です。純粋な factory・renderer は通常の関数として利用し、自動検出しません。
 
 ## Codex CLI
 
