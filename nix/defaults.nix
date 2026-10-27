@@ -154,6 +154,7 @@ let
                       chatgpt.enable = true;
                       dia.enable = true;
                       aerospace.enable = true;
+                      strata.enable = pkgs.stdenv.hostPlatform.system == "aarch64-darwin";
                       discord.enable = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.discord;
                     };
                     dotfiles.desktop.enable = true;

@@ -28,22 +28,29 @@ WSL の Noto CJK の追加導入・フォールバック指定は行いません
 
 固定中の nixpkgs に同じアプリがないものは、現在の取得元を使います。nixpkgs へ収録された場合は標準パッケージへ切り替えます。
 
-| アプリ                                   | 取得元と理由                                                                                                                                                        |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| dsh（macOS）                             | `llm-agents` の package。`pkgs.deepseek-harness` は Linux のみ対応するため。Linux では `pkgs.deepseek-harness` を使う。                                             |
-| Orca IDE                                 | `llm-agents` の package。`pkgs.orca` は GNOME のスクリーンリーダーで、別のアプリ。                                                                                  |
-| Hermes Agent / Desktop                   | 公式 `hermes-agent` flake の package と Home Manager module。対応する nixpkgs package がないため。                                                                  |
-| Strata Desktop / Control（Linux x86_64） | 公式 `Niko1221/Strata` の AppImage と Control archive。同じアプリが nixpkgs にないため。`strata-release` input の release metadata と asset の SHA-256 を固定する。 |
-| Dia ブラウザー                           | `dia` input の公式 DMG。`pkgs.dia` は図表エディターで、別のアプリ。                                                                                                 |
-| Chrome DevTools MCP                      | `mcp-servers` flake の package。対応する nixpkgs package がないため。                                                                                               |
-| xurl                                     | `xurl` input の upstream source を `buildGoModule` で構築。対応する nixpkgs package がないため。                                                                    |
-| Docker Desktop / Steam（macOS）          | Homebrew cask。対象 OS 用の同じ GUI アプリを nixpkgs から導入できないため。                                                                                         |
+| アプリ                                                        | 取得元と理由                                                                                                                                                                                  |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| dsh（macOS）                                                  | `llm-agents` の package。`pkgs.deepseek-harness` は Linux のみ対応するため。Linux では `pkgs.deepseek-harness` を使う。                                                                       |
+| Orca IDE                                                      | `llm-agents` の package。`pkgs.orca` は GNOME のスクリーンリーダーで、別のアプリ。                                                                                                            |
+| Hermes Agent / Desktop                                        | 公式 `hermes-agent` flake の package と Home Manager module。対応する nixpkgs package がないため。                                                                                            |
+| Strata Desktop / Control（Linux x86_64・Apple Silicon macOS） | 公式 `Niko1221/Strata` の Linux AppImage / macOS app archive と Control archive。同じアプリが nixpkgs にないため。`strata-release` input の release metadata と asset の SHA-256 を固定する。 |
+| Dia ブラウザー                                                | `dia` input の公式 DMG。`pkgs.dia` は図表エディターで、別のアプリ。                                                                                                                           |
+| Chrome DevTools MCP                                           | `mcp-servers` flake の package。対応する nixpkgs package がないため。                                                                                                                         |
+| xurl                                                          | `xurl` input の upstream source を `buildGoModule` で構築。対応する nixpkgs package がないため。                                                                                              |
+| Docker Desktop / Steam（macOS）                               | Homebrew cask。対象 OS 用の同じ GUI アプリを nixpkgs から導入できないため。                                                                                                                   |
 
 ChatGPT は `pkgs.chatgpt` を使います。同梱 Codex CLI を使う設定も、この nixpkgs package 内のバイナリーを参照します。`hermes-xapi` はリポジトリ内の連携スクリプトです。
 
 Ollama は共通 Home Manager の `services.ollama.enable` で標準 package とユーザーサービスを導入します。API は既定の `127.0.0.1:11434` で待ち受けます。モデルの自動取得や GPU backend の変更は行いません。`ollama pull <model>` で使用するモデルを選択します。
 
-Strata は Linux x86_64 / WSLg に `strata`（CLI）と `strata-desktop`（GUI）を導入します。[公式 release](https://github.com/Niko1221/Strata/releases) の版付き feed (`v0.2.6/strata-feed.json`) を input として固定し、Desktop と Control は同じ release の asset から取得します。新しい安定版へ更新するときは `flake.nix` の feed URL を変更し、`nix flake update strata-release` と package build を実行します。`nrs` は固定された版を導入します。Desktop の製品版と Control の内部 build 番号は異なります。Nix が管理する実行ファイルからユーザーディレクトリの別版 Control への自動引き継ぎは無効にします。モデルと推論エンジンは初回設定時に選び、ユーザーのデータディレクトリに取得します。macOS / ARM 用の独自 package は追加しません。
+Strata は Linux x86_64 / WSLg と Apple Silicon macOS に `strata`（CLI）と `strata-desktop`（GUI）を導入します。[公式 release](https://github.com/Niko1221/Strata/releases) の版付き feed (`v0.2.6/strata-feed.json`) を input として固定し、Desktop と Control は同じ release の asset から取得します。新しい安定版へ更新するときは `flake.nix` の feed URL を変更し、`nix flake update strata-release` と package build を実行します。`nrs` / `./install.sh` は固定された版を導入します。Desktop の製品版と Control の内部 build 番号は異なります。CLI は配布物に同梱された Python を使い、ユーザーディレクトリの別版 Control への自動引き継ぎは無効にします。Linux GUI も固定された Control を使います。macOS の `.app` は公式署名を保持するため変更せず、GUI は upstream の規則に従い、同梱版とユーザーが更新した Control の新しい方を使います。`STRATA_CONTROL_DIR` の指定だけでは新しいユーザー版への切り替えを禁止できません。モデルと推論エンジンは初回設定時に選び、ユーザーのデータディレクトリに取得します。
+
+Qwen3.8-Flash-Next を 64GB の Apple Silicon Mac で動かす場合は、[公式 Mac 手順](https://github.com/Niko1221/Strata/blob/main/docs/MAC.md) の推奨に従い Q2_0 と並列数 1 を選びます。次のコマンドは Metal エンジンとモデルを取得し、32K context の preset を保存して localhost:8080 で起動します。初回取得には画像対応と MTP を含め約 72.5GB の通信が必要です。以後は `strata launch --preset qwen-local --no-tui` で起動し、`strata launch --stop` で停止できます。
+
+```bash
+strata launch --family qwen --model q2_0 --context 32k --parallel 1 \
+  --access local --save-preset qwen-local --yes --no-tui
+```
 
 Neovim / Hermes の追加プラグインと formatter の入力は、アプリ本体とは別の依存です。source input は引き続き `flake.lock` で固定し、設定を持つ実 module は `default.nix` として自動検出します。
 

@@ -16,8 +16,11 @@ in
   config = lib.mkIf config.programs.strata.enable {
     assertions = [
       {
-        assertion = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
-        message = "Strata is supported only on x86_64-linux.";
+        assertion = builtins.elem pkgs.stdenv.hostPlatform.system [
+          "x86_64-linux"
+          "aarch64-darwin"
+        ];
+        message = "Strata is supported on x86_64-linux and aarch64-darwin.";
       }
     ];
     home.packages = [
