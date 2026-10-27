@@ -97,7 +97,6 @@ let
                   go-task
                   pre-commit
                   powershell
-                  bats
                   comfyui
                   # Orca is the AI IDE, not the GNOME screen reader.
                   inputs.llm-agents.packages.${stdenv.hostPlatform.system}.orca

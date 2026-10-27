@@ -142,6 +142,10 @@ runs:
                   nix=true
                   wsl=true
                   ;;
+                scripts/sh/tests/*)
+                  nix=true
+                  other=true
+                  ;;
                 nix/*|*.nix)
                   nix=true
                   linux=true
@@ -153,7 +157,7 @@ runs:
                   windows=true
                   ;;
                 # These entrypoints and fixtures span Nix, Windows and templates.
-                .github/*|scripts/*|taskfiles/*|Taskfile.yml|install.*|bootstrap.*|docker/*|.devcontainer/*|tests/*|.pre-commit-config.yaml|.gitattributes|.editorconfig)
+                .github/*|scripts/*|taskfiles/*|Taskfile.yml|install.*|bootstrap.*|docker/*|.devcontainer/*|.pre-commit-config.yaml|.gitattributes|.editorconfig)
                   nix=true
                   chezmoi=true
                   other=true

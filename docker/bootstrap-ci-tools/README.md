@@ -3,8 +3,8 @@
 `ci-nix.yml` の `nix`、`linux-build`、
 `wsl-prebuild` は、このイメージで検査・ビルドを実行します。
 `bash-test` もこのイメージで Bash テストを一度だけ実行します。
-Nix、Bash、Bats、chezmoi、go-task、Git / Git LFS、Python 3.14、Ruby、Node.js 24、PowerShell、
-PSScriptAnalyzer の最新安定版、statix、jq、tar、xz を事前導入します。
+Nix、Bash、go-task、Git、Python 3.14、Node.js 24、statix、jq、tar、xz を事前導入します。
+テスト専用ツールは checkout した flake の `runtime-tests` shell から取得します。
 `nix fmt` の formatter と検証対象のパッケージは、引き続き checkout した flake から選択します。
 
 ## 更新と再利用
@@ -45,8 +45,9 @@ Ubuntu / Debian の個別構成 build と E2E は実行せず、NixOS VM の検�
 WSL は本番構成を一度 build し、E2E で使う cache を生成します。
 ホストの SDK 削除や Docker イメージの一括削除は行いません。
 
-Bash テストは同じ workflow の Linux `bash-test` job に集約し、
-`scripts/sh/run-bash-tests.sh` を実行します。ローカルの `task test:bash` も同じ runner を使います。
+Bash テストは同じ workflow の Linux `bash-test` job とローカルで `task test:bash` を実行します。
+この Task は `nix develop --ignore-environment --keep HOME .#runtime-tests` で明示したツールだけを使い、
+`scripts/sh/tests` を Bats に渡します。Bats の標準動作で検出と失敗・0 件の終了状態を扱います。
 Darwin build job には Bash テスト用のインストール処理を置きません。
 OS 分岐の契約は stub で検証し、実 OS が必要な動作は別の E2E が担当します。
 push / PR では軽量な変更検出を必ず実行し、必要な job だけ起動します。

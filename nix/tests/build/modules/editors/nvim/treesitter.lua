@@ -24,6 +24,7 @@ for _, sample in ipairs({
     { "typescriptreact", "tsx", "const x: number = 1;" },
     { "python", "python", "answer = 42" },
     { "nix", "nix", "{ answer = 42; }" },
+    { "lua", "lua", "local answer = 42" },
 }) do
     local buf = vim.api.nvim_create_buf(true, false)
     vim.api.nvim_set_current_buf(buf)
@@ -40,6 +41,8 @@ for _, sample in ipairs({
     end
     assert(captures > 0, "no actual highlights: " .. sample[1])
 end
+vim.bo.filetype = "dotfiles_missing_parser"
+ts.start(vim.api.nvim_get_current_buf()) -- missing parsers must retain native syntax fallback
 local buf = vim.api.nvim_create_buf(true, false)
 vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "```python", "answer = 42", "```" })
 vim.bo[buf].filetype = "markdown"

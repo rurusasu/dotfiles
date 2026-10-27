@@ -27,16 +27,16 @@ pkgs.runCommand "neovim-native-check"
     mkdir -p "$XDG_CONFIG_HOME/nvim"
     ln -s ${neovim.lua} "$XDG_CONFIG_HOME/nvim/lua"
     cd ${../../../../../..}
-    nvim --headless -u NONE -i NONE -l tests/lua/nvim_modern_test.lua
-    nvim --headless -u NONE -i NONE -l tests/lua/nvim_treesitter_test.lua
-    nvim --headless -u NONE -i NONE -l tests/lua/nvim_snacks_test.lua
+    nvim --headless -u NONE -i NONE -l ${./modern.lua}
+    nvim --headless -u NONE -i NONE -l ${./treesitter.lua}
+    nvim --headless -u NONE -i NONE -l ${./snacks.lua}
     nvim --headless -i NONE -u ${neovim.init} \
-      -c 'lua local ok, err = pcall(dofile, "tests/lua/nvim_markdown_test.lua"); if not ok then print(err); vim.cmd("cquit 1") end' \
+      -c 'lua local ok, err = pcall(dofile, "${./markdown.lua}"); if not ok then print(err); vim.cmd("cquit 1") end' \
       -c 'qa!'
     nvim --headless -i NONE -u ${neovim.init} \
-      -c 'lua local ok, err = pcall(dofile, "tests/lua/nvim_keybindings_test.lua"); if not ok then print(err); vim.cmd("cquit 1") end' \
+      -c 'lua local ok, err = pcall(dofile, "${./keybindings.lua}"); if not ok then print(err); vim.cmd("cquit 1") end' \
       -c 'qa!'
     DOTFILES_NVIM_LSPCONFIG=${pkgs.vimPlugins.nvim-lspconfig} \
-      nvim --headless -u NONE -i NONE -l tests/lua/nvim_typescript_test.lua
+      nvim --headless -u NONE -i NONE -l ${./typescript.lua}
     touch "$out"
   ''

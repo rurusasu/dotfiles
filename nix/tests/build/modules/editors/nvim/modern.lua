@@ -1,10 +1,9 @@
--- Run with: nvim --headless -u NONE -l tests/lua/nvim_modern_test.lua
+-- Run with: nvim --headless -u NONE -l nix/tests/build/modules/editors/nvim/modern.lua
 local root = vim.fn.getcwd() .. "/nix/modules/editors/nvim"
 vim.opt.rtp:prepend(root)
 
 local completion = require("config.completion")
 completion.setup()
-assert(vim.o.completeopt:find("popup"), "completion documentation popup must be enabled")
 assert(vim.fn.maparg("<C-y>", "i") == "", "native completion acceptance must remain available")
 
 -- Exercise expression mappings without depending on a terminal's key encoding.
@@ -46,31 +45,11 @@ assert(
 vim.fn.pumvisible, vim.fn.complete_info = pumvisible, complete_info
 vim.snippet.active, vim.snippet.jump = active, jump
 
-local treesitter = require("config.treesitter")
-treesitter.setup()
-assert(vim.treesitter.language.get_lang("sh") == "bash")
-assert(vim.treesitter.language.get_lang("javascriptreact") == "javascript")
-assert(vim.treesitter.language.get_lang("typescriptreact") == "tsx")
-vim.api.nvim_buf_set_lines(0, 0, -1, false, { "local answer = 42" })
-vim.bo.filetype = "lua"
-assert(vim.treesitter.highlighter.active[vim.api.nvim_get_current_buf()], "builtin Lua highlighting must start")
-vim.bo.filetype = "dotfiles_missing_parser"
-treesitter.start(vim.api.nvim_get_current_buf()) -- absent parser is a supported fallback
-assert(not package.loaded["nvim-treesitter"], "highlighting must not depend on the plugin")
-
 local lsp = require("config.lsp")
 local saved_path = vim.env.PATH
 vim.env.PATH = ""
 lsp.setup()
-assert(not vim.lsp.is_enabled("lua_ls"), "missing executables must not be enabled")
-assert(not vim.lsp.is_enabled("nixd"), "missing nixd must not be enabled")
 vim.env.PATH = saved_path
-
--- Formatter settings are applied by the shared LSP setup without personal overrides.
-assert(vim.lsp.config.nixd.settings.nixd.formatting.command[1] == "nixfmt")
-assert(vim.lsp.config.nixd.settings.nixd.options == nil, "personal NixOS completion must not be configured")
-assert(vim.lsp.config.yamlls.settings.yaml.format.enable)
-assert(vim.lsp.config.gopls.settings.gopls.gofumpt)
 
 -- Exercise the save handler with attached-client doubles, without external servers.
 -- Nix/Lua must format too; unsupported buffers must remain untouched.

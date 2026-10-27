@@ -5,7 +5,7 @@
 # References:
 # - treefmt config: https://treefmt.com/v2.1/getting-started/configure/
 # - treefmt-nix examples: https://github.com/numtide/treefmt-nix/tree/main/examples
-{ pkgs, ... }:
+{ pkgs, lib, ... }:
 {
   projectRootFile = "flake.nix";
 
@@ -64,6 +64,7 @@
 
   # Custom formatters not in treefmt-nix programs
   settings.formatter = {
+    shfmt.includes = lib.mkAfter [ "*.bats" ];
     oxfmt = {
       options = [
         "--write"

@@ -17,6 +17,6 @@ tasks:
       - pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1
 
   test:bash:
-    desc: Run classified Bats runtime and artifact contracts
+    desc: Run shell runtime tests with the locked Nix toolchain
     cmds:
-      - '{{if eq OS "darwin"}}sh -c ''export PATH=/opt/homebrew/bin:/opt/homebrew/sbin:$PATH; cd "$(cd {{.DOTFILES_PATH}} && pwd -P)" && bash scripts/sh/run-bash-tests.sh''{{else}}{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bash scripts/sh/run-bash-tests.sh"{{end}}'
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix develop --ignore-environment --keep HOME .#runtime-tests --command bats --print-output-on-failure scripts/sh/tests"'

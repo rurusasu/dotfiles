@@ -1,8 +1,6 @@
 { inputs }:
 let
   inherit (inputs.nixpkgs) lib;
-  bashTests = ../../../tests/bash;
-  bashEntries = builtins.readDir bashTests;
   linesOf = source: builtins.filter builtins.isString (builtins.split "\n" source);
   nixUnitRegistry = builtins.readFile ../default.nix;
   nixFilesUnder =
@@ -34,35 +32,6 @@ let
 
 in
 {
-  testNixEvalBatsHaveExplicitRuntimeOwnership = {
-    # Match executable command forms, rather than comments or diagnostic strings.
-    expr =
-      builtins.filter
-        (
-          name:
-          (
-            source:
-            builtins.any (
-              line:
-              builtins.match "^[[:space:]]*(run[[:space:]]+[^#]*[[:space:]]+)?nix[[:space:]]+eval([[:space:]]|$).*" line
-              != null
-              ||
-                builtins.match "^[[:space:]]*\"?\\$([{][A-Za-z_][A-Za-z0-9_]*[}]|[A-Za-z_][A-Za-z0-9_]*)\"?[[:space:]]+eval([[:space:]]|$).*" line
-                != null
-            ) (linesOf source)
-          )
-            (builtins.readFile (bashTests + "/${name}"))
-        )
-        (
-          builtins.sort builtins.lessThan (
-            builtins.filter (
-              name: bashEntries.${name} == "regular" && builtins.match ".*\\.bats" name != null
-            ) (builtins.attrNames bashEntries)
-          )
-        );
-    expected = [ ];
-  };
-
   testEveryRecursiveNixUnitModuleIsRegisteredExactlyOnce = {
     expr =
       allNixTestFiles != [ ]

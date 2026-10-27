@@ -36,7 +36,7 @@ OS 固有の連携 package は host の実効設定で検証します。
 Windows の標準 package ID / source は CI の jq が `windows/winget/packages.json` を直接検証します。
 廃止した package catalog / provider resolution の fixture や生成 manifest 比較は対象にしません。
 
-- `tests/bash/` は shell / installer の順序、外部コマンドの stub、runtime / artifact 契約を検証します。
+- `scripts/sh/tests/` は shell / installer の順序、外部コマンドの stub、runtime / artifact 契約を検証します。
 - Nix の値 assertion を Bats 内の `nix eval` に追加せず、`unit/` に記載します。
 - Nix の構成・package 選択・生成設定の検証はすべて `unit/` / `build/` が担当します。
 - 実機の activation、service 起動、secret、network は nix-unit の対象外です。
@@ -100,7 +100,7 @@ Nix formatter は host module ではなく固定した store module を使いま
 Linux bootstrap CI は hardware fixture を `/etc/nixos/hardware-configuration.nix` に配置し、`x86_64-linux`（`ubuntu-24.04`）で本番 NixOS system と standalone Home Manager activation package を build します。両構成は同じ `systemDefaults.home-manager.sharedModules` を使います。
 Darwin CI は `extendModules` で runner の `system.primaryUser` を明示し、`aarch64-darwin`（`macos-15`）で `darwin-rebuild switch` と全 flake checks を実行します。
 WSL CI も `platform = "wsl"` を選ぶ本番経路の `nixos-rebuild switch` を実行します。Darwin cask artifact check は CI で実行しません。
-workflow の外部コマンド・認証・cache・Git 差分・集約判定は `tests/bash/ci_workflow.bats` で実行します。
+workflow の認証・cache の保護・変更分類・集約判定は `scripts/sh/tests/ci_workflow.bats` で実行します。
 YAML 構文は `actionlint`、設定適用は対象 platform の rebuild で検証します。
 共通の `nix` job は statix の lint を確認し、事前の `nix eval` / `nix flake check --no-build` は実行しません。
 `aarch64-linux` は flake の support/output には含まれますが、この workflow には ARM64 Linux runner の native build がありません。
@@ -110,14 +110,15 @@ YAML 構文は `actionlint`、設定適用は対象 platform の rebuild で検�
 
 ## Bats の所有境界
 
-`tests/bash/` は shell / installer の runtime 契約を担当します。Windows の manifest は
+`scripts/sh/tests/` は shell / installer の runtime 契約を担当します。Windows の manifest は
 独立した管理対象なので、Nix から生成した JSON との一致検査はありません。
 Windows の installer と verifier の実行契約は PowerShell / Pester が担当します。
 
-`unit/ownership.nix` は現在のファイル一覧から、再帰的な unit/build 登録の完全一致、
-重複したテスト名、Bats 内の `nix eval` 所有者を検査します。過去の移行時の件数や
+`unit/ownership.nix` は現在のファイル一覧から unit/build の登録漏れ・重複と、
+重複したテスト名を検査します。過去の移行時の件数や
 廃止したテスト名は固定しません。実行中の移行・backup・rollback 処理を守る
 runtime テストは残します。過去の移管履歴は [PR #633](https://github.com/rurusasu/dotfiles/pull/633) を参照してください。
 
-Nix / Bats 間の責務や呼び出しを変更した場合は、全 system の評価と対象 check の build に加えて、
-変更対象に絞った `bats` 実行または `task test:bash` で関連する runtime 契約を確認します。
+Nix / Bats 間の責務や呼び出しを変更した場合は、全 system の評価、対象 check の build、
+`task test:bash` を実行します。Task は `runtime-tests` shell の明示したツールだけで Bats を実行します。
+ホストの Nix・curl・PowerShell をテストの PATH に持ち込まず、必要な外部コマンドは各 fixture が用意します。

@@ -8,8 +8,8 @@ Taskもmasterから導入し、更新・反映は各1回です。
 
 実装は3ファイルです。
 
-- `scripts/powershell/install.ps1`: Windowsの標準コマンドとTaskの起動。
-- `lib/Invoke-ExternalCommand.ps1`: native終了コード、timeout、UTF-8、OS限定の昇格、PATH、標準import。
+- `scripts/powershell/install.ps1`: Windowsの標準コマンドとTaskの起動、WSL基盤の昇格。
+- `lib/Invoke-ExternalCommand.ps1`: native終了コード、timeout、UTF-8、PATH、標準import。
 - `lib/Invoke-NixosWslSetup.ps1`: 必要時のdistro登録と、同期・input更新・NixOS/Home Manager反映。
 
 通常の関数と例外を使います。クラス、結果オブジェクト、独自runnerはありません。

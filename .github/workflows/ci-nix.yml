@@ -163,7 +163,7 @@ jobs:
         run: bash scripts/sh/configure-bootstrap-ci-nix.sh
 
       - name: Run Bash tests
-        run: bash scripts/sh/run-bash-tests.sh
+        run: task test:bash
 
   nix:
     name: Bootstrap / Nix / Lint

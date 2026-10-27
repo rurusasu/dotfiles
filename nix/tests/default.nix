@@ -21,6 +21,33 @@ in
           };
         }
       ];
+      devShells.runtime-tests =
+        let
+          packages = with pkgs; [
+            bats
+            bash
+            coreutils
+            diffutils
+            findutils
+            gawk
+            gitMinimal
+            gnugrep
+            gnused
+            gnutar
+            gzip
+            jq
+            yq-go
+            python3
+            chezmoi
+            go-task
+          ];
+        in
+        pkgs.mkShellNoCC {
+          inherit packages;
+          shellHook = ''
+            export PATH="${lib.makeBinPath packages}"
+          '';
+        };
       checks = {
         docker-mcp = import ./build/modules/ai_agents/docker-mcp.nix { inherit inputs pkgs; };
         aerospace-workspace-cycle = import ./build/modules/aerospace/aerospace-cycle.nix { inherit pkgs; };

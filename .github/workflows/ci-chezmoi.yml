@@ -91,6 +91,13 @@ jobs:
               @($expectedScripts | Where-Object { $_ -notin $managedScripts }).Count -gt 0) {
             throw "Unexpected managed scripts: $($managedScripts -join ', ')"
           }
+          foreach ($os in 'linux', 'darwin') {
+            $unixData = @{ chezmoi = @{ os = $os; homeDir = '/home/ci' } } | ConvertTo-Json -Compress
+            $unixTargets = @(& chezmoi --source $source --override-data $unixData managed --include files,scripts --path-style relative)
+            if ($LASTEXITCODE -ne 0 -or $unixTargets.Count -ne 0) {
+              throw "chezmoi must leave $os configuration to Nix: $($unixTargets -join ', ')"
+            }
+          }
           $wslgConfig = @(& chezmoi --source $source --override-data $data execute-template --file (Join-Path $source 'dot_wslgconfig.tmpl'))
           if ($LASTEXITCODE -ne 0) { throw "chezmoi WSLg configuration render failed with exit $LASTEXITCODE" }
           $expectedWslgConfig = "[system-distro-env]`nFONTCONFIG_FILE=/mnt/c/Users/ci/.config/dotfiles/wslg-fontconfig.conf"

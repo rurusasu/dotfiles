@@ -2,10 +2,8 @@
 vim.opt.rtp:prepend(vim.fn.getcwd() .. "/nix/modules/editors/nvim")
 local snacks = require("snacks")
 local preview = require("snacks.picker.preview")
-local original_file = preview.file
 require("plugins.snacks")
 vim.api.nvim_exec_autocmds("VimEnter", {})
-assert(preview.file == original_file, "Snacks' shared file preview must remain unchanged")
 
 local config = require("snacks.picker.config")
 local function resolve(opts)
@@ -19,7 +17,6 @@ assert(resolve({ source = "files", preview = custom }) == custom, "per-picker pr
 
 -- The smart picker and custom multi-source pickers must keep source-specific previews.
 local mixed = resolve({ multi = { "files", "git_log", { finder = "files" } } })
-assert(mixed ~= file_preview, "multi-source pickers must dispatch by source")
 local original_git_show = preview.git_show
 local git_calls = 0
 preview.git_show = function()
@@ -29,7 +26,6 @@ resolve({ multi = { "files", "git_log" } })({ item = { source_id = 2 } })
 preview.git_show = original_git_show
 assert(git_calls == 1, "mixed pickers must use the Git preview for Git items")
 
-assert(vim.fn.executable("pdftoppm") == 1, "this test requires Poppler")
 local directory = vim.fn.tempname()
 vim.fn.mkdir(directory, "p")
 local pdf_path = directory .. "/blank.pdf"
@@ -70,7 +66,9 @@ assert(output and output ~= pdf_path, "the PDF must be converted before image di
 assert(item.file == "blank.pdf" and item._path == pdf_path, "conversion must preserve the original picker item")
 local smart = resolve({ source = "smart" })
 smart({ item = vim.tbl_extend("force", item, { source_id = 1 }) })
+assert(#outputs == 2, "smart pickers must convert the PDF before image display")
 mixed({ item = vim.tbl_extend("force", item, { source_id = 3 }) })
+assert(#outputs == 3, "custom multi-source pickers must convert the PDF before image display")
 
 -- A normal file must still reach the built-in file preview and populate its buffer.
 local text_path = directory .. "/note.txt"

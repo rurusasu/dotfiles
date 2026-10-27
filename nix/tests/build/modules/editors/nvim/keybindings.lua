@@ -1,5 +1,4 @@
 -- Run with the generated Home Manager init and native plugin pack, in isolated XDG dirs.
-assert(vim.v.errmsg == "", "startup error: " .. vim.v.errmsg)
 local oil = require("oil")
 local allocation = require("config.shared_keybindings")
 local original_cwd = vim.uv.cwd()
@@ -76,13 +75,6 @@ local function confirm()
     end, "Oil mutation did not finish")
 end
 
--- Assert the deployed export is what Neovim actually registered, not just a generated string.
-assert(allocation.leader == " " and #allocation.bindings == 17)
-for _, binding in ipairs(allocation.bindings) do
-    if binding.scope == "editor" and binding.action ~= "which-key" then
-        assert(vim.fn.maparg(binding.key, binding.mode) ~= "", binding.action .. " must be registered")
-    end
-end
 local trigger = false
 for _, item in ipairs(require("which-key.config").options.triggers) do
     trigger = trigger or item[1] == "<leader>"

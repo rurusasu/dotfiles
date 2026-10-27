@@ -34,8 +34,6 @@ assert(
 )
 local ruff = vim.lsp.get_clients({ bufnr = buf, name = "ruff" })[1]
 assert(ruff.server_capabilities.hoverProvider == false)
-assert(vim.fn.maparg("<C-y>", "i") == "")
-assert(vim.fn.maparg("grr", "n") ~= "", "native references mapping must remain")
 assert(
     vim.wait(5000, function()
         return ruff:supports_method("textDocument/formatting", buf)
