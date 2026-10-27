@@ -14,30 +14,21 @@ in
       manPager = home.config.home.sessionVariables.MANPAGER;
       manRoffOptions = home.config.home.sessionVariables.MANROFFOPT;
     }) homes;
-    expected = map (
-      home:
-      let
-        configuredBat = import ../../../../../modules/shells/plugins/bat.nix {
-          inherit (home) config pkgs;
-          inherit (home.pkgs) lib;
-        };
-      in
-      {
-        enabled = true;
-        packageName = "bat";
-        config =
-          lib.generators.toKeyValue {
-            mkKeyValue = name: value: "--${name}=${lib.escapeShellArg value}";
-            listsAsDuplicateKeys = true;
-          } (lib.filterAttrs (_: value: !(builtins.isBool value)) home.config.programs.bat.config)
-          + lib.concatMapStrings (name: "--${name}\n") (
-            builtins.attrNames (
-              lib.filterAttrs (_: value: builtins.isBool value && value) home.config.programs.bat.config
-            )
-          );
-        manPager = configuredBat.home.sessionVariables.MANPAGER;
-        manRoffOptions = configuredBat.home.sessionVariables.MANROFFOPT;
-      }
-    ) homes;
+    expected = map (home: {
+      enabled = true;
+      packageName = "bat";
+      config =
+        lib.generators.toKeyValue {
+          mkKeyValue = name: value: "--${name}=${lib.escapeShellArg value}";
+          listsAsDuplicateKeys = true;
+        } (lib.filterAttrs (_: value: !(builtins.isBool value)) home.config.programs.bat.config)
+        + lib.concatMapStrings (name: "--${name}\n") (
+          builtins.attrNames (
+            lib.filterAttrs (_: value: builtins.isBool value && value) home.config.programs.bat.config
+          )
+        );
+      manPager = "${lib.getExe' home.pkgs.bash "sh"} -c ${lib.escapeShellArg "${lib.getExe home.pkgs.unixtools.col} -bx | ${lib.getExe home.config.programs.bat.package} -l man -p"}";
+      manRoffOptions = "-c";
+    }) homes;
   };
 }

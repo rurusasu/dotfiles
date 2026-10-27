@@ -45,15 +45,18 @@ in
     inputs.home-manager.lib.homeManagerConfiguration {
       inherit pkgs;
       extraSpecialArgs = { inherit inputs; };
-      modules = modules ++ [
-        {
-          home = {
-            username = "test-user";
-            homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
-            stateVersion = "25.05";
-          };
-        }
-      ];
+      modules =
+        (import ../../discover-modules.nix "home-manager" ../../modules)
+        ++ modules
+        ++ [
+          {
+            home = {
+              username = "test-user";
+              homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
+              stateVersion = "25.05";
+            };
+          }
+        ];
     };
   darwin = inputs.nix-darwin.lib.darwinSystem {
     system = "aarch64-darwin";

@@ -21,7 +21,7 @@ let
         inherit inputs;
       }
       // specialArgs;
-      modules = [
+      modules = (import ../../discover-modules.nix "home-manager" ../../modules) ++ [
         (_: { home = testHome; })
         module
       ];

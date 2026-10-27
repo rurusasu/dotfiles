@@ -65,16 +65,6 @@ let
               ./modules/lazygit
               ./modules/ssh.nix
               ./modules/herdr
-              ./modules/shells/bash
-              ./modules/shells/plugins/starship
-              ./modules/shells/plugins/bat.nix
-              ./modules/shells/plugins/eza.nix
-              ./modules/shells/plugins/fd.nix
-              ./modules/shells/plugins/fzf.nix
-              ./modules/shells/plugins/ripgrep.nix
-              ./modules/shells/plugins/zoxide.nix
-              ./modules/shells/plugins/zsh-patina.nix
-              ./modules/shells/zsh
               ./modules/terminals/ghostty
               ./modules/terminals/wezterm
               (
@@ -128,6 +118,16 @@ let
               home-manager.enable = true;
               direnv.enable = true;
               jq.enable = true;
+              bash.enable = true;
+              zsh.enable = true;
+              bat.enable = true;
+              eza.enable = true;
+              fd.enable = true;
+              fzf.enable = true;
+              ripgrep.enable = true;
+              zoxide.enable = true;
+              starship.enable = true;
+              zsh-patina.enable = true;
             };
             services.ollama.enable = true;
             nix = {

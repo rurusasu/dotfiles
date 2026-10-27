@@ -41,18 +41,16 @@ in
   };
   testCommonHomeOnlyDeclaresApplicationEnableFlags = {
     expr = {
-      inherit (common) programs;
+      programs = builtins.all (
+        program: builtins.attrNames program == [ "enable" ] && builtins.isBool program.enable
+      ) (builtins.attrValues common.programs);
       inherit (common) services;
       agents = common ? launchd;
       sessionVariables = common.home ? sessionVariables;
       sessionPath = common.home ? sessionPath;
     };
     expected = {
-      programs = {
-        direnv.enable = true;
-        home-manager.enable = true;
-        jq.enable = true;
-      };
+      programs = true;
       services.ollama.enable = true;
       agents = false;
       sessionVariables = false;

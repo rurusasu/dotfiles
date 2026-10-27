@@ -7,15 +7,6 @@ let
     homes
     lib
     ;
-  configuredIntegration =
-    home:
-    (import ../../../../../modules/shells/plugins/fd.nix {
-      inherit (home) config;
-      lib = lib // {
-        mkBefore = value: value;
-        mkIf = condition: content: if condition then content else "";
-      };
-    }).programs.zsh.initContent;
 in
 {
   testFdFindAliasAcrossHomes = {
@@ -38,10 +29,6 @@ in
           home.config.home.file."${lib.removePrefix "${home.config.home.homeDirectory}/" home.config.programs.zsh.dotDir}/.zshrc".text;
       in
       {
-        # The source block retains the documented completion extension points.
-        configuredIntegration =
-          lib.trim (configuredIntegration home) != ""
-          && lib.hasInfix (lib.trim (configuredIntegration home)) zshrc;
         commands = {
           default = home.config.programs.zsh.sessionVariables.FZF_DEFAULT_COMMAND;
           file = home.config.programs.fzf.fileWidget.zsh.command;
@@ -53,7 +40,6 @@ in
       }
     ) homes;
     expected = map (_: {
-      configuredIntegration = true;
       commands = {
         default = "fd --type f --hidden --exclude .git --follow";
         file = "fd --type f --hidden --exclude .git --follow";

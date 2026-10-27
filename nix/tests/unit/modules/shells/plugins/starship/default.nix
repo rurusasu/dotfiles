@@ -12,7 +12,6 @@ let
     ;
   standalone =
     ((import ../../../../../fixtures/packages.nix { inherit inputs; }).mkHome "x86_64-linux" [
-      ../../../../../../modules/shells/plugins/starship
       { programs.starship.enable = true; }
     ]).config.programs.starship.settings;
   generatedSettings =
