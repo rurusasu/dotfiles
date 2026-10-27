@@ -5,32 +5,15 @@ let
     "x86_64-linux"
     "aarch64-linux"
   ];
-  inherit ((import ../../../../fixtures/packages.nix { inherit inputs; })) mkPkgs;
+  fixtures = import ../../../../fixtures/packages.nix { inherit inputs; };
+  inherit (fixtures) mkPkgs;
 in
 {
   testWezTermUsesSharedAppearance = {
     expr = map (
       system:
       let
-        cfg =
-          let
-            pkgs = mkPkgs system;
-          in
-          (import "${inputs.home-manager}/lib/eval-config.nix" {
-            inherit pkgs;
-            extraSpecialArgs = { inherit inputs; };
-            modules = [
-              ((import ../../../../fixtures/packages.nix { inherit inputs; }).homeModule "common")
-              ../../../../../modules/editors/nvim
-              {
-                home = {
-                  username = "test-user";
-                  homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
-                  stateVersion = "26.05";
-                };
-              }
-            ];
-          }).config.programs.wezterm;
+        cfg = (fixtures.mkHome system [ { programs.wezterm.enable = true; } ]).config.programs.wezterm;
       in
       {
         inherit system;

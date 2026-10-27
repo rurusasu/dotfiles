@@ -32,14 +32,11 @@ in
   };
 
   testWeztermExtraConfigRetainsTheCanonicalLua = {
-    expr = map (home: home.config.programs.wezterm.extraConfig) homes;
-    expected = map (
+    expr = map (
       home:
-      (import ../../../../../modules/terminals/wezterm {
-        inherit (home) config pkgs;
-        inherit (home.pkgs) lib;
-      }).programs.wezterm.extraConfig
+      lib.hasSuffix (builtins.readFile ../../../../../modules/terminals/wezterm/wezterm.lua) home.config.programs.wezterm.extraConfig
     ) homes;
+    expected = map (_: true) homes;
   };
 
   testWeztermShellIntegrationsAreGeneratedAcrossHomes = {

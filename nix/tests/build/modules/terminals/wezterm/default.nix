@@ -3,21 +3,22 @@ let
   terminals = ../../../../../modules/terminals;
   windowsWezTerm = ../../../../../../chezmoi/terminals/wezterm/wezterm.lua;
   settings =
-    (import (terminals + "/wezterm") {
+    (import (terminals + "/wezterm/home-manager.nix") {
       inherit pkgs;
       inherit (pkgs) lib;
       inherit (terminalHome) config;
-    }).programs.wezterm.settings;
+    }).config.content.programs.wezterm.settings;
   terminalHome = inputs.home-manager.lib.homeManagerConfiguration {
     inherit pkgs;
     modules = [
-      (terminals + "/wezterm")
+      (terminals + "/wezterm/home-manager.nix")
       {
         home = {
           username = "test-user";
           homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
           stateVersion = "25.05";
         };
+        programs.wezterm.enable = true;
         programs.bash.enable = true;
         programs.zsh = {
           enable = true;

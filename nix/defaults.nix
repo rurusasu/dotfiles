@@ -65,8 +65,6 @@ let
               ./modules/lazygit
               ./modules/ssh.nix
               ./modules/herdr
-              ./modules/terminals/ghostty
-              ./modules/terminals/wezterm
               (
                 { pkgs, inputs, ... }:
                 lib.mkIf (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (
@@ -128,6 +126,8 @@ let
               zoxide.enable = true;
               starship.enable = true;
               zsh-patina.enable = true;
+              ghostty.enable = true;
+              wezterm.enable = true;
             };
             services.ollama.enable = true;
             nix = {
@@ -198,7 +198,6 @@ let
                   (import ./modules/browsers/chrome).wsl
                   (import ./modules/ai_agents/chatgpt).cli
                   ./modules/superfile
-                  ./home/keybindings/windows-export.nix
                   ./modules/fcitx5.nix
                   ./modules/gnome-keyring
                   ./modules/editors/vscode.nix
