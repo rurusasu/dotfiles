@@ -20,7 +20,7 @@ in
             extraSpecialArgs = { inherit inputs; };
             modules = [
               ((import ../../fixtures/packages.nix { inherit inputs; }).homeModule "common")
-              ../../../modules/editors/nvim
+              { programs.neovim.enable = true; }
               {
                 home = {
                   username = "test-user";

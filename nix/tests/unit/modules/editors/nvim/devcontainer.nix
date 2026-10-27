@@ -11,7 +11,10 @@ in
           builtins.elem (fixtures.mkPkgs system).devcontainer
             (fixtures.mkHome system [
               (fixtures.homeModule "common")
-              ../../../../../modules/editors/nvim
+              ../../../../../modules/editors/nvim/home-manager.nix
+              ../../../../../modules/editors/nvim/plugins.home-manager.nix
+              ../../../../../modules/editors/nvim/runtime.home-manager.nix
+              { programs.neovim.enable = true; }
             ]).config.home.packages
         )
         [

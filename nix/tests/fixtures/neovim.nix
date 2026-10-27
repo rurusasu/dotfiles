@@ -1,23 +1,14 @@
 { inputs, pkgs }:
 let
-  home = inputs.home-manager.lib.homeManagerConfiguration {
-    pkgs = import pkgs.path {
-      system = pkgs.stdenv.hostPlatform.system;
-      config.allowUnfree = true;
-    };
-    extraSpecialArgs = { inherit inputs; };
-    modules = [
-      ((import ./packages.nix { inherit inputs; }).homeModule "common")
-      ../../modules/editors/nvim
-      {
-        home = {
-          username = "test-user";
-          homeDirectory = "/tmp/neovim-test-home";
-          stateVersion = "26.05";
-        };
-      }
-    ];
-  };
+  fixtures = import ./packages.nix { inherit inputs; };
+  home = fixtures.mkHome pkgs.stdenv.hostPlatform.system [
+    (fixtures.homeModule "common")
+    ({ lib, ... }: {
+      home.homeDirectory = lib.mkForce "/tmp/neovim-test-home";
+      home.stateVersion = lib.mkForce "26.05";
+      programs.neovim.enable = true;
+    })
+  ];
 in
 {
   package = home.config.programs.neovim.finalPackage;

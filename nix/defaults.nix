@@ -57,7 +57,6 @@ let
               ./modules/1password
               ./modules/ai_agents/mcp.nix
               ./modules/ai_agents/hermes
-              ./modules/editors/nvim
               ./modules/fonts
               ./modules/git
               ./modules/git/ghq.nix
@@ -128,6 +127,7 @@ let
               zsh-patina.enable = true;
               ghostty.enable = true;
               wezterm.enable = true;
+              neovim.enable = true;
             };
             services.ollama.enable = true;
             nix = {

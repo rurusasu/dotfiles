@@ -5,7 +5,7 @@ let
   windows = fixtures.windowsPackages;
   home = fixtures.mkHome "aarch64-darwin" [
     (fixtures.homeModule "common")
-    ../../../modules/editors/nvim
+    { programs.neovim.enable = true; }
   ];
   orcaPackage = inputs.llm-agents.packages.aarch64-darwin.orca;
 in
