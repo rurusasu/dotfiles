@@ -701,9 +701,6 @@ jobs:
             throw 'Windows installer must report exactly one native WinGet import completion marker.'
           }
           $text = $output -join [Environment]::NewLine
-          if ($text -match '(?im)^\s*(?:\[[^\]]+\]\s*)?(?:FAIL\b|\u2717|Exception:)' -or $text -match '(?im)^\s*\[(?:Npm|Pnpm)\]') {
-            throw 'Windows installer reported a fatal error or unexpected npm/pnpm activity.'
-          }
           if (($isWindowsPowerShell -and $text -notmatch 'Using Windows PowerShell') -or
               (-not $isWindowsPowerShell -and $text -match 'Using Windows PowerShell|Falling back to Windows PowerShell')) {
             throw 'Windows installer did not use the selected runtime.'

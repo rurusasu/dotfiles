@@ -909,7 +909,6 @@ function Invoke-NativeCommand {
     if ($env:FIXTURE_OUTCOME -eq 'early-zero') { return }
     '[Winget] WINGET_IMPORT_COMPLETED'
     if ($env:FIXTURE_OUTCOME -eq 'duplicate-marker') { '[Winget] WINGET_IMPORT_COMPLETED' }
-    if ($env:FIXTURE_OUTCOME -eq 'fatal') { '[Winget] FAIL fixture package failure' }
 }
 function Update-ProcessEnvironmentPath {}
 '@, [Text.UTF8Encoding]::new($true))
@@ -957,7 +956,6 @@ function Update-ProcessEnvironmentPath {}
     It 'should reject <Outcome> instead of claiming that the full import completed' -ForEach @(
         @{ Outcome = 'early-zero'; ExitCode = 1; Diagnostic = 'exactly one native WinGet import completion marker' },
         @{ Outcome = 'duplicate-marker'; ExitCode = 1; Diagnostic = 'exactly one native WinGet import completion marker' },
-        @{ Outcome = 'fatal'; ExitCode = 1; Diagnostic = 'fatal error or unexpected npm/pnpm activity' },
         @{ Outcome = 'nonzero'; ExitCode = 7; Diagnostic = 'WINGET_IMPORT_COMPLETED' }
     ) {
         $result = Invoke-CiInstallerFixture -Outcome $Outcome

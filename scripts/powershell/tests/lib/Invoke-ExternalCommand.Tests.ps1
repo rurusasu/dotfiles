@@ -2,13 +2,10 @@
 
 BeforeAll {
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
+    $script:psExe = (Get-Process -Id $PID).Path
 }
 
 Describe 'Invoke-NativeCommand' {
-    BeforeAll {
-        $script:psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell.exe" }
-    }
-
     It 'should not throw when a native command writes stderr and exits 0' {
         $result = Invoke-NativeCommand -Command $script:psExe -Arguments @(
             "-NoLogo",
@@ -108,10 +105,6 @@ Describe 'Get-PackageInstallTimeoutSecond' {
 }
 
 Describe 'Invoke-ExternalCommandWithTimeout' {
-    BeforeAll {
-        $script:psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell.exe" }
-    }
-
     It 'should return output when a native command exits before timeout' {
         $result = Invoke-ExternalCommandWithTimeout -Command $script:psExe -Arguments @(
             "-NoLogo",
