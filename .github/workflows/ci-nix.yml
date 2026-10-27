@@ -550,7 +550,16 @@ jobs:
           $moduleRoot = Join-Path $HOME "Documents\$env:PS_MODULE_DIRECTORY\Modules"
           New-Item -ItemType Directory -Force -Path $moduleRoot | Out-Null
           $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
-          Save-PSResource -Name Pester,PSScriptAnalyzer -Repository PSGallery -Path $moduleRoot -TrustRepository
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+              Save-PSResource -Name Pester,PSScriptAnalyzer -Repository PSGallery -Path $moduleRoot -TrustRepository
+              break
+            }
+            catch {
+              if ($attempt -eq 3) { throw }
+              Start-Sleep -Seconds ($attempt * 5)
+            }
+          }
           . .\scripts\powershell\tests\support\Resolve-TestModule.ps1
           Resolve-TestModule -Name Pester | Out-Null
           Resolve-TestModule -Name PSScriptAnalyzer | Out-Null
