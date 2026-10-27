@@ -155,7 +155,6 @@ in
         // (import ./unit/defaults/nodejs-package-selection.nix { inherit inputs; })
         // (import ./unit/modules/ai_agents/hermes/default.nix { inherit inputs; })
         // (import ./unit/modules/ai_agents/strata/default.nix { inherit inputs; })
-        // (import ./unit/windows/pnpm.nix { inherit inputs; })
         // (import ./unit/defaults/github-cli-package-selection.nix { inherit inputs; })
         // (import ./unit/defaults/darwin-configuration.nix { inherit inputs; })
         // (import ./unit/defaults/linux-configuration.nix { inherit inputs; })

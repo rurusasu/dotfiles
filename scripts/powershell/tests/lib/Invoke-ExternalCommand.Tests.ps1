@@ -1,13 +1,5 @@
 ﻿#Requires -Module Pester
 
-<#
-.SYNOPSIS
-    Invoke-ExternalCommand.ps1 のユニットテスト
-
-.DESCRIPTION
-    外部コマンドラッパー関数のテスト
-#>
-
 BeforeAll {
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
 }

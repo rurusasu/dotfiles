@@ -1,7 +1,7 @@
 # unit: nix-unit の値テスト
 
 - Nix 式、Home Manager / host の実効 option、package 選択、flake の配線を検証する。
-- 統合設定・OS 構成は `defaults/`、アプリは本番 `nix/modules/` と同じ分類の `modules/` に置く。共通キーは `home/keybindings/bindings.nix`、Windows manifest は `windows/`、登録契約は `ownership.nix` が担当する。
+- 統合設定・OS 構成は `defaults/`、アプリは本番 `nix/modules/` と同じ分類の `modules/` に置く。共通キーは `home/keybindings/bindings.nix`、登録契約は `ownership.nix` が担当する。Windows manifest は CI の jq で直接検証する。
 - 各ファイルは `test...` 属性を持つ属性セットを返し、各テストに `expr` と `expected` を定義する。
 - 入力が必要なら `{ inputs }:` を受け取り、pkgs は `nix/tests/fixtures/packages.nix` を利用する。
 - `nix/tests/default.nix` の `perSystem.nix-unit.tests` に明示的に登録する。

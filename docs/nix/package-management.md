@@ -12,7 +12,7 @@ Hermes は同梱 Python を使い、プロジェクト依存は `uv` で管理�
 
 通常の CLI・GUI とユーザー設定は Home Manager が管理します。macOS の Obsidian / Raycast / Dia / 1Password もこの範囲です。OS 固有の設定・権限・システムサービス・連携は `nix/defaults.nix` の各 OS ブロックに置きます。専用の実行依存は、そのアプリやサービスの module が管理します。Neovim の補助 CLI・LSP・整形ツール・toolchain・プラグイン実行依存は `nix/modules/editors/nvim/` が所有します。
 
-Windows の導入情報は `windows/winget/packages.json` を直接管理します。Unix の Nix module と独立した正本で、Nix から生成しません。通常の Windows セットアップは GUI アプリだけを導入し、`windows/npm/packages.json` と `windows/pnpm/packages.json` は空です。
+Windows の導入情報は `windows/winget/packages.json` を直接管理します。Unix の Nix module と独立した正本で、Nix から生成しません。通常の Windows セットアップは WinGet から GUI アプリを導入します。
 
 明示的な CLI 例外として、Windows PowerShell 用の Superfile (`spf`) も WinGet で導入します。
 WSL の Superfile は Home Manager が導入・設定を管理します。
@@ -72,7 +72,6 @@ Neovim / Hermes の追加プラグインと formatter の入力は、アプリ�
 | `nix/home/`                                | 共通キー配置と Windows export                                                  |
 | `nix/home/keybindings/`                    | 共通キー配置と Windows export                                                  |
 | `windows/winget/packages.json`             | Windows GUI の標準 package ID・source・Scope                                   |
-| `windows/{npm,pnpm}/packages.json`         | 独立した Node package manifest。現在は空                                       |
 
 Hermes の root・Desktop・gateway は公式 Home Manager module、named profile は Git 正本と公式 CLI で管理します。
 外部 LCM は `extraPlugins` に追加します。操作は [Hermes](../hermes-agent/bootstrap.md) を参照してください。
@@ -107,7 +106,7 @@ NixOS:            ./install.sh
 Ubuntu / Debian:  ./install.sh
 ```
 
-- Windows は `windows/winget/packages.json` を正本として GUI アプリのみを winget で導入します。npm/pnpm manifest は独立した空配列として保持します。
+- Windows は `windows/winget/packages.json` を正本として GUI アプリのみを winget で導入します。
 - `task install` は既存の PowerShell と winget で Windows GUI アプリを導入した後、NixOS-WSL の導入、inputs の更新と NixOS/Home Manager の反映、Windows chezmoi の順に一度ずつ実行します。WSLg の対象 GUI は Nix 側で導入します。実行順序は `taskfiles/install/taskfile.yml` が管理します。`install.cmd` / `install.ps1` が PowerShell で WinGet master を1回適用し、Task の導入後は Taskfile の WSL・chezmoi へ進みます。WinGet の実行経路はこの1か所で、直接の `task install` も同じ入口を使います。`-Phase Winget` は Windows GUI のみです。WSL 基盤の有効化だけ UAC 昇格します。Node.js・npm・pnpm・dsh・AutoHotkey・GlazeWM の Windows 導入や CLI runtime acceptance は行いません。既存アプリや Startup shortcut は自動削除しません。
 - Codex CLI はどの OS でも個別導入せず、各 OS 向け ChatGPT アプリ付属の CLI を使います。Windows の GUI profile は Microsoft Store のデスクトップアプリを対象とし、npm/pnpm パッケージを導入しません。
 - macOS は nix-darwin が Home Manager と nix-homebrew formula/cask を同じ switch に含めます。
@@ -185,7 +184,7 @@ WinGet と各アプリの installer が導入、更新、コマンドリンク�
 
 Windows PowerShell で使う superfile・eza・fd・ripgrep・lazygit と、WSL の `git_status.windows_starship` 用 Starship・MinGit は Windows CLI の明示的な例外です。これらは標準の `Scope: user` を指定します。Windows の alias・関数は chezmoi、Unix のアプリと設定は Nix / Home Manager が管理します。PATH が更新された場合は新しい terminal / WSL セッションで確認します。
 
-Chrome / Spotify / Signal / Obsidian の通常導入とキーからの起動先は NixOS-WSL です。Windows の 1Password は `op.exe` / Git signer 連携のため維持し、GUI の通常起動先は WSLg です。Windows npm/pnpm manifest は空です。各 OS ではその OS のアプリに付属する CLI を使います。
+Chrome / Spotify / Signal / Obsidian の通常導入とキーからの起動先は NixOS-WSL です。Windows の 1Password は `op.exe` / Git signer 連携のため維持し、GUI の通常起動先は WSLg です。各 OS ではその OS のアプリに付属する CLI を使います。
 
 Windows Dia は [公式サイト](https://www.diabrowser.com/)から手動導入します。master と独自 MSIX 導入処理からは削除しています。管理対象から外したアプリを自動 uninstall することはありません。
 
@@ -227,5 +226,5 @@ Starship の有効化・Bash / Zsh の標準連携・プロンプトは `nix/mod
 - `nix/defaults.nix:systemDefaults.home-manager.sharedModules`
 - `nix/home/keybindings/`
 - `nix/defaults.nix`
-- `windows/{winget,npm,pnpm}/packages.json`
+- `windows/winget/packages.json`
 - `scripts/powershell/lib/Invoke-ExternalCommand.ps1`

@@ -399,12 +399,8 @@ Describe 'Windows installer phases' {
             $library = Join-Path $adapter 'lib'
             New-Item -ItemType Directory -Path $library -Force | Out-Null
             Copy-Item -LiteralPath (Join-Path $script:repoRoot 'install.cmd') -Destination $root
-            foreach ($file in 'install.ps1') {
-                Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts/powershell/$file") -Destination $adapter
-            }
-            foreach ($file in 'Invoke-ExternalCommand.ps1') {
-                Copy-Item -LiteralPath (Join-Path $script:repoRoot "scripts/powershell/lib/$file") -Destination $library
-            }
+            Copy-Item -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/install.ps1') -Destination $adapter
+            Copy-Item -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/lib/Invoke-ExternalCommand.ps1') -Destination $library
             New-Item -ItemType Directory -Path "$root/windows/winget" -Force | Out-Null
             Copy-Item -LiteralPath (Join-Path $script:repoRoot 'windows/winget/packages.json') -Destination "$root/windows/winget/packages.json"
             New-Item -ItemType Directory -Path "$root/chezmoi", "$root/home" -Force | Out-Null
@@ -520,10 +516,7 @@ Describe 'Windows installer WSL integration' {
             New-Item -ItemType Directory -Path "$adapter/lib", "$root/taskfiles/install", $temporaryDirectory -Force | Out-Null
             if (-not $InstallDirectory) { $InstallDirectory = Join-Path $root 'NixOS' }
             Copy-Item "$script:repoRoot/install.cmd" $root
-            foreach ($name in 'install.ps1') {
-                $source = Join-Path $script:repoRoot "scripts/powershell/$name"
-                if (Test-Path $source) { Copy-Item $source $adapter }
-            }
+            Copy-Item -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/install.ps1') -Destination $adapter
             Copy-Item "$script:repoRoot/scripts/powershell/lib/*.ps1" "$adapter/lib"
             New-Item -ItemType Directory -Path "$root/chezmoi" -Force | Out-Null
             Copy-Item "$script:repoRoot/taskfiles/install/taskfile.yml" "$root/taskfiles/install"
@@ -533,13 +526,6 @@ includes:
   install:
     taskfile: ./taskfiles/install/taskfile.yml
     flatten: true
-tasks:
-  nrs:
-    cmds:
-      - pwsh -NoProfile -File nrs.ps1
-'@
-            Set-Content "$root/nrs.ps1" -Value @'
-Add-Content (Join-Path $env:FIXTURE_ROOT 'events.txt') 'nrs'
 '@
             # Keep the real registration operation and intercept OS/network/setup boundaries.
             Add-Content "$adapter/lib/Invoke-ExternalCommand.ps1" -Value @'

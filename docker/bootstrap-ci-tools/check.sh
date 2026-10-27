@@ -18,7 +18,6 @@ done
 
 bash -lc 'command -v git >/dev/null && command -v nix >/dev/null'
 
-python3 -c 'import sys; assert sys.version_info >= (3, 14), sys.version'
 node -e 'if (Number(process.versions.node.split(".")[0]) < 24) process.exit(1)'
 nix eval --json --expr '1 + 1' | grep -qx 2
 nix store info --store local

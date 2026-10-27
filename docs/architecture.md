@@ -10,7 +10,7 @@
    - Unix CLI / GUI の導入・package 選択・設定・連携・専用の実行依存をアプリごとの module にまとめ、共通・OS 別構成は module の外で imports を明示
    - enable・単純な package list・単一代入は `nix/defaults.nix` の必要な構成へ直接記載。設定・package override・生成・連携を持つアプリは module にまとめる
    - 通常の CLI・GUI とユーザー設定は Home Manager、OS 固有の設定・権限・システムサービス・連携は `nix/defaults.nix` の各 OS ブロックが管理。Homebrew と cask は `nix/defaults.nix` に宣言
-   - Windows は `windows/winget/packages.json` を直接管理し、GUI アプリを導入。npm/pnpm manifest は空
+   - Windows は `windows/winget/packages.json` を直接管理し、GUI アプリを導入
    - 機能と OS の所有境界は [分割の理由と編集先](./nix/package-management.md#分割の理由と編集先) を参照
 2. **ユーザー設定は Unix と Windows の責務を分離**
    - Unix の Codex、shell、Git、terminal、editor は Home Manager が管理
@@ -46,8 +46,6 @@ dotfiles/
 │   └── powershell/         # PowerShell scripts (Windows)
 ├── windows/                # Windows-side config files
 │   ├── winget/             # Independently maintained GUI packages.json
-│   ├── npm/                # Empty independent packages.json
-│   ├── pnpm/               # Empty independent packages.json
 │   └── .wslconfig          # WSL configuration
 ├── docs/                   # Documentation
 ├── Taskfile.yml            # Task runner (WSL 経由で nix fmt 等を実行)
@@ -185,7 +183,6 @@ nix/modules/ ───── 共通・OS 別構成が imports で選択
 nix/defaults.nix:systemDefaults ── 共通 OS / Home Manager 設定と有効化だけの標準宣言
 
 windows/winget/packages.json ── Windows GUI を直接宣言
-windows/{npm,pnpm}/packages.json ── 独立した空 manifest
 ```
 
 ### ツール追加手順

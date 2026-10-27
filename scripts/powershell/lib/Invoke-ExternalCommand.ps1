@@ -1,16 +1,6 @@
 ﻿
 
-<#
-.SYNOPSIS
-    WSL コマンドを実行する
-.PARAMETER Arguments
-    WSL に渡す引数
-.OUTPUTS
-    コマンドの出力
-.EXAMPLE
-    Invoke-Wsl -Arguments @('--list', '--quiet')
-    Invoke-Wsl -Arguments @('-d', 'NixOS', '-u', 'root', '--', 'sh', '-lc', 'whoami')
-#>
+# WSL_UTF8 and the reader encoding must agree, including under Windows PowerShell 5.1.
 function Invoke-Wsl {
     [CmdletBinding()]
     param(
@@ -30,18 +20,8 @@ function Invoke-Wsl {
     finally { $env:WSL_UTF8 = $previousWslUtf8 }
 }
 
-<#
-.SYNOPSIS
-    外部コマンドを stderr で例外化せずに実行する
-.DESCRIPTION
-    Windows PowerShell 5.1 は native command の stderr を ErrorRecord として扱う。
-    version 表示や warning を stderr に書く正常終了コマンドを失敗扱いしないため、
-    stderr は通常出力へ正規化し、成否は $LASTEXITCODE で判断する。
-.PARAMETER Command
-    実行するコマンド名
-.PARAMETER Arguments
-    コマンドに渡す引数
-#>
+# Windows PowerShell 5.1 turns native stderr into ErrorRecord objects.
+# Normalize warnings to text and use LASTEXITCODE to decide success.
 function Invoke-NativeCommand {
     [CmdletBinding()]
     param(
@@ -68,10 +48,6 @@ function Invoke-NativeCommand {
     }
 }
 
-<#
-.SYNOPSIS
-    標準 WinGet manifest を一度だけ import する
-#>
 function Import-WindowsPackage {
     [CmdletBinding()]
     param(
@@ -109,24 +85,12 @@ function Get-PackageInstallTimeoutSecond {
     return 3600
 }
 
-<#
-.SYNOPSIS
-    ユーザー環境変数 PATH の現在値を返す
-.DESCRIPTION
-    Pester でモック可能にするため [System.Environment] を直接呼ばずにラップする
-#>
+# Keep registry reads mockable so tests never change the persisted user PATH.
 function Get-UserEnvironmentPath {
     return [System.Environment]::GetEnvironmentVariable("PATH", "User")
 }
 
-<#
-.SYNOPSIS
-    現在の PowerShell プロセスの PATH を環境変数ストアから再構築する
-.DESCRIPTION
-    winget install 後は Machine/User PATH が更新されても、実行中の
-    PowerShell プロセスには自動反映されない。検証コマンドを同じ
-    install.cmd 実行内で見つけられるようにする。
-#>
+# Refresh registry PATH changes for commands launched after WinGet.
 function Update-ProcessEnvironmentPath {
     [CmdletBinding()]
     param()
@@ -181,16 +145,8 @@ function Update-ProcessEnvironmentPath {
     }
 }
 
-<#
-.SYNOPSIS
-    WSL が利用可能かどうかを確認する
-.DESCRIPTION
-    VirtualMachinePlatform の無効・未導入を先に検出する。
-    wsl --status は WSL 2 を起動できない状態でも exit 0 を返すため、
-    終了コードだけでは基盤の有効化を判定しない。Pester でモック可能。
-.OUTPUTS
-    [bool] WSL が利用可能なら $true
-#>
+# wsl --status can exit 0 even when WSL 2 cannot start.
+# Reject a disabled or absent VirtualMachinePlatform before checking status.
 function Test-WslAvailable {
     [CmdletBinding()]
     [OutputType([bool])]
@@ -219,13 +175,8 @@ function Test-WslAvailable {
 function ConvertTo-WindowsCommandLineArgument {
     [CmdletBinding()]
     param(
-        [AllowNull()]
         [string]$Argument
     )
-
-    if ($null -eq $Argument) {
-        return '""'
-    }
 
     if ($Argument -notmatch '[\s"]' -and $Argument.Length -gt 0) {
         return $Argument
@@ -298,6 +249,7 @@ function Invoke-ExternalCommandWithTimeout {
             }
         }
         else {
+            # Windows PowerShell 5.1 lacks ArgumentList; preserve CRT quote/backslash rules.
             $processStartInfo.Arguments = ($Arguments |
                     ForEach-Object { ConvertTo-WindowsCommandLineArgument -Argument ([string]$_) }) -join " "
         }

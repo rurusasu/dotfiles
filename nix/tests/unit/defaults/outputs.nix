@@ -20,7 +20,6 @@ let
         };
         lib = {
           getExe = package: package.executable;
-          getExe' = package: binary: "${package.executable}/${binary}";
           optionalAttrs = condition: attrs: if condition then attrs else { };
         };
       };
@@ -40,37 +39,25 @@ in
     expr =
       builtins.map
         (
-          spec:
+          name:
           let
-            node = lock.nodes.${rootInputs.${spec.name}};
+            node = lock.nodes.${rootInputs.${name}};
           in
           {
             inherit (node.locked) owner repo type;
-            rootInputIsPresent = builtins.hasAttr spec.name rootInputs;
-            sourceMatches = node.locked.owner == spec.owner && node.locked.repo == spec.repo;
             hasLockedRevision = node.locked.rev != "";
             hasNarHash = node.locked.narHash != "";
           }
         )
         [
-          {
-            name = "nix-darwin";
-            owner = "nix-darwin";
-            repo = "nix-darwin";
-          }
-          {
-            name = "nix-homebrew";
-            owner = "zhaofengli";
-            repo = "nix-homebrew";
-          }
+          "nix-darwin"
+          "nix-homebrew"
         ];
     expected = [
       {
         type = "github";
         owner = "nix-darwin";
         repo = "nix-darwin";
-        rootInputIsPresent = true;
-        sourceMatches = true;
         hasLockedRevision = true;
         hasNarHash = true;
       }
@@ -78,8 +65,6 @@ in
         type = "github";
         owner = "zhaofengli";
         repo = "nix-homebrew";
-        rootInputIsPresent = true;
-        sourceMatches = true;
         hasLockedRevision = true;
         hasNarHash = true;
       }

@@ -14,7 +14,7 @@ nix-unit と競合する別のテストフレームワークではありませ�
 
 テストの分類は本番の `nix/` に揃えます。統合設定・OS 構成は `unit/defaults/`、
 アプリは本番 `modules/` と同じ分類の `unit/modules/`、共通キーは `unit/home/keybindings/bindings.nix`、
-Windows manifest の契約は `unit/windows/` に置きます。
+Windows manifest の契約は CI の jq で直接検証します。
 構成テストは `nix/defaults.nix:systemDefaults` を参照し、`platform` と `system` で対象を選択します。
 共通の Home Manager 評価は `fixtures/home-configurations.nix` を使います。
 登録側で一度作った `homeConfigurations` を各テストへ渡し、同じホスト構成の評価を共有します。
@@ -33,13 +33,12 @@ nix-unit の flake-parts module が `checks.<system>.nix-unit` を自動生成�
 設定の正本は `nix/treefmt.nix`、読み込みと開発シェルの配線は `nix/defaults.nix` です。
 Unix CLI と GUI の選択は各アプリ module を選択した Home Manager の実効設定で検証し、
 OS 固有の連携 package は host の実効設定で検証します。
-Windows の 標準 package ID / source は独立した `windows/winget/packages.json` を直接評価します。
+Windows の標準 package ID / source は CI の jq が `windows/winget/packages.json` を直接検証します。
 廃止した package catalog / provider resolution の fixture や生成 manifest 比較は対象にしません。
 
 - `tests/bash/` は shell / installer の順序、外部コマンドの stub、runtime / artifact 契約を検証します。
 - Nix の値 assertion を Bats 内の `nix eval` に追加せず、`unit/` に記載します。
 - Nix の構成・package 選択・生成設定の検証はすべて `unit/` / `build/` が担当します。
-  `tests/python/` は Python の処理や外部コマンドの実行を検証し、本番設定の一覧や値を複製しません。
 - 実機の activation、service 起動、secret、network は nix-unit の対象外です。
   ビルド・CLI double の成功だけで実機の動作確認が完了したとは扱いません。
 
@@ -101,7 +100,8 @@ Nix formatter は host module ではなく固定した store module を使いま
 Linux bootstrap CI は hardware fixture を `/etc/nixos/hardware-configuration.nix` に配置し、`x86_64-linux`（`ubuntu-24.04`）で本番 NixOS system と standalone Home Manager activation package を build します。両構成は同じ `systemDefaults.home-manager.sharedModules` を使います。
 Darwin CI は `extendModules` で runner の `system.primaryUser` を明示し、`aarch64-darwin`（`macos-15`）で `darwin-rebuild switch` と全 flake checks を実行します。
 WSL CI も `platform = "wsl"` を選ぶ本番経路の `nixos-rebuild switch` を実行します。Darwin cask artifact check は CI で実行しません。
-Python unittest suite は CI の gate から外し、workflow 検証は `actionlint`、設定適用は対象 platform の rebuild で行います。
+workflow の外部コマンド・認証・cache・Git 差分・集約判定は `tests/bash/ci_workflow.bats` で実行します。
+YAML 構文は `actionlint`、設定適用は対象 platform の rebuild で検証します。
 共通の `nix` job は statix の lint を確認し、事前の `nix eval` / `nix flake check --no-build` は実行しません。
 `aarch64-linux` は flake の support/output には含まれますが、この workflow には ARM64 Linux runner の native build がありません。
 `aarch64-linux` の native build には対応する builder が必要です。

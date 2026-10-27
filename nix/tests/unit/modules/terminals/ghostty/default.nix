@@ -78,9 +78,6 @@ in
         ghosttySystemd = home.config.programs.ghostty.systemd.enable;
         ghosttyService = home.config.xdg.configFile ? "systemd/user/app-com.mitchellh.ghostty.service";
         customTarget = home.config.xdg.configFile."ghostty/config".target;
-        windowsWinget =
-          (import ../../../../fixtures/packages.nix { inherit inputs; })
-          .windowsPackages."wez.wezterm".PackageIdentifier;
       }
     ) systems;
     expected = map (system: {
@@ -91,7 +88,6 @@ in
       ghosttySystemd = system != "aarch64-darwin";
       ghosttyService = system != "aarch64-darwin";
       customTarget = "custom config/ghostty/config";
-      windowsWinget = "wez.wezterm";
     }) systems;
   };
   testWslGhosttyReadsChezmoiExportAtConfiguredXdgPath = {

@@ -12,7 +12,7 @@
 - 戻り値で unit / build を分け、その下の分類は本番 `nix/` に揃える。統合設定は `defaults/`、アプリは本番と同じ `modules/` の分類に置く。どちらも flake の `checks` 経由で実行する。
 - テスト本体はここに置き、`nix/tests/default.nix` に一度だけ登録する。
 - 移動時は相対 import、README、CI routing、Bats / PowerShell の固定パスを同時に更新する。
-- 共通キーは `unit/home/keybindings/bindings.nix`、Windows manifest は `unit/windows/` に置く。unit / build の登録漏れ・重複は `unit/ownership.nix` が検査する。
+- 共通キーは `unit/home/keybindings/bindings.nix`、Windows manifest は CI の jq で直接検証する。unit / build の登録漏れ・重複は `unit/ownership.nix` が検査する。
 - 既存の公開 check 名と OS 制約を維持する。VM テストは Linux builder が必要。
 - fixture に実際の認証情報や個人データを入れず、実機の設定として適用しない。
 

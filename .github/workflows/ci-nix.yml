@@ -879,15 +879,10 @@ jobs:
                 and all(to_entries[] | select(.key != "Scope"); .value | nonempty_string)))
             and ([.Sources[].Packages[].PackageIdentifier] as $ids
               | ($ids | length) == ($ids | unique | length))
+            and any(.Sources[]; .SourceDetails.Name == "winget"
+              and any(.Packages[]; .PackageIdentifier == "StablyAI.Orca"))
+            and any(.Sources[].Packages[]; .PackageIdentifier == "wez.wezterm")
           ' windows/winget/packages.json
-          for manifest in windows/npm/packages.json windows/pnpm/packages.json; do
-            jq -e '
-              (.globalPackages | type == "array")
-              and all(.globalPackages[];
-                (if type == "string" then . else .name end)
-                | type == "string" and length > 0)
-            ' "$manifest"
-          done
 
       - name: Save Nix cache
         uses: ./.github/actions/cache-nix

@@ -19,10 +19,8 @@ function Stop-UnexpectedAcquisition {
     Set-Content -LiteralPath $env:FIXTURE_NETWORK_MARKER 'called'
     throw 'Tests must not acquire dependencies'
 }
-function Find-Module { Stop-UnexpectedAcquisition }
-function Install-Module { Stop-UnexpectedAcquisition }
-function Save-Module { Stop-UnexpectedAcquisition }
-function Install-PackageProvider { Stop-UnexpectedAcquisition }
+function Save-PSResource { Stop-UnexpectedAcquisition }
+function Install-PSResource { Stop-UnexpectedAcquisition }
 function Invoke-RestMethod { Stop-UnexpectedAcquisition }
 function Invoke-WebRequest { Stop-UnexpectedAcquisition }
 if ($MissingDependency -in @('Pester', 'PSScriptAnalyzer')) {

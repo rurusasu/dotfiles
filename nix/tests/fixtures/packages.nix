@@ -25,18 +25,6 @@ in
         else
           lib.reverseList base.home-manager.sharedModules;
     };
-  windowsPackages = builtins.listToAttrs (
-    builtins.concatMap (
-      source:
-      builtins.map (package: {
-        name = package.PackageIdentifier;
-        value = package // {
-          source = source.SourceDetails.Name;
-        };
-      }) source.Packages
-    ) (builtins.fromJSON (builtins.readFile ../../../windows/winget/packages.json)).Sources
-  );
-  pnpmManifest = builtins.fromJSON (builtins.readFile ../../../windows/pnpm/packages.json);
   mkHome =
     system: modules:
     let

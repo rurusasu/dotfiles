@@ -18,7 +18,7 @@ function Resolve-TestModule {
                 }).Count -eq 0
             $psData = if ($candidate.PrivateData -is [Collections.IDictionary]) { $candidate.PrivateData['PSData'] } else { $null }
             $prerelease = if ($psData -is [Collections.IDictionary]) { $psData['Prerelease'] } else { $null }
-            $edition = if ($PSVersionTable.ContainsKey('PSEdition')) { $PSVersionTable.PSEdition } else { 'Desktop' }
+            $edition = $PSVersionTable.PSEdition
             $exportsRequiredCommands -and [string]::IsNullOrWhiteSpace([string]$prerelease) -and
             ($Name -ne 'Pester' -or $candidate.Version -ge [version]'6.2') -and
             (-not $candidate.PowerShellVersion -or $candidate.PowerShellVersion -le $PSVersionTable.PSVersion) -and

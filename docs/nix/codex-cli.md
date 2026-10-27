@@ -69,7 +69,7 @@ Google 連携は Pipedream に統一し、Codex の Google curated plugins は�
 設定と認証の範囲は [Google MCP](../hermes-agent/gmail-mcp.md) を参照してください。
 
 Unix の dsh の導入は `nix/defaults.nix` で管理します。
-Windows の npm/pnpm manifest は空で、dsh を導入しません。pnpm と Bun は導入しません。
+Windows では dsh・pnpm・Bun を導入しません。
 
 ## 反映
 

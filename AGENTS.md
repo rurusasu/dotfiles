@@ -18,7 +18,7 @@
 - OS / Home Manager 設定は `nix/defaults.nix:systemDefaults` にまとめ、末尾の構成登録で `specialArgs.platform` と CPU の `system` を選択する。
 - 共通の OS / Home Manager 設定は `nix/defaults.nix:systemDefaults` にまとめ、Home Manager 共通設定は同 module の `home-manager.sharedModules` に置く。OS 別ユーザー設定も同じ `sharedModules` 内で選択し、standalone と共有する。
 - 共通キー配列は `nix/home/keybindings/bindings.nix`、各アプリの生成関数・設定は `nix/modules/`。OS 基盤設定と module 選択は `nix/defaults.nix` が担当する。純粋な設定生成関数を Home Manager module の imports に渡さない。
-- Windows manifest: `windows/{winget,npm,pnpm}/packages.json`（直接管理する独立した正本。通常導入は WinGet の GUI のみ）
+- Windows manifest: `windows/winget/packages.json`（直接管理する独立した正本。通常導入は WinGet の GUI のみ）
 - アプリのユーザー設定・サービス・activation は `nix/modules/`、OS 基盤設定と module 選択は `nix/defaults.nix`、Windows は `chezmoi/` に置く。Unix の設定ファイルは標準 Home Manager option と `xdg.configFile` で管理し、二重配布しない。
 - Windows 実行ロジック: `scripts/powershell/`
 - CLI の実行順序・依存関係・公開コマンドは `Taskfile.yml` と `taskfiles/` に実装する。
