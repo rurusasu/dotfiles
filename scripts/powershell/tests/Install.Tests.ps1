@@ -387,10 +387,11 @@ includes:
 
     Context 'Windows installer Task visibility' -Skip:($env:OS -ne 'Windows_NT') {
         It 'should expose the install entry and hide every installation helper even from list-all' {
-            $output = @(& $script:taskRuntime --dir $script:taskRoot --list-all 2>&1) -join "`n"
+            $output = @(& $script:taskRuntime --dir $script:taskRoot --list-all --json 2>&1) -join "`n"
             $LASTEXITCODE | Should -Be 0 -Because $output
-            $output | Should -Match '(?m)^\* install:'
-            $output | Should -Not -Match '(?m)^\* install:(start|apply|winget|wsl|chezmoi):'
+            $names = ($output | ConvertFrom-Json).tasks.name
+            $names | Should -Contain 'install'
+            $names | Where-Object { $_ -like 'install:*' } | Should -BeNullOrEmpty
         }
 
         It 'should reject direct invocation of the private <TaskName> task' -ForEach @(
