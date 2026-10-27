@@ -1,33 +1,22 @@
 { inputs }:
 let
+  inherit (inputs.nixpkgs) lib;
   bashTests = ../../../tests/bash;
   bashEntries = builtins.readDir bashTests;
   linesOf = source: builtins.filter builtins.isString (builtins.split "\n" source);
   nixUnitRegistry = builtins.readFile ../default.nix;
   nixFilesUnder =
-    directory: prefix:
-    let
-      entries = builtins.readDir directory;
-    in
-    builtins.concatLists (
-      builtins.map (
-        name:
-        let
-          entryType = entries.${name};
-          relativeName = if prefix == "" then name else "${prefix}/${name}";
-        in
-        if entryType == "regular" && builtins.match ".*[.]nix$" name != null then
-          [ relativeName ]
-        else if entryType == "directory" then
-          nixFilesUnder (directory + "/${name}") relativeName
-        else
-          [ ]
-      ) (builtins.attrNames entries)
+    directory:
+    builtins.sort builtins.lessThan (
+      builtins.map (path: lib.removePrefix "${toString directory}/" (toString path)) (
+        lib.fileset.toList (
+          lib.fileset.fileFilter (file: file.type == "regular" && file.hasExt "nix") directory
+        )
+      )
     );
-  allNixTestFiles = nixFilesUnder ./. "";
   # Every file under unit/ is a test module; fixtures and build checks live outside it.
-  nixUnitModuleFiles = allNixTestFiles;
-  buildFiles = nixFilesUnder ../build "";
+  allNixTestFiles = nixFilesUnder ./.;
+  buildFiles = nixFilesUnder ../build;
   nixTestAttributeNames = builtins.concatLists (
     builtins.map (
       name:
@@ -76,7 +65,7 @@ in
 
   testEveryRecursiveNixUnitModuleIsRegisteredExactlyOnce = {
     expr =
-      nixUnitModuleFiles != [ ]
+      allNixTestFiles != [ ]
       &&
         builtins.sort builtins.lessThan (
           builtins.filter (name: name != null) (
@@ -88,14 +77,12 @@ in
               if match == null then null else builtins.elemAt match 2
             ) (linesOf nixUnitRegistry)
           )
-        ) == nixUnitModuleFiles;
+        ) == allNixTestFiles;
     expected = true;
   };
 
   testNixTestAttributeNamesAreUnique = {
-    expr =
-      builtins.length nixTestAttributeNames
-      == builtins.length (inputs.nixpkgs.lib.unique nixTestAttributeNames);
+    expr = builtins.length nixTestAttributeNames == builtins.length (lib.unique nixTestAttributeNames);
     expected = true;
   };
 

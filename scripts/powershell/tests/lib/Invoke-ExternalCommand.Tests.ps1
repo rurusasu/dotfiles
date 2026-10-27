@@ -274,60 +274,30 @@ Describe 'Update-ProcessEnvironmentPath' {
 
 
 
-    It 'should discard missing PATH directories before they crowd valid command paths out of the child environment' {
+    It 'should discard oversized stale inherited and User PATH entries while preserving native commands' {
         if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
-            Set-ItResult -Skipped -Because 'missing directory filtering is Windows-specific'
+            Set-ItResult -Skipped -Because 'Windows directory filtering and the cmd.exe environment limit are Windows-specific'
             return
         }
 
         $validUserPath = Join-Path $TestDrive 'valid-command-directory'
         $null = New-Item -ItemType Directory -Path $validUserPath -Force
-        $staleEntries = 1..500 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
-        Mock Get-UserEnvironmentPath { return (@($staleEntries) + @($validUserPath)) -join ';' }
-
-        $env:PATH = (@($script:originalPath -split ';') + @($staleEntries)) -join ';'
-
-        Update-ProcessEnvironmentPath
-
-        $env:PATH.Length | Should -BeLessOrEqual 8191
-        ($env:PATH -split ';') | Should -Contain $validUserPath
-        foreach ($entry in $staleEntries) {
-            ($env:PATH -split ';') | Should -Not -Contain $entry
-        }
-    }
-
-    It 'should refresh only the process without changing a stale oversized persisted User PATH' {
-        $validUserPath = Join-Path $TestDrive 'gui-only-command-directory'
-        $null = New-Item -ItemType Directory -Path $validUserPath -Force
-        $staleEntries = 1..1000 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
+        $staleEntries = 1..1000 | ForEach-Object { "C:\$([string]::new('S', 80))$_" }
         $oversizedUserPath = (@($staleEntries) + @($validUserPath)) -join ';'
-        $oversizedUserPath.Length | Should -BeGreaterThan 32767
-        Mock Get-UserEnvironmentPath { return $oversizedUserPath }
-
-        $env:PATH = $script:originalPath
-
-        Update-ProcessEnvironmentPath
-
-        $env:PATH.Length | Should -BeLessOrEqual 8191
-        ($env:PATH -split ';') | Should -Contain $validUserPath
-    }
-
-    It 'should keep the refreshed PATH below the Windows command environment limit' {
-        if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
-            Set-ItResult -Skipped -Because 'the cmd.exe environment limit is Windows-specific'
-            return
-        }
-
-        $oversizedUserPath = (1..600 | ForEach-Object { "C:\$([string]::new('U', 80))$_" }) -join ';'
-        Mock Get-UserEnvironmentPath { return $oversizedUserPath }
-
-        $env:PATH = "$script:originalPath;" + ((1..120 | ForEach-Object { "C:\$([string]::new('P', 80))$_" }) -join ';')
         $oversizedUserPath.Length | Should -BeGreaterThan 50000
+        Mock Get-UserEnvironmentPath { return $oversizedUserPath }
+
+        $env:PATH = (@($script:originalPath -split ';') + @($staleEntries | Select-Object -First 120)) -join ';'
+        $env:PATH.Length | Should -BeGreaterThan 8191
+        $env:PATH.Length | Should -BeLessThan 32767
 
         Update-ProcessEnvironmentPath
 
+        $paths = $env:PATH -split ';'
         $env:PATH.Length | Should -BeLessOrEqual 8191
-        ($env:PATH -split ';') | Should -Contain (Split-Path -Parent (Get-Command cmd.exe).Source)
+        $paths | Should -Contain $validUserPath
+        @($paths | Where-Object { $staleEntries -contains $_ }).Count | Should -Be 0
+        $paths | Should -Contain (Split-Path -Parent (Get-Command cmd.exe).Source)
         $commandInterpreter = Join-Path $env:SystemRoot 'System32\cmd.exe'
         & $commandInterpreter /d /c 'exit 0'
         $LASTEXITCODE | Should -Be 0
