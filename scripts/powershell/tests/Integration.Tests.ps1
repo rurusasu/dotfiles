@@ -28,7 +28,7 @@ Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platf
         # Font registration belongs to installer E2E and changes the current user's registry.
         $targets = @(
             'Documents/PowerShell/Microsoft.PowerShell_profile.ps1'
-            '.chezmoiscripts/deploy/terminals/run_onchange_deploy.ps1.tmpl'
+            'dot_config/wezterm/wezterm.lua.tmpl'
         ) | ForEach-Object { Join-Path $source $_ }
         $arguments = @('--config', $config, '--source', $source,
             '--destination', $destination, '--persistent-state', $state, '--source-path', 'apply', '--force', '--parent-dirs') + $targets

@@ -13,9 +13,7 @@ $fontRootDirectory = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Fonts\UDEV G
 $fontDirectory = Join-Path $fontRootDirectory $version
 $fontRegistryPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
 
-New-Item -ItemType Directory -Path $workDirectory -Force | Out-Null
-New-Item -ItemType Directory -Path $extractDirectory -Force | Out-Null
-New-Item -ItemType Directory -Path $fontDirectory -Force | Out-Null
+New-Item -ItemType Directory -Path $extractDirectory, $fontDirectory -Force | Out-Null
 New-Item -Path $fontRegistryPath -Force | Out-Null
 
 Write-Host "Downloading UDEV Gothic NF $version from the upstream release..."

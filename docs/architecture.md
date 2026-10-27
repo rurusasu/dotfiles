@@ -250,8 +250,4 @@ NixOS の hosted VM job は installer の再実行と Docker・Compose の runti
 - [chezmoi ドキュメント](./chezmoi/)
 - [フォーマッター設定](./formatter/)
 - [Windows セットアップ](./scripts/powershell/README.md)
-- [Hermes bootstrap design](./hermes-agent/bootstrap-design.md)
-- [Hermes bootstrap core plan](./hermes-agent/plans/2026-07-21-hermes-bootstrap-core.md)
-- [Hermes installer integration plan](./hermes-agent/plans/2026-07-21-hermes-bootstrap-integration.md)
-- [Hermes distribution repositories plan](./hermes-agent/plans/2026-07-21-hermes-distributions.md)
 - [Hermes bootstrap operations](./hermes-agent/bootstrap.md)

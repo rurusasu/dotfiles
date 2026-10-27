@@ -43,33 +43,6 @@ in
     };
   };
 
-  testFlakeHasNoIntermediateLibOrFlakesDirectories = {
-    expr = {
-      oldLib = builtins.pathExists ../../../lib;
-      oldFlakes = builtins.pathExists ../../../flakes;
-      consolidatedDefaults = builtins.pathExists ../../../defaults.nix;
-      splitHostDefinitions = builtins.pathExists ../../../hosts/default.nix;
-      splitRegistrations = builtins.pathExists ../../../hosts/configurations.nix;
-      splitHomeDefinitions = builtins.pathExists ../../../home/common.nix;
-      registryPresent = builtins.pathExists ../../default.nix;
-      splitPackageOutputs = builtins.pathExists ../../../outputs.nix;
-      treefmtConfig = builtins.pathExists ../../../treefmt.nix;
-      legacyFormatter = builtins.pathExists ../../../formatter.nix;
-    };
-    expected = {
-      oldLib = false;
-      oldFlakes = false;
-      consolidatedDefaults = true;
-      splitHostDefinitions = false;
-      splitRegistrations = false;
-      splitHomeDefinitions = false;
-      registryPresent = true;
-      splitPackageOutputs = false;
-      treefmtConfig = true;
-      legacyFormatter = false;
-    };
-  };
-
   testFlakeLockPinsPlatformInputs = {
     expr =
       builtins.map

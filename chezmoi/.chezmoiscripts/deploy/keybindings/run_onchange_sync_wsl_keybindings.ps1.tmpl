@@ -26,26 +26,16 @@ write_export generated.json "$contractBase64"
 write_export ghostty.conf "$ghosttyBase64"
 printf 'Applied exported Ghostty and Neovim keys in %s\n' "$keybindingsDirectory"
 '@
-$shellInput = "contractBase64='$contractBase64'`nghosttyBase64='$ghosttyBase64'`n" + ($shellBody -replace "`r`n", "`n") + "`n"
-$startInfo = New-Object Diagnostics.ProcessStartInfo
-$startInfo.FileName = Join-Path $env:SystemRoot 'System32/wsl.exe'
-$startInfo.Arguments = '--distribution NixOS --exec bash --login -s'
-$startInfo.UseShellExecute = $false
-$startInfo.CreateNoWindow = $true
-$startInfo.RedirectStandardInput = $true
-$startInfo.RedirectStandardOutput = $true
-$startInfo.RedirectStandardError = $true
-$process = New-Object Diagnostics.Process
-$process.StartInfo = $startInfo
+$shellInput = "contractBase64='$contractBase64'`nghosttyBase64='$ghosttyBase64'`n" + ($shellBody -replace "`r`n?", "`n") + "`n"
+$payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($shellInput))
+$systemDirectory = if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) { 'Sysnative' } else { 'System32' }
+$wsl = Join-Path (Join-Path $env:SystemRoot $systemDirectory) 'wsl.exe'
+$global:LASTEXITCODE = 127
+$ErrorActionPreference = 'Continue'
 try {
-    [void]$process.Start()
-    $process.StandardInput.Write($shellInput)
-    $process.StandardInput.Close()
-    $output = $process.StandardOutput.ReadToEnd()
-    $errorOutput = $process.StandardError.ReadToEnd()
-    $process.WaitForExit()
-    if ($process.ExitCode -ne 0) { throw "WSL key allocation deployment failed: $errorOutput" }
-    Write-Host $output.TrimEnd()
+    $payload | & $wsl --distribution NixOS --exec bash --login -c 'set -o pipefail; base64 --decode --ignore-garbage | bash'
+    $exitCode = $LASTEXITCODE
 }
-finally { $process.Dispose() }
+finally { $ErrorActionPreference = 'Stop' }
+if ($exitCode -ne 0) { throw "WSL key allocation deployment failed (exit=$exitCode)." }
 {{ end -}}

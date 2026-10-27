@@ -72,6 +72,7 @@ jobs:
           $expectedFiles = @(
             '.config/dotfiles/wslg-fontconfig.conf'
             '.config/git/config'
+            '.config/wezterm/wezterm.lua'
             '.wslgconfig'
             'AppData/Local/superfile/config.toml'
             'Documents/PowerShell/Microsoft.PowerShell_profile.ps1'
@@ -84,7 +85,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "chezmoi managed scripts failed with exit $LASTEXITCODE" }
           $expectedScripts = @(
             '.chezmoiscripts/deploy/keybindings/sync_wsl_keybindings.ps1'
-            '.chezmoiscripts/deploy/terminals/deploy.ps1'
             '.chezmoiscripts/deploy/terminals/install_udev_gothic_nf.ps1'
           )
           if ($managedScripts.Count -ne $expectedScripts.Count -or

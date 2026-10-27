@@ -75,5 +75,5 @@ task lint:all
 - `docs/architecture.md`
 - `docs/1password/README.md`（1Password / `op` 調査と OS 別運用）
 - `docs/chezmoi/`
-- `docs/taskfile/lint.md`
-- `docs/git/commit.md`
+- `taskfiles/quality/taskfile.yml`（フォーマット・lint の実装）
+- `taskfiles/git/taskfile.yml`（コミット手順の実装）
