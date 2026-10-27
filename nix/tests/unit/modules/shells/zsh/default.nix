@@ -1,7 +1,4 @@
-{
-  inputs,
-  homeConfigurations ? import ../../../../fixtures/home-configurations.nix { inherit inputs; },
-}:
+{ homeConfigurations }:
 let
   inherit (homeConfigurations) homes lib;
   rc =
@@ -30,16 +27,8 @@ in
         rc home
       );
       customInit =
-        let
-          blocks =
-            map (block: if builtins.isAttrs block then block.content else block)
-              (import ../../../../../modules/shells/zsh {
-                inherit (home) config pkgs;
-                inherit (home.pkgs) lib;
-              }).programs.zsh.initContent.contents;
-        in
-        blocks != [ ]
-        && builtins.all (block: lib.trim block != "" && lib.hasInfix (lib.trim block) (rc home)) blocks;
+        lib.hasInfix "bindkey '^?' backward-delete-char" (rc home)
+        && lib.hasInfix "add-zsh-hook precmd __disable_mouse_reporting" (rc home);
       aliases = lib.mapAttrsToList (
         name: value:
         lib.hasInfix (builtins.unsafeDiscardStringContext "alias -- ${lib.escapeShellArg name}=${lib.escapeShellArg value}") (

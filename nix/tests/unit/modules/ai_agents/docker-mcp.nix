@@ -1,13 +1,12 @@
-{ inputs }:
+{ fixtures }:
 let
-  fixtures = import ../../../fixtures/packages.nix { inherit inputs; };
   homes =
     map
       (
         system:
         fixtures.mkHome system [
-          ../../../../modules/ai_agents/mcp.nix
           ({ lib, ... }: {
+            programs.mcp.enable = true;
             xdg.enable = true;
             home.stateVersion = lib.mkForce "26.05";
           })
@@ -49,15 +48,16 @@ in
           settings:
           let
             home = fixtures.mkHome "x86_64-linux" [
-              ../../../../modules/ai_agents/mcp.nix
               ({ lib, ... }: {
+                programs.mcp.enable = true;
                 xdg.enable = true;
                 home.stateVersion = lib.mkForce "26.05";
               })
               settings.module
             ];
           in
-          builtins.hasAttr "${settings.directory}/cli-plugins/docker-mcp" home.config.home.file
+          home.config.home.file.".docker/cli-plugins/docker-mcp".target
+          == "${settings.directory}/cli-plugins/docker-mcp"
         )
         [
           {
@@ -97,11 +97,11 @@ in
           override:
           let
             home = fixtures.mkHome "x86_64-linux" [
-              ../../../../modules/ai_agents/mcp.nix
+              { programs.mcp.enable = true; }
               override
             ];
           in
-          (builtins.tryEval (builtins.attrNames home.config.home.file)).success
+          (builtins.tryEval home.config.home.file.".docker/cli-plugins/docker-mcp".target).success
         )
         [
           ({ lib, ... }: { home.sessionVariables = lib.mkForce { }; })

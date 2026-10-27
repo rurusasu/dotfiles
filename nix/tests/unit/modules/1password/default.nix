@@ -1,14 +1,30 @@
-{
-  inputs,
-  homeConfigurations ? import ../../../fixtures/home-configurations.nix { inherit inputs; },
-}:
+{ fixtures, homeConfigurations }:
 let
   inherit (homeConfigurations)
     wsl
     ;
-  fixtures = import ../../../fixtures/packages.nix { inherit inputs; };
+
 in
 {
+  testDisabledOnePasswordDoesNotInstallOrConfigureAgent = {
+    expr =
+      let
+        home = fixtures.mkHome "x86_64-linux" [ ];
+      in
+      {
+        cliInstalled = builtins.any (
+          package: (package.pname or "") == "1password-cli"
+        ) home.config.home.packages;
+        managesPublicKey = home.config.home.file ? ".ssh/signing_key.pub";
+        configuresAgent = home.config.home.sessionVariables ? SSH_AUTH_SOCK;
+      };
+    expected = {
+      cliInstalled = false;
+      managesPublicKey = false;
+      configuresAgent = false;
+    };
+  };
+
   testWslOnePasswordUsesNativeCliWithoutWindowsForwarder = {
     expr = {
       forwardsToWindows = wsl.config.home.file ? ".local/bin/op";
@@ -26,8 +42,10 @@ in
     expr =
       let
         home = fixtures.mkHome "x86_64-linux" [
-          ../../../../modules/1password
-          { dotfiles.onePassword.ssh.publicKey = null; }
+          {
+            dotfiles.onePassword.enable = true;
+            dotfiles.onePassword.ssh.publicKey = null;
+          }
         ];
       in
       {
@@ -47,10 +65,10 @@ in
           system:
           let
             home = fixtures.mkHome system [
-              ../../../../modules/1password
               {
                 programs.ssh.enable = true;
                 dotfiles.onePassword = {
+                  enable = true;
                   account = "fixture-account";
                   ssh.publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEPvjJr6iWYXFDo0foUBxas3qR9rJm1hix7E1Z6iY4RM fixture";
                 };

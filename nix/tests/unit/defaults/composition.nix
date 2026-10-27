@@ -1,7 +1,4 @@
-{
-  inputs,
-  homeConfigurations ? import ../../fixtures/home-configurations.nix { inherit inputs; },
-}:
+{ homeConfigurations, files }:
 let
   inherit (homeConfigurations)
     linux
@@ -145,7 +142,7 @@ in
       windowsEnvironment = "OP_ACCOUNT/u";
       signer = "${wsl.config.home.homeDirectory}/.local/bin/op-ssh-sign-wsl";
       signerBridge = {
-        source = ../../../modules/1password/op-ssh-sign-wsl;
+        source = files.nix.modules."1password".op-ssh-sign-wsl;
         executable = true;
       };
     };

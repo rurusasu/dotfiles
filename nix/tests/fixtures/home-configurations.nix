@@ -1,6 +1,9 @@
-{ inputs }:
+{
+  inputs,
+  fixtures,
+  code,
+}:
 let
-  fixtures = import ./packages.nix { inherit inputs; };
   inherit (fixtures) mkPkgs;
 
   testHome = {
@@ -13,12 +16,11 @@ let
     {
       system,
       module,
+      specialArgs ? { },
     }:
-    inputs.home-manager.lib.homeManagerConfiguration {
-      pkgs = mkPkgs system;
-      extraSpecialArgs = {
-        inherit inputs;
-      };
+    fixtures.mkHomeWith {
+      inherit system;
+      extraSpecialArgs = specialArgs;
       modules = [
         (_: { home = testHome; })
         module
@@ -44,6 +46,8 @@ in
 {
   inherit
     mkHome
+    mkPkgs
+    testHome
     linux
     wsl
     darwin
@@ -52,7 +56,7 @@ in
     system = "aarch64-linux";
     module = fixtures.homeModule "linux";
   };
-  configuredChrome = home: (import ../../modules/browsers/chrome).package { inherit (home) pkgs; };
+  configuredChrome = home: code.nix.modules.browsers.chrome.package { inherit (home) pkgs; };
   common = mkHome {
     system = "x86_64-linux";
     module = fixtures.homeModule "common";

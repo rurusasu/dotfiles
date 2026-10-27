@@ -1,22 +1,27 @@
-{ inputs, pkgs }:
-pkgs.stdenvNoCC.mkDerivation {
-  name = "dia-browser";
-  src = inputs.dia;
-
-  nativeBuildInputs = [ pkgs.undmg ];
-  dontFixup = true;
-
-  unpackPhase = "undmg $src";
-  installPhase = ''
-    mkdir -p "$out/Applications"
-    cp -R Dia.app "$out/Applications/"
-  '';
-
-  meta = {
-    description = "The Dia web browser";
-    homepage = "https://www.diabrowser.com/";
-    license = pkgs.lib.licenses.unfree;
-    mainProgram = "Dia";
-    platforms = [ "aarch64-darwin" ];
+{
+  config,
+  inputs,
+  lib,
+  pkgs,
+  ...
+}:
+{
+  options.programs.dia = {
+    enable = lib.mkEnableOption "Dia browser";
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = import ./package.nix { inherit inputs pkgs; };
+      defaultText = lib.literalExpression "the Dia distribution from inputs.dia";
+      description = "Dia browser package.";
+    };
+  };
+  config = lib.mkIf config.programs.dia.enable {
+    assertions = [
+      {
+        assertion = pkgs.stdenv.hostPlatform.system == "aarch64-darwin";
+        message = "Dia is supported only on aarch64-darwin.";
+      }
+    ];
+    home.packages = [ config.programs.dia.package ];
   };
 }

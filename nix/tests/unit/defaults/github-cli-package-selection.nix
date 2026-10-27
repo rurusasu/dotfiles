@@ -1,7 +1,4 @@
-{ inputs }:
-let
-  fixtures = import ../../fixtures/packages.nix { inherit inputs; };
-in
+{ fixtures }:
 {
   testHostModulesIncludeGitHubCliForDarwinAndLinux = {
     expr = {

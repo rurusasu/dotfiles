@@ -1,6 +1,10 @@
-{ inputs }:
+{
+  inputs,
+  code,
+  files,
+}:
 let
-  lock = builtins.fromJSON (builtins.readFile ../../../../flake.lock);
+  lock = builtins.fromJSON (builtins.readFile files."flake.lock");
   rootInputs = lock.nodes.${lock.root}.inputs;
 
   mkApps =
@@ -8,7 +12,7 @@ let
       system,
       isDarwin,
     }:
-    (import ../../../defaults.nix {
+    (code.nix.defaults {
       nix-darwin.packages.${system}.darwin-rebuild.executable = "darwin-rebuild";
       home-manager.packages.${system}.home-manager.executable = "home-manager";
     }).perSystem

@@ -36,7 +36,7 @@ Windows uses the NixOS/WSL installation. The external LCM plugin is supplied
 through `extraPlugins = [ inputs.hermes-lcm ]` because it is not bundled with Hermes.
 Update its source with `nix flake update hermes-lcm`.
 Hermes root settings convert the shared `programs.mcp.servers` definitions in
-`nix/modules/ai_agents/mcp.nix` into the official typed
+`nix/modules/ai_agents/mcp/default.nix` into the official typed
 `services.hermes-agent.mcpServers` option.
 
 ## Profiles

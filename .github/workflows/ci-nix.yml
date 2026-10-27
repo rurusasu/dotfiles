@@ -317,7 +317,7 @@ jobs:
             | grep -Fq 'hermes-agent.cachix.org-1:'
           SCRIPT
 
-      - name: Apply macOS configuration
+      - name: Build macOS configuration
         run: |
           mkdir -p "$RUNNER_TEMP/darwin"
           cat > "$RUNNER_TEMP/darwin/flake.nix" <<EOF
@@ -330,16 +330,25 @@ jobs:
             };
           }
           EOF
-          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
+          bash scripts/sh/retry-ci-dns.sh sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
             nix --accept-flake-config \
             --extra-experimental-features 'nix-command flakes' \
-            run .#darwin-rebuild -- switch --flake "$RUNNER_TEMP/darwin#macos" --impure
+            build --out-link "$RUNNER_TEMP/darwin-system" \
+            "$RUNNER_TEMP/darwin#darwinConfigurations.macos.system" --impure
+
+      - name: Apply macOS configuration
+        run: |
+          system_path="$(cd "$RUNNER_TEMP/darwin-system" && pwd -P)"
+          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
+            nix-env -p /nix/var/nix/profiles/system --set "$system_path"
+          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
+            "$system_path/sw/bin/darwin-rebuild" activate
 
       - name: Keep private build dependencies through checks
         run: python3 scripts/python/prepare_ci_nix_cache.py root "$RUNNER_TEMP/ci-build-dependencies"
 
       - name: Run all macOS Nix checks
-        run: sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
+        run: bash scripts/sh/retry-ci-dns.sh sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
 
       - name: Save Nix cache
         uses: ./.github/actions/cache-nix

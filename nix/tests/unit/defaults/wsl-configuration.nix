@@ -1,4 +1,9 @@
-{ inputs }:
+{
+  inputs,
+  code,
+  files,
+  homeConfigurations,
+}:
 let
   mkWsl = inputs.nixpkgs.lib.nixosSystem {
     system = "x86_64-linux";
@@ -7,12 +12,12 @@ let
       platform = "wsl";
     };
     modules = [
-      (import ../../../defaults.nix inputs).systemDefaults
+      (code.nix.defaults inputs).systemDefaults
     ];
   };
 
   defaultConfig = mkWsl.config;
-  home = (import ../../fixtures/home-configurations.nix { inherit inputs; }).wsl;
+  home = homeConfigurations.wsl;
 in
 {
   testWslUsesTheDeclaredDefaultUserWithoutBootstrapMetadata = {
@@ -150,7 +155,7 @@ in
     expr =
       let
         inherit (inputs.nixpkgs) lib;
-        path = ../../../modules/fonts/wsl-fontconfig.conf;
+        path = files.nix.modules.fonts."wsl-fontconfig.conf";
         xml = if builtins.pathExists path then builtins.readFile path else "";
         systemInclude = "<include>/etc/fonts/fonts.conf</include>";
         pieces = lib.splitString systemInclude xml;

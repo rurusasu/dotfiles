@@ -1,6 +1,7 @@
 {
-  inputs,
-  homeConfigurations ? import ../../../../fixtures/home-configurations.nix { inherit inputs; },
+  fixtures,
+  homeConfigurations,
+  code,
 }:
 let
   installed =
@@ -13,9 +14,9 @@ in
         (
           system:
           let
-            modulePkgs = (import ../../../../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
+            modulePkgs = fixtures.mkPkgs system;
           in
-          ((import ../../../../../modules/ai_agents/chatgpt).packages {
+          (code.nix.modules.ai_agents.chatgpt.package {
             pkgs = modulePkgs;
           }).chatgpt.drvPath == (modulePkgs.chatgpt.override { codex = null; }).drvPath
         )

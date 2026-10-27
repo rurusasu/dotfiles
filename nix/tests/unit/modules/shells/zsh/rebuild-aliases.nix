@@ -1,21 +1,8 @@
-{ inputs }:
+{ fixtures }:
 let
-  home = inputs.home-manager.lib.homeManagerConfiguration {
-    pkgs = import inputs.nixpkgs {
-      system = "x86_64-linux";
-      config.allowUnfree = true;
-    };
-    extraSpecialArgs = {
-      inherit inputs;
-    };
-    modules = [
-      {
-        home.username = "test-user";
-        home.homeDirectory = "/home/test-user";
-      }
-      ((import ../../../../fixtures/packages.nix { inherit inputs; }).homeModule "wsl")
-    ];
-  };
+  home = fixtures.mkHome "x86_64-linux" [
+    (fixtures.homeModule "wsl")
+  ];
 in
 {
   testNRTShellAliasUsesNixOSRebuildHelper = {

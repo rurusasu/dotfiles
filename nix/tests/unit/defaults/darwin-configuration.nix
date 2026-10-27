@@ -1,4 +1,4 @@
-{ inputs }:
+{ inputs, code }:
 let
   mkDarwin =
     primaryUser: extraModules:
@@ -13,7 +13,7 @@ let
           nixpkgs.config.allowUnfree = true;
           system.primaryUser = primaryUser;
         }
-        (import ../../../defaults.nix inputs).systemDefaults
+        (code.nix.defaults inputs).systemDefaults
       ]
       ++ extraModules;
     };
@@ -67,15 +67,8 @@ in
             };
           })
           [
-            "${
-              ((import ../../../modules/ai_agents/chatgpt).packages { inherit (defaultSystem) pkgs; }).chatgpt
-            }/Applications/ChatGPT.app"
-            "${
-              import ../../../modules/browsers/dia {
-                inherit inputs;
-                inherit (defaultSystem) pkgs;
-              }
-            }/Applications/Dia.app"
+            "${defaultHome.programs.chatgpt.package}/Applications/ChatGPT.app"
+            "${defaultHome.programs.dia.package}/Applications/Dia.app"
             "${defaultHome.programs.ghostty.package}/Applications/Ghostty.app"
             "${defaultSystem.pkgs.obsidian}/Applications/Obsidian.app"
           ];

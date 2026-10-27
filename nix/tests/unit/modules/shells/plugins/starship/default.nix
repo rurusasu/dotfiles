@@ -1,7 +1,4 @@
-{
-  inputs,
-  homeConfigurations ? import ../../../../../fixtures/home-configurations.nix { inherit inputs; },
-}:
+{ fixtures, homeConfigurations }:
 let
   inherit (homeConfigurations)
     homes
@@ -11,8 +8,7 @@ let
     darwin
     ;
   standalone =
-    ((import ../../../../../fixtures/packages.nix { inherit inputs; }).mkHome "x86_64-linux" [
-      ../../../../../../modules/shells/plugins/starship
+    (fixtures.mkHome "x86_64-linux" [
       { programs.starship.enable = true; }
     ]).config.programs.starship.settings;
   generatedSettings =

@@ -32,7 +32,7 @@ environment settings use `home.sessionVariables`. Git uses the existing
 1Password SSH configuration. This repository adds no profile-fetch activation
 or custom profile synchronization engine.
 
-Shared MCP definitions live in `nix/modules/ai_agents/mcp.nix` under
+Shared MCP definitions live in `nix/modules/ai_agents/mcp/default.nix` under
 `programs.mcp.servers`: `MCP_DOCKER`, `chrome`, `xapi` and `pipedream`.
 Codex uses its standard Home Manager integration; root Hermes converts the
 shared definitions into the official typed `services.hermes-agent.mcpServers`.

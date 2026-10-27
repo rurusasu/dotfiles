@@ -1,12 +1,16 @@
-{ inputs }:
+{
+  inputs,
+  code,
+  files,
+}:
 let
   inherit (inputs.nixpkgs) lib;
-  allocation = import ../../../../home/keybindings/bindings.nix { inherit lib; };
-  aerospace = import ../../../../modules/aerospace/aerospace.nix {
+  allocation = code.nix.home.keybindings.bindings { inherit lib; };
+  aerospace = code.nix.modules.aerospace.aerospace {
     inherit lib;
     commands.terminal = "terminal --new-window";
   };
-  hyprland = import ../../../../modules/hyprland/hyprland-renderer.nix {
+  hyprland = code.nix.modules.hyprland.hyprland-renderer {
     inherit lib;
     commands.terminal = "terminal --new-window";
   };
@@ -15,7 +19,7 @@ let
 in
 {
   testCommittedKeybindingsExportMatchesCanonicalAllocation = {
-    expr = builtins.fromJSON (builtins.readFile ../../../../home/keybindings/generated.json);
+    expr = builtins.fromJSON (builtins.readFile files.nix.home.keybindings."generated.json");
     expected = allocation;
   };
   testGhosttyOmarchySplitNavigationAndTabActions = {
@@ -53,7 +57,7 @@ in
     expr =
       (builtins.tryEval (
         builtins.stringLength (
-          import ../../../../modules/terminals/ghostty/ghostty-renderer.nix {
+          code.nix.modules.terminals.ghostty.ghostty-renderer {
             inherit lib;
             bindings = [
               {
@@ -131,7 +135,7 @@ in
   testSharedKeysDoNotLoseBindingsDuringRendering = {
     expr =
       let
-        contract = import ../../../../home/keybindings/bindings.nix { inherit lib; };
+        contract = code.nix.home.keybindings.bindings { inherit lib; };
       in
       {
         uniqueAerospace =

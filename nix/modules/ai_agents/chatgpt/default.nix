@@ -1,80 +1,60 @@
-rec {
-  # Native desktop and the CLI shipped in the same official distribution.
-  packages =
-    { pkgs }:
-    let
-      # Upstream otherwise replaces these binaries with its separate Codex package.
-      chatgpt = pkgs.chatgpt.override { codex = null; };
-      resources =
-        if pkgs.stdenv.hostPlatform.isDarwin then
-          "${chatgpt}/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin"
-        else
-          "${chatgpt}/lib/chatgpt/resources";
-    in
-    assert pkgs.stdenv.hostPlatform.isLinux || pkgs.stdenv.hostPlatform.isDarwin;
-    {
-      inherit chatgpt;
-      codex = pkgs.linkFarm "codex" (
-        {
-          "bin/codex" = "${resources}/codex";
-          "bin/codex-code-mode-host" = "${resources}/codex-code-mode-host";
-        }
-        // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-          "bin/bwrap" = pkgs.lib.getExe pkgs.bubblewrap;
-        }
-      );
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+let
+  packages = import ./package.nix {
+    inherit pkgs;
+    chatgpt = config.programs.chatgpt.package;
+  };
+in
+{
+  options.programs.chatgpt = {
+    enable = lib.mkEnableOption "ChatGPT desktop with its bundled Codex CLI";
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = (import ./package.nix { inherit pkgs; }).chatgpt;
+      defaultText = lib.literalExpression "(pkgs.chatgpt.override { codex = null; })";
+      description = "ChatGPT desktop distribution providing the bundled Codex CLI.";
     };
+  };
+  config = lib.mkMerge [
+    (lib.mkIf config.programs.chatgpt.enable {
+      programs.codex.enable = true;
+      home.packages = [ config.programs.chatgpt.package ];
+    })
+    (lib.mkIf config.programs.codex.enable {
+      home = {
+        packages = [ packages.codex ];
+        activation = {
+          codexXdgHome = lib.mkIf config.home.preferXdgDirectories (
+            lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ] ''
+              legacy=${lib.escapeShellArg "${config.home.homeDirectory}/.codex"}
+              target=${lib.escapeShellArg "${config.xdg.configHome}/codex"}
+              if [[ -L "$legacy" ]]; then
+                if [[ "$(${pkgs.coreutils}/bin/readlink -m -- "$legacy")" != "$(${pkgs.coreutils}/bin/readlink -m -- "$target")" ]]; then
+                  errorEcho "Codex legacy directory points elsewhere: $legacy; reconcile it with $target before activating."
+                  exit 1
+                fi
+              elif [[ -e "$legacy" ]]; then
+                if [[ ! -d "$legacy" || -e "$target" || -L "$target" ]]; then
+                  errorEcho "Cannot migrate Codex state from $legacy to $target without overwriting existing data."
+                  exit 1
+                fi
+                run ${pkgs.coreutils}/bin/mkdir -p -- "$(${pkgs.coreutils}/bin/dirname -- "$target")"
+                run ${pkgs.coreutils}/bin/mv --no-target-directory --update=none-fail -- "$legacy" "$target"
+              fi
+              if [[ ! -e "$legacy" && ! -L "$legacy" ]]; then
+                run ${pkgs.coreutils}/bin/mkdir -p -- "$target"
+                run ${pkgs.coreutils}/bin/ln -s -- "$target" "$legacy"
+              fi
+            ''
+          );
 
-  cli =
-    { pkgs, ... }:
-    {
-      imports = [ homeManager ];
-      home.packages = [ (packages { inherit pkgs; }).codex ];
-    };
-
-  desktop =
-    { pkgs, ... }:
-    {
-      imports = [ cli ];
-      home.packages = [ (packages { inherit pkgs; }).chatgpt ];
-    };
-
-  homeManager =
-    {
-      config,
-      lib,
-      pkgs,
-      ...
-    }:
-    {
-      home.activation.codexXdgHome = lib.mkIf config.home.preferXdgDirectories (
-        lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ] ''
-          legacy=${lib.escapeShellArg "${config.home.homeDirectory}/.codex"}
-          target=${lib.escapeShellArg "${config.xdg.configHome}/codex"}
-          if [[ -L "$legacy" ]]; then
-            if [[ "$(${pkgs.coreutils}/bin/readlink -m -- "$legacy")" != "$(${pkgs.coreutils}/bin/readlink -m -- "$target")" ]]; then
-              errorEcho "Codex legacy directory points elsewhere: $legacy; reconcile it with $target before activating."
-              exit 1
-            fi
-          elif [[ -e "$legacy" ]]; then
-            if [[ ! -d "$legacy" || -e "$target" || -L "$target" ]]; then
-              errorEcho "Cannot migrate Codex state from $legacy to $target without overwriting existing data."
-              exit 1
-            fi
-            run ${pkgs.coreutils}/bin/mkdir -p -- "$(${pkgs.coreutils}/bin/dirname -- "$target")"
-            run ${pkgs.coreutils}/bin/mv --no-target-directory --update=none-fail -- "$legacy" "$target"
-          fi
-          if [[ ! -e "$legacy" && ! -L "$legacy" ]]; then
-            run ${pkgs.coreutils}/bin/mkdir -p -- "$target"
-            run ${pkgs.coreutils}/bin/ln -s -- "$target" "$legacy"
-          fi
-        ''
-      );
-
-      # The mutable merge retains omitted keys, including removed managed roles.
-      home.activation.codexPruneManagedAgents =
-        lib.hm.dag.entryBetween [ "codexMutableSettings" ] [ "linkGeneration" ]
-          (
+          # The mutable merge retains omitted keys, including removed managed roles.
+          codexPruneManagedAgents = lib.hm.dag.entryBetween [ "codexMutableSettings" ] [ "linkGeneration" ] (
             lib.hm.generators.mkImpureConfigMerger {
               inherit pkgs;
               format = "toml";
@@ -94,18 +74,19 @@ rec {
               mode = "600";
             }
           );
+        };
+      };
 
       programs.codex = {
-        enable = true;
         enableMcpIntegration = true;
-        # The cli module exposes the bundled CLI; this option manages settings.
+        # Install the CLI from ChatGPT; this option manages its settings.
         package = lib.mkDefault null;
         # Preserve application settings and project trust in a writable user file.
         mutableSettings = true;
         settings = {
-          model = "gpt-6.1-sol";
-          model_reasoning_effort = "high";
-          plan_mode_reasoning_effort = "high";
+          model = "gpt-6.1-terra";
+          model_reasoning_effort = "ultra";
+          plan_mode_reasoning_effort = "ultra";
           model_reasoning_summary = "auto";
           model_verbosity = "low";
           approval_policy = "never";
@@ -147,5 +128,6 @@ rec {
           };
         };
       };
-    };
+    })
+  ];
 }

@@ -138,7 +138,7 @@ runs:
                   nix=true
                   linux=true
                   ;;
-                nix/modules/1password/op-ssh-sign-wsl|nix/modules/fcitx5.nix|nix/modules/gnome-keyring/*|nix/modules/editors/vscode.nix|nix/modules/nvidia.nix)
+                nix/modules/1password/op-ssh-sign-wsl|nix/modules/fcitx5/*|nix/modules/gnome-keyring/*|nix/modules/editors/vscode/*|nix/modules/nvidia/*)
                   nix=true
                   wsl=true
                   ;;

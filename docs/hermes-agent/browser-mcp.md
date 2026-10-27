@@ -6,7 +6,7 @@ HTTP で接続する。service は Nix の `mcp-proxy` を使い、1つの
 
 ## 構成
 
-[`nix/modules/ai_agents/mcp.nix`](../../nix/modules/ai_agents/mcp.nix) の共通 `chrome`
+[`nix/modules/ai_agents/mcp/default.nix`](../../nix/modules/ai_agents/mcp/default.nix) の共通 `chrome`
 定義は `http://127.0.0.1:8765/mcp` を使う。native service が保持する stdio child
 には次の引数を設定する。
 

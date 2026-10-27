@@ -1,6 +1,7 @@
+{ code }:
 {
   testAppearanceIsNixOwned = {
-    expr = import ../../../../modules/terminals/appearance.nix;
+    expr = code.nix.modules.terminals.appearance;
     expected = {
       font_family = "UDEV Gothic NF";
       font_size = 10;

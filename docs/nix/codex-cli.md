@@ -10,16 +10,18 @@ AI エージェントの設定はアプリ単位でまとめます。
 
 ```text
 nix/modules/ai_agents/
-├── mcp.nix   # 共通 MCP 定義
+├── mcp/      # 自動検出する共通 MCP module
 ├── chatgpt/  # ChatGPT アプリ・同梱 Codex の設定
 └── hermes/   # Hermes の公式 Home Manager 設定
 ```
 
-`chatgpt/default.nix` が `packages`・`homeManager` と、導入用の `cli`・`desktop` を公開します。
-`desktop` は `packages { inherit pkgs; }` が返すアプリと同梱 CLI へのリンクを Home Manager に導入し、
-`cli` は同じ Linux package の CLI へのリンクだけを導入します。CLI の PATH 配置は Home Manager に任せます。
-両方とも `homeManager` を読み込み、`programs.codex` で設定を管理します。
-`nix/defaults.nix:systemDefaults` は Darwin / native・standalone Linux で `desktop`、WSL で `cli` を選択します。WSL には Linux GUI を導入しません。
+`chatgpt/default.nix` はほかの実 module と同じく自動検出され、型付き `programs.chatgpt.enable` と
+標準 `programs.codex.enable` に従って導入・設定を管理します。アプリごとの import パスや公開一覧は登録しません。
+通常の `chatgpt/package.nix` factory が返す ChatGPT package と同梱 CLI へのリンクを使い、CLI の PATH 配置は Home Manager に任せます。
+`nix/defaults.nix:systemDefaults` は Darwin / native・standalone Linux で `programs.chatgpt.enable`、
+WSL では `programs.codex.enable` を指定します。ChatGPT の有効化は同梱 Codex も有効にし、WSL には Linux GUI を導入しません。
+Codex と ChatGPT Work の既定モデルは `gpt-6.1-terra`、通常・plan の reasoning effort は `ultra` です。
+Pi は独立した `programs.pi-coding-agent.enable` で有効化し、provider `openai-codex`、モデル `gpt-6.1-terra`、thinking level `max` を使います。
 Windows の Store 導入情報は `windows/winget/packages.json` で直接管理します。
 Codex CLI を独立したパッケージとして導入しません。
 
@@ -54,7 +56,7 @@ Unix の `CODEX_HOME` は `${config.xdg.configHome}/codex`（既定 `~/.config/c
 `home.preferXdgDirectories = true` により標準 module が XDG 配置を選びます。
 Unix の config は `nix/modules/ai_agents/chatgpt/` の
 Home Manager `programs.codex` が管理します。`programs.codex.enable = true` と `package = null` を指定し、
-CLI のバージョン判定に依存せず設定を生成します。CLI の導入は同じアプリ module の `cli` が担当します。
+CLI のバージョン判定に依存せず設定を生成します。同梱 CLI の導入も同じ `default.nix` が `programs.codex.enable` に従って管理します。
 WSL は Linux 版を使い、Windows は Windows 側のアプリを使います。
 `mutableSettings = true` で既存の UI 設定や project trust を保持して宣言値をマージします。
 認証ファイル・履歴・セッションは Home Manager の管理対象にしません。
@@ -62,7 +64,7 @@ Windows の設定は chezmoi が管理します。
 
 Home Manager activation の `codexXdgHome` は、既存の認証・履歴を引き継ぐため、旧 `~/.codex` の実ディレクトリを XDG 配置先へ移し、旧パスに互換 symlink を作成します。新規環境では配置先と互換 symlink を作成します。両方に実ディレクトリがある場合や、旧 symlink が別のディレクトリを指す場合は、上書きせず反映を停止します。この処理は activation 時にのみ実行します。
 
-共通 MCP は `nix/modules/ai_agents/mcp.nix` の `programs.mcp.servers` を正本とし、
+共通 MCP は `nix/modules/ai_agents/mcp/default.nix` の `programs.mcp.servers` を正本とし、
 Codex は `enableMcpIntegration = true` で取り込みます。
 Google 連携は Pipedream に統一し、Codex の Google curated plugins は宣言しません。
 ユーザーが `codex mcp login pipedream` で OAuth を実行してください。

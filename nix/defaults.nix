@@ -1,6 +1,8 @@
 # Consolidated host definitions, Home Manager defaults, and configuration registration.
 inputs:
 let
+  discoverModules = import ./discover-modules.nix;
+
   systemDefaults =
     {
       inputs,
@@ -51,37 +53,9 @@ let
         extraSpecialArgs = { inherit inputs; };
         sharedModules = [
           ({ config, lib, ... }: {
-            imports = [
-              ./modules/1password
-              ./modules/ai_agents/mcp.nix
-              ./modules/ai_agents/hermes
-              ./modules/editors/nvim
-              ./modules/fonts
-              ./modules/git
-              ./modules/git/ghq.nix
-              ./modules/git/gwq.nix
-              ./modules/lazygit
-              ./modules/ssh.nix
-              ./modules/herdr
-              ./modules/shells/bash
-              ./modules/shells/plugins/starship
-              ./modules/shells/plugins/bat.nix
-              ./modules/shells/plugins/eza.nix
-              ./modules/shells/plugins/fd.nix
-              ./modules/shells/plugins/fzf.nix
-              ./modules/shells/plugins/ripgrep.nix
-              ./modules/shells/plugins/zoxide.nix
-              ./modules/shells/plugins/zsh-patina.nix
-              ./modules/shells/zsh
-              ./modules/terminals/ghostty
-              ./modules/terminals/wezterm
-              (
-                { pkgs, inputs, ... }:
-                lib.mkIf (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (
-                  (import ./modules/ai_agents/strata).homeManager { inherit pkgs inputs; }
-                )
-              )
-            ];
+            imports = discoverModules "home-manager" ./modules;
+            dotfiles.onePassword.enable = true;
+            dotfiles.fonts.enable = true;
 
             home = {
               stateVersion = lib.mkDefault defaults.stateVersion;
@@ -115,7 +89,6 @@ let
                     ])
                     [
                       opencode
-                      pi-coding-agent
                       tuios
                     ]
                 ++ lib.optionals (!config.submoduleSupport.enable) [ config.nix.package ];
@@ -125,8 +98,39 @@ let
               home-manager.enable = true;
               direnv.enable = true;
               jq.enable = true;
+              bash.enable = true;
+              zsh.enable = true;
+              bat.enable = true;
+              eza.enable = true;
+              fd.enable = true;
+              fzf.enable = true;
+              ripgrep.enable = true;
+              zoxide.enable = true;
+              starship.enable = true;
+              zsh-patina.enable = true;
+              ghostty.enable = true;
+              wezterm.enable = true;
+              neovim.enable = true;
+              git.enable = true;
+              ghq.enable = true;
+              gwq.enable = true;
+              lazygit.enable = true;
+              herdr.enable = true;
+              ssh.enable = true;
+              codex.enable = true;
+              mcp.enable = true;
+              hermes-agent = {
+                enable = true;
+                desktop.enable = true;
+              };
             };
-            services.ollama.enable = true;
+            services = {
+              ollama.enable = true;
+              hermes-agent = {
+                enable = true;
+                gateway.enable = true;
+              };
+            };
             nix = {
               package = lib.mkDefault nixPackage;
               gc = gc // {
@@ -143,14 +147,21 @@ let
             imports =
               {
                 darwin = [
-                  (import ./modules/ai_agents/chatgpt).desktop
                   {
+                    programs = {
+                      pi-coding-agent.enable = true;
+                      chatgpt.enable = true;
+                      dia.enable = true;
+                      aerospace.enable = true;
+                      strata.enable = pkgs.stdenv.hostPlatform.system == "aarch64-darwin";
+                      discord.enable = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.discord;
+                    };
+                    dotfiles.desktop.enable = true;
                     home = {
                       packages = with pkgs; [
                         coreutils
                         tart
                         raycast
-                        (import ./modules/browsers/dia { inherit inputs pkgs; })
                       ];
                       sessionVariables = {
                         HOMEBREW_AUTO_UPDATE_SECS = "86400";
@@ -177,27 +188,20 @@ let
                       };
                     };
                   }
-                  ./modules/aerospace
-                  ./modules/discord
-                  ./modules/desktop.nix
                 ];
                 linux = [
-                  (import ./modules/browsers/chrome).homeManager
-                  (import ./modules/ai_agents/chatgpt).desktop
-                  ./modules/discord
                   {
                     home.packages = [ pkgs.nautilus ];
-                    programs.git.signing.signer = "/opt/1Password/op-ssh-sign";
+                    programs = {
+                      chatgpt.enable = true;
+                      chromium.enable = true;
+                      discord.enable = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.discord;
+                      strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
+                      git.signing.signer = "/opt/1Password/op-ssh-sign";
+                    };
                   }
                 ];
                 wsl = [
-                  (import ./modules/browsers/chrome).wsl
-                  (import ./modules/ai_agents/chatgpt).cli
-                  ./modules/superfile
-                  ./home/keybindings/windows-export.nix
-                  ./modules/fcitx5.nix
-                  ./modules/gnome-keyring
-                  ./modules/editors/vscode.nix
                   (
                     let
                       graphicsEnvironment = {
@@ -211,7 +215,19 @@ let
                         keybindings.fromWindowsExport = true;
                         gwq.settings.worktree.basedir = "/mnt/d/worktrees";
                       };
+                      i18n.inputMethod.enable = true;
+                      services = {
+                        gnome-keyring.enable = true;
+                        vscode-server.enable = true;
+                      };
                       programs = {
+                        pi-coding-agent.enable = true;
+                        superfile.enable = true;
+                        strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
+                        chromium = {
+                          enable = true;
+                          wslIntegration.enable = true;
+                        };
                         git = {
                           signing.signer = "${config.home.homeDirectory}/.local/bin/op-ssh-sign-wsl";
                           settings.ghq.root = [ "/mnt/d" ];
@@ -267,233 +283,235 @@ let
           })
         ];
       };
-      imports = [
-        ./modules/docker.nix
-        (
-          { config, lib, ... }:
-          let
-            user =
-              if platform == "darwin" then
-                config.system.primaryUser
-              else if platform == "wsl" then
-                config.wsl.defaultUser
-              else
-                defaults.nixosUser;
-            repository = "${config.users.users.${user}.home}/.dotfiles";
-            fontDirectory = "/usr/local/share/fonts/dotfiles-wslg";
-          in
-          if platform == "darwin" then
-            {
-              imports = [
-                inputs.home-manager.darwinModules.home-manager
-                inputs.nix-homebrew.darwinModules.nix-homebrew
-              ];
-              environment.systemPackages = [ pkgs.gh ];
-              nix-homebrew = {
-                enable = true;
-                enableRosetta = true;
-                inherit user;
-                autoMigrate = true;
-              };
-              homebrew = {
-                enable = true;
-                greedyCasks = true;
-                casks = [
-                  "docker-desktop"
-                  "steam"
+      dotfiles.fonts.enable = true;
+      imports =
+        discoverModules "system" ./modules
+        ++ discoverModules (if platform == "darwin" then "darwin" else "nixos") ./modules
+        ++ [
+          (
+            { config, lib, ... }:
+            let
+              user =
+                if platform == "darwin" then
+                  config.system.primaryUser
+                else if platform == "wsl" then
+                  config.wsl.defaultUser
+                else
+                  defaults.nixosUser;
+              repository = "${config.users.users.${user}.home}/.dotfiles";
+              fontDirectory = "/usr/local/share/fonts/dotfiles-wslg";
+            in
+            if platform == "darwin" then
+              {
+                imports = [
+                  inputs.home-manager.darwinModules.home-manager
+                  inputs.nix-homebrew.darwinModules.nix-homebrew
                 ];
-                onActivation = {
-                  autoUpdate = true;
-                  upgrade = true;
-                  cleanup = "zap";
-                  extraEnv = {
-                    HOMEBREW_AUTO_UPDATE_SECS = "86400";
-                    HOMEBREW_NO_ENV_HINTS = "1";
+                environment.systemPackages = [ pkgs.gh ];
+                nix-homebrew = {
+                  enable = true;
+                  enableRosetta = true;
+                  inherit user;
+                  autoMigrate = true;
+                };
+                homebrew = {
+                  enable = true;
+                  greedyCasks = true;
+                  casks = [
+                    "docker-desktop"
+                    "steam"
+                  ];
+                  onActivation = {
+                    autoUpdate = true;
+                    upgrade = true;
+                    cleanup = "zap";
+                    extraEnv = {
+                      HOMEBREW_AUTO_UPDATE_SECS = "86400";
+                      HOMEBREW_NO_ENV_HINTS = "1";
+                    };
                   };
                 };
-              };
-              fonts.packages = (import ./modules/fonts.nix { inherit pkgs; }).fonts.packages;
-              system = {
-                stateVersion = defaults.darwinStateVersion;
-                defaults.loginwindow = {
-                  GuestEnabled = false;
-                  SHOWFULLNAME = false;
+                system = {
+                  stateVersion = defaults.darwinStateVersion;
+                  defaults.loginwindow = {
+                    GuestEnabled = false;
+                    SHOWFULLNAME = false;
+                  };
                 };
-              };
-              nix = {
-                optimise.automatic = true;
-                gc = {
-                  interval = [
+                nix = {
+                  optimise.automatic = true;
+                  gc = {
+                    interval = [
+                      {
+                        Hour = 3;
+                        Minute = 15;
+                      }
+                    ];
+                  };
+                };
+                # The locked nixos-render-docs rejects nix-darwin's manual flags.
+                documentation.enable = false;
+                users.users.${user}.home = "/Users/${user}";
+                home-manager.users.${user} = { };
+              }
+            else
+              {
+                virtualisation.docker.enable = true;
+                imports = [
+                  inputs.home-manager.nixosModules.home-manager
+                ]
+                ++ (
+                  if platform == "wsl" then
+                    [
+                      inputs.nixos-wsl.nixosModules.wsl
+                      {
+                        dotfiles.wslGpu.enable = true;
+                        # Retire only the exact wrapper previously copied by this module. Keep
+                        # unrelated administrator files and symlinks at this path untouched.
+                        system.activationScripts.retireSystemOpWrapper = {
+                          text = ''
+                            if [ -f /usr/local/bin/op ] && [ ! -L /usr/local/bin/op ]; then
+                              # The bash store path can change independently of the wrapper body.
+                              if ${pkgs.coreutils}/bin/head -n 1 /usr/local/bin/op | \
+                                ${pkgs.gnugrep}/bin/grep -Eq '^#!/nix/store/[a-z0-9]{32}-bash-[^/]+/bin/bash$' && \
+                                ${pkgs.coreutils}/bin/tail -n +2 /usr/local/bin/op | \
+                                ${pkgs.diffutils}/bin/cmp -s ${
+                                  pkgs.writeText "legacy-op-wrapper-body" (
+                                    ''
+                                      OP_NATIVE="/etc/profiles/per-user/${config.wsl.defaultUser}/bin/op"
+                                      # op run injects secrets into Linux processes — keep on native binary
+                                      if [ "$1" = "run" ] && [ -x "$OP_NATIVE" ]; then
+                                        exec "$OP_NATIVE" "$@"
+                                      fi
+                                      # Find op.exe via Windows PATH (available in WSL via interop)
+                                      OP_EXE=$(IFS=:; for p in $PATH; do
+                                        [ -f "$p/op.exe" ] && echo "$p/op.exe" && break
+                                      done)
+                                      if [ -z "$OP_EXE" ]; then
+                                        echo "[ERROR] op.exe not found in PATH" >&2
+                                        exit 1
+                                      fi
+                                      OP_VARS=$(env | grep ^OP_ | cut -d= -f1 | tr '\n' ':')
+                                      export WSLENV="''${WSLENV:-}:''${OP_VARS%:}"
+                                      exec "$OP_EXE" "$@"
+                                    ''
+                                    + "\n"
+                                  )
+                                } -; then
+                                ${pkgs.coreutils}/bin/rm -- /usr/local/bin/op
+                              fi
+                            fi
+                          '';
+                        };
+                        system.activationScripts.wslgFonts = {
+                          deps = [ "specialfs" ];
+                          text = ''
+                            ${pkgs.coreutils}/bin/install -d -m 0755 ${fontDirectory}
+                            # Retire the Noto CJK file previously distributed by this module.
+                            ${pkgs.coreutils}/bin/rm -f -- ${fontDirectory}/NotoSansCJK-VF.otf.ttc
+                            ${pkgs.coreutils}/bin/install --compare -m 0644 ${pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Regular.ttf ${fontDirectory}/UDEVGothicNF-Regular.ttf
+                            ${pkgs.coreutils}/bin/install --compare -m 0644 ${pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Bold.ttf ${fontDirectory}/UDEVGothicNF-Bold.ttf
+                            ${pkgs.coreutils}/bin/install --compare -m 0644 ${pkgs.noto-fonts-color-emoji}/share/fonts/noto/NotoColorEmoji.ttf ${fontDirectory}/NotoColorEmoji.ttf
+                          '';
+                        };
+                        assertions = [
+                          {
+                            assertion = builtins.substring 0 1 repository == "/" && !(lib.hasInfix "*" repository);
+                            message = "WSL Git trust requires one absolute checkout path without wildcards.";
+                          }
+                        ];
+                        # Home Manager starts the keyring; PAM unlocks it at login.
+                        security.pam.services.login.enableGnomeKeyring = true;
+                        wsl = {
+                          enable = true;
+                          defaultUser = lib.mkDefault defaults.nixosUser;
+                          useWindowsDriver = true;
+                          wslConf.network.generateHosts = false;
+                        };
+                        i18n.extraLocales = [ "ja_JP.UTF-8/UTF-8" ];
+                        programs = {
+                          git = {
+                            enable = true;
+                            config.safe.directory = [ repository ];
+                          };
+                          dconf.enable = true;
+                          nix-ld = {
+                            enable = true;
+                            libraries = with pkgs; [
+                              wayland
+                              libxkbcommon
+                            ];
+                          };
+                        };
+                        systemd.user.services.nixos-activation = {
+                          wants = [ "graphical-session.target" ];
+                          after = [ "graphical-session.target" ];
+                        };
+                        xdg.portal = {
+                          enable = true;
+                          extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
+                          config.common.default = "*";
+                        };
+                      }
+                    ]
+                  else
+                    [
+                      {
+                        programs.hyprland.enable = true;
+                        home-manager.sharedModules = [
+                          {
+                            wayland.windowManager.hyprland.enable = true;
+                            home.packages = with pkgs; [
+                              firefox
+                              fuzzel
+                            ];
+                          }
+                        ];
+                      }
+                    ]
+                );
+                fonts.fontDir.enable = true;
+                # Desktop CLI integration authenticates the setgid native op wrapper.
+                programs._1password.enable = true;
+                home-manager.sharedModules = [
+                  (
+                    { config, lib, ... }:
+                    let
+                      hermes = config.services.hermes-agent;
+                    in
                     {
-                      Hour = 3;
-                      Minute = 15;
+                      # The service PATH contains store packages, which bypass setgid.
+                      services.hermes-agent.settings.secrets.onepassword.binary_path = "/run/wrappers/bin/op";
+                      # Native desktop authentication needs op's setgid transition.
+                      # NoNewPrivileges would suppress it even with the wrapper path.
+                      # PrivateTmp also creates a user namespace without op's host GID.
+                      systemd.user.services = lib.mkIf hermes.enable (
+                        lib.optionalAttrs hermes.gateway.enable {
+                          hermes-agent.Service.NoNewPrivileges = lib.mkForce false;
+                          hermes-agent.Service.PrivateTmp = lib.mkForce false;
+                        }
+                        // lib.optionalAttrs (hermes.backend.mode != "none") {
+                          hermes-backend.Service.NoNewPrivileges = lib.mkForce false;
+                          hermes-backend.Service.PrivateTmp = lib.mkForce false;
+                        }
+                      );
                     }
+                  )
+                ];
+                system.stateVersion = defaults.stateVersion;
+                users.users.${user} = {
+                  isNormalUser = true;
+                  shell = pkgs.zsh;
+                  linger = true;
+                  extraGroups = [
+                    "wheel"
+                    "docker"
                   ];
                 };
-              };
-              # The locked nixos-render-docs rejects nix-darwin's manual flags.
-              documentation.enable = false;
-              users.users.${user}.home = "/Users/${user}";
-              home-manager.users.${user} = { };
-            }
-          else
-            {
-              imports = [
-                ./modules/fonts.nix
-                inputs.home-manager.nixosModules.home-manager
-              ]
-              ++ (
-                if platform == "wsl" then
-                  [
-                    inputs.nixos-wsl.nixosModules.wsl
-                    ./modules/nvidia.nix
-                    {
-                      # Retire only the exact wrapper previously copied by this module. Keep
-                      # unrelated administrator files and symlinks at this path untouched.
-                      system.activationScripts.retireSystemOpWrapper = {
-                        text = ''
-                          if [ -f /usr/local/bin/op ] && [ ! -L /usr/local/bin/op ]; then
-                            # The bash store path can change independently of the wrapper body.
-                            if ${pkgs.coreutils}/bin/head -n 1 /usr/local/bin/op | \
-                              ${pkgs.gnugrep}/bin/grep -Eq '^#!/nix/store/[a-z0-9]{32}-bash-[^/]+/bin/bash$' && \
-                              ${pkgs.coreutils}/bin/tail -n +2 /usr/local/bin/op | \
-                              ${pkgs.diffutils}/bin/cmp -s ${
-                                pkgs.writeText "legacy-op-wrapper-body" (
-                                  ''
-                                    OP_NATIVE="/etc/profiles/per-user/${config.wsl.defaultUser}/bin/op"
-                                    # op run injects secrets into Linux processes — keep on native binary
-                                    if [ "$1" = "run" ] && [ -x "$OP_NATIVE" ]; then
-                                      exec "$OP_NATIVE" "$@"
-                                    fi
-                                    # Find op.exe via Windows PATH (available in WSL via interop)
-                                    OP_EXE=$(IFS=:; for p in $PATH; do
-                                      [ -f "$p/op.exe" ] && echo "$p/op.exe" && break
-                                    done)
-                                    if [ -z "$OP_EXE" ]; then
-                                      echo "[ERROR] op.exe not found in PATH" >&2
-                                      exit 1
-                                    fi
-                                    OP_VARS=$(env | grep ^OP_ | cut -d= -f1 | tr '\n' ':')
-                                    export WSLENV="''${WSLENV:-}:''${OP_VARS%:}"
-                                    exec "$OP_EXE" "$@"
-                                  ''
-                                  + "\n"
-                                )
-                              } -; then
-                              ${pkgs.coreutils}/bin/rm -- /usr/local/bin/op
-                            fi
-                          fi
-                        '';
-                      };
-                      system.activationScripts.wslgFonts = {
-                        deps = [ "specialfs" ];
-                        text = ''
-                          ${pkgs.coreutils}/bin/install -d -m 0755 ${fontDirectory}
-                          # Retire the Noto CJK file previously distributed by this module.
-                          ${pkgs.coreutils}/bin/rm -f -- ${fontDirectory}/NotoSansCJK-VF.otf.ttc
-                          ${pkgs.coreutils}/bin/install --compare -m 0644 ${pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Regular.ttf ${fontDirectory}/UDEVGothicNF-Regular.ttf
-                          ${pkgs.coreutils}/bin/install --compare -m 0644 ${pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Bold.ttf ${fontDirectory}/UDEVGothicNF-Bold.ttf
-                          ${pkgs.coreutils}/bin/install --compare -m 0644 ${pkgs.noto-fonts-color-emoji}/share/fonts/noto/NotoColorEmoji.ttf ${fontDirectory}/NotoColorEmoji.ttf
-                        '';
-                      };
-                      assertions = [
-                        {
-                          assertion = builtins.substring 0 1 repository == "/" && !(lib.hasInfix "*" repository);
-                          message = "WSL Git trust requires one absolute checkout path without wildcards.";
-                        }
-                      ];
-                      # Home Manager starts the keyring; PAM unlocks it at login.
-                      security.pam.services.login.enableGnomeKeyring = true;
-                      wsl = {
-                        enable = true;
-                        defaultUser = lib.mkDefault defaults.nixosUser;
-                        useWindowsDriver = true;
-                        wslConf.network.generateHosts = false;
-                      };
-                      i18n.extraLocales = [ "ja_JP.UTF-8/UTF-8" ];
-                      programs = {
-                        git = {
-                          enable = true;
-                          config.safe.directory = [ repository ];
-                        };
-                        dconf.enable = true;
-                        nix-ld = {
-                          enable = true;
-                          libraries = with pkgs; [
-                            wayland
-                            libxkbcommon
-                          ];
-                        };
-                      };
-                      systemd.user.services.nixos-activation = {
-                        wants = [ "graphical-session.target" ];
-                        after = [ "graphical-session.target" ];
-                      };
-                      xdg.portal = {
-                        enable = true;
-                        extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
-                        config.common.default = "*";
-                      };
-                    }
-                  ]
-                else
-                  [
-                    {
-                      programs.hyprland.enable = true;
-                      home-manager.sharedModules = [
-                        ./modules/hyprland
-                        {
-                          home.packages = with pkgs; [
-                            firefox
-                            fuzzel
-                          ];
-                        }
-                      ];
-                    }
-                  ]
-              );
-              fonts.fontDir.enable = true;
-              # Desktop CLI integration authenticates the setgid native op wrapper.
-              programs._1password.enable = true;
-              home-manager.sharedModules = [
-                (
-                  { config, lib, ... }:
-                  let
-                    hermes = config.services.hermes-agent;
-                  in
-                  {
-                    # The service PATH contains store packages, which bypass setgid.
-                    services.hermes-agent.settings.secrets.onepassword.binary_path = "/run/wrappers/bin/op";
-                    # Native desktop authentication needs op's setgid transition.
-                    # NoNewPrivileges would suppress it even with the wrapper path.
-                    # PrivateTmp also creates a user namespace without op's host GID.
-                    systemd.user.services = lib.mkIf hermes.enable (
-                      lib.optionalAttrs hermes.gateway.enable {
-                        hermes-agent.Service.NoNewPrivileges = lib.mkForce false;
-                        hermes-agent.Service.PrivateTmp = lib.mkForce false;
-                      }
-                      // lib.optionalAttrs (hermes.backend.mode != "none") {
-                        hermes-backend.Service.NoNewPrivileges = lib.mkForce false;
-                        hermes-backend.Service.PrivateTmp = lib.mkForce false;
-                      }
-                    );
-                  }
-                )
-              ];
-              system.stateVersion = defaults.stateVersion;
-              users.users.${user} = {
-                isNormalUser = true;
-                shell = pkgs.zsh;
-                linger = true;
-                extraGroups = [
-                  "wheel"
-                  "docker"
-                ];
-              };
-              home-manager.users.${user} = { };
-            }
-        )
-      ];
+                home-manager.users.${user} = { };
+              }
+          )
+        ];
     };
 
 in
@@ -528,7 +546,7 @@ in
             home-manager.program = lib.getExe inputs.home-manager.packages.${system}.home-manager;
           };
       packages = lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
-        darwin-dia-browser = import ./modules/browsers/dia {
+        darwin-dia-browser = import ./modules/browsers/dia/package.nix {
           inherit inputs;
           pkgs = import pkgs.path {
             inherit system;

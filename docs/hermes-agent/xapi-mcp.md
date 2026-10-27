@@ -8,7 +8,7 @@ OAuth cache and runs the official `xurl mcp https://api.x.com/mcp` bridge.
 ## Configuration and credentials
 
 The shared `xapi` definition in
-[`nix/modules/ai_agents/mcp.nix`](../../nix/modules/ai_agents/mcp.nix) supplies
+[`nix/modules/ai_agents/mcp/default.nix`](../../nix/modules/ai_agents/mcp/default.nix) supplies
 both clients with this HTTP URL. The `mcp-xapi` service sets `HERMES_DATA_DIR`
 to the root Hermes home and owns the command's lifetime. It runs as a systemd
 user service on Linux/WSL and a launchd agent on macOS, listening on loopback

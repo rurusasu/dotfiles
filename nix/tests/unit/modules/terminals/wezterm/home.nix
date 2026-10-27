@@ -1,7 +1,4 @@
-{
-  inputs,
-  homeConfigurations ? import ../../../../fixtures/home-configurations.nix { inherit inputs; },
-}:
+{ homeConfigurations, files }:
 let
   inherit (homeConfigurations) homes lib;
   shellSource = home: ''source "${home.config.programs.wezterm.package}/etc/profile.d/wezterm.sh"'';
@@ -32,14 +29,13 @@ in
   };
 
   testWeztermExtraConfigRetainsTheCanonicalLua = {
-    expr = map (home: home.config.programs.wezterm.extraConfig) homes;
-    expected = map (
+    expr = map (
       home:
-      (import ../../../../../modules/terminals/wezterm {
-        inherit (home) config pkgs;
-        inherit (home.pkgs) lib;
-      }).programs.wezterm.extraConfig
+      lib.hasSuffix (builtins.readFile
+        files.nix.modules.terminals.wezterm."wezterm.lua"
+      ) home.config.programs.wezterm.extraConfig
     ) homes;
+    expected = map (_: true) homes;
   };
 
   testWeztermShellIntegrationsAreGeneratedAcrossHomes = {
