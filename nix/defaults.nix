@@ -154,6 +154,9 @@ let
                     programs.pi-coding-agent.enable = true;
                     programs.chatgpt.enable = true;
                     programs.dia.enable = true;
+                    programs.aerospace.enable = true;
+                    programs.discord.enable = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.discord;
+                    dotfiles.desktop.enable = true;
                     home = {
                       packages = with pkgs; [
                         coreutils
@@ -185,25 +188,18 @@ let
                       };
                     };
                   }
-                  ./modules/aerospace
-                  ./modules/discord
-                  ./modules/desktop.nix
                 ];
                 linux = [
-                  ./modules/discord
                   {
                     home.packages = [ pkgs.nautilus ];
                     programs.chatgpt.enable = true;
                     programs.chromium.enable = true;
+                    programs.discord.enable = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.discord;
                     programs.strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
                     programs.git.signing.signer = "/opt/1Password/op-ssh-sign";
                   }
                 ];
                 wsl = [
-                  ./modules/superfile
-                  ./modules/fcitx5.nix
-                  ./modules/gnome-keyring
-                  ./modules/editors/vscode.nix
                   (
                     let
                       graphicsEnvironment = {
@@ -217,8 +213,14 @@ let
                         keybindings.fromWindowsExport = true;
                         gwq.settings.worktree.basedir = "/mnt/d/worktrees";
                       };
+                      i18n.inputMethod.enable = true;
+                      services = {
+                        gnome-keyring.enable = true;
+                        vscode-server.enable = true;
+                      };
                       programs = {
                         pi-coding-agent.enable = true;
+                        superfile.enable = true;
                         strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
                         chromium = {
                           enable = true;
@@ -453,8 +455,8 @@ let
                     {
                       programs.hyprland.enable = true;
                       home-manager.sharedModules = [
-                        ./modules/hyprland
                         {
+                          wayland.windowManager.hyprland.enable = true;
                           home.packages = with pkgs; [
                             firefox
                             fuzzel
