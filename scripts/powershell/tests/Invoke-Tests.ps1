@@ -1,8 +1,9 @@
 #Requires -Version 5.1
 [CmdletBinding()]
-param([string[]]$Path = @($PSScriptRoot))
+param([string[]]$Path)
 
 $ErrorActionPreference = 'Stop'
+if (-not $Path) { $Path = @($PSScriptRoot) }
 . (Join-Path $PSScriptRoot 'support/Resolve-TestModule.ps1')
 $pesterModule = Resolve-TestModule -Name Pester
 if (Get-Module -Name Pester) { Remove-Module -Name Pester -Force -ErrorAction Stop }

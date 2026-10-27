@@ -34,6 +34,13 @@ if ($MissingDependency -eq 'PSScriptAnalyzer') {
     Resolve-TestModule -Name PSScriptAnalyzer | Out-Null
     exit 0
 }
+if (-not $MissingDependency) {
+    Copy-Item -LiteralPath $Runner -Destination $Fixture
+    New-Item -ItemType Directory -Path "$Fixture/support" | Out-Null
+    Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $Runner) 'support/Resolve-TestModule.ps1') -Destination "$Fixture/support"
+    & (Join-Path $Fixture 'Invoke-Tests.ps1')
+    exit $LASTEXITCODE
+}
 $target = Join-Path $Fixture 'Fixture.Tests.ps1'
 if ($MissingDependency -eq 'task') {
     $env:PATH = $PSHOME + ';' + (Join-Path $env:SystemRoot 'System32')
@@ -63,7 +70,7 @@ exit $LASTEXITCODE
 }
 
 Describe 'PowerShell test prerequisites' {
-    It 'should use installed Pester without network access or installation' {
+    It 'should discover tests by default using installed Pester without acquisition' {
         $result = Invoke-TestPrerequisiteProbe
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $result.AcquisitionOccurred | Should -BeFalse
