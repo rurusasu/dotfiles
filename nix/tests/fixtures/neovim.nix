@@ -1,6 +1,5 @@
-{ inputs, pkgs }:
+{ fixtures, pkgs }:
 let
-  fixtures = import ./packages.nix { inherit inputs; };
   home = fixtures.mkHome pkgs.stdenv.hostPlatform.system [
     (fixtures.homeModule "common")
     ({ lib, ... }: {

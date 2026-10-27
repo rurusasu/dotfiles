@@ -1,4 +1,8 @@
-{ inputs }:
+{
+  inputs,
+  code,
+  files,
+}:
 let
   mkPkgs =
     system:
@@ -22,7 +26,7 @@ let
       }
       // extraSpecialArgs;
       modules =
-        (import ../../discover-modules.nix "home-manager" ../../modules)
+        (code.nix.discover-modules "home-manager" files.nix.modules.__path)
         ++ modules
         ++ [
           {
@@ -43,7 +47,7 @@ in
     requested:
     { pkgs, lib, ... }:
     let
-      base = (import ../../defaults.nix inputs).systemDefaults {
+      base = (code.nix.defaults inputs).systemDefaults {
         inherit inputs pkgs;
         platform = if requested == "common" then "linux" else requested;
       };
@@ -64,8 +68,8 @@ in
         platform = "darwin";
       };
       modules =
-        (import ../../discover-modules.nix "system" ../../modules)
-        ++ (import ../../discover-modules.nix "darwin" ../../modules)
+        (code.nix.discover-modules "system" files.nix.modules.__path)
+        ++ (code.nix.discover-modules "darwin" files.nix.modules.__path)
         ++ modules;
     };
   windowsPackages = builtins.listToAttrs (
@@ -77,9 +81,9 @@ in
           source = source.SourceDetails.Name;
         };
       }) source.Packages
-    ) (builtins.fromJSON (builtins.readFile ../../../windows/winget/packages.json)).Sources
+    ) (builtins.fromJSON (builtins.readFile files.windows.winget."packages.json")).Sources
   );
-  pnpmManifest = builtins.fromJSON (builtins.readFile ../../../windows/pnpm/packages.json);
+  pnpmManifest = builtins.fromJSON (builtins.readFile files.windows.pnpm."packages.json");
   mkHome = system: modules: mkHomeWith { inherit system modules; };
   darwin = inputs.nix-darwin.lib.darwinSystem {
     system = "aarch64-darwin";
@@ -92,7 +96,7 @@ in
         nixpkgs.pkgs = mkPkgs "aarch64-darwin";
         system.primaryUser = "test-user";
       }
-      (import ../../defaults.nix inputs).systemDefaults
+      (code.nix.defaults inputs).systemDefaults
     ];
   };
 }

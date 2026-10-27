@@ -1,6 +1,6 @@
 # Native Neovim behavior and the Nix parser/query distribution contract.
 {
-  inputs,
+  fixtures,
   pkgs,
   code,
   files,
@@ -8,7 +8,7 @@
 {
   neovim-native =
     let
-      neovim = code.nix.tests.fixtures.neovim { inherit inputs pkgs; };
+      neovim = code.nix.tests.fixtures.neovim { inherit fixtures pkgs; };
     in
     pkgs.runCommand "neovim-native-check"
       {

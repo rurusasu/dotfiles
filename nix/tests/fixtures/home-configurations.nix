@@ -1,6 +1,9 @@
-{ inputs }:
+{
+  inputs,
+  fixtures,
+  code,
+}:
 let
-  fixtures = import ./packages.nix { inherit inputs; };
   inherit (fixtures) mkPkgs;
 
   testHome = {
@@ -53,7 +56,7 @@ in
     system = "aarch64-linux";
     module = fixtures.homeModule "linux";
   };
-  configuredChrome = home: import ../../modules/browsers/chrome/package.nix { inherit (home) pkgs; };
+  configuredChrome = home: code.nix.modules.browsers.chrome.package { inherit (home) pkgs; };
   common = mkHome {
     system = "x86_64-linux";
     module = fixtures.homeModule "common";

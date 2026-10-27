@@ -2,6 +2,7 @@
   inputs,
   code,
   files,
+  homeConfigurations,
 }:
 let
   mkWsl = inputs.nixpkgs.lib.nixosSystem {
@@ -16,7 +17,7 @@ let
   };
 
   defaultConfig = mkWsl.config;
-  home = (code.nix.tests.fixtures.home-configurations { inherit inputs; }).wsl;
+  home = homeConfigurations.wsl;
 in
 {
   testWslUsesTheDeclaredDefaultUserWithoutBootstrapMetadata = {

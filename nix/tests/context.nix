@@ -2,8 +2,8 @@
 let
   repository = import ./source-tree.nix inputs.self.outPath;
   inherit (repository) code files;
-  fixtures = code.nix.tests.fixtures.packages { inherit inputs; };
-  homeConfigurations = code.nix.tests.fixtures.home-configurations { inherit inputs; };
+  fixtures = code.nix.tests.fixtures.packages { inherit inputs code files; };
+  homeConfigurations = code.nix.tests.fixtures.home-configurations { inherit inputs fixtures code; };
   upstream = builtins.mapAttrs (_: input: import ./source-tree.nix input.outPath) (
     inputs.nixpkgs.lib.filterAttrs (_: input: input ? inputs) inputs
   );
