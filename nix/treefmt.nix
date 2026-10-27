@@ -5,7 +5,7 @@
 # References:
 # - treefmt config: https://treefmt.com/v2.1/getting-started/configure/
 # - treefmt-nix examples: https://github.com/numtide/treefmt-nix/tree/main/examples
-{ pkgs, psscriptanalyzerSrc, ... }:
+{ pkgs, psscriptanalyzerRelease, ... }:
 {
   projectRootFile = "flake.nix";
 
@@ -64,8 +64,6 @@
 
   # Custom formatters not in treefmt-nix programs
   settings.formatter = {
-    # Keep raw chezmoi JSON templates out of oxfmt. They become valid
-    # JSON only after chezmoi expansion and are validated by Chezmoi CI.
     oxfmt = {
       options = [
         "--write"
@@ -85,8 +83,6 @@
           }
         ))
       ];
-      excludes = [
-      ];
     };
 
     # PowerShell (no built-in support)
@@ -95,7 +91,7 @@
         pkgs.writeShellScript "dotfiles-powershell-formatter" ''
           export DOTFILES_PSSA_MODULE="${
             pkgs.callPackage ./modules/shells/powershell/psscriptanalyzer.nix {
-              src = psscriptanalyzerSrc;
+              releaseMetadata = psscriptanalyzerRelease;
             }
           }/share/powershell/Modules/PSScriptAnalyzer/PSScriptAnalyzer.psd1"
           exec ${pkgs.powershell}/bin/pwsh "$@"

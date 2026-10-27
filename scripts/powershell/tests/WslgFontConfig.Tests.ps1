@@ -67,9 +67,6 @@ Describe 'WSLg Windows font configuration rendering' {
         $rendered = Invoke-WslgFontRender -Fixture $fixture -Command @('execute-template', '--file', (Join-Path $fixture.Source $relative))
         ($rendered -replace "`r", '').TrimEnd() | Should -BeExactly $fixture.Canonical.TrimEnd()
         [void][xml]$rendered
-        $template = [IO.File]::ReadAllText((Join-Path $script:repoRoot ('chezmoi/' + $relative)))
-        $template | Should -Match 'include\s+"\.\./nix/modules/fonts/wsl-fontconfig\.conf"'
-        $template | Should -Not -Match '<fontconfig|<family>'
     }
 
     It 'should render the actual canonical fontconfig file unchanged' {
@@ -82,15 +79,6 @@ Describe 'WSLg Windows font configuration rendering' {
         ($rendered -replace "`r", '').TrimEnd() | Should -BeExactly (([IO.File]::ReadAllText($canonical) -replace "`r", '').TrimEnd())
         [xml]$document = $rendered
         $document.DocumentElement.LocalName | Should -BeExactly 'fontconfig'
-    }
-
-    It 'should manage both Windows files through chezmoi' {
-        if (-not $script:chezmoi) { Set-ItResult -Skipped -Because 'Native chezmoi is not installed; isolated rendering requires its real template engine'; return }
-        $fixture = New-WslgFontRenderFixture
-        $managed = Invoke-WslgFontRender -Fixture $fixture -Command @('managed', '--path-style', 'relative')
-        $paths = @($managed -split "`n" | ForEach-Object { ($_ -replace '\\', '/').Trim() })
-        $paths | Should -Contain '.wslgconfig'
-        $paths | Should -Contain '.config/dotfiles/wslg-fontconfig.conf'
     }
 
     It 'should exclude Python caches while keeping Windows font files and Python source managed' {

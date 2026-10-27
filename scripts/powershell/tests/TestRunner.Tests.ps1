@@ -35,35 +35,12 @@ if ($MissingDependency -eq 'PSScriptAnalyzer') {
     Resolve-TestModule -Name PSScriptAnalyzer | Out-Null
     exit 0
 }
-if ($MissingDependency -eq 'PesterCoverageConfiguration') {
-    function global:New-FixturePesterConfiguration {
-        [pscustomobject]@{
-            Run = [pscustomobject]@{ Path = @(); Exit = $false; PassThru = $false }
-            Output = [pscustomobject]@{ Verbosity = '' }
-            CodeCoverage = [pscustomobject]@{
-                Enabled = $false; Path = @(); CoveragePercentTarget = 0
-                OutputFormat = ''; ExcludeTests = $false
-            }
-        }
-    }
-    # Keep the real installed Pester import, but expose a configuration without UseBreakpoints.
-    Set-Alias -Name New-PesterConfiguration -Value New-FixturePesterConfiguration -Scope Global
-}
-if ($MissingDependency -eq 'PesterCoberturaExporter') {
-    . (Join-Path (Split-Path -Parent $Runner) 'support/Resolve-TestModule.ps1')
-    $pesterModule = Resolve-TestModule -Name Pester
-    Import-Module -Name $pesterModule.Path -Force
-    $moduleWithoutExporter = New-Module -Name CoverageExporterFixture -ScriptBlock {}
-    Assert-PesterCoverageConfiguration -Configuration (New-PesterConfiguration) -Module $moduleWithoutExporter
-    exit 0
-}
 $target = Join-Path $Fixture 'Fixture.Tests.ps1'
 if ($MissingDependency -eq 'task') {
     $env:PATH = $PSHOME + ';' + (Join-Path $env:SystemRoot 'System32')
-    $target = Join-Path (Split-Path -Parent $Runner) 'Install.Wsl.Tests.ps1'
+    $target = Join-Path (Split-Path -Parent $Runner) 'Install.Tests.ps1'
 }
-$coverageArguments = if ($MissingDependency -eq 'PesterCoverageConfiguration') { @{ ShowCoverage = $true } } else { @{} }
-& $Runner -Path $target -MinimumCoverage 0 @coverageArguments
+& $Runner -Path $target -MinimumCoverage 0
 exit $LASTEXITCODE
 '@ | Set-Content -LiteralPath $bootstrap
 
@@ -95,25 +72,6 @@ Describe 'PowerShell test prerequisites' {
         $result = Invoke-TestPrerequisiteProbe
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $result.AcquisitionOccurred | Should -BeFalse
-        $result.Output | Should -Match 'SUCCESS: All tests passed!'
-    }
-
-    It 'should report missing Pester coverage configuration without downloading it' {
-        $result = Invoke-TestPrerequisiteProbe -MissingDependency 'PesterCoverageConfiguration'
-        $result.ExitCode | Should -Be 1 -Because $result.Output
-        $result.Output | Should -Match ([regex]::Escape("Required test dependency 'Pester'"))
-        $result.Output | Should -Match ([regex]::Escape('CodeCoverage.UseBreakpoints'))
-        $result.Output | Should -Match 'Prepare dependencies(?:\s|\|)+separately'
-        $result.AcquisitionOccurred | Should -BeFalse
-    }
-
-    It 'should report an unsupported Cobertura exporter without downloading it' {
-        $result = Invoke-TestPrerequisiteProbe -MissingDependency 'PesterCoberturaExporter'
-        $result.ExitCode | Should -Be 1 -Because $result.Output
-        $result.Output | Should -Match ([regex]::Escape("Required test dependency 'Pester'"))
-        $result.Output | Should -Match 'Cobertura coverage exporter'
-        $result.Output | Should -Match 'Prepare dependencies(?:\s|\|)+separately'
-        $result.AcquisitionOccurred | Should -BeFalse
     }
 
     It 'should report missing <Dependency> without downloading it' -ForEach @(
@@ -129,6 +87,13 @@ Describe 'PowerShell test prerequisites' {
 }
 
 Describe 'PowerShell test runner failure propagation' {
+    It 'should fail when no tests are discovered' {
+        $fixture = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $fixture | Out-Null
+        $output = & $script:runtime -NoProfile -File $script:runner -Path $fixture 2>&1
+        $LASTEXITCODE | Should -Be 1 -Because ($output -join [Environment]::NewLine)
+    }
+
     It 'should reject <FailureKind> even when another test passes' -ForEach @(
         @{ FailureKind = 'discovery errors'; BrokenSource = "Describe 'broken' {" }
         @{ FailureKind = 'container setup errors'; BrokenSource = "BeforeAll { throw 'fixture setup failed' }; Describe 'broken' { It 'cannot run' { 1 | Should -Be 1 } }" }
@@ -147,6 +112,59 @@ Describe 'PowerShell test runner failure propagation' {
         $exitCode = $LASTEXITCODE
 
         $exitCode | Should -Be 1 -Because ($output -join [Environment]::NewLine)
-        ($output -join [Environment]::NewLine) | Should -Not -Match 'SUCCESS: All tests passed!'
     }
+}
+
+Describe 'PowerShell coverage task contract' {
+    BeforeAll {
+        function New-CoverageFixture {
+            param([switch]$WithSource)
+
+            $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+            $tests = Join-Path $root 'tests'
+            New-Item -ItemType Directory -Path "$tests/support", "$root/lib" -Force | Out-Null
+            Copy-Item -LiteralPath $script:runner -Destination $tests
+            Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'support/Resolve-TestModule.ps1') -Destination "$tests/support"
+            "Describe 'fixture' { It 'passes' { 1 | Should -Be 1 } }" |
+                Set-Content -LiteralPath "$tests/Fixture.Tests.ps1"
+            if ($WithSource) {
+                "function Get-UnexecutedValue { 'not executed' }" | Set-Content -LiteralPath "$root/lib/Unused.ps1"
+            }
+            return $root
+        }
+    }
+
+    It 'should emit Cobertura for requested coverage even when no source command executes' {
+        $fixture = New-CoverageFixture -WithSource
+        $coveragePath = Join-Path $fixture 'coverage.xml'
+        $output = & $script:runtime -NoProfile -File "$fixture/tests/Invoke-Tests.ps1" -Path "$fixture/tests/Fixture.Tests.ps1" -ShowCoverage -CoverageOutputFile $coveragePath 2>&1
+        $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
+        [xml]$report = Get-Content -LiteralPath $coveragePath -Raw
+        [int]$report.coverage.'lines-valid' | Should -BeGreaterThan 0
+        [double]$report.coverage.'line-rate' | Should -Be 0
+    }
+
+    It 'should fail a positive threshold when measured coverage is zero' {
+        $fixture = New-CoverageFixture -WithSource
+        $coveragePath = Join-Path $fixture 'coverage.xml'
+        $output = & $script:runtime -NoProfile -File "$fixture/tests/Invoke-Tests.ps1" -Path "$fixture/tests/Fixture.Tests.ps1" -MinimumCoverage 1 -CoverageOutputFile $coveragePath 2>&1
+        $LASTEXITCODE | Should -Be 1 -Because ($output -join [Environment]::NewLine)
+        [xml]$report = Get-Content -LiteralPath $coveragePath -Raw
+        [double]$report.coverage.'line-rate' | Should -Be 0
+    }
+
+    It 'should fail requested coverage when no runtime sources exist' {
+        $fixture = New-CoverageFixture
+        $coveragePath = Join-Path $fixture 'coverage.xml'
+        $previousPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $output = & $script:runtime -NoProfile -File "$fixture/tests/Invoke-Tests.ps1" -Path "$fixture/tests/Fixture.Tests.ps1" -CoverageOutputFile $coveragePath 2>&1
+            $exitCode = $LASTEXITCODE
+        }
+        finally { $ErrorActionPreference = $previousPreference }
+        $exitCode | Should -Be 1 -Because ($output -join [Environment]::NewLine)
+        Test-Path -LiteralPath $coveragePath | Should -BeFalse
+    }
+
 }

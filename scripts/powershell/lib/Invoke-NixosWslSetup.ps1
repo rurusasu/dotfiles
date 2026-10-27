@@ -1,16 +1,100 @@
 ﻿# Windows owns checkout synchronization; Nix owns the host configuration.
+function Install-NixosWsl {
+    [CmdletBinding()]
+    param(
+        [ValidateNotNullOrEmpty()]
+        [string]$DistroName = 'NixOS',
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InstallDir,
+        [string]$ReleaseTag = ''
+    )
+
+    if ([string]::IsNullOrWhiteSpace($InstallDir)) {
+        throw 'The NixOS-WSL install directory must not be empty.'
+    }
+    $installPath = [IO.Path]::GetFullPath($InstallDir)
+    $listOutput = @(Invoke-Wsl -TimeoutSeconds 5 -Arguments @('--list', '--quiet'))
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not list WSL distributions (exit=$LASTEXITCODE): $($listOutput -join [Environment]::NewLine)"
+    }
+    $distros = $listOutput | ForEach-Object {
+        ([string]$_ -replace "`0", '' -replace [char]0xFEFF, '') -split '\r?\n'
+    } | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+    if ($distros -contains $DistroName) { return }
+
+    if (Test-Path -LiteralPath $installPath) {
+        if (-not (Test-Path -LiteralPath $installPath -PathType Container)) {
+            throw "The NixOS-WSL install location is not a directory: $installPath"
+        }
+        $vhdPath = Join-Path $installPath 'ext4.vhdx'
+        if (Test-Path -LiteralPath $vhdPath -PathType Leaf) {
+            $output = @(Invoke-Wsl -Arguments @('--import-in-place', $DistroName, $vhdPath))
+            if ($LASTEXITCODE -ne 0) {
+                throw "WSL VHD registration failed (exit=$LASTEXITCODE): $($output -join [Environment]::NewLine)"
+            }
+            $output | Out-Host
+            return
+        }
+        if (@(Get-ChildItem -LiteralPath $installPath -Force -ErrorAction Stop).Count -gt 0) {
+            throw "The NixOS-WSL install directory is not empty: $installPath"
+        }
+    }
+
+    $releaseBase = 'https://api.github.com/repos/nix-community/NixOS-WSL/releases'
+    $releaseUri = if ([string]::IsNullOrWhiteSpace($ReleaseTag)) {
+        "$releaseBase/latest"
+    }
+    else {
+        "$releaseBase/tags/$([Uri]::EscapeDataString($ReleaseTag))"
+    }
+    $release = Invoke-RestMethod -Uri $releaseUri -Headers @{ 'User-Agent' = 'nixos-wsl-installer' } -ErrorAction Stop
+    $asset = $release.assets | Where-Object { $_.name -eq 'nixos.wsl' } | Select-Object -First 1
+    if (-not $asset) {
+        throw "Release $($release.tag_name) does not contain nixos.wsl. Use latest or a ReleaseTag that provides nixos.wsl."
+    }
+
+    $downloadPath = Join-Path ([IO.Path]::GetTempPath()) ('nixos-' + [Guid]::NewGuid().ToString('N') + '.wsl')
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile $downloadPath -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $installPath)) {
+            New-Item -ItemType Directory -Path $installPath -ErrorAction Stop | Out-Null
+        }
+        $output = @(Invoke-Wsl -Arguments @('--install', '--from-file', $downloadPath, '--name', $DistroName, '--location', $installPath, '--no-launch'))
+        if ($LASTEXITCODE -ne 0) {
+            throw "WSL installation from nixos.wsl failed (exit=$LASTEXITCODE): $($output -join [Environment]::NewLine)"
+        }
+        $output | Out-Host
+    }
+    finally {
+        Remove-Item -LiteralPath $downloadPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Invoke-NixosWslSetup {
     [CmdletBinding()]
-    param([Parameter(Mandatory)]$Context)
-
-    $timeoutSeconds = [int]$Context.GetOption('PostInstallTimeoutSeconds', 1800)
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Repository,
+        [ValidateNotNullOrEmpty()]
+        [string]$DistroName = 'NixOS',
+        [ValidateSet('link', 'repo', 'nix', 'none')]
+        [string]$SyncMode = 'link',
+        [ValidateSet('repo', 'lock', 'none')]
+        [string]$SyncBack = 'lock',
+        [switch]$ForcePostInstall,
+        [ValidateRange(0, 2147483647)]
+        [int]$TimeoutSeconds = 1800,
+        [bool]$UpdateFlakeInputs = $true
+    )
     function ConvertTo-WslArgument([string]$Value) {
         return "'" + $Value.Replace("'", "'\''") + "'"
     }
     function Invoke-SetupCommand([string]$Command) {
         # Bypass WSL's default shell and keep profile banners out of machine-readable output.
         $output = @(Invoke-Wsl -TimeoutSeconds $timeoutSeconds -Arguments @(
-                '-d', $Context.DistroName, '-u', 'root', '--exec', 'bash', '-c',
+                '-d', $DistroName, '-u', 'root', '--exec', 'bash', '-c',
                 ". /etc/profile >/dev/null || exit; set -euo pipefail; $Command"
             ))
         if ($LASTEXITCODE -ne 0) {
@@ -19,18 +103,13 @@ function Invoke-NixosWslSetup {
         return $output
     }
 
-    $syncMode = [string]$Context.GetOption('SyncMode', 'link')
-    $syncBack = [string]$Context.GetOption('SyncBack', 'lock')
-    if ($syncMode -notin @('link', 'repo', 'nix', 'none') -or $syncBack -notin @('repo', 'lock', 'none')) {
-        throw 'Invalid WSL checkout synchronization mode.'
-    }
     if ($syncMode -eq 'nix' -and $syncBack -eq 'repo') {
         throw 'SyncMode nix requires SyncBack lock or none.'
     }
 
-    $sourceOutput = @(Invoke-Wsl -Arguments @(
-            '-d', $Context.DistroName, '-u', 'root', '--', 'wslpath', '-a',
-            ([IO.Path]::GetFullPath($Context.DotfilesPath).Replace('\', '/'))
+    $sourceOutput = @(Invoke-Wsl -TimeoutSeconds $TimeoutSeconds -Arguments @(
+            '-d', $DistroName, '-u', 'root', '--exec', 'wslpath', '-a',
+            ([IO.Path]::GetFullPath($Repository).Replace('\', '/'))
         ))
     $source = $sourceOutput | ForEach-Object { ([string]$_ -replace "`0", '' -replace [char]0xFEFF, '').Trim() } |
         Where-Object { $_ -match '^/' } | Select-Object -First 1
@@ -38,7 +117,7 @@ function Invoke-NixosWslSetup {
         throw 'Could not resolve the Windows checkout inside WSL.'
     }
 
-    $currentUserOutput = @(Invoke-Wsl -Arguments @('-d', $Context.DistroName, '--exec', '/run/current-system/sw/bin/id', '-un'))
+    $currentUserOutput = @(Invoke-Wsl -TimeoutSeconds $TimeoutSeconds -Arguments @('-d', $DistroName, '--exec', '/run/current-system/sw/bin/id', '-un'))
     $currentUser = [string]($currentUserOutput | Where-Object { [string]$_ -match '^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$' } | Select-Object -Last 1)
     if ($LASTEXITCODE -ne 0 -or -not $currentUser) { throw 'Could not resolve the current WSL default user.' }
     $accountOutput = @(Invoke-SetupCommand "getent passwd $(ConvertTo-WslArgument $currentUser)")
@@ -64,10 +143,9 @@ function Invoke-NixosWslSetup {
     $qRepo = ConvertTo-WslArgument $repo
     $qSource = ConvertTo-WslArgument $source
     $qOwner = ConvertTo-WslArgument "${user}:$group"
-    $force = [bool]$Context.GetOption('ForcePostInstall', $false)
 
     # Preserve conflicting checkouts even when ForcePostInstall is requested.
-    $backup = if ($force) {
+    $backup = if ($ForcePostInstall) {
         "mv -- $qRepo $(ConvertTo-WslArgument ($repo + '.backup-' + [Guid]::NewGuid().ToString('N')))"
     }
     else {
@@ -89,7 +167,6 @@ function Invoke-NixosWslSetup {
     $qFlakeTarget = ConvertTo-WslArgument ('path:' + $target)
     Invoke-SetupCommand "test -f $qTarget/flake.nix; test -f $qTarget/flake.lock" | Out-Host
 
-    $updateFlakeInputs = [bool]$Context.GetOption('UpdateFlakeInputs', $true)
     if ($updateFlakeInputs) {
         Invoke-SetupCommand "nix --accept-flake-config --extra-experimental-features 'nix-command flakes' flake update --flake $qFlakeTarget" | Out-Host
     }

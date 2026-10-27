@@ -1,20 +1,7 @@
-# lib: 共通ライブラリ編集ガイド
+# Windows 共通処理
 
-## 対象ファイル
-
-- `SetupHandler.ps1`: `SetupContext`, `SetupResult`, `SetupHandlerBase`
-- `Invoke-ExternalCommand.ps1`: モック可能な `Invoke-*` ラッパー群
-
-## 変更ルール
-
-- ハンドラーから呼ぶ OS/外部コマンドはラッパー関数として追加する。
-- 既存関数のインターフェースを変える場合は利用ハンドラーとテストを同時更新する。
-- 直接コマンド呼び出しを増やさない。
-
-## テスト
-
-```powershell
-cd scripts/powershell/tests
-.\Invoke-Tests.ps1 -Path .\lib\SetupHandler.Tests.ps1 -MinimumCoverage 0
-.\Invoke-Tests.ps1 -Path .\lib\Invoke-ExternalCommand.Tests.ps1 -MinimumCoverage 0
-```
+- `Invoke-ExternalCommand.ps1`: native実行、timeout、WSL UTF-8、昇格、プロセスPATH、標準master import。
+- `Invoke-NixosWslSetup.ps1`: distro登録、同期、input更新、NixOS反映。
+- 具体的な名前付き引数を使う。共有contextや結果class、未使用の互換処理は作らない。
+- ユーザーPATHを永続変更しない。既存VHD・チェックアウトを削除や上書きで復旧しない。
+- テストは `tests/Invoke-Tests.ps1` 経由で実行する。

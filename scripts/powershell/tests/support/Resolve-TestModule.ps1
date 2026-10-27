@@ -20,32 +20,13 @@ function Resolve-TestModule {
             $prerelease = if ($psData -is [Collections.IDictionary]) { $psData['Prerelease'] } else { $null }
             $edition = if ($PSVersionTable.ContainsKey('PSEdition')) { $PSVersionTable.PSEdition } else { 'Desktop' }
             $exportsRequiredCommands -and [string]::IsNullOrWhiteSpace([string]$prerelease) -and
+            ($Name -ne 'Pester' -or $candidate.Version -ge [version]'6.2') -and
             (-not $candidate.PowerShellVersion -or $candidate.PowerShellVersion -le $PSVersionTable.PSVersion) -and
             (-not $candidate.CompatiblePSEditions.Count -or $candidate.CompatiblePSEditions -contains $edition)
         } | Sort-Object Version -Descending | Select-Object -First 1
     if (-not $module) {
-        throw "Required test dependency '$Name' (stable module exporting $($requiredCommands -join ', ')) is not installed. Prepare dependencies separately; tests do not download or install them."
+        $requirement = if ($Name -eq 'Pester') { 'stable version 6.2 or newer' } else { 'stable module exporting Invoke-ScriptAnalyzer' }
+        throw "Required test dependency '$Name' ($requirement) is not installed. Prepare dependencies separately; tests do not download or install them."
     }
     return $module
-}
-
-function Assert-PesterCoverageConfiguration {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]$Configuration,
-        [Parameter(Mandatory)][System.Management.Automation.PSModuleInfo]$Module
-    )
-
-    $coverageConfiguration = $Configuration.PSObject.Properties['CodeCoverage']
-    if (-not $coverageConfiguration -or $null -eq $coverageConfiguration.Value -or
-        -not $coverageConfiguration.Value.PSObject.Properties['UseBreakpoints']) {
-        throw "Required test dependency 'Pester' does not provide CodeCoverage.UseBreakpoints. Prepare dependencies separately; tests do not download or install them."
-    }
-
-    $coberturaExporter = & $Module {
-        Get-Command -Name Get-CoberturaReportXml -CommandType Function -ErrorAction SilentlyContinue
-    }
-    if (-not $coberturaExporter) {
-        throw "Required test dependency 'Pester' does not provide the Cobertura coverage exporter. Prepare dependencies separately; tests do not download or install them."
-    }
 }

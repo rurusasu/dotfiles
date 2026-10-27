@@ -97,7 +97,7 @@ class DetectCiActionContractTests(unittest.TestCase):
                 UNIX | {"chezmoi", "windows"},
             ),
             (
-                ("nix/modules/terminals/ghostty/ghostty-windows.nix",),
+                ("nix/modules/terminals/ghostty/ghostty-wsl.nix",),
                 UNIX | {"chezmoi", "windows"},
             ),
             (

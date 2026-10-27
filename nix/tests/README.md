@@ -33,7 +33,7 @@ nix-unit の flake-parts module が `checks.<system>.nix-unit` を自動生成�
 設定の正本は `nix/treefmt.nix`、読み込みと開発シェルの配線は `nix/defaults.nix` です。
 Unix CLI と GUI の選択は各アプリ module を選択した Home Manager の実効設定で検証し、
 OS 固有の連携 package は host の実効設定で検証します。
-Windows の install / verifier metadata は独立した `windows/winget/packages.json` を直接評価します。
+Windows の 標準 package ID / source は独立した `windows/winget/packages.json` を直接評価します。
 廃止した package catalog / provider resolution の fixture や生成 manifest 比較は対象にしません。
 
 - `tests/bash/` は shell / installer の順序、外部コマンドの stub、runtime / artifact 契約を検証します。
@@ -58,6 +58,9 @@ Darwin / Linux の `custom-package-builds` は `chatgpt-desktop` check も含み
 ビルド・CLI 起動、および Linux の desktop entry と upstream tmpfiles 規則の一致を確認します。
 GUI の起動・ログイン・操作はこの check の対象外で、各 OS の実機で確認します。
 Codex / Hermes の unit は公式 Home Manager 設定と共通 MCP の配線を検証します。
+Docker MCP の unit は Linux / macOS の Home Manager package・plugin link・宣言したサーバー選択を検証します。
+`docker-mcp` check は公式配布物を SHA-256 で検証して導入し、空の HOME で Docker CLI からの
+plugin 検出、版の表示、gateway の起動オプションを確認します。Docker daemon や秘密情報は不要です。
 `hermes-configuration` は Home Manager の MCP 定義を client 向け JSON に変換し、
 Chrome / X API の localhost HTTP 接続先と Pipedream の OAuth 設定を確認します。
 共有する native ユーザーサービスの起動、headless browser の操作、API 認証は実機で確認します。
@@ -78,11 +81,12 @@ nix build .#checks.aarch64-darwin.nix-unit --no-link --no-write-lock-file
 
 `nix flake check --no-build` は評価確認です。nix-unit assertion や実行テストの成功は、
 対象 check の build 結果で確認します。Nix が既存の成功済み出力を再利用する場合もあります。
-`powershell-formatter` と `treefmt` は、PSScriptAnalyzer の PowerShell Gallery 配布パッケージを
-Nix input として取得し、Nix store の module manifest を直接 import します。
-`flake.nix` の `psscriptanalyzer` URL はバージョンを指定せず、取得済みの配布物と内容の hash は
-`flake.lock` で固定します。更新時は `nix flake update psscriptanalyzer` で input を再解決し、
-その lock を更新します。
+`powershell-formatter` と `treefmt` は、PSScriptAnalyzer の公式 GitHub release metadata を
+Nix input として取得し、そこに記載された配布 URL と SHA-256 で NuGet package を取得して、
+Nix store の module manifest を直接 import します。
+`flake.nix` の `psscriptanalyzer` URL はバージョンを指定しない `releases/latest` とし、
+配布物のバージョン・URL・SHA-256 を含む metadata の内容を `flake.lock` で固定します。
+更新時は `nix flake update psscriptanalyzer` で input を再解決し、その lock を更新します。
 依存 input の取得は build に先行し、formatter の実行中に `Install-Module` を呼びません。
 空の HOME でも同じ依存を使用します。`powershell-formatter` は未整形 fixture を整形し、
 CRLF・日本語の BOM と二度目の実行で byte / 更新時刻が変わらないことを検証します。

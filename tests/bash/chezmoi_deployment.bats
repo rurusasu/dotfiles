@@ -8,8 +8,6 @@
     mkdir -p "$fixture_root/nix/home/keybindings" "$fixture_root/scripts/powershell"
     cp -R "$REPO_ROOT/chezmoi" "$source_dir"
     cp "$REPO_ROOT/nix/home/keybindings/generated.json" "$fixture_root/nix/home/keybindings/generated.json"
-    cp "$REPO_ROOT/scripts/powershell/Sync-PowerToysKeyboard.ps1" "$fixture_root/scripts/powershell/Sync-PowerToysKeyboard.ps1"
-    cp "$REPO_ROOT/scripts/powershell/Invoke-DesktopAction.ps1" "$fixture_root/scripts/powershell/Invoke-DesktopAction.ps1"
 
     for os in linux darwin windows; do
         destination="$BATS_TEST_TMPDIR/$os/home"
@@ -26,7 +24,7 @@
         run chezmoi "${chezmoi_args[@]}" managed --include scripts --path-style relative
         [ "$status" -eq 0 ]
         if [ "$os" = windows ]; then
-            [ "$output" = $'.chezmoiscripts/deploy/keybindings/sync_powertoys_keyboard.ps1\n.chezmoiscripts/deploy/keybindings/sync_wsl_keybindings.ps1\n.chezmoiscripts/deploy/terminals/deploy.ps1\n.chezmoiscripts/deploy/terminals/install_udev_gothic_nf.ps1' ]
+            [ "$output" = $'.chezmoiscripts/deploy/keybindings/sync_wsl_keybindings.ps1\n.chezmoiscripts/deploy/terminals/deploy.ps1\n.chezmoiscripts/deploy/terminals/install_udev_gothic_nf.ps1' ]
         else
             [ -z "$output" ]
         fi

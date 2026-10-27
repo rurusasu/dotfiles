@@ -6,45 +6,10 @@
 
 .DESCRIPTION
     外部コマンドラッパー関数のテスト
-    100% カバレッジを目標とする
 #>
 
 BeforeAll {
     . $PSScriptRoot/../../lib/Invoke-ExternalCommand.ps1
-}
-
-Describe 'Invoke-Chezmoi' {
-    # ExePath を使ったテスト（chezmoi 本体のモックはスコープ競合するため回避）
-    BeforeAll {
-        # 固定出力を持つ偽 chezmoi スクリプトを作成
-        $script:fakeScript = Join-Path $env:TEMP "fake_chezmoi_$(Get-Random).ps1"
-        Set-Content $script:fakeScript -Value "Write-Host 'progress line 1'; Write-Host 'progress line 2'"
-        # pwsh (PowerShell 7) がなければ powershell.exe にフォールバック
-        $script:psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell.exe" }
-    }
-
-    AfterAll {
-        Remove-Item $script:fakeScript -ErrorAction SilentlyContinue
-    }
-
-    It 'should write each output line to host when MergeStderr is set' {
-        $script:written = @()
-        Mock Write-Host { param($Object) $script:written += $Object }
-
-        Invoke-Chezmoi -ExePath $script:psExe -MergeStderr "-NoProfile" "-NonInteractive" "-File" $script:fakeScript
-
-        $script:written | Should -Contain "progress line 1"
-        $script:written | Should -Contain "progress line 2"
-    }
-
-    It 'should return output via pipeline when MergeStderr is not set' {
-        Mock Write-Host { }
-
-        $result = Invoke-Chezmoi -ExePath $script:psExe "-NoProfile" "-NonInteractive" "-File" $script:fakeScript
-
-        Should -Invoke Write-Host -Times 0
-        $result | Should -Contain "progress line 1"
-    }
 }
 
 Describe 'Invoke-NativeCommand' {
@@ -77,12 +42,25 @@ Describe 'Invoke-NativeCommand' {
     }
 }
 
-$script:isWindowsRuntime = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
-
-Describe 'Invoke-Winget' {
+Describe 'Import-WindowsPackage' {
     BeforeEach {
         $script:originalInstallTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS
-        $script:originalWingetTimeout = $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS
+        Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+        $script:manifestPath = Join-Path $TestDrive 'master with spaces.json'
+        Set-Content -LiteralPath $script:manifestPath -Value '{"Sources":[]}'
+        $script:nativeExitCode = 0
+        $script:nativeArguments = @()
+        $script:logs = [Collections.Generic.List[string]]::new()
+        Mock Get-Command { [pscustomobject]@{ Source = 'C:\WinGet\winget.exe' } } -ParameterFilter { $Name -eq 'winget' }
+        Mock Get-Content { throw 'Pass the standard manifest directly to WinGet' }
+        Mock Invoke-ExternalCommandWithTimeout {
+            param($Command, $Arguments, $TimeoutSeconds)
+            $script:nativeArguments = @($Arguments)
+            $global:LASTEXITCODE = $script:nativeExitCode
+            return 'native import output'
+        }
+        Mock Update-ProcessEnvironmentPath { $script:logs.Add('PATH_REFRESHED') }
+        Mock Write-Host { param($Object) $script:logs.Add([string]$Object) }
     }
 
     AfterEach {
@@ -92,87 +70,72 @@ Describe 'Invoke-Winget' {
         else {
             $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $script:originalInstallTimeout
         }
-        if ($null -eq $script:originalWingetTimeout) {
-            Remove-Item Env:\DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
+    }
+
+    It 'should import the unchanged master once and refresh the process PATH before logging completion' {
+        Import-WindowsPackage -ManifestPath $script:manifestPath
+
+        $script:nativeArguments | Should -Be @(
+            'import', '--import-file', $script:manifestPath, '--ignore-versions',
+            '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity'
+        )
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -Exactly -ParameterFilter { $Command -eq 'winget' -and $TimeoutSeconds -eq 3600 }
+        Should -Invoke Get-Content -Times 0
+        Should -Invoke Update-ProcessEnvironmentPath -Times 1
+        $script:logs | Should -Contain '[Winget] native import output'
+        $script:logs[-2] | Should -Be 'PATH_REFRESHED'
+        $script:logs[-1] | Should -Be '[Winget] WINGET_IMPORT_COMPLETED'
+    }
+
+    It 'should stop immediately on native exit <ExitCode> without refreshing PATH or claiming completion' -ForEach @(
+        @{ ExitCode = 1 }, @{ ExitCode = 124 }
+    ) {
+        $script:nativeExitCode = $ExitCode
+
+        { Import-WindowsPackage -ManifestPath $script:manifestPath } | Should -Throw "*WinGet import failed (exit=$ExitCode)*"
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -Exactly
+        Should -Invoke Update-ProcessEnvironmentPath -Times 0
+        ($script:logs -join "`n") | Should -Not -Match 'WINGET_IMPORT_COMPLETED'
+    }
+
+    It 'should reject a missing <Dependency> before native import' -ForEach @(
+        @{ Dependency = 'manifest' }, @{ Dependency = 'executable' }
+    ) {
+        if ($Dependency -eq 'manifest') {
+            Remove-Item -LiteralPath $script:manifestPath
         }
         else {
-            $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = $script:originalWingetTimeout
+            Mock Get-Command { $null } -ParameterFilter { $Name -eq 'winget' }
         }
-    }
-
-    It 'should run winget through the shared 3600-second timeout wrapper by default' {
-        Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
-        Remove-Item Env:\DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
-        Mock Invoke-ExternalCommandWithTimeout {
-            $global:LASTEXITCODE = 0
-            return "winget ok"
-        }
-
-        $result = Invoke-Winget -Arguments @("install", "--id", "example.package")
-
-        $result | Should -Contain "winget ok"
-        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
-            $Command -eq "winget" -and
-            $Arguments -contains "example.package" -and
-            $TimeoutSeconds -eq 3600
-        }
-    }
-
-    It 'should ignore negative install overrides while preserving explicit zero' -TestCases @(
-        @{ Shared = '-1'; Legacy = $null; Expected = 3600 }
-        @{ Shared = '-1'; Legacy = '73'; Expected = 73 }
-        @{ Shared = $null; Legacy = '-1'; Expected = 3600 }
-        @{ Shared = '0'; Legacy = '73'; Expected = 0 }
-    ) {
-        param($Shared, $Legacy, $Expected)
-        $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $Shared
-        $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = $Legacy
-        Get-PackageInstallTimeoutSecond -LegacyEnvironmentVariable 'DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS' | Should -Be $Expected
-    }
-
-    It 'should allow disabling the winget timeout for tests or debugging' {
-        $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = "0"
-        Mock Invoke-ExternalCommandWithTimeout { throw "timeout wrapper should be disabled" }
-        Mock Invoke-NativeCommand {
-            $global:LASTEXITCODE = 0
-            return "native winget ok"
-        }
-
-        $result = Invoke-Winget -Arguments @("--version")
-
-        $result | Should -Contain "native winget ok"
+        { Import-WindowsPackage -ManifestPath $script:manifestPath } | Should -Throw '*not found*'
         Should -Invoke Invoke-ExternalCommandWithTimeout -Times 0
-        Should -Invoke Invoke-NativeCommand -Times 1 -ParameterFilter {
-            $Command -eq "winget" -and $Arguments -contains "--version"
-        }
-    }
-
-    It 'should prefer an explicit timeout over the default environment timeout' {
-        Remove-Item Env:\DOTFILES_INSTALL_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
-        $env:DOTFILES_WINGET_COMMAND_TIMEOUT_SECONDS = "180"
-        Mock Invoke-ExternalCommandWithTimeout {
-            $global:LASTEXITCODE = 0
-            return "winget ok"
-        }
-
-        $result = Invoke-Winget -Arguments @("install", "--id", "Google.CloudSDK") -TimeoutSeconds 900
-
-        $result | Should -Contain "winget ok"
-        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
-            $Command -eq "winget" -and
-            $Arguments -contains "Google.CloudSDK" -and
-            $TimeoutSeconds -eq 900
-        }
+        Should -Invoke Update-ProcessEnvironmentPath -Times 0
     }
 }
 
-Describe 'Invoke-VerifyCommand' {
+Describe 'Get-PackageInstallTimeoutSecond' {
+    BeforeEach { $script:originalInstallTimeout = $env:DOTFILES_INSTALL_TIMEOUT_SECONDS }
+    AfterEach { $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $script:originalInstallTimeout }
+
+    It 'should use timeout <Expected> for override <Override>' -ForEach @(
+        @{ Override = $null; Expected = 3600 }
+        @{ Override = 'invalid'; Expected = 3600 }
+        @{ Override = '-1'; Expected = 3600 }
+        @{ Override = '0'; Expected = 0 }
+        @{ Override = '73'; Expected = 73 }
+    ) {
+        $env:DOTFILES_INSTALL_TIMEOUT_SECONDS = $Override
+        Get-PackageInstallTimeoutSecond | Should -Be $Expected
+    }
+}
+
+Describe 'Invoke-ExternalCommandWithTimeout' {
     BeforeAll {
         $script:psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell.exe" }
     }
 
-    It 'should return output when verify command exits before timeout' {
-        $result = Invoke-VerifyCommand -Command $script:psExe -Arguments @(
+    It 'should return output when a native command exits before timeout' {
+        $result = Invoke-ExternalCommandWithTimeout -Command $script:psExe -Arguments @(
             "-NoLogo",
             "-NoProfile",
             "-Command",
@@ -183,8 +146,8 @@ Describe 'Invoke-VerifyCommand' {
         $global:LASTEXITCODE | Should -Be 0
     }
 
-    It 'should stop verify command when timeout expires' {
-        $result = Invoke-VerifyCommand -Command $script:psExe -Arguments @(
+    It 'should stop a native command when timeout expires and retain partial output' {
+        $result = Invoke-ExternalCommandWithTimeout -Command $script:psExe -Arguments @(
             "-NoLogo",
             "-NoProfile",
             "-Command",
@@ -196,63 +159,53 @@ Describe 'Invoke-VerifyCommand' {
         $global:LASTEXITCODE | Should -Be 124
     }
 
-    It 'should run a ps1 shim from a path containing spaces without splitting the file path' {
-        $tempRoot = Join-Path $env:TEMP "verify shim $(Get-Random)"
-        $binDir = Join-Path $tempRoot "Google Cloud SDK\bin"
+    It 'should preserve a script path containing spaces when the caller explicitly selects a PowerShell executable' {
+        $binDir = Join-Path $TestDrive 'script with spaces'
         $shimPath = Join-Path $binDir "gcloud.ps1"
-        $oldPath = $env:PATH
-        try {
-            New-Item -ItemType Directory -Path $binDir -Force | Out-Null
-            Set-Content -LiteralPath $shimPath -Value @'
+        New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+        Set-Content -LiteralPath $shimPath -Value @'
 Write-Output "shim ok: $($args -join ',')"
 exit 0
 '@
-            $env:PATH = "$binDir;$env:PATH"
+        $result = Invoke-ExternalCommandWithTimeout -Command $script:psExe -Arguments @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $shimPath, 'value with spaces', 'C:\path with spaces\'
+        ) -TimeoutSeconds 5
 
-            $result = Invoke-VerifyCommand -Command "gcloud" -Arguments @("version") -TimeoutSeconds 5
-
-            $result | Should -Contain "shim ok: version"
-            $global:LASTEXITCODE | Should -Be 0
-        }
-        finally {
-            $env:PATH = $oldPath
-            Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        $result | Should -Contain 'shim ok: value with spaces,C:\path with spaces\'
+        $global:LASTEXITCODE | Should -Be 0
     }
 
-    It 'should report a missing timed verification command without throwing a ProcessStart exception' {
+    It 'should report a missing timed native command without throwing a ProcessStart exception' {
         $missingCommand = Join-Path $TestDrive 'does-not-exist.exe'
 
-        $result = Invoke-VerifyCommand -Command $missingCommand -Arguments @('--version') -TimeoutSeconds 1
+        $result = Invoke-ExternalCommandWithTimeout -Command $missingCommand -Arguments @('--version') -TimeoutSeconds 1
 
         $result | Should -Match 'コマンドが見つかりません'
         $global:LASTEXITCODE | Should -Be 127
     }
+
+    It 'should wait for normal completion when the timeout is explicitly disabled' {
+        $result = Invoke-ExternalCommandWithTimeout -Command $script:psExe -Arguments @(
+            '-NoProfile', '-Command', "Start-Sleep -Milliseconds 100; Write-Output 'completed'; exit 7"
+        ) -TimeoutSeconds 0
+
+        $result | Should -Contain 'completed'
+        $global:LASTEXITCODE | Should -Be 7
+    }
 }
 
 Describe 'Invoke-Wsl' {
-    It 'should pass arguments to WSL' {
-        Mock wsl { return "test output" }
-
-        Invoke-Wsl --list --quiet
-
-        Should -Invoke wsl -Times 1
-    }
-
-    It 'should allow calling without arguments' {
-        Mock wsl { return "" }
-
-        Invoke-Wsl
-
-        Should -Invoke wsl -Times 1
-    }
+    BeforeEach { $script:originalWslUtf8 = $env:WSL_UTF8 }
+    AfterEach { $env:WSL_UTF8 = $script:originalWslUtf8 }
 
     It 'should pass multiple arguments' {
-        Mock wsl { return "OK" }
+        Mock Invoke-ExternalCommandWithTimeout { return "OK" }
 
-        Invoke-Wsl -d NixOS -u root -- sh -lc "whoami"
+        Invoke-Wsl -Arguments @('-d', 'NixOS', '-u', 'root', '--', 'sh', '-lc', 'whoami')
 
-        Should -Invoke wsl -Times 1
+        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -Exactly -ParameterFilter {
+            $Command -eq 'wsl' -and ($Arguments -join '|') -eq '-d|NixOS|-u|root|--|sh|-lc|whoami' -and $TimeoutSeconds -eq 0
+        }
     }
 
     It 'should run WSL through timeout wrapper when TimeoutSeconds is specified' {
@@ -268,226 +221,37 @@ Describe 'Invoke-Wsl' {
         Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
             $Command -eq "wsl" -and
             $Arguments -contains "--status" -and
-            $TimeoutSeconds -eq 1 -and
-            $null -ne $OutputEncoding
+            $TimeoutSeconds -eq 1
         }
     }
-}
 
-Describe 'Invoke-Dism' {
-    It 'should pass arguments to dism.exe' {
-        Mock dism.exe { return "test output" }
-
-        Invoke-Dism /online /get-features
-
-        Should -Invoke dism.exe -Times 1
-    }
-
-    It 'should pass multiple arguments' {
-        Mock dism.exe { return "The operation completed successfully." }
-
-        Invoke-Dism /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
-
-        Should -Invoke dism.exe -Times 1
-    }
-
-    It 'should run dism.exe through timeout wrapper when TimeoutSeconds is specified' {
+    It 'should preserve UTF-8 Linux output and restore the inherited WSL encoding after success or failure' {
+        $env:WSL_UTF8 = 'parent-value'
+        $script:unicodeOutput = '/mnt/d/' + [char]0x65E5 + [char]0x672C + [char]0x8A9E + '/.dotfiles'
+        $script:unicodeOutputBytes = [Text.Encoding]::UTF8.GetBytes($script:unicodeOutput)
+        $script:childWslUtf8 = $null
         Mock Invoke-ExternalCommandWithTimeout {
-            $global:LASTEXITCODE = 3010
-            return "The operation completed successfully."
+            param($OutputEncoding)
+            $script:childWslUtf8 = $env:WSL_UTF8
+            $global:LASTEXITCODE = 23
+            return $OutputEncoding.GetString($script:unicodeOutputBytes)
         }
 
-        $result = Invoke-Dism -TimeoutSeconds 300 /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+        Invoke-Wsl -TimeoutSeconds 5 -Arguments @('-d', 'NixOS', '--exec', 'wslpath', '-a', 'D:/checkout') | Should -BeExactly $script:unicodeOutput
+        $global:LASTEXITCODE | Should -Be 23
+        $script:childWslUtf8 | Should -BeExactly '1'
+        $env:WSL_UTF8 | Should -BeExactly 'parent-value'
 
-        $result | Should -Contain "The operation completed successfully."
-        $global:LASTEXITCODE | Should -Be 3010
-        Should -Invoke Invoke-ExternalCommandWithTimeout -Times 1 -ParameterFilter {
-            $Command -eq "dism.exe" -and
-            $Arguments -contains "/online" -and
-            $Arguments -contains "/enable-feature" -and
-            $Arguments -contains "/featurename:VirtualMachinePlatform" -and
-            $TimeoutSeconds -eq 300 -and
-            $null -ne $OutputEncoding
-        }
-    }
-}
-
-Describe 'Get-ExternalCommand' {
-    It 'should return command info when command <exists>' -ForEach @(
-        @{ exists = "exists"; name = "powershell"; mockReturn = [PSCustomObject]@{ Name = "powershell"; Source = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" }; expectedNull = $false }
-        @{ exists = "does not exist"; name = "nonexistent"; mockReturn = $null; expectedNull = $true }
-    ) {
-        Mock Get-Command { return $mockReturn }
-
-        $result = Get-ExternalCommand -Name $name
-
-        if ($expectedNull) {
-            $result | Should -BeNullOrEmpty
-        }
-        else {
-            $result | Should -Not -BeNullOrEmpty
-            $result.Name | Should -Be $name
-        }
-    }
-}
-
-Describe 'Get-ExternalCommandPath' {
-    It 'should resolve Path-only command metadata in strict mode' {
-        Set-StrictMode -Version Latest
-        try {
-            Get-ExternalCommandPath -CommandInfo ([pscustomobject]@{ Path = 'C:\tools\npm.cmd' }) |
-                Should -Be 'C:\tools\npm.cmd'
-        }
-        finally {
-            Set-StrictMode -Off
-        }
-    }
-}
-
-Describe 'Test-PathExist' {
-    It 'should return <expected> when path <exists>' -ForEach @(
-        @{ exists = "exists"; expected = $true }
-        @{ exists = "does not exist"; expected = $false }
-    ) {
-        Mock Test-Path { return $expected }
-
-        $result = Test-PathExist -Path "C:\SomePath"
-
-        $result | Should -Be $expected
-    }
-}
-
-Describe 'Get-JsonContent' {
-    It 'should parse JSON file and return object' {
-        Mock Get-Content { return '{"key": "value"}' }
-
-        $result = Get-JsonContent -Path "C:\test.json"
-
-        $result.key | Should -Be "value"
-    }
-
-    It 'should parse JSON with arrays' {
-        Mock Get-Content { return '{"items": [1, 2, 3]}' }
-
-        $result = Get-JsonContent -Path "C:\test.json"
-
-        $result.items | Should -HaveCount 3
-    }
-}
-
-Describe 'New-DirectorySafe' {
-    It 'should create directory with -Force option' {
-        Mock New-Item { return [PSCustomObject]@{ FullName = "C:\newdir" } }
-
-        New-DirectorySafe -Path "C:\newdir"
-
-        Should -Invoke New-Item -Times 1 -ParameterFilter {
-            $ItemType -eq "Directory" -and
-            $Path -eq "C:\newdir" -and
-            $Force -eq $true
-        }
-    }
-}
-
-Describe 'Get-ChildItemSafe' {
-    It 'should get files in directory' {
-        Mock Get-ChildItem {
-            return @(
-                [PSCustomObject]@{ Name = "file1.txt" },
-                [PSCustomObject]@{ Name = "file2.txt" }
-            )
-        }
-
-        $result = Get-ChildItemSafe -Path "C:\test"
-
-        $result | Should -HaveCount 2
-    }
-
-    It 'should apply Filter option' {
-        Mock Get-ChildItem { return @([PSCustomObject]@{ Name = "file.ps1" }) }
-
-        Get-ChildItemSafe -Path "C:\test" -Filter "*.ps1"
-
-        Should -Invoke Get-ChildItem -Times 1 -ParameterFilter {
-            $Filter -eq "*.ps1"
-        }
-    }
-
-    It 'should apply Recurse option' {
-        Mock Get-ChildItem { return @() }
-
-        Get-ChildItemSafe -Path "C:\test" -Recurse
-
-        Should -Invoke Get-ChildItem -Times 1 -ParameterFilter {
-            $Recurse -eq $true
-        }
-    }
-
-    It 'should apply Directory option' {
-        Mock Get-ChildItem { return @() }
-
-        Get-ChildItemSafe -Path "C:\test" -Directory
-
-        Should -Invoke Get-ChildItem -Times 1 -ParameterFilter {
-            $Directory -eq $true
-        }
-    }
-}
-
-Describe 'Invoke-WebRequestSafe' {
-    It 'should download file with UseBasicParsing' {
-        Mock Invoke-WebRequest { }
-
-        Invoke-WebRequestSafe -Uri "https://example.com/file.zip" -OutFile "C:\temp\file.zip"
-
-        Should -Invoke Invoke-WebRequest -Times 1 -ParameterFilter {
-            $Uri -eq "https://example.com/file.zip" -and
-            $OutFile -eq "C:\temp\file.zip" -and
-            $UseBasicParsing -eq $true
-        }
-    }
-}
-
-Describe 'Invoke-RestMethodSafe' {
-    It 'should call REST API and return result' {
-        Mock Invoke-RestMethod {
-            return [PSCustomObject]@{ result = "success" }
-        }
-
-        $result = Invoke-RestMethodSafe -Uri "https://api.example.com/data"
-
-        $result.result | Should -Be "success"
-    }
-
-    It 'should pass headers when specified' {
-        Mock Invoke-RestMethod { return @{} }
-
-        Invoke-RestMethodSafe -Uri "https://api.example.com" -Headers @{ "Authorization" = "Bearer token" }
-
-        Should -Invoke Invoke-RestMethod -Times 1 -ParameterFilter {
-            $Headers["Authorization"] -eq "Bearer token"
-        }
-    }
-}
-
-Describe 'Start-SleepSafe' {
-    It 'should sleep for specified seconds' {
-        Mock Start-Sleep { }
-
-        Start-SleepSafe -Seconds 5
-
-        Should -Invoke Start-Sleep -Times 1 -ParameterFilter {
-            $Seconds -eq 5
-        }
+        Mock Invoke-ExternalCommandWithTimeout { throw 'fixture failure' }
+        { Invoke-Wsl -Arguments @('--list', '--quiet') } | Should -Throw '*fixture failure*'
+        $env:WSL_UTF8 | Should -BeExactly 'parent-value'
     }
 }
 
 Describe 'Update-ProcessEnvironmentPath' {
     BeforeEach {
         $script:originalPath = $env:PATH
-        Mock Set-UserEnvironmentPath {
-            throw 'PATH normalization tests must explicitly mock persisted User PATH writes.'
-        }
+
     }
 
     AfterEach {
@@ -537,22 +301,7 @@ Describe 'Update-ProcessEnvironmentPath' {
         @($env:PATH -split ";" | Where-Object { $_ -eq $uniquePath -or $_ -eq $uniquePath.ToUpperInvariant() }).Count | Should -Be 1
     }
 
-    It 'should exclude selected paths while importing updated User PATH entries' {
-        $excludedPath = Join-Path $TestDrive "RunnerPnpm-$([guid]::NewGuid())"
-        $newUserPath = Join-Path $TestDrive "NewUserPath-$([guid]::NewGuid())"
-        $null = New-Item -ItemType Directory -Path $excludedPath, $newUserPath -Force
-        $userPath = "$newUserPath;$excludedPath"
-        Mock Get-UserEnvironmentPath { return $userPath }
-        $existingPath = Join-Path $TestDrive 'ExistingPath'
-        $null = New-Item -ItemType Directory -Path $existingPath -Force
-        $env:PATH = "$existingPath;$excludedPath"
 
-        Update-ProcessEnvironmentPath -ExcludePath @($excludedPath)
-
-        ($env:PATH -split ';') | Should -Contain $existingPath
-        ($env:PATH -split ';') | Should -Contain $newUserPath
-        ($env:PATH -split ';') | Should -Not -Contain $excludedPath
-    }
 
     It 'should discard missing PATH directories before they crowd valid command paths out of the child environment' {
         if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
@@ -564,7 +313,7 @@ Describe 'Update-ProcessEnvironmentPath' {
         $null = New-Item -ItemType Directory -Path $validUserPath -Force
         $staleEntries = 1..500 | ForEach-Object { "C:\dotfiles-ci-stale-path-entry-$_" }
         Mock Get-UserEnvironmentPath { return (@($staleEntries) + @($validUserPath)) -join ';' }
-        Mock Set-UserEnvironmentPath { }
+
         $env:PATH = (@($script:originalPath -split ';') + @($staleEntries)) -join ';'
 
         Update-ProcessEnvironmentPath
@@ -583,41 +332,12 @@ Describe 'Update-ProcessEnvironmentPath' {
         $oversizedUserPath = (@($staleEntries) + @($validUserPath)) -join ';'
         $oversizedUserPath.Length | Should -BeGreaterThan 32767
         Mock Get-UserEnvironmentPath { return $oversizedUserPath }
-        Mock Set-UserEnvironmentPath { throw 'GUI setup must not rewrite persisted PATH' }
+
         $env:PATH = $script:originalPath
 
-        Update-ProcessEnvironmentPath -ProcessOnly
+        Update-ProcessEnvironmentPath
 
         $env:PATH.Length | Should -BeLessOrEqual 8191
-        ($env:PATH -split ';') | Should -Contain $validUserPath
-        Should -Invoke Set-UserEnvironmentPath -Times 0 -Exactly
-    }
-
-    It 'should persistently remove stale local directories while retaining unresolved and offline User PATH entries' {
-        if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
-            Set-ItResult -Skipped -Because 'User PATH registry repair is Windows-specific'
-            return
-        }
-
-        $validUserPath = Join-Path $TestDrive 'valid-persistent-user-path'
-        $null = New-Item -ItemType Directory -Path $validUserPath -Force
-        $staleUserPath = Join-Path $env:TEMP "dotfiles-stale-user-path-$([guid]::NewGuid())"
-        $offlineUserPath = '\\dotfiles-ci-unavailable\share\bin'
-        $unresolvedUserPath = '%DOTFILES_CI_UNRESOLVED_PATH%\bin'
-        $script:persistedUserPath = $null
-        Mock Get-UserEnvironmentPath { return "$staleUserPath;$validUserPath;$offlineUserPath;$unresolvedUserPath" }
-        Mock Set-UserEnvironmentPath {
-            param([string]$Path)
-            $script:persistedUserPath = $Path
-        }
-        $env:PATH = $script:originalPath
-
-        Update-ProcessEnvironmentPath -ReportStatus
-
-        $script:persistedUserPath -split ';' | Should -Contain $validUserPath
-        $script:persistedUserPath -split ';' | Should -Contain $offlineUserPath
-        $script:persistedUserPath -split ';' | Should -Contain $unresolvedUserPath
-        $script:persistedUserPath -split ';' | Should -Not -Contain $staleUserPath
         ($env:PATH -split ';') | Should -Contain $validUserPath
     }
 
@@ -629,7 +349,7 @@ Describe 'Update-ProcessEnvironmentPath' {
 
         $oversizedUserPath = (1..600 | ForEach-Object { "C:\$([string]::new('U', 80))$_" }) -join ';'
         Mock Get-UserEnvironmentPath { return $oversizedUserPath }
-        Mock Set-UserEnvironmentPath { }
+
         $env:PATH = "$script:originalPath;" + ((1..120 | ForEach-Object { "C:\$([string]::new('P', 80))$_" }) -join ';')
         $oversizedUserPath.Length | Should -BeGreaterThan 50000
 
@@ -700,7 +420,6 @@ Describe 'Test-WslAvailable' {
     }
 
     It 'should return false when WSL status check times out' {
-        Mock Get-WslCheckTimeoutSecond { return 1 }
         Mock Invoke-Wsl {
             $global:LASTEXITCODE = 124
             return "timeout"
@@ -710,7 +429,36 @@ Describe 'Test-WslAvailable' {
 
         $result | Should -Be $false
         Should -Invoke Invoke-Wsl -Times 1 -ParameterFilter {
-            $TimeoutSeconds -eq 1 -and $Arguments -contains "--status"
+            $TimeoutSeconds -eq 5 -and $Arguments -contains "--status"
         }
     }
+}
+
+Describe 'Windows setup with missing command directories in PATH' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    BeforeEach {
+        $script:originalPath = $env:PATH
+        $script:originalLocalAppData = $env:LOCALAPPDATA
+        $env:PATH = "$PSHOME;$env:SystemRoot\System32"
+        $caseRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $env:LOCALAPPDATA = Join-Path $caseRoot 'local'
+        New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
+    }
+
+    AfterEach {
+        $env:PATH = $script:originalPath
+        $env:LOCALAPPDATA = $script:originalLocalAppData
+    }
+
+    It 'should restore the existing WindowsApps directory without duplicating or replacing PATH entries' {
+        $windowsApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
+        New-Item -ItemType Directory -Path $windowsApps -Force | Out-Null
+        $before = $env:PATH
+
+        Update-ProcessEnvironmentPath
+        Update-ProcessEnvironmentPath
+
+        @($env:PATH -split ';' | Where-Object { $_ -eq $windowsApps }).Count | Should -Be 1
+        foreach ($entry in $before -split ';' ) { ($env:PATH -split ';') | Should -Contain $entry }
+    }
+
 }

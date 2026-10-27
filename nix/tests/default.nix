@@ -22,6 +22,7 @@ in
         }
       ];
       checks = {
+        docker-mcp = import ./build/modules/ai_agents/docker-mcp.nix { inherit inputs pkgs; };
         aerospace-workspace-cycle = import ./build/modules/aerospace/aerospace-cycle.nix { inherit pkgs; };
         docker-desktop-activation = import ./build/modules/docker/desktop-activation.nix {
           inherit inputs pkgs;
@@ -78,6 +79,7 @@ in
         "llm-agents/treefmt-nix" = inputs.llm-agents.inputs.treefmt-nix;
         "mcp-servers/nixpkgs" = inputs.mcp-servers.inputs.nixpkgs;
         inherit (inputs)
+          docker-mcp-release
           devcontainer-cli-nvim
           dia
           flake-parts
@@ -109,6 +111,7 @@ in
         // (import ./unit/modules/shells/plugins/bat.nix { inherit inputs homeConfigurations; })
         // (import ./unit/modules/browsers/chrome/default.nix { inherit inputs homeConfigurations; })
         // (import ./unit/modules/ai_agents/chatgpt/home.nix { inherit inputs homeConfigurations; })
+        // (import ./unit/modules/ai_agents/docker-mcp.nix { inherit inputs; })
         // (import ./unit/modules/shells/plugins/eza.nix { inherit inputs homeConfigurations; })
         // (import ./unit/modules/shells/plugins/fd.nix { inherit inputs homeConfigurations; })
         // (import ./unit/modules/shells/plugins/fzf.nix { inherit inputs homeConfigurations; })
@@ -146,7 +149,6 @@ in
         // (import ./unit/modules/hyprland/default.nix { inherit inputs; })
         // (import ./unit/defaults/darwin-package-selection.nix { inherit inputs; })
         // (import ./unit/modules/browsers/dia/default.nix { inherit inputs; })
-        // (import ./unit/windows/discord.nix { inherit inputs; })
         // (import ./unit/modules/ai_agents/chatgpt/codex-packages.nix { inherit inputs; })
         // (import ./unit/modules/editors/nvim/devcontainer.nix { inherit inputs; })
         // (import ./unit/defaults/dsh-package-selection.nix { inherit inputs homeConfigurations; })
@@ -156,10 +158,6 @@ in
         // (import ./unit/modules/ai_agents/chatgpt/packages.nix { inherit inputs homeConfigurations; })
         // (import ./unit/defaults/tart-package-selection.nix { inherit inputs homeConfigurations; })
         // (import ./unit/defaults/nodejs-package-selection.nix { inherit inputs; })
-        // (import ./unit/windows/path-metadata.nix { inherit inputs; })
-        // (import ./unit/windows/desktop-verifiers.nix { inherit inputs; })
-        // (import ./unit/windows/codex-desktop-verifier.nix { inherit inputs; })
-        // (import ./unit/windows/wezterm-install-policy.nix { inherit inputs; })
         // (import ./unit/modules/ai_agents/hermes/default.nix { inherit inputs; })
         // (import ./unit/modules/ai_agents/strata/default.nix { inherit inputs; })
         // (import ./unit/windows/pnpm.nix { inherit inputs; })

@@ -1,68 +1,52 @@
 BeforeAll {
     $script:sourceRoot = Split-Path -Parent $PSScriptRoot
     $script:repoRoot = Split-Path -Parent (Split-Path -Parent $script:sourceRoot)
-    # These tests exercise the inline encoding policy; the Nix build check also
-    # executes its wrapper with the declared store module and an empty HOME.
+    $script:settingsPath = Join-Path $script:sourceRoot 'PSScriptAnalyzerSettings.psd1'
     $script:oldPssaModule = $env:DOTFILES_PSSA_MODULE
-    $module = Get-Module PSScriptAnalyzer | Select-Object -First 1
-    if (-not $module) {
-        $module = Get-Module -ListAvailable PSScriptAnalyzer | Sort-Object Version -Descending | Select-Object -First 1
+
+    . (Join-Path $PSScriptRoot 'support/Resolve-TestModule.ps1')
+    $analyzerModule = Resolve-TestModule -Name PSScriptAnalyzer
+    Import-Module -Name $analyzerModule.Path -Force -ErrorAction Stop
+    # The formatter and analyzer use the same preprovisioned module.
+    $env:DOTFILES_PSSA_MODULE = Join-Path $analyzerModule.ModuleBase 'PSScriptAnalyzer.psd1'
+
+    $script:sourceFiles = @(Get-ChildItem -LiteralPath $script:sourceRoot -Recurse -File |
+            Where-Object Extension -In '.ps1', '.psm1', '.psd1')
+    $script:runtimeFiles = @($script:sourceFiles | Where-Object {
+            $relativePath = $_.FullName.Substring($script:sourceRoot.Length + 1).Replace('\', '/')
+            $relativePath -eq 'install.ps1' -or $relativePath -match '^lib/'
+        })
+    if ($script:runtimeFiles.Count -eq 0) {
+        throw 'No runtime PowerShell sources were found in install.ps1 or lib/. Static analysis cannot pass without sources.'
     }
-    if (-not $module) { throw 'Preprovision latest PSScriptAnalyzer before running formatter tests' }
-    $env:DOTFILES_PSSA_MODULE = Join-Path $module.ModuleBase 'PSScriptAnalyzer.psd1'
 }
 
 AfterAll { $env:DOTFILES_PSSA_MODULE = $script:oldPssaModule }
 
+Describe 'PowerShell static analysis' {
+    It 'should report no errors or warnings in runtime sources' {
+        $issues = @(foreach ($file in $script:runtimeFiles) {
+                Invoke-ScriptAnalyzer -Path $file.FullName -Settings $script:settingsPath -Severity Error, Warning -ErrorAction Stop |
+                    ForEach-Object {
+                        "$($file.FullName):$($_.Line) - [$($_.Severity)] $($_.RuleName): $($_.Message)"
+                    }
+            })
+        $issues | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Windows PowerShell source encoding' {
     It 'should retain Unicode when files are read with an ANSI fallback' {
-        $violations = @()
-        foreach ($file in Get-ChildItem $script:sourceRoot -Recurse -File | Where-Object Extension -In '.ps1', '.psm1', '.psd1') {
-            $expected = [IO.File]::ReadAllText($file.FullName, [Text.Encoding]::UTF8)
-            # StreamReader detects a BOM; without one, emulate Japanese Windows 5.1.
-            $reader = [IO.StreamReader]::new($file.FullName, [Text.Encoding]::GetEncoding(932), $true)
-            try {
-                if ($reader.ReadToEnd() -cne $expected) { $violations += $file.FullName }
-            }
-            finally { $reader.Dispose() }
-        }
+        $violations = @(foreach ($file in $script:sourceFiles) {
+                $expected = [IO.File]::ReadAllText($file.FullName, [Text.Encoding]::UTF8)
+                # StreamReader detects a BOM; without one, emulate Japanese Windows 5.1.
+                $reader = [IO.StreamReader]::new($file.FullName, [Text.Encoding]::GetEncoding(932), $true)
+                try {
+                    if ($reader.ReadToEnd() -cne $expected) { $file.FullName }
+                }
+                finally { $reader.Dispose() }
+            })
         $violations | Should -BeNullOrEmpty
-    }
-
-    It 'should parse bootstrap entrypoints and load every real handler on Windows PowerShell 5.1' {
-        if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
-            Set-ItResult -Skipped -Because 'Windows PowerShell 5.1 requires Windows'
-            return
-        }
-        $probe = @'
-param([string]$Root)
-$ErrorActionPreference = 'Stop'
-if ($PSVersionTable.PSVersion.Major -ne 5) { throw 'Expected Windows PowerShell 5.1' }
-Write-Output ('ANSI codepage: ' + [Text.Encoding]::Default.CodePage)
-foreach ($name in 'install.ps1', 'install.user.ps1') {
-    $tokens = $null
-    $parseErrors = $null
-    [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $Root $name), [ref]$tokens, [ref]$parseErrors)
-    if ($parseErrors) { throw ($parseErrors | Out-String) }
-}
-. (Join-Path $Root 'lib/SetupHandler.ps1')
-. (Join-Path $Root 'lib/Invoke-ExternalCommand.ps1')
-foreach ($name in @(
-    'Handler.Winget.ps1'
-    'Handler.WslInstall.ps1'
-    'Handler.Chezmoi.ps1'
-    'Handler.NixOSWSL.ps1'
-)) {
-    . (Join-Path (Join-Path $Root 'handlers') $name)
-}
-Write-Output 'BOOTSTRAP_LOADED: Winget, WslInstall, Chezmoi, NixOSWSL'
-'@
-        $probePath = Join-Path $TestDrive 'probe.ps1'
-        [IO.File]::WriteAllText($probePath, $probe, [Text.UTF8Encoding]::new($false))
-        $exe = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
-        $output = & $exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $probePath -Root $script:sourceRoot 2>&1
-        $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
-        $output -join [Environment]::NewLine | Should -Match 'BOOTSTRAP_LOADED: Winget, WslInstall, Chezmoi, NixOSWSL'
     }
 }
 

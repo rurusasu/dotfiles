@@ -1,37 +1,9 @@
-# PowerShell: 実装ルールと検証手順
+# PowerShell 実装
 
-## 実装で必ず守るルール
-
-1. ハンドラーは `Handler.<Name>.ps1` / `<Name>Handler : SetupHandlerBase` を守る。
-2. 外部コマンドは直接呼ばず `Invoke-*` ラッパー経由にする。
-3. `Apply()` は例外を投げず `SetupResult` を返す。
-4. テストは `tests/Invoke-Tests.ps1` 経由で実行する。
-5. Pester の `It` 名は `should ...` 形式で書く。
-
-## 編集対象
-
-- `lib/SetupHandler.ps1`: 基底クラス・共通型
-- `lib/Invoke-ExternalCommand.ps1`: 外部コマンドラッパー
-- `handlers/Handler.*.ps1`: セットアップ処理
-- `tests/**/*.Tests.ps1`: ユニットテスト
-
-## テストコマンド
-
-```powershell
-cd scripts/powershell/tests
-.\Invoke-Tests.ps1
-.\Invoke-Tests.ps1 -ShowCoverage
-.\Invoke-Tests.ps1 -MinimumCoverage 0
-```
-
-```powershell
-task test:powershell
-```
-
-## ドキュメント更新条件
-
-以下を変更したら `docs/scripts/powershell/` も更新する。
-
-- ハンドラー実行順序
-- ラッパー関数の追加/削除
-- テスト方針と命名規則
+- `install.ps1` は Windows の標準コマンドを実行し、順序は Taskfile が管理する。
+- 共通処理は native 終了コード・timeout・文字コード・OS限定の昇格・プロセスPATHと、WSL登録・同期に絞る。
+- クラス、結果オブジェクト、独自runner、テスト専用引数やラッパーは作らない。失敗は例外で伝える。
+- distro登録は元のユーザーで実行し、基盤有効化のOSコマンドだけ昇格する。再起動要求は3010で停止する。
+- WinGet、input更新、NixOS/Home Manager反映、chezmoi反映は各1回。
+- テストは `tests/Invoke-Tests.ps1` を使い、現仕様の動作だけを確認する。
+- 詳細は `docs/scripts/powershell/README.md`。

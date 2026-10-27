@@ -7,6 +7,11 @@
 }:
 let
   packages = import ./mcp-packages.nix { inherit inputs pkgs; };
+  dockerConfig =
+    config.home.sessionVariables.DOCKER_CONFIG or (throw "Docker MCP requires DOCKER_CONFIG");
+  dockerConfigDirectory =
+    assert lib.assertMsg (dockerConfig != "") "Docker MCP requires a non-empty DOCKER_CONFIG";
+    lib.removePrefix "${config.home.homeDirectory}/" dockerConfig;
   hermesHome = config.home.sessionVariables.HERMES_HOME or "${config.home.homeDirectory}/.hermes";
   backends = {
     chrome = {
@@ -61,11 +66,14 @@ in
 {
   programs.mcp.enable = true;
   home = {
+    sessionVariables.DOCKER_CONFIG = "${config.home.homeDirectory}/.docker";
     packages = [
+      packages.docker-mcp
       packages.xurl
       packages.hermes-xapi
     ];
     file.".xurl".source = config.lib.file.mkOutOfStoreSymlink "${config.xdg.configHome}/xurl";
+    file."${dockerConfigDirectory}/cli-plugins/docker-mcp".source = lib.getExe packages.docker-mcp;
     activation.prepareXurlDirectory =
       lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ]
         ''
@@ -114,17 +122,14 @@ in
     // {
       MCP_DOCKER = {
         command = lib.getExe pkgs.docker-client;
+        env.DOCKER_CONFIG = dockerConfig;
         args = [
           "mcp"
           "gateway"
           "run"
-          "--profile"
-          "dotfiles"
+          "--servers"
+          "context7,deepwiki,exa,firecrawl,github-official,obsidian,playwright,tavily"
         ];
-        # Nix's CLI replaces Docker's standard system plugin search directories.
-        env.DOCKER_CLI_PLUGIN_DIRS =
-          "/usr/local/lib/docker/cli-plugins:/usr/local/libexec/docker/cli-plugins:/usr/lib/docker/cli-plugins:/usr/libexec/docker/cli-plugins"
-          + lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ":/Applications/Docker.app/Contents/Resources/cli-plugins";
         startup_timeout_sec = 30;
       };
       pipedream = {

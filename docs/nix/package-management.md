@@ -37,10 +37,16 @@ WSL の Noto CJK の追加導入・フォールバック指定は行いません
 | Strata Desktop / Control（Linux x86_64） | 公式 `Niko1221/Strata` の AppImage と Control archive。同じアプリが nixpkgs にないため。`strata-release` input の release metadata と asset の SHA-256 を固定する。 |
 | Dia ブラウザー                           | `dia` input の公式 DMG。`pkgs.dia` は図表エディターで、別のアプリ。                                                                                                 |
 | Chrome DevTools MCP                      | `mcp-servers` flake の package。対応する nixpkgs package がないため。                                                                                               |
+| Docker MCP Gateway                       | Docker 公式 release のプラグイン。対応する nixpkgs package がなく、`pkgs.mcp-gateway` は別製品のため。release metadata と asset の SHA-256 を input で固定する。    |
 | xurl                                     | `xurl` input の upstream source を `buildGoModule` で構築。対応する nixpkgs package がないため。                                                                    |
 | Docker Desktop / Steam（macOS）          | Homebrew cask。対象 OS 用の同じ GUI アプリを nixpkgs から導入できないため。                                                                                         |
 
 ChatGPT は `pkgs.chatgpt` を使います。同梱 Codex CLI を使う設定も、この nixpkgs package 内のバイナリーを参照します。`hermes-xapi` はリポジトリ内の連携スクリプトです。
+
+Docker MCP は `docker-mcp-release` input のバージョンを含まない release 一覧 URL から、最新の公開 release を選びます。
+upstream は現在プレリリースのみを公開しているため、`releases/latest` ではなく `releases?per_page=1` を使います。
+配布物の版・URL・SHA-256 は `flake.lock` の metadata 内容で固定し、`nrs` の input 更新で追従します。
+Home Manager が本体と Docker CLI の plugin link、利用サーバーの起動引数を反映するため、手動ダウンロードや profile sync は不要です。
 
 Ollama は共通 Home Manager の `services.ollama.enable` で標準 package とユーザーサービスを導入します。API は既定の `127.0.0.1:11434` で待ち受けます。モデルの自動取得や GPU backend の変更は行いません。`ollama pull <model>` で使用するモデルを選択します。
 
@@ -65,7 +71,7 @@ Neovim / Hermes の追加プラグインと formatter の入力は、アプリ�
 | `nix/defaults.nix`                                   | OS 基盤設定、module 選択、単純な有効化・package 宣言、アカウント、GC、公開出力 |
 | `nix/home/`                                          | 共通キー配置と Windows export                                                  |
 | `nix/home/keybindings/`                              | 共通キー配置と Windows export                                                  |
-| `windows/winget/packages.json`                       | Windows GUI の package ID、導入・検証情報                                      |
+| `windows/winget/packages.json`                       | Windows GUI の標準 package ID・source・Scope                                   |
 | `windows/{npm,pnpm}/packages.json`                   | 独立した Node package manifest。現在は空                                       |
 
 Hermes の root・Desktop・gateway は公式 Home Manager module、named profile は Git 正本と公式 CLI で管理します。
@@ -95,14 +101,14 @@ home.packages = [ pkgs.gh ];
 通常は個別コマンドではなく one-command installer を再実行します。
 
 ```text
-Windows:          install.cmd
+Windows:          task install
 macOS:            ./install.sh
 NixOS:            ./install.sh
 Ubuntu / Debian:  ./install.sh
 ```
 
 - Windows は `windows/winget/packages.json` を正本として GUI アプリのみを winget で導入します。npm/pnpm manifest は独立した空配列として保持します。
-- `install.cmd` は既存の PowerShell と winget で Windows GUI アプリを導入した後、NixOS-WSL の導入、NixOS/Home Manager 適用、Windows chezmoi の順に実行します。WSLg の対象 GUI は Nix 側で導入します。実行順序は `taskfiles/install/taskfile.yml` が管理し、Task がなければ専用 cache に取得します。`-UserPhaseOnly` は Windows GUI のみです。WSL 基盤の有効化だけ UAC 昇格します。Node.js・npm・pnpm・dsh・AutoHotkey・GlazeWM の Windows 導入や CLI runtime acceptance は行いません。既存アプリや Startup shortcut は自動削除しません。
+- `task install` は既存の PowerShell と winget で Windows GUI アプリを導入した後、NixOS-WSL の導入、inputs の更新と NixOS/Home Manager の反映、Windows chezmoi の順に一度ずつ実行します。WSLg の対象 GUI は Nix 側で導入します。実行順序は `taskfiles/install/taskfile.yml` が管理します。`install.cmd` / `install.ps1` が PowerShell で WinGet master を1回適用し、Task の導入後は Taskfile の WSL・chezmoi へ進みます。WinGet の実行経路はこの1か所で、直接の `task install` も同じ入口を使います。`-Phase Winget` は Windows GUI のみです。WSL 基盤の有効化だけ UAC 昇格します。Node.js・npm・pnpm・dsh・AutoHotkey・GlazeWM の Windows 導入や CLI runtime acceptance は行いません。既存アプリや Startup shortcut は自動削除しません。
 - Codex CLI はどの OS でも個別導入せず、各 OS 向け ChatGPT アプリ付属の CLI を使います。Windows の GUI profile は Microsoft Store のデスクトップアプリを対象とし、npm/pnpm パッケージを導入しません。
 - macOS は nix-darwin が Home Manager と nix-homebrew formula/cask を同じ switch に含めます。
 - 非 NixOS Linux（Ubuntu/Debian など）は standalone Home Manager がユーザー環境を適用します。Docker や OS service は管理しません。
@@ -171,34 +177,17 @@ macOS で Homebrew cask の適用に失敗する場合は、
 
 ## Windows manifest
 
-`windows/winget/packages.json` は直接編集する独立した正本です。package ID、Store source、PATH、検証条件、個別 timeout などは、このファイルの既存 schema に合わせます。Unix module に Windows の install metadata は置きません。
+`windows/winget/packages.json` は WinGet 標準 import 形式の独立した正本です。source、package ID、必要な `Scope` を直接編集し、Unix module に Windows metadata を置きません。
 
-Windows PowerShell で使う superfile と、共通エイリアス用の eza・fd・ripgrep・lazygit は CLI の明示例外です。ユーザー scope の portable executable を導入し、Links を PATH に保存します。エイリアスと関数は chezmoi の PowerShell profile に定義し、WSL へ転送しません。
+`install.cmd` は `winget import --import-file windows/winget/packages.json --ignore-versions --accept-package-agreements --accept-source-agreements --disable-interactivity` を一度実行します。master に含む Task が利用できるようになってから、Taskfile の WSL → chezmoi へ進みます。更新・NixOS 反映は WSL の処理で各一回です。
 
-Chrome / Spotify / Signal / Obsidian の通常導入とキーからの起動先は NixOS-WSL に統一します。これらを Windows manifest から外しても、導入済みの Windows 版は自動 uninstall しません。Windows の PowerToys は host のキー操作、Windows 版 1Password は既存の `op.exe` / Git signer 連携のため維持します。1Password GUI の通常起動先は WSLg です。
+WinGet と各アプリの installer が導入、更新、コマンドリンク、PATH 登録を管理します。独自のパッケージ別 JSON パース、PATH・リンク修復、検証 metadata はありません。import は共通の 3600 秒 timeout を使い、`DOTFILES_INSTALL_TIMEOUT_SECONDS` で変更できます。0 は timeout を無効にします。非ゼロ終了時は後続へ進みません。
 
-Windows の package install timeout は 3600 秒を共通既定値とし、WinGet manifest と direct installer に使います。npm/pnpm/WinGet/WSL の runtime adapter も既定 3600 秒で、`DOTFILES_INSTALL_TIMEOUT_SECONDS` による上書きを維持します。direct installer でも環境変数を manifest の値より優先し、0 はダウンロードと外部プロセスのタイムアウトを無効にします。不正な環境変数値や負数は無視し、manifest の個別 timeout、未指定なら共通既定値を使います。
+Windows PowerShell で使う superfile・eza・fd・ripgrep・lazygit と、WSL の `git_status.windows_starship` 用 Starship・MinGit は Windows CLI の明示的な例外です。これらは標準の `Scope: user` を指定します。Windows の alias・関数は chezmoi、Unix のアプリと設定は Nix / Home Manager が管理します。PATH が更新された場合は新しい terminal / WSL セッションで確認します。
 
-起動検証の既定と WSL の検証は 120 秒です。既存の長い個別 timeout は短縮せず、manifest の個別値を優先します。
+Chrome / Spotify / Signal / Obsidian の通常導入とキーからの起動先は NixOS-WSL です。Windows の 1Password は `op.exe` / Git signer 連携のため維持し、GUI の通常起動先は WSLg です。Windows npm/pnpm manifest は空です。各 OS ではその OS のアプリに付属する CLI を使います。
 
-Windows の npm/pnpm manifest は空で、dsh、pnpm、Bun、Codex CLI の個別導入は行いません。Windows は Windows アプリ付属 CLI を、NixOS / WSL は Linux アプリ付属 CLI を使います。
-
-Windows の `Starship.Starship` は、WSL から Windows drive 上の Git 状態を取得する補助コマンドとして宣言します。[公式の `git_status.windows_starship`](https://starship.rs/config/#git-status) が呼ぶ Windows 実行ファイルを、WinGet のユーザー scope・ZIP portable 版で導入します。既存 handler の `portableLink` が `%LOCALAPPDATA%\Microsoft\WinGet\Links\starship.exe` を作成し、リンク作成に権限が必要な環境では同じ場所へコピーします。検証はこの実行ファイルの `--version` で行います。これは Windows GUI 中心の導入方針に対する WSL 連携用の例外で、Windows PowerShell のプロンプト設定は変更しません。
-
-通常の `install.cmd` に含まれます。補助コマンドだけを先に導入する場合は、Windows で次を実行します。
-
-```powershell
-winget install --id Git.MinGit --exact --source winget --scope user --installer-type zip --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-winget install --id Starship.Starship --exact --source winget --scope user --installer-type zip --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-```
-
-WSL の `git_status.windows_starship` は `starship.exe` を PATH から探します。上記の WinGet Links ディレクトリを含む Windows PATH が WSL に取り込まれ、`command -v starship.exe` が成功することを確認します。通常 installer はコマンドリンクを修復します。上記の個別コマンドでリンクが作成されなかった場合も、通常 installer を再実行して修復します。
-
-`Git.MinGit` はこの Starship 補助コマンドが Windows Git を呼ぶ場合の依存として導入します。ユーザー scope の ZIP portable 版を使い、`%LOCALAPPDATA%\Microsoft\WinGet\Packages\Git.MinGit_Microsoft.Winget.Source_8wekyb3d8bbwe\cmd` を公開します。隣接する実行ファイルやライブラリが必要なので、MinGit の tree を保持します。`pathEntriesCommand` 検証はこの directory の `git.exe --version` を実行し、Codex cache などの別の Git を検証結果として採用しません。
-
-この2 package の `persistPathEntries: true` は、補助コマンドの PATH を次回の WSL 起動に引き継ぐための明示例外です。通常 installer は GUI phase でも宣言した WinGet Links と MinGit の `cmd` ディレクトリを Windows のユーザー PATH に保存し、繰り返し実行しても重複追加しません。他の package の GUI phase は実行中のプロセスだけの PATH 修復を維持します。既に起動している Windows terminal / Codex は古い PATH を保持するため、環境変数の更新後に起動したプロセスで `command -v starship.exe` を確認します。
-
-Windows Dia は WinGet / Microsoft Store 未登録のため、同じ manifest の `direct` source に公式 Windows 11 x64 MSIX を宣言します。URL・SHA256・package identity と依存関係を固定し、導入済みの同等以上の package を検証して利用します。Windows の export もこの宣言を保持します。更新時は公式配布から version・URL・hash と依存 metadata を確認して変更します。
+Windows Dia は [公式サイト](https://www.diabrowser.com/)から手動導入します。master と独自 MSIX 導入処理からは削除しています。管理対象から外したアプリを自動 uninstall することはありません。
 
 ## システム package と Home Manager の境界
 
@@ -210,14 +199,14 @@ Windows Dia は WinGet / Microsoft Store 未登録のため、同じ manifest �
 | Docker daemon/socket、ユーザー group、OS service | アプリごとの NixOS / nix-darwin module                                 |
 | macOS CLI                                        | 原則 Nix/Home Manager、明示例外は Homebrew formula                     |
 | macOS の例外 cask                                | `nix/defaults.nix`                                                     |
-| Windows GUI/OS application                       | `windows/winget/packages.json` と winget/msstore handler               |
+| Windows GUI/OS application                       | `windows/winget/packages.json` と標準 winget import                    |
 | shell、Git、terminal、editor 設定                | Unix は Home Manager、Windows は chezmoi                               |
 
 同じ package を Home Manager と system layer の両方へ導入するのは、システムサービスや OS 統合が必要とする場合に限定します。Darwin の GitHub CLI は host 連携用に system package にも残します。通常の GUI を system package に置く理由にはしません。
 
 dsh は `nix/defaults.nix` が導入します。Linux は `pkgs.deepseek-harness`、macOS は未対応のため `llm-agents` の package を使います。Google MCP は共通 Pipedream へ接続し、認証は [Google MCP](../hermes-agent/gmail-mcp.md) に従います。Codex の設定は Home Manager が管理し、NixOS / WSL は Linux アプリ付属 CLI、Windows は Windows アプリ付属 CLI を使います。
 
-`nix/modules/ai_agents/chatgpt/` が ChatGPT アプリと同梱 Codex CLI の OS ごとの package 選択・導入・設定を管理します。WSL は Linux CLI のみを選び、GUI を導入しません。Windows の Store ID・導入・検証情報は `windows/winget/packages.json` が所有します。
+`nix/modules/ai_agents/chatgpt/` が ChatGPT アプリと同梱 Codex CLI の OS ごとの package 選択・導入・設定を管理します。WSL は Linux CLI のみを選び、GUI を導入しません。Windows の Store ID・導入情報は `windows/winget/packages.json` が所有します。
 
 1Password CLI / GUI の導入と連携は `nix/modules/1password/` が管理します。通常の CLI / GUI は Home Manager が導入し、`ssh.nix` が公式 SSH agent socket の `IdentityAgent` / `SSH_AUTH_SOCK`、OS 別の Git 署名・WSL 連携と GUI package は `nix/defaults.nix` に直接宣言します。WSLg GUI の起動先を変えても、Windows `op.exe` / signer 連携の認証方式は変更しません。
 
@@ -239,4 +228,4 @@ Starship の有効化・Bash / Zsh の標準連携・プロンプトは `nix/mod
 - `nix/home/keybindings/`
 - `nix/defaults.nix`
 - `windows/{winget,npm,pnpm}/packages.json`
-- `scripts/powershell/handlers/Handler.Winget.ps1`
+- `scripts/powershell/lib/Invoke-ExternalCommand.ps1`

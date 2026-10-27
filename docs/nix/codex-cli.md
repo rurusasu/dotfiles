@@ -20,7 +20,7 @@ nix/modules/ai_agents/
 `cli` は同じ Linux package の CLI へのリンクだけを導入します。CLI の PATH 配置は Home Manager に任せます。
 両方とも `homeManager` を読み込み、`programs.codex` で設定を管理します。
 `nix/defaults.nix:systemDefaults` は Darwin / native・standalone Linux で `desktop`、WSL で `cli` を選択します。WSL には Linux GUI を導入しません。
-Windows の Store 導入・検証情報は `windows/winget/packages.json` で直接管理します。
+Windows の Store 導入情報は `windows/winget/packages.json` で直接管理します。
 Codex CLI を独立したパッケージとして導入しません。
 
 ## Darwin / Linux の公式版

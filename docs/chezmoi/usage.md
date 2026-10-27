@@ -46,4 +46,4 @@ Windows のエイリアスと関数も chezmoi の PowerShell profile が管理�
 | `kctx` / `kns`              | `kubectx.exe` / `kubens.exe`                      |
 | `dotf`                      | chezmoi source の親のリポジトリで Task を実行     |
 
-`eza`・`fd`・`ripgrep`・`lazygit` の導入情報は `windows/winget/packages.json` が管理します。`install.cmd -UserPhaseOnly` で導入し、`task chezmoi` と `. $PROFILE` で profile を反映します。Kubernetes の短縮コマンドは WSL と同様、対応する CLI を別途導入した環境で使えます。`nrs` / `nrt` / `nrb` は NixOS 固有なので Windows profile には定義しません。
+`eza`・`fd`・`ripgrep`・`lazygit` の導入情報は `windows/winget/packages.json` が管理します。`install.cmd -Phase Winget` で導入し、`task chezmoi` と `. $PROFILE` で profile を反映します。Kubernetes の短縮コマンドは WSL と同様、対応する CLI を別途導入した環境で使えます。`nrs` / `nrt` / `nrb` は NixOS 固有なので Windows profile には定義しません。

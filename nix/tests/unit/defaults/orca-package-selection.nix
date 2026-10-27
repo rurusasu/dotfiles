@@ -16,14 +16,12 @@ in
         package: package.drvPath == orcaPackage.drvPath
       ) home.config.home.packages;
       orcaWindowsProvider = windows."StablyAI.Orca".source;
-      orcaCiSkipInstall = windows."StablyAI.Orca".ciSkipInstall or false;
       directPythonInstallation = builtins.elem pkgs.python3 home.config.home.packages;
       uvInstalled = builtins.elem pkgs.uv home.config.home.packages;
     };
     expected = {
       orcaPackageSelected = true;
       orcaWindowsProvider = "winget";
-      orcaCiSkipInstall = true;
       directPythonInstallation = false;
       uvInstalled = true;
     };

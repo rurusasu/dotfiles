@@ -1,21 +1,48 @@
 version: "3"
 
-tasks:
-  install:windows:
-    desc: Install Windows apps, configure NixOS-WSL, and apply dotfiles
-    platforms: [windows]
-    vars:
-      INSTALL_POWERSHELL: '{{.DOTFILES_INSTALL_POWERSHELL | default "pwsh"}}'
-    cmds:
-      - '"{{.INSTALL_POWERSHELL}}" -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/Invoke-WindowsInstallPhase.ps1 -Phase Gui'
-      - '"{{.INSTALL_POWERSHELL}}" -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/Invoke-WindowsInstallPhase.ps1 -Phase Wsl'
+vars:
+  INSTALL_POWERSHELL: '{{.DOTFILES_INSTALL_POWERSHELL | default "pwsh"}}'
 
-  install:windows:post:
-    desc: Rebuild NixOS and apply Windows dotfiles after initial setup
+tasks:
+  install:
+    desc: Install Windows apps, update and apply NixOS-WSL once, then apply Windows dotfiles
+    summary: |
+      Windows アプリ導入 → WSL の更新・反映 → Windows 設定反映の順に実行します。
+      inputs の更新と NixOS/Home Manager の反映は WSL 処理で各1回だけ行います。
+      Windows の再起動が必要な場合は、設定反映へ進まず再実行を案内します。
+      再起動要求は終了コードで伝えます。一時ファイルは使いません。
+      install.cmd と task install は同じ PowerShell 入口で WinGet master を適用します。
+      master 適用後は INSTALL_STAGE=apply で WSL と Windows 設定反映だけを実行します。
     platforms: [windows]
     cmds:
-      - task: nrs
-      - task: chezmoi
+      - task: 'install:{{.INSTALL_STAGE | default "start"}}'
+
+  install:start:
+    desc: PowerShell で WinGet master を適用してから後続の Task 処理へ進む
+    internal: true
+    cmds:
+      - '"{{.INSTALL_POWERSHELL}}" -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1'
+
+  install:apply:
+    desc: WinGet master 適用後に WSL と Windows 設定を反映する
+    internal: true
+    cmds:
+      - task: install:wsl
+      - task: install:chezmoi
+      - cmd: echo "Setup Complete!"
+        silent: true
+
+  install:wsl:
+    desc: NixOS-WSL を準備し、inputs の更新と構成の反映を各1回行う
+    internal: true
+    cmds:
+      - '"{{.INSTALL_POWERSHELL}}" -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1 -Phase Wsl'
+
+  install:chezmoi:
+    desc: WSL 処理が成功した後に Windows の設定を chezmoi で反映する
+    internal: true
+    cmds:
+      - '"{{.INSTALL_POWERSHELL}}" -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1 -Phase Chezmoi'
 
   tart:prepare:
     desc: Download and clone the optional macOS Tart VM image
@@ -29,15 +56,8 @@ tasks:
       - cmd: ./scripts/sh/run-tart-vm.sh
         platforms: [darwin]
 
-  install:
-    desc: Run Windows installer
-    cmds:
-      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1
-
   chezmoi:
     desc: Apply Windows dotfiles
     platforms: [windows]
-    vars:
-      INSTALL_POWERSHELL: '{{.DOTFILES_INSTALL_POWERSHELL | default "pwsh"}}'
     cmds:
-      - '"{{.INSTALL_POWERSHELL}}" -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/Invoke-WindowsInstallPhase.ps1 -Phase Chezmoi'
+      - '"{{.INSTALL_POWERSHELL}}" -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1 -Phase Chezmoi'

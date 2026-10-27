@@ -42,7 +42,7 @@
 pre-commit の `fix-byte-order-marker` は `scripts/powershell/` を除外し、
 PSScriptAnalyzer の `PSUseBOMForUnicodeEncodedFile` は有効にします。
 CP932 での文字列保持、5.1 の実ファイル読み込み、formatter の BOM 補完と冪等性は
-[回帰テスト](../scripts/powershell/testing.md#windows-powershell-51-の文字コード回帰テスト) で検証します。
+[回帰テスト](../scripts/powershell/README.md#テスト) で検証します。
 
 ## フォーマットスタイル
 
@@ -86,10 +86,9 @@ function Get-Something {
 この repository の `nix fmt` / `checks.<system>.treefmt` は、PowerShell と
 PSScriptAnalyzer を宣言済みの依存として使用します。
 [`nix/modules/shells/powershell/psscriptanalyzer.nix`](../../nix/modules/shells/powershell/psscriptanalyzer.nix) が
-PowerShell Gallery のバージョン指定なし URL
-(`https://www.powershellgallery.com/api/v2/package/PSScriptAnalyzer`) を Nix input として使い、
-formatter は store の manifest を直接 import します。
-input URL は `flake.nix` に宣言し、取得した配布物と内容の hash は `flake.lock` で固定します。
+GitHub の最新 release metadata を Nix input として使い、asset の URL と SHA-256 から
+配布物を取得します。formatter は store の manifest を直接 import します。
+input URL は `flake.nix` に宣言し、metadata は `flake.lock` で固定します。
 更新時は `nix flake update psscriptanalyzer` で input を再解決し、lock を更新します。
 HOME の module cache に依存せず、整形中のダウンロードはありません。
 

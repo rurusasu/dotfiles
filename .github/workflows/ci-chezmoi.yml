@@ -83,7 +83,6 @@ jobs:
           $managedScripts = @(& chezmoi --source $source --override-data $data managed --include scripts --path-style relative)
           if ($LASTEXITCODE -ne 0) { throw "chezmoi managed scripts failed with exit $LASTEXITCODE" }
           $expectedScripts = @(
-            '.chezmoiscripts/deploy/keybindings/sync_powertoys_keyboard.ps1'
             '.chezmoiscripts/deploy/keybindings/sync_wsl_keybindings.ps1'
             '.chezmoiscripts/deploy/terminals/deploy.ps1'
             '.chezmoiscripts/deploy/terminals/install_udev_gothic_nf.ps1'

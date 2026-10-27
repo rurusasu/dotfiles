@@ -2,7 +2,7 @@
 # Windows owns these exported WSL data files; Home Manager owns their app loaders.
 $ErrorActionPreference = 'Stop'
 $contractBase64 = '{{ include "../nix/home/keybindings/generated.json" | b64enc }}'
-$ghosttyBase64 = '{{ (include "../nix/home/keybindings/generated.json" | fromJson).windows.ghosttyConfig | b64enc }}'
+$ghosttyBase64 = '{{ (include "../nix/home/keybindings/generated.json" | fromJson).ghosttyWslConfig | b64enc }}'
 $shellBody = @'
 set -eu
 keybindingsDirectory="$HOME/.config/dotfiles/keybindings"

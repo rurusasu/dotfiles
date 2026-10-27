@@ -115,7 +115,7 @@ runs:
                   windows=true
                   ;;
                 # Windows consumes the committed shortcuts through chezmoi.
-                nix/defaults.nix|nix/home/keybindings/bindings.nix|nix/home/keybindings/generated.json|nix/modules/terminals/ghostty/ghostty.nix|nix/modules/terminals/ghostty/ghostty-renderer.nix|nix/modules/terminals/ghostty/ghostty-windows.nix|nix/modules/editors/nvim/neovim.nix)
+                nix/defaults.nix|nix/home/keybindings/bindings.nix|nix/home/keybindings/generated.json|nix/modules/terminals/ghostty/ghostty.nix|nix/modules/terminals/ghostty/ghostty-renderer.nix|nix/modules/terminals/ghostty/ghostty-wsl.nix|nix/modules/editors/nvim/neovim.nix)
                   nix=true
                   chezmoi=true
                   linux=true

@@ -13,9 +13,6 @@
 .PARAMETER MinimumCoverage
     最小カバレッジパーセンテージ。この値を下回ると失敗
 
-.PARAMETER OutputFile
-    JUnit XML レポートの出力パス
-
 .PARAMETER CoverageOutputFile
     Cobertura カバレッジレポートの出力パス
 
@@ -31,7 +28,7 @@
     90% 以上のカバレッジを要求
 
 .EXAMPLE
-    .\Invoke-Tests.ps1 -Path .\tests\handlers\Handler.Chezmoi.Tests.ps1
+    .\Invoke-Tests.ps1 -Path .\Install.Tests.ps1
     特定のテストファイルのみ実行
 #>
 
@@ -41,10 +38,8 @@ param(
     [string[]]$Path,
 
     [Parameter()]
+    [ValidateRange(0, 100)]
     [int]$MinimumCoverage = 0,
-
-    [Parameter()]
-    [string]$OutputFile,
 
     [Parameter()]
     [string]$CoverageOutputFile,
@@ -63,91 +58,6 @@ else {
 $projectRoot = Split-Path -Parent $scriptRoot
 $coverageRequested = ($MinimumCoverage -gt 0) -or $ShowCoverage -or (-not [string]::IsNullOrWhiteSpace($CoverageOutputFile))
 
-function ConvertTo-Xml10SafeText {
-    param([AllowNull()][object]$Value)
-
-    if ($null -eq $Value) {
-        return ''
-    }
-
-    # Pester's JUnit exporter writes failure text directly to XML attributes.
-    # Keep diagnostics readable while representing XML 1.0-forbidden controls.
-    return [regex]::Replace([string]$Value, '[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]', {
-            param($match)
-            '[U+{0:X4}]' -f [int][char]$match.Value[0]
-        })
-}
-
-function Write-SafeJUnitReport {
-    param(
-        [Parameter(Mandatory)]$Result,
-        [Parameter(Mandatory)][string]$Path
-    )
-
-    $tests = @($Result.Tests | Where-Object ShouldRun)
-    $failures = @($tests | Where-Object Result -EQ 'Failed')
-    $skipped = @($tests | Where-Object { $_.Result -notin @('Passed', 'Failed') })
-    $settings = New-Object System.Xml.XmlWriterSettings
-    $settings.Indent = $true
-    $settings.Encoding = New-Object System.Text.UTF8Encoding($false)
-    $writer = [System.Xml.XmlWriter]::Create([System.IO.Path]::GetFullPath($Path), $settings)
-    try {
-        $writer.WriteStartDocument()
-        $writer.WriteStartElement('testsuites')
-        $writer.WriteAttributeString('name', (ConvertTo-Xml10SafeText $Result.Configuration.TestResult.TestSuiteName.Value))
-        $writer.WriteAttributeString('tests', [string]$tests.Count)
-        $writer.WriteAttributeString('errors', [string]($Result.FailedContainersCount + $Result.FailedBlocksCount))
-        $writer.WriteAttributeString('failures', [string]$failures.Count)
-        $writer.WriteAttributeString('disabled', [string]($Result.NotRunCount + $Result.SkippedCount))
-        $writer.WriteAttributeString('time', $Result.Duration.TotalSeconds.ToString('0.000', [Globalization.CultureInfo]::InvariantCulture))
-        $writer.WriteStartElement('testsuite')
-        $writer.WriteAttributeString('name', 'PowerShell')
-        $writer.WriteAttributeString('tests', [string]$tests.Count)
-        $writer.WriteAttributeString('errors', '0')
-        $writer.WriteAttributeString('failures', [string]$failures.Count)
-        $writer.WriteAttributeString('skipped', [string]$skipped.Count)
-        $writer.WriteAttributeString('time', $Result.Duration.TotalSeconds.ToString('0.000', [Globalization.CultureInfo]::InvariantCulture))
-
-        foreach ($test in $tests) {
-            $writer.WriteStartElement('testcase')
-            $writer.WriteAttributeString('name', (ConvertTo-Xml10SafeText $test.ExpandedPath))
-            $writer.WriteAttributeString('classname', (ConvertTo-Xml10SafeText ($test.Block.Path -join '.')))
-            $writer.WriteAttributeString('time', $test.Duration.TotalSeconds.ToString('0.000', [Globalization.CultureInfo]::InvariantCulture))
-
-            if ($test.Result -eq 'Failed') {
-                $messages = @($test.ErrorRecord | ForEach-Object {
-                        if ($_.DisplayErrorMessage) { $_.DisplayErrorMessage } else { $_.ToString() }
-                    })
-                $traces = @($test.ErrorRecord | ForEach-Object {
-                        if ($_.DisplayStackTrace) { $_.DisplayStackTrace }
-                    })
-                $writer.WriteStartElement('failure')
-                $writer.WriteAttributeString('message', (ConvertTo-Xml10SafeText ($messages -join [Environment]::NewLine)))
-                if ($traces.Count -gt 0) {
-                    $writer.WriteString((ConvertTo-Xml10SafeText ($traces -join [Environment]::NewLine)))
-                }
-                $writer.WriteEndElement()
-            }
-            elseif ($test.Result -notin @('Passed', 'Failed')) {
-                $writer.WriteStartElement('skipped')
-                $reason = @($test.ErrorRecord | ForEach-Object { if ($_.DisplayErrorMessage) { $_.DisplayErrorMessage } }) -join [Environment]::NewLine
-                if ($reason) { $writer.WriteAttributeString('message', (ConvertTo-Xml10SafeText $reason)) }
-                $writer.WriteEndElement()
-            }
-
-            $writer.WriteEndElement()
-        }
-
-        $writer.WriteEndElement()
-        $writer.WriteEndElement()
-        $writer.WriteEndDocument()
-        $writer.Flush()
-    }
-    finally {
-        $writer.Dispose()
-    }
-}
-
 # インストール済みの互換性のある安定版を使い、不足時は準備不足として失敗する。
 . (Join-Path $scriptRoot 'support/Resolve-TestModule.ps1')
 $pesterModule = Resolve-TestModule -Name Pester
@@ -155,22 +65,21 @@ $pesterModule = Resolve-TestModule -Name Pester
 if (Get-Module -Name Pester) {
     Remove-Module -Name Pester -Force -ErrorAction Stop
 }
-$activePesterModule = Import-Module -Name $pesterModule.Path -Force -PassThru -ErrorAction Stop
+Import-Module -Name $pesterModule.Path -Force -ErrorAction Stop
 
 $loadedVersion = (Get-Module -Name Pester).Version
 Write-Host "Pester v$loadedVersion を使用します" -ForegroundColor Cyan
-Write-Host ""
 
 # テスト対象ファイルの収集（カバレッジ有効時のみ）
 $sourceFiles = @()
 if ($coverageRequested) {
-    $sourceFiles = @(
+    $sourceFiles = @(@(
         Get-ChildItem -LiteralPath (Join-Path $projectRoot 'lib') -Filter '*.ps1' -File -ErrorAction SilentlyContinue
-        Get-ChildItem -LiteralPath (Join-Path $projectRoot 'handlers') -Filter 'Handler.*.ps1' -File -ErrorAction SilentlyContinue
-    ) | Select-Object -ExpandProperty FullName
+        Get-ChildItem -LiteralPath $projectRoot -Filter 'install.ps1' -File
+    ) | Select-Object -ExpandProperty FullName)
 
     if ($sourceFiles.Count -eq 0) {
-        Write-Warning "カバレッジ対象ファイルが見つかりません。パス: $projectRoot"
+        throw "Coverage was requested, but no runtime PowerShell source files were found: $projectRoot"
     }
 }
 
@@ -188,110 +97,41 @@ $pesterConfig.Run.Exit = $false
 $pesterConfig.Run.PassThru = $true
 
 # 出力設定
-$pesterConfig.Output.Verbosity = if ($OutputFile) { "Normal" } else { "Detailed" }
+$pesterConfig.Output.Verbosity = "Detailed"
 
 # カバレッジ設定
 if ($coverageRequested) {
-    if ($sourceFiles.Count -eq 0) {
-        $pesterConfig.CodeCoverage.Enabled = $false
-    }
-    else {
-        Assert-PesterCoverageConfiguration -Configuration $pesterConfig -Module $activePesterModule
-        $pesterConfig.CodeCoverage.Enabled = $true
-        $pesterConfig.CodeCoverage.Path = $sourceFiles
-        $pesterConfig.CodeCoverage.CoveragePercentTarget = $MinimumCoverage
-        $pesterConfig.CodeCoverage.OutputFormat = "Cobertura"
-        # 外部コマンド直接呼び出しはカバレッジから除外
-        $pesterConfig.CodeCoverage.ExcludeTests = $true
-        # カバレッジでモックを使用可能にする（ブレークポイント方式を無効化）
-        $pesterConfig.CodeCoverage.UseBreakpoints = $false
+    $pesterConfig.CodeCoverage.Enabled = $true
+    $pesterConfig.CodeCoverage.Path = $sourceFiles
+    $pesterConfig.CodeCoverage.CoveragePercentTarget = $MinimumCoverage
+    $pesterConfig.CodeCoverage.OutputFormat = "Cobertura"
+    $pesterConfig.CodeCoverage.ExcludeTests = $true
+    $pesterConfig.CodeCoverage.UseBreakpoints = $false
 
-        if ($CoverageOutputFile) {
-            $pesterConfig.CodeCoverage.OutputPath = $CoverageOutputFile
-            $pesterConfig.CodeCoverage.OutputFormat = "Cobertura"
-        }
+    if ($CoverageOutputFile) {
+        $pesterConfig.CodeCoverage.OutputPath = $CoverageOutputFile
     }
 }
 else {
     $pesterConfig.CodeCoverage.Enabled = $false
 }
 
-# JUnit XML 出力
-if ($OutputFile) {
-    # Write the report after the run so invalid XML controls are represented, not lost.
-    $pesterConfig.TestResult.Enabled = $false
-}
-
-Write-Host ""
-Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host "  PowerShell Test Runner (Pester)" -ForegroundColor Cyan
-Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Test Path: $Path" -ForegroundColor White
-Write-Host "Source Files: $($sourceFiles.Count)" -ForegroundColor White
-Write-Host "Minimum Coverage: $MinimumCoverage%" -ForegroundColor White
-Write-Host ""
-
 # テスト実行
 # 呼び出し元の StrictMode をテストスコープへ継承させず、通常の Pester CI と実行条件を揃える
 Set-StrictMode -Off
 $result = Invoke-Pester -Configuration $pesterConfig
-
-if ($OutputFile -and $result) {
-    Write-SafeJUnitReport -Result $result -Path $OutputFile
-}
 
 if (-not $result) {
     Write-Host "FAIL: Test runner did not return a result." -ForegroundColor Red
     exit 1
 }
 
-Write-Host ""
-Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host "  Test Results Summary" -ForegroundColor Cyan
-Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host ""
-
-# 結果表示
-$passedCount = $result.PassedCount
-$failedCount = $result.FailedCount
-$skippedCount = $result.SkippedCount
-$totalCount = $result.TotalCount
-
-Write-Host "Tests: " -NoNewline
-Write-Host "$passedCount passed" -ForegroundColor Green -NoNewline
-Write-Host ", " -NoNewline
-
-if ($failedCount -gt 0) {
-    Write-Host "$failedCount failed" -ForegroundColor Red -NoNewline
-}
-else {
-    Write-Host "$failedCount failed" -ForegroundColor Gray -NoNewline
-}
-
-Write-Host ", " -NoNewline
-Write-Host "$skippedCount skipped" -ForegroundColor Yellow -NoNewline
-Write-Host " / $totalCount total" -ForegroundColor White
-Write-Host ""
-
-# カバレッジ表示
-if ($result.CodeCoverage -and $result.CodeCoverage.CoveragePercent) {
-    $coverage = [math]::Round($result.CodeCoverage.CoveragePercent, 2)
-    $coveredCommands = $result.CodeCoverage.CommandsExecutedCount
-    $totalCommands = $result.CodeCoverage.CommandsAnalyzedCount
-    $missedCommands = $result.CodeCoverage.CommandsMissedCount
-
-    Write-Host "Coverage: " -NoNewline
-
-    if ($coverage -ge $MinimumCoverage) {
-        Write-Host "$coverage%" -ForegroundColor Green -NoNewline
+if ($coverageRequested) {
+    if ($null -eq $result.CodeCoverage -or $null -eq $result.CodeCoverage.CoveragePercent) {
+        Write-Host 'FAIL: Coverage was requested, but no coverage measurement was returned.' -ForegroundColor Red
+        exit 1
     }
-    else {
-        Write-Host "$coverage%" -ForegroundColor Red -NoNewline
-    }
-
-    Write-Host " ($coveredCommands / $totalCommands commands, $missedCommands missed)" -ForegroundColor White
-    Write-Host ""
+    $coverage = $result.CodeCoverage.CoveragePercent
 
     # 詳細カバレッジ
     if ($ShowCoverage -and $result.CodeCoverage.CommandsMissed) {
@@ -315,16 +155,14 @@ if ($result.CodeCoverage -and $result.CodeCoverage.CoveragePercent) {
 }
 
 # 失敗チェック
-if ($totalCount -le 0) {
+if ($result.TotalCount -le 0) {
     Write-Host "FAIL: No tests were discovered" -ForegroundColor Red
     exit 1
 }
 
-if ($failedCount -gt 0 -or $result.Result -eq 'Failed' -or
+if ($result.FailedCount -gt 0 -or $result.Result -eq 'Failed' -or
     $result.FailedContainersCount -gt 0 -or $result.FailedBlocksCount -gt 0) {
-    Write-Host "FAIL: $failedCount test(s) failed; containers=$($result.FailedContainersCount), blocks=$($result.FailedBlocksCount)" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "SUCCESS: All tests passed!" -ForegroundColor Green
 exit 0
