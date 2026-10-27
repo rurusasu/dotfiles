@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import itertools
-import json
 import os
 import re
 import shutil
@@ -14,7 +13,6 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/ci-nix.yml"
@@ -46,44 +44,6 @@ def run_bash(script: str, environment: dict[str, str], cwd: Path | None = None, 
 
 class CiWorkflowRoutingContractTests(unittest.TestCase):
     """Run build steps with external commands replaced at the process boundary."""
-
-    def test_cache_pruning_deletes_only_older_confirmed_main_generations(self) -> None:
-        with mock.patch.object(sys, "path", [str(ROOT / "scripts/python"), *sys.path]):
-            from prepare_ci_nix_cache import prune_cache
-
-        prefix = "ci-nix-v2-test-"
-        key = prefix + "current"
-        old = {"id": 1, "key": prefix + "old", "ref": "refs/heads/main", "created_at": "2026-01"}
-        protected = [
-            old | {"id": 2, "key": "unrelated-old"},
-            old | {"id": 3, "ref": "refs/pull/1/merge"},
-            old | {"id": 4, "created_at": "2026-03"},
-        ]
-        environment = {
-            "GITHUB_REF": "refs/heads/main", "GITHUB_API_URL": "https://api.github.com",
-            "GITHUB_REPOSITORY": "owner/repo", "GITHUB_TOKEN": "fixture-token",
-        }
-        for confirmed in (False, True):
-            pages = [{"actions_caches": [old, *protected]}, {"actions_caches": []}]
-            if confirmed:
-                pages[1]["actions_caches"].append(old | {"id": 5, "key": key, "created_at": "2026-02"})
-            with (
-                self.subTest(confirmed=confirmed),
-                mock.patch.dict(os.environ, environment),
-                mock.patch("prepare_ci_nix_cache.subprocess.run", return_value=subprocess.CompletedProcess([], 0, json.dumps(pages))) as run,
-            ):
-                prune_cache(key, prefix)
-                self.assertIn("--paginate", run.call_args_list[0].args[0])
-                self.assertIn("--slurp", run.call_args_list[0].args[0])
-                deleted = [call.args[0][-1] for call in run.call_args_list if "DELETE" in call.args[0]]
-                self.assertEqual(deleted, ["https://api.github.com/repos/owner/repo/actions/caches/1"] if confirmed else [])
-                self.assertNotIn("fixture-token", str([call.args for call in run.call_args_list]))
-        with (
-            mock.patch.dict(os.environ, environment),
-            mock.patch("prepare_ci_nix_cache.subprocess.run", side_effect=subprocess.CalledProcessError(1, ["gh", "api"])) as run,
-        ):
-            prune_cache(key, prefix)
-            self.assertEqual(run.call_count, 1)
 
     def test_linux_build_installs_declared_hardware_without_identity_inference(
         self,

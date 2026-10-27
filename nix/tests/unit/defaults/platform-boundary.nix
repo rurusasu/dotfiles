@@ -32,13 +32,6 @@ in
       agent = false;
     };
   };
-  testCommonHomeModuleDoesNotRequireOSSpecialArgs = {
-    expr = builtins.attrNames (builtins.functionArgs sharedHome);
-    expected = [
-      "config"
-      "lib"
-    ];
-  };
   testCommonHomeOnlyDeclaresApplicationEnableFlags = {
     expr = {
       inherit (common) programs;

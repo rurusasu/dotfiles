@@ -5,26 +5,36 @@ BeforeAll {
     $taskCommand = Get-Command task -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $taskCommand) { throw "Required test dependency 'task' is not installed or not on PATH. Prepare Task before running this suite." }
     $script:taskRuntime = $taskCommand.Source
+
+    function Invoke-FixtureProcess {
+        param([Diagnostics.ProcessStartInfo]$StartInfo, [int]$TimeoutMilliseconds = 60000)
+        $StartInfo.UseShellExecute = $false
+        $StartInfo.CreateNoWindow = $true
+        $StartInfo.RedirectStandardOutput = $true
+        $StartInfo.RedirectStandardError = $true
+        $process = [Diagnostics.Process]::new()
+        $process.StartInfo = $StartInfo
+        try {
+            [void]$process.Start()
+            $stdout = $process.StandardOutput.ReadToEndAsync()
+            $stderr = $process.StandardError.ReadToEndAsync()
+            if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+                if (Get-Command taskkill.exe -ErrorAction SilentlyContinue) {
+                    & taskkill.exe /PID $process.Id /T /F | Out-Null
+                }
+                else { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+                [void]$process.WaitForExit(5000)
+                throw "Installer fixture timed out: $($StartInfo.FileName)"
+            }
+            return [pscustomobject]@{ ExitCode = $process.ExitCode; Stdout = $stdout.Result; Stderr = $stderr.Result }
+        }
+        finally { $process.Dispose() }
+    }
 }
 
 Describe 'Windows installer entrypoint' {
     BeforeAll {
         $script:runsOnWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
-
-        function Stop-TestProcessTree {
-            [CmdletBinding()]
-            param(
-                [Parameter(Mandatory)]
-                [int]$ProcessId
-            )
-
-            if (Get-Command taskkill.exe -ErrorAction SilentlyContinue) {
-                & taskkill.exe /PID $ProcessId /T /F | Out-Null
-                return
-            }
-
-            Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
-        }
 
         function Invoke-TestCmdProcess {
             [CmdletBinding()]
@@ -33,50 +43,14 @@ Describe 'Windows installer entrypoint' {
                 [string]$WorkingDirectory,
 
                 [Parameter(Mandatory)]
-                [string]$CommandLine,
-
-                [int]$TimeoutMilliseconds = 60000
+                [string]$CommandLine
             )
 
             $psi = [System.Diagnostics.ProcessStartInfo]::new()
             $psi.FileName = "cmd.exe"
             $psi.Arguments = "/d /c $CommandLine"
             $psi.WorkingDirectory = $WorkingDirectory
-            $psi.UseShellExecute = $false
-            $psi.RedirectStandardOutput = $true
-            $psi.RedirectStandardError = $true
-            $psi.CreateNoWindow = $true
-
-            $process = [System.Diagnostics.Process]::new()
-            $process.StartInfo = $psi
-
-            try {
-                [void]$process.Start()
-                $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-                $stderrTask = $process.StandardError.ReadToEndAsync()
-
-                $finished = $process.WaitForExit($TimeoutMilliseconds)
-                if (-not $finished) {
-                    Stop-TestProcessTree -ProcessId $process.Id
-                    [void]$process.WaitForExit(5000)
-                }
-                [void]$process.WaitForExit()
-
-                $stdout = $stdoutTask.Result
-                $stderr = $stderrTask.Result
-                if (-not $finished) {
-                    throw "cmd.exe timed out. stdout=[$stdout] stderr=[$stderr]"
-                }
-
-                [pscustomobject]@{
-                    ExitCode = $process.ExitCode
-                    Stdout   = $stdout
-                    Stderr   = $stderr
-                }
-            }
-            finally {
-                $process.Dispose()
-            }
+            Invoke-FixtureProcess -StartInfo $psi
         }
 
 
@@ -465,28 +439,13 @@ function chezmoi {
             $info.FileName = 'cmd.exe'
             $info.Arguments = "/d /c install.cmd -Phase $Phase"
             $info.WorkingDirectory = $root
-            $info.UseShellExecute = $false
-            $info.CreateNoWindow = $true
-            $info.RedirectStandardOutput = $true
-            $info.RedirectStandardError = $true
             $info.EnvironmentVariables['FIXTURE_ROOT'] = $root
             $info.EnvironmentVariables['LOCALAPPDATA'] = Join-Path $root 'localappdata'
             if ($PSVersionTable.PSVersion.Major -lt 6) {
                 $info.EnvironmentVariables['DOTFILES_FORCE_WINDOWS_POWERSHELL'] = '1'
             }
-            $process = New-Object System.Diagnostics.Process
-            $process.StartInfo = $info
-            try {
-                [void]$process.Start()
-                $stdout = $process.StandardOutput.ReadToEndAsync()
-                $stderr = $process.StandardError.ReadToEndAsync()
-                if (-not $process.WaitForExit(30000)) {
-                    & taskkill.exe /PID $process.Id /T /F | Out-Null
-                    throw 'GUI setup fixture timed out'
-                }
-                [pscustomobject]@{ ExitCode = $process.ExitCode; Output = $stdout.Result + $stderr.Result; Applied = (Test-Path -LiteralPath "$root/home/.fixture") }
-            }
-            finally { $process.Dispose() }
+            $capture = Invoke-FixtureProcess -StartInfo $info -TimeoutMilliseconds 30000
+            [pscustomobject]@{ ExitCode = $capture.ExitCode; Output = $capture.Stdout + $capture.Stderr; Applied = (Test-Path -LiteralPath "$root/home/.fixture") }
         }
     }
 
@@ -704,10 +663,6 @@ function Invoke-NixosWslSetup {
                 $info.EnvironmentVariables['DOTFILES_INSTALL_POWERSHELL'] = $shellPath
             }
             $info.WorkingDirectory = $root
-            $info.UseShellExecute = $false
-            $info.CreateNoWindow = $true
-            $info.RedirectStandardOutput = $true
-            $info.RedirectStandardError = $true
             $info.EnvironmentVariables['FIXTURE_ROOT'] = $root
             $info.EnvironmentVariables['FIXTURE_TASK_INITIALLY_MISSING'] = [string]$TaskInitiallyMissing
             $info.EnvironmentVariables['FIXTURE_TASK_AFTER_WINGET'] = [string]$TaskAvailableAfterWinget
@@ -729,29 +684,18 @@ function Invoke-NixosWslSetup {
                 $info.EnvironmentVariables.Remove('DOTFILES_FORCE_WINDOWS_POWERSHELL')
                 $info.EnvironmentVariables['DOTFILES_PS7_DIR'] = $PSHOME
             }
-            $process = New-Object System.Diagnostics.Process
-            $process.StartInfo = $info
-            try {
-                [void]$process.Start()
-                $stdout = $process.StandardOutput.ReadToEndAsync()
-                $stderr = $process.StandardError.ReadToEndAsync()
-                if (-not $process.WaitForExit(60000)) {
-                    & taskkill.exe /PID $process.Id /T /F | Out-Null
-                    throw 'WSL installer fixture timed out'
-                }
-                $events = if (Test-Path "$root/events.txt") { @(Get-Content "$root/events.txt") } else { @() }
-                $context = if (Test-Path "$root/context.json") { Get-Content "$root/context.json" -Raw | ConvertFrom-Json } else { $null }
-                $taskLookups = if (Test-Path "$root/task-lookups.txt") { @(Get-Content "$root/task-lookups.txt") } else { @() }
-                return [pscustomobject]@{
-                    ExitCode = $process.ExitCode; Output = $stdout.Result + $stderr.Result; Events = $events; Context = $context
-                    InstallArguments = if (Test-Path "$root/install-arguments.json") { Get-Content "$root/install-arguments.json" -Raw | ConvertFrom-Json } else { @() }
-                    ReleaseUri = if (Test-Path "$root/release-uri.txt") { Get-Content "$root/release-uri.txt" -Raw } else { '' }
-                    TaskLookups = $taskLookups
-                    ElevationDisposed = Test-Path "$root/elevation-disposed.txt"
-                    ElevationWaitMilliseconds = if (Test-Path "$root/elevation-wait.json") { (Get-Content "$root/elevation-wait.json" -Raw | ConvertFrom-Json).Milliseconds } else { $null }
-                }
+            $capture = Invoke-FixtureProcess -StartInfo $info
+            $events = if (Test-Path "$root/events.txt") { @(Get-Content "$root/events.txt") } else { @() }
+            $context = if (Test-Path "$root/context.json") { Get-Content "$root/context.json" -Raw | ConvertFrom-Json } else { $null }
+            $taskLookups = if (Test-Path "$root/task-lookups.txt") { @(Get-Content "$root/task-lookups.txt") } else { @() }
+            return [pscustomobject]@{
+                ExitCode = $capture.ExitCode; Output = $capture.Stdout + $capture.Stderr; Events = $events; Context = $context
+                InstallArguments = if (Test-Path "$root/install-arguments.json") { Get-Content "$root/install-arguments.json" -Raw | ConvertFrom-Json } else { @() }
+                ReleaseUri = if (Test-Path "$root/release-uri.txt") { Get-Content "$root/release-uri.txt" -Raw } else { '' }
+                TaskLookups = $taskLookups
+                ElevationDisposed = Test-Path "$root/elevation-disposed.txt"
+                ElevationWaitMilliseconds = if (Test-Path "$root/elevation-wait.json") { (Get-Content "$root/elevation-wait.json" -Raw | ConvertFrom-Json).Milliseconds } else { $null }
             }
-            finally { $process.Dispose() }
         }
     }
 

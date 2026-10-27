@@ -43,9 +43,6 @@ in
         codex-config-migration = import ./build/modules/ai_agents/chatgpt/codex-config-migration.nix {
           inherit inputs pkgs;
         };
-        hermes-configuration = import ./build/modules/ai_agents/hermes/configuration.nix {
-          inherit inputs pkgs;
-        };
         hermes-version = import ./build/modules/ai_agents/hermes/version.nix {
           inherit inputs pkgs;
         };

@@ -68,9 +68,8 @@ OS・architecture・Nix version・job・flake.lock のハッシュで分離し�
   Darwin は activation 直後に private 出力を GC root で保持し、checks 中の GC による削除を防ぎます。
 - 圧縮は Nix の zstd を GC root と PATH で固定します。Homebrew cleanup 後も同じツールを使います。
 - 保存上限は Darwin 2 GiB、Linux / WSL は各 768 MiB、checks は 512 MiB です。上限超過時は警告し、前世代を維持します。
-  新世代の保存を API で確認してから、同じ namespace の古い main cache を削除します。
-  4ジョブの定常上限は計 4 GiB、全ジョブの世代交代が重なっても最大 8 GiB です。
-  他 workflow の cache も repository の 10 GB 枠を共有します。
+  世代の保持は [GitHub の自動削除](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#usage-limits-and-eviction-policy)に任せます。
+  この repository は他 workflow と合計 10 GB を共有し、未使用 7 日または容量超過時の LRU で古い cache が削除されます。
 - WSL への同一 run の artifact: 完全な cache の hardlink 複製から、`cache.nixos.org` に依存一式がある
   NAR payload だけを除きます。metadata は残し、Windows 側で署名付きの公開依存を先に取得してから取り込みます。
   公開 cache の判定は並列実行し、問い合わせ失敗時は未確認の payload を省きません。

@@ -13,14 +13,12 @@ let
     {
       system,
       module,
-      specialArgs ? { },
     }:
     inputs.home-manager.lib.homeManagerConfiguration {
       pkgs = mkPkgs system;
       extraSpecialArgs = {
         inherit inputs;
-      }
-      // specialArgs;
+      };
       modules = [
         (_: { home = testHome; })
         module
@@ -46,8 +44,6 @@ in
 {
   inherit
     mkHome
-    mkPkgs
-    testHome
     linux
     wsl
     darwin

@@ -15,10 +15,7 @@
         [
           homeConfigurations.linux
           homeConfigurations.wsl
-          (homeConfigurations.mkHome {
-            system = "aarch64-linux";
-            module = (import ../../fixtures/packages.nix { inherit inputs; }).homeModule "linux";
-          })
+          homeConfigurations.linuxArm
         ];
     expected = [
       {

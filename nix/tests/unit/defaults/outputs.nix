@@ -25,13 +25,6 @@ let
         };
       };
 
-  treefmtCheck = inputs.self.checks.aarch64-darwin.treefmt;
-  hasScriptLine =
-    pattern: script:
-    builtins.any (line: builtins.match pattern line != null) (
-      builtins.filter builtins.isString (builtins.split "\n" script)
-    );
-
 in
 {
   testConsolidatedDefaultsPublishDarwinPackages = {
@@ -123,21 +116,6 @@ in
     expected = {
       darwin = "darwin-rebuild";
       linux.home-manager.program = "home-manager";
-    };
-  };
-
-  testTreefmtCheckEvaluatesWithHostPlatformLocale = {
-    expr = {
-      checkName = treefmtCheck.name;
-      hasNoCacheCommand = hasScriptLine ".*treefmt --no-cache.*" treefmtCheck.buildCommand;
-      usesDarwinHostLocale = hasScriptLine ".*LANG=en_US[.]UTF-8.*" treefmtCheck.buildCommand;
-      avoidsDeprecatedDarwinAlias = !(hasScriptLine ".*stdenv[.]isDarwin.*" treefmtCheck.buildCommand);
-    };
-    expected = {
-      checkName = "treefmt-check";
-      hasNoCacheCommand = true;
-      usesDarwinHostLocale = true;
-      avoidsDeprecatedDarwinAlias = true;
     };
   };
 

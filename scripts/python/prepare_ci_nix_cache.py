@@ -1,15 +1,13 @@
-"""Prepare CI caches and WSL transport, then retain confirmed cache generations."""
+"""Prepare private CI caches and WSL transport."""
 
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
-from urllib.parse import urlencode
 
 PUBLIC_CACHE = "https://cache.nixos.org"
 
@@ -179,50 +177,6 @@ def transport_cache(cache: Path, root: str) -> None:
     print(f"WSL cache: {len(closure)} paths, {len(public)} public, {removed_bytes:,} payload bytes omitted")
 
 
-def prune_cache(key: str, prefix: str) -> None:
-    """Delete older main caches only after the replacement is visible in GitHub."""
-    if os.environ["GITHUB_REF"] != "refs/heads/main":
-        raise ValueError("Only main may update shared caches")
-    if not prefix.startswith("ci-nix-v2-") or not key.startswith(prefix):
-        raise ValueError("Invalid CI cache namespace")
-    base = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/actions/caches"
-
-    api = ["gh", "api", "-H", "X-GitHub-Api-Version: 2022-11-28"]
-    environment = os.environ | {"GH_TOKEN": os.environ["GITHUB_TOKEN"]}
-    try:
-        query = urlencode({"ref": "refs/heads/main", "key": prefix, "per_page": 100})
-        result = subprocess.run(
-            [*api, "--paginate", "--slurp", f"{base}?{query}"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=120,
-            env=environment,
-        )
-        caches = [cache for page in json.loads(result.stdout) for cache in page["actions_caches"]]
-        current = [cache for cache in caches if cache["key"] == key]
-        if not current:
-            print("::warning::New cache not confirmed; retaining previous generations")
-            return
-        newest = max(cache["created_at"] for cache in current)
-        for cache in caches:
-            if (
-                cache["ref"] == "refs/heads/main"
-                and cache["key"].startswith(prefix)
-                and cache["key"] != key
-                and cache["created_at"] < newest
-            ):
-                subprocess.run(
-                    [*api, "--method", "DELETE", f"{base}/{cache['id']}"],
-                    check=True,
-                    timeout=30,
-                    env=environment,
-                )
-                print(f"Removed older CI cache: {cache['key']}")
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as error:
-        print(f"::warning::Cache cleanup unavailable; retaining caches: {error}")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -234,7 +188,6 @@ def main() -> None:
     transport = commands.add_parser("transport")
     transport.add_argument("cache", type=Path)
     transport.add_argument("system_path")
-    commands.add_parser("prune")
     arguments = parser.parse_args()
     if arguments.command == "export":
         export_cache(arguments.cache.resolve(), arguments.max_size)
@@ -242,14 +195,6 @@ def main() -> None:
         root_dependencies(arguments.roots.resolve())
     elif arguments.command == "transport":
         transport_cache(arguments.cache.resolve(), arguments.system_path)
-    else:
-        producers = json.loads(os.environ["CACHE_PRODUCERS"])
-        for producer in producers.values():
-            if producer["result"] != "success":
-                continue
-            outputs = producer["outputs"]
-            if outputs.get("cache_key") and outputs.get("cache_prefix"):
-                prune_cache(outputs["cache_key"], outputs["cache_prefix"])
 
 
 if __name__ == "__main__":

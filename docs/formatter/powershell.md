@@ -2,31 +2,11 @@
 
 [PSScriptAnalyzer](https://github.com/PowerShell/PSScriptAnalyzer) の `Invoke-Formatter` を使用して PowerShell ファイルをフォーマットします。
 
-## 設定ファイル
+## 静的解析
 
-[PSScriptAnalyzerSettings.psd1](../../scripts/powershell/PSScriptAnalyzerSettings.psd1)
-
-```powershell
-@{
-    # 除外するルール
-    ExcludeRules = @(
-        # dot-source で読み込む型は静的解析で認識できないため除外
-        'PSUseOutputTypeCorrectly',
-        # 外部コマンドラッパー関数では ShouldProcess は不要なため除外
-        'PSUseShouldProcessForStateChangingFunctions'
-    )
-
-    # 重大度でフィルタリング
-    Severity = @('Error', 'Warning')
-
-    # 特定のルールの設定
-    Rules = @{
-        PSAvoidUsingCmdletAliases = @{
-            allowlist = @()
-        }
-    }
-}
-```
+[PowerShell.Tests.ps1](../../scripts/powershell/tests/PowerShell.Tests.ps1) が
+解析ルールを直接指定し、runtime ソースの Error / Warning を失敗にします。
+除外ルールも同じテストが所有します。
 
 ## 文字コードと改行
 
@@ -78,6 +58,7 @@ function Get-Something {
 | --------------------------------------------- | ----------------------------------------------- |
 | `PSUseOutputTypeCorrectly`                    | dot-source で読み込む型は静的解析で認識できない |
 | `PSUseShouldProcessForStateChangingFunctions` | ラッパー関数では ShouldProcess 不要             |
+| `PSAvoidUsingWriteHost`                       | installer の進捗・診断出力に使用                |
 
 ## インストール
 
@@ -114,11 +95,8 @@ $content = Get-Content -Raw -Path "script.ps1"
 $formatted = Invoke-Formatter -ScriptDefinition $content
 [IO.File]::WriteAllText((Join-Path $PWD "script.ps1"), $formatted, [Text.UTF8Encoding]::new($true))
 
-# 静的解析（lint）
-Invoke-ScriptAnalyzer -Path "script.ps1" -Settings "PSScriptAnalyzerSettings.psd1"
-
-# 再帰的に解析
-Invoke-ScriptAnalyzer -Path "." -Recurse -Settings "PSScriptAnalyzerSettings.psd1"
+# repository の静的解析と Windows 文字コード検証
+pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/PowerShell.Tests.ps1
 ```
 
 ## treefmt 設定
@@ -155,7 +133,6 @@ nix fmt -- --fail-on-change
     "files.encoding": "utf8bom"
   },
   "powershell.scriptAnalysis.enable": true,
-  "powershell.scriptAnalysis.settingsPath": "PSScriptAnalyzerSettings.psd1",
   "powershell.codeFormatting.preset": "OTBS",
   "powershell.codeFormatting.useCorrectCasing": true,
   "powershell.codeFormatting.trimWhitespaceAroundPipe": true,

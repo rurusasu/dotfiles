@@ -61,8 +61,8 @@ Codex / Hermes の unit は公式 Home Manager 設定と共通 MCP の配線を�
 Docker MCP の unit は Linux / macOS の Home Manager package・plugin link・宣言したサーバー選択を検証します。
 `docker-mcp` check は固定した公式 Git source と同梱の依存からビルドし、空の HOME で Docker CLI からの
 plugin 検出、版の表示、gateway の起動オプションを確認します。Docker daemon や秘密情報は不要です。
-`hermes-configuration` は Home Manager の MCP 定義を client 向け JSON に変換し、
-Chrome / X API の localhost HTTP 接続先と Pipedream の OAuth 設定を確認します。
+Hermes の unit は最終的な `settings.mcp_servers` で Chrome / X API の HTTP 接続先、
+Pipedream の OAuth 設定、HTTP サーバーにローカル command がないことを確認します。
 共有する native ユーザーサービスの起動、headless browser の操作、API 認証は実機で確認します。
 
 ```bash

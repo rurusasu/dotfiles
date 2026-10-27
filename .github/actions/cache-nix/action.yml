@@ -12,14 +12,6 @@ inputs:
     description: Maximum exported cache size in bytes (Darwin uses 2 GiB).
     default: "805306368"
 
-outputs:
-  key:
-    description: Cache generation to confirm before pruning.
-    value: ${{ steps.prepare.outputs.key }}
-  prefix:
-    description: Job namespace to retain across Nix and input updates.
-    value: ${{ steps.prepare.outputs.namespace }}
-
 runs:
   using: composite
   steps:
@@ -43,20 +35,15 @@ runs:
           "$compressor/bin/zstd" --version
           echo "$compressor/bin" >> "$GITHUB_PATH"
           version="$(nix --version | sed -n '1p' | tr -cs '[:alnum:].-' '-')"
-          namespace="ci-nix-v2-$RUNNER_OS-$RUNNER_ARCH-$CACHE_NAME-"
-          prefix="$namespace$version"
+          prefix="ci-nix-v2-$RUNNER_OS-$RUNNER_ARCH-$CACHE_NAME-$version"
           {
             echo "DOTFILES_CI_BINARY_CACHE=$cache_dir"
-            echo "DOTFILES_CI_CACHE_PREFIX=$namespace"
             echo "DOTFILES_CI_CACHE_KEY=$prefix-$LOCK_HASH-$GITHUB_SHA"
           } >> "$GITHUB_ENV"
           echo "prefix=$prefix-" >> "$GITHUB_OUTPUT"
           echo "lock-prefix=$prefix-$LOCK_HASH-" >> "$GITHUB_OUTPUT"
           echo "key=$prefix-$LOCK_HASH-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
           mkdir -p "$cache_dir"
-        else
-          echo "key=$DOTFILES_CI_CACHE_KEY" >> "$GITHUB_OUTPUT"
-          echo "namespace=$DOTFILES_CI_CACHE_PREFIX" >> "$GITHUB_OUTPUT"
         fi
         echo "path=$cache_dir" >> "$GITHUB_OUTPUT"
 

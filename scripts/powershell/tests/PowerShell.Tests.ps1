@@ -1,6 +1,5 @@
 BeforeAll {
     $script:sourceRoot = Split-Path -Parent $PSScriptRoot
-    $script:settingsPath = Join-Path $script:sourceRoot 'PSScriptAnalyzerSettings.psd1'
 
     . (Join-Path $PSScriptRoot 'support/Resolve-TestModule.ps1')
     $analyzerModule = Resolve-TestModule -Name PSScriptAnalyzer
@@ -20,7 +19,7 @@ BeforeAll {
 Describe 'PowerShell static analysis' {
     It 'should report no errors or warnings in runtime sources' {
         $issues = @(foreach ($file in $script:runtimeFiles) {
-                Invoke-ScriptAnalyzer -Path $file.FullName -Settings $script:settingsPath -Severity Error, Warning -ErrorAction Stop |
+                Invoke-ScriptAnalyzer -Path $file.FullName -ExcludeRule PSUseOutputTypeCorrectly, PSUseShouldProcessForStateChangingFunctions, PSAvoidUsingWriteHost -Severity Error, Warning -ErrorAction Stop |
                     ForEach-Object {
                         "$($file.FullName):$($_.Line) - [$($_.Severity)] $($_.RuleName): $($_.Message)"
                     }

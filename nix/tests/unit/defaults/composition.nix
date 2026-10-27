@@ -95,7 +95,7 @@ in
   };
   testCommonHomeModuleEvaluatesWithoutOSSpecialArgs = {
     expr = homeConfigurations.common.config.home.username;
-    expected = homeConfigurations.testHome.username;
+    expected = "test-user";
   };
 
   testNRShellAliasUsesPlatformInstallCommand = {

@@ -217,9 +217,6 @@ jobs:
     permissions:
       contents: read
       packages: read
-    outputs:
-      cache_key: ${{ steps.save-cache.outputs.key }}
-      cache_prefix: ${{ steps.save-cache.outputs.prefix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -248,7 +245,6 @@ jobs:
             .#homeConfigurations.x86_64-linux.activationPackage
 
       - name: Save Nix cache
-        id: save-cache
         uses: ./.github/actions/cache-nix
         with:
           name: linux-build
@@ -265,9 +261,6 @@ jobs:
     env:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
-    outputs:
-      cache_key: ${{ steps.save-cache.outputs.key }}
-      cache_prefix: ${{ steps.save-cache.outputs.prefix }}
     steps:
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -349,7 +342,6 @@ jobs:
         run: sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
 
       - name: Save Nix cache
-        id: save-cache
         uses: ./.github/actions/cache-nix
         with:
           name: darwin
@@ -374,9 +366,6 @@ jobs:
     permissions:
       contents: read
       packages: read
-    outputs:
-      cache_key: ${{ steps.save-cache.outputs.key }}
-      cache_prefix: ${{ steps.save-cache.outputs.prefix }}
     steps:
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -436,7 +425,6 @@ jobs:
           compression-level: 0
 
       - name: Save Nix cache
-        id: save-cache
         uses: ./.github/actions/cache-nix
         with:
           name: wsl-prebuild
@@ -827,9 +815,6 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-    outputs:
-      cache_key: ${{ steps.save-cache.outputs.key }}
-      cache_prefix: ${{ steps.save-cache.outputs.prefix }}
     steps:
       - name: Verify change detection
         if: ${{ needs.changes.result != 'success' }}
@@ -905,34 +890,8 @@ jobs:
           done
 
       - name: Save Nix cache
-        id: save-cache
         uses: ./.github/actions/cache-nix
         with:
           name: checks
           phase: save
           max-size: "536870912"
-
-  cache-cleanup:
-    name: Bootstrap / Cache cleanup
-    needs: [linux-build, darwin, wsl-prebuild, check]
-    if: >-
-      ${{ always() && github.ref == 'refs/heads/main' && !cancelled() &&
-          (needs.linux-build.outputs.cache_key != '' || needs.darwin.outputs.cache_key != '' ||
-           needs.wsl-prebuild.outputs.cache_key != '' || needs.check.outputs.cache_key != '') }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      actions: write
-    steps:
-      - name: Checkout exact tested SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Retain confirmed main cache generations
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CACHE_PRODUCERS: ${{ toJSON(needs) }}
-        run: python3 scripts/python/prepare_ci_nix_cache.py prune
