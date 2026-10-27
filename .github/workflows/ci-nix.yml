@@ -324,7 +324,7 @@ jobs:
             | grep -Fq 'hermes-agent.cachix.org-1:'
           SCRIPT
 
-      - name: Apply macOS configuration
+      - name: Build macOS configuration
         run: |
           mkdir -p "$RUNNER_TEMP/darwin"
           cat > "$RUNNER_TEMP/darwin/flake.nix" <<EOF
@@ -337,16 +337,25 @@ jobs:
             };
           }
           EOF
-          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
+          bash scripts/sh/retry-ci-dns.sh sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
             nix --accept-flake-config \
             --extra-experimental-features 'nix-command flakes' \
-            run .#darwin-rebuild -- switch --flake "$RUNNER_TEMP/darwin#macos" --impure
+            build --out-link "$RUNNER_TEMP/darwin-system" \
+            "$RUNNER_TEMP/darwin#darwinConfigurations.macos.system" --impure
+
+      - name: Apply macOS configuration
+        run: |
+          system_path="$(cd "$RUNNER_TEMP/darwin-system" && pwd -P)"
+          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
+            nix-env -p /nix/var/nix/profiles/system --set "$system_path"
+          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
+            "$system_path/sw/bin/darwin-rebuild" activate
 
       - name: Keep private build dependencies through checks
         run: python3 scripts/python/prepare_ci_nix_cache.py root "$RUNNER_TEMP/ci-build-dependencies"
 
       - name: Run all macOS Nix checks
-        run: sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
+        run: bash scripts/sh/retry-ci-dns.sh sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
 
       - name: Save Nix cache
         id: save-cache
@@ -548,51 +557,21 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $moduleRoot = Join-Path $HOME "Documents\$env:PS_MODULE_DIRECTORY\Modules"
-          if ($env:PSModulePath -notlike "*$moduleRoot*") {
-            $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
-          }
-
-          function Invoke-WithRetry {
-            param([Parameter(Mandatory)][scriptblock]$Script, [int]$Attempts = 3)
-            for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
-              try {
-                & $Script
-                return
-              }
-              catch {
-                if ($attempt -eq $Attempts) { throw }
-                Start-Sleep -Seconds ($attempt * 5)
-              }
+          New-Item -ItemType Directory -Force -Path $moduleRoot | Out-Null
+          $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+              Save-PSResource -Name Pester,PSScriptAnalyzer -Repository PSGallery -Path $moduleRoot -TrustRepository
+              break
+            }
+            catch {
+              if ($attempt -eq 3) { throw }
+              Start-Sleep -Seconds ($attempt * 5)
             }
           }
-
-          function Install-GalleryModuleArchive {
-            param([Parameter(Mandatory)][string]$Name)
-            $version = (Find-Module -Name $Name -Repository PSGallery -ErrorAction Stop).Version.ToString()
-            $modulePath = Join-Path $moduleRoot "$Name\$version"
-            if (-not (Test-Path -LiteralPath (Join-Path $modulePath "$Name.psd1"))) {
-              $packagePath = Join-Path $env:RUNNER_TEMP "$Name.$version.zip"
-              New-Item -ItemType Directory -Force -Path $modulePath | Out-Null
-              Invoke-WithRetry {
-                Invoke-WebRequest -Uri "https://www.powershellgallery.com/api/v2/package/$Name/$version" -OutFile $packagePath -UseBasicParsing
-              }
-              Expand-Archive -LiteralPath $packagePath -DestinationPath $modulePath -Force
-            }
-            Import-Module -Name (Join-Path $modulePath "$Name.psd1") -Force
-          }
-
-          # Provision the disposable CI user before the installed-only test runner.
-          Invoke-WithRetry {
-            if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
-              Register-PSRepository -Default -ErrorAction Stop
-            }
-            if (-not (Get-PSRepository -Name PSGallery -ErrorAction Stop)) {
-              throw 'CI provisioning could not register PSGallery.'
-            }
-          }
-
-          Install-GalleryModuleArchive -Name Pester
-          Install-GalleryModuleArchive -Name PSScriptAnalyzer
+          . .\scripts\powershell\tests\support\Resolve-TestModule.ps1
+          Resolve-TestModule -Name Pester | Out-Null
+          Resolve-TestModule -Name PSScriptAnalyzer | Out-Null
 
       - name: Run PSScriptAnalyzer
         if: ${{ matrix.version == '7' }}

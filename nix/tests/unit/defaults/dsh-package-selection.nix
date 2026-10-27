@@ -1,6 +1,7 @@
 {
   inputs,
-  homeConfigurations ? import ../../fixtures/home-configurations.nix { inherit inputs; },
+  fixtures,
+  homeConfigurations,
 }:
 {
   testDshUsesNixpkgsAcrossLinuxHomes = {
@@ -17,7 +18,7 @@
           homeConfigurations.wsl
           (homeConfigurations.mkHome {
             system = "aarch64-linux";
-            module = (import ../../fixtures/packages.nix { inherit inputs; }).homeModule "linux";
+            module = fixtures.homeModule "linux";
           })
         ];
     expected = [

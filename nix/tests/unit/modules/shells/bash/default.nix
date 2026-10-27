@@ -1,7 +1,4 @@
-{
-  inputs,
-  homeConfigurations ? import ../../../../fixtures/home-configurations.nix { inherit inputs; },
-}:
+{ homeConfigurations }:
 let
   inherit (homeConfigurations) homes lib;
 in

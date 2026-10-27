@@ -12,8 +12,20 @@ let
 in
 {
   tag_name = tag;
-  assets = [
-    (asset feed.app.platforms.linux-x86_64)
-  ]
-  ++ map asset (builtins.filter (entry: entry.platform == "linux-x86_64") feed.control.packages);
+  assets =
+    map asset (
+      builtins.filter (entry: entry != null) [
+        (feed.app.platforms.linux-x86_64 or null)
+        (feed.app.platforms.darwin-aarch64 or null)
+      ]
+    )
+    ++ map asset (
+      builtins.filter (
+        entry:
+        builtins.elem entry.platform [
+          "linux-x86_64"
+          "macos-arm64"
+        ]
+      ) feed.control.packages
+    );
 }

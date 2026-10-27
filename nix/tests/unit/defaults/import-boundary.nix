@@ -1,5 +1,6 @@
+{ code, files }:
 let
-  defaults = import ../../../defaults.nix { };
+  defaults = code.nix.defaults { };
   nixFiles =
     directory:
     builtins.filter (name: builtins.match ".*[.]nix" name != null) (
@@ -9,9 +10,9 @@ in
 {
   testHostAndHomeDefinitionsAreConsolidated = {
     expr = {
-      defaultsPresent = builtins.pathExists ../../../defaults.nix;
-      hostFiles = nixFiles ../../../hosts;
-      homeFiles = nixFiles ../../../home;
+      defaultsPresent = files.nix ? defaults;
+      hostFiles = nixFiles files.nix.hosts.__path;
+      homeFiles = nixFiles files.nix.home.__path;
     };
     expected = {
       defaultsPresent = true;

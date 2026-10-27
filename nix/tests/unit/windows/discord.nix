@@ -1,9 +1,7 @@
-{ inputs }:
+{ fixtures }:
 {
   testDiscordPreservesWindowsDistribution = {
-    expr =
-      (import ../../fixtures/packages.nix { inherit inputs; })
-      .windowsPackages."Discord.Discord".verifyCommand;
+    expr = fixtures.windowsPackages."Discord.Discord".verifyCommand;
     expected = {
       command = "Discord";
       type = "windowsInstalledProduct";

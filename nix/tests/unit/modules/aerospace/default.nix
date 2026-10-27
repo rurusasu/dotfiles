@@ -1,7 +1,7 @@
-{ inputs }:
+{ fixtures }:
 let
-  home = (import ../../../fixtures/packages.nix { inherit inputs; }).mkHome "aarch64-darwin" [
-    ../../../../modules/aerospace/default.nix
+  home = fixtures.mkHome "aarch64-darwin" [
+    { programs.aerospace.enable = true; }
   ];
   inherit (home) config pkgs;
   inherit (pkgs) lib;
@@ -19,11 +19,13 @@ in
       in
       {
         activation = disabled.config.home.activation.omarchySymbolicHotkeys.data or "";
+        legacyActivation = disabled.config.home.activation.retireNixDarwinAerospace.data or "";
         dockOrder = disabled.config.targets.darwin.defaults."com.apple.dock".mru-spaces or null;
         dockGrouping = disabled.config.targets.darwin.defaults."com.apple.dock".expose-group-apps;
       };
     expected = {
       activation = "";
+      legacyActivation = "";
       dockOrder = null;
       dockGrouping = null;
     };
@@ -141,9 +143,7 @@ in
       map
         (
           system:
-          let
-            fixtures = import ../../../fixtures/packages.nix { inherit inputs; };
-          in
+
           {
             linuxPackage =
               builtins.any (package: (package.pname or "") == "aerospace")
@@ -151,8 +151,7 @@ in
                   (fixtures.homeModule "linux")
                 ]).config.home.packages;
             windowsPackage = fixtures.windowsPackages ? "aerospace";
-          }
-        )
+          })
         [
           "aarch64-linux"
           "x86_64-linux"

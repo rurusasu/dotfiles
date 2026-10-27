@@ -1,18 +1,9 @@
-{
-  inputs,
-  homeConfigurations ? import ../../../../fixtures/home-configurations.nix { inherit inputs; },
-}:
+{ homeConfigurations }:
 let
   inherit (homeConfigurations)
     homes
     lib
     ;
-  configuredIntegration =
-    (import ../../../../../modules/shells/plugins/ripgrep.nix {
-      lib = lib // {
-        mkBefore = value: value;
-      };
-    }).programs.zsh.initContent;
 in
 {
   testRipgrepSettingsAcrossHomes = {
@@ -31,8 +22,6 @@ in
   };
 
   testRipgrepFzfIntegrationIsGeneratedAcrossHomes = {
-    # The canonical block covers its guard, function, both reload bindings,
-    # bat preview, and editor invocation without copying those shell commands.
     expr = map (
       home:
       let
@@ -40,16 +29,21 @@ in
           home.config.home.file."${lib.removePrefix "${home.config.home.homeDirectory}/" home.config.programs.zsh.dotDir}/.zshrc".text;
       in
       {
-        configuredIntegration =
-          lib.trim configuredIntegration != "" && lib.hasInfix (lib.trim configuredIntegration) zshrc;
         guarded = lib.hasInfix "if command -v rg >/dev/null 2>&1 && command -v fzf >/dev/null 2>&1; then" zshrc;
         functionDefined = lib.hasInfix "rfg() {" zshrc;
+        reloadStart = lib.hasInfix "start:reload:rg --line-number --no-heading --color=always -- {q} || true" zshrc;
+        reloadChange = lib.hasInfix "change:reload:rg --line-number --no-heading --color=always -- {q} || true" zshrc;
+        preview = lib.hasInfix "--preview 'bat --color=always --highlight-line {2} -- {1}'" zshrc;
+        editorInvocation = lib.hasInfix ''''${EDITOR:-vi} "+$line" "$file"'' zshrc;
       }
     ) homes;
     expected = map (_: {
-      configuredIntegration = true;
       guarded = true;
       functionDefined = true;
+      reloadStart = true;
+      reloadChange = true;
+      preview = true;
+      editorInvocation = true;
     }) homes;
   };
 }

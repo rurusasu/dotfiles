@@ -1,4 +1,8 @@
-{ inputs }:
+{
+  inputs,
+  fixtures,
+  code,
+}:
 {
   testCustomDarwinPackagesPreserveVendorBundleDerivationAttributes = {
     expr =
@@ -9,12 +13,9 @@
           platforms = package.meta.platforms;
         })
         {
-          dia-browser = import ../../../../../modules/browsers/dia {
+          dia-browser = code.nix.modules.browsers.dia.package {
             inherit inputs;
-            pkgs = import inputs.nixpkgs {
-              system = "aarch64-darwin";
-              config.allowUnfree = true;
-            };
+            pkgs = fixtures.mkPkgs "aarch64-darwin";
           };
         };
     expected = {

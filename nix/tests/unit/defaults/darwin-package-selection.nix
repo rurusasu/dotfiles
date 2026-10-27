@@ -1,6 +1,9 @@
-{ inputs }:
+{
+  inputs,
+  fixtures,
+  code,
+}:
 let
-  fixtures = import ../../fixtures/packages.nix { inherit inputs; };
   pkgs = fixtures.mkPkgs "aarch64-darwin";
   cfg = fixtures.darwin.config;
   homePackages = cfg.home-manager.users.test-user.home.packages;
@@ -8,7 +11,9 @@ let
 in
 {
   testDarwinDiaUsesItsCustomHomeDerivation = {
-    expr = contains (import ../../../modules/browsers/dia { inherit inputs pkgs; }) homePackages;
+    expr = contains (code.nix.modules.browsers.dia.package {
+      inherit inputs pkgs;
+    }) homePackages;
     expected = true;
   };
   testRaycastDerivationIsSelectedForDarwinHome = {

@@ -1,7 +1,5 @@
-{ inputs }:
-let
-  fixtures = import ../../../../fixtures/packages.nix { inherit inputs; };
-in
+{ fixtures }:
+
 {
   testDevcontainerUsesTheSharedUnixHomeManagerModule = {
     expr =
@@ -11,7 +9,7 @@ in
           builtins.elem (fixtures.mkPkgs system).devcontainer
             (fixtures.mkHome system [
               (fixtures.homeModule "common")
-              ../../../../../modules/editors/nvim
+              { programs.neovim.enable = true; }
             ]).config.home.packages
         )
         [

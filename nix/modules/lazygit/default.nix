@@ -1,7 +1,8 @@
-_: {
-  programs.lazygit = {
-    enable = true;
-    enableBashIntegration = true;
-    enableZshIntegration = true;
+{ config, lib, ... }: {
+  config = lib.mkIf config.programs.lazygit.enable {
+    programs.lazygit = {
+      enableBashIntegration = true;
+      enableZshIntegration = true;
+    };
   };
 }

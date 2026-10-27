@@ -1,6 +1,6 @@
-{ inputs }:
+{ fixtures }:
 let
-  windows = (import ../../fixtures/packages.nix { inherit inputs; }).windowsPackages;
+  windows = fixtures.windowsPackages;
 in
 {
   testWeztermStablePackageDoesNotRequireInstallerHashOverride = {
