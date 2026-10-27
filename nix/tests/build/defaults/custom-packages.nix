@@ -25,7 +25,7 @@ buildPkgs.linkFarm "custom-package-builds" (
   ++ buildPkgs.lib.optionals buildPkgs.stdenv.hostPlatform.isDarwin [
     {
       name = "dia-browser";
-      path = import ../../../modules/browsers/dia {
+      path = import ../../../modules/browsers/dia/package.nix {
         inherit inputs;
         pkgs = buildPkgs;
       };

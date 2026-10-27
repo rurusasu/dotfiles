@@ -9,7 +9,7 @@
           platforms = package.meta.platforms;
         })
         {
-          dia-browser = import ../../../../../modules/browsers/dia {
+          dia-browser = import ../../../../../modules/browsers/dia/package.nix {
             inherit inputs;
             pkgs = import inputs.nixpkgs {
               system = "aarch64-darwin";

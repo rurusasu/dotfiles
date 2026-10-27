@@ -1,6 +1,5 @@
 {
   config,
-  inputs,
   pkgs,
   ...
 }:
@@ -13,7 +12,7 @@
     show-recents = false;
     persistent-apps = [
       "${config.programs.chatgpt.package}/Applications/ChatGPT.app"
-      "${import ./browsers/dia { inherit inputs pkgs; }}/Applications/Dia.app"
+      "${config.programs.dia.package}/Applications/Dia.app"
       "${config.programs.ghostty.package}/Applications/Ghostty.app"
       "${pkgs.obsidian}/Applications/Obsidian.app"
     ];

@@ -153,12 +153,12 @@ let
                   {
                     programs.pi-coding-agent.enable = true;
                     programs.chatgpt.enable = true;
+                    programs.dia.enable = true;
                     home = {
                       packages = with pkgs; [
                         coreutils
                         tart
                         raycast
-                        (import ./modules/browsers/dia { inherit inputs pkgs; })
                       ];
                       sessionVariables = {
                         HOMEBREW_AUTO_UPDATE_SECS = "86400";
@@ -190,17 +190,16 @@ let
                   ./modules/desktop.nix
                 ];
                 linux = [
-                  (import ./modules/browsers/chrome).homeManager
                   ./modules/discord
                   {
                     home.packages = [ pkgs.nautilus ];
                     programs.chatgpt.enable = true;
+                    programs.chromium.enable = true;
                     programs.strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
                     programs.git.signing.signer = "/opt/1Password/op-ssh-sign";
                   }
                 ];
                 wsl = [
-                  (import ./modules/browsers/chrome).wsl
                   ./modules/superfile
                   ./modules/fcitx5.nix
                   ./modules/gnome-keyring
@@ -221,6 +220,10 @@ let
                       programs = {
                         pi-coding-agent.enable = true;
                         strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
+                        chromium = {
+                          enable = true;
+                          wslIntegration.enable = true;
+                        };
                         git = {
                           signing.signer = "${config.home.homeDirectory}/.local/bin/op-ssh-sign-wsl";
                           settings.ghq.root = [ "/mnt/d" ];
@@ -538,7 +541,7 @@ in
             home-manager.program = lib.getExe inputs.home-manager.packages.${system}.home-manager;
           };
       packages = lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
-        darwin-dia-browser = import ./modules/browsers/dia {
+        darwin-dia-browser = import ./modules/browsers/dia/package.nix {
           inherit inputs;
           pkgs = import pkgs.path {
             inherit system;

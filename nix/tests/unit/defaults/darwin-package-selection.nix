@@ -8,7 +8,9 @@ let
 in
 {
   testDarwinDiaUsesItsCustomHomeDerivation = {
-    expr = contains (import ../../../modules/browsers/dia { inherit inputs pkgs; }) homePackages;
+    expr = contains (import ../../../modules/browsers/dia/package.nix {
+      inherit inputs pkgs;
+    }) homePackages;
     expected = true;
   };
   testRaycastDerivationIsSelectedForDarwinHome = {

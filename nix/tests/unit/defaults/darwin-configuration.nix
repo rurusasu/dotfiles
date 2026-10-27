@@ -68,12 +68,7 @@ in
           })
           [
             "${defaultHome.programs.chatgpt.package}/Applications/ChatGPT.app"
-            "${
-              import ../../../modules/browsers/dia {
-                inherit inputs;
-                inherit (defaultSystem) pkgs;
-              }
-            }/Applications/Dia.app"
+            "${defaultHome.programs.dia.package}/Applications/Dia.app"
             "${defaultHome.programs.ghostty.package}/Applications/Ghostty.app"
             "${defaultSystem.pkgs.obsidian}/Applications/Obsidian.app"
           ];
