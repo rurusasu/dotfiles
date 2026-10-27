@@ -103,9 +103,9 @@ rec {
         # Preserve application settings and project trust in a writable user file.
         mutableSettings = true;
         settings = {
-          model = "gpt-6.1-sol";
-          model_reasoning_effort = "high";
-          plan_mode_reasoning_effort = "high";
+          model = "gpt-6.1-terra";
+          model_reasoning_effort = "ultra";
+          plan_mode_reasoning_effort = "ultra";
           model_reasoning_summary = "auto";
           model_verbosity = "low";
           approval_policy = "never";

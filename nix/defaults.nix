@@ -116,7 +116,6 @@ let
                     ])
                     [
                       opencode
-                      pi-coding-agent
                       tuios
                     ]
                 ++ lib.optionals (!config.submoduleSupport.enable) [ config.nix.package ];
@@ -145,6 +144,7 @@ let
               {
                 darwin = [
                   (import ./modules/ai_agents/chatgpt).desktop
+                  ./modules/ai_agents/pi
                   {
                     home = {
                       packages = with pkgs; [
@@ -194,6 +194,7 @@ let
                 wsl = [
                   (import ./modules/browsers/chrome).wsl
                   (import ./modules/ai_agents/chatgpt).cli
+                  ./modules/ai_agents/pi
                   ./modules/superfile
                   ./home/keybindings/windows-export.nix
                   ./modules/fcitx5.nix
