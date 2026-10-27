@@ -6,7 +6,7 @@ Unix のアプリ本体は、共通の `nixpkgs` から取得することを原�
 
 設定・package override・生成・連携を持つアプリは、導入と専用の実行依存も同じ module にまとめます。enable・単純な package list・単一代入だけなら module を作らず、`nix/defaults.nix` の必要な構成へ直接書きます。Home Manager 標準の package 既定値を優先します。
 
-共通・OS 別構成はアプリ module の外で組み立てます。現在は `nix/defaults.nix:systemDefaults` が Home Manager と OS module の imports を明示し、統合・standalone Home Manager は同じ `home-manager.sharedModules` を使います。
+共通・OS 別構成はアプリ module の外で組み立てます。新しい Home Manager module は `nix/modules/` 配下の `home-manager.nix` を再帰的に自動検出し、構成側には `programs.<name>.enable` などの option を書きます。アプリごとのパス登録や公開一覧の更新は不要です。統合・standalone Home Manager は同じ `home-manager.sharedModules` を使います。既存の明示的な imports と OS module の配線も同じ `nix/defaults.nix:systemDefaults` が管理します。
 
 Hermes は同梱 Python を使い、プロジェクト依存は `uv` で管理します。`nix/defaults.nix` が uv を導入し、Python interpreter は直接 `home.packages` に追加しません。X API 同期の公開コマンドは `uv run --no-project --managed-python` を使い、Python の選択は共通の [.python-version](../../.python-version) に従います。Nix 内部専用の Python 依存は各 module が管理します。
 
@@ -88,7 +88,7 @@ enable・package list・単一代入だけなら `nix/defaults.nix` の必要な
 home.packages = [ pkgs.gh ];
 ```
 
-アプリ module を追加した場合は、共通・OS 別構成の明示的な imports に登録します。通常の GUI も Home Manager に導入し、OS 固有の設定・サービス・連携と Homebrew・cask は `nix/defaults.nix` に定義します。Windows の導入は `windows/winget/packages.json` に記述します。
+新しい Home Manager のアプリ module は `nix/modules/<app>/home-manager.nix` として置き、設定を `lib.mkIf config.programs.<name>.enable` などで条件付けます。`defaults.nix` の共通・OS 別設定では標準の `programs.<name>.enable` などで選択します。自動検出は通常ファイルの `home-manager.nix` だけを対象とし、package factory や OS module など、他の Nix ファイルは読み込みません。Pi はこの方式で macOS / WSL に有効化します。通常の GUI も Home Manager に導入し、OS 固有の設定・サービス・連携と Homebrew・cask は `nix/defaults.nix` に定義します。Windows の導入は `windows/winget/packages.json` に記述します。
 
 ## OS ごとの反映
 

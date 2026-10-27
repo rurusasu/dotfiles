@@ -35,10 +35,10 @@
 
 - enable・単純な package list・単一代入だけの module は作らず、必要な構成へ直接書く。
 
-- OS 固有の設定と module 選択は `nix/defaults.nix`、共通のアプリ設定・生成・連携は各 module に置く。OS 別ファイルは作らない。純粋なアプリ用レンダラーは維持する。
+- OS 固有の設定と有効化は `nix/defaults.nix`、共通のアプリ設定・生成・連携は各 module に置く。新しい Home Manager module の入口は `home-manager.nix` にする。この名前のファイルは自動検出されるため、import パスの登録は不要。設定は `programs.<name>.enable` などに従わせ、読み込みだけでは有効化しない。OS 別ファイルは作らない。純粋なアプリ用レンダラーは維持する。
 - ユーザー環境の Python は Hermes 同梱の interpreter を使う。`nix/defaults.nix` で導入する uv はプロジェクト依存を管理し、Python interpreter を別途導入しない。Nix 内部専用の Python 依存はその module に置く。
 - GitHub CLI の home / Darwin system package は `nix/defaults.nix` に宣言する。既存の `~/.config/gh/config.yml` はユーザーが管理する。
-- 通常の CLI・GUI とユーザー設定は Home Manager、OS 固有の設定・権限・システムサービス・連携は `nix/defaults.nix` の各 OS ブロックが管理する。アプリ導入の集約 module は作らず、共通・OS 別構成はこのディレクトリの外で明示的な imports により組み立てる。OS service・フォント・ビルド用依存はそれぞれの所有先に置く。
+- 通常の CLI・GUI とユーザー設定は Home Manager、OS 固有の設定・権限・システムサービス・連携は `nix/defaults.nix` の各 OS ブロックが管理する。アプリ導入の集約 module は作らず、自動検出された module は構成側の option で有効化する。既存の明示的な imports は併用できる。OS service・フォント・ビルド用依存はそれぞれの所有先に置く。
 - 設定・サービスから絶対 store path で呼び出す専用の実行依存は、その module が管理する。zsh-patina の activate 連携もこの範囲に含む。
 - ここでは複数ホストで再利用できる単位に分割する。
 - Windows の WinGet 導入情報は `windows/winget/packages.json` に直接定義し、Unix module に Windows install metadata を置かない。

@@ -1,6 +1,6 @@
+{ config, lib, ... }:
 {
-  programs.pi-coding-agent = {
-    enable = true;
+  programs.pi-coding-agent = lib.mkIf config.programs.pi-coding-agent.enable {
     mutableSettings = true;
     settings = {
       defaultProvider = "openai-codex";

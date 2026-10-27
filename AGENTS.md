@@ -13,7 +13,7 @@
 - 設定・package override・生成・連携を持つアプリは module にまとめる。Neovim の LSP・整形ツール・toolchain・プラグイン実行依存は Neovim module が所有する。
 - enable・単純な package list・単一代入だけの module は作らず、`nix/defaults.nix` の必要な構成へ直接書く。
 - Hermes は同梱 Python を使う。Python interpreter を別途導入したり、直接 `home.packages` に追加したりしない。プロジェクト依存は uv で管理する。Nix 内部専用の Python 依存は各 module が管理する。
-- 共通・OS 別の module 選択はアプリ module の外で組み立てる。現在の配線は `nix/defaults.nix:systemDefaults` が管理し、Home Manager の共通・OS 別 imports を明示する。Windows のインストール情報は Nix module と分離する。詳細は [パッケージ管理](docs/nix/package-management.md#分割の理由と編集先)。
+- Home Manager の新しいアプリ module は `nix/modules/` 配下の `home-manager.nix` として置き、自動検出させる。アプリごとの import パス登録や公開一覧は追加しない。有効化は `nix/defaults.nix:systemDefaults` の `programs.<name>.enable` などの option で指定し、設定は enable に従わせる。既存の明示的な imports と Windows の独立したインストール情報は維持する。詳細は [パッケージ管理](docs/nix/package-management.md#分割の理由と編集先)。
 - Homebrew / nix-homebrew・cask・ユーザー PATH は `nix/defaults.nix` にまとめる。通常の CLI・GUI とユーザー設定は Home Manager が管理し、OS 固有の設定・権限・システムサービス・連携は `defaults.nix` の各 OS ブロックに置く。
 - OS / Home Manager 設定は `nix/defaults.nix:systemDefaults` にまとめ、末尾の構成登録で `specialArgs.platform` と CPU の `system` を選択する。
 - 共通の OS / Home Manager 設定は `nix/defaults.nix:systemDefaults` にまとめ、Home Manager 共通設定は同 module の `home-manager.sharedModules` に置く。OS 別ユーザー設定も同じ `sharedModules` 内で選択し、standalone と共有する。

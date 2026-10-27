@@ -1,6 +1,8 @@
 # Consolidated host definitions, Home Manager defaults, and configuration registration.
 inputs:
 let
+  discoverModules = import ./discover-modules.nix;
+
   systemDefaults =
     {
       inputs,
@@ -81,7 +83,8 @@ let
                   (import ./modules/ai_agents/strata).homeManager { inherit pkgs inputs; }
                 )
               )
-            ];
+            ]
+            ++ discoverModules "home-manager" ./modules;
 
             home = {
               stateVersion = lib.mkDefault defaults.stateVersion;
@@ -144,8 +147,8 @@ let
               {
                 darwin = [
                   (import ./modules/ai_agents/chatgpt).desktop
-                  ./modules/ai_agents/pi
                   {
+                    programs.pi-coding-agent.enable = true;
                     home = {
                       packages = with pkgs; [
                         coreutils
@@ -194,7 +197,6 @@ let
                 wsl = [
                   (import ./modules/browsers/chrome).wsl
                   (import ./modules/ai_agents/chatgpt).cli
-                  ./modules/ai_agents/pi
                   ./modules/superfile
                   ./home/keybindings/windows-export.nix
                   ./modules/fcitx5.nix
@@ -214,6 +216,7 @@ let
                         gwq.settings.worktree.basedir = "/mnt/d/worktrees";
                       };
                       programs = {
+                        pi-coding-agent.enable = true;
                         git = {
                           signing.signer = "${config.home.homeDirectory}/.local/bin/op-ssh-sign-wsl";
                           settings.ghq.root = [ "/mnt/d" ];

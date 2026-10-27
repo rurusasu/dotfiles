@@ -103,12 +103,14 @@ in
 
       nix-unit.tests =
         (import ./unit/defaults/import-boundary.nix)
+        // (import ./unit/defaults/module-discovery.nix)
         // (import ./unit/defaults/platform-boundary.nix)
         // (import ./unit/defaults/composition.nix { inherit inputs homeConfigurations; })
         // (import ./unit/modules/shells/bash/default.nix { inherit inputs homeConfigurations; })
         // (import ./unit/modules/shells/plugins/bat.nix { inherit inputs homeConfigurations; })
         // (import ./unit/modules/browsers/chrome/default.nix { inherit inputs homeConfigurations; })
         // (import ./unit/modules/ai_agents/chatgpt/home.nix { inherit inputs homeConfigurations; })
+        // (import ./unit/modules/ai_agents/pi/default.nix { inherit inputs homeConfigurations; })
         // (import ./unit/modules/shells/plugins/eza.nix { inherit inputs homeConfigurations; })
         // (import ./unit/modules/shells/plugins/fd.nix { inherit inputs homeConfigurations; })
         // (import ./unit/modules/shells/plugins/fzf.nix { inherit inputs homeConfigurations; })
