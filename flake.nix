@@ -41,10 +41,8 @@
     # Use the upstream package set unchanged so its binary cache can be used.
     llm-agents.url = "github:numtide/llm-agents.nix";
     mcp-servers.url = "github:natsukium/mcp-servers-nix";
-    docker-mcp-release = {
-      type = "file";
-      # Upstream currently publishes prereleases only; /releases/latest returns 404.
-      url = "https://api.github.com/repos/docker/mcp-gateway/releases?per_page=1";
+    docker-mcp = {
+      url = "github:docker/mcp-gateway";
       flake = false;
     };
     # Strata is not in nixpkgs. Pin a versioned feed, without mutable API counters.
@@ -76,12 +74,6 @@
     };
     hermes-lcm = {
       url = "github:stephenschoettler/hermes-lcm";
-      flake = false;
-    };
-    psscriptanalyzer = {
-      type = "file";
-      # Lock upstream release metadata, including the package URL and SHA-256.
-      url = "https://api.github.com/repos/PowerShell/PSScriptAnalyzer/releases/latest";
       flake = false;
     };
     hermes-agent = {

@@ -85,11 +85,9 @@ function Get-Something {
 
 この repository の `nix fmt` / `checks.<system>.treefmt` は、PowerShell と
 PSScriptAnalyzer を宣言済みの依存として使用します。
-[`nix/modules/shells/powershell/psscriptanalyzer.nix`](../../nix/modules/shells/powershell/psscriptanalyzer.nix) が
-GitHub の最新 release metadata を Nix input として使い、asset の URL と SHA-256 から
-配布物を取得します。formatter は store の manifest を直接 import します。
-input URL は `flake.nix` に宣言し、metadata は `flake.lock` で固定します。
-更新時は `nix flake update psscriptanalyzer` で input を再解決し、lock を更新します。
+nixpkgs の `vscode-extensions.ms-vscode.powershell` に同梱された module を直接 import します。
+VS Code 本体は導入せず、拡張機能の module ディレクトリから PowerShell が版を解決します。
+更新は `nrs` による nixpkgs input の更新に従い、配布物は `flake.lock` で固定されます。
 HOME の module cache に依存せず、整形中のダウンロードはありません。
 
 Windows テストは、インストール済みの互換性がある stable module を選択します。

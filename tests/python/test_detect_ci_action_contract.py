@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -18,9 +19,7 @@ UNIX = {"nix", "linux", "darwin", "wsl"}
 
 class DetectCiActionContractTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.action = (
-            ACTION_PATH.read_text(encoding="utf-8") if ACTION_PATH.is_file() else ""
-        )
+        self.action = ACTION_PATH.read_text(encoding="utf-8")
 
     def test_non_all_mode_classifies_git_paths_and_rejects_invalid_revisions(
         self,
@@ -28,14 +27,7 @@ class DetectCiActionContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             repository = self._make_test_repository(Path(temporary_directory))
             base_sha = self._git(repository, "rev-parse", "HEAD")
-            (repository / "nix").mkdir()
-            (repository / "nix" / "example.nix").write_text(
-                "#!/bin/sh\n",
-                encoding="utf-8",
-            )
-            self._git(repository, "add", ".")
-            self._git(repository, "commit", "-m", "add linux installer")
-            head_sha = self._git(repository, "rev-parse", "HEAD")
+            head_sha = self._commit_nix_config(repository)
 
             for base in (base_sha, "0" * 40):
                 with self.subTest(base=base):
@@ -156,83 +148,34 @@ class DetectCiActionContractTests(unittest.TestCase):
             )
             self.assertFalse((runner_temp / "ci-changed-paths").exists())
 
-    def test_deleted_linux_path_keeps_linux_enabled(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            repository = self._make_test_repository(Path(temporary_directory))
-            base_sha = self._commit_nix_config(repository)
-            (repository / "nix" / "example.nix").unlink()
-            self._git(repository, "add", "-A")
-            self._git(repository, "commit", "-m", "delete linux installer")
-            head_sha = self._git(repository, "rev-parse", "HEAD")
-
-            completed, output_path, runner_temp = self._run_action_script(
-                repository,
-                base_sha=base_sha,
-                head_sha=head_sha,
-                run_all=False,
-            )
-
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            self.assertTrue(self._read_outputs(output_path)["nix"])
-            self.assertEqual(
-                (runner_temp / "ci-changed-paths").read_text(encoding="utf-8"),
-                "nix/example.nix\0",
-            )
-
-    def test_renaming_linux_path_out_keeps_its_old_path_and_linux_enabled(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            repository = self._make_test_repository(Path(temporary_directory))
-            base_sha = self._commit_nix_config(repository)
-            self._git(
-                repository,
-                "mv",
-                "nix/example.nix",
-                "renamed-installer.sh",
-            )
-            self._git(repository, "commit", "-m", "rename linux installer")
-            head_sha = self._git(repository, "rev-parse", "HEAD")
-
-            completed, output_path, runner_temp = self._run_action_script(
-                repository,
-                base_sha=base_sha,
-                head_sha=head_sha,
-                run_all=False,
-            )
-
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            self.assertTrue(self._read_outputs(output_path)["nix"])
-            self.assertEqual(
-                set(
-                    (runner_temp / "ci-changed-paths")
-                    .read_text(encoding="utf-8")
-                    .split("\0")[:-1]
-                ),
-                {"renamed-installer.sh", "nix/example.nix"},
-            )
-
-    def test_type_change_keeps_linux_enabled(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            repository = self._make_test_repository(Path(temporary_directory))
-            base_sha = self._commit_nix_config(repository)
-            (repository / "nix" / "example.nix").unlink()
-            (repository / "nix" / "example.nix").symlink_to("../target")
-            self._git(repository, "add", "-A")
-            self._git(repository, "commit", "-m", "change linux installer type")
-            head_sha = self._git(repository, "rev-parse", "HEAD")
-
-            completed, output_path, runner_temp = self._run_action_script(
-                repository,
-                base_sha=base_sha,
-                head_sha=head_sha,
-                run_all=False,
-            )
-
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            self.assertTrue(self._read_outputs(output_path)["nix"])
-            self.assertEqual(
-                (runner_temp / "ci-changed-paths").read_text(encoding="utf-8"),
-                "nix/example.nix\0",
-            )
+    def test_deleted_renamed_and_type_changed_paths_keep_their_category(self) -> None:
+        for change in ("delete", "rename", "type"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
+                repository = self._make_test_repository(Path(temporary))
+                base_sha = self._commit_nix_config(repository)
+                path = repository / "nix/example.nix"
+                if change == "rename":
+                    self._git(repository, "mv", "nix/example.nix", "renamed-installer.sh")
+                else:
+                    path.unlink()
+                    if change == "type":
+                        path.symlink_to("../target")
+                self._git(repository, "add", "-A")
+                self._git(repository, "commit", "-m", change)
+                completed, output_path, runner_temp = self._run_action_script(
+                    repository,
+                    base_sha=base_sha,
+                    head_sha=self._git(repository, "rev-parse", "HEAD"),
+                    run_all=False,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertTrue(self._read_outputs(output_path)["nix"])
+                paths = {"nix/example.nix"}
+                if change == "rename":
+                    paths.add("renamed-installer.sh")
+                self.assertEqual(
+                    sorted((runner_temp / "ci-changed-paths").read_text().split("\0")[:-1]), sorted(paths)
+                )
 
     def test_pull_request_ignores_changes_only_on_the_base_branch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -259,16 +202,7 @@ class DetectCiActionContractTests(unittest.TestCase):
             self.assertFalse(self._read_outputs(output_path)["chezmoi"])
 
     def _run_script(self) -> str:
-        lines = self.action.splitlines()
-        marker = "      run: |"
-        self.assertIn(marker, lines)
-        start = lines.index(marker) + 1
-        script_lines: list[str] = []
-        for line in lines[start:]:
-            if line and not line.startswith("        "):
-                break
-            script_lines.append(line[8:] if line else "")
-        return "\n".join(script_lines) + "\n"
+        return textwrap.dedent(self.action.split("      run: |\n", 1)[1])
 
     def _make_test_repository(self, temporary_directory: Path) -> Path:
         repository = temporary_directory / "repository"

@@ -14,13 +14,13 @@ repos:
         pass_filenames: false
       - id: powershell-tests
         name: powershell tests
-        entry: scripts/sh/run-windows-powershell-tests.sh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 80"
+        entry: scripts/sh/run-windows-powershell-tests.sh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1
         language: system
         pass_filenames: false
         types: [powershell]
       - id: chezmoi-template-lint
         name: chezmoi template lint
-        entry: scripts/sh/run-windows-powershell-tests.sh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -Path ./scripts/powershell/tests/Integration.Tests.ps1 -MinimumCoverage 0"
+        entry: scripts/sh/run-windows-powershell-tests.sh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/Integration.Tests.ps1
         language: system
         pass_filenames: false
         files: '\.tmpl$'

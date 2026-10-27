@@ -8,7 +8,7 @@ Unix のアプリ本体は、共通の `nixpkgs` から取得することを原�
 
 共通・OS 別構成はアプリ module の外で組み立てます。現在は `nix/defaults.nix:systemDefaults` が Home Manager と OS module の imports を明示し、統合・standalone Home Manager は同じ `home-manager.sharedModules` を使います。
 
-Hermes は同梱 Python を使い、プロジェクト依存は `uv` で管理します。`nix/defaults.nix` が uv を導入し、Python interpreter は直接 `home.packages` に追加しません。X API 同期の公開コマンドは `uv run --no-project --managed-python` を使い、Python の選択は共通の [.python-version](../../.python-version) に従います。Nix 内部専用の Python 依存は各 module が管理します。
+Hermes は同梱 Python を使い、プロジェクト依存は `uv` で管理します。`nix/defaults.nix` が uv を導入し、Python interpreter は直接 `home.packages` に追加しません。X API 同期の公開コマンドは `uv run --no-project --managed-python` を使い、Python の選択も uv に任せます。Nix 内部専用の Python 依存は各 module が管理します。
 
 通常の CLI・GUI とユーザー設定は Home Manager が管理します。macOS の Obsidian / Raycast / Dia / 1Password もこの範囲です。OS 固有の設定・権限・システムサービス・連携は `nix/defaults.nix` の各 OS ブロックに置きます。専用の実行依存は、そのアプリやサービスの module が管理します。Neovim の補助 CLI・LSP・整形ツール・toolchain・プラグイン実行依存は `nix/modules/editors/nvim/` が所有します。
 
@@ -29,23 +29,23 @@ WSL の Noto CJK の追加導入・フォールバック指定は行いません
 
 固定中の nixpkgs に同じアプリがないものは、現在の取得元を使います。nixpkgs へ収録された場合は標準パッケージへ切り替えます。
 
-| アプリ                                   | 取得元と理由                                                                                                                                                        |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| dsh（macOS）                             | `llm-agents` の package。`pkgs.deepseek-harness` は Linux のみ対応するため。Linux では `pkgs.deepseek-harness` を使う。                                             |
-| Orca IDE                                 | `llm-agents` の package。`pkgs.orca` は GNOME のスクリーンリーダーで、別のアプリ。                                                                                  |
-| Hermes Agent / Desktop                   | 公式 `hermes-agent` flake の package と Home Manager module。対応する nixpkgs package がないため。                                                                  |
-| Strata Desktop / Control（Linux x86_64） | 公式 `Niko1221/Strata` の AppImage と Control archive。同じアプリが nixpkgs にないため。`strata-release` input の release metadata と asset の SHA-256 を固定する。 |
-| Dia ブラウザー                           | `dia` input の公式 DMG。`pkgs.dia` は図表エディターで、別のアプリ。                                                                                                 |
-| Chrome DevTools MCP                      | `mcp-servers` flake の package。対応する nixpkgs package がないため。                                                                                               |
-| Docker MCP Gateway                       | Docker 公式 release のプラグイン。対応する nixpkgs package がなく、`pkgs.mcp-gateway` は別製品のため。release metadata と asset の SHA-256 を input で固定する。    |
-| xurl                                     | `xurl` input の upstream source を `buildGoModule` で構築。対応する nixpkgs package がないため。                                                                    |
-| Docker Desktop / Steam（macOS）          | Homebrew cask。対象 OS 用の同じ GUI アプリを nixpkgs から導入できないため。                                                                                         |
+| アプリ                                   | 取得元と理由                                                                                                                                                             |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| dsh（macOS）                             | `llm-agents` の package。`pkgs.deepseek-harness` は Linux のみ対応するため。Linux では `pkgs.deepseek-harness` を使う。                                                  |
+| Orca IDE                                 | `llm-agents` の package。`pkgs.orca` は GNOME のスクリーンリーダーで、別のアプリ。                                                                                       |
+| Hermes Agent / Desktop                   | 公式 `hermes-agent` flake の package と Home Manager module。対応する nixpkgs package がないため。                                                                       |
+| Strata Desktop / Control（Linux x86_64） | 公式 `Niko1221/Strata` の AppImage と Control archive。同じアプリが nixpkgs にないため。`strata-release` input の release metadata と asset の SHA-256 を固定する。      |
+| Dia ブラウザー                           | `dia` input の公式 DMG。`pkgs.dia` は図表エディターで、別のアプリ。                                                                                                      |
+| Chrome DevTools MCP                      | `mcp-servers` flake の package。対応する nixpkgs package がないため。                                                                                                    |
+| Docker MCP Gateway                       | Docker 公式 Git source と同梱依存を `buildGoModule` で構築。対応する nixpkgs package がなく、`pkgs.mcp-gateway` は別製品のため。Git revision と内容を input で固定する。 |
+| xurl                                     | `xurl` input の upstream source を `buildGoModule` で構築。対応する nixpkgs package がないため。                                                                         |
+| Docker Desktop / Steam（macOS）          | Homebrew cask。対象 OS 用の同じ GUI アプリを nixpkgs から導入できないため。                                                                                              |
 
 ChatGPT は `pkgs.chatgpt` を使います。同梱 Codex CLI を使う設定も、この nixpkgs package 内のバイナリーを参照します。`hermes-xapi` はリポジトリ内の連携スクリプトです。
 
-Docker MCP は `docker-mcp-release` input のバージョンを含まない release 一覧 URL から、最新の公開 release を選びます。
-upstream は現在プレリリースのみを公開しているため、`releases/latest` ではなく `releases?per_page=1` を使います。
-配布物の版・URL・SHA-256 は `flake.lock` の metadata 内容で固定し、`nrs` の input 更新で追従します。
+Docker MCP は `docker-mcp` input の公式リポジトリの既定ブランチから取得します。
+Git revision と内容は `flake.lock` で固定し、`nrs` の input 更新で追従します。
+依存は source に同梱された `vendor/` を使い、ビルド中の追加ダウンロードは行いません。
 Home Manager が本体と Docker CLI の plugin link、利用サーバーの起動引数を反映するため、手動ダウンロードや profile sync は不要です。
 
 Ollama は共通 Home Manager の `services.ollama.enable` で標準 package とユーザーサービスを導入します。API は既定の `127.0.0.1:11434` で待ち受けます。モデルの自動取得や GPU backend の変更は行いません。`ollama pull <model>` で使用するモデルを選択します。
@@ -60,19 +60,19 @@ Neovim / Hermes の追加プラグインと formatter の入力は、アプリ�
 
 このリポジトリでは、設定・package override・生成・連携の責務をアプリ・機能単位でまとめます。単純な有効化・package list・単一代入は `nix/defaults.nix` に直接書きます。以下のパスはリポジトリの配置方針であり、公式資料が必須のディレクトリ構成を定めているわけではありません。
 
-| 編集先                                               | 責務                                                                           |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `nix/modules/<app>/` / `<app>.nix`                   | アプリの有効化・package 選択・設定・連携・専用の実行依存                       |
-| `nix/modules/editors/nvim/runtime.nix`               | Neovim の補助 CLI・LSP・整形ツール・toolchain・プラグイン実行依存              |
-| `nix/modules/ai_agents/hermes/default.nix`           | 公式 Hermes Home Manager の root・Desktop・gateway 設定、外部 LCM plugin       |
-| `nix/modules/ai_agents/mcp.nix`                      | Codex / root Hermes が使う共通 `programs.mcp.servers` 定義                     |
-| `nix/modules/browsers/dia/`                          | `inputs.dia` を使う package 定義と Home Manager への導入                       |
-| `nix/modules/shells/powershell/psscriptanalyzer.nix` | formatter が使用する PSScriptAnalyzer の package 定義                          |
-| `nix/defaults.nix`                                   | OS 基盤設定、module 選択、単純な有効化・package 宣言、アカウント、GC、公開出力 |
-| `nix/home/`                                          | 共通キー配置と Windows export                                                  |
-| `nix/home/keybindings/`                              | 共通キー配置と Windows export                                                  |
-| `windows/winget/packages.json`                       | Windows GUI の標準 package ID・source・Scope                                   |
-| `windows/{npm,pnpm}/packages.json`                   | 独立した Node package manifest。現在は空                                       |
+| 編集先                                     | 責務                                                                           |
+| ------------------------------------------ | ------------------------------------------------------------------------------ |
+| `nix/modules/<app>/` / `<app>.nix`         | アプリの有効化・package 選択・設定・連携・専用の実行依存                       |
+| `nix/modules/editors/nvim/runtime.nix`     | Neovim の補助 CLI・LSP・整形ツール・toolchain・プラグイン実行依存              |
+| `nix/modules/ai_agents/hermes/default.nix` | 公式 Hermes Home Manager の root・Desktop・gateway 設定、外部 LCM plugin       |
+| `nix/modules/ai_agents/mcp.nix`            | Codex / root Hermes が使う共通 `programs.mcp.servers` 定義                     |
+| `nix/modules/browsers/dia/`                | `inputs.dia` を使う package 定義と Home Manager への導入                       |
+| `nix/treefmt.nix`                          | formatter 設定と nixpkgs PowerShell 拡張機能の同梱 PSScriptAnalyzer の選択     |
+| `nix/defaults.nix`                         | OS 基盤設定、module 選択、単純な有効化・package 宣言、アカウント、GC、公開出力 |
+| `nix/home/`                                | 共通キー配置と Windows export                                                  |
+| `nix/home/keybindings/`                    | 共通キー配置と Windows export                                                  |
+| `windows/winget/packages.json`             | Windows GUI の標準 package ID・source・Scope                                   |
+| `windows/{npm,pnpm}/packages.json`         | 独立した Node package manifest。現在は空                                       |
 
 Hermes の root・Desktop・gateway は公式 Home Manager module、named profile は Git 正本と公式 CLI で管理します。
 外部 LCM は `extraPlugins` に追加します。操作は [Hermes](../hermes-agent/bootstrap.md) を参照してください。

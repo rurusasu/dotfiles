@@ -617,51 +617,12 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $moduleRoot = Join-Path $HOME "Documents\$env:PS_MODULE_DIRECTORY\Modules"
-          if ($env:PSModulePath -notlike "*$moduleRoot*") {
-            $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
-          }
-
-          function Invoke-WithRetry {
-            param([Parameter(Mandatory)][scriptblock]$Script, [int]$Attempts = 3)
-            for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
-              try {
-                & $Script
-                return
-              }
-              catch {
-                if ($attempt -eq $Attempts) { throw }
-                Start-Sleep -Seconds ($attempt * 5)
-              }
-            }
-          }
-
-          function Install-GalleryModuleArchive {
-            param([Parameter(Mandatory)][string]$Name)
-            $version = (Find-Module -Name $Name -Repository PSGallery -ErrorAction Stop).Version.ToString()
-            $modulePath = Join-Path $moduleRoot "$Name\$version"
-            if (-not (Test-Path -LiteralPath (Join-Path $modulePath "$Name.psd1"))) {
-              $packagePath = Join-Path $env:RUNNER_TEMP "$Name.$version.zip"
-              New-Item -ItemType Directory -Force -Path $modulePath | Out-Null
-              Invoke-WithRetry {
-                Invoke-WebRequest -Uri "https://www.powershellgallery.com/api/v2/package/$Name/$version" -OutFile $packagePath -UseBasicParsing
-              }
-              Expand-Archive -LiteralPath $packagePath -DestinationPath $modulePath -Force
-            }
-            Import-Module -Name (Join-Path $modulePath "$Name.psd1") -Force
-          }
-
-          # Provision the disposable CI user before the installed-only test runner.
-          Invoke-WithRetry {
-            if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
-              Register-PSRepository -Default -ErrorAction Stop
-            }
-            if (-not (Get-PSRepository -Name PSGallery -ErrorAction Stop)) {
-              throw 'CI provisioning could not register PSGallery.'
-            }
-          }
-
-          Install-GalleryModuleArchive -Name Pester
-          Install-GalleryModuleArchive -Name PSScriptAnalyzer
+          New-Item -ItemType Directory -Force -Path $moduleRoot | Out-Null
+          $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
+          Save-PSResource -Name Pester,PSScriptAnalyzer -Repository PSGallery -Path $moduleRoot -TrustRepository
+          . .\scripts\powershell\tests\support\Resolve-TestModule.ps1
+          Resolve-TestModule -Name Pester | Out-Null
+          Resolve-TestModule -Name PSScriptAnalyzer | Out-Null
 
       - name: Prepare Windows Store prerequisites
         shell: powershell
@@ -828,7 +789,7 @@ jobs:
           if ($env:PSModulePath -notlike "*$moduleRoot*") {
             $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
           }
-          & $env:PS_TEST_EXECUTABLE -NoProfile -File .\tests\Invoke-Tests.ps1 -MinimumCoverage 0
+          & $env:PS_TEST_EXECUTABLE -NoProfile -File .\tests\Invoke-Tests.ps1
 
   complete:
     name: Bootstrap / Complete

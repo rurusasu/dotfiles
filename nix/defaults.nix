@@ -511,7 +511,6 @@ in
     {
       treefmt = {
         imports = [ ./treefmt.nix ];
-        _module.args.psscriptanalyzerRelease = inputs.psscriptanalyzer;
       };
       devShells.default = pkgs.mkShell {
         inputsFrom = [ config.treefmt.build.devShell ];

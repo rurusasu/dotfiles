@@ -5,7 +5,6 @@
 - アプリごとの module: 設定・package override・生成・連携と導入・専用の実行依存をまとめる。enable・単純な package list・単一代入だけなら `nix/defaults.nix` の必要な構成へ直接書く
 - `browsers/dia/`: `inputs.dia` を使う Darwin package 定義。Home Manager への導入は `nix/defaults.nix`
 - `browsers/chrome/`: 標準 `programs.chromium` の固有設定と package factory。WSL の日本語 locale / fcitx 連携を管理する
-- `shells/powershell/psscriptanalyzer.nix`: formatter 用 PSScriptAnalyzer の package 定義
 - `ai_agents/chatgpt/`: ChatGPT と同梱 Codex CLI の package 選択・導入・設定を管理する。共通 nixpkgs の `pkgs.chatgpt.override { codex = null; }` と upstream の macOS 署名保持を利用する。`codex` は `pkgs.linkFarm` で `bin/codex`・`bin/codex-code-mode-host` と Linux の `bin/bwrap` を提供する。Darwin / native・standalone Linux はアプリと同梱 CLI、WSL は同じ Linux package の CLI へのリンクだけを導入する。標準 `programs.codex` は `enable = true`・`package = null` で config を管理する。`mutableSettings` でアプリの設定追記を保持し、公式 desktop worktree cleanup を宣言する。Windows の導入は `windows/winget/packages.json`、ユーザー設定は chezmoi が所有する
 - `fonts.nix`: Darwin / NixOS 共通のフォントパッケージと fontconfig の既定フォント
 - `fonts/`: `default.nix` が共通の Home Manager fontconfig と Linux GUI の GTK 設定を管理する。基本フォントは NixOS / nix-darwin 統合ではシステム、standalone Home Manager では `home.packages` が導入する。`wsl-fontconfig.conf` は WSL の fontconfig asset を所有する。WSLg の配布と dconf service の登録は `nix/defaults.nix` の WSL 設定が担当する
@@ -21,7 +20,7 @@
 - `superfile/`: WSL 用の標準 `programs.superfile` による導入、組み込みテーマ、Neovim とファイルプレビューの設定。選択は `nix/defaults.nix` が管理し、お気に入りなどの可変データはアプリが所有する
 - `ai_agents/mcp.nix`: `programs.mcp.servers` に `MCP_DOCKER` / `chrome` / `xapi` / `pipedream` を定義する。Chrome / X API の client 接続先は `http://127.0.0.1:8765/mcp` / `http://127.0.0.1:8766/mcp`。Home Manager のユーザーサービス `mcp-chrome` / `mcp-xapi` が `pkgs.mcp-proxy` で各 stdio child を一つずつ常駐させ、Hermes root の `.browser` / `.xurl` を共有する。Linux は systemd、Darwin は launchd が管理する。browser は headless で起動する。Codex の標準 MCP integration と Hermes の型付き `services.hermes-agent.mcpServers` が同じ HTTP 定義を使う。Pipedream の OAuth は client ごとにユーザーが行う
 - `ai_agents/mcp-packages.nix`: Chrome DevTools MCP は `inputs.mcp-servers`（`github:natsukium/mcp-servers-nix`）の既製 package を再利用する。xurl は `inputs.xurl` が取得する upstream `xdevplatform/xurl` の `main` の non-flake source を `buildGoModule` で構築し、version は source の revision から生成する。各 input は `flake.lock` で固定する
-- `ai_agents/docker-mcp.nix`: `docker-mcp-release` input の公式 release metadata から OS / CPU に合う配布物を SHA-256 検証付きで導入する。Home Manager の `mcp.nix` が本体と Docker plugin link、サーバー選択を管理し、更新と反映は `nrs` で行う。可変 profile の同期・クライアント登録を別スクリプトへ重複実装しない
+- `ai_agents/docker-mcp.nix`: `docker-mcp` input の公式 Git source と同梱依存からビルドする。Home Manager の `mcp.nix` が本体と Docker plugin link、サーバー選択を管理し、更新と反映は `nrs` で行う。可変 profile の同期・クライアント登録を別スクリプトへ重複実装しない
 - `ai_agents/hermes/`: `default.nix` が公式 Home Manager module による導入、root 設定・Desktop・gateway と外部 LCM の `extraPlugins = [ inputs.hermes-lcm ]` を宣言する。named profile の設定と個別 secret refs は Git 正本に置き、公式 `hermes profile install` / `update` を使う。named profile は root の MCP 設定を継承しない
 - `shells/plugins/`: bat / eza / fd / fzf / ripgrep / zoxide の導入・共通設定・シェル連携と zsh-patina の activate 連携。各アプリの module がそれぞれを所有する
 - `shells/plugins/starship/`: CLI の有効化、Bash / Zsh の標準連携と `programs.starship.settings` のプロンプト設定を管理し、Home Manager が `starship.toml` を生成する

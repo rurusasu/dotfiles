@@ -153,10 +153,10 @@ browser profile、OAuth cache、secret、session、memory、log は自動移行�
 Docker MCP Toolkit は Unix 側の `scripts/sh/mcp-toolkit.sh` が管理します。
 `task mcp:toolkit:*` は Windows からも NixOS-WSL 内で実行し、Windows の Docker CLI は使いません。
 MCP gateway の接続設定は Nix の `programs.mcp.servers` が所有し、リポジトリの `.mcp.json` には重複定義しません。
-Docker 公式プラグインは `docker-mcp-release` input の release metadata にある配布物と SHA-256 から導入し、
+Docker 公式プラグインは `docker-mcp` input の固定した Git source と同梱依存からビルドし、
 Home Manager が Docker の `cli-plugins/docker-mcp` に配置します。サーバー8種類の選択も
 `programs.mcp.servers.MCP_DOCKER.args` に宣言し、可変プロファイルへの同期処理は使いません。
-`nrs` が release metadata の lock 更新、プラグイン導入、リンクと接続設定の反映をまとめて行います。
+`nrs` が Git source の lock 更新、プラグイン導入、リンクと接続設定の反映をまとめて行います。
 Linux / WSL は Docker Engine 用の `DOCKER_MCP_IN_CONTAINER=1` をプラグインの wrapper が設定します。
 `DOCKER_CONFIG` は Home Manager が `${HOME}/.docker` と明示設定し、MCP クライアントにも渡します。
 プラグインと手動タスクは未設定・空の `DOCKER_CONFIG` をエラーにし、別のディレクトリへフォールバックしません。

@@ -5,7 +5,7 @@
 # References:
 # - treefmt config: https://treefmt.com/v2.1/getting-started/configure/
 # - treefmt-nix examples: https://github.com/numtide/treefmt-nix/tree/main/examples
-{ pkgs, psscriptanalyzerRelease, ... }:
+{ pkgs, ... }:
 {
   projectRootFile = "flake.nix";
 
@@ -89,11 +89,7 @@
     powershell = {
       command = toString (
         pkgs.writeShellScript "dotfiles-powershell-formatter" ''
-          export DOTFILES_PSSA_MODULE="${
-            pkgs.callPackage ./modules/shells/powershell/psscriptanalyzer.nix {
-              releaseMetadata = psscriptanalyzerRelease;
-            }
-          }/share/powershell/Modules/PSScriptAnalyzer/PSScriptAnalyzer.psd1"
+          export DOTFILES_PSSA_MODULE="${pkgs.vscode-extensions.ms-vscode.powershell}/share/vscode/extensions/ms-vscode.PowerShell/modules/PSScriptAnalyzer"
           exec ${pkgs.powershell}/bin/pwsh "$@"
         ''
       );

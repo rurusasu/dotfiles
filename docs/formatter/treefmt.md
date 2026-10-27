@@ -18,7 +18,7 @@ project root に生成物を配置する必要はありません。
 - Taplo: `programs.taplo.settings` から TOML を生成し、`--config` で渡します。
 - dprint: `programs.dprint.settings` から JSON を生成し、`--config` で渡します。
 - oxfmt: `pkgs.formats.json` で JSON を生成し、`settings.formatter.oxfmt.options` から `--config` で渡します。
-- PowerShell: 宣言済みの PSScriptAnalyzer を Nix store の manifest から import します。
+- PowerShell: nixpkgs の PowerShell 拡張機能に同梱された PSScriptAnalyzer を Nix store から import します。
 
 Markdown は dprint が担当し、oxfmt の対象は JSON/YAML に限定します。
 dprint の Markdown プラグインも nixpkgs から提供するため、整形中のダウンロードは不要です。

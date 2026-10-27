@@ -4,7 +4,7 @@ let
 in
 rec {
   docker-mcp = pkgs.callPackage ./docker-mcp.nix {
-    releaseMetadata = inputs.docker-mcp-release;
+    source = inputs.docker-mcp;
   };
 
   chrome-devtools-mcp =

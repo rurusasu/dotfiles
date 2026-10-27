@@ -79,7 +79,7 @@ in
         "llm-agents/treefmt-nix" = inputs.llm-agents.inputs.treefmt-nix;
         "mcp-servers/nixpkgs" = inputs.mcp-servers.inputs.nixpkgs;
         inherit (inputs)
-          docker-mcp-release
+          docker-mcp
           devcontainer-cli-nvim
           dia
           flake-parts
@@ -95,7 +95,6 @@ in
           nixos-vscode-server
           nixos-wsl
           nixpkgs
-          psscriptanalyzer
           strata-release
           systems
           treefmt-nix

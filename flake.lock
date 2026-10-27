@@ -79,16 +79,20 @@
         "url": "https://releases.diabrowser.com/release/Dia-latest.dmg"
       }
     },
-    "docker-mcp-release": {
+    "docker-mcp": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-AtM7HfHGg6bWWC/FAXoDqq0c69v1UeSCtwCVxaXSPXI=",
-        "type": "file",
-        "url": "https://api.github.com/repos/docker/mcp-gateway/releases?per_page=1"
+        "lastModified": 1793036854,
+        "narHash": "sha256-Jh63H5YjJJDxKKVjkNI4QaiUI2XHdUpCAhW+JCLP4Wc=",
+        "owner": "docker",
+        "repo": "mcp-gateway",
+        "rev": "7e0f34277c91855ad861eeff536b4fdc77420593",
+        "type": "github"
       },
       "original": {
-        "type": "file",
-        "url": "https://api.github.com/repos/docker/mcp-gateway/releases?per_page=1"
+        "owner": "docker",
+        "repo": "mcp-gateway",
+        "type": "github"
       }
     },
     "flake-compat": {
@@ -514,18 +518,6 @@
         "type": "github"
       }
     },
-    "psscriptanalyzer": {
-      "flake": false,
-      "locked": {
-        "narHash": "sha256-/YlLgf/oj+qBoRGszHwhP5TwjjzLkik8HyqMgpozm4s=",
-        "type": "file",
-        "url": "https://api.github.com/repos/PowerShell/PSScriptAnalyzer/releases/latest"
-      },
-      "original": {
-        "type": "file",
-        "url": "https://api.github.com/repos/PowerShell/PSScriptAnalyzer/releases/latest"
-      }
-    },
     "pyproject-build-systems": {
       "inputs": {
         "nixpkgs": [
@@ -580,7 +572,7 @@
       "inputs": {
         "devcontainer-cli-nvim": "devcontainer-cli-nvim",
         "dia": "dia",
-        "docker-mcp-release": "docker-mcp-release",
+        "docker-mcp": "docker-mcp",
         "flake-parts": "flake-parts",
         "hermes-agent": "hermes-agent",
         "hermes-lcm": "hermes-lcm",
@@ -594,7 +586,6 @@
         "nixos-vscode-server": "nixos-vscode-server",
         "nixos-wsl": "nixos-wsl",
         "nixpkgs": "nixpkgs_4",
-        "psscriptanalyzer": "psscriptanalyzer",
         "strata-release": "strata-release",
         "systems": "systems_2",
         "treefmt-nix": "treefmt-nix_3",

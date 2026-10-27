@@ -7,23 +7,9 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import TypedDict, cast
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
 from prepare_wsl_nix_cache import query_public_paths
-
-
-class CacheEntry(TypedDict):
-    id: int
-    key: str
-    ref: str
-    created_at: str
-
-
-class CacheResponse(TypedDict):
-    actions_caches: list[CacheEntry]
 
 
 def store_paths() -> list[str]:
@@ -120,33 +106,19 @@ def prune_cache(key: str, prefix: str) -> None:
         raise ValueError("Invalid CI cache namespace")
     base = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/actions/caches"
 
-    def request(url: str, method: str = "GET") -> CacheResponse | None:
-        req = Request(
-            url,
-            method=method,
-            headers={
-                "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
-        with urlopen(req, timeout=30) as response:
-            return cast(CacheResponse, json.load(response)) if method == "GET" else None
-
+    api = ["gh", "api", "-H", "X-GitHub-Api-Version: 2022-11-28"]
+    environment = os.environ | {"GH_TOKEN": os.environ["GITHUB_TOKEN"]}
     try:
-        caches: list[CacheEntry] = []
-        page = 1
-        while True:
-            query = urlencode(
-                {"ref": "refs/heads/main", "key": prefix, "per_page": 100, "page": page}
-            )
-            result = request(f"{base}?{query}")
-            assert result is not None
-            batch = result["actions_caches"]
-            caches.extend(batch)
-            if len(batch) < 100:
-                break
-            page += 1
+        query = urlencode({"ref": "refs/heads/main", "key": prefix, "per_page": 100})
+        result = subprocess.run(
+            [*api, "--paginate", "--slurp", f"{base}?{query}"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=120,
+            env=environment,
+        )
+        caches = [cache for page in json.loads(result.stdout) for cache in page["actions_caches"]]
         current = [cache for cache in caches if cache["key"] == key]
         if not current:
             print("::warning::New cache not confirmed; retaining previous generations")
@@ -159,9 +131,14 @@ def prune_cache(key: str, prefix: str) -> None:
                 and cache["key"] != key
                 and cache["created_at"] < newest
             ):
-                request(f"{base}/{cache['id']}", "DELETE")
+                subprocess.run(
+                    [*api, "--method", "DELETE", f"{base}/{cache['id']}"],
+                    check=True,
+                    timeout=30,
+                    env=environment,
+                )
                 print(f"Removed older CI cache: {cache['key']}")
-    except (HTTPError, URLError, TimeoutError) as error:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as error:
         print(f"::warning::Cache cleanup unavailable; retaining caches: {error}")
 
 

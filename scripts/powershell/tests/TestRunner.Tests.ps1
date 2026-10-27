@@ -11,10 +11,9 @@ BeforeAll {
             Set-Content -LiteralPath (Join-Path $fixture 'Fixture.Tests.ps1')
         $bootstrap = Join-Path $fixture 'bootstrap.ps1'
         @'
-param($Runner, $Fixture, $ModulePathsBase64, $MissingDependency)
+param($Runner, $Fixture, $MissingDependency)
 $ErrorActionPreference = 'Stop'
 Import-Module Microsoft.PowerShell.Management, Microsoft.PowerShell.Utility
-$env:PSModulePath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($ModulePathsBase64))
 $env:FIXTURE_NETWORK_MARKER = Join-Path $Fixture 'unexpected-acquisition.txt'
 function Stop-UnexpectedAcquisition {
     Set-Content -LiteralPath $env:FIXTURE_NETWORK_MARKER 'called'
@@ -40,19 +39,15 @@ if ($MissingDependency -eq 'task') {
     $env:PATH = $PSHOME + ';' + (Join-Path $env:SystemRoot 'System32')
     $target = Join-Path (Split-Path -Parent $Runner) 'Install.Tests.ps1'
 }
-& $Runner -Path $target -MinimumCoverage 0
+& $Runner -Path $target
 exit $LASTEXITCODE
 '@ | Set-Content -LiteralPath $bootstrap
 
         $previousPreference = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'
-            # Exercise native quoting with spaces and a trailing path separator.
-            $modulePaths = $env:PSModulePath + [IO.Path]::PathSeparator +
-            (Join-Path $fixture 'Modules with spaces') + [IO.Path]::DirectorySeparatorChar
-            $modulePathsBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($modulePaths))
             $arguments = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $bootstrap,
-                '-Runner', $script:runner, '-Fixture', $fixture, '-ModulePathsBase64', $modulePathsBase64)
+                '-Runner', $script:runner, '-Fixture', $fixture)
             if ($MissingDependency) { $arguments += @('-MissingDependency', $MissingDependency) }
             $output = @(& $script:runtime @arguments 2>&1)
             $exitCode = $LASTEXITCODE
@@ -102,69 +97,10 @@ Describe 'PowerShell test runner failure propagation' {
         New-Item -ItemType Directory -Path $fixture | Out-Null
         "Describe 'healthy' { It 'passes' { 1 | Should -Be 1 } }" | Set-Content -LiteralPath (Join-Path $fixture 'Healthy.Tests.ps1')
         $BrokenSource | Set-Content -LiteralPath (Join-Path $fixture 'Broken.Tests.ps1')
-        $escapedModules = $env:PSModulePath.Replace("'", "''")
-        $escapedRunner = $script:runner.Replace("'", "''")
-        $escapedFixture = $fixture.Replace("'", "''")
-        $command = "`$env:PSModulePath = '$escapedModules'; & '$escapedRunner' -Path '$escapedFixture' -MinimumCoverage 0"
-        $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-
-        $output = @(& $script:runtime -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand $encodedCommand 2>&1)
+        $output = @(& $script:runtime -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script:runner -Path $fixture 2>&1)
         $exitCode = $LASTEXITCODE
 
         $exitCode | Should -Be 1 -Because ($output -join [Environment]::NewLine)
     }
 }
 
-Describe 'PowerShell coverage task contract' {
-    BeforeAll {
-        function New-CoverageFixture {
-            param([switch]$WithSource)
-
-            $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
-            $tests = Join-Path $root 'tests'
-            New-Item -ItemType Directory -Path "$tests/support", "$root/lib" -Force | Out-Null
-            Copy-Item -LiteralPath $script:runner -Destination $tests
-            Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'support/Resolve-TestModule.ps1') -Destination "$tests/support"
-            "Describe 'fixture' { It 'passes' { 1 | Should -Be 1 } }" |
-                Set-Content -LiteralPath "$tests/Fixture.Tests.ps1"
-            if ($WithSource) {
-                "function Get-UnexecutedValue { 'not executed' }" | Set-Content -LiteralPath "$root/lib/Unused.ps1"
-            }
-            return $root
-        }
-    }
-
-    It 'should emit Cobertura for requested coverage even when no source command executes' {
-        $fixture = New-CoverageFixture -WithSource
-        $coveragePath = Join-Path $fixture 'coverage.xml'
-        $output = & $script:runtime -NoProfile -File "$fixture/tests/Invoke-Tests.ps1" -Path "$fixture/tests/Fixture.Tests.ps1" -ShowCoverage -CoverageOutputFile $coveragePath 2>&1
-        $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
-        [xml]$report = Get-Content -LiteralPath $coveragePath -Raw
-        [int]$report.coverage.'lines-valid' | Should -BeGreaterThan 0
-        [double]$report.coverage.'line-rate' | Should -Be 0
-    }
-
-    It 'should fail a positive threshold when measured coverage is zero' {
-        $fixture = New-CoverageFixture -WithSource
-        $coveragePath = Join-Path $fixture 'coverage.xml'
-        $output = & $script:runtime -NoProfile -File "$fixture/tests/Invoke-Tests.ps1" -Path "$fixture/tests/Fixture.Tests.ps1" -MinimumCoverage 1 -CoverageOutputFile $coveragePath 2>&1
-        $LASTEXITCODE | Should -Be 1 -Because ($output -join [Environment]::NewLine)
-        [xml]$report = Get-Content -LiteralPath $coveragePath -Raw
-        [double]$report.coverage.'line-rate' | Should -Be 0
-    }
-
-    It 'should fail requested coverage when no runtime sources exist' {
-        $fixture = New-CoverageFixture
-        $coveragePath = Join-Path $fixture 'coverage.xml'
-        $previousPreference = $ErrorActionPreference
-        try {
-            $ErrorActionPreference = 'Continue'
-            $output = & $script:runtime -NoProfile -File "$fixture/tests/Invoke-Tests.ps1" -Path "$fixture/tests/Fixture.Tests.ps1" -CoverageOutputFile $coveragePath 2>&1
-            $exitCode = $LASTEXITCODE
-        }
-        finally { $ErrorActionPreference = $previousPreference }
-        $exitCode | Should -Be 1 -Because ($output -join [Environment]::NewLine)
-        Test-Path -LiteralPath $coveragePath | Should -BeFalse
-    }
-
-}

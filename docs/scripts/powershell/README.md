@@ -35,7 +35,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/tests
 
 - `Install.Tests.ps1`: 実launcherとTaskfile、順序・回数、失敗・再起動、引数、隔離したホームへのchezmoi適用、CI実行と削除先の境界。
 - `PowerShell.Tests.ps1`: runtime全体の静的解析、ANSI/BOM、formatterの実行と冪等性。
-- `TestRunner.Tests.ps1`: coverage、必要module不在、0件・container失敗の検出。
+- `TestRunner.Tests.ps1`: 必要module不在、0件・container失敗の検出。
+- `Integration.Tests.ps1`: Windows profile、chezmoi反映とWSLg templateの描画。
 - `lib/`: native実行、登録、同期、更新と反映の境界。
 
 インストール済みの安定版Pester 6.2以降とPSScriptAnalyzerを使い、依存を自動取得しません。

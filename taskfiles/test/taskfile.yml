@@ -14,12 +14,7 @@ tasks:
   test:powershell:
     desc: Run PowerShell tests
     cmds:
-      - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -MinimumCoverage 0"
-
-  test:coverage:
-    desc: Run PowerShell tests with coverage
-    cmds:
-      - pwsh -NoProfile -Command "& ./scripts/powershell/tests/Invoke-Tests.ps1 -ShowCoverage"
+      - pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1
 
   test:bash:
     desc: Run classified Bats runtime and artifact contracts

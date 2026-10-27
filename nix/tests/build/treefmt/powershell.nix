@@ -6,6 +6,8 @@ pkgs.runCommand "powershell-formatter-check" { } ''
   ${formatter.command} -NoProfile -NonInteractive -File ${pkgs.writeText "powershell-formatter-probe.ps1" ''
     $ErrorActionPreference = 'Stop'
     $env:PSModulePath = Join-Path $PSHOME 'Modules'
+    $manifests = @(Get-ChildItem -LiteralPath $env:DOTFILES_PSSA_MODULE -Filter PSScriptAnalyzer.psd1 -Recurse -File)
+    if ($manifests.Count -ne 1) { throw 'Expected exactly one PSScriptAnalyzer manifest in the nixpkgs PowerShell extension' }
     function global:Install-Module { throw 'Runtime module installation is forbidden' }
     function global:Save-Module { throw 'Runtime module downloads are forbidden' }
     function global:Invoke-WebRequest { throw 'Runtime network access is forbidden' }
