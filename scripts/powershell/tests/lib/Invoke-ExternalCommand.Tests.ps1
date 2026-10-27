@@ -307,8 +307,12 @@ Describe 'Update-ProcessEnvironmentPath' {
 Describe 'Test-WslAvailable' {
     BeforeEach { Mock Get-CimInstance { [pscustomobject]@{ InstallState = 1 } } }
 
-    It 'should reject a disabled Virtual Machine Platform even when WSL status exits zero' {
-        Mock Get-CimInstance { [pscustomobject]@{ InstallState = 2 } }
+    It 'should reject Virtual Machine Platform state <InstallState> before checking WSL status' -ForEach @(
+        @{ InstallState = 2 }
+        @{ InstallState = 3 }
+    ) {
+        $script:featureInstallState = $InstallState
+        Mock Get-CimInstance { [pscustomobject]@{ InstallState = $script:featureInstallState } }
         Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
 
         Test-WslAvailable | Should -BeFalse
@@ -316,14 +320,6 @@ Describe 'Test-WslAvailable' {
         Should -Invoke Get-CimInstance -Times 1 -ParameterFilter {
             $ClassName -eq 'Win32_OptionalFeature' -and $Filter -eq "Name = 'VirtualMachinePlatform'"
         }
-    }
-
-    It 'should reject an absent Virtual Machine Platform' {
-        Mock Get-CimInstance { [pscustomobject]@{ InstallState = 3 } }
-        Mock Invoke-Wsl { $global:LASTEXITCODE = 0 }
-
-        Test-WslAvailable | Should -BeFalse
-        Should -Invoke Invoke-Wsl -Times 0
     }
 
     It 'should fall back to WSL status when the optional feature query is unavailable' {
@@ -344,12 +340,17 @@ Describe 'Test-WslAvailable' {
         }
     }
 
-    It 'should return false when wsl --status fails' {
-        Mock Invoke-Wsl { $global:LASTEXITCODE = 1 }
+    It 'should return false for WSL status exit <ExitCode>' -ForEach @(
+        @{ ExitCode = 1 }
+        @{ ExitCode = 124 }
+    ) {
+        $script:statusExitCode = $ExitCode
+        Mock Invoke-Wsl { $global:LASTEXITCODE = $script:statusExitCode }
 
-        $result = Test-WslAvailable
-
-        $result | Should -Be $false
+        Test-WslAvailable | Should -BeFalse
+        Should -Invoke Invoke-Wsl -Times 1 -ParameterFilter {
+            $TimeoutSeconds -eq 5 -and $Arguments -contains "--status"
+        }
     }
 
     It 'should return false when Invoke-Wsl throws an exception' {
@@ -358,20 +359,6 @@ Describe 'Test-WslAvailable' {
         $result = Test-WslAvailable
 
         $result | Should -Be $false
-    }
-
-    It 'should return false when WSL status check times out' {
-        Mock Invoke-Wsl {
-            $global:LASTEXITCODE = 124
-            return "timeout"
-        }
-
-        $result = Test-WslAvailable
-
-        $result | Should -Be $false
-        Should -Invoke Invoke-Wsl -Times 1 -ParameterFilter {
-            $TimeoutSeconds -eq 5 -and $Arguments -contains "--status"
-        }
     }
 }
 

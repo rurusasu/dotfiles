@@ -2,7 +2,7 @@
 
 ## 要件と責務
 
-最低 Neovim **0.12**。更新時は `nvim --version` と `:checkhealth vim.lsp` を確認します。動作確認済み版と採否の根拠は [最新化調査](./neovim-modernization-audit.md) に記録します。
+最低 Neovim **0.12**。更新時は `nvim --version` と `:checkhealth vim.lsp` を確認します。
 
 - 基本設定: `nix/modules/editors/nvim/init.lua`
 - 補助 Lua: `nix/modules/editors/nvim/lua/`
@@ -129,10 +129,6 @@ DOTFILES_NVIM_LSPCONFIG="/nix/store/<hash>-vimplugin-nvim-lspconfig-<version>" \
   nvim --headless -u NONE -i NONE -l tests/lua/nvim_typescript_test.lua
 ```
 
-```powershell
-pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/Integration.Tests.ps1
-```
-
 全 plugin の起動テストは `neovim-native` に含まれます。一時 XDG data に Home Manager の native package を配置し、生成された `init.lua` と Nix 管理の基本設定を読み込みます。ホストへの反映は不要です。
 
-Windows の PowerShell 検証を macOS で通しても、Windows 実機での compiler、PATH、WSL transport、画像、IME、キーバインドを検証したことにはなりません。これらと Linux/Devcontainer の実機動作は対応環境で別途確認してください。
+headless テストでは terminal・画像の描画、IME・キーバインドの実入力を検証できません。これらと Linux/Devcontainer の実機動作は対応環境で別途確認してください。
