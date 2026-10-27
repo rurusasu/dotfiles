@@ -1,19 +1,16 @@
 { inputs, pkgs }:
 let
+  fixtures = import ../../../fixtures/packages.nix { inherit inputs; };
   activation =
     pkgs.writeText "docker-desktop-activation"
-      (inputs.nix-darwin.lib.darwinSystem {
-        system = "aarch64-darwin";
-        modules = [
-          ../../../../modules/docker.nix
-          {
-            system.primaryUser = "test-user";
-            users.users.test-user.home = "/Users/test-user";
-            homebrew.enable = true;
-            homebrew.casks = [ "docker-desktop" ];
-          }
-        ];
-      }).config.system.activationScripts.postActivation.text;
+      (fixtures.mkDarwin [
+        {
+          system.primaryUser = "test-user";
+          users.users.test-user.home = "/Users/test-user";
+          homebrew.enable = true;
+          homebrew.casks = [ "docker-desktop" ];
+        }
+      ]).config.system.activationScripts.postActivation.text;
 in
 pkgs.runCommand "docker-desktop-activation-check"
   {

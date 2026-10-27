@@ -1,5 +1,6 @@
 { inputs }:
 let
+  fixtures = import ../../../fixtures/packages.nix { inherit inputs; };
   fontContract =
     {
       system,
@@ -63,6 +64,29 @@ let
     };
 in
 {
+  testDisabledFontsDoNotConfigureDesktopOrInstallPackages = {
+    expr =
+      let
+        home = fixtures.mkHome "x86_64-linux" [ ];
+      in
+      {
+        fontconfig = home.config.fonts.fontconfig.enable;
+        gtk = home.config.gtk.enable;
+        managedFonts = builtins.any (
+          package:
+          builtins.elem (package.pname or "") [
+            "udev-gothic-nf"
+            "noto-fonts-color-emoji"
+          ]
+        ) home.config.home.packages;
+      };
+    expected = {
+      fontconfig = false;
+      gtk = false;
+      managedFonts = false;
+    };
+  };
+
   testNixOSConfiguresManagedDefaultFonts = {
     expr =
       let

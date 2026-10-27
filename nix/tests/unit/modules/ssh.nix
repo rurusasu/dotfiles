@@ -4,8 +4,14 @@
 }:
 let
   inherit (homeConfigurations) homes lib;
+  fixtures = import ../../fixtures/packages.nix { inherit inputs; };
 in
 {
+  testDisabledSshLeavesUserConfigurationUnmanaged = {
+    expr = (fixtures.mkHome "x86_64-linux" [ ]).config.home.file ? ".ssh/config";
+    expected = false;
+  };
+
   testNativeSshOwnsItsConfigWithoutBackups = {
     expr = map (
       home:

@@ -25,6 +25,19 @@ in
         else
           lib.reverseList base.home-manager.sharedModules;
     };
+  mkDarwin =
+    modules:
+    inputs.nix-darwin.lib.darwinSystem {
+      system = "aarch64-darwin";
+      specialArgs = {
+        inherit inputs;
+        platform = "darwin";
+      };
+      modules =
+        (import ../../discover-modules.nix "system" ../../modules)
+        ++ (import ../../discover-modules.nix "darwin" ../../modules)
+        ++ modules;
+    };
   windowsPackages = builtins.listToAttrs (
     builtins.concatMap (
       source:
