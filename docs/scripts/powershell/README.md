@@ -26,6 +26,10 @@ WSL出力はUTF-8に統一し、日本語を含むチェックアウトパスも
 競合するチェックアウトはForce指定時もGUID付きで退避します。
 CIのdistroと削除先は`NixOS-CI-*`と一時領域の子ディレクトリに限定します。
 
+旧構成の`install:windows` / `install:windows:post`は廃止しました。入口は`install.cmd`または`task install`です。
+旧構成でPowerToysを導入した端末では、PowerToysを終了し、`winget uninstall --id Microsoft.PowerToys --exact --source winget`を一度手動で実行してください。
+WinGet importは既存アプリを削除しません。旧PowerToysの設定JSONは変更せず、アプリの撤去によって以前のキー変換を停止します。
+
 ## テスト
 
 ```powershell
