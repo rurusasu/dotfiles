@@ -58,12 +58,7 @@ let
               ./modules/ai_agents/mcp.nix
               ./modules/ai_agents/hermes
               ./modules/fonts
-              ./modules/git
-              ./modules/git/ghq.nix
-              ./modules/git/gwq.nix
-              ./modules/lazygit
               ./modules/ssh.nix
-              ./modules/herdr
               (
                 { pkgs, inputs, ... }:
                 lib.mkIf (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (
@@ -128,6 +123,11 @@ let
               ghostty.enable = true;
               wezterm.enable = true;
               neovim.enable = true;
+              git.enable = true;
+              ghq.enable = true;
+              gwq.enable = true;
+              lazygit.enable = true;
+              herdr.enable = true;
             };
             services.ollama.enable = true;
             nix = {

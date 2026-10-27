@@ -104,7 +104,7 @@ in
       nix-unit.tests =
         (import ./unit/defaults/import-boundary.nix)
         // (import ./unit/defaults/module-discovery.nix)
-        // (import ./unit/defaults/platform-boundary.nix)
+        // (import ./unit/defaults/platform-boundary.nix { inherit inputs homeConfigurations; })
         // (import ./unit/defaults/composition.nix { inherit inputs homeConfigurations; })
         // (import ./unit/modules/shells/bash/default.nix { inherit inputs homeConfigurations; })
         // (import ./unit/modules/shells/plugins/bat.nix { inherit inputs homeConfigurations; })

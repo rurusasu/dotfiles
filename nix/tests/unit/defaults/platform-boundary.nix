@@ -1,3 +1,7 @@
+{
+  inputs,
+  homeConfigurations ? import ../../fixtures/home-configurations.nix { inherit inputs; },
+}:
 let
   sharedHome =
     builtins.head
@@ -12,24 +16,14 @@ let
   };
 in
 {
-  testSharedGitAndSshDoNotDeclareOSSpecificProgramsOrAgents = {
+  testCommonGitAndSshUseTheSharedSignerAndAgent = {
     expr = {
-      signer =
-        builtins.hasAttr "signer"
-          (import ../../../modules/git {
-            config = { };
-            lib = { };
-            pkgs = { };
-          }).programs.git.signing;
-      agent =
-        builtins.hasAttr "extraOptionOverrides"
-          (import ../../../modules/ssh.nix {
-            pkgs = { };
-          }).programs.ssh;
+      signer = inputs.nixpkgs.lib.hasSuffix "/bin/ssh-keygen" homeConfigurations.common.config.programs.git.signing.signer;
+      agent = homeConfigurations.common.config.home.sessionVariables.SSH_AUTH_SOCK;
     };
     expected = {
-      signer = false;
-      agent = false;
+      signer = true;
+      agent = "${homeConfigurations.common.config.home.homeDirectory}/.1password/agent.sock";
     };
   };
   testCommonHomeModuleDoesNotRequireOSSpecialArgs = {

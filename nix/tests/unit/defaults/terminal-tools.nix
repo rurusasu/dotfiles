@@ -1,5 +1,6 @@
 { inputs }:
 let
+  fixtures = import ../../fixtures/packages.nix { inherit inputs; };
   systems = [
     "aarch64-darwin"
     "x86_64-linux"
@@ -11,25 +12,7 @@ in
     expr = map (
       system:
       let
-        home =
-          let
-            pkgs = (import ../../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
-          in
-          import "${inputs.home-manager}/lib/eval-config.nix" {
-            inherit pkgs;
-            extraSpecialArgs = { inherit inputs; };
-            modules = [
-              ((import ../../fixtures/packages.nix { inherit inputs; }).homeModule "common")
-              { programs.neovim.enable = true; }
-              {
-                home = {
-                  username = "test-user";
-                  homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
-                  stateVersion = "26.05";
-                };
-              }
-            ];
-          };
+        home = fixtures.mkHome system [ (fixtures.homeModule "common") ];
         cfg = home.config;
       in
       {
@@ -38,7 +21,11 @@ in
         herdr = cfg.programs.herdr.enable;
         bashWrapper = home.pkgs.lib.hasInfix "function lg()" cfg.programs.bash.initExtra;
         zshWrapper = home.pkgs.lib.hasInfix "function lg()" cfg.programs.zsh.initContent;
-        herdrConfig = cfg.programs.herdr.settings;
+        herdrConfig = {
+          inherit (cfg.programs.herdr.settings) onboarding terminal;
+          prefix = cfg.programs.herdr.settings.keys.prefix;
+          managedFile = cfg.xdg.configFile."herdr/config.toml".force;
+        };
       }
     ) systems;
     expected = map (system: {
@@ -47,7 +34,15 @@ in
       herdr = true;
       bashWrapper = true;
       zshWrapper = true;
-      herdrConfig = (import ../../../modules/herdr/default.nix { }).programs.herdr.settings;
+      herdrConfig = {
+        onboarding = false;
+        terminal = {
+          shell_mode = "auto";
+          new_cwd = "follow";
+        };
+        prefix = "ctrl+space";
+        managedFile = true;
+      };
     }) systems;
   };
 }
