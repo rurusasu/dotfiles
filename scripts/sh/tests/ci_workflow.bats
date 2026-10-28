@@ -236,6 +236,7 @@ EOF
         grep -Fxq 'http2 = false' "$secret_file"
         grep -Fxq 'stalled-download-timeout = 60' "$secret_file"
         grep -Fxq 'download-attempts = 3' "$secret_file"
+        grep -Fxq 'fallback = true' "$secret_file"
         grep -Fxq 'substituters = https://cache.nixos.org?priority=10' "$secret_file"
         if [[ $wsl == true ]]; then
           [ ! -e "$GIT_CONFIG_SYSTEM" ]

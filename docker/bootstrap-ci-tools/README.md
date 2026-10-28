@@ -39,6 +39,11 @@ CI の Nix ダウンロードは HTTP/1.1 を使い、無通信の待ち時間�
 公式キャッシュの優先度を 10 にして、Numtide の優先度 30 より先に公開成果物を取得します。
 追加キャッシュと署名検証は維持し、必要な独自成果物は引き続き追加キャッシュから取得します。
 これらは CI 専用の設定で、Linux container・macOS・WSL で共有します。
+追加キャッシュの取得が途中で失敗した場合は、固定した derivation のソースビルドへ
+フォールバックします。署名検証と fixed-output derivation のハッシュ検証は維持します。
+Linux container の `fetchurl` は `NIX_CURL_FLAGS` でも HTTP/1.1 を指定し、接続待ちを 15 秒、
+60 秒間の転送速度が 16 KiB/s 未満なら再接続します。公開前の fixed-output ビルドで、
+この環境変数が実際のビルダーへ渡ることも確認します。
 
 `nix` ジョブは statix の検査を行い、format と全 flake checks は `check` に集約します。
 アプリを含む OS 構成は Linux / Darwin の各 build job で検証します。

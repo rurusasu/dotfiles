@@ -25,6 +25,7 @@ nix config show --json | jq -e '
   .http2.value == false
   and .["stalled-download-timeout"].value == 60
   and .["download-attempts"].value == 3
+  and .fallback.value == true
   and (.substituters.value | index("https://cache.nixos.org?priority=10") != null)
 ' >/dev/null
 
@@ -41,14 +42,33 @@ fi
 if [[ $sandbox == true ]]; then
   CI_BASH=$(readlink -f "$(command -v bash)")
   export CI_BASH
-  # Nix expands $out inside the builder shell.
-  # shellcheck disable=SC2016
-  nix build --impure --no-link --expr 'derivation {
+  cat >"$fixture/smoke.nix" <<'NIX'
+let
+  builder = builtins.storePath (builtins.getEnv "CI_BASH");
+in
+[
+  (derivation {
     name = "bootstrap-ci-sandbox";
     system = "x86_64-linux";
-    builder = builtins.storePath (builtins.getEnv "CI_BASH");
+    inherit builder;
     args = [ "-c" "echo sandbox-ok > $out" ];
-  }'
+  })
+  (derivation {
+    name = "bootstrap-ci-fetch-environment";
+    system = "x86_64-linux";
+    inherit builder;
+    impureEnvVars = [ "NIX_CURL_FLAGS" ];
+    args = [ "-euc" ''
+      test "$NIX_CURL_FLAGS" = "--http1.1 --connect-timeout 15 --speed-limit 16384 --speed-time 60"
+      printf '%s' fetch-environment-ok > "$out"
+    '' ];
+    outputHashAlgo = "sha256";
+    outputHashMode = "flat";
+    outputHash = builtins.hashString "sha256" "fetch-environment-ok";
+  })
+]
+NIX
+  nix build --impure --no-link --option substitute false --file "$fixture/smoke.nix"
 fi
 
 echo "Bootstrap CI tools verified."

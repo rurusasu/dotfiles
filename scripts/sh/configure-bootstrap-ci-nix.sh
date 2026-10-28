@@ -56,7 +56,7 @@ mkdir -p "$config_dir"
   # Share caches and transport limits across every CI platform. Replacing the
   # base substituter also preserves the official-cache priority after NixOS or
   # nix-darwin activation installs the host's normal configuration.
-  grep -E '^(substituters|extra-substituters|extra-trusted-public-keys|http2|stalled-download-timeout|download-attempts) = ' \
+  grep -E '^(substituters|extra-substituters|extra-trusted-public-keys|http2|stalled-download-timeout|download-attempts|fallback) = ' \
     "$repo_root/docker/bootstrap-ci-tools/nix.conf"
   if [[ -n ${DOTFILES_CI_BINARY_CACHE:-} ]]; then
     # This local cache is restored within GitHub's branch-scoped CI cache.
