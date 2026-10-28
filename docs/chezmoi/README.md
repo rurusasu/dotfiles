@@ -2,6 +2,8 @@
 
 chezmoi は Windows の WezTerm 設定と PowerShell 7 プロファイルを管理します。PowerShell は WinGet manifest から最新版を導入し、WezTerm の既定プロファイルとして起動します。NixOS-WSL は別の WezTerm プロファイルから起動します。
 
+Windows の WezTerm は WinGet の `wez.wezterm.nightly` から nightly を導入します。
+
 ## 目次
 
 - [インストールと適用](./usage.md)
