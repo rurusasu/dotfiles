@@ -114,8 +114,8 @@ NixOS:            ./install.sh
 Ubuntu / Debian:  ./install.sh
 ```
 
-- Windows は `windows/winget/packages.json` を正本として GUI アプリのみを winget で導入します。
-- `task install` は既存の PowerShell と winget で Windows GUI アプリを導入した後、NixOS-WSL の導入、inputs の更新と NixOS/Home Manager の反映、Windows chezmoi の順に一度ずつ実行します。WSLg の対象 GUI は Nix 側で導入します。実行順序は `taskfiles/install/taskfile.yml` が管理します。`install.cmd` / `install.ps1` が PowerShell で WinGet master を1回適用し、Task の導入後は Taskfile の WSL・chezmoi へ進みます。WinGet の実行経路はこの1か所で、直接の `task install` も同じ入口を使います。`-Phase Winget` は Windows GUI のみです。WSL 基盤の有効化だけ UAC 昇格します。Node.js・npm・pnpm・dsh・AutoHotkey・GlazeWM の Windows 導入や CLI runtime acceptance は行いません。既存アプリや Startup shortcut は自動削除しません。
+- Windows は `windows/winget/packages.json` を正本として winget で導入します。
+- `task install` は既存の PowerShell と winget で Windows のパッケージを導入した後、NixOS-WSL の導入、inputs の更新と NixOS/Home Manager の反映、Windows chezmoi の順に一度ずつ実行します。WSLg の対象 GUI は Nix 側で導入します。実行順序は `taskfiles/install/taskfile.yml` が管理します。`install.cmd` / `install.ps1` が PowerShell で WinGet master を1回適用し、Task の導入後は Taskfile の WSL・chezmoi へ進みます。WinGet の実行経路はこの1か所で、直接の `task install` も同じ入口を使います。`-Phase Winget` は master の import のみを実行します。WSL 基盤の有効化だけ UAC 昇格します。既存アプリや Startup shortcut は自動削除しません。
 - Codex CLI はどの OS でも個別導入せず、各 OS 向け ChatGPT アプリ付属の CLI を使います。Windows の GUI profile は Microsoft Store のデスクトップアプリを対象とし、npm/pnpm パッケージを導入しません。
 - macOS は nix-darwin が Home Manager と nix-homebrew formula/cask を同じ switch に含めます。
 - 非 NixOS Linux（Ubuntu/Debian など）は standalone Home Manager がユーザー環境を適用します。Docker や OS service は管理しません。

@@ -3,17 +3,6 @@
 Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     BeforeAll {
         $script:repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
-        . (Join-Path $PSScriptRoot '../lib/Invoke-ExternalCommand.ps1')
-        $script:originalPath = $env:PATH
-        Update-ProcessEnvironmentPath
-    }
-
-    AfterAll { $env:PATH = $script:originalPath }
-
-    It 'should run the installed Windows WezTerm executable' {
-        $output = @(Invoke-ExternalCommandWithTimeout -Command wezterm -Arguments @('--version') -TimeoutSeconds 120)
-        $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
-        $output -join '' | Should -Match '\d+'
     }
 
     It 'should deploy the Windows configuration through real chezmoi apply and remain idempotent' {

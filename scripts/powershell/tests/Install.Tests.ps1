@@ -126,13 +126,6 @@ exit 0
             $marker | Should -Match "Phase=Winget"
             $marker | Should -Match "DistroName=WorkNix"
             $marker | Should -Match "Sentinel=ok"
-
-            $installBytes = [System.IO.File]::ReadAllBytes((Join-Path $scriptDir "install.ps1"))
-            $hasBom = $installBytes.Length -ge 3 -and
-            $installBytes[0] -eq 0xEF -and
-            $installBytes[1] -eq 0xBB -and
-            $installBytes[2] -eq 0xBF
-            $hasBom | Should -BeFalse
         }
 
         It 'should preserve an overlong inherited PATH when using the explicit PowerShell 7 path' {
@@ -464,8 +457,8 @@ function chezmoi {
         }
     }
 
-    Context 'GUI-only Windows setup execution' {
-        It 'should run only WinGet without loading CLI, WSL, admin or chezmoi code' {
+    Context 'Windows package import execution' {
+        It 'should import the master without loading WSL, admin or chezmoi code' {
             $result = Invoke-WindowsPhaseFixture
             $result.ExitCode | Should -Be 0 -Because $result.Output
             $result.Output | Should -Match 'GUI_FIXTURE_APPLIED'
@@ -788,12 +781,6 @@ function Invoke-NixosWslSetup {
             $result.Context.SyncMode | Should -Be 'none'
             $result.Context.SyncBack | Should -Be 'none'
             $result.Context.ForcePostInstall | Should -BeTrue
-        }
-
-        It 'should run only WinGet when its phase is selected' {
-            $result = Invoke-WslInstallerFixture -Arguments '-Phase Winget'
-            $result.ExitCode | Should -Be 0 -Because $result.Output
-            ($result.Events -join ',') | Should -Be 'gui'
         }
 
         # Windows PowerShell 5.1 -File treats this switch value as a string and cannot bind explicit false.

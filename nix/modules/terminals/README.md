@@ -10,7 +10,7 @@ theme/size は各 `default.nix` の標準 `programs.*.settings` に定義しま�
 - WSL の Ghostty GUI は WSLg が必要です。
 - WezTerm の Bash / Zsh 連携は `TERM_PROGRAM=WezTerm` のときだけ読み込みます。Ghostty で同時に有効にすると、プロンプト連携が重複し、Zsh では空の `HOSTNAME` により Ghostty が受け付けない OSC 7 が送られることがあります。
 - Windows は chezmoi が WezTerm 設定のみを配布し、PowerShell を既定シェルに設定します。NixOS-WSL は別の launcher profile として起動します。
-- Windows の WezTerm winget ID・PATH・verifier は `windows/winget/packages.json` が管理します。
+- Windows のパッケージは `windows/winget/packages.json` が管理します。
 
 `checks.<system>.wezterm-config` は Lua 構文、PowerShell の既定設定、NixOS-WSL launcher profile を検証します。
 

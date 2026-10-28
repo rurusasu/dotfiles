@@ -98,7 +98,6 @@ Darwin は `system.primaryUser`、WSL は上書き可能な `wsl.defaultUser` �
 | NixOS システム          | NixOS module            | native/WSL host、Docker、Home Manager を generation に統合    |
 | Unix ユーザー設定       | Home Manager            | shell、Git、terminal、editor の設定を宣言                     |
 | Windows 設定            | chezmoi                 | Windows のユーザー設定のみを配布                              |
-| 受入検証                | platform verifier       | runtime acceptance と drift を検出                            |
 
 WSL の Git 設定は、ユーザー設定を Home Manager、共有 checkout の信頼設定を
 NixOS `programs.git.config.safe.directory` が所有します。再構築 wrapper はローカルの

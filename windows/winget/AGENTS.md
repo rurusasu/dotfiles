@@ -8,7 +8,6 @@
 - 通常は Windows GUI を管理する。Task・PowerShell・chezmoi はセットアップ用、superfile・eza・fd・ripgrep・lazygit は Windows PowerShell 用、Starship・MinGit は WSL との連携用の明示的な CLI 例外。
 - Windows の alias・関数は chezmoi、Unix のアプリと設定は Nix / Home Manager で管理する。
 - Windows Dia は手動導入とし、master や独自 MSIX 処理に追加しない。
-- `retired-packages.json` は履歴。自動アンインストールには使わない。
 
 ## 実行コマンド
 
