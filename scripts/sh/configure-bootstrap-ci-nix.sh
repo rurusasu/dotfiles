@@ -56,7 +56,8 @@ mkdir -p "$config_dir"
   # Share the public binary caches across every CI platform. Keeping these
   # settings in the same source as the tools image avoids Darwin silently
   # rebuilding Hermes dependencies from source.
-  grep -E '^(extra-substituters|extra-trusted-public-keys) = ' \
+  # An explicit list also replaces a mirror inherited after OS activation.
+  grep -E '^(substituters|extra-trusted-public-keys) = ' \
     "$repo_root/docker/bootstrap-ci-tools/nix.conf"
   if [[ -n ${DOTFILES_CI_BINARY_CACHE:-} ]]; then
     # This local cache is restored within GitHub's branch-scoped CI cache.

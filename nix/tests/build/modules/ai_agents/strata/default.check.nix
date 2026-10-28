@@ -40,6 +40,11 @@ pkgs.lib.optionalAttrs
               ''
                 desktop-file-validate ${packages.desktop}/share/applications/Strata.desktop
                 test -s ${packages.desktop}/share/pixmaps/strata-desktop.png
+                # Resolve the actual GUI's libraries without requiring a display
+                # or nested bubblewrap namespaces in the build sandbox.
+                ${pkgs.glibc}/lib/ld-linux-x86-64.so.2 \
+                  --library-path ${packages.desktop.desktopContents}/usr/lib:${packages.desktop.fhsenv}/usr/lib64 \
+                  --list ${packages.desktop.desktopContents}/usr/bin/strata-desktop
               ''
           }
           touch "$out"
