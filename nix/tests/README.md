@@ -137,6 +137,11 @@ Linux の container job は `docker/bootstrap-ci-tools/nix.conf` で
 `sandbox = true` を設定した tools image を使います。新しい image は公開前に
 `check-bootstrap-ci-tools.sh --sandbox` で sandbox 内の build を検証し、各 job は検証済みの
 image を immutable digest で再利用します。
+全 CI platform は公式の `cache.nixos.org` を public package の取得で優先し、
+Numtide mirror は priority 50 の fallback として使います。設定の正本は
+`docker/bootstrap-ci-tools/nix.conf` で、認証設定用 adapter も同じ値を読み込みます。
+WSL の転送 artifact は workflow run ID ごとに保存し、consumer だけの再実行でも
+成功済み producer の出力を再利用します。producer の再実行時は同じ artifact を置き換えます。
 CI の format 検査は全 checks 内の `treefmt` にまとめ、同じ検査を別 job では実行しません。
 check job の結果も `Bootstrap / Complete` の成功条件に含めます。CI が host の PSGallery module を準備しても、
 Nix formatter は host module ではなく固定した store module を使います。

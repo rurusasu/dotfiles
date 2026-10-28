@@ -28,6 +28,25 @@ run_script() {
   run bash --noprofile --norc -e -o pipefail -c "$1"
 }
 
+@test "WSL transport remains available when only the consumer is rerun" {
+  upload=$(yq -er '.jobs["wsl-prebuild"].steps[] | select(.name == "Upload WSL Nix store cache") | .with.name' "$WORKFLOW")
+  download=$(yq -er '.jobs.wsl.steps[] | select(.name == "Download prebuilt WSL Nix store cache") | .with.name' "$WORKFLOW")
+  previous=''
+  for run_id in 123456 234567; do
+    uploaded=${upload//'${{ github.run_id }}'/$run_id}
+    uploaded=${uploaded//'${{ github.run_attempt }}'/1}
+    [ "$uploaded" != "$previous" ]
+    for attempt in 1 2 3; do
+      requested=${download//'${{ github.run_id }}'/$run_id}
+      requested=${requested//'${{ github.run_attempt }}'/$attempt}
+      [ "$requested" = "$uploaded" ]
+    done
+    previous=$uploaded
+  done
+  # Rerunning the producer must replace its artifact within the same run.
+  [ "$(yq -er '.jobs["wsl-prebuild"].steps[] | select(.name == "Upload WSL Nix store cache") | .with.overwrite' "$WORKFLOW")" = true ]
+}
+
 @test "WSL prebuild exports zstd transport and fails closed" {
   script=$(workflow_step "$WORKFLOW" wsl-prebuild 'Build the WSL system closure and export a local cache')
   export STORE_PATH=/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-hermes
