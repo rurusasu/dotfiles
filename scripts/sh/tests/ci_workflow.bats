@@ -110,6 +110,25 @@ EOF
   done
 }
 
+@test "WSL transport remains available when only the consumer is rerun" {
+  upload=$(yq -er '.jobs["wsl-prebuild"].steps[] | select(.name == "Upload WSL Nix store cache") | .with.name' "$WORKFLOW")
+  download=$(yq -er '.jobs.wsl.steps[] | select(.name == "Download prebuilt WSL Nix store cache") | .with.name' "$WORKFLOW")
+  previous=''
+  for run_id in 123456 234567; do
+    uploaded=${upload//'${{ github.run_id }}'/$run_id}
+    uploaded=${uploaded//'${{ github.run_attempt }}'/1}
+    [ "$uploaded" != "$previous" ]
+    for attempt in 1 2 3; do
+      requested=${download//'${{ github.run_id }}'/$run_id}
+      requested=${requested//'${{ github.run_attempt }}'/$attempt}
+      [ "$requested" = "$uploaded" ]
+    done
+    previous=$uploaded
+  done
+  # Rerunning the producer must replace its artifact within the same run.
+  [ "$(yq -er '.jobs["wsl-prebuild"].steps[] | select(.name == "Upload WSL Nix store cache") | .with.overwrite' "$WORKFLOW")" = true ]
+}
+
 @test "WSL prebuild exports zstd transport and fails closed" {
   script=$(workflow_step "$WORKFLOW" wsl-prebuild 'Build the WSL system closure and export a local cache')
   export STORE_PATH=/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-hermes
@@ -192,7 +211,7 @@ EOF
   write_stub nix <<'EOF'
 case "$*" in
 'config show access-tokens') field=access-tokens ;;
-'config show substituters') field=extra-substituters ;;
+'config show substituters') field=substituters ;;
 'config show trusted-public-keys') field=extra-trusted-public-keys ;;
 *) exit 64 ;;
 esac
@@ -237,7 +256,7 @@ EOF
         grep -Fxq 'stalled-download-timeout = 60' "$secret_file"
         grep -Fxq 'download-attempts = 3' "$secret_file"
         grep -Fxq 'fallback = true' "$secret_file"
-        grep -Fxq 'substituters = https://cache.nixos.org?priority=10' "$secret_file"
+        grep -Fxq 'substituters = https://cache.nixos.org?priority=10 https://cache.numtide.com?priority=50 https://hermes-agent.cachix.org' "$secret_file"
         if [[ $wsl == true ]]; then
           [ ! -e "$GIT_CONFIG_SYSTEM" ]
           grep -Fxq 'max-jobs = 2' "$secret_file"
