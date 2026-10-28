@@ -1,7 +1,13 @@
-{ inputs }:
+{
+  inputs,
+  fixtures,
+  code,
+  files,
+  upstream,
+}:
 let
-  repositoryLock = builtins.fromJSON (builtins.readFile ../../../../../../flake.lock);
-  upstreamLock = builtins.fromJSON (builtins.readFile "${inputs.hermes-agent}/flake.lock");
+  repositoryLock = builtins.fromJSON (builtins.readFile files."flake.lock");
+  upstreamLock = builtins.fromJSON (builtins.readFile upstream.hermes-agent.files."flake.lock");
   hermesNode =
     repositoryLock.nodes.${repositoryLock.nodes.${repositoryLock.root}.inputs.hermes-agent};
   upstreamInputs = upstreamLock.nodes.${upstreamLock.root}.inputs;
@@ -12,7 +18,7 @@ let
       homeDirectory,
     }:
     let
-      pkgs = (import ../../../../fixtures/packages.nix { inherit inputs; }).mkPkgs system;
+      pkgs = fixtures.mkPkgs system;
       testPackage =
         pkgs.runCommand "hermes-agent-test-package"
           {
@@ -25,26 +31,25 @@ let
             touch "$out/bin/hermes"
           '';
     in
-    (inputs.home-manager.lib.homeManagerConfiguration {
-      inherit pkgs;
-      extraSpecialArgs = {
-        inherit inputs;
-      };
-      modules = [
-        {
-          home = {
-            username = "test-user";
-            inherit homeDirectory;
-            stateVersion = "25.05";
-          };
-          # The upstream module closes over inputs.self for its package
-          # default. Pin its supported package option here so evaluation uses
-          # this local derivation without forcing the upstream Python package.
-          services.hermes-agent.package = testPackage;
-        }
-        ((import ../../../../fixtures/packages.nix { inherit inputs; }).homeModule "common")
-      ];
-    })
+    (fixtures.mkHome system [
+      {
+        home.homeDirectory = homeDirectory;
+        # The upstream module closes over inputs.self for its package
+        # default. Pin its supported package option here so evaluation uses
+        # this local derivation without forcing the upstream Python package.
+        programs.hermes-agent = {
+          enable = true;
+          desktop.enable = true;
+        };
+        services.hermes-agent = {
+          enable = true;
+          gateway.enable = true;
+          package = testPackage;
+        };
+        programs.mcp.enable = true;
+      }
+      (fixtures.homeModule "common")
+    ])
     // {
       inherit testPackage;
     };
@@ -59,8 +64,100 @@ let
   };
 
   hasNodejs = home: builtins.any (item: (item.pname or item.name) == "nodejs") home;
+  upstreamPackage = inputs.hermes-agent.packages.x86_64-linux.default;
+  # Model each input version explicitly; upstream may publish a placeholder
+  # today and a release number tomorrow. Keep its actual runtime in both cases.
+  packageWithVersion =
+    version:
+    upstreamPackage.overrideAttrs (previous: {
+      inherit version;
+      passthru = previous.passthru // {
+        hermesDesktop = previous.passthru.hermesDesktop.overrideAttrs { inherit version; };
+      };
+    });
+  knownReleasePackage = packageWithVersion "0.21.4";
+  versionPackage =
+    kind: package:
+    let
+      source = inputs.hermes-agent // {
+        outPath = files.nix.tests.fixtures.hermes-version.${kind}.__path;
+        rev = "0123456789abcdef0123456789abcdef01234567";
+        lastModifiedDate = "20261026122553";
+      };
+    in
+    code.nix.modules.ai_agents.hermes.package {
+      inherit package source;
+      pkgs = fixtures.mkPkgs "x86_64-linux";
+    };
 in
 {
+  testHermesVersionMetadataPreservesKnownReleaseAndRuntime = {
+    expr = {
+      inherit (versionPackage "legacy" knownReleasePackage) version;
+      samePackage = (versionPackage "legacy" knownReleasePackage).drvPath == knownReleasePackage.drvPath;
+      sameRuntime =
+        (versionPackage "legacy" knownReleasePackage).hermesVenv.drvPath
+        == knownReleasePackage.hermesVenv.drvPath;
+      knownDesktopPreserved =
+        (versionPackage "legacy" knownReleasePackage).hermesDesktop.drvPath
+        == knownReleasePackage.hermesDesktop.drvPath;
+    };
+    expected = {
+      version = "0.21.4";
+      samePackage = true;
+      sameRuntime = true;
+      knownDesktopPreserved = true;
+    };
+  };
+
+  testHermesKnownSourceVersionRepairsPlaceholderMetadata = {
+    expr =
+      let
+        package = packageWithVersion "0.0.0";
+        corrected = versionPackage "legacy" package;
+      in
+      {
+        inherit (corrected) version;
+        desktopVersion = corrected.hermesDesktop.version;
+        samePackage = corrected.drvPath == package.drvPath;
+        sameRuntime = corrected.hermesVenv.drvPath == package.hermesVenv.drvPath;
+      };
+    expected = {
+      version = "0.21.4";
+      desktopVersion = "0.21.4";
+      samePackage = false;
+      sameRuntime = true;
+    };
+  };
+
+  testHermesDevelopmentVersionIdentifiesDateAndRevision = {
+    expr = (versionPackage "stamped" (packageWithVersion "0.0.0")).version;
+    expected = "unstable-2026-10-26-01234567";
+  };
+
+  testHermesStaticPlaceholderIsNotAReleaseVersion = {
+    expr = (versionPackage "placeholder" (packageWithVersion "0.0.0")).version;
+    expected = "unstable-2026-10-26-01234567";
+  };
+
+  testHermesVersionCorrectionFollowsRuntimeOverrides = {
+    expr =
+      let
+        original = versionPackage "stamped" (packageWithVersion "0.0.0");
+        customized = original.override { extraDependencyGroups = [ "dev" ]; };
+      in
+      {
+        changedRuntime = customized.hermesVenv.drvPath != original.hermesVenv.drvPath;
+        followsRuntime = inputs.nixpkgs.lib.hasInfix (builtins.unsafeDiscardStringContext "${customized.hermesVenv}/bin/hermes") customized.postInstall;
+        staleRuntime = inputs.nixpkgs.lib.hasInfix (builtins.unsafeDiscardStringContext "${original.hermesVenv}/bin/hermes") customized.postInstall;
+      };
+    expected = {
+      changedRuntime = true;
+      followsRuntime = true;
+      staleRuntime = false;
+    };
+  };
+
   testHermesRuntimeUsesOfficialDependencyPins = {
     expr = builtins.all (
       name:
@@ -101,6 +198,7 @@ in
           linux.config.home.packages;
       home = linux.config.home.sessionVariables.HERMES_HOME;
       multiplexProfiles = linux.config.services.hermes-agent.settings.gateway.multiplex_profiles;
+      model = linux.config.services.hermes-agent.settings.model or { };
       serviceUsesInjectedPackage = builtins.any (
         command: inputs.nixpkgs.lib.hasPrefix "${linux.testPackage}/bin/hermes" command
       ) (inputs.nixpkgs.lib.toList linux.config.systemd.user.services.hermes-agent.Service.ExecStart);
@@ -109,7 +207,37 @@ in
       package = true;
       home = "/home/test-user/.hermes";
       multiplexProfiles = null;
+      model = {
+        provider = "openai-codex";
+        default = "gpt-6.1-sol";
+      };
       serviceUsesInjectedPackage = true;
+    };
+  };
+
+  testHermesSharedMcpTransportsReachFinalConfiguration = {
+    expr =
+      let
+        servers = linux.config.services.hermes-agent.settings.mcp_servers;
+      in
+      {
+        chrome = servers.chrome.url;
+        xapi = servers.xapi.url;
+        pipedream = { inherit (servers.pipedream) url auth; };
+        localCommands = builtins.filter (name: servers.${name} ? command) [
+          "chrome"
+          "xapi"
+          "pipedream"
+        ];
+      };
+    expected = {
+      chrome = "http://127.0.0.1:8765/mcp";
+      xapi = "http://127.0.0.1:8766/mcp";
+      pipedream = {
+        url = "https://mcp.pipedream.net/v2";
+        auth = "oauth";
+      };
+      localCommands = [ ];
     };
   };
 

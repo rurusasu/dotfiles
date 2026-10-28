@@ -3,12 +3,11 @@
 ## 役割
 
 - `scripts/sh/`: Linux/WSL 向けシェルスクリプト
-- `scripts/powershell/`: Windows セットアップとハンドラー実装
+- `scripts/powershell/`: Windows セットアップとWSL連携
 
 ## 主要エントリーポイント
 
-- Windows 全体セットアップ: `scripts/powershell/install.ps1`
-- ユーザー権限ハンドラー: `scripts/powershell/install.user.ps1`
+- Windows 全体セットアップ: `install.cmd` / `task install`。どちらも `scripts/powershell/install.ps1` で WinGet master を1回適用し、Task を含めて導入・更新してから `INSTALL_STAGE=apply` で Taskfile の後続処理へ進む。`-Phase` は単独処理と Taskfile の platform adapter 用
 - NixOS WSL postinstall: `scripts/powershell/lib/Invoke-NixosWslSetup.ps1`
 
 ## 変更時の判断基準

@@ -6,40 +6,85 @@ nix-unit と競合する別のテストフレームワークではありませ�
 
 ## 配置と所有境界
 
-| 配置        | 戻り値・役割                                                                    | 登録先                                      |
-| ----------- | ------------------------------------------------------------------------------- | ------------------------------------------- |
-| `unit/`     | `expr` / `expected` の属性セット。Nix 式、実効 option、package 選択、flake 配線 | `nix/tests/default.nix` の `nix-unit.tests` |
-| `build/`    | ビルド・生成物・外部プロセスを検証する derivation                               | 同ファイルの `checks`                       |
-| `fixtures/` | テスト用 pkgs、NixOS hardware module などの共有入力                             | テストから import                           |
+| 配置                   | 戻り値・役割                                                                                           | 自動検出                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| `unit/**/*.nix`        | `test...` をキーにした `expr` / `expected` の属性セット。Nix 式、実効 option、package 選択、flake 配線 | `nix/tests/discover.nix` が再帰的に読み込み `nix-unit.tests` へ接続 |
+| `build/**/*.check.nix` | check 名をキーとする derivation の属性セット。ビルド・生成物・外部プロセスを検証                       | 同じ scanner が読み込み `checks` へ接続                             |
+| `fixtures/`            | テスト用 pkgs、Home Manager / OS 評価関数、hardware module などの共有入力                              | 自動検出せずテストから利用                                          |
 
 テストの分類は本番の `nix/` に揃えます。統合設定・OS 構成は `unit/defaults/`、
 アプリは本番 `modules/` と同じ分類の `unit/modules/`、共通キーは `unit/home/keybindings/bindings.nix`、
-Windows manifest の契約は `unit/windows/` に置きます。
+Windows manifest の契約は CI の jq で直接検証します。
 構成テストは `nix/defaults.nix:systemDefaults` を参照し、`platform` と `system` で対象を選択します。
-共通の Home Manager 評価は `fixtures/home-configurations.nix` を使います。
-登録側で一度作った `homeConfigurations` を各テストへ渡し、同じホスト構成の評価を共有します。
+`nix/tests/context.nix` が `fixtures` / `homeConfigurations` / `code` / `files` / `upstream` を共有し、テストは必要な引数だけを受け取ります。
+`homeConfigurations` は共通の本番 Home Manager 構成を保持し、同じホストの評価を共有します。
 アプリ設定は各 OS の実効 option や正本ファイルを入力とし、生成された設定ファイルや shell 連携へ
 反映されることを検証します。共通設定を別途評価して期待値にせず、各 OS の override も対象にします。
 同じ option 同士の自己比較を避け、OS 境界・有効化・所有権は独立した assertion にします。
 生成ファイルが derivation の場合、unit は生成入力と配線を検証し、実際の生成処理の実行は build が担当します。
 unit のファイルは `test...` 属性を持つ nix-unit 形式にし、ファイル名は kebab-case にします。
-`unit/ownership.nix` が unit / build の登録漏れ・重複と Bats の責務分類を検査します。
+すべての unit `.nix` と build `.check.nix` を自動検出するため、テスト追加・移動時の個別パス登録は不要です。
+unit ファイルが空、テスト・check 名が重複、検出した全体が 0 件の場合は失敗します。
+build ファイルは OS 条件で空の属性セットを返せます。build の通常の `.nix` helper は検出しません。
+`unit/ownership.nix` と discovery の契約テストが unit / build の検出範囲・重複・空集合を検査します。
+
+テスト定義には fixture・純粋な helper・asset を含め、リポジトリ内のファイルパスや import を書きません。
+`source-tree.nix` がリポジトリの資源を再帰的に自動索引し、context が属性で渡します。
+資源ごとの手書き catalog やパス登録は不要です。パスを扱うのはこの共通 infrastructure だけです。
+
+- `fixtures.mkHome` / `fixtures.mkHomeWith` は本番と同じ module を自動検出し、型付き option で必要なアプリだけを有効化します。
+- `homeConfigurations` は本番と共通の OS 構成、`fixtures.mkDarwin` は Darwin OS module の単独評価に使います。
+- `code.*` は Nix ファイルを拡張子なしの属性名で参照し、通常の値・関数として扱います。純粋な factory・renderer もここから利用します。
+- `files.*` はファイルパスを保持します。Nix ファイルは拡張子なし、それ以外はファイル名をそのまま使い、ディレクトリは `.__path` で参照します。
+- `upstream.<input>.code` / `upstream.<input>.files` は flake input の資源を同じ形式で参照します。例: `upstream.home-manager.code.modules.lib.mcp { inherit lib; }`。外部資源にも import やソース内のパスを指定しません。
+- Nix ファイルとディレクトリの属性名が重なる場合、ディレクトリの子属性を維持し、同名ファイルは `.__file` で参照します。`code` では式・関数、`files` ではパスになります。
+
+実 module の設定は評価結果で検証し、`code` 経由で直接呼び出したり mock lib で設定を取り出したりしません。
+本番側の純粋な factory・renderer は通常の関数のまま維持します。テストからは `code` で参照するため、個別の import は不要です。
+
+```nix
+# unit の例: 必要な context 引数だけを受け取る
+{ fixtures, code }:
+let
+  home = fixtures.mkHome "aarch64-darwin" [
+    { programs.wezterm.enable = true; }
+  ];
+in
+{
+  testWeztermTheme = {
+    expr = home.config.programs.wezterm.settings.color_scheme;
+    expected = code.nix.modules.terminals.appearance.theme;
+  };
+}
+```
+
+```nix
+# build/example.check.nix: asset も属性から参照する
+{ pkgs, files }:
+{
+  wezterm-lua = pkgs.runCommand "wezterm-lua-check"
+    { nativeBuildInputs = [ pkgs.lua ]; }
+    ''
+      luac -p ${files.nix.modules.terminals.wezterm."wezterm.lua"}
+      touch "$out"
+    '';
+}
+```
 
 nix-unit の flake-parts module が `checks.<system>.nix-unit` を自動生成します。
 アプリの実行テストは本番の分類に対応する `build/modules/`、独自 package と standalone Darwin の構成ビルドは
-`build/defaults/{custom-packages,standalone-darwin-home}.nix`、PowerShell formatter は `build/treefmt/powershell.nix` に置きます。
+`build/defaults/{custom-packages,standalone-darwin-home}.check.nix`、PowerShell formatter は `build/treefmt/powershell.check.nix` に置きます。
 実行スクリプトを flake の配線ファイルに直書きしません。
 `treefmt` は treefmt-nix の flake-parts module が標準 check として公開します。
 設定の正本は `nix/treefmt.nix`、読み込みと開発シェルの配線は `nix/defaults.nix` です。
-Unix CLI と GUI の選択は各アプリ module を選択した Home Manager の実効設定で検証し、
+Unix CLI と GUI の選択は型付き option でアプリを有効化した Home Manager の実効設定で検証し、
 OS 固有の連携 package は host の実効設定で検証します。
-Windows の install / verifier metadata は独立した `windows/winget/packages.json` を直接評価します。
+Windows の標準 package ID / source は CI の jq が `windows/winget/packages.json` を直接検証します。
 廃止した package catalog / provider resolution の fixture や生成 manifest 比較は対象にしません。
 
-- `tests/bash/` は shell / installer の順序、外部コマンドの stub、runtime / artifact 契約を検証します。
+- `scripts/sh/tests/` は shell / installer の順序、外部コマンドの stub、runtime / artifact 契約を検証します。
 - Nix の値 assertion を Bats 内の `nix eval` に追加せず、`unit/` に記載します。
 - Nix の構成・package 選択・生成設定の検証はすべて `unit/` / `build/` が担当します。
-  `tests/python/` は Python の処理や外部コマンドの実行を検証し、本番設定の一覧や値を複製しません。
 - 実機の activation、service 起動、secret、network は nix-unit の対象外です。
   ビルド・CLI double の成功だけで実機の動作確認が完了したとは扱いません。
 
@@ -58,8 +103,11 @@ Darwin / Linux の `custom-package-builds` は `chatgpt-desktop` check も含み
 ビルド・CLI 起動、および Linux の desktop entry と upstream tmpfiles 規則の一致を確認します。
 GUI の起動・ログイン・操作はこの check の対象外で、各 OS の実機で確認します。
 Codex / Hermes の unit は公式 Home Manager 設定と共通 MCP の配線を検証します。
-`hermes-configuration` は Home Manager の MCP 定義を client 向け JSON に変換し、
-Chrome / X API の localhost HTTP 接続先と Pipedream の OAuth 設定を確認します。
+Docker MCP の unit は Linux / macOS の Home Manager package・plugin link・宣言したサーバー選択を検証します。
+`docker-mcp` check は固定した公式 Git source と同梱の依存からビルドし、空の HOME で Docker CLI からの
+plugin 検出、版の表示、gateway の起動オプションを確認します。Docker daemon や秘密情報は不要です。
+Hermes の unit は最終的な `settings.mcp_servers` で Chrome / X API の HTTP 接続先、
+Pipedream の OAuth 設定、HTTP サーバーにローカル command がないことを確認します。
 共有する native ユーザーサービスの起動、headless browser の操作、API 認証は実機で確認します。
 
 ```bash
@@ -78,11 +126,9 @@ nix build .#checks.aarch64-darwin.nix-unit --no-link --no-write-lock-file
 
 `nix flake check --no-build` は評価確認です。nix-unit assertion や実行テストの成功は、
 対象 check の build 結果で確認します。Nix が既存の成功済み出力を再利用する場合もあります。
-`powershell-formatter` と `treefmt` は、PSScriptAnalyzer の PowerShell Gallery 配布パッケージを
-Nix input として取得し、Nix store の module manifest を直接 import します。
-`flake.nix` の `psscriptanalyzer` URL はバージョンを指定せず、取得済みの配布物と内容の hash は
-`flake.lock` で固定します。更新時は `nix flake update psscriptanalyzer` で input を再解決し、
-その lock を更新します。
+`powershell-formatter` と `treefmt` は、nixpkgs の PowerShell 拡張機能に同梱された
+PSScriptAnalyzer を Nix store から直接 import します。VS Code 本体は不要です。
+更新は nixpkgs input の lock 更新に従い、追加の release metadata input は使いません。
 依存 input の取得は build に先行し、formatter の実行中に `Install-Module` を呼びません。
 空の HOME でも同じ依存を使用します。`powershell-formatter` は未整形 fixture を整形し、
 CRLF・日本語の BOM と二度目の実行で byte / 更新時刻が変わらないことを検証します。
@@ -100,7 +146,8 @@ Nix formatter は host module ではなく固定した store module を使いま
 Linux bootstrap CI は hardware fixture を `/etc/nixos/hardware-configuration.nix` に配置し、`x86_64-linux`（`ubuntu-24.04`）で本番 NixOS system と standalone Home Manager activation package を build します。両構成は同じ `systemDefaults.home-manager.sharedModules` を使います。
 Darwin CI は `extendModules` で runner の `system.primaryUser` を明示し、`aarch64-darwin`（`macos-15`）で `darwin-rebuild switch` と全 flake checks を実行します。
 WSL CI も `platform = "wsl"` を選ぶ本番経路の `nixos-rebuild switch` を実行します。Darwin cask artifact check は CI で実行しません。
-Python unittest suite は CI の gate から外し、workflow 検証は `actionlint`、設定適用は対象 platform の rebuild で行います。
+workflow の認証・cache の保護・変更分類・集約判定は `scripts/sh/tests/ci_workflow.bats` で実行します。
+YAML 構文は `actionlint`、設定適用は対象 platform の rebuild で検証します。
 共通の `nix` job は statix の lint を確認し、事前の `nix eval` / `nix flake check --no-build` は実行しません。
 `aarch64-linux` は flake の support/output には含まれますが、この workflow には ARM64 Linux runner の native build がありません。
 `aarch64-linux` の native build には対応する builder が必要です。
@@ -109,14 +156,15 @@ Python unittest suite は CI の gate から外し、workflow 検証は `actionl
 
 ## Bats の所有境界
 
-`tests/bash/` は shell / installer の runtime 契約を担当します。Windows の manifest は
+`scripts/sh/tests/` は shell / installer の runtime 契約を担当します。Windows の manifest は
 独立した管理対象なので、Nix から生成した JSON との一致検査はありません。
 Windows の installer と verifier の実行契約は PowerShell / Pester が担当します。
 
-`unit/ownership.nix` は現在のファイル一覧から、再帰的な unit/build 登録の完全一致、
-重複したテスト名、Bats 内の `nix eval` 所有者を検査します。過去の移行時の件数や
+`unit/ownership.nix` は現在のファイル一覧から、再帰的な unit/build 検出の完全一致、
+重複したテスト名を検査します。過去の移行時の件数や
 廃止したテスト名は固定しません。実行中の移行・backup・rollback 処理を守る
 runtime テストは残します。過去の移管履歴は [PR #633](https://github.com/rurusasu/dotfiles/pull/633) を参照してください。
 
-Nix / Bats 間の責務や呼び出しを変更した場合は、全 system の評価と対象 check の build に加えて、
-変更対象に絞った `bats` 実行または `task test:bash` で関連する runtime 契約を確認します。
+Nix / Bats 間の責務や呼び出しを変更した場合は、全 system の評価、対象 check の build、
+`task test:bash` を実行します。Task は `runtime-tests` shell の明示したツールだけで Bats を実行します。
+ホストの Nix・curl・PowerShell をテストの PATH に持ち込まず、必要な外部コマンドは各 fixture が用意します。

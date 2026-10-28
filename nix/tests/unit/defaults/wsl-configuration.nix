@@ -1,4 +1,9 @@
-{ inputs }:
+{
+  inputs,
+  code,
+  files,
+  homeConfigurations,
+}:
 let
   mkWsl = inputs.nixpkgs.lib.nixosSystem {
     system = "x86_64-linux";
@@ -7,12 +12,12 @@ let
       platform = "wsl";
     };
     modules = [
-      (import ../../../defaults.nix inputs).systemDefaults
+      (code.nix.defaults inputs).systemDefaults
     ];
   };
 
   defaultConfig = mkWsl.config;
-  home = (import ../../fixtures/home-configurations.nix { inherit inputs; }).wsl;
+  home = homeConfigurations.wsl;
 in
 {
   testWslUsesTheDeclaredDefaultUserWithoutBootstrapMetadata = {
@@ -52,6 +57,75 @@ in
     expected = true;
   };
 
+  testWslOnePasswordCliHasDesktopIntegrationPermissions = {
+    expr = {
+      enabled = defaultConfig.programs._1password.enable;
+      group = defaultConfig.security.wrappers.op.group or null;
+      setgid = defaultConfig.security.wrappers.op.setgid or false;
+      privateTmp =
+        defaultConfig.home-manager.users.nixos.systemd.user.services.hermes-agent.Service.PrivateTmp;
+      noNewPrivileges =
+        defaultConfig.home-manager.users.nixos.systemd.user.services.hermes-agent.Service.NoNewPrivileges;
+      hermesBinary =
+        defaultConfig.home-manager.users.nixos.services.hermes-agent.settings.secrets.onepassword.binary_path
+          or null;
+    };
+    expected = {
+      enabled = true;
+      group = "onepassword-cli";
+      setgid = true;
+      privateTmp = false;
+      noNewPrivileges = false;
+      hermesBinary = "/run/wrappers/bin/op";
+    };
+  };
+
+  testWslOnePasswordPermissionsFollowEnabledHermesServices = {
+    expr =
+      map
+        (
+          settings:
+          let
+            inherit
+              (mkWsl.extendModules {
+                modules = [
+                  { home-manager.users.nixos.services.hermes-agent = inputs.nixpkgs.lib.mkForce settings; }
+                ];
+              })
+              config
+              ;
+            services = config.home-manager.users.nixos.systemd.user.services;
+          in
+          {
+            gatewayExists = services ? hermes-agent;
+            backendExists = services ? hermes-backend;
+            backendNoNewPrivileges = services.hermes-backend.Service.NoNewPrivileges or null;
+            backendPrivateTmp = services.hermes-backend.Service.PrivateTmp or null;
+          }
+        )
+        [
+          {
+            gateway.enable = false;
+            backend.mode = "serve";
+          }
+          { enable = false; }
+        ];
+    expected = [
+      {
+        gatewayExists = false;
+        backendExists = true;
+        backendNoNewPrivileges = false;
+        backendPrivateTmp = false;
+      }
+      {
+        gatewayExists = false;
+        backendExists = false;
+        backendNoNewPrivileges = null;
+        backendPrivateTmp = null;
+      }
+    ];
+  };
+
   testWslRegistersDconfForGtkSettingsPersistence = {
     expr = defaultConfig.programs.dconf.enable;
     expected = true;
@@ -81,7 +155,7 @@ in
     expr =
       let
         inherit (inputs.nixpkgs) lib;
-        path = ../../../modules/fonts/wsl-fontconfig.conf;
+        path = files.nix.modules.fonts."wsl-fontconfig.conf";
         xml = if builtins.pathExists path then builtins.readFile path else "";
         systemInclude = "<include>/etc/fonts/fonts.conf</include>";
         pieces = lib.splitString systemInclude xml;

@@ -1,4 +1,8 @@
-{ inputs }:
+{
+  inputs,
+  code,
+  files,
+}:
 let
   mkPkgs =
     system:
@@ -6,14 +10,44 @@ let
       inherit system;
       config.allowUnfree = true;
     };
+  mkHomeWith =
+    {
+      system,
+      modules,
+      extraSpecialArgs ? { },
+    }:
+    let
+      pkgs = mkPkgs system;
+    in
+    inputs.home-manager.lib.homeManagerConfiguration {
+      inherit pkgs;
+      extraSpecialArgs = {
+        inherit inputs;
+      }
+      // extraSpecialArgs;
+      modules =
+        (code.nix.discover-modules "home-manager" files.nix.modules.__path)
+        ++ modules
+        ++ [
+          {
+            home = {
+              username = pkgs.lib.mkDefault "test-user";
+              homeDirectory = pkgs.lib.mkDefault (
+                if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user"
+              );
+              stateVersion = pkgs.lib.mkOverride 900 "25.05";
+            };
+          }
+        ];
+    };
 in
 {
-  inherit mkPkgs;
+  inherit mkPkgs mkHomeWith;
   homeModule =
     requested:
     { pkgs, lib, ... }:
     let
-      base = (import ../../defaults.nix inputs).systemDefaults {
+      base = (code.nix.defaults inputs).systemDefaults {
         inherit inputs pkgs;
         platform = if requested == "common" then "linux" else requested;
       };
@@ -25,36 +59,20 @@ in
         else
           lib.reverseList base.home-manager.sharedModules;
     };
-  windowsPackages = builtins.listToAttrs (
-    builtins.concatMap (
-      source:
-      builtins.map (package: {
-        name = package.PackageIdentifier;
-        value = package // {
-          source = source.SourceDetails.Name;
-        };
-      }) source.Packages
-    ) (builtins.fromJSON (builtins.readFile ../../../windows/winget/packages.json)).Sources
-  );
-  pnpmManifest = builtins.fromJSON (builtins.readFile ../../../windows/pnpm/packages.json);
-  mkHome =
-    system: modules:
-    let
-      pkgs = mkPkgs system;
-    in
-    inputs.home-manager.lib.homeManagerConfiguration {
-      inherit pkgs;
-      extraSpecialArgs = { inherit inputs; };
-      modules = modules ++ [
-        {
-          home = {
-            username = "test-user";
-            homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user";
-            stateVersion = "25.05";
-          };
-        }
-      ];
+  mkDarwin =
+    modules:
+    inputs.nix-darwin.lib.darwinSystem {
+      system = "aarch64-darwin";
+      specialArgs = {
+        inherit inputs;
+        platform = "darwin";
+      };
+      modules =
+        (code.nix.discover-modules "system" files.nix.modules.__path)
+        ++ (code.nix.discover-modules "darwin" files.nix.modules.__path)
+        ++ modules;
     };
+  mkHome = system: modules: mkHomeWith { inherit system modules; };
   darwin = inputs.nix-darwin.lib.darwinSystem {
     system = "aarch64-darwin";
     specialArgs = {
@@ -66,7 +84,7 @@ in
         nixpkgs.pkgs = mkPkgs "aarch64-darwin";
         system.primaryUser = "test-user";
       }
-      (import ../../defaults.nix inputs).systemDefaults
+      (code.nix.defaults inputs).systemDefaults
     ];
   };
 }

@@ -3,8 +3,7 @@
 [treefmt-nix](https://github.com/numtide/treefmt-nix) で formatter の設定と実行依存を管理します。
 正本は [nix/treefmt.nix](../../nix/treefmt.nix) です。
 このファイルは treefmt 専用の Nix モジュールで、`programs` と `settings` を直接宣言します。
-[nix/defaults.nix](../../nix/defaults.nix) の `perSystem.treefmt.imports` が読み込み、
-PowerShell 用の固定済み source を module 引数で渡します。
+[nix/defaults.nix](../../nix/defaults.nix) の `perSystem.treefmt.imports` が読み込みます。
 開発シェルも同じ `perSystem` で `inputsFrom = [ config.treefmt.build.devShell ];` を使い、
 treefmt の実行環境に statix と deadnix を追加します。
 
@@ -18,7 +17,7 @@ project root に生成物を配置する必要はありません。
 - Taplo: `programs.taplo.settings` から TOML を生成し、`--config` で渡します。
 - dprint: `programs.dprint.settings` から JSON を生成し、`--config` で渡します。
 - oxfmt: `pkgs.formats.json` で JSON を生成し、`settings.formatter.oxfmt.options` から `--config` で渡します。
-- PowerShell: 宣言済みの PSScriptAnalyzer を Nix store の manifest から import します。
+- PowerShell: nixpkgs の PowerShell 拡張機能に同梱された PSScriptAnalyzer を Nix store から import します。
 
 Markdown は dprint が担当し、oxfmt の対象は JSON/YAML に限定します。
 dprint の Markdown プラグインも nixpkgs から提供するため、整形中のダウンロードは不要です。

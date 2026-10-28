@@ -1,13 +1,10 @@
-{
-  inputs,
-  homeConfigurations ? import ../../../../fixtures/home-configurations.nix { inherit inputs; },
-}:
+{ homeConfigurations, code }:
 let
   inherit (homeConfigurations)
     homes
     lib
     ;
-  appearance = import ../../../../../modules/terminals/appearance.nix;
+  appearance = code.nix.modules.terminals.appearance;
   ghosttyBase = {
     theme = [ appearance.theme ];
     font-family = [ appearance.font_family ];
@@ -22,9 +19,9 @@ let
       { config-file = [ "?${home.config.xdg.configHome}/dotfiles/keybindings/ghostty.conf" ]; }
     else
       {
-        keybind = import ../../../../../modules/terminals/ghostty/ghostty-renderer.nix {
+        keybind = code.nix.modules.terminals.ghostty.ghostty-renderer {
           inherit lib;
-          bindings = (import ../../../../../home/keybindings/bindings.nix { inherit lib; }).ghostty;
+          bindings = (code.nix.home.keybindings.bindings { inherit lib; }).ghostty;
           asList = true;
         };
       };

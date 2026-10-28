@@ -2,22 +2,22 @@
 
 ## 要件と責務
 
-最低 Neovim **0.12**。更新時は `nvim --version` と `:checkhealth vim.lsp` を確認します。動作確認済み版と採否の根拠は [最新化調査](./neovim-modernization-audit.md) に記録します。
+最低 Neovim **0.12**。更新時は `nvim --version` と `:checkhealth vim.lsp` を確認します。
 
 - 基本設定: `nix/modules/editors/nvim/init.lua`
 - 補助 Lua: `nix/modules/editors/nvim/lua/`
 - Neovim 本体の有効化・設定・Lua の配置: `nix/modules/editors/nvim/default.nix`
-- 補助コマンド・LSP・整形ツール・toolchain・プラグイン実行依存の導入: `nix/modules/editors/nvim/runtime.nix`
+- 補助コマンド・LSP・整形ツール・toolchain・プラグイン実行依存の導入: `nix/modules/editors/nvim/runtime/default.nix`
 - Home Manager の起動設定: `nix/modules/editors/nvim/default.nix`
 - 共通 LSP 処理と整形設定: `nix/modules/editors/nvim/lua/config/lsp.lua`
-- プラグインの導入と Tree-sitter の言語一覧: `nix/modules/editors/nvim/plugins.nix`
+- プラグインの導入と Tree-sitter の言語一覧: `nix/modules/editors/nvim/plugins/default.nix`
 - プラグインの Lua 設定: `nix/modules/editors/nvim/lua/plugins/*.lua`
 - 共通キー配列: `nix/modules/editors/nvim/neovim.nix`（`bindings.nix` が読み込む）
 
 package データ、配布方式、エディタ設定を変更理由ごとに分けます。
 共通方針は [パッケージ管理の分割理由](../nix/package-management.md#分割の理由と編集先) を参照してください。
 
-`nix/modules/editors/nvim/` が Neovim 本体の有効化、package 選択、設定、プラグイン、Lua の配置と専用の実行依存を所有します。`default.nix` が標準 `programs.neovim` を有効化し、`runtime.nix` が補助コマンド・LSP・整形ツール・toolchain・プラグイン実行依存を通常の PATH に導入します。これらを全エディタ共通の集約 module に切り出しません。Neovim の内部 PATH は追加しません。Windows の winget / pnpm では配布しません。
+`nix/modules/editors/nvim/` が Neovim 本体の有効化、package 選択、設定、プラグイン、Lua の配置と専用の実行依存を所有します。構成側の標準 `programs.neovim.enable` に従い、自動検出される `default.nix` が設定を、`runtime/default.nix` が補助コマンド・LSP・整形ツール・toolchain・プラグイン実行依存を通常の PATH に導入します。これらを全エディタ共通の集約 module に切り出しません。Neovim の内部 PATH は追加しません。Windows の winget / pnpm では配布しません。
 
 Neovim の設定、プラグイン、キー配列を読み込む loader は Home Manager が管理します。`default.nix` が `builtins.readFile ./init.lua` で基本設定を読み込み、プラグイン設定より先に実行します。NixOS-WSL は Windows chezmoi が配置する `~/.config/dotfiles/keybindings/generated.json` から共通17割り当てを読み、初回 export 配置前は Nix の値を使います。native Unix は同じ Nix 定義を直接読みます。キーの更新は `task keybindings:export` と `task chezmoi` の後に Neovim を再起動します。loader 導入時は一度 `nrs` が必要です。実際の参照先は `:lua print(vim.fn.stdpath("config"))` で確認してください。非 Nix 環境向けの設定配布は行いません。
 
@@ -31,7 +31,7 @@ Neovim の設定、プラグイン、キー配列を読み込む loader は Home
 
 `nvim-treesitter.withPlugins` に対象言語を指定し、Home Manager の `programs.neovim.plugins` に直接登録します。独自の wrapper や環境変数は使用しません。パーサーと対応クエリのビルド・導入は標準の Nixpkgs / Home Manager の処理に任せます。
 
-Home Manager が `init.lua` を生成し、基本設定の後に `plugins.nix` の順序で `require("plugins.<name>")` により各 `lua/plugins/*.lua` を読み込みます。各ファイルは公式例に沿ってプラグイン自身の `setup()` とキー登録を直接実行します。設定を適用するだけの `local M` / `M.setup()` は使いません。LSP は関数を公開する共通モジュール `lua/config/lsp.lua` の `setup()` を呼び出します。lazy.nvim による遅延読み込みと更新は使用しません。プラグインは Nix の再反映で更新します。
+Home Manager が `init.lua` を生成し、基本設定の後に `plugins/default.nix` の順序で `require("plugins.<name>")` により各 `lua/plugins/*.lua` を読み込みます。各ファイルは公式例に沿ってプラグイン自身の `setup()` とキー登録を直接実行します。設定を適用するだけの `local M` / `M.setup()` は使いません。LSP は関数を公開する共通モジュール `lua/config/lsp.lua` の `setup()` を呼び出します。lazy.nvim による遅延読み込みと更新は使用しません。プラグインは Nix の再反映で更新します。
 
 Nix は継承先のクエリ（ecma、jsx、html_tags など）も閉包に含めます。「プラグインコードをロードしない」と「Nix store に nvim-treesitter 由来のパッケージが一切存在しない」は別です。ファイルタイプ `sh` / `javascriptreact` / `typescriptreact` は対応する grammar に明示登録します。
 
@@ -64,7 +64,7 @@ TypeScript 7 の `tsc --lsp --stdio` を優先し、使用できない環境で�
 
 選択順は project-local tsc → PATH tsc → project-local tsgo → PATH tsgo → local/PATH の従来サーバーです。バージョン確認は候補ごとに最大3秒。成功した選択は root ごとにセッション中固定し、不在はキャッシュしません。特定の旧機能のため従来サーバーを明示指定する場合は、LSP 起動前に `vim.g.dotfiles_typescript_server = "ts_ls"` を設定します。`"tsc"` を指定すると native のみに限定します。選択変更・依存更新後は再起動してください。
 
-旧 nvim-lspconfig に tsc 定義がなくても、TS の filetypes を引き継いで無関係な言語へ起動しないようにしています。現行上流が持つ settings/commands は保持します。plugin 更新は nixpkgs の更新と Nix の再反映で行います。起動・配布の互換テストは現行 checkout と [Nixpkgs が選択した nvim-lspconfig](../../nix/modules/editors/nvim/plugins.nix) の両方を使います。
+旧 nvim-lspconfig に tsc 定義がなくても、TS の filetypes を引き継いで無関係な言語へ起動しないようにしています。現行上流が持つ settings/commands は保持します。plugin 更新は nixpkgs の更新と Nix の再反映で行います。起動・配布の互換テストは現行 checkout と [Nixpkgs が選択した nvim-lspconfig](../../nix/modules/editors/nvim/plugins/default.nix) の両方を使います。
 
 ### TS7 終了時の未解決警告
 
@@ -114,8 +114,8 @@ Windows のカスタム floating terminal、Oil のドライブ一覧互換処�
 ```bash
 nix build path:.#checks.aarch64-darwin.neovim-native --no-link
 # Linux x86_64: checks.x86_64-linux.neovim-native
-nvim --headless -u NONE -i NONE -l tests/lua/nvim_modern_test.lua
-bats tests/bash/bootstrap_entrypoint.bats
+nvim --headless -u NONE -i NONE -l nix/tests/build/modules/editors/nvim/modern.lua
+task test:bash
 ```
 
 実 LSP テストには ty、ruff、TS7 の tsc と新しい nvim-lspconfig が必要です。例のパスは Home Manager が配置した nvim-lspconfig の Nix store パスに置き換えます。`:lua vim.print(vim.api.nvim_get_runtime_file('lsp/tsc.lua', false))` で確認できます。テストは一時バッファを使い、プロジェクトファイルを保存しません。
@@ -124,15 +124,11 @@ bats tests/bash/bootstrap_entrypoint.bats
 
 ```bash
 DOTFILES_NVIM_LSPCONFIG="/nix/store/<hash>-vimplugin-nvim-lspconfig-<version>" \
-  nvim --headless -u NONE -i NONE -l tests/lua/nvim_lsp_integration_test.lua
+  nvim --headless -u NONE -i NONE -l nix/tests/build/modules/editors/nvim/lsp-integration.lua
 DOTFILES_NVIM_LSPCONFIG="/nix/store/<hash>-vimplugin-nvim-lspconfig-<version>" \
-  nvim --headless -u NONE -i NONE -l tests/lua/nvim_typescript_test.lua
-```
-
-```powershell
-pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/Integration.Tests.ps1 -MinimumCoverage 0
+  nvim --headless -u NONE -i NONE -l nix/tests/build/modules/editors/nvim/typescript.lua
 ```
 
 全 plugin の起動テストは `neovim-native` に含まれます。一時 XDG data に Home Manager の native package を配置し、生成された `init.lua` と Nix 管理の基本設定を読み込みます。ホストへの反映は不要です。
 
-Windows の PowerShell 検証を macOS で通しても、Windows 実機での compiler、PATH、WSL transport、画像、IME、キーバインドを検証したことにはなりません。これらと Linux/Devcontainer の実機動作は対応環境で別途確認してください。
+headless テストでは terminal・画像の描画、IME・キーバインドの実入力を検証できません。これらと Linux/Devcontainer の実機動作は対応環境で別途確認してください。

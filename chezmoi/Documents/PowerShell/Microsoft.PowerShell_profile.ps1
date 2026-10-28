@@ -1,3 +1,29 @@
+# Match the common Zsh commands using Windows executables.
+# PowerShell's built-in ls alias otherwise takes precedence over the function.
+Remove-Item Alias:ls -Force -ErrorAction SilentlyContinue
+function eza { & eza.exe --icons auto --color auto --tree @args }
+function ls { eza --level=1 @args }
+function ll { eza --level=1 --group-directories-first --time-style=long-iso @args }
+function la { eza --level=1 --group-directories-first --time-style=long-iso --git --hyperlink -F @args }
+function lt { eza --level=2 --group-directories-first --time-style=long-iso --git @args }
+function lla { eza -la @args }
+Set-Alias -Name grep -Value rg.exe
+Set-Alias -Name find -Value fd.exe
+Set-Alias -Name lg -Value lazygit.exe
+Set-Alias -Name k -Value kubectl.exe
+Set-Alias -Name kctx -Value kubectx.exe
+Set-Alias -Name kns -Value kubens.exe
+function kgn { & kubectl.exe get nodes @args }
+function kgp { & kubectl.exe get pods -A @args }
+function kgs { & kubectl.exe get svc -A @args }
+
+function dotf {
+    # Resolve the checkout through chezmoi so moves and paths with spaces work.
+    $sourcePath = & chezmoi.exe source-path
+    if ($LASTEXITCODE -ne 0) { return }
+    & task.exe --dir (Split-Path -Parent $sourcePath) @args
+}
+
 function codex {
     $codexBin = if ($env:LOCALAPPDATA) {
         [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'OpenAI/Codex/bin'))

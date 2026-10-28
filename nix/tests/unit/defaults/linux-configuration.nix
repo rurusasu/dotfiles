@@ -1,4 +1,4 @@
-{ inputs }:
+{ inputs, code }:
 let
   inherit
     (inputs.nixpkgs.lib.nixosSystem {
@@ -7,7 +7,7 @@ let
         inherit inputs;
         platform = "linux";
       };
-      modules = [ (import ../../../defaults.nix inputs).systemDefaults ];
+      modules = [ (code.nix.defaults inputs).systemDefaults ];
     })
     config
     pkgs
@@ -17,6 +17,28 @@ in
   testNativeLinuxUsesStableLix = {
     expr = config.nix.package == pkgs.lixPackageSets.stable.lix;
     expected = true;
+  };
+
+  testNativeLinuxOnePasswordCliHasDesktopIntegrationPermissions = {
+    expr = {
+      enabled = config.programs._1password.enable;
+      group = config.security.wrappers.op.group or null;
+      setgid = config.security.wrappers.op.setgid or false;
+      privateTmp = config.home-manager.users.nixos.systemd.user.services.hermes-agent.Service.PrivateTmp;
+      noNewPrivileges =
+        config.home-manager.users.nixos.systemd.user.services.hermes-agent.Service.NoNewPrivileges;
+      hermesBinary =
+        config.home-manager.users.nixos.services.hermes-agent.settings.secrets.onepassword.binary_path
+          or null;
+    };
+    expected = {
+      enabled = true;
+      group = "onepassword-cli";
+      setgid = true;
+      privateTmp = false;
+      noNewPrivileges = false;
+      hermesBinary = "/run/wrappers/bin/op";
+    };
   };
 
   testNativeLinuxRegistersDconfForGtkSettingsPersistence = {

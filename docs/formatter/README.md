@@ -16,7 +16,7 @@
 | Lua        | StyLua           | `programs.stylua.settings`      |
 | Markdown   | dprint           | `programs.dprint.settings`      |
 
-PowerShell の静的解析設定は [PSScriptAnalyzerSettings.psd1](../../scripts/powershell/PSScriptAnalyzerSettings.psd1) が担当します。
+PowerShell の静的解析設定は [PowerShell.Tests.ps1](../../scripts/powershell/tests/PowerShell.Tests.ps1) が所有します。
 
 ## 使用方法
 

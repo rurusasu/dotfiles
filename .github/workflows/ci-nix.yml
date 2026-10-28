@@ -69,7 +69,7 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Authenticate to the repository image registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -163,7 +163,7 @@ jobs:
         run: bash scripts/sh/configure-bootstrap-ci-nix.sh
 
       - name: Run Bash tests
-        run: bash scripts/sh/run-bash-tests.sh
+        run: task test:bash
 
   nix:
     name: Bootstrap / Nix / Lint
@@ -217,9 +217,6 @@ jobs:
     permissions:
       contents: read
       packages: read
-    outputs:
-      cache_key: ${{ steps.save-cache.outputs.key }}
-      cache_prefix: ${{ steps.save-cache.outputs.prefix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -248,7 +245,6 @@ jobs:
             .#homeConfigurations.x86_64-linux.activationPackage
 
       - name: Save Nix cache
-        id: save-cache
         uses: ./.github/actions/cache-nix
         with:
           name: linux-build
@@ -265,9 +261,6 @@ jobs:
     env:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
-    outputs:
-      cache_key: ${{ steps.save-cache.outputs.key }}
-      cache_prefix: ${{ steps.save-cache.outputs.prefix }}
     steps:
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -324,7 +317,7 @@ jobs:
             | grep -Fq 'hermes-agent.cachix.org-1:'
           SCRIPT
 
-      - name: Apply macOS configuration
+      - name: Build macOS configuration
         run: |
           mkdir -p "$RUNNER_TEMP/darwin"
           cat > "$RUNNER_TEMP/darwin/flake.nix" <<EOF
@@ -337,19 +330,27 @@ jobs:
             };
           }
           EOF
-          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
+          bash scripts/sh/retry-ci-dns.sh sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
             nix --accept-flake-config \
             --extra-experimental-features 'nix-command flakes' \
-            run .#darwin-rebuild -- switch --flake "$RUNNER_TEMP/darwin#macos" --impure
+            build --out-link "$RUNNER_TEMP/darwin-system" \
+            "$RUNNER_TEMP/darwin#darwinConfigurations.macos.system" --impure
+
+      - name: Apply macOS configuration
+        run: |
+          system_path="$(cd "$RUNNER_TEMP/darwin-system" && pwd -P)"
+          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
+            nix-env -p /nix/var/nix/profiles/system --set "$system_path"
+          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
+            "$system_path/sw/bin/darwin-rebuild" activate
 
       - name: Keep private build dependencies through checks
         run: python3 scripts/python/prepare_ci_nix_cache.py root "$RUNNER_TEMP/ci-build-dependencies"
 
       - name: Run all macOS Nix checks
-        run: sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
+        run: bash scripts/sh/retry-ci-dns.sh sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
 
       - name: Save Nix cache
-        id: save-cache
         uses: ./.github/actions/cache-nix
         with:
           name: darwin
@@ -374,9 +375,6 @@ jobs:
     permissions:
       contents: read
       packages: read
-    outputs:
-      cache_key: ${{ steps.save-cache.outputs.key }}
-      cache_prefix: ${{ steps.save-cache.outputs.prefix }}
     steps:
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -420,7 +418,7 @@ jobs:
           mv "$export_dir" "$DOTFILES_CI_BINARY_CACHE"
           # Hard links avoid copying gigabytes; pruning unlinks only the transport files.
           cp -al "$DOTFILES_CI_BINARY_CACHE/." "$cache_dir/"
-          python3 scripts/python/prepare_wsl_nix_cache.py "$cache_dir" "$system_path"
+          python3 scripts/python/prepare_ci_nix_cache.py transport "$cache_dir" "$system_path"
           du -sh "$cache_dir"
           echo "::endgroup::"
           tar -cf "$artifact_dir/wsl-nix-cache.tar" -C "$cache_dir" .
@@ -436,7 +434,6 @@ jobs:
           compression-level: 0
 
       - name: Save Nix cache
-        id: save-cache
         uses: ./.github/actions/cache-nix
         with:
           name: wsl-prebuild
@@ -447,8 +444,8 @@ jobs:
     needs: [changes, wsl-prebuild]
     if: ${{ needs.changes.outputs.wsl == 'true' }}
     runs-on: windows-2025
-    # The isolated WSL E2E runs two independent rebuilds with 120-minute caps, plus setup and verification.
-    timeout-minutes: 300
+    # One production activation has a 120-minute cap, plus setup and verification.
+    timeout-minutes: 180
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -467,6 +464,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
 
           $env:WSL_UTF8 = "1"
           if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
@@ -481,39 +479,111 @@ jobs:
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WSLENV: GITHUB_TOKEN/u
-          HEAD_REF: ${{ github.head_ref }}
-          REF_NAME: ${{ github.ref_name }}
+          WSLENV: GITHUB_TOKEN/u:GITHUB_WORKSPACE/p:RUNNER_TEMP/p
         run: |
           Set-StrictMode -Version Latest
-          $ErrorActionPreference = "Stop"
-
-          $refName = $env:HEAD_REF
-          if ([string]::IsNullOrWhiteSpace($refName)) {
-            $refName = $env:REF_NAME
+          $ErrorActionPreference = 'Stop'
+          . .\scripts\powershell\lib\Invoke-ExternalCommand.ps1
+          . .\scripts\powershell\lib\Invoke-NixosWslSetup.ps1
+          $PSDefaultParameterValues = @{ 'Invoke-Wsl:TimeoutSeconds' = 900 }
+          if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) { throw 'RUNNER_TEMP is required.' }
+          $tempRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\', '/')
+          $distroName = 'NixOS-CI-' + [guid]::NewGuid().ToString('N')
+          $installDir = [IO.Path]::GetFullPath((Join-Path $tempRoot $distroName)).TrimEnd('\', '/')
+          if ($distroName -notmatch '^NixOS-CI-[a-f0-9]{32}$' -or
+              -not $installDir.StartsWith($tempRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Refusing an unsafe CI distro name or install directory.'
           }
-          $safeRef = $refName -replace "[^A-Za-z0-9_.-]", "-"
-          if ([string]::IsNullOrWhiteSpace($safeRef)) {
-            $safeRef = "ref"
+          function Invoke-CiWsl([string]$User, [string]$Source, [int]$TimeoutSeconds = 300) {
+            $payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($Source -replace "`r`n?", "`n")))
+            Invoke-Wsl -TimeoutSeconds $TimeoutSeconds -Arguments @(
+              '-d', $distroName, '-u', $User, '--exec', 'bash', '-lc',
+              "set -o pipefail; printf '%s' '$payload' | base64 -d | bash"
+            ) | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw "WSL command failed (exit=$LASTEXITCODE)." }
           }
-          if ($safeRef.Length -gt 48) {
-            $safeRef = $safeRef.Substring(0, 48).TrimEnd("-", ".", "_")
-          }
-          $sha256 = [System.Security.Cryptography.SHA256]::Create()
           try {
-            $refHashBytes = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($refName))
+            Install-NixosWsl -DistroName $distroName -InstallDir $installDir
+            foreach ($user in @('root', 'nixos')) {
+              Invoke-CiWsl -User $user -Source 'bash "$GITHUB_WORKSPACE/scripts/sh/configure-bootstrap-ci-nix.sh" --wsl'
+            }
+            Invoke-CiWsl -User root -TimeoutSeconds 1800 -Source @'
+          set -euo pipefail
+          artifact="$RUNNER_TEMP/wsl-nix-cache-artifact"
+          cache="$RUNNER_TEMP/wsl-nix-cache"
+          system=$(cat "$artifact/wsl-system-paths.txt")
+          [[ $system =~ ^/nix/store/[a-z0-9]{32}-[A-Za-z0-9+._?=-]+$ ]]
+          mkdir -p "$cache"
+          tar -xf "$artifact/wsl-nix-cache.tar" -C "$cache"
+          test -f "$cache/public-paths.txt"
+          if grep -qvE '^/nix/store/[a-z0-9]{32}-[A-Za-z0-9+._?=-]+$' "$cache/public-paths.txt"; then
+            echo 'Invalid public Nix store path.' >&2; exit 1
+          fi
+          xargs -r -n 128 nix-store --realise < "$cache/public-paths.txt"
+          nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from "file://$cache" "$system"
+          '@
+            Invoke-CiWsl -User nixos -Source @'
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.hermes/memories
+          printf '%s\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' > ~/.hermes/.env
+          printf '%s\n' 'model:' '  default: openrouter/auto' > ~/.hermes/config.yaml
+          printf '%s\n' 'preserve-existing-hermes-state' > ~/.hermes/memories/dotfiles-ci-state-preservation.txt
+          chmod 600 ~/.hermes/.env ~/.hermes/config.yaml ~/.hermes/memories/dotfiles-ci-state-preservation.txt
+          '@
+            Invoke-NixosWslSetup -Repository $env:GITHUB_WORKSPACE -DistroName $distroName -SyncMode repo -SyncBack none -TimeoutSeconds 7200 -UpdateFlakeInputs $false
+            Invoke-CiWsl -User root -Source @'
+          set -euo pipefail
+          nix config show access-tokens | grep -E '^[[:space:]]*github\.com[[:space:]]*=[[:space:]]*[^[:space:]]+' >/dev/null
+          test "$(nix config show max-jobs)" = 2
+          test "$(nix config show cores)" = 1
+          loginctl show-user nixos -p Linger --value | grep -qx yes
+          '@
+            Invoke-Wsl -Arguments @('--terminate', $distroName) -TimeoutSeconds 60 | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw "WSL cold restart failed (exit=$LASTEXITCODE)." }
+            Invoke-CiWsl -User nixos -TimeoutSeconds 360 -Source @'
+          set -euo pipefail
+          trap 'status=$?; if (( status != 0 )); then journalctl --user -u hermes-agent.service --no-pager -n 80 >&2; fi' EXIT
+          GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic '(( $+functions[cd] )) && functions cd' | rg '__zoxide_z'
+          task --dir ~/.dotfiles hermes:restart
+          case "$(readlink -f "$(command -v hermes)")" in /nix/store/*) ;; *) exit 1 ;; esac
+          hermes --version
+          codex --version
+          for file in .env config.yaml; do test "$(stat -c '%a' "$HOME/.hermes/$file")" = 600; done
+          for line in OPENROUTER_API_KEY=ci API_SERVER_ENABLED=true API_SERVER_PORT=18642; do grep -qx "$line" ~/.hermes/.env; done
+          for line in '  provider: openai-codex' '  default: gpt-6.1-sol'; do grep -qx "$line" ~/.hermes/config.yaml; done
+          grep -qx 'preserve-existing-hermes-state' ~/.hermes/memories/dotfiles-ci-state-preservation.txt
+          systemctl --user is-enabled hermes-agent.service
+          systemctl --user is-active hermes-agent.service
+          nix shell --inputs-from ~/.dotfiles nixpkgs#curl nixpkgs#jq --command bash -s <<'READINESS'
+          set -euo pipefail
+          url='http://127.0.0.1:18642/health/detailed'
+          # Gateway startup awaits MCP discovery before binding HTTP. Match its
+          # default 300-second startup watchdog, including cold MCP and secret loading.
+          deadline=$((SECONDS + 300))
+          while :; do
+            if response=$(curl --fail --silent --show-error --max-time 2 -H 'Authorization: Bearer dotfiles-ci-health-probe' "$url" 2>&1) &&
+                printf '%s' "$response" | jq -e '
+                  .status == "ok" and .readiness.status == "ok" and
+                  (.readiness.checks | type == "object" and all(.[]; .status == "ok")) and
+                  (.readiness.checks as $checks | all(
+                    ["state_db", "session_store", "config", "model", "disk", "gateway", "background_queues"][];
+                    . as $required | $checks[$required].status == "ok"))
+                ' >/dev/null 2>&1; then break; fi
+            if (( SECONDS >= deadline )); then printf '%s\n' "$response" >&2; exit 1; fi
+            sleep 1
+          done
+          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 2 "$url")" = 401
+          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 2 -H 'Authorization: Bearer invalid-dotfiles-ci-health-probe' "$url")" = 401
+          printf '%s\n' "$response"
+          READINESS
+          '@
           }
           finally {
-            $sha256.Dispose()
+            Invoke-Wsl -Arguments @('--terminate', $distroName) -TimeoutSeconds 60 | Out-Host
+            Invoke-Wsl -Arguments @('--unregister', $distroName) -TimeoutSeconds 300 | Out-Host
+            if (Test-Path -LiteralPath $installDir) { Remove-Item -LiteralPath $installDir -Recurse -Force }
           }
-          $refHash = (-join ($refHashBytes | ForEach-Object { $_.ToString("x2") })).Substring(0, 8)
-          $distroName = "NixOS-CI-$safeRef-$refHash"
-          $installDir = Join-Path $env:RUNNER_TEMP $distroName
-
-          pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
-            -File scripts/powershell/ci/Invoke-NixosWslE2E.ps1 `
-            -DistroName $distroName `
-            -InstallDir $installDir
 
   windows-installer:
     # Let GitHub generate matrix names; job-level skips happen before matrix
@@ -548,146 +618,110 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $moduleRoot = Join-Path $HOME "Documents\$env:PS_MODULE_DIRECTORY\Modules"
-          if ($env:PSModulePath -notlike "*$moduleRoot*") {
-            $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
-          }
-
-          function Invoke-WithRetry {
-            param([Parameter(Mandatory)][scriptblock]$Script, [int]$Attempts = 3)
-            for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
-              try {
-                & $Script
-                return
-              }
-              catch {
-                if ($attempt -eq $Attempts) { throw }
-                Start-Sleep -Seconds ($attempt * 5)
-              }
-            }
-          }
-
-          function Install-GalleryModuleArchive {
-            param([Parameter(Mandatory)][string]$Name)
-            $version = (Find-Module -Name $Name -Repository PSGallery -ErrorAction Stop).Version.ToString()
-            $modulePath = Join-Path $moduleRoot "$Name\$version"
-            if (-not (Test-Path -LiteralPath (Join-Path $modulePath "$Name.psd1"))) {
-              $packagePath = Join-Path $env:RUNNER_TEMP "$Name.$version.zip"
-              New-Item -ItemType Directory -Force -Path $modulePath | Out-Null
-              Invoke-WithRetry {
-                Invoke-WebRequest -Uri "https://www.powershellgallery.com/api/v2/package/$Name/$version" -OutFile $packagePath -UseBasicParsing
-              }
-              Expand-Archive -LiteralPath $packagePath -DestinationPath $modulePath -Force
-            }
-            Import-Module -Name (Join-Path $modulePath "$Name.psd1") -Force
-          }
-
-          # Provision the disposable CI user before the installed-only test runner.
-          Invoke-WithRetry {
-            if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
-              Register-PSRepository -Default -ErrorAction Stop
-            }
-            if (-not (Get-PSRepository -Name PSGallery -ErrorAction Stop)) {
-              throw 'CI provisioning could not register PSGallery.'
-            }
-          }
-
-          Install-GalleryModuleArchive -Name Pester
-          Install-GalleryModuleArchive -Name PSScriptAnalyzer
-
-      - name: Run PSScriptAnalyzer
-        if: ${{ matrix.version == '7' }}
-        shell: pwsh
-        run: |
-          $moduleRoot = Join-Path $HOME 'Documents\PowerShell\Modules'
-          if ($env:PSModulePath -notlike "*$moduleRoot*") {
-            $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
-          }
-          $findings = @(Invoke-ScriptAnalyzer -Path scripts/powershell -Recurse -Settings scripts/powershell/PSScriptAnalyzerSettings.psd1 |
-            Where-Object { $_.RuleName -ne 'TypeNotFound' })
-          $errors = @($findings | Where-Object { $_.Severity -in 'Error', 'ParseError' })
-          if ($errors.Count -gt 0) {
-            $errors | ForEach-Object { Write-Error "$($_.ScriptPath):$($_.Line) $($_.RuleName): $($_.Message)" }
-            throw "PSScriptAnalyzer found $($errors.Count) error(s)"
-          }
+          New-Item -ItemType Directory -Force -Path $moduleRoot | Out-Null
+          $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
+          # Avoid the IsLatestVersion query that PSGallery intermittently rejects.
+          Save-Module -Name Pester,PSScriptAnalyzer -Repository PSGallery -Path $moduleRoot -Force -AcceptLicense
+          . .\scripts\powershell\tests\support\Resolve-TestModule.ps1
+          Resolve-TestModule -Name Pester | Out-Null
+          Resolve-TestModule -Name PSScriptAnalyzer | Out-Null
 
       - name: Prepare Windows Store prerequisites
         shell: powershell
-        run: .\scripts\powershell\ci\Initialize-WindowsStore.ps1
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+          $policy = $null
+          try { $policy = Get-ItemProperty -LiteralPath $path -ErrorAction Stop }
+          catch [Management.Automation.ItemNotFoundException] { }
+          foreach ($name in @('DoNotConnectToWindowsUpdateInternetLocations', 'DisableWindowsUpdateAccess')) {
+            if ($policy -and $policy.PSObject.Properties[$name]) {
+              Remove-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop
+            }
+          }
+          $service = Get-Service -Name wuauserv -ErrorAction Stop
+          if ($service.StartType -eq 'Disabled') { Set-Service -Name wuauserv -StartupType Manual -ErrorAction Stop }
+          if ($service.Status -ne 'Running') {
+            $service.Start()
+            $service.WaitForStatus([ServiceProcess.ServiceControllerStatus]::Running, [TimeSpan]::FromSeconds(30))
+            $service.Refresh()
+            if ($service.Status -ne 'Running') { throw 'wuauserv did not reach Running within 30 seconds.' }
+          }
 
       - name: Bootstrap winget
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-
-          # Ensure winget is available on the runner
-          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-            Write-Host "winget not found — installing Microsoft.WinGet.Client..."
-            $ErrorActionPreference = 'Continue'
-            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue
-            $ErrorActionPreference = 'Stop'
-            Install-Module -Name Microsoft.WinGet.Client -RequiredVersion '1.29.280' -Scope CurrentUser -Force -Repository PSGallery
+          if (-not (Get-Command winget -CommandType Application -ErrorAction SilentlyContinue)) {
+            Install-PSResource -Name Microsoft.WinGet.Client -Scope CurrentUser -Repository PSGallery -TrustRepository
             Repair-WinGetPackageManager
           }
-          function Invoke-WingetSourceUpdate {
-            param([int]$Attempts = 3)
-
-            for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
-              Write-Host "winget source update attempt $attempt/$Attempts"
-              $ErrorActionPreference = 'Continue'
-              $sourceOutput = winget source update 2>&1 | ForEach-Object {
-                $line = [string]$_
-                Write-Host $line
-                $line
-              }
-              $sourceUpdateExit = $LASTEXITCODE
-              $ErrorActionPreference = 'Stop'
-
-              $sourceText = $sourceOutput -join [Environment]::NewLine
-              if ($sourceUpdateExit -eq 0 -and $sourceText -notmatch '(?im)\bCancelled\b') {
-                return
-              }
-
-              Write-Warning "winget source update did not complete cleanly (exit=$sourceUpdateExit). Retrying after source reset."
-              $ErrorActionPreference = 'Continue'
-              winget source reset --force
-              $ErrorActionPreference = 'Stop'
-              Start-Sleep -Seconds 5
-            }
-
-            throw "winget source update did not complete after $Attempts attempts"
-          }
-
-          # Validate winget sources before proceeding. A textual "Cancelled"
-          # with exit 0 still leaves later winget install calls unable to resolve
-          # packages, so detect it explicitly.
-          Invoke-WingetSourceUpdate
-          $wingetVersion = @(winget --version 2>&1)
-          $wingetVersionExitCode = $LASTEXITCODE
-          if ($wingetVersionExitCode -ne 0) {
-            throw "winget --version failed (exit=$wingetVersionExitCode): $($wingetVersion -join ' ')"
-          }
-          $wingetVersion | ForEach-Object { Write-Host $_ }
-          $wingetSources = @(winget source list 2>&1)
-          $wingetSourcesExitCode = $LASTEXITCODE
-          if ($wingetSourcesExitCode -ne 0) {
-            throw "winget source list failed (exit=$wingetSourcesExitCode): $($wingetSources -join ' ')"
-          }
-          $wingetSources | ForEach-Object { Write-Host $_ }
-
-      # Updating the MSI-managed runtime can terminate every process using it.
-      # Prepare it from stable Windows PowerShell before seeding E2E state.
-      - name: Prepare PowerShell 7 before installer E2E
-        shell: cmd
-        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts\powershell\ci\Initialize-WindowsInstallerRuntime.ps1
 
       - name: Run install.cmd strict user phase
-        shell: cmd
+        shell: powershell
         timeout-minutes: 180
         env:
           DOTFILES_INSTALL_TIMEOUT_SECONDS: "3600"
           DOTFILES_E2E_POWERSHELL_VERSION: ${{ matrix.version }}
-        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts\powershell\ci\Invoke-WindowsInstallerE2E.ps1
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          if ($PSVersionTable.PSVersion.Major -ne 5 -or $PSVersionTable.PSVersion.Minor -ne 1) {
+            throw 'Run the installer supervisor from stable Windows PowerShell 5.1.'
+          }
+          Set-Location -LiteralPath $env:GITHUB_WORKSPACE
+          . .\scripts\powershell\lib\Invoke-ExternalCommand.ps1
+
+          # Finish any PowerShell MSI update before launching the runtime it can terminate.
+          $master = Get-Content -LiteralPath windows/winget/packages.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          $runtime = @(
+            foreach ($source in $master.Sources) {
+              foreach ($package in $source.Packages) {
+                if ($package.PackageIdentifier -eq 'Microsoft.PowerShell') { @{ Source = $source; Package = $package } }
+              }
+            }
+          )
+          if ($runtime.Count -ne 1 -or $runtime[0].Source.SourceDetails.Name -ne 'winget') {
+            throw 'Expected exactly one Microsoft.PowerShell declaration from winget.'
+          }
+          $master.Sources = @($runtime[0].Source.PSObject.Copy())
+          $master.Sources[0].Packages = @($runtime[0].Package)
+          $temporaryManifest = [IO.Path]::GetTempFileName()
+          try {
+            [IO.File]::WriteAllText($temporaryManifest, ($master | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
+            Import-WindowsPackage -ManifestPath $temporaryManifest
+          }
+          finally { Remove-Item -LiteralPath $temporaryManifest -Force -ErrorAction Stop }
+
+          $pwsh = Get-Command pwsh.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $pwshMajor = @(Invoke-NativeCommand -Command $pwsh.Source -Arguments @('-NoLogo', '-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'))
+          if ($LASTEXITCODE -ne 0 -or ($pwshMajor -join '').Trim() -ne '7') {
+            throw 'Selected pwsh.exe must report PowerShell 7 with exit code 0.'
+          }
+          $env:DOTFILES_PS7_DIR = Split-Path -Parent $pwsh.Source
+          $isWindowsPowerShell = $env:DOTFILES_E2E_POWERSHELL_VERSION -eq '5.1'
+          if ($isWindowsPowerShell) { $env:DOTFILES_FORCE_WINDOWS_POWERSHELL = '1' }
+          else { Remove-Item Env:\DOTFILES_FORCE_WINDOWS_POWERSHELL -ErrorAction SilentlyContinue }
+          $originalPath = @($env:PATH -split ';')
+          $output = @(Invoke-NativeCommand -Command cmd.exe -Arguments @('/d', '/c', 'install.cmd -Phase Winget') | ForEach-Object {
+            $line = [string]$_
+            Write-Host $line
+            $line
+          })
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) { exit $exitCode }
+          if (@($output | Where-Object { $_ -ceq '[Winget] WINGET_IMPORT_COMPLETED' }).Count -ne 1) {
+            throw 'Windows installer must report exactly one native WinGet import completion marker.'
+          }
+          $text = $output -join [Environment]::NewLine
+          if (($isWindowsPowerShell -and $text -notmatch 'Using Windows PowerShell') -or
+              (-not $isWindowsPowerShell -and $text -match 'Using Windows PowerShell|Falling back to Windows PowerShell')) {
+            throw 'Windows installer did not use the selected runtime.'
+          }
+          Update-ProcessEnvironmentPath
+          $env:PATH -split ';' | Where-Object { $_ -and $originalPath -notcontains $_ } |
+            Add-Content -LiteralPath $env:GITHUB_PATH -Encoding UTF8
 
       - name: Install chezmoi for rendering tests
         uses: ./.github/actions/install-chezmoi
@@ -703,36 +737,7 @@ jobs:
           if ($env:PSModulePath -notlike "*$moduleRoot*") {
             $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
           }
-          & $env:PS_TEST_EXECUTABLE -NoProfile -File .\tests\Invoke-Tests.ps1 -MinimumCoverage 0
-
-      - name: Show Windows Store diagnostics
-        if: always()
-        shell: powershell
-        run: .\scripts\powershell\ci\Initialize-WindowsStore.ps1 -DiagnosticsOnly
-
-      - name: Collect Windows installer diagnostics
-        if: always()
-        shell: pwsh
-        run: |
-          $diagnostics = Join-Path $env:RUNNER_TEMP 'windows-installer-diagnostics'
-          New-Item -ItemType Directory -Path $diagnostics -Force | Out-Null
-          $wingetLogs = Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir'
-          if (Test-Path -LiteralPath $wingetLogs) {
-            Copy-Item -Path (Join-Path $wingetLogs '*.log') -Destination $diagnostics -ErrorAction Continue
-          }
-          Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP 'windows-installer-*.log') -File -ErrorAction SilentlyContinue |
-            Copy-Item -Destination $diagnostics
-          "tested_sha=$env:TESTED_SHA`nruntime=${{ matrix.version }}" |
-            Set-Content -LiteralPath (Join-Path $diagnostics 'attestation.txt')
-
-      - name: Upload Windows installer diagnostics
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: windows-installer-${{ matrix.version }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/windows-installer-diagnostics
-          retention-days: 7
-          if-no-files-found: error
+          & $env:PS_TEST_EXECUTABLE -NoProfile -File .\tests\Invoke-Tests.ps1
 
   complete:
     name: Bootstrap / Complete
@@ -821,9 +826,6 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-    outputs:
-      cache_key: ${{ steps.save-cache.outputs.key }}
-      cache_prefix: ${{ steps.save-cache.outputs.prefix }}
     steps:
       - name: Verify change detection
         if: ${{ needs.changes.result != 'success' }}
@@ -866,85 +868,36 @@ jobs:
         shell: bash
         run: |
           jq -e '
-            def nonempty_string: if type == "string" then length > 0 else false end;
-            def https_url: if type == "string" then test("^https://[^[:space:]]+$") else false end;
-            def sha256_hash: if type == "string" then test("^[A-Fa-f0-9]{64}$") else false end;
-            (.Sources | type == "array" and length > 0)
+            def nonempty_string: type == "string" and length > 0;
+            def only_keys($allowed): (keys - $allowed | length) == 0;
+            type == "object"
+            and only_keys(["$schema", "Sources", "WinGetVersion", "CreationDate"])
+            and ."$schema" == "https://aka.ms/winget-packages.schema.2.0.json"
+            and (if has("WinGetVersion") then (.WinGetVersion | nonempty_string) else true end)
+            and (if has("CreationDate") then (.CreationDate | nonempty_string) else true end)
+            and (.Sources | type == "array" and length > 0)
             and all(.Sources[];
-              (.SourceDetails.Name | type == "string" and length > 0)
-              and (.Packages | type == "array")
+              type == "object" and only_keys(["SourceDetails", "Packages"])
+              and (.SourceDetails | type == "object"
+                and only_keys(["Name", "Identifier", "Argument", "Type"])
+                and all(.Name, .Identifier, .Argument, .Type; nonempty_string))
+              and (.Packages | type == "array" and length > 0)
               and all(.Packages[];
-                (.PackageIdentifier | type == "string" and length > 0)
-                and (if has("persistPathEntries") then
-                  (.persistPathEntries | type == "boolean")
-                else true end))
-              and (if .SourceDetails.Name == "direct" then
-                .SourceDetails.Type == "Dotfiles.DirectInstaller"
-                and .SourceDetails.Identifier == "Dotfiles.DirectInstallers"
-                and (.SourceDetails.Argument | https_url)
-                and all(.Packages[];
-                  . as $package | .directInstaller |
-                  type == "object"
-                  and .type == "appx"
-                  and .name == $package.PackageIdentifier
-                  and (.packageFamilyName | nonempty_string)
-                  and (.version | if type == "string" then test("^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$") else false end)
-                  and .architecture == "x64"
-                  and (.executable | nonempty_string)
-                  and (.publisher | nonempty_string)
-                  and (.url | https_url)
-                  and (.sha256 | sha256_hash)
-                  and (.dependencies | type == "array"
-                    and all(.[];
-                      (.name | nonempty_string)
-                      and (.packageFamilyName | nonempty_string)
-                      and (.publisher | nonempty_string)
-                      and (.version | if type == "string" then test("^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$") else false end)
-                      and .architecture == "x64"
-                      and (.url | https_url)
-                      and (.sha256 | sha256_hash))))
-              else true end))
+                type == "object"
+                and only_keys(["PackageIdentifier", "Version", "Channel", "Scope", "InitialOverrideArguments", "InitialCustomSwitches"])
+                and (.PackageIdentifier | nonempty_string)
+                and (if has("Scope") then (.Scope == "user" or .Scope == "machine") else true end)
+                and all(to_entries[] | select(.key != "Scope"); .value | nonempty_string)))
             and ([.Sources[].Packages[].PackageIdentifier] as $ids
               | ($ids | length) == ($ids | unique | length))
+            and any(.Sources[]; .SourceDetails.Name == "winget"
+              and any(.Packages[]; .PackageIdentifier == "StablyAI.Orca"))
+            and any(.Sources[].Packages[]; .PackageIdentifier == "wez.wezterm")
           ' windows/winget/packages.json
-          for manifest in windows/npm/packages.json windows/pnpm/packages.json; do
-            jq -e '
-              (.globalPackages | type == "array")
-              and all(.globalPackages[];
-                (if type == "string" then . else .name end)
-                | type == "string" and length > 0)
-            ' "$manifest"
-          done
 
       - name: Save Nix cache
-        id: save-cache
         uses: ./.github/actions/cache-nix
         with:
           name: checks
           phase: save
           max-size: "536870912"
-
-  cache-cleanup:
-    name: Bootstrap / Cache cleanup
-    needs: [linux-build, darwin, wsl-prebuild, check]
-    if: >-
-      ${{ always() && github.ref == 'refs/heads/main' && !cancelled() &&
-          (needs.linux-build.outputs.cache_key != '' || needs.darwin.outputs.cache_key != '' ||
-           needs.wsl-prebuild.outputs.cache_key != '' || needs.check.outputs.cache_key != '') }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      actions: write
-    steps:
-      - name: Checkout exact tested SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Retain confirmed main cache generations
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CACHE_PRODUCERS: ${{ toJSON(needs) }}
-        run: python3 scripts/python/prepare_ci_nix_cache.py prune

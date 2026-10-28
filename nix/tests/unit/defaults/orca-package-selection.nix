@@ -1,29 +1,23 @@
-{ inputs }:
+{ inputs, fixtures }:
 let
-  pkgs = (import ../../fixtures/packages.nix { inherit inputs; }).mkPkgs "aarch64-darwin";
-  fixtures = import ../../fixtures/packages.nix { inherit inputs; };
-  windows = fixtures.windowsPackages;
+  pkgs = fixtures.mkPkgs "aarch64-darwin";
   home = fixtures.mkHome "aarch64-darwin" [
     (fixtures.homeModule "common")
-    ../../../modules/editors/nvim
+    { programs.neovim.enable = true; }
   ];
   orcaPackage = inputs.llm-agents.packages.aarch64-darwin.orca;
 in
 {
-  testOrcaHomeManagerModuleAndWingetMetadata = {
+  testOrcaHomeManagerPackageSelection = {
     expr = {
       orcaPackageSelected = builtins.any (
         package: package.drvPath == orcaPackage.drvPath
       ) home.config.home.packages;
-      orcaWindowsProvider = windows."StablyAI.Orca".source;
-      orcaCiSkipInstall = windows."StablyAI.Orca".ciSkipInstall or false;
       directPythonInstallation = builtins.elem pkgs.python3 home.config.home.packages;
       uvInstalled = builtins.elem pkgs.uv home.config.home.packages;
     };
     expected = {
       orcaPackageSelected = true;
-      orcaWindowsProvider = "winget";
-      orcaCiSkipInstall = true;
       directPythonInstallation = false;
       uvInstalled = true;
     };

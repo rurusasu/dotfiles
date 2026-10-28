@@ -5,7 +5,6 @@ REPOSITORY_URL="${DOTFILES_REPOSITORY_URL:-https://github.com/rurusasu/dotfiles.
 REPOSITORY_REF="${DOTFILES_REPOSITORY_REF:-refs/heads/main}"
 CHECKOUT="${DOTFILES_TART_CHECKOUT:-$HOME/.dotfiles}"
 STATE_FILE="${DOTFILES_TART_STATE_FILE:-$HOME/.local/state/dotfiles/tart-applied-commit}"
-APPLY_COMMAND="${DOTFILES_TART_APPLY_COMMAND:-}"
 
 die() {
   printf 'tart-sync: %s\n' "$*" >&2
@@ -63,15 +62,6 @@ checkout_hash() {
   git -C "$CHECKOUT" rev-parse --verify HEAD 2>/dev/null
 }
 
-apply_checkout() {
-  if [[ -n $APPLY_COMMAND ]]; then
-    [[ -x $APPLY_COMMAND ]] || die "Apply command is not executable: $APPLY_COMMAND"
-    "$APPLY_COMMAND" "$CHECKOUT"
-  else
-    "$CHECKOUT/install.sh"
-  fi
-}
-
 main() {
   command -v git >/dev/null 2>&1 || die "git is required"
   local target current recorded=""
@@ -94,7 +84,7 @@ main() {
 
   git -C "$CHECKOUT" fetch --force --depth=1 "$REPOSITORY_URL" "$target"
   git -C "$CHECKOUT" checkout --detach --force "$target"
-  apply_checkout
+  "$CHECKOUT/install.sh"
 
   mkdir -p "$(dirname "$STATE_FILE")"
   local temporary_state

@@ -115,7 +115,7 @@ runs:
                   windows=true
                   ;;
                 # Windows consumes the committed shortcuts through chezmoi.
-                nix/defaults.nix|nix/home/keybindings/bindings.nix|nix/home/keybindings/generated.json|nix/modules/terminals/ghostty/ghostty.nix|nix/modules/terminals/ghostty/ghostty-renderer.nix|nix/modules/terminals/ghostty/ghostty-windows.nix|nix/modules/editors/nvim/neovim.nix)
+                nix/defaults.nix|nix/home/keybindings/bindings.nix|nix/home/keybindings/generated.json|nix/modules/terminals/ghostty/ghostty.nix|nix/modules/terminals/ghostty/ghostty-renderer.nix|nix/modules/terminals/ghostty/ghostty-wsl.nix|nix/modules/editors/nvim/neovim.nix)
                   nix=true
                   chezmoi=true
                   linux=true
@@ -138,9 +138,13 @@ runs:
                   nix=true
                   linux=true
                   ;;
-                nix/modules/1password/op-ssh-sign-wsl|nix/modules/fcitx5.nix|nix/modules/gnome-keyring/*|nix/modules/editors/vscode.nix|nix/modules/nvidia.nix)
+                nix/modules/1password/op-ssh-sign-wsl|nix/modules/fcitx5/*|nix/modules/gnome-keyring/*|nix/modules/editors/vscode/*|nix/modules/nvidia/*)
                   nix=true
                   wsl=true
+                  ;;
+                scripts/sh/tests/*)
+                  nix=true
+                  other=true
                   ;;
                 nix/*|*.nix)
                   nix=true
@@ -153,7 +157,7 @@ runs:
                   windows=true
                   ;;
                 # These entrypoints and fixtures span Nix, Windows and templates.
-                .github/*|scripts/*|taskfiles/*|Taskfile.yml|install.*|bootstrap.*|docker/*|.devcontainer/*|tests/*|.pre-commit-config.yaml|.gitattributes|.editorconfig)
+                .github/*|scripts/*|taskfiles/*|Taskfile.yml|install.*|bootstrap.*|docker/*|.devcontainer/*|.pre-commit-config.yaml|.gitattributes|.editorconfig)
                   nix=true
                   chezmoi=true
                   other=true

@@ -3,6 +3,10 @@ let
   inherit (pkgs) lib;
 in
 rec {
+  docker-mcp = pkgs.callPackage ./docker-mcp.nix {
+    source = inputs.docker-mcp;
+  };
+
   chrome-devtools-mcp =
     inputs.mcp-servers.packages.${pkgs.stdenv.hostPlatform.system}.chrome-devtools-mcp;
 

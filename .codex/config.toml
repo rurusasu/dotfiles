@@ -24,32 +24,5 @@ apps = true
 [tools]
 view_image = true
 
-# [mcp_servers.linear]
-# url = "https://mcp.linear.app/mcp"
-# command = "pnpm"
-# args = [
-#     "dlx",
-#     "mcp-remote@0.1.38",
-#     "https://mcp.linear.app/mcp",
-# ]
-
 [mcp_servers.deepwiki]
 url = "https://mcp.deepwiki.com/mcp"
-
-# [mcp_servers.sentry]
-# url = "https://mcp.sentry.dev/mcp"
-# command = "pnpm"
-# args = [
-#     "dlx",
-#     "mcp-remote@0.1.38",
-#     "https://mcp.sentry.dev/mcp",
-# ]
-
-# [mcp_servers.kaggle]
-# url = "https://www.kaggle.com/mcp"
-# command = "pnpm"
-# args = [
-#     "dlx",
-#     "mcp-remote@0.1.38",
-#     "https://www.kaggle.com/mcp",
-# ]

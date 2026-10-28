@@ -1,33 +1,18 @@
-{ inputs }:
+{ fixtures }:
 let
   selected =
     packages:
     map (package: package.pname) (
       builtins.filter (package: (package.pname or "") == "comfyui") packages
     );
-  homePackages =
-    system: scope:
-    ((import ../../fixtures/packages.nix { inherit inputs; }).mkHome system [ scope ])
-    .config.home.packages;
+  homePackages = system: scope: (fixtures.mkHome system [ scope ]).config.home.packages;
 in
 {
   testComfyIsInstalledAcrossUnixHomes = {
     expr = {
-      native = selected (
-        homePackages "x86_64-linux" (
-          (import ../../fixtures/packages.nix { inherit inputs; }).homeModule "linux"
-        )
-      );
-      wsl = selected (
-        homePackages "x86_64-linux" (
-          (import ../../fixtures/packages.nix { inherit inputs; }).homeModule "wsl"
-        )
-      );
-      darwin = selected (
-        homePackages "aarch64-darwin" (
-          (import ../../fixtures/packages.nix { inherit inputs; }).homeModule "darwin"
-        )
-      );
+      native = selected (homePackages "x86_64-linux" (fixtures.homeModule "linux"));
+      wsl = selected (homePackages "x86_64-linux" (fixtures.homeModule "wsl"));
+      darwin = selected (homePackages "aarch64-darwin" (fixtures.homeModule "darwin"));
     };
     expected = {
       native = [ "comfyui" ];
@@ -36,11 +21,7 @@ in
     };
   };
   testComfyIsInstalledForArmLinux = {
-    expr = selected (
-      homePackages "aarch64-linux" (
-        (import ../../fixtures/packages.nix { inherit inputs; }).homeModule "common"
-      )
-    );
+    expr = selected (homePackages "aarch64-linux" (fixtures.homeModule "common"));
     expected = [ "comfyui" ];
   };
 }

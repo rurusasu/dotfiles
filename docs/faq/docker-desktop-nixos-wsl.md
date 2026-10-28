@@ -39,7 +39,7 @@ NixOS-WSL はファイルシステムが Nix store（read-only）をベースに
 Docker Desktop の WSL 統合を使わずに、Docker ソケットを直接マウントする:
 
 ```nix
-# nix/modules/docker.nix (NixOS module)
+# nix/modules/docker/nixos/default.nix (NixOS module)
 virtualisation.docker.enable = true;
 ```
 
@@ -59,5 +59,5 @@ export DOCKER_HOST=unix:///mnt/wsl/shared-docker/docker.sock
 
 ## install.cmd への影響
 
-- Windows installer は Docker Desktop をインストールしない。NixOS-WSL と Hermes は Docker に依存せず直接実行する。既に導入済みの Docker Desktop の連携処理は `EnableDockerDesktopIntegration = $true` を明示した場合だけ実行する。NixOS 内のネイティブ dockerd は既存の開発用コンテナ向けであり、Hermes の実行基盤ではない。
-- NixOS ディストリビューションが消えた場合、install.cmd を再実行すれば `Handler.NixOSWSL` が自動的に再インストールする
+- Windows installer は Docker Desktop をインストールしない。NixOS-WSL と Hermes は Docker に依存せず直接実行する。Docker Desktop向けの連携とWindows VHD管理は提供しない。NixOS 内のネイティブ dockerd は既存の開発用コンテナ向けであり、Hermes の実行基盤ではない。
+- NixOS ディストリビューションが消えた場合、install.cmd を再実行すれば 現在の登録処理が必要な場合だけ再インストールする

@@ -1,6 +1,10 @@
-{ inputs }:
+{
+  inputs,
+  code,
+  files,
+}:
 let
-  lock = builtins.fromJSON (builtins.readFile ../../../../flake.lock);
+  lock = builtins.fromJSON (builtins.readFile files."flake.lock");
   rootInputs = lock.nodes.${lock.root}.inputs;
 
   mkApps =
@@ -8,7 +12,7 @@ let
       system,
       isDarwin,
     }:
-    (import ../../../defaults.nix {
+    (code.nix.defaults {
       nix-darwin.packages.${system}.darwin-rebuild.executable = "darwin-rebuild";
       home-manager.packages.${system}.home-manager.executable = "home-manager";
     }).perSystem
@@ -20,17 +24,9 @@ let
         };
         lib = {
           getExe = package: package.executable;
-          getExe' = package: binary: "${package.executable}/${binary}";
           optionalAttrs = condition: attrs: if condition then attrs else { };
         };
       };
-
-  treefmtCheck = inputs.self.checks.aarch64-darwin.treefmt;
-  hasScriptLine =
-    pattern: script:
-    builtins.any (line: builtins.match pattern line != null) (
-      builtins.filter builtins.isString (builtins.split "\n" script)
-    );
 
 in
 {
@@ -43,68 +39,29 @@ in
     };
   };
 
-  testFlakeHasNoIntermediateLibOrFlakesDirectories = {
-    expr = {
-      oldLib = builtins.pathExists ../../../lib;
-      oldFlakes = builtins.pathExists ../../../flakes;
-      consolidatedDefaults = builtins.pathExists ../../../defaults.nix;
-      splitHostDefinitions = builtins.pathExists ../../../hosts/default.nix;
-      splitRegistrations = builtins.pathExists ../../../hosts/configurations.nix;
-      splitHomeDefinitions = builtins.pathExists ../../../home/common.nix;
-      registryPresent = builtins.pathExists ../../default.nix;
-      splitPackageOutputs = builtins.pathExists ../../../outputs.nix;
-      treefmtConfig = builtins.pathExists ../../../treefmt.nix;
-      legacyFormatter = builtins.pathExists ../../../formatter.nix;
-    };
-    expected = {
-      oldLib = false;
-      oldFlakes = false;
-      consolidatedDefaults = true;
-      splitHostDefinitions = false;
-      splitRegistrations = false;
-      splitHomeDefinitions = false;
-      registryPresent = true;
-      splitPackageOutputs = false;
-      treefmtConfig = true;
-      legacyFormatter = false;
-    };
-  };
-
   testFlakeLockPinsPlatformInputs = {
     expr =
       builtins.map
         (
-          spec:
+          name:
           let
-            node = lock.nodes.${rootInputs.${spec.name}};
+            node = lock.nodes.${rootInputs.${name}};
           in
           {
             inherit (node.locked) owner repo type;
-            rootInputIsPresent = builtins.hasAttr spec.name rootInputs;
-            sourceMatches = node.locked.owner == spec.owner && node.locked.repo == spec.repo;
             hasLockedRevision = node.locked.rev != "";
             hasNarHash = node.locked.narHash != "";
           }
         )
         [
-          {
-            name = "nix-darwin";
-            owner = "nix-darwin";
-            repo = "nix-darwin";
-          }
-          {
-            name = "nix-homebrew";
-            owner = "zhaofengli";
-            repo = "nix-homebrew";
-          }
+          "nix-darwin"
+          "nix-homebrew"
         ];
     expected = [
       {
         type = "github";
         owner = "nix-darwin";
         repo = "nix-darwin";
-        rootInputIsPresent = true;
-        sourceMatches = true;
         hasLockedRevision = true;
         hasNarHash = true;
       }
@@ -112,8 +69,6 @@ in
         type = "github";
         owner = "zhaofengli";
         repo = "nix-homebrew";
-        rootInputIsPresent = true;
-        sourceMatches = true;
         hasLockedRevision = true;
         hasNarHash = true;
       }
@@ -150,21 +105,6 @@ in
     expected = {
       darwin = "darwin-rebuild";
       linux.home-manager.program = "home-manager";
-    };
-  };
-
-  testTreefmtCheckEvaluatesWithHostPlatformLocale = {
-    expr = {
-      checkName = treefmtCheck.name;
-      hasNoCacheCommand = hasScriptLine ".*treefmt --no-cache.*" treefmtCheck.buildCommand;
-      usesDarwinHostLocale = hasScriptLine ".*LANG=en_US[.]UTF-8.*" treefmtCheck.buildCommand;
-      avoidsDeprecatedDarwinAlias = !(hasScriptLine ".*stdenv[.]isDarwin.*" treefmtCheck.buildCommand);
-    };
-    expected = {
-      checkName = "treefmt-check";
-      hasNoCacheCommand = true;
-      usesDarwinHostLocale = true;
-      avoidsDeprecatedDarwinAlias = true;
     };
   };
 

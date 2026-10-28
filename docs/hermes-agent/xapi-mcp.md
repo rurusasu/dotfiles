@@ -8,7 +8,7 @@ OAuth cache and runs the official `xurl mcp https://api.x.com/mcp` bridge.
 ## Configuration and credentials
 
 The shared `xapi` definition in
-[`nix/modules/ai_agents/mcp.nix`](../../nix/modules/ai_agents/mcp.nix) supplies
+[`nix/modules/ai_agents/mcp/default.nix`](../../nix/modules/ai_agents/mcp/default.nix) supplies
 both clients with this HTTP URL. The `mcp-xapi` service sets `HERMES_DATA_DIR`
 to the root Hermes home and owns the command's lifetime. It runs as a systemd
 user service on Linux/WSL and a launchd agent on macOS, listening on loopback
@@ -38,7 +38,7 @@ The shell adapter uses `scripts/sh/hermes-xapi-common.sh` for 1Password
 credentials, private service-account caching, token validation and refresh-token
 synchronization. Windows tasks forward to the same native command in WSL, so
 authentication and MCP use the same Linux root cache. Initial interactive
-`hermes:xapi:auth` / `setup` can use the Windows `op.exe` bridge to populate
+`hermes:xapi:auth` / `setup` use Linux-native `op` on WSL to populate
 the root `.op.env` Service Account cache. The running service always selects
 Nix's native `op` on every OS and reads 1Password items with the cached
 `OP_SERVICE_ACCOUNT_TOKEN`; Windows PATH and interop are not needed by the

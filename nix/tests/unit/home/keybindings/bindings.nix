@@ -1,21 +1,25 @@
-{ inputs }:
+{
+  inputs,
+  code,
+  files,
+}:
 let
   inherit (inputs.nixpkgs) lib;
-  allocation = import ../../../../home/keybindings/bindings.nix { inherit lib; };
-  aerospace = import ../../../../modules/aerospace/aerospace.nix {
+  allocation = code.nix.home.keybindings.bindings { inherit lib; };
+  aerospace = code.nix.modules.aerospace.aerospace {
     inherit lib;
     commands.terminal = "terminal --new-window";
   };
-  hyprland = import ../../../../modules/hyprland/hyprland-renderer.nix {
+  hyprland = code.nix.modules.hyprland.hyprland-renderer {
     inherit lib;
     commands.terminal = "terminal --new-window";
   };
-  chord = binding: lib.concatStringsSep "+" (binding.modifiers ++ [ binding.key ]);
-  windowsGhosttyLines = lib.splitString "\n" allocation.windows.ghosttyConfig;
+
+  wslGhosttyLines = lib.splitString "\n" allocation.ghosttyWslConfig;
 in
 {
   testCommittedKeybindingsExportMatchesCanonicalAllocation = {
-    expr = builtins.fromJSON (builtins.readFile ../../../../home/keybindings/generated.json);
+    expr = builtins.fromJSON (builtins.readFile files.nix.home.keybindings."generated.json");
     expected = allocation;
   };
   testGhosttyOmarchySplitNavigationAndTabActions = {
@@ -53,7 +57,7 @@ in
     expr =
       (builtins.tryEval (
         builtins.stringLength (
-          import ../../../../modules/terminals/ghostty/ghostty-renderer.nix {
+          code.nix.modules.terminals.ghostty.ghostty-renderer {
             inherit lib;
             bindings = [
               {
@@ -67,61 +71,10 @@ in
       )).success;
     expected = false;
   };
-  testWindowsGhosttyTransportPreservesAllCanonicalResizeSources = {
+  testWslGhosttyConfigUsesDirectResizeShortcuts = {
     expr = {
-      sources = map (binding: binding.source) allocation.windows.ghosttyTransport;
-      uniqueSources =
-        builtins.length allocation.windows.ghosttyTransport == builtins.length (
-          lib.unique (map (binding: chord binding.source) allocation.windows.ghosttyTransport)
-        );
-      onlyWslg = builtins.all (
-        binding: binding.targetApp == "msrdc.exe"
-      ) allocation.windows.ghosttyTransport;
-    };
-    expected = {
-      sources = builtins.filter (binding: lib.hasPrefix "resize-" binding.action) allocation.ghostty;
-      uniqueSources = true;
-      onlyWslg = true;
-    };
-  };
-  testWindowsGhosttyTransportUsesDistinctSuperFreeTargets = {
-    expr = {
-      targets = builtins.listToAttrs (
-        map (binding: {
-          name = binding.action;
-          value = chord binding.target;
-        }) allocation.windows.ghosttyTransport
-      );
-      uniqueTargets =
-        builtins.length allocation.windows.ghosttyTransport == builtins.length (
-          lib.unique (map (binding: chord binding.target) allocation.windows.ghosttyTransport)
-        );
-      noOtherGhosttyConflict = builtins.all (
-        transport:
-        !(builtins.elem (chord transport.target) (
-          map chord (builtins.filter (binding: !(lib.hasPrefix "resize-" binding.action)) allocation.ghostty)
-        ))
-      ) allocation.windows.ghosttyTransport;
-    };
-    expected = {
-      targets = {
-        ghostty-resize-left-10 = "ctrl+alt+shift+left";
-        ghostty-resize-down-10 = "ctrl+alt+shift+down";
-        ghostty-resize-up-10 = "ctrl+alt+shift+up";
-        ghostty-resize-right-10 = "ctrl+alt+shift+right";
-        ghostty-resize-left-100 = "ctrl+alt+shift+home";
-        ghostty-resize-down-100 = "ctrl+alt+shift+page_down";
-        ghostty-resize-up-100 = "ctrl+alt+shift+page_up";
-        ghostty-resize-right-100 = "ctrl+alt+shift+end";
-      };
-      uniqueTargets = true;
-      noOtherGhosttyConflict = true;
-    };
-  };
-  testWindowsGhosttyConfigChangesOnlyResizeTriggers = {
-    expr = {
-      resizeLines = builtins.filter (line: lib.hasInfix "=resize_split:" line) windowsGhosttyLines;
-      otherLines = builtins.filter (line: !(lib.hasInfix "=resize_split:" line)) windowsGhosttyLines;
+      resizeLines = builtins.filter (line: lib.hasInfix "=resize_split:" line) wslGhosttyLines;
+      otherLines = builtins.filter (line: !(lib.hasInfix "=resize_split:" line)) wslGhosttyLines;
     };
     expected = {
       resizeLines = [
@@ -182,7 +135,7 @@ in
   testSharedKeysDoNotLoseBindingsDuringRendering = {
     expr =
       let
-        contract = import ../../../../home/keybindings/bindings.nix { inherit lib; };
+        contract = code.nix.home.keybindings.bindings { inherit lib; };
       in
       {
         uniqueAerospace =
