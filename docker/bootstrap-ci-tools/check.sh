@@ -21,6 +21,12 @@ bash -lc 'command -v git >/dev/null && command -v nix >/dev/null'
 node -e 'if (Number(process.versions.node.split(".")[0]) < 24) process.exit(1)'
 nix eval --json --expr '1 + 1' | grep -qx 2
 nix store info --store local
+nix config show --json | jq -e '
+  .http2.value == false
+  and .["stalled-download-timeout"].value == 60
+  and .["download-attempts"].value == 3
+  and (.substituters.value | index("https://cache.nixos.org?priority=10") != null)
+' >/dev/null
 
 fixture=$(mktemp -d)
 trap 'rm -r "$fixture"' EXIT

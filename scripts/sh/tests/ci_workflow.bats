@@ -185,7 +185,7 @@ EOF
   done
 }
 
-@test "CI authentication follows Nix home and keeps tokens private" {
+@test "CI authentication and bounded HTTP/1.1 downloads follow Nix home and keep tokens private" {
   write_stub getent <<'EOF'
 printf 'fixture:x:0:0:Fixture:%s:/bin/bash\n' "$FALLBACK_HOME"
 EOF
@@ -233,6 +233,10 @@ EOF
         secret_file="$EXPECTED_CONFIG/nix/bootstrap-ci.conf"
         [ "$(stat -c %a "$secret_file" 2>/dev/null || stat -f %Lp "$secret_file")" = 600 ]
         [ "$(grep -Fc "include $secret_file" "$EXPECTED_CONFIG/nix/nix.conf")" -eq 1 ]
+        grep -Fxq 'http2 = false' "$secret_file"
+        grep -Fxq 'stalled-download-timeout = 60' "$secret_file"
+        grep -Fxq 'download-attempts = 3' "$secret_file"
+        grep -Fxq 'substituters = https://cache.nixos.org?priority=10' "$secret_file"
         if [[ $wsl == true ]]; then
           [ ! -e "$GIT_CONFIG_SYSTEM" ]
           grep -Fxq 'max-jobs = 2' "$secret_file"

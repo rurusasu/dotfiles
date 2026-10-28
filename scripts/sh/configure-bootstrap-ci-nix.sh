@@ -53,10 +53,10 @@ mkdir -p "$config_dir"
 {
   printf 'access-tokens = github.com=%s\n' "$GITHUB_TOKEN"
   repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
-  # Share the public binary caches across every CI platform. Keeping these
-  # settings in the same source as the tools image avoids Darwin silently
-  # rebuilding Hermes dependencies from source.
-  grep -E '^(extra-substituters|extra-trusted-public-keys) = ' \
+  # Share caches and transport limits across every CI platform. Replacing the
+  # base substituter also preserves the official-cache priority after NixOS or
+  # nix-darwin activation installs the host's normal configuration.
+  grep -E '^(substituters|extra-substituters|extra-trusted-public-keys|http2|stalled-download-timeout|download-attempts) = ' \
     "$repo_root/docker/bootstrap-ci-tools/nix.conf"
   if [[ -n ${DOTFILES_CI_BINARY_CACHE:-} ]]; then
     # This local cache is restored within GitHub's branch-scoped CI cache.
