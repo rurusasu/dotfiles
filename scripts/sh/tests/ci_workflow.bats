@@ -129,7 +129,7 @@ EOF
   write_stub nix <<'EOF'
 case "$*" in
 'config show access-tokens') field=access-tokens ;;
-'config show substituters') field=extra-substituters ;;
+'config show substituters') field=substituters ;;
 'config show trusted-public-keys') field=extra-trusted-public-keys ;;
 *) exit 64 ;;
 esac
