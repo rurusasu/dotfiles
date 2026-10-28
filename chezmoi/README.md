@@ -32,6 +32,14 @@ the `PredictionViewStyle` option in an interactive console.
 Windows uses its standard desktop shortcuts. Unix GUI applications are installed
 by Nix and opened from the WSL environment.
 
+Setup output colors are managed here: `.chezmoi.toml.tmpl` enables chezmoi's
+built-in diff colors (green additions and red removals), and `dot_taskrc.yml`
+deploys `%USERPROFILE%/.taskrc.yml` to enable Task's command and diagnostic colors.
+These settings also apply when setup forwards command output through PowerShell.
+Use `chezmoi --color=false` or `task --color=false` for plain output, including
+when saving logs. Application output keeps the colors provided by each tool;
+plain messages such as `Setup Complete!` remain plain.
+
 The key allocation is defined in `nix/home/keybindings/bindings.nix`,
 `nix/modules/terminals/ghostty/ghostty.nix`, and `nix/modules/editors/nvim/neovim.nix`.
 `task keybindings:export` directly evaluates those definitions with locked Nix
