@@ -73,6 +73,7 @@ jobs:
             '.config/dotfiles/wslg-fontconfig.conf'
             '.config/git/config'
             '.config/wezterm/wezterm.lua'
+            '.taskrc.yml'
             '.wslgconfig'
             'AppData/Local/superfile/config.toml'
             'Documents/PowerShell/Microsoft.PowerShell_profile.ps1'
