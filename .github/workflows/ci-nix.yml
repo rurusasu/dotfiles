@@ -541,8 +541,9 @@ jobs:
           '@
             Invoke-Wsl -Arguments @('--terminate', $distroName) -TimeoutSeconds 60 | Out-Host
             if ($LASTEXITCODE -ne 0) { throw "WSL cold restart failed (exit=$LASTEXITCODE)." }
-            Invoke-CiWsl -User nixos -Source @'
+            Invoke-CiWsl -User nixos -TimeoutSeconds 360 -Source @'
           set -euo pipefail
+          trap 'status=$?; if (( status != 0 )); then journalctl --user -u hermes-agent.service --no-pager -n 80 >&2; fi' EXIT
           GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic '(( $+functions[cd] )) && functions cd' | rg '__zoxide_z'
           task --dir ~/.dotfiles hermes:restart
           case "$(readlink -f "$(command -v hermes)")" in /nix/store/*) ;; *) exit 1 ;; esac
@@ -557,7 +558,10 @@ jobs:
           nix shell --inputs-from ~/.dotfiles nixpkgs#curl nixpkgs#jq --command bash -s <<'READINESS'
           set -euo pipefail
           url='http://127.0.0.1:18642/health/detailed'
-          for attempt in {1..30}; do
+          # Gateway startup awaits MCP discovery before binding HTTP. Match its
+          # default 300-second startup watchdog, including cold MCP and secret loading.
+          deadline=$((SECONDS + 300))
+          while :; do
             if response=$(curl --fail --silent --show-error --max-time 2 -H 'Authorization: Bearer dotfiles-ci-health-probe' "$url" 2>&1) &&
                 printf '%s' "$response" | jq -e '
                   .status == "ok" and .readiness.status == "ok" and
@@ -566,7 +570,7 @@ jobs:
                     ["state_db", "session_store", "config", "model", "disk", "gateway", "background_queues"][];
                     . as $required | $checks[$required].status == "ok"))
                 ' >/dev/null 2>&1; then break; fi
-            if [[ $attempt == 30 ]]; then printf '%s\n' "$response" >&2; exit 1; fi
+            if (( SECONDS >= deadline )); then printf '%s\n' "$response" >&2; exit 1; fi
             sleep 1
           done
           test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 2 "$url")" = 401
