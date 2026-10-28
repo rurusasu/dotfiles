@@ -72,6 +72,7 @@ jobs:
           $expectedFiles = @(
             '.config/dotfiles/wslg-fontconfig.conf'
             '.config/git/config'
+            '.config/wezterm/wezterm.lua'
             '.wslgconfig'
             'AppData/Local/superfile/config.toml'
             'Documents/PowerShell/Microsoft.PowerShell_profile.ps1'
@@ -83,14 +84,19 @@ jobs:
           $managedScripts = @(& chezmoi --source $source --override-data $data managed --include scripts --path-style relative)
           if ($LASTEXITCODE -ne 0) { throw "chezmoi managed scripts failed with exit $LASTEXITCODE" }
           $expectedScripts = @(
-            '.chezmoiscripts/deploy/keybindings/sync_powertoys_keyboard.ps1'
             '.chezmoiscripts/deploy/keybindings/sync_wsl_keybindings.ps1'
-            '.chezmoiscripts/deploy/terminals/deploy.ps1'
             '.chezmoiscripts/deploy/terminals/install_udev_gothic_nf.ps1'
           )
           if ($managedScripts.Count -ne $expectedScripts.Count -or
               @($expectedScripts | Where-Object { $_ -notin $managedScripts }).Count -gt 0) {
             throw "Unexpected managed scripts: $($managedScripts -join ', ')"
+          }
+          foreach ($os in 'linux', 'darwin') {
+            $unixData = @{ chezmoi = @{ os = $os; homeDir = '/home/ci' } } | ConvertTo-Json -Compress
+            $unixTargets = @(& chezmoi --source $source --override-data $unixData managed --include files,scripts --path-style relative)
+            if ($LASTEXITCODE -ne 0 -or $unixTargets.Count -ne 0) {
+              throw "chezmoi must leave $os configuration to Nix: $($unixTargets -join ', ')"
+            }
           }
           $wslgConfig = @(& chezmoi --source $source --override-data $data execute-template --file (Join-Path $source 'dot_wslgconfig.tmpl'))
           if ($LASTEXITCODE -ne 0) { throw "chezmoi WSLg configuration render failed with exit $LASTEXITCODE" }

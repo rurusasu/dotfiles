@@ -28,8 +28,6 @@
     pkgs.runCommand "wezterm-config-check"
       {
         nativeBuildInputs = [
-          pkgs.bats
-          pkgs.chezmoi
           pkgs.lua
         ];
       }
@@ -114,8 +112,6 @@
           "Backspace after the leader must send an unmodified Backspace key")
         print("Darwin WezTerm terminfo inheritance, IME and Backspace bindings are valid")
         LUA
-        WEZTERM_TEST_REPO_ROOT=${files.__path} bats ${files.tests.bash."wezterm_config.bats"}
-
         # Execute the generated shell startup with the real WezTerm integration.
         # WezTerm hooks must load in WezTerm and stay absent in Ghostty.
         for terminal in ghostty WezTerm; do

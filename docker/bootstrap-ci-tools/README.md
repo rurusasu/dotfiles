@@ -3,8 +3,8 @@
 `ci-nix.yml` の `nix`、`linux-build`、
 `wsl-prebuild` は、このイメージで検査・ビルドを実行します。
 `bash-test` もこのイメージで Bash テストを一度だけ実行します。
-Nix、Bash、Bats、chezmoi、go-task、Git / Git LFS、Python 3.14、Ruby、Node.js 24、PowerShell、
-PSScriptAnalyzer の最新安定版、statix、jq、tar、xz を事前導入します。
+Nix、Bash、go-task、Git、Python 3.14、Node.js 24、statix、jq、tar、xz を事前導入します。
+テスト専用ツールは checkout した flake の `runtime-tests` shell から取得します。
 `nix fmt` の formatter と検証対象のパッケージは、引き続き checkout した flake から選択します。
 
 ## 更新と再利用
@@ -45,8 +45,9 @@ Ubuntu / Debian の個別構成 build と E2E は実行せず、NixOS VM の検�
 WSL は本番構成を一度 build し、E2E で使う cache を生成します。
 ホストの SDK 削除や Docker イメージの一括削除は行いません。
 
-Bash テストは同じ workflow の Linux `bash-test` job に集約し、
-`scripts/sh/run-bash-tests.sh` を実行します。ローカルの `task test:bash` も同じ runner を使います。
+Bash テストは同じ workflow の Linux `bash-test` job とローカルで `task test:bash` を実行します。
+この Task は `nix develop --ignore-environment --keep HOME .#runtime-tests` で明示したツールだけを使い、
+`scripts/sh/tests` を Bats に渡します。Bats の標準動作で検出と失敗・0 件の終了状態を扱います。
 Darwin build job には Bash テスト用のインストール処理を置きません。
 OS 分岐の契約は stub で検証し、実 OS が必要な動作は別の E2E が担当します。
 push / PR では軽量な変更検出を必ず実行し、必要な job だけ起動します。
@@ -68,9 +69,8 @@ OS・architecture・Nix version・job・flake.lock のハッシュで分離し�
   Darwin は activation 直後に private 出力を GC root で保持し、checks 中の GC による削除を防ぎます。
 - 圧縮は Nix の zstd を GC root と PATH で固定します。Homebrew cleanup 後も同じツールを使います。
 - 保存上限は Darwin 2 GiB、Linux / WSL は各 768 MiB、checks は 512 MiB です。上限超過時は警告し、前世代を維持します。
-  新世代の保存を API で確認してから、同じ namespace の古い main cache を削除します。
-  4ジョブの定常上限は計 4 GiB、全ジョブの世代交代が重なっても最大 8 GiB です。
-  他 workflow の cache も repository の 10 GB 枠を共有します。
+  世代の保持は [GitHub の自動削除](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#usage-limits-and-eviction-policy)に任せます。
+  この repository は他 workflow と合計 10 GB を共有し、未使用 7 日または容量超過時の LRU で古い cache が削除されます。
 - WSL への同一 run の artifact: 完全な cache の hardlink 複製から、`cache.nixos.org` に依存一式がある
   NAR payload だけを除きます。metadata は残し、Windows 側で署名付きの公開依存を先に取得してから取り込みます。
   公開 cache の判定は並列実行し、問い合わせ失敗時は未確認の payload を省きません。

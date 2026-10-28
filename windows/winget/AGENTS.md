@@ -2,16 +2,17 @@
 
 ## 編集対象
 
-- `packages.json` を直接編集する。Windows の WinGet / Microsoft Store パッケージと installer metadata の SSOT であり、Nix からは生成しない。
-- `Sources[].Packages[]` に `PackageIdentifier` と必要な `verifyCommand`、`pathEntries`、`installTimeoutSeconds`、`ciSkipInstall` などをまとめる。
-- 現在の installer は Windows GUI アプリを管理する。Unix の CLI パッケージは `nix/modules/` 側で管理し、Windows manifest に自動追加しない。
-- `yorukot.superfile` は Windows PowerShell からも使うための明示的な CLI 例外。ユーザー scope に導入し、WinGet の Links を PATH に保存する。OpenCode・Pi coding agent・TUIOS は Windows に追加せず、`nix/defaults.nix` で WSL / Darwin に導入する。
-- `eza-community.eza`、`sharkdp.fd`、`BurntSushi.ripgrep.MSVC`、`JesseDuffield.lazygit` も Windows PowerShell の共通エイリアス用の明示的な CLI 例外。ユーザー scope・portableLink・永続 Links PATH を使う。エイリアスと関数は chezmoi の PowerShell profile が管理し、Unix の設定とは別に配布する。
-- `Starship.Starship` は WSL の Windows drive 上で `git_status.windows_starship` が使う補助コマンドとして管理する。ユーザー scope の ZIP portable 版を選び、`%LOCALAPPDATA%\Microsoft\WinGet\Links\starship.exe` を維持する。`persistPathEntries: true` はこの補助コマンドの PATH を次回の WSL 起動に引き継ぐための明示例外で、GUI phase でも宣言した directory をユーザー PATH に保存する。Windows PowerShell のプロンプト初期化は追加しない。
-- `Git.MinGit` はこの補助コマンドが Git を呼ぶ場合の依存として管理する。ユーザー scope の ZIP portable 版の tree を保ち、同じ WinGet package directory の `cmd` を `persistPathEntries: true` で公開する。`git.exe` だけのコピーは作成しない。`pathEntriesCommand` 検証は宣言した directory の実行ファイルを使い、Codex cache などに含まれる別の Git で成功扱いにしない。
-- `retired-packages.json` は既存の引退パッケージ cleanup 用 manifest。通常の追加・更新は `packages.json` を編集する。
+- `packages.json` は WinGet 標準 import 形式の独立した正本。Nix から生成しない。
+- `Sources[].SourceDetails` に source、`Packages[]` に `PackageIdentifier` と必要な標準の `Scope` を記載する。独自のインストール・検証・PATH metadata は追加しない。
+- バージョンは指定せず、更新とインストールは WinGet に任せる。コマンドリンク・PATH 登録も WinGet と各アプリの installer が管理する。
+- 通常は Windows GUI を管理する。Task・PowerShell・chezmoi はセットアップ用、superfile・eza・fd・ripgrep・lazygit は Windows PowerShell 用、Starship・MinGit は WSL との連携用の明示的な CLI 例外。
+- Windows の alias・関数は chezmoi、Unix のアプリと設定は Nix / Home Manager で管理する。
+- Windows Dia は手動導入とし、master や独自 MSIX 処理に追加しない。
+- `retired-packages.json` は履歴。自動アンインストールには使わない。
 
 ## 実行コマンド
+
+`install.cmd` が PowerShell で `winget import` を一度実行する。master 内の `Task.Task` が導入された後、Taskfile の WSL → chezmoi へ進む。Taskfile に別の WinGet 経路を作らない。
 
 ```powershell
 .\install.cmd
@@ -19,5 +20,6 @@
 
 ## 実装上の注意
 
-- 一部パッケージは対話や手動操作が必要。
-- 自動処理は `scripts/powershell/handlers/Handler.Winget.ps1` が担う。
+- `scripts/powershell/lib/Invoke-ExternalCommand.ps1` は master のパスをそのまま `winget import` に渡す。JSON を独自に解釈しない。
+- import の非ゼロ終了は失敗として後続を止める。利用できないパッケージを自動で無視しない。
+- 更新・反映と再起動による停止は Taskfile と installer の契約テストで検証する。

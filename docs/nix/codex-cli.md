@@ -22,7 +22,7 @@ nix/modules/ai_agents/
 WSL では `programs.codex.enable` を指定します。ChatGPT の有効化は同梱 Codex も有効にし、WSL には Linux GUI を導入しません。
 Codex と ChatGPT Work の既定モデルは `gpt-6.1-terra`、通常・plan の reasoning effort は `ultra` です。
 Pi は独立した `programs.pi-coding-agent.enable` で有効化し、provider `openai-codex`、モデル `gpt-6.1-terra`、thinking level `max` を使います。
-Windows の Store 導入・検証情報は `windows/winget/packages.json` で直接管理します。
+Windows の Store 導入情報は `windows/winget/packages.json` で直接管理します。
 Codex CLI を独立したパッケージとして導入しません。
 
 ## Darwin / Linux の公式版
@@ -71,7 +71,7 @@ Google 連携は Pipedream に統一し、Codex の Google curated plugins は�
 設定と認証の範囲は [Google MCP](../hermes-agent/gmail-mcp.md) を参照してください。
 
 Unix の dsh の導入は `nix/defaults.nix` で管理します。
-Windows の npm/pnpm manifest は空で、dsh を導入しません。pnpm と Bun は導入しません。
+Windows では dsh・pnpm・Bun を導入しません。
 
 ## 反映
 

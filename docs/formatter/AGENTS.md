@@ -3,7 +3,7 @@
 ## source of truth
 
 - `nix/treefmt.nix`: formatter の設定値、対象・除外、バイナリと実行依存。
-- `nix/defaults.nix` の `perSystem`: treefmt module の読み込み、PSScriptAnalyzer source の受け渡し、開発シェル。
+- `nix/defaults.nix` の `perSystem`: treefmt module の読み込みと開発シェル。
 - `flake.nix`: treefmt-nix の flake-parts module を読み込む。formatter と check は標準の自動公開を使う。
 - treefmt-nix が設定を Nix store に生成し、wrapper が各 formatter に設定パスを渡す。
 - project root に formatter の設定ファイルを二重管理しない。

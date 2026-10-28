@@ -12,9 +12,7 @@ ENV PATH="/opt/ci-tools/bin:/nix/var/nix/profiles/default/bin:/usr/local/sbin:/u
     HOME="/root" \
     LANG="C.UTF-8" \
     NIX_SSL_CERT_FILE="/nix/var/nix/profiles/default/etc/ssl/certs/ca-bundle.crt" \
-    SSL_CERT_FILE="/nix/var/nix/profiles/default/etc/ssl/certs/ca-bundle.crt" \
-    PSModulePath="/opt/powershell/Modules" \
-    POWERSHELL_TELEMETRY_OPTOUT="1"
+    SSL_CERT_FILE="/nix/var/nix/profiles/default/etc/ssl/certs/ca-bundle.crt"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -22,29 +20,16 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG NIXPKGS_REV=79b35bf0bda5cd110f856aa5b5b2c5ba4460dbf5
 RUN nix profile install --profile /opt/ci-tools --option sandbox false \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#bash" \
-      "github:NixOS/nixpkgs/${NIXPKGS_REV}#bats" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#cacert" \
-      "github:NixOS/nixpkgs/${NIXPKGS_REV}#chezmoi" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#coreutils" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#git" \
-      "github:NixOS/nixpkgs/${NIXPKGS_REV}#git-lfs" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#gnugrep" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#gnutar" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#go-task" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#jq" \
-      "github:NixOS/nixpkgs/${NIXPKGS_REV}#powershell" \
-      "github:NixOS/nixpkgs/${NIXPKGS_REV}#procps" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#python314" \
-      "github:NixOS/nixpkgs/${NIXPKGS_REV}#ruby" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#statix" \
-      "github:NixOS/nixpkgs/${NIXPKGS_REV}#yq-go" \
       "github:NixOS/nixpkgs/${NIXPKGS_REV}#xz"
-
-# PowerShell expands these variables, not the Docker build shell.
-# hadolint ignore=SC2016
-RUN mkdir -p /opt/powershell/Modules \
-    && pwsh -NoLogo -NoProfile -Command \
-      '$ErrorActionPreference = "Stop"; Save-Module -Name PSScriptAnalyzer -Repository PSGallery -Path /opt/powershell/Modules'
 
 COPY check.sh /usr/local/libexec/check-bootstrap-ci-tools.sh
 RUN bash /usr/local/libexec/check-bootstrap-ci-tools.sh

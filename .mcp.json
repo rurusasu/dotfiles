@@ -1,9 +1,5 @@
 {
   "mcpServers": {
-    "MCP_DOCKER": {
-      "command": "docker",
-      "args": ["mcp", "gateway", "run", "--profile", "dotfiles"]
-    },
     "hindsight": {
       "url": "http://127.0.0.1:8888/mcp/codex-shared/"
     },

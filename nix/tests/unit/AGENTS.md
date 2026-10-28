@@ -1,7 +1,7 @@
 # unit: nix-unit の値テスト
 
 - Nix 式、Home Manager / host の実効 option、package 選択、flake の配線を検証する。
-- 統合設定・OS 構成は `defaults/`、アプリは本番 `nix/modules/` と同じ分類の `modules/` に置く。共通キーは `home/keybindings/bindings.nix`、Windows manifest は `windows/`、登録契約は `ownership.nix` が担当する。
+- 統合設定・OS 構成は `defaults/`、アプリは本番 `nix/modules/` と同じ分類の `modules/` に置く。共通キーは `home/keybindings/bindings.nix`、登録契約は `ownership.nix` が担当する。Windows manifest は CI の jq で直接検証する。
 - 各ファイルは `test...` 属性を持つ属性セットを返し、各テストに `expr` と `expected` を定義する。
 - 共通 context の `inputs` / `fixtures` / `homeConfigurations` / `code` / `files` / `upstream` から必要な引数だけを受け取る。pkgs は `fixtures.mkPkgs`、helper は `code.*`、asset は `files.*` を使い、fixture を含むローカルパス・import をテスト定義へ書かない。資源は `source-tree.nix` が自動索引し、手書きの catalog は追加しない。外部 flake input は `upstream.<input>.code` / `upstream.<input>.files` を使う。
 - `nix/tests/discover.nix` がすべての通常ファイル `*.nix` を再帰的に自動検出する。個別の import パス登録は不要。空のファイル・名前の重複・全体で 0 件は失敗させる。

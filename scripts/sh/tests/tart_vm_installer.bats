@@ -1,0 +1,84 @@
+#!/usr/bin/env bats
+
+setup() {
+  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../../.." && pwd)"
+  INSTALLER="$REPO_ROOT/scripts/sh/install-tart-vm.sh"
+  TEST_HOME="$BATS_TEST_TMPDIR/home"
+  TART_HOME="$TEST_HOME/.tart"
+  STUB_BIN="$BATS_TEST_TMPDIR/bin"
+  COMMAND_LOG="$BATS_TEST_TMPDIR/commands.log"
+  mkdir -p "$TEST_HOME" "$TART_HOME" "$STUB_BIN"
+  : >"$COMMAND_LOG"
+  export HOME TART_HOME COMMAND_LOG
+}
+
+write_tart_stub() {
+  cat >"$STUB_BIN/tart" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'tart %s\n' "$*" >>"$COMMAND_LOG"
+mkdir -p "$TART_HOME/vms/${3:-unknown}"
+EOF
+  chmod +x "$STUB_BIN/tart"
+}
+
+write_df_stub() {
+  cat >"$STUB_BIN/df" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+printf '/dev/mock 100000000 0 36700160 0%% /\n'
+EOF
+  chmod +x "$STUB_BIN/df"
+}
+
+@test "Tart preparation skips an existing VM without invoking Tart" {
+  write_tart_stub
+  mkdir -p "$TART_HOME/vms/tahoe-base"
+
+  run env DOTFILES_TART_COMMAND="$STUB_BIN/tart" DOTFILES_TART_MIN_FREE_GIB=999999 "$INSTALLER"
+
+  [ "$status" -eq 0 ]
+  [[ $output == *"already exists"* ]]
+  [ ! -s "$COMMAND_LOG" ]
+}
+
+@test "Tart preparation rejects insufficient space before cloning" {
+  write_tart_stub
+  write_df_stub
+
+  run env PATH="$STUB_BIN:$PATH" DOTFILES_TART_COMMAND="$STUB_BIN/tart" DOTFILES_TART_MIN_FREE_GIB=040 "$INSTALLER"
+
+  [ "$status" -ne 0 ]
+  [[ $output == *"Insufficient free space"* ]]
+  [ ! -s "$COMMAND_LOG" ]
+}
+
+@test "Tart preparation rejects unsafe clone configuration" {
+  write_tart_stub
+  for invalid in DOTFILES_TART_MIN_FREE_GIB=8796093022208 DOTFILES_TART_VM_NAME=..; do
+    run env DOTFILES_TART_COMMAND="$STUB_BIN/tart" "$invalid" "$INSTALLER"
+    [ "$status" -ne 0 ]
+    if [[ $invalid == DOTFILES_TART_MIN_FREE_GIB=* ]]; then
+      [[ $output == *"too large"* ]]
+    else
+      [[ $output == *"unsupported characters"* ]]
+    fi
+    [ ! -s "$COMMAND_LOG" ]
+  done
+}
+
+@test "Tart preparation clones the configured image into TART_HOME" {
+  write_tart_stub
+  write_df_stub
+
+  run env PATH="$STUB_BIN:$PATH" DOTFILES_TART_COMMAND="$STUB_BIN/tart" \
+    DOTFILES_TART_MIN_FREE_GIB=08 \
+    DOTFILES_TART_IMAGE=ghcr.io/example/macos:tag \
+    DOTFILES_TART_VM_NAME=test-vm \
+    "$INSTALLER"
+
+  [ "$status" -eq 0 ]
+  grep -Fxq 'tart clone ghcr.io/example/macos:tag test-vm' "$COMMAND_LOG"
+  [ -d "$TART_HOME/vms/test-vm" ]
+}

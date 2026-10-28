@@ -7,9 +7,7 @@
   upstream,
 }:
 let
-  bashTests = files.tests.bash.__path;
-  bashEntries = builtins.readDir bashTests;
-  linesOf = source: builtins.filter builtins.isString (builtins.split "\n" source);
+  inherit (inputs.nixpkgs) lib;
   discover = code.nix.tests.discover;
   unit = discover {
     directory = files.nix.tests.unit.__path;
@@ -48,57 +46,17 @@ let
     map (file: inputs.nixpkgs.lib.removePrefix "${toString directory}/" (toString file)) files;
   nixFilesUnder =
     directory:
-    let
-      entries = builtins.readDir directory;
-    in
-    builtins.concatMap (
-      name:
-      let
-        path = directory + "/${name}";
-      in
-      if entries.${name} == "directory" then
-        nixFilesUnder path
-      else if entries.${name} == "regular" && builtins.match ".*[.]nix$" name != null then
-        [ path ]
-      else
-        [ ]
-    ) (builtins.attrNames entries);
+    lib.fileset.toList (
+      lib.fileset.fileFilter (file: file.type == "regular" && file.hasExt "nix") directory
+    );
+  sortedFiles = paths: builtins.sort builtins.lessThan (map toString paths);
 
 in
 {
-  testNixEvalBatsHaveExplicitRuntimeOwnership = {
-    # Match executable command forms, rather than comments or diagnostic strings.
-    expr =
-      builtins.filter
-        (
-          name:
-          (
-            source:
-            builtins.any (
-              line:
-              builtins.match "^[[:space:]]*(run[[:space:]]+[^#]*[[:space:]]+)?nix[[:space:]]+eval([[:space:]]|$).*" line
-              != null
-              ||
-                builtins.match "^[[:space:]]*\"?\\$([{][A-Za-z_][A-Za-z0-9_]*[}]|[A-Za-z_][A-Za-z0-9_]*)\"?[[:space:]]+eval([[:space:]]|$).*" line
-                != null
-            ) (linesOf source)
-          )
-            (builtins.readFile files.tests.bash.${name})
-        )
-        (
-          builtins.sort builtins.lessThan (
-            builtins.filter (
-              name: bashEntries.${name} == "regular" && builtins.match ".*\\.bats" name != null
-            ) (builtins.attrNames bashEntries)
-          )
-        );
-    expected = [ ];
-  };
-
   testEveryRecursiveNixUnitModuleIsDiscoveredExactlyOnce = {
     expr =
       unit.files != [ ]
-      && unit.files == nixFilesUnder files.nix.tests.unit.__path
+      && sortedFiles unit.files == sortedFiles (nixFilesUnder files.nix.tests.unit.__path)
       && builtins.length unit.files == builtins.length (inputs.nixpkgs.lib.unique unit.files);
     expected = true;
   };
@@ -111,8 +69,10 @@ in
       buildChecksDiscoveredExactlyOnce =
         build.files != [ ]
         &&
-          build.files == builtins.filter (path: inputs.nixpkgs.lib.hasSuffix ".check.nix" (toString path)) (
-            nixFilesUnder files.nix.tests.build.__path
+          sortedFiles build.files == sortedFiles (
+            builtins.filter (path: lib.hasSuffix ".check.nix" (toString path)) (
+              nixFilesUnder files.nix.tests.build.__path
+            )
           )
         && builtins.length (builtins.attrNames build.values) > 0;
       hardwareFixtureExists = files.nix.tests.fixtures ? hardware-configuration;

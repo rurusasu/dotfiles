@@ -1,25 +1,17 @@
-﻿#Requires -Module Pester
+#Requires -Module Pester
 
 Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     BeforeAll {
         $script:repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
-        . (Join-Path $PSScriptRoot '../lib/WindowsEnvironment.ps1')
         . (Join-Path $PSScriptRoot '../lib/Invoke-ExternalCommand.ps1')
         $script:originalPath = $env:PATH
-        Repair-WindowsSetupEnvironment
-        Update-ProcessEnvironmentPath -ProcessOnly
+        Update-ProcessEnvironmentPath
     }
 
     AfterAll { $env:PATH = $script:originalPath }
 
-    It 'should run the installed <Command> executable' -ForEach @(
-        @{ Command = 'winget'; Arguments = @('--version') }
-        @{ Command = 'pwsh'; Arguments = @('--version') }
-        @{ Command = 'chezmoi'; Arguments = @('--version') }
-        @{ Command = 'wezterm'; Arguments = @('--version') }
-    ) {
-        Get-Command -Name $Command -CommandType Application -ErrorAction Stop | Should -Not -BeNullOrEmpty
-        $output = @(Invoke-VerifyCommand -Command $Command -Arguments $Arguments -TimeoutSeconds 120)
+    It 'should run the installed Windows WezTerm executable' {
+        $output = @(Invoke-ExternalCommandWithTimeout -Command wezterm -Arguments @('--version') -TimeoutSeconds 120)
         $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
         $output -join '' | Should -Match '\d+'
     }
@@ -36,19 +28,16 @@ Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platf
         # Font registration belongs to installer E2E and changes the current user's registry.
         $targets = @(
             'Documents/PowerShell/Microsoft.PowerShell_profile.ps1'
-            '.chezmoiscripts/deploy/terminals/run_onchange_deploy.ps1.tmpl'
-            '.chezmoiscripts/deploy/keybindings/run_onchange_sync_powertoys_keyboard.ps1.tmpl'
+            'dot_config/wezterm/wezterm.lua.tmpl'
         ) | ForEach-Object { Join-Path $source $_ }
         $arguments = @('--config', $config, '--source', $source,
             '--destination', $destination, '--persistent-state', $state, '--source-path', 'apply', '--force', '--parent-dirs') + $targets
         $originalProfile = $env:USERPROFILE
         $originalLocalAppData = $env:LOCALAPPDATA
-        $originalProgramFiles = $env:ProgramFiles
         try {
-            # Isolate application settings and recognized PowerToys install paths.
+            # Isolate application settings from the real user.
             $env:USERPROFILE = $destination
             $env:LOCALAPPDATA = Join-Path $TestDrive 'localappdata'
-            $env:ProgramFiles = Join-Path $TestDrive 'programfiles'
             $output = @(& $chezmoi @arguments 2>&1)
             $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
             $deployed = Join-Path $destination '.config/wezterm/wezterm.lua'
@@ -57,52 +46,171 @@ Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platf
             ([IO.File]::ReadAllText($deployed) -replace "`r`n?", "`n").TrimEnd() |
                 Should -BeExactly (($expected -replace "`r`n?", "`n").TrimEnd())
             @(Get-ChildItem -LiteralPath (Join-Path $destination '.config') -Recurse -File -Force).Count | Should -Be 1
-            $desktopDirectory = Join-Path $env:LOCALAPPDATA 'dotfiles/keybindings'
-            [IO.File]::ReadAllText((Join-Path $desktopDirectory 'keybindings.json')) |
-                Should -BeExactly ([IO.File]::ReadAllText((Join-Path $script:repoRoot 'nix/home/keybindings/generated.json')))
-            [IO.File]::ReadAllText((Join-Path $desktopDirectory 'Invoke-DesktopAction.ps1')) |
-                Should -BeExactly ([IO.File]::ReadAllText((Join-Path $script:repoRoot 'scripts/powershell/Invoke-DesktopAction.ps1')))
-            $powerToysDirectory = Join-Path $env:LOCALAPPDATA 'Microsoft/PowerToys'
-            $powerToysRoot = [IO.File]::ReadAllText((Join-Path $powerToysDirectory 'settings.json')) | ConvertFrom-Json
-            $powerToysRoot.enabled.'Keyboard Manager' | Should -BeTrue
-            $powerToysRoot.enabled.ColorPicker | Should -BeTrue
-            $powerToysProfile = [IO.File]::ReadAllText((Join-Path $powerToysDirectory 'Keyboard Manager/default.json')) | ConvertFrom-Json
-            ($powerToysProfile.remapShortcuts.global | Where-Object originalKeys -EQ '260;13').runProgramArgs | Should -Match '\-Action "terminal"$'
-            $applicationFiles = @(Get-ChildItem -LiteralPath $env:LOCALAPPDATA -File -Recurse | Sort-Object FullName)
-            $applicationSnapshot = @($applicationFiles | ForEach-Object { $_.FullName + ':' + [Convert]::ToBase64String([IO.File]::ReadAllBytes($_.FullName)) }) -join '|'
             $first = [Convert]::ToBase64String([IO.File]::ReadAllBytes($deployed))
             $output = @(& $chezmoi @arguments 2>&1)
             $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
             [Convert]::ToBase64String([IO.File]::ReadAllBytes($deployed)) | Should -BeExactly $first
-            (@(Get-ChildItem -LiteralPath $env:LOCALAPPDATA -File -Recurse | Sort-Object FullName | ForEach-Object { $_.FullName + ':' + [Convert]::ToBase64String([IO.File]::ReadAllBytes($_.FullName)) }) -join '|') |
-                Should -BeExactly $applicationSnapshot
         }
         finally {
             $env:USERPROFILE = $originalProfile
             $env:LOCALAPPDATA = $originalLocalAppData
-            $env:ProgramFiles = $originalProgramFiles
         }
     }
 }
 
-Describe 'NixOS WSL environment integration' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+Describe 'Windows common shell commands' {
     BeforeAll {
-        $script:nixosAvailable = $false
-        if (Get-Command wsl.exe -CommandType Application -ErrorAction SilentlyContinue) {
-            $distros = @(& wsl.exe --list --quiet 2>$null)
-            $script:nixosAvailable = $LASTEXITCODE -eq 0 -and @($distros | Where-Object {
-                    ($_ -replace "`0", '' -replace [char]0xFEFF, '').Trim() -eq 'NixOS'
-                }).Count -gt 0
+        $script:profilePath = Join-Path $PSScriptRoot '../../../chezmoi/Documents/PowerShell/Microsoft.PowerShell_profile.ps1'
+    }
+
+    BeforeEach {
+        # A separate runspace keeps aliases, functions and cwd out of the test runner.
+        $script:shell = [powershell]::Create()
+        $script:shell.Runspace.SessionStateProxy.SetVariable('ProfileTestSource', (Join-Path $TestDrive 'source repo/chezmoi'))
+        $script:shell.AddScript(@'
+foreach ($command in 'eza', 'rg', 'fd', 'lazygit', 'kubectl', 'kubectx', 'kubens', 'task') {
+    $body = [scriptblock]::Create(@"
+[pscustomobject]@{ Command = '$command'; Arguments = @(`$args); Directory = (Get-Location).Path }
+`$global:LASTEXITCODE = 17
+"@)
+    Set-Item -Path "function:global:$command.exe" -Value $body
+}
+function global:chezmoi.exe { $global:LASTEXITCODE = 0; $global:ProfileTestSource }
+'@).Invoke() | Out-Null
+        $script:shell.Commands.Clear()
+        $script:shell.AddScript([IO.File]::ReadAllText($script:profilePath)).Invoke() | Out-Null
+        $script:shell.HadErrors | Should -BeFalse -Because ($script:shell.Streams.Error -join "`n")
+        $script:shell.Commands.Clear()
+    }
+
+    AfterEach { $script:shell.Dispose() }
+
+    It 'should forward <Name> options and paths with spaces to the Windows executable' -ForEach @(
+        @{ Name = 'eza'; Command = 'eza'; Options = @('--icons', 'auto', '--color', 'auto', '--tree') }
+        @{ Name = 'ls'; Command = 'eza'; Options = @('--icons', 'auto', '--color', 'auto', '--tree', '--level=1') }
+        @{ Name = 'll'; Command = 'eza'; Options = @('--icons', 'auto', '--color', 'auto', '--tree', '--level=1', '--group-directories-first', '--time-style=long-iso') }
+        @{ Name = 'la'; Command = 'eza'; Options = @('--icons', 'auto', '--color', 'auto', '--tree', '--level=1', '--group-directories-first', '--time-style=long-iso', '--git', '--hyperlink', '-F') }
+        @{ Name = 'lt'; Command = 'eza'; Options = @('--icons', 'auto', '--color', 'auto', '--tree', '--level=2', '--group-directories-first', '--time-style=long-iso', '--git') }
+        @{ Name = 'lla'; Command = 'eza'; Options = @('--icons', 'auto', '--color', 'auto', '--tree', '-la') }
+        @{ Name = 'grep'; Command = 'rg'; Options = @() }
+        @{ Name = 'find'; Command = 'fd'; Options = @() }
+        @{ Name = 'lg'; Command = 'lazygit'; Options = @() }
+        @{ Name = 'k'; Command = 'kubectl'; Options = @() }
+        @{ Name = 'kgn'; Command = 'kubectl'; Options = @('get', 'nodes') }
+        @{ Name = 'kgp'; Command = 'kubectl'; Options = @('get', 'pods', '-A') }
+        @{ Name = 'kgs'; Command = 'kubectl'; Options = @('get', 'svc', '-A') }
+        @{ Name = 'kctx'; Command = 'kubectx'; Options = @() }
+        @{ Name = 'kns'; Command = 'kubens'; Options = @() }
+    ) {
+        $script:shell.AddCommand($Name).AddArgument('directory with spaces').AddArgument('--help') | Out-Null
+        $actual = @($script:shell.Invoke())
+        $script:shell.HadErrors | Should -BeFalse -Because ($script:shell.Streams.Error -join "`n")
+        $actual.Count | Should -Be 1
+        $actual[0].Command | Should -Be $Command
+        ($actual[0].Arguments -join '|') | Should -Be ((@($Options) + @('directory with spaces', '--help')) -join '|')
+        $script:shell.Commands.Clear()
+        $script:shell.AddScript('$global:LASTEXITCODE').Invoke()[0] | Should -Be 17
+    }
+
+    It 'should run dotf in the chezmoi source repository without changing the current directory' {
+        $script:shell.AddScript('(Get-Location).Path') | Out-Null
+        $originalDirectory = $script:shell.Invoke()[0]
+        $script:shell.Commands.Clear()
+        $script:shell.AddCommand('dotf').AddArgument('test:powershell').AddArgument('ARG=two words') | Out-Null
+        $actual = @($script:shell.Invoke())
+        $script:shell.HadErrors | Should -BeFalse -Because ($script:shell.Streams.Error -join "`n")
+        $actual.Count | Should -Be 1
+        $actual[0].Command | Should -Be 'task'
+        ($actual[0].Arguments -join '|') | Should -Be ((@('--dir', (Join-Path $TestDrive 'source repo'), 'test:powershell', 'ARG=two words')) -join '|')
+        $actual[0].Directory | Should -Be $originalDirectory
+        $script:shell.Commands.Clear()
+        $script:shell.AddScript('(Get-Location).Path').Invoke()[0] | Should -Be $originalDirectory
+    }
+
+    It 'should stop dotf when chezmoi cannot resolve its source' {
+        $script:shell.AddScript('function global:chezmoi.exe { $global:LASTEXITCODE = 9 }').Invoke() | Out-Null
+        $script:shell.Commands.Clear()
+        $script:shell.AddCommand('dotf').AddArgument('fmt') | Out-Null
+        @($script:shell.Invoke()).Count | Should -Be 0
+        $script:shell.Commands.Clear()
+        $script:shell.AddScript('$global:LASTEXITCODE').Invoke()[0] | Should -Be 9
+    }
+}
+
+# Isolated rendering requires the installed native chezmoi template engine.
+Describe 'WSLg Windows font configuration rendering' -Skip:(-not (Get-Command chezmoi -CommandType Application -ErrorAction SilentlyContinue)) {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot '../lib/Invoke-ExternalCommand.ps1')
+        $script:repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+        $script:chezmoi = (Get-Command chezmoi -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+
+        function New-WslgFontRenderFixture {
+            $root = Join-Path $TestDrive ([guid]::NewGuid().ToString())
+            $source = Join-Path $root 'repo/chezmoi'
+            $destination = Join-Path $root 'destination'
+            $templates = @('dot_wslgconfig.tmpl', 'dot_config/dotfiles/wslg-fontconfig.conf.tmpl')
+            foreach ($relative in $templates) {
+                $original = Join-Path $script:repoRoot ('chezmoi/' + $relative)
+                $copy = Join-Path $source $relative
+                [void][IO.Directory]::CreateDirectory((Split-Path -Parent $copy))
+                Copy-Item -LiteralPath $original -Destination $copy
+            }
+            Copy-Item -LiteralPath (Join-Path $script:repoRoot 'chezmoi/.chezmoiignore.tmpl') -Destination $source
+            $canonical = Join-Path $root 'repo/nix/modules/fonts/wsl-fontconfig.conf'
+            [void][IO.Directory]::CreateDirectory((Split-Path -Parent $canonical))
+            $xml = "<?xml version=`"1.0`"?>`n<fontconfig><!-- canonical fixture --><dir>/fixture/fonts</dir></fontconfig>`n"
+            [IO.File]::WriteAllText($canonical, $xml, (New-Object Text.UTF8Encoding($false)))
+            [void][IO.Directory]::CreateDirectory($destination)
+            $config = Join-Path $root 'chezmoi.toml'
+            [IO.File]::WriteAllText($config, '')
+            [pscustomobject]@{ Root = $root; Source = $source; Destination = $destination; Config = $config; Canonical = $xml }
+        }
+
+        function Invoke-WslgFontRender {
+            param([object]$Fixture, [string]$HomeDir = 'C:\Users\tester', [string]$Os = 'windows', [string[]]$Command, [string]$Source = '')
+            if (-not $Source) { $Source = $Fixture.Source }
+            $override = @{ chezmoi = @{ os = $Os; homeDir = $HomeDir } } | ConvertTo-Json -Compress
+            $arguments = @('--config', $Fixture.Config, '--config-format', 'toml', '--source', $Source,
+                '--destination', $Fixture.Destination, '--cache', (Join-Path $Fixture.Root 'cache'),
+                '--persistent-state', (Join-Path $Fixture.Root 'state.boltdb'), '--override-data', $override) + $Command
+            $output = @(Invoke-ExternalCommandWithTimeout -Command $script:chezmoi -Arguments $arguments -TimeoutSeconds 30)
+            $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
+            $output -join "`n"
         }
     }
 
-    It 'should resolve <_> in an existing NixOS distribution' -ForEach @('nvim', 'task', 'op', 'obsidian') {
-        if (-not $script:nixosAvailable) {
-            Set-ItResult -Skipped -Because 'NixOS is not installed here; disposable distro setup is exercised by the WSL E2E job'
-            return
-        }
-        $output = @(& wsl.exe -d NixOS -- bash -lc "command -v $_" 2>&1)
-        $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
-        $output -join '' | Should -Not -BeNullOrEmpty
+    It 'should convert <HomeDir> to a stable Windows-backed fontconfig path' -ForEach @(
+        @{ HomeDir = 'C:\Users\tester'; Expected = '/mnt/c/Users/tester/.config/dotfiles/wslg-fontconfig.conf' },
+        @{ HomeDir = 'D:\Users\Test User'; Expected = '/mnt/d/Users/Test User/.config/dotfiles/wslg-fontconfig.conf' },
+        @{ HomeDir = 'e:/Profiles/Another User'; Expected = '/mnt/e/Profiles/Another User/.config/dotfiles/wslg-fontconfig.conf' }
+    ) {
+        $fixture = New-WslgFontRenderFixture
+        $rendered = Invoke-WslgFontRender -Fixture $fixture -HomeDir $HomeDir -Command @('execute-template', '--file', (Join-Path $fixture.Source 'dot_wslgconfig.tmpl'))
+        ($rendered -replace "`r", '').TrimEnd() | Should -BeExactly ("[system-distro-env]`nFONTCONFIG_FILE=" + $Expected)
+        $rendered | Should -Not -Match '/mnt/wslg/distro'
+    }
+
+    It 'should include the repository-relative canonical XML without duplicating it in Windows source' {
+        $fixture = New-WslgFontRenderFixture
+        $relative = 'dot_config/dotfiles/wslg-fontconfig.conf.tmpl'
+        $rendered = Invoke-WslgFontRender -Fixture $fixture -Command @('execute-template', '--file', (Join-Path $fixture.Source $relative))
+        ($rendered -replace "`r", '').TrimEnd() | Should -BeExactly $fixture.Canonical.TrimEnd()
+        [void][xml]$rendered
+    }
+
+    It 'should render the actual canonical fontconfig file unchanged' {
+        $fixture = New-WslgFontRenderFixture
+        $canonical = Join-Path $script:repoRoot 'nix/modules/fonts/wsl-fontconfig.conf'
+        $source = Join-Path $script:repoRoot 'chezmoi'
+        $rendered = Invoke-WslgFontRender -Fixture $fixture -Source $source -Command @('execute-template', '--file', (Join-Path $source 'dot_config/dotfiles/wslg-fontconfig.conf.tmpl'))
+        ($rendered -replace "`r", '').TrimEnd() | Should -BeExactly (([IO.File]::ReadAllText($canonical) -replace "`r", '').TrimEnd())
+        [xml]$document = $rendered
+        $document.DocumentElement.LocalName | Should -BeExactly 'fontconfig'
+    }
+
+    It 'should leave <Os> deployment to Nix instead of managing these Windows files' -ForEach @(@{ Os = 'linux' }, @{ Os = 'darwin' }) {
+        $fixture = New-WslgFontRenderFixture
+        $managed = Invoke-WslgFontRender -Fixture $fixture -Os $Os -HomeDir '/home/tester' -Command @('managed', '--path-style', 'relative')
+        $managed.Trim() | Should -BeNullOrEmpty
     }
 }

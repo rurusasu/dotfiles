@@ -1,6 +1,7 @@
 # NixOS-WSL インストールと初期 setup
 
-Windows の `install.cmd` は GUI アプリ導入後に NixOS-WSL をセットアップします。
+Windows の通常入口は `task install` です。GUI アプリ導入、NixOS-WSL の更新・反映、
+Windows chezmoi の適用を順に実行します。Nix の更新と反映は WSL phase で一度だけ行います。
 既存 distro は再利用し、未登録なら公式の `nixos.wsl` を取得して登録します。
 登録には `wsl --install --from-file` を試し、失敗した場合は `wsl --import` に切り替えます。
 `scripts/powershell/lib/Invoke-NixosWslSetup.ps1` が checkout を同期して NixOS/Home Manager を適用します。
@@ -10,17 +11,26 @@ Windows の `install.cmd` は GUI アプリ導入後に NixOS-WSL をセット�
 checkout のルートで通常ユーザーの PowerShell から実行します。
 
 ```powershell
+task install
+```
+
+`install.cmd` は先に PowerShell で WinGet master を適用し、Task もそこから導入します。Task の事前導入は不要です。同期オプションを指定する場合も同じ入口を使います。
+
+```powershell
 .\install.cmd
 # GUI アプリだけを導入・更新
-.\install.cmd -UserPhaseOnly
+.\install.cmd -Phase Winget
 # 既存 WSL checkout を使用し、逆同期を行わない
 .\install.cmd -DistroName NixOS -SyncMode none -SyncBack none
 ```
 
-実行順序は `taskfiles/install/taskfile.yml` の `install:windows` が管理します。
-Task がなければ installer 専用 cache に取得します。WSL 基盤の有効化だけ UAC 昇格し、
+実行順序は `taskfiles/install/taskfile.yml` の `install` が管理します。
+`install.cmd` / `install.ps1` は WinGet master 適用後に `task install INSTALL_STAGE=apply` を一度呼びます。Taskfile は WSL と chezmoi の後続処理だけを実行するため、WinGet は再実行しません。master 適用に失敗した場合、または適用後も Task が見つからない場合は停止します。
+WSL 基盤の有効化だけ UAC 昇格し、
 成功後は再起動して `install.cmd` を再実行するよう案内します。distro の登録と設定適用は元のユーザーで行います。
-再起動待ちはエラー表示せず終了コード `3010` を返し、`Setup Complete!` は表示しません。
+再起動待ちは WSL phase が終了コード `3010` で停止し、chezmoi へ進まず、`Setup Complete!` も表示しません。状態ファイルは作りません。
+直接の `task install` は Task 標準の終了コード `201`、`task --exit-code install` は `194`（Task が `3010` を8ビットへ変換した値）を返します。
+起動補助の `install.cmd` / `install.ps1` は、この値を Windows 標準の `3010` に戻して返します。再起動後は同じインストールコマンドを再実行します。
 初回導入で設定適用を二重実行しません。失敗時は非ゼロ終了し、`Setup Complete!` は表示しません。
 
 `-DistroName`、`-InstallDir`、`-ReleaseTag`、`-SyncMode`、`-SyncBack`、
@@ -87,25 +97,18 @@ Windows 側に checkout がなければ clone し、通常ユーザーの新し�
 git clone https://github.com/rurusasu/dotfiles.git
 cd dotfiles
 
-. ./scripts/powershell/lib/WindowsEnvironment.ps1
-. ./scripts/powershell/lib/SetupHandler.ps1
 . ./scripts/powershell/lib/Invoke-ExternalCommand.ps1
 . ./scripts/powershell/lib/Invoke-NixosWslSetup.ps1
-$context = [SetupContext]::new((Get-Location).Path)
-$context.DistroName = 'NixOS'
-$context.Options['SyncMode'] = 'link'
-$context.Options['SyncBack'] = 'lock'
-Invoke-NixosWslSetup -Context $context
+Invoke-NixosWslSetup -Repository (Get-Location).Path -DistroName NixOS -SyncMode link -SyncBack lock
 ```
 
-`SetupContext` は PowerShell class のため、新しいセッションで一度だけ読み込んでください。
-NixOS の stateVersion は共通 entrypoint が設定し、setup context への指定は不要です。
+NixOS の stateVersion は共通 entrypoint が設定し、追加引数の指定は不要です。
 
 設定適用だけを独立して呼び出すこともできます。
 
 ```text
 公式 nixos.wsl を手動導入
-  -> Invoke-NixosWslSetup -Context $context
+  -> Invoke-NixosWslSetup -Repository <Windows checkout> -DistroName NixOS
   -> checkout 同期（公式既定ユーザー nixos）
   -> nix flake update --flake path:<checkout>
   -> nixos-rebuild switch --flake path:<checkout>#nixos --impure
@@ -120,14 +123,14 @@ NixOS の stateVersion は共通 entrypoint が設定し、setup context への�
 
 ## 同期オプション
 
-`$context.Options` で指定します。
+`Invoke-NixosWslSetup` の名前付き引数で指定します。
 
-| Option                      | 値と意味                                                                                                                                   |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `SyncMode`                  | `link`（既定）: Windows checkout への symlink、`repo`: 完全コピー、`nix`: 既存 checkout の nix/ だけ同期、`none`: 既存 WSL checkout を使用 |
-| `SyncBack`                  | `lock`（既定）: flake.lock だけ戻す、`none`: 戻さない、`repo`: checkout を戻す                                                             |
-| `ForcePostInstall`          | 既存 checkout が競合した場合、隣接する `.backup-<ID>` へ移動して同期を許可                                                                 |
-| `PostInstallTimeoutSeconds` | 各 WSL setup コマンドのタイムアウト（既定 1800 秒）                                                                                        |
+| Option             | 値と意味                                                                                                                                   |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SyncMode`         | `link`（既定）: Windows checkout への symlink、`repo`: 完全コピー、`nix`: 既存 checkout の nix/ だけ同期、`none`: 既存 WSL checkout を使用 |
+| `SyncBack`         | `lock`（既定）: flake.lock だけ戻す、`none`: 戻さない、`repo`: checkout を戻す                                                             |
+| `ForcePostInstall` | 既存 checkout が競合した場合、隣接する `.backup-<ID>` へ移動して同期を許可                                                                 |
+| `TimeoutSeconds`   | 各 WSL setup コマンドのタイムアウト（既定 1800 秒）                                                                                        |
 
 `link` は Windows 側の変更が即時に見えます。既に同じ場所へのリンクなら維持します。
 `repo` / `nix` と逆同期はファイルを上書きし得るため、両側の checkout をバックアップしてください。
@@ -136,11 +139,11 @@ NixOS の stateVersion は共通 entrypoint が設定し、setup context への�
 `ForcePostInstall` は通常設定せず、競合する checkout を退避する必要がある場合だけ明示します。
 Flake inputs の更新失敗時は構成を反映しません。
 
-検証済みの `flake.lock` をそのまま適用する場合は、setup 前に
-`$context.Options['UpdateFlakeInputs'] = $false` を指定します。既定値は `$true` です。
+検証済みの `flake.lock` をそのまま適用する場合は、`Invoke-NixosWslSetup` に
+`-UpdateFlakeInputs $false` を渡します。既定値は `$true` です。
 WSL 内の再適用では `task nrs UPDATE_FLAKE_INPUTS=false` を使います。
 どちらも更新を省略し、`--no-update-lock-file` で lock の変更を禁止します。
-WSL CI は初回 setup と `nrs` の両方にこの指定を使い、PR の head SHA に含まれる
+WSL CI は setup を更新なしで一度だけ実行し、PR の head SHA に含まれる
 lock と事前ビルドの依存を一致させます。
 
 ## 通常の反映

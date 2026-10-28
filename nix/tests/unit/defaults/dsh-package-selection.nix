@@ -1,6 +1,5 @@
 {
   inputs,
-  fixtures,
   homeConfigurations,
 }:
 {
@@ -16,10 +15,7 @@
         [
           homeConfigurations.linux
           homeConfigurations.wsl
-          (homeConfigurations.mkHome {
-            system = "aarch64-linux";
-            module = fixtures.homeModule "linux";
-          })
+          homeConfigurations.linuxArm
         ];
     expected = [
       {

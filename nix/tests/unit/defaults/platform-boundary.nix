@@ -36,13 +36,6 @@ in
       agent = "${homeConfigurations.common.config.home.homeDirectory}/.1password/agent.sock";
     };
   };
-  testCommonHomeModuleDoesNotRequireOSSpecialArgs = {
-    expr = builtins.attrNames (builtins.functionArgs sharedHome);
-    expected = [
-      "config"
-      "lib"
-    ];
-  };
   testCommonHomeOnlyDeclaresApplicationEnableFlags = {
     expr = {
       programs = onlyEnableFlags common.programs;

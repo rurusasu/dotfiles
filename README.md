@@ -35,7 +35,7 @@ WSL も `switch` 前に inputs を更新します。更新に失敗した場合�
 - macOS: flake inputs を更新してから、nix-darwin / Home Manager と Homebrew パッケージを反映します。
 - Linux / NixOS: flake inputs を更新し、その OS の構成と Home Manager を反映します。
 - Windows: GUI profile のアプリを既存の WinGet で install / upgrade し、NixOS-WSL を導入・設定します。
-  Windows の CLI パッケージと chezmoi は導入・適用しません。WSL 基盤の有効化だけ管理者権限で行います。
+  WSL の更新・反映後に Windows chezmoi を適用します。WSL 基盤の有効化だけ管理者権限で行います。
 
 ```bash
 # flake inputs だけを更新するとき
@@ -55,22 +55,24 @@ pnpm と Bun は導入しません。
 ```powershell
 git clone https://github.com/rurusasu/dotfiles.git
 cd dotfiles
-.\install.cmd
+task install
 ```
 
-`install.cmd` は宣言済みの GUI アプリを導入・更新した後、NixOS-WSL を導入し、checkout の同期と NixOS/Home Manager の適用を行います。WezTerm と Windows Terminal も対象です。
+初回から `.\install.cmd` だけで実行できます。PowerShell が WinGet の master `windows/winget/packages.json` を先に適用し、Task も通常のパッケージとして導入します。
+
+通常は `task install` を実行します。宣言済みの GUI アプリを導入・更新した後、NixOS-WSL の導入、checkout の同期、flake inputs の更新と NixOS/Home Manager の反映、Windows chezmoi の適用を順に行います。更新と反映は WSL phase で一度だけ実行します。WezTerm と Windows Terminal も対象です。
 既存の NixOS ディストリビューションと保存済み `stateVersion` は再利用します。WSL 基盤が未導入の場合だけ UAC で有効化し、再起動後の再実行を案内します。登録と設定適用は元のユーザーで行います。
-Windows の CLI パッケージ導入、chezmoi の設定配布、Docker Desktop 連携、VHDX 拡張は実行しません。
+Windows の CLI パッケージ一括導入、Docker Desktop 連携、VHDX 拡張は実行しません。
 既存ソフトウェアのアンインストールや古い Startup ショートカットの削除も行いません。
 
 GUI アプリだけをセットアップする場合は、WSL を呼び出さず次を実行します。
 
 ```powershell
-.\install.cmd -UserPhaseOnly
+.\install.cmd -Phase Winget
 ```
 
-実行順序は `taskfiles/install/taskfile.yml` が管理します。Task が見つからなければ、installer 専用の実行ファイルを `%LOCALAPPDATA%\dotfiles\tools\task` に取得します。永続 PATH は変更しません。
-既定の登録名は `NixOS`、同期方式は `link` です。`-DistroName`、`-InstallDir`、`-ReleaseTag`、`-SyncMode`、`-SyncBack`、`-StateVersion`、`-ForcePostInstall` で指定できます。
+WinGet の master 適用は `install.ps1` の1か所だけが担当します。`task install` も同じ PowerShell 入口を使います。master 適用後は `INSTALL_STAGE=apply` で Taskfile の `install:apply` に進み、WSL → chezmoi の順に実行します。WinGet の再実行や更新・反映の重複はありません。
+既定の登録名は `NixOS`、同期方式は `link` です。起動補助の `-DistroName`、`-InstallDir`、`-ReleaseTag`、`-SyncMode`、`-SyncBack`、`-ForcePostInstall` で指定できます。
 実行例と同期・stateVersion の注意点は [NixOS-WSL インストール](./docs/nix/nixos-wsl-install.md)を参照してください。
 
 ### macOS (Apple Silicon)
@@ -241,7 +243,7 @@ Windows 側のファイルを編集すると、`~/.dotfiles` シンボリック�
 
 ### ターミナル設定を Windows に適用
 
-必要な場合だけ、GUI installer とは別に chezmoi を使って Windows に設定を手動適用します。`install.cmd` はこの処理を実行しません。詳細は [docs/chezmoi/](./docs/chezmoi/) を参照。
+`task install` は WSL の更新・反映に続いて Windows chezmoi を適用します。設定だけを再適用する場合は `task chezmoi` を使います。詳細は [docs/chezmoi/](./docs/chezmoi/) を参照。
 
 ```powershell
 # GitHub から直接取得（クローン不要・推奨）
@@ -337,7 +339,7 @@ docker info
 NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations`、`systemctl status docker.service docker.socket` を確認します。非 NixOS Linux は `home-manager generations` で適用済みのユーザー環境を確認します。Docker は管理対象外です。macOS は `darwin-rebuild --list-generations` と Docker Desktop の起動状態を確認します。Windows は PowerShell / WinGet / WSL とエラー内容を確認して installer を再実行します。WSL の個別 setup は [NixOS-WSL インストール](./docs/nix/nixos-wsl-install.md)を参照してください。
 
 ```powershell
-.\install.cmd -NoPause
+.\install.cmd
 ```
 
 ### macOS の WezTerm

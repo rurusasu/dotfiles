@@ -71,7 +71,6 @@ let
                   go-task
                   pre-commit
                   powershell
-                  bats
                   comfyui
                   # Orca is the AI IDE, not the GNOME screen reader.
                   inputs.llm-agents.packages.${stdenv.hostPlatform.system}.orca
@@ -529,7 +528,6 @@ in
     {
       treefmt = {
         imports = [ ./treefmt.nix ];
-        _module.args.psscriptanalyzerSrc = inputs.psscriptanalyzer;
       };
       devShells.default = pkgs.mkShell {
         inputsFrom = [ config.treefmt.build.devShell ];

@@ -10,7 +10,7 @@
    - Unix CLI / GUI の導入・package 選択・設定・連携・専用の実行依存をアプリごとの module にまとめ、すべての実 module の `default.nix` を自動検出し、構成側の型付き option で有効化
    - enable・単純な package list・単一代入は `nix/defaults.nix` の必要な構成へ直接記載。設定・package override・生成・連携を持つアプリは module にまとめる
    - 通常の CLI・GUI とユーザー設定は Home Manager、OS 固有の設定・権限・システムサービス・連携は `nix/defaults.nix` の各 OS ブロックが管理。Homebrew と cask は `nix/defaults.nix` に宣言
-   - Windows は `windows/winget/packages.json` を直接管理し、GUI アプリを導入。npm/pnpm manifest は空
+   - Windows は `windows/winget/packages.json` を直接管理し、GUI アプリを導入
    - 機能と OS の所有境界は [分割の理由と編集先](./nix/package-management.md#分割の理由と編集先) を参照
 2. **ユーザー設定は Unix と Windows の責務を分離**
    - Unix の Codex、shell、Git、terminal、editor は Home Manager が管理
@@ -48,8 +48,6 @@ dotfiles/
 │   └── powershell/         # PowerShell scripts (Windows)
 ├── windows/                # Windows-side config files
 │   ├── winget/             # Independently maintained GUI packages.json
-│   ├── npm/                # Empty independent packages.json
-│   ├── pnpm/               # Empty independent packages.json
 │   └── .wslconfig          # WSL configuration
 ├── docs/                   # Documentation
 ├── Taskfile.yml            # Task runner (WSL 経由で nix fmt 等を実行)
@@ -69,7 +67,7 @@ dotfiles/
 | Other Linux | `./install.sh` | none                                     | Home Manager             | not managed                    |
 | NixOS       | `./install.sh` | NixOS generation + host hardware profile | Home Manager             | rootful Docker                 |
 
-Windows の通常セットアップは `install.cmd` から GUI/Winget と WSL/NixOS-WSL のフェーズを順に実行し、既存アプリを自動アンインストールしません。`-UserPhaseOnly` を指定すると GUI アプリ導入だけを実行します。WSL 基盤が未導入なら UAC 昇格と Windows の再起動が必要になることがあり、再起動後に同じ入口を再実行します。distro の登録と NixOS/Home Manager の適用は元のユーザーで行います。Unix の Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → runtime acceptance` です。macOS では Docker Desktop と native Hermes の宣言済み構成を適用します。失敗時はその phase で停止し、同じ入口を再実行します。
+Windows の通常セットアップは `install.cmd` から GUI/Winget と WSL/NixOS-WSL のフェーズを順に実行し、既存アプリを自動アンインストールしません。`-Phase Winget` を指定すると GUI アプリ導入だけを実行します。WSL 基盤が未導入なら UAC 昇格と Windows の再起動が必要になることがあり、再起動後に同じ入口を再実行します。distro の登録と NixOS/Home Manager の適用は元のユーザーで行います。Unix の Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → runtime acceptance` です。macOS では Docker Desktop と native Hermes の宣言済み構成を適用します。失敗時はその phase で停止し、同じ入口を再実行します。
 
 非 NixOS Linux は `Nix/bootstrap → Home Manager` のみを実行します。
 
@@ -95,7 +93,7 @@ Darwin は `system.primaryUser`、WSL は上書き可能な `wsl.defaultUser` �
 | ----------------------- | ----------------------- | ------------------------------------------------------------- |
 | Unix CLI / GUI 定義     | Nix / Home Manager      | アプリごとの module が導入・設定・連携・専用の実行依存を所有  |
 | Unix ユーザーパッケージ | Home Manager            | macOS、NixOS、Ubuntu、Debian で共通の `home.packages`         |
-| Windows パッケージ      | winget                  | 独立した GUI manifest を WingetHandler が適用                 |
+| Windows パッケージ      | winget                  | 独立した標準 manifest を winget import で適用                 |
 | macOS システム          | nix-darwin/nix-homebrew | Homebrew、Docker Desktop、Home Manager を 1 generation で適用 |
 | NixOS システム          | NixOS module            | native/WSL host、Docker、Home Manager を generation に統合    |
 | Unix ユーザー設定       | Home Manager            | shell、Git、terminal、editor の設定を宣言                     |
@@ -152,6 +150,19 @@ Compose 設定、image、Docker 固有 adapter は削除済みです。既存 Do
 browser profile、OAuth cache、secret、session、memory、log は自動移行・削除しません。
 `MCP_DOCKER` と system の Docker 管理は独立して維持します。
 
+Docker MCP Toolkit は Unix 側の `scripts/sh/mcp-toolkit.sh` が管理します。
+`task mcp:toolkit:*` は Windows からも NixOS-WSL 内で実行し、Windows の Docker CLI は使いません。
+MCP gateway の接続設定は Nix の `programs.mcp.servers` が所有し、リポジトリの `.mcp.json` には重複定義しません。
+Docker 公式プラグインは `docker-mcp` input の固定した Git source と同梱依存からビルドし、
+Home Manager が Docker の `cli-plugins/docker-mcp` に配置します。サーバー8種類の選択も
+`programs.mcp.servers.MCP_DOCKER.args` に宣言し、可変プロファイルへの同期処理は使いません。
+`nrs` が Git source の lock 更新、プラグイン導入、リンクと接続設定の反映をまとめて行います。
+Linux / WSL は Docker Engine 用の `DOCKER_MCP_IN_CONTAINER=1` をプラグインの wrapper が設定します。
+`DOCKER_CONFIG` は Home Manager が `${HOME}/.docker` と明示設定し、MCP クライアントにも渡します。
+プラグインと手動タスクは未設定・空の `DOCKER_CONFIG` をエラーにし、別のディレクトリへフォールバックしません。
+手動タスクは `mcp:toolkit:secrets`（1Password から秘密情報を登録）と `mcp:toolkit:status`（版の表示）です。
+秘密情報と OAuth 認証は Nix store に含めず、既存の認証状態を使います。
+
 lifelog の正規 path は `${HERMES_HOME}/shared/lifelog` です。
 `hermes:repository:sync` はこの既存 checkout の commit を native Git で pull/push
 します。旧 `${HERMES_HOME}/core/lifelog` の自動移行や削除は行いません。
@@ -174,75 +185,30 @@ nix/modules/**/default.nix ── scope ごとに自動検出
 nix/defaults.nix:systemDefaults ── 共通 OS / Home Manager 設定と有効化だけの標準宣言
 
 windows/winget/packages.json ── Windows GUI を直接宣言
-windows/{npm,pnpm}/packages.json ── 独立した空 manifest
 ```
 
 ### ツール追加手順
 
 1. enable・単純な package list・単一代入は `nix/defaults.nix` の必要な構成へ直接書く。設定・package override・生成・連携を持つ場合はアプリ module にまとめる。設定・連携も管理するアプリは標準の `programs.<name>.enable`、設定をユーザーが管理するアプリや標準 module のないアプリは `home.packages` を使う。Neovim の LSP・整形ツール・toolchain・プラグイン実行依存は `editors/nvim/` に置く。
 2. 設定を持つ実 module はアプリ配下の `default.nix` とし、自動検出させる。OS module は `nixos/` / `darwin/` / `system/` 配下に置く。`nix/defaults.nix` には型付き enable option を指定し、個別の import パス登録・公開 catalog は追加しない。純粋な factory・renderer は通常の関数として維持する。Homebrew / nix-homebrew・cask と OS 基盤設定は `defaults.nix` の各 OS ブロックが担当する。
-3. Windows に追加する場合は `windows/winget/packages.json` の既存 schema に合わせ、package ID・導入・検証情報を直接記述する。
+3. Windows に追加する場合は `windows/winget/packages.json` のWinGet 標準 import schema に合わせ、package ID・source・Scope を直接記述する。
 4. 各 OS の通常インストーラーで反映する。具体的な入口と所有境界は [パッケージ管理](./nix/package-management.md) を参照する。
 
 Windows 専用のアプリも同じ WinGet manifest に直接追加する。Unix の Nix module に Windows install metadata は置かない。
 
 ---
 
-## PowerShell ハンドラーシステム
+## Windows セットアップ
 
-Windows の実行順序は `taskfiles/install/taskfile.yml` が管理します。
-`install.cmd` → `install.ps1` → `Invoke-WindowsInstallTask.ps1` → Taskfile の順に進み、
-GUI 導入、WSL 初期化、`nrs`、chezmoi 適用を実行します。
-`Invoke-WindowsInstallPhase.ps1` は各 phase に必要な handler だけを明示して読み込みます。
+`install.cmd` と `task install` は同じ `install.ps1` を使います。
+WinGet の標準 master を一度 import して Task も導入し、Taskfile の WSL → chezmoi へ進みます。
+WSL 基盤が必要な場合だけ OS コマンドを昇格し、再起動要求で停止します。distro 登録は元のユーザーで行います。
+新規導入と既存 distro は共通の setup に合流し、input 更新と NixOS/Home Manager 反映は各1回です。
 
-| Handler    | 役割                                        | 呼び出し元                       |
-| ---------- | ------------------------------------------- | -------------------------------- |
-| Winget     | Windows manifest の導入・検証               | `install.user.ps1`               |
-| WslInstall | WSL 基盤の有効化、必要時の昇格・再起動通知  | `Invoke-WindowsInstallPhase.ps1` |
-| NixOSWSL   | distro 導入、初回同期、既存 distro の再利用 | `Invoke-WindowsInstallPhase.ps1` |
-| Chezmoi    | chezmoi 初期化・Windows 設定の適用          | `Invoke-WindowsInstallPhase.ps1` |
-
-`lib/SetupHandler.ps1` は共有の `SetupContext` / `SetupResult` / `SetupHandlerBase` と
-結果表示を提供します。未使用 handler の動的探索・ソート・一括実行は行いません。
-`CanApply()` は判定専用、`Apply()` は適用結果を `SetupResult` で返します。
-外部コマンドは `lib/Invoke-ExternalCommand.ps1` の wrapper を使用します。
-NixOS の通常 rebuild は公開タスク `nrs` に集約します。
-
----
-## 外部コマンドラッパー
-
-テストでモック可能にするため、すべての外部コマンドをラップ関数経由で実行します。
-
-**実装場所**: [scripts/powershell/lib/Invoke-ExternalCommand.ps1](../scripts/powershell/lib/Invoke-ExternalCommand.ps1)
-
-### 主なラッパー関数
-
-```powershell
-# WSL コマンド
-function Invoke-Wsl {
-    param([string[]]$ArgumentList)
-    & wsl.exe @ArgumentList
-}
-
-# chezmoi コマンド
-function Invoke-Chezmoi {
-    param([string[]]$ArgumentList)
-    & chezmoi.exe @ArgumentList
-}
-
-# ファイル操作
-function Invoke-TestPath { param([string]$Path); Test-Path $Path }
-function Invoke-GetContent { param([string]$Path); Get-Content $Path }
-function Invoke-CopyItem { param([string]$Source, [string]$Destination); Copy-Item $Source $Destination }
-```
-
-### テストでのモック
-
-```powershell
-Mock Invoke-Wsl { return "Mocked output" }
-Should -Invoke Invoke-Wsl -Times 1 -Exactly
-```
----
+実装本体は `install.ps1` と、native 実行・WSL 登録と同期を担当する2ライブラリです。
+クラス、結果オブジェクト、ハンドラー、独自 runner はありません。標準コマンドで済む処理をラッパーに分割しません。
+CI は Windows Store の準備、安定した5.1からのruntime準備とログ、使い捨てWSL E2Eの3ファイルにまとめます。
+詳細は [Windows セットアップ](./scripts/powershell/README.md) を参照してください。
 
 ## テスト戦略
 
@@ -270,8 +236,8 @@ Linux の nix-unit・custom-package-builds・workspace-cycle と Windows キー�
 Nix の成果物は GitHub Actions cache に保存し、WSL artifact では取得可能な公開依存の payload を省きます。詳細は [CI cache](../docker/bootstrap-ci-tools/README.md#nix-成果物の再利用) を参照してください。
 
 WSL job は一時 NixOS-WSL 環境で native Nix/Home Manager switch、既存 `~/.hermes` state の保持、CLI 起動、user service の再起動と active 状態を検証します。
-Windows の Docker Desktop の実機適用は installer 末尾の local acceptance が判定します。macOS は Darwin job で nix-darwin switch を実行します。
-詳細は [WSL Hermes E2E](../scripts/powershell/ci/Invoke-NixosWslE2E.ps1) を参照してください。
+macOS は Darwin job で nix-darwin switch を実行します。
+詳細は [CI workflow](../.github/workflows/ci-nix.yml) の WSL job を参照してください。
 
 NixOS の hosted VM job は installer の再実行と Docker・Compose の runtime acceptance を検証します。非 NixOS Linux は standalone Home Manager の build と installer の mocked contract が対象です。pull request では hosted contract、declarative build、Linux runtime E2E の全checkが成功し、approval待ちやqueued jobがないことをmerge条件にします。
 
@@ -282,9 +248,5 @@ NixOS の hosted VM job は installer の再実行と Docker・Compose の runti
 - [パッケージ管理](./nix/package-management.md)
 - [chezmoi ドキュメント](./chezmoi/)
 - [フォーマッター設定](./formatter/)
-- [ハンドラー開発ガイド](./scripts/powershell/handler-development.md)
-- [Hermes bootstrap design](./hermes-agent/bootstrap-design.md)
-- [Hermes bootstrap core plan](./hermes-agent/plans/2026-07-21-hermes-bootstrap-core.md)
-- [Hermes installer integration plan](./hermes-agent/plans/2026-07-21-hermes-bootstrap-integration.md)
-- [Hermes distribution repositories plan](./hermes-agent/plans/2026-07-21-hermes-distributions.md)
+- [Windows セットアップ](./scripts/powershell/README.md)
 - [Hermes bootstrap operations](./hermes-agent/bootstrap.md)

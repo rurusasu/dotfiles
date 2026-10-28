@@ -72,18 +72,6 @@ in
         ++ (code.nix.discover-modules "darwin" files.nix.modules.__path)
         ++ modules;
     };
-  windowsPackages = builtins.listToAttrs (
-    builtins.concatMap (
-      source:
-      builtins.map (package: {
-        name = package.PackageIdentifier;
-        value = package // {
-          source = source.SourceDetails.Name;
-        };
-      }) source.Packages
-    ) (builtins.fromJSON (builtins.readFile files.windows.winget."packages.json")).Sources
-  );
-  pnpmManifest = builtins.fromJSON (builtins.readFile files.windows.pnpm."packages.json");
   mkHome = system: modules: mkHomeWith { inherit system modules; };
   darwin = inputs.nix-darwin.lib.darwinSystem {
     system = "aarch64-darwin";

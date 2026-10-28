@@ -15,7 +15,7 @@
 - Homebrew / nix-homebrew・cask・ユーザー PATH は `nix/defaults.nix` にまとめる
 - enable・単純な package list・単一代入だけなら `nix/defaults.nix` の必要な構成へ直接書く。設定・package override・生成・連携を持つアプリは module にまとめ、Neovim の LSP・整形ツール・toolchain は Neovim が所有する
 - 共通・OS 別の構成: `discover-modules.nix` が `modules/` 配下のすべての実 module の `default.nix` を自動検出する。通常は Home Manager、`nixos/` / `darwin/` / `system/` ディレクトリ配下は NixOS / nix-darwin / 両 OS 共通の scope とし、対応する評価へ読み込む。アプリごとの import パス登録・公開一覧は作らない。`nix/defaults.nix:systemDefaults` の型付き option で有効化し、設定・package・service・activation は enable に従わせる。純粋な factory・renderer は通常の関数として利用し、自動検出の入口名を付けない
-- Windows の導入情報: `windows/{winget,npm,pnpm}/packages.json` を直接管理し、Unix module から生成しない
+- Windows の導入情報: `windows/winget/packages.json` を直接管理し、Unix module から生成しない
 - 共通キー配列: `nix/home/keybindings/bindings.nix`。AeroSpace / Hyprland / Ghostty / Neovim の生成関数・ユーザー設定は各アプリ module に置く。純粋な関数を Home Manager module の imports に渡さない
 - flake wiring: root の `flake.nix`。custom package の出力は `nix/defaults.nix`、テストの自動検出は `nix/tests/discover.nix`、flake との接続は `nix/tests/default.nix`、formatter は `nix/treefmt.nix`
 - nix-unit の値テスト: `nix/tests/unit/`。統合設定は `defaults/`、アプリは本番と同じ `modules/` の分類に置く

@@ -4,220 +4,56 @@
     {
       "Packages": [
         {
-          "PackageIdentifier": "Microsoft.PowerShell",
-          "installArgs": ["--installer-type", "wix"],
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "pwsh"
-          }
+          "PackageIdentifier": "Microsoft.PowerShell"
         },
         {
-          "PackageIdentifier": "Task.Task",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "task"
-          }
+          "PackageIdentifier": "Task.Task"
         },
         {
-          "PackageIdentifier": "twpayne.chezmoi",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "chezmoi"
-          }
+          "PackageIdentifier": "twpayne.chezmoi"
         },
         {
           "PackageIdentifier": "Git.MinGit",
-          "installArgs": ["--scope", "user", "--installer-type", "zip"],
-          "installTimeoutSeconds": 3600,
-          "pathEntries": [
-            "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Git.MinGit_Microsoft.Winget.Source_8wekyb3d8bbwe\\cmd"
-          ],
-          "persistPathEntries": true,
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "git",
-            "type": "pathEntriesCommand"
-          }
+          "Scope": "user"
         },
         {
           "PackageIdentifier": "Starship.Starship",
-          "installArgs": ["--scope", "user", "--installer-type", "zip"],
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
-          "persistPathEntries": true,
-          "portableLink": {
-            "linkName": "starship.exe",
-            "targetPattern": "starship.exe"
-          },
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "starship.exe",
-            "type": "portableLinkCommand"
-          }
+          "Scope": "user"
         },
         {
-          "PackageIdentifier": "wez.wezterm",
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%ProgramFiles%\\WezTerm"],
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "wezterm"
-          }
+          "PackageIdentifier": "wez.wezterm"
         },
         {
           "PackageIdentifier": "yorukot.superfile",
-          "installArgs": ["--scope", "user"],
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
-          "persistPathEntries": true,
-          "portableLink": {
-            "linkName": "spf.exe",
-            "targetPattern": "spf.exe"
-          },
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "spf.exe",
-            "type": "portableLinkCommand"
-          }
+          "Scope": "user"
         },
         {
           "PackageIdentifier": "eza-community.eza",
-          "installArgs": ["--scope", "user"],
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
-          "persistPathEntries": true,
-          "portableLink": {
-            "linkName": "eza.exe",
-            "targetPattern": "eza.exe"
-          },
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "eza.exe",
-            "type": "portableLinkCommand"
-          }
+          "Scope": "user"
         },
         {
           "PackageIdentifier": "sharkdp.fd",
-          "installArgs": ["--scope", "user"],
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
-          "persistPathEntries": true,
-          "portableLink": {
-            "linkName": "fd.exe",
-            "targetPattern": "fd.exe"
-          },
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "fd.exe",
-            "type": "portableLinkCommand"
-          }
+          "Scope": "user"
         },
         {
           "PackageIdentifier": "BurntSushi.ripgrep.MSVC",
-          "installArgs": ["--scope", "user"],
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
-          "persistPathEntries": true,
-          "portableLink": {
-            "linkName": "rg.exe",
-            "targetPattern": "rg.exe"
-          },
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "rg.exe",
-            "type": "portableLinkCommand"
-          }
+          "Scope": "user"
         },
         {
           "PackageIdentifier": "JesseDuffield.lazygit",
-          "installArgs": ["--scope", "user"],
-          "installTimeoutSeconds": 3600,
-          "pathEntries": ["%LOCALAPPDATA%\\Microsoft\\WinGet\\Links"],
-          "persistPathEntries": true,
-          "portableLink": {
-            "linkName": "lazygit.exe",
-            "targetPattern": "lazygit.exe"
-          },
-          "verifyCommand": {
-            "args": ["--version"],
-            "command": "lazygit.exe",
-            "type": "portableLinkCommand"
-          }
+          "Scope": "user"
         },
         {
-          "PackageIdentifier": "AgileBits.1Password",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "appxPackage": {
-              "executable": "1Password.exe",
-              "name": "AgileBits.1Password",
-              "packageFamilyName": "Agilebits.1Password_amwd9z03whsfe"
-            },
-            "command": "AgileBits.1Password",
-            "type": "windowsInstalledProduct",
-            "uninstallEntry": {
-              "displayName": "1Password",
-              "executablePaths": [
-                "%ProgramFiles%\\1Password\\1Password.exe",
-                "%LOCALAPPDATA%\\1Password\\app\\*\\1Password.exe"
-              ]
-            }
-          }
+          "PackageIdentifier": "AgileBits.1Password"
         },
         {
-          "PackageIdentifier": "Discord.Discord",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "command": "Discord",
-            "type": "windowsInstalledProduct",
-            "uninstallEntry": {
-              "displayName": "Discord",
-              "executablePaths": ["%LOCALAPPDATA%\\Discord\\app-*\\Discord.exe"],
-              "productCodes": ["Discord"],
-              "publisher": "Discord Inc."
-            }
-          }
+          "PackageIdentifier": "Discord.Discord"
         },
         {
-          "PackageIdentifier": "StablyAI.Orca",
-          "ciSkipInstall": true,
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "command": "OrcaSlicer",
-            "type": "windowsInstalledProduct",
-            "uninstallEntry": {
-              "displayName": "Orca",
-              "productCodes": ["2b325ec9-0ed1-575f-ad70-e08307aee879"]
-            }
-          }
+          "PackageIdentifier": "StablyAI.Orca"
         },
         {
-          "PackageIdentifier": "Microsoft.PowerToys",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "command": "Microsoft PowerToys",
-            "type": "windowsInstalledProduct",
-            "uninstallEntry": {
-              "displayNamePattern": "^PowerToys(?: \\(Preview\\))?$",
-              "executablePaths": [
-                "%ProgramFiles%\\PowerToys\\PowerToys.exe",
-                "%LOCALAPPDATA%\\PowerToys\\PowerToys.exe"
-              ],
-              "publisher": "Microsoft Corporation"
-            }
-          }
-        },
-        {
-          "PackageIdentifier": "Microsoft.WindowsTerminal",
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["Microsoft.WindowsTerminal_8wekyb3d8bbwe!App"],
-            "command": "Microsoft.WindowsTerminal",
-            "type": "appxLaunchTarget"
-          }
+          "PackageIdentifier": "Microsoft.WindowsTerminal"
         }
       ],
       "SourceDetails": {
@@ -230,23 +66,10 @@
     {
       "Packages": [
         {
-          "PackageIdentifier": "9PCFS5B6T72H",
-          "ciSkipInstall": true,
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "command": "Microsoft.Paint",
-            "type": "appxPackage"
-          }
+          "PackageIdentifier": "9PCFS5B6T72H"
         },
         {
-          "PackageIdentifier": "9PLM9XGG6VKS",
-          "ciSkipInstall": true,
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["OpenAI.Codex_2p2nqsd0c76g0!App"],
-            "command": "OpenAI.Codex",
-            "type": "appxLaunchTarget"
-          }
+          "PackageIdentifier": "9PLM9XGG6VKS"
         }
       ],
       "SourceDetails": {
@@ -254,47 +77,6 @@
         "Identifier": "StoreEdgeFD",
         "Name": "msstore",
         "Type": "Microsoft.Rest"
-      }
-    },
-    {
-      "Packages": [
-        {
-          "PackageIdentifier": "TheBrowserCompany.Dia",
-          "directInstaller": {
-            "architecture": "x64",
-            "dependencies": [
-              {
-                "architecture": "x64",
-                "name": "Microsoft.VCLibs.140.00.UWPDesktop",
-                "packageFamilyName": "Microsoft.VCLibs.140.00.UWPDesktop_8wekyb3d8bbwe",
-                "publisher": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
-                "sha256": "077a3d1a5d0622bd3004dca85f5e192d6e98ec79b83d4aa06766759ea6c09c3d",
-                "url": "https://releases.diabrowser.com/windows/dependencies/x64/Microsoft.VCLibs.x64.14.00.Desktop.14.0.33728.0.appx",
-                "version": "14.0.33728.0"
-              }
-            ],
-            "executable": "Dia.exe",
-            "name": "TheBrowserCompany.Dia",
-            "packageFamilyName": "TheBrowserCompany.Dia_ttt1ap7aakyb4",
-            "publisher": "E=hello@thebrowser.company, CN=THE BROWSER COMPANY OF NEW YORK INC., O=THE BROWSER COMPANY OF NEW YORK INC., STREET=295 LAFAYETTE STREET, L=New York, S=New York, C=US, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US, SERIALNUMBER=7571542, OID.2.5.4.15=Private Organization",
-            "sha256": "813af1745f6688badbe16b1caf2782935311e79fb3bb88a971d318707dd28c04",
-            "type": "appx",
-            "url": "https://releases.diabrowser.com/windows/release/1.3.1.2/Dia.x64.msix",
-            "version": "1.3.1.2"
-          },
-          "installTimeoutSeconds": 3600,
-          "verifyCommand": {
-            "args": ["TheBrowserCompany.Dia_ttt1ap7aakyb4!Dia"],
-            "command": "TheBrowserCompany.Dia",
-            "type": "appxLaunchTarget"
-          }
-        }
-      ],
-      "SourceDetails": {
-        "Argument": "https://releases.diabrowser.com",
-        "Identifier": "Dotfiles.DirectInstallers",
-        "Name": "direct",
-        "Type": "Dotfiles.DirectInstaller"
       }
     }
   ]

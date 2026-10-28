@@ -64,38 +64,43 @@ let
   };
 
   hasNodejs = home: builtins.any (item: (item.pname or item.name) == "nodejs") home;
+  upstreamPackage = inputs.hermes-agent.packages.x86_64-linux.default;
+  # Model each input version explicitly; upstream may publish a placeholder
+  # today and a release number tomorrow. Keep its actual runtime in both cases.
+  packageWithVersion =
+    version:
+    upstreamPackage.overrideAttrs (previous: {
+      inherit version;
+      passthru = previous.passthru // {
+        hermesDesktop = previous.passthru.hermesDesktop.overrideAttrs { inherit version; };
+      };
+    });
+  knownReleasePackage = packageWithVersion "0.21.4";
   versionPackage =
-    kind:
+    kind: package:
     let
-      factory = code.nix.modules.ai_agents.hermes.package;
-      upstream = inputs.hermes-agent.packages.x86_64-linux.default;
-      package = if kind != "legacy" then upstream.overrideAttrs { version = "0.0.0"; } else upstream;
       source = inputs.hermes-agent // {
         outPath = files.nix.tests.fixtures.hermes-version.${kind}.__path;
         rev = "0123456789abcdef0123456789abcdef01234567";
         lastModifiedDate = "20261026122553";
       };
     in
-    if files.nix.modules.ai_agents.hermes ? package then
-      factory {
-        inherit package source;
-        pkgs = fixtures.mkPkgs "x86_64-linux";
-      }
-    else
-      package;
+    code.nix.modules.ai_agents.hermes.package {
+      inherit package source;
+      pkgs = fixtures.mkPkgs "x86_64-linux";
+    };
 in
 {
   testHermesVersionMetadataPreservesKnownReleaseAndRuntime = {
     expr = {
-      inherit (versionPackage "legacy") version;
-      samePackage =
-        (versionPackage "legacy").drvPath == inputs.hermes-agent.packages.x86_64-linux.default.drvPath;
+      inherit (versionPackage "legacy" knownReleasePackage) version;
+      samePackage = (versionPackage "legacy" knownReleasePackage).drvPath == knownReleasePackage.drvPath;
       sameRuntime =
-        (versionPackage "legacy").hermesVenv.drvPath
-        == inputs.hermes-agent.packages.x86_64-linux.default.hermesVenv.drvPath;
+        (versionPackage "legacy" knownReleasePackage).hermesVenv.drvPath
+        == knownReleasePackage.hermesVenv.drvPath;
       knownDesktopPreserved =
-        (versionPackage "legacy").hermesDesktop.version
-        == inputs.hermes-agent.packages.x86_64-linux.default.hermesDesktop.version;
+        (versionPackage "legacy" knownReleasePackage).hermesDesktop.drvPath
+        == knownReleasePackage.hermesDesktop.drvPath;
     };
     expected = {
       version = "0.21.4";
@@ -105,20 +110,40 @@ in
     };
   };
 
+  testHermesKnownSourceVersionRepairsPlaceholderMetadata = {
+    expr =
+      let
+        package = packageWithVersion "0.0.0";
+        corrected = versionPackage "legacy" package;
+      in
+      {
+        inherit (corrected) version;
+        desktopVersion = corrected.hermesDesktop.version;
+        samePackage = corrected.drvPath == package.drvPath;
+        sameRuntime = corrected.hermesVenv.drvPath == package.hermesVenv.drvPath;
+      };
+    expected = {
+      version = "0.21.4";
+      desktopVersion = "0.21.4";
+      samePackage = false;
+      sameRuntime = true;
+    };
+  };
+
   testHermesDevelopmentVersionIdentifiesDateAndRevision = {
-    expr = (versionPackage "stamped").version;
+    expr = (versionPackage "stamped" (packageWithVersion "0.0.0")).version;
     expected = "unstable-2026-10-26-01234567";
   };
 
   testHermesStaticPlaceholderIsNotAReleaseVersion = {
-    expr = (versionPackage "placeholder").version;
+    expr = (versionPackage "placeholder" (packageWithVersion "0.0.0")).version;
     expected = "unstable-2026-10-26-01234567";
   };
 
   testHermesVersionCorrectionFollowsRuntimeOverrides = {
     expr =
       let
-        original = versionPackage "stamped";
+        original = versionPackage "stamped" (packageWithVersion "0.0.0");
         customized = original.override { extraDependencyGroups = [ "dev" ]; };
       in
       {
@@ -187,6 +212,32 @@ in
         default = "gpt-6.1-sol";
       };
       serviceUsesInjectedPackage = true;
+    };
+  };
+
+  testHermesSharedMcpTransportsReachFinalConfiguration = {
+    expr =
+      let
+        servers = linux.config.services.hermes-agent.settings.mcp_servers;
+      in
+      {
+        chrome = servers.chrome.url;
+        xapi = servers.xapi.url;
+        pipedream = { inherit (servers.pipedream) url auth; };
+        localCommands = builtins.filter (name: servers.${name} ? command) [
+          "chrome"
+          "xapi"
+          "pipedream"
+        ];
+      };
+    expected = {
+      chrome = "http://127.0.0.1:8765/mcp";
+      xapi = "http://127.0.0.1:8766/mcp";
+      pipedream = {
+        url = "https://mcp.pipedream.net/v2";
+        auth = "oauth";
+      };
+      localCommands = [ ];
     };
   };
 

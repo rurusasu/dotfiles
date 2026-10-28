@@ -15,7 +15,7 @@
 - `context.nix` が共有する `fixtures` / `homeConfigurations` / `code` / `files` / `upstream` から必要な引数だけを受け取る。テスト定義には fixture・helper・asset のローカルパスや import を書かない。`source-tree.nix` がリポジトリを自動索引し、個別の資源 catalog は作らない。外部 flake input の helper・asset は `upstream.<input>.code` / `upstream.<input>.files` で参照する。
 - Home Manager は `fixtures.mkHome` / `fixtures.mkHomeWith` と型付き option、共通の本番構成は `homeConfigurations`、Darwin OS module は `fixtures.mkDarwin` を使う。純粋な helper は `code.*` の通常の値・関数、asset は `files.*` のファイル・ディレクトリとして参照する。パス処理は共通 infrastructure の責務とし、個別テストの参照をそこへ登録しない。
 - 移動時は `code` / `files` の属性参照、README、CI routing、Bats / PowerShell の固定パスを同時に更新する。
-- 共通キーは `unit/home/keybindings/bindings.nix`、Windows manifest は `unit/windows/` に置く。unit / build の検出漏れ・重複は `unit/ownership.nix` が検査する。
+- 共通キーは `unit/home/keybindings/bindings.nix`、Windows manifest は CI の jq で直接検証する。unit / build の検出漏れ・重複は `unit/ownership.nix` が検査する。
 - 既存の公開 check 名と OS 制約を維持する。VM テストは Linux builder が必要。
 - fixture に実際の認証情報や個人データを入れず、実機の設定として適用しない。
 

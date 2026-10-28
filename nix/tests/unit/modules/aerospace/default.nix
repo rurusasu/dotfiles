@@ -150,7 +150,6 @@ in
                 (fixtures.mkHome system [
                   (fixtures.homeModule "linux")
                 ]).config.home.packages;
-            windowsPackage = fixtures.windowsPackages ? "aerospace";
           })
         [
           "aarch64-linux"
@@ -158,7 +157,6 @@ in
         ];
     expected = builtins.genList (_: {
       linuxPackage = false;
-      windowsPackage = false;
     }) 2;
   };
 }

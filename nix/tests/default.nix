@@ -21,6 +21,33 @@ in
           };
         }
       ];
+      devShells.runtime-tests =
+        let
+          packages = with pkgs; [
+            bats
+            bash
+            coreutils
+            diffutils
+            findutils
+            gawk
+            gitMinimal
+            gnugrep
+            gnused
+            gnutar
+            gzip
+            jq
+            yq-go
+            python3
+            chezmoi
+            go-task
+          ];
+        in
+        pkgs.mkShellNoCC {
+          inherit packages;
+          shellHook = ''
+            export PATH="${lib.makeBinPath packages}"
+          '';
+        };
       checks =
         (import ./discover.nix {
           directory = ./build;
@@ -54,6 +81,7 @@ in
         "llm-agents/treefmt-nix" = inputs.llm-agents.inputs.treefmt-nix;
         "mcp-servers/nixpkgs" = inputs.mcp-servers.inputs.nixpkgs;
         inherit (inputs)
+          docker-mcp
           devcontainer-cli-nvim
           dia
           flake-parts
@@ -69,7 +97,6 @@ in
           nixos-vscode-server
           nixos-wsl
           nixpkgs
-          psscriptanalyzer
           strata-release
           systems
           treefmt-nix

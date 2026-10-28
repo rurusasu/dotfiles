@@ -160,10 +160,6 @@ let
         }
       ];
   ghostty = import ../../modules/terminals/ghostty/ghostty.nix { inherit lib directions; };
-  ghosttyWindows = import ../../modules/terminals/ghostty/ghostty-windows.nix {
-    inherit lib;
-    bindings = ghostty;
-  };
 in
 assert
   builtins.length bindings == builtins.length (
@@ -187,55 +183,8 @@ assert
     inherit lib;
     bindings = ghostty;
   };
-  windows = {
-    bindings = builtins.filter (
-      binding:
-      builtins.elem binding.action [
-        "terminal"
-        "browser"
-        "browser-private"
-        "files"
-        "activity"
-        "music"
-        "notes"
-        "editor"
-        "calendar"
-        "email"
-        "ai"
-        "passwords"
-        "messenger-signal"
-        "messenger-google"
-        "messenger-whatsapp"
-        "docker"
-        "copy"
-        "cut"
-        "paste"
-        "clipboard"
-        "screenshot"
-        "screenshot-clipboard"
-        "record"
-        "color-picker"
-        "save-browser-url"
-        "notification-dismiss"
-        "notification-dismiss-all"
-        "notification-toggle"
-        "notification-history"
-        "theme-cycle"
-        "background-cycle"
-        "transparency-toggle"
-        "idle-toggle"
-        "night-mode-toggle"
-        "bar-toggle"
-        "audio-output-cycle"
-      ]
-    ) bindings;
-    ghosttyTransport = ghosttyWindows.transport;
-    ghosttyConfig = ghosttyWindows.config;
-    disabledShortcuts = [
-      {
-        key = "d";
-        modifiers = super;
-      }
-    ];
+  ghosttyWslConfig = import ../../modules/terminals/ghostty/ghostty-wsl.nix {
+    inherit lib;
+    bindings = ghostty;
   };
 }
