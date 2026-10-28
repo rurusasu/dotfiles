@@ -28,6 +28,88 @@ run_script() {
   run bash --noprofile --norc -e -o pipefail -c "$1"
 }
 
+private_cache_fixture() {
+  export PRIVATE_PATH=/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-private
+  export PUBLIC_PATH=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-public
+  export MAX_CACHE_SIZE=33554432 PUBLIC_NAR_SIZE=16 COPY_EXIT=0 INFO_EXIT=0 INFO_FORMAT=object
+  export COPY_STARTED="$BATS_TEST_TMPDIR/copy-started"
+  export DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/previous-cache"
+  mkdir -p "$DOTFILES_CI_BINARY_CACHE"
+  printf previous >"$DOTFILES_CI_BINARY_CACHE/keep"
+  write_stub nix <<'EOF'
+case "$*" in
+'path-info --all') printf '%s\n' "$PRIVATE_PATH" "$PUBLIC_PATH" ;;
+'path-info --recursive --json --stdin')
+	[[ $(cat) == "$PRIVATE_PATH" ]]
+	((INFO_EXIT == 0)) || exit "$INFO_EXIT"
+	if [[ $INFO_FORMAT == object ]]; then
+		printf '{"%s":{"narSize":16},"%s":{"narSize":%s}}\n' "$PRIVATE_PATH" "$PUBLIC_PATH" "$PUBLIC_NAR_SIZE"
+	else
+		printf '[{"path":"%s","narSize":16},{"path":"%s","narSize":%s}]\n' "$PRIVATE_PATH" "$PUBLIC_PATH" "$PUBLIC_NAR_SIZE"
+	fi ;;
+'copy --stdin --to '*)
+	[[ $(cat) == "$PRIVATE_PATH" ]]
+	: >"$COPY_STARTED"
+	((COPY_EXIT == 0)) || exit "$COPY_EXIT"
+	cache=${4#file://}
+	cache=${cache%\?compression=zstd}
+	mkdir -p "$cache/nar"
+	printf private >"$cache/nar/private.nar.zst"
+	printf public >"$cache/nar/public.nar.zst"
+	printf 'StorePath: %s\nURL: nar/private.nar.zst\nReferences: %s\n' "$PRIVATE_PATH" "${PUBLIC_PATH#/nix/store/}" \
+		>"$cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.narinfo"
+	printf 'StorePath: %s\nURL: nar/public.nar.zst\nReferences: \n' "$PUBLIC_PATH" \
+		>"$cache/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo" ;;
+*) exit 64 ;;
+esac
+EOF
+  write_stub nix-store <<'EOF'
+[[ "$1 $2 $3 $4" == '--store https://cache.nixos.org --check-validity --print-invalid' ]]
+printf '%s\n' "$PRIVATE_PATH"
+EOF
+  CACHE_EXPORT=$(workflow_step "$REPO_ROOT/.github/actions/cache-nix/action.yml" '' 'Export private build outputs')
+}
+
+@test "private cache checks the full temporary closure before copying on a small disk" {
+  private_cache_fixture
+  # Only the public reference is huge; its payload would be pruned after copying.
+  export PUBLIC_NAR_SIZE=1000000000000000000
+  run_script "$CACHE_EXPORT"
+  [ "$status" -eq 0 ]
+  [[ $output == *'::warning::'* ]]
+  grep -Fxq 'cacheable=false' "$GITHUB_OUTPUT"
+  [ ! -e "$COPY_STARTED" ]
+  [ "$(cat "$DOTFILES_CI_BINARY_CACHE/keep")" = previous ]
+}
+
+@test "private cache still exports fitting outputs and prunes public payloads" {
+  private_cache_fixture
+  for format in object array; do
+    export RUNNER_TEMP="$BATS_TEST_TMPDIR/$format" INFO_FORMAT="$format"
+    : >"$GITHUB_OUTPUT"
+    run_script "$CACHE_EXPORT"
+    [ "$status" -eq 0 ]
+    grep -Fxq 'cacheable=true' "$GITHUB_OUTPUT"
+    [ -f "$RUNNER_TEMP/nix-private-cache/nar/private.nar.zst" ]
+    [ -f "$RUNNER_TEMP/nix-private-cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.narinfo" ]
+    [ ! -e "$RUNNER_TEMP/nix-private-cache/nar/public.nar.zst" ]
+    [ ! -e "$RUNNER_TEMP/nix-private-cache/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo" ]
+  done
+}
+
+@test "private cache propagates Nix query and copy failures" {
+  private_cache_fixture
+  for command in query copy; do
+    export RUNNER_TEMP="$BATS_TEST_TMPDIR/$command"
+    export INFO_EXIT=0 COPY_EXIT=0
+    if [[ $command == query ]]; then INFO_EXIT=47; else COPY_EXIT=47; fi
+    : >"$GITHUB_OUTPUT"
+    run_script "$CACHE_EXPORT"
+    [ "$status" -ne 0 ]
+    [ ! -s "$GITHUB_OUTPUT" ]
+  done
+}
+
 @test "WSL prebuild exports zstd transport and fails closed" {
   script=$(workflow_step "$WORKFLOW" wsl-prebuild 'Build the WSL system closure and export a local cache')
   export STORE_PATH=/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-hermes
