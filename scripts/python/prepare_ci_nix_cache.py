@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -108,6 +110,31 @@ def export_cache(cache: Path, maximum_size: int) -> None:
     paths = store_paths()
     public = query_public_paths(paths)
     private = sorted(set(paths) - public)
+    private_input = "".join(f"{path}\n" for path in private)
+    closure_result = subprocess.run(
+        ["nix", "path-info", "--recursive", "--json", "--stdin"],
+        input=private_input,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    closure = json.loads(closure_result.stdout)
+    # Nix returns a path-keyed object; Lix returns a list of path records.
+    metadata = list(closure.values()) if isinstance(closure, dict) else closure
+    nar_size = sum(entry["narSize"] for entry in metadata)
+    # Public references also occupy disk until pruning. Allow for compression
+    # expansion, per-entry metadata/allocation, the outer archive, and headroom.
+    required_space = nar_size + nar_size // 100 + len(metadata) * 16384 + maximum_size + 64 * 1024 * 1024
+    free_space = shutil.disk_usage(cache).free
+    if required_space > free_space:
+        print(
+            f"::warning::Insufficient space for temporary cache export "
+            f"({required_space:,} bytes required, {free_space:,} available); "
+            "keeping the previous generation"
+        )
+        with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+            output.write("cacheable=false\n")
+        return
     # Binary-cache exports require reference metadata to exist. Export the
     # private roots with their closure once, then remove confirmed public entries.
     subprocess.run(
@@ -118,7 +145,7 @@ def export_cache(cache: Path, maximum_size: int) -> None:
             "--to",
             f"{cache.as_uri()}?compression=zstd",
         ],
-        input="".join(f"{path}\n" for path in private),
+        input=private_input,
         text=True,
         check=True,
     )

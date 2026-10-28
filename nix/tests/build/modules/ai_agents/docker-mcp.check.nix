@@ -31,7 +31,10 @@
         fi
         test "$(docker mcp version)" = "v${package.version}"
         ${pkgs.lib.getExe package} docker-cli-plugin-metadata | jq -e '.SchemaVersion == "0.1.0"'
-        docker mcp gateway run --help | grep -q -- '--servers'
+        # Consume all help output before checking it; grep -q can otherwise
+        # close the pipe while Docker is still writing and fail the check.
+        docker mcp gateway run --help > gateway-help.log
+        grep -q -- '--servers' gateway-help.log
         touch "$out"
       '';
 }
