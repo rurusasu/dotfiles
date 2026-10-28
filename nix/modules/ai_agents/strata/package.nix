@@ -127,6 +127,8 @@ let
     inherit version profile;
     src = desktopSource;
     contents = desktopContents;
+    # The bundled libgcrypt needs this library from the host environment.
+    extraPkgs = packages: [ packages.libgpg-error ];
     extraInstallCommands = ''
       install -Dm444 ${desktopContents}/Strata.desktop \
         "$out/share/applications/Strata.desktop"
