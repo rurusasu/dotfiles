@@ -11,6 +11,7 @@ COPY profile.sh /etc/profile.d/bootstrap-ci-tools.sh
 ENV PATH="/opt/ci-tools/bin:/nix/var/nix/profiles/default/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     HOME="/root" \
     LANG="C.UTF-8" \
+    NIX_CURL_FLAGS="--http1.1 --connect-timeout 15 --speed-limit 16384 --speed-time 60" \
     NIX_SSL_CERT_FILE="/nix/var/nix/profiles/default/etc/ssl/certs/ca-bundle.crt" \
     SSL_CERT_FILE="/nix/var/nix/profiles/default/etc/ssl/certs/ca-bundle.crt"
 
