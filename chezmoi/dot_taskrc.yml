@@ -1,0 +1,2 @@
+# Task's command and diagnostic messages use its built-in colors.
+color: true
