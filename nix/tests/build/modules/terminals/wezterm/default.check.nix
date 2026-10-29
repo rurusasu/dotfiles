@@ -7,8 +7,6 @@
   wezterm-config =
     let
       unixWezTerm = files.nix.modules.terminals.wezterm."wezterm.lua";
-      windowsWezTerm = files.chezmoi.terminals.wezterm."wezterm.lua";
-      settings = terminalHome.config.programs.wezterm.settings;
       terminalHome = fixtures.mkHome pkgs.stdenv.hostPlatform.system [
         {
           home = {
@@ -35,26 +33,15 @@
         export HOME="$TMPDIR/home"
         mkdir -p "$HOME"
         luac -p ${unixWezTerm}
-        luac -p ${windowsWezTerm}
-        lua - ${windowsWezTerm} \
-          ${pkgs.lib.escapeShellArg "UDEV Gothic NF"} \
-          ${toString settings.font_size} \
-          ${pkgs.lib.escapeShellArg settings.color_scheme} \
-          ${pkgs.writeText "wezterm-darwin-config.lua" ''
-            local dotfiles_terminfo_directory = ${pkgs.lib.generators.toLua { } terminfoDirectory}
-            ${builtins.readFile unixWezTerm}
-          ''} \
+        lua - ${pkgs.writeText "wezterm-darwin-config.lua" ''
+          local dotfiles_terminfo_directory = ${pkgs.lib.generators.toLua { } terminfoDirectory}
+          ${builtins.readFile unixWezTerm}
+        ''} \
           ${pkgs.lib.escapeShellArg terminfoDirectory} <<'LUA'
-        local target_triple = "x86_64-pc-windows-msvc"
-        package.loaded.wezterm = nil
         package.preload.wezterm = function()
           return {
-            target_triple = target_triple,
-            default_wsl_domains = function()
-              return { { name = "WSL:NixOS", distribution = "NixOS" } }
-            end,
+            target_triple = "aarch64-apple-darwin",
             config_builder = function() return {} end,
-            font = function(family) return family end,
             action_callback = function(callback) return callback end,
             action = setmetatable({}, {
               __index = function(_, name)
@@ -63,42 +50,15 @@
             }),
           }
         end
-        local config = dofile(arg[1])
-        assert(config.font == arg[2], "font family differs")
-        assert(config.font_size == tonumber(arg[3]), "font size differs")
-        assert(config.color_scheme == arg[4], "theme differs")
-        assert(config.default_prog[1] == "pwsh.exe", "PowerShell must be the default shell")
-        assert(config.default_prog[2] == "-NoLogo", "PowerShell must start without its logo")
-        local has_nixos_wsl = false
-        for _, domain in ipairs(config.wsl_domains) do
-          if domain.name == "WSL:NixOS" and domain.distribution == "NixOS" then
-            has_nixos_wsl = true
-          end
-        end
-        assert(has_nixos_wsl, "default WSL domains must include NixOS")
-        local has_nixos_launcher = false
-        for _, entry in ipairs(config.launch_menu) do
-          if entry.label == "NixOS (WSL)"
-            and type(entry.domain) == "table"
-            and entry.domain.DomainName == "WSL:NixOS"
-          then
-            has_nixos_launcher = true
-          end
-        end
-        assert(has_nixos_launcher, "launch menu must expose NixOS WSL")
-        print("Windows WezTerm default shell and NixOS WSL launcher are valid")
-
-        target_triple = "aarch64-apple-darwin"
-        package.loaded.wezterm = nil
         local getenv = os.getenv
         os.getenv = function(name)
           if name == "TERMINFO_DIRS" then return "/inherited/terminfo" end
           return getenv(name)
         end
-        config = dofile(arg[5])
+        local config = dofile(arg[1])
         os.getenv = getenv
         assert(config.set_environment_variables.TERMINFO_DIRS
-          == arg[6] .. ":/usr/share/terminfo:/inherited/terminfo",
+          == arg[2] .. ":/usr/share/terminfo:/inherited/terminfo",
           "Darwin child shells must receive package, system and inherited terminfo paths")
         assert(config.use_ime == true, "Darwin IME support must remain enabled")
         local backspace, leader_backspace

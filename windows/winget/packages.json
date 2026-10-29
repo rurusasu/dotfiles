@@ -21,9 +21,6 @@
           "Scope": "user"
         },
         {
-          "PackageIdentifier": "wez.wezterm.nightly"
-        },
-        {
           "PackageIdentifier": "yorukot.superfile",
           "Scope": "user"
         },

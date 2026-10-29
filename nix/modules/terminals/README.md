@@ -9,10 +9,10 @@ theme/size は各 `default.nix` の標準 `programs.*.settings` に定義しま�
 - Darwin の WezTerm は `programs.wezterm.package.terminfo` の store path を Lua に渡し、起動する shell の `TERMINFO_DIRS` に設定します。
 - WSL の Ghostty GUI は WSLg が必要です。
 - WezTerm の Bash / Zsh 連携は `TERM_PROGRAM=WezTerm` のときだけ読み込みます。Ghostty で同時に有効にすると、プロンプト連携が重複し、Zsh では空の `HOSTNAME` により Ghostty が受け付けない OSC 7 が送られることがあります。
-- Windows は chezmoi が WezTerm 設定のみを配布し、PowerShell を既定シェルに設定します。NixOS-WSL は別の launcher profile として起動します。
+- Windows Terminal は chezmoi が設定を配布し、PowerShell 7 を既定プロファイルにします。NixOS-WSL は自動生成される `NixOS` プロファイルから起動します。
 - Windows のパッケージは `windows/winget/packages.json` が管理します。
 
-`checks.<system>.wezterm-config` は Lua 構文、PowerShell の既定設定、NixOS-WSL launcher profile を検証します。
+`checks.<system>.wezterm-config` は Unix の WezTerm 設定とシェル連携を検証します。
 
 `XDG_CONFIG_HOME` は Home Manager の `xdg.configHome` で指定してください。
 macOS の `~/Library/Application Support/com.mitchellh.ghostty/config` に別の設定がある場合は、その設定も Ghostty に読み込まれます。

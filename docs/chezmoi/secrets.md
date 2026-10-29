@@ -1,5 +1,5 @@
 # Windows ユーザー設定と秘密情報
 
-Windows の chezmoi source には秘密情報やテンプレート secret を置きません。管理対象は WezTerm 設定と PowerShell 7 プロファイルです。
+Windows の chezmoi source には秘密情報やテンプレート secret を置きません。管理対象は Windows Terminal 設定と PowerShell 7 プロファイルです。
 
 1Password SSH agent などの Unix 側連携は NixOS/Home Manager の設定が所有します。詳細は [1Password 運用](../1password/README.md) を参照してください。

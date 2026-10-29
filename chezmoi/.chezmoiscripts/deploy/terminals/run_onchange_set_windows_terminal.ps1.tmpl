@@ -1,0 +1,10 @@
+{{ if eq .chezmoi.os "windows" -}}
+$ErrorActionPreference = 'Stop'
+if (-not (Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction Stop)) {
+    throw 'Install Microsoft.WindowsTerminal from windows/winget/packages.json before applying terminal settings.'
+}
+$path = 'HKCU:\Console\%%Startup'
+New-Item -Path $path -Force | Out-Null
+New-ItemProperty -LiteralPath $path -Name DelegationConsole -PropertyType String -Value '{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}' -Force | Out-Null
+New-ItemProperty -LiteralPath $path -Name DelegationTerminal -PropertyType String -Value '{E12CFF52-A866-4C77-9A90-F570A7AA2C6B}' -Force | Out-Null
+{{ end -}}
