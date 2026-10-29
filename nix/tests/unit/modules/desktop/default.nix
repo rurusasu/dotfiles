@@ -16,6 +16,7 @@ in
     };
     expected = with darwin.config; {
       apps = [
+        "/System/Applications/Apps.app"
         "${programs.chatgpt.package}/Applications/ChatGPT.app"
         "${programs.dia.package}/Applications/Dia.app"
         "${programs.ghostty.package}/Applications/Ghostty.app"
