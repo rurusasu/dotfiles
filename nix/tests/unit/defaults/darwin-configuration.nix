@@ -67,6 +67,7 @@ in
             };
           })
           [
+            "/System/Applications/Apps.app"
             "${defaultHome.programs.chatgpt.package}/Applications/ChatGPT.app"
             "${defaultHome.programs.dia.package}/Applications/Dia.app"
             "${defaultHome.programs.ghostty.package}/Applications/Ghostty.app"
