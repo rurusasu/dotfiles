@@ -159,8 +159,10 @@ Homebrew の `zap` や設定ファイルの配置で停止した場合の詳細�
   復元できません。手動インストールしたアプリや Mac App Store アプリは対象外です。
 - この設定は任意のユーザーファイルやアプリのデータ全般を走査・削除するものではありません。
 
-Dock の固定アプリと順序は `nix/modules/dock/default.nix` が Nix package の `.app` を参照して管理します。
-ChatGPT・Dia・Ghostty・Obsidian の順に固定し、追加の固定フォルダーと最近使ったアプリは表示しません。
+Dock の固定アプリと順序は `nix/modules/dock/default.nix` が管理します。
+macOS 27 の標準「アプリ」（`/System/Applications/Apps.app`）を先頭に置き、
+Nix package の ChatGPT・Dia・Ghostty・Obsidian の順に固定します。
+追加の固定フォルダーと最近使ったアプリは表示しません。
 Finder・ゴミ箱・起動中のアプリの表示は固定アプリの一覧とは別です。
 
 通常インストールは Nix のビルド・activation、ユーザー設定の反映、環境の動作確認を行います。

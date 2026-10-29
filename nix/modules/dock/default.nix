@@ -13,6 +13,7 @@
       show-process-indicators = true;
       show-recents = false;
       persistent-apps = [
+        { app = "/System/Applications/Apps.app"; }
         "${config.programs.chatgpt.package}/Applications/ChatGPT.app"
         "${config.programs.dia.package}/Applications/Dia.app"
         "${config.programs.ghostty.package}/Applications/Ghostty.app"
