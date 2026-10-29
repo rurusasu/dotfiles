@@ -232,7 +232,10 @@ let
                           signing.signer = "${config.home.homeDirectory}/.local/bin/op-ssh-sign-wsl";
                           settings.ghq.root = [ "/mnt/d" ];
                         };
-                        starship.settings.git_status.windows_starship = "starship.exe";
+                        starship = {
+                          wslIntegration.enable = true;
+                          asyncZsh.enable = true;
+                        };
                         zsh = {
                           initContent = lib.mkBefore ''
                             zstyle ':autocomplete:' delay 0.15
