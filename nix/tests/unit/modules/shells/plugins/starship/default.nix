@@ -13,7 +13,10 @@ let
     ]).config.programs.starship.settings;
   generatedSettings =
     home:
-    builtins.fromJSON home.config.home.file.${home.config.programs.starship.configPath}.source.value;
+    builtins.fromJSON (
+      builtins.unsafeDiscardStringContext
+        home.config.home.file.${home.config.programs.starship.configPath}.source.value
+    );
   windowsHelperHome =
     system: enable: integration:
     fixtures.mkHome system [
@@ -97,7 +100,7 @@ in
   testStarshipAsyncZshSelection = {
     expr = map (home: {
       enabled = home.config.programs.starship.asyncZsh.enable;
-      initialized = lib.hasInfix "${home.config.programs.starship.asyncZsh.package}/share/zsh/site-functions/async" home.config.programs.zsh.initContent;
+      initialized = lib.hasInfix (builtins.unsafeDiscardStringContext "${home.config.programs.starship.asyncZsh.package}/share/zsh/site-functions/async") home.config.programs.zsh.initContent;
     }) homes;
     expected =
       map
