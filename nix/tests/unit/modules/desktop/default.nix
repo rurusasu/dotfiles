@@ -20,6 +20,7 @@ in
         "${programs.dia.package}/Applications/Dia.app"
         "${programs.ghostty.package}/Applications/Ghostty.app"
         "${darwin.pkgs.obsidian}/Applications/Obsidian.app"
+        "${programs.strata.package}/Applications/Strata.app"
       ];
       finder = "PfHm";
       darkMode = "Dark";

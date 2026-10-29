@@ -71,6 +71,7 @@ in
             "${defaultHome.programs.dia.package}/Applications/Dia.app"
             "${defaultHome.programs.ghostty.package}/Applications/Ghostty.app"
             "${defaultSystem.pkgs.obsidian}/Applications/Obsidian.app"
+            "${defaultHome.programs.strata.package}/Applications/Strata.app"
           ];
       others = [ ];
       recents = false;

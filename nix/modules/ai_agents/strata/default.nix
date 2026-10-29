@@ -12,7 +12,15 @@ let
   };
 in
 {
-  options.programs.strata.enable = lib.mkEnableOption "Strata desktop and control CLI";
+  options.programs.strata = {
+    enable = lib.mkEnableOption "Strata desktop and control CLI";
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = selected.desktop;
+      defaultText = lib.literalExpression "the Strata desktop distribution from inputs.strata-release";
+      description = "Strata desktop package.";
+    };
+  };
   config = lib.mkIf config.programs.strata.enable {
     assertions = [
       {
@@ -24,7 +32,7 @@ in
       }
     ];
     home.packages = [
-      selected.desktop
+      config.programs.strata.package
       selected.control
     ];
   };

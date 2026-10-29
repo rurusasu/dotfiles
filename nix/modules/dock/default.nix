@@ -17,7 +17,8 @@
         "${config.programs.dia.package}/Applications/Dia.app"
         "${config.programs.ghostty.package}/Applications/Ghostty.app"
         "${pkgs.obsidian}/Applications/Obsidian.app"
-      ];
+      ]
+      ++ lib.optional config.programs.strata.enable "${config.programs.strata.package}/Applications/Strata.app";
       persistent-others = [ ];
       showDesktopGestureEnabled = true;
       showMissionControlGestureEnabled = true;
