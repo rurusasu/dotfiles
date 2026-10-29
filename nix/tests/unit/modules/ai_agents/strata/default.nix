@@ -1,5 +1,15 @@
 { fixtures, code }:
 let
+  darwin = fixtures.mkHome "aarch64-darwin" [
+    (fixtures.homeModule "darwin")
+    (
+      { lib, ... }:
+      {
+        targets.darwin.copyApps.enable = lib.mkDefault true;
+        targets.darwin.linkApps.enable = lib.mkDefault false;
+      }
+    )
+  ];
   pkgs = fixtures.mkPkgs "x86_64-linux";
   release = {
     tag_name = "v9.8.7";
@@ -75,9 +85,43 @@ in
     };
   };
   testStrataDarwinIsEnabledByThePlatform = {
-    expr =
-      (fixtures.mkHome "aarch64-darwin" [ (fixtures.homeModule "darwin") ]).config.programs.strata.enable;
+    expr = darwin.config.programs.strata.enable;
     expected = true;
+  };
+  testStrataProtectsTheCopiedBundleAfterCopyApps = {
+    expr = darwin.config.home.activation.strataProtectSignedBundle.after;
+    expected = [ "copyApps" ];
+  };
+  testStrataBundleProtectionUsesConfiguredHomeAndApplicationDirectory = {
+    expr =
+      let
+        home = darwin.extendModules {
+          modules = [
+            {
+              home.homeDirectory = darwin.pkgs.lib.mkForce "/Volumes/Home/testuser";
+              targets.darwin.copyApps.directory = "Applications/Managed Apps";
+            }
+          ];
+        };
+      in
+      darwin.pkgs.lib.hasInfix "'/Volumes/Home/testuser/Applications/Managed Apps/Strata.app'" home.config.home.activation.strataProtectSignedBundle.data;
+    expected = true;
+  };
+  testStrataDoesNotProtectAnUnmanagedOrDisabledBundle = {
+    expr = map (home: home.config.home.activation ? strataProtectSignedBundle) [
+      (darwin.extendModules {
+        modules = [ { programs.strata.enable = darwin.pkgs.lib.mkForce false; } ];
+      })
+      (darwin.extendModules {
+        modules = [ { targets.darwin.copyApps.enable = false; } ];
+      })
+      (fixtures.mkHome "x86_64-linux" [ (fixtures.homeModule "linux") ])
+    ];
+    expected = [
+      false
+      false
+      false
+    ];
   };
   testStrataFeedIncludesMacDesktopAndControl = {
     expr = code.nix.modules.ai_agents.strata.release {

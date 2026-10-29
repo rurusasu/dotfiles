@@ -27,5 +27,18 @@ in
       selected.desktop
       selected.control
     ];
+    home.activation =
+      lib.mkIf (pkgs.stdenv.hostPlatform.isDarwin && config.targets.darwin.copyApps.enable)
+        {
+          strataProtectSignedBundle = lib.hm.dag.entryAfter [ "copyApps" ] ''
+            strataAppDirectory=${lib.escapeShellArg "${config.home.homeDirectory}/${config.targets.darwin.copyApps.directory}/Strata.app"}
+            strataControlDirectory="$strataAppDirectory/Contents/Resources/control"
+            # copyApps makes the bundle writable; Python would then replace its signed bytecode.
+            # Failed cache writes are harmless: Python compiles imports in memory instead.
+            if [[ -d "$strataControlDirectory" && ! -L "$strataAppDirectory" && ! -L "$strataControlDirectory" ]]; then
+              run ${pkgs.coreutils}/bin/chmod -R a-w "$strataControlDirectory"
+            fi
+          '';
+        };
   };
 }
