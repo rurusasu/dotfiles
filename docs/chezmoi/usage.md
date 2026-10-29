@@ -27,6 +27,8 @@ chezmoi --source "$PWD/chezmoi" diff
 
 chezmoi は `%LOCALAPPDATA%/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json` と `%USERPROFILE%/Documents/PowerShell/Microsoft.PowerShell_profile.ps1` を管理します。Windows Terminal 安定版を Windows の既定のターミナルにし、PowerShell 7 を既定プロファイルにします。NixOS-WSL は Windows Terminal が自動生成する `NixOS` プロファイルから起動します。
 
+PowerShell から NixOS のタブを開く場合は `wt.exe -p NixOS`、現在のタブで NixOS に入る場合は `wsl.exe -d NixOS` を使います。
+
 Windows Terminal のフォントは UDEV Gothic NF の 10 pt、配色は Catppuccin Mocha、不透明度は 75% です。タブ・ペインの操作は標準ショートカットを使います。
 
 `modify_settings.json` は既存の JSONC 設定を読み、既定プロファイル・フォント・配色・不透明度をマージします。配色は `%LOCALAPPDATA%/Microsoft/Windows Terminal/Fragments/dotfiles/catppuccin-mocha.json` の fragment で追加します。
