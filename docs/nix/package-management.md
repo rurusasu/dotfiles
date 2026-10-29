@@ -225,6 +225,8 @@ lazygit / Herdr はそれぞれ `nix/modules/lazygit/` / `nix/modules/herdr/` �
 
 zoxide / fzf / eza / bat / ripgrep / fd の導入・設定と zsh-patina の連携は `nix/modules/shells/plugins/` の各アプリ module に置きます。zoxide は標準連携の `--cmd cd` で `cd` / `cdi` を使い、WSL の除外ディレクトリは `nix/defaults.nix` の WSL ユーザー設定に置きます。fzf の Zsh は標準 integration の Ctrl+T/R・Alt+C を使い、検索コマンド・プレビューは `programs.fzf` の widget option に定義します。Unix の Bash integration は無効です。ripgrep の設定ファイルと `RIPGREP_CONFIG_PATH` は Home Manager が生成します。
 
+zsh-patina 1.11.0 は無効な動的ハイライトでも照会を先に実行するため、module の nixpkgs package override で設定判定を照会より前へ移します。WSL の構文色分けと既存パスの識別を維持し、無効なコマンド判定によるファイル照会だけを省きます。Linux の `zsh-patina-disabled-lookups` check は両方の処理経路の照会回数と修正前後の色分けの同一性を実際の daemon で検証します。
+
 Starship の有効化・Bash / Zsh の標準連携・プロンプトは `nix/modules/shells/plugins/starship/` にまとめ、`programs.starship.settings` から Home Manager が `~/.config/starship.toml` を生成します。
 
 ## 関連ファイル

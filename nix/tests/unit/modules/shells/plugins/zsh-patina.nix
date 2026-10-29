@@ -25,7 +25,7 @@ in
   testPatinaActivatesAfterOtherZshIntegrationsAcrossHomes = {
     expr = map (
       home:
-      lib.hasSuffix ''eval "$(${lib.getExe home.pkgs.zsh-patina} activate)"'' (
+      lib.hasSuffix ''eval "$(${lib.getExe home.config.programs.zsh-patina.package} activate)"'' (
         lib.trim
           home.config.home.file."${lib.removePrefix "${home.config.home.homeDirectory}/" home.config.programs.zsh.dotDir}/.zshrc".text
       )
