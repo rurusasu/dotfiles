@@ -1,6 +1,6 @@
 # Chezmoi ドキュメント
 
-chezmoi は Windows の WezTerm 設定と PowerShell 7 プロファイルを管理します。PowerShell は WinGet manifest から最新版を導入し、WezTerm の既定プロファイルとして起動します。NixOS-WSL は別の WezTerm プロファイルから起動します。
+chezmoi は Windows Terminal 設定と PowerShell 7 プロファイルを管理します。PowerShell 7 を既定プロファイルとし、NixOS-WSL は Windows Terminal が自動生成する `NixOS` プロファイルから起動します。
 
 ## 目次
 
@@ -10,12 +10,11 @@ chezmoi は Windows の WezTerm 設定と PowerShell 7 プロファイルを管�
 
 ## 所有境界
 
-| 設定                                 | 所有者              |
-| ------------------------------------ | ------------------- |
-| Windows WezTerm                      | chezmoi             |
-| Windows PowerShell 7 profile         | chezmoi             |
-| Windows PowerShell / WezTerm package | WinGet manifest     |
-| macOS、Linux、NixOS-WSL 内の WezTerm | Home Manager        |
-| WezTerm の共有 appearance values     | Nix package catalog |
+| 設定                                 | 所有者                                                |
+| ------------------------------------ | ----------------------------------------------------- |
+| Windows Terminal                     | chezmoi                                               |
+| Windows PowerShell 7 profile         | chezmoi                                               |
+| PowerShell 7 / Windows Terminal 本体 | [WinGet manifest](../../windows/winget/packages.json) |
+| macOS、Linux、NixOS-WSL 内の WezTerm | Home Manager                                          |
 
-PowerShell プロファイルは WezTerm 補完と PSReadLine の履歴候補表示を設定します。詳しい適用方法は [usage.md](./usage.md) を参照してください。
+PowerShell プロファイルは PSReadLine の履歴候補表示と共通エイリアスを設定します。詳しい適用方法は [usage.md](./usage.md) を参照してください。

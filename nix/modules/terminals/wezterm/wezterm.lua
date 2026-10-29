@@ -2,47 +2,12 @@ local wezterm = require("wezterm")
 local act = wezterm.action
 local config = wezterm.config_builder()
 
-local is_windows = wezterm.target_triple:find("windows") ~= nil
 local is_macos = wezterm.target_triple:find("darwin") ~= nil
 
 -- Window focus: h=left, l=right
--- Same-process: WezTerm native. Cross-process: Win32 SetForegroundWindow via PowerShell.
 local function focus_adjacent_window(direction)
     local offset = direction == "right" and 1 or -1
-    if not is_windows then
-        return act.ActivateWindowRelative(offset)
-    end
-    return wezterm.action_callback(function(window, pane)
-        if #wezterm.gui.gui_windows() > 1 then
-            window:perform_action(act.ActivateWindowRelative(offset), pane)
-            return
-        end
-        local ps = table.concat({
-            "Add-Type -TypeDef 'using System;using System.Runtime.InteropServices;",
-            "public class U{",
-            '[DllImport("user32")]public static extern IntPtr GetForegroundWindow();',
-            '[DllImport("user32")]public static extern bool SetForegroundWindow(IntPtr h);',
-            '[DllImport("user32")]public static extern bool ShowWindow(IntPtr h,int n);',
-            '[DllImport("user32")]public static extern bool IsIconic(IntPtr h);}\';',
-            "$d=" .. tostring(offset) .. ";",
-            "$p=@(Get-Process wezterm-gui -EA 0|Where-Object{$_.MainWindowHandle -ne 0}|Sort-Object Id);",
-            "if($p.Count -lt 2){exit};",
-            "$h=@($p|ForEach-Object{[IntPtr]$_.MainWindowHandle});",
-            "$c=[U]::GetForegroundWindow();",
-            "$i=[Array]::IndexOf($h,$c);",
-            "if($i -lt 0){exit};",
-            "$n=(($i+$d)%$p.Count+$p.Count)%$p.Count;",
-            "if([U]::IsIconic($h[$n])){[U]::ShowWindow($h[$n],9)};",
-            "[void][U]::SetForegroundWindow($h[$n])",
-        })
-        wezterm.run_child_process({ "pwsh.exe", "-NoProfile", "-NonInteractive", "-Command", ps })
-    end)
-end
-
--- Detect Windows for default shell
-if is_windows then
-    config.default_prog = { "pwsh.exe", "-NoLogo" }
-    config.exit_behavior = "Close"
+    return act.ActivateWindowRelative(offset)
 end
 
 -- Terminal type (enables undercurl, colored underlines, etc.)
@@ -78,7 +43,6 @@ config.show_new_tab_button_in_tab_bar = true
 config.leader = { key = "Space", mods = "CTRL", timeout_milliseconds = 1000 }
 
 -- Force snacks.nvim to recognise WezTerm's Kitty graphics protocol support.
--- Auto-detection can fail on Windows where TERM_PROGRAM may not propagate.
 config.set_environment_variables = {
     SNACKS_WEZTERM = "true",
 }

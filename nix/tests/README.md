@@ -163,7 +163,7 @@ YAML 構文は `actionlint`、設定適用は対象 platform の rebuild で検�
 
 `scripts/sh/tests/` は shell / installer の runtime 契約を担当します。Windows の manifest は
 独立した管理対象なので、Nix から生成した JSON との一致検査はありません。
-Windows の installer と verifier の実行契約は PowerShell / Pester が担当します。
+Windows の installer の実行契約は PowerShell / Pester が担当します。
 
 `unit/ownership.nix` は現在のファイル一覧から、再帰的な unit/build 検出の完全一致、
 重複したテスト名を検査します。過去の移行時の件数や

@@ -35,5 +35,6 @@ Windows の公開入口は WSL 経由の `task fmt` / `task fmt:check` とする
 
 - treefmt は chezmoi 展開前のソースを解析する。`{{ ... }}` を含むファイルでも、展開前の構文が対象言語として成立するもの（Lua など）は通常どおり formatter の対象にする。
 - 展開前には有効な JSON にならないテンプレートは、oxfmt の対象から除外する。現在の対象と除外理由は `nix/treefmt.nix` の `settings.formatter.oxfmt.excludes` を source of truth とする。
+- Windows Terminal の `modify_settings.json` は chezmoi の規約で `.tmpl` を付けられない modify-template なので除外する。`Integration.Tests.ps1` が実際の apply 後の JSON と既存設定の保持を検証する。
 - 除外はテストを省略する指定ではない。対象ファイルを検証するテストは `chezmoi execute-template` で OS とデータを与えてレンダリングしてから、JSON などの実構文を解析する。
 - format gate はソースの整形、Chezmoi CI はレンダリング後の構文・意味の検証を担当する。どちらか一方をもう一方の代替として扱わない。

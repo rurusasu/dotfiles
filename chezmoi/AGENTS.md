@@ -1,7 +1,8 @@
 # chezmoi: Windows user settings
 
-- chezmoi deploys `%USERPROFILE%/.config/wezterm/wezterm.lua` on Windows and installs the pinned UDEV Gothic NF font for the current user.
-- chezmoi also manages the PowerShell 7 profile in `%USERPROFILE%/Documents/PowerShell/` for WezTerm completion and PSReadLine history prediction.
+- chezmoi merges the managed defaults into Windows Terminal's stable `settings.json`, installs its color-scheme fragment and the pinned UDEV Gothic NF font, and selects Windows Terminal as the current user's default terminal.
+- Keep existing Windows Terminal profiles and keybindings. Use the standard PowerShell 7 profile as default and let WSL generate its distribution profiles.
+- chezmoi also manages the PowerShell 7 profile in `%USERPROFILE%/Documents/PowerShell/` for PSReadLine history prediction.
 - The same profile owns Windows-native common shell aliases and functions matching Zsh (`eza`, `ls`/`ll`/`la`/`lt`/`lla`, `grep`, `find`, `lg`, `k` shortcuts, and `dotf`). Keep these in chezmoi; do not route them through WSL. `dotf` resolves the repository from `chezmoi source-path`. CLI install metadata remains in `windows/winget/packages.json`.
 - Superfile's Windows configuration is managed in `AppData/Local/superfile/config.toml`; its hotkeys, pins, and runtime state remain application-managed.
 - Setup output colors belong to `.chezmoi.toml.tmpl` (chezmoi diffs) and `dot_taskrc.yml` (Task's own output). Prefer native tool configuration over ANSI coloring in installer scripts.

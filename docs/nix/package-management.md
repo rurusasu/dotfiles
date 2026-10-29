@@ -114,8 +114,8 @@ NixOS:            ./install.sh
 Ubuntu / Debian:  ./install.sh
 ```
 
-- Windows は `windows/winget/packages.json` を正本として GUI アプリのみを winget で導入します。
-- `task install` は既存の PowerShell と winget で Windows GUI アプリを導入した後、NixOS-WSL の導入、inputs の更新と NixOS/Home Manager の反映、Windows chezmoi の順に一度ずつ実行します。WSLg の対象 GUI は Nix 側で導入します。実行順序は `taskfiles/install/taskfile.yml` が管理します。`install.cmd` / `install.ps1` が PowerShell で WinGet master を1回適用し、Task の導入後は Taskfile の WSL・chezmoi へ進みます。WinGet の実行経路はこの1か所で、直接の `task install` も同じ入口を使います。`-Phase Winget` は Windows GUI のみです。WSL 基盤の有効化だけ UAC 昇格します。Node.js・npm・pnpm・dsh・AutoHotkey・GlazeWM の Windows 導入や CLI runtime acceptance は行いません。既存アプリや Startup shortcut は自動削除しません。
+- Windows は `windows/winget/packages.json` を正本として winget で導入します。
+- `task install` は既存の PowerShell と winget で Windows のパッケージを導入した後、NixOS-WSL の導入、inputs の更新と NixOS/Home Manager の反映、Windows chezmoi の順に一度ずつ実行します。WSLg の対象 GUI は Nix 側で導入します。実行順序は `taskfiles/install/taskfile.yml` が管理します。`install.cmd` / `install.ps1` が PowerShell で WinGet master を1回適用し、Task の導入後は Taskfile の WSL・chezmoi へ進みます。WinGet の実行経路はこの1か所で、直接の `task install` も同じ入口を使います。`-Phase Winget` は master の import のみを実行します。WSL 基盤の有効化だけ UAC 昇格します。既存アプリや Startup shortcut は自動削除しません。
 - Codex CLI はどの OS でも個別導入せず、各 OS 向け ChatGPT アプリ付属の CLI を使います。Windows の GUI profile は Microsoft Store のデスクトップアプリを対象とし、npm/pnpm パッケージを導入しません。
 - macOS は nix-darwin が Home Manager と nix-homebrew formula/cask を同じ switch に含めます。
 - 非 NixOS Linux（Ubuntu/Debian など）は standalone Home Manager がユーザー環境を適用します。Docker や OS service は管理しません。
@@ -224,6 +224,8 @@ lazygit / Herdr はそれぞれ `nix/modules/lazygit/` / `nix/modules/herdr/` �
 エディタの導入・設定は `nix/modules/editors/` にまとめます。`nvim/` は Neovim 本体・設定・プラグインを所有し、`runtime/default.nix` が補助 CLI・LSP・整形ツール・toolchain とプラグインの実行依存を通常の PATH に導入します。これらを全エディタ共通の集約 module に移しません。Orca は `nix/defaults.nix` が `inputs.llm-agents.packages.${system}.orca` を導入します。CLI は `orca`、GUI は `orca-ide` です。運用は [Neovim](../chezmoi/neovim.md) を参照してください。
 
 zoxide / fzf / eza / bat / ripgrep / fd の導入・設定と zsh-patina の連携は `nix/modules/shells/plugins/` の各アプリ module に置きます。zoxide は標準連携の `--cmd cd` で `cd` / `cdi` を使い、WSL の除外ディレクトリは `nix/defaults.nix` の WSL ユーザー設定に置きます。fzf の Zsh は標準 integration の Ctrl+T/R・Alt+C を使い、検索コマンド・プレビューは `programs.fzf` の widget option に定義します。Unix の Bash integration は無効です。ripgrep の設定ファイルと `RIPGREP_CONFIG_PATH` は Home Manager が生成します。
+
+zsh-patina 1.11.0 は無効な動的ハイライトでも照会を先に実行するため、module の nixpkgs package override で設定判定を照会より前へ移します。WSL の構文色分けと既存パスの識別を維持し、無効なコマンド判定によるファイル照会だけを省きます。Linux の `zsh-patina-disabled-lookups` check は両方の処理経路の照会回数と修正前後の色分けの同一性を実際の daemon で検証します。
 
 Starship の有効化・Bash / Zsh の標準連携・プロンプトは `nix/modules/shells/plugins/starship/` にまとめ、`programs.starship.settings` から Home Manager が `~/.config/starship.toml` を生成します。
 

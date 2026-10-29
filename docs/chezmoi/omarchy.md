@@ -4,9 +4,9 @@
 
 Windows は標準デスクトップと標準ショートカットを使用し、共通デスクトップキーのリマップは行いません。Ghostty と Neovim のアプリ内キーは Nix の定義から生成し、chezmoi が export を WSL に配布します。
 
-## WezTerm の境界
+## ターミナルの境界
 
-Windows の WezTerm 設定は chezmoi の `terminals/wezterm/wezterm.lua` に置きます。PowerShell を既定シェルとし、NixOS-WSL は別の launcher profile から起動します。Unix の設定は Home Manager が管理します。
+Windows Terminal の設定は chezmoi が管理します。PowerShell 7 を既定プロファイルとし、NixOS-WSL は Windows Terminal が自動生成する `NixOS` プロファイルから起動します。Ghostty と WezTerm の Unix 設定は Home Manager が管理します。
 
 Nix のテストは純粋な設定生成と実効値を検査します。実機の compositor 動作やキー入力は対象 host 上で確認します。
 
@@ -56,7 +56,7 @@ task chezmoi
 
 ## ターミナルとの境界と検証
 
-デスクトップ配列は各 OS の desktop adapter が扱います。Ghostty と WezTerm は split・tab・pane 移動に共通の直接キーを使い、WezTerm の固有操作と Herdr の操作には [キーバインド統一方針](./keybindings.md) の `Ctrl+Space` を使います。WSL のターミナル操作は Windows のデスクトップ操作から独立した層です。Ghostty / WezTerm のサイズ変更量は10 / 100ピクセルであり、行数ではありません。
+デスクトップ配列は各 OS の desktop adapter が扱います。Windows Terminal は標準ショートカットを使います。Unix の Ghostty と WezTerm は split・tab・pane 移動に共通の直接キーを使い、WezTerm の固有操作と Herdr の操作には [キーバインド統一方針](./keybindings.md) の `Ctrl+Space` を使います。サイズ変更の単位は Ghostty がピクセル、WezTerm がセルです。
 
 WSLg Ghostty は ghostty-wsl.nix が生成するアプリ内の直接キーを使います。10ピクセルの resize は Ctrl+Alt+Shift+矢印、100ピクセルは Ctrl+Alt+Shift+Home/PageDown/PageUp/End です。Windows 側のキー変換や常駐スクリプトは使いません。
 

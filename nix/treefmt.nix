@@ -66,6 +66,10 @@
   settings.formatter = {
     shfmt.includes = lib.mkAfter [ "*.bats" ];
     oxfmt = {
+      # chezmoi modify-templates cannot use .tmpl and are not JSON before rendering.
+      excludes = [
+        "chezmoi/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/modify_settings.json"
+      ];
       options = [
         "--write"
         "--config"

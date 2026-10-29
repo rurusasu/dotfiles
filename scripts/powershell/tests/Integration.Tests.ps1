@@ -3,20 +3,12 @@
 Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     BeforeAll {
         $script:repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
-        . (Join-Path $PSScriptRoot '../lib/Invoke-ExternalCommand.ps1')
-        $script:originalPath = $env:PATH
-        Update-ProcessEnvironmentPath
     }
 
-    AfterAll { $env:PATH = $script:originalPath }
-
-    It 'should run the installed Windows WezTerm executable' {
-        $output = @(Invoke-ExternalCommandWithTimeout -Command wezterm -Arguments @('--version') -TimeoutSeconds 120)
-        $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
-        $output -join '' | Should -Match '\d+'
-    }
-
-    It 'should deploy the Windows configuration through real chezmoi apply and remain idempotent' {
+    It 'should merge Windows Terminal settings into <Case> through real chezmoi apply and remain idempotent' -ForEach @(
+        @{ Case = 'a new home'; ExistingSettings = $false }
+        @{ Case = 'existing JSONC settings'; ExistingSettings = $true }
+    ) {
         # Keep the real user's configuration and chezmoi state outside the test.
         $destination = Join-Path $TestDrive 'home'
         $config = Join-Path $TestDrive 'chezmoi.toml'
@@ -25,10 +17,33 @@ Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platf
         [IO.File]::WriteAllText($config, '')
         $chezmoi = (Get-Command chezmoi -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
         $source = Join-Path $script:repoRoot 'chezmoi'
-        # Font registration belongs to installer E2E and changes the current user's registry.
+        # Registry activation and font registration must not change the real user's state here.
+        $terminalRelative = 'AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json'
+        $fragmentRelative = 'AppData/Local/Microsoft/Windows Terminal/Fragments/dotfiles/catppuccin-mocha.json'
+        $deployed = Join-Path $destination $terminalRelative
+        if ($ExistingSettings) {
+            [void][IO.Directory]::CreateDirectory((Split-Path -Parent $deployed))
+            $existing = @'
+{
+  // Windows Terminal accepts comments and trailing commas.
+  "defaultProfile": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
+  "copyOnSelect": true,
+  "profiles": {
+    "defaults": { "historySize": 8000, "font": { "weight": "semi-bold" } },
+    "list": [
+      { "guid": "{aa4bf240-2b1a-43c6-b629-665bf0f882dd}", "name": "Custom", "commandline": "cmd.exe" },
+      { "guid": "{d3878e06-fc60-4fae-9f1c-fd03391609ca}", "name": "NixOS", "source": "Microsoft.WSL" },
+    ],
+  },
+  "keybindings": [{ "keys": "ctrl+alt+q", "id": "Terminal.NewTab" }],
+}
+'@
+            [IO.File]::WriteAllText($deployed, $existing, [Text.UTF8Encoding]::new($false))
+        }
         $targets = @(
             'Documents/PowerShell/Microsoft.PowerShell_profile.ps1'
-            'dot_config/wezterm/wezterm.lua.tmpl'
+            'AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/modify_settings.json'
+            $fragmentRelative
         ) | ForEach-Object { Join-Path $source $_ }
         $arguments = @('--config', $config, '--source', $source,
             '--destination', $destination, '--persistent-state', $state, '--source-path', 'apply', '--force', '--parent-dirs') + $targets
@@ -40,12 +55,24 @@ Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platf
             $env:LOCALAPPDATA = Join-Path $TestDrive 'localappdata'
             $output = @(& $chezmoi @arguments 2>&1)
             $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)
-            $deployed = Join-Path $destination '.config/wezterm/wezterm.lua'
             Test-Path -LiteralPath $deployed -PathType Leaf | Should -BeTrue
-            $expected = [IO.File]::ReadAllText((Join-Path $script:repoRoot 'chezmoi/terminals/wezterm/wezterm.lua'))
-            ([IO.File]::ReadAllText($deployed) -replace "`r`n?", "`n").TrimEnd() |
-                Should -BeExactly (($expected -replace "`r`n?", "`n").TrimEnd())
-            @(Get-ChildItem -LiteralPath (Join-Path $destination '.config') -Recurse -File -Force).Count | Should -Be 1
+            $settings = Get-Content -LiteralPath $deployed -Raw | ConvertFrom-Json
+            $settings.defaultProfile | Should -Be '{574e775e-4f2a-5b96-ac1e-a2962a402336}'
+            $settings.profiles.defaults.font.face | Should -Be 'UDEV Gothic NF'
+            $settings.profiles.defaults.font.size | Should -Be 10
+            $settings.profiles.defaults.opacity | Should -Be 75
+            $fragment = Get-Content -LiteralPath (Join-Path $destination $fragmentRelative) -Raw | ConvertFrom-Json
+            $settings.profiles.defaults.colorScheme | Should -Be $fragment.schemes[0].name
+            if ($ExistingSettings) {
+                $settings.copyOnSelect | Should -BeTrue
+                $settings.profiles.defaults.historySize | Should -Be 8000
+                $settings.profiles.defaults.font.weight | Should -Be 'semi-bold'
+                @($settings.profiles.list).Count | Should -Be 2
+                $settings.profiles.list[0].commandline | Should -Be 'cmd.exe'
+                $settings.profiles.list[1].guid | Should -Be '{d3878e06-fc60-4fae-9f1c-fd03391609ca}'
+                $settings.profiles.list[1].source | Should -Be 'Microsoft.WSL'
+                $settings.keybindings[0].keys | Should -Be 'ctrl+alt+q'
+            }
             $first = [Convert]::ToBase64String([IO.File]::ReadAllBytes($deployed))
             $output = @(& $chezmoi @arguments 2>&1)
             $LASTEXITCODE | Should -Be 0 -Because ($output -join [Environment]::NewLine)

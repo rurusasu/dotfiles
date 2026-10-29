@@ -13,7 +13,24 @@ let
     ]).config.programs.starship.settings;
   generatedSettings =
     home:
-    builtins.fromJSON home.config.home.file.${home.config.programs.starship.configPath}.source.value;
+    builtins.fromJSON (
+      builtins.unsafeDiscardStringContext
+        home.config.home.file.${home.config.programs.starship.configPath}.source.value
+    );
+  windowsHelperHome =
+    system: enable: integration:
+    fixtures.mkHome system [
+      {
+        programs = {
+          bash.enable = true;
+          zsh.enable = true;
+          starship = {
+            inherit enable;
+            wslIntegration.enable = integration;
+          };
+        };
+      }
+    ];
 in
 {
   testStarshipEnabled = {
@@ -49,7 +66,7 @@ in
           else
             null
         }](${settings.os.style}) " settings.format;
-        windowsHelper = settings.git_status.windows_starship or null;
+        windowsHelper = settings.git_status ? windows_starship;
       }
     ) homes;
     expected =
@@ -60,9 +77,9 @@ in
           inherit windowsHelper;
         })
         [
-          null
-          "starship.exe"
-          null
+          false
+          true
+          false
         ];
   };
 
@@ -78,6 +95,24 @@ in
       enabled = true;
       initialization = home.config.programs.starship.enableZshIntegration;
     }) homes;
+  };
+
+  testStarshipAsyncZshSelection = {
+    expr = map (home: {
+      enabled = home.config.programs.starship.asyncZsh.enable;
+      initialized = lib.hasInfix (builtins.unsafeDiscardStringContext "${home.config.programs.starship.asyncZsh.package}/share/zsh/site-functions/async") home.config.programs.zsh.initContent;
+    }) homes;
+    expected =
+      map
+        (enabled: {
+          inherit enabled;
+          initialized = enabled;
+        })
+        [
+          false
+          true
+          false
+        ];
   };
 
   testStarshipConfigLocation = {
@@ -102,5 +137,41 @@ in
       runtimeDetection = false;
       staticPrefix = true;
     };
+  };
+
+  testStarshipWindowsHelperEnableBoundary = {
+    expr =
+      map
+        (
+          home:
+          let
+            settings = home.config.programs.starship.settings;
+            helper = settings.git_status.windows_starship or null;
+          in
+          {
+            absoluteHelper = helper != null && lib.hasPrefix "${builtins.storeDir}/" helper;
+            bashLookup = lib.hasInfix "DOTFILES_WINDOWS_STARSHIP" home.config.programs.bash.initExtra;
+            zshLookup = lib.hasInfix "DOTFILES_WINDOWS_STARSHIP" home.config.programs.zsh.initContent;
+          }
+        )
+        [
+          (windowsHelperHome "x86_64-linux" true true)
+          (windowsHelperHome "x86_64-linux" true false)
+          (windowsHelperHome "x86_64-linux" false true)
+          (windowsHelperHome "aarch64-darwin" true true)
+        ];
+    expected =
+      map
+        (enabled: {
+          absoluteHelper = enabled;
+          bashLookup = enabled;
+          zshLookup = enabled;
+        })
+        [
+          true
+          false
+          false
+          false
+        ];
   };
 }

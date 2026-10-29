@@ -60,7 +60,7 @@ task install
 
 初回から `.\install.cmd` だけで実行できます。PowerShell が WinGet の master `windows/winget/packages.json` を先に適用し、Task も通常のパッケージとして導入します。
 
-通常は `task install` を実行します。宣言済みの GUI アプリを導入・更新した後、NixOS-WSL の導入、checkout の同期、flake inputs の更新と NixOS/Home Manager の反映、Windows chezmoi の適用を順に行います。更新と反映は WSL phase で一度だけ実行します。WezTerm と Windows Terminal も対象です。
+通常は `task install` を実行します。宣言済みの GUI アプリを導入・更新した後、NixOS-WSL の導入、checkout の同期、flake inputs の更新と NixOS/Home Manager の反映、Windows chezmoi の適用を順に行います。更新と反映は WSL phase で一度だけ実行します。Windows Terminal も対象です。
 既存の NixOS ディストリビューションと保存済み `stateVersion` は再利用します。WSL 基盤が未導入の場合だけ UAC で有効化し、再起動後の再実行を案内します。登録と設定適用は元のユーザーで行います。
 Windows の CLI パッケージ一括導入、Docker Desktop 連携、VHDX 拡張は実行しません。
 既存ソフトウェアのアンインストールや古い Startup ショートカットの削除も行いません。
@@ -309,14 +309,15 @@ wsl --shutdown
 
 ### Windows Terminal
 
-- 設定ソース: `chezmoi/terminals/windows-terminal/settings.json`
+- 設定ソース: `chezmoi/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/modify_settings.json`
+- PowerShell 7 を既定にし、WSL が自動生成する `NixOS` プロファイルを使用
+- 既存のプロファイルとキーバインドを保ちながら設定を適用
 - タブ・ペイン操作は Windows Terminal 標準のキー操作を使用（常駐キー変換は不要）
 
-### WezTerm
+### WezTerm（Unix）
 
-- 設定ソース: Windows は `chezmoi/terminals/wezterm/wezterm.lua`、Unix は `nix/modules/terminals/wezterm/default.nix` と `wezterm.lua`
+- 設定ソース: `nix/modules/terminals/wezterm/default.nix` と `wezterm.lua`
 - Leader key: `Ctrl+Space`
-- prefix に続けて `v` で左右分割、`-` で上下分割、`x` でペインを閉じる
 
 ## トラブルシューティング
 

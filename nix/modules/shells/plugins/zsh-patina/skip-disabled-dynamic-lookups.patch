@@ -1,0 +1,25 @@
+diff --git a/src/highlighting/highlighter.rs b/src/highlighting/highlighter.rs
+--- a/src/highlighting/highlighter.rs
++++ b/src/highlighting/highlighter.rs
+@@ -493,8 +493,8 @@ impl Highlighter {
+             {
+                 for g in dynamic_builder.build(&ops, byte_offset) {
+                     let dynamic_type = g.dynamic_type;
+-                    if let Ok(group_spans) = g.highlight(command, dynamic_highlighting_options)
+-                        && self.should_highlight_dynamic(&dynamic_type)
++                    if self.should_highlight_dynamic(&dynamic_type)
++                        && let Ok(group_spans) = g.highlight(command, dynamic_highlighting_options)
+                     {
+                         mixins.extend(group_spans);
+                     }
+@@ -511,8 +511,8 @@ impl Highlighter {
+         {
+             for g in dynamic_builder.finish(byte_offset) {
+                 let dynamic_type = g.dynamic_type;
+-                if let Ok(group_spans) = g.highlight(command, dynamic_highlighting_options)
+-                    && self.should_highlight_dynamic(&dynamic_type)
++                if self.should_highlight_dynamic(&dynamic_type)
++                    && let Ok(group_spans) = g.highlight(command, dynamic_highlighting_options)
+                 {
+                     mixins.extend(group_spans);
+                 }
