@@ -76,6 +76,9 @@ in
       file.".docker/cli-plugins/docker-mcp" = {
         target = "${dockerConfigDirectory}/cli-plugins/docker-mcp";
         source = lib.getExe packages.docker-mcp;
+        # Docker Desktop also ships this plugin and links it to the same path.
+        # Keep the pinned Nix plugin authoritative across activations.
+        force = true;
       };
       activation.prepareXurlDirectory =
         lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ]
