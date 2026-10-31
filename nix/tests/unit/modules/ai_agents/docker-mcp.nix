@@ -30,6 +30,11 @@ in
     }) homes;
   };
 
+  testDockerMcpForcesItsCliPluginLink = {
+    expr = map (home: home.config.home.file.".docker/cli-plugins/docker-mcp".force) homes;
+    expected = map (_: true) homes;
+  };
+
   testDockerMcpServersAreDeclarativeWithoutMutableProfiles = {
     expr = map (home: home.config.programs.mcp.servers.MCP_DOCKER.args) homes;
     expected = map (_: [
