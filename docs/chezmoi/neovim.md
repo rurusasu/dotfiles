@@ -105,6 +105,8 @@ WezTerm / Herdr の terminal prefix も `Ctrl+Space` です。Neovim に届か�
 
 Snacks は端末の画像対応を自動判定します。PDF は公式の [`picker.preview` と `picker.config`](https://github.com/folke/snacks.nvim/blob/main/docs/picker.md#️-config) で Poppler の変換処理を指定し、通常のファイル表示とソース別の専用プレビューを維持します。`VimEnter` での内部関数の差し替えは行いません。外部プロセスは `vim.system` で終了コード・10秒上限を確認します。ただし変換待ちは同期なので、大きな PDF の UI 停止を完全には解消していません。
 
+Snacks の terminal と Sidekick の CLI ペインは `wrap` を有効にして横方向の view 移動を禁止し、縦スクロールだけを許可します。`termopen()` と Sidekick の scrollback が使う `nvim_open_term()` は `wrap` を false に戻すため、terminal / buffer の開始後に再適用します。
+
 Windows のカスタム floating terminal、Oil のドライブ一覧互換処理は維持します。0.12 更新だけを理由に、実機での根拠なく既存 workaround を撤去しません。
 
 ## 検証

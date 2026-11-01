@@ -26,7 +26,28 @@ end
 
 require("snacks").setup({
     lazygit = { enabled = true },
-    terminal = { enabled = true },
+    terminal = {
+        enabled = true,
+        win = {
+            -- 端末は縦スクロールだけを許可し、左右の view 移動を禁止する。
+            wo = {
+                wrap = true,
+                sidescrolloff = 0,
+            },
+            -- termopen() は 'wrap' を false に戻すため、開始後に再適用する。
+            on_buf = function(terminal)
+                vim.api.nvim_create_autocmd("TermOpen", {
+                    buffer = terminal.buf,
+                    callback = function()
+                        for _, win in ipairs(vim.fn.win_findbuf(terminal.buf)) do
+                            vim.wo[win].wrap = true
+                            vim.wo[win].sidescrolloff = 0
+                        end
+                    end,
+                })
+            end,
+        },
+    },
     image = {
         enabled = true,
         force = false, -- Let Snacks detect whether the terminal supports images.

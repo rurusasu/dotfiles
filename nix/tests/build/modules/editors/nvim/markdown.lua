@@ -38,4 +38,40 @@ for name in pairs(require("config.lsp").servers) do
     vim.lsp.enable(name, false)
 end
 
+local sidekick_config = require("sidekick.config")
+assert(sidekick_config.cli.win.wo.wrap, "Sidekick CLI terminal must wrap long lines")
+
+-- termopen() resets 'wrap'; the Sidekick config must re-apply it after start.
+local sidekick_term = {
+    buf = vim.api.nvim_create_buf(false, true),
+    group = vim.api.nvim_create_augroup("TestSidekickWrap", { clear = true }),
+}
+sidekick_config.cli.win.config(sidekick_term)
+vim.cmd("vsplit")
+sidekick_term.win = vim.api.nvim_get_current_win()
+vim.api.nvim_win_set_buf(sidekick_term.win, sidekick_term.buf)
+vim.fn.jobstart({ "sh", "-c", "printf x" }, { term = true })
+assert(
+    vim.wait(1000, function()
+        return vim.wo[sidekick_term.win].wrap
+    end, 20),
+    "Sidekick terminal must re-apply 'wrap' after termopen"
+)
+
+-- The Sidekick scrollback uses nvim_open_term(), which also resets 'wrap'.
+local scrollback = vim.api.nvim_create_buf(false, true)
+vim.api.nvim_win_set_buf(sidekick_term.win, scrollback)
+local scrollback_chan = vim.api.nvim_open_term(scrollback, {})
+assert(
+    vim.wait(1000, function()
+        return vim.wo[sidekick_term.win].wrap
+    end, 20),
+    "Sidekick scrollback must keep 'wrap' after nvim_open_term"
+)
+pcall(vim.fn.chanclose, scrollback_chan)
+vim.api.nvim_win_set_buf(sidekick_term.win, sidekick_term.buf)
+vim.api.nvim_win_close(sidekick_term.win, true)
+vim.api.nvim_buf_delete(sidekick_term.buf, { force = true })
+vim.api.nvim_buf_delete(scrollback, { force = true })
+
 print("Markdown rendering and Marp keymap checks passed")
