@@ -34,6 +34,30 @@ require("sidekick").setup({
     cli = {
         win = {
             layout = "right",
+            -- AI CLI の出力も縦スクロールだけを許可し、左右の view 移動を禁止する。
+            wo = {
+                wrap = true,
+            },
+            -- termopen() / nvim_open_term() は 'wrap' を false に戻すため、開始後に再適用する。
+            config = function(terminal)
+                local function wrap()
+                    if terminal.win and vim.api.nvim_win_is_valid(terminal.win) then
+                        vim.wo[terminal.win].wrap = true
+                    end
+                end
+                vim.api.nvim_create_autocmd({ "TermOpen", "BufWinEnter", "BufEnter", "WinEnter" }, {
+                    group = terminal.group,
+                    callback = function(args)
+                        if
+                            terminal.win
+                            and vim.api.nvim_win_is_valid(terminal.win)
+                            and vim.api.nvim_win_get_buf(terminal.win) == args.buf
+                        then
+                            vim.schedule(wrap)
+                        end
+                    end,
+                })
+            end,
             keys = {
                 resize_grow = {
                     "<M-+>",

@@ -111,5 +111,23 @@ vim.api.nvim_buf_delete(buf, { force = true })
 for _, path in ipairs(outputs) do
     vim.fn.delete(path)
 end
+
+-- Terminal windows must keep vertical-only scrolling.
+local long_path = directory .. "/terminal.txt"
+vim.fn.writefile({ string.rep("x", 200) }, long_path)
+local terminal = snacks.terminal.open({ "cat", long_path }, {
+    interactive = false,
+    win = { position = "bottom" },
+})
+assert(terminal and terminal.win, "the snacks terminal must open a window")
+assert(vim.wo[terminal.win].wrap, "the snacks terminal must wrap instead of scrolling horizontally")
+assert(vim.wo[terminal.win].sidescrolloff == 0, "the snacks terminal must not reserve a horizontal scroll margin")
+local leftcol = vim.api.nvim_win_call(terminal.win, function()
+    vim.cmd("normal! zl")
+    return vim.fn.winsaveview().leftcol
+end)
+assert(leftcol == 0, "the snacks terminal must not allow horizontal view movement")
+terminal:close()
+
 vim.fn.delete(directory, "rf")
 print("Snacks preview callbacks: PDF conversion, text, multi-source dispatch and errors passed")
