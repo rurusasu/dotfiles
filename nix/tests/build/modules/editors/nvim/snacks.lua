@@ -1,9 +1,15 @@
 -- Exercise the configured picker callbacks with real Snacks and Poppler.
 vim.opt.rtp:prepend(vim.fn.getcwd() .. "/nix/modules/editors/nvim")
+vim.g.mapleader = " "
 local snacks = require("snacks")
 local preview = require("snacks.picker.preview")
 require("plugins.snacks")
 vim.api.nvim_exec_autocmds("VimEnter", {})
+
+-- Space is also the leader; using it as a terminal-mode mapping prefix delays shell input.
+for _, map in ipairs(vim.api.nvim_get_keymap("t")) do
+    assert(map.lhs:sub(1, 1) ~= " ", "terminal-mode mappings must not use Space as a prefix: " .. map.lhs)
+end
 
 local config = require("snacks.picker.config")
 local function resolve(opts)
@@ -120,6 +126,10 @@ local terminal = snacks.terminal.open({ "cat", long_path }, {
     win = { position = "bottom" },
 })
 assert(terminal and terminal.win, "the snacks terminal must open a window")
+-- Esc must reach the shell; <C-q> is the only terminal-mode escape.
+for _, map in ipairs(vim.api.nvim_buf_get_keymap(terminal.buf, "t")) do
+    assert(map.lhs ~= "<Esc>", "the snacks terminal must not capture Esc: " .. map.lhs)
+end
 assert(vim.wo[terminal.win].wrap, "the snacks terminal must wrap instead of scrolling horizontally")
 assert(vim.wo[terminal.win].sidescrolloff == 0, "the snacks terminal must not reserve a horizontal scroll margin")
 local leftcol = vim.api.nvim_win_call(terminal.win, function()

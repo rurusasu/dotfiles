@@ -126,6 +126,11 @@ map("t", "<C-j>", "<C-\\><C-n><C-w>j", { desc = "Go to lower window" })
 map("t", "<C-k>", "<C-\\><C-n><C-w>k", { desc = "Go to upper window" })
 map("t", "<C-l>", "<C-\\><C-n><C-w>l", { desc = "Go to right window" })
 
+-- Terminal mode: leave terminal input with Ctrl+Q in every terminal.
+-- Sidekick defines the same key buffer-locally; Snacks disables its
+-- default <Esc><Esc> so Esc always reaches the shell.
+map("t", "<C-q>", "<C-\\><C-n>", { desc = "Leave terminal mode" })
+
 -- Open terminal in a 15-line split at the bottom
 vim.api.nvim_create_user_command("Term", function()
     vim.cmd("botright 15split | terminal")

@@ -83,12 +83,6 @@
         type = "lua";
         config = ''require("plugins.indent_blankline")'';
       }
-      # 挿入・ターミナルモードで jk を押すと通常モードに戻る。
-      {
-        plugin = pkgs.vimPlugins.better-escape-nvim;
-        type = "lua";
-        config = ''require("plugins.better_escape")'';
-      }
       # Devcontainer の起動・接続・終了を Neovim から操作する。
       {
         plugin = pkgs.vimUtils.buildVimPlugin {

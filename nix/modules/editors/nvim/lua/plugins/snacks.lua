@@ -29,6 +29,11 @@ require("snacks").setup({
     terminal = {
         enabled = true,
         win = {
+            -- terminal mode からは <C-q> で抜ける。Snacks 既定の
+            -- <Esc><Esc> は無効化し、Esc を shell へ素通しする。
+            keys = {
+                term_normal = false,
+            },
             -- 端末は縦スクロールだけを許可し、左右の view 移動を禁止する。
             wo = {
                 wrap = true,
@@ -255,6 +260,9 @@ local keys = {
         desc = "Git log (file)",
     },
 
+    -- leader (Space) を terminal mode のマッピングに使うと、shell へ送る
+    -- space がプレフィックスの確定待ちになり、入力が遅延・欠落して見える。
+    -- terminal 内から切り替える場合は <C-q> で terminal mode を抜ける。
     {
         "<leader>tt",
         function()
@@ -262,7 +270,6 @@ local keys = {
                 win = { position = "bottom", height = 0.3 },
             })
         end,
-        mode = { "n", "t" },
         desc = "Toggle bottom terminal",
     },
 
@@ -272,7 +279,6 @@ local keys = {
             -- Keep the custom float's persisted geometry and resize handling.
             require("config.float_term").toggle()
         end,
-        mode = { "n", "t" },
         desc = "Toggle floating terminal",
     },
 }
