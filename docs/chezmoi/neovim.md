@@ -107,6 +107,8 @@ Snacks は端末の画像対応を自動判定します。PDF は公式の [`pic
 
 Snacks の terminal と Sidekick の CLI ペインは `wrap` を有効にして横方向の view 移動を禁止し、縦スクロールだけを許可します。`termopen()` と Sidekick の scrollback が使う `nvim_open_term()` は `wrap` を false に戻すため、terminal / buffer の開始後に再適用します。
 
+leader の Space は terminal mode のマッピングに使いません。`Space` で始まる terminal mode のマッピングがあると、shell へ送る space が `timeoutlen` まで確定待ちになり、入力が反映されていないように見えます。Snacks terminal の toggle は normal mode の `Space t t` / `Space t f` のみとし、terminal 内からは `<C-q>`（または `<C-\><C-n>`）で terminal mode を抜けてから切り替えます。`<C-q>` は `config/keymaps.lua` の terminal mode 全体のマッピングで、Snacks 既定の `<Esc><Esc>` は `term_normal = false` により無効化しています。Esc は常に shell / CLI へ渡ります。
+
 Windows のカスタム floating terminal、Oil のドライブ一覧互換処理は維持します。0.12 更新だけを理由に、実機での根拠なく既存 workaround を撤去しません。
 
 ## 検証
