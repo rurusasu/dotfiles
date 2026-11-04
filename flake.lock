@@ -597,11 +597,11 @@
       "locked": {
         "narHash": "sha256-22g4Frg1cWgS3pjR1vJxlC/YrJFSzkoLmoY3068ZvPg=",
         "type": "file",
-        "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.10/strata-feed.json"
+        "url": "https://github.com/Niko1221/Strata/releases/latest/download/strata-feed.json"
       },
       "original": {
         "type": "file",
-        "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.10/strata-feed.json"
+        "url": "https://github.com/Niko1221/Strata/releases/latest/download/strata-feed.json"
       }
     },
     "systems": {
