@@ -48,7 +48,7 @@
     # Strata is not in nixpkgs. Pin a versioned feed, without mutable API counters.
     strata-release = {
       type = "file";
-      url = "https://github.com/Niko1221/Strata/releases/download/v0.2.6/strata-feed.json";
+      url = "https://github.com/Niko1221/Strata/releases/download/v0.2.10/strata-feed.json";
       flake = false;
     };
     xurl = {

@@ -51,6 +51,21 @@ Ollama は共通 Home Manager の `services.ollama.enable` で標準 package と
 
 Strata は Linux x86_64 / WSLg と Apple Silicon macOS に `strata`（CLI）と `strata-desktop`（GUI）を導入します。[公式 release](https://github.com/Niko1221/Strata/releases) の版付き feed (`v0.2.6/strata-feed.json`) を input として固定し、Desktop と Control は同じ release の asset から取得します。新しい安定版へ更新するときは `flake.nix` の feed URL を変更し、`nix flake update strata-release` と package build を実行します。`nrs` / `./install.sh` は固定された版を導入します。Desktop の製品版と Control の内部 build 番号は異なります。CLI は配布物に同梱された Python を使い、ユーザーディレクトリの別版 Control への自動引き継ぎは無効にします。Linux GUI も固定された Control を使います。macOS の `.app` は公式署名を保持するため変更せず、GUI は upstream の規則に従い、同梱版とユーザーが更新した Control の新しい方を使います。`STRATA_CONTROL_DIR` の指定だけでは新しいユーザー版への切り替えを禁止できません。モデルと推論エンジンは初回設定時に選び、ユーザーのデータディレクトリに取得します。
 
+DeepSeek-V4.1-Flash（`ist-das-2.25bpw`、約 274GB）を 64GB の Apple Silicon Mac で使う場合は、初回設定でモデルと Metal engine を選び、context 8192・`--dspark none`・`--vision off`・Speed は Faster（`--experts 5`、Full は 6）で運用します。
+Speed はアプリが run config の `args` に書く値で、`strata profile set` では変更できません。
+生成された run config（`~/.strata/data/native-instances/*.json`）は API key・ランダムな UUID・engine と pack の絶対パスを含むため、dotfiles には置きません。
+再現に必要な値だけをここに残します。
+
+速度は VRAM に載る expert の量で決まります。
+エンジン停止から間を置かずに起動すると他プロセスのメモリが残り、share が 21.3GB まで下がって CPU lane が expert の約半分になり、1 t/s 前後まで落ちます。
+停止後は 3 分待つか OS を再起動してから起動してください。
+Full に戻すときはアプリの Speed を Full にします。
+
+| VRAM expert share | CPU lane | 生成速度（6.2K prompt・512 tok） |
+| ----------------- | -------- | -------------------------------- |
+| 26.8GB            | 2〜3%    | 5.9 t/s                          |
+| 21.3〜21.6GB      | 約50%    | 0.85〜1.0 t/s                    |
+
 Qwen3.8-Flash-Next を 64GB の Apple Silicon Mac で動かす場合は、[公式 Mac 手順](https://github.com/Niko1221/Strata/blob/main/docs/MAC.md) の推奨に従い Q2_0 と並列数 1 を選びます。次のコマンドは Metal エンジンとモデルを取得し、32K context の preset を保存して localhost:8080 で起動します。初回取得には画像対応と MTP を含め約 72.5GB の通信が必要です。以後は `strata launch --preset qwen-local --no-tui` で起動し、`strata launch --stop` で停止できます。
 
 ```bash
