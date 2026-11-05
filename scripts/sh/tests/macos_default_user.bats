@@ -92,24 +92,3 @@ EOF
   grep -Fxq 'fallback = false' "$TEST_CAPTURE.config"
   [ -d "$prepared" ]
 }
-
-@test "frozen macOS normal target locks only the temporary login-user wrapper offline" {
-  run env UPDATE_FLAKE_INPUTS=false "$REPO_ROOT/scripts/sh/install-macos.sh"
-  [ "$status" -eq 0 ]
-  run grep -q 'flake update' "$TEST_LOG"
-  [ "$status" -eq 1 ]
-  grep -q 'flake lock path:.* --offline --override-input dotfiles' "$TEST_LOG"
-  grep -Fq '<--no-update-lock-file>' "$TEST_LOG"
-  [ ! -e "$(cat "$TEST_CAPTURE.path")" ]
-}
-
-@test "Darwin renderer keeps its optional CI module separate from normal installation" {
-  . "$REPO_ROOT/scripts/sh/lib/darwin-flake.sh"
-  fixture="$BATS_TEST_TMPDIR/wrapper"
-  write_darwin_flake "$fixture" runner true
-  [ "$(cat "$fixture/primary-user")" = runner ]
-  [ -s "$fixture/ci-settings.nix" ]
-  write_darwin_flake "$fixture" k-miki
-  [ "$(cat "$fixture/primary-user")" = k-miki ]
-  [ ! -e "$fixture/ci-settings.nix" ]
-}

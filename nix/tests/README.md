@@ -145,7 +145,7 @@ CI の共通入口は `task ci:build TARGET=linux|darwin|windows` と
 
 | 対象          | Producer の成果物                                                                    | E2E の実行境界                                                                                                                                                |
 | ------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| NixOS / Linux | 本番構成、standalone Home Manager、VM driver を同じ store で構築                     | native NixOS VM 内で `install.sh` を実行し、実際の reboot 後に system path、CLI、service、health、既存 state の保持を確認                                     |
+| NixOS / Linux | 本番構成、standalone Home Manager、VM driver を同じ store で構築                     | native NixOS VM 内で `install.sh` を実行し、実際の reboot 後に system path、CLI、service、healthを確認                                                        |
 | macOS         | runner のユーザー名を固定した nix-darwin 構成と必要な依存                            | 別 runner で成果物を import し、`install.sh`、service の再起動、新しい login shell、system path と CLI / service の確認                                       |
 | Windows / WSL | 固定したソースと WinGet master の Windows plan、Linux producer が構築した WSL system | PowerShell 5.1 / 7 で本番の WinGet → WSL setup → chezmoi を通し、WSL の cold restart、新しい PowerShell profile session、CLI / package / 設定 / health を確認 |
 
@@ -155,7 +155,7 @@ native Linux が選択された場合は VM の runtime check も必須です。
 入力となる配布コードと WinGet master を保存します。WinGet / Store の catalog は外部入力であり、
 実際に解決・導入された版を E2E の inventory に記録します。
 macOS の Homebrew cask（Docker Desktop / Steam）も外部 catalog から取得するため、
-Nix の固定 closure とは区別し、導入済みの版と存在を E2E で確認します。
+Nix の固定 closure とは区別し、導入済みの版を E2E の inventory に記録します。
 Linux の VM adapter は、同じ guest の反映・reboot・検証を一つの driver 内で順に実行します。
 
 Nix artifact は source SHA、target、root store paths、closure metadata と payload の digest を持ちます。

@@ -241,7 +241,7 @@ consumer は対象 SHA・platform・digest を検証し、本番 installer の�
 Linux producer は通常の checks をすべて実行し、変更分類で選択された通常 NixOS /
 standalone Home Manager、WSL、NixOS VM driver を同じ store で構築します。
 native Linux が選択された場合は VM の runtime check も必須です。Linux の E2E は VM 内の本番 `install.sh` と reboot 後の CLI・service・
-health・state 保持を確認します。macOS の E2E も producer の構成を本番 `install.sh` で反映し、
+healthを確認します。macOS の E2E も producer の構成を本番 `install.sh` で反映し、
 service の再起動と新しい login shell で確認します。Windows は配布コードと WinGet master の
 plan を作り、PowerShell 5.1 / 7 それぞれで WinGet → WSL setup → chezmoi の本番経路を実行します。
 WSL は cold restart 後の system path・service・health、Windows は新しい profile session と

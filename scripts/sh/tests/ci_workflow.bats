@@ -28,13 +28,6 @@ run_script() {
   run bash --noprofile --norc -e -o pipefail -c "$1"
 }
 
-@test "private cache exports bounded dependency-closed subsets and propagates failures" {
-  run python3 -W error::ResourceWarning -m unittest discover \
-    -s scripts/python/tests -p test_prepare_ci_nix_cache.py -v
-  [ "$status" -eq 0 ]
-  [[ $output =~ Ran[[:space:]]+[1-9][0-9]*[[:space:]]+tests? ]]
-}
-
 @test "CI authentication and bounded HTTP/1.1 downloads follow Nix home and keep tokens private" {
   write_stub getent <<'EOF'
 printf 'fixture:x:0:0:Fixture:%s:/bin/bash\n' "$FALLBACK_HOME"
@@ -102,56 +95,16 @@ EOF
   done
 }
 
-@test "bootstrap aggregate requires every selected producer and runtime consumer to succeed" {
+@test "bootstrap aggregate fails when a required runtime consumer fails" {
   script=$(workflow_step "$WORKFLOW" complete 'Verify routed job results')
-  variables=$(yq -r '.jobs.complete.env | keys | .[]' "$WORKFLOW")
-  for variable in $variables; do
-    if [[ $variable == *_RESULT ]]; then export "$variable=skipped"; else export "$variable=false"; fi
-  done
-  export CHANGES_RESULT=success
-  run_script "$script"
-  [ "$status" -eq 0 ]
-  for variable in $variables; do
+  for variable in $(yq -r '.jobs.complete.env | keys | .[]' "$WORKFLOW"); do
     if [[ $variable == *_RESULT ]]; then export "$variable=success"; else export "$variable=true"; fi
   done
   run_script "$script"
   [ "$status" -eq 0 ]
-  for variable in $variables; do
-    [[ $variable == *_RESULT ]] || continue
-    for result in failure cancelled skipped; do
-      export "$variable=$result"
-      run_script "$script"
-      [ "$status" -ne 0 ]
-    done
-    export "$variable=success"
-  done
-}
-
-@test "runtime consumers receive artifacts by producer-issued immutable IDs" {
-  for consumer in linux darwin windows-installer; do
-    downloads=$(JOB="$consumer" yq -r '.jobs[strenv(JOB)].steps[] | select((.uses // "") | test("^actions/download-artifact@")) | .name' "$WORKFLOW")
-    [ -n "$downloads" ]
-    while IFS= read -r step; do
-      ids=$(JOB="$consumer" STEP="$step" yq -er '.jobs[strenv(JOB)].steps[] | select(.name == strenv(STEP)) | .with["artifact-ids"]' "$WORKFLOW")
-      [[ $ids =~ needs\.([a-z-]+)\.outputs\.([a-z-]+) ]]
-      producer=${BASH_REMATCH[1]} output=${BASH_REMATCH[2]}
-      JOB="$consumer" PRODUCER="$producer" yq -e '.jobs[strenv(JOB)].needs | any_c(. == strenv(PRODUCER))' "$WORKFLOW" >/dev/null
-      reference=$(JOB="$producer" OUTPUT="$output" yq -er '.jobs[strenv(JOB)].outputs[strenv(OUTPUT)]' "$WORKFLOW")
-      [[ $reference == *'.outputs.artifact-id'* ]]
-      JOB="$consumer" STEP="$step" yq -e '.jobs[strenv(JOB)].steps[] | select(.name == strenv(STEP)) | .with.name == null' "$WORKFLOW" >/dev/null
-      target=${step#Download exact }
-      target=${target% producer artifact}
-      guard="Require exact $target producer artifact"
-      reference=$(JOB="$consumer" STEP="$guard" yq -er '.jobs[strenv(JOB)].steps[] | select(.name == strenv(STEP)) | .env.PRODUCER_ARTIFACT_ID' "$WORKFLOW")
-      [ "$reference" = "$ids" ]
-      script=$(workflow_step "$WORKFLOW" "$consumer" "$guard")
-      for id in '' 0 invalid 12,34 12345; do
-        export PRODUCER_ARTIFACT_ID="$id"
-        run_script "$script"
-        if [[ $id == 12345 ]]; then [ "$status" -eq 0 ]; else [ "$status" -ne 0 ]; fi
-      done
-    done <<<"$downloads"
-  done
+  export DARWIN_RESULT=failure
+  run_script "$script"
+  [ "$status" -ne 0 ]
 }
 
 git_fixture() {

@@ -24,6 +24,10 @@
 - CLI の実行順序・依存関係・公開コマンドは `Taskfile.yml` と `taskfiles/` に実装する。
 - Bash/PowerShell は Taskfile から呼ばれる platform adapter、secret 処理、複雑な検証に限定し、CLI の処理順序を重複定義しない。
 
+## テストの最小化
+
+コードの作成・変更時とレビュー時には、必ず [minimal-tests](nix/modules/ai_agents/chatgpt/skills/minimal-tests/SKILL.md) を読み、その基準を適用する。
+
 ## テスト責務
 
 - Nix expression、Home Manager option、flake output、Nix package 選択の値テストは `nix/tests/unit/` に nix-unit 形式で記載する。ビルド・実行テストの derivation は `nix/tests/build/`、共有入力は `nix/tests/fixtures/` に置く。

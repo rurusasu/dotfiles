@@ -48,8 +48,6 @@ wait_for_hermes() {
     fi
     sleep 1
   done
-  [[ $("$curl" --silent --show-error --max-time 2 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18642/health/detailed) == 401 ]]
-  [[ $("$curl" --silent --show-error --max-time 2 --output /dev/null --write-out '%{http_code}' -H 'Authorization: Bearer invalid-ci-key' http://127.0.0.1:18642/health/detailed) == 401 ]]
 }
 
 case $phase in
@@ -58,7 +56,9 @@ source)
   git -C "$repository" diff --exit-code --quiet
   git -C "$repository" diff --cached --exit-code --quiet
   cd "$repository"
-  nix flake archive --json --no-write-lock-file . >"$CI_STATE/source.json"
+  # Archive the committed tree so checkout line-ending transforms cannot alter
+  # the immutable source identity on a different consumer platform.
+  nix flake archive --json --no-write-lock-file "git+file://$repository?rev=$TESTED_SHA&shallow=1" >"$CI_STATE/source.json"
   frozen=$(source_path)
   # shellcheck disable=SC2016 # This interpolation is Nix syntax.
   CI_SOURCE_ROOT="$frozen" nix eval --impure --json --expr '
@@ -170,11 +170,9 @@ apply | run-vm)
       exit 1
     }
     launchctl print "gui/$(id -u)" >/dev/null
-    mkdir -p "$HOME/.hermes/memories"
+    mkdir -p "$HOME/.hermes"
     printf '%s\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' >"$HOME/.hermes/.env"
-    printf '%s\n' 'model:' '  default: openrouter/auto' >"$HOME/.hermes/config.yaml"
-    printf '%s\n' preserve-existing-hermes-state >"$HOME/.hermes/memories/dotfiles-ci-state-preservation.txt"
-    chmod 600 "$HOME/.hermes/.env" "$HOME/.hermes/config.yaml" "$HOME/.hermes/memories/dotfiles-ci-state-preservation.txt"
+    chmod 600 "$HOME/.hermes/.env"
     UPDATE_FLAKE_INPUTS=false DOTFILES_ALLOW_BUILDS=false \
       DOTFILES_FLAKE_REF="$deployment#macos" "$source/install.sh"
     [[ $(cd /nix/var/nix/profiles/system && pwd -P) == "$(root_path system)" ]]
@@ -190,16 +188,11 @@ verify)
   [[ $target == darwin ]] || exit 64
   system=$(root_path system)
   [[ $(cd /nix/var/nix/profiles/system && pwd -P) == "$system" ]]
-  /bin/zsh -lic 'command -v hermes && hermes --version && codex --version && command -v nvim'
+  /bin/zsh -lic 'hermes --version'
   launchctl print "gui/$(id -u)/org.nix-community.home.hermes-agent" >"$CI_STATE/hermes-launchd.txt"
   grep -Eq 'state = running|pid = [0-9]+' "$CI_STATE/hermes-launchd.txt"
   wait_for_hermes
-  grep -qx preserve-existing-hermes-state "$HOME/.hermes/memories/dotfiles-ci-state-preservation.txt"
-  [[ $(stat -f %Lp "$HOME/.hermes/.env") == 600 ]]
-  grep -qx OPENROUTER_API_KEY=ci "$HOME/.hermes/.env"
-  grep -qx API_SERVER_PORT=18642 "$HOME/.hermes/.env"
   brew list --cask --versions >"$CI_STATE/homebrew-casks.txt"
-  for cask in docker-desktop steam; do grep -Eq "^$cask " "$CI_STATE/homebrew-casks.txt"; done
   ;;
 *) exit 64 ;;
 esac

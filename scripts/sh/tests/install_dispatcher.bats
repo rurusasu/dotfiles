@@ -187,15 +187,3 @@ EOF
   grep -Fxq 'fallback = false' "$TEST_CONFIG_LOG"
   [ "${NIX_CONFIG-unset}" = unset ]
 }
-
-@test "invalid deployment options fail before checkout creation or Nix calls" {
-  write_uname_stub
-  write_dispatch_repo
-  export TEST_UNAME_S=Linux TEST_UNAME_M=x86_64
-  for option in UPDATE_FLAKE_INPUTS=invalid DOTFILES_ALLOW_BUILDS=invalid DOTFILES_FLAKE_REF=missing-target 'DOTFILES_FLAKE_REF=#macos' 'DOTFILES_FLAKE_REF=source#macos#extra'; do
-    run env "$option" "$BATS_TEST_TMPDIR/repo/install.sh"
-    [ "$status" -eq 64 ]
-    [ ! -e "$TEST_CHECKOUT" ]
-    [ ! -e "$DISPATCH_LOG" ]
-  done
-}

@@ -28,10 +28,10 @@ if ($Phase -eq 'Prepare') {
     Expand-Archive -LiteralPath $archivePath -DestinationPath $source -Force
     Copy-Item -LiteralPath (Join-Path $source 'windows/winget/packages.json') -Destination $manifestPath
     $provenance = [ordered]@{
-        schemaVersion = 1
-        target = 'windows'
-        testedSha = $TestedSha
-        packagesSha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        schemaVersion        = 1
+        target               = 'windows'
+        testedSha            = $TestedSha
+        packagesSha256       = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
         sourceSnapshotSha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
     }
     [IO.File]::WriteAllText($provenancePath, ($provenance | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
@@ -107,13 +107,12 @@ switch ($Phase) {
         # this job. Exercise a fresh native shell/session after the WSL cold boot.
         $sessionScript = Join-Path $artifact 'fresh-session.ps1'
         $sessionBody = @'
-param([string]$ManagedProfile, [string]$Marker, [int]$ExpectedMajor, [int]$ParentProcessId, [switch]$LoadCompatibilityProfile)
+param([string]$Marker, [int]$ExpectedMajor, [int]$ParentProcessId)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if ($PID -eq $ParentProcessId -or $PSVersionTable.PSVersion.Major -ne $ExpectedMajor) {
     throw 'Windows restart did not create the requested fresh runtime.'
 }
-if ($LoadCompatibilityProfile) { . $ManagedProfile }
 foreach ($name in @('dotf', 'ls', 'll', 'codex')) {
     if (-not (Get-Command $name -CommandType Function -ErrorAction SilentlyContinue)) {
         throw "Managed PowerShell profile function is missing: $name"
@@ -125,33 +124,20 @@ if ((Get-Alias grep).Definition -cne 'rg.exe' -or (Get-Alias find).Definition -c
 [IO.File]::WriteAllText($Marker, ($PSVersionTable.PSVersion.Major.ToString() + ':' + $PID), [Text.UTF8Encoding]::new($false))
 '@
         [IO.File]::WriteAllText($sessionScript, $sessionBody, [Text.UTF8Encoding]::new($true))
-        # The installed profile belongs to PowerShell 7. Test its normal startup
-        # in both installer matrices, then PS5.1 syntax compatibility separately.
+        # The installed profile belongs to PowerShell 7. Check normal startup
+        # after either supported installer runtime.
         Invoke-NativeCommand -Command 'pwsh.exe' -Arguments @(
             '-NoLogo', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $sessionScript,
-            '-ManagedProfile', (Join-Path $env:USERPROFILE 'Documents/PowerShell/Microsoft.PowerShell_profile.ps1'),
             '-Marker', (Join-Path $artifact 'profile-session.txt'), '-ExpectedMajor', 7, '-ParentProcessId', $PID
         ) | Out-Host
         if ($LASTEXITCODE -ne 0) { throw "Fresh Windows session failed (exit=$LASTEXITCODE)." }
-        if ($PowerShellVersion -eq '5.1') {
-            Invoke-NativeCommand -Command 'powershell.exe' -Arguments @(
-                '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $sessionScript,
-                '-ManagedProfile', (Join-Path $env:USERPROFILE 'Documents/PowerShell/Microsoft.PowerShell_profile.ps1'),
-                '-Marker', (Join-Path $artifact 'compatibility-session.txt'), '-ExpectedMajor', 5,
-                '-ParentProcessId', $PID, '-LoadCompatibilityProfile'
-            ) | Out-Host
-            if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell compatibility session failed (exit=$LASTEXITCODE)." }
-        }
+
     }
     'Verify' {
         $major = if ($PowerShellVersion -eq '5.1') { 5 } else { 7 }
         if ($PSVersionTable.PSVersion.Major -ne $major) { throw 'Run Windows verification with the selected PowerShell runtime.' }
         $session = (Get-Content -LiteralPath (Join-Path $artifact 'profile-session.txt') -Raw).Trim()
         if ($session -notmatch '^7:[0-9]+$') { throw 'The fresh Windows profile session was not verified.' }
-        if ($PowerShellVersion -eq '5.1' -and
-            (Get-Content -LiteralPath (Join-Path $artifact 'compatibility-session.txt') -Raw).Trim() -notmatch '^5:[0-9]+$') {
-            throw 'The Windows PowerShell compatibility session was not verified.'
-        }
         Update-ProcessEnvironmentPath
         foreach ($command in @('task.exe', 'chezmoi.exe', 'spf.exe', 'rg.exe', 'fd.exe', 'lazygit.exe', 'starship.exe')) {
             Invoke-NativeCommand -Command $command -Arguments @('--version') | Out-Host

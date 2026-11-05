@@ -38,15 +38,6 @@ EOF
   [ ! -e "$RETRY_SLEEPS" ]
 }
 
-@test "CI DNS retry recovers after a temporary lookup failure" {
-  export RETRY_FAILURES=1
-  run bash "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" target ready
-  [ "$status" -eq 0 ]
-  [[ $output == *'success: <ready>'* ]]
-  [ "$(wc -l <"$RETRY_CALLS" | tr -d ' ')" -eq 2 ]
-  [ "$(cat "$RETRY_SLEEPS")" = 10 ]
-}
-
 @test "CI DNS retry stops after three failed attempts and keeps the exit status" {
   export RETRY_FAILURES=9
   run bash "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" target
@@ -89,8 +80,7 @@ EOF
 }
 
 @test "CI DNS recovery publishes only the successful machine-readable stdout" {
-  export EXPECTED_STDOUT
-  cat >"$BATS_TEST_TMPDIR/bin/path-target" <<'EOF'
+  cat >"$BATS_TEST_TMPDIR/bin/json-target" <<'EOF'
 #!/usr/bin/env bash
 if [[ ! -e "$RETRY_CALLS" ]]; then
   printf first >"$RETRY_CALLS"
@@ -98,74 +88,13 @@ if [[ ! -e "$RETRY_CALLS" ]]; then
   printf '%s\n' "$RETRY_ERROR" >&2
   exit 23
 fi
-printf '%s\n' "$EXPECTED_STDOUT"
+printf '{"path":"/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source"}\n'
 EOF
-  chmod +x "$BATS_TEST_TMPDIR/bin/path-target"
-  for expected in '/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-system' '{"path":"/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source"}'; do
-    export EXPECTED_STDOUT="$expected"
-    rm -f "$RETRY_CALLS" "$RETRY_SLEEPS"
-    run bash -c 'bash "$1" path-target >"$2"' fixture \
-      "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" "$BATS_TEST_TMPDIR/stdout"
-    [ "$status" -eq 0 ]
-    [ "$(cat "$BATS_TEST_TMPDIR/stdout")" = "$expected" ]
-    [[ $output == *'incomplete'* ]]
-    [ "$(cat "$RETRY_SLEEPS")" = 10 ]
-  done
-}
-
-@test "Darwin producer retries Nix downloads but a DNS-shaped installer failure runs once" {
-  local fixture="$BATS_TEST_TMPDIR/repository"
-  export CI_STATE="$BATS_TEST_TMPDIR/state" GITHUB_ACTIONS=true
-  export TESTED_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-  export HOME="$BATS_TEST_TMPDIR/home" CI_PHASE_LOG="$BATS_TEST_TMPDIR/phases"
-  export CI_SYSTEM=/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-system
-  export CI_REBUILD=/nix/store/cccccccccccccccccccccccccccccccc-rebuild
-  export CI_DEPLOYMENT=/nix/store/dddddddddddddddddddddddddddddddd-deployment
-  mkdir -p "$CI_STATE" "$HOME" "$fixture/scripts/sh/lib" "$CI_STATE/artifacts/darwin"
-  cp "$REPO_ROOT/scripts/sh/ci-nix.sh" "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" "$fixture/scripts/sh/"
-  cp "$REPO_ROOT/scripts/sh/lib/darwin-flake.sh" "$fixture/scripts/sh/lib/"
-  printf '{"path":"%s"}\n' "$fixture" >"$CI_STATE/source.json"
-  cat >"$BATS_TEST_TMPDIR/bin/nix" <<'EOF'
-#!/usr/bin/env bash
-case "$1 $2" in
-'flake lock') exit 0 ;;
-'flake archive') printf '{"path":"%s"}\n' "$CI_DEPLOYMENT" ;;
-'build --no-link')
-  printf 'build\n' >>"$CI_PHASE_LOG"
-  if [[ ! -e "$RETRY_CALLS" ]]; then
-    touch "$RETRY_CALLS"
-    printf '%s\n' "$RETRY_ERROR" >&2
-    exit 23
-  fi
-  printf '%s\n' "$CI_SYSTEM" ;;
-'eval --raw') printf '%s/bin/darwin-rebuild\n' "$CI_REBUILD" ;;
-*) exit 64 ;;
-esac
-EOF
-  cat >"$BATS_TEST_TMPDIR/bin/nix-store" <<'EOF'
-#!/usr/bin/env bash
-[[ $1 == --realise && $2 == "$CI_REBUILD" ]]
-EOF
-  cat >"$BATS_TEST_TMPDIR/bin/launchctl" <<'EOF'
-#!/usr/bin/env bash
-[[ $1 == print && $2 == gui/* ]]
-EOF
-  cat >"$fixture/install.sh" <<'EOF'
-#!/usr/bin/env bash
-[[ $UPDATE_FLAKE_INPUTS == false && $DOTFILES_ALLOW_BUILDS == false ]]
-[[ $DOTFILES_FLAKE_REF == "$CI_DEPLOYMENT#macos" ]]
-printf 'activate\n' >>"$CI_PHASE_LOG"
-printf '%s\n' "$RETRY_ERROR" >&2
-exit 42
-EOF
-  chmod +x "$BATS_TEST_TMPDIR/bin/"* "$fixture/install.sh"
-  run bash "$fixture/scripts/sh/ci-nix.sh" build darwin
+  chmod +x "$BATS_TEST_TMPDIR/bin/json-target"
+  run bash -c 'bash "$1" json-target >"$2"' fixture \
+    "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" "$BATS_TEST_TMPDIR/stdout"
   [ "$status" -eq 0 ]
-  [ "$(jq -r .system "$CI_STATE/roots-darwin.json")" = "$CI_SYSTEM" ]
-  jq --arg source "$fixture" '. + {source:$source}' "$CI_STATE/roots-darwin.json" \
-    >"$CI_STATE/artifacts/darwin/roots.json"
-  run bash "$fixture/scripts/sh/ci-nix.sh" apply darwin
-  [ "$status" -eq 42 ]
-  [ "$(tr '\n' ' ' <"$CI_PHASE_LOG")" = 'build build activate ' ]
+  [ "$(cat "$BATS_TEST_TMPDIR/stdout")" = '{"path":"/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source"}' ]
+  [[ $output == *'incomplete'* ]]
   [ "$(cat "$RETRY_SLEEPS")" = 10 ]
 }

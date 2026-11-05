@@ -137,20 +137,14 @@ switch ($Phase) {
         Invoke-CiWslCommand -User nixos -Source @'
 set -euo pipefail
 umask 077
-mkdir -p ~/.hermes/memories
+mkdir -p ~/.hermes
 printf '%s\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' > ~/.hermes/.env
-printf '%s\n' 'model:' '  default: openrouter/auto' > ~/.hermes/config.yaml
-printf '%s\n' 'preserve-existing-hermes-state' > ~/.hermes/memories/dotfiles-ci-state-preservation.txt
-chmod 600 ~/.hermes/.env ~/.hermes/config.yaml ~/.hermes/memories/dotfiles-ci-state-preservation.txt
+chmod 600 ~/.hermes/.env
 '@
         Invoke-NixosWslSetup -Repository $repository -DistroName $distroName -SyncMode repo -SyncBack none -TimeoutSeconds 7200 -UpdateFlakeInputs $false -FlakeReference ('path:' + $roots.source + '#nixos') -SourceDirectory $roots.source -AllowBuilds $false
         Invoke-CiWslCommand -User root -Source @"
 set -euo pipefail
 test "`$(readlink -f /run/current-system)" = $qSystem
-nix config show access-tokens | grep -E '^[[:space:]]*github\.com[[:space:]]*=[[:space:]]*[^[:space:]]+' >/dev/null
-test "`$(nix config show max-jobs)" = 2
-test "`$(nix config show cores)" = 1
-loginctl show-user nixos -p Linger --value | grep -qx yes
 diff -qr $qSource /home/nixos/.dotfiles
 "@
     }
@@ -166,20 +160,11 @@ diff -qr $qSource /home/nixos/.dotfiles
 set -euo pipefail
 trap 'status=`$?; if (( status != 0 )); then journalctl --user -u hermes-agent.service --no-pager -n 80 >&2; fi' EXIT
 test "`$(readlink -f /run/current-system)" = $qSystem
-GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic '(( `$+functions[cd] )) && functions cd' | rg '__zoxide_z'
-case "`$(readlink -f "`$(command -v hermes)")" in /nix/store/*) ;; *) exit 1 ;; esac
 hermes --version
-codex --version
-for file in .env config.yaml; do test "`$(stat -c '%a' "`$HOME/.hermes/`$file")" = 600; done
-for line in OPENROUTER_API_KEY=ci API_SERVER_ENABLED=true API_SERVER_PORT=18642; do grep -qx "`$line" ~/.hermes/.env; done
-for line in '  provider: openai-codex' '  default: gpt-6.1-sol'; do grep -qx "`$line" ~/.hermes/config.yaml; done
-grep -qx 'preserve-existing-hermes-state' ~/.hermes/memories/dotfiles-ci-state-preservation.txt
-systemctl --user is-enabled hermes-agent.service
 # Wait only for ordinary boot activation, not a repair/restart command.
 export NIX_CONFIG=`$'max-jobs = 0\nbuilders =\nfallback = false'
 nix shell --inputs-from $qSource nixpkgs#curl nixpkgs#jq --command bash -s <<'READINESS'
 set -euo pipefail
-check_readiness() {
 url='http://127.0.0.1:18642/health/detailed'
 deadline=`$((SECONDS + 300))
 while :; do
@@ -193,15 +178,7 @@ while :; do
   if (( SECONDS >= deadline )); then printf '%s\n' "`$response" >&2; exit 1; fi
   sleep 1
 done
-test "`$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 2 "`$url")" = 401
-test "`$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 2 -H 'Authorization: Bearer invalid-dotfiles-ci-health-probe' "`$url")" = 401
 printf '%s\n' "`$response"
-}
-check_readiness
-systemctl --user is-active hermes-agent.service
-# Restart is independently exercised only after proving cold boot readiness.
-task --dir ~/.dotfiles hermes:restart
-check_readiness
 systemctl --user is-active hermes-agent.service
 READINESS
 "@

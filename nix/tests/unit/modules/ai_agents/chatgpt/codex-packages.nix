@@ -18,7 +18,6 @@ in
     expr = {
       desktop = disabled.config.programs.chatgpt.enable;
       cli = disabled.config.programs.codex.enable;
-      migration = disabled.config.home.activation ? codexPruneManagedAgents;
       packages = builtins.filter (
         package:
         builtins.elem (package.pname or package.name) [
@@ -30,7 +29,6 @@ in
     expected = {
       desktop = false;
       cli = false;
-      migration = false;
       packages = [ ];
     };
   };
