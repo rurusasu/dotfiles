@@ -17,6 +17,7 @@ Windows の導入情報は `windows/winget/packages.json` を直接管理しま�
 明示的な CLI 例外として、Windows PowerShell 用の Superfile (`spf`) も WinGet で導入します。
 WSL の Superfile は Home Manager が導入・設定を管理します。
 OpenCode (`opencode`) と TUIOS (`tuios`) は `nix/defaults.nix` の Home Manager package 宣言から WSL / Darwin に導入します。Pi coding agent (`pi`) は同じ platform で `programs.pi-coding-agent.enable = true` を指定し、自動検出される Pi module が設定を管理します。
+nixpkgs の opencode 2.2.5 は bun 1.4.4 の libc filter で fixed-output hash が Linux と Darwin で変わるため、`nix/defaults.nix` で `--libc="*"` と単一 hash に補正しています。上流の修正が入ったら override を削除します（[NixOS/nixpkgs#582673](https://github.com/NixOS/nixpkgs/issues/582673)）。
 
 フォントパッケージと fontconfig 設定の値は `nix/modules/fonts/settings.nix` の通常の関数に一度だけ定義します。`fonts/default.nix`、`fonts/nixos/default.nix`、`fonts/darwin/default.nix` を対応する scope で自動検出し、`nix/defaults.nix:systemDefaults` の `dotfiles.fonts.enable` で有効化します。NixOS / nix-darwin 統合時は各 OS がフォントを導入し、standalone Home Manager の配布と共通 fontconfig・Linux GTK 設定は Home Manager module が管理します。WSLg への配布と dconf service の登録は `defaults.nix` の WSL 設定が担当します。
 
@@ -49,7 +50,22 @@ Home Manager が本体と Docker CLI の plugin link、利用サーバーの起�
 
 Ollama は共通 Home Manager の `services.ollama.enable` で標準 package とユーザーサービスを導入します。API は既定の `127.0.0.1:11434` で待ち受けます。モデルの自動取得や GPU backend の変更は行いません。`ollama pull <model>` で使用するモデルを選択します。
 
-Strata は Linux x86_64 / WSLg と Apple Silicon macOS に `strata`（CLI）と `strata-desktop`（GUI）を導入します。[公式 release](https://github.com/Niko1221/Strata/releases) の版付き feed (`v0.2.6/strata-feed.json`) を input として固定し、Desktop と Control は同じ release の asset から取得します。新しい安定版へ更新するときは `flake.nix` の feed URL を変更し、`nix flake update strata-release` と package build を実行します。`nrs` / `./install.sh` は固定された版を導入します。Desktop の製品版と Control の内部 build 番号は異なります。CLI は配布物に同梱された Python を使い、ユーザーディレクトリの別版 Control への自動引き継ぎは無効にします。Linux GUI も固定された Control を使います。macOS の `.app` は公式署名を保持するため変更せず、GUI は upstream の規則に従い、同梱版とユーザーが更新した Control の新しい方を使います。`STRATA_CONTROL_DIR` の指定だけでは新しいユーザー版への切り替えを禁止できません。モデルと推論エンジンは初回設定時に選び、ユーザーのデータディレクトリに取得します。
+Strata は Linux x86_64 / WSLg と Apple Silicon macOS に `strata`（CLI）と `strata-desktop`（GUI）を導入します。[公式 release](https://github.com/Niko1221/Strata/releases) の latest feed (`releases/latest/download/strata-feed.json`) を input として使い、Desktop と Control は feed が示す同じ release の asset から取得します。`nix flake update strata-release` または `nrs` / `./install.sh` の input 更新で最新の安定版に追従します。lock は feed の内容と asset の SHA-256 を固定するため、コミット単位では再現できます。`nrs` / `./install.sh` は input 更新後の版を導入します。Desktop の製品版と Control の内部 build 番号は異なります。CLI は配布物に同梱された Python を使い、ユーザーディレクトリの別版 Control への自動引き継ぎは無効にします。Linux GUI も固定された Control を使います。macOS の `.app` は公式署名を保持するため変更せず、GUI は upstream の規則に従い、同梱版とユーザーが更新した Control の新しい方を使います。`STRATA_CONTROL_DIR` の指定だけでは新しいユーザー版への切り替えを禁止できません。モデルと推論エンジンは初回設定時に選び、ユーザーのデータディレクトリに取得します。
+
+DeepSeek-V4.1-Flash（`ist-das-2.25bpw`、約 274GB）を 64GB の Apple Silicon Mac で使う場合は、初回設定でモデルと Metal engine を選び、context 8192・`--dspark none`・`--vision off`・Speed は Faster（`--experts 5`、Full は 6）で運用します。
+Speed はアプリが run config の `args` に書く値で、`strata profile set` では変更できません。
+生成された run config（`~/.strata/data/native-instances/*.json`）は API key・ランダムな UUID・engine と pack の絶対パスを含むため、dotfiles には置きません。
+再現に必要な値だけをここに残します。
+
+速度は VRAM に載る expert の量で決まります。
+エンジン停止から間を置かずに起動すると他プロセスのメモリが残り、share が 21.3GB まで下がって CPU lane が expert の約半分になり、1 t/s 前後まで落ちます。
+停止後は 3 分待つか OS を再起動してから起動してください。
+Full に戻すときはアプリの Speed を Full にします。
+
+| VRAM expert share | CPU lane | 生成速度（6.2K prompt・512 tok） |
+| ----------------- | -------- | -------------------------------- |
+| 26.8GB            | 2〜3%    | 5.9 t/s                          |
+| 21.3〜21.6GB      | 約50%    | 0.85〜1.0 t/s                    |
 
 Qwen3.8-Flash-Next を 64GB の Apple Silicon Mac で動かす場合は、[公式 Mac 手順](https://github.com/Niko1221/Strata/blob/main/docs/MAC.md) の推奨に従い Q2_0 と並列数 1 を選びます。次のコマンドは Metal エンジンとモデルを取得し、32K context の preset を保存して localhost:8080 で起動します。初回取得には画像対応と MTP を含め約 72.5GB の通信が必要です。以後は `strata launch --preset qwen-local --no-tui` で起動し、`strata launch --stop` で停止できます。
 
