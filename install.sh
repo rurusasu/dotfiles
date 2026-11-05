@@ -64,9 +64,7 @@ if [[ $installer == home-manager ]]; then
   aarch64 | arm64) system=aarch64-linux ;;
   esac
   if [[ $UPDATE_FLAKE_INPUTS == true ]]; then
-    nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
-      flake update --flake "$ROOT"
-    bash "$ROOT/scripts/sh/normalize-strata-release-lock.sh" "$ROOT"
+    bash "$ROOT/scripts/sh/update-flake-inputs.sh" "$ROOT"
   fi
   exec nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
     run ${install_flake_options[@]+"${install_flake_options[@]}"} "$ROOT#home-manager" -- switch \

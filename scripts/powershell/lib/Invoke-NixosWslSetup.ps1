@@ -191,12 +191,10 @@ function Invoke-NixosWslSetup {
     }
     $target = if ($syncMode -eq 'link') { $source } else { $repo }
     $qTarget = ConvertTo-WslArgument $target
-    $qFlakeTarget = ConvertTo-WslArgument ('path:' + $target)
     Invoke-SetupCommand "test -f $qTarget/flake.nix; test -f $qTarget/flake.lock" | Out-Host
 
     if ($updateFlakeInputs) {
-        Invoke-SetupCommand "nix --accept-flake-config --extra-experimental-features 'nix-command flakes' flake update --flake $qFlakeTarget" | Out-Host
-        Invoke-SetupCommand "bash $qSource/scripts/sh/normalize-strata-release-lock.sh $qTarget" | Out-Host
+        Invoke-SetupCommand "bash $qSource/scripts/sh/update-flake-inputs.sh $qTarget path" | Out-Host
     }
     $lockOption = if ($updateFlakeInputs) { '' } else { ' --no-update-lock-file' }
     $deploymentFlake = if ($FlakeReference) { $FlakeReference } else { 'path:' + $target + '#nixos' }

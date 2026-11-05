@@ -39,7 +39,7 @@ WSL も `switch` 前に inputs を更新します。更新に失敗した場合�
 
 ```bash
 # flake inputs だけを更新するとき
-nix flake update
+task update
 ```
 
 Codex CLI の個別インストールは行わず、ChatGPT アプリ付属の CLI を使います。
@@ -120,7 +120,7 @@ service に HTTP で接続します。各 service が1つの stdio process を�
 `http://127.0.0.1:8765/mcp` / `http://127.0.0.1:8766/mcp` を使います。ブラウザは
 headless のため display や WSLg は不要です。Chrome DevTools MCP は `mcp-servers` input の
 既製 Nix package、xurl は `xurl` input に固定した upstream source を使い、
-通常の `nix flake update` で更新します。
+通常の `task update` で更新します。
 既存の `~/.hermes/.browser` と `~/.hermes/.xurl` は保持します。native xurl の
 `~/.xurl` は Home Manager が XDG 経由で既存 cache へリンクし、既存実体との衝突では
 反映を停止します。MCP service は Linux の systemd user service / macOS の launchd が

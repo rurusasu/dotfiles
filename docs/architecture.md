@@ -74,7 +74,7 @@ Windows の通常セットアップは `install.cmd` から GUI/Winget と WSL/N
 `./install.sh` は必要に応じて Nix を導入し、毎回 flake input を更新してから
 OS の rebuild または Home Manager の switch を実行します。進捗とエラーは
 各コマンドの出力をそのまま表示し、更新や反映に失敗した場合は終了します。
-flake inputs だけを更新する場合は `nix flake update` を使います。
+flake inputs だけを更新する場合は `task update` を使います。共通の updater が Dia の最新版を取得前に版付き URL へ解決し、Strata の feed も版付き URL で lock に保存します。通常更新は latest を追い、検証済みの lock は次回 release 後も再現できます。
 
 ## 役割分担
 

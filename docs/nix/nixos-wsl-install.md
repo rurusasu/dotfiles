@@ -110,7 +110,7 @@ NixOS の stateVersion は共通 entrypoint が設定し、追加引数の指定
 公式 nixos.wsl を手動導入
   -> Invoke-NixosWslSetup -Repository <Windows checkout> -DistroName NixOS
   -> checkout 同期（公式既定ユーザー nixos）
-  -> nix flake update --flake path:<checkout>
+  -> bash <checkout>/scripts/sh/update-flake-inputs.sh <checkout> path
   -> nixos-rebuild switch --flake path:<checkout>#nixos --impure
 ```
 

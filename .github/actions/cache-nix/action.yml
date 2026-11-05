@@ -68,7 +68,7 @@ runs:
           ${{ steps.prepare.outputs.prefix }}
 
     - name: Export private build outputs
-      if: ${{ !cancelled() && inputs.phase == 'save' && (github.event_name == 'pull_request' || (github.ref == 'refs/heads/main' && job.status == 'success')) }}
+      if: ${{ !cancelled() && inputs.phase == 'save' && steps.prepare.outcome == 'success' && (github.event_name == 'pull_request' || (github.ref == 'refs/heads/main' && job.status == 'success')) }}
       id: export
       shell: bash
       env:
@@ -78,6 +78,7 @@ runs:
           "$RUNNER_TEMP/nix-private-cache" --max-size "$MAX_CACHE_SIZE"
 
     - name: Replace the restored cache with current outputs
+      id: replace
       if: ${{ !cancelled() && inputs.phase == 'save' && steps.export.outputs.cacheable == 'true' }}
       shell: bash
       run: |
@@ -85,7 +86,7 @@ runs:
         mv "$RUNNER_TEMP/nix-private-cache" "$DOTFILES_CI_BINARY_CACHE"
 
     - name: Save binary cache
-      if: ${{ !cancelled() && inputs.phase == 'save' && steps.export.outputs.cacheable == 'true' }}
+      if: ${{ !cancelled() && inputs.phase == 'save' && steps.replace.outcome == 'success' }}
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         # Cache versions include the path: restore and save must use the same one.

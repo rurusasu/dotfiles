@@ -21,9 +21,7 @@ if [[ $host == nixos ]]; then
   fi
 fi
 if [[ $UPDATE_FLAKE_INPUTS == true ]]; then
-  nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
-    flake update --flake "$ROOT"
-  bash "$ROOT/scripts/sh/normalize-strata-release-lock.sh" "$ROOT"
+  bash "$ROOT/scripts/sh/update-flake-inputs.sh" "$ROOT"
 fi
 exec sudo ${install_sudo_options[@]+"${install_sudo_options[@]}"} nixos-rebuild switch --flake "$flake_ref" --impure \
   --option accept-flake-config true --option experimental-features 'nix-command flakes' \

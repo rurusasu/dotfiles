@@ -16,12 +16,21 @@ printf '%s\n' "$TEST_CURRENT_USER"
 EOF
   cat >"$STUB_BIN/nix" <<'EOF'
 #!/usr/bin/env bash
+if [[ -n ${DOTFILES_FLAKE_ROOT:-} ]]; then exit 0; fi
 if [[ -n ${DOTFILES_FLAKE_LOCK:-} ]]; then
   cat "$DOTFILES_FLAKE_LOCK"
   exit 0
 fi
 printf 'nix %s\n' "$*" >>"$TEST_LOG"
-exit "$TEST_UPDATE_STATUS"
+[[ $TEST_UPDATE_STATUS == 0 ]] || exit "$TEST_UPDATE_STATUS"
+while (($#)); do
+  case "$1" in
+    --reference-lock-file) reference=$2; shift ;;
+    --output-lock-file) output=$2; shift ;;
+  esac
+  shift
+done
+if [[ -n ${output:-} ]]; then cp "$reference" "$output"; fi
 EOF
   cat >"$STUB_BIN/sudo" <<'EOF'
 #!/usr/bin/env bash
