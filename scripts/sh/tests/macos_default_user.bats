@@ -7,6 +7,7 @@ setup() {
   export PATH="$STUB_BIN:$PATH"
   export TEST_LOG="$BATS_TEST_TMPDIR/commands"
   export TEST_CAPTURE="$BATS_TEST_TMPDIR/capture"
+  unset UPDATE_FLAKE_INPUTS DOTFILES_ALLOW_BUILDS DOTFILES_FLAKE_REF NIX_CONFIG
   export TEST_CURRENT_USER=k-miki TEST_UPDATE_STATUS=0 TEST_SWITCH_STATUS=0
   cat >"$STUB_BIN/id" <<'EOF'
 #!/usr/bin/env bash
@@ -23,6 +24,7 @@ EOF
 printf 'sudo' >>"$TEST_LOG"
 printf ' <%s>' "$@" >>"$TEST_LOG"
 printf '\n' >>"$TEST_LOG"
+printf '%s' "${NIX_CONFIG:-}" >"$TEST_CAPTURE.config"
 while (($#)); do
   if [[ $1 == --flake ]]; then
     wrapper=${2%#macos}
@@ -68,4 +70,46 @@ EOF
   [ "$status" -ne 0 ]
   [[ $output == *'without sudo'* ]]
   [ ! -e "$TEST_LOG" ]
+}
+
+@test "macOS frozen deployment selects the prepared flake and preserves root build restrictions" {
+  prepared="$BATS_TEST_TMPDIR/prepared"
+  mkdir -p "$prepared"
+  printf k-miki >"$prepared/primary-user"
+  run env UPDATE_FLAKE_INPUTS=false DOTFILES_ALLOW_BUILDS=false \
+    NIX_CONFIG='connect-timeout = 5' DOTFILES_FLAKE_REF="path:$prepared#macos" \
+    "$REPO_ROOT/scripts/sh/install-macos.sh"
+  [ "$status" -eq 0 ]
+  run grep -q '^nix ' "$TEST_LOG"
+  [ "$status" -eq 1 ]
+  grep -Fq '<--preserve-env=NIX_CONFIG>' "$TEST_LOG"
+  grep -Fq -- '<--no-update-lock-file>' "$TEST_LOG"
+  run grep -q '<--override-input>' "$TEST_LOG"
+  [ "$status" -eq 1 ]
+  grep -Fxq 'connect-timeout = 5' "$TEST_CAPTURE.config"
+  grep -Fxq 'max-jobs = 0' "$TEST_CAPTURE.config"
+  grep -Fxq 'builders =' "$TEST_CAPTURE.config"
+  grep -Fxq 'fallback = false' "$TEST_CAPTURE.config"
+  [ -d "$prepared" ]
+}
+
+@test "frozen macOS normal target locks only the temporary login-user wrapper offline" {
+  run env UPDATE_FLAKE_INPUTS=false "$REPO_ROOT/scripts/sh/install-macos.sh"
+  [ "$status" -eq 0 ]
+  run grep -q 'flake update' "$TEST_LOG"
+  [ "$status" -eq 1 ]
+  grep -q 'flake lock path:.* --offline --override-input dotfiles' "$TEST_LOG"
+  grep -Fq '<--no-update-lock-file>' "$TEST_LOG"
+  [ ! -e "$(cat "$TEST_CAPTURE.path")" ]
+}
+
+@test "Darwin renderer keeps its optional CI module separate from normal installation" {
+  . "$REPO_ROOT/scripts/sh/lib/darwin-flake.sh"
+  fixture="$BATS_TEST_TMPDIR/wrapper"
+  write_darwin_flake "$fixture" runner true
+  [ "$(cat "$fixture/primary-user")" = runner ]
+  [ -s "$fixture/ci-settings.nix" ]
+  write_darwin_flake "$fixture" k-miki
+  [ "$(cat "$fixture/primary-user")" = k-miki ]
+  [ ! -e "$fixture/ci-settings.nix" ]
 }

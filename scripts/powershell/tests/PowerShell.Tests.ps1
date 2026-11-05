@@ -9,10 +9,10 @@ BeforeAll {
             Where-Object Extension -In '.ps1', '.psm1', '.psd1')
     $script:runtimeFiles = @($script:sourceFiles | Where-Object {
             $relativePath = $_.FullName.Substring($script:sourceRoot.Length + 1).Replace('\', '/')
-            $relativePath -eq 'install.ps1' -or $relativePath -match '^lib/'
+            $relativePath -eq 'install.ps1' -or $relativePath -match '^lib/' -or $relativePath -like 'Invoke-Ci*.ps1'
         })
     if ($script:runtimeFiles.Count -eq 0) {
-        throw 'No runtime PowerShell sources were found in install.ps1 or lib/. Static analysis cannot pass without sources.'
+        throw 'No runtime PowerShell sources were found in installer, CI adapters, or lib/. Static analysis cannot pass without sources.'
     }
 }
 

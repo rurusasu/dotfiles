@@ -3,44 +3,61 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
+import heapq
 import json
 import os
+import selectors
 import shutil
 import subprocess
+import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
 
-PUBLIC_CACHE = "https://cache.nixos.org"
+ARCHIVE_RESERVE = 16 * 1024 * 1024
+DISK_RESERVE = 64 * 1024 * 1024
+
+
+def public_caches() -> list[str]:
+    """Use configured remote substituters, never the restored optional cache."""
+    result = subprocess.run(
+        ["nix", "config", "show", "substituters"],
+        check=True, capture_output=True, text=True,
+    )
+    return list(dict.fromkeys(
+        cache for cache in result.stdout.split()
+        if cache.startswith(("https://", "http://"))
+    ))
 
 
 def query_public_paths(paths: list[str]) -> set[str]:
-    """Bound parallel HTTP queries and retain payloads on a cache outage."""
-    unavailable = Event()
+    """Query all remote caches; an outage keeps unconfirmed payloads private."""
+    caches = public_caches()
+    unavailable = {cache: Event() for cache in caches}
 
     def query_batch(batch: list[str]) -> set[str]:
-        if unavailable.is_set():
-            return set()
-        try:
-            result = subprocess.run(
-                [
-                    "nix-store", "--store", PUBLIC_CACHE, "--check-validity", "--print-invalid", *batch,
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=60,
-            )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
-            unavailable.set()
-            print(f"::warning::Public cache query failed; retaining unconfirmed payloads: {error}")
-            return set()
-        invalid = set(result.stdout.splitlines())
-        if not invalid <= set(batch):
-            raise ValueError("Unexpected public-cache validity response")
-        return set(batch) - invalid
+        missing = set(batch)
+        for cache in caches:
+            if not missing or unavailable[cache].is_set():
+                continue
+            try:
+                result = subprocess.run(
+                    ["nix-store", "--store", cache, "--check-validity", "--print-invalid", *sorted(missing)],
+                    capture_output=True, text=True, check=True, timeout=60,
+                )
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                unavailable[cache].set()
+                print("::warning::A remote cache query failed; retaining unconfirmed payloads")
+                continue
+            invalid = set(result.stdout.splitlines())
+            if not invalid <= missing:
+                raise ValueError("Unexpected public-cache validity response")
+            missing = invalid
+        return set(batch) - missing
 
-    # nix-store checks paths sequentially; separate clients overlap requests.
     batches = [paths[start : start + 32] for start in range(0, len(paths), 32)]
     with ThreadPoolExecutor(max_workers=16) as executor:
         return set().union(*executor.map(query_batch, batches))
@@ -102,70 +119,202 @@ def root_dependencies(roots: Path) -> None:
     print(f"Protected {len(private)} private paths and their references from GC")
 
 
+def path_metadata(paths: list[str]) -> dict[str, dict]:
+    """Read realised paths without exporting their reference closures."""
+    if not paths:
+        return {}
+    result = subprocess.run(
+        ["nix", "path-info", "--json", "--stdin"],
+        input="".join(f"{path}\n" for path in paths),
+        capture_output=True, text=True, check=True,
+    )
+    metadata = json.loads(result.stdout)
+    # Nix returns a path-keyed object; Lix returns a list of path records.
+    if isinstance(metadata, dict):
+        records = {path: {**entry, "path": path} for path, entry in metadata.items()}
+    else:
+        records = {entry["path"]: entry for entry in metadata}
+    if set(records) != set(paths):
+        raise ValueError("Nix returned incomplete path metadata")
+    for path, entry in records.items():
+        if entry.get("narSize", -1) < 0 or not entry.get("narHash"):
+            raise ValueError(f"Invalid NAR metadata for {path}")
+    return records
+
+
+def closed_public_paths(public: set[str], metadata: dict[str, dict]) -> set[str]:
+    """Remote roots are public only when all transitive references are too."""
+    while True:
+        closed = {
+            path for path in public
+            if set(metadata[path].get("references", [])) <= public
+        }
+        if closed == public:
+            return closed
+        public = closed
+
+
+def narinfo(entry: dict, filename: str, size: int, digest: str) -> str:
+    """Describe one complete payload; references may resolve in remote caches."""
+    lines = [
+        f"StorePath: {entry['path']}", f"URL: nar/{filename}",
+        "Compression: zstd", f"FileHash: sha256-{digest}", f"FileSize: {size}",
+        f"NarHash: {entry['narHash']}", f"NarSize: {entry['narSize']}",
+        "References: " + " ".join(sorted(Path(ref).name for ref in entry.get("references", []))),
+    ]
+    if entry.get("deriver"):
+        lines.append(f"Deriver: {Path(entry['deriver']).name}")
+    if entry.get("ca"):
+        lines.append(f"CA: {entry['ca']}")
+    return "\n".join(lines) + "\n"
+
+
+def compress_path(path: str, destination: Path, maximum_bytes: int, timeout: int = 120) -> tuple[int, str, str] | None:
+    """Stream one NAR, stopping before an oversized payload fills the disk."""
+    processes = []
+    try:
+        with tempfile.TemporaryFile() as errors, destination.open("wb") as output:
+            dump = subprocess.Popen(["nix-store", "--dump", path], stdout=subprocess.PIPE, stderr=errors)
+            processes.append(dump)
+            compressor = subprocess.Popen(
+                ["zstd", "-q", "-T0", "-c"], stdin=dump.stdout, stdout=subprocess.PIPE, stderr=errors,
+            )
+            processes.append(compressor)
+            dump.stdout.close()
+            digest = hashlib.sha256()
+            size = 0
+            deadline = time.monotonic() + timeout
+            with selectors.DefaultSelector() as selector:
+                selector.register(compressor.stdout, selectors.EVENT_READ)
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0 or not selector.select(remaining):
+                        raise subprocess.TimeoutExpired(["nix-store", "--dump", path], timeout)
+                    chunk = os.read(compressor.stdout.fileno(), min(1024 * 1024, maximum_bytes - size + 1))
+                    if not chunk:
+                        break
+                    if size + len(chunk) > maximum_bytes:
+                        return None
+                    output.write(chunk)
+                    digest.update(chunk)
+                    size += len(chunk)
+            compressor.stdout.close()
+            for process in processes:
+                status = process.wait(timeout=max(0.1, deadline - time.monotonic()))
+                if status:
+                    errors.seek(0)
+                    raise RuntimeError(f"NAR export failed for {path}: " + errors.read(8192).decode("utf-8", errors="replace"))
+            return size, digest.hexdigest(), base64.b64encode(digest.digest()).decode("ascii")
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+        for process in processes:
+            process.wait()
+            if process.stdout is not None:
+                process.stdout.close()
+
+
+def export_entry(cache: Path, path: str, entry: dict, maximum_bytes: int, timeout: int = 120) -> tuple[Path, Path, int] | None:
+    """Write one payload and narinfo within a byte limit; leave no partial entry."""
+    overhead = len(narinfo(entry, "0" * 64 + ".nar.zst", 2**64 - 1, "0" * 44).encode())
+    if maximum_bytes <= overhead:
+        return None
+    temporary = cache / "nar" / ".candidate"
+    try:
+        result = compress_path(path, temporary, maximum_bytes - overhead, timeout)
+        if result is None:
+            return None
+        payload_size, hexadecimal, digest = result
+        filename = hexadecimal + ".nar.zst"
+        payload = cache / "nar" / filename
+        record = narinfo(entry, filename, payload_size, digest)
+        if payload.exists():
+            temporary.unlink()
+            payload_size = 0
+        else:
+            temporary.replace(payload)
+        record_path = cache / (Path(path).name.split("-", 1)[0] + ".narinfo")
+        record_path.write_text(record)
+        return record_path, payload, payload_size + len(record.encode())
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def export_cache(cache: Path, maximum_size: int) -> None:
-    """Keep build dependencies as well as runtime outputs, without public NARs."""
+    """Save useful dependency-closed subsets rather than dropping a whole generation."""
     if maximum_size <= 0:
         raise ValueError("Cache size must be positive")
     cache.mkdir(parents=True, exist_ok=False)
+    (cache / "nar").mkdir()
+    (cache / "nix-cache-info").write_text("StoreDir: /nix/store\nWantMassQuery: 1\n")
     paths = store_paths()
-    public = query_public_paths(paths)
-    private = sorted(set(paths) - public)
-    private_input = "".join(f"{path}\n" for path in private)
-    closure_result = subprocess.run(
-        ["nix", "path-info", "--recursive", "--json", "--stdin"],
-        input=private_input,
-        capture_output=True,
-        text=True,
-        check=True,
+    metadata = path_metadata(paths)
+    public = closed_public_paths(query_public_paths(paths), metadata)
+    private = set(paths) - public
+    metadata = {path: metadata[path] for path in private}
+    dependencies = {
+        path: set(entry.get("references", [])) - public - {path}
+        for path, entry in metadata.items()
+    }
+    dependents = {path: set() for path in private}
+    for path, references in dependencies.items():
+        for reference in references & private:
+            dependents[reference].add(path)
+    # Shared dependencies are useful even when the large application above them
+    # cannot fit. A self reference is valid; other cycles are conservatively skipped.
+    ready = []
+    for path in private:
+        if not dependencies[path]:
+            heapq.heappush(ready, (-len(dependents[path]), -metadata[path]["narSize"], path))
+    selected = set()
+    size = (cache / "nix-cache-info").stat().st_size
+    budget = maximum_size - ARCHIVE_RESERVE
+    oversized = 0
+    disk_limited = 0
+    while ready:
+        _, _, path = heapq.heappop(ready)
+        entry = metadata[path]
+        # Existing selected bytes also need an outer Actions archive. Reserve
+        # room for that archive and twice the one pending compressed payload.
+        capacity = budget - size
+        free = shutil.disk_usage(cache).free
+        disk_capacity = (free - DISK_RESERVE - size) // 2
+        if capacity <= 0:
+            break
+        if disk_capacity <= 0:
+            disk_limited += 1
+            break
+        result = export_entry(cache, path, entry, min(capacity, disk_capacity))
+        if result is None:
+            oversized += 1
+            print(f"CI cache skipped {path}: exceeds remaining {min(capacity, disk_capacity):,}-byte budget (NAR {entry['narSize']:,} bytes)")
+            continue
+        _, _, added_bytes = result
+        size += added_bytes
+        selected.add(path)
+        for dependent in dependents[path]:
+            dependencies[dependent].discard(path)
+            if not dependencies[dependent]:
+                heapq.heappush(ready, (-len(dependents[dependent]), -metadata[dependent]["narSize"], dependent))
+    # Never publish a root whose private dependencies were skipped for space.
+    for path, _, _, refs in cache_entries(cache):
+        if not refs <= public | selected:
+            raise ValueError(f"Incomplete private reference closure for {path}")
+    skipped = len(private) - len(selected)
+    blocked = [path for path in sorted(private - selected) if dependencies[path]]
+    for path in blocked[:20]:
+        print(f"CI cache skipped {path}: {len(dependencies[path])} private references unavailable")
+    if len(blocked) > 20:
+        print(f"CI cache: {len(blocked) - 20} additional outputs blocked by skipped private references")
+    print(
+        f"CI cache: {len(selected)} selected / {len(private)} private / {len(paths)} paths, "
+        f"{size:,} bytes; {skipped} skipped ({oversized} oversized, {disk_limited} disk-limited)"
     )
-    closure = json.loads(closure_result.stdout)
-    # Nix returns a path-keyed object; Lix returns a list of path records.
-    metadata = list(closure.values()) if isinstance(closure, dict) else closure
-    nar_size = sum(entry["narSize"] for entry in metadata)
-    # Public references also occupy disk until pruning. Allow for compression
-    # expansion, per-entry metadata/allocation, the outer archive, and headroom.
-    required_space = nar_size + nar_size // 100 + len(metadata) * 16384 + maximum_size + 64 * 1024 * 1024
-    free_space = shutil.disk_usage(cache).free
-    if required_space > free_space:
-        print(
-            f"::warning::Insufficient space for temporary cache export "
-            f"({required_space:,} bytes required, {free_space:,} available); "
-            "keeping the previous generation"
-        )
-        with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
-            output.write("cacheable=false\n")
-        return
-    # Binary-cache exports require reference metadata to exist. Export the
-    # private roots with their closure once, then remove confirmed public entries.
-    subprocess.run(
-        [
-            "nix",
-            "copy",
-            "--stdin",
-            "--to",
-            f"{cache.as_uri()}?compression=zstd",
-        ],
-        input=private_input,
-        text=True,
-        check=True,
-    )
-    entries = cache_entries(cache)
-    private_blobs = {blob for path, _, blob, _ in entries if path not in public}
-    # Omit public metadata too: a normal substituter must never advertise a NAR
-    # whose payload is absent. Public references resolve via the public cache.
-    for path, narinfo, blob, _ in entries:
-        if path in public:
-            narinfo.unlink()
-            if blob not in private_blobs and blob.exists():
-                blob.unlink()
-    size = sum(path.stat().st_size for path in cache.rglob("*") if path.is_file())
-    # Leave room for the outer cache archive's metadata and framing.
-    cacheable = size + 16 * 1024 * 1024 <= maximum_size
-    print(f"CI cache: {len(private)} private / {len(paths)} paths, {size:,} bytes")
-    if not cacheable:
-        print("::warning::Private cache exceeds its budget; keeping the previous generation")
+    if not selected:
+        print("::warning::No dependency-closed private outputs fit; keeping the previous generation")
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
-        output.write(f"cacheable={str(cacheable).lower()}\n")
+        output.write(f"cacheable={str(bool(selected)).lower()}\n")
 
 
 def transport_cache(cache: Path, root: str) -> None:

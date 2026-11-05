@@ -10,6 +10,8 @@ vars:
   WSL: '{{if eq OS "windows"}}wsl -d {{.DISTRO}} -- {{end}}'
 
 includes:
+  ci:
+    taskfile: ./taskfiles/ci/taskfile.yml
   quality:
     taskfile: ./taskfiles/quality/taskfile.yml
     flatten: true

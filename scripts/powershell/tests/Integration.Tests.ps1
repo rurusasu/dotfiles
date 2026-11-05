@@ -103,6 +103,8 @@ foreach ($command in 'eza', 'rg', 'fd', 'lazygit', 'kubectl', 'kubectx', 'kubens
     Set-Item -Path "function:global:$command.exe" -Value $body
 }
 function global:chezmoi.exe { $global:LASTEXITCODE = 0; $global:ProfileTestSource }
+# Match Windows' default alias before the managed profile replaces it.
+Set-Alias -Name ls -Value Get-ChildItem
 '@).Invoke() | Out-Null
         $script:shell.Commands.Clear()
         $script:shell.AddScript([IO.File]::ReadAllText($script:profilePath)).Invoke() | Out-Null

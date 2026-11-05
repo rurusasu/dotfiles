@@ -251,4 +251,40 @@ Describe 'Invoke-NixosWslSetup' {
         @($script:setupCommands | Where-Object { $_ -match 'flake update --flake' }).Count | Should -Be 0
         @($script:setupCommands | Where-Object { $_ -match 'nixos-rebuild switch' }).Count | Should -Be 1
     }
+
+    It 'should apply the selected immutable flake and forbid all local and remote builds' {
+        Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SyncMode repo -SyncBack none -UpdateFlakeInputs $false -FlakeReference 'path:/nix/store/prepared-source#nixos' -AllowBuilds $false
+        $commands = $script:setupCommands -join "`n"
+        $commands | Should -Match ([regex]::Escape("eval --raw 'path:/nix/store/prepared-source#nixosConfigurations.nixos.config.wsl.defaultUser'"))
+        $commands | Should -Match ([regex]::Escape("nixos-rebuild switch --flake 'path:/nix/store/prepared-source#nixos' --impure --no-update-lock-file"))
+        $commands | Should -Match 'max-jobs = 0\\nbuilders =\\nfallback = false'
+        $commands | Should -Not -Match 'flake update|cp --'
+        @($script:setupCommands | Where-Object { $_ -match 'nixos-rebuild switch' }).Count | Should -Be 1
+    }
+
+    It 'should validate the deployed configuration user before synchronizing the checkout' {
+        $script:declaredUser = 'other'
+        { Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SyncMode repo -SyncBack none -UpdateFlakeInputs $false -FlakeReference 'path:/nix/store/prepared-source#alternate' -AllowBuilds $false } | Should -Throw '*declared wsl.defaultUser*'
+        ($script:setupCommands -join "`n") | Should -Not -Match 'tar|chown|nixos-rebuild switch'
+    }
+
+    It 'should reject a moving prebuilt deployment before contacting WSL' {
+        { Invoke-NixosWslSetup -Repository 'D:\dotfiles' -AllowBuilds $false } | Should -Throw '*inputs frozen*'
+        $script:wslCalls.Count | Should -Be 0
+        { Invoke-NixosWslSetup -Repository 'D:\dotfiles' -FlakeReference 'path:/source#nixos' } | Should -Throw '*frozen inputs*'
+        $script:wslCalls.Count | Should -Be 0
+    }
+
+
+    It 'should synchronize the exact Linux source snapshot without mapping a Windows checkout' {
+        Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SyncMode repo -SyncBack none -UpdateFlakeInputs $false -FlakeReference 'path:/nix/store/prepared-source#nixos' -SourceDirectory '/nix/store/prepared-source' -AllowBuilds $false
+        @($script:wslCalls | Where-Object { $_.Arguments -contains 'wslpath' }).Count | Should -Be 0
+        ($script:setupCommands -join "`n") | Should -Match ([regex]::Escape("(cd '/nix/store/prepared-source' && tar --exclude=.git --exclude=.direnv --exclude=result -cf - .)"))
+    }
+
+    It 'should reject syncing mutable state back into an immutable Linux source' {
+        { Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SourceDirectory '/nix/store/prepared-source' } | Should -Throw '*SyncBack none*'
+        $script:wslCalls.Count | Should -Be 0
+    }
+
 }

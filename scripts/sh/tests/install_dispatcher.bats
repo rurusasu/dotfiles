@@ -11,9 +11,12 @@ setup() {
   mkdir -p "$TEST_BIN" "$TEST_NIX_BIN" "${TEST_CHECKOUT%/*}"
   export PATH="$TEST_BIN:$PATH"
   export DISPATCH_LOG TEST_NIX_DAEMON_PROFILE TEST_NIX_PROFILE_FIXTURE TEST_NIX_BIN
+  unset UPDATE_FLAKE_INPUTS DOTFILES_ALLOW_BUILDS DOTFILES_FLAKE_REF NIX_CONFIG
+  export TEST_CONFIG_LOG="$BATS_TEST_TMPDIR/nix-config"
   cat >"$TEST_BIN/nix" <<'EOF'
 #!/usr/bin/env bash
 printf 'nix=%s\n' "$*" >>"$DISPATCH_LOG"
+printf '%s' "${NIX_CONFIG:-}" >"$TEST_CONFIG_LOG"
 EOF
   chmod +x "$TEST_BIN/nix"
 }
@@ -31,7 +34,8 @@ EOF
 }
 
 write_dispatch_repo() {
-  mkdir -p "$BATS_TEST_TMPDIR/repo/scripts/sh"
+  mkdir -p "$BATS_TEST_TMPDIR/repo/scripts/sh/lib"
+  cp "$REPO_ROOT/scripts/sh/lib/install-options.sh" "$BATS_TEST_TMPDIR/repo/scripts/sh/lib/"
   sed -e "s|/etc/NIXOS|$BATS_TEST_TMPDIR/NIXOS|g" \
     -e "s|\$HOME/.dotfiles|$TEST_CHECKOUT|g" \
     -e "s|/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh|$TEST_NIX_DAEMON_PROFILE|g" \
@@ -59,7 +63,8 @@ EOF
 }
 
 run_installer_checking_nounset() {
-  run env -u ZSH_VERSION bash -c '
+  # Keep the host's real Nix out of this missing-Nix/profile-loading fixture.
+  run env -u ZSH_VERSION PATH="$TEST_BIN:/usr/bin:/bin" bash -c '
 exec() {
 	case "$-" in
 		*u*) ;;
@@ -162,5 +167,35 @@ EOF
     [ "$status" -ne 0 ]
     [[ $output == *"Unsupported platform"* ]]
     [[ $output == *"install.cmd"* ]]
+  done
+}
+
+@test "frozen standalone Home Manager uses its prepared target without updating inputs or building" {
+  write_uname_stub
+  write_dispatch_repo
+  export TEST_UNAME_S=Linux TEST_UNAME_M=x86_64
+  run env UPDATE_FLAKE_INPUTS=false DOTFILES_ALLOW_BUILDS=false \
+    DOTFILES_FLAKE_REF=path:/nix/store/prepared-source#x86_64-linux \
+    "$BATS_TEST_TMPDIR/repo/install.sh"
+  [ "$status" -eq 0 ]
+  run grep -q 'flake update' "$DISPATCH_LOG"
+  [ "$status" -eq 1 ]
+  grep -Fq 'run --no-update-lock-file' "$DISPATCH_LOG"
+  grep -Fq -- '--flake path:/nix/store/prepared-source#x86_64-linux' "$DISPATCH_LOG"
+  grep -Fxq 'max-jobs = 0' "$TEST_CONFIG_LOG"
+  grep -Fxq 'builders =' "$TEST_CONFIG_LOG"
+  grep -Fxq 'fallback = false' "$TEST_CONFIG_LOG"
+  [ "${NIX_CONFIG-unset}" = unset ]
+}
+
+@test "invalid deployment options fail before checkout creation or Nix calls" {
+  write_uname_stub
+  write_dispatch_repo
+  export TEST_UNAME_S=Linux TEST_UNAME_M=x86_64
+  for option in UPDATE_FLAKE_INPUTS=invalid DOTFILES_ALLOW_BUILDS=invalid DOTFILES_FLAKE_REF=missing-target 'DOTFILES_FLAKE_REF=#macos' 'DOTFILES_FLAKE_REF=source#macos#extra'; do
+    run env "$option" "$BATS_TEST_TMPDIR/repo/install.sh"
+    [ "$status" -eq 64 ]
+    [ ! -e "$TEST_CHECKOUT" ]
+    [ ! -e "$DISPATCH_LOG" ]
   done
 }

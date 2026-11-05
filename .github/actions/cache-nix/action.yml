@@ -9,8 +9,8 @@ inputs:
     description: Restore before building or save after all checks succeed.
     default: restore
   max-size:
-    description: Maximum exported cache size in bytes (Darwin uses 2 GiB).
-    default: "805306368"
+    description: Maximum cache size per producer (both fit the shared repository quota).
+    default: "4294967296"
 
 runs:
   using: composite
@@ -22,10 +22,12 @@ runs:
         CACHE_NAME: ${{ inputs.name }}
         CACHE_PHASE: ${{ inputs.phase }}
         LOCK_HASH: ${{ hashFiles('flake.lock') }}
+        TESTED_SHA: ${{ env.TESTED_SHA }}
       run: |
         set -euo pipefail
         [[ "$CACHE_NAME" =~ ^[a-z0-9-]+$ ]]
         [[ "$CACHE_PHASE" == restore || "$CACHE_PHASE" == save ]]
+        [[ "$TESTED_SHA" =~ ^[0-9a-f]{40}$ ]]
         cache_dir="$RUNNER_TEMP/nix-binary-cache"
         if [[ "$CACHE_PHASE" == restore ]]; then
           # Homebrew cleanup removes its zstd during Darwin activation. A Nix
@@ -35,14 +37,14 @@ runs:
           "$compressor/bin/zstd" --version
           echo "$compressor/bin" >> "$GITHUB_PATH"
           version="$(nix --version | sed -n '1p' | tr -cs '[:alnum:].-' '-')"
-          prefix="ci-nix-v2-$RUNNER_OS-$RUNNER_ARCH-$CACHE_NAME-$version"
+          prefix="ci-nix-v3-$RUNNER_OS-$RUNNER_ARCH-$CACHE_NAME-$version"
           {
             echo "DOTFILES_CI_BINARY_CACHE=$cache_dir"
-            echo "DOTFILES_CI_CACHE_KEY=$prefix-$LOCK_HASH-$GITHUB_SHA"
+            echo "DOTFILES_CI_CACHE_KEY=$prefix-$LOCK_HASH-$TESTED_SHA"
           } >> "$GITHUB_ENV"
           echo "prefix=$prefix-" >> "$GITHUB_OUTPUT"
           echo "lock-prefix=$prefix-$LOCK_HASH-" >> "$GITHUB_OUTPUT"
-          echo "key=$prefix-$LOCK_HASH-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "key=$prefix-$LOCK_HASH-$TESTED_SHA" >> "$GITHUB_OUTPUT"
           mkdir -p "$cache_dir"
         fi
         echo "path=$cache_dir" >> "$GITHUB_OUTPUT"

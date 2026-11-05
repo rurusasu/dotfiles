@@ -1,7 +1,8 @@
 # Bootstrap CI tools image
 
-`ci-nix.yml` の `nix`、`linux-build`、
-`wsl-prebuild` は、このイメージで検査・ビルドを実行します。
+`ci-nix.yml` の Linux producer は、このイメージの同じ Nix store で
+通常の checks と、変更分類で選択された通常 Linux、WSL、native NixOS VM driver の
+検査・ビルドを実行します。native Linux が選択された場合の VM runtime check は必須です。
 `bash-test` もこのイメージで Bash テストを一度だけ実行します。
 Nix、Bash、go-task、Git、Python 3.14、Node.js 24、statix、jq、tar、xz を事前導入します。
 テスト専用ツールは checkout した flake の `runtime-tests` shell から取得します。
@@ -45,15 +46,22 @@ Linux container の `fetchurl` は `NIX_CURL_FLAGS` でも HTTP/1.1 を指定し
 60 秒間の転送速度が 16 KiB/s 未満なら再接続します。公開前の fixed-output ビルドで、
 この環境変数が実際のビルダーへ渡ることも確認します。
 
-`nix` ジョブは statix の検査を行い、format と全 flake checks は `check` に集約します。
-アプリを含む OS 構成は Linux / Darwin の各 build job で検証します。
-事前の `nix eval` や `nix flake check --no-build` は重ねません。
-Linux / Darwin / WSL / Windows の実行条件は、共有 checks の分類と独立しています。
-Windows manifest の変更では共有 checks と Windows installer を実行し、Unix の build は起動しません。
-OS 固有 host の変更は該当 OS、共有 Nix module / flake input の変更は依存する各 OS を選択します。
-Ubuntu / Debian の個別構成 build と E2E は実行せず、NixOS VM の検証は維持します。
-WSL は本番構成を一度 build し、E2E で使う cache を生成します。
-ホストの SDK 削除や Docker イメージの一括削除は行いません。
+Nix lint は statix、format と通常の flake checks は producer の検証工程で実行します。
+通常の checks はすべて保ち、native Linux の VM runtime check は OS の変更分類で選択します。
+VM driver は producer で構築し、VM の実行は consumer の E2E 工程に置きます。
+事前の `nix eval` / `nix flake check --no-build` をテストの代わりに重ねません。
+`task ci:build TARGET=linux|darwin|windows` と `task ci:e2e TARGET=linux|darwin|windows` が共通の入口です。
+工程順序は Taskfile、OS 固有の操作は platform adapter が所有します。
+Linux / Darwin / Windows の producer は対象の SHA を固定して成果物を作り、
+consumer は artifact の取得 → import / 本番 installer の反映 → 再起動 / 新しい session → runtime 確認を行います。
+
+Linux producer は通常 NixOS と WSL の共有依存を再利用します。native Linux の consumer は KVM の
+NixOS VM で `install.sh` と実 reboot を確認します。WSL の consumer は Windows 上の使い捨て distro で
+本番 setup と cold restart を確認します。macOS は別 runner で `install.sh`、service の再起動、
+新しい login shell を検証します。Windows は WinGet master とソースの plan を受け取り、
+PowerShell 5.1 / 7 で本番 Winget → WSL → chezmoi と新しい profile session を確認します。
+macOS / Windows の hosted host 自体の OS reboot は対象外です。
+standalone Home Manager は build / installer contract の対象で、Ubuntu / Debian の activation E2E は含みません。
 
 Bash テストは同じ workflow の Linux `bash-test` job とローカルで `task test:bash` を実行します。
 この Task は `nix develop --ignore-environment --keep HOME .#runtime-tests` で明示したツールだけを使い、
@@ -69,24 +77,34 @@ push / PR では軽量な変更検出を必ず実行し、必要な job だけ�
 
 ## Nix 成果物の再利用
 
-`.github/actions/cache-nix` が GitHub Actions cache を復元・保存します。追加アカウントや secret は不要です。
-OS・architecture・Nix version・job・flake.lock のハッシュで分離し、同じ inputs、次に同じ実行環境の順で復元します。
-成功した main の commit だけが保存し、PR は main の cache を読み取ります。
+必須の build artifact と、任意の dependency cache は別の責務です。
 
-- 全ジョブで公式 `actions/cache` の file binary cache を使い、store DB は保存しません。
-  `cache.nixos.org` にある成果物は metadata ごと除外し、公開 substituter から取得します。
-  実現済みの全出力を調べるため、macOS の torch などのビルド用依存も保存対象です。
-  Darwin は activation 直後に private 出力を GC root で保持し、checks 中の GC による削除を防ぎます。
-- 圧縮は Nix の zstd を GC root と PATH で固定します。Homebrew cleanup 後も同じツールを使います。
-- 保存上限は Darwin 2 GiB、Linux / WSL は各 768 MiB、checks は 512 MiB です。上限超過時は警告し、前世代を維持します。
-  世代の保持は [GitHub の自動削除](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#usage-limits-and-eviction-policy)に任せます。
-  この repository は他 workflow と合計 10 GB を共有し、未使用 7 日または容量超過時の LRU で古い cache が削除されます。
-- WSL への同一 run の artifact: 完全な cache の hardlink 複製から、`cache.nixos.org` に依存一式がある
-  NAR payload だけを除きます。metadata は残し、Windows 側で署名付きの公開依存を先に取得してから取り込みます。
-  公開 cache の判定は並列実行し、問い合わせ失敗時は未確認の payload を省きません。
+- 必須 artifact は source SHA、target、root store paths、closure metadata と payload の digest を持ちます。
+  consumer は producer の artifact ID を指定して取得し、入力の一致を確認します。
+  公開依存は configured HTTP(S) substituter で全参照が解決する場合だけ payload を省き、
+  consumer が公開依存を取得してから private NAR を import します。
+  取得漏れを consumer 内のソースビルドで補わず、反映後の system が producer の root と一致することを検証します。
+- `.github/actions/cache-nix` は追加 account / secret を使わず、GitHub Actions cache に任意の file binary cache を保存します。
+  OS・architecture・Nix version・cache 名・flake.lock のハッシュで分離し、同じ inputs、
+  次に同じ実行環境の順で復元します。成功した main が保存し、PR は読み取ります。
+  この cache が消えても必須 artifact の整合性と E2E の成功条件は変わりません。
 
-初回や GitHub 側の容量制限で cache が削除された場合は通常の build に戻ります。
-warm run の時間と cache / artifact のサイズは hosted Actions のログで確認します。
+optional cache の exporter は、設定された公開 substituter（公式、Numtide、Hermes）を調べ、
+間接参照も公開された出力を保存対象から除きます。未確認の出力は private として扱います。
+共有依存を優先し、private 参照がそろった出力から個別 NAR を stream 圧縮します。
+大きな出力が入らなくても、収まる依存出力を保存します。公開依存を含む全 closure を一度ディスクへ
+書き出してから削る方式は使いません。循環参照などで完全性を保証できない候補は保存しません。
+ログには selected / skipped の件数、保存 byte 数、上限・空き容量・依存不足による見送りを出します。
+
+保存上限は統合した Linux producer と Darwin producer で各 4 GiB（4,294,967,296 bytes）です。
+repository の cache 容量枠や課金設定を増やさず、既定の 10 GiB 枠を他 workflow と共有します。
+store DB は保存せず、metadata と対応する payload がそろった file binary cache だけを保存します。
+圧縮には Nix の zstd を使い、Homebrew cleanup 後も同じ compressor を使えるよう GC root と PATH で保持します。
+初回や容量制限による cache eviction 時は producer が不足分を構築します。E2E consumer は構築しません。
+複数 cache が repository の容量枠を共有するため、上限が各世代の永続保持を保証するわけではありません。
+保存・復元・artifact 転送にかかった時間と容量は hosted Actions の各工程のログで確認します。
+保存ジョブの成功だけで改善完了とせず、後続実行で Linux / Darwin の両 producer に実際の cache hit があり、
+不要な再ビルドを減らせていることを確認します。
 
 ## ローカル検証
 

@@ -305,6 +305,17 @@ Describe 'Update-ProcessEnvironmentPath' {
 }
 
 Describe 'Test-WslAvailable' {
+    BeforeAll {
+        # CimCmdlets is Windows-only. Retain the pure fallback/exit-code tests
+        # on other hosts, with an explicit command boundary for Pester to mock.
+        if (-not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) {
+            function Get-CimInstance {
+                [CmdletBinding()]
+                param([string]$ClassName, [string]$Filter)
+                throw 'Get-CimInstance must be mocked in this test.'
+            }
+        }
+    }
     BeforeEach { Mock Get-CimInstance { [pscustomobject]@{ InstallState = 1 } } }
 
     It 'should reject Virtual Machine Platform state <InstallState> before checking WSL status' -ForEach @(

@@ -382,7 +382,7 @@ includes:
     }
 }
 
-Describe 'Windows installer phases' {
+Describe 'Windows installer phases' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     BeforeAll {
         function Invoke-WindowsPhaseFixture {
             param([bool]$Success = $true, [string]$Phase = 'Winget')
@@ -853,10 +853,7 @@ function Invoke-NixosWslSetup {
 Describe 'Windows CI installer boundary' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     BeforeAll {
         . "$script:repoRoot/scripts/powershell/lib/Invoke-ExternalCommand.ps1"
-        $workflow = [IO.File]::ReadAllText((Join-Path $script:repoRoot '.github/workflows/ci-nix.yml'))
-        $step = [regex]::Match($workflow, '(?ms)^      - name: Run install\.cmd strict user phase\r?\n(?:(?!^      - name:).)*?^        run: \|\r?\n(?<body>(?:^          [^\r\n]*(?:\r?\n|$)|^\r?\n)+)')
-        if (-not $step.Success) { throw 'Windows CI installer step was not found.' }
-        $script:ciInstallerBody = $step.Groups['body'].Value -replace '(?m)^ {10}', ''
+        $script:ciInstallerBody = [IO.File]::ReadAllText((Join-Path $script:repoRoot 'scripts/powershell/Invoke-CiWindowsInstall.ps1'))
 
         function Invoke-CiInstallerFixture {
             param([string]$Outcome = 'complete', [switch]$DuplicateRuntime)
@@ -923,7 +920,7 @@ function Update-ProcessEnvironmentPath {}
         }
     }
 
-    It 'should prepare only the declared runtime then complete the real inline checks for the parent runtime' {
+    It 'should prepare only the declared runtime then complete the real adapter checks for the parent runtime' {
         $result = Invoke-CiInstallerFixture
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $runtime = Get-Content -LiteralPath (Join-Path $result.Root 'runtime-import.json') -Raw | ConvertFrom-Json
@@ -980,37 +977,84 @@ function Update-ProcessEnvironmentPath {}
     }
 }
 
-Describe 'NixOS-WSL E2E cleanup boundary' {
+Describe 'Windows CI artifact provenance' {
     BeforeAll {
-        $workflow = [IO.File]::ReadAllText((Join-Path $script:repoRoot '.github/workflows/ci-nix.yml'))
-        $step = [regex]::Match($workflow, '(?ms)^      - name: Run isolated NixOS-WSL switch\r?\n(?:(?!^      - name:).)*?^        run: \|\r?\n(?<body>(?:^          [^\r\n]*(?:\r?\n|$)|^\r?\n)+)')
-        if (-not $step.Success) { throw 'WSL CI step was not found.' }
-        $tokens = $null
-        $parseErrors = $null
-        $ast = [Management.Automation.Language.Parser]::ParseInput(($step.Groups['body'].Value -replace '(?m)^ {10}', ''), [ref]$tokens, [ref]$parseErrors)
-        if ($parseErrors.Count) { throw ($parseErrors -join "`n") }
-        $guard = $ast.Find({ param($node)
-                $node -is [Management.Automation.Language.IfStatementAst] -and $node.Extent.Text -match 'Refusing an unsafe CI distro name'
-            }, $true)
-        $script:e2eCleanupGuard = [scriptblock]::Create($guard.Extent.Text)
+        $script:ciArtifactScript = Join-Path $script:repoRoot 'scripts/powershell/Invoke-CiWindows.ps1'
+        $script:ciArtifactSha = (& git -C $script:repoRoot rev-parse HEAD).Trim()
+        if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the artifact fixture source.' }
+
+        function Invoke-CiWindowsArtifactFixture {
+            param([string]$Phase, [string]$Directory, [string]$SourceSha = $script:ciArtifactSha)
+            $startInfo = [Diagnostics.ProcessStartInfo]::new()
+            $startInfo.FileName = (Get-Process -Id $PID).Path
+            $startInfo.Arguments = '-NoLogo -NoProfile -File "{0}" -Phase {1} -ArtifactDirectory "{2}" -TestedSha {3}' -f $script:ciArtifactScript, $Phase, $Directory, $SourceSha
+            Invoke-FixtureProcess -StartInfo $startInfo
+        }
+
+        $script:ciPreparedArtifact = Join-Path $TestDrive 'prepared windows source'
+        $prepared = Invoke-CiWindowsArtifactFixture -Phase Prepare -Directory $script:ciPreparedArtifact
+        if ($prepared.ExitCode -ne 0) { throw "Artifact preparation failed: $($prepared.Stdout) $($prepared.Stderr)" }
     }
 
-    It 'should reject unsafe distro names and cleanup paths with the actual workflow guard' {
+    It 'should prepare the tested source and package plan without installing Windows packages' {
+        $provenance = Get-Content -LiteralPath (Join-Path $script:ciPreparedArtifact 'windows-provenance.json') -Raw | ConvertFrom-Json
+        $provenance.testedSha | Should -BeExactly $script:ciArtifactSha
+        $provenance.target | Should -BeExactly 'windows'
+        $provenance.packagesSha256 | Should -BeExactly (Get-FileHash -LiteralPath (Join-Path $script:ciPreparedArtifact 'packages.json')).Hash.ToLowerInvariant()
+        $provenance.sourceSnapshotSha256 | Should -BeExactly (Get-FileHash -LiteralPath (Join-Path $script:ciPreparedArtifact 'source.zip')).Hash.ToLowerInvariant()
+        Test-Path -LiteralPath (Join-Path $script:ciPreparedArtifact 'source') | Should -BeFalse
+    }
+
+    It 'should reject a mismatched tested SHA before creating an artifact' {
+        $directory = Join-Path $TestDrive 'wrong source'
+        $result = Invoke-CiWindowsArtifactFixture -Phase Prepare -Directory $directory -SourceSha ('0' * 40)
+        $result.ExitCode | Should -Not -Be 0
+        $result.Stderr | Should -Match 'does not match the tested SHA'
+        Test-Path -LiteralPath (Join-Path $directory 'source.zip') | Should -BeFalse
+    }
+
+    It 'should reject a modified package plan before extracting or executing its installer' {
+        $directory = Join-Path $TestDrive 'modified plan'
+        Copy-Item -LiteralPath $script:ciPreparedArtifact -Destination $directory -Recurse
+        Add-Content -LiteralPath (Join-Path $directory 'packages.json') -Value ' '
+        $result = Invoke-CiWindowsArtifactFixture -Phase Apply -Directory $directory
+        $result.ExitCode | Should -Not -Be 0
+        $result.Stderr | Should -Match 'artifact digest mismatch'
+        Test-Path -LiteralPath (Join-Path $directory 'source') | Should -BeFalse
+    }
+}
+
+Describe 'NixOS-WSL E2E cleanup boundary' {
+    BeforeAll {
+        $tokens = $null
+        $parseErrors = $null
+        $scriptPath = Join-Path $script:repoRoot 'scripts/powershell/Invoke-CiWsl.ps1'
+        $ast = [Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
+        if ($parseErrors.Count) { throw ($parseErrors -join "`n") }
+        $guard = $ast.Find({ param($node)
+                $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Assert-CiWslOwnership'
+            }, $true)
+        if (-not $guard) { throw 'WSL cleanup ownership guard was not found.' }
+        . ([scriptblock]::Create($guard.Extent.Text))
+    }
+
+    It 'should reject pre-existing or foreign distro cleanup locations using the real ownership guard' {
         $tempRoot = Join-Path $TestDrive 'temp-root'
-        $validName = 'NixOS-CI-' + ('a' * 32)
+        $validDirectory = Join-Path $tempRoot ('NixOS-CI-' + ('a' * 32))
         foreach ($case in @(
-                @{ Name = $validName; Path = $tempRoot; Allowed = $false }
-                @{ Name = $validName; Path = $tempRoot + [IO.Path]::DirectorySeparatorChar; Allowed = $false }
-                @{ Name = $validName; Path = (Join-Path $tempRoot $validName); Allowed = $true }
-                @{ Name = 'NixOS'; Path = (Join-Path $tempRoot 'NixOS'); Allowed = $false }
-                @{ Name = $validName; Path = $tempRoot + '-sibling'; Allowed = $false }
-                @{ Name = $validName; Path = (Join-Path $tempRoot '../sibling'); Allowed = $false }
-                @{ Name = $validName; Path = (Join-Path $tempRoot 'child/..'); Allowed = $false }
+                @{ Name = 'NixOS'; Path = $validDirectory; Run = '123'; Allowed = $true }
+                @{ Name = 'NixOS'; Path = $tempRoot; Run = '123'; Allowed = $false }
+                @{ Name = 'NixOS'; Path = (Join-Path $tempRoot 'NixOS'); Run = '123'; Allowed = $false }
+                @{ Name = 'NixOS'; Path = (Join-Path $tempRoot '../NixOS-CI-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'); Run = '123'; Allowed = $false }
+                @{ Name = 'other'; Path = $validDirectory; Run = '123'; Allowed = $false }
+                @{ Name = 'NixOS'; Path = $validDirectory; Run = '456'; Allowed = $false }
             )) {
-            $distroName = $case.Name
-            $installDir = [IO.Path]::GetFullPath($case.Path).TrimEnd('\', '/')
-            if ($case.Allowed) { { & $script:e2eCleanupGuard } | Should -Not -Throw }
-            else { { & $script:e2eCleanupGuard } | Should -Throw '*Refusing an unsafe CI distro*' }
+            if ($case.Allowed) {
+                { Assert-CiWslOwnership -Root $tempRoot -Directory $case.Path -Name $case.Name -RunId $case.Run -ExpectedRunId '123' } | Should -Not -Throw
+            }
+            else {
+                { Assert-CiWslOwnership -Root $tempRoot -Directory $case.Path -Name $case.Name -RunId $case.Run -ExpectedRunId '123' } | Should -Throw '*Refusing an unsafe CI distro*'
+            }
         }
     }
 }

@@ -8,10 +8,14 @@ if (($# == 0)); then
 fi
 
 retry_log=$(mktemp)
-trap 'rm -f "$retry_log"' EXIT
+retry_stdout=$(mktemp)
+trap 'rm -f "$retry_log" "$retry_stdout"' EXIT
 
 for retry_attempt in 1 2 3; do
-  if "$@" 2>&1 | tee "$retry_log"; then
+  # Keep JSON and --print-out-paths stdout usable after a recovered attempt.
+  # Stderr streams immediately; only successful stdout is published as stdout.
+  if { "$@" >"$retry_stdout"; } 2>&1 | tee "$retry_log" >&2; then
+    cat "$retry_stdout"
     exit 0
   else
     retry_statuses=("${PIPESTATUS[@]}")
@@ -20,6 +24,8 @@ for retry_attempt in 1 2 3; do
   if ((retry_statuses[1] != 0)); then
     exit "${retry_statuses[1]}"
   fi
+  cat "$retry_stdout" >&2
+  cat "$retry_stdout" >>"$retry_log"
   retry_status=${retry_statuses[0]}
   if ((retry_attempt == 3 || retry_status >= 128)) ||
     ! grep -Eq 'curl: \(6\) Could not resolve host:' "$retry_log" ||

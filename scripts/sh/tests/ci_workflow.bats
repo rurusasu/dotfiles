@@ -28,180 +28,11 @@ run_script() {
   run bash --noprofile --norc -e -o pipefail -c "$1"
 }
 
-private_cache_fixture() {
-  export PRIVATE_PATH=/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-private
-  export PUBLIC_PATH=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-public
-  export MAX_CACHE_SIZE=33554432 PUBLIC_NAR_SIZE=16 COPY_EXIT=0 INFO_EXIT=0 INFO_FORMAT=object
-  export COPY_STARTED="$BATS_TEST_TMPDIR/copy-started"
-  export DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/previous-cache"
-  mkdir -p "$DOTFILES_CI_BINARY_CACHE"
-  printf previous >"$DOTFILES_CI_BINARY_CACHE/keep"
-  write_stub nix <<'EOF'
-case "$*" in
-'path-info --all') printf '%s\n' "$PRIVATE_PATH" "$PUBLIC_PATH" ;;
-'path-info --recursive --json --stdin')
-	[[ $(cat) == "$PRIVATE_PATH" ]]
-	((INFO_EXIT == 0)) || exit "$INFO_EXIT"
-	if [[ $INFO_FORMAT == object ]]; then
-		printf '{"%s":{"narSize":16},"%s":{"narSize":%s}}\n' "$PRIVATE_PATH" "$PUBLIC_PATH" "$PUBLIC_NAR_SIZE"
-	else
-		printf '[{"path":"%s","narSize":16},{"path":"%s","narSize":%s}]\n' "$PRIVATE_PATH" "$PUBLIC_PATH" "$PUBLIC_NAR_SIZE"
-	fi ;;
-'copy --stdin --to '*)
-	[[ $(cat) == "$PRIVATE_PATH" ]]
-	: >"$COPY_STARTED"
-	((COPY_EXIT == 0)) || exit "$COPY_EXIT"
-	cache=${4#file://}
-	cache=${cache%\?compression=zstd}
-	mkdir -p "$cache/nar"
-	printf private >"$cache/nar/private.nar.zst"
-	printf public >"$cache/nar/public.nar.zst"
-	printf 'StorePath: %s\nURL: nar/private.nar.zst\nReferences: %s\n' "$PRIVATE_PATH" "${PUBLIC_PATH#/nix/store/}" \
-		>"$cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.narinfo"
-	printf 'StorePath: %s\nURL: nar/public.nar.zst\nReferences: \n' "$PUBLIC_PATH" \
-		>"$cache/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo" ;;
-*) exit 64 ;;
-esac
-EOF
-  write_stub nix-store <<'EOF'
-[[ "$1 $2 $3 $4" == '--store https://cache.nixos.org --check-validity --print-invalid' ]]
-printf '%s\n' "$PRIVATE_PATH"
-EOF
-  CACHE_EXPORT=$(workflow_step "$REPO_ROOT/.github/actions/cache-nix/action.yml" '' 'Export private build outputs')
-}
-
-@test "private cache checks the full temporary closure before copying on a small disk" {
-  private_cache_fixture
-  # Only the public reference is huge; its payload would be pruned after copying.
-  export PUBLIC_NAR_SIZE=1000000000000000000
-  run_script "$CACHE_EXPORT"
+@test "private cache exports bounded dependency-closed subsets and propagates failures" {
+  run python3 -W error::ResourceWarning -m unittest discover \
+    -s scripts/python/tests -p test_prepare_ci_nix_cache.py -v
   [ "$status" -eq 0 ]
-  [[ $output == *'::warning::'* ]]
-  grep -Fxq 'cacheable=false' "$GITHUB_OUTPUT"
-  [ ! -e "$COPY_STARTED" ]
-  [ "$(cat "$DOTFILES_CI_BINARY_CACHE/keep")" = previous ]
-}
-
-@test "private cache still exports fitting outputs and prunes public payloads" {
-  private_cache_fixture
-  for format in object array; do
-    export RUNNER_TEMP="$BATS_TEST_TMPDIR/$format" INFO_FORMAT="$format"
-    : >"$GITHUB_OUTPUT"
-    run_script "$CACHE_EXPORT"
-    [ "$status" -eq 0 ]
-    grep -Fxq 'cacheable=true' "$GITHUB_OUTPUT"
-    [ -f "$RUNNER_TEMP/nix-private-cache/nar/private.nar.zst" ]
-    [ -f "$RUNNER_TEMP/nix-private-cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.narinfo" ]
-    [ ! -e "$RUNNER_TEMP/nix-private-cache/nar/public.nar.zst" ]
-    [ ! -e "$RUNNER_TEMP/nix-private-cache/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo" ]
-  done
-}
-
-@test "private cache propagates Nix query and copy failures" {
-  private_cache_fixture
-  for command in query copy; do
-    export RUNNER_TEMP="$BATS_TEST_TMPDIR/$command"
-    export INFO_EXIT=0 COPY_EXIT=0
-    if [[ $command == query ]]; then INFO_EXIT=47; else COPY_EXIT=47; fi
-    : >"$GITHUB_OUTPUT"
-    run_script "$CACHE_EXPORT"
-    [ "$status" -ne 0 ]
-    [ ! -s "$GITHUB_OUTPUT" ]
-  done
-}
-
-@test "WSL transport remains available when only the consumer is rerun" {
-  upload=$(yq -er '.jobs["wsl-prebuild"].steps[] | select(.name == "Upload WSL Nix store cache") | .with.name' "$WORKFLOW")
-  download=$(yq -er '.jobs.wsl.steps[] | select(.name == "Download prebuilt WSL Nix store cache") | .with.name' "$WORKFLOW")
-  previous=''
-  for run_id in 123456 234567; do
-    uploaded=${upload//'${{ github.run_id }}'/$run_id}
-    uploaded=${uploaded//'${{ github.run_attempt }}'/1}
-    [ "$uploaded" != "$previous" ]
-    for attempt in 1 2 3; do
-      requested=${download//'${{ github.run_id }}'/$run_id}
-      requested=${requested//'${{ github.run_attempt }}'/$attempt}
-      [ "$requested" = "$uploaded" ]
-    done
-    previous=$uploaded
-  done
-  # Rerunning the producer must replace its artifact within the same run.
-  [ "$(yq -er '.jobs["wsl-prebuild"].steps[] | select(.name == "Upload WSL Nix store cache") | .with.overwrite' "$WORKFLOW")" = true ]
-}
-
-@test "WSL prebuild exports zstd transport and fails closed" {
-  script=$(workflow_step "$WORKFLOW" wsl-prebuild 'Build the WSL system closure and export a local cache')
-  export STORE_PATH=/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-hermes
-  write_stub nix <<'EOF'
-case "$1" in
---version) echo 'nix boundary double' ;;
-build)
-	[[ " $* " == *' .#nixosConfigurations.nixos.config.system.build.toplevel '* ]]
-	printf '%s\n' "$STORE_PATH" ;;
-copy)
-	[[ $# == 4 && $2 == --to && $4 == "$STORE_PATH" && $3 == file:///*'?compression=zstd' ]]
-	((COPY_EXIT == 0)) || exit "$COPY_EXIT"
-	cache=${3#file://}
-	[[ ${cache#*\?} == compression=zstd ]]
-	cache=${cache%\?compression=zstd}
-	mkdir -p "$cache/nar"
-	printf cache >"$cache/nar/private.nar.zst"
-	printf 'StorePath: %s\nURL: %s\nReferences: %s\n' "$STORE_PATH" "$NAR_URL" "$NAR_REFS" \
-		>"$cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.narinfo" ;;
-path-info) [[ $2 == --recursive ]]; printf '%s\n' "$STORE_PATH" ;;
-*) exit 64 ;;
-esac
-EOF
-  write_stub nix-store <<'EOF'
-[[ "$1 $2 $3 $4" == '--store https://cache.nixos.org --check-validity --print-invalid' ]]
-shift 4
-printf '%s\n' "$@"
-EOF
-  for case in success native traversal missing closure; do
-    export RUNNER_TEMP="$BATS_TEST_TMPDIR/$case/container runner temp"
-    export DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/persistent-cache"
-    export COPY_EXIT=0 NAR_URL=nar/private.nar.zst NAR_REFS=''
-    expected=1 diagnostic=''
-    case "$case" in
-    success) expected=0 ;;
-    native)
-      COPY_EXIT=47
-      expected=47
-      ;;
-    traversal)
-      NAR_URL=../outside.nar
-      diagnostic='Invalid NAR location'
-      ;;
-    missing)
-      NAR_URL=nar/missing.nar
-      diagnostic='Missing NAR payload'
-      ;;
-    closure)
-      NAR_REFS=outside-closure
-      diagnostic='Incomplete reference closure'
-      ;;
-    esac
-    mkdir -p "$DOTFILES_CI_BINARY_CACHE"
-    : >"$GITHUB_OUTPUT"
-    run_script "$script"
-    [ "$status" -eq "$expected" ]
-    if ((expected)); then
-      [[ $output == *"$diagnostic"* ]]
-      [ ! -s "$GITHUB_OUTPUT" ]
-      [ ! -e "$RUNNER_TEMP/wsl-nix-cache-artifact/wsl-nix-cache.tar" ]
-    else
-      artifact=$(sed -n 's/^artifact-dir=//p' "$GITHUB_OUTPUT")
-      [[ $artifact == "$RUNNER_TEMP/"* ]]
-      [ "$(ls -1 "$artifact")" = $'wsl-nix-cache.tar\nwsl-system-paths.txt' ]
-      [ "$(cat "$artifact/wsl-system-paths.txt")" = "$STORE_PATH" ]
-      tar -tf "$artifact/wsl-nix-cache.tar" >"$BATS_TEST_TMPDIR/archive-list"
-      grep -Fxq './nar/private.nar.zst' "$BATS_TEST_TMPDIR/archive-list"
-      grep -Fxq './public-paths.txt' "$BATS_TEST_TMPDIR/archive-list"
-    fi
-    if ((COPY_EXIT == 0)); then
-      [ -f "$DOTFILES_CI_BINARY_CACHE/nar/private.nar.zst" ]
-    fi
-  done
+  [[ $output =~ Ran[[:space:]]+[1-9][0-9]*[[:space:]]+tests? ]]
 }
 
 @test "CI authentication and bounded HTTP/1.1 downloads follow Nix home and keep tokens private" {
@@ -271,23 +102,55 @@ EOF
   done
 }
 
-@test "bootstrap aggregate accepts no work and rejects missing required jobs" {
+@test "bootstrap aggregate requires every selected producer and runtime consumer to succeed" {
   script=$(workflow_step "$WORKFLOW" complete 'Verify routed job results')
-  for changes in '' CHANGES_RESULT=failure LINUX_BUILD_REQUIRED=true NIX_REQUIRED=true \
-    BASH_REQUIRED=true 'BASH_REQUIRED=true BASH_RESULT=failure' 'BASH_REQUIRED=true BASH_RESULT=success' \
-    BASH_RESULT=success \
-    'TOOLS_REQUIRED=true TOOLS_RESULT=success NIX_REQUIRED=true NIX_RESULT=success LINUX_BUILD_REQUIRED=true LINUX_BUILD_RESULT=success' \
-    WINDOWS_REQUIRED=true 'WINDOWS_REQUIRED=true WINDOWS_INSTALLER_RESULT=success' WINDOWS_INSTALLER_RESULT=success DARWIN_RESULT=success; do
-    while read -r variable; do
-      if [[ $variable == *_RESULT ]]; then export "$variable=skipped"; else export "$variable=false"; fi
-    done < <(grep -oE '\$\{[A-Z_]+\}' <<<"$script" | tr -d '${}' | sort -u)
-    export CHANGES_RESULT=success
-    for assignment in $changes; do export "$assignment"; done
-    run_script "$script"
-    case "$changes" in
-    '' | 'BASH_REQUIRED=true BASH_RESULT=success' | 'TOOLS_REQUIRED=true '* | 'WINDOWS_REQUIRED=true WINDOWS_INSTALLER_RESULT=success') [ "$status" -eq 0 ] ;;
-    *) [ "$status" -eq 1 ] ;;
-    esac
+  variables=$(yq -r '.jobs.complete.env | keys | .[]' "$WORKFLOW")
+  for variable in $variables; do
+    if [[ $variable == *_RESULT ]]; then export "$variable=skipped"; else export "$variable=false"; fi
+  done
+  export CHANGES_RESULT=success
+  run_script "$script"
+  [ "$status" -eq 0 ]
+  for variable in $variables; do
+    if [[ $variable == *_RESULT ]]; then export "$variable=success"; else export "$variable=true"; fi
+  done
+  run_script "$script"
+  [ "$status" -eq 0 ]
+  for variable in $variables; do
+    [[ $variable == *_RESULT ]] || continue
+    for result in failure cancelled skipped; do
+      export "$variable=$result"
+      run_script "$script"
+      [ "$status" -ne 0 ]
+    done
+    export "$variable=success"
+  done
+}
+
+@test "runtime consumers receive artifacts by producer-issued immutable IDs" {
+  for consumer in linux darwin windows-installer; do
+    downloads=$(JOB="$consumer" yq -r '.jobs[strenv(JOB)].steps[] | select((.uses // "") | test("^actions/download-artifact@")) | .name' "$WORKFLOW")
+    [ -n "$downloads" ]
+    while IFS= read -r step; do
+      ids=$(JOB="$consumer" STEP="$step" yq -er '.jobs[strenv(JOB)].steps[] | select(.name == strenv(STEP)) | .with["artifact-ids"]' "$WORKFLOW")
+      [[ $ids =~ needs\.([a-z-]+)\.outputs\.([a-z-]+) ]]
+      producer=${BASH_REMATCH[1]} output=${BASH_REMATCH[2]}
+      JOB="$consumer" PRODUCER="$producer" yq -e '.jobs[strenv(JOB)].needs | any_c(. == strenv(PRODUCER))' "$WORKFLOW" >/dev/null
+      reference=$(JOB="$producer" OUTPUT="$output" yq -er '.jobs[strenv(JOB)].outputs[strenv(OUTPUT)]' "$WORKFLOW")
+      [[ $reference == *'.outputs.artifact-id'* ]]
+      JOB="$consumer" STEP="$step" yq -e '.jobs[strenv(JOB)].steps[] | select(.name == strenv(STEP)) | .with.name == null' "$WORKFLOW" >/dev/null
+      target=${step#Download exact }
+      target=${target% producer artifact}
+      guard="Require exact $target producer artifact"
+      reference=$(JOB="$consumer" STEP="$guard" yq -er '.jobs[strenv(JOB)].steps[] | select(.name == strenv(STEP)) | .env.PRODUCER_ARTIFACT_ID' "$WORKFLOW")
+      [ "$reference" = "$ids" ]
+      script=$(workflow_step "$WORKFLOW" "$consumer" "$guard")
+      for id in '' 0 invalid 12,34 12345; do
+        export PRODUCER_ARTIFACT_ID="$id"
+        run_script "$script"
+        if [[ $id == 12345 ]]; then [ "$status" -eq 0 ]; else [ "$status" -ne 0 ]; fi
+      done
+    done <<<"$downloads"
   done
 }
 
