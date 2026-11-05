@@ -56,7 +56,7 @@ mkdir -p "$config_dir"
   # Share caches and transport limits across every CI platform. Replacing the
   # base substituter also preserves the official-cache priority after NixOS or
   # nix-darwin activation installs the host's normal configuration.
-  grep -E '^(substituters|extra-trusted-public-keys|http2|stalled-download-timeout|download-attempts|fallback) = ' \
+  grep -E '^(substituters|trusted-public-keys|extra-trusted-public-keys|http2|stalled-download-timeout|download-attempts|fallback) = ' \
     "$repo_root/docker/bootstrap-ci-tools/nix.conf"
   if [[ -n ${DOTFILES_CI_BINARY_CACHE:-} ]]; then
     # This local cache is restored within GitHub's branch-scoped CI cache.
@@ -87,7 +87,11 @@ if ! nix config show substituters | grep -Fq 'https://hermes-agent.cachix.org'; 
   echo "Nix did not load the Hermes binary cache." >&2
   exit 1
 fi
-if ! nix config show trusted-public-keys | grep -Fq 'hermes-agent.cachix.org-1:'; then
-  echo "Nix did not load the Hermes binary cache key." >&2
-  exit 1
-fi
+trusted_public_keys=$(nix config show trusted-public-keys)
+while IFS= read -r signing_key; do
+  [[ -n $signing_key ]] || continue
+  if ! printf '%s\n' "$trusted_public_keys" | tr ' ' '\n' | grep -Fxq "$signing_key"; then
+    printf 'Nix did not load the CI binary cache signing key: %s\n' "${signing_key%%:*}" >&2
+    exit 1
+  fi
+done < <(sed -n -E 's/^(extra-)?trusted-public-keys = //p' "$repo_root/docker/bootstrap-ci-tools/nix.conf" | tr ' ' '\n')

@@ -80,26 +80,32 @@ checks)
   system=$(nix eval --impure --raw --expr builtins.currentSystem)
   # VM drivers are built here; VM execution belongs to the E2E consumer.
   selection='builtins.attrValues checks'
+  driver='null'
   if [[ $target == linux && ${CI_LINUX_REQUIRED:-false} != true ]]; then
     selection='builtins.filter (check: !(check ? driver)) (builtins.attrValues checks)'
+  elif [[ $target == linux ]]; then
+    driver='checks.native-linux-vm.driver.outPath'
   fi
   nix eval --json "$source#checks.$system" --apply \
-    "checks: map (check: (check.driver or check).drvPath) ($selection)" >"$CI_STATE/checks.json"
-  [[ $(jq length "$CI_STATE/checks.json") -gt 0 ]]
+    "checks: { derivations = map (check: (check.driver or check).drvPath) ($selection); driver = $driver; }" >"$CI_STATE/checks.json"
+  [[ $(jq '.derivations | length' "$CI_STATE/checks.json") -gt 0 ]]
   checks=()
-  while IFS= read -r check; do checks+=("$check^*"); done < <(jq -er '.[]' "$CI_STATE/checks.json")
+  while IFS= read -r check; do checks+=("$check^*"); done < <(jq -er '.derivations[]' "$CI_STATE/checks.json")
   nix build --no-link --no-write-lock-file --print-build-logs "${checks[@]}"
+  if [[ $target == linux && ${CI_LINUX_REQUIRED:-false} == true ]]; then
+    record_root linux driver "$(jq -er .driver "$CI_STATE/checks.json")"
+  fi
   ;;
 build)
   source=$(source_path)
   if [[ $target == darwin ]]; then
     # shellcheck source=/dev/null
     source "$repository/scripts/sh/lib/darwin-flake.sh"
-    write_darwin_flake "$CI_STATE/darwin-flake" "$(id -un)" true
-    nix flake lock --offline --override-input dotfiles "$source" "path:$CI_STATE/darwin-flake"
-    nix flake archive --json "path:$CI_STATE/darwin-flake" >"$CI_STATE/deployment.json"
+    write_darwin_flake "$CI_STATE/darwin-flake" "$(id -un)" "$source" true
+    nix flake lock --offline "path:$CI_STATE/darwin-flake"
+    nix flake archive --json --no-update-lock-file --no-write-lock-file "path:$CI_STATE/darwin-flake" >"$CI_STATE/deployment.json"
     deployment=$(jq -er .path "$CI_STATE/deployment.json")
-    system=$(nix build --no-link --print-out-paths --print-build-logs "$deployment#darwinConfigurations.macos.system")
+    system=$(nix build --no-link --no-update-lock-file --no-write-lock-file --print-out-paths --print-build-logs "$deployment#darwinConfigurations.macos.system")
     record_root darwin system "$system"
     record_root darwin deployment "$deployment"
     program=$(nix eval --raw "$source#apps.aarch64-darwin.darwin-rebuild.program")
@@ -108,12 +114,9 @@ build)
     record_root darwin rebuild "$rebuild"
   else
     if [[ ${CI_LINUX_REQUIRED:-false} == true ]]; then
-      install -D -m 0644 "$source/nix/tests/fixtures/hardware-configuration.nix" /etc/nixos/hardware-configuration.nix
-      nix build --impure --no-link --print-build-logs \
-        "$source#nixosConfigurations.linux.config.system.build.toplevel" \
-        "$source#homeConfigurations.x86_64-linux.activationPackage"
-      driver=$(nix build --no-link --print-out-paths "$source#checks.x86_64-linux.native-linux-vm.driver")
-      record_root linux driver "$driver"
+      # The driver already contains the complete production configuration on
+      # VM hardware. Build the standalone installer target separately.
+      nix build --no-link --print-build-logs "$source#homeConfigurations.x86_64-linux.activationPackage"
     fi
     if [[ ${CI_WSL_REQUIRED:-false} == true ]]; then
       system=$(nix build --impure --no-link --print-out-paths --print-build-logs "$source#nixosConfigurations.nixos.config.system.build.toplevel")

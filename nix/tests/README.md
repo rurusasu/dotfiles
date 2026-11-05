@@ -72,8 +72,8 @@ in
 ```
 
 nix-unit の flake-parts module が `checks.<system>.nix-unit` を自動生成します。
-アプリの実行テストは本番の分類に対応する `build/modules/`、独自 package と standalone Darwin の構成ビルドは
-`build/defaults/{custom-packages,standalone-darwin-home}.check.nix`、PowerShell formatter は `build/treefmt/powershell.check.nix` に置きます。
+アプリの実行テストは本番の分類に対応する `build/modules/`、standalone Darwin の構成ビルドは
+`build/defaults/standalone-darwin-home.check.nix`、PowerShell formatter は `build/treefmt/powershell.check.nix` に置きます。
 実行スクリプトを flake の配線ファイルに直書きしません。
 `treefmt` は treefmt-nix の flake-parts module が標準 check として公開します。
 設定の正本は `nix/treefmt.nix`、読み込みと開発シェルの配線は `nix/defaults.nix` です。
@@ -145,11 +145,11 @@ CI の共通入口は `task ci:build TARGET=linux|darwin|windows` と
 
 | 対象          | Producer の成果物                                                                    | E2E の実行境界                                                                                                                                                |
 | ------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| NixOS / Linux | 本番構成、standalone Home Manager、VM driver を同じ store で構築                     | native NixOS VM 内で `install.sh` を実行し、実際の reboot 後に system path、CLI、service、healthを確認                                                        |
+| NixOS / Linux | 本番設定を取り込む VM driver と standalone Home Manager を同じ store で構築          | native NixOS VM 内で `install.sh` を実行し、実際の reboot 後に system path、CLI、service、healthを確認                                                        |
 | macOS         | runner のユーザー名を固定した nix-darwin 構成と必要な依存                            | 別 runner で成果物を import し、`install.sh`、service の再起動、新しい login shell、system path と CLI / service の確認                                       |
 | Windows / WSL | 固定したソースと WinGet master の Windows plan、Linux producer が構築した WSL system | PowerShell 5.1 / 7 で本番の WinGet → WSL setup → chezmoi を通し、WSL の cold restart、新しい PowerShell profile session、CLI / package / 設定 / health を確認 |
 
-Linux の producer は通常の checks と、変更分類で選択された通常 Linux / WSL / VM driver を
+Linux の producer は通常の checks と、変更分類で選択された standalone Home Manager / WSL / VM driver を
 同じ Nix store で扱い、共有パッケージを別ジョブの空の store で再ビルドしません。
 native Linux が選択された場合は VM の runtime check も必須です。Windows の producer は外部アプリをソースビルドせず、
 入力となる配布コードと WinGet master を保存します。WinGet / Store の catalog は外部入力であり、

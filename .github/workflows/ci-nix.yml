@@ -231,6 +231,8 @@ jobs:
         with:
           name: linux-build
       - name: Build Linux checks and selected platform outputs
+        # Leave time to preserve completed outputs when the build step fails.
+        timeout-minutes: 150
         run: task ci:build TARGET=linux
       - name: Upload linux producer artifact
         id: upload-linux
@@ -254,6 +256,8 @@ jobs:
         if: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
       - name: Save Nix cache
         uses: ./.github/actions/cache-nix
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         continue-on-error: true
         with:
           name: linux-build
@@ -327,6 +331,7 @@ jobs:
         with:
           name: darwin
       - name: Build Darwin checks and deployment
+        timeout-minutes: 200
         run: task ci:build TARGET=darwin
       - name: Upload darwin producer artifact
         id: upload-darwin
@@ -339,6 +344,8 @@ jobs:
           compression-level: 0
       - name: Save Nix cache
         uses: ./.github/actions/cache-nix
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
         continue-on-error: true
         with:
           name: darwin

@@ -36,7 +36,9 @@ EOF
 case "$*" in
 'config show access-tokens') field=access-tokens ;;
 'config show substituters') field=substituters ;;
-'config show trusted-public-keys') field=extra-trusted-public-keys ;;
+'config show trusted-public-keys')
+  sed -n -E 's/^(extra-)?trusted-public-keys = //p' "$EXPECTED_CONFIG/nix/bootstrap-ci.conf"
+  exit 0 ;;
 *) exit 64 ;;
 esac
 grep "^$field = " "$EXPECTED_CONFIG/nix/bootstrap-ci.conf" | cut -d= -f2-

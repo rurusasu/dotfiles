@@ -49,7 +49,6 @@ EOF
   [ "$status" -eq 0 ]
   [ "$(cat "$TEST_CAPTURE.user")" = k-miki ]
   grep -Fq -- "flake update --flake $REPO_ROOT" "$TEST_LOG"
-  grep -Fq -- "<--override-input> <dotfiles> <$REPO_ROOT>" "$TEST_LOG"
   grep -Fq -- '<--show-trace>' "$TEST_LOG"
   [ ! -e "$(cat "$TEST_CAPTURE.path")" ]
 }

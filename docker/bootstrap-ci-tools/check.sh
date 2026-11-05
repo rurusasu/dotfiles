@@ -27,6 +27,8 @@ nix config show --json | jq -e '
   and .["download-attempts"].value == 3
   and .fallback.value == true
   and (.substituters.value | index("https://cache.nixos.org?priority=10") != null)
+  and ((.["trusted-public-keys"].value | map(split(":")[0]) | sort) ==
+    ["cache.nixos.org-1", "hermes-agent.cachix.org-1", "niks3.numtide.com-1"])
 ' >/dev/null
 
 fixture=$(mktemp -d)

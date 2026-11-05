@@ -1,7 +1,7 @@
 # Bootstrap CI tools image
 
 `ci-nix.yml` の Linux producer は、このイメージの同じ Nix store で
-通常の checks と、変更分類で選択された通常 Linux、WSL、native NixOS VM driver の
+通常の checks と、変更分類で選択された standalone Home Manager、WSL、native NixOS VM driver の
 検査・ビルドを実行します。native Linux が選択された場合の VM runtime check は必須です。
 `bash-test` もこのイメージで Bash テストを一度だけ実行します。
 Nix、Bash、go-task、Git、Python 3.14、Node.js 24、statix、jq、tar、xz を事前導入します。
@@ -55,7 +55,7 @@ VM driver は producer で構築し、VM の実行は consumer の E2E 工程に
 Linux / Darwin / Windows の producer は対象の SHA を固定して成果物を作り、
 consumer は artifact の取得 → import / 本番 installer の反映 → 再起動 / 新しい session → runtime 確認を行います。
 
-Linux producer は通常 NixOS と WSL の共有依存を再利用します。native Linux の consumer は KVM の
+Linux producer は本番設定を取り込む VM、standalone Home Manager と WSL の共有依存を再利用します。native Linux の consumer は KVM の
 NixOS VM で `install.sh` と実 reboot を確認します。WSL の consumer は Windows 上の使い捨て distro で
 本番 setup と cold restart を確認します。macOS は別 runner で `install.sh`、service の再起動、
 新しい login shell を検証します。Windows は WinGet master とソースの plan を受け取り、
@@ -85,8 +85,10 @@ push / PR では軽量な変更検出を必ず実行し、必要な job だけ�
   consumer が公開依存を取得してから private NAR を import します。
   取得漏れを consumer 内のソースビルドで補わず、反映後の system が producer の root と一致することを検証します。
 - `.github/actions/cache-nix` は追加 account / secret を使わず、GitHub Actions cache に任意の file binary cache を保存します。
-  OS・architecture・Nix version・cache 名・flake.lock のハッシュで分離し、同じ inputs、
-  次に同じ実行環境の順で復元します。成功した main が保存し、PR は読み取ります。
+  OS・architecture・Nix version・cache 名・flake.lock のハッシュで分離し、同じ SHA、同じ inputs、
+  次に同じ実行環境の順で復元します。成功した main が共有用を保存し、PR は自身の merge ref に
+  完了済み出力を保存します。PR の保存先は main や他 PR から復元できません。
+  run ID と attempt をキーに含め、同じ SHA の再試行でも新しい出力を蓄積します。
   この cache が消えても必須 artifact の整合性と E2E の成功条件は変わりません。
 
 optional cache の exporter は、設定された公開 substituter（公式、Numtide、Hermes）を調べ、
@@ -102,6 +104,8 @@ store DB は保存せず、metadata と対応する payload がそろった file
 圧縮には Nix の zstd を使い、Homebrew cleanup 後も同じ compressor を使えるよう GC root と PATH で保持します。
 初回や容量制限による cache eviction 時は producer が不足分を構築します。E2E consumer は構築しません。
 複数 cache が repository の容量枠を共有するため、上限が各世代の永続保持を保証するわけではありません。
+build step の時間上限は job 全体より短くし、失敗時も完了済み出力を保存する時間を確保します。
+cache 保存には20分の上限を設けます。job 全体の timeout・キャンセル・runner 消失時の保存は保証しません。
 保存・復元・artifact 転送にかかった時間と容量は hosted Actions の各工程のログで確認します。
 保存ジョブの成功だけで改善完了とせず、後続実行で Linux / Darwin の両 producer に実際の cache hit があり、
 不要な再ビルドを減らせていることを確認します。

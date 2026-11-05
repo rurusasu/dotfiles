@@ -18,24 +18,22 @@ fi
 
 # A deployment can select the immutable flake produced for this login user.
 flake_ref=${DOTFILES_FLAKE_REF:-}
-override_options=()
 if [[ -z $flake_ref ]]; then
   # shellcheck source=scripts/sh/lib/darwin-flake.sh
   . "$ROOT/scripts/sh/lib/darwin-flake.sh"
   darwin_flake=$(mktemp -d)
   trap 'rm -f "$darwin_flake/flake.nix" "$darwin_flake/flake.lock" "$darwin_flake/primary-user" "$darwin_flake/ci-settings.nix"; rmdir "$darwin_flake"' EXIT
-  write_darwin_flake "$darwin_flake" "$primary_user"
+  write_darwin_flake "$darwin_flake" "$primary_user" "$ROOT"
   flake_ref="path:$darwin_flake#macos"
-  override_options=(--override-input dotfiles "$ROOT")
   if [[ $UPDATE_FLAKE_INPUTS == false ]]; then
     # Creating the temporary wrapper lock does not update the source's lock.
     nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
-      flake lock "path:$darwin_flake" --offline "${override_options[@]}"
+      flake lock "path:$darwin_flake" --offline
   fi
 fi
 
 sudo --set-home ${install_sudo_options[@]+"${install_sudo_options[@]}"} "$(command -v nix)" --accept-flake-config \
   --extra-experimental-features 'nix-command flakes' \
   run ${install_flake_options[@]+"${install_flake_options[@]}"} "$ROOT#darwin-rebuild" -- switch --flake "$flake_ref" \
-  ${override_options[@]+"${override_options[@]}"} --impure ${install_flake_options[@]+"${install_flake_options[@]}"} \
+  --impure ${install_flake_options[@]+"${install_flake_options[@]}"} \
   --option accept-flake-config true "$@"

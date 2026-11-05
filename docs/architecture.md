@@ -238,8 +238,8 @@ consumer は対象 SHA・platform・digest を検証し、本番 installer の�
 セッション → runtime assertion を実行します。Bash / PowerShell adapter は OS の操作だけを担当し、
 工程順序を workflow と script に重複定義しません。
 
-Linux producer は通常の checks をすべて実行し、変更分類で選択された通常 NixOS /
-standalone Home Manager、WSL、NixOS VM driver を同じ store で構築します。
+Linux producer は通常の checks をすべて実行し、変更分類で選択された
+standalone Home Manager、WSL、本番設定を取り込む NixOS VM driver を同じ store で構築します。
 native Linux が選択された場合は VM の runtime check も必須です。Linux の E2E は VM 内の本番 `install.sh` と reboot 後の CLI・service・
 healthを確認します。macOS の E2E も producer の構成を本番 `install.sh` で反映し、
 service の再起動と新しい login shell で確認します。Windows は配布コードと WinGet master の
@@ -251,6 +251,7 @@ WSL は cold restart 後の system path・service・health、Windows は新し�
 GitHub Actions cache と分離します。E2E 内では input を更新せず、欠落した成果物をソースビルドで
 補いません。source SHA が異なる実行には、その SHA で得た検証結果を使います。
 optional cache は収まる依存出力を部分保存して高速化するためのもので、E2E の成功条件ではありません。
+PR のビルド失敗時も完了済み出力を PR の範囲内で保存し、再試行で利用します。main の共有 cache は成功時だけ保存します。
 詳細は [CI cache](../docker/bootstrap-ci-tools/README.md#nix-成果物の再利用) を参照してください。
 
 GitHub-hosted macOS / Windows の host OS reboot は対象外です。service / shell session の
