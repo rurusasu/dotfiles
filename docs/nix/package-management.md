@@ -17,6 +17,7 @@ Windows の導入情報は `windows/winget/packages.json` を直接管理しま�
 明示的な CLI 例外として、Windows PowerShell 用の Superfile (`spf`) も WinGet で導入します。
 WSL の Superfile は Home Manager が導入・設定を管理します。
 OpenCode (`opencode`) と TUIOS (`tuios`) は `nix/defaults.nix` の Home Manager package 宣言から WSL / Darwin に導入します。Pi coding agent (`pi`) は同じ platform で `programs.pi-coding-agent.enable = true` を指定し、自動検出される Pi module が設定を管理します。
+nixpkgs の opencode 2.2.5 は bun 1.4.4 の libc filter で fixed-output hash が Linux と Darwin で変わるため、`nix/defaults.nix` で `--libc="*"` と単一 hash に補正しています。上流の修正が入ったら override を削除します（[NixOS/nixpkgs#582673](https://github.com/NixOS/nixpkgs/issues/582673)）。
 
 フォントパッケージと fontconfig 設定の値は `nix/modules/fonts/settings.nix` の通常の関数に一度だけ定義します。`fonts/default.nix`、`fonts/nixos/default.nix`、`fonts/darwin/default.nix` を対応する scope で自動検出し、`nix/defaults.nix:systemDefaults` の `dotfiles.fonts.enable` で有効化します。NixOS / nix-darwin 統合時は各 OS がフォントを導入し、standalone Home Manager の配布と共通 fontconfig・Linux GTK 設定は Home Manager module が管理します。WSLg への配布と dconf service の登録は `defaults.nix` の WSL 設定が担当します。
 

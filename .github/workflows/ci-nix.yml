@@ -268,6 +268,22 @@ jobs:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
 
+      - name: Free runner disk space
+        run: |
+          set -euo pipefail
+          df -h /
+          default_xcode="$(xcode-select -p)"
+          default_xcode="${default_xcode%/Contents/Developer}"
+          for app in /Applications/Xcode_*.app; do
+            [[ "$app" == "$default_xcode" ]] && continue
+            sudo rm -rf "$app"
+          done
+          sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes
+          rm -rf "$HOME/Library/Developer/CoreSimulator/Devices"
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+          rm -rf "$HOME/Library/Android/sdk"
+          df -h /
+
       - name: Install Nix
         uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b
         with:
