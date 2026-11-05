@@ -2,11 +2,11 @@
 
 共通キー配列は `nix/home/keybindings/`、アプリの設定・サービスは `nix/modules/`、OS 別選択は `nix/defaults.nix:systemDefaults` が所有します。macOS は AeroSpace、native NixOS は Hyprland を使います。NixOS-WSL には compositor を導入しません。
 
-Windows は標準デスクトップと標準ショートカットを使用し、共通デスクトップキーのリマップは行いません。Ghostty と Neovim のアプリ内キーは Nix の定義から生成し、chezmoi が export を WSL に配布します。
+Windows は標準デスクトップと標準ショートカットを使用し、共通デスクトップキーのリマップは行いません。Neovim のアプリ内キーは Nix の定義から生成し、chezmoi が export を WSL に配布します。
 
 ## ターミナルの境界
 
-Windows Terminal の設定は chezmoi が管理します。PowerShell 7 を既定プロファイルとし、NixOS-WSL は Windows Terminal が自動生成する `NixOS` プロファイルから起動します。Ghostty と WezTerm の Unix 設定は Home Manager が管理します。
+Windows Terminal の設定は chezmoi が管理します。PowerShell 7 を既定プロファイルとし、NixOS-WSL は Windows Terminal が自動生成する `NixOS` プロファイルから起動します。Alacritty の Unix 設定は Home Manager が管理します。
 
 Nix のテストは純粋な設定生成と実効値を検査します。実機の compositor 動作やキー入力は対象 host 上で確認します。
 
@@ -50,15 +50,13 @@ task keybindings:export
 task chezmoi
 ```
 
-キーを変更した開発環境で `task keybindings:export` を実行し、正本の Nix ファイルと生成した JSON を一緒にコミットします。Windows での export は WSL の Nix を使います。chezmoi はコミット済み JSON を読み、Ghostty / Neovim の export を NixOS-WSL の `~/.config/dotfiles/keybindings/` にコピーします。chezmoi 実行時に Nix の評価・ビルドは行いません。GitHub Actions は export と Nix 定義の一致を検査し、自動生成・自動コミットは必要ありません。
+キーを変更した開発環境で `task keybindings:export` を実行し、正本の Nix ファイルと生成した JSON を一緒にコミットします。Windows での export は WSL の Nix を使います。chezmoi はコミット済み JSON を読み、Neovim の export を NixOS-WSL の `~/.config/dotfiles/keybindings/` にコピーします。chezmoi 実行時に Nix の評価・ビルドは行いません。GitHub Actions は export と Nix 定義の一致を検査し、自動生成・自動コミットは必要ありません。
 
-通常の `install.cmd` は Windows GUI アプリの導入、NixOS-WSL の準備・同期、`nrs`、Windows chezmoi の順に実行します。`nrs` は `dotfiles.keybindings.fromWindowsExport` を有効にした WSL のアプリ loader を配置し、その後に chezmoi が export を配置します。既存環境でも loader 導入時は一度 `nrs` が必要です。以後のキー変更は export と `task chezmoi` で反映し、Neovim の再起動と Ghostty の設定再読み込みで読み込みます。native Unix のアプリは同じ Nix 定義を直接読みます。
+通常の `install.cmd` は Windows GUI アプリの導入、NixOS-WSL の準備・同期、`nrs`、Windows chezmoi の順に実行します。`nrs` は `dotfiles.keybindings.fromWindowsExport` を有効にした WSL のアプリ loader を配置し、その後に chezmoi が export を配置します。既存環境でも loader 導入時は一度 `nrs` が必要です。以後のキー変更は export と `task chezmoi` で反映し、Neovim を再起動して読み込みます。native Unix のアプリは同じ Nix 定義を直接読みます。
 
 ## ターミナルとの境界と検証
 
-デスクトップ配列は各 OS の desktop adapter が扱います。Windows Terminal は標準ショートカットを使います。Unix の Ghostty と WezTerm は split・tab・pane 移動に共通の直接キーを使い、WezTerm の固有操作と Herdr の操作には [キーバインド統一方針](./keybindings.md) の `Ctrl+Space` を使います。サイズ変更の単位は Ghostty がピクセル、WezTerm がセルです。
-
-WSLg Ghostty は ghostty-wsl.nix が生成するアプリ内の直接キーを使います。10ピクセルの resize は Ctrl+Alt+Shift+矢印、100ピクセルは Ctrl+Alt+Shift+Home/PageDown/PageUp/End です。Windows 側のキー変換や常駐スクリプトは使いません。
+デスクトップ配列は各 OS の desktop adapter が扱います。Windows Terminal は標準ショートカットを使います。Alacritty は単一ウィンドウの terminal とし、split・tab・pane 移動は Herdr の共通 suffix を使います。
 
 Nix の検証では共通キーの重複、renderer の出力、host import の境界を確認します。実機では対象セッションで端末起動、方向移動、workspace 切り替えと移動、floating、全画面をキー入力で確認します。Nix 評価や設定生成の成功だけでは compositor の起動、macOS の Accessibilityは確認できません。
 

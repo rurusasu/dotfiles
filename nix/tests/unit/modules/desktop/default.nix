@@ -19,7 +19,7 @@ in
         "/System/Applications/Apps.app"
         "${programs.chatgpt.package}/Applications/ChatGPT.app"
         "${programs.dia.package}/Applications/Dia.app"
-        "${programs.ghostty.package}/Applications/Ghostty.app"
+        "${programs.alacritty.package}/Applications/Alacritty.app"
         "${darwin.pkgs.obsidian}/Applications/Obsidian.app"
       ];
       finder = "PfHm";

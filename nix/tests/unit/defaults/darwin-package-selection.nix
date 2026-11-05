@@ -20,16 +20,14 @@ in
     expr = contains pkgs.raycast homePackages;
     expected = true;
   };
-  testDarwinTerminalGuiPackagesUseNativeWindowManagerAndTerminals = {
+  testDarwinTerminalGuiPackagesUseNativeWindowManagerAndTerminal = {
     expr = {
       aerospace = contains pkgs.aerospace homePackages;
-      ghostty = contains cfg.home-manager.users.test-user.programs.ghostty.package homePackages;
-      wezterm = contains cfg.home-manager.users.test-user.programs.wezterm.package homePackages;
+      alacritty = contains cfg.home-manager.users.test-user.programs.alacritty.package homePackages;
     };
     expected = {
       aerospace = true;
-      ghostty = true;
-      wezterm = true;
+      alacritty = true;
     };
   };
 }

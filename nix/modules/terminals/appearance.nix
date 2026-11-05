@@ -2,5 +2,6 @@
 {
   font_family = "UDEV Gothic NF";
   font_size = 10;
-  theme = "Catppuccin Mocha";
+  # alacritty-theme file stem.
+  theme = "catppuccin_mocha";
 }

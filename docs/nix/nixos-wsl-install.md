@@ -177,13 +177,13 @@ GTK の画面内フォントは `nix/modules/fonts/default.nix` が GTK 3 / 4 �
 WSL host は `wsl.useWindowsDriver = true` で Windows の D3D12 / DXCore ライブラリを
 `/run/opengl-driver/lib` に接続します。`LD_LIBRARY_PATH` にそのディレクトリを設定し、
 `GALLIUM_DRIVER=d3d12` で Mesa の描画経路を選択します。
-Ghostty などの OpenGL アプリが CPU 描画の `llvmpipe` にフォールバックするのを防ぎます。
+Alacritty などの OpenGL アプリが CPU 描画の `llvmpipe` にフォールバックするのを防ぎます。
 `platform = "wsl"` の `systemDefaults` が Windows driver・ポータル・ユーザーの描画環境を管理します。
 シェルには `home.sessionVariables`、systemd 経由の GUI 起動には `systemd.user.sessionVariables` で渡します。
 詳細は [NixOS-WSL の option](https://nix-community.github.io/NixOS-WSL/options.html#wsl.useWindowsDriver) と
 [WSLg の D3D12 自動選択の問題](https://github.com/microsoft/wslg/issues/1332) を参照してください。
 
-反映後は新しい WSL シェルで確認します。既に起動している Ghostty は再起動してください。
+反映後は新しい WSL シェルで確認します。既に起動している Alacritty は再起動してください。
 
 ```bash
 nix shell --inputs-from ~/.dotfiles nixpkgs#mesa-demos -c glxinfo -B
@@ -211,24 +211,9 @@ busctl --user call org.freedesktop.portal.Desktop /org/freedesktop/portal/deskto
   org.freedesktop.portal.Settings Read ss org.freedesktop.appearance color-scheme
 ```
 
-Ghostty 1.3.1 の起動ログには、設定で解決する警告と upstream 由来の警告があります。
-
-| ログ                                                   | 原因と対応                                                                                                                                    |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Portal の `startup job failed`                         | セッション target と GTK backend の環境が必要です。上記の設定と D-Bus 呼び出しで確認します。                                                  |
-| `gtk-xft-dpi ... (-1)`                                 | GTK が DPI 設定を得られない場合に既定倍率を使います。Portal 起動後に解消することを実機で確認しました。                                        |
-| `OSC 7 ... UriMissingHost`                             | WezTerm の連携が Ghostty 内でも読み込まれ、Zsh で空の `HOSTNAME` を使っていました。WezTerm の連携は `TERM_PROGRAM=WezTerm` に限定します。     |
-| Mesa の `fd -1` / device information                   | Mesa の Linux DRM 情報取得が WSL の D3D12 経路では失敗します。これだけで CPU 描画とは判断せず、上記の renderer を確認します。                 |
-| `unimplemented action=.cell_size`                      | Ghostty 1.3.1 の GTK frontend が内部のセル寸法通知を実装していない警告です。設定のキー割り当てではありません。                                |
-| Adwaita の `style-dark.css` などの deprecated resource | Ghostty に同梱された旧形式のテーマ resource に対する libadwaita の警告です。ユーザーのテーマ設定エラーではありません。                        |
-| `水 ... discarding ic_width metric`                    | フォントの実グリフ幅が advance を超えたため、Ghostty がフォントサイズ正規化用の測定値を破棄しています。文字自体を削除する動作ではありません。 |
-
-上記の実装は [Ghostty 1.3.1 の GTK frontend](https://github.com/ghostty-org/ghostty/blob/v1.3.1/src/apprt/gtk/class/application.zig)、
-[DPI 処理](https://github.com/ghostty-org/ghostty/blob/v1.3.1/src/apprt/gtk/class/surface.zig)、
-[フォント測定](https://github.com/ghostty-org/ghostty/blob/v1.3.1/src/font/face/freetype.zig)、
-[Mesa 26.2.4 の loader](https://gitlab.freedesktop.org/mesa/mesa/-/blob/mesa-26.2.4/src/loader/loader.c)
-で確認できます。WSL で `EGL_PLATFORM=surfaceless` も試しましたが Mesa の警告は残り、
-`MESA_LOADER_DRIVER_OVERRIDE=d3d12` は別の EGL 警告を生んだため、いずれも常設しません。
+WSLg の Mesa は Linux DRM 情報取得に失敗するログを出すことがありますが、`glxinfo -B` の
+`OpenGL renderer string` と `Accelerated` で GPU 描画を判断します。
+`EGL_PLATFORM=surfaceless` や `MESA_LOADER_DRIVER_OVERRIDE=d3d12` は警告を増やすため常設しません。
 
 ## system version と system.stateVersion
 

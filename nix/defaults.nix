@@ -123,8 +123,7 @@ let
               zoxide.enable = true;
               starship.enable = true;
               zsh-patina.enable = true;
-              ghostty.enable = true;
-              wezterm.enable = true;
+              alacritty.enable = true;
               neovim.enable = true;
               git.enable = true;
               ghq.enable = true;

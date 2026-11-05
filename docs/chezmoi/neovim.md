@@ -95,7 +95,7 @@ nvim-cmp、cmp source 群、LuaSnip、friendly-snippets は使用しません。
 
 標準の自動補完はサーバーの trigger character に従います。cmp のようにあらゆる文字入力で複数 source を同時検索する構成ではありません。`completeopt=menu,menuone,noselect,popup` により説明 popup と明示選択を使います。autopairs の Enter 上書きを無効にし、insert-mode の `Ctrl+Y` を redo で奪わないようにしています。
 
-WezTerm / Herdr の terminal prefix も `Ctrl+Space` です。Neovim に届かない環境では `Ctrl+X Ctrl+O` を使ってください。Ghostty は直接キーで分割・tab を操作します。
+Herdr の terminal prefix も `Ctrl+Space` です。Neovim に届かない環境では `Ctrl+X Ctrl+O` を使ってください。Alacritty はタブ・ペイン操作を持たず、Herdr に任せます。
 
 `Space e` は Oil サイドバー、`Space d e` は診断表示です。`Space Space` は fuzzy file search、`Space g g` は Lazygit、`Space s g` はファイル検索です。Oil 内では `a/A` でファイル / ディレクトリ追加、`d` で削除、`m` で移動、`r` で名前変更、`?` でヘルプを開きます。名前・移動先の prompt と Oil の確認・保存処理を使い、削除は trash に送ります。Sidekick を含むキー一覧は [キーバインド](./keybindings.md) を参照してください。
 

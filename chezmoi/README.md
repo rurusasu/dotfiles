@@ -40,14 +40,13 @@ Use `chezmoi --color=false` or `task --color=false` for plain output, including
 when saving logs. Application output keeps the colors provided by each tool;
 plain messages such as `Setup Complete!` remain plain.
 
-The key allocation is defined in `nix/home/keybindings/bindings.nix`,
-`nix/modules/terminals/ghostty/ghostty.nix`, and `nix/modules/editors/nvim/neovim.nix`.
+The key allocation is defined in `nix/home/keybindings/bindings.nix` and
+`nix/modules/editors/nvim/neovim.nix`.
 `task keybindings:export` directly evaluates those definitions with locked Nix
 inputs and jq to update the committed `nix/home/keybindings/generated.json` export. chezmoi reads this export without
-running Nix during apply. chezmoi also copies the exported Ghostty and Neovim data to
+running Nix during apply. chezmoi also copies the exported Neovim data to
 `~/.config/dotfiles/keybindings/` inside NixOS-WSL. Home Manager installs the
-application loaders once; later key changes only require export and chezmoi.
-WSLg Ghostty uses direct Ctrl+Alt+Shift resize shortcuts within the application.
+application loader once; later key changes only require export and chezmoi.
 Regenerate the export after editing the Nix allocation, then apply it with:
 
 ```powershell
@@ -59,6 +58,6 @@ NixOS-WSL once to install the loaders, and applies Windows chezmoi to deploy the
 exported data. `install.cmd` bootstraps the same Task entry when Task is not yet
 installed. That flow consumes the committed JSON and does not regenerate it. On an
 existing installation, run `nrs` once after adding this loader configuration,
-then `task chezmoi`. Restart Neovim and reload Ghostty configuration after key
-changes. GitHub Actions checks that the export matches Nix; it does not need to
-generate or commit files on behalf of Windows installations.
+then `task chezmoi`. Restart Neovim after key changes. GitHub Actions checks that
+the export matches Nix; it does not need to generate or commit files on behalf of
+Windows installations.

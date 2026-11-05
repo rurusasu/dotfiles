@@ -16,7 +16,7 @@ in
 {
   workspace-next = toString (pkgs.writeShellScript "omarchy-workspace-next" cycles.next);
   workspace-prev = toString (pkgs.writeShellScript "omarchy-workspace-prev" cycles.prev);
-  terminal = launch "WezTerm";
+  terminal = launch "Alacritty";
   browser = launch "Dia";
   files = launch "Finder";
   notes = launch "Obsidian";

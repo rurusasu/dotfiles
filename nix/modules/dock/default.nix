@@ -16,7 +16,7 @@
         { app = "/System/Applications/Apps.app"; }
         "${config.programs.chatgpt.package}/Applications/ChatGPT.app"
         "${config.programs.dia.package}/Applications/Dia.app"
-        "${config.programs.ghostty.package}/Applications/Ghostty.app"
+        "${config.programs.alacritty.package}/Applications/Alacritty.app"
         "${pkgs.obsidian}/Applications/Obsidian.app"
       ];
       persistent-others = [ ];

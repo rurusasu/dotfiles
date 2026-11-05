@@ -16,15 +16,15 @@
         (import ./hyprland-renderer.nix {
           inherit lib;
           commands = {
-            terminal = "wezterm start --always-new-process";
+            terminal = "alacritty";
             browser = "firefox --new-window";
             files = "nautilus --new-window";
             notes = "obsidian";
             ai = "chatgpt";
             passwords = "1password";
             launcher = "fuzzel";
-            help = "wezterm start --always-new-process -- less ${pkgs.writeText "omarchy-keybindings.txt" (builtins.readFile ../../../docs/chezmoi/omarchy.md)}";
-            activity = "wezterm start --always-new-process -- top";
+            help = "alacritty -e less ${pkgs.writeText "omarchy-keybindings.txt" (builtins.readFile ../../../docs/chezmoi/omarchy.md)}";
+            activity = "alacritty -e top";
           };
         }).config;
     };

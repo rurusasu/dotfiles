@@ -144,7 +144,7 @@ CI は OS configuration を build することで、その構成に含まれる�
 standalone Home Manager は上記の OS 統合を使えない環境向けに維持します。
 キー設定の JSON は `task keybindings:export` が正本を直接評価して更新します。Darwin custom package の出力は `nix/defaults.nix` に定義します。
 
-macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Homebrew package を反映します。通常の CLI と Neovim・WezTerm は Nix 側で管理します。Homebrew の設定と cask は `nix/defaults.nix` に宣言します。Nix パッケージの版は `flake.lock` に従います。
+macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Homebrew package を反映します。通常の CLI と Neovim・Alacritty は Nix 側で管理します。Homebrew の設定と cask は `nix/defaults.nix` に宣言します。Nix パッケージの版は `flake.lock` に従います。
 
 ### macOS の権限エラー
 
@@ -177,7 +177,7 @@ Homebrew の `zap` や設定ファイルの配置で停止した場合の詳細�
 
 Dock の固定アプリと順序は `nix/modules/dock/default.nix` が管理します。
 macOS 27 の標準「アプリ」（`/System/Applications/Apps.app`）を先頭に置き、
-Nix package の ChatGPT・Dia・Ghostty・Obsidian の順に固定します。
+Nix package の ChatGPT・Dia・Alacritty・Obsidian の順に固定します。
 追加の固定フォルダーと最近使ったアプリは表示しません。
 Finder・ゴミ箱・起動中のアプリの表示は固定アプリの一覧とは別です。
 

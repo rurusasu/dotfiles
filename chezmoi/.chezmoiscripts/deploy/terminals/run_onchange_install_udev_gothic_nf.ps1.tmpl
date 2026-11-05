@@ -74,8 +74,8 @@ if (-not ([UdevGothicFontNativeMethods]::SendMessageTimeout(
     5000,
     [ref]$messageResult
 ))) {
-    Write-Warning "Windows did not acknowledge the font-change notification. Restart WezTerm or sign out to load UDEV Gothic NF."
+    Write-Warning "Windows did not acknowledge the font-change notification. Restart open terminal applications or sign out to load UDEV Gothic NF."
 } else {
-    Write-Host "Installed and loaded $($fontFiles.Count) UDEV Gothic NF font files for the current user. Restart WezTerm to use them."
+    Write-Host "Installed and loaded $($fontFiles.Count) UDEV Gothic NF font files for the current user. Restart terminal applications to use them."
 }
 {{ end -}}
