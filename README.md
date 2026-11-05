@@ -314,10 +314,10 @@ wsl --shutdown
 - 既存のプロファイルとキーバインドを保ちながら設定を適用
 - タブ・ペイン操作は Windows Terminal 標準のキー操作を使用（常駐キー変換は不要）
 
-### Ghostty（Unix）
+### Ghostty / Herdr（Unix）
 
-- 設定ソース: `nix/modules/terminals/ghostty/default.nix` と `ghostty.nix`
-- タブ・ペイン操作は共通の直接キーを使用
+- Ghostty の設定: `nix/modules/terminals/ghostty/default.nix`。分割・タブ操作キーは割り当てない
+- Herdr の設定: `nix/modules/herdr/default.nix`。タブ・ペイン・セッションを `Ctrl+Space` prefix で操作
 
 ## トラブルシューティング
 

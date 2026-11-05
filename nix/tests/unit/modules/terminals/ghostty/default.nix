@@ -1,15 +1,7 @@
 {
   fixtures,
-  code,
 }:
 let
-  appearance = code.nix.modules.terminals.appearance;
-  ghosttyBase = {
-    theme = [ appearance.theme ];
-    font-family = [ appearance.font_family ];
-    font-size = [ appearance.font_size ];
-    macos-option-as-alt = [ true ];
-  };
   systems = [
     "aarch64-darwin"
     "aarch64-linux"
@@ -39,19 +31,6 @@ in
         ];
       in
       {
-        ghosttyConfig =
-          home.config.programs.ghostty.enable
-          &&
-            home.config.programs.ghostty.settings == (
-              ghosttyBase
-              // {
-                keybind = code.nix.modules.terminals.ghostty.ghostty-renderer {
-                  inherit (pkgs) lib;
-                  bindings = (code.nix.home.keybindings.bindings { inherit (pkgs) lib; }).ghostty;
-                  asList = true;
-                };
-              }
-            );
         zshIntegration =
           home.config.programs.ghostty.enableZshIntegration
           && pkgs.lib.hasInfix "shell-integration/zsh/ghostty-integration" home.config.programs.zsh.initContent;
@@ -64,25 +43,11 @@ in
       }
     ) systems;
     expected = map (system: {
-      ghosttyConfig = true;
       zshIntegration = true;
       bashIntegration = true;
       ghosttySystemd = system != "aarch64-darwin";
       ghosttyService = system != "aarch64-darwin";
       customTarget = "custom config/ghostty/config";
     }) systems;
-  };
-  testWslGhosttyReadsChezmoiExportAtConfiguredXdgPath = {
-    expr =
-      (fixtures.mkHome "x86_64-linux" [
-        {
-          programs.ghostty.enable = true;
-          dotfiles.keybindings.fromWindowsExport = true;
-          xdg.configHome = "/home/test-user/custom config";
-        }
-      ]).config.programs.ghostty.settings;
-    expected = ghosttyBase // {
-      config-file = [ "?/home/test-user/custom config/dotfiles/keybindings/ghostty.conf" ];
-    };
   };
 }

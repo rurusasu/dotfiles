@@ -53,7 +53,7 @@ in
 {
   testGhosttyTheme = {
     expr = home.config.programs.ghostty.settings.theme;
-    expected = [ code.nix.modules.terminals.appearance.theme ];
+    expected = code.nix.modules.terminals.appearance.theme;
   };
 }
 ```

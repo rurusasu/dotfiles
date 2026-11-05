@@ -13,7 +13,7 @@ enable・単純な package list・単一代入だけなら `nix/defaults.nix` �
 | Bash・共通 PATH・Zsh                  | `../modules/shells/`                                                                                  |
 | Starship・Patina・zoxide              | `../modules/shells/plugins/`                                                                          |
 | AeroSpace・Hyprland                   | `../modules/aerospace/`・`../modules/hyprland/`                                                       |
-| Ghostty・Neovim のキー設定            | `../modules/terminals/ghostty/`・`../modules/editors/nvim/`                                           |
+| Ghostty・Herdr・Neovim のキー設定     | `../modules/terminals/ghostty/`・`../modules/herdr/`・`../modules/editors/nvim/`                      |
 | fcitx5・gnome-keyring・VS Code Server | `../modules/fcitx5/default.nix`・`../modules/gnome-keyring/`・`../modules/editors/vscode/default.nix` |
 | Homebrew 設定                         | `../defaults.nix`                                                                                     |
 

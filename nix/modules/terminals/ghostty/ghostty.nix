@@ -1,34 +1,49 @@
-# Application key allocation; consumed by Home Manager and the Windows export.
-{ lib, directions }:
-let
-  bind = action: key: modifiers: { inherit action key modifiers; };
-  controlShift = [
-    "ctrl"
-    "shift"
-  ];
-  resizeModifiers = [
-    "super"
-    "ctrl"
-    "shift"
-  ];
-in
+# Reset upstream defaults so upgrades cannot restore split or tab shortcuts.
+# Herdr owns splits and tabs; Ghostty keeps terminal and window operations.
 [
-  (bind "split-down" "e" controlShift)
-  (bind "split-right" "o" controlShift)
-  (bind "new-tab" "t" controlShift)
-  (bind "previous-tab" "left" controlShift)
-  (bind "previous-tab" "up" controlShift)
-  (bind "next-tab" "right" controlShift)
-  (bind "next-tab" "down" controlShift)
+  "clear"
+  "copy=copy_to_clipboard:mixed"
+  "paste=paste_from_clipboard"
+  "super+c=copy_to_clipboard:mixed"
+  "ctrl+shift+c=copy_to_clipboard:mixed"
+  "super+v=paste_from_clipboard"
+  "ctrl+shift+v=paste_from_clipboard"
+  "super+,=open_config:os_open"
+  "ctrl+,=open_config:os_open"
+  "super+shift+,=reload_config"
+  "ctrl+shift+,=reload_config"
+  "super+==increase_font_size:1"
+  "super++=increase_font_size:1"
+  "ctrl++=increase_font_size:1"
+  "ctrl+==increase_font_size:1"
+  "super+-=decrease_font_size:1"
+  "ctrl+-=decrease_font_size:1"
+  "super+0=reset_font_size"
+  "ctrl+0=reset_font_size"
+  "super+f=start_search"
+  "ctrl+shift+f=start_search"
+  "performable:escape=end_search"
+  "super+g=navigate_search:next"
+  "super+shift+g=navigate_search:previous"
+  "super+a=select_all"
+  "super+k=clear_screen"
+  "super+home=scroll_to_top"
+  "super+end=scroll_to_bottom"
+  "super+page_up=scroll_page_up"
+  "super+page_down=scroll_page_down"
+  "shift+page_up=scroll_page_up"
+  "shift+page_down=scroll_page_down"
+  "super+n=new_window"
+  "ctrl+shift+n=new_window"
+  "super+w=close_window"
+  "ctrl+shift+w=close_window"
+  "super+q=quit"
+  "super+enter=toggle_fullscreen"
+  "ctrl+shift+enter=toggle_fullscreen"
+  "super+ctrl+f=toggle_fullscreen"
+  "super+arrow_right=text:\\x05"
+  "super+arrow_left=text:\\x01"
+  "super+backspace=text:\\x15"
+  "alt+arrow_left=esc:b"
+  "alt+arrow_right=esc:f"
 ]
-++ lib.concatMap (direction: [
-  (bind "focus-${direction}" direction [
-    "ctrl"
-    "alt"
-  ])
-  ((bind "resize-${direction}" direction resizeModifiers) // { amount = 10; })
-  ((bind "resize-${direction}" direction (resizeModifiers ++ [ "alt" ])) // { amount = 100; })
-]) directions
-++ map (number: (bind "goto-tab" (toString number) [ "alt" ]) // { amount = number; }) (
-  lib.range 1 9
-)
