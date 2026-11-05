@@ -13,6 +13,7 @@ fi
 if [[ $UPDATE_FLAKE_INPUTS == true ]]; then
   nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
     flake update --flake "$ROOT"
+  bash "$ROOT/scripts/sh/normalize-strata-release-lock.sh" "$ROOT"
 fi
 
 # A deployment can select the immutable flake produced for this login user.

@@ -196,6 +196,7 @@ function Invoke-NixosWslSetup {
 
     if ($updateFlakeInputs) {
         Invoke-SetupCommand "nix --accept-flake-config --extra-experimental-features 'nix-command flakes' flake update --flake $qFlakeTarget" | Out-Host
+        Invoke-SetupCommand "bash $qSource/scripts/sh/normalize-strata-release-lock.sh $qTarget" | Out-Host
     }
     $lockOption = if ($updateFlakeInputs) { '' } else { ' --no-update-lock-file' }
     $deploymentFlake = if ($FlakeReference) { $FlakeReference } else { 'path:' + $target + '#nixos' }

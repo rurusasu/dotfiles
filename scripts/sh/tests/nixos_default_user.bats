@@ -13,6 +13,10 @@ printf '%s\n' "$TEST_KERNEL"
 EOF
   cat >"$BATS_TEST_TMPDIR/bin/nix" <<'EOF'
 #!/usr/bin/env bash
+if [[ -n ${DOTFILES_FLAKE_LOCK:-} ]]; then
+  cat "$DOTFILES_FLAKE_LOCK"
+  exit 0
+fi
 printf 'nix %s\n' "$*" >>"$TEST_LOG"
 if [[ "$*" == *'eval --raw'* ]]; then printf '%s' "$TEST_CONFIGURED_USER"; fi
 EOF

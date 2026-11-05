@@ -15,6 +15,10 @@ setup() {
   export TEST_CONFIG_LOG="$BATS_TEST_TMPDIR/nix-config"
   cat >"$TEST_BIN/nix" <<'EOF'
 #!/usr/bin/env bash
+if [[ -n ${DOTFILES_FLAKE_LOCK:-} ]]; then
+  cat "$DOTFILES_FLAKE_LOCK"
+  exit 0
+fi
 printf 'nix=%s\n' "$*" >>"$DISPATCH_LOG"
 printf '%s' "${NIX_CONFIG:-}" >"$TEST_CONFIG_LOG"
 EOF
@@ -36,6 +40,8 @@ EOF
 write_dispatch_repo() {
   mkdir -p "$BATS_TEST_TMPDIR/repo/scripts/sh/lib"
   cp "$REPO_ROOT/scripts/sh/lib/install-options.sh" "$BATS_TEST_TMPDIR/repo/scripts/sh/lib/"
+  cp "$REPO_ROOT/scripts/sh/normalize-strata-release-lock.sh" "$BATS_TEST_TMPDIR/repo/scripts/sh/"
+  cp "$REPO_ROOT/flake.lock" "$BATS_TEST_TMPDIR/repo/flake.lock"
   sed -e "s|/etc/NIXOS|$BATS_TEST_TMPDIR/NIXOS|g" \
     -e "s|\$HOME/.dotfiles|$TEST_CHECKOUT|g" \
     -e "s|/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh|$TEST_NIX_DAEMON_PROFILE|g" \

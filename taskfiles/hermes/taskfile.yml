@@ -37,6 +37,7 @@ tasks:
       - cmd: |-
           set -eu
           nix flake update
+          bash scripts/sh/normalize-strata-release-lock.sh .
           if [ -e /etc/NIXOS ]; then
             sudo nixos-rebuild switch --flake . --impure
           else
@@ -45,7 +46,7 @@ tasks:
           fi
           task hermes:sync
         platforms: [linux]
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix flake update && sudo nixos-rebuild switch --flake . --impure && task hermes:sync"'
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix flake update && bash scripts/sh/normalize-strata-release-lock.sh . && sudo nixos-rebuild switch --flake . --impure && task hermes:sync"'
         platforms: [windows]
       - cmd: task darwin:install && task hermes:sync
         platforms: [darwin]

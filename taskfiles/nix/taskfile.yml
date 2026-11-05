@@ -18,7 +18,7 @@ tasks:
   rebuild:
     desc: Run nixos-rebuild switch
     cmds:
-      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && {{if ne .UPDATE_FLAKE_INPUTS "false"}}nix flake update && {{end}}sudo nixos-rebuild switch --flake . --impure{{if eq .UPDATE_FLAKE_INPUTS "false"}} --no-update-lock-file{{end}}"'
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && {{if ne .UPDATE_FLAKE_INPUTS "false"}}nix flake update && bash scripts/sh/normalize-strata-release-lock.sh . && {{end}}sudo nixos-rebuild switch --flake . --impure{{if eq .UPDATE_FLAKE_INPUTS "false"}} --no-update-lock-file{{end}}"'
 
   build:
     desc: Dry build NixOS configuration
@@ -28,4 +28,4 @@ tasks:
   update:
     desc: Update flake inputs
     cmds:
-      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix flake update"'
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix flake update && bash scripts/sh/normalize-strata-release-lock.sh ."'

@@ -120,6 +120,7 @@ dotfiles_update_flake() {
       DOTFILES_FLAKE_UPDATE_ROOT="$flake_ref" NIX_CONFIG="$nix_config" \
         nix-shell -p git --run 'nix flake update --flake "$DOTFILES_FLAKE_UPDATE_ROOT"'
     fi
+    NIX_CONFIG="$nix_config" bash "$flake_root/scripts/sh/normalize-strata-release-lock.sh" "$flake_root"
   )
 }
 

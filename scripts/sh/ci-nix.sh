@@ -56,9 +56,12 @@ source)
   git -C "$repository" diff --exit-code --quiet
   git -C "$repository" diff --cached --exit-code --quiet
   cd "$repository"
-  # Archive the committed tree so checkout line-ending transforms cannot alter
-  # the immutable source identity on a different consumer platform.
-  nix flake archive --json --no-write-lock-file "git+file://$repository?rev=$TESTED_SHA&shallow=1" >"$CI_STATE/source.json"
+  # Give Nix a committed-tree snapshot instead of the local Git fetcher, whose
+  # resolve and archive passes can disagree on the source hash on Darwin.
+  committed_source="$CI_STATE/committed-source"
+  mkdir "$committed_source"
+  git -C "$repository" archive --format=tar "$TESTED_SHA" | tar -xf - -C "$committed_source"
+  nix flake archive --json --no-write-lock-file "path:$committed_source" >"$CI_STATE/source.json"
   frozen=$(source_path)
   # shellcheck disable=SC2016 # This interpolation is Nix syntax.
   CI_SOURCE_ROOT="$frozen" nix eval --impure --json --expr '

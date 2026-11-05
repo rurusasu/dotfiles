@@ -16,6 +16,10 @@ printf '%s\n' "$TEST_CURRENT_USER"
 EOF
   cat >"$STUB_BIN/nix" <<'EOF'
 #!/usr/bin/env bash
+if [[ -n ${DOTFILES_FLAKE_LOCK:-} ]]; then
+  cat "$DOTFILES_FLAKE_LOCK"
+  exit 0
+fi
 printf 'nix %s\n' "$*" >>"$TEST_LOG"
 exit "$TEST_UPDATE_STATUS"
 EOF
