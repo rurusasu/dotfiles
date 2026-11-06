@@ -163,7 +163,7 @@ lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
           machine.wait_for_unit("home-manager-nixos.service")
           assert boot_id != machine.succeed("cat /proc/sys/kernel/random/boot_id").strip()
           machine.succeed("test $(readlink -f /run/current-system) = ${target}")
-          machine.wait_until_succeeds("su - nixos -c 'systemctl --user is-active hermes-agent.service'", timeout=360)
+          machine.wait_for_unit("hermes-agent.service", user="nixos", timeout=360)
           machine.succeed("su - nixos -c " + shlex.quote("GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic 'hermes --version'"))
           machine.wait_until_succeeds("curl --fail --silent --max-time 2 -H 'Authorization: Bearer dotfiles-ci-health-probe' http://127.0.0.1:18642/health/detailed | jq -e '.status == \"ok\" and .readiness.status == \"ok\" and (.readiness.checks | type == \"object\" and all(.[]; .status == \"ok\")) and (.readiness.checks as $checks | all([\"state_db\", \"session_store\", \"config\", \"model\", \"disk\", \"gateway\", \"background_queues\"][]; . as $required | $checks[$required].status == \"ok\"))'", timeout=360)
         '';

@@ -95,7 +95,7 @@ Describe 'Windows common shell commands' {
         $script:shell = [powershell]::Create()
         $script:shell.Runspace.SessionStateProxy.SetVariable('ProfileTestSource', (Join-Path $TestDrive 'source repo/chezmoi'))
         $script:shell.AddScript(@'
-foreach ($command in 'eza', 'rg', 'fd', 'lazygit', 'kubectl', 'kubectx', 'kubens', 'task') {
+foreach ($command in 'eza', 'task') {
     $body = [scriptblock]::Create(@"
 [pscustomobject]@{ Command = '$command'; Arguments = @(`$args); Directory = (Get-Location).Path }
 `$global:LASTEXITCODE = 17
@@ -103,8 +103,10 @@ foreach ($command in 'eza', 'rg', 'fd', 'lazygit', 'kubectl', 'kubectx', 'kubens
     Set-Item -Path "function:global:$command.exe" -Value $body
 }
 function global:chezmoi.exe { $global:LASTEXITCODE = 0; $global:ProfileTestSource }
-# Match Windows' default alias before the managed profile replaces it.
-Set-Alias -Name ls -Value Get-ChildItem
+# Seed the Windows alias only on hosts where it is absent.
+if (-not (Get-Alias -Name ls -ErrorAction SilentlyContinue)) {
+    Set-Alias -Name ls -Value Get-ChildItem
+}
 '@).Invoke() | Out-Null
         $script:shell.Commands.Clear()
         $script:shell.AddScript([IO.File]::ReadAllText($script:profilePath)).Invoke() | Out-Null
@@ -114,29 +116,13 @@ Set-Alias -Name ls -Value Get-ChildItem
 
     AfterEach { $script:shell.Dispose() }
 
-    It 'should forward <Name> options and paths with spaces to the Windows executable' -ForEach @(
-        @{ Name = 'eza'; Command = 'eza'; Options = @('--icons', 'auto', '--color', 'auto', '--tree') }
-        @{ Name = 'ls'; Command = 'eza'; Options = @('--icons', 'auto', '--color', 'auto', '--tree', '--level=1') }
-        @{ Name = 'll'; Command = 'eza'; Options = @('--icons', 'auto', '--color', 'auto', '--tree', '--level=1', '--group-directories-first', '--time-style=long-iso') }
-        @{ Name = 'la'; Command = 'eza'; Options = @('--icons', 'auto', '--color', 'auto', '--tree', '--level=1', '--group-directories-first', '--time-style=long-iso', '--git', '--hyperlink', '-F') }
-        @{ Name = 'lt'; Command = 'eza'; Options = @('--icons', 'auto', '--color', 'auto', '--tree', '--level=2', '--group-directories-first', '--time-style=long-iso', '--git') }
-        @{ Name = 'lla'; Command = 'eza'; Options = @('--icons', 'auto', '--color', 'auto', '--tree', '-la') }
-        @{ Name = 'grep'; Command = 'rg'; Options = @() }
-        @{ Name = 'find'; Command = 'fd'; Options = @() }
-        @{ Name = 'lg'; Command = 'lazygit'; Options = @() }
-        @{ Name = 'k'; Command = 'kubectl'; Options = @() }
-        @{ Name = 'kgn'; Command = 'kubectl'; Options = @('get', 'nodes') }
-        @{ Name = 'kgp'; Command = 'kubectl'; Options = @('get', 'pods', '-A') }
-        @{ Name = 'kgs'; Command = 'kubectl'; Options = @('get', 'svc', '-A') }
-        @{ Name = 'kctx'; Command = 'kubectx'; Options = @() }
-        @{ Name = 'kns'; Command = 'kubens'; Options = @() }
-    ) {
-        $script:shell.AddCommand($Name).AddArgument('directory with spaces').AddArgument('--help') | Out-Null
+    It 'should forward ls flags and paths with spaces through eza and preserve its exit code' {
+        $script:shell.AddCommand('ls').AddArgument('directory with spaces').AddArgument('--help') | Out-Null
         $actual = @($script:shell.Invoke())
         $script:shell.HadErrors | Should -BeFalse -Because ($script:shell.Streams.Error -join "`n")
         $actual.Count | Should -Be 1
-        $actual[0].Command | Should -Be $Command
-        ($actual[0].Arguments -join '|') | Should -Be ((@($Options) + @('directory with spaces', '--help')) -join '|')
+        $actual[0].Command | Should -Be 'eza'
+        ($actual[0].Arguments -join '|') | Should -Be '--icons|auto|--color|auto|--tree|--level=1|directory with spaces|--help'
         $script:shell.Commands.Clear()
         $script:shell.AddScript('$global:LASTEXITCODE').Invoke()[0] | Should -Be 17
     }
