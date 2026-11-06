@@ -159,7 +159,6 @@ let
           modifiers = [ "ctrl" ];
         }
       ];
-  ghostty = import ../../modules/terminals/ghostty/ghostty.nix { inherit lib directions; };
 in
 assert
   builtins.length bindings == builtins.length (
@@ -175,16 +174,7 @@ assert
     bindings
     directions
     workspaces
-    ghostty
     ;
   neovim = import ../../modules/editors/nvim/neovim.nix;
   neovimLeader = " ";
-  ghosttyConfig = import ../../modules/terminals/ghostty/ghostty-renderer.nix {
-    inherit lib;
-    bindings = ghostty;
-  };
-  ghosttyWslConfig = import ../../modules/terminals/ghostty/ghostty-wsl.nix {
-    inherit lib;
-    bindings = ghostty;
-  };
 }

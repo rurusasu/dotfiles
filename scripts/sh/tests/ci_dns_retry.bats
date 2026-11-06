@@ -38,15 +38,6 @@ EOF
   [ ! -e "$RETRY_SLEEPS" ]
 }
 
-@test "CI DNS retry recovers after a temporary lookup failure" {
-  export RETRY_FAILURES=1
-  run bash "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" target ready
-  [ "$status" -eq 0 ]
-  [[ $output == *'success: <ready>'* ]]
-  [ "$(wc -l <"$RETRY_CALLS" | tr -d ' ')" -eq 2 ]
-  [ "$(cat "$RETRY_SLEEPS")" = 10 ]
-}
-
 @test "CI DNS retry stops after three failed attempts and keeps the exit status" {
   export RETRY_FAILURES=9
   run bash "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" target
@@ -88,57 +79,22 @@ EOF
   [ ! -e "$RETRY_SLEEPS" ]
 }
 
-workflow_step() {
-  awk -v target="      - name: $1" '
-    $0 == target { found = 1; next }
-    found && /^        run: \|$/ { body = 1; next }
-    body && /^          / { sub(/^          /, ""); print; next }
-    body { exit }
-  ' "$REPO_ROOT/.github/workflows/ci-nix.yml"
-}
-
-@test "Darwin CI retries the build but activates the built system only once" {
-  local build_step apply_step fixture="$BATS_TEST_TMPDIR/repository"
-  build_step=$(workflow_step 'Build macOS configuration')
-  apply_step=$(workflow_step 'Apply macOS configuration')
-  [ -n "$build_step" ]
-  [ -n "$apply_step" ]
-  export RUNNER_TEMP="$BATS_TEST_TMPDIR/runner" GITHUB_WORKSPACE="$fixture"
-  export CI_PHASE_LOG="$BATS_TEST_TMPDIR/phases" CI_SYSTEM="$BATS_TEST_TMPDIR/system"
-  mkdir -p "$RUNNER_TEMP" "$fixture/scripts/sh" "$CI_SYSTEM/sw/bin"
-  CI_SYSTEM=$(cd "$CI_SYSTEM" && pwd -P)
-  cp "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" "$fixture/scripts/sh/"
-  cat >"$BATS_TEST_TMPDIR/bin/sudo" <<'EOF'
+@test "CI DNS recovery publishes only the successful machine-readable stdout" {
+  cat >"$BATS_TEST_TMPDIR/bin/json-target" <<'EOF'
 #!/usr/bin/env bash
-if [[ "$1" == -H ]]; then shift; fi
-exec "$@"
-EOF
-  cat >"$BATS_TEST_TMPDIR/bin/nix" <<'EOF'
-#!/usr/bin/env bash
-printf 'build\n' >> "$CI_PHASE_LOG"
-if [[ ! -e "$RUNNER_TEMP/downloaded" ]]; then
-  touch "$RUNNER_TEMP/downloaded"
-  printf '%s\n' 'curl: (6) Could not resolve host: example.invalid' 'error: cannot download source.tar.gz from any mirror' >&2
-  exit 1
+if [[ ! -e "$RETRY_CALLS" ]]; then
+  printf first >"$RETRY_CALLS"
+  printf '{"incomplete":\n'
+  printf '%s\n' "$RETRY_ERROR" >&2
+  exit 23
 fi
-ln -s "$CI_SYSTEM" "$RUNNER_TEMP/darwin-system"
+printf '{"path":"/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source"}\n'
 EOF
-  cat >"$BATS_TEST_TMPDIR/bin/nix-env" <<'EOF'
-#!/usr/bin/env bash
-[[ "$1" == -p && "$2" == /nix/var/nix/profiles/system && "$3" == --set && "$4" == "$CI_SYSTEM" ]] || exit 9
-printf 'profile\n' >> "$CI_PHASE_LOG"
-EOF
-  cat >"$CI_SYSTEM/sw/bin/darwin-rebuild" <<'EOF'
-#!/usr/bin/env bash
-[[ "$1" == activate ]] || exit 9
-printf 'activate\n' >> "$CI_PHASE_LOG"
-printf 'error: activation failed\n' >&2
-exit 42
-EOF
-  chmod +x "$BATS_TEST_TMPDIR/bin/"* "$CI_SYSTEM/sw/bin/darwin-rebuild"
-  printf 'set -euo pipefail\n%s\n%s\n' "$build_step" "$apply_step" >"$BATS_TEST_TMPDIR/workflow.sh"
-  cd "$fixture"
-  run bash "$BATS_TEST_TMPDIR/workflow.sh"
-  [ "$status" -eq 42 ]
-  [ "$(tr '\n' ' ' <"$CI_PHASE_LOG")" = 'build build profile activate ' ]
+  chmod +x "$BATS_TEST_TMPDIR/bin/json-target"
+  run bash -c 'bash "$1" json-target >"$2"' fixture \
+    "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" "$BATS_TEST_TMPDIR/stdout"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$BATS_TEST_TMPDIR/stdout")" = '{"path":"/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source"}' ]
+  [[ $output == *'incomplete'* ]]
+  [ "$(cat "$RETRY_SLEEPS")" = 10 ]
 }

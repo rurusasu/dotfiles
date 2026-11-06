@@ -1,51 +1,65 @@
 name: Cache CI Nix builds
-description: Reuse bounded private binary caches from main on every platform.
+description: Reuse bounded private binary caches from main and the current PR.
 
 inputs:
   name:
     description: Job-specific cache namespace.
     required: true
   phase:
-    description: Restore before building or save after all checks succeed.
+    description: Restore before building or save completed build outputs.
     default: restore
   max-size:
-    description: Maximum exported cache size in bytes (Darwin uses 2 GiB).
-    default: "805306368"
+    description: Maximum cache size per producer (both fit the shared repository quota).
+    default: "4294967296"
 
 runs:
   using: composite
   steps:
     - name: Prepare Nix cache
       id: prepare
+      if: ${{ !cancelled() }}
       shell: bash
       env:
         CACHE_NAME: ${{ inputs.name }}
         CACHE_PHASE: ${{ inputs.phase }}
         LOCK_HASH: ${{ hashFiles('flake.lock') }}
+        TESTED_SHA: ${{ env.TESTED_SHA }}
       run: |
         set -euo pipefail
         [[ "$CACHE_NAME" =~ ^[a-z0-9-]+$ ]]
         [[ "$CACHE_PHASE" == restore || "$CACHE_PHASE" == save ]]
+        [[ "$TESTED_SHA" =~ ^[0-9a-f]{40}$ ]]
         cache_dir="$RUNNER_TEMP/nix-binary-cache"
+        version="$(nix --version | sed -n '1p' | tr -cs '[:alnum:].-' '-')"
+        prefix="ci-nix-v3-$RUNNER_OS-$RUNNER_ARCH-$CACHE_NAME-$version"
+        # Cache entries are immutable. A retry needs a new key to retain the
+        # newly completed outputs, while restore prefixes reuse earlier runs.
+        key="$prefix-$LOCK_HASH-$TESTED_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+        {
+          echo "DOTFILES_CI_BINARY_CACHE=$cache_dir"
+          echo "DOTFILES_CI_CACHE_KEY=$key"
+        } >> "$GITHUB_ENV"
+        {
+          echo "prefix=$prefix-"
+          echo "lock-prefix=$prefix-$LOCK_HASH-"
+          echo "sha-prefix=$prefix-$LOCK_HASH-$TESTED_SHA-"
+          echo "key=$key"
+          echo "path=$cache_dir"
+        } >> "$GITHUB_OUTPUT"
+        mkdir -p "$cache_dir"
         if [[ "$CACHE_PHASE" == restore ]]; then
           # Homebrew cleanup removes its zstd during Darwin activation. A Nix
           # GC root and GITHUB_PATH keep the same compressor for restore/save.
-          compressor="$(nix build --inputs-from . nixpkgs#zstd.bin \
+          compressor="$(nix build --inputs-from path:. nixpkgs#zstd.bin \
             --out-link "$RUNNER_TEMP/ci-zstd" --print-out-paths)"
           "$compressor/bin/zstd" --version
           echo "$compressor/bin" >> "$GITHUB_PATH"
-          version="$(nix --version | sed -n '1p' | tr -cs '[:alnum:].-' '-')"
-          prefix="ci-nix-v2-$RUNNER_OS-$RUNNER_ARCH-$CACHE_NAME-$version"
-          {
-            echo "DOTFILES_CI_BINARY_CACHE=$cache_dir"
-            echo "DOTFILES_CI_CACHE_KEY=$prefix-$LOCK_HASH-$GITHUB_SHA"
-          } >> "$GITHUB_ENV"
-          echo "prefix=$prefix-" >> "$GITHUB_OUTPUT"
-          echo "lock-prefix=$prefix-$LOCK_HASH-" >> "$GITHUB_OUTPUT"
-          echo "key=$prefix-$LOCK_HASH-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
-          mkdir -p "$cache_dir"
+          # Bootstrap Nix commands may initialize daemon-owned cache children.
+          # Extract into a fresh runner-owned tree before any cached outputs exist.
+          bootstrap_cache=$(mktemp -d "$RUNNER_TEMP/nix-cache-bootstrap.XXXXXX")
+          mv "$cache_dir" "$bootstrap_cache/cache"
+          mkdir "$cache_dir"
         fi
-        echo "path=$cache_dir" >> "$GITHUB_OUTPUT"
 
     - name: Restore binary cache
       if: ${{ inputs.phase == 'restore' }}
@@ -54,28 +68,42 @@ runs:
         path: ${{ steps.prepare.outputs.path }}
         key: ${{ steps.prepare.outputs.key }}
         restore-keys: |
+          ${{ steps.prepare.outputs.sha-prefix }}
           ${{ steps.prepare.outputs.lock-prefix }}
           ${{ steps.prepare.outputs.prefix }}
 
     - name: Export private build outputs
-      if: ${{ inputs.phase == 'save' && github.ref == 'refs/heads/main' }}
+      if: ${{ !cancelled() && inputs.phase == 'save' && steps.prepare.outcome == 'success' && (github.event_name == 'pull_request' || (github.ref == 'refs/heads/main' && job.status == 'success')) }}
       id: export
       shell: bash
       env:
         MAX_CACHE_SIZE: ${{ inputs.max-size }}
       run: |
-        python3 scripts/python/prepare_ci_nix_cache.py export \
+        nix develop --no-update-lock-file path:.#ci --command \
+          python3 scripts/python/prepare_ci_nix_cache.py export \
           "$RUNNER_TEMP/nix-private-cache" --max-size "$MAX_CACHE_SIZE"
 
-    - name: Replace the restored cache with current outputs
-      if: ${{ inputs.phase == 'save' && github.ref == 'refs/heads/main' && steps.export.outputs.cacheable == 'true' }}
+    - name: Select cache generation
+      id: replace
+      if: ${{ !cancelled() && inputs.phase == 'save' && steps.export.outcome == 'success' }}
       shell: bash
+      env:
+        FRESH_CACHEABLE: ${{ steps.export.outputs.cacheable }}
+        SPACE_CONSTRAINED: ${{ steps.export.outputs.space_constrained }}
       run: |
-        mv "$DOTFILES_CI_BINARY_CACHE" "$RUNNER_TEMP/nix-cache-before-save"
-        mv "$RUNNER_TEMP/nix-private-cache" "$DOTFILES_CI_BINARY_CACHE"
+        restored_entries=("$DOTFILES_CI_BINARY_CACHE"/*.narinfo)
+        if [[ "$SPACE_CONSTRAINED" == true && -f "${restored_entries[0]}" ]]; then
+          echo '::notice::Keeping the restored cache because export was constrained by disk space.'
+        elif [[ "$FRESH_CACHEABLE" == true ]]; then
+          mv "$DOTFILES_CI_BINARY_CACHE" "$RUNNER_TEMP/nix-cache-before-save"
+          mv "$RUNNER_TEMP/nix-private-cache" "$DOTFILES_CI_BINARY_CACHE"
+        else
+          exit 0
+        fi
+        echo 'cacheable=true' >> "$GITHUB_OUTPUT"
 
     - name: Save binary cache
-      if: ${{ inputs.phase == 'save' && github.ref == 'refs/heads/main' && steps.export.outputs.cacheable == 'true' }}
+      if: ${{ !cancelled() && inputs.phase == 'save' && steps.replace.outputs.cacheable == 'true' }}
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         # Cache versions include the path: restore and save must use the same one.

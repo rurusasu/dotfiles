@@ -1,0 +1,67 @@
+version: "3"
+
+tasks:
+  build:
+    desc: Build and publish the exact inputs consumed by platform E2E
+    requires:
+      vars: [TARGET]
+    cmds:
+      - task: "build:{{.TARGET}}"
+
+  build:linux:
+    internal: true
+    cmds:
+      - bash scripts/sh/ci-nix.sh source linux
+      - bash scripts/sh/ci-nix.sh checks linux
+      - bash scripts/sh/ci-nix.sh build linux
+      - bash scripts/sh/ci-nix.sh export linux
+
+  build:darwin:
+    internal: true
+    cmds:
+      - bash scripts/sh/ci-nix.sh source darwin
+      - bash scripts/sh/ci-nix.sh checks darwin
+      - bash scripts/sh/ci-nix.sh build darwin
+      - bash scripts/sh/ci-nix.sh export darwin
+
+  build:windows:
+    internal: true
+    cmds:
+      - powershell -NoProfile -File scripts/powershell/Invoke-CiWindows.ps1 -Phase Prepare -ArtifactDirectory "{{.CI_STATE}}/artifacts/windows" -TestedSha "{{.TESTED_SHA}}"
+
+  e2e:
+    desc: Import, apply, restart and verify the producer's platform artifact
+    requires:
+      vars: [TARGET]
+    cmds:
+      - task: "e2e:{{.TARGET}}"
+
+  e2e:linux:
+    internal: true
+    cmds:
+      - bash scripts/sh/ci-nix.sh import linux
+      # The VM driver owns the installer, bootloader reboot and assertions in
+      # one guest lifecycle; separate host processes cannot resume that guest.
+      - bash scripts/sh/ci-nix.sh run-vm linux
+
+  e2e:darwin:
+    internal: true
+    cmds:
+      - bash scripts/sh/ci-nix.sh import darwin
+      - bash scripts/sh/ci-nix.sh apply darwin
+      - bash scripts/sh/ci-nix.sh restart darwin
+      - bash scripts/sh/ci-nix.sh verify darwin
+
+  e2e:windows:
+    internal: true
+    cmds:
+      - defer: powershell -NoProfile -File scripts/powershell/Invoke-CiWsl.ps1 -Phase Cleanup -ArtifactDirectory "{{.CI_STATE}}/artifacts/wsl" -TestedSha "{{.TESTED_SHA}}"
+      - powershell -NoProfile -File scripts/powershell/Invoke-CiWsl.ps1 -Phase Prepare -ArtifactDirectory "{{.CI_STATE}}/artifacts/wsl" -TestedSha "{{.TESTED_SHA}}"
+      - powershell -NoProfile -File scripts/powershell/Invoke-CiWsl.ps1 -Phase Import -ArtifactDirectory "{{.CI_STATE}}/artifacts/wsl" -TestedSha "{{.TESTED_SHA}}"
+      - powershell -NoProfile -File scripts/powershell/Invoke-CiWindows.ps1 -Phase Apply -ArtifactDirectory "{{.CI_STATE}}/artifacts/windows" -TestedSha "{{.TESTED_SHA}}" -PowerShellVersion "{{.PS_VERSION}}"
+      - powershell -NoProfile -File scripts/powershell/Invoke-CiWsl.ps1 -Phase Apply -ArtifactDirectory "{{.CI_STATE}}/artifacts/wsl" -TestedSha "{{.TESTED_SHA}}"
+      - powershell -NoProfile -File scripts/powershell/Invoke-CiWindows.ps1 -Phase Configure -ArtifactDirectory "{{.CI_STATE}}/artifacts/windows" -TestedSha "{{.TESTED_SHA}}" -PowerShellVersion "{{.PS_VERSION}}"
+      - powershell -NoProfile -File scripts/powershell/Invoke-CiWsl.ps1 -Phase Restart -ArtifactDirectory "{{.CI_STATE}}/artifacts/wsl" -TestedSha "{{.TESTED_SHA}}"
+      - powershell -NoProfile -File scripts/powershell/Invoke-CiWindows.ps1 -Phase Restart -ArtifactDirectory "{{.CI_STATE}}/artifacts/windows" -TestedSha "{{.TESTED_SHA}}" -PowerShellVersion "{{.PS_VERSION}}"
+      - powershell -NoProfile -File scripts/powershell/Invoke-CiWsl.ps1 -Phase Verify -ArtifactDirectory "{{.CI_STATE}}/artifacts/wsl" -TestedSha "{{.TESTED_SHA}}"
+      - '{{if eq .PS_VERSION "7"}}pwsh{{else}}powershell{{end}} -NoProfile -File scripts/powershell/Invoke-CiWindows.ps1 -Phase Verify -ArtifactDirectory "{{.CI_STATE}}/artifacts/windows" -TestedSha "{{.TESTED_SHA}}" -PowerShellVersion "{{.PS_VERSION}}"'

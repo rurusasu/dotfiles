@@ -72,7 +72,7 @@
       "locked": {
         "narHash": "sha256-Ye0GKMeBbAXxhzF/mReztbyqghGroDV4lmZ5u2Zp6dI=",
         "type": "file",
-        "url": "https://releases.diabrowser.com/release/Dia-latest.dmg"
+        "url": "https://releases.diabrowser.com/release/Dia-1.55.1-89833.dmg"
       },
       "original": {
         "type": "file",
@@ -597,7 +597,7 @@
       "locked": {
         "narHash": "sha256-22g4Frg1cWgS3pjR1vJxlC/YrJFSzkoLmoY3068ZvPg=",
         "type": "file",
-        "url": "https://github.com/Niko1221/Strata/releases/latest/download/strata-feed.json"
+        "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.10/strata-feed.json"
       },
       "original": {
         "type": "file",

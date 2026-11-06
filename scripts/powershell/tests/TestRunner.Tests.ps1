@@ -41,7 +41,9 @@ if (-not $MissingDependency) {
 }
 $target = Join-Path $Fixture 'Fixture.Tests.ps1'
 if ($MissingDependency -eq 'task') {
-    $env:PATH = $PSHOME + ';' + (Join-Path $env:SystemRoot 'System32')
+    $paths = @($PSHOME)
+    if ($env:SystemRoot) { $paths += Join-Path $env:SystemRoot 'System32' }
+    $env:PATH = $paths -join [IO.Path]::PathSeparator
     $target = Join-Path (Split-Path -Parent $Runner) 'Install.Tests.ps1'
 }
 & $Runner -Path $target

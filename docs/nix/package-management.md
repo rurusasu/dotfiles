@@ -50,7 +50,7 @@ Home Manager が本体と Docker CLI の plugin link、利用サーバーの起�
 
 Ollama は共通 Home Manager の `services.ollama.enable` で標準 package とユーザーサービスを導入します。API は既定の `127.0.0.1:11434` で待ち受けます。モデルの自動取得や GPU backend の変更は行いません。`ollama pull <model>` で使用するモデルを選択します。
 
-Strata は Linux x86_64 / WSLg と Apple Silicon macOS に `strata`（CLI）と `strata-desktop`（GUI）を導入します。[公式 release](https://github.com/Niko1221/Strata/releases) の latest feed (`releases/latest/download/strata-feed.json`) を input として使い、Desktop と Control は feed が示す同じ release の asset から取得します。`nix flake update strata-release` または `nrs` / `./install.sh` の input 更新で最新の安定版に追従します。lock は feed の内容と asset の SHA-256 を固定するため、コミット単位では再現できます。`nrs` / `./install.sh` は input 更新後の版を導入します。Desktop の製品版と Control の内部 build 番号は異なります。CLI は配布物に同梱された Python を使い、ユーザーディレクトリの別版 Control への自動引き継ぎは無効にします。Linux GUI も固定された Control を使います。macOS の `.app` は公式署名を保持するため変更せず、GUI は upstream の規則に従い、同梱版とユーザーが更新した Control の新しい方を使います。`STRATA_CONTROL_DIR` の指定だけでは新しいユーザー版への切り替えを禁止できません。モデルと推論エンジンは初回設定時に選び、ユーザーのデータディレクトリに取得します。
+Strata は Linux x86_64 / WSLg と Apple Silicon macOS に `strata`（CLI）と `strata-desktop`（GUI）を導入します。[公式 release](https://github.com/Niko1221/Strata/releases) の latest feed (`releases/latest/download/strata-feed.json`) を input として使い、Desktop と Control は feed が示す同じ release の asset から取得します。`task update` または `nrs` / `./install.sh` の input 更新で最新の安定版に追従します。共通の `update-flake-inputs.sh` が更新時に latest feed の版を解決し、同じ hash の版付き URL を確認して lock に保存します。input の original URL は latest のままなので、特定の版に固定し続ける設定ではありません。lock は feed の版付き URL・内容と asset の SHA-256 を固定するため、次の release 後も同じコミットを再現できます。`nix flake update` の単独実行では mutable URL が lock に残るため、更新には `task update` または `bash scripts/sh/update-flake-inputs.sh .` を使います。`nrs` / `./install.sh` は input 更新後の版を導入します。Desktop の製品版と Control の内部 build 番号は異なります。CLI は配布物に同梱された Python を使い、ユーザーディレクトリの別版 Control への自動引き継ぎは無効にします。Linux GUI も固定された Control を使います。macOS の `.app` は公式署名を保持するため変更せず、GUI は upstream の規則に従い、同梱版とユーザーが更新した Control の新しい方を使います。`STRATA_CONTROL_DIR` の指定だけでは新しいユーザー版への切り替えを禁止できません。モデルと推論エンジンは初回設定時に選び、ユーザーのデータディレクトリに取得します。
 
 DeepSeek-V4.1-Flash（`ist-das-2.25bpw`、約 274GB）を 64GB の Apple Silicon Mac で使う場合は、初回設定でモデルと Metal engine を選び、context 8192・`--dspark none`・`--vision off`・Speed は Faster（`--experts 5`、Full は 6）で運用します。
 Speed はアプリが run config の `args` に書く値で、`strata profile set` では変更できません。
@@ -144,7 +144,7 @@ CI は OS configuration を build することで、その構成に含まれる�
 standalone Home Manager は上記の OS 統合を使えない環境向けに維持します。
 キー設定の JSON は `task keybindings:export` が正本を直接評価して更新します。Darwin custom package の出力は `nix/defaults.nix` に定義します。
 
-macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Homebrew package を反映します。通常の CLI と Neovim・WezTerm は Nix 側で管理します。Homebrew の設定と cask は `nix/defaults.nix` に宣言します。Nix パッケージの版は `flake.lock` に従います。
+macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Homebrew package を反映します。通常の CLI と Neovim・Ghostty は Nix 側で管理します。Homebrew の設定と cask は `nix/defaults.nix` に宣言します。Nix パッケージの版は `flake.lock` に従います。
 
 ### macOS の権限エラー
 
@@ -183,7 +183,7 @@ Finder・ゴミ箱・起動中のアプリの表示は固定アプリの一覧�
 
 通常インストールは Nix のビルド・activation、ユーザー設定の反映、環境の動作確認を行います。
 application identity、署名、CLI version を独自の期待値と比較する provider 検証は廃止しました。
-flake inputs の更新は `nix flake update` を使い、取得内容は `flake.lock` で固定します。
+flake inputs の更新は `task update`（共通の `update-flake-inputs.sh`）を使い、取得内容は `flake.lock` で固定します。Dia は公式 appcast から最新版の版付き DMG URL を先に解決してから取得するため、更新ごとの DMG 二重取得を避けます。Dia / Strata とも original の latest URL を保持し、通常更新では最新版に追従します。更新と検証が完了した場合だけ lock を置き換えます。
 
 非 NixOS Linux も `./install.sh` が通常の入口です。Home Manager の適用に追加の opt-in は不要です。
 
@@ -195,7 +195,7 @@ macOS で Homebrew cask の適用に失敗する場合は、
 
 `nix/defaults.nix` が標準 `pkgs.comfyui` を Unix 共通で導入します。
 `comfyui` で起動し、ブラウザーで `http://127.0.0.1:8188` を開きます。
-更新は `nix flake update` と通常の Nix 設定反映で行います。
+更新は `task update` と通常の Nix 設定反映で行います。
 
 過去の macOS Desktop 版で Nix 出力の削除に失敗する場合は、
 [旧 Comfy Desktop 出力の復旧手順](./homebrew-cask-troubleshooting.md#旧-comfy-desktop-の-nix-出力)を参照してください。

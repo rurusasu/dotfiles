@@ -1,0 +1,63 @@
+name: Set up native CI Nix
+description: Bootstrap native Nix and Task independently for parallel producer, check and E2E jobs.
+inputs:
+  github-token:
+    description: Token for fetching the exact locked GitHub inputs.
+    required: true
+  clean-disk:
+    description: Reclaim unused hosted Linux SDKs before importing or building closures.
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Reclaim unused Linux SDKs
+      if: ${{ runner.os == 'Linux' && inputs.clean-disk == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        df -h / "$RUNNER_TEMP"
+        df -i / "$RUNNER_TEMP"
+        # Keep the hosted tool cache and Python used by the Nix installer.
+        sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift
+        df -h / "$RUNNER_TEMP"
+        df -i / "$RUNNER_TEMP"
+    - name: Install Nix
+      uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b
+      with:
+        github_access_token: ${{ inputs.github-token }}
+    - name: Inspect Nix store and workspace filesystems
+      shell: bash
+      run: |
+        set -euo pipefail
+        paths=(/)
+        if [[ -d /nix/store ]]; then paths+=(/nix/store); fi
+        paths+=("$RUNNER_TEMP")
+        df -h "${paths[@]}"
+        df -i "${paths[@]}"
+    - name: Configure native Nix caches and authentication
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+        DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/nix-binary-cache" \
+          bash scripts/sh/configure-bootstrap-ci-nix.sh
+        if [[ $RUNNER_OS == macOS ]]; then
+          # Activation takes ownership of /etc/nix/nix.conf; retain root settings.
+          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES \
+            PATH="$PATH" GITHUB_TOKEN="$GITHUB_TOKEN" \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/nix-binary-cache" \
+            bash scripts/sh/configure-bootstrap-ci-nix.sh
+        fi
+        nix config show substituters | grep -Fq 'https://hermes-agent.cachix.org'
+        nix config show substituters | grep -Fq "file://$RUNNER_TEMP/nix-binary-cache"
+    - name: Bootstrap Task without compiling
+      shell: bash
+      run: |
+        set -euo pipefail
+        # E2E consumers bootstrap only public tools, then use producer outputs.
+        task_path=$(nix build --inputs-from path:. nixpkgs#go-task \
+          --out-link "$RUNNER_TEMP/ci-task" --print-out-paths --no-update-lock-file \
+          --option max-jobs 0 --option builders '' --option fallback false)
+        echo "$task_path/bin" >> "$GITHUB_PATH"

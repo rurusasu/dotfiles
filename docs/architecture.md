@@ -74,7 +74,7 @@ Windows の通常セットアップは `install.cmd` から GUI/Winget と WSL/N
 `./install.sh` は必要に応じて Nix を導入し、毎回 flake input を更新してから
 OS の rebuild または Home Manager の switch を実行します。進捗とエラーは
 各コマンドの出力をそのまま表示し、更新や反映に失敗した場合は終了します。
-flake inputs だけを更新する場合は `nix flake update` を使います。
+flake inputs だけを更新する場合は `task update` を使います。共通の updater が Dia の最新版を取得前に版付き URL へ解決し、Strata の feed も版付き URL で lock に保存します。通常更新は latest を追い、検証済みの lock は次回 release 後も再現できます。
 
 ## 役割分担
 
@@ -227,18 +227,38 @@ Nix 設定は Nix、Windows の chezmoi 設定は chezmoi、共通 installer・s
 分類は排他的ではなく、複数変更の和集合を実行します。Windows manifest の変更は共有 checks と Windows installer、OS 固有 host の変更は該当 OS の build / E2E を選択します。
 共有 Nix module や flake input、共通スクリプトは依存する各 OS を選択し、配布するキーバインド help 文書も実行対象に含めます。
 
-各検証ジョブの名前・OS runner・実際の runtime assertion を維持します。Changes ジョブは各 workflow に一つだけ置きます。
-workflow は常時起動し、対象外の検証ジョブだけを `if` でスキップします。検出失敗はチェック失敗とし、手動実行は全分類を有効にします。
-PR は merge-base からの差分を使い、削除・移動元も含めます。NUL 区切りでファイル名を扱い、push のゼロ base SHA では empty tree と比較します。
-`ci-nix.yml` の `complete` は必要な build / E2E の success と、対象外ジョブの skipped を確認します。
-Linux の nix-unit・custom-package-builds・workspace-cycle と Windows キー設定生成・manifest 検査は `check` ジョブに集約し、`linux-build` からの二重ビルド参照をなくします。
-Nix の成果物は GitHub Actions cache に保存し、WSL artifact では取得可能な公開依存の payload を省きます。詳細は [CI cache](../docker/bootstrap-ci-tools/README.md#nix-成果物の再利用) を参照してください。
+Changes ジョブは各 workflow に一つだけ置きます。workflow は常時起動し、対象外の
+検証ジョブだけを `if` でスキップします。検出失敗はチェック失敗、手動実行は全分類を対象とします。
+PR は merge-base から削除・移動元も含めた差分を NUL 区切りで扱い、push のゼロ base SHA は
+empty tree と比較します。各工程の対象はイベントで受け取った source SHA に固定します。
 
-WSL job は一時 NixOS-WSL 環境で native Nix/Home Manager switch、既存 `~/.hermes` state の保持、CLI 起動、user service の再起動と active 状態を検証します。
-macOS は Darwin job で nix-darwin switch を実行します。
-詳細は [CI workflow](../.github/workflows/ci-nix.yml) の WSL job を参照してください。
+CI の依存ツールは `flake.lock` に従う薄い `.#ci` 環境へ集約し、Linux は native hosted runner 上で Nix を実行します。
+全 platform の CI 手順は `taskfiles/ci/taskfile.yml` の `ci:build` / `ci:e2e` にそろえます。
+producer は入力と checks を検証してから対象の成果物を一度構築し、別の consumer に渡します。
+consumer は対象 SHA・platform・digest を検証し、本番 installer の反映 → 再起動または新しい
+セッション → runtime assertion を実行します。Bash / PowerShell adapter は OS の操作だけを担当し、
+工程順序を workflow と script に重複定義しません。
 
-NixOS の hosted VM job は installer の再実行と Docker・Compose の runtime acceptance を検証します。非 NixOS Linux は standalone Home Manager の build と installer の mocked contract が対象です。pull request では hosted contract、declarative build、Linux runtime E2E の全checkが成功し、approval待ちやqueued jobがないことをmerge条件にします。
+Linux producer は通常の checks をすべて実行し、変更分類で選択された
+standalone Home Manager、WSL、本番設定を取り込む NixOS VM driver を同じ store で構築します。
+native Linux が選択された場合は VM の runtime check も必須です。Linux の E2E は VM 内の本番 `install.sh` と reboot 後の CLI・service・
+healthを確認します。macOS の E2E も producer の構成を本番 `install.sh` で反映し、
+service の再起動と新しい login shell で確認します。Windows は配布コードと WinGet master の
+plan を作り、PowerShell 5.1 / 7 それぞれで WinGet → WSL setup → chezmoi の本番経路を実行します。
+WSL は cold restart 後の system path・service・health、Windows は新しい profile session と
+導入済み package / 設定を確認します。WinGet / Store が実際に解決した版は inventory に記録します。
+
+必須 artifact は producer の artifact ID、source SHA と root store paths を持ち、任意の
+GitHub Actions cache と分離します。E2E 内では input を更新せず、欠落した成果物をソースビルドで
+補いません。source SHA が異なる実行には、その SHA で得た検証結果を使います。
+optional cache は収まる依存出力を部分保存して高速化するためのもので、E2E の成功条件ではありません。
+PR のビルド失敗時も完了済み出力を PR の範囲内で保存し、再試行で利用します。main の共有 cache は成功時だけ保存します。
+詳細は [CI の実行環境とキャッシュ](./ci/README.md#nix-成果物の再利用) を参照してください。
+
+GitHub-hosted macOS / Windows の host OS reboot は対象外です。service / shell session の
+再起動と、NixOS VM / WSL の実際の reboot を区別します。非 NixOS Linux の standalone Home Manager は
+build と installer contract の対象であり、Ubuntu / Debian の activation runtime を確認したとは扱いません。
+`ci-nix.yml` の `complete` は、必要な build / E2E の success と対象外ジョブの skipped を確認します。
 
 ---
 

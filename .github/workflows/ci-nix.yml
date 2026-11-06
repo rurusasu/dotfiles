@@ -1,22 +1,19 @@
 name: Bootstrap CI
-
 on:
-  workflow_dispatch:
+  workflow_dispatch: null
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
-
+    branches:
+      - main
 concurrency:
   group: bootstrap-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 permissions:
   contents: read
-
 env:
   TESTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-
 jobs:
   changes:
     name: Bootstrap / Changes
@@ -29,7 +26,6 @@ jobs:
           ref: ${{ env.TESTED_SHA }}
           fetch-depth: 0
           persist-credentials: false
-
       - name: Detect changed bootstrap targets
         id: detect
         uses: ./.github/actions/detect-ci-changes
@@ -37,7 +33,6 @@ jobs:
           base-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
           head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           run-all: ${{ github.event_name == 'workflow_dispatch' }}
-
     outputs:
       nix: ${{ steps.detect.outputs.nix }}
       chezmoi: ${{ steps.detect.outputs.chezmoi }}
@@ -46,232 +41,158 @@ jobs:
       darwin: ${{ steps.detect.outputs.darwin }}
       wsl: ${{ steps.detect.outputs.wsl }}
       windows: ${{ steps.detect.outputs.windows }}
-
-  ci-tools:
-    needs: changes
-    if: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
-    name: Bootstrap / Tools image
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      image: ${{ steps.resolve.outputs.image }}
-    steps:
-      - name: Checkout exact tested SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Authenticate to the repository image registry
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Select image for the tool definition
-        id: select
-        env:
-          DEFINITION_HASH: ${{ hashFiles('docker/bootstrap-ci-tools/Dockerfile', 'docker/bootstrap-ci-tools/nix.conf', 'docker/bootstrap-ci-tools/check.sh', 'docker/bootstrap-ci-tools/profile.sh') }}
-          CAN_PUBLISH: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-        run: |
-          set -euo pipefail
-          [[ "$DEFINITION_HASH" =~ ^[0-9a-f]{64}$ ]]
-          image="ghcr.io/${GITHUB_REPOSITORY,,}/bootstrap-ci-tools:${DEFINITION_HASH}"
-          echo "tag=$image" >> "$GITHUB_OUTPUT"
-          if docker buildx imagetools inspect "$image"; then
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          elif [[ "$CAN_PUBLISH" == "true" ]]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::This tool definition has no published image. A maintainer must build it on a repository branch before a fork can use it."
-            exit 1
-          fi
-
-      - name: Build the tools image
-        if: ${{ steps.select.outputs.build == 'true' }}
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: docker/bootstrap-ci-tools
-          platforms: linux/amd64
-          load: true
-          tags: ${{ steps.select.outputs.tag }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ env.TESTED_SHA }}
-          cache-from: type=gha,scope=bootstrap-ci-tools
-          cache-to: type=gha,scope=bootstrap-ci-tools,mode=max
-
-      - name: Verify runtime tools and Nix sandbox before publishing
-        if: ${{ steps.select.outputs.build == 'true' }}
-        env:
-          IMAGE: ${{ steps.select.outputs.tag }}
-        run: |
-          docker run --rm --privileged "$IMAGE" \
-            bash /usr/local/libexec/check-bootstrap-ci-tools.sh --sandbox
-
-      - name: Publish the verified image
-        if: ${{ steps.select.outputs.build == 'true' }}
-        env:
-          IMAGE: ${{ steps.select.outputs.tag }}
-        run: docker push "$IMAGE"
-
-      - name: Resolve immutable image reference
-        id: resolve
-        env:
-          IMAGE: ${{ steps.select.outputs.tag }}
-        run: |
-          set -euo pipefail
-          digest=$(docker buildx imagetools inspect "$IMAGE" --format '{{.Manifest.Digest}}')
-          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
-          echo "image=${IMAGE%:*}@$digest" >> "$GITHUB_OUTPUT"
-
+  # Native Unix jobs bootstrap Nix and Task independently, so lint, tests and
+  # producers start in parallel. Producers/lint get their tools from path:.#ci;
+  # E2E consumers import exact producer artifacts and use their frozen tools.
   bash-test:
     name: Bootstrap / Bash tests
-    needs: [changes, ci-tools]
+    needs:
+      - changes
     if: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
     runs-on: ubuntu-24.04
-    container:
-      image: ${{ needs.ci-tools.outputs.image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-      options: --privileged
     defaults:
       run:
         shell: bash
     timeout-minutes: 30
     permissions:
       contents: read
-      packages: read
     steps:
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
-
-      - name: Configure Nix authentication
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash scripts/sh/configure-bootstrap-ci-nix.sh
-
+      - name: Set up native Nix and Task
+        uses: ./.github/actions/setup-ci-nix
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run Bash tests
         run: task test:bash
-
   nix:
     name: Bootstrap / Nix / Lint
-    needs: [changes, ci-tools]
+    needs:
+      - changes
     if: ${{ needs.changes.outputs.nix == 'true' }}
     runs-on: ubuntu-24.04
-    container:
-      image: ${{ needs.ci-tools.outputs.image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-      options: --privileged
     defaults:
       run:
         shell: bash
     timeout-minutes: 25
     permissions:
       contents: read
-      packages: read
     steps:
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
-
-      - name: Configure Nix authentication
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash scripts/sh/configure-bootstrap-ci-nix.sh
-
+      - name: Set up native Nix and Task
+        uses: ./.github/actions/setup-ci-nix
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run statix
         timeout-minutes: 15
-        run: statix check .
-
+        run: nix develop --no-update-lock-file path:.#ci --command statix check .
   linux-build:
     name: Bootstrap / Linux / Build
-    needs: [changes, ci-tools]
-    if: ${{ needs.changes.outputs.linux == 'true' }}
+    needs:
+      - changes
+    if: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' }}
     runs-on: ubuntu-24.04
-    container:
-      image: ${{ needs.ci-tools.outputs.image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-      options: --privileged
     defaults:
       run:
         shell: bash
-    timeout-minutes: 150
+    timeout-minutes: 180
     permissions:
       contents: read
-      packages: read
+    env:
+      CI_LINUX_REQUIRED: ${{ needs.changes.outputs.linux == 'true' }}
+      CI_WSL_REQUIRED: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
+    outputs:
+      linux-artifact-id: ${{ steps.upload-linux.outputs.artifact-id }}
+      wsl-artifact-id: ${{ steps.upload-wsl.outputs.artifact-id }}
     steps:
+      - name: Prepare CI state
+        shell: bash
+        run: |
+          printf 'CI_STATE=%s/bootstrap-ci\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
-
-      - name: Configure Nix authentication
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/nix-binary-cache" \
-            bash scripts/sh/configure-bootstrap-ci-nix.sh
-
+      - name: Set up native Nix and Task
+        uses: ./.github/actions/setup-ci-nix
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          clean-disk: "true"
       - name: Restore Nix cache
         uses: ./.github/actions/cache-nix
+        continue-on-error: true
         with:
           name: linux-build
-
-      - name: Build Linux configurations and checks
-        run: |
-          install -D -m 0644 "$GITHUB_WORKSPACE/nix/tests/fixtures/hardware-configuration.nix" \
-            /etc/nixos/hardware-configuration.nix
-          nix build --impure --no-link --print-build-logs \
-            .#nixosConfigurations.linux.config.system.build.toplevel \
-            .#homeConfigurations.x86_64-linux.activationPackage
-
+      - name: Build Linux checks and selected platform outputs
+        # Leave time to preserve completed outputs when the build step fails.
+        timeout-minutes: 150
+        run: nix develop --no-update-lock-file path:.#ci --command task ci:build TARGET=linux
+      - name: Upload linux producer artifact
+        id: upload-linux
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: bootstrap-linux-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.CI_STATE }}/artifacts/linux
+          retention-days: 1
+          if-no-files-found: error
+          compression-level: 0
+        if: ${{ needs.changes.outputs.linux == 'true' }}
+      - name: Upload wsl producer artifact
+        id: upload-wsl
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: bootstrap-wsl-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.CI_STATE }}/artifacts/wsl
+          retention-days: 1
+          if-no-files-found: error
+          compression-level: 0
+        if: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
       - name: Save Nix cache
         uses: ./.github/actions/cache-nix
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        continue-on-error: true
         with:
           name: linux-build
           phase: save
-
-  darwin:
-    name: Bootstrap / Darwin
+          max-size: "4294967296"
+  # Native macOS and Linux producers run in parallel after change detection.
+  darwin-build:
+    name: Bootstrap / Darwin / Build
     needs: changes
     if: ${{ needs.changes.outputs.darwin == 'true' }}
     runs-on: macos-15
-    timeout-minutes: 360
+    timeout-minutes: 240
     permissions:
       contents: read
     env:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
+    outputs:
+      darwin-artifact-id: ${{ steps.upload-darwin.outputs.artifact-id }}
     steps:
+      - name: Prepare CI state
+        shell: bash
+        run: |
+          printf 'CI_STATE=%s/bootstrap-ci\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
-
       - name: Free runner disk space
         run: |
           set -euo pipefail
-          df -h /
+          df -h / "$RUNNER_TEMP"
+          df -i / "$RUNNER_TEMP"
           default_xcode="$(xcode-select -p)"
           default_xcode="${default_xcode%/Contents/Developer}"
           for app in /Applications/Xcode_*.app; do
@@ -282,32 +203,214 @@ jobs:
           rm -rf "$HOME/Library/Developer/CoreSimulator/Devices"
           rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
           rm -rf "$HOME/Library/Android/sdk"
-          df -h /
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b
+          df -h / "$RUNNER_TEMP"
+          df -i / "$RUNNER_TEMP"
+      - name: Set up native Nix and Task
+        uses: ./.github/actions/setup-ci-nix
         with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure shared Nix caches
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Configure the daemon-owned Nix settings as root. A regular user
-          # can display extra substituters while the daemon still ignores
-          # them as untrusted, which silently turns cache hits into builds.
-          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES \
-            PATH="$PATH" \
-            GITHUB_TOKEN="$GITHUB_TOKEN" \
-            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
-            DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/nix-binary-cache" \
-            bash scripts/sh/configure-bootstrap-ci-nix.sh
-
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Restore Nix cache
         uses: ./.github/actions/cache-nix
+        continue-on-error: true
         with:
           name: darwin
-
+      - name: Build Darwin checks and deployment
+        timeout-minutes: 200
+        run: nix develop --no-update-lock-file path:.#ci --command task ci:build TARGET=darwin
+      - name: Upload darwin producer artifact
+        id: upload-darwin
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: bootstrap-darwin-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.CI_STATE }}/artifacts/darwin
+          retention-days: 1
+          if-no-files-found: error
+          compression-level: 0
+      - name: Save Nix cache
+        uses: ./.github/actions/cache-nix
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        continue-on-error: true
+        with:
+          name: darwin
+          phase: save
+          max-size: "4294967296"
+  windows-build:
+    name: Bootstrap / Windows / Plan
+    needs: changes
+    if: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
+    runs-on: windows-2025
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      windows-artifact-id: ${{ steps.upload-windows.outputs.artifact-id }}
+    steps:
+      - name: Prepare CI state
+        shell: powershell
+        run: |
+          "CI_STATE=$env:RUNNER_TEMP/bootstrap-ci" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+      - name: Prepare Windows Store prerequisites
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+          $policy = $null
+          try { $policy = Get-ItemProperty -LiteralPath $path -ErrorAction Stop }
+          catch [Management.Automation.ItemNotFoundException] { }
+          foreach ($name in @('DoNotConnectToWindowsUpdateInternetLocations', 'DisableWindowsUpdateAccess')) {
+            if ($policy -and $policy.PSObject.Properties[$name]) {
+              Remove-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop
+            }
+          }
+          $service = Get-Service -Name wuauserv -ErrorAction Stop
+          if ($service.StartType -eq 'Disabled') { Set-Service -Name wuauserv -StartupType Manual -ErrorAction Stop }
+          if ($service.Status -ne 'Running') {
+            $service.Start()
+            $service.WaitForStatus([ServiceProcess.ServiceControllerStatus]::Running, [TimeSpan]::FromSeconds(30))
+            $service.Refresh()
+            if ($service.Status -ne 'Running') { throw 'wuauserv did not reach Running within 30 seconds.' }
+          }
+      - name: Bootstrap winget
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          if (-not (Get-Command winget -CommandType Application -ErrorAction SilentlyContinue)) {
+            Install-PSResource -Name Microsoft.WinGet.Client -Scope CurrentUser -Repository PSGallery -TrustRepository
+            Repair-WinGetPackageManager
+          }
+      - name: Prepare Task runner
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . .\scripts\powershell\lib\Invoke-ExternalCommand.ps1
+          if (-not (Get-Command task -CommandType Application -ErrorAction SilentlyContinue)) {
+            Invoke-NativeCommand -Command winget -Arguments @('install', '--id', 'Task.Task', '--exact', '--source', 'winget', '--accept-source-agreements', '--accept-package-agreements', '--silent') | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw "Task bootstrap failed (exit=$LASTEXITCODE)." }
+            Update-ProcessEnvironmentPath
+          }
+          $task = Get-Command task -CommandType Application -ErrorAction Stop
+          Split-Path -Parent $task.Source | Add-Content -LiteralPath $env:GITHUB_PATH -Encoding UTF8
+      - name: Freeze Windows installation plan
+        shell: powershell
+        run: task ci:build TARGET=windows
+      - name: Upload windows producer artifact
+        id: upload-windows
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: bootstrap-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.CI_STATE }}/artifacts/windows
+          retention-days: 1
+          if-no-files-found: error
+          compression-level: 0
+  linux:
+    name: Bootstrap / Linux / E2E
+    needs:
+      - changes
+      - linux-build
+    if: ${{ needs.changes.outputs.linux == 'true' }}
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Prepare CI state
+        shell: bash
+        run: |
+          printf 'CI_STATE=%s/bootstrap-ci\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+      - name: Set up native Nix and Task
+        uses: ./.github/actions/setup-ci-nix
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          clean-disk: "true"
+      - name: Require exact linux producer artifact
+        shell: bash
+        env:
+          PRODUCER_ARTIFACT_ID: ${{ needs.linux-build.outputs.linux-artifact-id }}
+        run: |
+          if [[ ! $PRODUCER_ARTIFACT_ID =~ ^[1-9][0-9]*$ ]]; then
+            echo 'Producer artifact ID is missing or invalid.' >&2
+            exit 1
+          fi
+      - name: Download exact linux producer artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.linux-build.outputs.linux-artifact-id }}
+          path: ${{ env.CI_STATE }}/artifacts/linux
+      - name: Apply, restart and verify native Linux
+        run: task ci:e2e TARGET=linux
+  darwin:
+    name: Bootstrap / Darwin / E2E
+    needs:
+      - changes
+      - darwin-build
+    if: ${{ needs.changes.outputs.darwin == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+    steps:
+      - name: Prepare CI state
+        shell: bash
+        run: |
+          printf 'CI_STATE=%s/bootstrap-ci\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+      - name: Free runner disk space
+        run: |
+          set -euo pipefail
+          df -h / "$RUNNER_TEMP"
+          df -i / "$RUNNER_TEMP"
+          default_xcode="$(xcode-select -p)"
+          default_xcode="${default_xcode%/Contents/Developer}"
+          for app in /Applications/Xcode_*.app; do
+            [[ "$app" == "$default_xcode" ]] && continue
+            sudo rm -rf "$app"
+          done
+          sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes
+          rm -rf "$HOME/Library/Developer/CoreSimulator/Devices"
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+          rm -rf "$HOME/Library/Android/sdk"
+          df -h / "$RUNNER_TEMP"
+          df -i / "$RUNNER_TEMP"
+      - name: Set up native Nix and Task
+        uses: ./.github/actions/setup-ci-nix
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Require exact darwin producer artifact
+        shell: bash
+        env:
+          PRODUCER_ARTIFACT_ID: ${{ needs.darwin-build.outputs.darwin-artifact-id }}
+        run: |
+          if [[ ! $PRODUCER_ARTIFACT_ID =~ ^[1-9][0-9]*$ ]]; then
+            echo 'Producer artifact ID is missing or invalid.' >&2
+            exit 1
+          fi
+      - name: Download exact darwin producer artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.darwin-build.outputs.darwin-artifact-id }}
+          path: ${{ env.CI_STATE }}/artifacts/darwin
       - name: Preserve installer files before nix-darwin takes ownership
         run: |
           sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" bash <<'SCRIPT'
@@ -332,282 +435,14 @@ jobs:
           nix --extra-experimental-features nix-command config show trusted-public-keys \
             | grep -Fq 'hermes-agent.cachix.org-1:'
           SCRIPT
-
-      - name: Build macOS configuration
-        run: |
-          mkdir -p "$RUNNER_TEMP/darwin"
-          cat > "$RUNNER_TEMP/darwin/flake.nix" <<EOF
-          {
-            inputs.dotfiles.url = "path:$GITHUB_WORKSPACE";
-            outputs = { dotfiles, ... }: {
-              darwinConfigurations.macos = dotfiles.darwinConfigurations.macos.extendModules {
-                modules = [ ({ lib, ... }: { system.primaryUser = lib.mkForce "$(id -un)"; }) ];
-              };
-            };
-          }
-          EOF
-          bash scripts/sh/retry-ci-dns.sh sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
-            nix --accept-flake-config \
-            --extra-experimental-features 'nix-command flakes' \
-            build --out-link "$RUNNER_TEMP/darwin-system" \
-            "$RUNNER_TEMP/darwin#darwinConfigurations.macos.system" --impure
-
-      - name: Apply macOS configuration
-        run: |
-          system_path="$(cd "$RUNNER_TEMP/darwin-system" && pwd -P)"
-          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
-            nix-env -p /nix/var/nix/profiles/system --set "$system_path"
-          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" \
-            "$system_path/sw/bin/darwin-rebuild" activate
-
-      - name: Keep private build dependencies through checks
-        run: python3 scripts/python/prepare_ci_nix_cache.py root "$RUNNER_TEMP/ci-build-dependencies"
-
-      - name: Run all macOS Nix checks
-        run: bash scripts/sh/retry-ci-dns.sh sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
-
-      - name: Save Nix cache
-        uses: ./.github/actions/cache-nix
-        with:
-          name: darwin
-          phase: save
-          max-size: "2147483648"
-
-  wsl-prebuild:
-    name: Bootstrap / WSL / Prebuild
-    needs: [changes, ci-tools]
-    if: ${{ needs.changes.outputs.wsl == 'true' }}
-    runs-on: ubuntu-24.04
-    container:
-      image: ${{ needs.ci-tools.outputs.image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-      options: --privileged
-    defaults:
-      run:
-        shell: bash
-    timeout-minutes: 120
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - name: Checkout exact tested SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Configure Nix authentication
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/nix-binary-cache" \
-            bash scripts/sh/configure-bootstrap-ci-nix.sh
-
-      - name: Restore Nix cache
-        uses: ./.github/actions/cache-nix
-        with:
-          name: wsl-prebuild
-
-      - name: Build the WSL system closure and export a local cache
-        id: wsl-cache
-        shell: bash
-        run: |
-          set -euo pipefail
-          cache_dir="$RUNNER_TEMP/wsl-nix-cache"
-          artifact_dir="$RUNNER_TEMP/wsl-nix-cache-artifact"
-          mkdir -p "$cache_dir" "$artifact_dir"
-
-          system_path="$(nix build \
-            .#nixosConfigurations.nixos.config.system.build.toplevel \
-            --impure --no-link --print-out-paths)"
-          printf '%s\n' "$system_path" > "$artifact_dir/wsl-system-paths.txt"
-
-          # This same-run transport cache favors fast compression over archival size.
-          echo "::group::Export WSL Nix cache (zstd)"
-          nix --version
-          export_dir="$RUNNER_TEMP/nix-cache-export"
-          mkdir -p "$export_dir"
-          nix copy --to "file://$export_dir?compression=zstd" "$system_path"
-          mv "$DOTFILES_CI_BINARY_CACHE" "$DOTFILES_CI_BINARY_CACHE.restored"
-          mv "$export_dir" "$DOTFILES_CI_BINARY_CACHE"
-          # Hard links avoid copying gigabytes; pruning unlinks only the transport files.
-          cp -al "$DOTFILES_CI_BINARY_CACHE/." "$cache_dir/"
-          python3 scripts/python/prepare_ci_nix_cache.py transport "$cache_dir" "$system_path"
-          du -sh "$cache_dir"
-          echo "::endgroup::"
-          tar -cf "$artifact_dir/wsl-nix-cache.tar" -C "$cache_dir" .
-          printf 'artifact-dir=%s\n' "$artifact_dir" >> "$GITHUB_OUTPUT"
-
-      - name: Upload WSL Nix store cache
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          # A consumer-only rerun must still find the successful producer's artifact.
-          name: bootstrap-wsl-nix-cache-${{ github.run_id }}
-          overwrite: true
-          path: ${{ steps.wsl-cache.outputs.artifact-dir }}
-          retention-days: 1
-          if-no-files-found: error
-          compression-level: 0
-
-      - name: Save Nix cache
-        uses: ./.github/actions/cache-nix
-        with:
-          name: wsl-prebuild
-          phase: save
-
-  wsl:
-    name: Bootstrap / WSL
-    needs: [changes, wsl-prebuild]
-    if: ${{ needs.changes.outputs.wsl == 'true' }}
-    runs-on: windows-2025
-    # One production activation has a 120-minute cap, plus setup and verification.
-    timeout-minutes: 180
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-
-      - name: Download prebuilt WSL Nix store cache
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: bootstrap-wsl-nix-cache-${{ github.run_id }}
-          path: ${{ runner.temp }}/wsl-nix-cache-artifact
-
-      - name: Prepare WSL2
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = "Stop"
-          $PSNativeCommandUseErrorActionPreference = $true
-
-          $env:WSL_UTF8 = "1"
-          if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
-            winget install --id Microsoft.WSL --exact --accept-source-agreements --accept-package-agreements --silent
-          }
-
-          wsl --version
-          wsl --set-default-version 2
-          wsl --status
-
-      - name: Run isolated NixOS-WSL switch
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WSLENV: GITHUB_TOKEN/u:GITHUB_WORKSPACE/p:RUNNER_TEMP/p
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          . .\scripts\powershell\lib\Invoke-ExternalCommand.ps1
-          . .\scripts\powershell\lib\Invoke-NixosWslSetup.ps1
-          $PSDefaultParameterValues = @{ 'Invoke-Wsl:TimeoutSeconds' = 900 }
-          if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) { throw 'RUNNER_TEMP is required.' }
-          $tempRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\', '/')
-          $distroName = 'NixOS-CI-' + [guid]::NewGuid().ToString('N')
-          $installDir = [IO.Path]::GetFullPath((Join-Path $tempRoot $distroName)).TrimEnd('\', '/')
-          if ($distroName -notmatch '^NixOS-CI-[a-f0-9]{32}$' -or
-              -not $installDir.StartsWith($tempRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-            throw 'Refusing an unsafe CI distro name or install directory.'
-          }
-          function Invoke-CiWsl([string]$User, [string]$Source, [int]$TimeoutSeconds = 300) {
-            $payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($Source -replace "`r`n?", "`n")))
-            Invoke-Wsl -TimeoutSeconds $TimeoutSeconds -Arguments @(
-              '-d', $distroName, '-u', $User, '--exec', 'bash', '-lc',
-              "set -o pipefail; printf '%s' '$payload' | base64 -d | bash"
-            ) | Out-Host
-            if ($LASTEXITCODE -ne 0) { throw "WSL command failed (exit=$LASTEXITCODE)." }
-          }
-          try {
-            Install-NixosWsl -DistroName $distroName -InstallDir $installDir
-            foreach ($user in @('root', 'nixos')) {
-              Invoke-CiWsl -User $user -Source 'bash "$GITHUB_WORKSPACE/scripts/sh/configure-bootstrap-ci-nix.sh" --wsl'
-            }
-            Invoke-CiWsl -User root -TimeoutSeconds 1800 -Source @'
-          set -euo pipefail
-          artifact="$RUNNER_TEMP/wsl-nix-cache-artifact"
-          cache="$RUNNER_TEMP/wsl-nix-cache"
-          system=$(cat "$artifact/wsl-system-paths.txt")
-          [[ $system =~ ^/nix/store/[a-z0-9]{32}-[A-Za-z0-9+._?=-]+$ ]]
-          mkdir -p "$cache"
-          tar -xf "$artifact/wsl-nix-cache.tar" -C "$cache"
-          test -f "$cache/public-paths.txt"
-          if grep -qvE '^/nix/store/[a-z0-9]{32}-[A-Za-z0-9+._?=-]+$' "$cache/public-paths.txt"; then
-            echo 'Invalid public Nix store path.' >&2; exit 1
-          fi
-          xargs -r -n 128 nix-store --realise < "$cache/public-paths.txt"
-          nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --from "file://$cache" "$system"
-          '@
-            Invoke-CiWsl -User nixos -Source @'
-          set -euo pipefail
-          umask 077
-          mkdir -p ~/.hermes/memories
-          printf '%s\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' > ~/.hermes/.env
-          printf '%s\n' 'model:' '  default: openrouter/auto' > ~/.hermes/config.yaml
-          printf '%s\n' 'preserve-existing-hermes-state' > ~/.hermes/memories/dotfiles-ci-state-preservation.txt
-          chmod 600 ~/.hermes/.env ~/.hermes/config.yaml ~/.hermes/memories/dotfiles-ci-state-preservation.txt
-          '@
-            Invoke-NixosWslSetup -Repository $env:GITHUB_WORKSPACE -DistroName $distroName -SyncMode repo -SyncBack none -TimeoutSeconds 7200 -UpdateFlakeInputs $false
-            Invoke-CiWsl -User root -Source @'
-          set -euo pipefail
-          nix config show access-tokens | grep -E '^[[:space:]]*github\.com[[:space:]]*=[[:space:]]*[^[:space:]]+' >/dev/null
-          test "$(nix config show max-jobs)" = 2
-          test "$(nix config show cores)" = 1
-          loginctl show-user nixos -p Linger --value | grep -qx yes
-          '@
-            Invoke-Wsl -Arguments @('--terminate', $distroName) -TimeoutSeconds 60 | Out-Host
-            if ($LASTEXITCODE -ne 0) { throw "WSL cold restart failed (exit=$LASTEXITCODE)." }
-            Invoke-CiWsl -User nixos -TimeoutSeconds 360 -Source @'
-          set -euo pipefail
-          trap 'status=$?; if (( status != 0 )); then journalctl --user -u hermes-agent.service --no-pager -n 80 >&2; fi' EXIT
-          GH_TOKEN=ci TAVILY_API_KEY=ci GITHUB_WORK_TOKEN=ci zsh -ic '(( $+functions[cd] )) && functions cd' | rg '__zoxide_z'
-          task --dir ~/.dotfiles hermes:restart
-          case "$(readlink -f "$(command -v hermes)")" in /nix/store/*) ;; *) exit 1 ;; esac
-          hermes --version
-          codex --version
-          for file in .env config.yaml; do test "$(stat -c '%a' "$HOME/.hermes/$file")" = 600; done
-          for line in OPENROUTER_API_KEY=ci API_SERVER_ENABLED=true API_SERVER_PORT=18642; do grep -qx "$line" ~/.hermes/.env; done
-          for line in '  provider: openai-codex' '  default: gpt-6.1-sol'; do grep -qx "$line" ~/.hermes/config.yaml; done
-          grep -qx 'preserve-existing-hermes-state' ~/.hermes/memories/dotfiles-ci-state-preservation.txt
-          systemctl --user is-enabled hermes-agent.service
-          systemctl --user is-active hermes-agent.service
-          nix shell --inputs-from ~/.dotfiles nixpkgs#curl nixpkgs#jq --command bash -s <<'READINESS'
-          set -euo pipefail
-          url='http://127.0.0.1:18642/health/detailed'
-          # Gateway startup awaits MCP discovery before binding HTTP. Match its
-          # default 300-second startup watchdog, including cold MCP and secret loading.
-          deadline=$((SECONDS + 300))
-          while :; do
-            if response=$(curl --fail --silent --show-error --max-time 2 -H 'Authorization: Bearer dotfiles-ci-health-probe' "$url" 2>&1) &&
-                printf '%s' "$response" | jq -e '
-                  .status == "ok" and .readiness.status == "ok" and
-                  (.readiness.checks | type == "object" and all(.[]; .status == "ok")) and
-                  (.readiness.checks as $checks | all(
-                    ["state_db", "session_store", "config", "model", "disk", "gateway", "background_queues"][];
-                    . as $required | $checks[$required].status == "ok"))
-                ' >/dev/null 2>&1; then break; fi
-            if (( SECONDS >= deadline )); then printf '%s\n' "$response" >&2; exit 1; fi
-            sleep 1
-          done
-          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 2 "$url")" = 401
-          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 2 -H 'Authorization: Bearer invalid-dotfiles-ci-health-probe' "$url")" = 401
-          printf '%s\n' "$response"
-          READINESS
-          '@
-          }
-          finally {
-            Invoke-Wsl -Arguments @('--terminate', $distroName) -TimeoutSeconds 60 | Out-Host
-            Invoke-Wsl -Arguments @('--unregister', $distroName) -TimeoutSeconds 300 | Out-Host
-            if (Test-Path -LiteralPath $installDir) { Remove-Item -LiteralPath $installDir -Recurse -Force }
-          }
-
+      - name: Apply, restart and verify Darwin
+        run: task ci:e2e TARGET=darwin
   windows-installer:
-    # Let GitHub generate matrix names; job-level skips happen before matrix
-    # expansion and would otherwise display an unevaluated name expression.
-    needs: changes
-    if: ${{ needs.changes.outputs.windows == 'true' }}
+    needs:
+      - changes
+      - linux-build
+      - windows-build
+    if: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
     runs-on: windows-2025
     timeout-minutes: 210
     strategy:
@@ -622,12 +457,15 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Prepare CI state
+        shell: powershell
+        run: |
+          "CI_STATE=$env:RUNNER_TEMP/bootstrap-ci" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
-
       - name: Install PowerShell test modules
         shell: pwsh
         env:
@@ -638,12 +476,11 @@ jobs:
           $moduleRoot = Join-Path $HOME "Documents\$env:PS_MODULE_DIRECTORY\Modules"
           New-Item -ItemType Directory -Force -Path $moduleRoot | Out-Null
           $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
-          # Avoid the IsLatestVersion query that PSGallery intermittently rejects.
-          Save-Module -Name Pester,PSScriptAnalyzer -Repository PSGallery -Path $moduleRoot -Force -AcceptLicense
+          # Construct download URLs from the repository, avoiding bad metadata URIs.
+          Save-PSResource -Name Pester,PSScriptAnalyzer -Repository PSGallery -Path $moduleRoot -TrustRepository -AcceptLicense
           . .\scripts\powershell\tests\support\Resolve-TestModule.ps1
           Resolve-TestModule -Name Pester | Out-Null
           Resolve-TestModule -Name PSScriptAnalyzer | Out-Null
-
       - name: Prepare Windows Store prerequisites
         shell: powershell
         run: |
@@ -665,7 +502,6 @@ jobs:
             $service.Refresh()
             if ($service.Status -ne 'Running') { throw 'wuauserv did not reach Running within 30 seconds.' }
           }
-
       - name: Bootstrap winget
         shell: pwsh
         run: |
@@ -675,75 +511,54 @@ jobs:
             Install-PSResource -Name Microsoft.WinGet.Client -Scope CurrentUser -Repository PSGallery -TrustRepository
             Repair-WinGetPackageManager
           }
-
-      - name: Run install.cmd strict user phase
+      - name: Prepare Task runner
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . .\scripts\powershell\lib\Invoke-ExternalCommand.ps1
+          if (-not (Get-Command task -CommandType Application -ErrorAction SilentlyContinue)) {
+            Invoke-NativeCommand -Command winget -Arguments @('install', '--id', 'Task.Task', '--exact', '--source', 'winget', '--accept-source-agreements', '--accept-package-agreements', '--silent') | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw "Task bootstrap failed (exit=$LASTEXITCODE)." }
+            Update-ProcessEnvironmentPath
+          }
+          $task = Get-Command task -CommandType Application -ErrorAction Stop
+          Split-Path -Parent $task.Source | Add-Content -LiteralPath $env:GITHUB_PATH -Encoding UTF8
+      - name: Require exact wsl producer artifact
+        shell: bash
+        env:
+          PRODUCER_ARTIFACT_ID: ${{ needs.linux-build.outputs.wsl-artifact-id }}
+        run: |
+          if [[ ! $PRODUCER_ARTIFACT_ID =~ ^[1-9][0-9]*$ ]]; then
+            echo 'Producer artifact ID is missing or invalid.' >&2
+            exit 1
+          fi
+      - name: Download exact wsl producer artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.linux-build.outputs.wsl-artifact-id }}
+          path: ${{ env.CI_STATE }}/artifacts/wsl
+      - name: Require exact windows producer artifact
+        shell: bash
+        env:
+          PRODUCER_ARTIFACT_ID: ${{ needs.windows-build.outputs.windows-artifact-id }}
+        run: |
+          if [[ ! $PRODUCER_ARTIFACT_ID =~ ^[1-9][0-9]*$ ]]; then
+            echo 'Producer artifact ID is missing or invalid.' >&2
+            exit 1
+          fi
+      - name: Download exact windows producer artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.windows-build.outputs.windows-artifact-id }}
+          path: ${{ env.CI_STATE }}/artifacts/windows
+      - name: Apply, restart and verify Windows and WSL
         shell: powershell
         timeout-minutes: 180
+        run: task ci:e2e TARGET=windows
         env:
-          DOTFILES_INSTALL_TIMEOUT_SECONDS: "3600"
-          DOTFILES_E2E_POWERSHELL_VERSION: ${{ matrix.version }}
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          if ($PSVersionTable.PSVersion.Major -ne 5 -or $PSVersionTable.PSVersion.Minor -ne 1) {
-            throw 'Run the installer supervisor from stable Windows PowerShell 5.1.'
-          }
-          Set-Location -LiteralPath $env:GITHUB_WORKSPACE
-          . .\scripts\powershell\lib\Invoke-ExternalCommand.ps1
-
-          # Finish any PowerShell MSI update before launching the runtime it can terminate.
-          $master = Get-Content -LiteralPath windows/winget/packages.json -Raw -Encoding UTF8 | ConvertFrom-Json
-          $runtime = @(
-            foreach ($source in $master.Sources) {
-              foreach ($package in $source.Packages) {
-                if ($package.PackageIdentifier -eq 'Microsoft.PowerShell') { @{ Source = $source; Package = $package } }
-              }
-            }
-          )
-          if ($runtime.Count -ne 1 -or $runtime[0].Source.SourceDetails.Name -ne 'winget') {
-            throw 'Expected exactly one Microsoft.PowerShell declaration from winget.'
-          }
-          $master.Sources = @($runtime[0].Source.PSObject.Copy())
-          $master.Sources[0].Packages = @($runtime[0].Package)
-          $temporaryManifest = [IO.Path]::GetTempFileName()
-          try {
-            [IO.File]::WriteAllText($temporaryManifest, ($master | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
-            Import-WindowsPackage -ManifestPath $temporaryManifest
-          }
-          finally { Remove-Item -LiteralPath $temporaryManifest -Force -ErrorAction Stop }
-
-          $pwsh = Get-Command pwsh.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
-          $pwshMajor = @(Invoke-NativeCommand -Command $pwsh.Source -Arguments @('-NoLogo', '-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'))
-          if ($LASTEXITCODE -ne 0 -or ($pwshMajor -join '').Trim() -ne '7') {
-            throw 'Selected pwsh.exe must report PowerShell 7 with exit code 0.'
-          }
-          $env:DOTFILES_PS7_DIR = Split-Path -Parent $pwsh.Source
-          $isWindowsPowerShell = $env:DOTFILES_E2E_POWERSHELL_VERSION -eq '5.1'
-          if ($isWindowsPowerShell) { $env:DOTFILES_FORCE_WINDOWS_POWERSHELL = '1' }
-          else { Remove-Item Env:\DOTFILES_FORCE_WINDOWS_POWERSHELL -ErrorAction SilentlyContinue }
-          $originalPath = @($env:PATH -split ';')
-          $output = @(Invoke-NativeCommand -Command cmd.exe -Arguments @('/d', '/c', 'install.cmd -Phase Winget') | ForEach-Object {
-            $line = [string]$_
-            Write-Host $line
-            $line
-          })
-          $exitCode = $LASTEXITCODE
-          if ($exitCode -ne 0) { exit $exitCode }
-          if (@($output | Where-Object { $_ -ceq '[Winget] WINGET_IMPORT_COMPLETED' }).Count -ne 1) {
-            throw 'Windows installer must report exactly one native WinGet import completion marker.'
-          }
-          $text = $output -join [Environment]::NewLine
-          if (($isWindowsPowerShell -and $text -notmatch 'Using Windows PowerShell') -or
-              (-not $isWindowsPowerShell -and $text -match 'Using Windows PowerShell|Falling back to Windows PowerShell')) {
-            throw 'Windows installer did not use the selected runtime.'
-          }
-          Update-ProcessEnvironmentPath
-          $env:PATH -split ';' | Where-Object { $_ -and $originalPath -notcontains $_ } |
-            Add-Content -LiteralPath $env:GITHUB_PATH -Encoding UTF8
-
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Install chezmoi for rendering tests
         uses: ./.github/actions/install-chezmoi
-
       - name: Run PowerShell test suite
         shell: pwsh
         working-directory: scripts/powershell
@@ -756,87 +571,8 @@ jobs:
             $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
           }
           & $env:PS_TEST_EXECUTABLE -NoProfile -File .\tests\Invoke-Tests.ps1
-
-  complete:
-    name: Bootstrap / Complete
-    if: ${{ always() }}
-    needs:
-      [
-        changes,
-        ci-tools,
-        bash-test,
-        wsl-prebuild,
-        nix,
-        linux-build,
-        darwin,
-        wsl,
-        windows-installer,
-        check,
-      ]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
     env:
-      CHANGES_RESULT: ${{ needs.changes.result }}
-      TOOLS_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
-      TOOLS_RESULT: ${{ needs.ci-tools.result }}
-      BASH_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
-      BASH_RESULT: ${{ needs.bash-test.result }}
-      PLATFORM_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
-      LINUX_BUILD_REQUIRED: ${{ needs.changes.outputs.linux == 'true' }}
-      DARWIN_REQUIRED: ${{ needs.changes.outputs.darwin == 'true' }}
-      WSL_REQUIRED: ${{ needs.changes.outputs.wsl == 'true' }}
-      WINDOWS_REQUIRED: ${{ needs.changes.outputs.windows == 'true' }}
-      NIX_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
-      CHECKS_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' }}
-      LINUX_BUILD_RESULT: ${{ needs.linux-build.result }}
-      DARWIN_RESULT: ${{ needs.darwin.result }}
-      WSL_RESULT: ${{ needs.wsl.result }}
-      WSL_PREBUILD_RESULT: ${{ needs.wsl-prebuild.result }}
-      NIX_RESULT: ${{ needs.nix.result }}
-      CHECKS_RESULT: ${{ needs.check.result }}
-      WINDOWS_INSTALLER_RESULT: ${{ needs.windows-installer.result }}
-    steps:
-      - name: Verify routed job results
-        run: |
-          set -euo pipefail
-
-          if [[ "${CHANGES_RESULT}" != "success" ]]; then
-            echo "CI change detection did not complete successfully: ${CHANGES_RESULT}"
-            exit 1
-          fi
-
-          if [[ "${PLATFORM_REQUIRED}" != "true" ]]; then
-            echo "No bootstrap runtime changes; verifying that platform jobs were skipped."
-          fi
-
-          check_required_job() {
-            local name="$1"
-            local required="$2"
-            local result="$3"
-
-            if [[ "${required}" == "true" && "${result}" != "success" ]]; then
-              echo "Required Bootstrap job ${name} did not succeed: ${result}"
-              return 1
-            fi
-            if [[ "${required}" != "true" && "${result}" != "skipped" ]]; then
-              echo "Unselected Bootstrap job ${name} ran unexpectedly: ${result}"
-              return 1
-            fi
-          }
-
-          check_required_job "Tools image" "${TOOLS_REQUIRED}" "${TOOLS_RESULT}"
-          check_required_job "Bash tests" "${BASH_REQUIRED}" "${BASH_RESULT}"
-          check_required_job "Nix" "${NIX_REQUIRED}" "${NIX_RESULT}"
-          check_required_job "Checks" "${CHECKS_REQUIRED}" "${CHECKS_RESULT}"
-          check_required_job "Windows / Installer" "${WINDOWS_REQUIRED}" "${WINDOWS_INSTALLER_RESULT}"
-          check_required_job "WSL / Prebuild" "${WSL_REQUIRED}" "${WSL_PREBUILD_RESULT}"
-
-          check_required_job "Linux / Build" "${LINUX_BUILD_REQUIRED}" "${LINUX_BUILD_RESULT}"
-          check_required_job "Darwin" "${DARWIN_REQUIRED}" "${DARWIN_RESULT}"
-          check_required_job "WSL" "${WSL_REQUIRED}" "${WSL_RESULT}"
-
-          echo "All required bootstrap platform jobs completed successfully."
-
+      PS_VERSION: ${{ matrix.version }}
   check:
     needs: changes
     if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true')) }}
@@ -854,38 +590,17 @@ jobs:
         with:
           ref: ${{ env.TESTED_SHA }}
           persist-credentials: false
-
+      - name: Set up native Nix and Task
+        uses: ./.github/actions/setup-ci-nix
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run actionlint
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b
-        with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure shared Nix caches
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES \
-            PATH="$PATH" \
-            GITHUB_TOKEN="$GITHUB_TOKEN" \
-            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
-            DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/nix-binary-cache" \
-            bash scripts/sh/configure-bootstrap-ci-nix.sh
-
-      - name: Restore Nix check cache
-        uses: ./.github/actions/cache-nix
-        with:
-          name: checks
-
-      - name: Run all Nix checks
-        run: sudo -H env -u XDG_CONFIG_HOME -u NIX_USER_CONF_FILES PATH="$PATH" nix flake check --no-write-lock-file --print-build-logs
-
+        run: nix develop --no-update-lock-file path:.#ci --command actionlint .github/workflows/*.yml
       - name: Validate Windows package manifests
         shell: bash
         run: |
-          jq -e '
+          # shellcheck disable=SC2016 # jq expressions must not be expanded by Bash.
+          nix develop --no-update-lock-file path:.#ci --command jq -e '
             def nonempty_string: type == "string" and length > 0;
             def only_keys($allowed): (keys - $allowed | length) == 0;
             type == "object"
@@ -909,10 +624,68 @@ jobs:
             and ([.Sources[].Packages[].PackageIdentifier] as $ids
               | ($ids | length) == ($ids | unique | length))
           ' windows/winget/packages.json
-
-      - name: Save Nix cache
-        uses: ./.github/actions/cache-nix
-        with:
-          name: checks
-          phase: save
-          max-size: "536870912"
+  complete:
+    name: Bootstrap / Complete
+    if: ${{ always() }}
+    needs:
+      - changes
+      - bash-test
+      - nix
+      - linux-build
+      - darwin-build
+      - windows-build
+      - linux
+      - darwin
+      - windows-installer
+      - check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      CHANGES_RESULT: ${{ needs.changes.result }}
+      BASH_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
+      BASH_RESULT: ${{ needs.bash-test.result }}
+      NIX_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
+      NIX_RESULT: ${{ needs.nix.result }}
+      LINUX_BUILD_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' }}
+      LINUX_BUILD_RESULT: ${{ needs.linux-build.result }}
+      DARWIN_BUILD_REQUIRED: ${{ needs.changes.outputs.darwin == 'true' }}
+      DARWIN_BUILD_RESULT: ${{ needs.darwin-build.result }}
+      WINDOWS_BUILD_REQUIRED: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
+      WINDOWS_BUILD_RESULT: ${{ needs.windows-build.result }}
+      LINUX_REQUIRED: ${{ needs.changes.outputs.linux == 'true' }}
+      LINUX_RESULT: ${{ needs.linux.result }}
+      DARWIN_REQUIRED: ${{ needs.changes.outputs.darwin == 'true' }}
+      DARWIN_RESULT: ${{ needs.darwin.result }}
+      WINDOWS_INSTALLER_REQUIRED: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
+      WINDOWS_INSTALLER_RESULT: ${{ needs.windows-installer.result }}
+      CHECKS_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' }}
+      CHECKS_RESULT: ${{ needs.check.result }}
+    steps:
+      - name: Verify routed job results
+        run: |
+          set -euo pipefail
+          if [[ "$CHANGES_RESULT" != success ]]; then
+            echo "CI change detection did not succeed: $CHANGES_RESULT"
+            exit 1
+          fi
+          check_required_job() {
+            local name="$1" required="$2" result="$3"
+            if [[ $required == true && $result != success ]]; then
+              echo "Required Bootstrap job $name did not succeed: $result"
+              return 1
+            fi
+            if [[ $required != true && $result != skipped ]]; then
+              echo "Unselected Bootstrap job $name ran unexpectedly: $result"
+              return 1
+            fi
+          }
+          check_required_job "bash-test" "${BASH_REQUIRED}" "${BASH_RESULT}"
+          check_required_job "nix" "${NIX_REQUIRED}" "${NIX_RESULT}"
+          check_required_job "linux-build" "${LINUX_BUILD_REQUIRED}" "${LINUX_BUILD_RESULT}"
+          check_required_job "darwin-build" "${DARWIN_BUILD_REQUIRED}" "${DARWIN_BUILD_RESULT}"
+          check_required_job "windows-build" "${WINDOWS_BUILD_REQUIRED}" "${WINDOWS_BUILD_RESULT}"
+          check_required_job "linux" "${LINUX_REQUIRED}" "${LINUX_RESULT}"
+          check_required_job "darwin" "${DARWIN_REQUIRED}" "${DARWIN_RESULT}"
+          check_required_job "windows-installer" "${WINDOWS_INSTALLER_REQUIRED}" "${WINDOWS_INSTALLER_RESULT}"
+          check_required_job "check" "${CHECKS_REQUIRED}" "${CHECKS_RESULT}"
+          echo "All required Bootstrap producers and runtime consumers succeeded."

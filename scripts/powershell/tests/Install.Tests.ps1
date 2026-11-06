@@ -382,7 +382,7 @@ includes:
     }
 }
 
-Describe 'Windows installer phases' {
+Describe 'Windows installer phases' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     BeforeAll {
         function Invoke-WindowsPhaseFixture {
             param([bool]$Success = $true, [string]$Phase = 'Winget')
@@ -850,167 +850,22 @@ function Invoke-NixosWslSetup {
     }
 }
 
-Describe 'Windows CI installer boundary' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
-    BeforeAll {
-        . "$script:repoRoot/scripts/powershell/lib/Invoke-ExternalCommand.ps1"
-        $workflow = [IO.File]::ReadAllText((Join-Path $script:repoRoot '.github/workflows/ci-nix.yml'))
-        $step = [regex]::Match($workflow, '(?ms)^      - name: Run install\.cmd strict user phase\r?\n(?:(?!^      - name:).)*?^        run: \|\r?\n(?<body>(?:^          [^\r\n]*(?:\r?\n|$)|^\r?\n)+)')
-        if (-not $step.Success) { throw 'Windows CI installer step was not found.' }
-        $script:ciInstallerBody = $step.Groups['body'].Value -replace '(?m)^ {10}', ''
-
-        function Invoke-CiInstallerFixture {
-            param([string]$Outcome = 'complete', [switch]$DuplicateRuntime)
-            $runtime = if ($PSVersionTable.PSVersion.Major -lt 6) { '5.1' } else { '7' }
-            $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
-            $library = Join-Path $root 'scripts/powershell/lib'
-            [void][IO.Directory]::CreateDirectory($library)
-            [void][IO.Directory]::CreateDirectory((Join-Path $root 'windows/winget'))
-            $master = Get-Content -LiteralPath (Join-Path $script:repoRoot 'windows/winget/packages.json') -Raw | ConvertFrom-Json
-            $package = @($master.Sources.Packages | Where-Object PackageIdentifier -EQ 'Microsoft.PowerShell')[0]
-            $package | Add-Member -NotePropertyName Scope -NotePropertyValue machine -Force
-            $package | Add-Member -NotePropertyName Version -NotePropertyValue '7.5.0' -Force
-            if ($DuplicateRuntime) { $master.Sources[0].Packages += $package }
-            $masterPath = Join-Path $root 'windows/winget/packages.json'
-            [IO.File]::WriteAllText($masterPath, ($master | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
-            $originalMaster = [IO.File]::ReadAllText($masterPath)
-            [IO.File]::WriteAllText((Join-Path $library 'Invoke-ExternalCommand.ps1'), @'
-function Import-WindowsPackage {
-    param([string]$ManifestPath)
-    Copy-Item -LiteralPath $ManifestPath -Destination (Join-Path $env:FIXTURE_ROOT 'runtime-import.json')
-    Set-Content -LiteralPath (Join-Path $env:FIXTURE_ROOT 'temporary-manifest.txt') -Value $ManifestPath
-    if ($env:FIXTURE_OUTCOME -eq 'runtime-failure') { throw 'Runtime import failed (exit=7).' }
-}
-function Invoke-NativeCommand {
-    param([string]$Command, [string[]]$Arguments)
-    if ([IO.Path]::GetFileName($Command) -eq 'pwsh.exe') {
-        if (-not (Test-Path -LiteralPath (Join-Path $env:FIXTURE_ROOT 'runtime-import.json'))) { throw 'Runtime probe ran before preparation.' }
-        Set-Content -LiteralPath (Join-Path $env:FIXTURE_ROOT 'runtime-probed.txt') -Value ($Command + ' ' + ($Arguments -join ' '))
-        $global:LASTEXITCODE = if ($env:FIXTURE_OUTCOME -eq 'probe-failure') { 9 } else { 0 }
-        if ($env:FIXTURE_OUTCOME -eq 'wrong-major') { '8' } else { '7' }
-        return
-    }
-    if (-not (Test-Path -LiteralPath (Join-Path $env:FIXTURE_ROOT 'runtime-probed.txt'))) { throw 'Installer ran before the runtime probe.' }
-    Set-Content -LiteralPath (Join-Path $env:FIXTURE_ROOT 'installer-invoked.txt') -Value ($Command + ' ' + ($Arguments -join ' '))
-    $global:LASTEXITCODE = if ($env:FIXTURE_OUTCOME -eq 'nonzero') { 7 } else { 0 }
-    if ($env:DOTFILES_FORCE_WINDOWS_POWERSHELL -eq '1') { '[INFO] Using Windows PowerShell.' }
-    if ($env:FIXTURE_OUTCOME -eq 'early-zero') { return }
-    '[Winget] WINGET_IMPORT_COMPLETED'
-    if ($env:FIXTURE_OUTCOME -eq 'duplicate-marker') { '[Winget] WINGET_IMPORT_COMPLETED' }
-}
-function Update-ProcessEnvironmentPath {}
-'@, [Text.UTF8Encoding]::new($true))
-            $path = Join-Path $root 'inline-ci.ps1'
-            [IO.File]::WriteAllText($path, $script:ciInstallerBody, [Text.UTF8Encoding]::new($true))
-            $originalEnvironment = @{}
-            foreach ($name in @('FIXTURE_ROOT', 'FIXTURE_OUTCOME', 'GITHUB_WORKSPACE', 'GITHUB_PATH', 'DOTFILES_E2E_POWERSHELL_VERSION')) {
-                $originalEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
-            }
-            try {
-                $env:FIXTURE_ROOT = $root
-                $env:FIXTURE_OUTCOME = $Outcome
-                $env:GITHUB_WORKSPACE = $root
-                $env:GITHUB_PATH = Join-Path $root 'github-path.txt'
-                $env:DOTFILES_E2E_POWERSHELL_VERSION = $Runtime
-                $output = @(Invoke-ExternalCommandWithTimeout -Command 'powershell.exe' -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $path) -TimeoutSeconds 30)
-                $exitCode = $LASTEXITCODE
-            }
-            finally {
-                foreach ($name in $originalEnvironment.Keys) {
-                    [Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], 'Process')
-                }
-            }
-            return @{ Root = $root; ExitCode = $exitCode; Output = ($output -join "`n"); OriginalMaster = $originalMaster }
+Describe 'Windows CI artifact provenance' {
+    It 'should reject a modified package plan before extracting or executing its installer' {
+        $adapter = Join-Path $script:repoRoot 'scripts/powershell/Invoke-CiWindows.ps1'
+        $sourceSha = (& git -C $script:repoRoot rev-parse HEAD).Trim()
+        if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the artifact fixture source.' }
+        $directory = Join-Path $TestDrive 'modified plan'
+        foreach ($phase in @('Prepare', 'Apply')) {
+            if ($phase -eq 'Apply') { Add-Content -LiteralPath (Join-Path $directory 'packages.json') -Value ' ' }
+            $startInfo = [Diagnostics.ProcessStartInfo]::new()
+            $startInfo.FileName = (Get-Process -Id $PID).Path
+            $startInfo.Arguments = '-NoLogo -NoProfile -File "{0}" -Phase {1} -ArtifactDirectory "{2}" -TestedSha {3}' -f $adapter, $phase, $directory, $sourceSha
+            $result = Invoke-FixtureProcess -StartInfo $startInfo
+            if ($phase -eq 'Prepare') { $result.ExitCode | Should -Be 0 -Because $result.Stderr }
         }
-    }
-
-    It 'should prepare only the declared runtime then complete the real inline checks for the parent runtime' {
-        $result = Invoke-CiInstallerFixture
-        $result.ExitCode | Should -Be 0 -Because $result.Output
-        $runtime = Get-Content -LiteralPath (Join-Path $result.Root 'runtime-import.json') -Raw | ConvertFrom-Json
-        @($runtime.Sources).Count | Should -Be 1
-        @($runtime.Sources[0].Packages).Count | Should -Be 1
-        $runtime.Sources[0].Packages[0].PackageIdentifier | Should -Be 'Microsoft.PowerShell'
-        $runtime.Sources[0].Packages[0].Scope | Should -Be 'machine'
-        $runtime.Sources[0].Packages[0].Version | Should -Be '7.5.0'
-        $master = $result.OriginalMaster | ConvertFrom-Json
-        ($runtime.Sources[0].SourceDetails | ConvertTo-Json -Compress) | Should -BeExactly ($master.Sources[0].SourceDetails | ConvertTo-Json -Compress)
-        [IO.File]::ReadAllText((Join-Path $result.Root 'windows/winget/packages.json')) | Should -BeExactly $result.OriginalMaster
-        Test-Path -LiteralPath (Get-Content -LiteralPath (Join-Path $result.Root 'temporary-manifest.txt') -Raw).Trim() | Should -BeFalse
-        Test-Path -LiteralPath (Join-Path $result.Root 'runtime-probed.txt') | Should -BeTrue
-        Get-Content -LiteralPath (Join-Path $result.Root 'installer-invoked.txt') -Raw | Should -Match 'cmd\.exe /d /c install\.cmd -Phase Winget'
-    }
-
-    It 'should reject <Outcome> instead of claiming that the full import completed' -ForEach @(
-        @{ Outcome = 'early-zero'; ExitCode = 1; Diagnostic = 'exactly one native WinGet import completion marker' },
-        @{ Outcome = 'duplicate-marker'; ExitCode = 1; Diagnostic = 'exactly one native WinGet import completion marker' },
-        @{ Outcome = 'nonzero'; ExitCode = 7; Diagnostic = 'WINGET_IMPORT_COMPLETED' }
-    ) {
-        $result = Invoke-CiInstallerFixture -Outcome $Outcome
-        Test-Path -LiteralPath (Join-Path $result.Root 'installer-invoked.txt') | Should -BeTrue -Because $result.Output
-        $result.ExitCode | Should -Be $ExitCode -Because $result.Output
-        $result.Output | Should -Match $Diagnostic
-    }
-
-    It 'should reject <Outcome> before starting the full installer' -ForEach @(
-        @{ Outcome = 'wrong-major' }, @{ Outcome = 'probe-failure' }
-    ) {
-        $result = Invoke-CiInstallerFixture -Outcome $Outcome
-        $result.ExitCode | Should -Be 1 -Because $result.Output
-        $result.Output | Should -Match 'Selected pwsh.exe must report PowerShell 7 with exit code 0'
-        Test-Path -LiteralPath (Join-Path $result.Root 'runtime-probed.txt') | Should -BeTrue
-        Test-Path -LiteralPath (Join-Path $result.Root 'installer-invoked.txt') | Should -BeFalse
-        Test-Path -LiteralPath (Get-Content -LiteralPath (Join-Path $result.Root 'temporary-manifest.txt') -Raw).Trim() | Should -BeFalse
-    }
-
-    It 'should stop before the full installer when runtime preparation fails and remove its temporary manifest' {
-        $result = Invoke-CiInstallerFixture -Outcome runtime-failure
-        $result.ExitCode | Should -Be 1 -Because $result.Output
-        $result.Output | Should -Match 'Runtime import failed \(exit=7\)'
-        Test-Path -LiteralPath (Join-Path $result.Root 'runtime-probed.txt') | Should -BeFalse
-        Test-Path -LiteralPath (Join-Path $result.Root 'installer-invoked.txt') | Should -BeFalse
-        Test-Path -LiteralPath (Get-Content -LiteralPath (Join-Path $result.Root 'temporary-manifest.txt') -Raw).Trim() | Should -BeFalse
-    }
-
-    It 'should reject duplicate runtime ownership before importing any package' {
-        $result = Invoke-CiInstallerFixture -DuplicateRuntime
-        $result.ExitCode | Should -Be 1 -Because $result.Output
-        $result.Output | Should -Match 'Expected exactly one Microsoft.PowerShell declaration from winget'
-        Test-Path -LiteralPath (Join-Path $result.Root 'runtime-import.json') | Should -BeFalse
-        Test-Path -LiteralPath (Join-Path $result.Root 'installer-invoked.txt') | Should -BeFalse
-    }
-}
-
-Describe 'NixOS-WSL E2E cleanup boundary' {
-    BeforeAll {
-        $workflow = [IO.File]::ReadAllText((Join-Path $script:repoRoot '.github/workflows/ci-nix.yml'))
-        $step = [regex]::Match($workflow, '(?ms)^      - name: Run isolated NixOS-WSL switch\r?\n(?:(?!^      - name:).)*?^        run: \|\r?\n(?<body>(?:^          [^\r\n]*(?:\r?\n|$)|^\r?\n)+)')
-        if (-not $step.Success) { throw 'WSL CI step was not found.' }
-        $tokens = $null
-        $parseErrors = $null
-        $ast = [Management.Automation.Language.Parser]::ParseInput(($step.Groups['body'].Value -replace '(?m)^ {10}', ''), [ref]$tokens, [ref]$parseErrors)
-        if ($parseErrors.Count) { throw ($parseErrors -join "`n") }
-        $guard = $ast.Find({ param($node)
-                $node -is [Management.Automation.Language.IfStatementAst] -and $node.Extent.Text -match 'Refusing an unsafe CI distro name'
-            }, $true)
-        $script:e2eCleanupGuard = [scriptblock]::Create($guard.Extent.Text)
-    }
-
-    It 'should reject unsafe distro names and cleanup paths with the actual workflow guard' {
-        $tempRoot = Join-Path $TestDrive 'temp-root'
-        $validName = 'NixOS-CI-' + ('a' * 32)
-        foreach ($case in @(
-                @{ Name = $validName; Path = $tempRoot; Allowed = $false }
-                @{ Name = $validName; Path = $tempRoot + [IO.Path]::DirectorySeparatorChar; Allowed = $false }
-                @{ Name = $validName; Path = (Join-Path $tempRoot $validName); Allowed = $true }
-                @{ Name = 'NixOS'; Path = (Join-Path $tempRoot 'NixOS'); Allowed = $false }
-                @{ Name = $validName; Path = $tempRoot + '-sibling'; Allowed = $false }
-                @{ Name = $validName; Path = (Join-Path $tempRoot '../sibling'); Allowed = $false }
-                @{ Name = $validName; Path = (Join-Path $tempRoot 'child/..'); Allowed = $false }
-            )) {
-            $distroName = $case.Name
-            $installDir = [IO.Path]::GetFullPath($case.Path).TrimEnd('\', '/')
-            if ($case.Allowed) { { & $script:e2eCleanupGuard } | Should -Not -Throw }
-            else { { & $script:e2eCleanupGuard } | Should -Throw '*Refusing an unsafe CI distro*' }
-        }
+        $result.ExitCode | Should -Not -Be 0
+        $result.Stderr | Should -Match 'artifact digest mismatch'
+        Test-Path -LiteralPath (Join-Path $directory 'source') | Should -BeFalse
     }
 }

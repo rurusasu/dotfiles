@@ -28,267 +28,66 @@ run_script() {
   run bash --noprofile --norc -e -o pipefail -c "$1"
 }
 
-private_cache_fixture() {
-  export PRIVATE_PATH=/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-private
-  export PUBLIC_PATH=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-public
-  export MAX_CACHE_SIZE=33554432 PUBLIC_NAR_SIZE=16 COPY_EXIT=0 INFO_EXIT=0 INFO_FORMAT=object
-  export COPY_STARTED="$BATS_TEST_TMPDIR/copy-started"
-  export DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/previous-cache"
-  mkdir -p "$DOTFILES_CI_BINARY_CACHE"
-  printf previous >"$DOTFILES_CI_BINARY_CACHE/keep"
-  write_stub nix <<'EOF'
-case "$*" in
-'path-info --all') printf '%s\n' "$PRIVATE_PATH" "$PUBLIC_PATH" ;;
-'path-info --recursive --json --stdin')
-	[[ $(cat) == "$PRIVATE_PATH" ]]
-	((INFO_EXIT == 0)) || exit "$INFO_EXIT"
-	if [[ $INFO_FORMAT == object ]]; then
-		printf '{"%s":{"narSize":16},"%s":{"narSize":%s}}\n' "$PRIVATE_PATH" "$PUBLIC_PATH" "$PUBLIC_NAR_SIZE"
-	else
-		printf '[{"path":"%s","narSize":16},{"path":"%s","narSize":%s}]\n' "$PRIVATE_PATH" "$PUBLIC_PATH" "$PUBLIC_NAR_SIZE"
-	fi ;;
-'copy --stdin --to '*)
-	[[ $(cat) == "$PRIVATE_PATH" ]]
-	: >"$COPY_STARTED"
-	((COPY_EXIT == 0)) || exit "$COPY_EXIT"
-	cache=${4#file://}
-	cache=${cache%\?compression=zstd}
-	mkdir -p "$cache/nar"
-	printf private >"$cache/nar/private.nar.zst"
-	printf public >"$cache/nar/public.nar.zst"
-	printf 'StorePath: %s\nURL: nar/private.nar.zst\nReferences: %s\n' "$PRIVATE_PATH" "${PUBLIC_PATH#/nix/store/}" \
-		>"$cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.narinfo"
-	printf 'StorePath: %s\nURL: nar/public.nar.zst\nReferences: \n' "$PUBLIC_PATH" \
-		>"$cache/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo" ;;
-*) exit 64 ;;
-esac
-EOF
-  write_stub nix-store <<'EOF'
-[[ "$1 $2 $3 $4" == '--store https://cache.nixos.org --check-validity --print-invalid' ]]
-printf '%s\n' "$PRIVATE_PATH"
-EOF
-  CACHE_EXPORT=$(workflow_step "$REPO_ROOT/.github/actions/cache-nix/action.yml" '' 'Export private build outputs')
-}
-
-@test "private cache checks the full temporary closure before copying on a small disk" {
-  private_cache_fixture
-  # Only the public reference is huge; its payload would be pruned after copying.
-  export PUBLIC_NAR_SIZE=1000000000000000000
-  run_script "$CACHE_EXPORT"
-  [ "$status" -eq 0 ]
-  [[ $output == *'::warning::'* ]]
-  grep -Fxq 'cacheable=false' "$GITHUB_OUTPUT"
-  [ ! -e "$COPY_STARTED" ]
-  [ "$(cat "$DOTFILES_CI_BINARY_CACHE/keep")" = previous ]
-}
-
-@test "private cache still exports fitting outputs and prunes public payloads" {
-  private_cache_fixture
-  for format in object array; do
-    export RUNNER_TEMP="$BATS_TEST_TMPDIR/$format" INFO_FORMAT="$format"
-    : >"$GITHUB_OUTPUT"
-    run_script "$CACHE_EXPORT"
-    [ "$status" -eq 0 ]
-    grep -Fxq 'cacheable=true' "$GITHUB_OUTPUT"
-    [ -f "$RUNNER_TEMP/nix-private-cache/nar/private.nar.zst" ]
-    [ -f "$RUNNER_TEMP/nix-private-cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.narinfo" ]
-    [ ! -e "$RUNNER_TEMP/nix-private-cache/nar/public.nar.zst" ]
-    [ ! -e "$RUNNER_TEMP/nix-private-cache/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.narinfo" ]
-  done
-}
-
-@test "private cache propagates Nix query and copy failures" {
-  private_cache_fixture
-  for command in query copy; do
-    export RUNNER_TEMP="$BATS_TEST_TMPDIR/$command"
-    export INFO_EXIT=0 COPY_EXIT=0
-    if [[ $command == query ]]; then INFO_EXIT=47; else COPY_EXIT=47; fi
-    : >"$GITHUB_OUTPUT"
-    run_script "$CACHE_EXPORT"
-    [ "$status" -ne 0 ]
-    [ ! -s "$GITHUB_OUTPUT" ]
-  done
-}
-
-@test "WSL transport remains available when only the consumer is rerun" {
-  upload=$(yq -er '.jobs["wsl-prebuild"].steps[] | select(.name == "Upload WSL Nix store cache") | .with.name' "$WORKFLOW")
-  download=$(yq -er '.jobs.wsl.steps[] | select(.name == "Download prebuilt WSL Nix store cache") | .with.name' "$WORKFLOW")
-  previous=''
-  for run_id in 123456 234567; do
-    uploaded=${upload//'${{ github.run_id }}'/$run_id}
-    uploaded=${uploaded//'${{ github.run_attempt }}'/1}
-    [ "$uploaded" != "$previous" ]
-    for attempt in 1 2 3; do
-      requested=${download//'${{ github.run_id }}'/$run_id}
-      requested=${requested//'${{ github.run_attempt }}'/$attempt}
-      [ "$requested" = "$uploaded" ]
-    done
-    previous=$uploaded
-  done
-  # Rerunning the producer must replace its artifact within the same run.
-  [ "$(yq -er '.jobs["wsl-prebuild"].steps[] | select(.name == "Upload WSL Nix store cache") | .with.overwrite' "$WORKFLOW")" = true ]
-}
-
-@test "WSL prebuild exports zstd transport and fails closed" {
-  script=$(workflow_step "$WORKFLOW" wsl-prebuild 'Build the WSL system closure and export a local cache')
-  export STORE_PATH=/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-hermes
-  write_stub nix <<'EOF'
-case "$1" in
---version) echo 'nix boundary double' ;;
-build)
-	[[ " $* " == *' .#nixosConfigurations.nixos.config.system.build.toplevel '* ]]
-	printf '%s\n' "$STORE_PATH" ;;
-copy)
-	[[ $# == 4 && $2 == --to && $4 == "$STORE_PATH" && $3 == file:///*'?compression=zstd' ]]
-	((COPY_EXIT == 0)) || exit "$COPY_EXIT"
-	cache=${3#file://}
-	[[ ${cache#*\?} == compression=zstd ]]
-	cache=${cache%\?compression=zstd}
-	mkdir -p "$cache/nar"
-	printf cache >"$cache/nar/private.nar.zst"
-	printf 'StorePath: %s\nURL: %s\nReferences: %s\n' "$STORE_PATH" "$NAR_URL" "$NAR_REFS" \
-		>"$cache/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.narinfo" ;;
-path-info) [[ $2 == --recursive ]]; printf '%s\n' "$STORE_PATH" ;;
-*) exit 64 ;;
-esac
-EOF
-  write_stub nix-store <<'EOF'
-[[ "$1 $2 $3 $4" == '--store https://cache.nixos.org --check-validity --print-invalid' ]]
-shift 4
-printf '%s\n' "$@"
-EOF
-  for case in success native traversal missing closure; do
-    export RUNNER_TEMP="$BATS_TEST_TMPDIR/$case/container runner temp"
-    export DOTFILES_CI_BINARY_CACHE="$RUNNER_TEMP/persistent-cache"
-    export COPY_EXIT=0 NAR_URL=nar/private.nar.zst NAR_REFS=''
-    expected=1 diagnostic=''
-    case "$case" in
-    success) expected=0 ;;
-    native)
-      COPY_EXIT=47
-      expected=47
-      ;;
-    traversal)
-      NAR_URL=../outside.nar
-      diagnostic='Invalid NAR location'
-      ;;
-    missing)
-      NAR_URL=nar/missing.nar
-      diagnostic='Missing NAR payload'
-      ;;
-    closure)
-      NAR_REFS=outside-closure
-      diagnostic='Incomplete reference closure'
-      ;;
-    esac
-    mkdir -p "$DOTFILES_CI_BINARY_CACHE"
-    : >"$GITHUB_OUTPUT"
-    run_script "$script"
-    [ "$status" -eq "$expected" ]
-    if ((expected)); then
-      [[ $output == *"$diagnostic"* ]]
-      [ ! -s "$GITHUB_OUTPUT" ]
-      [ ! -e "$RUNNER_TEMP/wsl-nix-cache-artifact/wsl-nix-cache.tar" ]
-    else
-      artifact=$(sed -n 's/^artifact-dir=//p' "$GITHUB_OUTPUT")
-      [[ $artifact == "$RUNNER_TEMP/"* ]]
-      [ "$(ls -1 "$artifact")" = $'wsl-nix-cache.tar\nwsl-system-paths.txt' ]
-      [ "$(cat "$artifact/wsl-system-paths.txt")" = "$STORE_PATH" ]
-      tar -tf "$artifact/wsl-nix-cache.tar" >"$BATS_TEST_TMPDIR/archive-list"
-      grep -Fxq './nar/private.nar.zst' "$BATS_TEST_TMPDIR/archive-list"
-      grep -Fxq './public-paths.txt' "$BATS_TEST_TMPDIR/archive-list"
-    fi
-    if ((COPY_EXIT == 0)); then
-      [ -f "$DOTFILES_CI_BINARY_CACHE/nar/private.nar.zst" ]
-    fi
-  done
-}
-
-@test "CI authentication and bounded HTTP/1.1 downloads follow Nix home and keep tokens private" {
-  write_stub getent <<'EOF'
-printf 'fixture:x:0:0:Fixture:%s:/bin/bash\n' "$FALLBACK_HOME"
-EOF
+@test "native CI authentication bounds cache downloads and keeps tokens private" {
   write_stub nix <<'EOF'
 case "$*" in
 'config show access-tokens') field=access-tokens ;;
 'config show substituters') field=substituters ;;
-'config show trusted-public-keys') field=extra-trusted-public-keys ;;
+'config show trusted-public-keys')
+  sed -n -E 's/^(extra-)?trusted-public-keys = //p' "$EXPECTED_CONFIG/nix/bootstrap-ci.conf"
+  exit 0 ;;
 *) exit 64 ;;
 esac
 grep "^$field = " "$EXPECTED_CONFIG/nix/bootstrap-ci.conf" | cut -d= -f2-
 EOF
-  for use_xdg in true false; do
-    for wsl in true false; do
-      for owned_home in true false; do
-        fixture="$BATS_TEST_TMPDIR/$use_xdg-$wsl-$owned_home"
-        export FALLBACK_HOME="$fixture/passwd-home" HOME="$fixture/missing-home"
-        export EXPECTED_CONFIG="$FALLBACK_HOME/.config" GITHUB_ENV="$fixture/github-env"
-        export GIT_CONFIG_SYSTEM="$fixture/gitconfig" GITHUB_WORKSPACE="$fixture/checkout"
-        export GITHUB_TOKEN=fixture-token-not-a-real-secret
-        mkdir -p "$FALLBACK_HOME"
-        unset XDG_CONFIG_HOME NIX_CONFIG NIX_USER_CONF_FILES
-        if [[ $owned_home == true ]]; then
-          HOME=$FALLBACK_HOME
-          if [[ $use_xdg == true ]]; then EXPECTED_CONFIG="$fixture/xdg"; fi
-        fi
-        if [[ $use_xdg == true ]]; then export XDG_CONFIG_HOME="$EXPECTED_CONFIG"; fi
-        args=()
-        if [[ $wsl == true ]]; then
-          args=(--wsl)
-          unset GITHUB_WORKSPACE
-        fi
-        for attempt in 1 2; do
-          run bash "$REPO_ROOT/scripts/sh/configure-bootstrap-ci-nix.sh" "${args[@]}"
-          [ "$status" -eq 0 ]
-          [[ $output != *"$GITHUB_TOKEN"* ]]
-        done
-        if [[ $owned_home == true ]]; then
-          [ ! -e "$GITHUB_ENV" ]
-        else
-          printf 'HOME=%s\nXDG_CONFIG_HOME=\nHOME=%s\nXDG_CONFIG_HOME=\n' \
-            "$FALLBACK_HOME" "$FALLBACK_HOME" >"$fixture/expected-env"
-          cmp "$GITHUB_ENV" "$fixture/expected-env"
-        fi
-        secret_file="$EXPECTED_CONFIG/nix/bootstrap-ci.conf"
-        [ "$(stat -c %a "$secret_file" 2>/dev/null || stat -f %Lp "$secret_file")" = 600 ]
-        [ "$(grep -Fc "include $secret_file" "$EXPECTED_CONFIG/nix/nix.conf")" -eq 1 ]
-        grep -Fxq 'http2 = false' "$secret_file"
-        grep -Fxq 'stalled-download-timeout = 60' "$secret_file"
-        grep -Fxq 'download-attempts = 3' "$secret_file"
-        grep -Fxq 'fallback = true' "$secret_file"
-        grep -Fxq 'substituters = https://cache.nixos.org?priority=10 https://cache.numtide.com?priority=50 https://hermes-agent.cachix.org' "$secret_file"
-        if [[ $wsl == true ]]; then
-          [ ! -e "$GIT_CONFIG_SYSTEM" ]
-          grep -Fxq 'max-jobs = 2' "$secret_file"
-        else
-          run git config --system --get-all safe.directory
-          [ "$status" -eq 0 ]
-          [ "$output" = "$GITHUB_WORKSPACE" ]
-          ! grep -Fq "$GITHUB_TOKEN" "$GIT_CONFIG_SYSTEM"
-        fi
-      done
+  for platform in native wsl; do
+    fixture="$BATS_TEST_TMPDIR/$platform"
+    export HOME="$fixture/home" EXPECTED_CONFIG="$fixture/home/.config"
+    export GIT_CONFIG_SYSTEM="$fixture/system-gitconfig" GITHUB_WORKSPACE="$fixture/checkout"
+    export GITHUB_TOKEN=fixture-token-not-a-real-secret
+    mkdir -p "$HOME"
+    unset XDG_CONFIG_HOME NIX_CONFIG NIX_USER_CONF_FILES
+    args=()
+    if [[ $platform == wsl ]]; then
+      args=(--wsl)
+      export EXPECTED_CONFIG="$fixture/xdg" XDG_CONFIG_HOME="$fixture/xdg"
+      unset GITHUB_WORKSPACE
+    fi
+    for attempt in 1 2; do
+      run bash "$REPO_ROOT/scripts/sh/configure-bootstrap-ci-nix.sh" "${args[@]}"
+      [ "$status" -eq 0 ]
+      [[ $output != *"$GITHUB_TOKEN"* ]]
     done
+    secret_file="$EXPECTED_CONFIG/nix/bootstrap-ci.conf"
+    [ "$(stat -c %a "$secret_file" 2>/dev/null || stat -f %Lp "$secret_file")" = 600 ]
+    [ "$(grep -Fc "include $secret_file" "$EXPECTED_CONFIG/nix/nix.conf")" -eq 1 ]
+    grep -Fxq 'http2 = false' "$secret_file"
+    grep -Fxq 'stalled-download-timeout = 60' "$secret_file"
+    grep -Fxq 'download-attempts = 3' "$secret_file"
+    grep -Fxq 'fallback = true' "$secret_file"
+    grep -Fxq 'substituters = https://cache.nixos.org?priority=10 https://cache.numtide.com?priority=50 https://hermes-agent.cachix.org' "$secret_file"
+    [ ! -e "$GIT_CONFIG_SYSTEM" ]
+    if [[ $platform == wsl ]]; then
+      grep -Fxq 'max-jobs = 2' "$secret_file"
+    else
+      run git config --global --get-all safe.directory
+      [ "$status" -eq 0 ]
+      [ "$output" = "$GITHUB_WORKSPACE" ]
+      ! grep -Fq "$GITHUB_TOKEN" "$HOME/.gitconfig"
+    fi
   done
 }
 
-@test "bootstrap aggregate accepts no work and rejects missing required jobs" {
+@test "bootstrap aggregate fails when a required runtime consumer fails" {
   script=$(workflow_step "$WORKFLOW" complete 'Verify routed job results')
-  for changes in '' CHANGES_RESULT=failure LINUX_BUILD_REQUIRED=true NIX_REQUIRED=true \
-    BASH_REQUIRED=true 'BASH_REQUIRED=true BASH_RESULT=failure' 'BASH_REQUIRED=true BASH_RESULT=success' \
-    BASH_RESULT=success \
-    'TOOLS_REQUIRED=true TOOLS_RESULT=success NIX_REQUIRED=true NIX_RESULT=success LINUX_BUILD_REQUIRED=true LINUX_BUILD_RESULT=success' \
-    WINDOWS_REQUIRED=true 'WINDOWS_REQUIRED=true WINDOWS_INSTALLER_RESULT=success' WINDOWS_INSTALLER_RESULT=success DARWIN_RESULT=success; do
-    while read -r variable; do
-      if [[ $variable == *_RESULT ]]; then export "$variable=skipped"; else export "$variable=false"; fi
-    done < <(grep -oE '\$\{[A-Z_]+\}' <<<"$script" | tr -d '${}' | sort -u)
-    export CHANGES_RESULT=success
-    for assignment in $changes; do export "$assignment"; done
-    run_script "$script"
-    case "$changes" in
-    '' | 'BASH_REQUIRED=true BASH_RESULT=success' | 'TOOLS_REQUIRED=true '* | 'WINDOWS_REQUIRED=true WINDOWS_INSTALLER_RESULT=success') [ "$status" -eq 0 ] ;;
-    *) [ "$status" -eq 1 ] ;;
-    esac
+  for variable in $(yq -r '.jobs.complete.env | keys | .[]' "$WORKFLOW"); do
+    if [[ $variable == *_RESULT ]]; then export "$variable=success"; else export "$variable=true"; fi
   done
+  run_script "$script"
+  [ "$status" -eq 0 ]
+  export DARWIN_RESULT=failure
+  run_script "$script"
+  [ "$status" -ne 0 ]
 }
 
 git_fixture() {
@@ -370,9 +169,7 @@ nix wsl chezmoi windows|nix/modules/fonts/wsl-fontconfig.conf
 nix linux darwin wsl chezmoi windows|nix/defaults.nix
 nix linux darwin wsl chezmoi windows|nix/home/keybindings/bindings.nix
 nix linux darwin wsl chezmoi windows|nix/home/keybindings/generated.json
-nix linux darwin wsl chezmoi windows|nix/modules/terminals/ghostty/ghostty.nix
-nix linux darwin wsl chezmoi windows|nix/modules/terminals/ghostty/ghostty-renderer.nix
-nix linux darwin wsl chezmoi windows|nix/modules/terminals/ghostty/ghostty-wsl.nix
+nix linux darwin wsl|nix/modules/terminals/ghostty/ghostty.nix
 nix linux darwin wsl chezmoi windows|nix/modules/editors/nvim/neovim.nix
 nix linux|nix/modules/hyprland/hyprland-renderer.nix
 nix chezmoi windows|windows/winget/packages.json

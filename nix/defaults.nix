@@ -124,7 +124,6 @@ let
               starship.enable = true;
               zsh-patina.enable = true;
               ghostty.enable = true;
-              wezterm.enable = true;
               neovim.enable = true;
               git.enable = true;
               ghq.enable = true;
@@ -552,6 +551,22 @@ in
         packages = [
           pkgs.statix
           pkgs.deadnix
+        ];
+      };
+      devShells.ci = pkgs.mkShellNoCC {
+        packages = with pkgs; [
+          actionlint
+          bash
+          coreutils
+          gitMinimal
+          gnugrep
+          gnused
+          gnutar
+          go-task
+          jq
+          python3
+          statix
+          zstd
         ];
       };
       apps =

@@ -39,7 +39,7 @@ WSL も `switch` 前に inputs を更新します。更新に失敗した場合�
 
 ```bash
 # flake inputs だけを更新するとき
-nix flake update
+task update
 ```
 
 Codex CLI の個別インストールは行わず、ChatGPT アプリ付属の CLI を使います。
@@ -120,7 +120,7 @@ service に HTTP で接続します。各 service が1つの stdio process を�
 `http://127.0.0.1:8765/mcp` / `http://127.0.0.1:8766/mcp` を使います。ブラウザは
 headless のため display や WSLg は不要です。Chrome DevTools MCP は `mcp-servers` input の
 既製 Nix package、xurl は `xurl` input に固定した upstream source を使い、
-通常の `nix flake update` で更新します。
+通常の `task update` で更新します。
 既存の `~/.hermes/.browser` と `~/.hermes/.xurl` は保持します。native xurl の
 `~/.xurl` は Home Manager が XDG 経由で既存 cache へリンクし、既存実体との衝突では
 反映を停止します。MCP service は Linux の systemd user service / macOS の launchd が
@@ -175,9 +175,9 @@ native NixOS 構成は `/etc/nixos/hardware-configuration.nix` がある場合�
 
 ### 成功条件と CI
 
-Unix のシステム統合 installer は必須 CLI を acceptance で確認し、Docker を選択した profile では Docker daemon、Compose、`docker run --rm hello-world` も確認します。非 NixOS Linux は Home Manager の build・activation までが対象です。Windows の installer は GUI アプリの導入結果を検証します。CI は GitHub-hosted Actions だけで完結し、Nix の option、package、flake output は Nix-native `nix-unit`、Windows は PowerShell/Pester、macOS の installer/runtime 契約は Bats で検証します。NixOS は hosted VM E2E で installer の再実行と Docker・Compose の runtime acceptance を検証します。
+CI は GitHub-hosted Actions で実行します。Nix の option・package・flake output は `nix-unit`、shell の installer 契約は Bats、Windows の契約は PowerShell/Pester で検証します。NixOS は hosted VM で本番 installer の反映と reboot 後の CLI・service・health を確認し、macOS と Windows / WSL も対象 OS の本番手順で反映・起動を確認します。CI の producer・lint は同じ `flake.lock` の薄い `.#ci` 環境でツールを管理します。工程と成果物の境界は [CI の実行環境](docs/ci/README.md) を参照してください。
 
-標準の hosted macOS runner では Docker Desktop の VM を起動しないため、その実機固有部分は macOS の installer を実行した際の acceptance が判定します。ローカル acceptance が失敗した場合、installer はセットアップ成功を表示しません。Windows の GUI installer は Docker runtime acceptance を実行しません。
+GitHub-hosted macOS / Windows の host OS 自体の reboot は対象外で、service または新しい login / profile session を確認します。非 NixOS Linux の standalone Home Manager は build と installer contract の対象です。Docker Desktop の実機起動はこの CI の検証対象に含めません。
 
 ## 方針
 
@@ -314,10 +314,10 @@ wsl --shutdown
 - 既存のプロファイルとキーバインドを保ちながら設定を適用
 - タブ・ペイン操作は Windows Terminal 標準のキー操作を使用（常駐キー変換は不要）
 
-### WezTerm（Unix）
+### Ghostty / Herdr（Unix）
 
-- 設定ソース: `nix/modules/terminals/wezterm/default.nix` と `wezterm.lua`
-- Leader key: `Ctrl+Space`
+- Ghostty の設定: `nix/modules/terminals/ghostty/default.nix`。分割・タブ操作キーは割り当てない
+- Herdr の設定: `nix/modules/herdr/default.nix`。タブ・ペイン・セッションを `Ctrl+Space` prefix で操作
 
 ## トラブルシューティング
 
@@ -342,11 +342,6 @@ NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations`�
 ```powershell
 .\install.cmd
 ```
-
-### macOS の WezTerm
-
-WezTerm は Nix package として管理します。旧 `wezterm@nightly` cask が残っている場合は、
-[WezTerm の旧 provider](./docs/nix/homebrew-cask-troubleshooting.md#wezterm) を参照してください。
 
 ### Windows Terminal 設定が反映されない
 

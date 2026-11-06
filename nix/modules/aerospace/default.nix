@@ -46,15 +46,20 @@ in
         mode.main.binding =
           (import ./aerospace.nix {
             inherit lib;
-            commands = (import ./darwin-commands.nix { inherit lib pkgs aerospace; }) // {
-              capture = "/usr/bin/open -a Screenshot";
-              lock = openUrl "raycast://extensions/raycast/system/lock-screen";
-              audio = openUrl "x-apple.systempreferences:com.apple.Sound-Settings.extension";
-              bluetooth = openUrl "x-apple.systempreferences:com.apple.BluetoothSettings";
-              display = openUrl "x-apple.systempreferences:com.apple.Displays-Settings.extension";
-              network = openUrl "x-apple.systempreferences:com.apple.wifi-settings-extension";
-              power = openUrl "x-apple.systempreferences:com.apple.Battery-Settings.extension";
-            };
+            commands =
+              (import ./darwin-commands.nix {
+                inherit lib pkgs aerospace;
+                ghostty = if config.programs.ghostty.enable then config.programs.ghostty.package else null;
+              })
+              // {
+                capture = "/usr/bin/open -a Screenshot";
+                lock = openUrl "raycast://extensions/raycast/system/lock-screen";
+                audio = openUrl "x-apple.systempreferences:com.apple.Sound-Settings.extension";
+                bluetooth = openUrl "x-apple.systempreferences:com.apple.BluetoothSettings";
+                display = openUrl "x-apple.systempreferences:com.apple.Displays-Settings.extension";
+                network = openUrl "x-apple.systempreferences:com.apple.wifi-settings-extension";
+                power = openUrl "x-apple.systempreferences:com.apple.Battery-Settings.extension";
+              };
           }).bindings;
         mode.passthrough.binding.cmd-ctrl-alt-esc = "mode main";
       };

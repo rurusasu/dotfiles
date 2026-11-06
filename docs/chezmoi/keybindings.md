@@ -1,6 +1,6 @@
 # キーバインド統一方針
 
-Nix で管理するデスクトップ・Ghostty・Neovim 配列と、chezmoi が配布する Windows / WSL 設定のキー設計方針。
+Nix で管理するデスクトップ・Ghostty・Herdr・Neovim と、chezmoi が配布する Windows / WSL 設定のキー設計方針。
 
 ## 目的
 
@@ -10,18 +10,15 @@ Nix で管理するデスクトップ・Ghostty・Neovim 配列と、chezmoi が
 
 ## 統一ルール
 
-| グループ                       | 役割                                   | 例                                  |
-| ------------------------------ | -------------------------------------- | ----------------------------------- |
-| `Ctrl+Space`                   | Unix WezTerm の追加操作 / Herdr prefix | `Ctrl+Space` + suffix               |
-| `Ctrl+Space Ctrl+Space`        | nested terminal へ prefix を1回転送    | `Ctrl+Space Ctrl+Space` + suffix    |
-| `Ctrl+Command` (WezTerm macOS) | 契約外の GUI pane resize               | `Ctrl+Command+矢印`                 |
-| `Ctrl+Command+M` (macOS)       | GUI window zoom / restore              | `Ctrl+Command+M`                    |
-| `Command+Alt` (WezTerm macOS)  | 契約外の GUI window focus              | `Command+Alt+H/L`                   |
-| `Alt+Shift` (WezTerm Linux)    | 契約外の GUI window focus/pane resize  | `Alt+Shift+H/L` / `Alt+Shift+矢印`  |
-| `Ctrl`                         | Unix/Vim focus                         | `Ctrl+H/J/K/L`                      |
-| `Shift+Enter`                  | 複数行入力                             | AI CLI / terminal prompt 改行       |
-| `Space` (`Leader`)             | editor 機能呼び出し                    | 検索、エクスプローラ、タブ操作      |
-| `Alt` (Shell)                  | CLI 補助操作                           | fzf/zoxide ウィジェット (`Q/D/T/R`) |
+| グループ                 | 役割                                | 例                                  |
+| ------------------------ | ----------------------------------- | ----------------------------------- |
+| `Ctrl+Space`             | Herdr prefix                        | `Ctrl+Space` + suffix               |
+| `Ctrl+Space Ctrl+Space`  | nested terminal へ prefix を1回転送 | `Ctrl+Space Ctrl+Space` + suffix    |
+| `Ctrl+Command+M` (macOS) | GUI window zoom / restore           | `Ctrl+Command+M`                    |
+| `Ctrl`                   | Unix/Vim focus                      | `Ctrl+H/J/K/L`                      |
+| `Shift+Enter`            | 複数行入力                          | AI CLI / terminal prompt 改行       |
+| `Space` (`Leader`)       | editor 機能呼び出し                 | 検索、エクスプローラ、タブ操作      |
+| `Alt` (Shell)            | CLI 補助操作                        | fzf/zoxide ウィジェット (`Q/D/T/R`) |
 
 ## 現在の適用状況
 
@@ -29,11 +26,11 @@ Nix で管理するデスクトップ・Ghostty・Neovim 配列と、chezmoi が
 
 配置方針は `nix/home/keybindings/` に共通 action とキーを定義し、macOS の AeroSpace と native NixOS の Hyprland 設定を生成する。Windows は標準ショートカットを使用し、グローバルなキーのリマップは行いません。WSL guest に Hyprland は導入しません。責務・OS ごとの代替動作は [共通定義と OS 別実装](./omarchy.md) を参照してください。
 
-キー配列の正本は `nix/home/keybindings/bindings.nix` と、それが読み込む `nix/modules/terminals/ghostty/ghostty.nix` / `nix/modules/editors/nvim/neovim.nix` です。`task keybindings:export` がロック済み Nix 入力で正本を直接評価し、jq でコミット対象の `generated.json` を更新します。chezmoi は Ghostty / Neovim の export を NixOS-WSL の `~/.config/dotfiles/keybindings/` に配置します。Windows の apply は Nix を呼びません。WSL の Home Manager は export を読む loader を所有し、native Unix は同じ Nix 定義を直接読みます。Nix の単体テストは生成済み JSON と正本の一致を検査します。
+共通配列の正本は `nix/home/keybindings/bindings.nix` と、それが読み込む `nix/modules/editors/nvim/neovim.nix` です。`task keybindings:export` がロック済み Nix 入力で正本を直接評価し、jq でコミット対象の `generated.json` を更新します。chezmoi はデスクトップ / Neovim の export を NixOS-WSL の `~/.config/dotfiles/keybindings/` に配置します。Windows の apply は Nix を呼びません。WSL の Neovim loader は Home Manager が所有し、native Unix は同じ Nix 定義を直接読みます。Ghostty と Herdr の設定は各アプリの Home Manager module が管理します。
 
 配列の生成・配置テストと、各アプリでの実キー入力の確認は区別します。
 
-WSLg Ghostty の resize はアプリ内の Ctrl+Alt+Shift 系キーに直接割り当てます。Windows のコピー・貼り付けとデスクトップ操作は標準キーを使います。
+Windows のコピー・貼り付けとデスクトップ操作は標準キーを使います。
 
 macOS は nix-darwin の AeroSpace サービスで管理し、Super=Command とする。
 ⌘F・⌘T・⌘S・⌘数字・⌘Tab などはデスクトップ操作がアプリ標準キーより優先する。
@@ -48,52 +45,9 @@ macOS は nix-darwin の AeroSpace サービスで管理し、Super=Command と�
 
 #### Ghostty
 
-Ghostty は `ghostty.nix` の直接キー28割り当てを使います。macOS の標準 Command キー設定は残し、次の配列を追加します。WSL では export した `ghostty.conf` を読み込み、resize は `ghostty-wsl.nix` の Ctrl+Alt+Shift 系キーをアプリ内で直接処理します。
+Ghostty の設定は macOS / Linux / WSL とも `nix/modules/terminals/ghostty/default.nix` の Home Manager module が管理します。既定キーを `keybind = clear` でクリアし、コピー・貼り付け、フォント、検索・スクロール、設定、新規ウィンドウ、全画面のキーだけを定義します。
 
-| キー                        | 操作                              |
-| --------------------------- | --------------------------------- |
-| `Ctrl+Shift+E`              | 上下に分割（新しい pane は下）    |
-| `Ctrl+Shift+O`              | 左右に分割（新しい pane は右）    |
-| `Ctrl+Alt+矢印`             | その方向の pane に移動            |
-| `Super+Ctrl+Shift+矢印`     | その方向へ10ピクセルのサイズ変更  |
-| `Super+Ctrl+Shift+Alt+矢印` | その方向へ100ピクセルのサイズ変更 |
-| `Ctrl+Shift+T`              | 新しい tab                        |
-| `Ctrl+Shift+Left/Up`        | 前の tab                          |
-| `Ctrl+Shift+Right/Down`     | 次の tab                          |
-| `Alt+1..9`                  | 指定した tab に移動               |
-
-Ghostty の `resize_split` の単位はピクセルで、行数ではありません。反映後は Ghostty の設定を再読み込みします。
-
-#### WezTerm（macOS / Linux）
-
-Unix の WezTerm は split / tab / pane 移動を Ghostty と同じ直接キーで操作します。サイズ変更の単位はセルで、小幅は1セル、大幅は10セルです。
-
-| キー                                      | 操作                                                        |
-| ----------------------------------------- | ----------------------------------------------------------- |
-| `Ctrl+Shift+E`                            | 下に分割                                                    |
-| `Ctrl+Shift+O`                            | 右に分割                                                    |
-| `Ctrl+Shift+T`                            | 新しい tab                                                  |
-| `Ctrl+Shift+Left/Up`                      | 前の tab                                                    |
-| `Ctrl+Shift+Right/Down`                   | 次の tab                                                    |
-| `Ctrl+Alt+矢印`                           | その方向の pane に移動                                      |
-| `Ctrl+Alt+Shift+矢印`                     | WezTerm はその方向へ1セル、Ghostty は10ピクセルのサイズ変更 |
-| `Ctrl+Alt+Shift+Home/PageDown/PageUp/End` | WezTerm は10セル、Ghostty は100ピクセルのサイズ変更         |
-| `Alt+1..9`                                | 指定した tab に移動                                         |
-
-`Ctrl+Space` は WezTerm 固有の workspace / session 操作と pane / tab を閉じる操作に残す。WezTerm は組み込み leader を使い、prefix timeout は1秒。
-
-| suffix | 操作                            |
-| ------ | ------------------------------- |
-| `w`    | workspace picker                |
-| `a`    | workspace を作成                |
-| `q`    | tab を閉じる                    |
-| `x`    | pane を閉じる                   |
-| `g`    | workspace / tab / domain picker |
-| `d`    | domain を detach                |
-| `[`    | copy mode                       |
-| `c`    | clipboard に copy               |
-
-Terminal.app は WezTerm の組み込み leader を使わず、標準のキー操作を使用する。デスクトップ全体の Omarchy 配列は AeroSpace が担当するため、Terminal.app 専用の常駐 adapter は導入しない。
+Ghostty の分割・タブ作成・ペイン移動・サイズ変更・undo / redo にはキーを割り当てません。ターミナル内のタブ・ペイン・セッションは Herdr で操作します。
 
 #### Herdr
 
@@ -115,7 +69,7 @@ Herdr は `Ctrl+Space` の terminal Window Manager prefix と native key table �
 
 - nested terminal では `Ctrl+Space Ctrl+Space` で内側へ prefix を1回転送し、その後の suffix で内側の Herdr を操作する。
 
-Window Manager 契約外の Unix WezTerm 操作として、pane resize、window focus、pane zoom を設定します。
+### GUI window zoom
 
 - macOS の全アプリに `Ctrl+Command+M` を割り当て、標準メニューの `Zoom` または `拡大／縮小` を実行する。
 - 設定反映後は対象アプリを再起動する。対象メニューを持たないアプリや、一部のElectronアプリでは動作しない場合がある。
@@ -175,9 +129,8 @@ Window Manager 契約外の Unix WezTerm 操作として、pane resize、window 
 
 - 新しいショートカットを追加する前に、この表のどのグループに属するかを先に決める
 - Windows Terminal は標準ショートカットを使う
-- Unix の Ghostty / WezTerm の split・tab・pane 移動は共通の直接キーを使う。WezTerm 固有操作は `Ctrl+Space`、Herdr は共通 suffix を使う
+- Ghostty はホスト端末として使い、ターミナル内のタブ・ペイン・セッション操作は Herdr の `Ctrl+Space` prefix に統一する
 - target が持たない capability は no-op とし、target 固有の代替キーを共通契約へ混ぜない
 - nested terminal の prefix 転送は `Ctrl+Space Ctrl+Space` に統一する
-- WezTerm の直接 window focus / pane resize は共通契約外の補助操作として維持する
 - Neovim など Unix/Vim 系は `Ctrl+H/J/K/L` を優先して維持する
 - `Vim` 拡張前提の操作説明は追加しない

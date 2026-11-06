@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Configure only disposable CI users; do not persist credentials in the image.
+# Configure only disposable CI users; keep credentials in their private config.
 set -euo pipefail
 
 if [[ $# -gt 1 || (${1:-} != "" && ${1:-} != --wsl) ]]; then
@@ -12,40 +12,15 @@ if [[ $GITHUB_TOKEN == *[[:space:]]* ]]; then
   exit 1
 fi
 
-# Git and Nix/libgit2 must trust the runner-owned checkout in this disposable
-# root container, including tests that reset HOME. Do not trust other paths.
+# The native runner and explicit root activation each trust this checkout only
+# in their own user configuration; no system-wide Git configuration is changed.
 if [[ ${1:-} != --wsl ]]; then
   : "${GITHUB_WORKSPACE:?CI checkout path is required}"
   [[ $GITHUB_WORKSPACE == /* ]] || exit 64
-  git config --system --replace-all safe.directory "$GITHUB_WORKSPACE"
+  git config --global --replace-all safe.directory "$GITHUB_WORKSPACE"
 fi
 
-nix_home="$HOME"
-# Nix rejects the runner-owned HOME mount in root container jobs and falls
-# back to the passwd home. Keep this shell and later workflow steps aligned.
-if [[ ! -O $nix_home ]]; then
-  if command -v getent >/dev/null 2>&1; then
-    nix_home=$(getent passwd "$(id -u)" | cut -d: -f6)
-  elif [[ $(uname -s) == Darwin && $(id -u) == 0 ]]; then
-    nix_home=/var/root
-  else
-    echo "Cannot resolve the Nix user's home." >&2
-    exit 1
-  fi
-  [[ $nix_home == /* ]] || {
-    echo "Cannot resolve the Nix user's home." >&2
-    exit 1
-  }
-  export HOME="$nix_home"
-  unset XDG_CONFIG_HOME
-  if [[ -n ${GITHUB_ENV:-} ]]; then
-    {
-      printf 'HOME=%s\n' "$nix_home"
-      printf 'XDG_CONFIG_HOME=\n'
-    } >>"$GITHUB_ENV"
-  fi
-fi
-config_home="${XDG_CONFIG_HOME:-$nix_home/.config}"
+config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 config_dir="$config_home/nix"
 config_file="$config_dir/bootstrap-ci.conf"
 umask 077
@@ -56,17 +31,15 @@ mkdir -p "$config_dir"
   # Share caches and transport limits across every CI platform. Replacing the
   # base substituter also preserves the official-cache priority after NixOS or
   # nix-darwin activation installs the host's normal configuration.
-  grep -E '^(substituters|extra-trusted-public-keys|http2|stalled-download-timeout|download-attempts|fallback) = ' \
-    "$repo_root/docker/bootstrap-ci-tools/nix.conf"
+  cat "$repo_root/.github/nix.conf"
   if [[ -n ${DOTFILES_CI_BINARY_CACHE:-} ]]; then
     # This local cache is restored within GitHub's branch-scoped CI cache.
     [[ $DOTFILES_CI_BINARY_CACHE == /* && $DOTFILES_CI_BINARY_CACHE != *[[:space:]?]* ]] || exit 64
+    # Own the directory before the root daemon opens this file substituter.
+    mkdir -p "$DOTFILES_CI_BINARY_CACHE"
     printf 'extra-substituters = file://%s?trusted=true\n' "$DOTFILES_CI_BINARY_CACHE"
   fi
   if [[ ${1:-} == --wsl ]]; then
-    # Keep container-only store ownership and sandbox settings out of NixOS.
-    grep -E '^experimental-features = ' \
-      "$repo_root/docker/bootstrap-ci-tools/nix.conf"
     printf 'max-jobs = 2\ncores = 1\n'
   fi
 } >"$config_file"
@@ -87,7 +60,11 @@ if ! nix config show substituters | grep -Fq 'https://hermes-agent.cachix.org'; 
   echo "Nix did not load the Hermes binary cache." >&2
   exit 1
 fi
-if ! nix config show trusted-public-keys | grep -Fq 'hermes-agent.cachix.org-1:'; then
-  echo "Nix did not load the Hermes binary cache key." >&2
-  exit 1
-fi
+trusted_public_keys=$(nix config show trusted-public-keys)
+while IFS= read -r signing_key; do
+  [[ -n $signing_key ]] || continue
+  if ! printf '%s\n' "$trusted_public_keys" | tr ' ' '\n' | grep -Fxq "$signing_key"; then
+    printf 'Nix did not load the CI binary cache signing key: %s\n' "${signing_key%%:*}" >&2
+    exit 1
+  fi
+done < <(sed -n -E 's/^(extra-)?trusted-public-keys = //p' "$repo_root/.github/nix.conf" | tr ' ' '\n')

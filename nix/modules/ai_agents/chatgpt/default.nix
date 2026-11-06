@@ -79,6 +79,15 @@ in
 
       programs.codex = {
         enableMcpIntegration = true;
+        skills.minimal-tests = ./skills/minimal-tests;
+        context = ''
+          For every code creation or modification, and for every code review,
+          always read and apply the minimal-tests skill before starting implementation
+          or review.
+          Read $CODEX_HOME/skills/minimal-tests/SKILL.md (use ~/.codex when
+          CODEX_HOME is unset). Apply it during implementation and again during
+          review, including removal of redundant, obsolete and migration tests.
+        '';
         # Install the CLI from ChatGPT; this option manages its settings.
         package = lib.mkDefault null;
         # Preserve application settings and project trust in a writable user file.

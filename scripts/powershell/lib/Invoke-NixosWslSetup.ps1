@@ -86,16 +86,31 @@ function Invoke-NixosWslSetup {
         [switch]$ForcePostInstall,
         [ValidateRange(0, 2147483647)]
         [int]$TimeoutSeconds = 1800,
-        [bool]$UpdateFlakeInputs = $true
+        [bool]$UpdateFlakeInputs = $true,
+        [string]$FlakeReference = '',
+        [string]$SourceDirectory = '',
+        [bool]$AllowBuilds = $true
     )
     function ConvertTo-WslArgument([string]$Value) {
         return "'" + $Value.Replace("'", "'\''") + "'"
+    }
+    if ($SourceDirectory -and ($SourceDirectory -notmatch '^/[^\r\n]*$' -or $SyncBack -ne 'none')) {
+        throw 'A Linux source directory requires an absolute path and SyncBack none.'
+    }
+    if (-not $AllowBuilds -and $UpdateFlakeInputs) {
+        throw 'Prebuilt deployments must keep flake inputs frozen.'
+    }
+    if ($FlakeReference -and ($FlakeReference -notmatch '^[^\r\n#]+#[A-Za-z0-9_-]+$' -or $UpdateFlakeInputs)) {
+        throw 'FlakeReference must select a named configuration with frozen inputs.'
+    }
+    $buildGuard = if ($AllowBuilds) { '' } else {
+        'export NIX_CONFIG="${NIX_CONFIG-}"$''\nmax-jobs = 0\nbuilders =\nfallback = false''; '
     }
     function Invoke-SetupCommand([string]$Command) {
         # Bypass WSL's default shell and keep profile banners out of machine-readable output.
         $output = @(Invoke-Wsl -TimeoutSeconds $timeoutSeconds -Arguments @(
                 '-d', $DistroName, '-u', 'root', '--exec', 'bash', '-c',
-                ". /etc/profile >/dev/null || exit; set -euo pipefail; $Command"
+                ". /etc/profile >/dev/null || exit; set -euo pipefail; $buildGuard$Command"
             ))
         if ($LASTEXITCODE -ne 0) {
             throw "NixOS-WSL setup failed (exit=$LASTEXITCODE): $($output -join [Environment]::NewLine)"
@@ -107,14 +122,22 @@ function Invoke-NixosWslSetup {
         throw 'SyncMode nix requires SyncBack lock or none.'
     }
 
-    $sourceOutput = @(Invoke-Wsl -TimeoutSeconds $TimeoutSeconds -Arguments @(
-            '-d', $DistroName, '-u', 'root', '--exec', 'wslpath', '-a',
-            ([IO.Path]::GetFullPath($Repository).Replace('\', '/'))
-        ))
-    $source = $sourceOutput | ForEach-Object { ([string]$_ -replace "`0", '' -replace [char]0xFEFF, '').Trim() } |
-        Where-Object { $_ -match '^/' } | Select-Object -First 1
-    if ($LASTEXITCODE -ne 0 -or -not $source) {
-        throw 'Could not resolve the Windows checkout inside WSL.'
+    if ($SourceDirectory) {
+        # A prepared immutable deployment can synchronize its exact Linux store
+        # snapshot without converting it through a Windows working tree.
+        $source = $SourceDirectory
+    }
+    else {
+        $sourceOutput = @(Invoke-Wsl -TimeoutSeconds $TimeoutSeconds -Arguments @(
+                '-d', $DistroName, '-u', 'root', '--exec', 'wslpath', '-a',
+                ([IO.Path]::GetFullPath($Repository).Replace('\', '/'))
+            ))
+        $source = $sourceOutput | ForEach-Object { ([string]$_ -replace "`0", '' -replace [char]0xFEFF, '').Trim() } |
+            Where-Object { $_ -match '^/' } | Select-Object -First 1
+        if ($LASTEXITCODE -ne 0 -or -not $source) {
+            throw 'Could not resolve the Windows checkout inside WSL.'
+        }
+
     }
 
     $currentUserOutput = @(Invoke-Wsl -TimeoutSeconds $TimeoutSeconds -Arguments @('-d', $DistroName, '--exec', '/run/current-system/sw/bin/id', '-un'))
@@ -131,7 +154,11 @@ function Invoke-NixosWslSetup {
 
     # Validate the declaration being applied; none retains the independent WSL checkout.
     $userFlake = if ($syncMode -eq 'none') { $repo } else { $source }
-    $userAttribute = ConvertTo-WslArgument ('path:' + $userFlake + '#nixosConfigurations.nixos.config.wsl.defaultUser')
+    $selectedFlake = if ($FlakeReference) { $FlakeReference } else { 'path:' + $userFlake + '#nixos' }
+    $selection = $selectedFlake.LastIndexOf('#')
+    $configurationRoot = $selectedFlake.Substring(0, $selection)
+    $configurationName = $selectedFlake.Substring($selection + 1)
+    $userAttribute = ConvertTo-WslArgument ($configurationRoot + '#nixosConfigurations.' + $configurationName + '.config.wsl.defaultUser')
     $userOutput = @(Invoke-SetupCommand "nix --accept-flake-config --extra-experimental-features 'nix-command flakes' eval --raw $userAttribute --impure --no-write-lock-file")
     $declaredUser = [string]($userOutput | Where-Object { [string]$_ -match '^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$' } | Select-Object -Last 1)
     if (-not $declaredUser) { throw 'Could not resolve the declared wsl.defaultUser.' }
@@ -164,14 +191,14 @@ function Invoke-NixosWslSetup {
     }
     $target = if ($syncMode -eq 'link') { $source } else { $repo }
     $qTarget = ConvertTo-WslArgument $target
-    $qFlakeTarget = ConvertTo-WslArgument ('path:' + $target)
     Invoke-SetupCommand "test -f $qTarget/flake.nix; test -f $qTarget/flake.lock" | Out-Host
 
     if ($updateFlakeInputs) {
-        Invoke-SetupCommand "nix --accept-flake-config --extra-experimental-features 'nix-command flakes' flake update --flake $qFlakeTarget" | Out-Host
+        Invoke-SetupCommand "bash $qSource/scripts/sh/update-flake-inputs.sh $qTarget path" | Out-Host
     }
     $lockOption = if ($updateFlakeInputs) { '' } else { ' --no-update-lock-file' }
-    Invoke-SetupCommand "nixos-rebuild switch --flake $(ConvertTo-WslArgument ('path:' + $target + '#nixos')) --impure$lockOption --option accept-flake-config true --option experimental-features 'nix-command flakes'" | Out-Host
+    $deploymentFlake = if ($FlakeReference) { $FlakeReference } else { 'path:' + $target + '#nixos' }
+    Invoke-SetupCommand "nixos-rebuild switch --flake $(ConvertTo-WslArgument $deploymentFlake) --impure$lockOption --option accept-flake-config true --option experimental-features 'nix-command flakes'" | Out-Host
 
     if ($target -ne $source) {
         switch ($syncBack) {

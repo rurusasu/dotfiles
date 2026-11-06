@@ -24,12 +24,10 @@ in
     expr = {
       aerospace = contains pkgs.aerospace homePackages;
       ghostty = contains cfg.home-manager.users.test-user.programs.ghostty.package homePackages;
-      wezterm = contains cfg.home-manager.users.test-user.programs.wezterm.package homePackages;
     };
     expected = {
       aerospace = true;
       ghostty = true;
-      wezterm = true;
     };
   };
 }

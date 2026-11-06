@@ -40,14 +40,16 @@ Use `chezmoi --color=false` or `task --color=false` for plain output, including
 when saving logs. Application output keeps the colors provided by each tool;
 plain messages such as `Setup Complete!` remain plain.
 
-The key allocation is defined in `nix/home/keybindings/bindings.nix`,
-`nix/modules/terminals/ghostty/ghostty.nix`, and `nix/modules/editors/nvim/neovim.nix`.
+The shared key allocation is defined in `nix/home/keybindings/bindings.nix`
+and `nix/modules/editors/nvim/neovim.nix`.
 `task keybindings:export` directly evaluates those definitions with locked Nix
 inputs and jq to update the committed `nix/home/keybindings/generated.json` export. chezmoi reads this export without
-running Nix during apply. chezmoi also copies the exported Ghostty and Neovim data to
+running Nix during apply. chezmoi also copies the exported desktop and Neovim data to
 `~/.config/dotfiles/keybindings/` inside NixOS-WSL. Home Manager installs the
-application loaders once; later key changes only require export and chezmoi.
-WSLg Ghostty uses direct Ctrl+Alt+Shift resize shortcuts within the application.
+Neovim loader once; later shared key changes only require export and chezmoi.
+Home Manager owns Ghostty and Herdr settings on every Unix platform. Ghostty
+provides the host terminal; Herdr owns terminal tabs, panes, and sessions through
+its `Ctrl+Space` prefix. Ghostty has no split or tab keybindings.
 Regenerate the export after editing the Nix allocation, then apply it with:
 
 ```powershell
@@ -55,10 +57,10 @@ task chezmoi
 ```
 
 The normal `task install` flow installs Windows GUI apps, configures and applies
-NixOS-WSL once to install the loaders, and applies Windows chezmoi to deploy the
+NixOS-WSL once to install the Neovim loader, and applies Windows chezmoi to deploy the
 exported data. `install.cmd` bootstraps the same Task entry when Task is not yet
 installed. That flow consumes the committed JSON and does not regenerate it. On an
 existing installation, run `nrs` once after adding this loader configuration,
-then `task chezmoi`. Restart Neovim and reload Ghostty configuration after key
-changes. GitHub Actions checks that the export matches Nix; it does not need to
+then `task chezmoi`. Restart Neovim after shared key changes. Apply Ghostty and
+Herdr changes with `nrs`. GitHub Actions checks that the export matches Nix; it does not need to
 generate or commit files on behalf of Windows installations.

@@ -47,12 +47,12 @@ build ファイルは OS 条件で空の属性セットを返せます。build �
 { fixtures, code }:
 let
   home = fixtures.mkHome "aarch64-darwin" [
-    { programs.wezterm.enable = true; }
+    { programs.ghostty.enable = true; }
   ];
 in
 {
-  testWeztermTheme = {
-    expr = home.config.programs.wezterm.settings.color_scheme;
+  testGhosttyTheme = {
+    expr = home.config.programs.ghostty.settings.theme;
     expected = code.nix.modules.terminals.appearance.theme;
   };
 }
@@ -62,18 +62,18 @@ in
 # build/example.check.nix: asset も属性から参照する
 { pkgs, files }:
 {
-  wezterm-lua = pkgs.runCommand "wezterm-lua-check"
+  neovim-window-style = pkgs.runCommand "neovim-window-style-check"
     { nativeBuildInputs = [ pkgs.lua ]; }
     ''
-      luac -p ${files.nix.modules.terminals.wezterm."wezterm.lua"}
+      luac -p ${files.nix.modules.editors.nvim.lua.config."window_styles.lua"}
       touch "$out"
     '';
 }
 ```
 
 nix-unit の flake-parts module が `checks.<system>.nix-unit` を自動生成します。
-アプリの実行テストは本番の分類に対応する `build/modules/`、独自 package と standalone Darwin の構成ビルドは
-`build/defaults/{custom-packages,standalone-darwin-home}.check.nix`、PowerShell formatter は `build/treefmt/powershell.check.nix` に置きます。
+アプリの実行テストは本番の分類に対応する `build/modules/`、standalone Darwin の構成ビルドは
+`build/defaults/standalone-darwin-home.check.nix`、PowerShell formatter は `build/treefmt/powershell.check.nix` に置きます。
 実行スクリプトを flake の配線ファイルに直書きしません。
 `treefmt` は treefmt-nix の flake-parts module が標準 check として公開します。
 設定の正本は `nix/treefmt.nix`、読み込みと開発シェルの配線は `nix/defaults.nix` です。
@@ -93,7 +93,7 @@ Windows の標準 package ID / source は CI の jq が `windows/winget/packages
 Unix の `task test` は `task test:nix` を呼びます。CI と同じ
 `nix flake check --no-write-lock-file --print-build-logs` で、現在の system に登録された
 すべての check を実行します。check 名のリストや system 判定を呼び出し側で管理しません。
-対象には nix-unit、独自 package build、AeroSpace、Neovim、WezTerm、Docker Desktop、
+対象には nix-unit、独自 package build、AeroSpace、Neovim、Docker Desktop、
 PowerShell formatter、treefmt を含み、Darwin では standalone Home Manager の構成ビルドも含みます。
 Docker Desktop の初期設定は生成された activation を CLI double で実行し、再実行、失敗時の再試行、
 既存の `md5` パスとの衝突を検証します。実機の Docker Desktop 起動は installer の検証対象です。
@@ -114,7 +114,7 @@ Pipedream の OAuth 設定、HTTP サーバーにローカル command がない�
 # 全 system の flake 出力を評価する。テスト本体は実行しない
 nix flake check --all-systems --no-build --no-write-lock-file
 
-# CI と共通の全 checks 実行（Unix）
+# 現在の system の全 checks 実行（Unix）
 task test:nix
 
 # Taskfile を介さず現在の system の全 checks を実行する
@@ -132,32 +132,58 @@ PSScriptAnalyzer を Nix store から直接 import します。VS Code 本体は
 依存 input の取得は build に先行し、formatter の実行中に `Install-Module` を呼びません。
 空の HOME でも同じ依存を使用します。`powershell-formatter` は未整形 fixture を整形し、
 CRLF・日本語の BOM と二度目の実行で byte / 更新時刻が変わらないことを検証します。
-`task test:nix` と Linux の check job は全 checks に含めて実行します。
-Linux の container job は `docker/bootstrap-ci-tools/nix.conf` で
-`sandbox = true` を設定した tools image を使います。新しい image は公開前に
-`check-bootstrap-ci-tools.sh --sandbox` で sandbox 内の build を検証し、各 job は検証済みの
-image を immutable digest で再利用します。
-全 CI platform は公式の `cache.nixos.org` を public package の取得で優先し、
-Numtide mirror は priority 50 の fallback として使います。設定の正本は
-`docker/bootstrap-ci-tools/nix.conf` で、認証設定用 adapter も同じ値を読み込みます。
-WSL の転送 artifact は workflow run ID ごとに保存し、consumer だけの再実行でも
-成功済み producer の出力を再利用します。producer の再実行時は同じ artifact を置き換えます。
-CI の format 検査は全 checks 内の `treefmt` にまとめ、同じ検査を別 job では実行しません。
-check job の結果も `Bootstrap / Complete` の成功条件に含めます。CI が host の PSGallery module を準備しても、
-Nix formatter は host module ではなく固定した store module を使います。
-`activationPackage` を checks に登録すれば Home Manager の構成ビルドも検証できますが、
-それ自体は activation の実行や、設定値を比較する nix-unit テストを意味しません。
+`task test:nix` は現在の system の全 checks を実行します。CI の Linux / Darwin producer は
+通常の checks をすべて構築し、native Linux の runtime check は OS の変更分類で選択します。
+Linux が選択された場合の VM check は `.driver` のビルドと実行を分けます。
+VM の起動・反映・再起動は E2E consumer が担当し、producer 内で同じ VM テストを重ねて実行しません。
 
-Linux bootstrap CI は hardware fixture を `/etc/nixos/hardware-configuration.nix` に配置し、`x86_64-linux`（`ubuntu-24.04`）で本番 NixOS system と standalone Home Manager activation package を build します。両構成は同じ `systemDefaults.home-manager.sharedModules` を使います。
-Darwin CI は `extendModules` で runner の `system.primaryUser` を明示し、`aarch64-darwin`（`macos-15`）で `darwin-rebuild switch` と全 flake checks を実行します。
-WSL CI も `platform = "wsl"` を選ぶ本番経路の `nixos-rebuild switch` を実行します。Darwin cask artifact check は CI で実行しません。
-workflow の認証・cache の保護・変更分類・集約判定は `scripts/sh/tests/ci_workflow.bats` で実行します。
-YAML 構文は `actionlint`、設定適用は対象 platform の rebuild で検証します。
-共通の `nix` job は statix の lint を確認し、事前の `nix eval` / `nix flake check --no-build` は実行しません。
-`aarch64-linux` は flake の support/output には含まれますが、この workflow には ARM64 Linux runner の native build がありません。
-`aarch64-linux` の native build には対応する builder が必要です。
-配置変更時には `.github/actions/detect-ci-changes/action.yml` の共有検査・OS 別の分類と、
-対応する workflow の実行条件を確認してください。
+CI の共通入口は `task ci:build TARGET=linux|darwin|windows` と
+`task ci:e2e TARGET=linux|darwin|windows` です。工程と依存関係は
+`taskfiles/ci/taskfile.yml`、OS 固有の操作は Bash / PowerShell adapter が所有します。
+全 platform が「固定した入力の検証 → build / 準備 → 成果物の受け渡し → 本番手順で反映 →
+再起動または新しいセッション → runtime assertion」を通ります。
+
+| 対象          | Producer の成果物                                                                    | E2E の実行境界                                                                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NixOS / Linux | 本番設定を取り込む VM driver と standalone Home Manager を同じ store で構築          | native NixOS VM 内で `install.sh` を実行し、実際の reboot 後に system path、CLI、service、healthを確認                                                        |
+| macOS         | runner のユーザー名を固定した nix-darwin 構成と必要な依存                            | 別 runner で成果物を import し、`install.sh`、service の再起動、新しい login shell、system path と CLI / service の確認                                       |
+| Windows / WSL | 固定したソースと WinGet master の Windows plan、Linux producer が構築した WSL system | PowerShell 5.1 / 7 で本番の WinGet → WSL setup → chezmoi を通し、WSL の cold restart、新しい PowerShell profile session、CLI / package / 設定 / health を確認 |
+
+Linux の producer は通常の checks と、変更分類で選択された standalone Home Manager / WSL / VM driver を
+同じ Nix store で扱い、共有パッケージを別ジョブの空の store で再ビルドしません。
+native Linux が選択された場合は VM の runtime check も必須です。Windows の producer は外部アプリをソースビルドせず、
+入力となる配布コードと WinGet master を保存します。WinGet / Store の catalog は外部入力であり、
+実際に解決・導入された版を E2E の inventory に記録します。
+macOS の Homebrew cask（Docker Desktop / Steam）も外部 catalog から取得するため、
+Nix の固定 closure とは区別し、導入済みの版を E2E の inventory に記録します。
+Linux の VM adapter は、同じ guest の反映・reboot・検証を一つの driver 内で順に実行します。
+
+Nix artifact は source SHA、target、root store paths、closure metadata と payload の digest を持ちます。
+consumer は producer の artifact ID を指定して取得し、対象と digest を確認してから import します。
+公開依存の payload を省く場合も、それらの参照が公開 cache だけで閉じることを確認します。
+任意の dependency cache が消えても、必須 artifact の欠落を新しいソースビルドで埋めません。
+本番の rebuild コマンドは保ち、input 更新と未準備のビルドを禁止し、反映後の system path が
+producer の root と一致することを確認します。古い PR head の成功を別の merge SHA に転用しません。
+
+GitHub-hosted macOS / Windows は job を維持した host OS の reboot を保証できないため、
+macOS は service reload と新しい login shell、Windows は新しい PowerShell process / profile を
+再起動の境界とします。NixOS VM と WSL は実際に reboot / terminate を行います。
+通常 Linux の standalone Home Manager は build と installer contract の検証対象であり、
+Ubuntu / Debian 上の実 activation E2E は含みません。`aarch64-linux` も flake の出力対象ですが、
+この workflow に対応する native ARM64 builder はありません。
+
+Linux producer / consumer は native hosted runner 上で Nix を実行します。
+検証ツールは `flake.lock` に従う薄い `.#ci` 環境で供給し、producer の Nix sandbox は有効にします。
+全 CI platform が公式 cache を優先し、Numtide と Hermes の cache も利用します。
+キャッシュ、必須 artifact、実行環境の詳細は
+[CI の実行環境と Nix 成果物の再利用](../../docs/ci/README.md#nix-成果物の再利用) を参照してください。
+
+CI の format 検査は通常の checks に含む `treefmt` にまとめます。PowerShell formatter は host の
+PSGallery module ではなく、固定した Nix store の PSScriptAnalyzer を使います。
+変更分類・artifact の同一性・認証・集約判定は `scripts/sh/tests/ci_workflow.bats` と
+artifact / cache の runtime テストで確認します。YAML は `actionlint` で検査します。
+必須 build / E2E が失敗または未完了なら `Bootstrap / Complete` を成功にしません。
+配置変更時は `.github/actions/detect-ci-changes/action.yml` の OS 分類と実行条件も更新します。
 
 ## Bats の所有境界
 

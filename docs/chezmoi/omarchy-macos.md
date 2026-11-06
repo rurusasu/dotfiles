@@ -27,7 +27,7 @@ native NixOS、Windows デスクトップ、WSL の対応範囲は [共通定義
 
 | キー                                    | 操作                                                         |
 | --------------------------------------- | ------------------------------------------------------------ |
-| ⌘Enter                                  | WezTerm 起動                                                 |
+| ⌘Enter                                  | Ghostty 起動                                                 |
 | ⌘Shift Enter / ⌘Shift B                 | Dia 起動                                                     |
 | ⌘Shift F/O/A                            | Finder / Obsidian / ChatGPT                                  |
 | ⌘Shift /                                | 1Password                                                    |

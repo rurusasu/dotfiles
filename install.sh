@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=scripts/sh/lib/install-options.sh
+. "$ROOT/scripts/sh/lib/install-options.sh"
 os="$(uname -s)"
 arch="$(uname -m)"
 
@@ -61,10 +63,12 @@ if [[ $installer == home-manager ]]; then
   x86_64) system=x86_64-linux ;;
   aarch64 | arm64) system=aarch64-linux ;;
   esac
-  nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
-    flake update --flake "$ROOT"
+  if [[ $UPDATE_FLAKE_INPUTS == true ]]; then
+    bash "$ROOT/scripts/sh/update-flake-inputs.sh" "$ROOT"
+  fi
   exec nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
-    run "$ROOT#home-manager" -- switch --flake "$ROOT#$system" --impure "$@"
+    run ${install_flake_options[@]+"${install_flake_options[@]}"} "$ROOT#home-manager" -- switch \
+    --flake "${DOTFILES_FLAKE_REF:-$ROOT#$system}" --impure ${install_flake_options[@]+"${install_flake_options[@]}"} "$@"
 fi
 
 exec "$ROOT/scripts/sh/$installer" "$@"

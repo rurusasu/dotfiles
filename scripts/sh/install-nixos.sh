@@ -2,11 +2,17 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=scripts/sh/lib/install-options.sh
+. "$ROOT/scripts/sh/lib/install-options.sh"
 host=linux
 if [[ $(uname -r) == *[Mm]icrosoft* ]]; then
   host=nixos
+fi
+flake_ref=${DOTFILES_FLAKE_REF:-$ROOT#$host}
+if [[ $host == nixos ]]; then
+  account_flake=${DOTFILES_FLAKE_REF:-path:$ROOT#$host}
   configured_user=$(nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
-    eval --raw "path:$ROOT#nixosConfigurations.nixos.config.wsl.defaultUser" --impure --no-write-lock-file)
+    eval --raw "${account_flake%#*}#nixosConfigurations.${account_flake##*#}.config.wsl.defaultUser" --impure --no-write-lock-file)
   current_user=$(id -un)
   if [[ $configured_user != "$current_user" ]]; then
     printf 'WSL user %s differs from declared wsl.defaultUser %s. Use nixos-rebuild boot and the official WSL restart procedure before switch: https://nix-community.github.io/NixOS-WSL/how-to/change-username.html\n' \
@@ -14,7 +20,9 @@ if [[ $(uname -r) == *[Mm]icrosoft* ]]; then
     exit 1
   fi
 fi
-nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
-  flake update --flake "$ROOT"
-exec sudo nixos-rebuild switch --flake "$ROOT#$host" --impure \
-  --option accept-flake-config true --option experimental-features 'nix-command flakes' "$@"
+if [[ $UPDATE_FLAKE_INPUTS == true ]]; then
+  bash "$ROOT/scripts/sh/update-flake-inputs.sh" "$ROOT"
+fi
+exec sudo ${install_sudo_options[@]+"${install_sudo_options[@]}"} nixos-rebuild switch --flake "$flake_ref" --impure \
+  --option accept-flake-config true --option experimental-features 'nix-command flakes' \
+  ${install_flake_options[@]+"${install_flake_options[@]}"} "$@"
