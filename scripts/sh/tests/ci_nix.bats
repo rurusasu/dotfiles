@@ -4,7 +4,6 @@
   repository=$(cd "$BATS_TEST_DIRNAME/../../.." && pwd)
   export CI_STATE="$BATS_TEST_TMPDIR/state" PREPARED_ZSTD="$BATS_TEST_TMPDIR/zstd"
   export TESTED_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-  export CI_WSL_REQUIRED=true CI_LINUX_REQUIRED=false
   python="$BATS_TEST_TMPDIR/python"
   source=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source
   system=/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-system
@@ -21,7 +20,7 @@ set -euo pipefail
 mkdir -p "$CI_STATE/artifacts/wsl"
 EOF
   chmod +x "$python/bin/python3"
-  run bash "$repository/scripts/sh/ci-nix.sh" export linux
+  run bash "$repository/scripts/sh/ci-nix.sh" export wsl
   [ "$status" -eq 0 ]
   [ "$(cat "$CI_STATE/artifacts/wsl/bootstrap-python-path.txt")" = "$python" ]
 }

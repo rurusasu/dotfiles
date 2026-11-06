@@ -24,6 +24,13 @@ tasks:
       - bash scripts/sh/ci-nix.sh build darwin
       - bash scripts/sh/ci-nix.sh export darwin
 
+  build:wsl:
+    internal: true
+    cmds:
+      - bash scripts/sh/ci-nix.sh source wsl
+      - bash scripts/sh/ci-nix.sh build wsl
+      - bash scripts/sh/ci-nix.sh export wsl
+
   build:windows:
     internal: true
     cmds:

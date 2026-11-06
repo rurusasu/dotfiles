@@ -9,12 +9,52 @@ tasks:
   fmt:check:
     desc: Format files and fail if changes are needed
     cmds:
-      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix fmt -- --fail-on-change"'
+      - |
+        {{.WSL}}bash -lc 'cd "{{if eq OS "windows"}}$HOME/.dotfiles{{else}}{{.DOTFILES_PATH}}{{end}}" && formatter_system=$(nix eval --impure --raw --expr builtins.currentSystem) && nix run --no-update-lock-file "path:.#formatter.$formatter_system" -- --fail-on-change'
 
   lint:
     desc: Run pre-commit on all files
     cmds:
       - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && pre-commit run --all-files"'
+
+  lint:powershell:
+    desc: Check PowerShell runtime sources and Windows source encoding
+    cmds:
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix run --no-update-lock-file path:.#powershell-lint"'
+
+  lint:ci:
+    desc: Run shared static CI checks
+    cmds:
+      - task: fmt:check
+      - statix check .
+      - actionlint
+      - task: lint:powershell
+      - |
+        # shellcheck disable=SC2016 # jq expressions must not be expanded by Bash.
+        jq -e '
+          def nonempty_string: type == "string" and length > 0;
+          def only_keys($allowed): (keys - $allowed | length) == 0;
+          type == "object"
+          and only_keys(["$schema", "Sources", "WinGetVersion", "CreationDate"])
+          and ."$schema" == "https://aka.ms/winget-packages.schema.2.0.json"
+          and (if has("WinGetVersion") then (.WinGetVersion | nonempty_string) else true end)
+          and (if has("CreationDate") then (.CreationDate | nonempty_string) else true end)
+          and (.Sources | type == "array" and length > 0)
+          and all(.Sources[];
+            type == "object" and only_keys(["SourceDetails", "Packages"])
+            and (.SourceDetails | type == "object"
+              and only_keys(["Name", "Identifier", "Argument", "Type"])
+              and all(.Name, .Identifier, .Argument, .Type; nonempty_string))
+            and (.Packages | type == "array" and length > 0)
+            and all(.Packages[];
+              type == "object"
+              and only_keys(["PackageIdentifier", "Version", "Channel", "Scope", "InitialOverrideArguments", "InitialCustomSwitches"])
+              and (.PackageIdentifier | nonempty_string)
+              and (if has("Scope") then (.Scope == "user" or .Scope == "machine") else true end)
+              and all(to_entries[] | select(.key != "Scope"); .value | nonempty_string)))
+          and ([.Sources[].Packages[].PackageIdentifier] as $ids
+            | ($ids | length) == ($ids | unique | length))
+        ' windows/winget/packages.json
 
   lint:no-format:
     internal: true

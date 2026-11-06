@@ -12,6 +12,12 @@ repos:
         entry: nix fmt -- --fail-on-change
         language: system
         pass_filenames: false
+      - id: powershell-lint
+        name: powershell lint
+        entry: task lint:powershell
+        language: system
+        pass_filenames: false
+        files: '\.(ps1|psm1|psd1)$'
       - id: powershell-tests
         name: powershell tests
         entry: scripts/sh/run-windows-powershell-tests.sh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1

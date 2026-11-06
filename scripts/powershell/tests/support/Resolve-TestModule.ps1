@@ -2,14 +2,11 @@ function Resolve-TestModule {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('Pester', 'PSScriptAnalyzer')]
+        [ValidateSet('Pester')]
         [string]$Name
     )
 
-    $requiredCommands = if ($Name -eq 'Pester') {
-        @('New-PesterConfiguration', 'Invoke-Pester')
-    }
-    else { @('Invoke-ScriptAnalyzer') }
+    $requiredCommands = @('New-PesterConfiguration', 'Invoke-Pester')
     $module = Get-Module -ListAvailable -Name $Name |
         Where-Object {
             $candidate = $_
@@ -20,13 +17,12 @@ function Resolve-TestModule {
             $prerelease = if ($psData -is [Collections.IDictionary]) { $psData['Prerelease'] } else { $null }
             $edition = $PSVersionTable.PSEdition
             $exportsRequiredCommands -and [string]::IsNullOrWhiteSpace([string]$prerelease) -and
-            ($Name -ne 'Pester' -or $candidate.Version -ge [version]'6.2') -and
+            ($candidate.Version -ge [version]'6.2') -and
             (-not $candidate.PowerShellVersion -or $candidate.PowerShellVersion -le $PSVersionTable.PSVersion) -and
             (-not $candidate.CompatiblePSEditions.Count -or $candidate.CompatiblePSEditions -contains $edition)
         } | Sort-Object Version -Descending | Select-Object -First 1
     if (-not $module) {
-        $requirement = if ($Name -eq 'Pester') { 'stable version 6.2 or newer' } else { 'stable module exporting Invoke-ScriptAnalyzer' }
-        throw "Required test dependency '$Name' ($requirement) is not installed. Prepare dependencies separately; tests do not download or install them."
+        throw "Required test dependency '$Name' (stable version 6.2 or newer) is not installed. Prepare dependencies separately; tests do not download or install them."
     }
     return $module
 }

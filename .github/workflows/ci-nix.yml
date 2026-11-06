@@ -16,7 +16,7 @@ env:
   TESTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 jobs:
   changes:
-    name: Bootstrap / Changes
+    name: Changes
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -41,21 +41,39 @@ jobs:
       darwin: ${{ steps.detect.outputs.darwin }}
       wsl: ${{ steps.detect.outputs.wsl }}
       windows: ${{ steps.detect.outputs.windows }}
-  # Native Unix jobs bootstrap Nix and Task independently, so lint, tests and
-  # producers start in parallel. Producers/lint get their tools from path:.#ci;
-  # E2E consumers import exact producer artifacts and use their frozen tools.
+  # Lint gates every producer and runtime test. Each E2E imports only its
+  # matching producer artifacts; Changes is used by routing and Complete.
+  lint:
+    name: Lint
+    needs: changes
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+      - name: Set up native Nix and Task
+        uses: ./.github/actions/setup-ci-nix
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run shared static checks
+        run: nix develop --no-update-lock-file path:.#ci --command task lint:ci
   bash-test:
-    name: Bootstrap / Bash tests
+    name: Bash tests
     needs:
       - changes
+      - lint
     if: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
     runs-on: ubuntu-24.04
     defaults:
       run:
         shell: bash
     timeout-minutes: 30
-    permissions:
-      contents: read
     steps:
       - name: Checkout exact tested SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -68,35 +86,11 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run Bash tests
         run: task test:bash
-  nix:
-    name: Bootstrap / Nix / Lint
-    needs:
-      - changes
-    if: ${{ needs.changes.outputs.nix == 'true' }}
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        shell: bash
-    timeout-minutes: 25
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout exact tested SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-      - name: Set up native Nix and Task
-        uses: ./.github/actions/setup-ci-nix
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Run statix
-        timeout-minutes: 15
-        run: nix develop --no-update-lock-file path:.#ci --command statix check .
   linux-build:
-    name: Bootstrap / Linux / Build
+    name: Linux build
     needs:
       - changes
+      - lint
     if: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' }}
     runs-on: ubuntu-24.04
     defaults:
@@ -107,10 +101,8 @@ jobs:
       contents: read
     env:
       CI_LINUX_REQUIRED: ${{ needs.changes.outputs.linux == 'true' }}
-      CI_WSL_REQUIRED: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
     outputs:
       linux-artifact-id: ${{ steps.upload-linux.outputs.artifact-id }}
-      wsl-artifact-id: ${{ steps.upload-wsl.outputs.artifact-id }}
     steps:
       - name: Prepare CI state
         shell: bash
@@ -131,7 +123,7 @@ jobs:
         continue-on-error: true
         with:
           name: linux-build
-      - name: Build Linux checks and selected platform outputs
+      - name: Build Linux checks and deployment
         # Leave time to preserve completed outputs when the build step fails.
         timeout-minutes: 150
         run: nix develop --no-update-lock-file path:.#ci --command task ci:build TARGET=linux
@@ -145,16 +137,6 @@ jobs:
           if-no-files-found: error
           compression-level: 0
         if: ${{ needs.changes.outputs.linux == 'true' }}
-      - name: Upload wsl producer artifact
-        id: upload-wsl
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: bootstrap-wsl-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.CI_STATE }}/artifacts/wsl
-          retention-days: 1
-          if-no-files-found: error
-          compression-level: 0
-        if: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
       - name: Save Nix cache
         uses: ./.github/actions/cache-nix
         if: ${{ !cancelled() }}
@@ -164,10 +146,56 @@ jobs:
           name: linux-build
           phase: save
           max-size: "4294967296"
-  # Native macOS and Linux producers run in parallel after change detection.
+  wsl-build:
+    name: WSL build
+    needs:
+      - changes
+      - lint
+    if: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 180
+    outputs:
+      wsl-artifact-id: ${{ steps.upload-wsl.outputs.artifact-id }}
+    steps:
+      - name: Prepare CI state
+        run: |
+          printf 'CI_STATE=%s/bootstrap-ci\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Checkout exact tested SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TESTED_SHA }}
+          persist-credentials: false
+      - name: Set up native Nix and Task
+        uses: ./.github/actions/setup-ci-nix
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          clean-disk: "true"
+      # Reuse common Linux dependencies without adding another cache writer.
+      - name: Restore Nix cache
+        uses: ./.github/actions/cache-nix
+        continue-on-error: true
+        with:
+          name: linux-build
+      - name: Build WSL deployment
+        timeout-minutes: 150
+        run: nix develop --no-update-lock-file path:.#ci --command task ci:build TARGET=wsl
+      - name: Upload wsl producer artifact
+        id: upload-wsl
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: bootstrap-wsl-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.CI_STATE }}/artifacts/wsl
+          retention-days: 1
+          if-no-files-found: error
+          compression-level: 0
   darwin-build:
-    name: Bootstrap / Darwin / Build
-    needs: changes
+    name: macOS build
+    needs:
+      - changes
+      - lint
     if: ${{ needs.changes.outputs.darwin == 'true' }}
     runs-on: macos-15
     timeout-minutes: 240
@@ -214,7 +242,7 @@ jobs:
         continue-on-error: true
         with:
           name: darwin
-      - name: Build Darwin checks and deployment
+      - name: Build macOS checks and deployment
         timeout-minutes: 200
         run: nix develop --no-update-lock-file path:.#ci --command task ci:build TARGET=darwin
       - name: Upload darwin producer artifact
@@ -236,8 +264,10 @@ jobs:
           phase: save
           max-size: "4294967296"
   windows-build:
-    name: Bootstrap / Windows / Plan
-    needs: changes
+    name: Windows plan
+    needs:
+      - changes
+      - lint
     if: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
     runs-on: windows-2025
     timeout-minutes: 30
@@ -310,11 +340,9 @@ jobs:
           if-no-files-found: error
           compression-level: 0
   linux:
-    name: Bootstrap / Linux / E2E
-    needs:
-      - changes
-      - linux-build
-    if: ${{ needs.changes.outputs.linux == 'true' }}
+    name: Linux E2E
+    needs: linux-build
+    if: ${{ needs.linux-build.outputs.linux-artifact-id != '' }}
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -354,11 +382,8 @@ jobs:
       - name: Apply, restart and verify native Linux
         run: task ci:e2e TARGET=linux
   darwin:
-    name: Bootstrap / Darwin / E2E
-    needs:
-      - changes
-      - darwin-build
-    if: ${{ needs.changes.outputs.darwin == 'true' }}
+    name: macOS E2E
+    needs: darwin-build
     runs-on: macos-15
     timeout-minutes: 120
     permissions:
@@ -435,25 +460,20 @@ jobs:
           nix --extra-experimental-features nix-command config show trusted-public-keys \
             | grep -Fq 'hermes-agent.cachix.org-1:'
           SCRIPT
-      - name: Apply, restart and verify Darwin
+      - name: Apply, restart and verify macOS
         run: task ci:e2e TARGET=darwin
   windows-installer:
+    name: Windows+WSL E2E (PS${{ matrix.version }})
     needs:
-      - changes
-      - linux-build
+      - wsl-build
       - windows-build
-    if: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
     runs-on: windows-2025
     timeout-minutes: 210
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        include:
-          - runtime: Windows PowerShell 5.1
-            version: "5.1"
-          - runtime: PowerShell 7
-            version: "7"
+        version: ["5.1", "7"]
     permissions:
       contents: read
     steps:
@@ -477,10 +497,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path $moduleRoot | Out-Null
           $env:PSModulePath = "$moduleRoot;$env:PSModulePath"
           # Construct download URLs from the repository, avoiding bad metadata URIs.
-          Save-PSResource -Name Pester,PSScriptAnalyzer -Repository PSGallery -Path $moduleRoot -TrustRepository -AcceptLicense
+          Save-PSResource -Name Pester -Repository PSGallery -Path $moduleRoot -TrustRepository -AcceptLicense
           . .\scripts\powershell\tests\support\Resolve-TestModule.ps1
           Resolve-TestModule -Name Pester | Out-Null
-          Resolve-TestModule -Name PSScriptAnalyzer | Out-Null
       - name: Prepare Windows Store prerequisites
         shell: powershell
         run: |
@@ -526,7 +545,7 @@ jobs:
       - name: Require exact wsl producer artifact
         shell: bash
         env:
-          PRODUCER_ARTIFACT_ID: ${{ needs.linux-build.outputs.wsl-artifact-id }}
+          PRODUCER_ARTIFACT_ID: ${{ needs.wsl-build.outputs.wsl-artifact-id }}
         run: |
           if [[ ! $PRODUCER_ARTIFACT_ID =~ ^[1-9][0-9]*$ ]]; then
             echo 'Producer artifact ID is missing or invalid.' >&2
@@ -535,7 +554,7 @@ jobs:
       - name: Download exact wsl producer artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          artifact-ids: ${{ needs.linux-build.outputs.wsl-artifact-id }}
+          artifact-ids: ${{ needs.wsl-build.outputs.wsl-artifact-id }}
           path: ${{ env.CI_STATE }}/artifacts/wsl
       - name: Require exact windows producer artifact
         shell: bash
@@ -573,81 +592,31 @@ jobs:
           & $env:PS_TEST_EXECUTABLE -NoProfile -File .\tests\Invoke-Tests.ps1
     env:
       PS_VERSION: ${{ matrix.version }}
-  check:
-    needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || (needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true')) }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - name: Verify change detection
-        if: ${{ needs.changes.result != 'success' }}
-        shell: bash
-        run: exit 1
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.TESTED_SHA }}
-          persist-credentials: false
-      - name: Set up native Nix and Task
-        uses: ./.github/actions/setup-ci-nix
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Run actionlint
-        run: nix develop --no-update-lock-file path:.#ci --command actionlint .github/workflows/*.yml
-      - name: Validate Windows package manifests
-        shell: bash
-        run: |
-          # shellcheck disable=SC2016 # jq expressions must not be expanded by Bash.
-          nix develop --no-update-lock-file path:.#ci --command jq -e '
-            def nonempty_string: type == "string" and length > 0;
-            def only_keys($allowed): (keys - $allowed | length) == 0;
-            type == "object"
-            and only_keys(["$schema", "Sources", "WinGetVersion", "CreationDate"])
-            and ."$schema" == "https://aka.ms/winget-packages.schema.2.0.json"
-            and (if has("WinGetVersion") then (.WinGetVersion | nonempty_string) else true end)
-            and (if has("CreationDate") then (.CreationDate | nonempty_string) else true end)
-            and (.Sources | type == "array" and length > 0)
-            and all(.Sources[];
-              type == "object" and only_keys(["SourceDetails", "Packages"])
-              and (.SourceDetails | type == "object"
-                and only_keys(["Name", "Identifier", "Argument", "Type"])
-                and all(.Name, .Identifier, .Argument, .Type; nonempty_string))
-              and (.Packages | type == "array" and length > 0)
-              and all(.Packages[];
-                type == "object"
-                and only_keys(["PackageIdentifier", "Version", "Channel", "Scope", "InitialOverrideArguments", "InitialCustomSwitches"])
-                and (.PackageIdentifier | nonempty_string)
-                and (if has("Scope") then (.Scope == "user" or .Scope == "machine") else true end)
-                and all(to_entries[] | select(.key != "Scope"); .value | nonempty_string)))
-            and ([.Sources[].Packages[].PackageIdentifier] as $ids
-              | ($ids | length) == ($ids | unique | length))
-          ' windows/winget/packages.json
   complete:
-    name: Bootstrap / Complete
+    name: Complete
     if: ${{ always() }}
     needs:
       - changes
       - bash-test
-      - nix
+      - lint
       - linux-build
+      - wsl-build
       - darwin-build
       - windows-build
       - linux
       - darwin
       - windows-installer
-      - check
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
       CHANGES_RESULT: ${{ needs.changes.result }}
       BASH_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
       BASH_RESULT: ${{ needs.bash-test.result }}
-      NIX_REQUIRED: ${{ needs.changes.outputs.nix == 'true' }}
-      NIX_RESULT: ${{ needs.nix.result }}
+      LINT_RESULT: ${{ needs.lint.result }}
       LINUX_BUILD_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' }}
       LINUX_BUILD_RESULT: ${{ needs.linux-build.result }}
+      WSL_BUILD_REQUIRED: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
+      WSL_BUILD_RESULT: ${{ needs.wsl-build.result }}
       DARWIN_BUILD_REQUIRED: ${{ needs.changes.outputs.darwin == 'true' }}
       DARWIN_BUILD_RESULT: ${{ needs.darwin-build.result }}
       WINDOWS_BUILD_REQUIRED: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
@@ -658,8 +627,6 @@ jobs:
       DARWIN_RESULT: ${{ needs.darwin.result }}
       WINDOWS_INSTALLER_REQUIRED: ${{ needs.changes.outputs.windows == 'true' || needs.changes.outputs.wsl == 'true' }}
       WINDOWS_INSTALLER_RESULT: ${{ needs.windows-installer.result }}
-      CHECKS_REQUIRED: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' }}
-      CHECKS_RESULT: ${{ needs.check.result }}
     steps:
       - name: Verify routed job results
         run: |
@@ -671,21 +638,21 @@ jobs:
           check_required_job() {
             local name="$1" required="$2" result="$3"
             if [[ $required == true && $result != success ]]; then
-              echo "Required Bootstrap job $name did not succeed: $result"
+              echo "Required CI job $name did not succeed: $result"
               return 1
             fi
             if [[ $required != true && $result != skipped ]]; then
-              echo "Unselected Bootstrap job $name ran unexpectedly: $result"
+              echo "Unselected CI job $name ran unexpectedly: $result"
               return 1
             fi
           }
           check_required_job "bash-test" "${BASH_REQUIRED}" "${BASH_RESULT}"
-          check_required_job "nix" "${NIX_REQUIRED}" "${NIX_RESULT}"
+          check_required_job "lint" true "${LINT_RESULT}"
           check_required_job "linux-build" "${LINUX_BUILD_REQUIRED}" "${LINUX_BUILD_RESULT}"
+          check_required_job "wsl-build" "${WSL_BUILD_REQUIRED}" "${WSL_BUILD_RESULT}"
           check_required_job "darwin-build" "${DARWIN_BUILD_REQUIRED}" "${DARWIN_BUILD_RESULT}"
           check_required_job "windows-build" "${WINDOWS_BUILD_REQUIRED}" "${WINDOWS_BUILD_RESULT}"
           check_required_job "linux" "${LINUX_REQUIRED}" "${LINUX_RESULT}"
           check_required_job "darwin" "${DARWIN_REQUIRED}" "${DARWIN_RESULT}"
           check_required_job "windows-installer" "${WINDOWS_INSTALLER_REQUIRED}" "${WINDOWS_INSTALLER_RESULT}"
-          check_required_job "check" "${CHECKS_REQUIRED}" "${CHECKS_RESULT}"
-          echo "All required Bootstrap producers and runtime consumers succeeded."
+          echo "All required CI checks, producers and runtime consumers succeeded."

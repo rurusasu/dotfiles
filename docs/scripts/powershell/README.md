@@ -6,7 +6,7 @@
 Taskもmasterから導入し、更新・反映は各1回です。
 `-Phase Winget` / `Wsl` / `Chezmoi` はその操作だけを実行します。
 
-実装は3ファイルです。
+セットアップの主な実装は次の3ファイルです。
 
 - `scripts/powershell/install.ps1`: Windowsの標準コマンドとTaskの起動、WSL基盤の昇格。
 - `lib/Invoke-ExternalCommand.ps1`: native終了コード、timeout、UTF-8、PATH、標準import。
@@ -24,7 +24,18 @@ WSL出力はUTF-8に統一し、日本語を含むチェックアウトパスも
 
 既存VHDはファイルを指定して再登録し、非空の導入先は上書きしません。
 競合するチェックアウトはForce指定時もGUID付きで退避します。
-CIのdistroと削除先は`NixOS-CI-*`と一時領域の子ディレクトリに限定します。
+CI は既存の `NixOS` distro を置き換えません。導入先は一時領域内の `NixOS-CI-*` に限定し、
+当該 run が作成した `NixOS` だけを削除します。
+
+## 静的検査
+
+```bash
+task lint:powershell
+```
+
+`Invoke-StaticAnalysis.ps1` が runtime ソースの PSScriptAnalyzer と、全 PowerShell ソースの
+ANSI/BOM 整合性を検査します。formatter と同じ locked nixpkgs の PowerShell / PSScriptAnalyzer を使い、
+Pester や Gallery からの module 取得は不要です。CI は Build / Plan より先にこの検査を実行します。
 
 ## テスト
 
@@ -34,18 +45,20 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/tests
 ```
 
 - `Install.Tests.ps1`: 実launcherとTaskfile、順序・回数、失敗・再起動、引数、隔離したホームへのchezmoi適用、CI実行と削除先の境界。
-- `PowerShell.Tests.ps1`: runtime全体の静的解析とWindowsのANSI/BOM。formatterの実行・冪等性はNix build checkで確認します。
 - `TestRunner.Tests.ps1`: 必要module不在、0件・container失敗の検出。
 - `Integration.Tests.ps1`: Windows profile、chezmoi反映とWSLg templateの描画。
 - `lib/`: native実行、登録、同期、更新と反映の境界。
 
-インストール済みの安定版Pester 6.2以降とPSScriptAnalyzerを使い、依存を自動取得しません。
+runtime suite はインストール済みの安定版 Pester 6.2 以降を使い、依存を自動取得しません。
+formatter の実行・冪等性は Nix build check で確認します。
 実インストール・ネットワーク・UACはmockし、実CLIは一時ホームに隔離します。
 旧仕様、ソースの書き方、同一契約の重複検証は維持しません。
 
 ## CI
 
-WindowsのStore準備とinstaller実行はworkflowに直接記載します。
-更新対象のPowerShell自身が終了しないよう、安定した5.1プロセスで先にruntimeを準備し、選択runtimeのinstaller終了コードとimport完了を確認します。
-runtime準備用の一時manifestは成功・失敗時とも削除します。
-WSL E2Eもworkflowに記載します。一時distroの登録とprebuilt cache import後に本番と同じsetupを一度実行し、Hermesの再起動と認証を検証してdistroを削除します。
+Lint 完了後に Windows Plan と WSL Build を独立して実行し、その成果物を Windows / WSL E2E が受け取ります。
+更新対象の PowerShell 自身が終了しないよう、安定した 5.1 プロセスで先に runtime を準備し、
+選択 runtime の installer 終了コードと import 完了を確認します。
+runtime 準備用の一時 manifest は成功・失敗時とも削除します。
+Taskfile が一時 distro の登録、prebuilt closure の import、本番 setup、cold restart、Hermes の health 検証と削除を順に実行します。
+Pester suite は E2E 後に PowerShell 5.1 / 7 で runtime 契約を検証します。
