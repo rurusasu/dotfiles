@@ -50,7 +50,7 @@ runs:
         if [[ "$CACHE_PHASE" == restore ]]; then
           # Homebrew cleanup removes its zstd during Darwin activation. A Nix
           # GC root and GITHUB_PATH keep the same compressor for restore/save.
-          compressor="$(nix build --inputs-from . nixpkgs#zstd.bin \
+          compressor="$(nix build --inputs-from path:. nixpkgs#zstd.bin \
             --out-link "$RUNNER_TEMP/ci-zstd" --print-out-paths)"
           "$compressor/bin/zstd" --version
           echo "$compressor/bin" >> "$GITHUB_PATH"
@@ -79,7 +79,8 @@ runs:
       env:
         MAX_CACHE_SIZE: ${{ inputs.max-size }}
       run: |
-        python3 scripts/python/prepare_ci_nix_cache.py export \
+        nix develop --no-update-lock-file path:.#ci --command \
+          python3 scripts/python/prepare_ci_nix_cache.py export \
           "$RUNNER_TEMP/nix-private-cache" --max-size "$MAX_CACHE_SIZE"
 
     - name: Replace the restored cache with current outputs

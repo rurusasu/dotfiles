@@ -553,6 +553,22 @@ in
           pkgs.deadnix
         ];
       };
+      devShells.ci = pkgs.mkShellNoCC {
+        packages = with pkgs; [
+          actionlint
+          bash
+          coreutils
+          gitMinimal
+          gnugrep
+          gnused
+          gnutar
+          go-task
+          jq
+          python3
+          statix
+          zstd
+        ];
+      };
       apps =
         if pkgs.stdenv.hostPlatform.isDarwin then
           {

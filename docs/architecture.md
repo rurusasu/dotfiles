@@ -232,6 +232,7 @@ Changes ジョブは各 workflow に一つだけ置きます。workflow は常�
 PR は merge-base から削除・移動元も含めた差分を NUL 区切りで扱い、push のゼロ base SHA は
 empty tree と比較します。各工程の対象はイベントで受け取った source SHA に固定します。
 
+CI の依存ツールは `flake.lock` に従う薄い `.#ci` 環境へ集約し、Linux は native hosted runner 上で Nix を実行します。
 全 platform の CI 手順は `taskfiles/ci/taskfile.yml` の `ci:build` / `ci:e2e` にそろえます。
 producer は入力と checks を検証してから対象の成果物を一度構築し、別の consumer に渡します。
 consumer は対象 SHA・platform・digest を検証し、本番 installer の反映 → 再起動または新しい
@@ -252,7 +253,7 @@ GitHub Actions cache と分離します。E2E 内では input を更新せず、
 補いません。source SHA が異なる実行には、その SHA で得た検証結果を使います。
 optional cache は収まる依存出力を部分保存して高速化するためのもので、E2E の成功条件ではありません。
 PR のビルド失敗時も完了済み出力を PR の範囲内で保存し、再試行で利用します。main の共有 cache は成功時だけ保存します。
-詳細は [CI cache](../docker/bootstrap-ci-tools/README.md#nix-成果物の再利用) を参照してください。
+詳細は [CI の実行環境とキャッシュ](./ci/README.md#nix-成果物の再利用) を参照してください。
 
 GitHub-hosted macOS / Windows の host OS reboot は対象外です。service / shell session の
 再起動と、NixOS VM / WSL の実際の reboot を区別します。非 NixOS Linux の standalone Home Manager は

@@ -175,9 +175,9 @@ native NixOS 構成は `/etc/nixos/hardware-configuration.nix` がある場合�
 
 ### 成功条件と CI
 
-Unix のシステム統合 installer は必須 CLI を acceptance で確認し、Docker を選択した profile では Docker daemon、Compose、`docker run --rm hello-world` も確認します。非 NixOS Linux は Home Manager の build・activation までが対象です。Windows の installer は GUI アプリの導入結果を検証します。CI は GitHub-hosted Actions だけで完結し、Nix の option、package、flake output は Nix-native `nix-unit`、Windows は PowerShell/Pester、macOS の installer/runtime 契約は Bats で検証します。NixOS は hosted VM E2E で installer の再実行と Docker・Compose の runtime acceptance を検証します。
+CI は GitHub-hosted Actions で実行します。Nix の option・package・flake output は `nix-unit`、shell の installer 契約は Bats、Windows の契約は PowerShell/Pester で検証します。NixOS は hosted VM で本番 installer の反映と reboot 後の CLI・service・health を確認し、macOS と Windows / WSL も対象 OS の本番手順で反映・起動を確認します。CI の producer・lint は同じ `flake.lock` の薄い `.#ci` 環境でツールを管理します。工程と成果物の境界は [CI の実行環境](docs/ci/README.md) を参照してください。
 
-標準の hosted macOS runner では Docker Desktop の VM を起動しないため、その実機固有部分は macOS の installer を実行した際の acceptance が判定します。ローカル acceptance が失敗した場合、installer はセットアップ成功を表示しません。Windows の GUI installer は Docker runtime acceptance を実行しません。
+GitHub-hosted macOS / Windows の host OS 自体の reboot は対象外で、service または新しい login / profile session を確認します。非 NixOS Linux の standalone Home Manager は build と installer contract の対象です。Docker Desktop の実機起動はこの CI の検証対象に含めません。
 
 ## 方針
 

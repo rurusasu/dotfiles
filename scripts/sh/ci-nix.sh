@@ -18,7 +18,26 @@ source | checks | build)
 esac
 
 source_path() { jq -er .path "$CI_STATE/source.json"; }
-root_path() { jq -er --arg name "$1" '.[$name]' "$CI_STATE/artifacts/$target/roots.json"; }
+bootstrap_python() {
+  local python
+  python=$(cat "$CI_STATE/artifacts/$target/bootstrap-python-path.txt")
+  [[ $python =~ ^/nix/store/[a-z0-9]{32}-[A-Za-z0-9+._?=-]+$ ]] || exit 1
+  printf '%s\n' "$python"
+}
+root_path() {
+  # The consumer has only Nix and the producer's public bootstrap Python before
+  # importing. Do not depend on a host/image jq to find the frozen tools.
+  "$(bootstrap_python)/bin/python3" -B - "$CI_STATE/artifacts/$target/roots.json" "$1" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1]) as stream:
+    root = json.load(stream)[sys.argv[2]]
+if not isinstance(root, str):
+    raise ValueError("Artifact root must be a store path")
+print(root)
+PY
+}
 record_root() {
   local file="$CI_STATE/roots-$1.json"
   [[ -f $file ]] || printf '{}\n' >"$file"
@@ -156,8 +175,7 @@ export)
   ;;
 import)
   artifact="$CI_STATE/artifacts/$target"
-  python=$(cat "$artifact/bootstrap-python-path.txt")
-  [[ $python =~ ^/nix/store/[a-z0-9]{32}-[A-Za-z0-9+._?=-]+$ ]] || exit 1
+  python=$(bootstrap_python)
   nix-store --realise --option max-jobs 0 --option builders '' "$python"
   "$python/bin/python3" -B "$repository/scripts/python/prepare_ci_nix_artifact.py" import \
     --target "$target" --tested-sha "$TESTED_SHA" --input "$artifact"

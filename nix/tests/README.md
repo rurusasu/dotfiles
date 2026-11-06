@@ -172,11 +172,11 @@ macOS は service reload と新しい login shell、Windows は新しい PowerSh
 Ubuntu / Debian 上の実 activation E2E は含みません。`aarch64-linux` も flake の出力対象ですが、
 この workflow に対応する native ARM64 builder はありません。
 
-Linux producer は `docker/bootstrap-ci-tools/nix.conf` の `sandbox = true` を使います。
-tools image は公開前に sandbox 内の build を検証し、利用ジョブは immutable digest で取得します。
+Linux producer / consumer は native hosted runner 上で Nix を実行します。
+検証ツールは `flake.lock` に従う薄い `.#ci` 環境で供給し、producer の Nix sandbox は有効にします。
 全 CI platform が公式 cache を優先し、Numtide と Hermes の cache も利用します。
 キャッシュ、必須 artifact、実行環境の詳細は
-[CI tools / Nix 成果物の再利用](../../docker/bootstrap-ci-tools/README.md#nix-成果物の再利用) を参照してください。
+[CI の実行環境と Nix 成果物の再利用](../../docs/ci/README.md#nix-成果物の再利用) を参照してください。
 
 CI の format 検査は通常の checks に含む `treefmt` にまとめます。PowerShell formatter は host の
 PSGallery module ではなく、固定した Nix store の PSScriptAnalyzer を使います。

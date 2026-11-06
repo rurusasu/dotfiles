@@ -16,7 +16,8 @@ cache also remain in place. Native xurl reaches the cache through Home Manager's
 activation.
 
 `MCP_DOCKER` is a separate shared MCP definition and remains available.
-`docker/bootstrap-ci-tools` remains the CI tools image, and MLflow retains its
-independent Compose configuration in `docker/local-ai-services`.
+CI uses native runners and the locked thin `.#ci` Nix environment described in
+[CI execution](../ci/README.md). MLflow retains its independent Compose
+configuration in `docker/local-ai-services`.
 
 Use [Hermes Operations](bootstrap.md) and [Desktop operations](desktop.md).

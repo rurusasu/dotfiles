@@ -28,10 +28,7 @@ run_script() {
   run bash --noprofile --norc -e -o pipefail -c "$1"
 }
 
-@test "CI authentication and bounded HTTP/1.1 downloads follow Nix home and keep tokens private" {
-  write_stub getent <<'EOF'
-printf 'fixture:x:0:0:Fixture:%s:/bin/bash\n' "$FALLBACK_HOME"
-EOF
+@test "native CI authentication bounds cache downloads and keeps tokens private" {
   write_stub nix <<'EOF'
 case "$*" in
 'config show access-tokens') field=access-tokens ;;
@@ -43,57 +40,41 @@ case "$*" in
 esac
 grep "^$field = " "$EXPECTED_CONFIG/nix/bootstrap-ci.conf" | cut -d= -f2-
 EOF
-  for use_xdg in true false; do
-    for wsl in true false; do
-      for owned_home in true false; do
-        fixture="$BATS_TEST_TMPDIR/$use_xdg-$wsl-$owned_home"
-        export FALLBACK_HOME="$fixture/passwd-home" HOME="$fixture/missing-home"
-        export EXPECTED_CONFIG="$FALLBACK_HOME/.config" GITHUB_ENV="$fixture/github-env"
-        export GIT_CONFIG_SYSTEM="$fixture/gitconfig" GITHUB_WORKSPACE="$fixture/checkout"
-        export GITHUB_TOKEN=fixture-token-not-a-real-secret
-        mkdir -p "$FALLBACK_HOME"
-        unset XDG_CONFIG_HOME NIX_CONFIG NIX_USER_CONF_FILES
-        if [[ $owned_home == true ]]; then
-          HOME=$FALLBACK_HOME
-          if [[ $use_xdg == true ]]; then EXPECTED_CONFIG="$fixture/xdg"; fi
-        fi
-        if [[ $use_xdg == true ]]; then export XDG_CONFIG_HOME="$EXPECTED_CONFIG"; fi
-        args=()
-        if [[ $wsl == true ]]; then
-          args=(--wsl)
-          unset GITHUB_WORKSPACE
-        fi
-        for attempt in 1 2; do
-          run bash "$REPO_ROOT/scripts/sh/configure-bootstrap-ci-nix.sh" "${args[@]}"
-          [ "$status" -eq 0 ]
-          [[ $output != *"$GITHUB_TOKEN"* ]]
-        done
-        if [[ $owned_home == true ]]; then
-          [ ! -e "$GITHUB_ENV" ]
-        else
-          printf 'HOME=%s\nXDG_CONFIG_HOME=\nHOME=%s\nXDG_CONFIG_HOME=\n' \
-            "$FALLBACK_HOME" "$FALLBACK_HOME" >"$fixture/expected-env"
-          cmp "$GITHUB_ENV" "$fixture/expected-env"
-        fi
-        secret_file="$EXPECTED_CONFIG/nix/bootstrap-ci.conf"
-        [ "$(stat -c %a "$secret_file" 2>/dev/null || stat -f %Lp "$secret_file")" = 600 ]
-        [ "$(grep -Fc "include $secret_file" "$EXPECTED_CONFIG/nix/nix.conf")" -eq 1 ]
-        grep -Fxq 'http2 = false' "$secret_file"
-        grep -Fxq 'stalled-download-timeout = 60' "$secret_file"
-        grep -Fxq 'download-attempts = 3' "$secret_file"
-        grep -Fxq 'fallback = true' "$secret_file"
-        grep -Fxq 'substituters = https://cache.nixos.org?priority=10 https://cache.numtide.com?priority=50 https://hermes-agent.cachix.org' "$secret_file"
-        if [[ $wsl == true ]]; then
-          [ ! -e "$GIT_CONFIG_SYSTEM" ]
-          grep -Fxq 'max-jobs = 2' "$secret_file"
-        else
-          run git config --system --get-all safe.directory
-          [ "$status" -eq 0 ]
-          [ "$output" = "$GITHUB_WORKSPACE" ]
-          ! grep -Fq "$GITHUB_TOKEN" "$GIT_CONFIG_SYSTEM"
-        fi
-      done
+  for platform in native wsl; do
+    fixture="$BATS_TEST_TMPDIR/$platform"
+    export HOME="$fixture/home" EXPECTED_CONFIG="$fixture/home/.config"
+    export GIT_CONFIG_SYSTEM="$fixture/system-gitconfig" GITHUB_WORKSPACE="$fixture/checkout"
+    export GITHUB_TOKEN=fixture-token-not-a-real-secret
+    mkdir -p "$HOME"
+    unset XDG_CONFIG_HOME NIX_CONFIG NIX_USER_CONF_FILES
+    args=()
+    if [[ $platform == wsl ]]; then
+      args=(--wsl)
+      export EXPECTED_CONFIG="$fixture/xdg" XDG_CONFIG_HOME="$fixture/xdg"
+      unset GITHUB_WORKSPACE
+    fi
+    for attempt in 1 2; do
+      run bash "$REPO_ROOT/scripts/sh/configure-bootstrap-ci-nix.sh" "${args[@]}"
+      [ "$status" -eq 0 ]
+      [[ $output != *"$GITHUB_TOKEN"* ]]
     done
+    secret_file="$EXPECTED_CONFIG/nix/bootstrap-ci.conf"
+    [ "$(stat -c %a "$secret_file" 2>/dev/null || stat -f %Lp "$secret_file")" = 600 ]
+    [ "$(grep -Fc "include $secret_file" "$EXPECTED_CONFIG/nix/nix.conf")" -eq 1 ]
+    grep -Fxq 'http2 = false' "$secret_file"
+    grep -Fxq 'stalled-download-timeout = 60' "$secret_file"
+    grep -Fxq 'download-attempts = 3' "$secret_file"
+    grep -Fxq 'fallback = true' "$secret_file"
+    grep -Fxq 'substituters = https://cache.nixos.org?priority=10 https://cache.numtide.com?priority=50 https://hermes-agent.cachix.org' "$secret_file"
+    [ ! -e "$GIT_CONFIG_SYSTEM" ]
+    if [[ $platform == wsl ]]; then
+      grep -Fxq 'max-jobs = 2' "$secret_file"
+    else
+      run git config --global --get-all safe.directory
+      [ "$status" -eq 0 ]
+      [ "$output" = "$GITHUB_WORKSPACE" ]
+      ! grep -Fq "$GITHUB_TOKEN" "$HOME/.gitconfig"
+    fi
   done
 }
 
