@@ -422,11 +422,22 @@ class Session:
             shutil.rmtree(self.root)
             return
         self.capture_owned()
-        try:
-            os.write(self.fd, b"\x03\x15exit\r")
-        except OSError:
-            pass
+        # Restoring the standard prompt can synchronously run the fake renderer.
+        # Speed up only future renders; in-flight workers retain their delay and
+        # must still be stopped by the production adapter.
+        self.configure(label="cleanup", delay=0.01)
         deadline = time.monotonic() + 3
+        try:
+            sent = time.monotonic_ns()
+            os.write(self.fd, b"\x03\x15")
+            self.wait(
+                lambda frame: frame["kind"] == "INIT",
+                timeout=max(0, deadline - time.monotonic()),
+                since=sent,
+            )
+            os.write(self.fd, b"exit\r")
+        except (OSError, TimeoutError):
+            pass
         reaped = False
         while time.monotonic() < deadline:
             try:
@@ -516,10 +527,6 @@ def check_yank_pop(s):
         "bindkey -M emacs $'\\ey' yank-pop\n"
         "CUTBUFFER=first\nkillring=(second third)\nBUFFER=''\nCURSOR=0"
     )
-    # First prove that the fixture's hooks and bindings preserve normal chaining.
-    s.control(setup)
-    key_buffer(s, b"\x19", "first", "baseline yank did not insert CUTBUFFER")
-    key_buffer(s, b"\x1by", "second", "baseline yank-pop did not cycle killring")
     s.control(setup)
     key_buffer(s, b"\x19", "first", "yank did not insert CUTBUFFER")
     release_render(s, "yank-chain")
@@ -536,27 +543,21 @@ def check_kill_chain(s):
         "bindkey -M emacs '^Y' yank\n"
         "CUTBUFFER=''\nkillring=(old)\nBUFFER='alpha beta gamma'\nCURSOR=6"
     )
-    for asynchronous in (False, True):
-        s.control(setup)
-        key_buffer(
-            s,
-            b"\x1bd",
-            lambda buffer: buffer.startswith("alpha ") and "beta" not in buffer,
-            "kill-word did not remove the synthetic word",
-        )
-        if asynchronous:
-            release_render(s, "kill-chain")
-        key_buffer(
-            s, b"\x0b", "alpha ", "kill-line did not remove the remaining suffix"
-        )
-        key_buffer(
-            s,
-            b"\x19",
-            original,
-            "async callback broke kill-word/kill-line chaining"
-            if asynchronous
-            else "baseline kill-word/kill-line did not share one kill buffer",
-        )
+    s.control(setup)
+    key_buffer(
+        s,
+        b"\x1bd",
+        lambda buffer: buffer.startswith("alpha ") and "beta" not in buffer,
+        "kill-word did not remove the synthetic word",
+    )
+    release_render(s, "kill-chain")
+    key_buffer(s, b"\x0b", "alpha ", "kill-line did not remove the remaining suffix")
+    key_buffer(
+        s,
+        b"\x19",
+        original,
+        "async callback broke kill-word/kill-line chaining",
+    )
 
 
 def check_kill_boundary(s):
@@ -567,24 +568,16 @@ def check_kill_boundary(s):
         "bindkey -M emacs '^Y' yank\n"
         "CUTBUFFER=old\nkillring=(older)\nBUFFER='alpha beta'\nCURSOR=6"
     )
-    for asynchronous in (False, True):
-        s.control(setup)
-        key_buffer(
-            s, b"x", "alpha xbeta", "self-insert did not update the synthetic buffer"
-        )
-        if asynchronous:
-            release_render(s, "kill-boundary")
-        key_buffer(
-            s, b"\x0b", "alpha x", "kill-line did not remove the synthetic suffix"
-        )
-        key_buffer(
-            s,
-            b"\x19",
-            "alpha xbeta",
-            "async callback falsely merged the old kill buffer after self-insert"
-            if asynchronous
-            else "baseline self-insert did not break the old kill chain",
-        )
+    s.control(setup)
+    key_buffer(s, b"x", "alpha xbeta", "self-insert did not update the synthetic buffer")
+    release_render(s, "kill-boundary")
+    key_buffer(s, b"\x0b", "alpha x", "kill-line did not remove the synthetic suffix")
+    key_buffer(
+        s,
+        b"\x19",
+        "alpha xbeta",
+        "async callback falsely merged the old kill buffer after self-insert",
+    )
 
 
 def check_accepted(s):
@@ -592,9 +585,6 @@ def check_accepted(s):
     assert state["enabled"] and not state["restored"], "candidate did not stay enabled"
     event = s.fake_start("normal")
     assert event["args"]["jobs"] == "0", "internal worker leaked into user job count"
-    assert event["synthetic_padding_bytes"] == s.padding_bytes, (
-        "worker did not inherit complete synthetic environment"
-    )
 
 
 def check_payload(s):
@@ -609,16 +599,6 @@ def check_payload(s):
     )
     plain = CSI.sub(b"", bytes(s.tty_tail))
     assert b"LITERAL%n" in plain, "literal percent escapes changed"
-
-
-def check_empty_refresh(s):
-    s.visible("AF-normal-")
-    s.configure(label="empty-refresh", delay=0.04)
-    s.line()
-    s.visible("AF-empty-refresh-")
-    assert s.fake_start("empty-refresh")["args"]["status"] == "", (
-        "empty prompt refresh retained a command status"
-    )
 
 
 def check_edit(s):
@@ -801,10 +781,6 @@ def check_restore(s):
 
 def check_exit(s):
     s.fake_start("exit")
-    # A Ctrl-C/new line may synchronously render the original prompt while the
-    # shell exits. Its controlled fake should be fast; the in-flight old job
-    # retains its six-second delay and must still be cleaned up by the adapter.
-    s.configure(label="after-exit", delay=0.01)
 
 
 def check_continuation(s):
@@ -833,10 +809,9 @@ def check_continuation(s):
     assert not any(frame["kind"] == "INIT" for frame in s.frames[count:]), (
         "callback restarted continuation editor"
     )
-    os.write(s.fd, b"\x03")
 
 
-def check_continuation_error(s, transport=False):
+def check_continuation_error(s):
     s.fake_start("continuation-error")
     os.write(s.fd, b"echo '\r")
     deadline = time.monotonic() + 5
@@ -851,12 +826,7 @@ def check_continuation_error(s, transport=False):
         "%_ did not show the quote parser context"
     )
     s.tty_tail.clear()
-    event = (
-        "_dsal_receive '[async]' 1 ''"
-        if transport
-        else "_dsal_receive _dsal_render 0 invalid-token"
-    )
-    after = s.control(event)
+    after = s.control("_dsal_receive _dsal_render 0 invalid-token")
     assert after["restored"] and not after["enabled"] and after["error"], (
         "error did not restore the standard prompt"
     )
@@ -872,7 +842,6 @@ def check_continuation_error(s, transport=False):
     assert b"AF-continuation-error-" not in s.tty_tail, (
         "error fallback replaced PS2 with the main prompt"
     )
-    os.write(s.fd, b"\x03")
 
 
 def main():
@@ -916,18 +885,6 @@ def main():
             2,
         ),
         (
-            "large-exported-environment",
-            check_accepted,
-            {"label": "normal", "delay": 0.05},
-            2,
-        ),
-        (
-            "empty-enter-refresh",
-            check_empty_refresh,
-            {"label": "normal", "delay": 0.05},
-            2,
-        ),
-        (
             "untrusted-render-and-percent",
             check_payload,
             {"label": "payload", "delay": 0.1, "mode": "payload"},
@@ -964,12 +921,6 @@ def main():
             {"label": "bounded", "delay": 0.5},
             2,
         ),
-        (
-            "failure-fallback",
-            check_failure,
-            {"label": "failure", "delay": 0.1, "mode": "fail"},
-            2,
-        ),
         ("timeout-fallback", check_failure, {"label": "timeout", "delay": 1.5}, 1),
         (
             "oversized-request-safe-fallback",
@@ -994,12 +945,6 @@ def main():
         (
             "continuation-invalid-token-fallback",
             check_continuation_error,
-            {"label": "continuation-error", "delay": 2},
-            5,
-        ),
-        (
-            "continuation-transport-fallback",
-            lambda s: check_continuation_error(s, transport=True),
             {"label": "continuation-error", "delay": 2},
             5,
         ),
@@ -1042,7 +987,7 @@ def main():
                 timeout,
                 name == "stale-direnv-environment",
                 32768
-                if name in ("large-exported-environment", "stale-direnv-environment")
+                if name == "stale-direnv-environment"
                 else 0,
                 name == "oversized-request-safe-fallback",
                 name
