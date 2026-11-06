@@ -578,7 +578,14 @@ in
           {
             home-manager.program = lib.getExe inputs.home-manager.packages.${system}.home-manager;
           };
-      packages = lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
+      packages = {
+        powershell-lint = pkgs.writeShellScriptBin "powershell-lint" ''
+          exec ${config.treefmt.settings.formatter.powershell.command} \
+            -NoProfile -NonInteractive -File ${../scripts/powershell/Invoke-StaticAnalysis.ps1} \
+            -SourceRoot "$PWD/scripts/powershell"
+        '';
+      }
+      // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
         darwin-dia-browser = import ./modules/browsers/dia/package.nix {
           inherit inputs;
           pkgs = import pkgs.path {

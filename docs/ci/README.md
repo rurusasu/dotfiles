@@ -5,35 +5,42 @@ macOS と Windows も native runner を使い、WSL は Windows 上の使い捨�
 
 ## ツールと入力
 
-Unix の producer・lint は共通の薄い `.#ci` Nix 環境から、Task、Bash、Python、Git、jq、
+Unix の producer・lint は共通の薄い `path:.#ci` Nix 環境から、Task、Bash、Python、Git、jq、
 actionlint、statix などのツールを取得します。版はリポジトリの `flake.lock` で固定します。
 アプリ本体や本番構成の依存はこの環境に含めず、producer が対象の flake output から構築します。
 E2E consumer は public cache からビルド禁止で取得した Task と、artifact 内の固定済み Python / jq などを使います。
-consumer は `.#ci` を構築しません。Bash テスト専用の Bats などは、同じ lock に従う
-`.#runtime-tests` shell が供給します。Windows の本番導入は WinGet / PowerShell の経路で検証します。
+consumer は `path:.#ci` を構築しません。Bash テスト専用の Bats などは、同じ lock に従う
+`path:.#runtime-tests` shell が供給します。Windows の本番導入は WinGet / PowerShell の経路で検証します。
 
 Nix の認証と通信設定は `scripts/sh/configure-bootstrap-ci-nix.sh` が使い捨て CI ユーザーへ設定します。
 GitHub token は権限600の専用設定ファイルへ保存し、ログや成果物へ含めません。
 Linux の producer は Nix sandbox を有効にして構築し、native NixOS E2E は KVM を利用します。
 WSL でも同じ認証設定 adapter を使い、root / nixos の両方に必要な設定を反映します。
 公式 cache を優先し、Numtide と Hermes の cache も利用します。
+CI は global flake registry を使わず、bootstrap の alias は明示した locked inputs から解決します。
 
 ## 全プラットフォーム共通の工程
 
-公開入口は `task ci:build TARGET=linux|darwin|windows` と
+公開入口は `task ci:build TARGET=linux|darwin|wsl|windows` と
 `task ci:e2e TARGET=linux|darwin|windows` です。
 工程順序は `taskfiles/ci/taskfile.yml`、OS 固有の操作は platform adapter が所有します。
-producer は source SHA と依存を固定し、checks → ビルド・準備 → artifact 保存を実行します。
+job の順序は Changes → Lint → 各 Build / Plan → 対応 E2E → Complete です。
+Lint は `task lint:ci` から `fmt:check` を一度実行し、statix、actionlint、
+`lint:powershell`、Windows manifest の JSON 検証も終えてから各 producer を起動します。
+format は sandbox 外の checkout で検査し、producer では treefmt を再実行しません。
+Bash テストは Lint 後に producer と並列で、ローカルと同じ `task test:bash` を実行します。
+
+Linux build は汎用 Nix checks、standalone Home Manager、native NixOS VM driver を構築します。
+macOS build は macOS の checks と構成を、独立した WSL build は WSL の構成を構築します。
+Windows plan は WinGet master と source SHA を固定します。
+Windows / WSL E2E は WSL build と Windows plan のみを待ち、Linux build は待ちません。
+VM driver は producer が構築し、VM 自体の実行は consumer に置きます。
+事前の `nix eval` / `nix flake check --no-build` をテスト実行の代わりに重ねません。
+
+producer は source SHA と依存を固定して artifact を保存します。
 consumer は artifact の取得 → import / 本番 installer の反映 → 再起動または新しい session →
 runtime 確認を実行します。consumer 内で input を更新したり、欠けた成果物を
-ソースビルドで補ったりしません。
-
-Linux producer は同じ Nix store で通常の checks と、変更分類で選択された
-standalone Home Manager、WSL、native NixOS VM driver の検査・ビルドを実行します。
-VM driver は producer が構築し、VM 自体の実行は consumer に置きます。
-Nix lint は statix、format と通常の flake checks は producer の検証工程で実行します。
-事前の `nix eval` / `nix flake check --no-build` をテスト実行の代わりに重ねません。
-Bash テストはローカルと CI が同じ `task test:bash` から実行します。
+ソースビルドで補ったりしません。PowerShell の Pester suite は E2E 後の runtime 検証を担当します。
 
 native Linux の consumer は KVM の NixOS VM で本番 `install.sh` と reboot 後の
 CLI・service・health を確認します。WSL は Windows 上の使い捨て distro で
@@ -74,7 +81,7 @@ optional cache の exporter は、設定された公開 substituter（公式、N
 書き出してから削る方式は使いません。循環参照などで完全性を保証できない候補は保存しません。
 ログには selected / skipped の件数、保存 byte 数、上限・空き容量・依存不足による見送りを出します。
 
-保存上限は統合した Linux producer と Darwin producer で各 4 GiB（4,294,967,296 bytes）です。
+保存上限は各 producer の workflow の `max-size` で指定します。
 repository の cache 容量枠や課金設定を増やさず、既定の 10 GiB 枠を他 workflow と共有します。
 store DB は保存せず、metadata と対応する payload がそろった file binary cache だけを保存します。
 圧縮には Nix の zstd を使い、Homebrew cleanup 後も同じ compressor を使えるよう GC root と PATH で保持します。

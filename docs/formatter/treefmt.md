@@ -39,11 +39,12 @@ nix develop
 treefmt path/to/file.nix
 ```
 
-Windows では `task fmt` が WSL の Nix を呼び出します。
-`task fmt:check` と pre-commit は `nix fmt -- --fail-on-change` を利用します。
-これは対象ファイルを整形したうえで、変更があれば失敗するコマンドです。
-作業ファイルを書き換えずに検査する場合は、下記の Nix check を使います。
-CI は `nix flake check` に含まれる同じ check を実行します。
+Windows の `task fmt` / `task fmt:check` は WSL の Nix を呼び出します。
+`fmt:check` は現在の system を取得し、`nix run` で `path:.#formatter.<system>` を
+checkout 上で起動します。pre-commit は `nix fmt -- --fail-on-change` から同じ wrapper を使います。
+どちらも対象ファイルを整形したうえで、変更があれば失敗します。
+CI は `task lint:ci` から `fmt:check` を一度実行してから各 Build / Plan を起動します。
+checkout の Git 情報を参照できる sandbox 外で検査し、producer で treefmt を再実行しません。
 Nix が提供する wrapper を使い、設定を持たない単独の treefmt を直接呼ばないでください。
 
 ## エディター
@@ -56,12 +57,11 @@ Nix が提供する wrapper を使い、設定を持たない単独の treefmt �
 ## 検証
 
 ```bash
-nix build .#checks.x86_64-linux.treefmt --no-link --no-write-lock-file
-nix build .#checks.x86_64-linux.powershell-formatter --no-link --no-write-lock-file
+nix build path:.#checks.x86_64-linux.powershell-formatter --no-link --no-write-lock-file
 ```
 
 treefmt-nix の flake-parts module が `formatter.<system>` と `checks.<system>.treefmt` を自動公開します。
-独自の `build.check` は定義せず、標準 check がソースのコピーを整形して差分がないことを検証します。
+標準 treefmt check も公開されますが、CI の format gate は checkout 上の `fmt:check` が担当します。
 `powershell-formatter` check は空の HOME と宣言済みの依存で PowerShell の整形・BOM 補完・冪等性を検証します。
 chezmoi の未展開 JSON テンプレートの除外理由と semantic test は [AGENTS.md](AGENTS.md) を参照してください。
 

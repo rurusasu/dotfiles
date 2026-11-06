@@ -6,7 +6,7 @@ target=${2:?target is required}
 : "${CI_STATE:?absolute CI state directory is required}"
 : "${TESTED_SHA:?tested source SHA is required}"
 [[ $CI_STATE == /* && $TESTED_SHA =~ ^[0-9a-f]{40}$ ]] || exit 64
-case $target in linux | darwin) ;; *) exit 64 ;; esac
+case $target in linux | darwin | wsl) ;; *) exit 64 ;; esac
 mkdir -p "$CI_STATE"
 repository=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 
@@ -95,6 +95,7 @@ source)
   jq -er .python.path "$CI_STATE/tools.json" >"$CI_STATE/python-path"
   ;;
 checks)
+  [[ $target != wsl ]] || exit 64
   source=$(source_path)
   system=$(nix eval --impure --raw --expr builtins.currentSystem)
   # VM drivers are built here; VM execution belongs to the E2E consumer.
@@ -106,7 +107,7 @@ checks)
     driver='checks.native-linux-vm.driver.outPath'
   fi
   nix eval --json "$source#checks.$system" --apply \
-    "checks: { derivations = map (check: (check.driver or check).drvPath) ($selection); driver = $driver; }" >"$CI_STATE/checks.json"
+    "allChecks: let checks = builtins.removeAttrs allChecks [ \"treefmt\" ]; in { derivations = map (check: (check.driver or check).drvPath) ($selection); driver = $driver; }" >"$CI_STATE/checks.json"
   [[ $(jq '.derivations | length' "$CI_STATE/checks.json") -gt 0 ]]
   checks=()
   while IFS= read -r check; do checks+=("$check^*"); done < <(jq -er '.derivations[]' "$CI_STATE/checks.json")
@@ -135,15 +136,14 @@ build)
       in f.inputs.nix-darwin.packages.${builtins.currentSystem}.darwin-rebuild
     ')
     record_root darwin rebuild "$rebuild"
+  elif [[ $target == wsl ]]; then
+    system=$(nix build --impure --no-link --print-out-paths --print-build-logs "$source#nixosConfigurations.nixos.config.system.build.toplevel")
+    record_root wsl system "$system"
   else
     if [[ ${CI_LINUX_REQUIRED:-false} == true ]]; then
       # The driver already contains the complete production configuration on
       # VM hardware. Build the standalone installer target separately.
       nix build --no-link --print-build-logs "$source#homeConfigurations.x86_64-linux.activationPackage"
-    fi
-    if [[ ${CI_WSL_REQUIRED:-false} == true ]]; then
-      system=$(nix build --impure --no-link --print-out-paths --print-build-logs "$source#nixosConfigurations.nixos.config.system.build.toplevel")
-      record_root wsl system "$system"
     fi
   fi
   ;;
@@ -151,9 +151,8 @@ export)
   source=$(source_path)
   python=$(cat "$CI_STATE/python-path")
   targets=()
-  if [[ $target == darwin ]]; then targets=(darwin); else
-    [[ ${CI_LINUX_REQUIRED:-false} != true ]] || targets+=(linux)
-    [[ ${CI_WSL_REQUIRED:-false} != true ]] || targets+=(wsl)
+  if [[ $target != linux || ${CI_LINUX_REQUIRED:-false} == true ]]; then
+    targets=("$target")
   fi
   for output in "${targets[@]}"; do
     arguments=(--root "source=$source")
@@ -189,7 +188,7 @@ apply | run-vm)
       cat "$CI_STATE/linux-e2e.log"
       exit 1
     }
-  else
+  elif [[ $target == darwin ]]; then
     [[ $phase == apply ]] || exit 64
     source=$(root_path source)
     deployment=$(root_path deployment)
@@ -206,6 +205,8 @@ apply | run-vm)
     [[ $(cd /nix/var/nix/profiles/system && pwd -P) == "$(root_path system)" ]]
     # Prove activation auto-starts the service before explicitly restarting it.
     wait_for_hermes
+  else
+    exit 64
   fi
   ;;
 restart)

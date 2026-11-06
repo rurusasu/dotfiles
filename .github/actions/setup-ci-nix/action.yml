@@ -1,5 +1,5 @@
 name: Set up native CI Nix
-description: Bootstrap native Nix and Task independently for parallel producer, check and E2E jobs.
+description: Bootstrap native Nix and Task for lint, platform builds and artifact-only E2E jobs.
 inputs:
   github-token:
     description: Token for fetching the exact locked GitHub inputs.

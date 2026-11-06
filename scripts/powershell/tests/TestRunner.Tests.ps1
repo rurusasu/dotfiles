@@ -23,14 +23,9 @@ function Save-PSResource { Stop-UnexpectedAcquisition }
 function Install-PSResource { Stop-UnexpectedAcquisition }
 function Invoke-RestMethod { Stop-UnexpectedAcquisition }
 function Invoke-WebRequest { Stop-UnexpectedAcquisition }
-if ($MissingDependency -in @('Pester', 'PSScriptAnalyzer')) {
+if ($MissingDependency -eq 'Pester') {
     $env:PSModulePath = Join-Path $Fixture 'empty-modules'
     New-Item -ItemType Directory -Path $env:PSModulePath | Out-Null
-}
-if ($MissingDependency -eq 'PSScriptAnalyzer') {
-    . (Join-Path (Split-Path -Parent $Runner) 'support/Resolve-TestModule.ps1')
-    Resolve-TestModule -Name PSScriptAnalyzer | Out-Null
-    exit 0
 }
 if (-not $MissingDependency) {
     Copy-Item -LiteralPath $Runner -Destination $Fixture
@@ -78,7 +73,6 @@ Describe 'PowerShell test prerequisites' {
 
     It 'should report missing <Dependency> without downloading it' -ForEach @(
         @{ Dependency = 'Pester' }
-        @{ Dependency = 'PSScriptAnalyzer' }
         @{ Dependency = 'task' }
     ) {
         $result = Invoke-TestPrerequisiteProbe -MissingDependency $Dependency

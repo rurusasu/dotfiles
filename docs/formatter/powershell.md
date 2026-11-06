@@ -4,9 +4,9 @@
 
 ## 静的解析
 
-[PowerShell.Tests.ps1](../../scripts/powershell/tests/PowerShell.Tests.ps1) が
-解析ルールを直接指定し、runtime ソースの Error / Warning を失敗にします。
-除外ルールも同じテストが所有します。
+`task lint:powershell` が [Invoke-StaticAnalysis.ps1](../../scripts/powershell/Invoke-StaticAnalysis.ps1) を実行します。
+この adapter が解析ルールと除外を所有し、runtime ソースの Error / Warning と
+全 PowerShell ソースの ANSI/BOM 不整合を失敗にします。CI は Build / Plan より前に実行します。
 
 ## 文字コードと改行
 
@@ -21,8 +21,9 @@
 
 pre-commit の `fix-byte-order-marker` は `scripts/powershell/` を除外し、
 PSScriptAnalyzer の `PSUseBOMForUnicodeEncodedFile` は有効にします。
-CP932 での文字列保持、5.1 の実ファイル読み込み、formatter の BOM 補完と冪等性は
-[回帰テスト](../scripts/powershell/README.md#テスト) で検証します。
+CP932 での文字列保持は `task lint:powershell`、5.1 の実ファイル読み込みは
+[runtime suite](../scripts/powershell/README.md#テスト) が検証します。
+formatter の BOM 補完と冪等性は Nix build check が担当します。
 
 ## フォーマットスタイル
 
@@ -64,15 +65,15 @@ function Get-Something {
 
 ### Nix (推奨)
 
-この repository の `nix fmt` / `checks.<system>.treefmt` は、PowerShell と
+この repository の `nix fmt` / `task lint:powershell` は、PowerShell と
 PSScriptAnalyzer を宣言済みの依存として使用します。
 nixpkgs の `vscode-extensions.ms-vscode.powershell` に同梱された module を直接 import します。
 VS Code 本体は導入せず、拡張機能の module ディレクトリから PowerShell が版を解決します。
 更新は `nrs` による nixpkgs input の更新に従い、配布物は `flake.lock` で固定されます。
-HOME の module cache に依存せず、整形中のダウンロードはありません。
+HOME の module cache に依存せず、整形・静的検査中の module ダウンロードはありません。
 
-Windows テストは、インストール済みの互換性がある stable module を選択します。
-必要な module が不足していればエラーにし、テスト中にダウンロードしません。
+Windows の runtime suite は、インストール済みの互換性がある stable Pester を選択します。
+不足していればエラーにし、テスト中にダウンロードしません。
 
 PowerShell 自体を単独で使う場合:
 
@@ -94,9 +95,12 @@ nix run nixpkgs#powershell -- -c "Write-Host 'Hello'"
 $content = Get-Content -Raw -Path "script.ps1"
 $formatted = Invoke-Formatter -ScriptDefinition $content
 [IO.File]::WriteAllText((Join-Path $PWD "script.ps1"), $formatted, [Text.UTF8Encoding]::new($true))
+```
 
-# repository の静的解析と Windows 文字コード検証
-pwsh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1 -Path scripts/powershell/tests/PowerShell.Tests.ps1
+repository の静的解析と Windows 文字コード検証:
+
+```bash
+task lint:powershell
 ```
 
 ## treefmt 設定
