@@ -213,6 +213,11 @@ jobs:
       - name: Prepare CI state
         shell: bash
         run: |
+          # This job uses the image/Nix tools; the hosted SDK cache is unused.
+          # /__t is the runner tool-cache bind mount, separate from Actions /__e.
+          df -h "$RUNNER_TEMP"
+          rm -rf -- /__t/*
+          df -h "$RUNNER_TEMP"
           printf 'CI_STATE=%s/bootstrap-ci\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -450,6 +455,10 @@ jobs:
       - name: Prepare CI state
         shell: bash
         run: |
+          # Leave space for the imported closure and native VM disk.
+          df -h "$RUNNER_TEMP"
+          rm -rf -- /__t/*
+          df -h "$RUNNER_TEMP"
           printf 'CI_STATE=%s/bootstrap-ci\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
