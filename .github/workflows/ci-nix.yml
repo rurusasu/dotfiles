@@ -41,6 +41,11 @@ jobs:
       darwin: ${{ steps.detect.outputs.darwin }}
       wsl: ${{ steps.detect.outputs.wsl }}
       windows: ${{ steps.detect.outputs.windows }}
+  # Shared linux/amd64 runtime: Nix, Node, Task, jq, Python and statix.
+  # Bash tests, Nix lint, Linux builds and Linux E2E consume this image; the
+  # Linux producer also builds the WSL system. Dotfiles outputs are built later.
+  # Reuse GHCR by tool-definition hash. Changed definitions are built, checked
+  # for working tools/Nix sandbox, then published; consumers use the image digest.
   ci-tools:
     needs: changes
     if: ${{ needs.changes.outputs.nix == 'true' || needs.changes.outputs.chezmoi == 'true' || needs.changes.outputs.other == 'true' }}
@@ -268,6 +273,8 @@ jobs:
           name: linux-build
           phase: save
           max-size: "4294967296"
+  # macOS builds run natively and install Nix/Task on their own runner.
+  # They only need change detection, so run alongside the Linux tools image job.
   darwin-build:
     name: Bootstrap / Darwin / Build
     needs: changes
