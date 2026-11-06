@@ -60,6 +60,18 @@ lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
         config = config.nodes.machine.specialisation.production.configuration;
       };
       nodes.machine = {
+        nixpkgs.overlays = [
+          (_final: prev: {
+            lkl = prev.lkl.overrideAttrs (old: {
+              # cptofs hardcodes 100 MiB, which exhausts memory while copying
+              # the production closure. Give only this image-copy tool 1 GiB.
+              postPatch = (old.postPatch or "") + ''
+                substituteInPlace tools/lkl/cptofs.c \
+                  --replace-fail 'lkl_start_kernel("mem=100M")' 'lkl_start_kernel("mem=1024M")'
+              '';
+            });
+          })
+        ];
         virtualisation = {
           memorySize = 4096;
           cores = 2;
