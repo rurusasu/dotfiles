@@ -112,6 +112,29 @@ def validate_closure(roots: dict, metadata: dict) -> None:
         require(set(references) <= metadata.keys(), "Incomplete reference closure")
 
 
+def verify_closure_identity(expected: dict[str, dict], realised: dict[str, dict]) -> None:
+    # These are Nix's signature fingerprint fields. CA is an optional proof
+    # of content addressing and may be absent for the same signed NAR.
+    fields = ("path", "narHash", "narSize", "references")
+    differences = []
+    for path in sorted(expected.keys() | realised.keys()):
+        if path not in expected:
+            difference = "unexpected path"
+        elif path not in realised:
+            difference = "missing path"
+        else:
+            changed = {
+                field: {"expected": expected[path][field], "realised": realised[path][field]}
+                for field in fields if expected[path][field] != realised[path][field]
+            }
+            if not changed:
+                continue
+            difference = json.dumps(changed, sort_keys=True)
+        differences.append(f"{path}: {difference}")
+    details = "; ".join(differences[:5])[:4096]
+    require(not differences, f"Imported closure identity mismatch ({len(differences)} paths): {details}")
+
+
 def closed_public_paths(metadata: dict[str, dict]) -> set[str]:
     public = query_public_paths(sorted(metadata))
     while True:
@@ -288,7 +311,7 @@ def import_artifact(target: str, tested_sha: str, directory: Path, source: Path 
     # Querying existing paths never builds them. Nix verifies payload integrity
     # during import; explicitly compare all resulting NAR identities as well.
     realised = closure_metadata(manifest["roots"])
-    require(realised == metadata, "Imported closure identity mismatch")
+    verify_closure_identity(metadata, realised)
     roots = manifest["roots"]
     (directory / "roots.json").write_text(json.dumps(roots, indent=2) + "\n")
     (directory / "roots.env").write_text("".join(f"CI_ARTIFACT_ROOT_{name.upper().replace('-', '_')}={shlex.quote(path)}\n" for name, path in sorted(roots.items())))

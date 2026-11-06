@@ -32,7 +32,7 @@ class ArtifactTests(unittest.TestCase):
         self.roots = {"source": SOURCE, "system": SYSTEM}
         self.metadata = {
             SOURCE: {"path": SOURCE, "narHash": NAR_HASH, "narSize": 41, "references": [PUBLIC]},
-            PUBLIC: {"path": PUBLIC, "narHash": NAR_HASH, "narSize": 42, "references": []},
+            PUBLIC: {"path": PUBLIC, "narHash": NAR_HASH, "narSize": 42, "references": [], "ca": "fixed:r:sha256:" + "0" * 52},
             SYSTEM: {"path": SYSTEM, "narHash": NAR_HASH, "narSize": 43, "references": [SOURCE, PUBLIC]},
         }
 
@@ -64,12 +64,17 @@ class ArtifactTests(unittest.TestCase):
             yield
 
     def test_exported_artifact_imports_exact_source_and_roots_without_building(self):
-        with self.producer(), patch.object(artifact.subprocess, "run") as nix:
+        realised = {**self.metadata, PUBLIC: {key: value for key, value in self.metadata[PUBLIC].items() if key != "ca"}}
+        with (
+            self.producer(), patch.object(artifact.subprocess, "run") as nix,
+            patch.object(artifact, "closure_metadata", return_value=realised),
+        ):
             imported = artifact.import_artifact("wsl", TESTED_SHA, self.directory)
         self.assertEqual(imported, self.roots)
         manifest = json.loads((self.directory / "manifest.json").read_text())
         self.assertEqual(manifest["testedSha"], TESTED_SHA)
         self.assertEqual(manifest["source"], {"path": SOURCE, "narHash": NAR_HASH, "flakeLockSha256": LOCK_DIGEST})
+        self.assertEqual(next(entry for entry in manifest["closure"] if entry["path"] == PUBLIC)["ca"], self.metadata[PUBLIC]["ca"])
         self.assertEqual(json.loads((self.directory / "roots.json").read_text()), self.roots)
         self.assertTrue(nix.called)
         for call in nix.call_args_list:
