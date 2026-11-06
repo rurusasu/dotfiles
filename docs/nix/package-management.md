@@ -144,7 +144,7 @@ CI は OS configuration を build することで、その構成に含まれる�
 standalone Home Manager は上記の OS 統合を使えない環境向けに維持します。
 キー設定の JSON は `task keybindings:export` が正本を直接評価して更新します。Darwin custom package の出力は `nix/defaults.nix` に定義します。
 
-macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Homebrew package を反映します。通常の CLI と Neovim・WezTerm は Nix 側で管理します。Homebrew の設定と cask は `nix/defaults.nix` に宣言します。Nix パッケージの版は `flake.lock` に従います。
+macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Homebrew package を反映します。通常の CLI と Neovim・Ghostty は Nix 側で管理します。Homebrew の設定と cask は `nix/defaults.nix` に宣言します。Nix パッケージの版は `flake.lock` に従います。
 
 ### macOS の権限エラー
 

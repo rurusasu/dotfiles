@@ -6,7 +6,7 @@ Windows は標準デスクトップと標準ショートカットを使用し、
 
 ## ターミナルの境界
 
-Windows Terminal の設定は chezmoi が管理します。PowerShell 7 を既定プロファイルとし、NixOS-WSL は Windows Terminal が自動生成する `NixOS` プロファイルから起動します。Ghostty と WezTerm の Unix 設定は Home Manager が管理します。
+Windows Terminal の設定は chezmoi が管理します。PowerShell 7 を既定プロファイルとし、NixOS-WSL は Windows Terminal が自動生成する `NixOS` プロファイルから起動します。Ghostty の Unix 設定は Home Manager が管理します。
 
 Nix のテストは純粋な設定生成と実効値を検査します。実機の compositor 動作やキー入力は対象 host 上で確認します。
 
@@ -56,7 +56,7 @@ task chezmoi
 
 ## ターミナルとの境界と検証
 
-デスクトップ配列は各 OS の desktop adapter が扱います。Windows Terminal は標準ショートカットを使います。Unix の Ghostty と WezTerm は split・tab・pane 移動に共通の直接キーを使い、WezTerm の固有操作と Herdr の操作には [キーバインド統一方針](./keybindings.md) の `Ctrl+Space` を使います。サイズ変更の単位は Ghostty がピクセル、WezTerm がセルです。
+デスクトップ配列は各 OS の desktop adapter が扱います。Windows Terminal は標準ショートカットを使います。Unix の Ghostty は split・tab・pane 移動に共通の直接キーを使い、Herdr の操作には [キーバインド統一方針](./keybindings.md) の `Ctrl+Space` を使います。Ghostty のサイズ変更の単位はピクセルです。
 
 WSLg Ghostty は ghostty-wsl.nix が生成するアプリ内の直接キーを使います。10ピクセルの resize は Ctrl+Alt+Shift+矢印、100ピクセルは Ctrl+Alt+Shift+Home/PageDown/PageUp/End です。Windows 側のキー変換や常駐スクリプトは使いません。
 

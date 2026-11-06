@@ -124,7 +124,6 @@ let
               starship.enable = true;
               zsh-patina.enable = true;
               ghostty.enable = true;
-              wezterm.enable = true;
               neovim.enable = true;
               git.enable = true;
               ghq.enable = true;

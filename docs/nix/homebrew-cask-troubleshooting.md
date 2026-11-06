@@ -53,11 +53,3 @@ test ! -e "$comfy_store_path"
 `--store local` は daemon に依頼せず、端末から起動した Nix で指定出力を削除します。
 Nix の参照保護は維持し、`--ignore-liveness` や `--delete-closure` は使いません。
 この旧出力の復旧は Nix の更新ごとに行う処理ではありません。
-
-## WezTerm
-
-WezTerm は Nix provider で管理します。旧 cask `wezterm@nightly` の
-install/upgrade と Nix への自動移行はサポートしません。`nrs` で現在の
-Nix package を反映してください。旧 package が残っている場合の扱いは
-[旧 provider サポート終了](./package-management.md#macos-の旧-provider-サポート終了)
-を参照してください。

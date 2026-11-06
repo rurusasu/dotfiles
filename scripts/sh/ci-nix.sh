@@ -108,9 +108,13 @@ build)
     system=$(nix build --no-link --no-update-lock-file --no-write-lock-file --print-out-paths --print-build-logs "$deployment#darwinConfigurations.macos.system")
     record_root darwin system "$system"
     record_root darwin deployment "$deployment"
-    program=$(nix eval --raw "$source#apps.aarch64-darwin.darwin-rebuild.program")
-    rebuild=${program%/bin/*}
-    nix-store --realise "$rebuild"
+    # Build the same derivation as the public app; a raw program string loses
+    # its derivation context and cannot realise an uncached store output.
+    # shellcheck disable=SC2016 # The package system interpolation is Nix syntax.
+    rebuild=$(CI_SOURCE_ROOT="$source" nix build --impure --no-link --no-update-lock-file --no-write-lock-file --print-out-paths --print-build-logs --expr '
+      let f = builtins.getFlake (builtins.getEnv "CI_SOURCE_ROOT");
+      in f.inputs.nix-darwin.packages.${builtins.currentSystem}.darwin-rebuild
+    ')
     record_root darwin rebuild "$rebuild"
   else
     if [[ ${CI_LINUX_REQUIRED:-false} == true ]]; then

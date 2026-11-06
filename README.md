@@ -314,10 +314,10 @@ wsl --shutdown
 - 既存のプロファイルとキーバインドを保ちながら設定を適用
 - タブ・ペイン操作は Windows Terminal 標準のキー操作を使用（常駐キー変換は不要）
 
-### WezTerm（Unix）
+### Ghostty（Unix）
 
-- 設定ソース: `nix/modules/terminals/wezterm/default.nix` と `wezterm.lua`
-- Leader key: `Ctrl+Space`
+- 設定ソース: `nix/modules/terminals/ghostty/default.nix` と `ghostty.nix`
+- タブ・ペイン操作は共通の直接キーを使用
 
 ## トラブルシューティング
 
@@ -342,11 +342,6 @@ NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations`�
 ```powershell
 .\install.cmd
 ```
-
-### macOS の WezTerm
-
-WezTerm は Nix package として管理します。旧 `wezterm@nightly` cask が残っている場合は、
-[WezTerm の旧 provider](./docs/nix/homebrew-cask-troubleshooting.md#wezterm) を参照してください。
 
 ### Windows Terminal 設定が反映されない
 

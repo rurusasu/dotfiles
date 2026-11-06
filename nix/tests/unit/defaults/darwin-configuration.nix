@@ -138,7 +138,6 @@ in
       gpgSshAgentEnabled = defaultConfig.programs.gnupg.agent.enableSSHSupport;
       homebrew = defaultConfig.homebrew.enable;
       nixHomebrew = defaultConfig.nix-homebrew.enable;
-      wezterm = defaultHome.programs.wezterm.enable;
       github = builtins.any (name: builtins.match "^(gh|github-cli)($|[-.].*)" name != null) (
         packageNames defaultConfig
       );
@@ -152,7 +151,6 @@ in
       gpgSshAgentEnabled = false;
       homebrew = true;
       nixHomebrew = true;
-      wezterm = true;
       github = true;
       managedFont = true;
       homeManagerUser = true;

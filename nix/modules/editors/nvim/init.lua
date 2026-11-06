@@ -152,7 +152,7 @@ if vim.fn.has("win32") == 1 then
     end
 end
 
--- Restore the terminal for the retained WezTerm/Windows Terminal exit workaround.
+-- Restore the terminal for the Windows Terminal exit workaround.
 -- Route control sequences through the UI, never through headless stdout.
 vim.api.nvim_create_autocmd("VimLeave", {
     callback = function()

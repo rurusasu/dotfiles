@@ -54,6 +54,11 @@ runs:
             --out-link "$RUNNER_TEMP/ci-zstd" --print-out-paths)"
           "$compressor/bin/zstd" --version
           echo "$compressor/bin" >> "$GITHUB_PATH"
+          # Bootstrap Nix commands may initialize daemon-owned cache children.
+          # Extract into a fresh runner-owned tree before any cached outputs exist.
+          bootstrap_cache=$(mktemp -d "$RUNNER_TEMP/nix-cache-bootstrap.XXXXXX")
+          mv "$cache_dir" "$bootstrap_cache/cache"
+          mkdir "$cache_dir"
         fi
 
     - name: Restore binary cache

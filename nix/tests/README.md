@@ -47,13 +47,13 @@ build ファイルは OS 条件で空の属性セットを返せます。build �
 { fixtures, code }:
 let
   home = fixtures.mkHome "aarch64-darwin" [
-    { programs.wezterm.enable = true; }
+    { programs.ghostty.enable = true; }
   ];
 in
 {
-  testWeztermTheme = {
-    expr = home.config.programs.wezterm.settings.color_scheme;
-    expected = code.nix.modules.terminals.appearance.theme;
+  testGhosttyTheme = {
+    expr = home.config.programs.ghostty.settings.theme;
+    expected = [ code.nix.modules.terminals.appearance.theme ];
   };
 }
 ```
@@ -62,10 +62,10 @@ in
 # build/example.check.nix: asset も属性から参照する
 { pkgs, files }:
 {
-  wezterm-lua = pkgs.runCommand "wezterm-lua-check"
+  neovim-window-style = pkgs.runCommand "neovim-window-style-check"
     { nativeBuildInputs = [ pkgs.lua ]; }
     ''
-      luac -p ${files.nix.modules.terminals.wezterm."wezterm.lua"}
+      luac -p ${files.nix.modules.editors.nvim.lua.config."window_styles.lua"}
       touch "$out"
     '';
 }
@@ -93,7 +93,7 @@ Windows の標準 package ID / source は CI の jq が `windows/winget/packages
 Unix の `task test` は `task test:nix` を呼びます。CI と同じ
 `nix flake check --no-write-lock-file --print-build-logs` で、現在の system に登録された
 すべての check を実行します。check 名のリストや system 判定を呼び出し側で管理しません。
-対象には nix-unit、独自 package build、AeroSpace、Neovim、WezTerm、Docker Desktop、
+対象には nix-unit、独自 package build、AeroSpace、Neovim、Docker Desktop、
 PowerShell formatter、treefmt を含み、Darwin では standalone Home Manager の構成ビルドも含みます。
 Docker Desktop の初期設定は生成された activation を CLI double で実行し、再実行、失敗時の再試行、
 既存の `md5` パスとの衝突を検証します。実機の Docker Desktop 起動は installer の検証対象です。

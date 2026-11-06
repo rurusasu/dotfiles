@@ -3,6 +3,7 @@
   lib,
   pkgs,
   aerospace,
+  ghostty,
 }:
 let
   launch = app: "/usr/bin/open -a ${lib.escapeShellArg app}";
@@ -16,7 +17,9 @@ in
 {
   workspace-next = toString (pkgs.writeShellScript "omarchy-workspace-next" cycles.next);
   workspace-prev = toString (pkgs.writeShellScript "omarchy-workspace-prev" cycles.prev);
-  terminal = launch "WezTerm";
+  terminal = "/usr/bin/open -na ${
+    lib.escapeShellArg (if ghostty == null then "Ghostty" else "${ghostty}/Applications/Ghostty.app")
+  }";
   browser = launch "Dia";
   files = launch "Finder";
   notes = launch "Obsidian";

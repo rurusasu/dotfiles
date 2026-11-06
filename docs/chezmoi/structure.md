@@ -12,4 +12,4 @@ Windows 用 source tree は Windows Terminal 設定、PowerShell プロファイ
 | `.chezmoiscripts/deploy/terminals/run_onchange_set_windows_terminal.ps1.tmpl`                    | `HKCU:\Console\%%Startup` を設定し、Windows Terminal 安定版を既定のターミナルにする |
 | `.chezmoi.toml.tmpl`, `.chezmoiignore.tmpl`                                                      | source directory と Windows 適用対象を定義                                          |
 
-PowerShell 7 と Windows Terminal のインストールは WinGet manifest が所有します。Unix の WezTerm / Ghostty 設定は Home Manager が所有します。
+PowerShell 7 と Windows Terminal のインストールは WinGet manifest が所有します。Unix の Ghostty / Herdr 設定は Home Manager が所有します。

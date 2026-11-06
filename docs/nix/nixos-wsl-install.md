@@ -217,7 +217,6 @@ Ghostty 1.3.1 の起動ログには、設定で解決する警告と upstream �
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Portal の `startup job failed`                         | セッション target と GTK backend の環境が必要です。上記の設定と D-Bus 呼び出しで確認します。                                                  |
 | `gtk-xft-dpi ... (-1)`                                 | GTK が DPI 設定を得られない場合に既定倍率を使います。Portal 起動後に解消することを実機で確認しました。                                        |
-| `OSC 7 ... UriMissingHost`                             | WezTerm の連携が Ghostty 内でも読み込まれ、Zsh で空の `HOSTNAME` を使っていました。WezTerm の連携は `TERM_PROGRAM=WezTerm` に限定します。     |
 | Mesa の `fd -1` / device information                   | Mesa の Linux DRM 情報取得が WSL の D3D12 経路では失敗します。これだけで CPU 描画とは判断せず、上記の renderer を確認します。                 |
 | `unimplemented action=.cell_size`                      | Ghostty 1.3.1 の GTK frontend が内部のセル寸法通知を実装していない警告です。設定のキー割り当てではありません。                                |
 | Adwaita の `style-dark.css` などの deprecated resource | Ghostty に同梱された旧形式のテーマ resource に対する libadwaita の警告です。ユーザーのテーマ設定エラーではありません。                        |

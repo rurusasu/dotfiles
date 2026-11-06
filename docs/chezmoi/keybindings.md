@@ -10,18 +10,15 @@ Nix で管理するデスクトップ・Ghostty・Neovim 配列と、chezmoi が
 
 ## 統一ルール
 
-| グループ                       | 役割                                   | 例                                  |
-| ------------------------------ | -------------------------------------- | ----------------------------------- |
-| `Ctrl+Space`                   | Unix WezTerm の追加操作 / Herdr prefix | `Ctrl+Space` + suffix               |
-| `Ctrl+Space Ctrl+Space`        | nested terminal へ prefix を1回転送    | `Ctrl+Space Ctrl+Space` + suffix    |
-| `Ctrl+Command` (WezTerm macOS) | 契約外の GUI pane resize               | `Ctrl+Command+矢印`                 |
-| `Ctrl+Command+M` (macOS)       | GUI window zoom / restore              | `Ctrl+Command+M`                    |
-| `Command+Alt` (WezTerm macOS)  | 契約外の GUI window focus              | `Command+Alt+H/L`                   |
-| `Alt+Shift` (WezTerm Linux)    | 契約外の GUI window focus/pane resize  | `Alt+Shift+H/L` / `Alt+Shift+矢印`  |
-| `Ctrl`                         | Unix/Vim focus                         | `Ctrl+H/J/K/L`                      |
-| `Shift+Enter`                  | 複数行入力                             | AI CLI / terminal prompt 改行       |
-| `Space` (`Leader`)             | editor 機能呼び出し                    | 検索、エクスプローラ、タブ操作      |
-| `Alt` (Shell)                  | CLI 補助操作                           | fzf/zoxide ウィジェット (`Q/D/T/R`) |
+| グループ                 | 役割                                | 例                                  |
+| ------------------------ | ----------------------------------- | ----------------------------------- |
+| `Ctrl+Space`             | Herdr prefix                        | `Ctrl+Space` + suffix               |
+| `Ctrl+Space Ctrl+Space`  | nested terminal へ prefix を1回転送 | `Ctrl+Space Ctrl+Space` + suffix    |
+| `Ctrl+Command+M` (macOS) | GUI window zoom / restore           | `Ctrl+Command+M`                    |
+| `Ctrl`                   | Unix/Vim focus                      | `Ctrl+H/J/K/L`                      |
+| `Shift+Enter`            | 複数行入力                          | AI CLI / terminal prompt 改行       |
+| `Space` (`Leader`)       | editor 機能呼び出し                 | 検索、エクスプローラ、タブ操作      |
+| `Alt` (Shell)            | CLI 補助操作                        | fzf/zoxide ウィジェット (`Q/D/T/R`) |
 
 ## 現在の適用状況
 
@@ -64,37 +61,6 @@ Ghostty は `ghostty.nix` の直接キー28割り当てを使います。macOS �
 
 Ghostty の `resize_split` の単位はピクセルで、行数ではありません。反映後は Ghostty の設定を再読み込みします。
 
-#### WezTerm（macOS / Linux）
-
-Unix の WezTerm は split / tab / pane 移動を Ghostty と同じ直接キーで操作します。サイズ変更の単位はセルで、小幅は1セル、大幅は10セルです。
-
-| キー                                      | 操作                                                        |
-| ----------------------------------------- | ----------------------------------------------------------- |
-| `Ctrl+Shift+E`                            | 下に分割                                                    |
-| `Ctrl+Shift+O`                            | 右に分割                                                    |
-| `Ctrl+Shift+T`                            | 新しい tab                                                  |
-| `Ctrl+Shift+Left/Up`                      | 前の tab                                                    |
-| `Ctrl+Shift+Right/Down`                   | 次の tab                                                    |
-| `Ctrl+Alt+矢印`                           | その方向の pane に移動                                      |
-| `Ctrl+Alt+Shift+矢印`                     | WezTerm はその方向へ1セル、Ghostty は10ピクセルのサイズ変更 |
-| `Ctrl+Alt+Shift+Home/PageDown/PageUp/End` | WezTerm は10セル、Ghostty は100ピクセルのサイズ変更         |
-| `Alt+1..9`                                | 指定した tab に移動                                         |
-
-`Ctrl+Space` は WezTerm 固有の workspace / session 操作と pane / tab を閉じる操作に残す。WezTerm は組み込み leader を使い、prefix timeout は1秒。
-
-| suffix | 操作                            |
-| ------ | ------------------------------- |
-| `w`    | workspace picker                |
-| `a`    | workspace を作成                |
-| `q`    | tab を閉じる                    |
-| `x`    | pane を閉じる                   |
-| `g`    | workspace / tab / domain picker |
-| `d`    | domain を detach                |
-| `[`    | copy mode                       |
-| `c`    | clipboard に copy               |
-
-Terminal.app は WezTerm の組み込み leader を使わず、標準のキー操作を使用する。デスクトップ全体の Omarchy 配列は AeroSpace が担当するため、Terminal.app 専用の常駐 adapter は導入しない。
-
 #### Herdr
 
 Herdr は `Ctrl+Space` の terminal Window Manager prefix と native key table を使う。suffix は次のとおり。
@@ -114,8 +80,6 @@ Herdr は `Ctrl+Space` の terminal Window Manager prefix と native key table �
 | Session   | `d`                   | detach                  |
 
 - nested terminal では `Ctrl+Space Ctrl+Space` で内側へ prefix を1回転送し、その後の suffix で内側の Herdr を操作する。
-
-Window Manager 契約外の Unix WezTerm 操作として、pane resize、window focus、pane zoom を設定します。
 
 - macOS の全アプリに `Ctrl+Command+M` を割り当て、標準メニューの `Zoom` または `拡大／縮小` を実行する。
 - 設定反映後は対象アプリを再起動する。対象メニューを持たないアプリや、一部のElectronアプリでは動作しない場合がある。
@@ -175,9 +139,8 @@ Window Manager 契約外の Unix WezTerm 操作として、pane resize、window 
 
 - 新しいショートカットを追加する前に、この表のどのグループに属するかを先に決める
 - Windows Terminal は標準ショートカットを使う
-- Unix の Ghostty / WezTerm の split・tab・pane 移動は共通の直接キーを使う。WezTerm 固有操作は `Ctrl+Space`、Herdr は共通 suffix を使う
+- Unix の Ghostty の split・tab・pane 移動は共通の直接キーを使い、Herdr は共通 prefix と suffix を使う
 - target が持たない capability は no-op とし、target 固有の代替キーを共通契約へ混ぜない
 - nested terminal の prefix 転送は `Ctrl+Space Ctrl+Space` に統一する
-- WezTerm の直接 window focus / pane resize は共通契約外の補助操作として維持する
 - Neovim など Unix/Vim 系は `Ctrl+H/J/K/L` を優先して維持する
 - `Vim` 拡張前提の操作説明は追加しない
