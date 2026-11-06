@@ -271,12 +271,18 @@ def import_artifact(target: str, tested_sha: str, directory: Path, source: Path 
         validate_cache(cache, metadata, public)
         for start in range(0, len(public), 128):
             subprocess.run(["nix-store", *NO_BUILD, "--realise", *sorted(public)[start : start + 128]], check=True)
-        subprocess.run(
-            ["nix", *NO_BUILD, "copy", "--no-check-sigs", "--from", cache.as_uri(), "--stdin"],
-            input="".join(f"{path}\n" for path in sorted(set(manifest["roots"].values()))),
-            text=True,
-            check=True,
-        )
+        # Public paths already exist in the destination. A recursive copy of
+        # roots would still ask the source cache for those omitted paths and
+        # references. Copy every private member explicitly without traversing
+        # the source closure; dependency completeness was validated above.
+        private = sorted(metadata.keys() - public)
+        if private:
+            subprocess.run(
+                ["nix", *NO_BUILD, "copy", "--no-recursive", "--no-check-sigs", "--from", cache.as_uri(), "--stdin"],
+                input="".join(f"{path}\n" for path in private),
+                text=True,
+                check=True,
+            )
     imported = Path(manifest["roots"]["source"])
     require((imported / "flake.lock").is_file() and sha256(imported / "flake.lock") == manifest["source"]["flakeLockSha256"], "Imported source lock digest mismatch")
     # Querying existing paths never builds them. Nix verifies payload integrity
