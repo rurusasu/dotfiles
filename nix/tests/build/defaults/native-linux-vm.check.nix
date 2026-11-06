@@ -70,6 +70,24 @@ lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
                   --replace-fail 'lkl_start_kernel("mem=100M")' 'lkl_start_kernel("mem=1024M")'
               '';
             });
+            vmTools = prev.vmTools // {
+              runInLinuxVM =
+                drv:
+                prev.vmTools.runInLinuxVM (
+                  if drv.name == "nixos-disk-image" then
+                    drv.overrideAttrs (old: {
+                      # cptofs has copied the closure into the raw image. Free
+                      # its staging copy before the raw-to-qcow2 conversion.
+                      preVM = old.preVM + ''
+                        test "$root" = "$PWD/root"
+                        find "$root" -type d -exec chmod u+w {} +
+                        rm -rf -- "$root"
+                      '';
+                    })
+                  else
+                    drv
+                );
+            };
           })
         ];
         virtualisation = {

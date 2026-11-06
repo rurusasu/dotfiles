@@ -285,10 +285,16 @@ def export_cache(cache: Path, maximum_size: int) -> None:
         if disk_capacity <= 0:
             disk_limited += 1
             break
-        result = export_entry(cache, path, entry, min(capacity, disk_capacity))
+        limit = min(capacity, disk_capacity)
+        result = export_entry(cache, path, entry, limit)
         if result is None:
-            oversized += 1
-            print(f"CI cache skipped {path}: exceeds remaining {min(capacity, disk_capacity):,}-byte budget (NAR {entry['narSize']:,} bytes)")
+            if disk_capacity < capacity:
+                disk_limited += 1
+                reason = "available disk space"
+            else:
+                oversized += 1
+                reason = "remaining cache budget"
+            print(f"CI cache skipped {path}: exceeds {limit:,}-byte {reason} (NAR {entry['narSize']:,} bytes)")
             continue
         _, _, added_bytes = result
         size += added_bytes
@@ -315,6 +321,7 @@ def export_cache(cache: Path, maximum_size: int) -> None:
         print("::warning::No dependency-closed private outputs fit; keeping the previous generation")
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         output.write(f"cacheable={str(bool(selected)).lower()}\n")
+        output.write(f"space_constrained={str(bool(disk_limited)).lower()}\n")
 
 
 def transport_cache(cache: Path, root: str) -> None:
