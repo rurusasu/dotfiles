@@ -95,7 +95,13 @@ lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
           cores = 2;
           writableStore = true;
           useBootLoader = true;
-          additionalPaths = map (entry: entry.input.outPath) sources;
+          # Bootloader images neither share the host store nor automatically
+          # copy paths referenced only by the host-side test script.
+          additionalPaths = [
+            preparedFlake
+            inputs.self.outPath
+          ]
+          ++ map (entry: entry.input.outPath) sources;
         };
         boot.loader.grub.enable = true;
         users.users.nixos = {
