@@ -178,7 +178,8 @@ Linux producer / consumer は native hosted runner 上で Nix を実行します
 キャッシュ、必須 artifact、実行環境の詳細は
 [CI の実行環境と Nix 成果物の再利用](../../docs/ci/README.md#nix-成果物の再利用) を参照してください。
 
-CI の format 検査は通常の checks に含む `treefmt` にまとめます。PowerShell formatter は host の
+CI は Build / Plan より先に Lint の `task lint:ci` から `fmt:check` を一度実行します。
+producer の checks では `treefmt` を除外し、format 検査を重ねません。PowerShell formatter は host の
 PSGallery module ではなく、固定した Nix store の PSScriptAnalyzer を使います。
 変更分類・artifact の同一性・認証・集約判定は `scripts/sh/tests/ci_workflow.bats` と
 artifact / cache の runtime テストで確認します。YAML は `actionlint` で検査します。

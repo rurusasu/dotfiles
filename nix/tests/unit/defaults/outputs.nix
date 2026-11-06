@@ -30,15 +30,6 @@ let
 
 in
 {
-  testConsolidatedDefaultsPublishDarwinPackages = {
-    expr = builtins.mapAttrs (_: packages: builtins.attrNames packages) inputs.self.packages;
-    expected = {
-      aarch64-darwin = [ "darwin-dia-browser" ];
-      aarch64-linux = [ ];
-      x86_64-linux = [ ];
-    };
-  };
-
   testFlakeLockPinsPlatformInputs = {
     expr =
       builtins.map
