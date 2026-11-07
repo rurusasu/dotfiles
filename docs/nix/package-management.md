@@ -39,9 +39,41 @@ WSL の Noto CJK の追加導入・フォールバック指定は行いません
 | Chrome DevTools MCP                                           | `mcp-servers` flake の package。対応する nixpkgs package がないため。                                                                                                                         |
 | Docker MCP Gateway                                            | Docker 公式 Git source と同梱依存を `buildGoModule` で構築。対応する nixpkgs package がなく、`pkgs.mcp-gateway` は別製品のため。Git revision と内容を input で固定する。                      |
 | xurl                                                          | `xurl` input の upstream source を `buildGoModule` で構築。対応する nixpkgs package がないため。                                                                                              |
+| Lifelog（WSL x86_64）                                         | 非公開 repository の公開済み Release tag をローカル checkout から取得し、`Cargo.lock` に従って Nix で構築。nixpkgs に同じアプリがないため。                                                   |
 | Docker Desktop / Steam（macOS）                               | Homebrew cask。対象 OS 用の同じ GUI アプリを nixpkgs から導入できないため。                                                                                                                   |
 
 ChatGPT は `pkgs.chatgpt` を使います。同梱 Codex CLI を使う設定も、この nixpkgs package 内のバイナリーを参照します。`hermes-xapi` はリポジトリ内の連携スクリプトです。
+
+### Lifelog（WSL）
+
+Lifelog は非公開 repository のため、公開 dotfiles の flake input には含めません。WSL x86_64 では `/mnt/d/lifelog-core` に checkout を用意し、GitHub の公開済み最新 Release を選択します。初回は `gh repo clone rurusasu/lifelog-core /mnt/d/lifelog-core` で checkout し、GitHub CLI と Git の認証を済ませてください。
+
+以前、手動で Lifelog を導入して `~/.local/bin/lifelog` と `~/.local/share/applications/lifelog.desktop` を専用 profile へのシンボリックリンクとして作成した場合、初回の `nrs` の前にそのリンクを退避してください。Home Manager は既存の未管理シンボリックリンクを自動で退避しません。次のコマンドは専用 profile を指すリンクだけを退避します。
+
+```bash
+backup_dir=$(mktemp -d "$HOME/.local/state/lifelog-previous.XXXXXX")
+for path in "$HOME/.local/bin/lifelog" "$HOME/.local/share/applications/lifelog.desktop"; do
+  target=$(readlink "$path" 2>/dev/null || true)
+  case "$target" in
+    "$HOME/.local/state/lifelog/profile/"*) mv "$path" "$backup_dir/" ;;
+  esac
+done
+printf '以前のリンク: %s\n' "$backup_dir"
+```
+
+初回 `nrs` が失敗した場合、表示されたディレクトリの `lifelog` と `lifelog.desktop` をそれぞれ元の場所に戻せます。既存ファイルを上書きしないでください。
+
+以下を Bash で実行して Release を選択し、設定を反映します。
+
+```bash
+tag=$(gh release view --repo rurusasu/lifelog-core --json tagName --jq .tagName) &&
+  [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] &&
+  git -C /mnt/d/lifelog-core fetch origin "refs/tags/$tag:refs/tags/$tag" &&
+  printf '%s\n' "$tag" > /mnt/d/lifelog-core/.git/lifelog-release-tag &&
+  task --dir "$HOME/.dotfiles" nrs
+```
+
+Home Manager は指定 tag のコミット済みソースから Linux アプリをビルドし、`lifelog` コマンドとアプリメニューを導入します。checkout の作業中の変更や未リリースの `main` は含まれません。新しい Release を使うときは同じ手順を再実行します。GitHub の自動確認や定期更新は行いません。tag の記録がない環境や pure 評価では導入されず、公開 CI に非公開ソースは渡りません。`nrs` は `--impure` でローカルの tag を読みます。Nix store に展開されたソースはローカルの他ユーザーから読めるため、機密情報をソースに含めないでください。OCR は別途セットアップが必要です。
 
 Docker MCP は `docker-mcp` input の公式リポジトリの既定ブランチから取得します。
 Git revision と内容は `flake.lock` で固定し、`nrs` の input 更新で追従します。

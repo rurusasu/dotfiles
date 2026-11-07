@@ -238,6 +238,9 @@ let
                         pi-coding-agent.enable = true;
                         superfile.enable = true;
                         strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
+                        lifelog.enable =
+                          pkgs.stdenv.hostPlatform.system == "x86_64-linux"
+                          && builtins.pathExists /mnt/d/lifelog-core/.git/lifelog-release-tag;
                         chromium = {
                           enable = true;
                           wslIntegration.enable = true;
