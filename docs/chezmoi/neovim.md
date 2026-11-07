@@ -19,7 +19,7 @@ package データ、配布方式、エディタ設定を変更理由ごとに分
 
 `nix/modules/editors/nvim/` が Neovim 本体の有効化、package 選択、設定、プラグイン、Lua の配置と専用の実行依存を所有します。構成側の標準 `programs.neovim.enable` に従い、自動検出される `default.nix` が設定を、`runtime/default.nix` が補助コマンド・LSP・整形ツール・toolchain・プラグイン実行依存を通常の PATH に導入します。これらを全エディタ共通の集約 module に切り出しません。Neovim の内部 PATH は追加しません。Windows の winget / pnpm では配布しません。
 
-Neovim の設定、プラグイン、キー配列を読み込む loader は Home Manager が管理します。`default.nix` が `builtins.readFile ./init.lua` で基本設定を読み込み、プラグイン設定より先に実行します。NixOS-WSL は Windows chezmoi が配置する `~/.config/dotfiles/keybindings/generated.json` から共通17割り当てを読み、初回 export 配置前は Nix の値を使います。native Unix は同じ Nix 定義を直接読みます。キーの更新は `task keybindings:export` と `task chezmoi` の後に Neovim を再起動します。loader 導入時は一度 `nrs` が必要です。実際の参照先は `:lua print(vim.fn.stdpath("config"))` で確認してください。非 Nix 環境向けの設定配布は行いません。
+Neovim の設定、プラグイン、キー配列を読み込む loader は Home Manager が管理します。`default.nix` が `builtins.readFile ./init.lua` で基本設定を読み込み、プラグイン設定より先に実行します。NixOS-WSL は Windows chezmoi が配置する `~/.config/dotfiles/keybindings/generated.json` から共通キー配列を読み、初回 export 配置前は Nix の値を使います。native Unix は同じ Nix 定義を直接読みます。キーの更新は `task keybindings:export` と `task chezmoi` の後に Neovim を再起動します。loader 導入時は一度 `nrs` が必要です。実際の参照先は `:lua print(vim.fn.stdpath("config"))` で確認してください。非 Nix 環境向けの設定配布は行いません。
 
 ### 設定ファイルの配置
 
@@ -97,7 +97,7 @@ nvim-cmp、cmp source 群、LuaSnip、friendly-snippets は使用しません。
 
 Herdr の terminal prefix も `Ctrl+Space` です。Neovim に届かない環境では `Ctrl+X Ctrl+O` を使ってください。Ghostty の分割・タブ操作キーは割り当てず、ターミナル内の区画は Herdr で管理します。
 
-`Space e` は Oil サイドバー、`Space d e` は診断表示です。`Space Space` は fuzzy file search、`Space g g` は Lazygit、`Space s g` はファイル検索です。Oil 内では `a/A` でファイル / ディレクトリ追加、`d` で削除、`m` で移動、`r` で名前変更、`?` でヘルプを開きます。名前・移動先の prompt と Oil の確認・保存処理を使い、削除は trash に送ります。Sidekick を含むキー一覧は [キーバインド](./keybindings.md) を参照してください。
+`-` は現在のファイルの親ディレクトリを Oil で開き、`Space d e` は診断を表示します。`Space Space` は fuzzy file search、`Space g g` は Lazygit、`Space s g` はファイル検索です。Oil 内は標準キーマップを使い、`Esc` に標準の `actions.close` だけを追加しています。バッファに名前を追加・編集したり、行を削除・移動したりして、`:w` でファイル操作を反映します。ディレクトリの追加は名前の末尾に `/` を付けます。ヘルプは `g?`、閉じる操作は `Esc` / `Ctrl+C` です。削除は trash に送ります。Sidekick を含むキー一覧は [キーバインド](./keybindings.md) を参照してください。
 
 ## 画像・ターミナル
 
@@ -109,7 +109,7 @@ Snacks の terminal と Sidekick の CLI ペインは `wrap` を有効にして�
 
 leader の Space は terminal mode のマッピングに使いません。`Space` で始まる terminal mode のマッピングがあると、shell へ送る space が `timeoutlen` まで確定待ちになり、入力が反映されていないように見えます。Snacks terminal の toggle は normal mode の `Space t t` / `Space t f` のみとし、terminal 内からは `<C-q>`（または `<C-\><C-n>`）で terminal mode を抜けてから切り替えます。`<C-q>` は `config/keymaps.lua` の terminal mode 全体のマッピングで、Snacks 既定の `<Esc><Esc>` は `term_normal = false` により無効化しています。Esc は常に shell / CLI へ渡ります。
 
-Windows のカスタム floating terminal、Oil のドライブ一覧互換処理は維持します。0.12 更新だけを理由に、実機での根拠なく既存 workaround を撤去しません。
+Windows のカスタム floating terminal は維持します。0.12 更新だけを理由に、実機での根拠なく既存 workaround を撤去しません。
 
 ## 検証
 
