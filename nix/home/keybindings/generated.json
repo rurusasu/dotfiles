@@ -656,12 +656,6 @@
       "scope": "editor"
     },
     {
-      "action": "explorer",
-      "key": "<leader>e",
-      "mode": "n",
-      "scope": "editor"
-    },
-    {
       "action": "git",
       "key": "<leader>gg",
       "mode": "n",
@@ -708,42 +702,6 @@
       "key": "<leader>bd",
       "mode": "n",
       "scope": "editor"
-    },
-    {
-      "action": "oil-add-file",
-      "key": "a",
-      "mode": "n",
-      "scope": "oil"
-    },
-    {
-      "action": "oil-add-dir",
-      "key": "A",
-      "mode": "n",
-      "scope": "oil"
-    },
-    {
-      "action": "oil-delete",
-      "key": "d",
-      "mode": "n",
-      "scope": "oil"
-    },
-    {
-      "action": "oil-move",
-      "key": "m",
-      "mode": "n",
-      "scope": "oil"
-    },
-    {
-      "action": "oil-rename",
-      "key": "r",
-      "mode": "n",
-      "scope": "oil"
-    },
-    {
-      "action": "oil-help",
-      "key": "?",
-      "mode": "n",
-      "scope": "oil"
     }
   ],
   "neovimLeader": " ",

@@ -22,18 +22,8 @@ map("v", "<A-k>", ":m '<-2<cr>gv=gv", { desc = "Move selection up" })
 -- Buffer navigation
 local shared_keys = {
     ["window-next"] = { "<C-w>w", "Go to next window" },
-    ["width-minus"] = {
-        function()
-            require("config.oil_actions").resize(-2)
-        end,
-        "Decrease sidebar width",
-    },
-    ["width-plus"] = {
-        function()
-            require("config.oil_actions").resize(2)
-        end,
-        "Increase sidebar width",
-    },
+    ["width-minus"] = { "<cmd>vertical resize -2<cr>", "Decrease window width" },
+    ["width-plus"] = { "<cmd>vertical resize +2<cr>", "Increase window width" },
     ["buffer-prev"] = { "<cmd>bprevious<cr>", "Prev buffer" },
     ["buffer-next"] = { "<cmd>bnext<cr>", "Next buffer" },
     ["buffer-delete"] = { "<cmd>bdelete<cr>", "Delete buffer" },
@@ -65,9 +55,6 @@ map("n", "<leader>Q", "<cmd>qa!<cr>", { desc = "Quit all" })
 
 -- Diagnostics
 map("n", "<leader>de", vim.diagnostic.open_float, { desc = "Show diagnostic" })
-
--- File explorer
-map("n", "-", "<cmd>Oil<cr>", { desc = "Open parent directory" })
 
 -- Marp preview
 require("config.marp").setup()

@@ -82,13 +82,14 @@ Herdr は `Ctrl+Space` の terminal Window Manager prefix と native key table �
   - `Ctrl+Z`: undo
   - `Ctrl+Y`: normal/visual は redo、insert は補完候補の確定
   - `Space`: which-key のコマンド候補、`Space Space`: fuzzy file search
-  - `Space e`: Oil サイドバー切り替え、`-`: 現在のディレクトリを Oil で開く
+  - `-`: 現在のファイルの親ディレクトリを Oil で開く
   - `Space g g`: Lazygit、`Space s g`: ファイル検索
-  - `Ctrl+w w`: 次の window、`Ctrl+Left/Right`: Oil サイドバーの幅を2列ずつ変更（サイドバーがなければ現在の window）
+  - `Ctrl+w w`: 次の window、`Ctrl+Left/Right`: 現在の window の幅を2列ずつ変更
   - `Shift+H/L`: 前 / 次の buffer、`Space b d`: buffer を閉じる
   - `Space d e`: 診断表示
-  - Oil 内: `a` / `A` で現在の親ディレクトリにファイル / ディレクトリを追加、`d` で削除、`m` で移動先ディレクトリを指定、`r` で名前変更、`?` でキーのヘルプ。入力 prompt と Oil の確認・保存処理を使い、削除は trash に送る
-  - Oil 内の補助操作: `Enter` で開く、`Ctrl+S` で縦分割、`Ctrl+H` で横分割、`Ctrl+T` で新規タブ、`Esc` で閉じる、`g.` で隠しファイル切替、`Ctrl+L` で再読み込み（Oil 内では window 移動より優先）
+  - Oil 内: 標準のバッファ編集で名前を追加・変更、行を削除・移動し、`:w` で反映する。ディレクトリ追加は名前の末尾に `/` を付け、削除は trash に送る
+  - Oil の標準キー: `Ctrl+S` で縦分割、`Ctrl+H` で横分割、`Ctrl+T` で新規タブ、`Ctrl+C` で閉じる、`g?` でヘルプ、`g.` で隠しファイル切替、`Ctrl+L` で再読み込み（Oil 内では window 移動より優先）
+  - Oil 内の `Esc` にも標準の `actions.close` を割り当てる
   - `gc/gcc`: 標準コメント、`grr/grn/gra/gri/grt`: 標準 LSP 操作
   - `Ctrl+X Ctrl+O`: LSP 補完、`Ctrl+X Ctrl+F`: パス補完、`Ctrl+N/P`: バッファ補完
   - `Tab/Shift+Tab`: 補完選択／snippet 移動、`Enter`: 選択候補の確定（未選択なら改行）
@@ -98,7 +99,7 @@ Herdr は `Ctrl+Space` の terminal Window Manager prefix と native key table �
   - `Space+du/dc/dd/dt`: Devcontainer up／コンテナ内 bash／down／toggle
   - Markdown のインライン表示切り替え: `Space+mp`（`render-markdown.nvim`）
   - Marp のブラウザプレビュー切り替え: `Space+marp`
-  - 提示された共通17割り当ては `neovim.nix` が正本。反映後は Neovim を再起動する。補助機能・terminal prefix と補完の競合は [Neovim](./neovim.md) を参照
+  - 共通キー配列は `neovim.nix` が正本。反映後は Neovim を再起動する。補助機能・terminal prefix と補完の競合は [Neovim](./neovim.md) を参照
 
 ### Shells
 
