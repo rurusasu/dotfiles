@@ -6,12 +6,12 @@
 }:
 {
   config = lib.mkIf config.programs.neovim.enable {
+    programs.lazydocker.enable = true;
     home.packages =
       with pkgs;
       [
         # Configured Neovim plugin runtime.
         neovim-remote
-        devcontainer
         imagemagick
         poppler-utils
         # Language servers and formatters used by the Neovim configuration.

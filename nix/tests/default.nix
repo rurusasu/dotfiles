@@ -82,7 +82,6 @@ in
         "mcp-servers/nixpkgs" = inputs.mcp-servers.inputs.nixpkgs;
         inherit (inputs)
           docker-mcp
-          devcontainer-cli-nvim
           dia
           flake-parts
           home-manager

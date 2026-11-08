@@ -83,16 +83,6 @@
         type = "lua";
         config = ''require("plugins.indent_blankline")'';
       }
-      # Devcontainer の起動・接続・終了を Neovim から操作する。
-      {
-        plugin = pkgs.vimUtils.buildVimPlugin {
-          name = "devcontainer-cli.nvim";
-          src = inputs.devcontainer-cli-nvim;
-          dependencies = [ pkgs.vimPlugins.toggleterm-nvim ];
-        };
-        type = "lua";
-        config = ''require("plugins.devcontainer")'';
-      }
       # 各ウインドウにファイル名・アイコン・診断件数を表示する。
       {
         plugin = pkgs.vimPlugins.incline-nvim;

@@ -2,11 +2,11 @@ version: "3"
 
 tasks:
   toolkit:secrets:
-    desc: Inject Docker MCP Toolkit secrets from the openclaw 1Password vault
+    desc: Sync MCP Gateway secrets from 1Password to a private local file
     cmds:
       - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bash ./scripts/sh/mcp-toolkit.sh secrets"'
 
   toolkit:status:
-    desc: Show the installed Docker MCP plugin version
+    desc: Show the installed MCP Gateway version
     cmds:
       - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bash ./scripts/sh/mcp-toolkit.sh status"'

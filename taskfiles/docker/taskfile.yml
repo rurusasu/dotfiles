@@ -2,9 +2,9 @@ version: "3"
 
 tasks:
   docker:prune:
-    desc: "DESTRUCTIVE: Remove all unused Docker images, containers, networks, and build cache"
+    desc: "DESTRUCTIVE: Remove all unused Podman images, containers, networks, and build cache"
     preconditions:
-      - sh: docker info
-        msg: "Docker daemon is not running. Start the Docker daemon and try again."
+      - sh: podman info
+        msg: "Podman is unavailable. Check the Podman runtime and try again."
     cmds:
-      - docker system prune -a --force
+      - podman system prune -a --force

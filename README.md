@@ -17,14 +17,14 @@ Windows の GUI アプリと、macOS、NixOS、Ubuntu、Debian の環境を管�
 | Packages           | Unix: Nix modules (`nix/modules/`)、Windows: WinGet JSON |
 | System convergence | winget handlers, nix-darwin, NixOS                       |
 | User environment   | Home Manager + chezmoi                                   |
-| Containers         | Docker Desktop / rootful Docker + Docker Compose         |
+| Containers         | Rootless Podman + podman-compose + Lazydocker            |
 | Formatter          | treefmt-nix                                              |
 
 ## クイックスタート
 
 clone 後、OS ごとの入口を実行します。Unix の installer は Nix、OS パッケージ、
 Home Manager を適用します。Windows の installer は GUI アプリの導入・更新と NixOS-WSL の設定適用を行います。
-Unix の Docker profile では最後に runtime acceptance も実行します。途中で失敗した場合も
+Unix の Full support 構成では最後に runtime acceptance も実行します。途中で失敗した場合も
 同じコマンドを再実行できます。
 
 macOS / Linux の `./install.sh` は、Nix が未導入なら初回だけ導入し、
@@ -86,14 +86,13 @@ cd dotfiles
 ./install.sh
 ```
 
-`./install.sh` は宣言済みの macOS パッケージ、Docker Desktop と native Hermes を
+`./install.sh` は宣言済みの macOS パッケージ、Podman machine と native Hermes を
 適用します。機能別の選択フラグは不要です。
 ログインユーザーで実行すると、そのアカウントを `system.primaryUser` に設定し、
 Home Manager と Homebrew にも使用します。スクリプト自体に `sudo` は付けません。
-Docker Desktop のライセンス同意と初期設定も nix-darwin の activation で管理するため、
-実行前の環境変数設定は不要です。初期設定済みの環境では既存の完了マーカーを引き継ぎます。
-macOS / NixOS / WSL の Docker 設定は [`nix/modules/docker/`](./nix/modules/docker/) の OS 別 module にまとめています。
-Docker の設定は同モジュールが所有し、installer に Docker 用の環境変数はありません。
+Podman のユーザー設定と API は [`nix/modules/podman/`](./nix/modules/podman/) が管理します。
+Linux / WSL はユーザー用ソケット、macOS は Home Manager の標準 Podman machine を使います。
+`lazydocker` はその API に接続します。Compose は `podman compose` で実行します。
 1Password の環境変数は Home Manager が管理します。
 
 macOS / Linux の初回導入には [Lix installer](https://lix.systems/install/) を使います。
@@ -168,8 +167,8 @@ cd dotfiles
 ./install.sh
 ```
 
-- NixOS: `nixos-rebuild switch` に Home Manager と rootful Docker を含めます。
-- その他の Linux（Ubuntu / Debian など）: Lix を必要に応じて導入し、Home Manager を適用します。初回の Lix installer は管理者権限で daemon・ビルド用アカウントを構成します。その後の Home Manager はユーザー環境を管理し、Docker・OS のサービス・既存アカウントは変更しません。
+- NixOS: `nixos-rebuild switch` に Home Manager と Podman の OS 基盤を含めます。
+- その他の Linux（Ubuntu / Debian など）: Lix を必要に応じて導入し、Home Manager を適用します。初回の Lix installer は管理者権限で daemon・ビルド用アカウントを構成します。その後の Home Manager は Podman API を含むユーザー環境を管理します。Rootless Podman に必要な subordinate UID/GID と user namespace はホスト側で用意します。
 
 native NixOS 構成は `/etc/nixos/hardware-configuration.nix` がある場合だけ公開します。ユーザー名と各 stateVersion は `nix/defaults.nix:systemDefaults` 内の `defaults` で管理します。
 
@@ -177,7 +176,7 @@ native NixOS 構成は `/etc/nixos/hardware-configuration.nix` がある場合�
 
 CI は GitHub-hosted Actions で実行します。Nix の option・package・flake output は `nix-unit`、shell の installer 契約は Bats、Windows の契約は PowerShell/Pester で検証します。NixOS は hosted VM で本番 installer の反映と reboot 後の CLI・service・health を確認し、macOS と Windows / WSL も対象 OS の本番手順で反映・起動を確認します。CI の producer・lint は同じ `flake.lock` の薄い `.#ci` 環境でツールを管理します。工程と成果物の境界は [CI の実行環境](docs/ci/README.md) を参照してください。
 
-GitHub-hosted macOS / Windows の host OS 自体の reboot は対象外で、service または新しい login / profile session を確認します。非 NixOS Linux の standalone Home Manager は build と installer contract の対象です。Docker Desktop の実機起動はこの CI の検証対象に含めません。
+GitHub-hosted macOS / Windows の host OS 自体の reboot は対象外で、service または新しい login / profile session を確認します。非 NixOS Linux の standalone Home Manager は build と installer contract の対象です。
 
 ## 方針
 
@@ -334,10 +333,10 @@ sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
 
 ```bash
 hermes gateway status
-docker info
+podman info
 ```
 
-NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations`、`systemctl status docker.service docker.socket` を確認します。非 NixOS Linux は `home-manager generations` で適用済みのユーザー環境を確認します。Docker は管理対象外です。macOS は `darwin-rebuild --list-generations` と Docker Desktop の起動状態を確認します。Windows は PowerShell / WinGet / WSL とエラー内容を確認して installer を再実行します。WSL の個別 setup は [NixOS-WSL インストール](./docs/nix/nixos-wsl-install.md)を参照してください。
+NixOS では `readlink /run/current-system`、`nixos-rebuild list-generations` を確認します。Linux 共通の Podman API は `systemctl --user status podman.socket podman.service`、standalone Home Manager は `home-manager generations` で確認します。macOS は `darwin-rebuild --list-generations` と `podman machine list` を確認します。Windows は PowerShell / WinGet / WSL とエラー内容を確認して installer を再実行します。WSL の個別 setup は [NixOS-WSL インストール](./docs/nix/nixos-wsl-install.md)を参照してください。
 
 ```powershell
 .\install.cmd

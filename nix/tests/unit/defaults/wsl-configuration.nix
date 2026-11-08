@@ -261,18 +261,21 @@ in
     };
   };
 
-  testWslDockerModulePreservesNativeDaemonAndRegistry = {
+  testWslPodmanUsesTheLocalRegistry = {
     expr = {
-      enabled = defaultConfig.virtualisation.docker.enable;
-      insecureRegistries = defaultConfig.virtualisation.docker.daemon.settings.insecure-registries;
-      logDriver = defaultConfig.virtualisation.docker.daemon.settings."log-driver" or null;
-      userGroup = builtins.elem "docker" defaultConfig.users.users.nixos.extraGroups;
+      enabled = defaultConfig.virtualisation.podman.enable;
+      registries = map (registry: {
+        inherit (registry) location insecure;
+      }) defaultConfig.home-manager.users.nixos.services.podman.settings.registries.registry;
     };
     expected = {
       enabled = true;
-      insecureRegistries = [ "registry.localhost" ];
-      logDriver = "journald";
-      userGroup = true;
+      registries = [
+        {
+          location = "registry.localhost";
+          insecure = true;
+        }
+      ];
     };
   };
 

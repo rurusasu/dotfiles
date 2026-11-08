@@ -7,34 +7,17 @@
   docker-mcp =
     let
       package = (code.nix.modules.ai_agents.mcp-packages { inherit inputs pkgs; }).docker-mcp;
+      runtime = code.nix.modules.podman.runtime { inherit pkgs; };
     in
-    pkgs.runCommand "docker-mcp-plugin-check"
-      {
-        nativeBuildInputs = [
-          pkgs.docker-client
-          pkgs.jq
-        ];
-      }
-      ''
-        export HOME="$TMPDIR/home"
-        export DOCKER_CONFIG="$HOME/.docker"
-        mkdir -p "$DOCKER_CONFIG/cli-plugins"
-        ln -s ${pkgs.lib.getExe package} "$DOCKER_CONFIG/cli-plugins/docker-mcp"
-        if env -u DOCKER_CONFIG ${pkgs.lib.getExe package} version >missing-config.log 2>&1; then
-          echo 'Docker MCP must reject an unset DOCKER_CONFIG' >&2
-          exit 1
-        fi
-        grep -q 'DOCKER_CONFIG' missing-config.log
-        if DOCKER_CONFIG= ${pkgs.lib.getExe package} version >empty-config.log 2>&1; then
-          echo 'Docker MCP must reject an empty DOCKER_CONFIG' >&2
-          exit 1
-        fi
-        test "$(docker mcp version)" = "v${package.version}"
-        ${pkgs.lib.getExe package} docker-cli-plugin-metadata | jq -e '.SchemaVersion == "0.1.0"'
-        # Consume all help output before checking it; grep -q can otherwise
-        # close the pipe while Docker is still writing and fail the check.
-        docker mcp gateway run --help > gateway-help.log
-        grep -q -- '--servers' gateway-help.log
-        touch "$out"
-      '';
+    pkgs.runCommand "docker-mcp-check" { } ''
+      export HOME="$TMPDIR/home"
+      export DOCKER_CONFIG="$HOME/.docker"
+      export DOCKER_HOST="unix://$TMPDIR/podman.sock"
+      mkdir -p "$DOCKER_CONFIG"
+      test "$(${pkgs.lib.getExe package} version)" = "v${package.version}"
+      ${pkgs.lib.getExe runtime.dockerCompat} --version | grep -F 'version ${pkgs.podman.version}'
+      ${pkgs.lib.getExe package} gateway run --help >gateway-help.log
+      grep -q -- '--servers' gateway-help.log
+      touch "$out"
+    '';
 }

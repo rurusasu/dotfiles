@@ -68,10 +68,6 @@
       url = "github:mvllow/modes.nvim";
       flake = false;
     };
-    devcontainer-cli-nvim = {
-      url = "github:erichlf/devcontainer-cli.nvim";
-      flake = false;
-    };
     hermes-lcm = {
       url = "github:stephenschoettler/hermes-lcm";
       flake = false;

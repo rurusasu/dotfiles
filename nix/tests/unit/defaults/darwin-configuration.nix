@@ -161,43 +161,22 @@ in
     expr = {
       casks = map (cask: cask.name) defaultConfig.homebrew.casks;
       chrome = hasDarwinCask "google-chrome" defaultConfig;
-      docker = hasDarwinCask "docker-desktop" defaultConfig;
+      podman = defaultHome.services.podman.enable;
+      machine = defaultHome.services.podman.useDefaultMachine;
     };
     expected = {
       casks = [
-        "docker-desktop"
         "steam"
       ];
       chrome = false;
-      docker = true;
+      podman = true;
+      machine = true;
     };
   };
 
   testDarwinConfigurationIncludesSteamCask = {
     expr = hasDarwinCask "steam" defaultConfig;
     expected = true;
-  };
-
-  testDarwinDockerInitializationUsesConfiguredIdentityAndHome = {
-    expr = {
-      configuredUser = inputs.nixpkgs.lib.hasInfix "--user=${inputs.nixpkgs.lib.escapeShellArg "ktome1995"}" configuredUserConfig.system.activationScripts.postActivation.text;
-      hostHome = inputs.nixpkgs.lib.hasInfix (inputs.nixpkgs.lib.escapeShellArg "/Volumes/Home/alice/.config/dotfiles") nonstandardHomeConfig.system.activationScripts.postActivation.text;
-      acceptsLicense = inputs.nixpkgs.lib.hasInfix "--accept-license" defaultConfig.system.activationScripts.postActivation.text;
-    };
-    expected = {
-      configuredUser = true;
-      hostHome = true;
-      acceptsLicense = true;
-    };
-  };
-
-  testDarwinDockerInitializationRequiresDeclaredCask = {
-    expr =
-      inputs.nixpkgs.lib.hasInfix "--accept-license"
-        (mkDarwin "rurusasu" [
-          { homebrew.casks = inputs.nixpkgs.lib.mkForce [ ]; }
-        ]).config.system.activationScripts.postActivation.text;
-    expected = false;
   };
 
   testDarwinHomeManagerOwnsPlatformEnvironment = {

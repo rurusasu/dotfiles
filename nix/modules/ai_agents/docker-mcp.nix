@@ -1,9 +1,9 @@
 {
   lib,
-  stdenv,
   buildGoModule,
   makeWrapper,
-  docker-client,
+  dockerCompat,
+  apiEnvironment,
   source,
 }:
 buildGoModule (finalAttrs: {
@@ -24,8 +24,9 @@ buildGoModule (finalAttrs: {
     mv "$out/bin/docker-mcp" "$out/libexec/docker-mcp"
     makeWrapper "$out/libexec/docker-mcp" "$out/bin/docker-mcp" \
       --run ${lib.escapeShellArg '': "''${DOCKER_CONFIG:?Docker MCP requires DOCKER_CONFIG}"''} \
-      --prefix PATH : ${lib.makeBinPath [ docker-client ]} \
-      ${lib.optionalString stdenv.hostPlatform.isLinux "--set-default DOCKER_MCP_IN_CONTAINER 1"}
+      --prefix PATH : ${lib.makeBinPath [ dockerCompat ]} \
+      --run ${lib.escapeShellArg apiEnvironment} \
+      --set-default DOCKER_MCP_IN_CONTAINER 1
   '';
   meta = {
     description = "Docker MCP CLI plugin and gateway";

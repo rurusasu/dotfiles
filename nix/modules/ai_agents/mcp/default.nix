@@ -9,9 +9,9 @@ let
   packages = import ../mcp-packages.nix { inherit inputs pkgs; };
   dockerConfig =
     config.home.sessionVariables.DOCKER_CONFIG or (throw "Docker MCP requires DOCKER_CONFIG");
-  dockerConfigDirectory =
+  secretsFile =
     assert lib.assertMsg (dockerConfig != "") "Docker MCP requires a non-empty DOCKER_CONFIG";
-    lib.removePrefix "${config.home.homeDirectory}/" dockerConfig;
+    "${dockerConfig}/mcp/secrets.env";
   hermesHome = config.home.sessionVariables.HERMES_HOME or "${config.home.homeDirectory}/.hermes";
   backends = {
     chrome = {
@@ -73,13 +73,6 @@ in
         packages.hermes-xapi
       ];
       file.".xurl".source = config.lib.file.mkOutOfStoreSymlink "${config.xdg.configHome}/xurl";
-      file.".docker/cli-plugins/docker-mcp" = {
-        target = "${dockerConfigDirectory}/cli-plugins/docker-mcp";
-        source = lib.getExe packages.docker-mcp;
-        # Docker Desktop also ships this plugin and links it to the same path.
-        # Keep the pinned Nix plugin authoritative across activations.
-        force = true;
-      };
       activation.prepareXurlDirectory =
         lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ]
           ''
@@ -127,12 +120,13 @@ in
       }) backends
       // {
         MCP_DOCKER = {
-          command = lib.getExe pkgs.docker-client;
+          command = lib.getExe packages.docker-mcp;
           env.DOCKER_CONFIG = dockerConfig;
           args = [
-            "mcp"
             "gateway"
             "run"
+            "--secrets"
+            secretsFile
             "--servers"
             "context7,deepwiki,exa,firecrawl,github-official,obsidian,playwright,tavily"
           ];

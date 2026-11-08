@@ -81,7 +81,6 @@ let
                   yq-go
                   gh
                   btop
-                  lazydocker
                   uv
                   go-task
                   pre-commit
@@ -129,6 +128,7 @@ let
               ghq.enable = true;
               gwq.enable = true;
               lazygit.enable = true;
+              lazydocker.enable = true;
               herdr.enable = true;
               ssh.enable = true;
               codex.enable = true;
@@ -139,6 +139,7 @@ let
               };
             };
             services = {
+              podman.enable = true;
               ollama.enable = true;
               hermes-agent = {
                 enable = true;
@@ -231,6 +232,12 @@ let
                       };
                       i18n.inputMethod.enable = true;
                       services = {
+                        podman.settings.registries.registry = [
+                          {
+                            location = "registry.localhost";
+                            insecure = true;
+                          }
+                        ];
                         gnome-keyring.enable = true;
                         vscode-server.enable = true;
                       };
@@ -338,7 +345,6 @@ let
                   enable = true;
                   greedyCasks = true;
                   casks = [
-                    "docker-desktop"
                     "steam"
                   ];
                   onActivation = {
@@ -376,7 +382,7 @@ let
               }
             else
               {
-                virtualisation.docker.enable = true;
+                virtualisation.podman.enable = true;
                 imports = [
                   inputs.home-manager.nixosModules.home-manager
                 ]
@@ -386,6 +392,13 @@ let
                       inputs.nixos-wsl.nixosModules.wsl
                       {
                         dotfiles.wslGpu.enable = true;
+                        # kind nodes use the in-cluster Zot mirror for this registry.
+                        environment.etc."containerd/certs.d/registry.localhost/hosts.toml".text = ''
+                          server = "http://registry.localhost"
+
+                          [host."http://zot.infra.svc.cluster.local:5080"]
+                            capabilities = ["pull", "resolve"]
+                        '';
                         # Retire only the exact wrapper previously copied by this module. Keep
                         # unrelated administrator files and symlinks at this path untouched.
                         system.activationScripts.retireSystemOpWrapper = {
@@ -525,7 +538,6 @@ let
                   linger = true;
                   extraGroups = [
                     "wheel"
-                    "docker"
                   ];
                 };
                 home-manager.users.${user} = { };

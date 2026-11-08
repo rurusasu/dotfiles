@@ -96,7 +96,7 @@ Herdr は `Ctrl+Space` の terminal Window Manager prefix と native key table �
   - `Space+ff/fg/fb`: ファイル検索/grep/buffers
   - `Ctrl+.`: Sidekick focus、`Space+as/ad`: CLI 選択／close
   - `Space+at/af/av/ap`: Sidekick へ位置／ファイル／選択範囲送信／prompt 選択
-  - `Space+du/dc/dd/dt`: Devcontainer up／コンテナ内 bash／down／toggle
+  - `Space d c`: Lazydocker をフローティングターミナルで開閉（Podman に接続）
   - Markdown のインライン表示切り替え: `Space+mp`（`render-markdown.nvim`）
   - Marp のブラウザプレビュー切り替え: `Space+marp`
   - 共通キー配列は `neovim.nix` が正本。反映後は Neovim を再起動する。補助機能・terminal prefix と補完の競合は [Neovim](./neovim.md) を参照

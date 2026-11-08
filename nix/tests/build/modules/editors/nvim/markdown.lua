@@ -29,7 +29,6 @@ for _, direction in ipairs({ "h", "j", "k", "l" }) do
     local terminal_key = vim.fn.maparg(key, "t")
     assert(terminal_key:sub(-6) == "<C-W>" .. direction, "terminal navigation must use native windows")
 end
-assert(vim.fn.exists(":DevcontainerUp") == 2, "Devcontainer commands must be configured")
 
 vim.api.nvim_buf_set_lines(0, 0, -1, false, { "# Heading", "", "```python", "answer = 42", "```" })
 vim.bo.filetype = "markdown"

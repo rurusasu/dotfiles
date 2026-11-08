@@ -11,7 +11,7 @@
 - `1password/`: CLI / GUI の導入、account・SSH 公開鍵の既定値、SSH agent、署名、WSL interop を管理する。通常の CLI / GUI は Home Manager が所有し、OS 別の署名・agent・WSL 連携と移行処理は `nix/defaults.nix` に置く。署名スクリプトは同ディレクトリの `op-ssh-sign-wsl`
 - `git/`: 共通 Git・ghq・gwq の導入と設定・alias。WSL の保存先・Git trust と OS 別の署名連携は `nix/defaults.nix`
 - `desktop/default.nix` / `dock/default.nix` / `finder/default.nix`: macOS のデスクトップ設定と反映。Dock は導入する Nix package の `.app` を参照する
-- Homebrew / nix-homebrew・Docker Desktop / Steam の cask・ユーザー PATH は `nix/defaults.nix` が管理する
+- Homebrew / nix-homebrew・Steam の cask・ユーザー PATH は `nix/defaults.nix` が管理する
 - `aerospace/` / `hyprland/`: キー設定生成関数とユーザー設定。Hyprland のシステムセッションは `nix/defaults.nix` の Linux 設定
 - `fcitx5/default.nix` / `gnome-keyring/` / `editors/vscode/default.nix` / `nvidia/nixos/default.nix`: 各アプリの設定・サービス・activation
 - `ssh/default.nix`: SSH の共通 Home Manager 設定。1Password agent の接続設定は `1password/ssh/default.nix` が担当する
@@ -20,11 +20,11 @@
 - `superfile/`: WSL 用の標準 `programs.superfile` による導入、組み込みテーマ、Neovim とファイルプレビューの設定。選択は `nix/defaults.nix` が管理し、お気に入りなどの可変データはアプリが所有する
 - `ai_agents/mcp/default.nix`: `programs.mcp.servers` に `MCP_DOCKER` / `chrome` / `xapi` / `pipedream` を定義する。Chrome / X API の client 接続先は `http://127.0.0.1:8765/mcp` / `http://127.0.0.1:8766/mcp`。Home Manager のユーザーサービス `mcp-chrome` / `mcp-xapi` が `pkgs.mcp-proxy` で各 stdio child を一つずつ常駐させ、Hermes root の `.browser` / `.xurl` を共有する。Linux は systemd、Darwin は launchd が管理する。browser は headless で起動する。Codex の標準 MCP integration と Hermes の型付き `services.hermes-agent.mcpServers` が同じ HTTP 定義を使う。Pipedream の OAuth は client ごとにユーザーが行う
 - `ai_agents/mcp-packages.nix`: Chrome DevTools MCP は `inputs.mcp-servers`（`github:natsukium/mcp-servers-nix`）の既製 package を再利用する。xurl は `inputs.xurl` が取得する upstream `xdevplatform/xurl` の `main` の non-flake source を `buildGoModule` で構築し、version は source の revision から生成する。各 input は `flake.lock` で固定する
-- `ai_agents/docker-mcp.nix`: `docker-mcp` input の公式 Git source と同梱依存からビルドする。Home Manager の `mcp/default.nix` が本体と Docker plugin link、サーバー選択を管理し、更新と反映は `nrs` で行う。可変 profile の同期・クライアント登録を別スクリプトへ重複実装しない
+- `ai_agents/docker-mcp.nix`: `docker-mcp` input の公式 Git source と同梱依存からビルドする。Home Manager の `mcp/default.nix` が単体バイナリとサーバー選択を管理する。Podman API と互換コマンドを使い、更新と反映は `nrs` で行う。可変 profile の同期・クライアント登録を別スクリプトへ重複実装しない
 - `ai_agents/hermes/`: `default.nix` が公式 Home Manager module による導入、root 設定・Desktop・gateway と外部 LCM の `extraPlugins = [ inputs.hermes-lcm ]` を宣言する。named profile の設定と個別 secret refs は Git 正本に置き、公式 `hermes profile install` / `update` を使う。named profile は root の MCP 設定を継承しない
 - `shells/plugins/`: bat / eza / fd / fzf / ripgrep / zoxide の導入・共通設定・シェル連携と zsh-patina の activate 連携。各アプリの module がそれぞれを所有する
 - `shells/plugins/starship/`: CLI の有効化、Bash / Zsh の標準連携と `programs.starship.settings` のプロンプト設定を管理し、Home Manager が `starship.toml` を生成する
-- `editors/nvim/`: Neovim の有効化・設定・プラグイン・Lua 配置と、`runtime/default.nix` による補助 CLI・LSP・整形ツール・toolchain・プラグイン実行依存の導入。追加ソースは `modes-nvim` / `devcontainer-cli-nvim` flake input で管理する
+- `editors/nvim/`: Neovim の有効化・設定・プラグイン・Lua 配置と、`runtime/default.nix` による補助 CLI・LSP・整形ツール・toolchain・プラグイン実行依存の導入。追加ソースは `modes-nvim` flake input で管理する
 - `terminals/`: Ghostty の `default.nix` を自動検出し、構成側の `programs.ghostty.enable` に従う。package / systemd の OS 差分とキー設定もアプリ module が扱う
 - `herdr/`: CLI の有効化と、標準 `programs.herdr.settings` によるキー設定
 - `shells/zsh/default.nix`: zsh の有効化・`dotDir`・履歴・option・alias・キー設定・初期化・補完を管理する。`nix/defaults.nix` が選択し、標準 Home Manager が XDG 配下に `.zshrc` などを生成する

@@ -40,7 +40,7 @@ WSL の Noto CJK の追加導入・フォールバック指定は行いません
 | Docker MCP Gateway                                            | Docker 公式 Git source と同梱依存を `buildGoModule` で構築。対応する nixpkgs package がなく、`pkgs.mcp-gateway` は別製品のため。Git revision と内容を input で固定する。                      |
 | xurl                                                          | `xurl` input の upstream source を `buildGoModule` で構築。対応する nixpkgs package がないため。                                                                                              |
 | Lifelog（WSL x86_64）                                         | 非公開 repository の公開済み Release tag をローカル checkout から取得し、`Cargo.lock` に従って Nix で構築。nixpkgs に同じアプリがないため。                                                   |
-| Docker Desktop / Steam（macOS）                               | Homebrew cask。対象 OS 用の同じ GUI アプリを nixpkgs から導入できないため。                                                                                                                   |
+| Steam（macOS）                                                | Homebrew cask。対象 OS 用の同じ GUI アプリを nixpkgs から導入できないため。                                                                                                                   |
 
 ChatGPT は `pkgs.chatgpt` を使います。同梱 Codex CLI を使う設定も、この nixpkgs package 内のバイナリーを参照します。`hermes-xapi` はリポジトリ内の連携スクリプトです。
 
@@ -78,7 +78,9 @@ Home Manager は指定 tag のコミット済みソースから Linux アプリ�
 Docker MCP は `docker-mcp` input の公式リポジトリの既定ブランチから取得します。
 Git revision と内容は `flake.lock` で固定し、`nrs` の input 更新で追従します。
 依存は source に同梱された `vendor/` を使い、ビルド中の追加ダウンロードは行いません。
-Home Manager が本体と Docker CLI の plugin link、利用サーバーの起動引数を反映するため、手動ダウンロードや profile sync は不要です。
+Home Manager が単体の `docker-mcp` バイナリと利用サーバーの起動引数を反映します。Podman API を使い、Docker CLI の plugin link や profile sync は不要です。秘密情報は `task mcp:toolkit:secrets` で所有者だけが読み書きできるローカルファイルへ同期します。
+
+Podman は標準の `services.podman.enable`、Lazydocker は `programs.lazydocker.enable` で導入します。Linux / WSL は rootless API ソケット、macOS は Home Manager の標準 Podman machine を使います。Lazydocker と MCP Gateway の wrapper は `DOCKER_HOST` の明示指定を優先し、未指定ならこの接続先を設定します。Docker CLI package は削除し、upstream が実行する `docker` コマンドだけを Podman へのリンクで供給します。Compose は `podman-compose` を provider とする `podman compose` を使います。既存の公開タスク `docker:prune` も Podman を対象にします。
 
 Ollama は共通 Home Manager の `services.ollama.enable` で標準 package とユーザーサービスを導入します。API は既定の `127.0.0.1:11434` で待ち受けます。モデルの自動取得や GPU backend の変更は行いません。`ollama pull <model>` で使用するモデルを選択します。
 
@@ -201,7 +203,7 @@ OS 基盤設定、型付き option による有効化、公開構成は `nix/def
 
 統合・standalone Home Manager は同じ `systemDefaults.home-manager.sharedModules` を使います。CPU 別の wrapper は設けません。GUI も各 OS の構成が対応するアプリの enable option を選択します。Darwin のブラウザーは Dia、Linux / WSLg は Chrome を使います。WSL は Chrome / Spotify / Signal / Obsidian / 1Password GUI を Nix で導入し、デスクトップキーから WSLg で開きます。Windows の 1Password CLI / Git signer 連携は維持します。
 
-Homebrew / nix-homebrew・Docker Desktop / Steam の cask・ユーザー PATH は `nix/defaults.nix` に宣言します。native NixOS の Hyprland は Linux ブロックが有効化し、単純な GUI package は `defaults.nix` の Home Manager 設定が導入します。WSL / standalone へ compositor を自動導入しません。Discord も Darwin / native Linux の既存 Home Manager module から導入し、WSL では Windows のアプリを利用します。
+Homebrew / nix-homebrew・Steam の cask・ユーザー PATH は `nix/defaults.nix` に宣言します。native NixOS の Hyprland は Linux ブロックが有効化し、単純な GUI package は `defaults.nix` の Home Manager 設定が導入します。WSL / standalone へ compositor を自動導入しません。Discord も Darwin / native Linux の既存 Home Manager module から導入し、WSL では Windows のアプリを利用します。
 
 [共通のキー割り当て](../chezmoi/omarchy.md) は `nix/home/keybindings/` に一度だけ定義し、host が OS 統合と有効化を担当します。共通データや純粋な設定生成関数は Home Manager module ではないため、`imports` に渡しません。
 
@@ -233,7 +235,7 @@ Ubuntu / Debian:  ./install.sh
 - `task install` は既存の PowerShell と winget で Windows のパッケージを導入した後、NixOS-WSL の導入、inputs の更新と NixOS/Home Manager の反映、Windows chezmoi の順に一度ずつ実行します。WSLg の対象 GUI は Nix 側で導入します。実行順序は `taskfiles/install/taskfile.yml` が管理します。`install.cmd` / `install.ps1` が PowerShell で WinGet master を1回適用し、Task の導入後は Taskfile の WSL・chezmoi へ進みます。WinGet の実行経路はこの1か所で、直接の `task install` も同じ入口を使います。`-Phase Winget` は master の import のみを実行します。WSL 基盤の有効化だけ UAC 昇格します。既存アプリや Startup shortcut は自動削除しません。
 - Codex CLI はどの OS でも個別導入せず、各 OS 向け ChatGPT アプリ付属の CLI を使います。Windows の GUI profile は Microsoft Store のデスクトップアプリを対象とし、npm/pnpm パッケージを導入しません。
 - macOS は nix-darwin が Home Manager と nix-homebrew formula/cask を同じ switch に含めます。
-- 非 NixOS Linux（Ubuntu/Debian など）は standalone Home Manager がユーザー環境を適用します。Docker や OS service は管理しません。
+- 非 NixOS Linux（Ubuntu/Debian など）は standalone Home Manager が Podman API を含むユーザー環境を適用します。OS service は管理しません。
 - NixOS は NixOS generation に Home Manager と system module を統合します。
 
 アプリと OS 設定はこの OS 別構成を唯一の通常インストール入口とします。
@@ -315,16 +317,16 @@ Windows Dia は [公式サイト](https://www.diabrowser.com/)から手動導入
 
 ## システム package と Home Manager の境界
 
-| 対象                                             | 管理先                                                                 |
-| ------------------------------------------------ | ---------------------------------------------------------------------- |
-| shell / editor から使う Unix CLI                 | アプリごとの Home Manager module。有効化だけの標準宣言は構成へ直接記載 |
-| Linux / WSLg / Darwin の通常 GUI                 | アプリごとの Home Manager module                                       |
-| Neovim の LSP・整形ツール・toolchain             | `nix/modules/editors/nvim/runtime/default.nix`                         |
-| Docker daemon/socket、ユーザー group、OS service | アプリごとの NixOS / nix-darwin module                                 |
-| macOS CLI                                        | 原則 Nix/Home Manager、明示例外は Homebrew formula                     |
-| macOS の例外 cask                                | `nix/defaults.nix`                                                     |
-| Windows GUI/OS application                       | `windows/winget/packages.json` と標準 winget import                    |
-| shell、Git、terminal、editor 設定                | Unix は Home Manager、Windows は chezmoi                               |
+| 対象                                 | 管理先                                                                 |
+| ------------------------------------ | ---------------------------------------------------------------------- |
+| shell / editor から使う Unix CLI     | アプリごとの Home Manager module。有効化だけの標準宣言は構成へ直接記載 |
+| Linux / WSLg / Darwin の通常 GUI     | アプリごとの Home Manager module                                       |
+| Neovim の LSP・整形ツール・toolchain | `nix/modules/editors/nvim/runtime/default.nix`                         |
+| Podman API / machine、Lazydocker     | アプリごとの Home Manager module。NixOS 基盤は `nix/defaults.nix`      |
+| macOS CLI                            | 原則 Nix/Home Manager、明示例外は Homebrew formula                     |
+| macOS の例外 cask                    | `nix/defaults.nix`                                                     |
+| Windows GUI/OS application           | `windows/winget/packages.json` と標準 winget import                    |
+| shell、Git、terminal、editor 設定    | Unix は Home Manager、Windows は chezmoi                               |
 
 同じ package を Home Manager と system layer の両方へ導入するのは、システムサービスや OS 統合が必要とする場合に限定します。Darwin の GitHub CLI は host 連携用に system package にも残します。通常の GUI を system package に置く理由にはしません。
 

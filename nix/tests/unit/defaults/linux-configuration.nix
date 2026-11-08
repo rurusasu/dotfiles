@@ -49,27 +49,18 @@ in
     expr = config.system.activationScripts ? wslgFonts;
     expected = false;
   };
-  testLinuxDockerModulePreservesDaemonAndCliConfiguration = {
+  testLinuxEnablesPodmanAndItsUserApi = {
     expr = {
-      enabled = config.virtualisation.docker.enable;
-      logDriver = config.virtualisation.docker.daemon.settings."log-driver";
-      logOptions = config.virtualisation.docker.daemon.settings."log-opts";
-      compose = builtins.elem pkgs.docker-compose config.virtualisation.docker.package.buildInputs;
-      buildx = builtins.elem pkgs.docker-buildx config.virtualisation.docker.package.buildInputs;
-      userGroup = builtins.elem "docker" config.users.users.nixos.extraGroups;
-      insecureRegistries = config.virtualisation.docker.daemon.settings.insecure-registries or [ ];
+      enabled = config.virtualisation.podman.enable;
+      userRuntime = config.home-manager.users.nixos.services.podman.enable;
+      userSocket = config.home-manager.users.nixos.systemd.user.sockets.podman.Socket.ListenStream;
+      manager = config.home-manager.users.nixos.programs.lazydocker.enable;
     };
     expected = {
       enabled = true;
-      logDriver = "json-file";
-      logOptions = {
-        "max-size" = "10m";
-        "max-file" = "3";
-      };
-      compose = true;
-      buildx = true;
-      userGroup = true;
-      insecureRegistries = [ ];
+      userRuntime = true;
+      userSocket = "%t/podman/podman.sock";
+      manager = true;
     };
   };
 

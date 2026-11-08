@@ -14,12 +14,7 @@ secret_specs=(
 
 require_docker_mcp() {
   : "${DOCKER_CONFIG:?Docker MCP requires DOCKER_CONFIG}"
-  command -v docker >/dev/null 2>&1 || {
-    printf '%s\n' "[mcp-toolkit] docker is required" >&2
-    exit 127
-  }
-
-  docker mcp --help >/dev/null 2>&1 || {
+  command -v docker-mcp >/dev/null 2>&1 || {
     printf '%s\n' "[mcp-toolkit] Docker MCP Toolkit CLI is required" >&2
     exit 127
   }
@@ -54,20 +49,30 @@ read_onepassword_secret() {
   fi
 }
 
-sync_secrets() {
+sync_secrets() (
   require_op
 
-  local spec key ref
+  local spec key ref value secret_file
+  umask 077
+  mkdir -p "$DOCKER_CONFIG/mcp"
+  secret_file=$(mktemp "$DOCKER_CONFIG/mcp/secrets.env.XXXXXX")
+  trap 'rm -f -- "$secret_file"' EXIT
   for spec in "${secret_specs[@]}"; do
     key="${spec%%|*}"
     ref="${spec#*|}"
     printf '%s\n' "[mcp-toolkit] injecting $key from 1Password"
-    if ! read_onepassword_secret "$ref" | docker mcp secret set "$key" >/dev/null; then
+    if ! value=$(read_onepassword_secret "$ref"); then
       printf '%s\n' "[mcp-toolkit] failed to inject $key" >&2
       return 1
     fi
+    if [[ $value == *$'\n'* || $value == *$'\r'* ]]; then
+      printf '%s\n' "[mcp-toolkit] secret $key must be a single line" >&2
+      return 1
+    fi
+    printf '%s=%s\n' "$key" "$value" >>"$secret_file"
   done
-}
+  mv -f -- "$secret_file" "$DOCKER_CONFIG/mcp/secrets.env"
+)
 
 main() {
   local action="${1:-status}"
@@ -78,7 +83,7 @@ main() {
     sync_secrets
     ;;
   status)
-    docker mcp version
+    docker-mcp version
     ;;
   *)
     printf 'Usage: %s {secrets|status}\n' "$(basename "$0")" >&2
