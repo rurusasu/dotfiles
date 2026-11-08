@@ -84,6 +84,62 @@ Ollama は共通 Home Manager の `services.ollama.enable` で標準 package と
 
 Strata は Linux x86_64 / WSLg と Apple Silicon macOS に `strata`（CLI）と `strata-desktop`（GUI）を導入します。[公式 release](https://github.com/Niko1221/Strata/releases) の latest feed (`releases/latest/download/strata-feed.json`) を input として使い、Desktop と Control は feed が示す同じ release の asset から取得します。`task update` または `nrs` / `./install.sh` の input 更新で最新の安定版に追従します。共通の `update-flake-inputs.sh` が更新時に latest feed の版を解決し、同じ hash の版付き URL を確認して lock に保存します。input の original URL は latest のままなので、特定の版に固定し続ける設定ではありません。lock は feed の版付き URL・内容と asset の SHA-256 を固定するため、次の release 後も同じコミットを再現できます。`nix flake update` の単独実行では mutable URL が lock に残るため、更新には `task update` または `bash scripts/sh/update-flake-inputs.sh .` を使います。`nrs` / `./install.sh` は input 更新後の版を導入します。Desktop の製品版と Control の内部 build 番号は異なります。CLI は配布物に同梱された Python を使い、ユーザーディレクトリの別版 Control への自動引き継ぎは無効にします。Linux GUI も固定された Control を使います。macOS の `.app` は公式署名を保持するため変更せず、GUI は upstream の規則に従い、同梱版とユーザーが更新した Control の新しい方を使います。`STRATA_CONTROL_DIR` の指定だけでは新しいユーザー版への切り替えを禁止できません。モデルと推論エンジンは初回設定時に選び、ユーザーのデータディレクトリに取得します。
 
+WSL の NVIDIA GPU は Windows 側のドライバーを使います。CLI・GUI の FHS 環境には `/usr/lib/wsl` を読み取り専用で公開し、同梱の `nvidia-smi` と CUDA driver library を参照します。Linux 用 NVIDIA ドライバーを WSL 内へ別途導入する必要はありません。
+RTX 4060（VRAM 8GB）と約 48GB の RAM では、[Qwen3.6-35B-A3B](https://github.com/Niko1221/Strata/blob/main/docs/QWEN36.md) の `UD-Q4_K_XL`（約 22.9GB）を context 8K・並列数 1・画像なし・MTP draft なしで生成確認しています。VRAM に収まらない expert は CPU と RAM を使うため、モデル全体が GPU に載る構成ではありません。既定の Q8 decode 用追加コピーでは VRAM が不足したため、`STRATA_Q8_PACKED=0` で追加コピーを無効にします。MTP draft を無効にしても、このモデルの MTP block 自体はメモリに残ります。次のコマンドは CUDA engine とモデルを取得し、localhost:8080 で起動します。
+
+```bash
+strata launch --family qwen36 --model UD-Q4_K_XL --backend nvidia --gpu 0 \
+  --context 8k --parallel 1 --vision off --access local \
+  --set STRATA_Q8_PACKED=0 --set mtp=0 --set prefill=512 \
+  --save-preset qwen36-local --yes --no-tui
+```
+
+以後は `strata launch --preset qwen36-local --no-tui` で起動し、`strata launch --status` で状態確認、`strata launch --stop` で停止します。
+
+同じ RTX 4060 / 約 48GB RAM の WSL では、Qwen3.8-Flash-Next の `Q2_0` も GPU と CPU・RAM を併用して起動できます。初回取得は約 66.4GB で、約 28.8GB の検索テーブルは SSD 上に置いて参照します。context 8K・並列数 1・画像と drafting なしで使い、`vram-reserve-mib=1024` で GPU メモリに余裕を残します。
+
+```bash
+strata launch --family qwen --model q2_0 --backend nvidia --gpu 0 \
+  --context 8k --parallel 1 --vision off --mtp off --drafting off \
+  --set prefill=512 --set vram-reserve-mib=1024 --access local \
+  --save-preset flash-next-local --yes --no-tui
+```
+
+Qwen3.6 と Flash-Next を切り替えるときは、`strata launch --stop` で現在のモデルを停止してから `strata launch --preset qwen36-local --no-tui` または `strata launch --preset flash-next-local --no-tui` で起動します。どちらも localhost:8080 を使います。
+
+Core Ultra 7 265K（WSL に20コアを公開）/ RTX 4060 の drafting なしでの校正では、CPU ワーカー18を12・9・4に減らす設定と expert cache の更新頻度を上げる設定は改善せず、既定値を維持しました。PCIe 配分 `0.10` と `spec-min-p=0.30` の組み合わせは、校正用の3組の確認測定で約5%改善しました。
+
+2026-11-07、engine 0.1.57、同じ Q2_0・context 8K・並列数1で、API へ同じ入力を各3回送った測定値は次のとおりです。速度は API が返すエンジンの `timings` の中央値で、長文入力は毎回4,869トークンを新規に処理しています。コード生成は192トークンで打ち切った速度比較で、完成したコードの正しさを評価したものではありません。長文からの情報抽出は全条件で3回とも正答しました。
+
+| 測定         | drafting なし |         MTP |     DFlash2 |
+| ------------ | ------------: | ----------: | ----------: |
+| 日本語生成   |    39.1 tok/s |  37.8 tok/s |  34.3 tok/s |
+| コード生成   |    38.7 tok/s |  51.8 tok/s |  56.2 tok/s |
+| 長文入力処理 |   334.2 tok/s | 328.7 tok/s | 334.3 tok/s |
+
+普段用は MTP の `flash-next-tuned`、コード優先用は DFlash2 の `flash-next-coding` として保存しています。どちらも `prefill=512`・`pcie-frac=0.10`・GPU メモリ予約1536MiBで使います。`prefill=auto` も起動しましたが、GPU の空きが約532MiBまで減ったため採用しませんでした。
+
+MTP の補助層が未取得の場合、既存モデルの `--mtp on` 指定だけでは取得されないことがあるため、先に公式 installer で約5.21GBのテンソルを取得・変換します。
+
+```bash
+strata launch --stop
+strata install -- --family qwen --model Q2_0 --context 8192 --parallel 1 \
+  --vision no --mtp on --gpu 0 --yes --no-start
+strata launch --preset flash-next-local --mtp on --drafting mtp \
+  --set prefill=512 --set pcie-frac=0.10 --set vram-reserve-mib=1536 \
+  --save-preset flash-next-tuned --yes --no-tui
+```
+
+以後は `strata launch --preset flash-next-tuned --no-tui` で起動できます。モデルや preset を切り替える場合は先に `strata launch --stop` で停止するか、起動時に `--restart` を指定します。
+
+DFlash2 の追加取得は約1.2GBです。日本語の会話も速くなる設定ではないため、用途に応じて選びます。
+
+```bash
+strata launch --preset flash-next-local --drafting dflash2 --mtp off \
+  --set pcie-frac=0.10 --set vram-reserve-mib=1536 \
+  --save-preset flash-next-coding --restart --yes --no-tui
+```
+
 DeepSeek-V4.1-Flash（`ist-das-2.25bpw`、約 274GB）を 64GB の Apple Silicon Mac で使う場合は、初回設定でモデルと Metal engine を選び、context 8192・`--dspark none`・`--vision off`・Speed は Faster（`--experts 5`、Full は 6）で運用します。
 Speed はアプリが run config の `args` に書く値で、`strata profile set` では変更できません。
 生成された run config（`~/.strata/data/native-instances/*.json`）は API key・ランダムな UUID・engine と pack の絶対パスを含むため、dotfiles には置きません。
