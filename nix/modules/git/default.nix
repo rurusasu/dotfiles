@@ -8,7 +8,7 @@
     programs.git = {
       signing = {
         format = "ssh";
-        key = "~/.ssh/signing_key.pub";
+        key = config.home.homeDirectory + "/.ssh/signing_key.pub";
         signByDefault = false;
       };
 

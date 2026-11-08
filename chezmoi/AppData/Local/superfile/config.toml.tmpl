@@ -1,5 +1,6 @@
+{{- $appearance := include "../nix/home/appearance.json" | fromJson -}}
 # Superfile's built-in theme and keybindings; pins remain application-managed.
-theme = "catppuccin-mocha"
+theme = {{ $appearance.superfileTheme | quote }}
 editor = "notepad"
 default_open_file_preview = true
 nerdfont = true

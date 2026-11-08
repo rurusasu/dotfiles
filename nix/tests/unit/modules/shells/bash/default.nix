@@ -39,7 +39,7 @@ in
     ) homes;
     expected = map (home: {
       history = {
-        historyFile = "$HOME/.bash_history";
+        historyFile = "${home.config.home.homeDirectory}/.bash_history";
         historySize = 1000;
         historyFileSize = 2000;
         historyControl = [ "ignoreboth" ];

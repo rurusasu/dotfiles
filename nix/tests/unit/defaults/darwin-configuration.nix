@@ -166,6 +166,7 @@ in
     };
     expected = {
       casks = [
+        "google-drive"
         "steam"
       ];
       chrome = false;
@@ -184,7 +185,7 @@ in
       autoUpdate = defaultHome.home.sessionVariables.HOMEBREW_AUTO_UPDATE_SECS;
       onePassword = defaultHome.home.sessionVariables.OP_BIOMETRIC_UNLOCK_ENABLED;
       homebrewPath = builtins.elem "/opt/homebrew/bin" defaultHome.home.sessionPath;
-      sharedPath = builtins.elem "$HOME/.local/bin" defaultHome.home.sessionPath;
+      sharedPath = builtins.elem "${defaultHome.home.homeDirectory}/.local/bin" defaultHome.home.sessionPath;
       pathOrder = defaultHome.home.sessionPath;
     };
     expected = {
@@ -193,10 +194,10 @@ in
       homebrewPath = true;
       sharedPath = true;
       pathOrder = [
-        "$HOME/.bun/bin"
-        "$HOME/.local/bin"
-        "$HOME/bin"
-        "$HOME/.local/npm/bin"
+        "${defaultHome.home.homeDirectory}/.bun/bin"
+        "${defaultHome.home.homeDirectory}/.local/bin"
+        "${defaultHome.home.homeDirectory}/bin"
+        "${defaultHome.home.homeDirectory}/.local/npm/bin"
         "/opt/homebrew/bin"
         "/opt/homebrew/sbin"
       ];

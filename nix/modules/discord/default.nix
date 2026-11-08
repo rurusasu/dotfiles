@@ -31,7 +31,12 @@ in
         ];
         RunAtLoad = true;
         KeepAlive.PathState = {
-          "${config.home.homeDirectory}/Library/Application Support/discord/${config.programs.discord.package.version}/modules/installed.json" =
+          ${
+            config.home.homeDirectory
+            + "/Library/Application Support/discord/"
+            + config.programs.discord.package.version
+            + "/modules/installed.json"
+          } =
             false;
         };
       };

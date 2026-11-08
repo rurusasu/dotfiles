@@ -74,7 +74,7 @@ jobs:
             '.config/git/config'
             '.taskrc.yml'
             '.wslgconfig'
-            'AppData/Local/Microsoft/Windows Terminal/Fragments/dotfiles/catppuccin-mocha.json'
+            'AppData/Local/Microsoft/Windows Terminal/Fragments/dotfiles/theme.json'
             'AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json'
             'AppData/Local/superfile/config.toml'
             'Documents/PowerShell/Microsoft.PowerShell_profile.ps1'
@@ -86,6 +86,7 @@ jobs:
           $managedScripts = @(& chezmoi --source $source --override-data $data managed --include scripts --path-style relative)
           if ($LASTEXITCODE -ne 0) { throw "chezmoi managed scripts failed with exit $LASTEXITCODE" }
           $expectedScripts = @(
+            '.chezmoiscripts/deploy/keybindings/install_wsl_super_key.ps1'
             '.chezmoiscripts/deploy/keybindings/sync_wsl_keybindings.ps1'
             '.chezmoiscripts/deploy/terminals/install_udev_gothic_nf.ps1'
             '.chezmoiscripts/deploy/terminals/set_windows_terminal.ps1'

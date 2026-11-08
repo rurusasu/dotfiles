@@ -1,9 +1,9 @@
-{ pkgs }:
+{ pkgs, sourceDirectory }:
 let
-  tag = pkgs.lib.removeSuffix "\n" (builtins.readFile /mnt/d/lifelog-core/.git/lifelog-release-tag);
+  tag = pkgs.lib.removeSuffix "\n" (builtins.readFile "${sourceDirectory}/.git/lifelog-release-tag");
   stableSemver = "v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)";
   source = builtins.fetchGit {
-    url = "/mnt/d/lifelog-core";
+    url = sourceDirectory;
     ref =
       if builtins.match stableSemver tag != null then
         "refs/tags/${tag}"

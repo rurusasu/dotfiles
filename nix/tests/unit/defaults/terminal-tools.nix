@@ -1,4 +1,4 @@
-{ fixtures }:
+{ fixtures, inputs }:
 let
   systems = [
     "aarch64-darwin"
@@ -18,12 +18,13 @@ in
         inherit system;
         lazygit = cfg.programs.lazygit.enable;
         herdr = cfg.programs.herdr.enable;
+        herdrPackage = cfg.programs.herdr.package.drvPath;
         bashWrapper = home.pkgs.lib.hasInfix "function lg()" cfg.programs.bash.initExtra;
         zshWrapper = home.pkgs.lib.hasInfix "function lg()" cfg.programs.zsh.initContent;
         herdrConfig = {
-          inherit (cfg.programs.herdr.settings) onboarding terminal;
-          prefix = cfg.programs.herdr.settings.keys.prefix;
-          managedFile = cfg.xdg.configFile."herdr/config.toml".force;
+          mutable = cfg.programs.herdr.mutableSettings;
+          mergeActivation = cfg.home.activation ? herdrMutableSettings;
+          immutableFile = cfg.xdg.configFile ? "herdr/config.toml";
         };
       }
     ) systems;
@@ -31,16 +32,13 @@ in
       inherit system;
       lazygit = true;
       herdr = true;
+      herdrPackage = inputs.herdr.packages.${system}.default.drvPath;
       bashWrapper = true;
       zshWrapper = true;
       herdrConfig = {
-        onboarding = false;
-        terminal = {
-          shell_mode = "auto";
-          new_cwd = "follow";
-        };
-        prefix = "ctrl+space";
-        managedFile = true;
+        mutable = true;
+        mergeActivation = true;
+        immutableFile = false;
       };
     }) systems;
   };

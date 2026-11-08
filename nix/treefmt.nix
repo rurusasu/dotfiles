@@ -11,6 +11,10 @@
 
   programs = {
     nixfmt.enable = true; # *.nix
+    clang-format = {
+      enable = true;
+      includes = [ "*.cs" ];
+    };
     shfmt.enable = true; # *.sh
     taplo = {
       enable = true;

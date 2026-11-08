@@ -44,13 +44,10 @@
           "PackageIdentifier": "AgileBits.1Password"
         },
         {
-          "PackageIdentifier": "Discord.Discord"
-        },
-        {
-          "PackageIdentifier": "StablyAI.Orca"
-        },
-        {
           "PackageIdentifier": "Microsoft.WindowsTerminal"
+        },
+        {
+          "PackageIdentifier": "Google.GoogleDrive"
         }
       ],
       "SourceDetails": {

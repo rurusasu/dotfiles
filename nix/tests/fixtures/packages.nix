@@ -29,6 +29,9 @@ let
         (code.nix.discover-modules "home-manager" files.nix.modules.__path)
         ++ modules
         ++ [
+          # The common composition supplies the flake wrapper's package defaults.
+          # Import only the base options here to avoid defining those defaults twice.
+          (inputs.catppuccin + "/modules/home-manager")
           {
             home = {
               username = pkgs.lib.mkDefault "test-user";

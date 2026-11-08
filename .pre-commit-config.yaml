@@ -23,4 +23,4 @@ repos:
         entry: scripts/sh/run-windows-powershell-tests.sh -NoProfile -File scripts/powershell/tests/Invoke-Tests.ps1
         language: system
         pass_filenames: false
-        files: '\.(ps1|psm1|psd1|tmpl)$'
+        files: '\.(cs|ps1|psm1|psd1|tmpl)$'

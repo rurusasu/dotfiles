@@ -5,7 +5,7 @@
       settings = {
         # Home Manager writes a partial config; use superfile defaults for the rest.
         ignore_missing_fields = true;
-        theme = "catppuccin-mocha";
+        theme = "catppuccin-${config.catppuccin.flavor}";
         editor = "nvim";
         default_open_file_preview = true;
         nerdfont = true;

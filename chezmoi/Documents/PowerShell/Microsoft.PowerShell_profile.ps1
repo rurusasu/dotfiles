@@ -10,12 +10,6 @@ function lla { eza -la @args }
 Set-Alias -Name grep -Value rg.exe
 Set-Alias -Name find -Value fd.exe
 Set-Alias -Name lg -Value lazygit.exe
-Set-Alias -Name k -Value kubectl.exe
-Set-Alias -Name kctx -Value kubectx.exe
-Set-Alias -Name kns -Value kubens.exe
-function kgn { & kubectl.exe get nodes @args }
-function kgp { & kubectl.exe get pods -A @args }
-function kgs { & kubectl.exe get svc -A @args }
 
 function dotf {
     # Resolve the checkout through chezmoi so moves and paths with spaces work.

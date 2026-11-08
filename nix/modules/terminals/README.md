@@ -4,7 +4,7 @@
 
 - `nix/discover-modules.nix` が `default.nix` を自動検出し、構成側の `programs.ghostty.enable` で有効化します。
 - 標準キーをクリアし、コピー・貼り付け、フォント、検索・スクロール、設定、新規ウィンドウ、全画面のキーだけを定義します。分割・タブ・ペイン移動・サイズ変更・undo / redo のキーは割り当てません。
-- ターミナル内のタブ・ペイン・セッションは `nix/modules/herdr/default.nix` が管理する Herdr の `Ctrl+Space` prefix で操作します。
+- ターミナル内のタブ・ペイン・セッションは `nix/modules/terminals/herdr/default.nix` が管理する Herdr の `Ctrl+Space` prefix で操作します。
 - Ghostty の Bash / zsh integration は Home Manager で有効化します。シェル設定は `shells/bash/default.nix` と `shells/zsh/default.nix` が管理します。
 - Linux の systemd / D-Bus 連携と macOS の `pkgs.ghostty-bin` 選択は Ghostty module が扱います。WSL の GUI には WSLg が必要です。
 - Windows Terminal は chezmoi が設定を配布し、標準ショートカットと PowerShell 7 を使います。Windows の package は `windows/winget/packages.json` が管理します。

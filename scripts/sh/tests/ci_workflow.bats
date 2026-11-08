@@ -169,7 +169,8 @@ nix wsl chezmoi windows|nix/modules/fonts/wsl-fontconfig.conf
 nix linux darwin wsl chezmoi windows|nix/defaults.nix
 nix linux darwin wsl chezmoi windows|nix/home/keybindings/bindings.nix
 nix linux darwin wsl chezmoi windows|nix/home/keybindings/generated.json
-nix linux darwin wsl|nix/modules/terminals/ghostty/ghostty.nix
+nix linux darwin wsl chezmoi windows|nix/home/appearance.json
+nix linux darwin wsl|nix/modules/terminals/ghostty/default.nix
 nix linux darwin wsl chezmoi windows|nix/modules/editors/nvim/neovim.nix
 nix linux|nix/modules/hyprland/hyprland-renderer.nix
 nix chezmoi windows|windows/winget/packages.json

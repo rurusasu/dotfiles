@@ -19,7 +19,8 @@ Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platf
         $source = Join-Path $script:repoRoot 'chezmoi'
         # Registry activation and font registration must not change the real user's state here.
         $terminalRelative = 'AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json'
-        $fragmentRelative = 'AppData/Local/Microsoft/Windows Terminal/Fragments/dotfiles/catppuccin-mocha.json'
+        $fragmentRelative = 'AppData/Local/Microsoft/Windows Terminal/Fragments/dotfiles/theme.json'
+        $appearance = Get-Content -LiteralPath (Join-Path $script:repoRoot 'nix/home/appearance.json') -Raw | ConvertFrom-Json
         $deployed = Join-Path $destination $terminalRelative
         if ($ExistingSettings) {
             [void][IO.Directory]::CreateDirectory((Split-Path -Parent $deployed))
@@ -32,7 +33,7 @@ Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platf
     "defaults": { "historySize": 8000, "font": { "weight": "semi-bold" } },
     "list": [
       { "guid": "{aa4bf240-2b1a-43c6-b629-665bf0f882dd}", "name": "Custom", "commandline": "cmd.exe" },
-      { "guid": "{d3878e06-fc60-4fae-9f1c-fd03391609ca}", "name": "NixOS", "source": "Microsoft.WSL" },
+      { "guid": "{44e92ba7-c506-5029-ad0c-0a507a574953}", "name": "Work", "source": "Microsoft.WSL" },
     ],
   },
   "keybindings": [{ "keys": "ctrl+alt+q", "id": "Terminal.NewTab" }],
@@ -43,7 +44,7 @@ Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platf
         $targets = @(
             'Documents/PowerShell/Microsoft.PowerShell_profile.ps1'
             'AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/modify_settings.json'
-            $fragmentRelative
+            ($fragmentRelative + '.tmpl')
         ) | ForEach-Object { Join-Path $source $_ }
         $arguments = @('--config', $config, '--source', $source,
             '--destination', $destination, '--persistent-state', $state, '--source-path', 'apply', '--force', '--parent-dirs') + $targets
@@ -58,8 +59,8 @@ Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platf
             Test-Path -LiteralPath $deployed -PathType Leaf | Should -BeTrue
             $settings = Get-Content -LiteralPath $deployed -Raw | ConvertFrom-Json
             $settings.defaultProfile | Should -Be '{574e775e-4f2a-5b96-ac1e-a2962a402336}'
-            $settings.profiles.defaults.font.face | Should -Be 'UDEV Gothic NF'
-            $settings.profiles.defaults.font.size | Should -Be 10
+            $settings.profiles.defaults.font.face | Should -Be $appearance.fontFamily
+            $settings.profiles.defaults.font.size | Should -Be $appearance.fontSize
             $settings.profiles.defaults.opacity | Should -Be 75
             $fragment = Get-Content -LiteralPath (Join-Path $destination $fragmentRelative) -Raw | ConvertFrom-Json
             $settings.profiles.defaults.colorScheme | Should -Be $fragment.schemes[0].name
@@ -69,8 +70,10 @@ Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platf
                 $settings.profiles.defaults.font.weight | Should -Be 'semi-bold'
                 @($settings.profiles.list).Count | Should -Be 2
                 $settings.profiles.list[0].commandline | Should -Be 'cmd.exe'
-                $settings.profiles.list[1].guid | Should -Be '{d3878e06-fc60-4fae-9f1c-fd03391609ca}'
+                $settings.profiles.list[1].guid | Should -Be '{44e92ba7-c506-5029-ad0c-0a507a574953}'
                 $settings.profiles.list[1].source | Should -Be 'Microsoft.WSL'
+                $settings.profiles.list[1].tabTitle | Should -Be '[dotfiles:WSL]'
+                $settings.profiles.list[1].suppressApplicationTitle | Should -BeTrue
                 $settings.keybindings[0].keys | Should -Be 'ctrl+alt+q'
             }
             $first = [Convert]::ToBase64String([IO.File]::ReadAllBytes($deployed))
@@ -81,6 +84,53 @@ Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platf
         finally {
             $env:USERPROFILE = $originalProfile
             $env:LOCALAPPDATA = $originalLocalAppData
+        }
+    }
+}
+
+Describe 'WSL Super-key adapter installation' -Skip:([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    It 'preserves other startup entries and replaces a running adapter on reapply' {
+        $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../chezmoi'))
+        $template = Join-Path $source '.chezmoiscripts/deploy/keybindings/run_onchange_after_install_wsl_super_key.ps1.tmpl'
+        $rendered = @(& chezmoi.exe --source $source execute-template --file $template)
+        $LASTEXITCODE | Should -Be 0
+        $installer = Join-Path $TestDrive 'install-adapter.ps1'
+        [IO.File]::WriteAllText($installer, ($rendered -join "`n"), [Text.UTF8Encoding]::new($true))
+        $wrapper = Join-Path $TestDrive 'isolated-registry.ps1'
+        [IO.File]::WriteAllText($wrapper, @'
+param([string]$RegistryRoot, [string]$Installer)
+$ErrorActionPreference = 'Stop'
+Remove-PSDrive HKCU
+New-PSDrive -Name HKCU -PSProvider Registry -Root $RegistryRoot | Out-Null
+& $Installer
+'@)
+        # Remap the Registry provider in a child process, so the real Run key is unreachable.
+        $subkey = 'Software\DotfilesSuperKeyTests\' + [guid]::NewGuid().ToString()
+        $testRun = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($subkey + '\Software\Microsoft\Windows\CurrentVersion\Run')
+        $testRun.SetValue('OtherApplication', 'keep this startup command')
+        $previousLocalAppData = $env:LOCALAPPDATA
+        $env:LOCALAPPDATA = Join-Path $TestDrive 'appdata'
+        $program = Join-Path $env:LOCALAPPDATA 'dotfiles/WslSuperKey.exe'
+        try {
+            foreach ($apply in 1..2) {
+                $output = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $wrapper -RegistryRoot ('HKEY_CURRENT_USER\' + $subkey) -Installer $installer 2>&1)
+                $LASTEXITCODE | Should -Be 0 -Because ($output -join "`n")
+                $testRun.GetValue('OtherApplication') | Should -Be 'keep this startup command'
+                $testRun.GetValue('DotfilesWslSuperKey') | Should -Be ('"' + $program + '"')
+                @(Get-Process WslSuperKey -ErrorAction SilentlyContinue | Where-Object Path -EQ $program).Count | Should -Be 1
+            }
+        }
+        finally {
+            if (Test-Path -LiteralPath $program) {
+                $stop = Start-Process -FilePath $program -ArgumentList '--stop' -PassThru
+                $stop.WaitForExit()
+                Get-Process WslSuperKey -ErrorAction SilentlyContinue | Where-Object Path -EQ $program | ForEach-Object {
+                    if (-not $_.WaitForExit(3000)) { Stop-Process -Id $_.Id }
+                }
+            }
+            $env:LOCALAPPDATA = $previousLocalAppData
+            $testRun.Dispose()
+            [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($subkey)
         }
     }
 }

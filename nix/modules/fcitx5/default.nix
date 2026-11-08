@@ -29,11 +29,19 @@
         recursive = true;
         force = true;
       };
-      # systemd owns startup because WSLg needs the Wayland addon disabled.
-      "autostart/org.fcitx.Fcitx5.desktop".text = ''
-        [Desktop Entry]
-        Hidden=true
-      '';
+    };
+    # Generate the override; systemd owns startup because WSLg disables Wayland.
+    xdg.autostart = {
+      enable = true;
+      entries = [
+        "${
+          pkgs.makeDesktopItem {
+            name = "org.fcitx.Fcitx5";
+            desktopName = "Fcitx 5";
+            extraConfig.Hidden = "true";
+          }
+        }/share/applications/org.fcitx.Fcitx5.desktop"
+      ];
     };
     systemd.user.services.fcitx5-daemon = {
       Unit.After = [ "basic.target" ];

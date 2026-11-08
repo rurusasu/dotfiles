@@ -10,6 +10,8 @@ Nix で管理するデスクトップ・Ghostty・Herdr・Neovim と、chezmoi �
 
 ## 統一ルール
 
+`Super` は macOS では `Command`、Linux / WSL では Windows（Super）キーを指します。`Ctrl` は各 OS の Control キーのままで、`Super` へ自動変換しません。Herdr の prefix は Omarchy と同じ `Ctrl+Space` で、デスクトップの `Super` とは別です。
+
 | グループ                 | 役割                                | 例                                  |
 | ------------------------ | ----------------------------------- | ----------------------------------- |
 | `Ctrl+Space`             | Herdr prefix                        | `Ctrl+Space` + suffix               |
@@ -24,7 +26,7 @@ Nix で管理するデスクトップ・Ghostty・Herdr・Neovim と、chezmoi �
 
 ### デスクトップ（Omarchy 配列）
 
-配置方針は `nix/home/keybindings/` に共通 action とキーを定義し、macOS の AeroSpace と native NixOS の Hyprland 設定を生成する。Windows は標準ショートカットを使用し、グローバルなキーのリマップは行いません。WSL guest に Hyprland は導入しません。責務・OS ごとの代替動作は [共通定義と OS 別実装](./omarchy.md) を参照してください。
+配置方針は `nix/home/keybindings/` に共通 action とキーを定義し、macOS の AeroSpace と native NixOS の Hyprland 設定を生成する。Windows は標準ショートカットを使用し、WSL 端末部分では Win キーを Super 入力として転送します。WSL guest に Hyprland は導入しません。対象範囲は [共通定義と OS 別実装](./omarchy.md) を参照してください。
 
 共通配列の正本は `nix/home/keybindings/bindings.nix` と、それが読み込む `nix/modules/editors/nvim/neovim.nix` です。`task keybindings:export` がロック済み Nix 入力で正本を直接評価し、jq でコミット対象の `generated.json` を更新します。chezmoi はデスクトップ / Neovim の export を NixOS-WSL の `~/.config/dotfiles/keybindings/` に配置します。Windows の apply は Nix を呼びません。WSL の Neovim loader は Home Manager が所有し、native Unix は同じ Nix 定義を直接読みます。Ghostty と Herdr の設定は各アプリの Home Manager module が管理します。
 
@@ -51,21 +53,23 @@ Ghostty の分割・タブ作成・ペイン移動・サイズ変更・undo / re
 
 #### Herdr
 
-Herdr は `Ctrl+Space` の terminal Window Manager prefix と native key table を使う。suffix は次のとおり。
+Herdr は [Omarchy 公式の配列](https://github.com/omacom/omarchy/blob/quattro/config/herdr/config.toml) を使います。`omarchy` input の revision を `flake.lock` で固定し、その `[keys]` を `programs.herdr.settings.keys` から生成します。以下の `prefix` は `Ctrl+Space` です。
 
-| 対象      | suffix                | 操作                    |
-| --------- | --------------------- | ----------------------- |
-| Workspace | `w`                   | picker を開く           |
-| Workspace | `a`                   | 新規作成                |
-| Workspace | `j` / `k`             | picker 内で次 / 前      |
-| Tab       | `n`                   | 新規作成                |
-| Tab       | `q`                   | 閉じる                  |
-| Tab       | `Tab` / `Shift+Tab`   | 次 / 前                 |
-| Pane      | `h` / `j` / `k` / `l` | 左 / 下 / 上 / 右へ移動 |
-| Pane      | `v` / `-`             | 左右 / 上下分割         |
-| Pane      | `x`                   | 閉じる                  |
-| Session   | `g`                   | navigator を開く        |
-| Session   | `d`                   | detach                  |
+| 対象      | キー                                | 操作                    |
+| --------- | ----------------------------------- | ----------------------- |
+| Workspace | `prefix+w`                          | picker を開く           |
+| Workspace | `prefix+Shift+C`                    | 新規作成                |
+| Workspace | `↑` / `↓`                           | picker 内で前 / 次      |
+| Workspace | `prefix+Shift+P` / `prefix+Shift+N` | 前 / 次                 |
+| Tab       | `prefix+c`                          | 新規作成                |
+| Tab       | `prefix+k`                          | 閉じる                  |
+| Tab       | `prefix+p` / `prefix+n`             | 前 / 次                 |
+| Pane      | `Ctrl+Alt+←/↓/↑/→`                  | 左 / 下 / 上 / 右へ移動 |
+| Pane      | `prefix+v` / `prefix+h`             | 左右 / 上下分割         |
+| Pane      | `prefix+x`                          | 閉じる                  |
+| Session   | `prefix+g`                          | navigator を開く        |
+| Session   | `prefix+d`                          | detach                  |
+| Config    | `prefix+q`                          | 再読み込み              |
 
 - nested terminal では `Ctrl+Space Ctrl+Space` で内側へ prefix を1回転送し、その後の suffix で内側の Herdr を操作する。
 
@@ -78,7 +82,7 @@ Herdr は `Ctrl+Space` の terminal Window Manager prefix と native key table �
 
 - Neovim
   - `Leader` は `Space`
-  - `Ctrl+H/J/K/L`: Neovim 内の window 移動（Herdr の pane 移動は共通 prefix を使う）
+  - `Ctrl+H/J/K/L`: Neovim 内の window 移動（Herdr の pane 移動は `Ctrl+Alt+矢印` を使う）
   - `Ctrl+Z`: undo
   - `Ctrl+Y`: normal/visual は redo、insert は補完候補の確定
   - `Space`: which-key のコマンド候補、`Space Space`: fuzzy file search
