@@ -47,7 +47,9 @@ function M.ghq_repos()
         vim.notify("ghq not found", vim.log.levels.WARN)
         return
     end
-    Snacks.picker.pick("proc", {
+    Snacks.picker({
+        finder = "proc",
+        format = "file",
         cmd = "ghq",
         args = { "list", "--full-path" },
         title = "ghq repos",

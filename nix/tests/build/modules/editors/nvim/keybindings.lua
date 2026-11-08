@@ -34,6 +34,22 @@ assert(trigger, "Space must trigger which-key")
 
 -- Launch the real file pickers and Lazygit with disposable config/repository state.
 assert(vim.system({ "git", "init", "-q", root }):wait().code == 0)
+local ghq_root = root .. "/ghq"
+local repository = ghq_root .. "/example.test/team/sample"
+vim.fn.mkdir(repository, "p")
+assert(vim.system({ "git", "init", "-q", repository }):wait().code == 0)
+vim.env.GHQ_ROOT = ghq_root
+press("<leader>fq")
+local repository_picker
+wait_for(function()
+    repository_picker = Snacks.picker.get()[1]
+    return repository_picker and #repository_picker:items() == 1
+end, "Space f q must list ghq repositories")
+repository_picker.opts.confirm(repository_picker, repository_picker:items()[1])
+assert(vim.uv.cwd() == vim.uv.fs_realpath(repository), "selecting a ghq repository must change the working directory")
+vim.cmd.cd(root)
+vim.cmd.stopinsert()
+
 for _, key in ipairs({ "<leader><leader>", "<leader>sg" }) do
     press(key)
     wait_for(function()
@@ -48,7 +64,7 @@ end
 press("<leader>gg")
 local terminal
 wait_for(function()
-    terminal = Snacks.terminal.get({ "lazygit" }, { cwd = root, create = false })
+    terminal = Snacks.terminal.get({ "lazygit" }, { cwd = vim.uv.fs_realpath(root), create = false })
     return terminal and vim.api.nvim_buf_is_valid(terminal.buf)
 end, "Space g g must launch Lazygit")
 local job = vim.b[terminal.buf].terminal_job_id
