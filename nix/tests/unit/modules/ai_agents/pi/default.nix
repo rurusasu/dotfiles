@@ -73,7 +73,7 @@ in
             provider = pi.settings.defaultProvider;
             model = pi.settings.defaultModel == model.id;
             endpoint = provider.baseUrl;
-            api = provider.api;
+            inherit (provider) api;
             thinking = pi.settings.defaultThinkingLevel;
             context = model.contextWindow;
             output = model.maxTokens;
