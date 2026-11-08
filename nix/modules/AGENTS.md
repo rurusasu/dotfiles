@@ -24,7 +24,7 @@
 - `ai_agents/hermes/`: `default.nix` が公式 Home Manager module による導入、root 設定・Desktop・gateway と外部 LCM の `extraPlugins = [ inputs.hermes-lcm ]` を宣言する。named profile の設定と個別 secret refs は Git 正本に置き、公式 `hermes profile install` / `update` を使う。named profile は root の MCP 設定を継承しない
 - `shells/plugins/`: bat / eza / fd / fzf / ripgrep / zoxide の導入・共通設定・シェル連携と zsh-patina の activate 連携。各アプリの module がそれぞれを所有する
 - `shells/plugins/starship/`: CLI の有効化、Bash / Zsh の標準連携と `programs.starship.settings` のプロンプト設定を管理し、Home Manager が `starship.toml` を生成する
-- `editors/nvim/`: Neovim の有効化・設定・プラグイン・Lua 配置と、`runtime/default.nix` による補助 CLI・LSP・整形ツール・toolchain・プラグイン実行依存の導入。追加ソースは `modes-nvim` / `devcontainer-cli-nvim` flake input で管理する
+- `editors/nvim/`: Neovim の有効化・設定・プラグイン・Lua 配置と、`runtime/default.nix` による補助 CLI・LSP・整形ツール・toolchain・プラグイン実行依存の導入。追加ソースは `modes-nvim` flake input で管理する
 - `terminals/`: Ghostty の `default.nix` を自動検出し、構成側の `programs.ghostty.enable` に従う。package / systemd の OS 差分とキー設定もアプリ module が扱う
 - `herdr/`: CLI の有効化と、標準 `programs.herdr.settings` によるキー設定
 - `shells/zsh/default.nix`: zsh の有効化・`dotDir`・履歴・option・alias・キー設定・初期化・補完を管理する。`nix/defaults.nix` が選択し、標準 Home Manager が XDG 配下に `.zshrc` などを生成する

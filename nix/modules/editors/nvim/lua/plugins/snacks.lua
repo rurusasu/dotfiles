@@ -224,6 +224,14 @@ local keys = {
     },
 
     {
+        "<leader>dc",
+        function()
+            Snacks.terminal.toggle({ "lazydocker" }, { win = { position = "float" } })
+        end,
+        desc = "Lazydocker",
+    },
+
+    {
         allocation.key("files"),
         function()
             Snacks.picker.files()

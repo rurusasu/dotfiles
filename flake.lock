@@ -51,22 +51,6 @@
         "type": "github"
       }
     },
-    "devcontainer-cli-nvim": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1779239237,
-        "narHash": "sha256-5ASPCFzVOndi8wbLpmxNJcHpmWGaqC1qgmT7bptZ3+A=",
-        "owner": "erichlf",
-        "repo": "devcontainer-cli.nvim",
-        "rev": "00b08c1dd2b272b5b56b265de148c38d12ea0597",
-        "type": "github"
-      },
-      "original": {
-        "owner": "erichlf",
-        "repo": "devcontainer-cli.nvim",
-        "type": "github"
-      }
-    },
     "dia": {
       "flake": false,
       "locked": {
@@ -570,7 +554,6 @@
     },
     "root": {
       "inputs": {
-        "devcontainer-cli-nvim": "devcontainer-cli-nvim",
         "dia": "dia",
         "docker-mcp": "docker-mcp",
         "flake-parts": "flake-parts",

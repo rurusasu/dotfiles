@@ -35,7 +35,7 @@ Home Manager が `init.lua` を生成し、基本設定の後に `plugins/defaul
 
 Nix は継承先のクエリ（ecma、jsx、html_tags など）も閉包に含めます。「プラグインコードをロードしない」と「Nix store に nvim-treesitter 由来のパッケージが一切存在しない」は別です。ファイルタイプ `sh` / `javascriptreact` / `typescriptreact` は対応する grammar に明示登録します。
 
-`modes.nvim` / `devcontainer-cli.nvim` のソースは flake input の `modes-nvim` / `devcontainer-cli-nvim` で管理します。更新は `nix flake update modes-nvim devcontainer-cli-nvim` と通常の Nix 反映を使います。
+`modes.nvim` のソースは flake input の `modes-nvim` で管理します。更新は `nix flake update modes-nvim` と通常の Nix 反映を使います。
 
 インデントは標準 filetype indent / smartindent を使います。旧 nvim-treesitter の `indent = { enable = true }` と完全に同一の動作ではありません。パーサー未導入時は従来 syntax にフォールバックしますが、ABI 不一致や壊れた query は隠しません。
 
@@ -135,4 +135,4 @@ DOTFILES_NVIM_LSPCONFIG="/nix/store/<hash>-vimplugin-nvim-lspconfig-<version>" \
 
 全 plugin の起動テストは `neovim-native` に含まれます。一時 XDG data に Home Manager の native package を配置し、生成された `init.lua` と Nix 管理の基本設定を読み込みます。ホストへの反映は不要です。
 
-headless テストでは terminal・画像の描画、IME・キーバインドの実入力を検証できません。これらと Linux/Devcontainer の実機動作は対応環境で別途確認してください。
+headless テストでは terminal・画像の描画、IME・キーバインドの実入力を検証できません。これらと Linux の実機動作は対応環境で別途確認してください。

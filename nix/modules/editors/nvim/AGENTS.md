@@ -13,7 +13,7 @@
 ## 変更ルール
 
 - 設定・プラグインは Home Manager が管理し、chezmoi で二重配布しない。
-- `modes.nvim` / `devcontainer-cli.nvim` のソースは `modes-nvim` / `devcontainer-cli-nvim` flake input で管理し、`flake.lock` で固定する。
+- `modes.nvim` のソースは `modes-nvim` flake input で管理し、`flake.lock` で固定する。
 - プラグイン設定は公式例に沿った `require("plugin").setup(...)` とキー登録を記載する。設定を適用するだけの `local M` / `M.setup()` は作らず、`plugins/default.nix` から `require("plugins.<name>")` で読み込む。関数を公開する `lua/config/` のモジュールはこの対象外。
 - プラグインのグローバルキーは各ファイルの `local keys = { ... }` にまとめ、末尾のループで `vim.keymap.set(key.mode or "n", key[1], key[2], { desc = key.desc })` を呼ぶ。バッファ・ウインドウ内のキーはプラグイン専用の設定に残す。グローバルキーのないファイルには空の一覧やループを追加しない。
 - Neovim 本体の有効化、package 選択、設定・連携・プラグインと専用の実行依存はこのディレクトリが所有する。LSP・整形ツール・toolchain を無関係な CLI の集約 module へ移さない。
