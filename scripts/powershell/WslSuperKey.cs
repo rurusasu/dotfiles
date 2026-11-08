@@ -235,7 +235,11 @@ internal static class WslSuperKey {
       }
     Input fresh = KeyInput((int)key.vk, false);
     fresh.key.scan = (ushort)key.scan;
-    fresh.key.flags = (key.flags & 1) | (key.vk == 0xE7 ? 4u : 0u);
+    fresh.key.flags = key.flags & 1;
+    if (key.vk == 0xE7) {
+      fresh.key.vk = 0;
+      fresh.key.flags = 4;
+    }
     inputs.Add(fresh);
     // Restore swallowed Win downs before the fresh key in one ordered batch.
     uint sent = SendInput((uint)inputs.Count, inputs.ToArray(),
