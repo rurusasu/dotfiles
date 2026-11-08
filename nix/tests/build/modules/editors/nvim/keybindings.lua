@@ -100,6 +100,5 @@ for _, buf in ipairs(vim.api.nvim_list_bufs()) do
         vim.api.nvim_buf_delete(buf, { force = true })
     end
 end
-assert(root:match("keybinding%-runtime$"), "cleanup must target the test directory")
-vim.fn.delete(root, "rf")
+-- Neovim owns this temporary directory; background Git jobs may still use it.
 print("Neovim shared mappings checks passed")
