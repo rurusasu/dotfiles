@@ -109,7 +109,8 @@ checkout を移動した場合も、新しい信頼設定の適用には明示�
 
 コンテナは Home Manager の `services.podman` が管理し、macOS は標準の Podman machine、
 Linux / WSL は rootless Podman とユーザー用 API ソケットを使います。
-NixOS の OS 基盤は `nix/defaults.nix` が有効化します。
+NixOS の互換コマンドと API unit は `nix/defaults.nix` の標準 `virtualisation.podman` が管理します。
+Home Manager の手書き API unit は standalone Linux だけに適用します。
 Lazydocker と MCP Gateway の wrapper は Podman API の接続先を設定します。
 Docker CLI package は導入せず、upstream が必要とする `docker` コマンドは Podman へのリンクで供給します。
 

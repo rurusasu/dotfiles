@@ -382,7 +382,10 @@ let
               }
             else
               {
-                virtualisation.podman.enable = true;
+                virtualisation.podman = {
+                  enable = true;
+                  dockerCompat = true;
+                };
                 imports = [
                   inputs.home-manager.nixosModules.home-manager
                 ]
