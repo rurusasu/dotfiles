@@ -46,10 +46,11 @@ for _, key in ipairs({ "<leader><leader>", "<leader>sg" }) do
     vim.cmd.stopinsert()
 end
 press("<leader>gg")
+local terminal
 wait_for(function()
-    return _G.__snacks_last_lg and vim.api.nvim_buf_is_valid(_G.__snacks_last_lg.buf)
+    terminal = Snacks.terminal.get({ "lazygit" }, { cwd = root, create = false })
+    return terminal and vim.api.nvim_buf_is_valid(terminal.buf)
 end, "Space g g must launch Lazygit")
-local terminal = _G.__snacks_last_lg
 local job = vim.b[terminal.buf].terminal_job_id
 assert(job and vim.fn.jobwait({ job }, 0)[1] == -1, "Lazygit process must be running")
 -- Terminate only this probe's child; suppress its expected forced-exit notification.
