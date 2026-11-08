@@ -239,7 +239,6 @@ let
                           }
                         ];
                         gnome-keyring.enable = true;
-                        vscode-server.enable = true;
                       };
                       programs = {
                         pi-coding-agent.enable = true;

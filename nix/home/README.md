@@ -5,17 +5,17 @@
 
 enable・単純な package list・単一代入だけなら `nix/defaults.nix` の必要な構成へ直接書きます。設定・package override・生成・連携を持つアプリは module にまとめます。
 
-| 設定                                  | 所有先                                                                                                |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| CLI / GUI の導入・設定・連携          | `../modules/` のアプリごとの module                                                                   |
-| 1Password・署名・WSL interop          | `../modules/1password/`                                                                               |
-| Git・ghq・gwq                         | `../modules/git/`                                                                                     |
-| Bash・共通 PATH・Zsh                  | `../modules/shells/`                                                                                  |
-| Starship・Patina・zoxide              | `../modules/shells/plugins/`                                                                          |
-| AeroSpace・Hyprland                   | `../modules/aerospace/`・`../modules/hyprland/`                                                       |
-| Ghostty・Herdr・Neovim のキー設定     | `../modules/terminals/ghostty/`・`../modules/herdr/`・`../modules/editors/nvim/`                      |
-| fcitx5・gnome-keyring・VS Code Server | `../modules/fcitx5/default.nix`・`../modules/gnome-keyring/`・`../modules/editors/vscode/default.nix` |
-| Homebrew 設定                         | `../defaults.nix`                                                                                     |
+| 設定                              | 所有先                                                                           |
+| --------------------------------- | -------------------------------------------------------------------------------- |
+| CLI / GUI の導入・設定・連携      | `../modules/` のアプリごとの module                                              |
+| 1Password・署名・WSL interop      | `../modules/1password/`                                                          |
+| Git・ghq・gwq                     | `../modules/git/`                                                                |
+| Bash・共通 PATH・Zsh              | `../modules/shells/`                                                             |
+| Starship・Patina・zoxide          | `../modules/shells/plugins/`                                                     |
+| AeroSpace・Hyprland               | `../modules/aerospace/`・`../modules/hyprland/`                                  |
+| Ghostty・Herdr・Neovim のキー設定 | `../modules/terminals/ghostty/`・`../modules/herdr/`・`../modules/editors/nvim/` |
+| fcitx5・gnome-keyring             | `../modules/fcitx5/default.nix`・`../modules/gnome-keyring/`                     |
+| Homebrew 設定                     | `../defaults.nix`                                                                |
 
 Dock・Finder・trackpad と反映処理は `../modules/desktop/default.nix`、WSLg フォント配布は `../defaults.nix` の WSL 設定が担当します。
 

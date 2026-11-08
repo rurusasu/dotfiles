@@ -93,7 +93,6 @@ in
           nix-darwin
           nix-homebrew
           nix-unit
-          nixos-vscode-server
           nixos-wsl
           nixpkgs
           strata-release

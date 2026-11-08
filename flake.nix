@@ -21,10 +21,6 @@
       url = "github:nix-community/NixOS-WSL";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    nixos-vscode-server = {
-      url = "github:nix-community/nixos-vscode-server";
-      inputs.flake-parts.follows = "flake-parts";
-    };
     nix-darwin = {
       url = "github:nix-darwin/nix-darwin/master";
       inputs.nixpkgs.follows = "nixpkgs";

@@ -13,7 +13,7 @@
 - `desktop/default.nix` / `dock/default.nix` / `finder/default.nix`: macOS のデスクトップ設定と反映。Dock は導入する Nix package の `.app` を参照する
 - Homebrew / nix-homebrew・Steam の cask・ユーザー PATH は `nix/defaults.nix` が管理する
 - `aerospace/` / `hyprland/`: キー設定生成関数とユーザー設定。Hyprland のシステムセッションは `nix/defaults.nix` の Linux 設定
-- `fcitx5/default.nix` / `gnome-keyring/` / `editors/vscode/default.nix` / `nvidia/nixos/default.nix`: 各アプリの設定・サービス・activation
+- `fcitx5/default.nix` / `gnome-keyring/` / `nvidia/nixos/default.nix`: 各アプリの設定・サービス・activation
 - `ssh/default.nix`: SSH の共通 Home Manager 設定。1Password agent の接続設定は `1password/ssh/default.nix` が担当する
 - `discord/`: Home Manager 標準 `programs.discord` の設定。Darwin / native Linux から読み込み、WSL には導入しない
 - `lazygit/`: CLI の有効化と Bash / Zsh の `lg` 連携
