@@ -16,6 +16,7 @@
         nativeBuildInputs = [
           neovim.package
           pkgs.git
+          pkgs.ghq
           pkgs.jq
           pkgs.gettext
           pkgs.poppler-utils

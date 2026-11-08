@@ -1,4 +1,8 @@
-{ inputs, code }:
+{
+  inputs,
+  code,
+  homeConfigurations,
+}:
 let
   inherit
     (inputs.nixpkgs.lib.nixosSystem {
@@ -52,14 +56,20 @@ in
   testLinuxEnablesPodmanAndItsUserApi = {
     expr = {
       enabled = config.virtualisation.podman.enable;
+      dockerCompat = config.virtualisation.podman.dockerCompat;
       userRuntime = config.home-manager.users.nixos.services.podman.enable;
-      userSocket = config.home-manager.users.nixos.systemd.user.sockets.podman.Socket.ListenStream;
+      userSocket = config.systemd.user.sockets.podman.wantedBy;
+      homeSocket = config.home-manager.users.nixos.systemd.user.sockets ? podman;
+      standaloneSocket = homeConfigurations.linux.config.systemd.user.sockets.podman.Socket.ListenStream;
       manager = config.home-manager.users.nixos.programs.lazydocker.enable;
     };
     expected = {
       enabled = true;
+      dockerCompat = true;
       userRuntime = true;
-      userSocket = "%t/podman/podman.sock";
+      userSocket = [ "sockets.target" ];
+      homeSocket = false;
+      standaloneSocket = "%t/podman/podman.sock";
       manager = true;
     };
   };

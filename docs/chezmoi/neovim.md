@@ -12,6 +12,7 @@
 - 共通 LSP 処理と整形設定: `nix/modules/editors/nvim/lua/config/lsp.lua`
 - プラグインの導入と Tree-sitter の言語一覧: `nix/modules/editors/nvim/plugins/default.nix`
 - プラグインの Lua 設定: `nix/modules/editors/nvim/lua/plugins/*.lua`
+- Snacks の PDF プレビュー・ghq 連携・smart 検索: `nix/modules/editors/nvim/lua/config/snacks_picker.lua`
 - 共通キー配列: `nix/modules/editors/nvim/neovim.nix`（`bindings.nix` が読み込む）
 
 package データ、配布方式、エディタ設定を変更理由ごとに分けます。

@@ -239,7 +239,6 @@ let
                           }
                         ];
                         gnome-keyring.enable = true;
-                        vscode-server.enable = true;
                       };
                       programs = {
                         pi-coding-agent.enable = true;
@@ -382,7 +381,10 @@ let
               }
             else
               {
-                virtualisation.podman.enable = true;
+                virtualisation.podman = {
+                  enable = true;
+                  dockerCompat = true;
+                };
                 imports = [
                   inputs.home-manager.nixosModules.home-manager
                 ]

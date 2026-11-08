@@ -13,26 +13,6 @@ set_hl()
 vim.api.nvim_create_autocmd("ColorScheme", { callback = set_hl })
 
 local devicons = require("nvim-web-devicons")
-local generic_set = {}
-for _, n in ipairs({
-    "init.lua",
-    "init.vim",
-    "init.ts",
-    "init.js",
-    "index.ts",
-    "index.js",
-    "index.tsx",
-    "index.jsx",
-    "main.rs",
-    "main.go",
-    "main.py",
-    "main.c",
-    "main.cpp",
-    "mod.rs",
-    "lib.rs",
-}) do
-    generic_set[n] = true
-end
 
 require("incline").setup({
     window = {
@@ -53,13 +33,6 @@ require("incline").setup({
         local focused = props.focused
         local fname = vim.api.nvim_buf_get_name(bufnr)
         local tail = fname ~= "" and vim.fn.fnamemodify(fname, ":t") or "[No Name]"
-        local name = tail
-        if generic_set[tail] then
-            local parent = vim.fn.fnamemodify(fname, ":h:t")
-            if parent ~= "" and parent ~= "." then
-                name = parent .. "/" .. tail
-            end
-        end
 
         local icon, icon_color
         if fname ~= "" then
@@ -90,7 +63,7 @@ require("incline").setup({
         end
 
         result[#result + 1] = { icon .. " ", guifg = icon_color }
-        result[#result + 1] = { name, guifg = focused and c.fg or c.dim }
+        result[#result + 1] = { tail, guifg = focused and c.fg or c.dim }
         if vim.bo[bufnr].modified then
             result[#result + 1] = { " ●", guifg = c.warn }
         end
