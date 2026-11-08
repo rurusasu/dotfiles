@@ -1,10 +1,12 @@
 { inputs, pkgs }:
 let
   inherit (pkgs) lib;
+  runtime = import ../podman/runtime.nix { inherit pkgs; };
 in
 rec {
   docker-mcp = pkgs.callPackage ./docker-mcp.nix {
     source = inputs.docker-mcp;
+    inherit (runtime) dockerCompat apiEnvironment;
   };
 
   chrome-devtools-mcp =

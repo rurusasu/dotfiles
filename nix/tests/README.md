@@ -93,19 +93,17 @@ Windows の標準 package ID / source は CI の jq が `windows/winget/packages
 Unix の `task test` は `task test:nix` を呼びます。CI と同じ
 `nix flake check --no-write-lock-file --print-build-logs` で、現在の system に登録された
 すべての check を実行します。check 名のリストや system 判定を呼び出し側で管理しません。
-対象には nix-unit、独自 package build、AeroSpace、Neovim、Docker Desktop、
+対象には nix-unit、独自 package build、AeroSpace、Neovim、
 PowerShell formatter、treefmt を含み、Darwin では standalone Home Manager の構成ビルドも含みます。
-Docker Desktop の初期設定は生成された activation を CLI double で実行し、再実行、失敗時の再試行、
-既存の `md5` パスとの衝突を検証します。実機の Docker Desktop 起動は installer の検証対象です。
 Windows の `task test` は PowerShell テストを実行します。
 
 Darwin / Linux の `custom-package-builds` は `chatgpt-desktop` check も含み、公式アプリと同梱 CLI の
 ビルド・CLI 起動、および Linux の desktop entry と upstream tmpfiles 規則の一致を確認します。
 GUI の起動・ログイン・操作はこの check の対象外で、各 OS の実機で確認します。
 Codex / Hermes の unit は公式 Home Manager 設定と共通 MCP の配線を検証します。
-Docker MCP の unit は Linux / macOS の Home Manager package・plugin link・宣言したサーバー選択を検証します。
-`docker-mcp` check は固定した公式 Git source と同梱の依存からビルドし、空の HOME で Docker CLI からの
-plugin 検出、版の表示、gateway の起動オプションを確認します。Docker daemon や秘密情報は不要です。
+Docker MCP の unit は Linux / macOS の単体 gateway と秘密ファイルの接続設定を検証します。
+`docker-mcp` check は固定した公式 Git source と同梱の依存からビルドし、版の表示、gateway の起動オプションと Podman 互換コマンドを確認します。
+シークレット同期は Bats でファイル権限と読み取り失敗時の保持を確認します。コンテナの実起動と macOS の machine 起動は実機で確認します。
 Hermes の unit は最終的な `settings.mcp_servers` で Chrome / X API の HTTP 接続先、
 Pipedream の OAuth 設定、HTTP サーバーにローカル command がないことを確認します。
 共有する native ユーザーサービスの起動、headless browser の操作、API 認証は実機で確認します。
@@ -154,7 +152,7 @@ Linux の producer は通常の checks と、変更分類で選択された stan
 native Linux が選択された場合は VM の runtime check も必須です。Windows の producer は外部アプリをソースビルドせず、
 入力となる配布コードと WinGet master を保存します。WinGet / Store の catalog は外部入力であり、
 実際に解決・導入された版を E2E の inventory に記録します。
-macOS の Homebrew cask（Docker Desktop / Steam）も外部 catalog から取得するため、
+macOS の Homebrew cask（Steam）も外部 catalog から取得するため、
 Nix の固定 closure とは区別し、導入済みの版を E2E の inventory に記録します。
 Linux の VM adapter は、同じ guest の反映・reboot・検証を一つの driver 内で順に実行します。
 

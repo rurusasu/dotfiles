@@ -34,20 +34,17 @@ NixOS-WSL はファイルシステムが Nix store（read-only）をベースに
 3. **NixOS のトグルをオフにする**
 4. **Apply & restart**
 
-### NixOS 内で Docker を使う方法
+### 現在のコンテナ構成
 
-Docker Desktop の WSL 統合を使わずに、Docker ソケットを直接マウントする:
+このリポジトリでは rootless Podman を使います。`nix/defaults.nix` が OS 基盤を有効化し、`nix/modules/podman/` がユーザー用 API を管理します。
 
 ```nix
-# nix/modules/docker/nixos/default.nix (NixOS module)
-virtualisation.docker.enable = true;
+podman info
+systemctl --user status podman.socket
+lazydocker
 ```
 
-または、Docker Desktop のソケットを NixOS 内からアクセスする:
-
-```bash
-export DOCKER_HOST=unix:///mnt/wsl/shared-docker/docker.sock
-```
+Lazydocker と MCP Gateway はユーザー用 Podman ソケットに接続します。Docker Desktop のソケット共有は不要です。
 
 ## 関連 Issue
 
@@ -59,5 +56,5 @@ export DOCKER_HOST=unix:///mnt/wsl/shared-docker/docker.sock
 
 ## install.cmd への影響
 
-- Windows installer は Docker Desktop をインストールしない。NixOS-WSL と Hermes は Docker に依存せず直接実行する。Docker Desktop向けの連携とWindows VHD管理は提供しない。NixOS 内のネイティブ dockerd は既存の開発用コンテナ向けであり、Hermes の実行基盤ではない。
+- Windows installer は Docker Desktop をインストールしない。NixOS-WSL と Hermes は直接実行し、開発用コンテナには Podman を使う。Docker Desktop 向けの連携と Windows VHD 管理は提供しない。
 - NixOS ディストリビューションが消えた場合、install.cmd を再実行すれば 現在の登録処理が必要な場合だけ再インストールする

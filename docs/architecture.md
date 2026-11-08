@@ -22,7 +22,7 @@
    - 非 NixOS Linux: standalone Home Manager（ユーザー環境のみ、OS service は管理しない）
    - NixOS/WSL: NixOS module
 4. **Full support は runtime acceptance までを契約に含める**
-   - Unix では必須 CLI、Docker profile では Docker、Compose、hello-world も確認。Windows は GUI アプリの導入検証だけを行う
+   - Unix では必須 CLI、コンテナ構成では Podman と Compose も確認。Windows は GUI アプリの導入検証だけを行う
    - installer は同じコマンドを安全に再実行できる
 
 ## 全体構造
@@ -63,11 +63,11 @@ dotfiles/
 | Platform    | Entrypoint     | System layer                             | User layer               | Runtime                        |
 | ----------- | -------------- | ---------------------------------------- | ------------------------ | ------------------------------ |
 | Windows     | `install.cmd`  | Winget + WSL 基盤（初回のみ）            | NixOS-WSL + Home Manager | Windows GUI + WSL2 / NixOS     |
-| macOS ARM64 | `./install.sh` | nix-darwin + nix-homebrew                | Home Manager             | Docker Desktop / native Hermes |
-| Other Linux | `./install.sh` | none                                     | Home Manager             | not managed                    |
-| NixOS       | `./install.sh` | NixOS generation + host hardware profile | Home Manager             | rootful Docker                 |
+| macOS ARM64 | `./install.sh` | nix-darwin + nix-homebrew                | Home Manager             | Podman machine / native Hermes |
+| Other Linux | `./install.sh` | none                                     | Home Manager             | rootless Podman                |
+| NixOS       | `./install.sh` | NixOS generation + host hardware profile | Home Manager             | rootless Podman                |
 
-Windows の通常セットアップは `install.cmd` から GUI/Winget と WSL/NixOS-WSL のフェーズを順に実行し、既存アプリを自動アンインストールしません。`-Phase Winget` を指定すると GUI アプリ導入だけを実行します。WSL 基盤が未導入なら UAC 昇格と Windows の再起動が必要になることがあり、再起動後に同じ入口を再実行します。distro の登録と NixOS/Home Manager の適用は元のユーザーで行います。Unix の Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → runtime acceptance` です。macOS では Docker Desktop と native Hermes の宣言済み構成を適用します。失敗時はその phase で停止し、同じ入口を再実行します。
+Windows の通常セットアップは `install.cmd` から GUI/Winget と WSL/NixOS-WSL のフェーズを順に実行し、既存アプリを自動アンインストールしません。`-Phase Winget` を指定すると GUI アプリ導入だけを実行します。WSL 基盤が未導入なら UAC 昇格と Windows の再起動が必要になることがあり、再起動後に同じ入口を再実行します。distro の登録と NixOS/Home Manager の適用は元のユーザーで行います。Unix の Full support の共通フローは `preflight → Nix/bootstrap → system switch → Home Manager → runtime acceptance` です。macOS では Podman machine と native Hermes の宣言済み構成を適用します。失敗時はその phase で停止し、同じ入口を再実行します。
 
 非 NixOS Linux は `Nix/bootstrap → Home Manager` のみを実行します。
 
@@ -89,15 +89,15 @@ Darwin は `system.primaryUser`、WSL は上書き可能な `wsl.defaultUser` �
 共通配列と Windows export は `nix/home/keybindings/`、アプリの導入・設定・サービス・生成関数は `nix/modules/` が所有します。
 共通フォント package は NixOS / nix-darwin 統合時には system、standalone 時には Home Manager が供給します。
 
-| 役割                    | ツール                  | 説明                                                          |
-| ----------------------- | ----------------------- | ------------------------------------------------------------- |
-| Unix CLI / GUI 定義     | Nix / Home Manager      | アプリごとの module が導入・設定・連携・専用の実行依存を所有  |
-| Unix ユーザーパッケージ | Home Manager            | macOS、NixOS、Ubuntu、Debian で共通の `home.packages`         |
-| Windows パッケージ      | winget                  | 独立した標準 manifest を winget import で適用                 |
-| macOS システム          | nix-darwin/nix-homebrew | Homebrew、Docker Desktop、Home Manager を 1 generation で適用 |
-| NixOS システム          | NixOS module            | native/WSL host、Docker、Home Manager を generation に統合    |
-| Unix ユーザー設定       | Home Manager            | shell、Git、terminal、editor の設定を宣言                     |
-| Windows 設定            | chezmoi                 | Windows のユーザー設定のみを配布                              |
+| 役割                    | ツール                  | 説明                                                         |
+| ----------------------- | ----------------------- | ------------------------------------------------------------ |
+| Unix CLI / GUI 定義     | Nix / Home Manager      | アプリごとの module が導入・設定・連携・専用の実行依存を所有 |
+| Unix ユーザーパッケージ | Home Manager            | macOS、NixOS、Ubuntu、Debian で共通の `home.packages`        |
+| Windows パッケージ      | winget                  | 独立した標準 manifest を winget import で適用                |
+| macOS システム          | nix-darwin/nix-homebrew | Homebrew、Home Manager を 1 generation で適用                |
+| NixOS システム          | NixOS module            | native/WSL host、Podman、Home Manager を generation に統合   |
+| Unix ユーザー設定       | Home Manager            | shell、Git、terminal、editor の設定を宣言                    |
+| Windows 設定            | chezmoi                 | Windows のユーザー設定のみを配布                             |
 
 WSL の Git 設定は、ユーザー設定を Home Manager、共有 checkout の信頼設定を
 NixOS `programs.git.config.safe.directory` が所有します。再構築 wrapper はローカルの
@@ -107,11 +107,11 @@ installer は `~/.gitconfig` や XDG Git config を追記・コピーせず、mu
 初回 postinstall の更新・構築は明示的な `path:` provider、適用後は Git provider を使用します。
 checkout を移動した場合も、新しい信頼設定の適用には明示的な初回 `path:` 構築が必要です。
 
-macOS の Docker Desktop と CLI artifacts は公式 Homebrew `docker-desktop` Cask が所有します。
-installer は `/Applications/Docker.app` への正確なリンクだけを管理し、他の app や Nix store を
-指すリンク、既存ファイルとの衝突では停止します。旧 Nix Docker Desktop の自動停止・リンク移行は
-終了しています。新規 Cask 登録や欠けたリンクの修復時は、失敗に備えて現行リンクの状態を保持し、
-検証成功後に確定します。Docker volume とユーザーデータはこのリンク処理の対象外です。
+コンテナは Home Manager の `services.podman` が管理し、macOS は標準の Podman machine、
+Linux / WSL は rootless Podman とユーザー用 API ソケットを使います。
+NixOS の OS 基盤は `nix/defaults.nix` が有効化します。
+Lazydocker と MCP Gateway の wrapper は Podman API の接続先を設定します。
+Docker CLI package は導入せず、upstream が必要とする `docker` コマンドは Podman へのリンクで供給します。
 
 ## Hermes Runtime and Bootstrap Ownership
 
@@ -147,20 +147,21 @@ X API 認証 task は `mcp-xapi` を停止してから interactive OAuth を行�
 旧 Hermes Docker Agent / Dashboard、Browser/noVNC、X API sidecar の
 Compose 設定、image、Docker 固有 adapter は削除済みです。既存 Docker volume、
 browser profile、OAuth cache、secret、session、memory、log は自動移行・削除しません。
-`MCP_DOCKER` と system の Docker 管理は独立して維持します。
+`MCP_DOCKER` は Podman 上で実行します。
 
 Docker MCP Toolkit は Unix 側の `scripts/sh/mcp-toolkit.sh` が管理します。
 `task mcp:toolkit:*` は Windows からも NixOS-WSL 内で実行し、Windows の Docker CLI は使いません。
 MCP gateway の接続設定は Nix の `programs.mcp.servers` が所有し、リポジトリの `.mcp.json` には重複定義しません。
-Docker 公式プラグインは `docker-mcp` input の固定した Git source と同梱依存からビルドし、
-Home Manager が Docker の `cli-plugins/docker-mcp` に配置します。サーバー8種類の選択も
+Docker 公式 gateway は `docker-mcp` input の固定した Git source と同梱依存からビルドし、
+Home Manager が単体の `docker-mcp` コマンドを導入します。サーバー8種類の選択も
 `programs.mcp.servers.MCP_DOCKER.args` に宣言し、可変プロファイルへの同期処理は使いません。
-`nrs` が Git source の lock 更新、プラグイン導入、リンクと接続設定の反映をまとめて行います。
-Linux / WSL は Docker Engine 用の `DOCKER_MCP_IN_CONTAINER=1` をプラグインの wrapper が設定します。
+`nrs` が Git source の lock 更新、gateway 導入と接続設定の反映をまとめて行います。
+wrapper は `DOCKER_MCP_IN_CONTAINER=1` で Desktop 固有の検査を省き、Podman API を使います。
 `DOCKER_CONFIG` は Home Manager が `${HOME}/.docker` と明示設定し、MCP クライアントにも渡します。
-プラグインと手動タスクは未設定・空の `DOCKER_CONFIG` をエラーにし、別のディレクトリへフォールバックしません。
-手動タスクは `mcp:toolkit:secrets`（1Password から秘密情報を登録）と `mcp:toolkit:status`（版の表示）です。
-秘密情報と OAuth 認証は Nix store に含めず、既存の認証状態を使います。
+gateway と手動タスクは未設定・空の `DOCKER_CONFIG` をエラーにします。
+`mcp:toolkit:secrets` は 1Password から `${DOCKER_CONFIG}/mcp/secrets.env` へ秘密情報を同期します。
+ファイルは所有者だけが読み書きでき、全件の取得に成功してから置き換えます。gateway は `--secrets` で読み込みます。
+`mcp:toolkit:status` は版を表示します。秘密情報と OAuth 認証は Nix store に含めません。
 
 lifelog の正規 path は `${HERMES_HOME}/shared/lifelog` です。
 `hermes:repository:sync` はこの既存 checkout の commit を native Git で pull/push
