@@ -24,6 +24,9 @@ local function preview_file(ctx)
     }))
 end
 
+-- Lazygit generates its theme in the cache directory on first launch.
+vim.fn.mkdir(vim.fn.stdpath("cache"), "p")
+
 require("snacks").setup({
     lazygit = { enabled = true },
     terminal = {
