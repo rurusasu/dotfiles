@@ -65,6 +65,19 @@ let
     export STRATA_NO_HANDOVER=1
     export PYTHONDONTWRITEBYTECODE=1
   '';
+  linuxProfile = profile + ''
+    if [ -d /usr/lib/wsl/lib ]; then
+      export PATH="/usr/lib/wsl/lib:$PATH"
+      export LD_LIBRARY_PATH="/usr/lib/wsl/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
+  '';
+  # FHS environments replace /usr; keep the Windows-provided CUDA driver
+  # and nvidia-smi visible on WSL, without requiring them on native Linux.
+  extraBwrapArgs = [ "--ro-bind-try /usr/lib/wsl /usr/lib/wsl" ];
+  extraBuildCommands = ''
+    # Bubblewrap needs a mount point inside the read-only /usr tree.
+    mkdir -p "$out/usr/lib64/wsl"
+  '';
   meta = {
     homepage = "https://github.com/Niko1221/Strata";
     license = lib.licenses.mit;
@@ -124,7 +137,8 @@ let
       '';
   linuxDesktop = pkgs.appimageTools.wrapAppImage {
     pname = "strata-desktop";
-    inherit version profile;
+    inherit version extraBwrapArgs extraBuildCommands;
+    profile = linuxProfile;
     src = desktopSource;
     contents = desktopContents;
     # The bundled libgcrypt needs this library from the host environment.
@@ -148,7 +162,8 @@ let
     pname = "strata-control";
     version = controlVersion;
     executableName = "strata";
-    inherit profile;
+    inherit extraBwrapArgs extraBuildCommands;
+    profile = linuxProfile;
     targetPkgs = packages: [
       packages.bash
       packages.coreutils
