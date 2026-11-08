@@ -21,7 +21,12 @@ nix/modules/ai_agents/
 `nix/defaults.nix:systemDefaults` は Darwin / native・standalone Linux で `programs.chatgpt.enable`、
 WSL では `programs.codex.enable` を指定します。ChatGPT の有効化は同梱 Codex も有効にし、WSL には Linux GUI を導入しません。
 Codex と ChatGPT Work の既定モデルは `gpt-6.1-terra`、通常・plan の reasoning effort は `ultra` です。
-Pi は独立した `programs.pi-coding-agent.enable` で有効化し、provider `openai-codex`、モデル `gpt-6.1-terra`、thinking level `max` を使います。
+Pi は独立した `programs.pi-coding-agent.enable` で有効化し、既定の coding engine にローカル Strata を使います。
+`nix/modules/ai_agents/pi/default.nix` が provider `strata`、モデル `qwen3.8-flash-next-q2_0`、
+接続先 `http://127.0.0.1:8080/v1`、thinking level `off` を管理します。
+context は32K、生成上限と compaction の予約は4096トークン、保持する直近履歴は8192トークンです。
+`models.json` は Home Manager、可変の `settings.json` は Home Manager の既定値との merge で管理します。
+Strata の起動と preset は [パッケージ管理](package-management.md) を参照してください。新規セッションは Strata を使い、既存セッションのモデルを変える場合は Pi の `/model` で選択します。
 Windows の Store 導入情報は `windows/winget/packages.json` で直接管理します。
 Codex CLI を独立したパッケージとして導入しません。
 

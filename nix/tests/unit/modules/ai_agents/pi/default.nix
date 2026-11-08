@@ -59,4 +59,42 @@ in
       hasManagedModels = false;
     };
   };
+  testPiDefaultsToTheConfiguredLocalStrataModel = {
+    expr =
+      map
+        (
+          home:
+          let
+            pi = home.config.programs.pi-coding-agent;
+            provider = pi.models.providers.${pi.settings.defaultProvider};
+            model = builtins.head provider.models;
+          in
+          {
+            provider = pi.settings.defaultProvider;
+            model = pi.settings.defaultModel == model.id;
+            endpoint = provider.baseUrl;
+            api = provider.api;
+            thinking = pi.settings.defaultThinkingLevel;
+            context = model.contextWindow;
+            output = model.maxTokens;
+            compactionFits =
+              pi.settings.compaction.reserveTokens + pi.settings.compaction.keepRecentTokens
+              < model.contextWindow;
+          }
+        )
+        [
+          darwin
+          wsl
+        ];
+    expected = builtins.genList (_: {
+      provider = "strata";
+      model = true;
+      endpoint = "http://127.0.0.1:8080/v1";
+      api = "openai-completions";
+      thinking = "off";
+      context = 32768;
+      output = 4096;
+      compactionFits = true;
+    }) 2;
+  };
 }

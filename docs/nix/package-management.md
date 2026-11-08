@@ -140,6 +140,17 @@ strata launch --preset flash-next-local --drafting dflash2 --mtp off \
   --save-preset flash-next-coding --restart --yes --no-tui
 ```
 
+Pi の coding engine として使う場合は、AGENTS.md とツール定義・会話履歴を収めるため `flash-next-coding` を32K context に拡張します。KV cache は int8、GPU 常駐分は4096トークンに制限します。上記の速度比較は8Kで測定した値です。
+
+```bash
+strata launch --preset flash-next-coding --context 32k --kv int8 \
+  --set kv-resident=4096 --save-preset flash-next-coding \
+  --restart --yes --no-tui
+pi
+```
+
+Pi の既定 provider は `strata`、モデルは `qwen3.8-flash-next-q2_0`、接続先は `http://127.0.0.1:8080/v1` です。生成上限4096・thinking off・自動 compaction を設定しています。`~/.pi/agent/models.json` は Home Manager が生成するため、接続設定は `nix/modules/ai_agents/pi/default.nix` で管理します。既存セッションでは `/model` から Strata のモデルを選択できます。
+
 DeepSeek-V4.1-Flash（`ist-das-2.25bpw`、約 274GB）を 64GB の Apple Silicon Mac で使う場合は、初回設定でモデルと Metal engine を選び、context 8192・`--dspark none`・`--vision off`・Speed は Faster（`--experts 5`、Full は 6）で運用します。
 Speed はアプリが run config の `args` に書く値で、`strata profile set` では変更できません。
 生成された run config（`~/.strata/data/native-instances/*.json`）は API key・ランダムな UUID・engine と pack の絶対パスを含むため、dotfiles には置きません。
