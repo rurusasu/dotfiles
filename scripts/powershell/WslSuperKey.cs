@@ -23,7 +23,8 @@ internal static class WslSuperKey {
   private static readonly AutoResetEvent Answer = new AutoResetEvent(false);
   private static readonly HookProc Callback = OnKey;
   private static int request, response;
-  private static IntPtr target, chordWindow, hook;
+  private static IntPtr target, inspectedWindow, chordWindow, hook;
+  private static bool focusKnown;
   private static Exception failure;
   private static int reset;
 
@@ -101,45 +102,66 @@ internal static class WslSuperKey {
   }
 
   private static void InspectFocus() {
+    // Warm up UIA before installing the hook, including outside Terminal.
+    try {
+      AutomationElement focused = AutomationElement.FocusedElement;
+      if (focused != null)
+        focused.GetRuntimeId();
+    } catch (Exception) {
+    }
     while (true) {
       Query.WaitOne();
       int current = Volatile.Read(ref request);
       IntPtr found = IntPtr.Zero;
+      IntPtr window = GetForegroundWindow();
+      bool known = false;
       try {
-        IntPtr window = GetForegroundWindow();
-        AutomationElement focused = AutomationElement.FocusedElement;
         uint pid;
         GetWindowThreadProcessId(window, out pid);
         using (Process process = Process.GetProcessById((int)pid)) {
           if (process.ProcessName == "WindowsTerminal" &&
               !IsElevated(process)) {
+            AutomationElement focused = AutomationElement.FocusedElement;
+            known = focused != null && focused.Current.ProcessId == (int)pid;
             if (focused != null && focused.Current.ProcessId == (int)pid &&
                 focused.Current.ClassName == "TermControl" &&
                 focused.Current.Name == TerminalTitle &&
                 GetForegroundWindow() == window)
               found = window;
+          } else {
+            known = true;
           }
         }
       }
       // Closed windows, inaccessible UIA providers and elevation fail open.
       catch (Exception) {
+        known = false;
       }
       target = found;
+      inspectedWindow = window;
+      focusKnown = known;
       Volatile.Write(ref response, current);
       Answer.Set();
     }
   }
 
   private static IntPtr QueryTarget() {
+    bool known;
+    return QueryTarget(out known);
+  }
+
+  private static IntPtr QueryTarget(out bool known) {
+    known = false;
     Answer.Reset();
     int current = Interlocked.Increment(ref request);
     Query.Set();
     // A stalled UIA provider must never stall or uninstall the low-level hook.
     if (!Answer.WaitOne(25) || Volatile.Read(ref response) != current)
       return IntPtr.Zero;
-    IntPtr found = target;
-    return found != IntPtr.Zero && GetForegroundWindow() == found ? found
-                                                                  : IntPtr.Zero;
+    if (GetForegroundWindow() != inspectedWindow)
+      return IntPtr.Zero;
+    known = focusKnown;
+    return target;
   }
 
   private static IntPtr OnKey(int code, IntPtr message, IntPtr data) {
@@ -159,6 +181,24 @@ internal static class WslSuperKey {
         chordWindow = IntPtr.Zero;
       return new IntPtr(1);
     }
+    IntPtr focused = IntPtr.Zero;
+    if (!up && chordWindow != IntPtr.Zero) {
+      bool known;
+      focused = QueryTarget(out known);
+      // A timeout in the same window is not evidence that focus left WSL.
+      if (!Consumed[vk] && !wasDown &&
+          (GetForegroundWindow() != chordWindow ||
+           (known && focused != chordWindow))) {
+        if (focused != IntPtr.Zero) {
+          chordWindow = focused;
+        } else {
+          chordWindow = IntPtr.Zero;
+          return RestoreWindowsInput(key)
+                     ? new IntPtr(1)
+                     : CallNextHookEx(hook, code, message, data);
+        }
+      }
+    }
     if (!up && (vk == 0x5B || vk == 0x5C)) {
       if (chordWindow == IntPtr.Zero && !winWasDown)
         chordWindow = QueryTarget();
@@ -171,7 +211,7 @@ internal static class WslSuperKey {
     if (!up && (Consumed[vk] ||
                 (chordWindow != IntPtr.Zero && !IsModifier(vk) && !wasDown))) {
       Consumed[vk] = true;
-      if (chordWindow != IntPtr.Zero && QueryTarget() == chordWindow) {
+      if (chordWindow != IntPtr.Zero && focused == chordWindow) {
         try {
           string sequence = Encode(vk);
           if (sequence != null)
@@ -183,6 +223,27 @@ internal static class WslSuperKey {
       return new IntPtr(1);
     }
     return CallNextHookEx(hook, code, message, data);
+  }
+
+  private static bool RestoreWindowsInput(Keyboard key) {
+    List<Input> inputs = new List<Input>();
+    List<int> held = new List<int>();
+    for (int vk = 0x5B; vk <= 0x5C; vk++)
+      if (Down[vk] && Consumed[vk]) {
+        held.Add(vk);
+        inputs.Add(KeyInput(vk, false));
+      }
+    Input fresh = KeyInput((int)key.vk, false);
+    fresh.key.scan = (ushort)key.scan;
+    fresh.key.flags = (key.flags & 1) | (key.vk == 0xE7 ? 4u : 0u);
+    inputs.Add(fresh);
+    // Restore swallowed Win downs before the fresh key in one ordered batch.
+    uint sent = SendInput((uint)inputs.Count, inputs.ToArray(),
+                          Marshal.SizeOf(typeof(Input)));
+    for (int i = 0; i < held.Count && i < sent; i++)
+      Consumed[held[i]] = false;
+    // UIPI may reject injection into elevated apps. Let the original key pass.
+    return sent == inputs.Count;
   }
 
   private static bool IsModifier(int vk) {
@@ -288,7 +349,9 @@ internal static class WslSuperKey {
     Input input = new Input();
     input.type = 1;
     input.key.vk = (ushort)vk;
-    input.key.flags = (up ? 2u : 0u) | (vk == 0xA3 || vk == 0xA5 ? 1u : 0u);
+    input.key.flags =
+        (up ? 2u : 0u) |
+        (vk == 0xA3 || vk == 0xA5 || vk == 0x5B || vk == 0x5C ? 1u : 0u);
     input.key.extra = OwnInput;
     return input;
   }
