@@ -7,7 +7,7 @@
 let
   home = fixtures.mkHome pkgs.stdenv.hostPlatform.system [ (fixtures.homeModule "common") ];
   generated = code.nix.home.appearance {
-    config = home.config;
+    inherit (home) config;
     inherit pkgs;
   };
 in
