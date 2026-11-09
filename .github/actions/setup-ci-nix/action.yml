@@ -7,6 +7,9 @@ inputs:
   clean-disk:
     description: Reclaim unused hosted Linux SDKs before importing or building closures.
     default: "false"
+  build-gc:
+    description: Enable build-time GC only for producers that root their inputs and outputs.
+    default: "false"
 runs:
   using: composite
   steps:
@@ -14,6 +17,17 @@ runs:
       uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b
       with:
         github_access_token: ${{ inputs.github-token }}
+        # Configure daemon fetches and keep room for active builds and artifacts.
+        extra_nix_config: |
+          extra-experimental-features = nix-command flakes configurable-impure-env
+          filetransfer-retry-delay = 5000
+          filetransfer-retry-delay-rate-limited = 30000
+          impure-env = NIX_CURL_FLAGS=--retry-delay=15
+          max-jobs = 2
+          cores = 2
+          auto-optimise-store = true
+          min-free = ${{ inputs.build-gc == 'true' && '8G' || '0' }}
+          max-free = 16G
     - name: Inspect Nix store and workspace filesystems
       shell: bash
       run: |

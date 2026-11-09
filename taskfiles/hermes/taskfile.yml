@@ -34,21 +34,8 @@ tasks:
   hermes:bootstrap:
     desc: Apply the Nix-managed Hermes Agent profile and gateway service
     cmds:
-      - cmd: |-
-          set -eu
-          bash scripts/sh/update-flake-inputs.sh .
-          if [ -e /etc/NIXOS ]; then
-            sudo nixos-rebuild switch --flake . --impure
-          else
-            system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
-            home-manager switch --flake ".#${system}" --impure
-          fi
-          task hermes:sync
-        platforms: [linux]
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bash scripts/sh/update-flake-inputs.sh . && sudo nixos-rebuild switch --flake . --impure && task hermes:sync"'
-        platforms: [windows]
-      - cmd: task darwin:install && task hermes:sync
-        platforms: [darwin]
+      - task: nrs
+      - task: hermes:sync
 
   hermes:xapi:auth:
     desc: Authenticate the X MCP bridge with the headless OAuth flow
@@ -198,9 +185,6 @@ tasks:
         platforms: [windows]
 
   hermes:upgrade:
-    desc: Update the Hermes flake input and activate the Nix-managed Hermes Agent
+    desc: Prepare dependency updates for CI; apply separately with nrs
     cmds:
-      - cmd: task hermes:bootstrap
-        platforms: [linux, darwin]
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && task hermes:bootstrap"'
-        platforms: [windows]
+      - task: update

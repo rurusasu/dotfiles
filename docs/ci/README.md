@@ -14,7 +14,19 @@ consumer は `path:.#ci` を構築しません。Bash テスト専用の Bats �
 
 Nix の認証と通信設定は `scripts/sh/configure-bootstrap-ci-nix.sh` が使い捨て CI ユーザーへ設定します。
 GitHub token は権限600の専用設定ファイルへ保存し、ログや成果物へ含めません。
+Nix のファイル転送は再試行回数の標準値を使います。native CI の Nix 2.35 では通常の初期間隔を
+5秒、HTTP 429/503 の初期間隔を30秒にし、標準の指数バックオフ・jitter・Retry-After 処理を使います。
+これらの新しい設定は native の install action だけに渡し、WSL の Lix 設定には配布しません。
+fetchurl の取得は Nix 本体と別の curl を使うため、native daemon の `configurable-impure-env` と
+`impure-env` で `NIX_CURL_FLAGS=--retry-delay=15` を渡し、既存の再試行間隔を15秒に延ばします。
+パッケージ定義・固定出力ハッシュ・再試行回数は変更しません。
 Linux の producer は Nix sandbox を有効にして構築し、native NixOS E2E は KVM を利用します。
+CI の Nix daemon は store の重複排除を有効にし、producer だけ `build-gc` で空き容量連動の GC を有効にします。
+同時ビルドは2件・各2 core に制限し、GC できない実行中の build directory の膨張も抑えます。
+空き容量が 8 GiB 未満になると 16 GiB を目標に不要な store path を回収します。
+producer の source・入力・checks・構成・rebuild tool は通常の `--out-link` で
+GC root として保持し、artifact の export 前に必要な成果物を失わないようにします。
+consumer の import は複数バッチを使うため自動 GC を無効にし、先行バッチの出力を回収させません。
 WSL でも同じ認証設定 adapter を使い、root / nixos の両方に必要な設定を反映します。
 公式 cache を優先し、Numtide と Hermes の cache も利用します。
 CI は global flake registry を使わず、bootstrap の alias は明示した locked inputs から解決します。
@@ -41,6 +53,18 @@ producer は source SHA と依存を固定して artifact を保存します。
 consumer は artifact の取得 → import / 本番 installer の反映 → 再起動または新しい session →
 runtime 確認を実行します。consumer 内で input を更新したり、欠けた成果物を
 ソースビルドで補ったりしません。PowerShell の Pester suite は E2E 後の runtime 検証を担当します。
+
+依存更新と適用は分離します。`task update` は `flake.lock` を更新するだけで、
+`install` / `nrs` / Hermes bootstrap は lock を変更せず適用します。
+更新した lock は変更元の source と一緒に commit / PR に含め、producer build と E2E が
+成功した SHA を適用します。適用入口と CI source archive は `--no-update-lock-file` を使い、
+lock が不足・不整合なら新しい依存を選び直さず失敗します。
+macOS の一時 wrapper は元 source の lock を検証後、外側の lock だけを作成します。
+ローカルで source / lock を編集した場合、その変更は再検証が必要です。
+保証対象は同じ source・lock・対象構成の Nix 依存で、ローカル Lifelog checkout や hardware、
+版を固定していない WinGet / Homebrew の導入結果までは同一とみなしません。
+コンパイルエラーは既存の package build check と構成全体の producer build が検出し、
+E2E に同じコンパイル検査を重複して追加しません。
 
 native Linux の consumer は KVM の NixOS VM で本番 `install.sh` と reboot 後の
 CLI・service・health を確認します。WSL は Windows 上の使い捨て distro で

@@ -154,7 +154,7 @@ lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
           # production input nor downloads/builds anything in the consumer.
           machine.succeed("su - nixos -c 'nix flake lock --offline /home/nixos/ci-target'")
           before_lock = machine.succeed("sha256sum /home/nixos/dotfiles/flake.lock")
-          machine.succeed("su - nixos -c 'UPDATE_FLAKE_INPUTS=false DOTFILES_ALLOW_BUILDS=false DOTFILES_FLAKE_REF=path:/home/nixos/ci-target#linux /home/nixos/dotfiles/install.sh'", timeout=1800)
+          machine.succeed("su - nixos -c 'DOTFILES_ALLOW_BUILDS=false DOTFILES_FLAKE_REF=path:/home/nixos/ci-target#linux /home/nixos/dotfiles/install.sh'", timeout=1800)
           assert before_lock == machine.succeed("sha256sum /home/nixos/dotfiles/flake.lock")
           machine.succeed("test $(readlink -f /run/current-system) = ${target}")
           boot_id = machine.succeed("cat /proc/sys/kernel/random/boot_id").strip()

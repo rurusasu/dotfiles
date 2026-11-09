@@ -10,10 +10,6 @@ if [[ $primary_user == root ]]; then
   exit 1
 fi
 
-if [[ $UPDATE_FLAKE_INPUTS == true ]]; then
-  bash "$ROOT/scripts/sh/update-flake-inputs.sh" "$ROOT"
-fi
-
 # A deployment can select the immutable flake produced for this login user.
 flake_ref=${DOTFILES_FLAKE_REF:-}
 if [[ -z $flake_ref ]]; then
@@ -21,13 +17,13 @@ if [[ -z $flake_ref ]]; then
   . "$ROOT/scripts/sh/lib/darwin-flake.sh"
   darwin_flake=$(mktemp -d)
   trap 'rm -f "$darwin_flake/flake.nix" "$darwin_flake/flake.lock" "$darwin_flake/primary-user" "$darwin_flake/ci-settings.nix"; rmdir "$darwin_flake"' EXIT
-  write_darwin_flake "$darwin_flake" "$primary_user" "$ROOT"
   flake_ref="path:$darwin_flake#macos"
-  if [[ $UPDATE_FLAKE_INPUTS == false ]]; then
-    # Creating the temporary wrapper lock does not update the source's lock.
-    nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
-      flake lock "path:$darwin_flake" --offline
-  fi
+  # Validate the source lock before creating the temporary wrapper's own lock.
+  nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
+    flake archive --no-update-lock-file "path:$ROOT" >/dev/null
+  write_darwin_flake "$darwin_flake" "$primary_user" "$ROOT"
+  nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
+    flake lock "path:$darwin_flake" --offline
 fi
 
 sudo --set-home ${install_sudo_options[@]+"${install_sudo_options[@]}"} "$(command -v nix)" --accept-flake-config \

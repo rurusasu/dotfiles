@@ -545,6 +545,18 @@ function Get-Command {
 }
 function Invoke-NativeCommand {
     param($Command, $Arguments)
+    if ($Command -eq 'curl.exe') {
+        $uri = [string]$Arguments[-1]
+        $outFile = $Arguments[[Array]::IndexOf($Arguments, '--output') + 1]
+        if ($uri.StartsWith('https://api.github.com/')) {
+            Set-Content "$env:FIXTURE_ROOT/release-uri.txt" $uri
+            @{ tag_name = 'fixture'; assets = @(@{ name = 'nixos.wsl'; browser_download_url = 'https://example.invalid/nixos.wsl' }) } |
+                ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $outFile -Encoding UTF8
+        }
+        else { Set-Content -LiteralPath $outFile 'fixture' }
+        $global:LASTEXITCODE = 0
+        return
+    }
     if ($Command -eq 'chezmoi') {
         if ($Arguments -notcontains 'init' -or $Arguments -notcontains '--apply') { throw 'Expected native chezmoi init --apply' }
         Add-Content "$env:FIXTURE_ROOT/events.txt" 'chezmoi'
@@ -579,15 +591,6 @@ function Invoke-Wsl {
         else { Set-Content "$root/installed.txt" 'registered' }
     }
     elseif ($Arguments -contains '--version') { return 'WSL available' }
-}
-function Invoke-RestMethod {
-    param($Uri, $Headers)
-    Set-Content "$env:FIXTURE_ROOT/release-uri.txt" $Uri
-    return @{ tag_name = 'fixture'; assets = @(@{ name = 'nixos.wsl'; browser_download_url = 'https://example.invalid/nixos.wsl' }) }
-}
-function Invoke-WebRequest {
-    param($Uri, $OutFile)
-    Set-Content $OutFile 'fixture'
 }
 function Start-Process {
     param($FilePath, $ArgumentList, $Verb, $WindowStyle, [switch]$PassThru)

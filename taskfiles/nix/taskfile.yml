@@ -1,8 +1,5 @@
 version: "3"
 
-vars:
-  UPDATE_FLAKE_INPUTS: '{{.UPDATE_FLAKE_INPUTS | default "true"}}'
-
 tasks:
   darwin:install:
     desc: Install Nix if needed and switch the macOS configuration
@@ -11,9 +8,7 @@ tasks:
       - ./install.sh
 
   nrs:
-    desc: Update inputs and activate OS-managed applications and configuration
-    env:
-      UPDATE_FLAKE_INPUTS: "{{.UPDATE_FLAKE_INPUTS}}"
+    desc: Apply locked OS-managed applications and configuration
     cmds:
       - cmd: ./install.sh
         platforms: [darwin, linux]
@@ -23,14 +18,14 @@ tasks:
   rebuild:
     desc: Run nixos-rebuild switch
     cmds:
-      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && {{if ne .UPDATE_FLAKE_INPUTS "false"}}bash scripts/sh/update-flake-inputs.sh . && {{end}}sudo nixos-rebuild switch --flake . --impure{{if eq .UPDATE_FLAKE_INPUTS "false"}} --no-update-lock-file{{end}}"'
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && sudo nixos-rebuild switch --flake . --impure --no-update-lock-file"'
 
   build:
     desc: Dry build NixOS configuration
     cmds:
-      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix build .#nixosConfigurations.nixos.config.system.build.toplevel --dry-run"'
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix build .#nixosConfigurations.nixos.config.system.build.toplevel --dry-run --no-update-lock-file"'
 
   update:
-    desc: Update flake inputs
+    desc: Update flake inputs for review and CI without applying them
     cmds:
       - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && bash scripts/sh/update-flake-inputs.sh ."'

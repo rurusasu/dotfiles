@@ -48,15 +48,27 @@ function Install-NixosWsl {
     else {
         "$releaseBase/tags/$([Uri]::EscapeDataString($ReleaseTag))"
     }
-    $release = Invoke-RestMethod -Uri $releaseUri -Headers @{ 'User-Agent' = 'nixos-wsl-installer' } -ErrorAction Stop
-    $asset = $release.assets | Where-Object { $_.name -eq 'nixos.wsl' } | Select-Object -First 1
-    if (-not $asset) {
-        throw "Release $($release.tag_name) does not contain nixos.wsl. Use latest or a ReleaseTag that provides nixos.wsl."
-    }
-
     $downloadPath = Join-Path ([IO.Path]::GetTempPath()) ('nixos-' + [Guid]::NewGuid().ToString('N') + '.wsl')
+    $releasePath = "$downloadPath.json"
+    # Windows includes curl.exe under both supported PowerShell runtimes.
+    # Use its transient HTTP retry policy; never retry WSL registration.
+    $curlArguments = @(
+        '--fail', '--location', '--silent', '--show-error',
+        '--retry', '5', '--retry-delay', '15', '--retry-max-time', '300',
+        '--connect-timeout', '30',
+        '--user-agent', 'nixos-wsl-installer'
+    )
     try {
-        Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile $downloadPath -ErrorAction Stop
+        # File output lets curl discard an incomplete response before retrying.
+        Invoke-NativeCommand -Command 'curl.exe' -Arguments ($curlArguments + @('--max-time', '120', '--output', $releasePath, $releaseUri)) | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "NixOS-WSL release query failed (exit=$LASTEXITCODE)." }
+        $release = Get-Content -LiteralPath $releasePath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $asset = $release.assets | Where-Object { $_.name -eq 'nixos.wsl' } | Select-Object -First 1
+        if (-not $asset) {
+            throw "Release $($release.tag_name) does not contain nixos.wsl. Use latest or a ReleaseTag that provides nixos.wsl."
+        }
+        Invoke-NativeCommand -Command 'curl.exe' -Arguments ($curlArguments + @('--max-time', '1800', '--output', $downloadPath, $asset.browser_download_url)) | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "NixOS-WSL download failed (exit=$LASTEXITCODE)." }
         if (-not (Test-Path -LiteralPath $installPath)) {
             New-Item -ItemType Directory -Path $installPath -ErrorAction Stop | Out-Null
         }
@@ -67,7 +79,7 @@ function Install-NixosWsl {
         $output | Out-Host
     }
     finally {
-        Remove-Item -LiteralPath $downloadPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $downloadPath, $releasePath -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -86,7 +98,6 @@ function Invoke-NixosWslSetup {
         [switch]$ForcePostInstall,
         [ValidateRange(0, 2147483647)]
         [int]$TimeoutSeconds = 1800,
-        [bool]$UpdateFlakeInputs = $true,
         [string]$FlakeReference = '',
         [string]$SourceDirectory = '',
         [bool]$AllowBuilds = $true
@@ -97,11 +108,8 @@ function Invoke-NixosWslSetup {
     if ($SourceDirectory -and ($SourceDirectory -notmatch '^/[^\r\n]*$' -or $SyncBack -ne 'none')) {
         throw 'A Linux source directory requires an absolute path and SyncBack none.'
     }
-    if (-not $AllowBuilds -and $UpdateFlakeInputs) {
-        throw 'Prebuilt deployments must keep flake inputs frozen.'
-    }
-    if ($FlakeReference -and ($FlakeReference -notmatch '^[^\r\n#]+#[A-Za-z0-9_-]+$' -or $UpdateFlakeInputs)) {
-        throw 'FlakeReference must select a named configuration with frozen inputs.'
+    if ($FlakeReference -and $FlakeReference -notmatch '^[^\r\n#]+#[A-Za-z0-9_-]+$') {
+        throw 'FlakeReference must select a named configuration.'
     }
     $buildGuard = if ($AllowBuilds) { '' } else {
         'export NIX_CONFIG="${NIX_CONFIG-}"$''\nmax-jobs = 0\nbuilders =\nfallback = false''; '
@@ -113,7 +121,20 @@ function Invoke-NixosWslSetup {
                 ". /etc/profile >/dev/null || exit; set -euo pipefail; $buildGuard$Command"
             ))
         if ($LASTEXITCODE -ne 0) {
-            throw "NixOS-WSL setup failed (exit=$LASTEXITCODE): $($output -join [Environment]::NewLine)"
+            $exitCode = $LASTEXITCODE
+            # Keep the full output searchable without flooding the terminal with dependency failures.
+            $plainOutput = @($output | ForEach-Object { [string]$_ -replace '\x1B\[[0-?]*[ -/]*[@-~]', '' })
+            $firstError = $plainOutput | Select-String -Pattern '(?i)\berror:|\berror\[|\bfatal:|\bundefined:|hash mismatch|タイムアウト' | Select-Object -First 1
+            $summaryLines = if ($firstError) { $plainOutput | Select-Object -Skip ([Math]::Max(0, $firstError.LineNumber - 4)) -First 24 } else { $plainOutput | Select-Object -Last 20 }
+            $summary = $summaryLines -join [Environment]::NewLine
+            $logPath = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-wsl-' + [Guid]::NewGuid().ToString('N') + '.log')
+            try {
+                [IO.File]::WriteAllLines($logPath, [string[]]$plainOutput, [Text.UTF8Encoding]::new($false))
+            }
+            catch {
+                throw "NixOS-WSL setup failed (exit=$exitCode):`n$summary`nCould not save full log: $($_.Exception.Message)"
+            }
+            throw "NixOS-WSL setup failed (exit=$exitCode):`n$summary`nFull log: $logPath"
         }
         return $output
     }
@@ -159,7 +180,7 @@ function Invoke-NixosWslSetup {
     $configurationRoot = $selectedFlake.Substring(0, $selection)
     $configurationName = $selectedFlake.Substring($selection + 1)
     $userAttribute = ConvertTo-WslArgument ($configurationRoot + '#nixosConfigurations.' + $configurationName + '.config.wsl.defaultUser')
-    $userOutput = @(Invoke-SetupCommand "nix --accept-flake-config --extra-experimental-features 'nix-command flakes' eval --raw $userAttribute --impure --no-write-lock-file")
+    $userOutput = @(Invoke-SetupCommand "nix --accept-flake-config --extra-experimental-features 'nix-command flakes' eval --raw $userAttribute --impure --no-update-lock-file")
     $declaredUser = [string]($userOutput | Where-Object { [string]$_ -match '^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$' } | Select-Object -Last 1)
     if (-not $declaredUser) { throw 'Could not resolve the declared wsl.defaultUser.' }
     if ($currentUser -ne $declaredUser) {
@@ -193,12 +214,8 @@ function Invoke-NixosWslSetup {
     $qTarget = ConvertTo-WslArgument $target
     Invoke-SetupCommand "test -f $qTarget/flake.nix; test -f $qTarget/flake.lock" | Out-Host
 
-    if ($updateFlakeInputs) {
-        Invoke-SetupCommand "bash $qSource/scripts/sh/update-flake-inputs.sh $qTarget path" | Out-Host
-    }
-    $lockOption = if ($updateFlakeInputs) { '' } else { ' --no-update-lock-file' }
     $deploymentFlake = if ($FlakeReference) { $FlakeReference } else { 'path:' + $target + '#nixos' }
-    Invoke-SetupCommand "nixos-rebuild switch --flake $(ConvertTo-WslArgument $deploymentFlake) --impure$lockOption --option accept-flake-config true --option experimental-features 'nix-command flakes'" | Out-Host
+    Invoke-SetupCommand "nixos-rebuild switch --flake $(ConvertTo-WslArgument $deploymentFlake) --impure --no-update-lock-file --option accept-flake-config true --option experimental-features 'nix-command flakes'" | Out-Host
 
     if ($target -ne $source) {
         switch ($syncBack) {

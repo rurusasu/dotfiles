@@ -44,6 +44,8 @@ in
         provider = "openai-codex";
         default = "gpt-6.1-sol";
       };
+      # Let the upstream boot-time guard decide whether profile multiplexing is safe.
+      gateway.multiplex_profiles = null;
       context.engine = "lcm";
       plugins.enabled = [ "hermes-lcm" ];
       platforms.discord.allow_bots = "mentions";

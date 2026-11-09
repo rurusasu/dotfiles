@@ -3,14 +3,14 @@
 ## 実装
 
 `install.cmd` → `install.ps1` → WinGet master import → Taskfile の WSL → chezmoi の順です。
-Taskもmasterから導入し、更新・反映は各1回です。
+Taskもmasterから導入し、Nix は lock 済みの依存を一度だけ反映します。
 `-Phase Winget` / `Wsl` / `Chezmoi` はその操作だけを実行します。
 
 セットアップの主な実装は次の3ファイルです。
 
 - `scripts/powershell/install.ps1`: Windowsの標準コマンドとTaskの起動、WSL基盤の昇格。
 - `lib/Invoke-ExternalCommand.ps1`: native終了コード、timeout、UTF-8、PATH、標準import。
-- `lib/Invoke-NixosWslSetup.ps1`: 必要時のdistro登録と、同期・input更新・NixOS/Home Manager反映。
+- `lib/Invoke-NixosWslSetup.ps1`: 必要時のdistro登録と、同期・lock済みのNixOS/Home Manager反映。
 
 通常の関数と例外を使います。クラス、結果オブジェクト、独自runnerはありません。
 順序はTaskfileだけが管理し、初回導入と既存distroでsetupを重複させません。
@@ -21,6 +21,9 @@ WinGetは標準JSONをimportします。導入後にプロセスPATHを再読込
 開始時のPATHはcmd.exeの8191文字制限に収め、ユーザーPATHは変更しません。
 chezmoiは`init --apply --force --no-tty --no-pager`を一度実行します。
 WSL出力はUTF-8に統一し、日本語を含むチェックアウトパスも扱います。
+WSLセットアップ失敗時は最初のエラー周辺（見つからない場合は末尾20行）と終了コードを表示し、
+出力全文はWindowsの一時ディレクトリの `dotfiles-wsl-<GUID>.log` に保存します。
+例外末尾の `Full log:` に表示されたパスを開くと全文を確認できます。
 
 既存VHDはファイルを指定して再登録し、非空の導入先は上書きしません。
 競合するチェックアウトはForce指定時もGUID付きで退避します。
@@ -47,7 +50,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/tests
 - `Install.Tests.ps1`: 実launcherとTaskfile、順序・回数、失敗・再起動、引数、隔離したホームへのchezmoi適用、CI実行と削除先の境界。
 - `TestRunner.Tests.ps1`: 必要module不在、0件・container失敗の検出。
 - `Integration.Tests.ps1`: Windows profile、chezmoi反映とWSLg templateの描画。
-- `lib/`: native実行、登録、同期、更新と反映の境界。
+- `lib/`: native実行、登録、同期、lock済み構成の反映の境界。
 
 runtime suite はインストール済みの安定版 Pester 6.2 以降を使い、依存を自動取得しません。
 formatter の実行・冪等性は Nix build check で確認します。

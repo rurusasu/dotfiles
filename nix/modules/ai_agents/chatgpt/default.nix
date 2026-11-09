@@ -18,7 +18,7 @@ in
       type = lib.types.package;
       default = pkgs.chatgpt.override {
         codex = null;
-        # Remove after nixos-unstable includes nixpkgs 743696b736aa419c86abb36e2777cda684d619a0.
+        # Remove after nixpkgs-unstable includes nixpkgs 743696b736aa419c86abb36e2777cda684d619a0.
         tectonic-unwrapped = pkgs.tectonic-unwrapped.overrideAttrs (previous: {
           buildInputs = [ pkgs.aws-lc ] ++ previous.buildInputs;
         });
