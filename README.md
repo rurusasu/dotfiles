@@ -43,6 +43,7 @@ task update
 ```
 
 CI が成功した source と lock を `nrs` / installer で適用します。適用時に依存を再更新しません。
+`nrt` / `nrb` の test / boot も同じ lock を使い、不足・不整合な lock は拒否します。
 WinGet / Homebrew の版未固定アプリやホスト固有設定の保証範囲は [CI の説明](docs/ci/README.md) を参照してください。
 
 Codex CLI の個別インストールは行わず、ChatGPT アプリ付属の CLI を使います。

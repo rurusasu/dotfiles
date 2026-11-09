@@ -280,10 +280,10 @@ let
                           shellAliases = {
                             nrt = "sudo nixos-rebuild test --flake ${
                               lib.escapeShellArg (config.home.homeDirectory + "/.dotfiles")
-                            } --impure";
+                            } --no-update-lock-file --impure";
                             nrb = "sudo nixos-rebuild boot --flake ${
                               lib.escapeShellArg (config.home.homeDirectory + "/.dotfiles")
-                            } --impure";
+                            } --no-update-lock-file --impure";
                           };
                         };
                       };
