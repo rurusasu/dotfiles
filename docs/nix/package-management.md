@@ -4,6 +4,11 @@
 
 Unix のアプリ本体は、共通の `nixpkgs` から取得することを原則とします。Home Manager で設定・連携も管理するアプリは標準の `programs.<name>.enable` と package 既定値を優先し、設定をユーザーが管理するアプリや標準 module のないアプリは `pkgs.<name>` を導入します。追加 flake や独自のダウンロード定義は、対象 OS の nixpkgs に同じアプリがない場合に限定します。
 
+Linux / Darwin 共通の入力には `nixpkgs-unstable` を使い、検証する revision を `flake.lock` に固定します。
+Darwin の標準依存まで利用するため、Linux 向けの `nixos-unstable` だけを基準にしません（[公式のチャネル選択](https://nix.dev/concepts/faq.html#rolling)）。
+キャッシュがない revision では .NET SDK や Swift / LLDB の bootstrap に数時間かかる場合があります。
+更新した lock は両 OS の producer build と E2E で検証してから反映します。
+
 設定・package override・生成・連携を持つアプリは、導入と専用の実行依存も同じ module にまとめます。enable・単純な package list・単一代入だけなら module を作らず、`nix/defaults.nix` の必要な構成へ直接書きます。Home Manager 標準の package 既定値を優先します。
 
 共通・OS 別構成はアプリ module の外で組み立てます。すべての実 module は `nix/modules/` 配下の `default.nix` を入口とし、`nix/discover-modules.nix` が再帰的に自動検出します。通常のディレクトリは Home Manager、`nixos/` / `darwin/` / `system/` 配下は NixOS / nix-darwin / 両 OS 共通の scope です。構成側には `programs.<name>.enable` などの型付き option だけを書き、アプリごとの import パス登録や公開一覧は作りません。統合・standalone Home Manager は同じ `home-manager.sharedModules` と自動検出入口を使います。
