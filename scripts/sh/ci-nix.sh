@@ -82,6 +82,11 @@ source)
   git -C "$repository" archive --format=tar "$TESTED_SHA" | tar -xf - -C "$committed_source"
   nix flake archive --json --no-update-lock-file "path:$committed_source" >"$CI_STATE/source.json"
   frozen=$(source_path)
+  # Retain the exact source and every archived input while build-time GC runs.
+  inputs=()
+  while IFS= read -r input; do inputs+=("$input"); done \
+    < <(jq -er '[.. | objects | .path? // empty] | unique[]' "$CI_STATE/source.json")
+  nix build --out-link "$CI_STATE/input" "${inputs[@]}"
   # shellcheck disable=SC2016 # This interpolation is Nix syntax.
   CI_SOURCE_ROOT="$frozen" nix eval --impure --json --expr '
     let f = builtins.getFlake (builtins.getEnv "CI_SOURCE_ROOT");
@@ -111,7 +116,7 @@ checks)
   [[ $(jq '.derivations | length' "$CI_STATE/checks.json") -gt 0 ]]
   checks=()
   while IFS= read -r check; do checks+=("$check^*"); done < <(jq -er '.derivations[]' "$CI_STATE/checks.json")
-  nix build --no-link --no-write-lock-file --print-build-logs "${checks[@]}"
+  nix build --out-link "$CI_STATE/check" --no-update-lock-file --print-build-logs "${checks[@]}"
   if [[ $target == linux && ${CI_LINUX_REQUIRED:-false} == true ]]; then
     record_root linux driver "$(jq -er .driver "$CI_STATE/checks.json")"
   fi
@@ -125,25 +130,26 @@ build)
     nix flake lock --offline "path:$CI_STATE/darwin-flake"
     nix flake archive --json --no-update-lock-file --no-write-lock-file "path:$CI_STATE/darwin-flake" >"$CI_STATE/deployment.json"
     deployment=$(jq -er .path "$CI_STATE/deployment.json")
-    system=$(nix build --no-link --no-update-lock-file --no-write-lock-file --print-out-paths --print-build-logs "$deployment#darwinConfigurations.macos.system")
+    nix build --out-link "$CI_STATE/deployment" "$deployment"
+    system=$(nix build --out-link "$CI_STATE/system" --no-update-lock-file --print-out-paths --print-build-logs "$deployment#darwinConfigurations.macos.system")
     record_root darwin system "$system"
     record_root darwin deployment "$deployment"
     # Build the same derivation as the public app; a raw program string loses
     # its derivation context and cannot realise an uncached store output.
     # shellcheck disable=SC2016 # The package system interpolation is Nix syntax.
-    rebuild=$(CI_SOURCE_ROOT="$source" nix build --impure --no-link --no-update-lock-file --no-write-lock-file --print-out-paths --print-build-logs --expr '
+    rebuild=$(CI_SOURCE_ROOT="$source" nix build --impure --out-link "$CI_STATE/rebuild" --no-update-lock-file --print-out-paths --print-build-logs --expr '
       let f = builtins.getFlake (builtins.getEnv "CI_SOURCE_ROOT");
       in f.inputs.nix-darwin.packages.${builtins.currentSystem}.darwin-rebuild
     ')
     record_root darwin rebuild "$rebuild"
   elif [[ $target == wsl ]]; then
-    system=$(nix build --impure --no-link --no-update-lock-file --print-out-paths --print-build-logs "$source#nixosConfigurations.nixos.config.system.build.toplevel")
+    system=$(nix build --impure --out-link "$CI_STATE/system" --no-update-lock-file --print-out-paths --print-build-logs "$source#nixosConfigurations.nixos.config.system.build.toplevel")
     record_root wsl system "$system"
   else
     if [[ ${CI_LINUX_REQUIRED:-false} == true ]]; then
       # The driver already contains the complete production configuration on
       # VM hardware. Build the standalone installer target separately.
-      nix build --no-link --print-build-logs "$source#homeConfigurations.x86_64-linux.activationPackage"
+      nix build --out-link "$CI_STATE/home" --no-update-lock-file --print-build-logs "$source#homeConfigurations.x86_64-linux.activationPackage"
     fi
   fi
   ;;

@@ -14,7 +14,33 @@
         import ./package.nix {
           inherit pkgs;
           source = inputs.hermes-agent;
-          package = inputs.hermes-agent.packages.${pkgs.stdenv.hostPlatform.system}.default;
+          package =
+            let
+              system = pkgs.stdenv.hostPlatform.system;
+              upstream = inputs.hermes-agent.packages.${system}.default;
+              runtimePkgs = inputs.hermes-agent.inputs.nixpkgs.legacyPackages.${system};
+            in
+            if
+              pkgs.stdenv.hostPlatform.isDarwin
+              &&
+                upstream.hermesNpmLib.pnpmDeps.outputHash == "sha256-x+ywbFSCI60OcBH0R3UMm2zDc/pSLuYouerDLzqGi0c="
+            then
+              # Upstream's single pnpm store hash was generated on Linux.
+              # Keep its source/toolchain, correcting only the Darwin fetch hash.
+              upstream.override {
+                callPackage = runtimePkgs.newScope {
+                  fetchPnpmDeps =
+                    args:
+                    runtimePkgs.fetchPnpmDeps (
+                      args
+                      // {
+                        hash = "sha256-c5SncErlf7IRWYj+b8MsAle7aplRt6Ip7rHWS037wzo=";
+                      }
+                    );
+                };
+              }
+            else
+              upstream;
         }
       );
     }
