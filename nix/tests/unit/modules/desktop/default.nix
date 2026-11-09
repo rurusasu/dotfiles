@@ -1,6 +1,6 @@
-{ fixtures }:
+{ fixtures, homeConfigurations }:
 let
-  darwin = fixtures.mkHome "aarch64-darwin" [ (fixtures.homeModule "darwin") ];
+  inherit (homeConfigurations) darwin;
   disabled = darwin.extendModules {
     modules = [ { dotfiles.desktop.enable = darwin.pkgs.lib.mkForce false; } ];
   };

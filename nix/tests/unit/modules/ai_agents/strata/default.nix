@@ -1,4 +1,8 @@
-{ fixtures, code }:
+{
+  fixtures,
+  code,
+  homeConfigurations,
+}:
 let
   darwin = fixtures.mkHome "aarch64-darwin" [
     (fixtures.homeModule "darwin")
@@ -89,7 +93,7 @@ in
       (darwin.extendModules {
         modules = [ { targets.darwin.copyApps.enable = false; } ];
       })
-      (fixtures.mkHome "x86_64-linux" [ (fixtures.homeModule "linux") ])
+      homeConfigurations.linux
     ];
     expected = [
       false
