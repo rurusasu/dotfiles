@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Keep the runner's completed Nix builds when a fetch hits a temporary DNS failure.
+# Keep completed Nix builds when a source fetch hits a temporary network failure.
 set -euo pipefail
 
 if (($# == 0)); then
@@ -27,13 +27,20 @@ for retry_attempt in 1 2 3; do
   cat "$retry_stdout" >&2
   cat "$retry_stdout" >>"$retry_log"
   retry_status=${retry_statuses[0]}
-  if ((retry_attempt == 3 || retry_status >= 128)) ||
-    ! grep -Eq 'curl: \(6\) Could not resolve host:' "$retry_log" ||
-    ! grep -Eq 'error: cannot download .+ from any mirror' "$retry_log"; then
+  if ((retry_attempt == 3 || retry_status >= 128)); then
     exit "$retry_status"
   fi
-  retry_delay=$((retry_attempt * 10))
-  printf 'Temporary DNS failure; retrying in %s seconds (attempt %s of 3).\n' \
-    "$retry_delay" "$((retry_attempt + 1))" >&2
+  if grep -Eq '^[[:space:]]*error:.*unable to download.*https://api\.github\.com/.*HTTP error 429([[:space:]]|$)' "$retry_log"; then
+    retry_reason='GitHub download rate limit'
+    retry_delay=$((retry_attempt * 60))
+  elif grep -Eq 'curl: \(6\) Could not resolve host:' "$retry_log" &&
+    grep -Eq 'error: cannot download .+ from any mirror' "$retry_log"; then
+    retry_reason='Temporary DNS failure'
+    retry_delay=$((retry_attempt * 10))
+  else
+    exit "$retry_status"
+  fi
+  printf '%s; retrying in %s seconds (attempt %s of 3).\n' \
+    "$retry_reason" "$retry_delay" "$((retry_attempt + 1))" >&2
   sleep "$retry_delay"
 done

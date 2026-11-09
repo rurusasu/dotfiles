@@ -13,7 +13,7 @@ repository=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 case $phase in
 source | checks | build)
   # Retry individual read/build operations, never the state-changing installer.
-  nix() { bash "$repository/scripts/sh/retry-ci-dns.sh" nix "$@"; }
+  nix() { bash "$repository/scripts/sh/retry-ci-fetch.sh" nix "$@"; }
   ;;
 esac
 

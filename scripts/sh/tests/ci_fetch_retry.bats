@@ -29,8 +29,8 @@ EOF
   export PATH="$stub_bin:$PATH"
 }
 
-@test "CI DNS retry preserves successful command arguments without repeating it" {
-  run bash "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" target 'two words' '$(not-a-command)'
+@test "CI fetch retry preserves successful command arguments without repeating it" {
+  run bash "$REPO_ROOT/scripts/sh/retry-ci-fetch.sh" target 'two words' '$(not-a-command)'
   [ "$status" -eq 0 ]
   [[ $output == *'success: <two words>'* ]]
   [[ $output == *'success: <$(not-a-command)>'* ]]
@@ -38,48 +38,49 @@ EOF
   [ ! -e "$RETRY_SLEEPS" ]
 }
 
-@test "CI DNS retry stops after three failed attempts and keeps the exit status" {
+@test "CI fetch retry bounds rate-limit attempts and keeps the exit status" {
   export RETRY_FAILURES=9
-  run bash "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" target
+  export RETRY_ERROR="error: unable to download 'https://api.github.com/repos/example/source/tarball/fixture': HTTP error 429"
+  run bash "$REPO_ROOT/scripts/sh/retry-ci-fetch.sh" target
   [ "$status" -eq 23 ]
   [ "$(wc -l <"$RETRY_CALLS" | tr -d ' ')" -eq 3 ]
-  [ "$(tr '\n' ' ' <"$RETRY_SLEEPS")" = '10 20 ' ]
+  [ "$(tr '\n' ' ' <"$RETRY_SLEEPS")" = '60 120 ' ]
 }
 
-@test "CI DNS retry fails immediately for errors unrelated to DNS" {
+@test "CI fetch retry fails immediately for errors unrelated to fetching" {
   export RETRY_FAILURES=9 RETRY_ERROR='error: invalid configuration' RETRY_EXIT=42
-  run bash "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" target
+  run bash "$REPO_ROOT/scripts/sh/retry-ci-fetch.sh" target
   [ "$status" -eq 42 ]
   [ "$(wc -l <"$RETRY_CALLS" | tr -d ' ')" -eq 1 ]
   [ ! -e "$RETRY_SLEEPS" ]
 }
 
-@test "CI DNS retry does not reuse a previous attempt's lookup error" {
+@test "CI fetch retry does not reuse a previous attempt's lookup error" {
   export RETRY_FAILURES=9 RETRY_SECOND_ERROR='error: invalid configuration'
-  run bash "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" target
+  run bash "$REPO_ROOT/scripts/sh/retry-ci-fetch.sh" target
   [ "$status" -eq 23 ]
   [ "$(wc -l <"$RETRY_CALLS" | tr -d ' ')" -eq 2 ]
   [ "$(cat "$RETRY_SLEEPS")" = 10 ]
 }
 
-@test "CI DNS retry ignores a recovered lookup error before an unrelated failure" {
+@test "CI fetch retry ignores a recovered rate-limit warning before an unrelated failure" {
   export RETRY_FAILURES=9 RETRY_EXIT=42
-  export RETRY_ERROR=$'curl: (6) Could not resolve host: example.invalid\nDownload recovered\nerror: activation failed'
-  run bash "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" target
+  export RETRY_ERROR=$'warning: error: unable to download https://api.github.com/source: HTTP error 429\nDownload recovered\nerror: invalid configuration'
+  run bash "$REPO_ROOT/scripts/sh/retry-ci-fetch.sh" target
   [ "$status" -eq 42 ]
   [ "$(wc -l <"$RETRY_CALLS" | tr -d ' ')" -eq 1 ]
   [ ! -e "$RETRY_SLEEPS" ]
 }
 
-@test "CI DNS retry preserves cancellation without another attempt" {
+@test "CI fetch retry preserves cancellation without another attempt" {
   export RETRY_FAILURES=9 RETRY_EXIT=130
-  run bash "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" target
+  run bash "$REPO_ROOT/scripts/sh/retry-ci-fetch.sh" target
   [ "$status" -eq 130 ]
   [ "$(wc -l <"$RETRY_CALLS" | tr -d ' ')" -eq 1 ]
   [ ! -e "$RETRY_SLEEPS" ]
 }
 
-@test "CI DNS recovery publishes only the successful machine-readable stdout" {
+@test "CI fetch recovery publishes only the successful machine-readable stdout" {
   cat >"$BATS_TEST_TMPDIR/bin/json-target" <<'EOF'
 #!/usr/bin/env bash
 if [[ ! -e "$RETRY_CALLS" ]]; then
@@ -92,7 +93,7 @@ printf '{"path":"/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source"}\n'
 EOF
   chmod +x "$BATS_TEST_TMPDIR/bin/json-target"
   run bash -c 'bash "$1" json-target >"$2"' fixture \
-    "$REPO_ROOT/scripts/sh/retry-ci-dns.sh" "$BATS_TEST_TMPDIR/stdout"
+    "$REPO_ROOT/scripts/sh/retry-ci-fetch.sh" "$BATS_TEST_TMPDIR/stdout"
   [ "$status" -eq 0 ]
   [ "$(cat "$BATS_TEST_TMPDIR/stdout")" = '{"path":"/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source"}' ]
   [[ $output == *'incomplete'* ]]
