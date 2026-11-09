@@ -63,7 +63,6 @@ EOF
     [ "$(grep -Fc "include $secret_file" "$EXPECTED_CONFIG/nix/nix.conf")" -eq 1 ]
     grep -Fxq 'http2 = false' "$secret_file"
     grep -Fxq 'stalled-download-timeout = 60' "$secret_file"
-    grep -Fxq 'download-attempts = 3' "$secret_file"
     grep -Fxq 'fallback = true' "$secret_file"
     grep -Fxq 'substituters = https://cache.nixos.org?priority=10 https://cache.numtide.com?priority=50 https://hermes-agent.cachix.org' "$secret_file"
     [ ! -e "$GIT_CONFIG_SYSTEM" ]

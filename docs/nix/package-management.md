@@ -4,6 +4,11 @@
 
 Unix のアプリ本体は、共通の `nixpkgs` から取得することを原則とします。Home Manager で設定・連携も管理するアプリは標準の `programs.<name>.enable` と package 既定値を優先し、設定をユーザーが管理するアプリや標準 module のないアプリは `pkgs.<name>` を導入します。追加 flake や独自のダウンロード定義は、対象 OS の nixpkgs に同じアプリがない場合に限定します。
 
+Linux / Darwin 共通の入力には `nixpkgs-unstable` を使い、検証する revision を `flake.lock` に固定します。
+Darwin の標準依存まで利用するため、Linux 向けの `nixos-unstable` だけを基準にしません（[公式のチャネル選択](https://nix.dev/concepts/faq.html#rolling)）。
+キャッシュがない revision では .NET SDK や Swift / LLDB の bootstrap に数時間かかる場合があります。
+更新した lock は両 OS の producer build と E2E で検証してから反映します。
+
 設定・package override・生成・連携を持つアプリは、導入と専用の実行依存も同じ module にまとめます。enable・単純な package list・単一代入だけなら module を作らず、`nix/defaults.nix` の必要な構成へ直接書きます。Home Manager 標準の package 既定値を優先します。
 
 共通・OS 別構成はアプリ module の外で組み立てます。すべての実 module は `nix/modules/` 配下の `default.nix` を入口とし、`nix/discover-modules.nix` が再帰的に自動検出します。通常のディレクトリは Home Manager、`nixos/` / `darwin/` / `system/` 配下は NixOS / nix-darwin / 両 OS 共通の scope です。構成側には `programs.<name>.enable` などの型付き option だけを書き、アプリごとの import パス登録や公開一覧は作りません。統合・standalone Home Manager は同じ `home-manager.sharedModules` と自動検出入口を使います。
@@ -111,7 +116,7 @@ tag=$(gh release view --repo "$repo" --json tagName --jq .tagName) &&
 Home Manager は指定 tag のコミット済みソースから Linux アプリをビルドし、`lifelog` コマンドとアプリメニューを導入します。checkout の作業中の変更や未リリースの `main` は含まれません。新しい Release を使うときは同じ手順を再実行します。GitHub の自動確認や定期更新は行いません。tag の記録がない環境や pure 評価では導入されず、公開 CI に非公開ソースは渡りません。`nrs` は `--impure` でローカルの tag を読みます。Nix store に展開されたソースはローカルの他ユーザーから読めるため、機密情報をソースに含めないでください。OCR は別途セットアップが必要です。
 
 Docker MCP は `docker-mcp` input の公式リポジトリの既定ブランチから取得します。
-Git revision と内容は `flake.lock` で固定し、`nrs` の input 更新で追従します。
+Git revision と内容は `flake.lock` で固定し、`task update` で更新し、CI 検証後に `nrs` で反映します。
 依存は source に同梱された `vendor/` を使い、ビルド中の追加ダウンロードは行いません。
 Home Manager が単体の `docker-mcp` バイナリと利用サーバーの起動引数を反映します。Podman API を使い、Docker CLI の plugin link や profile sync は不要です。秘密情報は `task mcp:toolkit:secrets` で所有者だけが読み書きできるローカルファイルへ同期します。
 
@@ -121,7 +126,7 @@ NixOS / WSL の公開互換コマンドと API unit は標準の `virtualisation
 
 Ollama は共通 Home Manager の `services.ollama.enable` で標準 package とユーザーサービスを導入します。API は既定の `127.0.0.1:11434` で待ち受けます。モデルの自動取得や GPU backend の変更は行いません。`ollama pull <model>` で使用するモデルを選択します。
 
-Strata は Linux x86_64 / WSLg と Apple Silicon macOS に `strata`（CLI）と `strata-desktop`（GUI）を導入します。[公式 release](https://github.com/Niko1221/Strata/releases) の latest feed (`releases/latest/download/strata-feed.json`) を input として使い、Desktop と Control は feed が示す同じ release の asset から取得します。`task update` または `nrs` / `./install.sh` の input 更新で最新の安定版に追従します。共通の `update-flake-inputs.sh` が更新時に latest feed の版を解決し、同じ hash の版付き URL を確認して lock に保存します。input の original URL は latest のままなので、特定の版に固定し続ける設定ではありません。lock は feed の版付き URL・内容と asset の SHA-256 を固定するため、次の release 後も同じコミットを再現できます。`nix flake update` の単独実行では mutable URL が lock に残るため、更新には `task update` または `bash scripts/sh/update-flake-inputs.sh .` を使います。`nrs` / `./install.sh` は input 更新後の版を導入します。Desktop の製品版と Control の内部 build 番号は異なります。CLI は配布物に同梱された Python を使い、ユーザーディレクトリの別版 Control への自動引き継ぎは無効にします。Linux GUI も固定された Control を使います。macOS の `.app` は公式署名を保持するため変更せず、GUI は upstream の規則に従い、同梱版とユーザーが更新した Control の新しい方を使います。`STRATA_CONTROL_DIR` の指定だけでは新しいユーザー版への切り替えを禁止できません。モデルと推論エンジンは初回設定時に選び、ユーザーのデータディレクトリに取得します。
+Strata は Linux x86_64 / WSLg と Apple Silicon macOS に `strata`（CLI）と `strata-desktop`（GUI）を導入します。[公式 release](https://github.com/Niko1221/Strata/releases) の latest feed (`releases/latest/download/strata-feed.json`) を input として使い、Desktop と Control は feed が示す同じ release の asset から取得します。`task update` で最新の安定版へ更新し、変更した lock を CI で検証します。共通の `update-flake-inputs.sh` が更新時に latest feed の版を解決し、同じ hash の版付き URL を確認して lock に保存します。input の original URL は latest のままなので、特定の版に固定し続ける設定ではありません。lock は feed の版付き URL・内容と asset の SHA-256 を固定するため、次の release 後も同じコミットを再現できます。`nix flake update` の単独実行では mutable URL が lock に残るため、更新には `task update` または `bash scripts/sh/update-flake-inputs.sh .` を使います。`nrs` / `./install.sh` は lock 済みの版を更新せず導入します。Desktop の製品版と Control の内部 build 番号は異なります。CLI は配布物に同梱された Python を使い、ユーザーディレクトリの別版 Control への自動引き継ぎは無効にします。Linux GUI も固定された Control を使います。macOS の `.app` は公式署名を保持するため変更せず、GUI は upstream の規則に従い、同梱版とユーザーが更新した Control の新しい方を使います。`STRATA_CONTROL_DIR` の指定だけでは新しいユーザー版への切り替えを禁止できません。モデルと推論エンジンは初回設定時に選び、ユーザーのデータディレクトリに取得します。
 
 WSL の NVIDIA GPU は Windows 側のドライバーを使います。CLI・GUI の FHS 環境には `/usr/lib/wsl` を読み取り専用で公開し、同梱の `nvidia-smi` と CUDA driver library を参照します。Linux 用 NVIDIA ドライバーを WSL 内へ別途導入する必要はありません。
 RTX 4060（VRAM 8GB）と約 48GB の RAM では、[Qwen3.6-35B-A3B](https://github.com/Niko1221/Strata/blob/main/docs/QWEN36.md) の `UD-Q4_K_XL`（約 22.9GB）を context 8K・並列数 1・画像なし・MTP draft なしで生成確認しています。VRAM に収まらない expert は CPU と RAM を使うため、モデル全体が GPU に載る構成ではありません。既定の Q8 decode 用追加コピーでは VRAM が不足したため、`STRATA_Q8_PACKED=0` で追加コピーを無効にします。MTP draft を無効にしても、このモデルの MTP block 自体はメモリに残ります。次のコマンドは CUDA engine とモデルを取得し、localhost:8080 で起動します。
@@ -269,7 +274,7 @@ Ubuntu / Debian:  ./install.sh
 ```
 
 - Windows は `windows/winget/packages.json` を正本として winget で導入します。
-- `task install` は既存の PowerShell と winget で Windows のパッケージを導入した後、NixOS-WSL の導入、inputs の更新と NixOS/Home Manager の反映、Windows chezmoi の順に一度ずつ実行します。WSLg の対象 GUI は Nix 側で導入します。実行順序は `taskfiles/install/taskfile.yml` が管理します。`install.cmd` / `install.ps1` が PowerShell で WinGet master を1回適用し、Task の導入後は Taskfile の WSL・chezmoi へ進みます。WinGet の実行経路はこの1か所で、直接の `task install` も同じ入口を使います。`-Phase Winget` は master の import のみを実行します。WSL 基盤の有効化だけ UAC 昇格します。既存アプリや Startup shortcut は自動削除しません。
+- `task install` は既存の PowerShell と winget で Windows のパッケージを導入した後、NixOS-WSL の導入、lock 済みの NixOS/Home Manager の反映、Windows chezmoi の順に一度ずつ実行します。WSLg の対象 GUI は Nix 側で導入します。実行順序は `taskfiles/install/taskfile.yml` が管理します。`install.cmd` / `install.ps1` が PowerShell で WinGet master を1回適用し、Task の導入後は Taskfile の WSL・chezmoi へ進みます。WinGet の実行経路はこの1か所で、直接の `task install` も同じ入口を使います。`-Phase Winget` は master の import のみを実行します。WSL 基盤の有効化だけ UAC 昇格します。既存アプリや Startup shortcut は自動削除しません。
 - Codex CLI はどの OS でも個別導入せず、各 OS 向け ChatGPT アプリ付属の CLI を使います。Windows の GUI profile は Microsoft Store のデスクトップアプリを対象とし、npm/pnpm パッケージを導入しません。
 - macOS は nix-darwin が Home Manager と nix-homebrew formula/cask を同じ switch に含めます。
 - 非 NixOS Linux（Ubuntu/Debian など）は standalone Home Manager が Podman API を含むユーザー環境を適用します。OS service は管理しません。
@@ -342,7 +347,7 @@ macOS で Homebrew cask の適用に失敗する場合は、
 
 `windows/winget/packages.json` は WinGet 標準 import 形式の独立した正本です。source、package ID、必要な `Scope` を直接編集し、Unix module に Windows metadata を置きません。
 
-`install.cmd` は `winget import --import-file windows/winget/packages.json --ignore-versions --accept-package-agreements --accept-source-agreements --disable-interactivity` を一度実行します。master に含む Task が利用できるようになってから、Taskfile の WSL → chezmoi へ進みます。更新・NixOS 反映は WSL の処理で各一回です。
+`install.cmd` は `winget import --import-file windows/winget/packages.json --ignore-versions --accept-package-agreements --accept-source-agreements --disable-interactivity` を一度実行します。master に含む Task が利用できるようになってから、Taskfile の WSL → chezmoi へ進みます。NixOS の反映は WSL の処理で一回です。
 
 WinGet と各アプリの installer が導入、更新、コマンドリンク、PATH 登録を管理します。独自のパッケージ別 JSON パース、PATH・リンク修復、検証 metadata はありません。import は共通の 3600 秒 timeout を使い、`DOTFILES_INSTALL_TIMEOUT_SECONDS` で変更できます。0 は timeout を無効にします。非ゼロ終了時は後続へ進みません。
 

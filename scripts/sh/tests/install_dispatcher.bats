@@ -11,25 +11,12 @@ setup() {
   mkdir -p "$TEST_BIN" "$TEST_NIX_BIN" "${TEST_CHECKOUT%/*}"
   export PATH="$TEST_BIN:$PATH"
   export DISPATCH_LOG TEST_NIX_DAEMON_PROFILE TEST_NIX_PROFILE_FIXTURE TEST_NIX_BIN
-  unset UPDATE_FLAKE_INPUTS DOTFILES_ALLOW_BUILDS DOTFILES_FLAKE_REF NIX_CONFIG
+  unset DOTFILES_ALLOW_BUILDS DOTFILES_FLAKE_REF NIX_CONFIG
   export TEST_CONFIG_LOG="$BATS_TEST_TMPDIR/nix-config"
   cat >"$TEST_BIN/nix" <<'EOF'
 #!/usr/bin/env bash
-if [[ -n ${DOTFILES_FLAKE_ROOT:-} ]]; then exit 0; fi
-if [[ -n ${DOTFILES_FLAKE_LOCK:-} ]]; then
-  cat "$DOTFILES_FLAKE_LOCK"
-  exit 0
-fi
 printf 'nix=%s\n' "$*" >>"$DISPATCH_LOG"
 printf '%s' "${NIX_CONFIG:-}" >"$TEST_CONFIG_LOG"
-while (($#)); do
-  case "$1" in
-    --reference-lock-file) reference=$2; shift ;;
-    --output-lock-file) output=$2; shift ;;
-  esac
-  shift
-done
-if [[ -n ${output:-} ]]; then cp "$reference" "$output"; fi
 EOF
   chmod +x "$TEST_BIN/nix"
 }
@@ -49,7 +36,6 @@ EOF
 write_dispatch_repo() {
   mkdir -p "$BATS_TEST_TMPDIR/repo/scripts/sh/lib"
   cp "$REPO_ROOT/scripts/sh/lib/install-options.sh" "$BATS_TEST_TMPDIR/repo/scripts/sh/lib/"
-  cp "$REPO_ROOT/scripts/sh/update-flake-inputs.sh" "$BATS_TEST_TMPDIR/repo/scripts/sh/"
   cp "$REPO_ROOT/flake.lock" "$BATS_TEST_TMPDIR/repo/flake.lock"
   sed -e "s|/etc/NIXOS|$BATS_TEST_TMPDIR/NIXOS|g" \
     -e "s|\$HOME/.dotfiles|$TEST_CHECKOUT|g" \
@@ -79,6 +65,9 @@ EOF
 
 run_installer_checking_nounset() {
   # Keep the host's real Nix out of this missing-Nix/profile-loading fixture.
+  for tool in bash dirname cat cp ln sh; do
+    ln -s "$(command -v "$tool")" "$TEST_BIN/$tool"
+  done
   run env -u ZSH_VERSION PATH="$TEST_BIN:/usr/bin:/bin" bash -c '
 exec() {
 	case "$-" in
@@ -159,7 +148,7 @@ EOF
   grep -q '^target=install-nixos.sh args=--example$' "$DISPATCH_LOG"
 }
 
-@test "non-NixOS Linux updates inputs then runs Home Manager with arguments intact" {
+@test "non-NixOS Linux applies locked Home Manager with arguments intact" {
   write_uname_stub
   write_dispatch_repo
   local dispatch_root
@@ -170,8 +159,8 @@ EOF
 
   [ "$status" -eq 0 ]
   [[ $TEST_CHECKOUT -ef "$BATS_TEST_TMPDIR/repo" ]]
-  grep -Fq -- "flake update --flake $dispatch_root" "$DISPATCH_LOG"
-  grep -Fq -- "run $dispatch_root#home-manager -- switch --flake $dispatch_root#x86_64-linux --impure --example" "$DISPATCH_LOG"
+  ! grep -q 'flake update' "$DISPATCH_LOG"
+  grep -Fq -- "run --no-update-lock-file $dispatch_root#home-manager -- switch --flake $dispatch_root#x86_64-linux --impure --no-update-lock-file --example" "$DISPATCH_LOG"
 }
 
 @test "unsupported platforms are rejected and direct Windows users to install.cmd" {
@@ -189,7 +178,7 @@ EOF
   write_uname_stub
   write_dispatch_repo
   export TEST_UNAME_S=Linux TEST_UNAME_M=x86_64
-  run env UPDATE_FLAKE_INPUTS=false DOTFILES_ALLOW_BUILDS=false \
+  run env DOTFILES_ALLOW_BUILDS=false \
     DOTFILES_FLAKE_REF=path:/nix/store/prepared-source#x86_64-linux \
     "$BATS_TEST_TMPDIR/repo/install.sh"
   [ "$status" -eq 0 ]

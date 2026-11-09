@@ -69,7 +69,7 @@ function Get-Something {
 PSScriptAnalyzer を宣言済みの依存として使用します。
 nixpkgs の `vscode-extensions.ms-vscode.powershell` に同梱された module を直接 import します。
 VS Code 本体は導入せず、拡張機能の module ディレクトリから PowerShell が版を解決します。
-更新は `nrs` による nixpkgs input の更新に従い、配布物は `flake.lock` で固定されます。
+更新は `task update` による nixpkgs input の更新と CI 検証に従い、配布物は `flake.lock` で固定されます。
 HOME の module cache に依存せず、整形・静的検査中の module ダウンロードはありません。
 
 Windows の runtime suite は、インストール済みの互換性がある stable Pester を選択します。

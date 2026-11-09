@@ -5,7 +5,7 @@ setup() {
   mkdir -p "$BATS_TEST_TMPDIR/bin"
   export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
   export TEST_LOG="$BATS_TEST_TMPDIR/commands"
-  unset UPDATE_FLAKE_INPUTS DOTFILES_ALLOW_BUILDS DOTFILES_FLAKE_REF NIX_CONFIG
+  unset DOTFILES_ALLOW_BUILDS DOTFILES_FLAKE_REF NIX_CONFIG
   export TEST_KERNEL=Microsoft TEST_CURRENT_USER=nixos TEST_CONFIGURED_USER=nixos
   cat >"$BATS_TEST_TMPDIR/bin/uname" <<'EOF'
 #!/usr/bin/env bash
@@ -13,21 +13,8 @@ printf '%s\n' "$TEST_KERNEL"
 EOF
   cat >"$BATS_TEST_TMPDIR/bin/nix" <<'EOF'
 #!/usr/bin/env bash
-if [[ -n ${DOTFILES_FLAKE_ROOT:-} ]]; then exit 0; fi
-if [[ -n ${DOTFILES_FLAKE_LOCK:-} ]]; then
-  cat "$DOTFILES_FLAKE_LOCK"
-  exit 0
-fi
 printf 'nix %s\n' "$*" >>"$TEST_LOG"
 if [[ "$*" == *'eval --raw'* ]]; then printf '%s' "$TEST_CONFIGURED_USER"; fi
-while (($#)); do
-  case "$1" in
-    --reference-lock-file) reference=$2; shift ;;
-    --output-lock-file) output=$2; shift ;;
-  esac
-  shift
-done
-if [[ -n ${output:-} ]]; then cp "$reference" "$output"; fi
 EOF
   cat >"$BATS_TEST_TMPDIR/bin/id" <<'EOF'
 #!/usr/bin/env bash
@@ -46,6 +33,8 @@ EOF
   run "$REPO_ROOT/scripts/sh/install-nixos.sh"
   [ "$status" -eq 0 ]
   grep -q 'sudo nixos-rebuild switch' "$TEST_LOG"
+  grep -q -- '--no-update-lock-file' "$TEST_LOG"
+  ! grep -q 'flake update' "$TEST_LOG"
 }
 
 @test "WSL username changes require boot and restart before switch" {

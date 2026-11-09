@@ -5,10 +5,10 @@ vars:
 
 tasks:
   install:
-    desc: Install Windows apps, update and apply NixOS-WSL once, then apply Windows dotfiles
+    desc: Install Windows apps, apply locked NixOS-WSL, then apply Windows dotfiles
     summary: |
-      Windows アプリ導入 → WSL の更新・反映 → Windows 設定反映の順に実行します。
-      inputs の更新と NixOS/Home Manager の反映は WSL 処理で各1回だけ行います。
+      Windows アプリ導入 → WSL の反映 → Windows 設定反映の順に実行します。
+      NixOS/Home Manager は lock 済みの依存を一度だけ反映します。
       Windows の再起動が必要な場合は、設定反映へ進まず再実行を案内します。
       再起動要求は終了コードで伝えます。一時ファイルは使いません。
       install.cmd と task install は同じ PowerShell 入口で WinGet master を適用します。
@@ -33,7 +33,7 @@ tasks:
         silent: true
 
   install:wsl:
-    desc: NixOS-WSL を準備し、inputs の更新と構成の反映を各1回行う
+    desc: NixOS-WSL を準備し、lock 済みの構成を一度反映する
     internal: true
     cmds:
       - '"{{.INSTALL_POWERSHELL}}" -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1 -Phase Wsl'

@@ -9,7 +9,7 @@ tasks:
   test:nix:
     desc: Run all Nix flake checks for the current system
     cmds:
-      - nix flake check --no-write-lock-file --print-build-logs
+      - nix flake check --no-update-lock-file --print-build-logs
 
   test:powershell:
     desc: Run PowerShell tests
@@ -19,4 +19,4 @@ tasks:
   test:bash:
     desc: Run shell runtime tests with the locked Nix toolchain
     cmds:
-      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix develop --ignore-environment --keep HOME .#runtime-tests --command bats --print-output-on-failure scripts/sh/tests"'
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix develop --no-update-lock-file --ignore-environment --keep HOME .#runtime-tests --command bats --print-output-on-failure scripts/sh/tests"'

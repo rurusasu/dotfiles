@@ -5,6 +5,6 @@
 - クラス、結果オブジェクト、独自runner、テスト専用引数やラッパーは作らない。失敗は例外で伝える。
 - 具体的な名前付き引数を使い、ユーザーPATHを永続変更せず、既存VHD・チェックアウトを削除や上書きで復旧しない。
 - distro登録は元のユーザーで実行し、基盤有効化のOSコマンドだけ昇格する。再起動要求は3010で停止する。
-- WinGet、input更新、NixOS/Home Manager反映、chezmoi反映は各1回。
+- WinGet、NixOS/Home Manager反映、chezmoi反映は各1回。依存更新は task update に分離し、通常反映は lock を更新しない。
 - テストは `tests/Invoke-Tests.ps1` を使い、現仕様の動作だけを確認する。
 - 詳細は `docs/scripts/powershell/README.md`。
