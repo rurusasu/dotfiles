@@ -3,8 +3,10 @@
 Windows の通常入口は `task install` です。GUI アプリ導入、lock 済みの NixOS-WSL の反映、
 Windows chezmoi の適用を順に実行します。Nix の反映は WSL phase で一度だけ行います。
 既存 distro は再利用し、未登録なら公式の `nixos.wsl` を取得して登録します。
-登録には `wsl --install --from-file` を試し、失敗した場合は `wsl --import` に切り替えます。
+登録には `wsl --install --from-file` を使い、失敗時は停止します。
 `scripts/powershell/lib/Invoke-NixosWslSetup.ps1` が checkout を同期して NixOS/Home Manager を適用します。
+初回登録用の release 情報と `nixos.wsl` は Windows 標準の `curl.exe` で取得します。
+一時的な HTTP エラーは15秒間隔で最大5回再試行し、取得失敗時は登録せず一時ファイルを削除します。
 
 ## 推奨: Windows installer から実行する
 

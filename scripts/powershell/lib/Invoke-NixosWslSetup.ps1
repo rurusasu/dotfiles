@@ -48,15 +48,27 @@ function Install-NixosWsl {
     else {
         "$releaseBase/tags/$([Uri]::EscapeDataString($ReleaseTag))"
     }
-    $release = Invoke-RestMethod -Uri $releaseUri -Headers @{ 'User-Agent' = 'nixos-wsl-installer' } -ErrorAction Stop
-    $asset = $release.assets | Where-Object { $_.name -eq 'nixos.wsl' } | Select-Object -First 1
-    if (-not $asset) {
-        throw "Release $($release.tag_name) does not contain nixos.wsl. Use latest or a ReleaseTag that provides nixos.wsl."
-    }
-
     $downloadPath = Join-Path ([IO.Path]::GetTempPath()) ('nixos-' + [Guid]::NewGuid().ToString('N') + '.wsl')
+    $releasePath = "$downloadPath.json"
+    # Windows includes curl.exe under both supported PowerShell runtimes.
+    # Use its transient HTTP retry policy; never retry WSL registration.
+    $curlArguments = @(
+        '--fail', '--location', '--silent', '--show-error',
+        '--retry', '5', '--retry-delay', '15', '--retry-max-time', '300',
+        '--connect-timeout', '30',
+        '--user-agent', 'nixos-wsl-installer'
+    )
     try {
-        Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile $downloadPath -ErrorAction Stop
+        # File output lets curl discard an incomplete response before retrying.
+        Invoke-NativeCommand -Command 'curl.exe' -Arguments ($curlArguments + @('--max-time', '120', '--output', $releasePath, $releaseUri)) | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "NixOS-WSL release query failed (exit=$LASTEXITCODE)." }
+        $release = Get-Content -LiteralPath $releasePath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $asset = $release.assets | Where-Object { $_.name -eq 'nixos.wsl' } | Select-Object -First 1
+        if (-not $asset) {
+            throw "Release $($release.tag_name) does not contain nixos.wsl. Use latest or a ReleaseTag that provides nixos.wsl."
+        }
+        Invoke-NativeCommand -Command 'curl.exe' -Arguments ($curlArguments + @('--max-time', '1800', '--output', $downloadPath, $asset.browser_download_url)) | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "NixOS-WSL download failed (exit=$LASTEXITCODE)." }
         if (-not (Test-Path -LiteralPath $installPath)) {
             New-Item -ItemType Directory -Path $installPath -ErrorAction Stop | Out-Null
         }
@@ -67,7 +79,7 @@ function Install-NixosWsl {
         $output | Out-Host
     }
     finally {
-        Remove-Item -LiteralPath $downloadPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $downloadPath, $releasePath -Force -ErrorAction SilentlyContinue
     }
 }
 

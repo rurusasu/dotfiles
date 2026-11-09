@@ -22,6 +22,7 @@ Describe 'Install-NixosWsl' {
         $script:registeredDistros = @()
         $script:listExitCode = 0
         $script:registrationExitCode = 0
+        $script:downloadExitCode = 0
         $script:release = @{
             tag_name = 'fixture-release'
             assets   = @(
@@ -43,16 +44,21 @@ Describe 'Install-NixosWsl' {
             $global:LASTEXITCODE = $script:registrationExitCode
             return 'registration output'
         }
-        Mock Invoke-RestMethod {
-            param($Uri)
-            $script:releaseRequests += ([Uri]$Uri).AbsoluteUri
-            return $script:release
-        }
-        Mock Invoke-WebRequest {
-            param($Uri, $OutFile)
-            $script:downloadRequests += [string]$Uri
-            $script:downloadPath = $OutFile
-            Set-Content -LiteralPath $OutFile -Value 'download fixture' -NoNewline
+        Mock Invoke-NativeCommand {
+            param($Command, $Arguments)
+            $uri = [string]$Arguments[-1]
+            $outFile = $Arguments[[Array]::IndexOf($Arguments, '--output') + 1]
+            $global:LASTEXITCODE = 0
+            if ($uri.StartsWith('https://api.github.com/')) {
+                $script:releaseRequests += ([Uri]$uri).AbsoluteUri
+                $script:release | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $outFile -Encoding UTF8
+            }
+            else {
+                $script:downloadRequests += $uri
+                $script:downloadPath = $outFile
+                Set-Content -LiteralPath $outFile -Value 'download fixture' -NoNewline
+                $global:LASTEXITCODE = $script:downloadExitCode
+            }
         }
     }
 
@@ -99,6 +105,17 @@ Describe 'Install-NixosWsl' {
         $script:wslCalls[1][0] | Should -Be '--install'
         $script:downloadExistedAtRegistration | Should -Be $true
         Test-Path -LiteralPath $script:downloadPath | Should -Be $false
+    }
+
+    It 'should stop before registration and remove incomplete files when the download fails' {
+        $script:downloadExitCode = 22
+
+        { Install-NixosWsl -InstallDir $script:installDir } | Should -Throw '*download failed (exit=22)*'
+
+        $script:wslCalls.Count | Should -Be 1
+        Test-Path -LiteralPath $script:installDir | Should -Be $false
+        Test-Path -LiteralPath $script:downloadPath | Should -Be $false
+        Test-Path -LiteralPath "$script:downloadPath.json" | Should -Be $false
     }
 
     It 'should stop on a failed distribution query even when its output contains the name' {
