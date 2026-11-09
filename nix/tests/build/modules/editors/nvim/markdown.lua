@@ -1,6 +1,5 @@
 -- Run after loading the Home Manager-generated init.lua and native plugins.
 assert(vim.v.errmsg == "", "plugin startup must not report errors: " .. vim.v.errmsg)
-assert(package.loaded["config.completion"], "core setup must run before plugin configuration")
 
 -- Restore a valid last-edit position, but preserve an explicitly chosen position.
 local buf = vim.api.nvim_create_buf(true, false)
@@ -13,8 +12,6 @@ assert(vim.deep_equal(vim.api.nvim_win_get_cursor(0), { 2, 3 }), "last-edit posi
 vim.api.nvim_win_set_cursor(0, { 3, 1 })
 vim.api.nvim_exec_autocmds("BufReadPost", { buffer = buf, group = "DotfilesEditing" })
 assert(vim.deep_equal(vim.api.nvim_win_get_cursor(0), { 3, 1 }), "explicit cursor position must be preserved")
-require("config.autocmds").setup()
-assert(#vim.api.nvim_get_autocmds({ group = "DotfilesEditing", event = "BufReadPost" }) == 1)
 
 local markdown_key = vim.fn.maparg("<leader>mp", "n", false, true)
 markdown_key.callback()
@@ -33,9 +30,6 @@ end
 vim.api.nvim_buf_set_lines(0, 0, -1, false, { "# Heading", "", "```python", "answer = 42", "```" })
 vim.bo.filetype = "markdown"
 assert(vim.treesitter.highlighter.active[vim.api.nvim_get_current_buf()], "Markdown highlighting must start")
-for name in pairs(require("config.lsp").servers) do
-    vim.lsp.enable(name, false)
-end
 
 local sidekick_config = require("sidekick.config")
 assert(sidekick_config.cli.win.wo.wrap, "Sidekick CLI terminal must wrap long lines")

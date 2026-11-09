@@ -61,5 +61,3 @@ not an `.app` bundle.
 
 See [1Password](onepassword.md), [Gmail MCP](gmail-mcp.md),
 [Browser MCP](browser-mcp.md) and [X API MCP](xapi-mcp.md) for integrations.
-Old Docker data is not migrated or deleted automatically; see the
-[retired runtime note](retired-docker-runtime.md).

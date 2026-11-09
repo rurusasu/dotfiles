@@ -59,14 +59,18 @@ in
 ```
 
 ```nix
-# build/example.check.nix: asset も属性から参照する
-{ pkgs, files }:
+# build/example.check.nix: 配布用の設定をそのまま検証する
+{ pkgs, fixtures }:
+let
+  home = fixtures.mkHome pkgs.stdenv.hostPlatform.system [
+    { programs.ssh.enable = true; }
+  ];
+in
 {
-  neovim-window-style = pkgs.runCommand "neovim-window-style-check"
-    { nativeBuildInputs = [ pkgs.lua ]; }
+  ssh-config = pkgs.runCommand "ssh-config-check"
+    { nativeBuildInputs = [ pkgs.openssh ]; }
     ''
-      luac -p ${files.nix.modules.editors.nvim.lua.config."window_styles.lua"}
-      touch "$out"
+      ssh -G -F ${home.config.home.file.".ssh/config".source} github.com > "$out"
     '';
 }
 ```

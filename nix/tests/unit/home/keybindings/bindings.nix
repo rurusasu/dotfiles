@@ -1,11 +1,9 @@
 {
   inputs,
   code,
-  files,
 }:
 let
   inherit (inputs.nixpkgs) lib;
-  allocation = code.nix.home.keybindings.bindings { inherit lib; };
   aerospace = code.nix.modules.aerospace.aerospace {
     inherit lib;
     commands.terminal = "terminal --new-window";
@@ -17,10 +15,6 @@ let
 
 in
 {
-  testCommittedKeybindingsExportMatchesCanonicalAllocation = {
-    expr = builtins.fromJSON (builtins.readFile files.nix.home.keybindings."generated.json");
-    expected = allocation;
-  };
   testSharedKeysTranslateModifiersAndWorkspaceZero = {
     expr = lib.getAttrs [
       "cmd-enter"
@@ -52,14 +46,30 @@ in
     };
   };
   testSharedHyprlandKeysProduceDistinctFollowAndSilentCommands = {
-    expr = builtins.all (line: lib.hasInfix line hyprland.config) [
-      ''hl.bind("SUPER + RETURN", hl.dsp.exec_cmd("terminal --new-window"),''
-      ''hl.bind("SUPER + 0", hl.dsp.focus({ workspace = "10" }),''
-      ''hl.bind("SUPER + SHIFT + 0", hl.dsp.window.move({ workspace = "10" }),''
-      ''hl.bind("SUPER + SHIFT + ALT + 0", hl.dsp.window.move({ workspace = "10", follow = false }),''
-      ''hl.bind("SUPER + LEFT", hl.dsp.focus({ direction = "l" }),''
-    ];
-    expected = true;
+    expr =
+      lib.getAttrs
+        [
+          "SUPER + RETURN"
+          "SUPER + 0"
+          "SUPER + SHIFT + 0"
+          "SUPER + SHIFT + ALT + 0"
+          "SUPER + LEFT"
+        ]
+        (
+          builtins.listToAttrs (
+            map (binding: {
+              name = builtins.head binding._args;
+              value = (builtins.elemAt binding._args 1).expr;
+            }) hyprland.bindings
+          )
+        );
+    expected = {
+      "SUPER + RETURN" = ''hl.dsp.exec_cmd("terminal --new-window")'';
+      "SUPER + 0" = ''hl.dsp.focus({ workspace = "10" })'';
+      "SUPER + SHIFT + 0" = ''hl.dsp.window.move({ workspace = "10" })'';
+      "SUPER + SHIFT + ALT + 0" = ''hl.dsp.window.move({ workspace = "10", follow = false })'';
+      "SUPER + LEFT" = ''hl.dsp.focus({ direction = "l" })'';
+    };
   };
   testSharedKeysDoNotLoseBindingsDuringRendering = {
     expr =

@@ -87,8 +87,6 @@ switch ($Phase) {
         }
     }
     'Configure' {
-        # Task prepares the production NixOS distro before this phase: the real
-        # chezmoi WSL keybinding hook deliberately requires it.
         $previousForce = $env:DOTFILES_FORCE_WINDOWS_POWERSHELL
         if ($PowerShellVersion -eq '5.1') { $env:DOTFILES_FORCE_WINDOWS_POWERSHELL = '1' }
         else { Remove-Item Env:\DOTFILES_FORCE_WINDOWS_POWERSHELL -ErrorAction SilentlyContinue }

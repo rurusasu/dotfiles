@@ -18,6 +18,29 @@ let
       ];
 in
 {
+  testMcpUsesHermesStateWithoutInstallingItsCli = {
+    expr =
+      let
+        home = fixtures.mkHome "x86_64-linux" [
+          {
+            programs.mcp.enable = true;
+            services.hermes-agent = {
+              enable = true;
+              hermesHome = "/srv/hermes";
+            };
+          }
+        ];
+      in
+      {
+        cli = home.config.programs.hermes-agent.enable;
+        sharesState = builtins.elem "HERMES_DATA_DIR=/srv/hermes" home.config.systemd.user.services.mcp-xapi.Service.Environment;
+      };
+    expected = {
+      cli = false;
+      sharesState = true;
+    };
+  };
+
   testMcpGatewayUsesItsManagedBinaryAndSecrets = {
     expr = map (
       home:

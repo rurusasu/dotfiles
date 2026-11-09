@@ -25,6 +25,8 @@ WSL の Noto CJK の追加導入・フォールバック指定は行いません
 
 共通の `fonts.fontconfig.defaultFonts` は `monospace` / `sansSerif` / `serif` を `UDEV Gothic NF`、`emoji` を `Noto Color Emoji` に設定します。Darwin での既定フォント設定は fontconfig を使うアプリに適用され、macOS 標準 UI / CoreText の既定フォントは変更しません。
 
+Neovim はユーザー指定の Nixvim Home Manager module で設定します。`nixvim` input は設定 framework として使い、`nixpkgs.useGlobalPackages = true` と `nixpkgs` の follows により、本体・プラグインは共通の nixpkgs から取得します。
+
 ## nixpkgs を使わない例外
 
 固定中の nixpkgs に同じアプリがないものは、現在の取得元を使います。nixpkgs へ収録された場合は標準パッケージへ切り替えます。
@@ -80,21 +82,6 @@ gh repo clone "$repo" "$checkout"
 ```
 
 `programs.ghq.root` や `programs.lifelog.sourceDirectory` を変更した場合は、その保存先を使ってください。
-
-以前、手動で Lifelog を導入して `~/.local/bin/lifelog` と `~/.local/share/applications/lifelog.desktop` を専用 profile へのシンボリックリンクとして作成した場合、初回の `nrs` の前にそのリンクを退避してください。Home Manager は既存の未管理シンボリックリンクを自動で退避しません。次のコマンドは専用 profile を指すリンクだけを退避します。
-
-```bash
-backup_dir=$(mktemp -d "$HOME/.local/state/lifelog-previous.XXXXXX")
-for path in "$HOME/.local/bin/lifelog" "$HOME/.local/share/applications/lifelog.desktop"; do
-  target=$(readlink "$path" 2>/dev/null || true)
-  case "$target" in
-    "$HOME/.local/state/lifelog/profile/"*) mv "$path" "$backup_dir/" ;;
-  esac
-done
-printf '以前のリンク: %s\n' "$backup_dir"
-```
-
-初回 `nrs` が失敗した場合、表示されたディレクトリの `lifelog` と `lifelog.desktop` をそれぞれ元の場所に戻せます。既存ファイルを上書きしないでください。
 
 以下を Bash で実行して Release を選択し、設定を反映します。
 
@@ -229,8 +216,8 @@ Neovim / Hermes の追加プラグインと formatter の入力は、アプリ�
 | `nix/modules/browsers/dia/`                    | `inputs.dia` を使う package 定義と Home Manager への導入                                      |
 | `nix/treefmt.nix`                              | formatter 設定と nixpkgs PowerShell 拡張機能の同梱 PSScriptAnalyzer の選択                    |
 | `nix/defaults.nix`                             | OS 基盤設定、型付き option による有効化、単純な有効化・package 宣言、アカウント、GC、公開出力 |
-| `nix/home/`                                    | 共通キー配置と Windows export                                                                 |
-| `nix/home/keybindings/`                        | 共通キー配置と Windows export                                                                 |
+| `nix/home/`                                    | 共通キー配置と Windows 向け外観 export                                                        |
+| `nix/home/keybindings/`                        | 共通キー配置                                                                                  |
 | `windows/winget/packages.json`                 | Windows GUI の標準 package ID・source・Scope                                                  |
 
 Hermes の root・Desktop・gateway は公式 Home Manager module、named profile は Git 正本と公式 CLI で管理します。
@@ -280,7 +267,7 @@ Ubuntu / Debian:  ./install.sh
 公開しません。Tart の macOS guest も通常の `install.sh` を使います。
 CI は OS configuration を build することで、その構成に含まれるアプリも検証します。
 standalone Home Manager は上記の OS 統合を使えない環境向けに維持します。
-キー設定の JSON は `task keybindings:export` が正本を直接評価して更新します。Darwin custom package の出力は `nix/defaults.nix` に定義します。
+キー設定は各アプリの Home Manager module が Nix 定義から直接生成します。Windows 向けの外観 JSON は `task keybindings:export` で更新します。Darwin custom package の出力は `nix/defaults.nix` に定義します。
 
 macOS の `nrs` は nix-darwin を通じて Nix/Home Manager と宣言済み Homebrew package を反映します。通常の CLI と Neovim・Ghostty は Nix 側で管理します。Homebrew の設定と cask は `nix/defaults.nix` に宣言します。Nix パッケージの版は `flake.lock` に従います。
 
@@ -371,11 +358,11 @@ dsh は `nix/defaults.nix` が導入します。Linux は `pkgs.deepseek-harness
 
 `nix/modules/ai_agents/chatgpt/` が ChatGPT アプリと同梱 Codex CLI の OS ごとの package 選択・導入・設定を管理します。WSL は Linux CLI のみを選び、GUI を導入しません。Windows の Store ID・導入情報は `windows/winget/packages.json` が所有します。
 
-1Password CLI / GUI の導入と連携は `nix/modules/1password/` が管理します。通常の CLI / GUI は Home Manager が導入し、`ssh/default.nix` が公式 SSH agent socket の `IdentityAgent` / `SSH_AUTH_SOCK`、OS 別の Git 署名・WSL 連携と GUI package は `nix/defaults.nix` に直接宣言します。WSLg GUI の起動先を変えても、Windows `op.exe` / signer 連携の認証方式は変更しません。
+1Password CLI / GUI の導入と連携は `nix/modules/1password/` が管理します。通常の CLI / GUI は Home Manager が導入し、`ssh/default.nix` が公式 SSH agent socket の `IdentityAgent` / `SSH_AUTH_SOCK`、OS 別の Git 署名・WSL 連携は `nix/defaults.nix` に直接宣言します。WSLg GUI の起動先を変えても、Windows `op.exe` / signer 連携の認証方式は変更しません。
 
-Git / ghq / gwq の導入・設定は `nix/modules/git/` にまとめます。`default.nix` は Home Manager 標準 `programs.git` の設定、`ghq/default.nix` は独自 option `programs.ghq.enable` / `programs.ghq.root` による導入と Git 設定への反映、既存の Git alias は Git 本体の module が管理します。ghq の保存先は全 OS 共通で `config.home.homeDirectory + "/ghq"` が既定値です。gwq も `programs.gwq.settings` から設定し、worktree の保存先は `config.home.homeDirectory + "/worktrees"` が既定値です。ユーザーパスは `config.home.homeDirectory` / `config.xdg.*` とアプリの option から生成し、ユーザー名やドライブ文字を固定しません。単純なパスの結合には Nix の `+` を使います。署名の OS 固有設定は `nix/defaults.nix` が管理します。全 OS の `nrs` alias は `task nrs` を呼び、Taskfile が Unix の `install.sh` と Windows の WSL rebuild を選びます。
+Git / ghq / gwq の導入・設定は `nix/modules/git/` にまとめます。`default.nix` は Home Manager 標準 `programs.git` の設定、`ghq/default.nix` は独自 option `programs.ghq.enable` / `programs.ghq.root` による導入と標準 `home.sessionVariables.GHQ_ROOT` への反映、既存の Git alias は Git 本体の module が管理します。ghq の保存先は全 OS 共通で `config.home.homeDirectory + "/ghq"` が既定値です。gwq も `programs.gwq.settings` から設定し、worktree の保存先は `config.home.homeDirectory + "/worktrees"` が既定値です。ユーザーパスは `config.home.homeDirectory` / `config.xdg.*` とアプリの option から生成し、ユーザー名やドライブ文字を固定しません。単純なパスの結合には Nix の `+` を使います。署名の OS 固有設定は `nix/defaults.nix` が管理します。全 OS の `nrs` alias は `task nrs` を呼び、Taskfile が Unix の `install.sh` と Windows の WSL rebuild を選びます。
 
-lazygit / Herdr はそれぞれ `nix/modules/lazygit/` / `nix/modules/terminals/herdr/` が有効化・設定を管理します。lazygit は Bash / Zsh の `lg` 連携、Herdr は [公式の Nix 手順](https://herdr.dev/ja/tui/docs/install/#nix-でインストール) に従い、`herdr` input の安定版 release flake を `programs.herdr.package` に指定します。設定は標準 `programs.herdr.settings` から生成します。tag を更新するときは `flake.nix` の `inputs.herdr.url` を変更して `nix flake update herdr` を実行し、通常の OS / Home Manager 反映を行います。Windows 側には Herdr の installer や設定を配置しません。
+lazygit は `nix/defaults.nix` の標準 `programs.lazygit.enable` で有効化し、Bash / Zsh の `lg` 連携は Home Manager の既定値を使います。Herdr は `nix/modules/terminals/herdr/` が設定を管理し、[公式の Nix 手順](https://herdr.dev/ja/tui/docs/install/#nix-でインストール) に従い、`herdr` input の安定版 release flake を `programs.herdr.package` に指定します。設定は標準 `programs.herdr.settings` から生成します。tag を更新するときは `flake.nix` の `inputs.herdr.url` を変更して `nix flake update herdr` を実行し、通常の OS / Home Manager 反映を行います。Windows 側には Herdr の installer や設定を配置しません。
 
 Herdr の [公式設定方法](https://herdr.dev/ja/tui/docs/configuration/) に合わせ、`programs.herdr.mutableSettings = true` で通常の書き込み可能な `config.toml` を生成します。キーは `omarchy` input の公式 `config/herdr/config.toml` から `[keys]` を取得し、独自配列を持ちません。Nix はこの配列とシェル・worktree・外観・通知などの宣言値を管理し、未宣言の項目は Herdr の既定値を使います。`programs.herdr.settings` の宣言値は反映時に優先され、未宣言の設定はアプリの設定画面や通常のファイル編集で変更できます。Nix の宣言を削除しても、既に書き込み可能なファイルに残った値は自動削除されません。設定の確認は `herdr config check`、実行中サーバーへの再読み込みは `herdr server reload-config` を使います。公式既定値の一覧は `herdr --default-config` で確認できます。
 

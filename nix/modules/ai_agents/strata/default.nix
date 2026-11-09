@@ -8,7 +8,7 @@
 let
   selected = import ./package.nix {
     inherit pkgs;
-    release = import ./release.nix (builtins.fromJSON (builtins.readFile inputs.strata-release));
+    feed = builtins.fromJSON (builtins.readFile inputs.strata-release);
   };
 in
 {

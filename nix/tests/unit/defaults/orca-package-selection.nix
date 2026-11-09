@@ -3,7 +3,7 @@ let
   pkgs = fixtures.mkPkgs "aarch64-darwin";
   home = fixtures.mkHome "aarch64-darwin" [
     (fixtures.homeModule "common")
-    { programs.neovim.enable = true; }
+    { programs.nixvim.enable = true; }
   ];
   orcaPackage = inputs.llm-agents.packages.aarch64-darwin.orca;
 in

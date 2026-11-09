@@ -11,12 +11,6 @@ let
     (fixtures.mkHome "x86_64-linux" [
       { programs.starship.enable = true; }
     ]).config.programs.starship.settings;
-  generatedSettings =
-    home:
-    builtins.fromJSON (
-      builtins.unsafeDiscardStringContext
-        home.config.home.file.${home.config.programs.starship.configPath}.source.value
-    );
   windowsHelperHome =
     system: enable: integration:
     fixtures.mkHome system [
@@ -36,24 +30,17 @@ in
   testStarshipEnabled = {
     expr = map (home: {
       enabled = home.config.programs.starship.enable;
-      ownsConfig = home.config.home.file.${home.config.programs.starship.configPath}.force;
     }) homes;
     expected = map (_: {
       enabled = true;
-      ownsConfig = true;
     }) homes;
-  };
-
-  testStarshipConfiguration = {
-    expr = map generatedSettings homes;
-    expected = map (home: home.config.programs.starship.settings) homes;
   };
 
   testStarshipOperatingSystems = {
     expr = map (
       home:
       let
-        settings = generatedSettings home;
+        settings = home.config.programs.starship.settings;
         platform = home.pkgs.stdenv.hostPlatform;
       in
       {

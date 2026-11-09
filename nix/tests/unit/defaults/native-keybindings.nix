@@ -47,17 +47,19 @@ in
   testNativeHomeInstallsChatGPTAndBundledCodex = {
     expr = {
       chatgpt = builtins.elem "chatgpt" (map lib.getName home.home.packages);
-      codex = builtins.elem "codex" (map lib.getName home.home.packages);
-      aiShortcut = lib.hasInfix "chatgpt" home.wayland.windowManager.hyprland.extraConfig;
+      codex = builtins.any (
+        path: lib.hasPrefix "${home.programs.chatgpt.package}/" path
+      ) home.home.sessionPath;
+      aiShortcut = builtins.any (
+        binding: (builtins.elemAt binding._args 1).expr == ''hl.dsp.exec_cmd("chatgpt")''
+      ) home.wayland.windowManager.hyprland.settings.bind;
       cliManaged = home.programs.codex.enable && home.programs.codex.package == null;
-      cleanup = home.systemd.user.tmpfiles.rules;
     };
     expected = {
       chatgpt = true;
       codex = true;
       aiShortcut = true;
       cliManaged = true;
-      cleanup = [ ];
     };
   };
   testNativeDesktopModulesSelectTheirPackages = {

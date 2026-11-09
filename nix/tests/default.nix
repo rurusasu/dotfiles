@@ -72,7 +72,6 @@ in
         "hermes-agent/pyproject-nix" = inputs.hermes-agent.inputs.pyproject-nix;
         "hermes-agent/uv2nix" = inputs.hermes-agent.inputs.uv2nix;
         "hermes-agent/pyproject-build-systems" = inputs.hermes-agent.inputs.pyproject-build-systems;
-        "hermes-agent/npm-lockfile-fix" = inputs.hermes-agent.inputs.npm-lockfile-fix;
         "herdr/nixpkgs" = inputs.herdr.inputs.nixpkgs;
         "herdr/rust-overlay" = inputs.herdr.inputs.rust-overlay;
         # Preserve llm-agents' own dependency graph inside the test sandbox.
@@ -82,6 +81,8 @@ in
         "llm-agents/systems" = inputs.llm-agents.inputs.systems;
         "llm-agents/treefmt-nix" = inputs.llm-agents.inputs.treefmt-nix;
         "mcp-servers/nixpkgs" = inputs.mcp-servers.inputs.nixpkgs;
+        "nixvim/flake-parts" = inputs.nixvim.inputs.flake-parts;
+        "nixvim/systems" = inputs.nixvim.inputs.systems;
         inherit (inputs)
           catppuccin
           docker-mcp
@@ -97,6 +98,7 @@ in
           nix-darwin
           nix-homebrew
           nix-unit
+          nixvim
           nixos-wsl
           nixpkgs
           omarchy

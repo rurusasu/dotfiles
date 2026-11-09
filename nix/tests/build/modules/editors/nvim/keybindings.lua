@@ -8,9 +8,6 @@ vim.cmd.cd(root)
 vim.o.columns = 160
 vim.o.lines = 50
 vim.o.clipboard = ""
-for name in pairs(require("config.lsp").servers) do
-    vim.lsp.enable(name, false)
-end
 
 local function wait_for(predicate, message)
     assert(vim.wait(5000, predicate, 10), message)

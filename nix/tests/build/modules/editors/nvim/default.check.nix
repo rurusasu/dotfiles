@@ -13,6 +13,7 @@
     in
     pkgs.runCommand "neovim-native-check"
       {
+        DOTFILES_NVIM_LSP_SERVERS = builtins.toJSON neovim.servers;
         nativeBuildInputs = [
           neovim.package
           pkgs.git
@@ -31,22 +32,15 @@
         export XDG_DATA_HOME="$TMPDIR/data"
         export XDG_STATE_HOME="$TMPDIR/state"
         export XDG_CACHE_HOME="$TMPDIR/cache"
-        mkdir -p "$HOME" "$XDG_DATA_HOME/nvim/site/pack"
-        ln -s ${neovim.plugins} "$XDG_DATA_HOME/nvim/site/pack/hm"
-        mkdir -p "$XDG_CONFIG_HOME/nvim"
-        ln -s ${neovim.lua} "$XDG_CONFIG_HOME/nvim/lua"
+        mkdir -p "$HOME"
         cd ${files.__path}
-        nvim --headless -u NONE -i NONE -l ${scripts."modern.lua"}
-        nvim --headless -u NONE -i NONE -l ${scripts."treesitter.lua"}
-        nvim --headless -u NONE -i NONE -l ${scripts."snacks.lua"}
-        nvim --headless -i NONE -u ${neovim.init} \
-          -c 'lua local ok, err = pcall(dofile, "${scripts."markdown.lua"}"); if not ok then print(err); vim.cmd("cquit 1") end' \
-          -c 'qa!'
-        nvim --headless -i NONE -u ${neovim.init} \
-          -c 'lua local ok, err = pcall(dofile, "${scripts."keybindings.lua"}"); if not ok then print(err); vim.cmd("cquit 1") end' \
-          -c 'qa!'
-        DOTFILES_NVIM_LSPCONFIG=${pkgs.vimPlugins.nvim-lspconfig} \
-          nvim --headless -u NONE -i NONE -l ${scripts."typescript.lua"}
+        for script in ${scripts."modern.lua"} ${scripts."treesitter.lua"} \
+          ${scripts."snacks.lua"} ${scripts."markdown.lua"} ${scripts."keybindings.lua"}; do
+          nvim --headless -i NONE \
+            -c 'lua for _, name in ipairs(vim.json.decode(vim.env.DOTFILES_NVIM_LSP_SERVERS)) do vim.lsp.enable(name, false) end' \
+            -c "lua local ok, err = pcall(dofile, [[$script]]); if not ok then print(err); vim.cmd('cquit 1') end" \
+            -c 'qa!'
+        done
         touch "$out"
       '';
 }

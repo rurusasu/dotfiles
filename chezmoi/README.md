@@ -44,25 +44,26 @@ when saving logs. Application output keeps the colors provided by each tool;
 plain messages such as `Setup Complete!` remain plain.
 
 The shared key allocation is defined in `nix/home/keybindings/bindings.nix`
-and `nix/modules/editors/nvim/neovim.nix`.
-`task keybindings:export` directly evaluates those definitions with locked Nix
-inputs and jq to update `nix/home/keybindings/generated.json` and `nix/home/appearance.json`. The latter uses the common Catppuccin flavor and font settings. chezmoi reads these exports without
-running Nix during apply. chezmoi also copies the exported desktop and Neovim data to
-`~/.config/dotfiles/keybindings/` inside NixOS-WSL. Home Manager installs the
-Neovim loader once; later shared key changes only require export and chezmoi.
+and `nix/modules/editors/nvim/default.nix`.
+Home Manager generates Neovim settings from those definitions on every Unix
+platform, including NixOS-WSL. Apply key changes with `nrs` and restart Neovim.
+`task keybindings:export` exports only `nix/home/appearance.json`, using the common
+Catppuccin flavor and font settings. chezmoi reads this appearance export without
+running Nix during apply and does not deploy key data into WSL.
 Home Manager owns Ghostty and Herdr settings on every Unix platform. Ghostty
 provides the host terminal; Herdr owns terminal tabs, panes, and sessions through
 its `Ctrl+Space` prefix. Ghostty has no split or tab keybindings.
 
-Regenerate the export after editing the Nix allocation, then apply it with:
+Regenerate the appearance export after editing the common theme or font, then apply it with:
 
 ```powershell
+task keybindings:export
 task chezmoi
 ```
 
 The normal `task install` flow installs Windows GUI apps, configures and applies
-NixOS-WSL once to install the Neovim loader, and applies Windows chezmoi to deploy the
-exported data. `install.cmd` bootstraps the same Task entry when Task is not yet
+NixOS-WSL once to apply its application settings, and applies Windows chezmoi.
+`install.cmd` bootstraps the same Task entry when Task is not yet
 installed. That flow consumes the committed JSON and does not regenerate it. On an
 existing installation, run `nrs` once after adding this loader configuration,
 then `task chezmoi`. Restart Neovim after shared key changes. Apply Ghostty and

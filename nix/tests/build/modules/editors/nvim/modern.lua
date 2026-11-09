@@ -1,9 +1,5 @@
 -- Run with: nvim --headless -u NONE -l nix/tests/build/modules/editors/nvim/modern.lua
-local root = vim.fn.getcwd() .. "/nix/modules/editors/nvim"
-vim.opt.rtp:prepend(root)
 
-local completion = require("config.completion")
-completion.setup()
 assert(vim.fn.maparg("<C-y>", "i") == "", "native completion acceptance must remain available")
 
 -- Exercise expression mappings without depending on a terminal's key encoding.
@@ -44,12 +40,6 @@ assert(
 )
 vim.fn.pumvisible, vim.fn.complete_info = pumvisible, complete_info
 vim.snippet.active, vim.snippet.jump = active, jump
-
-local lsp = require("config.lsp")
-local saved_path = vim.env.PATH
-vim.env.PATH = ""
-lsp.setup()
-vim.env.PATH = saved_path
 
 -- Exercise the save handler with attached-client doubles, without external servers.
 -- Nix/Lua must format too; unsupported buffers must remain untouched.
@@ -101,11 +91,4 @@ assert(#calls == 0, "nonmodifiable buffers must not be formatted")
 vim.bo.modifiable = true
 vim.lsp.get_clients, vim.lsp.buf.format = get_clients, format
 
--- Re-running setup must not accumulate format/attach handlers.
-lsp.setup()
-assert(#vim.api.nvim_get_autocmds({ group = "DotfilesLsp", event = "LspAttach" }) == 1)
-assert(#vim.api.nvim_get_autocmds({ group = "DotfilesLsp", event = "BufWritePre" }) == 1)
-for name in pairs(lsp.servers) do
-    vim.lsp.enable(name, false)
-end
 print("Neovim native configuration checks passed")

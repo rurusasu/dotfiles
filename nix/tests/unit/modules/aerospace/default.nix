@@ -19,13 +19,11 @@ in
       in
       {
         activation = disabled.config.home.activation.omarchySymbolicHotkeys.data or "";
-        legacyActivation = disabled.config.home.activation.retireNixDarwinAerospace.data or "";
         dockOrder = disabled.config.targets.darwin.defaults."com.apple.dock".mru-spaces or null;
         dockGrouping = disabled.config.targets.darwin.defaults."com.apple.dock".expose-group-apps;
       };
     expected = {
       activation = "";
-      legacyActivation = "";
       dockOrder = null;
       dockGrouping = null;
     };
@@ -36,8 +34,7 @@ in
       configVersion = service.settings.config-version;
       selectedPackage = service.package == pkgs.aerospace;
       homePackage = builtins.elem service.package config.home.packages;
-      launchdOwnsStartup =
-        !service.settings.start-at-login && agent.config.RunAtLoad && agent.config.KeepAlive;
+      launchdOwnsStartup = service.launchd.enable && agent.config.RunAtLoad && agent.config.KeepAlive;
       explicitImmutableConfig =
         builtins.elemAt agent.config.ProgramArguments 1 == "--config-path"
         && lib.hasPrefix "/nix/store/" (builtins.elemAt agent.config.ProgramArguments 2);

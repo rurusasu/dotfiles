@@ -28,16 +28,5 @@
         });
       };
     };
-
-    # Git reads both XDG config and ~/.gitconfig. Clear the old higher-priority
-    # chezmoi settings without including the XDG file a second time.
-    home.file.".gitconfig" = {
-      force = true;
-      text = ''
-        # Managed by Home Manager.
-        # Git settings: ${config.xdg.configHome}/git/config
-      '';
-    };
-    xdg.configFile."git/config".force = true;
   };
 }

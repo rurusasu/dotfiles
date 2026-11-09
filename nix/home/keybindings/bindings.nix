@@ -175,6 +175,4 @@ assert
     directions
     workspaces
     ;
-  neovim = import ../../modules/editors/nvim/neovim.nix;
-  neovimLeader = " ";
 }

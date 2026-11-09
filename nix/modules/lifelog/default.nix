@@ -31,8 +31,6 @@ in
 
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package ];
-    # The local bin directory precedes the Nix profile in this WSL setup.
-    home.file.".local/bin/lifelog".source = "${cfg.package}/bin/lifelog";
     xdg.desktopEntries.lifelog = {
       name = "Lifelog";
       genericName = "Local file workspace";

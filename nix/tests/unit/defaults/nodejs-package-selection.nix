@@ -5,7 +5,7 @@
       builtins.filter (package: (package.pname or null) == "nodejs")
         (fixtures.mkHome "x86_64-linux" [
           (fixtures.homeModule "common")
-          { programs.neovim.enable = true; }
+          { programs.nixvim.enable = true; }
         ]).config.home.packages
     );
     expected = [ ];

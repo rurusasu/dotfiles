@@ -2,14 +2,12 @@ version: "3"
 
 tasks:
   keybindings:export:
-    desc: Export the canonical Nix desktop keys and appearance for Windows chezmoi
+    desc: Export the canonical Nix appearance for Windows chezmoi
     dir: "{{.ROOT_DIR}}"
     cmds:
       - |
         {{if eq OS "windows"}}wsl -d {{.DISTRO}} --cd "{{.ROOT_DIR}}" --exec {{end}}bash -lc '
           set -euo pipefail
-          keybindings=$(nix eval --json --impure --expr "import ./nix/home/keybindings/bindings.nix { lib = (builtins.getFlake (toString ./.)).inputs.nixpkgs.lib; }" | jq .)
-          printf "%s\n" "$keybindings" > nix/home/keybindings/generated.json
           appearance=$(nix build --no-link --print-out-paths --impure --expr "let f = builtins.getFlake (toString ./.); in import ./nix/home/appearance.nix { config = f.homeConfigurations.x86_64-linux.config; pkgs = f.inputs.nixpkgs.legacyPackages.x86_64-linux; }")
           cp "$appearance" nix/home/appearance.json
         '

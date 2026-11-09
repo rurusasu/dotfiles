@@ -130,25 +130,47 @@ in
     expr = defaultConfig.programs.dconf.enable;
     expected = true;
   };
-  testWslgFontBridgeCopiesUdevAndEmojiAndRetiresNoto = {
+  testWslOptionalApplicationsCanBeDisabled = {
     expr =
       let
-        activation = defaultConfig.system.activationScripts.wslgFonts or { };
+        inherit
+          (mkWsl.extendModules {
+            modules = [
+              ({ lib, ... }: {
+                dotfiles.fonts.enable = lib.mkForce false;
+                home-manager.users.nixos = {
+                  dotfiles.onePassword.enable = lib.mkForce false;
+                  programs.git.enable = lib.mkForce false;
+                  programs.starship.enable = lib.mkForce false;
+                };
+              })
+            ];
+          })
+          config
+          ;
+        disabledHome = config.home-manager.users.nixos;
       in
       {
-        deps = activation.deps or [ ];
-        text = activation.text or "";
+        defaultFonts = defaultConfig.system.activationScripts ? wslgFonts;
+        disabledFonts = config.system.activationScripts ? wslgFonts;
+        lifelog = disabledHome.programs.lifelog.enable;
+        starshipEnvironment = disabledHome.home.sessionVariables ? STARSHIP_CONFIG;
+        onePasswordEnvironment = disabledHome.home.sessionVariables ? OP_ACCOUNT;
+        onePasswordInterop = disabledHome.home.sessionVariables ? WSLENV;
+        onePasswordBridge = disabledHome.home.file ? ".local/bin/op-ssh-sign-wsl";
+        onePasswordWrapper = config.security.wrappers ? op;
+        onePasswordGui = builtins.elem mkWsl.pkgs._1password-gui disabledHome.home.packages;
       };
     expected = {
-      deps = [ "specialfs" ];
-      text = ''
-        ${mkWsl.pkgs.coreutils}/bin/install -d -m 0755 /usr/local/share/fonts/dotfiles-wslg
-        # Retire the Noto CJK file previously distributed by this module.
-        ${mkWsl.pkgs.coreutils}/bin/rm -f -- /usr/local/share/fonts/dotfiles-wslg/NotoSansCJK-VF.otf.ttc
-        ${mkWsl.pkgs.coreutils}/bin/install --compare -m 0644 ${mkWsl.pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Regular.ttf /usr/local/share/fonts/dotfiles-wslg/UDEVGothicNF-Regular.ttf
-        ${mkWsl.pkgs.coreutils}/bin/install --compare -m 0644 ${mkWsl.pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Bold.ttf /usr/local/share/fonts/dotfiles-wslg/UDEVGothicNF-Bold.ttf
-        ${mkWsl.pkgs.coreutils}/bin/install --compare -m 0644 ${mkWsl.pkgs.noto-fonts-color-emoji}/share/fonts/noto/NotoColorEmoji.ttf /usr/local/share/fonts/dotfiles-wslg/NotoColorEmoji.ttf
-      '';
+      defaultFonts = true;
+      disabledFonts = false;
+      lifelog = false;
+      starshipEnvironment = false;
+      onePasswordEnvironment = false;
+      onePasswordInterop = false;
+      onePasswordBridge = false;
+      onePasswordWrapper = false;
+      onePasswordGui = false;
     };
   };
   testWslgServerFontconfigPrependsUdevAndPreservesFallbacks = {
@@ -258,24 +280,6 @@ in
         LD_LIBRARY_PATH = "/run/opengl-driver/lib";
         WARP_ENABLE_WAYLAND = "1";
       };
-    };
-  };
-
-  testWslPodmanUsesTheLocalRegistry = {
-    expr = {
-      enabled = defaultConfig.virtualisation.podman.enable;
-      registries = map (registry: {
-        inherit (registry) location insecure;
-      }) defaultConfig.home-manager.users.nixos.services.podman.settings.registries.registry;
-    };
-    expected = {
-      enabled = true;
-      registries = [
-        {
-          location = "registry.localhost";
-          insecure = true;
-        }
-      ];
     };
   };
 

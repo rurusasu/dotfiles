@@ -18,6 +18,7 @@ let
       bashGrep = home.config.programs.bash.shellAliases.grep or null;
       bashFind = home.config.programs.bash.shellAliases.find or null;
       zshGrep = home.config.programs.zsh.shellAliases.grep or null;
+      zshFind = home.config.programs.zsh.shellAliases.find or null;
     };
 in
 {
@@ -31,11 +32,13 @@ in
         bashGrep = null;
         bashFind = null;
         zshGrep = null;
+        zshFind = null;
       }
       {
         bashGrep = "rg";
         bashFind = "fd";
         zshGrep = "rg";
+        zshFind = "fd";
       }
     ];
   };

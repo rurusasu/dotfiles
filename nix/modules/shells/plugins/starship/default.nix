@@ -33,11 +33,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Replace the previously deployed TOML when Home Manager takes ownership.
-    home.file = {
-      ${cfg.configPath}.force = true;
-    };
-
     assertions = [
       {
         assertion = !cfg.asyncZsh.enable || (config.programs.zsh.enable && cfg.enableZshIntegration);

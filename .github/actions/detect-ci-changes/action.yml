@@ -114,8 +114,8 @@ runs:
                   wsl=true
                   windows=true
                   ;;
-                # Windows consumes the committed shortcuts through chezmoi.
-                nix/defaults.nix|nix/home/appearance.*|nix/home/keybindings/bindings.nix|nix/home/keybindings/generated.json|nix/modules/editors/nvim/neovim.nix)
+                # Windows consumes the committed appearance through chezmoi.
+                nix/defaults.nix|nix/home/appearance.*)
                   nix=true
                   chezmoi=true
                   linux=true

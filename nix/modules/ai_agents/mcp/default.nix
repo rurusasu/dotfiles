@@ -7,12 +7,15 @@
 }:
 let
   packages = import ../mcp-packages.nix { inherit inputs pkgs; };
+  secretConfig = config.dotfiles.onePassword.secrets;
+  references = secretConfig.references;
+  referenceCatalog = "${config.xdg.configHome}/mcp/onepassword.json";
   dockerConfig =
     config.home.sessionVariables.DOCKER_CONFIG or (throw "Docker MCP requires DOCKER_CONFIG");
   secretsFile =
     assert lib.assertMsg (dockerConfig != "") "Docker MCP requires a non-empty DOCKER_CONFIG";
     "${dockerConfig}/mcp/secrets.env";
-  hermesHome = config.home.sessionVariables.HERMES_HOME or (config.home.homeDirectory + "/.hermes");
+  hermesHome = config.services.hermes-agent.hermesHome;
   backends = {
     chrome = {
       port = 8765;
@@ -39,6 +42,7 @@ let
       env = {
         HERMES_DATA_DIR = hermesHome;
         DOTFILES_HERMES_OP_EXECUTABLE = lib.getExe pkgs._1password-cli;
+        DOTFILES_MCP_ONEPASSWORD_CONFIG = referenceCatalog;
       };
     };
   };
@@ -65,24 +69,39 @@ let
 in
 {
   config = lib.mkIf config.programs.mcp.enable {
+    xdg.configFile."mcp/onepassword.json".source =
+      (pkgs.formats.json { }).generate "mcp-onepassword.json"
+        {
+          account = config.dotfiles.onePassword.account;
+          dockerMcp = {
+            "exa.api_key" = references.exaApiKey;
+            "firecrawl.api_key" = references.firecrawlApiKey;
+            "github.personal_access_token" = references.githubToken;
+            "tavily.api_token" = references.tavilyApiToken;
+          };
+          xapi = {
+            inherit (secretConfig.xapi) vault item;
+            serviceAccountTokenRef = references.serviceAccountToken;
+          };
+        };
     home = {
       sessionVariables.DOCKER_CONFIG = config.home.homeDirectory + "/.docker";
       packages = [
         packages.docker-mcp
         packages.xurl
         packages.hermes-xapi
+        pkgs._1password-cli
+        pkgs.jq
+        pkgs.coreutils
       ];
-      file.".xurl".source = config.lib.file.mkOutOfStoreSymlink (config.xdg.configHome + "/xurl");
+      # xurl fixes its credential path at ~/.xurl; share the Hermes cache directly.
+      file.".xurl".source = config.lib.file.mkOutOfStoreSymlink "${hermesHome}/.xurl";
       activation.prepareXurlDirectory =
         lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ]
           ''
             run ${pkgs.coreutils}/bin/install -d -m 0700 ${lib.escapeShellArg "${hermesHome}/.xurl"}
           '';
     };
-
-    # xurl fixes its credential path at ~/.xurl. Keep the existing private cache
-    # behind an XDG configuration link; Home Manager refuses conflicting files.
-    xdg.configFile.xurl.source = config.lib.file.mkOutOfStoreSymlink "${hermesHome}/.xurl";
 
     # Both clients share one browser profile and one in-memory OAuth token store.
     # Home Manager starts these services after installing their configuration links.

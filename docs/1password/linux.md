@@ -52,9 +52,5 @@ Host *
     IdentityAgent ~/.1password/agent.sock
 ```
 
-`gpg.ssh.program` は 1Password の signer を使う。
-
-```gitconfig
-[gpg "ssh"]
-  program = /opt/1Password/op-ssh-sign
-```
+`gpg.ssh.program` は、導入する Nix package 内の `bin/op-ssh-sign` を絶対パスで指定する。
+実際の設定値は `git config --get gpg.ssh.program` で確認できる。

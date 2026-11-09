@@ -7,8 +7,6 @@
         ignore_missing_fields = true;
         theme = "catppuccin-${config.catppuccin.flavor}";
         editor = "nvim";
-        default_open_file_preview = true;
-        nerdfont = true;
       };
     };
 

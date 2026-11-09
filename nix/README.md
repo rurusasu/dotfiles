@@ -8,7 +8,7 @@
 | `nix/modules/`          | Unix のパッケージ導入・アプリ設定・custom package 定義              |
 | `windows/winget/`       | Windows GUI の独立した install manifest                             |
 | `nix/home/keybindings/` | 共通 action/key と Windows export                                   |
-| `nix/home/`             | 共通キー配列と Windows export                                       |
+| `nix/home/`             | 共通キー配列と Windows 向け外観 export                              |
 | `nix/tests/unit/`       | nix-unit による Nix 式・実効設定値のテスト                          |
 | `nix/tests/build/`      | `*.check.nix` による named derivation の属性セット                  |
 | `nix/tests/fixtures/`   | テスト用の共有入力・補助 module                                     |

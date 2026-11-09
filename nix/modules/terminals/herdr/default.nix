@@ -22,7 +22,10 @@ in
         inherit (omarchy) keys;
         terminal = {
           default_shell = lib.getExe (
-            if config.programs.zsh.enable then config.programs.zsh.package else pkgs.bashInteractive
+            if config.programs.zsh.enable && config.programs.zsh.package != null then
+              config.programs.zsh.package
+            else
+              pkgs.bashInteractive
           );
           shell_mode = "auto";
           new_cwd = "follow";

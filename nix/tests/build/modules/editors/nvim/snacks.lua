@@ -1,9 +1,7 @@
 -- Exercise the configured picker callbacks with real Snacks and Poppler.
-vim.opt.rtp:prepend(vim.fn.getcwd() .. "/nix/modules/editors/nvim")
 vim.g.mapleader = " "
 local snacks = require("snacks")
 local preview = require("snacks.picker.preview")
-require("plugins.snacks")
 vim.api.nvim_exec_autocmds("VimEnter", {})
 
 -- Space is also the leader; using it as a terminal-mode mapping prefix delays shell input.

@@ -22,17 +22,16 @@ Update it with `nix flake update xurl`, then apply the usual Nix
 configuration.
 
 xurl uses the fixed native path `~/.xurl`. Home Manager connects it to the
-existing private cache through these links:
+existing private cache through one link:
 
 ```text
-~/.xurl -> <XDG_CONFIG_HOME>/xurl -> <root Hermes home>/.xurl
+~/.xurl -> <root Hermes home>/.xurl
 ```
 
 The default cache remains `~/.hermes/.xurl/auth.yml`. Home Manager stops on
 conflicting existing files or directories; it does not overwrite an independent
 `~/.xurl` directory. Preserve that directory and resolve the conflict before
-activation. Browser profiles, OAuth data and legacy Docker volumes are not
-deleted by this migration.
+activation. The credential directory remains owned by xurl.
 
 The shell adapter uses `scripts/sh/hermes-xapi-common.sh` for 1Password
 credentials, private service-account caching, token validation and refresh-token
@@ -55,16 +54,27 @@ mcp_servers:
 ## First authentication
 
 Create or update the X OAuth application credentials in 1Password. Keep the
-values out of Git, profile configuration and local env files:
+values out of Git, profile configuration and local env files. The account,
+vault, item and service-account token reference are declared through
+`dotfiles.onePassword.secrets` in Nix. Home Manager publishes their non-secret
+metadata in `$XDG_CONFIG_HOME/mcp/onepassword.json` (default
+`~/.config/mcp/onepassword.json`), shared with Docker MCP. The runtime reads this
+catalog; `DOTFILES_MCP_ONEPASSWORD_CONFIG` can select another path.
 
-| Account            | Vault      | Item               | Fields                                                                        |
-| ------------------ | ---------- | ------------------ | ----------------------------------------------------------------------------- |
-| `my.1password.com` | `openclaw` | `Hermes X API MCP` | `X_API_CLIENT_ID`, `X_API_CLIENT_SECRET`, `Refresh Token/X_API_REFRESH_TOKEN` |
+The X OAuth item needs `X_API_CLIENT_ID`, `X_API_CLIENT_SECRET`, and
+`Refresh Token/X_API_REFRESH_TOKEN` fields.
 
 Store the OAuth refresh token in the `Refresh Token` section of the same item.
 Do not store the short-lived access token or copy the complete `.xurl/auth.yml`
-file. The item name can be overridden per PC with
+file. The item name can be overridden for a run with
 `DOTFILES_HERMES_XAPI_1PASSWORD_ITEM` or `DOTFILES_HERMES_XAPI_OAUTH_ITEM`.
+The corresponding account and vault overrides are
+`DOTFILES_HERMES_XAPI_1PASSWORD_ACCOUNT` and
+`DOTFILES_HERMES_XAPI_1PASSWORD_VAULT`. Service-account bootstrap accepts
+`DOTFILES_HERMES_OP_SERVICE_ACCOUNT_ACCOUNT` and
+`DOTFILES_HERMES_OP_SERVICE_ACCOUNT_TOKEN_REF`. These overrides take precedence
+over the catalog; missing required metadata stops the command before that
+1Password lookup.
 Use separate items per PC if the provider rotates refresh tokens in a way that
 invalidates another PC's token.
 

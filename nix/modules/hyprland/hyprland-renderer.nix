@@ -1,4 +1,4 @@
-# Pure renderer; hyprland.nix owns the Home Manager options.
+# Shared keybindings expressed as Home Manager Lua settings.
 { lib, commands }:
 let
   contract = import ../../home/keybindings/bindings.nix { inherit lib; };
@@ -69,27 +69,24 @@ let
   supported = builtins.filter (binding: builtins.hasAttr binding.action actions) contract.bindings;
 in
 {
-  config =
-    lib.concatMapStringsSep "\n" (
-      binding:
-      "hl.bind(${
-        quote (
-          lib.concatStringsSep " + " (
-            map lib.toUpper binding.modifiers
-            ++ [
-              (
-                {
-                  enter = "RETURN";
-                  backtick = "grave";
-                }
-                .${binding.key} or (lib.toUpper binding.key)
-              )
-            ]
+  bindings = map (binding: {
+    _args = [
+      (lib.concatStringsSep " + " (
+        map lib.toUpper binding.modifiers
+        ++ [
+          (
+            {
+              enter = "RETURN";
+              backtick = "grave";
+            }
+            .${binding.key} or (lib.toUpper binding.key)
           )
-        )
-      }, ${actions.${binding.action}}, { description = ${quote binding.action} })"
-    ) supported
-    + "\n";
+        ]
+      ))
+      (lib.generators.mkLuaInline actions.${binding.action})
+      { description = binding.action; }
+    ];
+  }) supported;
   unsupported = builtins.filter (
     binding: !(builtins.hasAttr binding.action actions)
   ) contract.bindings;

@@ -28,7 +28,7 @@ Nix で管理するデスクトップ・Ghostty・Herdr・Neovim と、chezmoi �
 
 配置方針は `nix/home/keybindings/` に共通 action とキーを定義し、macOS の AeroSpace と native NixOS の Hyprland 設定を生成する。Windows は標準ショートカットを使用し、WSL 端末部分では Win キーを Super 入力として転送します。WSL guest に Hyprland は導入しません。対象範囲は [共通定義と OS 別実装](./omarchy.md) を参照してください。
 
-共通配列の正本は `nix/home/keybindings/bindings.nix` と、それが読み込む `nix/modules/editors/nvim/neovim.nix` です。`task keybindings:export` がロック済み Nix 入力で正本を直接評価し、jq でコミット対象の `generated.json` を更新します。chezmoi はデスクトップ / Neovim の export を NixOS-WSL の `~/.config/dotfiles/keybindings/` に配置します。Windows の apply は Nix を呼びません。WSL の Neovim loader は Home Manager が所有し、native Unix は同じ Nix 定義を直接読みます。Ghostty と Herdr の設定は各アプリの Home Manager module が管理します。
+デスクトップのキー配列は `nix/home/keybindings/bindings.nix`、Neovim のキー配列と leader は `nix/modules/editors/nvim/default.nix` が管理します。NixOS-WSL を含むすべての Unix 環境で、各アプリの Home Manager module が Nix 定義からキー設定を直接生成します。WSL の Neovim・Ghostty・Herdr のキー変更は `nrs` で反映し、アプリを再起動します。Windows の chezmoi は WSL へのキー設定配布を行いません。`task keybindings:export` は Windows 用の外観設定 `nix/home/appearance.json` だけを更新します。
 
 配列の生成・配置テストと、各アプリでの実キー入力の確認は区別します。
 

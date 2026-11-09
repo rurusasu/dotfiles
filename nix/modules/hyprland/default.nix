@@ -2,7 +2,6 @@
 {
   config,
   lib,
-  pkgs,
   ...
 }:
 let
@@ -19,7 +18,7 @@ in
       package = null;
       portalPackage = null;
       configType = "lua";
-      extraConfig =
+      settings.bind =
         (import ./hyprland-renderer.nix {
           inherit lib;
           commands = {
@@ -30,10 +29,10 @@ in
             ai = "chatgpt";
             passwords = "1password";
             launcher = "fuzzel";
-            help = "${terminal} -e less ${pkgs.writeText "omarchy-keybindings.txt" (builtins.readFile ../../../docs/chezmoi/omarchy.md)}";
+            help = "${terminal} -e less ${../../../docs/chezmoi/omarchy.md}";
             activity = "${terminal} -e top";
           };
-        }).config;
+        }).bindings;
     };
   };
 }

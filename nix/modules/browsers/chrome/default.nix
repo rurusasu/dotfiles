@@ -18,6 +18,7 @@
           }
         ];
         programs.chromium.package = import ./package.nix { inherit pkgs; };
+        programs.chromium.commandLineArgs = [ "--lang=ja" ];
         home.sessionVariables.BROWSER = lib.getExe config.programs.chromium.finalPackage;
       })
     ]

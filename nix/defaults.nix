@@ -136,7 +136,7 @@ let
               starship.enable = true;
               zsh-patina.enable = true;
               ghostty.enable = true;
-              neovim.enable = true;
+              nixvim.enable = true;
               git.enable = true;
               ghq.enable = true;
               gwq.enable = true;
@@ -168,10 +168,7 @@ let
             };
           })
           ({ config, lib, ... }: {
-            home.packages = with pkgs; [
-              obsidian
-              _1password-gui
-            ];
+            home.packages = [ pkgs.obsidian ];
             imports =
               {
                 darwin = [
@@ -193,6 +190,8 @@ let
                       ];
                       sessionVariables = {
                         HOMEBREW_AUTO_UPDATE_SECS = "86400";
+                      }
+                      // lib.optionalAttrs config.dotfiles.onePassword.enable {
                         OP_BIOMETRIC_UNLOCK_ENABLED = "true";
                       };
                       sessionPath = pkgs.lib.mkAfter [
@@ -200,10 +199,12 @@ let
                         "/opt/homebrew/sbin"
                       ];
                     };
-                    programs.git.signing.signer = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
+                    programs.git.signing.signer = lib.mkIf (
+                      config.programs.git.enable && config.dotfiles.onePassword.enable
+                    ) "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
 
                     # GUI apps use the same 1Password socket as this user's shell sessions.
-                    launchd.agents.onepassword-ssh-environment = {
+                    launchd.agents.onepassword-ssh-environment = lib.mkIf config.dotfiles.onePassword.enable {
                       enable = true;
                       config = {
                         ProgramArguments = [
@@ -226,7 +227,9 @@ let
                       chromium.enable = true;
                       discord.enable = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.discord;
                       strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
-                      git.signing.signer = "/opt/1Password/op-ssh-sign";
+                      git.signing.signer = lib.mkIf (
+                        config.programs.git.enable && config.dotfiles.onePassword.enable
+                      ) "${pkgs._1password-gui}/bin/op-ssh-sign";
                     };
                   }
                 ];
@@ -240,17 +243,21 @@ let
                       };
                     in
                     {
-                      dotfiles = {
-                        keybindings.fromWindowsExport = true;
+                      programs.nixvim.globals.clipboard = {
+                        name = "win32yank";
+                        copy = {
+                          "+" = "win32yank.exe -i --crlf";
+                          "*" = "win32yank.exe -i --crlf";
+                        };
+                        paste = {
+                          "+" = "win32yank.exe -o --lf";
+                          "*" = "win32yank.exe -o --lf";
+                        };
+                        cache_enabled = 0;
                       };
                       i18n.inputMethod.enable = true;
+                      i18n.inputMethod.fcitx5.wslIntegration.enable = true;
                       services = {
-                        podman.settings.registries.registry = [
-                          {
-                            location = "registry.localhost";
-                            insecure = true;
-                          }
-                        ];
                         gnome-keyring.enable = true;
                       };
                       programs = {
@@ -259,14 +266,17 @@ let
                         superfile.enable = true;
                         strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
                         lifelog.enable =
-                          pkgs.stdenv.hostPlatform.system == "x86_64-linux"
+                          config.programs.git.enable
+                          && pkgs.stdenv.hostPlatform.system == "x86_64-linux"
                           && builtins.pathExists (config.programs.lifelog.sourceDirectory + "/.git/lifelog-release-tag");
                         chromium = {
                           enable = true;
                           wslIntegration.enable = true;
                         };
                         git = {
-                          signing.signer = config.home.homeDirectory + "/.local/bin/op-ssh-sign-wsl";
+                          signing.signer = lib.mkIf (config.programs.git.enable && config.dotfiles.onePassword.enable) (
+                            config.home.homeDirectory + "/.local/bin/op-ssh-sign-wsl"
+                          );
                         };
                         starship = {
                           wslIntegration.enable = true;
@@ -297,20 +307,28 @@ let
                           spotify
                           signal-desktop
                         ];
-                        sessionVariables = graphicsEnvironment // {
-                          _ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
-                          WSLENV = "OP_ACCOUNT/u";
-                          OP_ACCOUNT = config.dotfiles.onePassword.account;
-                          STARSHIP_CONFIG = lib.mkForce (
-                            toString config.home.file.${config.programs.starship.configPath}.source
-                          );
-                        };
-                        file = {
-                          ".local/bin/op-ssh-sign-wsl" = {
-                            source = ./modules/1password/op-ssh-sign-wsl;
-                            executable = true;
-                            force = true;
+                        sessionVariables =
+                          graphicsEnvironment
+                          // {
+                            _ZO_EXCLUDE_DIRS = "/mnt/wsl/*:/mnt/wslg/*";
+                          }
+                          // lib.optionalAttrs config.dotfiles.onePassword.enable {
+                            WSLENV = "OP_ACCOUNT/u";
+                            OP_ACCOUNT = config.dotfiles.onePassword.account;
+                          }
+                          // lib.optionalAttrs config.programs.starship.enable {
+                            STARSHIP_CONFIG = lib.mkForce (
+                              toString config.home.file.${config.programs.starship.configPath}.source
+                            );
                           };
+                        file = {
+                          ".local/bin/op-ssh-sign-wsl" =
+                            lib.mkIf (config.dotfiles.onePassword.enable && config.programs.git.enable)
+                              {
+                                source = ./modules/1password/op-ssh-sign-wsl;
+                                executable = true;
+                                force = true;
+                              };
                         };
                       };
                       systemd.user.sessionVariables = graphicsEnvironment // {
@@ -412,56 +430,10 @@ let
                       inputs.nixos-wsl.nixosModules.wsl
                       {
                         dotfiles.wslGpu.enable = true;
-                        # kind nodes use the in-cluster Zot mirror for this registry.
-                        environment.etc."containerd/certs.d/registry.localhost/hosts.toml".text = ''
-                          server = "http://registry.localhost"
-
-                          [host."http://zot.infra.svc.cluster.local:5080"]
-                            capabilities = ["pull", "resolve"]
-                        '';
-                        # Retire only the exact wrapper previously copied by this module. Keep
-                        # unrelated administrator files and symlinks at this path untouched.
-                        system.activationScripts.retireSystemOpWrapper = {
-                          text = ''
-                            if [ -f /usr/local/bin/op ] && [ ! -L /usr/local/bin/op ]; then
-                              # The bash store path can change independently of the wrapper body.
-                              if ${pkgs.coreutils}/bin/head -n 1 /usr/local/bin/op | \
-                                ${pkgs.gnugrep}/bin/grep -Eq '^#!/nix/store/[a-z0-9]{32}-bash-[^/]+/bin/bash$' && \
-                                ${pkgs.coreutils}/bin/tail -n +2 /usr/local/bin/op | \
-                                ${pkgs.diffutils}/bin/cmp -s ${
-                                  pkgs.writeText "legacy-op-wrapper-body" (
-                                    ''
-                                      OP_NATIVE="/etc/profiles/per-user/${config.wsl.defaultUser}/bin/op"
-                                      # op run injects secrets into Linux processes — keep on native binary
-                                      if [ "$1" = "run" ] && [ -x "$OP_NATIVE" ]; then
-                                        exec "$OP_NATIVE" "$@"
-                                      fi
-                                      # Find op.exe via Windows PATH (available in WSL via interop)
-                                      OP_EXE=$(IFS=:; for p in $PATH; do
-                                        [ -f "$p/op.exe" ] && echo "$p/op.exe" && break
-                                      done)
-                                      if [ -z "$OP_EXE" ]; then
-                                        echo "[ERROR] op.exe not found in PATH" >&2
-                                        exit 1
-                                      fi
-                                      OP_VARS=$(env | grep ^OP_ | cut -d= -f1 | tr '\n' ':')
-                                      export WSLENV="''${WSLENV:-}:''${OP_VARS%:}"
-                                      exec "$OP_EXE" "$@"
-                                    ''
-                                    + "\n"
-                                  )
-                                } -; then
-                                ${pkgs.coreutils}/bin/rm -- /usr/local/bin/op
-                              fi
-                            fi
-                          '';
-                        };
-                        system.activationScripts.wslgFonts = {
+                        system.activationScripts.wslgFonts = lib.mkIf config.dotfiles.fonts.enable {
                           deps = [ "specialfs" ];
                           text = ''
                             ${pkgs.coreutils}/bin/install -d -m 0755 ${fontDirectory}
-                            # Retire the Noto CJK file previously distributed by this module.
-                            ${pkgs.coreutils}/bin/rm -f -- ${fontDirectory}/NotoSansCJK-VF.otf.ttc
                             ${pkgs.coreutils}/bin/install --compare -m 0644 ${pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Regular.ttf ${fontDirectory}/UDEVGothicNF-Regular.ttf
                             ${pkgs.coreutils}/bin/install --compare -m 0644 ${pkgs.udev-gothic-nf}/share/fonts/truetype/UDEVGothicNF-Bold.ttf ${fontDirectory}/UDEVGothicNF-Bold.ttf
                             ${pkgs.coreutils}/bin/install --compare -m 0644 ${pkgs.noto-fonts-color-emoji}/share/fonts/noto/NotoColorEmoji.ttf ${fontDirectory}/NotoColorEmoji.ttf
@@ -525,7 +497,11 @@ let
                 );
                 fonts.fontDir.enable = true;
                 # Desktop CLI integration authenticates the setgid native op wrapper.
-                programs._1password.enable = true;
+                programs._1password.enable = lib.mkDefault (
+                  builtins.any (home: home.dotfiles.onePassword.enable) (
+                    builtins.attrValues config.home-manager.users
+                  )
+                );
                 home-manager.sharedModules = [
                   (
                     { config, lib, ... }:
@@ -533,21 +509,23 @@ let
                       hermes = config.services.hermes-agent;
                     in
                     {
-                      # The service PATH contains store packages, which bypass setgid.
-                      services.hermes-agent.settings.secrets.onepassword.binary_path = "/run/wrappers/bin/op";
-                      # Native desktop authentication needs op's setgid transition.
-                      # NoNewPrivileges would suppress it even with the wrapper path.
-                      # PrivateTmp also creates a user namespace without op's host GID.
-                      systemd.user.services = lib.mkIf hermes.enable (
-                        lib.optionalAttrs hermes.gateway.enable {
-                          hermes-agent.Service.NoNewPrivileges = lib.mkForce false;
-                          hermes-agent.Service.PrivateTmp = lib.mkForce false;
-                        }
-                        // lib.optionalAttrs (hermes.backend.mode != "none") {
-                          hermes-backend.Service.NoNewPrivileges = lib.mkForce false;
-                          hermes-backend.Service.PrivateTmp = lib.mkForce false;
-                        }
-                      );
+                      config = lib.mkIf config.dotfiles.onePassword.enable {
+                        # The service PATH contains store packages, which bypass setgid.
+                        services.hermes-agent.settings.secrets.onepassword.binary_path = "/run/wrappers/bin/op";
+                        # Native desktop authentication needs op's setgid transition.
+                        # NoNewPrivileges would suppress it even with the wrapper path.
+                        # PrivateTmp also creates a user namespace without op's host GID.
+                        systemd.user.services = lib.mkIf hermes.enable (
+                          lib.optionalAttrs hermes.gateway.enable {
+                            hermes-agent.Service.NoNewPrivileges = lib.mkForce false;
+                            hermes-agent.Service.PrivateTmp = lib.mkForce false;
+                          }
+                          // lib.optionalAttrs (hermes.backend.mode != "none") {
+                            hermes-backend.Service.NoNewPrivileges = lib.mkForce false;
+                            hermes-backend.Service.PrivateTmp = lib.mkForce false;
+                          }
+                        );
+                      };
                     }
                   )
                 ];

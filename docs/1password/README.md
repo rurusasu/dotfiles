@@ -5,9 +5,20 @@
 
 ## Nix の管理場所
 
-Unix の CLI / GUI 導入・設定・連携は `nix/modules/1password/` が管理し、既存の nixpkgs バイナリを利用する。CLI と macOS / Linux デスクトップ版は Home Manager が導入し、OS 固有の権限・システム統合は `nix/defaults.nix` に置く。実 module の `default.nix` は自動検出し、共通・OS 別構成の `dotfiles.onePassword.enable` と `programs.ssh.enable` などの型付き option で有効化する。Windows の WinGet 標準の導入情報は `windows/winget/packages.json` で直接管理する。`ssh/default.nix` が公式 SSH agent socket の `IdentityAgent` と `SSH_AUTH_SOCK` を管理する。OS 別の署名・agent・WSL 連携と GUI package は `nix/defaults.nix` に置く。WSL の署名 wrapper の正本は `nix/modules/1password/op-ssh-sign-wsl` に置く。
+Unix の CLI / GUI 導入・設定・連携は `nix/modules/1password/` が管理し、既存の nixpkgs バイナリを利用する。CLI と macOS / Linux デスクトップ版は Home Manager が導入し、OS 固有の権限・システム統合は `nix/defaults.nix` に置く。実 module の `default.nix` は自動検出し、共通・OS 別構成は `dotfiles.onePassword.enable` と `programs.ssh.enable` などの型付き option に従う。Windows の WinGet 標準の導入情報は `windows/winget/packages.json` で直接管理する。`ssh/default.nix` が公式 SSH agent socket の `IdentityAgent` と `SSH_AUTH_SOCK` を管理する。OS 別の署名・agent・WSL 連携は `nix/defaults.nix` に置く。WSL の署名 wrapper の正本は `nix/modules/1password/op-ssh-sign-wsl` に置く。
 
 `nix/modules/1password/default.nix` は型付き Home Manager option の `dotfiles.onePassword.account` と `dotfiles.onePassword.ssh.publicKey` を定義する。個人用の既定値も同 module に宣言する。WSL の `OP_ACCOUNT` も同じ account option を参照する。account と SSH 公開鍵は非秘密の値として Git / Nix store に含めてよい。
+
+Hermes と MCP も `dotfiles.onePassword.account` を共有し、secret 参照は同 module の `dotfiles.onePassword.secrets` を正本とする。Home Manager の設定から、例えば次のように変更できる。
+
+```nix
+dotfiles.onePassword = {
+  account = "example.1password.com";
+  secrets.references.githubToken = "op://Private/GitHub/credential";
+};
+```
+
+Hermes は公式の `settings.secrets.onepassword` で起動時に取得する。MCP は参照だけを `${XDG_CONFIG_HOME:-$HOME/.config}/mcp/onepassword.json` に生成し、既存の同期コマンドが必要な値を実行時に取得する。別のカタログを使う場合は `DOTFILES_MCP_ONEPASSWORD_CONFIG` で指定する。実際の token や API key を Nix option、`home.sessionVariables`、生成 JSON に記載しない。Nix store に入れるのは参照と非秘密設定だけとする。OAuth のログイン状態、更新処理、キャッシュは各アプリが管理し、共通環境変数へ展開しない。
 
 SSH agent は CLI 単体ではなくデスクトップ版が提供する。初回のサインイン・ロック解除と Settings > Developer > Use the SSH Agent の有効化は、[1Password 公式手順](https://developer.1password.com/docs/ssh/get-started/)に従ってユーザーが行う。Nix は秘密鍵を取得・展開せず、Bash も別の `ssh-agent` を起動しない。
 

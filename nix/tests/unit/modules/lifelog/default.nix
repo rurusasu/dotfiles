@@ -18,13 +18,11 @@ in
   testLifelogUsesSelectedPackageAndGitUserCheckout = {
     expr = {
       installed = builtins.elem pkgs.hello home.config.home.packages;
-      command = toString home.config.home.file.".local/bin/lifelog".source;
       desktop = home.config.xdg.desktopEntries.lifelog.exec;
       checkout = home.config.programs.lifelog.sourceDirectory;
     };
     expected = {
       installed = true;
-      command = "${pkgs.hello}/bin/lifelog";
       desktop = "${pkgs.hello}/bin/lifelog";
       checkout = "/home/test-user/ghq/github.com/work-user/lifelog-core";
     };

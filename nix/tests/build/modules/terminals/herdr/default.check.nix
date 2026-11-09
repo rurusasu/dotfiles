@@ -1,7 +1,10 @@
 { pkgs, fixtures }:
 let
-  home = fixtures.mkHome pkgs.stdenv.hostPlatform.system [ (fixtures.homeModule "common") ];
-  settings = (pkgs.formats.toml { }).generate "herdr-config.toml" home.config.programs.herdr.settings;
+  home = fixtures.mkHome pkgs.stdenv.hostPlatform.system [
+    (fixtures.homeModule "common")
+    ({ lib, ... }: { programs.herdr.mutableSettings = lib.mkForce false; })
+  ];
+  settings = home.config.xdg.configFile."herdr/config.toml".source;
 in
 {
   herdr-config =

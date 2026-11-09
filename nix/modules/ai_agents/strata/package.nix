@@ -1,39 +1,28 @@
-{ pkgs, release }:
+{ pkgs, feed }:
 let
   inherit (pkgs) lib;
   isDarwin = pkgs.stdenv.hostPlatform.system == "aarch64-darwin";
-  version = lib.removePrefix "v" release.tag_name;
-  selectAsset =
-    description: predicate:
-    lib.findSingle predicate (throw "Strata release has no ${description} asset")
-      (throw "Strata release has multiple ${description} assets")
-      release.assets;
-  desktopAsset = selectAsset "desktop for ${pkgs.stdenv.hostPlatform.system}" (
-    asset:
-    asset.name == (if isDarwin then "Strata.app.tar.gz" else "Strata-${version}-linux-x86_64.AppImage")
-  );
-  controlPattern = "strata-control-(.+)-${
-    if isDarwin then "macos-arm64" else "linux-x86_64"
-  }[.]tar[.]gz";
-  controlAsset = selectAsset "Control for ${pkgs.stdenv.hostPlatform.system}" (
-    asset: builtins.match controlPattern asset.name != null
-  );
-  controlVersion = builtins.head (builtins.match controlPattern controlAsset.name);
+  version = feed.app.version;
+  releaseTag = "v${version}";
+  desktopAsset = feed.app.platforms.${if isDarwin then "darwin-aarch64" else "linux-x86_64"};
+  controlPlatform = if isDarwin then "macos-arm64" else "linux-x86_64";
+  controlAsset =
+    lib.findSingle (asset: asset.platform == controlPlatform)
+      (throw "Strata feed has no Control asset for ${controlPlatform}")
+      (throw "Strata feed has multiple Control assets for ${controlPlatform}")
+      feed.control.packages;
+  controlVersion = feed.control.version;
   fetchAsset =
     asset:
-    let
-      digest = asset.digest or null;
-    in
-    if !builtins.isString digest || builtins.match "sha256:[0-9a-fA-F]{64}" digest == null then
-      throw "Strata release asset ${asset.name} has no valid SHA-256 digest"
-    else
-      pkgs.fetchurl {
-        url = asset.browser_download_url;
-        sha256 = lib.removePrefix "sha256:" digest;
-      };
+    pkgs.fetchurl {
+      # The desktop URLs in the feed use /latest/download/. Pin every asset to
+      # the feed's release so later releases cannot change this derivation.
+      url = "https://github.com/Niko1221/Strata/releases/download/${releaseTag}/${builtins.baseNameOf asset.url}";
+      sha256 = asset.sha256;
+    };
   desktopSource = fetchAsset desktopAsset;
   controlSource = fetchAsset controlAsset;
-  desktopContents = pkgs.appimageTools.extractType2 {
+  desktopContents = pkgs.appimageTools.extract {
     pname = "strata-desktop";
     inherit version;
     src = desktopSource;
@@ -106,9 +95,6 @@ let
         --set PYTHONDONTWRITEBYTECODE 1
       runHook postInstall
     '';
-    passthru = {
-      releaseTag = release.tag_name;
-    };
     meta = meta // {
       description = "Strata local AI desktop application";
       mainProgram = "strata-desktop";
@@ -122,7 +108,6 @@ let
         passthru = {
           inherit controlContents;
           productVersion = version;
-          releaseTag = release.tag_name;
         };
         meta = meta // {
           description = "Strata Terminal with its bundled Python and Control runtime";
@@ -151,7 +136,6 @@ let
     '';
     passthru = {
       inherit desktopContents;
-      releaseTag = release.tag_name;
     };
     meta = meta // {
       description = "Strata local AI desktop application";
@@ -179,7 +163,6 @@ let
     passthru = {
       inherit controlContents;
       productVersion = version;
-      releaseTag = release.tag_name;
     };
     meta = meta // {
       description = "Strata Terminal with its bundled Python and Control runtime";

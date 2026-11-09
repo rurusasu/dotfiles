@@ -6,34 +6,39 @@ let
 
 in
 {
-  testDisabledOnePasswordDoesNotInstallOrConfigureAgent = {
+  testDisabledOnePasswordRemovesDarwinDesktopIntegration = {
     expr =
       let
-        home = fixtures.mkHome "x86_64-linux" [ ];
+        home = fixtures.mkHome "aarch64-darwin" [
+          (fixtures.homeModule "darwin")
+          ({ lib, ... }: { dotfiles.onePassword.enable = lib.mkForce false; })
+        ];
       in
       {
-        cliInstalled = builtins.any (
-          package: (package.pname or "") == "1password-cli"
-        ) home.config.home.packages;
+        guiInstalled = builtins.elem home.pkgs._1password-gui home.config.home.packages;
         managesPublicKey = home.config.home.file ? ".ssh/signing_key.pub";
         configuresAgent = home.config.home.sessionVariables ? SSH_AUTH_SOCK;
+        launchdAgent = home.config.launchd.agents ? onepassword-ssh-environment;
+        biometricUnlock = home.config.home.sessionVariables ? OP_BIOMETRIC_UNLOCK_ENABLED;
+        signer = home.config.programs.git.signing.signer;
       };
     expected = {
-      cliInstalled = false;
+      guiInstalled = false;
       managesPublicKey = false;
       configuresAgent = false;
+      launchdAgent = false;
+      biometricUnlock = false;
+      signer = "${homeConfigurations.darwin.pkgs.openssh}/bin/ssh-keygen";
     };
   };
 
-  testWslOnePasswordUsesNativeCliWithoutWindowsForwarder = {
+  testWslOnePasswordInstallsNativeCli = {
     expr = {
-      forwardsToWindows = wsl.config.home.file ? ".local/bin/op";
       nativeCliInstalled = builtins.any (
         package: (package.pname or "") == "1password-cli"
       ) wsl.config.home.packages;
     };
     expected = {
-      forwardsToWindows = false;
       nativeCliInstalled = true;
     };
   };
@@ -50,11 +55,9 @@ in
       in
       {
         managesPublicKey = home.config.home.file ? ".ssh/signing_key.pub";
-        publicKeyActivation = home.config.home.activation ? onePasswordSshPublicKey;
       };
     expected = {
       managesPublicKey = false;
-      publicKeyActivation = false;
     };
   };
 
@@ -79,7 +82,6 @@ in
             publicKey = home.config.home.file.".ssh/signing_key.pub".text;
             replaceExistingKey = home.config.home.file.".ssh/signing_key.pub".force;
             executable = home.config.home.file.".ssh/signing_key.pub".executable;
-            publicKeyActivation = home.config.home.activation ? onePasswordSshPublicKey;
           }
         )
         [
@@ -92,7 +94,6 @@ in
           publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEPvjJr6iWYXFDo0foUBxas3qR9rJm1hix7E1Z6iY4RM fixture\n";
           replaceExistingKey = true;
           executable = false;
-          publicKeyActivation = false;
         })
         [
           "x86_64-linux"
@@ -123,7 +124,6 @@ in
           home.config.home.file.".ssh/config".text;
       opensshAgentEnabled = home.config.services.ssh-agent.enable;
       gpgSshAgentEnabled = home.config.services.gpg-agent.enableSshSupport;
-      publicKeyActivation = home.config.home.activation ? onePasswordSshPublicKey;
       publicKeyIsStoreManaged = home.config.home.file ? ".ssh/signing_key.pub";
     }) homeConfigurations.homes;
     expected =
@@ -135,12 +135,11 @@ in
           sshAgentRendered = true;
           opensshAgentEnabled = false;
           gpgSshAgentEnabled = false;
-          publicKeyActivation = false;
           publicKeyIsStoreManaged = true;
         })
         [
           {
-            signer = "/opt/1Password/op-ssh-sign";
+            signer = "${homeConfigurations.linux.pkgs._1password-gui}/bin/op-ssh-sign";
             agentSocket = "${homeConfigurations.linux.config.home.homeDirectory}/.1password/agent.sock";
           }
           {

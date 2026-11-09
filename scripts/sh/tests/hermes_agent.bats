@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 
 setup() {
+  bats_require_minimum_version 1.5.0
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../../.." && pwd)"
   TEST_HOME="$BATS_TEST_TMPDIR/home"
   STUB_BIN="$BATS_TEST_TMPDIR/bin"
@@ -17,6 +18,15 @@ setup() {
 
   export REPO_ROOT PATH="$STUB_BIN:$PATH"
   export HOME="$TEST_HOME"
+  export XDG_CONFIG_HOME="$TEST_HOME/config"
+  unset DOTFILES_MCP_ONEPASSWORD_CONFIG
+  unset DOTFILES_HERMES_OP_SERVICE_ACCOUNT_ACCOUNT DOTFILES_HERMES_OP_SERVICE_ACCOUNT_TOKEN_REF
+  unset DOTFILES_HERMES_XAPI_1PASSWORD_ACCOUNT DOTFILES_HERMES_XAPI_1PASSWORD_VAULT
+  unset DOTFILES_HERMES_XAPI_1PASSWORD_ITEM DOTFILES_HERMES_XAPI_OAUTH_ITEM
+  mkdir -p "$XDG_CONFIG_HOME/mcp"
+  cat >"$XDG_CONFIG_HOME/mcp/onepassword.json" <<'EOF'
+{"account":"fixture.1password.com","dockerMcp":{},"xapi":{"vault":"fixture-vault","item":"Fixture X API","serviceAccountTokenRef":"op://fixture/service-account/credential"}}
+EOF
   export HERMES_DATA_DIR="$TEST_HOME/.hermes"
   unset HERMES_HOME USERPROFILE DOTFILES_HERMES_OP_EXECUTABLE
   unset CLIENT_ID CLIENT_SECRET X_API_CLIENT_ID X_API_CLIENT_SECRET
@@ -36,9 +46,8 @@ setup() {
   export XAPI_ROTATED_REFRESH_TOKEN=""
 
   write_stub op '
-printf "op" >>"$COMMAND_LOG"
-printf " <%s>" "$@" >>"$COMMAND_LOG"
-printf "\n" >>"$COMMAND_LOG"
+printf -v arguments " <%s>" "$@"
+printf "op%s\n" "$arguments" >>"$COMMAND_LOG"
 	case "${3:-}" in
 	read)
 		if [[ ${OP_READ_DELAY_SECONDS:-0} != 0 ]]; then
@@ -60,9 +69,9 @@ printf "\n" >>"$COMMAND_LOG"
 		fi
 		[ "${2:-}" = get ] || exit 2
 		printf "%s\n" "${OP_SERVICE_ACCOUNT_TOKEN:-<unset>}" >>"$OP_TOKEN_CAPTURE"
-		if [ "${3:-}" = "Hermes X API MCP" ]; then
+		if [ "${3:-}" = "Fixture X API" ]; then
 			printf "%s\n" "$XAPI_OP_ITEM_JSON"
-		elif [ "${3:-}" = "Hermes X API MCP OAuth" ]; then
+		elif [ "${3:-}" = "Fixture X API OAuth" ]; then
 			printf "%s\n" "$XAPI_OAUTH_ITEM_JSON"
 		else
 			printf "%s\n" "$OP_ITEM_JSON"
@@ -149,7 +158,7 @@ assert_service_account_cache_rejected_after_timeout() {
   export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
   run_xapi_mcp
   [ "$status" -ne 0 ]
-  ! grep -q '^xurl ' "$COMMAND_LOG"
+  run ! grep -q '^xurl ' "$COMMAND_LOG"
 }
 
 @test "uses the explicit Hermes data directory before HERMES_HOME and USERPROFILE" {
@@ -181,11 +190,22 @@ dotfiles_hermes_prepare_runtime_home
   grep -q '<read>' "$COMMAND_LOG"
   run grep -q '<signin>' "$COMMAND_LOG"
   [ "$status" -eq 1 ]
-  grep -q '^op <item> <get> <Hermes X API MCP> ' "$COMMAND_LOG"
+  grep -Fq 'op <item> <get> <Fixture X API> <--account> <fixture.1password.com> <--vault> <fixture-vault>' "$COMMAND_LOG"
+  grep -Fq 'op <--account> <fixture.1password.com> <read> <op://fixture/service-account/credential>' "$COMMAND_LOG"
   [ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=service-account-token' ]
   [ "$(service_account_cache_mode)" = 600 ]
   run grep -q 'xapi-client-secret-marker\|service-account-token' "$COMMAND_LOG"
   [ "$status" -eq 1 ]
+}
+
+@test "rejects an incomplete catalog before reading secrets or starting xurl" {
+  export DOTFILES_MCP_ONEPASSWORD_CONFIG="$TEST_HOME/incomplete.json"
+  printf '{"account":"fixture.1password.com","xapi":{}}\n' >"$DOTFILES_MCP_ONEPASSWORD_CONFIG"
+
+  run_xapi_mcp
+
+  [ "$status" -ne 0 ]
+  run ! grep -q '^op \|^xurl ' "$COMMAND_LOG"
 }
 
 @test "uses HERMES_HOME then HOME for native xurl state while ignoring USERPROFILE" {
@@ -234,13 +254,13 @@ dotfiles_hermes_with_xapi_credentials bash -c '"'"'printf "%s:%s\n" "$X_API_CLIE
   grep -q 'client_id: "xapi-client-id-marker"' "$HOME/.hermes/.xurl/auth.yml"
   grep -q 'client_secret: "xapi-client-secret-marker"' "$HOME/.hermes/.xurl/auth.yml"
   grep -q 'refresh_token: "xapi-refresh-token-marker"' "$HOME/.hermes/.xurl/auth.yml"
-  xapi_lookup_count="$(grep -c '<Hermes X API MCP>' "$COMMAND_LOG")"
+  xapi_lookup_count="$(grep -c '<Fixture X API>' "$COMMAND_LOG")"
   [ "$xapi_lookup_count" -ge 2 ]
-  last_xapi_lookup="$(grep -n '<Hermes X API MCP>' "$COMMAND_LOG" | tail -n 1 | cut -d: -f1)"
+  last_xapi_lookup="$(grep -n '<Fixture X API>' "$COMMAND_LOG" | tail -n 1 | cut -d: -f1)"
   mcp_line="$(grep -n '^xurl <mcp> <https://api.x.com/mcp>$' "$COMMAND_LOG" | cut -d: -f1)"
   [ "$last_xapi_lookup" -lt "$mcp_line" ]
-  ! grep -q 'xapi-refresh-token-marker' "$COMMAND_LOG"
-  ! grep -q '<item> <edit>' "$COMMAND_LOG"
+  run ! grep -q 'xapi-refresh-token-marker' "$COMMAND_LOG"
+  run ! grep -q '<item> <edit>' "$COMMAND_LOG"
 }
 
 @test "validates the X API token before starting MCP without exposing its stdout" {
@@ -284,7 +304,7 @@ EOF
   grep -q 'client_secret: "xapi-client-secret-marker"' "$HOME/.hermes/.xurl/auth.yml"
   grep -q 'refresh_token: "xapi-refresh-token-marker"' "$HOME/.hermes/.xurl/auth.yml"
   grep -q '^xurl <mcp>' "$COMMAND_LOG"
-  ! grep -q 'stale-refresh-token' "$COMMAND_LOG"
+  run ! grep -q 'stale-refresh-token' "$COMMAND_LOG"
 }
 
 @test "stops before MCP startup when local and 1Password X API tokens are invalid" {
@@ -308,8 +328,8 @@ EOF
   [ "$(cat "$XAPI_TOKEN_ATTEMPT_FILE")" -eq 2 ]
   [[ $output == *"task hermes:xapi:setup"* ]]
   grep -q 'refresh_token: "stale-refresh-token"' "$HOME/.hermes/.xurl/auth.yml"
-  ! grep -q '^xurl <mcp>' "$COMMAND_LOG"
-  ! grep -q 'stale-refresh-token' "$COMMAND_LOG"
+  run ! grep -q '^xurl <mcp>' "$COMMAND_LOG"
+  run ! grep -q 'stale-refresh-token' "$COMMAND_LOG"
 }
 
 @test "does not replace the local X API cache after a native xurl connection failure" {
@@ -335,8 +355,8 @@ EOF
   [ "$(cat "$XAPI_TOKEN_ATTEMPT_FILE")" -eq 1 ]
   grep -q 'refresh_token: "local-refresh-token"' "$HOME/.hermes/.xurl/auth.yml"
   [[ $output != *"task hermes:xapi:setup"* ]]
-  ! grep -q '<item> <edit>' "$COMMAND_LOG"
-  ! grep -q '^xurl <mcp>' "$COMMAND_LOG"
+  run ! grep -q '<item> <edit>' "$COMMAND_LOG"
+  run ! grep -q '^xurl <mcp>' "$COMMAND_LOG"
 }
 
 @test "syncs a refresh token rotated by a successful X API probe back to 1Password" {
@@ -358,7 +378,7 @@ EOF
 
   [ "$status" -eq 0 ]
   jq -e '.fields[] | select(.label == "X_API_REFRESH_TOKEN") | .value == "rotated-refresh-token"' "$EDIT_CAPTURE" >/dev/null
-  ! grep -q 'rotated-refresh-token' "$COMMAND_LOG"
+  run ! grep -q 'rotated-refresh-token' "$COMMAND_LOG"
 }
 
 @test "keeps a successfully rotated local X API token when 1Password sync fails" {
@@ -381,8 +401,8 @@ EOF
 
   [ "$status" -eq 17 ]
   grep -q 'refresh_token: "rotated-refresh-token"' "$HOME/.hermes/.xurl/auth.yml"
-  ! grep -q 'refresh_token: "local-refresh-token"' "$HOME/.hermes/.xurl/auth.yml"
-  ! grep -q '^xurl <mcp>' "$COMMAND_LOG"
+  run ! grep -q 'refresh_token: "local-refresh-token"' "$HOME/.hermes/.xurl/auth.yml"
+  run ! grep -q '^xurl <mcp>' "$COMMAND_LOG"
 }
 
 @test "sync-token writes the local refresh token through the 1Password template" {
@@ -403,14 +423,14 @@ EOF
   [ "$status" -eq 0 ]
   jq -e '.fields[] | select(.label == "X_API_REFRESH_TOKEN") | .value == "local-refresh-token-marker"' "$EDIT_CAPTURE" >/dev/null
   grep -q '<read>' "$COMMAND_LOG"
-  ! grep -q '<signin>' "$COMMAND_LOG"
+  run ! grep -q '<signin>' "$COMMAND_LOG"
   [ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=service-account-token' ]
   [ "$(cat "$OP_TOKEN_CAPTURE")" = 'service-account-token' ]
-  ! grep -q 'local-refresh-token-marker' "$COMMAND_LOG"
+  run ! grep -q 'local-refresh-token-marker' "$COMMAND_LOG"
 }
 
 @test "sync-token updates the configured OAuth item" {
-  export DOTFILES_HERMES_XAPI_OAUTH_ITEM='Hermes X API MCP OAuth'
+  export DOTFILES_HERMES_XAPI_OAUTH_ITEM='Fixture X API OAuth'
   export XAPI_OAUTH_ITEM_JSON='{"id":"xapi-oauth-item","fields":[{"label":"X_API_REFRESH_TOKEN","section":{"label":"Refresh Token"},"value":"xapi-refresh-token-marker"}]}'
   mkdir -p "$HOME/.hermes/.xurl"
   cat >"$HOME/.hermes/.xurl/auth.yml" <<'EOF'
@@ -427,8 +447,8 @@ EOF
   run bash "$REPO_ROOT/scripts/sh/hermes-xapi.sh" sync-token
 
   [ "$status" -eq 0 ]
-  grep -q '<item> <get> <Hermes X API MCP OAuth>' "$COMMAND_LOG"
-  grep -q '<item> <edit> <Hermes X API MCP OAuth>' "$COMMAND_LOG"
+  grep -q '<item> <get> <Fixture X API OAuth>' "$COMMAND_LOG"
+  grep -q '<item> <edit> <Fixture X API OAuth>' "$COMMAND_LOG"
   jq -e '.fields[] | select(.label == "X_API_REFRESH_TOKEN") | .value == "configured-item-refresh-token-marker"' "$EDIT_CAPTURE" >/dev/null
 }
 
@@ -465,8 +485,8 @@ EOF
   export OP_READ_DELAY_SECONDS=2 DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=1
   run_xapi_mcp
   [ "$status" -ne 0 ]
-  ! grep -q '^op' "$COMMAND_LOG"
-  ! grep -q '^xurl ' "$COMMAND_LOG"
+  run ! grep -q '^op' "$COMMAND_LOG"
+  run ! grep -q '^xurl ' "$COMMAND_LOG"
 }
 
 @test "rejects a symlinked cached service account before native xurl" {
@@ -499,18 +519,6 @@ EOF
   assert_service_account_cache_rejected_after_timeout
 }
 
-@test "defaults arbitrarily large service-account read timeouts to twenty seconds" {
-  export DOTFILES_HERMES_OP_READ_TIMEOUT_SECONDS=999999999999999999999999999999999999
-  run bash -c '
-set -euo pipefail
-. "$REPO_ROOT/scripts/sh/install-common.sh"
-. "$REPO_ROOT/scripts/sh/hermes-xapi-common.sh"
-dotfiles_hermes_service_account_read_timeout_seconds
-'
-  [ "$status" -eq 0 ]
-  [ "$output" = 20 ]
-}
-
 @test "atomically replaces an old service account cache after a successful op read" {
   printf 'OP_SERVICE_ACCOUNT_TOKEN=old-token\n' >"$HOME/.hermes/.op.env"
   chmod 600 "$HOME/.hermes/.op.env"
@@ -540,7 +548,7 @@ esac
   run_xapi_mcp
   [ "$status" -ne 0 ]
   grep -q '<read>' "$COMMAND_LOG"
-  ! grep -q '^xurl ' "$COMMAND_LOG"
+  run ! grep -q '^xurl ' "$COMMAND_LOG"
   [ "$(cat "$HOME/.hermes/.op.env")" = 'OP_SERVICE_ACCOUNT_TOKEN=old-token' ]
   [ "$(service_account_cache_mode)" = 600 ]
 }

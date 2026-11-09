@@ -6,7 +6,7 @@ let
       programs.ssh.enable = true;
     }
   ];
-  sshConfig = pkgs.writeText "ssh-config" home.config.home.file.".ssh/config".text;
+  sshConfig = home.config.home.file.".ssh/config".source;
 in
 {
   ssh-home-paths = pkgs.runCommand "ssh-home-paths-check" { nativeBuildInputs = [ pkgs.openssh ]; } ''

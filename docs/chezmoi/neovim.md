@@ -4,35 +4,33 @@
 
 最低 Neovim **0.12**。更新時は `nvim --version` と `:checkhealth vim.lsp` を確認します。
 
-- 基本設定: `nix/modules/editors/nvim/init.lua`
-- 補助 Lua: `nix/modules/editors/nvim/lua/`
-- Neovim 本体の有効化・設定・Lua の配置: `nix/modules/editors/nvim/default.nix`
+- 実行時 callback: `nix/modules/editors/nvim/callbacks.nix`（Nixvim の起動設定に埋め込む Lua）
+- Neovim 本体の有効化・基本設定・起動処理・補助 Lua の配置: `nix/modules/editors/nvim/default.nix`
 - 補助コマンド・LSP・整形ツール・toolchain・プラグイン実行依存の導入: `nix/modules/editors/nvim/runtime/default.nix`
-- Home Manager の起動設定: `nix/modules/editors/nvim/default.nix`
-- 共通 LSP 処理と整形設定: `nix/modules/editors/nvim/lua/config/lsp.lua`
+- LSP の有効化・サーバー別設定・整形設定: `nix/modules/editors/nvim/lsp/default.nix`
 - プラグインの導入と Tree-sitter の言語一覧: `nix/modules/editors/nvim/plugins/default.nix`
-- プラグインの Lua 設定: `nix/modules/editors/nvim/lua/plugins/*.lua`
-- Snacks の PDF プレビュー・ghq 連携・smart 検索: `nix/modules/editors/nvim/lua/config/snacks_picker.lua`
-- 共通キー配列: `nix/modules/editors/nvim/neovim.nix`（`bindings.nix` が読み込む）
+- 設定値・キー・autocmd・ユーザーコマンド: Nixvim の標準 option
+- Snacks の PDF プレビュー・ghq 連携・smart 検索: `callbacks.nix` の `Dotfiles.snacks_picker`
+- 基本キー配列・leader: `default.nix` の `programs.nixvim.keymaps` / `globals`。プラグインのキーは `plugins/default.nix`
 
 package データ、配布方式、エディタ設定を変更理由ごとに分けます。
 共通方針は [パッケージ管理の分割理由](../nix/package-management.md#分割の理由と編集先) を参照してください。
 
-`nix/modules/editors/nvim/` が Neovim 本体の有効化、package 選択、設定、プラグイン、Lua の配置と専用の実行依存を所有します。構成側の標準 `programs.neovim.enable` に従い、自動検出される `default.nix` が設定を、`runtime/default.nix` が補助コマンド・LSP・整形ツール・toolchain・プラグイン実行依存を通常の PATH に導入します。これらを全エディタ共通の集約 module に切り出しません。Neovim の内部 PATH は追加しません。Windows の winget / pnpm では配布しません。
+[Nixvim の Home Manager module](https://nix-community.github.io/nixvim/user-guide/install.html) を使い、構成側の `programs.nixvim.enable` で有効化します。`nixvim` input は共通の `nixpkgs` に follows し、`nixpkgs.useGlobalPackages = true` で同じ package set を使います。Neovim 本体は `pkgs.neovim-unwrapped`、補助コマンド・LSP・整形ツール・toolchain は `runtime/default.nix` が通常のユーザー PATH へ導入します。
 
-Neovim の設定、プラグイン、キー配列を読み込む loader は Home Manager が管理します。`default.nix` が `builtins.readFile ./init.lua` で基本設定を読み込み、プラグイン設定より先に実行します。NixOS-WSL は Windows chezmoi が配置する `~/.config/dotfiles/keybindings/generated.json` から共通キー配列を読み、初回 export 配置前は Nix の値を使います。native Unix は同じ Nix 定義を直接読みます。キーの更新は `task keybindings:export` と `task chezmoi` の後に Neovim を再起動します。loader 導入時は一度 `nrs` が必要です。実際の参照先は `:lua print(vim.fn.stdpath("config"))` で確認してください。非 Nix 環境向けの設定配布は行いません。
+設定値は `opts` / `globals`、キーは `keymaps`、イベントは `autoCmd`、コマンドは `userCommands`、全プラグインの設定は `plugins.<name>.settings` に宣言します。Modes / Incline も Nixvim の標準 plugin factory で型付き option を定義します。Lua の生成・初期化順序・配布は Nixvim が担当し、PDF preview・ウインドウ操作・整形対象の選択などの実行処理は `callbacks.nix` から起動設定に埋め込み、`Dotfiles.*` として参照します。
 
-### 設定ファイルの配置
+### 設定の配布
 
-`init.lua` と `lua/` は Home Manager 標準のファイル配布で配置します。専用の移行・退避スクリプトや強制上書きは使用しません。管理外の既存設定と衝突する場合は、Home Manager の標準検査で停止するため、対象を確認して手動で整理してください。`after/lsp/` などの既存ファイルは自動で移動・削除しません。
+`wrapRc = true` / `impureRtp = false` により、Nixvim が設定と補助 Lua を package の runtime に含めます。個別の `.lua` ソースや設定ディレクトリは配布せず、独自の `init.lua` 生成、共通キー用の中間ファイル、XDG への二重配布も行いません。`nixvim-print-init` で生成された起動設定を確認できます。NixOS-WSL も同じ設定を使い、変更は `nrs` で反映して Neovim を再起動します。
 
 ## Tree-sitter は何が必要か
 
 構文解析とハイライトの実行は Neovim 本体の `vim.treesitter.start()` で行います。したがって、それだけのために nvim-treesitter の Lua プラグインをロードする必要はありません。ただし **言語ごとのパーサーバイナリと対応クエリ** は必要です。Neovim 同梱の少数言語だけでは Python、Nix、TSX などをカバーできません。[Neovim 公式](https://neovim.io/doc/user/treesitter/)
 
-`nvim-treesitter.withPlugins` に対象言語を指定し、Home Manager の `programs.neovim.plugins` に直接登録します。独自の wrapper や環境変数は使用しません。パーサーと対応クエリのビルド・導入は標準の Nixpkgs / Home Manager の処理に任せます。
+`programs.nixvim.plugins.treesitter.grammarPackages` に対象言語を指定します。パーサーは設定した Tree-sitter package の `builtGrammars` から取得し、対応クエリと組み合わせます。実行時のダウンロード・ビルドは行いません。
 
-Home Manager が `init.lua` を生成し、基本設定の後に `plugins/default.nix` の順序で `require("plugins.<name>")` により各 `lua/plugins/*.lua` を読み込みます。各ファイルは公式例に沿ってプラグイン自身の `setup()` とキー登録を直接実行します。設定を適用するだけの `local M` / `M.setup()` は使いません。LSP は関数を公開する共通モジュール `lua/config/lsp.lua` の `setup()` を呼び出します。lazy.nvim による遅延読み込みと更新は使用しません。プラグインは Nix の再反映で更新します。
+プラグインの `setup()` は Nixvim が適用します。`Dotfiles.*` の callback は Nix の `settings` / `keymaps` / `autoCmd` から参照します。Sidekick は CLI 連携を使い、未構成の Copilot NES は無効にします。プラグインは Nix の再反映で更新します。
 
 Nix は継承先のクエリ（ecma、jsx、html_tags など）も閉包に含めます。「プラグインコードをロードしない」と「Nix store に nvim-treesitter 由来のパッケージが一切存在しない」は別です。ファイルタイプ `sh` / `javascriptreact` / `typescriptreact` は対応する grammar に明示登録します。
 
@@ -42,38 +40,33 @@ Nix は継承先のクエリ（ecma、jsx、html_tags など）も閉包に含�
 
 ## LSP
 
-nvim-lspconfig の標準サーバー定義を使い、起動は `vim.lsp.config` / `vim.lsp.enable`、共通処理は `LspAttach` で行います。個人環境向けの `after/lsp/` 設定は使用しません。整形に必要な Nix の nixfmt、YAML の整形有効化、Go の gofumpt は `lua/config/lsp.lua` に記載します。Mason やその PATH 補正は不要です。
+`plugins.lspconfig.enable` により nvim-lspconfig の `lsp/*.lua` を使います。有効化・設定は `lsp/default.nix` の `lsp.servers.<name>` にサーバーごとにまとめ、起動・補完・LSP キー登録も Nixvim に任せます。`cmd` / `root_dir` の独自定義やサーバー選択は行いません。`package = null` は `runtime/default.nix` が通常のユーザー PATH に導入するサーバーを使う指定です。
 
-| 対象                   | サーバー／実行ファイル     | 補足                                                         |
-| ---------------------- | -------------------------- | ------------------------------------------------------------ |
-| Nix                    | nixd                       | nixfmt による保存時整形                                      |
-| Go                     | gopls                      | Nix で導入、gofumpt による整形                               |
-| Rust                   | rust-analyzer              | 保存時整形、全ターゲットの Clippy 診断                       |
-| JS / TS                | tsc (TS7+) / ts_ls (TS5/6) | ネイティブ版優先、旧版の互換経路を維持                       |
-| JS / TS lint           | oxlint                     | 上流の project-local cmd、設定ファイル検出、Astro 対応を維持 |
-| YAML                   | yaml-language-server       | Nix                                                          |
-| TOML                   | taplo                      | Nix                                                          |
-| Shell                  | bash-language-server       | Nix                                                          |
-| Lua                    | lua-language-server        | LuaJIT / vim globals                                         |
-| Markdown               | marksman                   | Nix                                                          |
-| Python lint/format     | ruff                       | hover は ty に任せる                                         |
-| Python type/completion | ty                         | ty.toml / pyproject.toml などを root とする                  |
+| 対象                   | サーバー／実行ファイル | 補足                                                         |
+| ---------------------- | ---------------------- | ------------------------------------------------------------ |
+| Nix                    | nixd                   | nixfmt による保存時整形                                      |
+| Go                     | gopls                  | Nix で導入、gofumpt による整形                               |
+| Rust                   | rust-analyzer          | 保存時整形、全ターゲットの Clippy 診断                       |
+| C#                     | csharp-ls              | Roslyn ベース。.NET SDK 10、保存時整形                       |
+| JS / TS                | tsc (TS7+)             | 上流の TS7 LSP 定義に固定                                    |
+| JS / TS lint           | oxlint                 | 上流の project-local cmd、設定ファイル検出、Astro 対応を維持 |
+| YAML                   | yaml-language-server   | Nix                                                          |
+| TOML                   | taplo                  | Nix                                                          |
+| Shell                  | bash-language-server   | Nix                                                          |
+| Lua                    | lua-language-server    | LuaJIT / vim globals                                         |
+| Markdown               | marksman               | Nix                                                          |
+| Python lint/format     | ruff                   | hover は ty に任せる                                         |
+| Python type/completion | ty                     | ty.toml / pyproject.toml などを root とする                  |
 
-TypeScript 7 の `tsc --lsp --stdio` を優先し、使用できない環境では typescript-language-server へフォールバックします。両方を同じバッファへ起動しません。旧サーバーには TS5/6 の `tsserver.js` が必要です。global TypeScript を7に更新しただけでは旧サーバーの依存は満たせません。必要な旧プロジェクトには対応する TS5/6 を project-local に保持してください。TS 用の上流設定は Deno 判定も行います。
-
-未導入 executable は起動対象から外し、後から別の project-local executable があるプロジェクトを開くケースも再評価します。実行ファイルが存在しても server 初期化やプロジェクト設定の成功までは保証しません。`:checkhealth vim.lsp`、`:messages`、`:lua vim.print(vim.lsp.get_clients({bufnr=0}))` を確認します。
-
-選択順は project-local tsc → PATH tsc → project-local tsgo → PATH tsgo → local/PATH の従来サーバーです。バージョン確認は候補ごとに最大3秒。成功した選択は root ごとにセッション中固定し、不在はキャッシュしません。特定の旧機能のため従来サーバーを明示指定する場合は、LSP 起動前に `vim.g.dotfiles_typescript_server = "ts_ls"` を設定します。`"tsc"` を指定すると native のみに限定します。選択変更・依存更新後は再起動してください。
-
-旧 nvim-lspconfig に tsc 定義がなくても、TS の filetypes を引き継いで無関係な言語へ起動しないようにしています。現行上流が持つ settings/commands は保持します。plugin 更新は nixpkgs の更新と Nix の再反映で行います。起動・配布の互換テストは現行 checkout と [Nixpkgs が選択した nvim-lspconfig](../../nix/modules/editors/nvim/plugins/default.nix) の両方を使います。
+TypeScript は `tsc` のみを有効化します。独自のプロジェクト別選択、旧サーバーへのフォールバック、互換用の設定は持ちません。サーバーの root 判定・起動引数は nvim-lspconfig の上流定義に従います。
 
 ### TS7 終了時の未解決警告
 
-2026-09-06 の tsc 7.0.2 / Neovim 0.12.5 では、正常な shutdown 要求後にも `context canceled` と exit code 1 を観測しました。dotfiles をロードせず、上流 tsc 設定だけを有効化した隔離プローブでも再現しています。接続・補完は成功していますが、終了コードまで正常とはしていません。通知を隠す workaround は追加せず、必要なら上記の `ts_ls` 明示選択と TS5/6 を使ってください。[Microsoft の過去の類似ログ](https://github.com/microsoft/typescript-go/issues/3026) は参考であり、同一原因や現在の修正予定を証明するものではありません。
+2026-09-06 の tsc 7.0.2 / Neovim 0.12.5 では、正常な shutdown 要求後にも `context canceled` と exit code 1 を観測しました。dotfiles をロードせず、上流 tsc 設定だけを有効化した隔離プローブでも再現しています。接続・補完は成功していますが、終了コードまで正常とはしていません。通知を隠す workaround は追加しません。[Microsoft の過去の類似ログ](https://github.com/microsoft/typescript-go/issues/3026) は参考であり、同一原因や現在の修正予定を証明するものではありません。
 
 拡張子などから判定した filetype に応じて、設定済み・実行可能な LSP を自動起動します。整形対応の LSP が接続していれば、保存前に自動整形します（同期、上限3秒）。フォーマッターがないファイルでは何もしません。Python は Ruff、Rust は rust-analyzer に限定し、それ以外も接続した整形対応 LSP 一つだけを使って二重整形を避けます。手動 `Space f` も同じ選択を使います。LSP が使用する外部整形コマンド（Nix の nixfmt など）は別途導入が必要です。
 
-Rust は保存時に rust-analyzer が Clippy を全ターゲット・locked・offline で実行し、診断を更新します。Clippy が利用できない Rustup toolchain では cargo check にフォールバックします。テストの実行は保存時には行いません。
+Rust は保存時に rust-analyzer が Clippy を全ターゲット・locked・offline で実行し、診断を更新します。使用する Rust toolchain には Clippy が必要です。テストの実行は保存時には行いません。
 
 個人の `~/.dotfiles` や特定ホストの NixOS options を補完対象にする設定は追加しません。Nix フォーマットには nixfmt が別途必要です。
 
@@ -102,15 +95,15 @@ Herdr の terminal prefix も `Ctrl+Space` です。Neovim に届かない環境
 
 ## 画像・ターミナル
 
-作業ディレクトリの OSC 7 通知は `lua/config/osc7.lua` が `vim.api.nvim_ui_send` で送信します。Oil 内では表示中のディレクトリを使います。
+作業ディレクトリの OSC 7 通知は `callbacks.nix` の `Dotfiles.osc7` が `vim.api.nvim_ui_send` で送信します。Oil 内では表示中のディレクトリを使います。
 
 Snacks は端末の画像対応を自動判定します。PDF は公式の [`picker.preview` と `picker.config`](https://github.com/folke/snacks.nvim/blob/main/docs/picker.md#️-config) で Poppler の変換処理を指定し、通常のファイル表示とソース別の専用プレビューを維持します。`VimEnter` での内部関数の差し替えは行いません。外部プロセスは `vim.system` で終了コード・10秒上限を確認します。ただし変換待ちは同期なので、大きな PDF の UI 停止を完全には解消していません。
 
 Snacks の terminal と Sidekick の CLI ペインは `wrap` を有効にして横方向の view 移動を禁止し、縦スクロールだけを許可します。`termopen()` と Sidekick の scrollback が使う `nvim_open_term()` は `wrap` を false に戻すため、terminal / buffer の開始後に再適用します。
 
-leader の Space は terminal mode のマッピングに使いません。`Space` で始まる terminal mode のマッピングがあると、shell へ送る space が `timeoutlen` まで確定待ちになり、入力が反映されていないように見えます。Snacks terminal の toggle は normal mode の `Space t t` / `Space t f` のみとし、terminal 内からは `<C-q>`（または `<C-\><C-n>`）で terminal mode を抜けてから切り替えます。`<C-q>` は `config/keymaps.lua` の terminal mode 全体のマッピングで、Snacks 既定の `<Esc><Esc>` は `term_normal = false` により無効化しています。Esc は常に shell / CLI へ渡ります。
+leader の Space は terminal mode のマッピングに使いません。`Space` で始まる terminal mode のマッピングがあると、shell へ送る space が `timeoutlen` まで確定待ちになり、入力が反映されていないように見えます。Snacks terminal の toggle は normal mode の `Space t t` / `Space t f` のみとし、terminal 内からは `<C-q>`（または `<C-\><C-n>`）で terminal mode を抜けてから切り替えます。`<C-q>` は `default.nix` の terminal mode 全体のマッピングで、Snacks 既定の `<Esc><Esc>` は `term_normal = false` により無効化しています。Esc は常に shell / CLI へ渡ります。
 
-Windows のカスタム floating terminal は維持します。0.12 更新だけを理由に、実機での根拠なく既存 workaround を撤去しません。
+floating terminal の寸法・リサイズ幅は `globals.dotfiles_float_style`、terminal の表示設定は `globals.dotfiles_terminal_options` が所有します。
 
 ## 検証
 
@@ -119,21 +112,17 @@ Windows のカスタム floating terminal は維持します。0.12 更新だけ
 ```bash
 nix build path:.#checks.aarch64-darwin.neovim-native --no-link
 # Linux x86_64: checks.x86_64-linux.neovim-native
-nvim --headless -u NONE -i NONE -l nix/tests/build/modules/editors/nvim/modern.lua
 task test:bash
 ```
 
-実 LSP テストには ty、ruff、TS7 の tsc と新しい nvim-lspconfig が必要です。例のパスは Home Manager が配置した nvim-lspconfig の Nix store パスに置き換えます。`:lua vim.print(vim.api.nvim_get_runtime_file('lsp/tsc.lua', false))` で確認できます。テストは一時バッファを使い、プロジェクトファイルを保存しません。
-
-旧版の実 LSP テストでは TS5/6 と対応する typescript-language-server を PATH の先頭に置き、`DOTFILES_NVIM_TS_SERVER=ts_ls` を指定します（この環境変数はテストの期待値指定で、実設定の選択は上記の Lua global）。TS5.9.3＋従来サーバー5.3.0でも初期化・補完応答まで確認しました。routing テストはプロセス起動をモックし、上流の root 判定は実行します。
+実 LSP テストは設定済み Nixvim と PATH 上の ty・ruff・TS7 の tsc を使います。上流の起動定義を調べる場合は `:lua vim.print(vim.api.nvim_get_runtime_file('lsp/tsc.lua', false))` で確認できます。テストは一時バッファを使い、プロジェクトファイルを保存しません。
 
 ```bash
-DOTFILES_NVIM_LSPCONFIG="/nix/store/<hash>-vimplugin-nvim-lspconfig-<version>" \
-  nvim --headless -u NONE -i NONE -l nix/tests/build/modules/editors/nvim/lsp-integration.lua
-DOTFILES_NVIM_LSPCONFIG="/nix/store/<hash>-vimplugin-nvim-lspconfig-<version>" \
-  nvim --headless -u NONE -i NONE -l nix/tests/build/modules/editors/nvim/typescript.lua
+nvim --headless -i NONE \
+  -c 'lua local ok, err = pcall(dofile, "nix/tests/build/modules/editors/nvim/lsp-integration.lua"); if not ok then print(err); vim.cmd("cquit 1") end' \
+  -c 'qa!'
 ```
 
-全 plugin の起動テストは `neovim-native` に含まれます。一時 XDG data に Home Manager の native package を配置し、生成された `init.lua` と Nix 管理の基本設定を読み込みます。ホストへの反映は不要です。
+全 plugin の起動テストは `neovim-native` に含まれます。一時 HOME / XDG 環境で、本番と同じ Nixvim package を通常起動します。テスト用の init や plugin pack は別途生成・配置しません。ホストへの反映は不要です。
 
 headless テストでは terminal・画像の描画、IME・キーバインドの実入力を検証できません。これらと Linux の実機動作は対応環境で別途確認してください。

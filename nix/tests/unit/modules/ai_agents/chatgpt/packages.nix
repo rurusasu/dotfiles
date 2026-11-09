@@ -1,30 +1,17 @@
-{
-  fixtures,
-  homeConfigurations,
-  code,
-}:
+{ homeConfigurations }:
 let
   installed =
     home: builtins.any (package: (package.pname or "") == "chatgpt") home.config.home.packages;
 in
 {
   testChatGPTDesktopKeepsTheAppProvidedCodexAcrossPlatforms = {
-    expr =
-      builtins.all
-        (
-          system:
-          let
-            modulePkgs = fixtures.mkPkgs system;
-          in
-          (code.nix.modules.ai_agents.chatgpt.package {
-            pkgs = modulePkgs;
-          }).chatgpt.drvPath == (modulePkgs.chatgpt.override { codex = null; }).drvPath
-        )
-        [
-          "x86_64-linux"
-          "aarch64-linux"
-          "aarch64-darwin"
-        ];
+    expr = builtins.all (
+      home:
+      let
+        upstream = home.pkgs.chatgpt.override { codex = null; };
+      in
+      home.config.programs.chatgpt.package.drvPath == upstream.drvPath
+    ) (homeConfigurations.homes ++ [ homeConfigurations.linuxArm ]);
     expected = true;
   };
 

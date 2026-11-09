@@ -12,14 +12,7 @@ rec {
   chrome-devtools-mcp =
     inputs.mcp-servers.packages.${pkgs.stdenv.hostPlatform.system}.chrome-devtools-mcp;
 
-  mcp-proxy = pkgs.mcp-proxy.override {
-    # The proxy's streamable HTTP server still requires the request_ctx API.
-    python3Packages = pkgs.python3Packages.overrideScope (
-      _: prev: {
-        mcp = prev.mcp_1;
-      }
-    );
-  };
+  inherit (pkgs) mcp-proxy;
 
   xurl = pkgs.buildGoModule (finalAttrs: {
     pname = "xurl";

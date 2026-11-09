@@ -1,7 +1,6 @@
 {
   inputs,
   fixtures,
-  code,
 }:
 let
   inherit (fixtures) mkPkgs;
@@ -56,7 +55,7 @@ in
     system = "aarch64-linux";
     module = fixtures.homeModule "linux";
   };
-  configuredChrome = home: code.nix.modules.browsers.chrome.package { inherit (home) pkgs; };
+  configuredChrome = home: home.config.programs.chromium.finalPackage;
   common = mkHome {
     system = "x86_64-linux";
     module = fixtures.homeModule "common";

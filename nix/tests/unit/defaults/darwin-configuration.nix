@@ -134,6 +134,7 @@ in
 
   testDarwinConfigurationKeepsSystemIntegrations = {
     expr = {
+      codexEnvironment = builtins.elemAt defaultHome.launchd.agents.codex-environment.config.ProgramArguments 3;
       agentEnvironment = builtins.elemAt defaultHome.launchd.agents.onepassword-ssh-environment.config.ProgramArguments 3;
       gpgSshAgentEnabled = defaultConfig.programs.gnupg.agent.enableSSHSupport;
       homebrew = defaultConfig.homebrew.enable;
@@ -147,6 +148,7 @@ in
       homeManagerUser = builtins.hasAttr "rurusasu" defaultConfig.home-manager.users;
     };
     expected = {
+      codexEnvironment = "/Users/rurusasu/.config/codex";
       agentEnvironment = "/Users/rurusasu/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock";
       gpgSshAgentEnabled = false;
       homebrew = true;
@@ -186,21 +188,15 @@ in
       onePassword = defaultHome.home.sessionVariables.OP_BIOMETRIC_UNLOCK_ENABLED;
       homebrewPath = builtins.elem "/opt/homebrew/bin" defaultHome.home.sessionPath;
       sharedPath = builtins.elem "${defaultHome.home.homeDirectory}/.local/bin" defaultHome.home.sessionPath;
-      pathOrder = defaultHome.home.sessionPath;
+      managedPackagesFirst =
+        builtins.head defaultHome.home.sessionPath == defaultHome.home.profileDirectory + "/bin";
     };
     expected = {
       autoUpdate = "86400";
       onePassword = "true";
       homebrewPath = true;
       sharedPath = true;
-      pathOrder = [
-        "${defaultHome.home.homeDirectory}/.bun/bin"
-        "${defaultHome.home.homeDirectory}/.local/bin"
-        "${defaultHome.home.homeDirectory}/bin"
-        "${defaultHome.home.homeDirectory}/.local/npm/bin"
-        "/opt/homebrew/bin"
-        "/opt/homebrew/sbin"
-      ];
+      managedPackagesFirst = true;
     };
   };
 
