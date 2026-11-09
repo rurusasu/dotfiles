@@ -18,7 +18,7 @@ let
       # The desktop URLs in the feed use /latest/download/. Pin every asset to
       # the feed's release so later releases cannot change this derivation.
       url = "https://github.com/Niko1221/Strata/releases/download/${releaseTag}/${builtins.baseNameOf asset.url}";
-      sha256 = asset.sha256;
+      inherit (asset) sha256;
     };
   desktopSource = fetchAsset desktopAsset;
   controlSource = fetchAsset controlAsset;

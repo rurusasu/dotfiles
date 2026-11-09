@@ -49,7 +49,7 @@
             RainbowCyan.fg = "#56B6C2";
             InclineActive = {
               bg = "#2d2f3f";
-              fg = inclineColors.fg;
+              inherit (inclineColors) fg;
             };
             InclineInactive = {
               bg = "#2d2f3f";

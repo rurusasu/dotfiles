@@ -8,12 +8,14 @@ in
       let
         home = fixtures.mkHome "x86_64-linux" [
           {
-            programs.bash.enable = true;
-            programs.zsh.enable = true;
-            programs.eza = {
-              enable = true;
-              enableBashIntegration = false;
-              enableZshIntegration = false;
+            programs = {
+              bash.enable = true;
+              zsh.enable = true;
+              eza = {
+                enable = true;
+                enableBashIntegration = false;
+                enableZshIntegration = false;
+              };
             };
           }
         ];

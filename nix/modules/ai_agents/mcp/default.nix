@@ -8,7 +8,7 @@
 let
   packages = import ../mcp-packages.nix { inherit inputs pkgs; };
   secretConfig = config.dotfiles.onePassword.secrets;
-  references = secretConfig.references;
+  inherit (secretConfig) references;
   referenceCatalog = "${config.xdg.configHome}/mcp/onepassword.json";
   dockerConfig =
     config.home.sessionVariables.DOCKER_CONFIG or (throw "Docker MCP requires DOCKER_CONFIG");
