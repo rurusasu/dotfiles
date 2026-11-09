@@ -7,6 +7,9 @@ inputs:
   clean-disk:
     description: Reclaim unused hosted Linux SDKs before importing or building closures.
     default: "false"
+  build-gc:
+    description: Enable build-time GC only for producers that root their inputs and outputs.
+    default: "false"
 runs:
   using: composite
   steps:
@@ -30,7 +33,7 @@ runs:
           max-jobs = 2
           cores = 2
           auto-optimise-store = true
-          min-free = 8G
+          min-free = ${{ inputs.build-gc == 'true' && '8G' || '0' }}
           max-free = 16G
     - name: Inspect Nix store and workspace filesystems
       shell: bash

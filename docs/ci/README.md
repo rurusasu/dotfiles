@@ -15,11 +15,12 @@ consumer は `path:.#ci` を構築しません。Bash テスト専用の Bats �
 Nix の認証と通信設定は `scripts/sh/configure-bootstrap-ci-nix.sh` が使い捨て CI ユーザーへ設定します。
 GitHub token は権限600の専用設定ファイルへ保存し、ログや成果物へ含めません。
 Linux の producer は Nix sandbox を有効にして構築し、native NixOS E2E は KVM を利用します。
-CI の Nix daemon は store の重複排除と空き容量連動の GC を有効にします。
+CI の Nix daemon は store の重複排除を有効にし、producer だけ `build-gc` で空き容量連動の GC を有効にします。
 同時ビルドは2件・各2 core に制限し、GC できない実行中の build directory の膨張も抑えます。
 空き容量が 8 GiB 未満になると 16 GiB を目標に不要な store path を回収します。
 producer の source・入力・checks・構成・rebuild tool は通常の `--out-link` で
 GC root として保持し、artifact の export 前に必要な成果物を失わないようにします。
+consumer の import は複数バッチを使うため自動 GC を無効にし、先行バッチの出力を回収させません。
 WSL でも同じ認証設定 adapter を使い、root / nixos の両方に必要な設定を反映します。
 公式 cache を優先し、Numtide と Hermes の cache も利用します。
 CI は global flake registry を使わず、bootstrap の alias は明示した locked inputs から解決します。
