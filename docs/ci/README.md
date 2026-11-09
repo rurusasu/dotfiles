@@ -14,6 +14,12 @@ consumer は `path:.#ci` を構築しません。Bash テスト専用の Bats �
 
 Nix の認証と通信設定は `scripts/sh/configure-bootstrap-ci-nix.sh` が使い捨て CI ユーザーへ設定します。
 GitHub token は権限600の専用設定ファイルへ保存し、ログや成果物へ含めません。
+Nix のファイル転送は再試行回数の標準値を使います。native CI の Nix 2.35 では通常の初期間隔を
+5秒、HTTP 429/503 の初期間隔を30秒にし、標準の指数バックオフ・jitter・Retry-After 処理を使います。
+これらの新しい設定は native の install action だけに渡し、WSL の Lix 設定には配布しません。
+fetchurl の取得は Nix 本体と別の curl を使うため、native daemon の `configurable-impure-env` と
+`impure-env` で `NIX_CURL_FLAGS=--retry-delay=15` を渡し、既存の再試行間隔を15秒に延ばします。
+パッケージ定義・固定出力ハッシュ・再試行回数は変更しません。
 Linux の producer は Nix sandbox を有効にして構築し、native NixOS E2E は KVM を利用します。
 CI の Nix daemon は store の重複排除を有効にし、producer だけ `build-gc` で空き容量連動の GC を有効にします。
 同時ビルドは2件・各2 core に制限し、GC できない実行中の build directory の膨張も抑えます。

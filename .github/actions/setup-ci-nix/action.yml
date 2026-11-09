@@ -28,8 +28,12 @@ runs:
       uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b
       with:
         github_access_token: ${{ inputs.github-token }}
-        # Configure the daemon itself: keep room for active builds and artifacts.
+        # Configure daemon fetches and keep room for active builds and artifacts.
         extra_nix_config: |
+          extra-experimental-features = nix-command flakes configurable-impure-env
+          filetransfer-retry-delay = 5000
+          filetransfer-retry-delay-rate-limited = 30000
+          impure-env = NIX_CURL_FLAGS=--retry-delay=15
           max-jobs = 2
           cores = 2
           auto-optimise-store = true
