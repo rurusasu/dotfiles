@@ -80,7 +80,7 @@ source)
   committed_source="$CI_STATE/committed-source"
   mkdir "$committed_source"
   git -C "$repository" archive --format=tar "$TESTED_SHA" | tar -xf - -C "$committed_source"
-  nix flake archive --json --no-write-lock-file "path:$committed_source" >"$CI_STATE/source.json"
+  nix flake archive --json --no-update-lock-file "path:$committed_source" >"$CI_STATE/source.json"
   frozen=$(source_path)
   # shellcheck disable=SC2016 # This interpolation is Nix syntax.
   CI_SOURCE_ROOT="$frozen" nix eval --impure --json --expr '
@@ -137,7 +137,7 @@ build)
     ')
     record_root darwin rebuild "$rebuild"
   elif [[ $target == wsl ]]; then
-    system=$(nix build --impure --no-link --print-out-paths --print-build-logs "$source#nixosConfigurations.nixos.config.system.build.toplevel")
+    system=$(nix build --impure --no-link --no-update-lock-file --print-out-paths --print-build-logs "$source#nixosConfigurations.nixos.config.system.build.toplevel")
     record_root wsl system "$system"
   else
     if [[ ${CI_LINUX_REQUIRED:-false} == true ]]; then
@@ -200,7 +200,7 @@ apply | run-vm)
     mkdir -p "$HOME/.hermes"
     printf '%s\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' >"$HOME/.hermes/.env"
     chmod 600 "$HOME/.hermes/.env"
-    UPDATE_FLAKE_INPUTS=false DOTFILES_ALLOW_BUILDS=false \
+    DOTFILES_ALLOW_BUILDS=false \
       DOTFILES_FLAKE_REF="$deployment#macos" "$source/install.sh"
     [[ $(cd /nix/var/nix/profiles/system && pwd -P) == "$(root_path system)" ]]
     # Prove activation auto-starts the service before explicitly restarting it.

@@ -24,7 +24,7 @@ Describe 'Install-NixosWsl' {
         $script:registrationExitCode = 0
         $script:release = @{
             tag_name = 'fixture-release'
-            assets = @(
+            assets   = @(
                 @{ name = 'nixos.aarch64.wsl'; browser_download_url = 'https://example.invalid/arm.wsl' }
                 @{ name = 'nixos.wsl.sha256'; browser_download_url = 'https://example.invalid/checksum' }
                 @{ name = 'nixos.wsl'; browser_download_url = 'https://example.invalid/nixos.wsl' }
@@ -169,6 +169,8 @@ Describe 'Invoke-NixosWslSetup' {
         $script:declaredUser = 'nixos'
         $script:sourcePath = '/mnt/d/dotfiles'
         $script:accountHome = '/home/nixos'
+        $script:rebuildExitCode = 0
+        $script:rebuildOutput = ''
         $script:setupCommands = [Collections.Generic.List[string]]::new()
         $script:wslCalls = [Collections.Generic.List[object]]::new()
         Mock Invoke-Wsl {
@@ -190,11 +192,43 @@ Describe 'Invoke-NixosWslSetup' {
                 return ('{0}:x:1000:100::{1}:/bin/bash' -f $script:currentUser, $script:accountHome)
             }
             if ($command -match 'id -gn') { return 'users' }
+            if ($command -match 'nixos-rebuild switch') {
+                $global:LASTEXITCODE = $script:rebuildExitCode
+                return $script:rebuildOutput
+            }
             return ''
         }
     }
 
-    It 'should quote paths and back up a conflicting link before updating and rebuilding once' {
+    It 'should show the first build failure and save all output without continuing setup' {
+        $script:rebuildExitCode = 1
+        $script:rebuildOutput = @(
+            1..500 | ForEach-Object { "downloading dependency $_" }
+            ([char]27 + '[31merror: builder for docker-mcp failed' + [char]27 + '[0m')
+            'handler_server.go:271:18: undefined: http2.TrailerPrefix'
+            1..500 | ForEach-Object { "error: dependency $_ failed to build" }
+        )
+        $failure = $null
+        try { Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SyncMode repo }
+        catch { $failure = $_.Exception.Message }
+
+        $failure | Should -Match 'setup failed \(exit=1\)'
+        $failure | Should -Match 'undefined: http2.TrailerPrefix'
+        $failure | Should -Not -Match 'error: dependency 500|\x1B'
+        $failure.Length | Should -BeLessThan 3000
+        $failure | Should -Match 'Full log: (.+)$'
+        $logPath = [regex]::Match($failure, 'Full log: (.+)$').Groups[1].Value.Trim()
+        try {
+            $log = Get-Content -LiteralPath $logPath -Raw -Encoding UTF8
+            $log | Should -Match 'downloading dependency 1'
+            $log | Should -Match 'undefined: http2.TrailerPrefix'
+            $log | Should -Match 'error: dependency 500 failed to build'
+        }
+        finally { Remove-Item -LiteralPath $logPath -Force }
+        ($script:setupCommands -join "`n") | Should -Not -Match 'cp --'
+    }
+
+    It 'should quote paths and back up a conflicting link before applying the locked configuration once' {
         $script:currentUser = 'alice'
         $script:declaredUser = 'alice'
         $script:sourcePath = "/mnt/d/it's dotfiles"
@@ -209,9 +243,8 @@ Describe 'Invoke-NixosWslSetup' {
         $commands | Should -Match ([regex]::Escape("mv -- $quotedRepo "))
         $commands | Should -Match ([regex]::Escape("ln -s -- $quotedSource $quotedRepo"))
         $commands | Should -Match ([regex]::Escape("chown -h -- 'alice:users'"))
-        $commands | Should -Match ([regex]::Escape("bash $quotedSource/scripts/sh/update-flake-inputs.sh $quotedSource path"))
-        $commands | Should -Match ([regex]::Escape("nixos-rebuild switch --flake 'path:/mnt/d/it'\''s dotfiles#nixos'"))
-        @($script:setupCommands | Where-Object { $_ -match 'update-flake-inputs[.]sh' }).Count | Should -Be 1
+        $commands | Should -Match ([regex]::Escape("nixos-rebuild switch --flake 'path:/mnt/d/it'\''s dotfiles#nixos' --impure --no-update-lock-file"))
+        $commands | Should -Not -Match 'update-flake-inputs[.]sh'
         @($script:setupCommands | Where-Object { $_ -match 'nixos-rebuild switch' }).Count | Should -Be 1
         @($script:wslCalls | Where-Object { $_.TimeoutSeconds -ne 77 }).Count | Should -Be 0
         $commands | Should -Not -Match 'dotfiles\.json|/var/lib/dotfiles/user|rm -rf'
@@ -234,14 +267,13 @@ Describe 'Invoke-NixosWslSetup' {
         Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SyncMode none -SyncBack none
 
         $commands = $script:setupCommands -join "`n"
-        $commands | Should -Match ([regex]::Escape("bash '/mnt/d/dotfiles'/scripts/sh/update-flake-inputs.sh '/srv/homes/alice/.dotfiles' path"))
-        $commands | Should -Match ([regex]::Escape("nixos-rebuild switch --flake 'path:/srv/homes/alice/.dotfiles#nixos'"))
+        $commands | Should -Match ([regex]::Escape("nixos-rebuild switch --flake 'path:/srv/homes/alice/.dotfiles#nixos' --impure --no-update-lock-file"))
         @($script:setupCommands | Where-Object { $_ -match 'nixos-rebuild switch' }).Count | Should -Be 1
         $commands | Should -Not -Match 'chown|ln -s|mv --|tar|cp --'
     }
 
     It 'should synchronize a repository and its lock while rebuilding once without updating inputs' {
-        Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SyncMode repo -SyncBack lock -UpdateFlakeInputs $false
+        Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SyncMode repo -SyncBack lock
 
         $commands = $script:setupCommands -join "`n"
         $commands | Should -Match 'Existing checkout conflicts.*ForcePostInstall'
@@ -253,7 +285,7 @@ Describe 'Invoke-NixosWslSetup' {
     }
 
     It 'should deploy the immutable source and selected configuration without updating or building' {
-        Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SyncMode repo -SyncBack none -UpdateFlakeInputs $false -FlakeReference 'path:/nix/store/prepared-source#nixos' -SourceDirectory '/nix/store/prepared-source' -AllowBuilds $false
+        Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SyncMode repo -SyncBack none -FlakeReference 'path:/nix/store/prepared-source#nixos' -SourceDirectory '/nix/store/prepared-source' -AllowBuilds $false
         $commands = $script:setupCommands -join "`n"
         $deployment = $script:setupCommands | Where-Object { $_ -match 'nixos-rebuild switch' }
         $commands | Should -Match ([regex]::Escape("(cd '/nix/store/prepared-source' && tar"))

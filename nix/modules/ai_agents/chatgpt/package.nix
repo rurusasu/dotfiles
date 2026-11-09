@@ -1,6 +1,12 @@
 {
   pkgs,
-  chatgpt ? pkgs.chatgpt.override { codex = null; },
+  chatgpt ? pkgs.chatgpt.override {
+    codex = null;
+    # Tectonic's aws-lc-sys uses the system library with the current Rust hook.
+    tectonic-unwrapped = pkgs.tectonic-unwrapped.overrideAttrs (previous: {
+      buildInputs = previous.buildInputs ++ [ pkgs.aws-lc ];
+    });
+  },
 }:
 let
   # Upstream otherwise replaces these binaries with its separate Codex package.

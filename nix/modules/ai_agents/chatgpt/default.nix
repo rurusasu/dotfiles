@@ -16,7 +16,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = (import ./package.nix { inherit pkgs; }).chatgpt;
-      defaultText = lib.literalExpression "(pkgs.chatgpt.override { codex = null; })";
+      defaultText = lib.literalExpression "(import ./package.nix { inherit pkgs; }).chatgpt";
       description = "ChatGPT desktop distribution providing the bundled Codex CLI.";
     };
   };

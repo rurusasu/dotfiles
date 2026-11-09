@@ -12,6 +12,11 @@ buildGoModule (finalAttrs: {
   src = source;
   vendorHash = null;
   subPackages = [ "cmd/docker-mcp" ];
+  # Match grpc-go upstream: x/net/http2 no longer exports TrailerPrefix on Go 1.27.
+  postPatch = ''
+    substituteInPlace vendor/google.golang.org/grpc/internal/transport/handler_server.go \
+      --replace-fail 'http2.TrailerPrefix' 'http.TrailerPrefix'
+  '';
   env.CGO_ENABLED = 0;
   ldflags = [
     "-s"

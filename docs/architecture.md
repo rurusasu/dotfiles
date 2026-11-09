@@ -71,9 +71,9 @@ Windows の通常セットアップは `install.cmd` から GUI/Winget と WSL/N
 
 非 NixOS Linux は `Nix/bootstrap → Home Manager` のみを実行します。
 
-`./install.sh` は必要に応じて Nix を導入し、毎回 flake input を更新してから
+`./install.sh` は必要に応じて Nix を導入し、`flake.lock` の依存を更新せず
 OS の rebuild または Home Manager の switch を実行します。進捗とエラーは
-各コマンドの出力をそのまま表示し、更新や反映に失敗した場合は終了します。
+各コマンドの出力をそのまま表示し、依存の解決や反映に失敗した場合は終了します。
 flake inputs だけを更新する場合は `task update` を使います。共通の updater が Dia の最新版を取得前に版付き URL へ解決し、Strata の feed も版付き URL で lock に保存します。通常更新は latest を追い、検証済みの lock は次回 release 後も再現できます。
 
 ## 役割分担
@@ -156,7 +156,7 @@ MCP gateway の接続設定は Nix の `programs.mcp.servers` が所有し、リ
 Docker 公式 gateway は `docker-mcp` input の固定した Git source と同梱依存からビルドし、
 Home Manager が単体の `docker-mcp` コマンドを導入します。サーバー8種類の選択も
 `programs.mcp.servers.MCP_DOCKER.args` に宣言し、可変プロファイルへの同期処理は使いません。
-`nrs` が Git source の lock 更新、gateway 導入と接続設定の反映をまとめて行います。
+`task update` が Git source の lock を更新し、CI 検証後に `nrs` で gateway と接続設定を反映します。
 wrapper は `DOCKER_MCP_IN_CONTAINER=1` で Desktop 固有の検査を省き、Podman API を使います。
 `DOCKER_CONFIG` は Home Manager が `${HOME}/.docker` と明示設定し、MCP クライアントにも渡します。
 gateway と手動タスクは未設定・空の `DOCKER_CONFIG` をエラーにします。
@@ -204,7 +204,7 @@ Windows 専用のアプリも同じ WinGet manifest に直接追加する。Unix
 `install.cmd` と `task install` は同じ `install.ps1` を使います。
 WinGet の標準 master を一度 import して Task も導入し、Taskfile の WSL → chezmoi へ進みます。
 WSL 基盤が必要な場合だけ OS コマンドを昇格し、再起動要求で停止します。distro 登録は元のユーザーで行います。
-新規導入と既存 distro は共通の setup に合流し、input 更新と NixOS/Home Manager 反映は各1回です。
+新規導入と既存 distro は共通の setup に合流し、NixOS/Home Manager は lock 済みの依存を一度だけ反映します。
 
 実装本体は `install.ps1` と、native 実行・WSL 登録と同期を担当する2ライブラリです。
 クラス、結果オブジェクト、ハンドラー、独自 runner はありません。標準コマンドで済む処理をラッパーに分割しません。

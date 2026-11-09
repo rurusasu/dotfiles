@@ -7,8 +7,8 @@ setup() {
   export PATH="$STUB_BIN:$PATH"
   export TEST_LOG="$BATS_TEST_TMPDIR/commands"
   export TEST_CAPTURE="$BATS_TEST_TMPDIR/capture"
-  unset UPDATE_FLAKE_INPUTS DOTFILES_ALLOW_BUILDS DOTFILES_FLAKE_REF NIX_CONFIG
-  export TEST_CURRENT_USER=k-miki TEST_UPDATE_STATUS=0 TEST_SWITCH_STATUS=0
+  unset DOTFILES_ALLOW_BUILDS DOTFILES_FLAKE_REF NIX_CONFIG
+  export TEST_CURRENT_USER=k-miki TEST_LOCK_STATUS=0 TEST_SWITCH_STATUS=0
   cat >"$STUB_BIN/id" <<'EOF'
 #!/usr/bin/env bash
 [[ "$*" == '-un' ]] || exit 2
@@ -16,21 +16,8 @@ printf '%s\n' "$TEST_CURRENT_USER"
 EOF
   cat >"$STUB_BIN/nix" <<'EOF'
 #!/usr/bin/env bash
-if [[ -n ${DOTFILES_FLAKE_ROOT:-} ]]; then exit 0; fi
-if [[ -n ${DOTFILES_FLAKE_LOCK:-} ]]; then
-  cat "$DOTFILES_FLAKE_LOCK"
-  exit 0
-fi
 printf 'nix %s\n' "$*" >>"$TEST_LOG"
-[[ $TEST_UPDATE_STATUS == 0 ]] || exit "$TEST_UPDATE_STATUS"
-while (($#)); do
-  case "$1" in
-    --reference-lock-file) reference=$2; shift ;;
-    --output-lock-file) output=$2; shift ;;
-  esac
-  shift
-done
-if [[ -n ${output:-} ]]; then cp "$reference" "$output"; fi
+exit "$TEST_LOCK_STATUS"
 EOF
   cat >"$STUB_BIN/sudo" <<'EOF'
 #!/usr/bin/env bash
@@ -57,7 +44,9 @@ EOF
   run env USER=unrelated SUDO_USER=unrelated "$REPO_ROOT/scripts/sh/install-macos.sh" --show-trace
   [ "$status" -eq 0 ]
   [ "$(cat "$TEST_CAPTURE.user")" = k-miki ]
-  grep -Fq -- "flake update --flake $REPO_ROOT" "$TEST_LOG"
+  ! grep -q 'flake update' "$TEST_LOG"
+  grep -Fq -- "flake archive --no-update-lock-file path:$REPO_ROOT" "$TEST_LOG"
+  grep -Fq -- '<--no-update-lock-file>' "$TEST_LOG"
   grep -Fq -- '<--show-trace>' "$TEST_LOG"
   [ ! -e "$(cat "$TEST_CAPTURE.path")" ]
 }
@@ -69,14 +58,14 @@ EOF
   [ ! -e "$(cat "$TEST_CAPTURE.path")" ]
 }
 
-@test "macOS rebuild does not activate after a flake update failure" {
-  export TEST_UPDATE_STATUS=43
+@test "macOS rebuild does not activate when its source lock cannot be resolved" {
+  export TEST_LOCK_STATUS=43
   run "$REPO_ROOT/scripts/sh/install-macos.sh"
   [ "$status" -eq 43 ]
   ! grep -q '^sudo' "$TEST_LOG"
 }
 
-@test "macOS rebuild rejects root before updating or activating" {
+@test "macOS rebuild rejects root before resolving or activating" {
   export TEST_CURRENT_USER=root
   run "$REPO_ROOT/scripts/sh/install-macos.sh"
   [ "$status" -ne 0 ]
@@ -88,7 +77,7 @@ EOF
   prepared="$BATS_TEST_TMPDIR/prepared"
   mkdir -p "$prepared"
   printf k-miki >"$prepared/primary-user"
-  run env UPDATE_FLAKE_INPUTS=false DOTFILES_ALLOW_BUILDS=false \
+  run env DOTFILES_ALLOW_BUILDS=false \
     NIX_CONFIG='connect-timeout = 5' DOTFILES_FLAKE_REF="path:$prepared#macos" \
     "$REPO_ROOT/scripts/sh/install-macos.sh"
   [ "$status" -eq 0 ]

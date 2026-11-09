@@ -1,7 +1,7 @@
 # NixOS-WSL インストールと初期 setup
 
-Windows の通常入口は `task install` です。GUI アプリ導入、NixOS-WSL の更新・反映、
-Windows chezmoi の適用を順に実行します。Nix の更新と反映は WSL phase で一度だけ行います。
+Windows の通常入口は `task install` です。GUI アプリ導入、lock 済みの NixOS-WSL の反映、
+Windows chezmoi の適用を順に実行します。Nix の反映は WSL phase で一度だけ行います。
 既存 distro は再利用し、未登録なら公式の `nixos.wsl` を取得して登録します。
 登録には `wsl --install --from-file` を試し、失敗した場合は `wsl --import` に切り替えます。
 `scripts/powershell/lib/Invoke-NixosWslSetup.ps1` が checkout を同期して NixOS/Home Manager を適用します。
@@ -110,8 +110,7 @@ NixOS の stateVersion は共通 entrypoint が設定し、追加引数の指定
 公式 nixos.wsl を手動導入
   -> Invoke-NixosWslSetup -Repository <Windows checkout> -DistroName NixOS
   -> checkout 同期（公式既定ユーザー nixos）
-  -> bash <checkout>/scripts/sh/update-flake-inputs.sh <checkout> path
-  -> nixos-rebuild switch --flake path:<checkout>#nixos --impure
+  -> nixos-rebuild switch --flake path:<checkout>#nixos --impure --no-update-lock-file
 ```
 
 初期 NixOS-WSL イメージには Git CLI がないため、ローカル checkout は明示的な `path:` flake として扱います。
@@ -137,14 +136,10 @@ NixOS の stateVersion は共通 entrypoint が設定し、追加引数の指定
 `nix` は既に flake.nix・flake.lock・scripts/ を持つ完全な WSL checkout が必要で、
 `SyncBack = 'repo'` と併用できません。
 `ForcePostInstall` は通常設定せず、競合する checkout を退避する必要がある場合だけ明示します。
-Flake inputs の更新失敗時は構成を反映しません。
-
-検証済みの `flake.lock` をそのまま適用する場合は、`Invoke-NixosWslSetup` に
-`-UpdateFlakeInputs $false` を渡します。既定値は `$true` です。
-WSL 内の再適用では `task nrs UPDATE_FLAKE_INPUTS=false` を使います。
-どちらも更新を省略し、`--no-update-lock-file` で lock の変更を禁止します。
-WSL CI は setup を更新なしで一度だけ実行し、PR の head SHA に含まれる
-lock と事前ビルドの依存を一致させます。
+通常の setup と `task nrs` は `--no-update-lock-file` で lock の変更を禁止します。
+不足・不整合な lock は反映前に失敗します。依存の更新は WSL 内で `task update` を実行し、
+更新した lock を commit / PR に含めて CI を通してから適用します。
+WSL CI と通常の setup は同じ固定入力の方針で一度だけ反映します。
 
 ## 通常の反映
 

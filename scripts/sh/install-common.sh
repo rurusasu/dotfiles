@@ -85,44 +85,6 @@ dotfiles_load_nix() {
   fi
 }
 
-dotfiles_update_flake() {
-  local flake_root="${1:-${DOTFILES_ROOT:-}}"
-  local source_scheme="${2:-git}"
-  if [[ ${DOTFILES_SKIP_FLAKE_UPDATE:-0} == 1 ]]; then
-    dotfiles_log "Skipping flake input update."
-    return 0
-  fi
-  [[ -n $flake_root ]] || dotfiles_die "A flake root is required for input updates."
-  [[ -f $flake_root/flake.nix ]] || dotfiles_die "Flake configuration is missing: $flake_root/flake.nix"
-  flake_root="$(dotfiles_canonical_directory "$flake_root")" || return 1
-  case "$source_scheme" in
-  git | path) ;;
-  *) dotfiles_die "Invalid flake source: $source_scheme (expected git or path)." ;;
-  esac
-  dotfiles_have nix || dotfiles_die "Nix is required to update flake inputs."
-
-  dotfiles_log "Updating flake inputs..."
-  (
-    cd "$flake_root" || exit 1
-    local nix_config="experimental-features = nix-command flakes"
-    if [[ -n ${GITHUB_TOKEN:-} ]]; then
-      nix_config+=$'\naccess-tokens = github.com='"$GITHUB_TOKEN"
-    fi
-    if [[ $source_scheme == path ]] || dotfiles_have git; then
-      NIX_CONFIG="$nix_config" \
-        bash "$flake_root/scripts/sh/update-flake-inputs.sh" "$flake_root" "$source_scheme"
-    else
-      # Nix also invokes Git while updating a git-backed flake's lock file.
-      # The release rootfs has a Nixpkgs channel but may not include Git yet.
-      dotfiles_have nix-shell || dotfiles_die "Git or nix-shell is required for the initial flake update."
-      dotfiles_log "Using temporary Nix-shell Git for the initial flake update."
-      # shellcheck disable=SC2016 # Expanded by the nix-shell runtime shell.
-      DOTFILES_FLAKE_UPDATE_ROOT="$flake_root" NIX_CONFIG="$nix_config" \
-        nix-shell -p git --run 'bash "$DOTFILES_FLAKE_UPDATE_ROOT/scripts/sh/update-flake-inputs.sh" "$DOTFILES_FLAKE_UPDATE_ROOT"'
-    fi
-  )
-}
-
 dotfiles_canonical_directory() {
   (
     cd "$1" || exit 1

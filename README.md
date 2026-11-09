@@ -28,19 +28,22 @@ Unix の Full support 構成では最後に runtime acceptance も実行しま�
 同じコマンドを再実行できます。
 
 macOS / Linux の `./install.sh` は、Nix が未導入なら初回だけ導入し、
-その後は flake inputs を最新に更新して OS の Nix 構成を `switch` します。
-WSL も `switch` 前に inputs を更新します。更新に失敗した場合は反映しません。
+その後は `flake.lock` に固定された依存で OS の Nix 構成を `switch` します。
+WSL も inputs を更新せず反映します。不足・不整合な lock は反映前に失敗します。
 リポジトリの pull / merge は別途行います。
 
-- macOS: flake inputs を更新してから、nix-darwin / Home Manager と Homebrew パッケージを反映します。
-- Linux / NixOS: flake inputs を更新し、その OS の構成と Home Manager を反映します。
+- macOS: lock 済みの nix-darwin / Home Manager と Homebrew 宣言を反映します。
+- Linux / NixOS: lock 済みの OS 構成と Home Manager を反映します。
 - Windows: GUI profile のアプリを既存の WinGet で install / upgrade し、NixOS-WSL を導入・設定します。
-  WSL の更新・反映後に Windows chezmoi を適用します。WSL 基盤の有効化だけ管理者権限で行います。
+  WSL の反映後に Windows chezmoi を適用します。WSL 基盤の有効化だけ管理者権限で行います。
 
 ```bash
-# flake inputs だけを更新するとき
+# flake inputs を更新し、変更した lock を commit / PR で CI 検証する
 task update
 ```
+
+CI が成功した source と lock を `nrs` / installer で適用します。適用時に依存を再更新しません。
+WinGet / Homebrew の版未固定アプリやホスト固有設定の保証範囲は [CI の説明](docs/ci/README.md) を参照してください。
 
 Codex CLI の個別インストールは行わず、ChatGPT アプリ付属の CLI を使います。
 単純な CLI の有効化・package 宣言は `nix/defaults.nix` に直接書きます。設定・package override・生成・連携を持つアプリは `nix/modules/` にまとめます。
@@ -60,7 +63,7 @@ task install
 
 初回から `.\install.cmd` だけで実行できます。PowerShell が WinGet の master `windows/winget/packages.json` を先に適用し、Task も通常のパッケージとして導入します。
 
-通常は `task install` を実行します。宣言済みの GUI アプリを導入・更新した後、NixOS-WSL の導入、checkout の同期、flake inputs の更新と NixOS/Home Manager の反映、Windows chezmoi の適用を順に行います。更新と反映は WSL phase で一度だけ実行します。Windows Terminal も対象です。
+通常は `task install` を実行します。宣言済みの GUI アプリを導入・更新した後、NixOS-WSL の導入、checkout の同期、lock 済みの NixOS/Home Manager の反映、Windows chezmoi の適用を順に行います。Nix の反映は WSL phase で一度だけ実行します。Windows Terminal も対象です。
 既存の NixOS ディストリビューションと保存済み `stateVersion` は再利用します。WSL 基盤が未導入の場合だけ UAC で有効化し、再起動後の再実行を案内します。登録と設定適用は元のユーザーで行います。
 Windows の CLI パッケージ一括導入、Docker Desktop 連携、VHDX 拡張は実行しません。
 既存ソフトウェアのアンインストールや古い Startup ショートカットの削除も行いません。
@@ -231,10 +234,10 @@ nix/defaults.nix
 WSL 内で実行:
 
 ```bash
-# flake inputs の更新と NixOS の反映
+# lock 済みの NixOS 構成を反映
 nrs  # alias for: task --dir ~/.dotfiles nrs
 
-# installer でも inputs の更新と反映
+# installer も同じ lock を反映
 ~/.dotfiles/install.sh
 ```
 
@@ -242,7 +245,7 @@ Windows 側のファイルを編集すると、`~/.dotfiles` シンボリック�
 
 ### ターミナル設定を Windows に適用
 
-`task install` は WSL の更新・反映に続いて Windows chezmoi を適用します。設定だけを再適用する場合は `task chezmoi` を使います。詳細は [docs/chezmoi/](./docs/chezmoi/) を参照。
+`task install` は WSL の反映に続いて Windows chezmoi を適用します。設定だけを再適用する場合は `task chezmoi` を使います。詳細は [docs/chezmoi/](./docs/chezmoi/) を参照。
 
 ```powershell
 # GitHub から直接取得（クローン不要・推奨）

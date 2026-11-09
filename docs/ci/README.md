@@ -42,6 +42,18 @@ consumer は artifact の取得 → import / 本番 installer の反映 → 再�
 runtime 確認を実行します。consumer 内で input を更新したり、欠けた成果物を
 ソースビルドで補ったりしません。PowerShell の Pester suite は E2E 後の runtime 検証を担当します。
 
+依存更新と適用は分離します。`task update` は `flake.lock` を更新するだけで、
+`install` / `nrs` / Hermes bootstrap は lock を変更せず適用します。
+更新した lock は変更元の source と一緒に commit / PR に含め、producer build と E2E が
+成功した SHA を適用します。適用入口と CI source archive は `--no-update-lock-file` を使い、
+lock が不足・不整合なら新しい依存を選び直さず失敗します。
+macOS の一時 wrapper は元 source の lock を検証後、外側の lock だけを作成します。
+ローカルで source / lock を編集した場合、その変更は再検証が必要です。
+保証対象は同じ source・lock・対象構成の Nix 依存で、ローカル Lifelog checkout や hardware、
+版を固定していない WinGet / Homebrew の導入結果までは同一とみなしません。
+コンパイルエラーは既存の package build check と構成全体の producer build が検出し、
+E2E に同じコンパイル検査を重複して追加しません。
+
 native Linux の consumer は KVM の NixOS VM で本番 `install.sh` と reboot 後の
 CLI・service・health を確認します。WSL は Windows 上の使い捨て distro で
 本番 setup と cold restart を確認します。macOS は別 runner で `install.sh`、
