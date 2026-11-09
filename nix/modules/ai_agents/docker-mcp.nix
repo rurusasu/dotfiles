@@ -1,12 +1,14 @@
 {
   lib,
-  buildGoModule,
+  buildGo126Module,
   makeWrapper,
   dockerCompat,
   apiEnvironment,
   source,
 }:
-buildGoModule (finalAttrs: {
+# Match upstream's Go 1.26 toolchain; its vendored gRPC is not Go 1.27 compatible.
+# https://github.com/docker/mcp-gateway/blob/7e0f34277c91855ad861eeff536b4fdc77420593/Dockerfile#L3
+buildGo126Module (finalAttrs: {
   pname = "docker-mcp";
   version = "unstable-${source.shortRev}";
   src = source;

@@ -4,17 +4,6 @@ let
     home: builtins.any (package: (package.pname or "") == "chatgpt") home.config.home.packages;
 in
 {
-  testChatGPTDesktopKeepsTheAppProvidedCodexAcrossPlatforms = {
-    expr = builtins.all (
-      home:
-      let
-        upstream = home.pkgs.chatgpt.override { codex = null; };
-      in
-      home.config.programs.chatgpt.package.drvPath == upstream.drvPath
-    ) (homeConfigurations.homes ++ [ homeConfigurations.linuxArm ]);
-    expected = true;
-  };
-
   testChatGPTDesktopSelectionFollowsPlatform = {
     expr = {
       darwin = installed homeConfigurations.darwin;

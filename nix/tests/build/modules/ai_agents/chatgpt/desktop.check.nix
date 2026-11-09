@@ -42,6 +42,7 @@
         version="$(codex --version)"
         echo "$version"
         [[ "$version" == "codex-cli "* ]]
+        [[ "$(realpath "$(command -v codex)")" == ${chatgpt}/* ]]
         touch "$out"
       '';
 }

@@ -71,6 +71,11 @@ assert(#calls == 1 and calls[1].id == 8, "extensionless Lua buffer must format")
 clients = { { id = 3, name = "ty" }, { id = 9, name = "ruff" } }
 save_as("python", ".py")
 assert(#calls == 1 and calls[1].id == 9, "Python must use only Ruff")
+vim.api.nvim_exec_autocmds("LspAttach", { buffer = buf, group = "nixvim_lsp_binds" })
+local manual_format = vim.fn.maparg(vim.g.mapleader .. "f", "n", false, true)
+calls = {}
+manual_format.callback()
+assert(#calls == 1 and calls[1].id == 9 and calls[1].async, "manual formatting must use only Ruff asynchronously")
 clients = { { id = 3, name = "ty" } }
 save_as("python", ".py")
 assert(#calls == 0, "Python must not fall back to a second formatter when Ruff is absent")

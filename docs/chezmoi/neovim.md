@@ -4,13 +4,12 @@
 
 最低 Neovim **0.12**。更新時は `nvim --version` と `:checkhealth vim.lsp` を確認します。
 
-- 実行時 callback: `nix/modules/editors/nvim/callbacks.nix`（Nixvim の起動設定に埋め込む Lua）
-- Neovim 本体の有効化・基本設定・起動処理・補助 Lua の配置: `nix/modules/editors/nvim/default.nix`
+- Neovim 本体の有効化・基本設定・イベント・ユーザーコマンド: `nix/modules/editors/nvim/default.nix`
 - 補助コマンド・LSP・整形ツール・toolchain・プラグイン実行依存の導入: `nix/modules/editors/nvim/runtime/default.nix`
 - LSP の有効化・サーバー別設定・整形設定: `nix/modules/editors/nvim/lsp/default.nix`
 - プラグインの導入と Tree-sitter の言語一覧: `nix/modules/editors/nvim/plugins/default.nix`
 - 設定値・キー・autocmd・ユーザーコマンド: Nixvim の標準 option
-- Snacks の PDF プレビュー・ghq 連携・smart 検索: `callbacks.nix` の `Dotfiles.snacks_picker`
+- Snacks の PDF プレビュー・ghq 連携・smart 検索: `plugins/default.nix` の Snacks 設定
 - 基本キー配列・leader: `default.nix` の `programs.nixvim.keymaps` / `globals`。プラグインのキーは `plugins/default.nix`
 
 package データ、配布方式、エディタ設定を変更理由ごとに分けます。
@@ -18,7 +17,7 @@ package データ、配布方式、エディタ設定を変更理由ごとに分
 
 [Nixvim の Home Manager module](https://nix-community.github.io/nixvim/user-guide/install.html) を使い、構成側の `programs.nixvim.enable` で有効化します。`nixvim` input は共通の `nixpkgs` に follows し、`nixpkgs.useGlobalPackages = true` で同じ package set を使います。Neovim 本体は `pkgs.neovim-unwrapped`、補助コマンド・LSP・整形ツール・toolchain は `runtime/default.nix` が通常のユーザー PATH へ導入します。
 
-設定値は `opts` / `globals`、キーは `keymaps`、イベントは `autoCmd`、コマンドは `userCommands`、全プラグインの設定は `plugins.<name>.settings` に宣言します。Modes / Incline も Nixvim の標準 plugin factory で型付き option を定義します。Lua の生成・初期化順序・配布は Nixvim が担当し、PDF preview・ウインドウ操作・整形対象の選択などの実行処理は `callbacks.nix` から起動設定に埋め込み、`Dotfiles.*` として参照します。
+設定値は `opts` / `globals`、キーは `keymaps`、イベントは `autoCmd`、コマンドは `userCommands`、全プラグインの設定は `plugins.<name>.settings` に宣言します。Modes / Incline も Nixvim の標準 plugin factory で型付き option を定義します。Lua の生成・初期化順序・配布は Nixvim が担当し、PDF preview・ウインドウ操作・整形対象の選択などの callback は利用する設定に直接置きます。共有する関数や状態は、その設定を所有する module 内のローカル変数として定義します。
 
 ### 設定の配布
 
@@ -30,7 +29,7 @@ package データ、配布方式、エディタ設定を変更理由ごとに分
 
 `programs.nixvim.plugins.treesitter.grammarPackages` に対象言語を指定します。パーサーは設定した Tree-sitter package の `builtGrammars` から取得し、対応クエリと組み合わせます。実行時のダウンロード・ビルドは行いません。
 
-プラグインの `setup()` は Nixvim が適用します。`Dotfiles.*` の callback は Nix の `settings` / `keymaps` / `autoCmd` から参照します。Sidekick は CLI 連携を使い、未構成の Copilot NES は無効にします。プラグインは Nix の再反映で更新します。
+プラグインの `setup()` は Nixvim が適用します。callback も Nix の `settings` / `keymaps` / `autoCmd` に宣言します。Sidekick は CLI 連携を使い、未構成の Copilot NES は無効にします。プラグインは Nix の再反映で更新します。
 
 Nix は継承先のクエリ（ecma、jsx、html_tags など）も閉包に含めます。「プラグインコードをロードしない」と「Nix store に nvim-treesitter 由来のパッケージが一切存在しない」は別です。ファイルタイプ `sh` / `javascriptreact` / `typescriptreact` は対応する grammar に明示登録します。
 
@@ -95,7 +94,7 @@ Herdr の terminal prefix も `Ctrl+Space` です。Neovim に届かない環境
 
 ## 画像・ターミナル
 
-作業ディレクトリの OSC 7 通知は `callbacks.nix` の `Dotfiles.osc7` が `vim.api.nvim_ui_send` で送信します。Oil 内では表示中のディレクトリを使います。
+作業ディレクトリの OSC 7 通知は `default.nix` の `autoCmd` が `vim.api.nvim_ui_send` で送信します。Oil 内では表示中のディレクトリを使います。
 
 Snacks は端末の画像対応を自動判定します。PDF は公式の [`picker.preview` と `picker.config`](https://github.com/folke/snacks.nvim/blob/main/docs/picker.md#️-config) で Poppler の変換処理を指定し、通常のファイル表示とソース別の専用プレビューを維持します。`VimEnter` での内部関数の差し替えは行いません。外部プロセスは `vim.system` で終了コード・10秒上限を確認します。ただし変換待ちは同期なので、大きな PDF の UI 停止を完全には解消していません。
 

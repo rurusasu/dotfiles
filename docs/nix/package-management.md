@@ -39,7 +39,7 @@ Neovim はユーザー指定の Nixvim Home Manager module で設定します。
 | Strata Desktop / Control（Linux x86_64・Apple Silicon macOS） | 公式 `Niko1221/Strata` の Linux AppImage / macOS app archive と Control archive。同じアプリが nixpkgs にないため。`strata-release` input の release metadata と asset の SHA-256 を固定する。 |
 | Dia ブラウザー                                                | `dia` input の公式 DMG。`pkgs.dia` は図表エディターで、別のアプリ。                                                                                                                           |
 | Chrome DevTools MCP                                           | `mcp-servers` flake の package。対応する nixpkgs package がないため。                                                                                                                         |
-| Docker MCP Gateway                                            | Docker 公式 Git source と同梱依存を `buildGoModule` で構築。対応する nixpkgs package がなく、`pkgs.mcp-gateway` は別製品のため。Git revision と内容を input で固定する。                      |
+| Docker MCP Gateway                                            | Docker 公式 Git source と同梱依存を `buildGo126Module` で構築。対応する nixpkgs package がなく、`pkgs.mcp-gateway` は別製品のため。Git revision と内容を input で固定する。                   |
 | xurl                                                          | `xurl` input の upstream source を `buildGoModule` で構築。対応する nixpkgs package がないため。                                                                                              |
 | Lifelog（WSL x86_64）                                         | 非公開 repository の公開済み Release tag をローカル checkout から取得し、`Cargo.lock` に従って Nix で構築。nixpkgs に同じアプリがないため。                                                   |
 | Herdr TUI                                                     | ユーザー指定により、nixpkgs の package から公式の Nix インストール手順が案内する release flake へ切り替える。`herdr` input の安定版 tag と upstream の build toolchain を lock する。         |
@@ -100,6 +100,7 @@ Home Manager は指定 tag のコミット済みソースから Linux アプリ�
 Docker MCP は `docker-mcp` input の公式リポジトリの既定ブランチから取得します。
 Git revision と内容は `flake.lock` で固定し、`nrs` の input 更新で追従します。
 依存は source に同梱された `vendor/` を使い、ビルド中の追加ダウンロードは行いません。
+ビルドには upstream の `go.mod` / `Dockerfile` と同じ Go 1.26 系の標準 `buildGo126Module` を使います。同梱 gRPC が Go 1.27 の HTTP/2 API 変更に未対応のためです。
 Home Manager が単体の `docker-mcp` バイナリと利用サーバーの起動引数を反映します。Podman API を使い、Docker CLI の plugin link や profile sync は不要です。秘密情報は `task mcp:toolkit:secrets` で所有者だけが読み書きできるローカルファイルへ同期します。
 
 Podman は標準の `services.podman.enable`、Lazydocker は `programs.lazydocker.enable` で導入します。Linux / WSL は rootless API ソケット、macOS は Home Manager の標準 Podman machine を使います。Lazydocker と MCP Gateway の wrapper は `DOCKER_HOST` の明示指定を優先し、未指定ならこの接続先を設定します。Docker CLI package は削除し、upstream が実行する `docker` コマンドだけを Podman へのリンクで供給します。Compose は `podman-compose` を provider とする `podman compose` を使います。既存の公開タスク `docker:prune` も Podman を対象にします。
@@ -368,7 +369,9 @@ Herdr の [公式設定方法](https://herdr.dev/ja/tui/docs/configuration/) に
 
 OS 全体の反映に先行して Herdr だけを使う場合は、公式手順の `nix profile install github:herdrdev/herdr/v0.9.5` でユーザープロファイルへ導入できます。この entry は Home Manager の package より PATH 上で優先されるため、後で OS / Home Manager の反映が済んだら `nix profile remove herdr` で外し、以後は宣言された package から更新します。
 
-エディタの導入・設定は `nix/modules/editors/` にまとめます。`nvim/` は Neovim 本体・設定・プラグインを所有し、`runtime/default.nix` が補助 CLI・LSP・整形ツール・toolchain とプラグインの実行依存を通常の PATH に導入します。これらを全エディタ共通の集約 module に移しません。Orca は `nix/defaults.nix` が `inputs.llm-agents.packages.${system}.orca` を導入します。CLI は `orca`、GUI は `orca-ide` です。運用は [Neovim](../chezmoi/neovim.md) を参照してください。
+エディタ固有の設定は `nix/modules/editors/` にまとめます。`nvim/` は Neovim 本体・設定・プラグインを所有し、`runtime/default.nix` が補助 CLI・LSP・整形ツール・toolchain とプラグインの実行依存を通常の PATH に導入します。これらを全エディタ共通の集約 module に移しません。運用は [Neovim](../chezmoi/neovim.md) を参照してください。
+
+Orca AI IDE は macOS・Linux/WSL 共通の `nix/defaults.nix` の `home.packages` で `inputs.llm-agents.packages.${system}.orca` を導入します。導入だけのため、専用 module は作りません。バージョンは `flake.lock` の `llm-agents` input で固定します。GUI は `orca-ide`、CLI は `orca` で起動します。
 
 zoxide / fzf / eza / bat / ripgrep / fd の導入・設定と zsh-patina の連携は `nix/modules/shells/plugins/` の各アプリ module に置きます。zoxide は標準連携の `--cmd cd` で `cd` / `cdi` を使い、WSL の除外ディレクトリは `nix/defaults.nix` の WSL ユーザー設定に置きます。fzf の Zsh は標準 integration の Ctrl+T/R・Alt+C を使い、検索コマンド・プレビューは `programs.fzf` の widget option に定義します。Unix の Bash integration は無効です。ripgrep の設定ファイルと `RIPGREP_CONFIG_PATH` は Home Manager が生成します。
 

@@ -1,6 +1,24 @@
 _: {
   programs.nixvim = { config, lib, ... }: {
     config = lib.mkIf config.enable {
+      extraConfigLuaPre = lib.mkOrder 650 ''
+        local function format_lsp_buffer(buf, async)
+            if vim.bo[buf].buftype ~= "" or not vim.bo[buf].modifiable then
+                return
+            end
+            local clients = vim.lsp.get_clients({ bufnr = buf, method = "textDocument/formatting" })
+            table.sort(clients, function(a, b)
+                return a.id < b.id
+            end)
+            local preferred = (vim.g.dotfiles_formatters or {})[vim.bo[buf].filetype]
+            for _, client in ipairs(clients) do
+                if not preferred or client.name == preferred then
+                    vim.lsp.buf.format({ bufnr = buf, id = client.id, async = async, timeout_ms = 3000 })
+                    return
+                end
+            end
+        end
+      '';
       globals.dotfiles_formatters = {
         python = "ruff";
         rust = "rust_analyzer";
@@ -103,7 +121,7 @@ _: {
           }
           {
             key = "<leader>f";
-            action.__raw = "function() Dotfiles.lsp.format_buffer(0, true) end";
+            action.__raw = "function() format_lsp_buffer(0, true) end";
             options.desc = "Format";
           }
         ];
@@ -113,7 +131,7 @@ _: {
         {
           event = "BufWritePre";
           group = "DotfilesLsp";
-          callback.__raw = "function(args) Dotfiles.lsp.format_buffer(args.buf, false) end";
+          callback.__raw = "function(args) format_lsp_buffer(args.buf, false) end";
         }
       ];
     };

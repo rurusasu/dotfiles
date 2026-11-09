@@ -16,8 +16,14 @@ in
     enable = lib.mkEnableOption "ChatGPT desktop with its bundled Codex CLI";
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.chatgpt.override { codex = null; };
-      defaultText = lib.literalExpression "(pkgs.chatgpt.override { codex = null; })";
+      default = pkgs.chatgpt.override {
+        codex = null;
+        # Remove after nixos-unstable includes nixpkgs 743696b736aa419c86abb36e2777cda684d619a0.
+        tectonic-unwrapped = pkgs.tectonic-unwrapped.overrideAttrs (previous: {
+          buildInputs = [ pkgs.aws-lc ] ++ previous.buildInputs;
+        });
+      };
+      defaultText = lib.literalMD "nixpkgs ChatGPT with its bundled Codex CLI and the upstream Tectonic build fix";
       description = "ChatGPT desktop distribution providing the bundled Codex CLI.";
     };
   };

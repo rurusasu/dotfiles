@@ -17,6 +17,7 @@ Windows の GUI アプリと、macOS、NixOS、Ubuntu、Debian の環境を管�
 | Packages           | Unix: Nix modules (`nix/modules/`)、Windows: WinGet JSON |
 | System convergence | winget handlers, nix-darwin, NixOS                       |
 | User environment   | Home Manager + chezmoi                                   |
+| Editors            | Neovim (Nixvim), Orca AI IDE                             |
 | Containers         | Rootless Podman + podman-compose + Lazydocker            |
 | Formatter          | treefmt-nix                                              |
 
