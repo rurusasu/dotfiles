@@ -34,6 +34,16 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    catppuccin = {
+      url = "github:catppuccin/nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    # Use Herdr's documented release flake with its pinned build toolchain.
+    herdr.url = "github:herdrdev/herdr/v0.9.5";
+    omarchy = {
+      url = "github:omacom/omarchy/quattro";
+      flake = false;
+    };
     # Use the upstream package set unchanged so its binary cache can be used.
     llm-agents.url = "github:numtide/llm-agents.nix";
     mcp-servers.url = "github:natsukium/mcp-servers-nix";

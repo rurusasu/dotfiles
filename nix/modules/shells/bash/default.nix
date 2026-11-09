@@ -7,14 +7,14 @@ in
 {
   config = lib.mkIf config.programs.bash.enable {
     home.sessionPath = [
-      "$HOME/.bun/bin"
-      "$HOME/.local/bin"
-      "$HOME/bin"
-      "$HOME/.local/npm/bin"
+      (config.home.homeDirectory + "/.bun/bin")
+      (config.home.homeDirectory + "/.local/bin")
+      (config.home.homeDirectory + "/bin")
+      (config.home.homeDirectory + "/.local/npm/bin")
     ];
     # Bash configuration is generated together with terminal shell integrations.
     programs.bash = {
-      historyFile = "$HOME/.bash_history";
+      historyFile = config.home.homeDirectory + "/.bash_history";
       historySize = 1000;
       historyFileSize = 2000;
       historyControl = [ "ignoreboth" ];
@@ -57,7 +57,11 @@ in
         lib.optionalString (!config.programs.eza.enable) ''
           # Preserve GNU ls colors when eza is disabled and dircolors is available.
           if [ -x /usr/bin/dircolors ]; then
-            test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+            test -r ${
+              lib.escapeShellArg (config.home.homeDirectory + "/.dircolors")
+            } && eval "$(dircolors -b ${
+              lib.escapeShellArg (config.home.homeDirectory + "/.dircolors")
+            })" || eval "$(dircolors -b)"
             alias ls='ls --color=auto'
           fi
         ''
@@ -66,12 +70,12 @@ in
           export GROUP_ID="$(id -g)"
 
           # NVM's user-managed installation and its completion remain optional.
-          export NVM_DIR="$HOME/.nvm"
+          export NVM_DIR=${lib.escapeShellArg (config.home.homeDirectory + "/.nvm")}
           [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
           [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
 
           # Run task from the dotfiles root without changing the caller's cwd.
-          dotf() { (cd ~/.dotfiles && task "$@"); }
+          dotf() { (cd ${lib.escapeShellArg (config.home.homeDirectory + "/.dotfiles")} && task "$@"); }
 
           codex() {
             local __dotfiles_had_force_secret_load=0
@@ -80,9 +84,11 @@ in
               __dotfiles_had_force_secret_load=1
             fi
 
-            if { [ -z "''${GITHUB_PAT_TOKEN:-}" ] || [ -z "''${GITHUB_WORK_TOKEN:-}" ] || [ -z "''${TAVILY_API_KEY:-}" ]; } && [ -f "$HOME/.config/shell/secret.sh" ]; then
+            if { [ -z "''${GITHUB_PAT_TOKEN:-}" ] || [ -z "''${GITHUB_WORK_TOKEN:-}" ] || [ -z "''${TAVILY_API_KEY:-}" ]; } && [ -f ${
+              lib.escapeShellArg (config.xdg.configHome + "/shell/secret.sh")
+            } ]; then
               export DOTFILES_FORCE_SECRET_LOAD=1
-              source "$HOME/.config/shell/secret.sh"
+              source ${lib.escapeShellArg (config.xdg.configHome + "/shell/secret.sh")}
               if [ "$__dotfiles_had_force_secret_load" = 1 ]; then
                 export DOTFILES_FORCE_SECRET_LOAD="$__dotfiles_previous_force_secret_load"
               else
@@ -94,8 +100,12 @@ in
           }
 
           # Keep compatibility with existing user-managed secret/token loaders.
-          [[ -f "$HOME/.config/shell/secret.sh" ]] && source "$HOME/.config/shell/secret.sh"
-          [[ -f "$HOME/.config/shell/gh-token-switch.sh" ]] && source "$HOME/.config/shell/gh-token-switch.sh"
+          [[ -f ${lib.escapeShellArg (config.xdg.configHome + "/shell/secret.sh")} ]] && source ${
+            lib.escapeShellArg (config.xdg.configHome + "/shell/secret.sh")
+          }
+          [[ -f ${lib.escapeShellArg (config.xdg.configHome + "/shell/gh-token-switch.sh")} ]] && source ${
+            lib.escapeShellArg (config.xdg.configHome + "/shell/gh-token-switch.sh")
+          }
         ''
       );
     };

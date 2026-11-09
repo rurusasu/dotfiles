@@ -9,6 +9,10 @@ let
 in
 {
   config = lib.mkIf config.programs.neovim.enable {
+    catppuccin.nvim = {
+      enable = true;
+      settings.transparent_background = true;
+    };
     programs.neovim = {
       # Use the unwrapped package and expose runtime dependencies on the user PATH.
       package = pkgs.neovim-unwrapped;
@@ -25,7 +29,7 @@ in
     # The former whole-directory Home Manager link must be moved before checking
     # the new per-file Lua layout. Keep the link itself as a recoverable backup.
     home.activation.migrateNeovimLuaDirectoryLink = lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
-      luaDirectory=${lib.escapeShellArg "${config.xdg.configHome}/nvim/lua"}
+      luaDirectory=${lib.escapeShellArg (config.xdg.configHome + "/nvim/lua")}
       if [ -L "$luaDirectory" ]; then
         luaTarget=$(${pkgs.coreutils}/bin/readlink -- "$luaDirectory")
         if [[ "$luaTarget" =~ ^/nix/store/[0-9a-z]{32}-home-manager-files/\.config/nvim/lua$ ]]; then
@@ -46,7 +50,7 @@ in
     xdg.configFile."nvim/lua/config/shared_keybindings.lua".text =
       lib.optionalString (lib.attrByPath [ "dotfiles" "keybindings" "fromWindowsExport" ] false config) ''
         -- WSL receives exported key data through Windows chezmoi.
-        local path = ${builtins.toJSON "${config.xdg.configHome}/dotfiles/keybindings/generated.json"}
+        local path = ${builtins.toJSON (config.xdg.configHome + "/dotfiles/keybindings/generated.json")}
         if vim.fn.filereadable(path) == 1 then
             local allocation = vim.json.decode(table.concat(vim.fn.readfile(path), "\n"))
             return { leader = allocation.neovimLeader, bindings = allocation.neovim }

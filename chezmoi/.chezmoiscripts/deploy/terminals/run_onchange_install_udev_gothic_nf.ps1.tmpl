@@ -14,7 +14,7 @@ $fontDirectory = Join-Path $fontRootDirectory $version
 $fontRegistryPath = "HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
 
 New-Item -ItemType Directory -Path $extractDirectory, $fontDirectory -Force | Out-Null
-New-Item -Path $fontRegistryPath -Force | Out-Null
+if (-not (Test-Path -LiteralPath $fontRegistryPath)) { New-Item -Path $fontRegistryPath | Out-Null }
 
 Write-Host "Downloading UDEV Gothic NF $version from the upstream release..."
 Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath

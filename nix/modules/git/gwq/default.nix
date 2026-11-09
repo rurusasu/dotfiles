@@ -11,7 +11,7 @@ in
 {
   options.programs.gwq.enable = lib.mkEnableOption "gwq worktree management";
 
-  options.dotfiles.gwq.settings = lib.mkOption {
+  options.programs.gwq.settings = lib.mkOption {
     inherit (format) type;
     default = { };
     description = "Declarative gwq configuration, with host-specific worktree locations.";
@@ -19,16 +19,16 @@ in
 
   config = lib.mkIf config.programs.gwq.enable {
     home.packages = [ pkgs.gwq ];
-    dotfiles.gwq.settings = {
+    programs.gwq.settings = {
       worktree = {
-        basedir = lib.mkDefault "${config.home.homeDirectory}/worktrees";
+        basedir = lib.mkDefault (config.home.homeDirectory + "/worktrees");
         auto_mkdir = lib.mkDefault true;
       };
       cd.launch_shell = lib.mkDefault false;
     };
 
     xdg.configFile."gwq/config.toml".source =
-      format.generate "gwq-config.toml" config.dotfiles.gwq.settings;
+      format.generate "gwq-config.toml" config.programs.gwq.settings;
 
     programs = {
       git.settings.alias.gtr = lib.mkIf config.programs.git.enable "!gwq add";

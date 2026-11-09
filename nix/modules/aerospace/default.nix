@@ -87,7 +87,9 @@ in
       lib.hm.dag.entryBetween [ "onFilesChange" "setupLaunchAgents" ] [ "writeBoundary" ]
         ''
           (
-            legacyPlist=${lib.escapeShellArg "${config.home.homeDirectory}/Library/LaunchAgents/org.nixos.aerospace.plist"}
+            legacyPlist=${
+              lib.escapeShellArg (config.home.homeDirectory + "/Library/LaunchAgents/org.nixos.aerospace.plist")
+            }
             legacySource=/run/current-system/user/Library/LaunchAgents/org.nixos.aerospace.plist
             [[ -f "$legacySource" ]] || exit 0
 

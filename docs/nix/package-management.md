@@ -40,13 +40,46 @@ WSL の Noto CJK の追加導入・フォールバック指定は行いません
 | Docker MCP Gateway                                            | Docker 公式 Git source と同梱依存を `buildGoModule` で構築。対応する nixpkgs package がなく、`pkgs.mcp-gateway` は別製品のため。Git revision と内容を input で固定する。                      |
 | xurl                                                          | `xurl` input の upstream source を `buildGoModule` で構築。対応する nixpkgs package がないため。                                                                                              |
 | Lifelog（WSL x86_64）                                         | 非公開 repository の公開済み Release tag をローカル checkout から取得し、`Cargo.lock` に従って Nix で構築。nixpkgs に同じアプリがないため。                                                   |
+| Herdr TUI                                                     | ユーザー指定により、nixpkgs の package から公式の Nix インストール手順が案内する release flake へ切り替える。`herdr` input の安定版 tag と upstream の build toolchain を lock する。         |
 | Steam（macOS）                                                | Homebrew cask。対象 OS 用の同じ GUI アプリを nixpkgs から導入できないため。                                                                                                                   |
 
 ChatGPT は `pkgs.chatgpt` を使います。同梱 Codex CLI を使う設定も、この nixpkgs package 内のバイナリーを参照します。`hermes-xapi` はリポジトリ内の連携スクリプトです。
 
+Google Drive は Windows では WinGet の `Google.GoogleDrive`、macOS では `google-drive` cask で公式 Drive for desktop を導入します。macOS の nixpkgs に同じ公式アプリがなく、システム連携を含む公式 installer が必要なため、Homebrew を使う例外です。Linux / WSL 向けの公式デスクトップ版は提供されていません（[公式の対応 OS](https://support.google.com/drive/answer/2375082)）。NixOS・standalone Linux・WSL は標準の `programs.rclone.enable` で nixpkgs の rclone を導入します。`rclone config` で Google Drive の認証を設定すると、ファイル操作や `rclone mount` を利用できます。Google アカウントの認証と接続先は利用者が設定し、自動同期・マウントは初期状態では有効にしません（[rclone の Google Drive 手順](https://rclone.org/drive/)）。
+
+OS / Home Manager の反映より先に rclone をユーザープロファイルへ導入した場合、反映後は `nix profile remove rclone` でその entry を外し、宣言側からの更新に統一してください。
+
+### Meta AI Assistant / Muse
+
+指定された [Meta AI Assistant](https://ai.meta.com/meta-ai/assistant/) の[公式デスクトップ配布](https://ai.meta.com/meta-ai/download/)は macOS 向けです。Meta の Muse にも[別の公式ダウンロードページ](https://ai.meta.com/muse/download/)があり、デスクトップ版は macOS 向けです。どちらも Windows・Linux / WSL 向けのネイティブ版は案内されていません。nixpkgs の `muse` は音楽シーケンサー、`muse-code` はコーディング用 CLI であり、対象とは異なります。
+
+2026-11-08 時点で [Homebrew の `muse` cask](https://github.com/Homebrew/homebrew-cask/blob/main/Casks/m/muse.rb) は、署名付きダウンロード URL が必要なため無効化されています。公式の取得先 `https://muse.ai/api/hatch/app-download/mac` も、この環境からは `403` / `not_eligible` を返しました。このため自動インストールの宣言は追加していません。macOS では公式ページで利用資格を確認してインストーラーを取得し、公式の手順で導入してください。公開された固定可能な配布物、または有効なパッケージが提供された時点で宣言的な導入へ切り替えます。
+
+### 共通テーマとフォント
+
+`nix/defaults.nix` の共通 Home Manager 設定が `catppuccin.flavor = "mocha"` を宣言します。公式 `catppuccin/nix` input の Home Manager module を使い、導入済みアプリの port だけを有効にします。Ghostty・Neovim・bat はこの共通設定からテーマを生成し、superfile は共通 flavor を参照します。Herdr は `theme.name = "terminal"` で外側のターミナルの配色を引き継ぎます。macOS 自体の外観は Dark、Linux GTK のテーマも同じ flavor です。
+
+フォント名は `fonts.fontconfig.defaultFonts`、共通サイズは `gtk.font.size` を正本として `nix/modules/fonts/default.nix` が管理します。Ghostty はこれらを参照します。macOS では GTK は有効にせず、共通のサイズ設定だけを利用します。Herdr・Neovim などの TUI は外側のターミナルのフォントを使います。
+
+Windows Terminal のフォント・サイズ・配色と superfile のテーマは `nix/home/appearance.nix` が公式 Catppuccin palette と同じ共通設定から生成します。`task keybindings:export` で `nix/home/appearance.json` を更新し、chezmoi が Nix を呼ばずに読み込みます。Windows のシステム UI フォントは変更しません。
+
+### Herdr の設定
+
+`nix/modules/terminals/herdr/default.nix` は[公式設定](https://herdr.dev/ja/tui/docs/configuration/)に従い、標準 `programs.herdr.settings` から生成します。対話シェルは Home Manager の Zsh、シェル起動モードは OS に従う `auto`、新しいペインの作業ディレクトリは `follow` です。worktree のルートは有効な gwq の `worktree.basedir`、未導入なら `config.home.homeDirectory + "/worktrees"` を使います。
+
+リモートアタッチは `remote.manage_ssh_config = true` で既存 SSH 設定を取り込む一時設定を使います。接続先や SSH サーバーの公開は追加しません。通知は右下の Herdr トーストと通知音を有効にし、Linux の再生依存 `paplay` も module が導入します。Kitty graphics は有効ですが、実際の描画には外側のターミナルの対応が必要です。サイドバーは状態記号、ステータス欄は zoom・サーバー名・時刻を表示します。
+
 ### Lifelog（WSL）
 
-Lifelog は非公開 repository のため、公開 dotfiles の flake input には含めません。WSL x86_64 では `/mnt/d/lifelog-core` に checkout を用意し、GitHub の公開済み最新 Release を選択します。初回は `gh repo clone rurusasu/lifelog-core /mnt/d/lifelog-core` で checkout し、GitHub CLI と Git の認証を済ませてください。
+Lifelog は非公開 repository のため、公開 dotfiles の flake input には含めません。WSL x86_64 では `programs.lifelog.sourceDirectory` に checkout を用意し、GitHub の公開済み最新 Release を選択します。既定値は `config.programs.ghq.root + "/github.com/" + config.programs.git.settings.user.name + "/lifelog-core"` です。Git の `user.name` を repository の所有者名として使います。初回は GitHub CLI と Git の認証を済ませ、既定の配置に clone します。
+
+```bash
+repo="$(git config --get user.name)/lifelog-core"
+checkout="$HOME/ghq/github.com/$repo"
+gh repo clone "$repo" "$checkout"
+```
+
+`programs.ghq.root` や `programs.lifelog.sourceDirectory` を変更した場合は、その保存先を使ってください。
 
 以前、手動で Lifelog を導入して `~/.local/bin/lifelog` と `~/.local/share/applications/lifelog.desktop` を専用 profile へのシンボリックリンクとして作成した場合、初回の `nrs` の前にそのリンクを退避してください。Home Manager は既存の未管理シンボリックリンクを自動で退避しません。次のコマンドは専用 profile を指すリンクだけを退避します。
 
@@ -66,10 +99,12 @@ printf '以前のリンク: %s\n' "$backup_dir"
 以下を Bash で実行して Release を選択し、設定を反映します。
 
 ```bash
-tag=$(gh release view --repo rurusasu/lifelog-core --json tagName --jq .tagName) &&
+repo="$(git config --get user.name)/lifelog-core"
+checkout="$HOME/ghq/github.com/$repo"
+tag=$(gh release view --repo "$repo" --json tagName --jq .tagName) &&
   [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] &&
-  git -C /mnt/d/lifelog-core fetch origin "refs/tags/$tag:refs/tags/$tag" &&
-  printf '%s\n' "$tag" > /mnt/d/lifelog-core/.git/lifelog-release-tag &&
+  git -C "$checkout" fetch origin "refs/tags/$tag:refs/tags/$tag" &&
+  printf '%s\n' "$tag" > "$checkout/.git/lifelog-release-tag" &&
   task --dir "$HOME/.dotfiles" nrs
 ```
 
@@ -205,7 +240,7 @@ OS 基盤設定、型付き option による有効化、公開構成は `nix/def
 
 統合・standalone Home Manager は同じ `systemDefaults.home-manager.sharedModules` を使います。CPU 別の wrapper は設けません。GUI も各 OS の構成が対応するアプリの enable option を選択します。Darwin のブラウザーは Dia、Linux / WSLg は Chrome を使います。WSL は Chrome / Spotify / Signal / Obsidian / 1Password GUI を Nix で導入し、デスクトップキーから WSLg で開きます。Windows の 1Password CLI / Git signer 連携は維持します。
 
-Homebrew / nix-homebrew・Steam の cask・ユーザー PATH は `nix/defaults.nix` に宣言します。native NixOS の Hyprland は Linux ブロックが有効化し、単純な GUI package は `defaults.nix` の Home Manager 設定が導入します。WSL / standalone へ compositor を自動導入しません。Discord も Darwin / native Linux の既存 Home Manager module から導入し、WSL では Windows のアプリを利用します。
+Homebrew / nix-homebrew・Google Drive と Steam の cask・ユーザー PATH は `nix/defaults.nix` に宣言します。native NixOS の Hyprland は Linux ブロックが有効化し、単純な GUI package は `defaults.nix` の Home Manager 設定が導入します。WSL / standalone へ compositor を自動導入しません。Discord は Darwin / native Linux の Home Manager module が管理します。Windows / WSL 向けの Windows Discord アプリは導入しません。
 
 [共通のキー割り当て](../chezmoi/omarchy.md) は `nix/home/keybindings/` に一度だけ定義し、host が OS 統合と有効化を担当します。共通データや純粋な設定生成関数は Home Manager module ではないため、`imports` に渡しません。
 
@@ -338,9 +373,13 @@ dsh は `nix/defaults.nix` が導入します。Linux は `pkgs.deepseek-harness
 
 1Password CLI / GUI の導入と連携は `nix/modules/1password/` が管理します。通常の CLI / GUI は Home Manager が導入し、`ssh/default.nix` が公式 SSH agent socket の `IdentityAgent` / `SSH_AUTH_SOCK`、OS 別の Git 署名・WSL 連携と GUI package は `nix/defaults.nix` に直接宣言します。WSLg GUI の起動先を変えても、Windows `op.exe` / signer 連携の認証方式は変更しません。
 
-Git / ghq / gwq の導入・設定は `nix/modules/git/` にまとめます。`default.nix` は Home Manager 標準 `programs.git` の設定、`ghq/default.nix` は共通の `ghq.root`、既存の Git alias は Git 本体の module が管理します。署名と WSL の保存先は `nix/defaults.nix` の各 OS 設定が管理します。
+Git / ghq / gwq の導入・設定は `nix/modules/git/` にまとめます。`default.nix` は Home Manager 標準 `programs.git` の設定、`ghq/default.nix` は独自 option `programs.ghq.enable` / `programs.ghq.root` による導入と Git 設定への反映、既存の Git alias は Git 本体の module が管理します。ghq の保存先は全 OS 共通で `config.home.homeDirectory + "/ghq"` が既定値です。gwq も `programs.gwq.settings` から設定し、worktree の保存先は `config.home.homeDirectory + "/worktrees"` が既定値です。ユーザーパスは `config.home.homeDirectory` / `config.xdg.*` とアプリの option から生成し、ユーザー名やドライブ文字を固定しません。単純なパスの結合には Nix の `+` を使います。署名の OS 固有設定は `nix/defaults.nix` が管理します。全 OS の `nrs` alias は `task nrs` を呼び、Taskfile が Unix の `install.sh` と Windows の WSL rebuild を選びます。
 
-lazygit / Herdr はそれぞれ `nix/modules/lazygit/` / `nix/modules/herdr/` が有効化・設定を管理します。lazygit は Bash / Zsh の `lg` 連携、Herdr は標準 `programs.herdr.settings` に Nix で設定値を直接定義します。Windows の既存 Herdr installer・chezmoi 設定は維持します。
+lazygit / Herdr はそれぞれ `nix/modules/lazygit/` / `nix/modules/terminals/herdr/` が有効化・設定を管理します。lazygit は Bash / Zsh の `lg` 連携、Herdr は [公式の Nix 手順](https://herdr.dev/ja/tui/docs/install/#nix-でインストール) に従い、`herdr` input の安定版 release flake を `programs.herdr.package` に指定します。設定は標準 `programs.herdr.settings` から生成します。tag を更新するときは `flake.nix` の `inputs.herdr.url` を変更して `nix flake update herdr` を実行し、通常の OS / Home Manager 反映を行います。Windows 側には Herdr の installer や設定を配置しません。
+
+Herdr の [公式設定方法](https://herdr.dev/ja/tui/docs/configuration/) に合わせ、`programs.herdr.mutableSettings = true` で通常の書き込み可能な `config.toml` を生成します。キーは `omarchy` input の公式 `config/herdr/config.toml` から `[keys]` を取得し、独自配列を持ちません。Nix はこの配列とシェル・worktree・外観・通知などの宣言値を管理し、未宣言の項目は Herdr の既定値を使います。`programs.herdr.settings` の宣言値は反映時に優先され、未宣言の設定はアプリの設定画面や通常のファイル編集で変更できます。Nix の宣言を削除しても、既に書き込み可能なファイルに残った値は自動削除されません。設定の確認は `herdr config check`、実行中サーバーへの再読み込みは `herdr server reload-config` を使います。公式既定値の一覧は `herdr --default-config` で確認できます。
+
+OS 全体の反映に先行して Herdr だけを使う場合は、公式手順の `nix profile install github:herdrdev/herdr/v0.9.5` でユーザープロファイルへ導入できます。この entry は Home Manager の package より PATH 上で優先されるため、後で OS / Home Manager の反映が済んだら `nix profile remove herdr` で外し、以後は宣言された package から更新します。
 
 エディタの導入・設定は `nix/modules/editors/` にまとめます。`nvim/` は Neovim 本体・設定・プラグインを所有し、`runtime/default.nix` が補助 CLI・LSP・整形ツール・toolchain とプラグインの実行依存を通常の PATH に導入します。これらを全エディタ共通の集約 module に移しません。Orca は `nix/defaults.nix` が `inputs.llm-agents.packages.${system}.orca` を導入します。CLI は `orca`、GUI は `orca-ide` です。運用は [Neovim](../chezmoi/neovim.md) を参照してください。
 

@@ -1,0 +1,2 @@
+{{- $appearance := include "../nix/home/appearance.json" | fromJson -}}
+{{ dict "schemes" (list $appearance.windowsTerminalScheme) | toPrettyJson }}

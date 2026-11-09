@@ -68,9 +68,22 @@ let
         extraSpecialArgs = { inherit inputs; };
         sharedModules = [
           ({ config, lib, ... }: {
-            imports = discoverModules "home-manager" ./modules;
+            imports = discoverModules "home-manager" ./modules ++ [ inputs.catppuccin.homeModules.catppuccin ];
             dotfiles.onePassword.enable = true;
             dotfiles.fonts.enable = true;
+            catppuccin = {
+              enable = true;
+              autoEnable = false;
+              flavor = "mocha";
+            };
+            gtk.theme = lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
+              name = "catppuccin-${config.catppuccin.flavor}-${config.catppuccin.accent}-standard+default";
+              package = pkgs.catppuccin-gtk.override {
+                variant = config.catppuccin.flavor;
+                accents = [ config.catppuccin.accent ];
+              };
+            };
+            gtk.gtk4.theme = lib.mkIf pkgs.stdenv.hostPlatform.isLinux config.gtk.theme;
 
             home = {
               stateVersion = lib.mkDefault defaults.stateVersion;
@@ -208,6 +221,7 @@ let
                   {
                     home.packages = [ pkgs.nautilus ];
                     programs = {
+                      rclone.enable = true;
                       chatgpt.enable = true;
                       chromium.enable = true;
                       discord.enable = lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.discord;
@@ -228,7 +242,6 @@ let
                     {
                       dotfiles = {
                         keybindings.fromWindowsExport = true;
-                        gwq.settings.worktree.basedir = "/mnt/d/worktrees";
                       };
                       i18n.inputMethod.enable = true;
                       services = {
@@ -241,19 +254,19 @@ let
                         gnome-keyring.enable = true;
                       };
                       programs = {
+                        rclone.enable = true;
                         pi-coding-agent.enable = true;
                         superfile.enable = true;
                         strata.enable = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
                         lifelog.enable =
                           pkgs.stdenv.hostPlatform.system == "x86_64-linux"
-                          && builtins.pathExists /mnt/d/lifelog-core/.git/lifelog-release-tag;
+                          && builtins.pathExists (config.programs.lifelog.sourceDirectory + "/.git/lifelog-release-tag");
                         chromium = {
                           enable = true;
                           wslIntegration.enable = true;
                         };
                         git = {
-                          signing.signer = "${config.home.homeDirectory}/.local/bin/op-ssh-sign-wsl";
-                          settings.ghq.root = [ "/mnt/d" ];
+                          signing.signer = config.home.homeDirectory + "/.local/bin/op-ssh-sign-wsl";
                         };
                         starship = {
                           wslIntegration.enable = true;
@@ -265,9 +278,12 @@ let
                             zstyle ':autocomplete:list-choices:' min-input 2
                           '';
                           shellAliases = {
-                            nrs = "task --dir ~/.dotfiles nrs";
-                            nrt = "sudo nixos-rebuild test --flake ~/.dotfiles --impure";
-                            nrb = "sudo nixos-rebuild boot --flake ~/.dotfiles --impure";
+                            nrt = "sudo nixos-rebuild test --flake ${
+                              lib.escapeShellArg (config.home.homeDirectory + "/.dotfiles")
+                            } --impure";
+                            nrb = "sudo nixos-rebuild boot --flake ${
+                              lib.escapeShellArg (config.home.homeDirectory + "/.dotfiles")
+                            } --impure";
                           };
                         };
                       };
@@ -324,7 +340,7 @@ let
                   config.wsl.defaultUser
                 else
                   defaults.nixosUser;
-              repository = "${config.users.users.${user}.home}/.dotfiles";
+              repository = config.users.users.${user}.home + "/.dotfiles";
               fontDirectory = "/usr/local/share/fonts/dotfiles-wslg";
             in
             if platform == "darwin" then
@@ -334,6 +350,7 @@ let
                   inputs.nix-homebrew.darwinModules.nix-homebrew
                 ];
                 environment.systemPackages = [ pkgs.gh ];
+                power.sleep.computer = "never";
                 nix-homebrew = {
                   enable = true;
                   enableRosetta = true;
@@ -344,6 +361,7 @@ let
                   enable = true;
                   greedyCasks = true;
                   casks = [
+                    "google-drive"
                     "steam"
                   ];
                   onActivation = {

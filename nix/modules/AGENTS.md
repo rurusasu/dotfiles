@@ -26,12 +26,15 @@
 - `shells/plugins/starship/`: CLI の有効化、Bash / Zsh の標準連携と `programs.starship.settings` のプロンプト設定を管理し、Home Manager が `starship.toml` を生成する
 - `editors/nvim/`: Neovim の有効化・設定・プラグイン・Lua 配置と、`runtime/default.nix` による補助 CLI・LSP・整形ツール・toolchain・プラグイン実行依存の導入。追加ソースは `modes-nvim` flake input で管理する
 - `terminals/`: Ghostty の `default.nix` を自動検出し、構成側の `programs.ghostty.enable` に従う。package / systemd の OS 差分とキー設定もアプリ module が扱う
-- `herdr/`: CLI の有効化と、標準 `programs.herdr.settings` によるキー設定
+- `terminals/herdr/`: 公式 release flake の CLI と、標準 `programs.herdr.settings` / `mutableSettings` による書き込み可能な設定の生成。キーは lock した `omarchy` input の公式 Herdr 配列から取得し、独自配列を重複定義しない。アプリで変更した未宣言の設定は保持する
 - `shells/zsh/default.nix`: zsh の有効化・`dotDir`・履歴・option・alias・キー設定・初期化・補完を管理する。`nix/defaults.nix` が選択し、標準 Home Manager が XDG 配下に `.zshrc` などを生成する
 - `shells/bash/default.nix`: Bash の有効化・設定と共通 `home.sessionPath`。有効化は `nix/defaults.nix` の `programs.bash.enable`
 - アプリ固有の system / Home Manager 設定・service・activation は各 module、OS 基盤設定と型付き option による有効化は `nix/defaults.nix`。CPU architecture は `system` 引数で選択する
 
 ## ルール
+
+- ユーザーパスは `config.home.homeDirectory` / `config.xdg.*` とアプリの型付き option から生成する。ユーザー名・ドライブ文字・`~` / `$HOME` を module のパス設定に直書きしない。アプリ固有の保存先は `programs.<name>` などの option として公開し、再利用 module にホスト固有の保存先を埋め込まない。
+- 単純なパスの結合は `config.home.homeDirectory + "/ghq"` のように書く。アプリ設定は標準の `programs.*` / `services.*` / `settings` を優先し、標準 option がない場合も型付き option と format generator から生成する。生成に置き換えた不要な設定ファイルは削除し、実行ロジックを持つ Lua / shell や Windows と共有する asset は区別する。
 
 - enable・単純な package list・単一代入だけの module は作らず、必要な構成へ直接書く。
 

@@ -6,8 +6,8 @@
 }:
 {
   config = lib.mkIf config.programs.bat.enable {
+    catppuccin.bat.enable = true;
     programs.bat.config = {
-      theme = "Catppuccin Mocha";
       style = "numbers,changes,header,grid";
       paging = "auto";
     };

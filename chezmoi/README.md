@@ -1,7 +1,7 @@
 # chezmoi
 
 This source merges Windows Terminal defaults into its stable `settings.json`,
-deploys the Catppuccin Mocha color-scheme fragment, and installs the pinned UDEV Gothic
+generates its theme and font settings from `nix/home/appearance.json`, and installs the pinned UDEV Gothic
 NF release for the current user. The font is registered under the current
 Windows account, so no administrator privileges are needed.
 
@@ -29,8 +29,11 @@ commands that have not been used remain available through ordinary Tab completio
 This setting works on Windows without WSL and is enabled when PSReadLine exposes
 the `PredictionViewStyle` option in an interactive console.
 
-Windows uses its standard desktop shortcuts. Unix GUI applications are installed
-by Nix and opened from the WSL environment.
+Windows uses its standard desktop shortcuts outside marked WSL terminal controls.
+The user-level `WslSuperKey` adapter forwards Win chords from those controls as Super
+input. It is compiled from `scripts/powershell/WslSuperKey.cs` by chezmoi, starts at
+login through HKCU Run, and uses neither PowerToys nor administrator privileges.
+Unix GUI applications are installed by Nix and opened from the WSL environment.
 
 Setup output colors are managed here: `.chezmoi.toml.tmpl` enables chezmoi's
 built-in diff colors (green additions and red removals), and `dot_taskrc.yml`
@@ -43,13 +46,14 @@ plain messages such as `Setup Complete!` remain plain.
 The shared key allocation is defined in `nix/home/keybindings/bindings.nix`
 and `nix/modules/editors/nvim/neovim.nix`.
 `task keybindings:export` directly evaluates those definitions with locked Nix
-inputs and jq to update the committed `nix/home/keybindings/generated.json` export. chezmoi reads this export without
+inputs and jq to update `nix/home/keybindings/generated.json` and `nix/home/appearance.json`. The latter uses the common Catppuccin flavor and font settings. chezmoi reads these exports without
 running Nix during apply. chezmoi also copies the exported desktop and Neovim data to
 `~/.config/dotfiles/keybindings/` inside NixOS-WSL. Home Manager installs the
 Neovim loader once; later shared key changes only require export and chezmoi.
 Home Manager owns Ghostty and Herdr settings on every Unix platform. Ghostty
 provides the host terminal; Herdr owns terminal tabs, panes, and sessions through
 its `Ctrl+Space` prefix. Ghostty has no split or tab keybindings.
+
 Regenerate the export after editing the Nix allocation, then apply it with:
 
 ```powershell

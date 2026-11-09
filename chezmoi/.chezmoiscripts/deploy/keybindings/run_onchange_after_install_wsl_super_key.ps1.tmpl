@@ -1,0 +1,33 @@
+{{ if eq .chezmoi.os "windows" -}}
+$ErrorActionPreference = 'Stop'
+$source = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{ include "../scripts/powershell/WslSuperKey.cs" | b64enc }}'))
+$directory = Join-Path $env:LOCALAPPDATA 'dotfiles'
+[void][IO.Directory]::CreateDirectory($directory)
+$program = Join-Path $directory 'WslSuperKey.exe'
+$temporary = Join-Path $directory 'WslSuperKey.new.exe'
+$sourcePath = Join-Path $directory 'WslSuperKey.cs'
+$framework = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319'
+try {
+    [IO.File]::WriteAllText($sourcePath, $source, [Text.UTF8Encoding]::new($false))
+    & (Join-Path $framework 'csc.exe') /nologo /target:winexe /platform:x64 "/out:$temporary" /reference:System.Windows.Forms.dll "/reference:$(Join-Path $framework 'WPF/UIAutomationClient.dll')" "/reference:$(Join-Path $framework 'WPF/UIAutomationTypes.dll')" "/reference:$(Join-Path $framework 'WPF/WindowsBase.dll')" $sourcePath
+    if ($LASTEXITCODE -ne 0) { throw 'Could not compile the WSL Super-key adapter.' }
+    if (Test-Path -LiteralPath $program) {
+        $previous = @(Get-Process WslSuperKey -ErrorAction SilentlyContinue | Where-Object Path -EQ $program)
+        $stop = Start-Process -FilePath $program -ArgumentList '--stop' -PassThru
+        $stop.WaitForExit()
+        foreach ($process in $previous) {
+            if (-not $process.WaitForExit(5000)) { throw 'The previous WSL Super-key adapter did not stop.' }
+        }
+    }
+    Move-Item -LiteralPath $temporary -Destination $program -Force
+    $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    if (-not (Test-Path -LiteralPath $run)) { [void](New-Item -Path $run) }
+    [void](New-ItemProperty -LiteralPath $run -Name DotfilesWslSuperKey -PropertyType String -Value ('"' + $program + '"') -Force)
+    $started = Start-Process -FilePath $program -PassThru
+    Start-Sleep -Milliseconds 500
+    if ($started.HasExited) { throw "The WSL Super-key adapter exited. See $directory/WslSuperKey.log." }
+}
+finally {
+    Remove-Item -LiteralPath $sourcePath, $temporary -Force -ErrorAction SilentlyContinue
+}
+{{ end -}}

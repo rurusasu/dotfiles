@@ -316,7 +316,7 @@ wsl --shutdown
 ### Ghostty / Herdr（Unix）
 
 - Ghostty の設定: `nix/modules/terminals/ghostty/default.nix`。分割・タブ操作キーは割り当てない
-- Herdr の設定: `nix/modules/herdr/default.nix`。タブ・ペイン・セッションを `Ctrl+Space` prefix で操作
+- Herdr の設定: `nix/modules/terminals/herdr/default.nix`。タブ・ペイン・セッションを `Ctrl+Space` prefix で操作
 
 ## トラブルシューティング
 

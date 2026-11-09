@@ -95,19 +95,6 @@ in
     expected = "test-user";
   };
 
-  testNRShellAliasUsesPlatformInstallCommand = {
-    expr = {
-      wsl = wsl.config.programs.zsh.shellAliases.nrs;
-      linux = linux.config.programs.zsh.shellAliases.nrs;
-      darwin = darwin.config.programs.zsh.shellAliases.nrs;
-    };
-    expected = {
-      wsl = "task --dir ~/.dotfiles nrs";
-      linux = "~/.dotfiles/install.sh";
-      darwin = "~/.dotfiles/install.sh";
-    };
-  };
-
   testLinuxHomeModuleDoesNotReceiveDarwinSessionVariables = {
     expr = builtins.hasAttr "HOMEBREW_AUTO_UPDATE_SECS" linux.config.home.sessionVariables;
     expected = false;

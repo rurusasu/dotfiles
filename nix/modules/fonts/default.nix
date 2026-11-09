@@ -17,10 +17,10 @@ in
     home.packages = lib.optionals (!config.submoduleSupport.enable) sharedFonts.packages;
 
     # GTK settings also feed the desktop portal used by Wayland applications.
-    gtk = lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
-      enable = true;
+    gtk = {
+      enable = pkgs.stdenv.hostPlatform.isLinux;
       font = {
-        name = "UDEV Gothic NF";
+        name = builtins.head config.fonts.fontconfig.defaultFonts.monospace;
         size = 11;
       };
     };

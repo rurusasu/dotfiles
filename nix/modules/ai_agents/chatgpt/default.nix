@@ -31,8 +31,8 @@ in
         activation = {
           codexXdgHome = lib.mkIf config.home.preferXdgDirectories (
             lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ] ''
-              legacy=${lib.escapeShellArg "${config.home.homeDirectory}/.codex"}
-              target=${lib.escapeShellArg "${config.xdg.configHome}/codex"}
+              legacy=${lib.escapeShellArg (config.home.homeDirectory + "/.codex")}
+              target=${lib.escapeShellArg (config.xdg.configHome + "/codex")}
               if [[ -L "$legacy" ]]; then
                 if [[ "$(${pkgs.coreutils}/bin/readlink -m -- "$legacy")" != "$(${pkgs.coreutils}/bin/readlink -m -- "$target")" ]]; then
                   errorEcho "Codex legacy directory points elsewhere: $legacy; reconcile it with $target before activating."
@@ -61,15 +61,19 @@ in
               empty = "{}";
               jqOperation = ''
                 $dynamic | reduce ["fast_worker", "python_coding"][] as $name (.;
-                  if .agents[$name].config_file? == (${builtins.toJSON "${config.home.homeDirectory}/.codex/agents/"} + $name + ".toml")
+                  if .agents[$name].config_file? == (${
+                    builtins.toJSON (config.home.homeDirectory + "/.codex/agents/")
+                  } + $name + ".toml")
                   then del(.agents[$name]) else . end)
               '';
-              path = "${
-                if config.home.preferXdgDirectories then
-                  "${config.xdg.configHome}/codex"
-                else
-                  "${config.home.homeDirectory}/.codex"
-              }/config.toml";
+              path =
+                (
+                  if config.home.preferXdgDirectories then
+                    (config.xdg.configHome + "/codex")
+                  else
+                    (config.home.homeDirectory + "/.codex")
+                )
+                + "/config.toml";
               staticSettings = pkgs.writeText "codex-agent-migration.toml" "";
               mode = "600";
             }

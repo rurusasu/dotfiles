@@ -146,7 +146,7 @@ if ((Get-Alias grep).Definition -cne 'rg.exe' -or (Get-Alias find).Definition -c
         foreach ($relative in @(
                 'Documents/PowerShell/Microsoft.PowerShell_profile.ps1',
                 'AppData/Local/superfile/config.toml', '.config/git/config',
-                'AppData/Local/Microsoft/Windows Terminal/Fragments/dotfiles/catppuccin-mocha.json'
+                'AppData/Local/Microsoft/Windows Terminal/Fragments/dotfiles/theme.json'
             )) {
             if (-not (Test-Path -LiteralPath (Join-Path $env:USERPROFILE $relative) -PathType Leaf)) {
                 throw "Windows settings are missing after activation: $relative"

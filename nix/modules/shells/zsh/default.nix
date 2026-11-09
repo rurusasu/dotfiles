@@ -9,14 +9,14 @@
     # ── Shell: zsh ────────────────────────────────────────────────────────
     programs.zsh = {
       package = pkgs.zsh;
-      dotDir = "${config.xdg.configHome}/zsh";
+      dotDir = config.xdg.configHome + "/zsh";
       setOptions = [
         "AUTO_CD"
         "NO_BEEP"
         "NUMERIC_GLOB_SORT"
       ];
       history = {
-        path = "${config.xdg.stateHome}/zsh/history";
+        path = config.xdg.stateHome + "/zsh/history";
         size = 10000;
         save = 10000;
         append = true;
@@ -34,7 +34,9 @@
         kgs = "kubectl get svc -A";
         kctx = "kubectx";
         kns = "kubens";
-        nrs = lib.mkDefault "~/.dotfiles/install.sh";
+        nrs = lib.mkDefault "task --dir ${
+          lib.escapeShellArg (config.home.homeDirectory + "/.dotfiles")
+        } nrs";
       };
       initContent = lib.mkMerge [
         ''
@@ -74,7 +76,7 @@
     # zsh-autocomplete writes recent cd locations under XDG_DATA_HOME/zsh.
     # The plugin does not create that parent directory itself.
     home.activation.createZshDataDirectory = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      run mkdir -p -- ${lib.escapeShellArg "${config.xdg.dataHome}/zsh"}
+      run mkdir -p -- ${lib.escapeShellArg (config.xdg.dataHome + "/zsh")}
     '';
   };
 }

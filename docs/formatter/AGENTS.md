@@ -29,6 +29,7 @@ Windows の公開入口は WSL 経由の `task fmt` / `task fmt:check` とする
 - formatter の追加は「適用対象ファイル」と「導入理由」をセットで残す。
 - treefmt-nix 未対応ツールはカスタム定義で明示的に管理する。
 - Markdown は dprint、JSON/YAML は oxfmt が担当し、同じファイルを二重整形しない。
+- Windows の Win32 入力 adapter の C#（`*.cs`）は clang-format で整形する。
 - dprint プラグインは Nix の依存として提供し、整形中にネットワーク取得しない。
 
 ## chezmoi テンプレートの境界

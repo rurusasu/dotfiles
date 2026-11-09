@@ -1,8 +1,25 @@
 {{- /* chezmoi:modify-template */ -}}
-{{- .chezmoi.stdin | trim | default "{}" | fromJsonc
+{{- $appearance := include "../nix/home/appearance.json" | fromJson -}}
+{{- $settings := .chezmoi.stdin | trim | default "{}" | fromJsonc -}}
+{{- $profiles := list -}}
+{{- $hasNixOS := false -}}
+{{- range (get (get $settings "profiles" | default dict) "list" | default list) -}}
+    {{- $profile := . -}}
+    {{- if eq (get . "source") "Microsoft.WSL" -}}
+        {{- $profile = $profile | setValueAtPath "tabTitle" "[dotfiles:WSL]" | setValueAtPath "suppressApplicationTitle" true -}}
+        {{- if or (eq (get . "name") "NixOS") (eq (lower (get . "guid")) "{44e92ba7-c506-5029-ad0c-0a507a574953}") -}}{{- $hasNixOS = true -}}{{- end -}}
+    {{- end -}}
+    {{- $profiles = append $profiles $profile -}}
+{{- end -}}
+{{- if not $hasNixOS -}}
+    {{- /* Windows Terminal's generated Microsoft.WSL / NixOS profile GUID. */ -}}
+    {{- $profiles = append $profiles (dict "guid" "{44e92ba7-c506-5029-ad0c-0a507a574953}" "name" "NixOS" "source" "Microsoft.WSL" "tabTitle" "[dotfiles:WSL]" "suppressApplicationTitle" true) -}}
+{{- end -}}
+{{- $settings
+    | setValueAtPath "profiles.list" $profiles
     | setValueAtPath "defaultProfile" "{574e775e-4f2a-5b96-ac1e-a2962a402336}"
-    | setValueAtPath "profiles.defaults.font.face" "UDEV Gothic NF"
-    | setValueAtPath "profiles.defaults.font.size" 10
-    | setValueAtPath "profiles.defaults.colorScheme" "Catppuccin Mocha"
+    | setValueAtPath "profiles.defaults.font.face" $appearance.fontFamily
+    | setValueAtPath "profiles.defaults.font.size" $appearance.fontSize
+    | setValueAtPath "profiles.defaults.colorScheme" $appearance.windowsTerminalScheme.name
     | setValueAtPath "profiles.defaults.opacity" 75
     | toPrettyJson -}}

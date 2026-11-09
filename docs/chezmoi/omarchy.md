@@ -2,7 +2,17 @@
 
 共通キー配列は `nix/home/keybindings/`、アプリの設定・サービスは `nix/modules/`、OS 別選択は `nix/defaults.nix:systemDefaults` が所有します。macOS は AeroSpace、native NixOS は Hyprland を使います。NixOS-WSL には compositor を導入しません。
 
-Windows は標準デスクトップと標準ショートカットを使用し、共通デスクトップキーのリマップは行いません。chezmoi はデスクトップ / Neovim の共通キー export を WSL に配布します。Ghostty と Herdr のキーは Home Manager が管理します。
+Windows のデスクトップ操作は標準キーを使います。Windows Terminal の WSL 端末部分では、chezmoi が導入するユーザー常駐の `WslSuperKey` が Windows キーを捕捉し、Super 修飾付きの端末入力へ変換します。Ghostty と Herdr のキーは Home Manager が管理します。
+
+共通配列の `Super` は macOS では `Command`、WSL では Windows キーを指します。Windows Terminal の設定だけでは、Windows が先に処理する予約キーを上書きできません。`Win+Space` は通常、入力言語・配列の切り替えに使われます（[Windows Terminal の制約](https://learn.microsoft.com/en-us/windows/terminal/customize-settings/key-bindings)、[Windows のショートカット](https://support.microsoft.com/en-us/accessibility/windows/keyboard-shortcuts-in-windows)）。
+
+Herdr は Omarchy と同じ `Ctrl+Space` を prefix として使います。`Win+Space` は `ESC[32;9u` として転送し、Ctrl+Space へは置き換えません。受信アプリが Super を解釈する必要があります。
+
+転送対象は通常権限の Windows Terminal で、`Microsoft.WSL` プロファイルの端末にフォーカスがある場合です。プロファイルの `tabTitle` を `[dotfiles:WSL]`、`suppressApplicationTitle` を true にして対象を識別します。検索欄、設定画面、他のプロファイル、管理者の端末は対象外です。対応するキーは英数字・記号・Space・Enter・Tab・Esc・Backspace・矢印・Home/End・Insert/Delete・PageUp/PageDownです。追加の Shift/Ctrl/Alt も転送します。未対応キーは無修飾の入力に化けないよう消費します。WSLg の GUI アプリへの生のキー転送、セキュアデスクトップや Win+L の抑止は保証しません。
+
+chezmoi が .NET Framework のコンパイラーで adapter を生成し、HKCU Run にユーザーのログイン時起動を登録します。再適用は既存の adapter を停止して置き換え、他アプリの Run 値を保持します。停止は `%LOCALAPPDATA%\dotfiles\WslSuperKey.exe --stop`、再開は同じ exe の起動です。PowerToys は不要です。実機の専用 Windows Terminal→WSL で合成 Win+Space の受信バイトを確認済みですが、物理キーの動作は未確認です。
+
+Omarchy 配列の直接ショートカットには Windows Terminal の標準キーと重なるものもあります。`Alt+矢印` などの転送はホスト端末側の設定に依存し、Herdr の設定検証だけで実キー入力の動作確認とはしません。
 
 ## ターミナルの境界
 
@@ -41,7 +51,7 @@ macOS の全キー、標準 shortcut への影響、初回権限設定と回復�
 
 ## Windows デスクトップの運用
 
-アプリ起動やデスクトップ操作は Windows 標準の機能を使います。共通デスクトップ配列は macOS / native NixOS の renderer が扱い、Windows には配布しません。
+アプリ起動やデスクトップ操作は Windows 標準の機能を使います。共通デスクトップ配列は macOS / native NixOS の renderer が扱います。WSL 端末への Super 転送はデスクトップ操作の再実装を含みません。
 
 ## Export と反映手順
 

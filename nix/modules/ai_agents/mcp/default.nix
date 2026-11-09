@@ -12,7 +12,7 @@ let
   secretsFile =
     assert lib.assertMsg (dockerConfig != "") "Docker MCP requires a non-empty DOCKER_CONFIG";
     "${dockerConfig}/mcp/secrets.env";
-  hermesHome = config.home.sessionVariables.HERMES_HOME or "${config.home.homeDirectory}/.hermes";
+  hermesHome = config.home.sessionVariables.HERMES_HOME or (config.home.homeDirectory + "/.hermes");
   backends = {
     chrome = {
       port = 8765;
@@ -66,13 +66,13 @@ in
 {
   config = lib.mkIf config.programs.mcp.enable {
     home = {
-      sessionVariables.DOCKER_CONFIG = "${config.home.homeDirectory}/.docker";
+      sessionVariables.DOCKER_CONFIG = config.home.homeDirectory + "/.docker";
       packages = [
         packages.docker-mcp
         packages.xurl
         packages.hermes-xapi
       ];
-      file.".xurl".source = config.lib.file.mkOutOfStoreSymlink "${config.xdg.configHome}/xurl";
+      file.".xurl".source = config.lib.file.mkOutOfStoreSymlink (config.xdg.configHome + "/xurl");
       activation.prepareXurlDirectory =
         lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ]
           ''

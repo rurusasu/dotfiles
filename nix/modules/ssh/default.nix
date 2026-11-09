@@ -4,16 +4,19 @@
   pkgs,
   ...
 }:
+let
+  homePath = suffix: ''"${lib.escape [ "\\" "\"" ] (config.home.homeDirectory + suffix)}"'';
+in
 {
   config = lib.mkIf config.programs.ssh.enable {
     programs.ssh = {
       package = pkgs.openssh;
       enableDefaultConfig = false;
-      includes = [ "~/.ssh/orca-docker-*.config" ];
+      includes = [ (homePath "/.ssh/orca-docker-*.config") ];
       settings."github.com" = {
         HostName = "github.com";
         User = "git";
-        IdentityFile = "~/.ssh/signing_key.pub";
+        IdentityFile = homePath "/.ssh/signing_key.pub";
         IdentitiesOnly = true;
       };
     };

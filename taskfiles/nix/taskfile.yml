@@ -12,8 +12,13 @@ tasks:
 
   nrs:
     desc: Update inputs and activate OS-managed applications and configuration
+    env:
+      UPDATE_FLAKE_INPUTS: "{{.UPDATE_FLAKE_INPUTS}}"
     cmds:
-      - task: rebuild
+      - cmd: ./install.sh
+        platforms: [darwin, linux]
+      - cmd: task rebuild
+        platforms: [windows]
 
   rebuild:
     desc: Run nixos-rebuild switch
