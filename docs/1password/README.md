@@ -5,7 +5,7 @@
 
 ## Nix の管理場所
 
-Unix の CLI / GUI 導入・設定・連携は `nix/modules/1password/` が管理し、既存の nixpkgs バイナリを利用する。CLI と macOS / Linux デスクトップ版は Home Manager が導入し、OS 固有の権限・システム統合は `nix/home/` / `nix/hosts/` に置く。実アプリ module は imports に明示し、共通・OS 別構成は `dotfiles.onePassword.enable` と `programs.ssh.enable` などの型付き option に従う。Windows の WinGet 標準の導入情報は `chezmoi/winget/packages.json` で直接管理する。`ssh/default.nix` が公式 SSH agent socket の `IdentityAgent` と `SSH_AUTH_SOCK` を管理する。OS 別の署名・agent・WSL 連携は `nix/home/` / `nix/hosts/` に置く。WSL の署名 wrapper の正本は `nix/modules/ssh/op-ssh-sign-wsl` に置く。
+Unix の CLI / GUI 導入・設定・連携は `nix/modules/1password/` が管理し、既存の nixpkgs バイナリを利用する。CLI と macOS / Linux デスクトップ版は Home Manager が導入し、NixOS 固有の権限・システム統合は同 module の `nixos.nix` に置く。実アプリ module は imports に明示し、各 module が `dotfiles.onePassword.enable` と `programs.ssh.enable` などの型付き option を有効にする。Windows の WinGet 標準の導入情報は `chezmoi/winget/packages.json` で直接管理する。`ssh/default.nix` が公式 SSH agent socket の `IdentityAgent` と `SSH_AUTH_SOCK` を管理する。OS 別の署名・agent・WSL 連携は Git / SSH / 1Password の各 module が所有する。WSL の署名 wrapper の正本は `nix/modules/ssh/op-ssh-sign-wsl` に置く。
 
 `nix/modules/1password/default.nix` が account・secret 参照を、`nix/modules/ssh/default.nix` が `dotfiles.onePassword.ssh.publicKey` を定義する。各 module が対応する非秘密の既定値を管理する。WSL の `OP_ACCOUNT` も同じ account option を参照する。account と SSH 公開鍵は非秘密の値として Git / Nix store に含めてよい。
 

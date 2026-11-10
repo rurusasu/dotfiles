@@ -132,7 +132,7 @@ headless のため display や WSLg は不要です。Chrome DevTools MCP は `m
 
 詳細は [Hermes Desktop の運用](./docs/hermes-agent/desktop.md) を参照してください。
 
-Tart CLI もこの macOS activation で導入されますが、約25GBの VM image は通常の `./install.sh` では取得しません。大容量ダウンロードを開始するタイミングを分離するため、初回だけ次を実行します。
+Tart CLI は通常の macOS activation には含めません。Tart CLI と Task を用意した開発環境で次を実行します。約25GBの VM image は `task tart:prepare` で初回だけ取得します。
 
 ```bash
 task tart:prepare
@@ -326,7 +326,7 @@ wsl --shutdown
 
 ```bash
 # ドライランでエラーを確認
-sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
+sudo nixos-rebuild dry-build --flake ~/.dotfiles#wsl --impure
 ```
 
 ### installer が途中で停止した

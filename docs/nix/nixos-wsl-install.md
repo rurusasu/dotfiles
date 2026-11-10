@@ -138,7 +138,7 @@ NixOS の stateVersion は共通 entrypoint が設定し、追加引数の指定
 `nix` は既に flake.nix・flake.lock・scripts/ を持つ完全な WSL checkout が必要で、
 `SyncBack = 'repo'` と併用できません。
 `ForcePostInstall` は通常設定せず、競合する checkout を退避する必要がある場合だけ明示します。
-通常の setup と `task ./install.sh` は `--no-update-lock-file` で lock の変更を禁止します。
+通常の setup と `./install.sh` は `--no-update-lock-file` で lock の変更を禁止します。
 不足・不整合な lock は反映前に失敗します。依存の更新は WSL 内で `task update` を実行し、
 更新した lock を commit / PR に含めて CI を通してから適用します。
 WSL CI と通常の setup は同じ固定入力の方針で一度だけ反映します。

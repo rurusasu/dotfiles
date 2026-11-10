@@ -41,13 +41,12 @@ macOS、Linux、NixOS-WSL 内部の Ghostty / Herdr 設定は Home Manager が�
 
 Windows のエイリアスと関数も chezmoi の PowerShell profile が管理します。WSL の Zsh と同じ名前・オプションで Windows の実行ファイルを呼び出します。
 
-| コマンド                   | Windows 側の動作                              |
-| -------------------------- | --------------------------------------------- |
-| `eza`                      | アイコン・自動色・tree 表示                   |
-| `ls`                       | 深さ 1 の eza 表示                            |
-| `ll` / `la` / `lt` / `lla` | Zsh と同じ eza の表示オプション               |
-| `grep` / `find`            | `rg.exe` / `fd.exe`                           |
-| `lg`                       | `lazygit.exe`                                 |
-| `dotf`                     | chezmoi source の親のリポジトリで Task を実行 |
+| コマンド                   | Windows 側の動作                |
+| -------------------------- | ------------------------------- |
+| `eza`                      | アイコン・自動色・tree 表示     |
+| `ls`                       | 深さ 1 の eza 表示              |
+| `ll` / `la` / `lt` / `lla` | Zsh と同じ eza の表示オプション |
+| `grep` / `find`            | `rg.exe` / `fd.exe`             |
+| `lg`                       | `lazygit.exe`                   |
 
-`eza`・`fd`・`ripgrep`・`lazygit` の導入情報は `chezmoi/winget/packages.json` が管理します。Windows のアプリ設定・短縮コマンドはこの manifest に載っているアプリだけを対象とします。`install.cmd -Phase Winget` で導入し、`task chezmoi` と `. $PROFILE` で profile を反映します。`./install.sh` / `nrt` / `nrb` は NixOS 固有なので Windows profile には定義しません。
+`eza`・`fd`・`ripgrep`・`lazygit` の導入情報は `chezmoi/winget/packages.json` が管理します。Windows のアプリ設定・短縮コマンドはこの manifest に載っているアプリだけを対象とします。`install.cmd -Phase Winget` で導入し、`task chezmoi` と `. $PROFILE` で profile を反映します。Unix 側の Nix 設定は、その checkout で `./install.sh` を実行して反映します。

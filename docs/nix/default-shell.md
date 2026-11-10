@@ -2,7 +2,7 @@
 
 NixOS / NixOS-WSL は、対象ユーザーのログインシェルに zsh を設定します。
 `programs.zsh.enable` で zsh を導入し、ユーザーの `shell` option に反映します。
-通常の `./install.sh` / インストール後、新しいログインセッションから有効になります。
+`./install.sh` によるインストール後、新しいログインセッションから有効になります。
 
 macOS は `programs.zsh.enable` と Home Manager で zsh の設定を管理します。
 既存アカウントのログインシェルを変更する独自 activation は実行しません。
