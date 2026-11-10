@@ -9,7 +9,7 @@
     config.programs.nixvim.enable && config.programs.nixvim.lsp.servers.ruff.enable
   ) [ pkgs.ruff ];
   programs.nixvim = { config, lib, ... }: {
-    config = lib.mkIf config.enable ({
+    config = lib.mkIf config.enable {
       lsp.servers.ruff = {
         enable = true;
         package = null;
@@ -20,6 +20,6 @@
           end
         '';
       };
-    });
+    };
   };
 }

@@ -12,11 +12,11 @@
         pkgs.stylua
       ];
   programs.nixvim = { config, lib, ... }: {
-    config = lib.mkIf config.enable ({
+    config = lib.mkIf config.enable {
       lsp.servers.lua_ls = {
         enable = true;
         package = null;
       };
-    });
+    };
   };
 }

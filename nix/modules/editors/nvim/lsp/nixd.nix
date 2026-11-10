@@ -12,11 +12,11 @@
         pkgs.nixfmt
       ];
   programs.nixvim = { config, lib, ... }: {
-    config = lib.mkIf config.enable ({
+    config = lib.mkIf config.enable {
       lsp.servers.nixd = {
         enable = true;
         package = null;
       };
-    });
+    };
   };
 }

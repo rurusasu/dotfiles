@@ -12,11 +12,11 @@
         pkgs.dotnet-sdk_10
       ];
   programs.nixvim = { config, lib, ... }: {
-    config = lib.mkIf config.enable ({
+    config = lib.mkIf config.enable {
       lsp.servers.csharp_ls = {
         enable = true;
         package = null;
       };
-    });
+    };
   };
 }

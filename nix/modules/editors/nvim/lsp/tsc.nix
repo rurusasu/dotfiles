@@ -9,11 +9,11 @@
     config.programs.nixvim.enable && config.programs.nixvim.lsp.servers.tsc.enable
   ) [ pkgs.typescript ];
   programs.nixvim = { config, lib, ... }: {
-    config = lib.mkIf config.enable ({
+    config = lib.mkIf config.enable {
       lsp.servers.tsc = {
         enable = true;
         package = null;
       };
-    });
+    };
   };
 }

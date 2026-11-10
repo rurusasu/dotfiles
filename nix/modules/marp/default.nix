@@ -42,7 +42,7 @@ in
     enable = lib.mkEnableOption "Marp CLI and slide preview";
     package = lib.mkPackageOption pkgs "marp-cli" { };
     settings = lib.mkOption {
-      type = json.type;
+      inherit (json) type;
       default = {
         theme = "default";
       };
