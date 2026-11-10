@@ -17,7 +17,7 @@ nix/modules/ai_agents/
 
 `chatgpt/default.nix` はほかの実 module と同じく自動検出され、型付き `programs.chatgpt.enable` と
 標準 `programs.codex.enable` に従って導入・設定を管理します。アプリごとの import パスや公開一覧は登録しません。
-通常の `chatgpt/package.nix` factory が返す ChatGPT package と同梱 CLI へのリンクを使い、CLI の PATH 配置は Home Manager に任せます。
+`chatgpt/default.nix` 内で ChatGPT package を選び、同梱 CLI の配置先を標準 `home.sessionPath` へ登録します。
 `nix/defaults.nix:systemDefaults` は Darwin / native・standalone Linux で `programs.chatgpt.enable`、
 WSL では `programs.codex.enable` を指定します。ChatGPT の有効化は同梱 Codex も有効にし、WSL には Linux GUI を導入しません。
 Codex と ChatGPT Work の既定モデルは `gpt-6.1-terra`、通常・plan の reasoning effort は `ultra` です。
@@ -38,8 +38,8 @@ package 内 install check の扱いは upstream の package 定義が所有し�
 `codex = null` により、Linux の upstream が既定で行う独立 Codex package への置換を無効化します。
 専用のビルドテストが store 確定後に
 Home Manager と同じ方法でコピーしたアプリの署名・アプリの版・同梱 CLI の起動を検証します。
-`codex` は `pkgs.linkFarm` で `bin/codex` と `bin/codex-code-mode-host` を
-アプリ内の実体への symlink として公開します。Linux では `bin/bwrap` も提供します。
+同梱 CLI と `codex-code-mode-host` があるディレクトリを PATH に登録します。
+Linux の実行依存 `bubblewrap` は同じ module が導入します。
 Darwin は公式 launcher の `Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`、
 Linux は `lib/chatgpt/resources/codex` を使います。
 
@@ -59,6 +59,8 @@ native Wayland には制約があります。最新の範囲は [公式 Linux �
 
 Unix の `CODEX_HOME` は `${config.xdg.configHome}/codex`（既定 `~/.config/codex`）です。
 `home.preferXdgDirectories = true` により標準 module が XDG 配置を選びます。
+macOS の GUI にも同じ `CODEX_HOME` を渡します。標準の `launchd.agents` を使い、
+ログイン時にユーザー環境へ設定します。
 Unix の config は `nix/modules/ai_agents/chatgpt/` の
 Home Manager `programs.codex` が管理します。`programs.codex.enable = true` と `package = null` を指定し、
 CLI のバージョン判定に依存せず設定を生成します。同梱 CLI の導入も同じ `default.nix` が `programs.codex.enable` に従って管理します。
@@ -67,7 +69,8 @@ WSL は Linux 版を使い、Windows は Windows 側のアプリを使います�
 認証ファイル・履歴・セッションは Home Manager の管理対象にしません。
 Windows の設定は chezmoi が管理します。
 
-Home Manager activation の `codexXdgHome` は、既存の認証・履歴を引き継ぐため、旧 `~/.codex` の実ディレクトリを XDG 配置先へ移し、旧パスに互換 symlink を作成します。新規環境では配置先と互換 symlink を作成します。両方に実ディレクトリがある場合や、旧 symlink が別のディレクトリを指す場合は、上書きせず反映を停止します。この処理は activation 時にのみ実行します。
+管理スキルは `chatgpt/skills/` 直下の実ディレクトリから `SKILL.md` を持つものを自動登録します。
+個別の名前を登録せず、Codex の共通指示は各スキルの description から適用対象を判断して読むよう指定します。
 
 共通 MCP は `nix/modules/ai_agents/mcp/default.nix` の `programs.mcp.servers` を正本とし、
 Codex は `enableMcpIntegration = true` で取り込みます。

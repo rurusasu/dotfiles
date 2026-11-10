@@ -37,12 +37,25 @@ dotfiles_hermes_prepare_runtime_home() {
   fi
 }
 
+dotfiles_hermes_onepassword_setting() {
+  local field="$1" override="$2" catalog
+  if [[ -n $override ]]; then
+    printf '%s\n' "$override"
+    return 0
+  fi
+  catalog="${DOTFILES_MCP_ONEPASSWORD_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/mcp/onepassword.json}"
+  jq -er "$field | select(type == \"string\" and length > 0)" "$catalog" || {
+    printf 'Missing or invalid 1Password metadata: %s in %s\n' "$field" "$catalog" >&2
+    return 1
+  }
+}
+
 dotfiles_hermes_service_account_ref() {
-  printf '%s\n' "${DOTFILES_HERMES_OP_SERVICE_ACCOUNT_TOKEN_REF:-op://openclaw/3bgd5qtytxuvuauauyqr2p4iki/credential}"
+  dotfiles_hermes_onepassword_setting .xapi.serviceAccountTokenRef "${DOTFILES_HERMES_OP_SERVICE_ACCOUNT_TOKEN_REF:-}"
 }
 
 dotfiles_hermes_service_account_account() {
-  printf '%s\n' "${DOTFILES_HERMES_OP_SERVICE_ACCOUNT_ACCOUNT:-my.1password.com}"
+  dotfiles_hermes_onepassword_setting .account "${DOTFILES_HERMES_OP_SERVICE_ACCOUNT_ACCOUNT:-}"
 }
 
 dotfiles_hermes_service_account_read_timeout_seconds() {
@@ -137,8 +150,6 @@ dotfiles_hermes_prepare_service_account_environment() {
   data_dir="$(dotfiles_hermes_data_dir)"
   op_env_path="$data_dir/.op.env"
   op_command="$(dotfiles_hermes_op_command)" || return 1
-  account="$(dotfiles_hermes_service_account_account)"
-  reference="$(dotfiles_hermes_service_account_ref)"
 
   if [[ $- == *x* ]]; then
     xtrace_enabled=1
@@ -147,7 +158,9 @@ dotfiles_hermes_prepare_service_account_environment() {
   if [[ ${DOTFILES_HERMES_REFRESH_SERVICE_ACCOUNT:-0} != 1 ]] &&
     dotfiles_hermes_validate_service_account_environment_cache "$op_env_path"; then
     :
-  elif dotfiles_hermes_read_service_account_token "$op_command" "$account" "$reference" token &&
+  elif account="$(dotfiles_hermes_service_account_account)" &&
+    reference="$(dotfiles_hermes_service_account_ref)" &&
+    dotfiles_hermes_read_service_account_token "$op_command" "$account" "$reference" token &&
     [[ -n $token && $token != *$'\n'* && $token != *$'\r'* ]]; then
     temporary="$(mktemp "$data_dir/.op.env.XXXXXX")" || status=1
     if ((status == 0)); then
@@ -197,15 +210,15 @@ dotfiles_hermes_require_xapi_tools() {
 }
 
 dotfiles_hermes_xapi_secret_item() {
-  printf '%s\n' "${DOTFILES_HERMES_XAPI_1PASSWORD_ITEM:-Hermes X API MCP}"
+  dotfiles_hermes_onepassword_setting .xapi.item "${DOTFILES_HERMES_XAPI_1PASSWORD_ITEM:-}"
 }
 
 dotfiles_hermes_xapi_secret_account() {
-  printf '%s\n' "${DOTFILES_HERMES_XAPI_1PASSWORD_ACCOUNT:-my.1password.com}"
+  dotfiles_hermes_onepassword_setting .account "${DOTFILES_HERMES_XAPI_1PASSWORD_ACCOUNT:-}"
 }
 
 dotfiles_hermes_xapi_secret_vault() {
-  printf '%s\n' "${DOTFILES_HERMES_XAPI_1PASSWORD_VAULT:-openclaw}"
+  dotfiles_hermes_onepassword_setting .xapi.vault "${DOTFILES_HERMES_XAPI_1PASSWORD_VAULT:-}"
 }
 
 dotfiles_hermes_extract_xapi_credentials() {
@@ -225,7 +238,7 @@ dotfiles_hermes_extract_xapi_credentials() {
 }
 
 dotfiles_hermes_xapi_oauth_item() {
-  printf '%s\n' "${DOTFILES_HERMES_XAPI_OAUTH_ITEM:-${DOTFILES_HERMES_XAPI_1PASSWORD_ITEM:-Hermes X API MCP}}"
+  dotfiles_hermes_onepassword_setting .xapi.item "${DOTFILES_HERMES_XAPI_OAUTH_ITEM:-${DOTFILES_HERMES_XAPI_1PASSWORD_ITEM:-}}"
 }
 
 dotfiles_hermes_extract_xapi_refresh_token() {
@@ -243,9 +256,9 @@ dotfiles_hermes_extract_xapi_refresh_token() {
 dotfiles_hermes_read_xapi_refresh_token() {
   local op_command account vault item
   op_command="$(dotfiles_hermes_op_command)" || return 1
-  account="$(dotfiles_hermes_xapi_secret_account)"
-  vault="$(dotfiles_hermes_xapi_secret_vault)"
-  item="$(dotfiles_hermes_xapi_oauth_item)"
+  account="$(dotfiles_hermes_xapi_secret_account)" || return 1
+  vault="$(dotfiles_hermes_xapi_secret_vault)" || return 1
+  item="$(dotfiles_hermes_xapi_oauth_item)" || return 1
 
   dotfiles_hermes_run_with_service_account_cache \
     "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
@@ -303,9 +316,9 @@ dotfiles_hermes_sync_xapi_auth_cache() {
 dotfiles_hermes_read_xapi_credentials() {
   local op_command account vault item
   op_command="$(dotfiles_hermes_op_command)" || return 1
-  account="$(dotfiles_hermes_xapi_secret_account)"
-  vault="$(dotfiles_hermes_xapi_secret_vault)"
-  item="$(dotfiles_hermes_xapi_secret_item)"
+  account="$(dotfiles_hermes_xapi_secret_account)" || return 1
+  vault="$(dotfiles_hermes_xapi_secret_vault)" || return 1
+  item="$(dotfiles_hermes_xapi_secret_item)" || return 1
 
   dotfiles_hermes_run_with_service_account_cache \
     "$op_command" item get "$item" --account "$account" --vault "$vault" --format json |
@@ -403,9 +416,9 @@ dotfiles_hermes_sync_xapi_refresh_token_to_onepassword() {
   [[ -f $cache_path && ! -L $cache_path ]] || return 1
   [[ $(stat -c '%a' "$cache_path" 2>/dev/null || stat -f '%Lp' "$cache_path") == 600 ]] || return 1
   op_command="$(dotfiles_hermes_op_command)" || return 1
-  account="$(dotfiles_hermes_xapi_secret_account)"
-  vault="$(dotfiles_hermes_xapi_secret_vault)"
-  item="$(dotfiles_hermes_xapi_oauth_item)"
+  account="$(dotfiles_hermes_xapi_secret_account)" || return 1
+  vault="$(dotfiles_hermes_xapi_secret_vault)" || return 1
+  item="$(dotfiles_hermes_xapi_oauth_item)" || return 1
   item_file="$(mktemp "$data_dir/.xapi-item.XXXXXX")" || return 1
   template_file="$(mktemp "$data_dir/.xapi-template.XXXXXX")" || {
     rm -f -- "$item_file"

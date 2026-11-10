@@ -1,22 +1,19 @@
 {
   lib,
-  buildGoModule,
+  buildGo126Module,
   makeWrapper,
   dockerCompat,
   apiEnvironment,
   source,
 }:
-buildGoModule (finalAttrs: {
+# Match upstream's Go 1.26 toolchain; its vendored gRPC is not Go 1.27 compatible.
+# https://github.com/docker/mcp-gateway/blob/7e0f34277c91855ad861eeff536b4fdc77420593/Dockerfile#L3
+buildGo126Module (finalAttrs: {
   pname = "docker-mcp";
   version = "unstable-${source.shortRev}";
   src = source;
   vendorHash = null;
   subPackages = [ "cmd/docker-mcp" ];
-  # Match grpc-go upstream: x/net/http2 no longer exports TrailerPrefix on Go 1.27.
-  postPatch = ''
-    substituteInPlace vendor/google.golang.org/grpc/internal/transport/handler_server.go \
-      --replace-fail 'http2.TrailerPrefix' 'http.TrailerPrefix'
-  '';
   env.CGO_ENABLED = 0;
   ldflags = [
     "-s"

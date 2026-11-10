@@ -1,20 +1,5 @@
--- Uses already-installed upstream configs and real language servers, without lazy.nvim.
--- DOTFILES_NVIM_LSPCONFIG selects an explicit checkout for CI or local testing.
-local root = vim.fn.getcwd() .. "/nix/modules/editors/nvim"
-local upstream = assert(vim.env.DOTFILES_NVIM_LSPCONFIG, "set DOTFILES_NVIM_LSPCONFIG")
-local ts_server = vim.env.DOTFILES_NVIM_TS_SERVER or "tsc"
-assert(ts_server == "tsc" or ts_server == "ts_ls")
-vim.opt.rtp:prepend(upstream)
-vim.opt.rtp:prepend(root)
-vim.cmd("filetype plugin indent on")
-require("config.completion").setup()
-local lsp = require("config.lsp")
-for name in pairs(lsp.servers) do
-    if name ~= "ty" and name ~= "ruff" and name ~= "tsc" and name ~= "ts_ls" then
-        lsp.servers[name] = nil
-    end
-end
-lsp.setup()
+-- Run through the configured Nixvim package with real ty, Ruff and TypeScript 7 on PATH.
+local ts_server = "tsc"
 local buf = vim.api.nvim_get_current_buf()
 vim.api.nvim_buf_set_name(buf, vim.fn.tempname() .. ".py")
 vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "answer=42", "print(answer)" })
@@ -54,7 +39,7 @@ assert(
     end, 50),
     "selected TypeScript LSP must attach: " .. ts_server
 )
-local other_server = ts_server == "tsc" and "ts_ls" or "tsc"
+local other_server = "ts_ls"
 assert(#vim.lsp.get_clients({ bufnr = tsbuf, name = other_server }) == 0, "TypeScript servers must not attach twice")
 local tsclient = vim.lsp.get_clients({ bufnr = tsbuf, name = ts_server })[1]
 local result = assert(tsclient:request_sync("textDocument/completion", {

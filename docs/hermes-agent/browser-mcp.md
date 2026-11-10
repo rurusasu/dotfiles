@@ -34,7 +34,7 @@ Browser profile は root Hermes home の `.browser` に保存する。既定値�
 `~/.hermes/.browser` で、全 client が同じ native MCP service を通じて参照する。
 client ごとに browser process を起動しないため、同じ profile の同時起動を避けられる。
 
-Nix の反映と旧 Docker runtime の削除は、この directory を削除・初期化しない。
+Nix の反映は、この directory を削除・初期化しない。
 profile を手動で削除すると browser login、session、cache も失われる。
 ブラウザが profile の形式を更新することがあるため、古い browser version への
 downgrade は別途確認する。

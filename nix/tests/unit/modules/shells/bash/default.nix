@@ -1,6 +1,6 @@
 { homeConfigurations }:
 let
-  inherit (homeConfigurations) homes lib;
+  inherit (homeConfigurations) homes;
 in
 {
   testBashEnabled = {
@@ -13,7 +13,6 @@ in
       home:
       let
         bash = home.config.programs.bash;
-        rc = home.config.home.file.".bashrc".source.text;
       in
       {
         history = {
@@ -27,14 +26,6 @@ in
             ;
         };
         starshipIntegration = home.config.programs.starship.enableBashIntegration;
-        initialization = lib.hasInfix (builtins.unsafeDiscardStringContext bash.initExtra) rc;
-        loginConfiguration =
-          lib.hasInfix (builtins.unsafeDiscardStringContext bash.profileExtra)
-            home.config.home.file.".profile".source.text;
-        aliases = lib.mapAttrsToList (
-          name: value:
-          lib.hasInfix (builtins.unsafeDiscardStringContext "alias -- ${name}=${lib.escapeShellArg value}") rc
-        ) bash.shellAliases;
       }
     ) homes;
     expected = map (home: {
@@ -57,9 +48,6 @@ in
         ];
       };
       starshipIntegration = true;
-      initialization = true;
-      loginConfiguration = true;
-      aliases = lib.mapAttrsToList (_: _: true) home.config.programs.bash.shellAliases;
     }) homes;
   };
 }

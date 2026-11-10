@@ -16,6 +16,6 @@
 
   config = lib.mkIf config.programs.ghq.enable {
     home.packages = [ pkgs.ghq ];
-    programs.git.settings.ghq.root = config.programs.ghq.root;
+    home.sessionVariables.GHQ_ROOT = config.programs.ghq.root;
   };
 }

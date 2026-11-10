@@ -171,7 +171,7 @@ in
         browser = "${configuredChrome wsl}/bin/google-chrome-stable";
       }
       {
-        chrome = false;
+        chrome = true;
         rawChrome = true;
         spotify = false;
         signal = false;

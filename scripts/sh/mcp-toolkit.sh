@@ -2,15 +2,8 @@
 
 set -euo pipefail
 
-secret_account="${MCP_TOOLKIT_OP_ACCOUNT:-my.1password.com}"
+reference_catalog="${DOTFILES_MCP_ONEPASSWORD_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/mcp/onepassword.json}"
 secret_timeout_seconds="${MCP_TOOLKIT_OP_TIMEOUT_SECONDS:-15}"
-
-secret_specs=(
-  "exa.api_key|op://openclaw/ExaUsedOpenclawPAT/credential"
-  "firecrawl.api_key|op://openclaw/FirecrawlUsedOpenclawPAT/credential"
-  "github.personal_access_token|op://openclaw/GitHubUsedOpenClawPAT/credential"
-  "tavily.api_token|op://openclaw/TavilyUsedOpenclawPAT/credential"
-)
 
 require_docker_mcp() {
   : "${DOCKER_CONFIG:?Docker MCP requires DOCKER_CONFIG}"
@@ -52,25 +45,27 @@ read_onepassword_secret() {
 sync_secrets() (
   require_op
 
-  local spec key ref value secret_file
+  local key ref value secret_file secret_account secret_specs
+  secret_account="${MCP_TOOLKIT_OP_ACCOUNT:-$(jq -er '.account | select(type == "string" and length > 0)' "$reference_catalog")}"
+  secret_specs=$(jq -er '.dockerMcp | to_entries[] | [.key, .value] | @tsv' "$reference_catalog")
   umask 077
   mkdir -p "$DOCKER_CONFIG/mcp"
   secret_file=$(mktemp "$DOCKER_CONFIG/mcp/secrets.env.XXXXXX")
   trap 'rm -f -- "$secret_file"' EXIT
-  for spec in "${secret_specs[@]}"; do
-    key="${spec%%|*}"
-    ref="${spec#*|}"
+  while IFS=$'\t' read -r key ref; do
     printf '%s\n' "[mcp-toolkit] injecting $key from 1Password"
-    if ! value=$(read_onepassword_secret "$ref"); then
+    # Preserve trailing newlines so multiline secrets cannot enter the raw key=value file.
+    if ! value=$(read_onepassword_secret "$ref" && printf '.'); then
       printf '%s\n' "[mcp-toolkit] failed to inject $key" >&2
       return 1
     fi
+    value=${value%.}
     if [[ $value == *$'\n'* || $value == *$'\r'* ]]; then
       printf '%s\n' "[mcp-toolkit] secret $key must be a single line" >&2
       return 1
     fi
     printf '%s=%s\n' "$key" "$value" >>"$secret_file"
-  done
+  done <<<"$secret_specs"
   mv -f -- "$secret_file" "$DOCKER_CONFIG/mcp/secrets.env"
 )
 

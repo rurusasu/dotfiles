@@ -4,13 +4,19 @@
   pkgs,
   ...
 }:
+let
+  cfg = config.i18n.inputMethod.fcitx5;
+in
 {
+  options.i18n.inputMethod.fcitx5.wslIntegration.enable =
+    lib.mkEnableOption "WSLg input method startup and display integration";
+
   config = lib.mkIf config.i18n.inputMethod.enable {
     i18n.inputMethod = {
       type = "fcitx5";
       fcitx5 = {
         addons = [ pkgs.fcitx5-mozc ];
-        waylandFrontend = false;
+        waylandFrontend = lib.mkIf cfg.wslIntegration.enable false;
         settings.inputMethod = {
           "Groups/0" = {
             Name = "Default";
@@ -31,7 +37,7 @@
       };
     };
     # Generate the override; systemd owns startup because WSLg disables Wayland.
-    xdg.autostart = {
+    xdg.autostart = lib.mkIf (cfg.wslIntegration.enable && cfg.systemd.enable) {
       enable = true;
       entries = [
         "${
@@ -43,7 +49,7 @@
         }/share/applications/org.fcitx.Fcitx5.desktop"
       ];
     };
-    systemd.user.services.fcitx5-daemon = {
+    systemd.user.services.fcitx5-daemon = lib.mkIf (cfg.wslIntegration.enable && cfg.systemd.enable) {
       Unit.After = [ "basic.target" ];
       Service = {
         ExecStart = lib.mkForce "${config.i18n.inputMethod.package}/bin/fcitx5 --disable=wayland";

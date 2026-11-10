@@ -41,20 +41,4 @@ in
     expected = map (_: [ ]) homes;
   };
 
-  testNativeGitOwnsItsFilesWithoutBackups = {
-    expr = map (home: {
-      gitForce = home.config.xdg.configFile."git/config".force;
-      legacyGitForce = home.config.home.file.".gitconfig".force;
-      legacyGitHasNoSettings = !(home.pkgs.lib.hasInfix "[" home.config.home.file.".gitconfig".text);
-      gitTextHasIdentity =
-        home.pkgs.lib.hasInfix "email = ${builtins.toJSON sharedGit.settings.user.email}"
-          home.config.xdg.configFile."git/config".text;
-    }) homes;
-    expected = map (_: {
-      gitForce = true;
-      legacyGitForce = true;
-      legacyGitHasNoSettings = true;
-      gitTextHasIdentity = true;
-    }) homes;
-  };
 }

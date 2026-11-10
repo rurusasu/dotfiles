@@ -1,102 +1,64 @@
 {
   config,
+  options,
   inputs,
   lib,
   pkgs,
   ...
 }:
+let
+  secretReferences = config.dotfiles.onePassword.secrets.references;
+in
 {
   imports = [ inputs.hermes-agent.homeManagerModules.default ];
 
-  config.services.hermes-agent = lib.mkMerge [
-    {
-      package = lib.mkDefault (
-        import ./package.nix {
-          inherit pkgs;
-          source = inputs.hermes-agent;
-          package =
-            let
-              system = pkgs.stdenv.hostPlatform.system;
-              upstream = inputs.hermes-agent.packages.${system}.default;
-              runtimePkgs = inputs.hermes-agent.inputs.nixpkgs.legacyPackages.${system};
-            in
-            if
-              pkgs.stdenv.hostPlatform.isDarwin
-              &&
-                upstream.hermesNpmLib.pnpmDeps.outputHash == "sha256-x+ywbFSCI60OcBH0R3UMm2zDc/pSLuYouerDLzqGi0c="
-            then
-              # Upstream's single pnpm store hash was generated on Linux.
-              # Keep its source/toolchain, correcting only the Darwin fetch hash.
-              upstream.override {
-                callPackage = runtimePkgs.newScope {
-                  fetchPnpmDeps =
-                    args:
-                    runtimePkgs.fetchPnpmDeps (
-                      args
-                      // {
-                        hash = "sha256-c5SncErlf7IRWYj+b8MsAle7aplRt6Ip7rHWS037wzo=";
-                      }
-                    );
-                };
-              }
-            else
-              upstream;
-        }
-      );
-    }
-    (lib.mkIf config.services.hermes-agent.enable {
-      extraPackages = [ pkgs._1password-cli ];
-      extraPlugins = [ (inputs.hermes-lcm // { name = "hermes-lcm"; }) ];
-      mcpServers = lib.mapAttrs (
-        _: server:
-        let
-          normalized = lib.hm.mcp.transformMcpServer { inherit server; };
-        in
-        lib.filterAttrs (
-          name: _:
-          builtins.elem name [
-            "command"
-            "args"
-            "env"
-            "url"
-            "headers"
-            "auth"
-            "enabled"
-            "timeout"
-            "connect_timeout"
-            "tools"
-            "sampling"
-          ]
-        ) normalized
-        // lib.optionalAttrs (normalized ? startup_timeout_sec) {
-          connect_timeout = normalized.startup_timeout_sec;
-        }
-        // lib.optionalAttrs (normalized ? tool_timeout_sec) {
-          timeout = normalized.tool_timeout_sec;
-        }
-      ) config.programs.mcp.servers;
-      settings = {
-        model = {
-          provider = "openai-codex";
-          default = "gpt-6.1-sol";
+  config.services.hermes-agent = lib.mkIf config.services.hermes-agent.enable {
+    extraPackages = [ pkgs._1password-cli ];
+    extraPlugins = [ (inputs.hermes-lcm // { name = "hermes-lcm"; }) ];
+    mcpServers = lib.mapAttrs (
+      name: server:
+      let
+        normalized = lib.hm.mcp.transformMcpServer {
+          inherit server;
+          extraTransforms = lib.optional ((server.command or null) != null) (
+            lib.hm.mcp.wrapEnvFilesCommand { inherit pkgs name; }
+          );
         };
-        # Null also replaces the old explicit true in the mutable config, so the
-        # upstream boot-time guard decides whether profile multiplexing is safe.
-        gateway.multiplex_profiles = null;
-        context.engine = "lcm";
-        plugins.enabled = [ "hermes-lcm" ];
-        platforms.discord.allow_bots = "mentions";
-        secrets.onepassword = {
-          enabled = true;
-          account = config.dotfiles.onePassword.account;
-          env = {
-            GITHUB_TOKEN = "op://openclaw/GitHubUsedOpenClawPAT/credential";
-            XAI_API_KEY = "op://openclaw/xAI-Grok-Twitter/console/apikey";
-            DISCORD_BOT_TOKEN = "op://openclaw/Master/Discord/bot_token";
-            DISCORD_ALLOWED_USERS = "op://openclaw/Master/Discord/allowed_users";
-          };
+        serverOptions = builtins.removeAttrs (options.services.hermes-agent.mcpServers.type.getSubOptions
+          [ ]
+        ) [ "_module" ];
+      in
+      lib.intersectAttrs serverOptions normalized
+      // lib.optionalAttrs (normalized ? command) {
+        command = toString normalized.command;
+      }
+      // lib.optionalAttrs (normalized ? startup_timeout_sec) {
+        connect_timeout = normalized.startup_timeout_sec;
+      }
+      // lib.optionalAttrs (normalized ? tool_timeout_sec) {
+        timeout = normalized.tool_timeout_sec;
+      }
+    ) config.programs.mcp.servers;
+    settings = {
+      model = {
+        provider = "openai-codex";
+        default = "gpt-6.1-sol";
+      };
+      # Let the upstream boot-time guard decide whether profile multiplexing is safe.
+      gateway.multiplex_profiles = null;
+      context.engine = "lcm";
+      plugins.enabled = [ "hermes-lcm" ];
+      platforms.discord.allow_bots = "mentions";
+      secrets.onepassword = {
+        enabled = true;
+        account = config.dotfiles.onePassword.account;
+        env = {
+          GITHUB_TOKEN = secretReferences.githubToken;
+          XAI_API_KEY = secretReferences.xaiApiKey;
+          DISCORD_BOT_TOKEN = secretReferences.discordBotToken;
+          DISCORD_ALLOWED_USERS = secretReferences.discordAllowedUsers;
         };
       };
-    })
-  ];
+    };
+  };
 }

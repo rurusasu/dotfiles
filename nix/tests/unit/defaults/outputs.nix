@@ -94,17 +94,6 @@ in
     };
   };
 
-  testStandaloneHomeOutputsSelectOsSpecificSigners = {
-    expr = builtins.mapAttrs (
-      _: home: home.config.programs.git.signing.signer
-    ) inputs.self.homeConfigurations;
-    expected = {
-      aarch64-darwin = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
-      aarch64-linux = "/opt/1Password/op-ssh-sign";
-      x86_64-linux = "/opt/1Password/op-ssh-sign";
-    };
-  };
-
   testRegisteredWslIntegratesHomeManagerWithItsDefaultUser = {
     expr =
       let

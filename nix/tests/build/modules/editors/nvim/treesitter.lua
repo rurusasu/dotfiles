@@ -1,9 +1,4 @@
 -- Run with the Home Manager package and plugin data from nix/modules/editors/nvim.
-local root = vim.fn.getcwd() .. "/nix/modules/editors/nvim"
-vim.opt.rtp:prepend(root)
-vim.cmd.packloadall()
-local ts = require("config.treesitter")
-ts.setup()
 local languages = {}
 for _, path in ipairs(vim.api.nvim_get_runtime_file("parser/*", true)) do
     local lang = vim.fn.fnamemodify(path, ":t:r")
@@ -19,6 +14,7 @@ for _, lang in ipairs(languages) do
     vim.treesitter.query.get(lang, "injections") -- also compile optional injection queries
 end
 for _, sample in ipairs({
+    { "cs", "c_sharp", "var answer = 42;" },
     { "sh", "bash", "echo hello" },
     { "javascriptreact", "javascript", "const x = <div>hello</div>;" },
     { "typescriptreact", "tsx", "const x: number = 1;" },
@@ -42,7 +38,7 @@ for _, sample in ipairs({
     assert(captures > 0, "no actual highlights: " .. sample[1])
 end
 vim.bo.filetype = "dotfiles_missing_parser"
-ts.start(vim.api.nvim_get_current_buf()) -- missing parsers must retain native syntax fallback
+-- The native FileType handler must retain syntax fallback without a parser.
 local buf = vim.api.nvim_create_buf(true, false)
 vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "```python", "answer = 42", "```" })
 vim.bo[buf].filetype = "markdown"

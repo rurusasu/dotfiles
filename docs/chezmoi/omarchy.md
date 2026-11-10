@@ -53,16 +53,20 @@ macOS の全キー、標準 shortcut への影響、初回権限設定と回復�
 
 アプリ起動やデスクトップ操作は Windows 標準の機能を使います。共通デスクトップ配列は macOS / native NixOS の renderer が扱います。WSL 端末への Super 転送はデスクトップ操作の再実装を含みません。
 
-## Export と反映手順
+## 反映手順
+
+NixOS-WSL の Neovim・Ghostty・Herdr の設定は `nrs` で反映し、アプリを再起動します。共通キーは Nix から直接生成するため、Windows 側の export や chezmoi は不要です。
+
+Windows のテーマ・フォントの共通設定を変更した場合は、外観設定だけを export して適用します。
 
 ```powershell
 task keybindings:export
 task chezmoi
 ```
 
-共通キーを変更した開発環境で `task keybindings:export` を実行し、正本の Nix ファイルと生成した JSON を一緒にコミットします。Windows での export は WSL の Nix を使います。chezmoi はコミット済み JSON を読み、デスクトップ / Neovim の export を NixOS-WSL の `~/.config/dotfiles/keybindings/` にコピーします。chezmoi 実行時に Nix の評価・ビルドは行いません。GitHub Actions は export と Nix 定義の一致を検査します。
+`task keybindings:export` は `nix/home/appearance.json` を更新します。Windows での export は WSL の Nix を使います。chezmoi 実行時に Nix の評価・ビルドは行いません。GitHub Actions は外観 export と Nix 定義の一致を検査します。
 
-通常の `install.cmd` は Windows GUI アプリの導入、NixOS-WSL の準備・同期、`nrs`、Windows chezmoi の順に実行します。`nrs` は WSL の Neovim loader を配置し、その後に chezmoi が export を配置します。共通キーの変更は export と `task chezmoi` の後に Neovim を再起動します。Ghostty / Herdr の設定変更は `nrs` で反映します。
+通常の `install.cmd` は Windows GUI アプリの導入、NixOS-WSL の準備・同期、`nrs`、Windows chezmoi の順に実行します。`nrs` が WSL のアプリ設定を、chezmoi が Windows のユーザー設定を反映します。
 
 ## ターミナルとの境界と検証
 

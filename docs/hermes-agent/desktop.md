@@ -6,8 +6,8 @@
 module and declares `services.hermes-agent` settings. The official module owns
 the Agent package, Desktop application, and native gateway service
 (systemd on Linux, launchd on macOS). Desktop is enabled on all supported OSes.
-`settings.gateway.multiplex_profiles = null` clears a previous explicit value
-and restores the upstream AUTO safety decision at gateway startup.
+Gateway profile multiplexing follows upstream's startup policy; Nix does not
+declare or rewrite that runtime setting.
 
 The root provider and default model are declared in
 `services.hermes-agent.settings.model`: `openai-codex` and `gpt-6.1-sol`.
@@ -16,13 +16,10 @@ Home Manager installation, the model picker may authenticate successfully but
 refuse to save the default model; update the Nix settings and apply them instead.
 An unset model can fail local-session policy validation as `storage_unavailable`.
 
-Nix builds preserve a source-declared release number when one is available.
-When upstream ships placeholder version metadata, the package reports
-`unstable-YYYY-MM-DD-REVISION` and uses the source date in the CLI banner.
-This identifies a development build without assigning it a published release
-number. Placeholder Agent and Desktop builds share this identity; an existing
-Desktop release number is preserved. The correction retains upstream's bundled
-Python and locked runtime dependencies.
+`flake.lock` selects the Hermes source revision. Agent and Desktop packages,
+version metadata, and install stamps follow the official module without local
+version or dependency-hash overrides. Update the source with
+`nix flake update hermes-agent`.
 
 Apply the usual Nix/Home Manager configuration, then launch Desktop:
 
@@ -66,7 +63,5 @@ storage. Chrome and X API MCP run as shared native `mcp-chrome` and `mcp-xapi`
 services, independent of the Hermes gateway. Clients connect to their loopback
 HTTP endpoints; each service keeps one stdio child. Chrome runs headless using
 the root Hermes `.browser` profile; native xurl accesses
-the existing root `.xurl` cache through Home Manager's `~/.xurl` and XDG links.
-Conflicting existing xurl paths stop activation. Legacy Docker data is not
-migrated or deleted automatically; see the
-[retired runtime inventory](retired-docker-runtime.md).
+the existing root `.xurl` cache through Home Manager's `~/.xurl` link.
+Conflicting existing xurl paths stop activation.

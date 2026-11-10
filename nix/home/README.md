@@ -1,6 +1,6 @@
 # Home Manager の構成
 
-`nix/home/keybindings/` は共通の `bindings.nix` と Windows 向け `generated.json` を保持します。Windows export を読み込む型付き option と loader は `nix/modules/keybindings/windows-export/default.nix` が管理し、ほかの実 module と同じく自動検出します。
+`nix/home/keybindings/` は共通の `bindings.nix` を保持します。NixOS-WSL を含む各 Unix 環境で、アプリの Home Manager module がキー設定を直接生成します。Windows 向けの外観 export は `nix/home/appearance.json` が保持します。
 アプリの設定・サービス・キー設定生成関数は `nix/modules/`、OS の基盤設定と module 選択は `nix/defaults.nix` が担当します。
 
 enable・単純な package list・単一代入だけなら `nix/defaults.nix` の必要な構成へ直接書きます。設定・package override・生成・連携を持つアプリは module にまとめます。

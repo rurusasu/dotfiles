@@ -20,6 +20,8 @@
         # A public placeholder for Pi's provider availability check; localhost
         # Strata does not require authentication.
         apiKey = "strata-local";
+        # This local endpoint uses system messages and chat-template thinking
+        # controls rather than OpenAI's developer role and reasoning_effort.
         compat = {
           supportsDeveloperRole = false;
           supportsReasoningEffort = false;
@@ -42,25 +44,6 @@
           }
         ];
       };
-      # Terra is not yet included in Pi's bundled Codex model catalog.
-      models.providers.openai-codex.models = [
-        {
-          id = "gpt-6.1-terra";
-          name = "GPT-6.1 Terra";
-          reasoning = true;
-          input = [
-            "text"
-            "image"
-          ];
-          contextWindow = 500000;
-          maxTokens = 128000;
-          thinkingLevelMap = {
-            minimal = "low";
-            xhigh = "xhigh";
-            max = "max";
-          };
-        }
-      ];
     };
   };
 }

@@ -13,17 +13,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Reclaim unused Linux SDKs
-      if: ${{ runner.os == 'Linux' && inputs.clean-disk == 'true' }}
-      shell: bash
-      run: |
-        set -euo pipefail
-        df -h / "$RUNNER_TEMP"
-        df -i / "$RUNNER_TEMP"
-        # Keep the hosted tool cache and Python used by the Nix installer.
-        sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift
-        df -h / "$RUNNER_TEMP"
-        df -i / "$RUNNER_TEMP"
     - name: Install Nix
       uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b
       with:
@@ -75,3 +64,15 @@ runs:
           --out-link "$RUNNER_TEMP/ci-task" --print-out-paths --no-update-lock-file \
           --option max-jobs 0 --option builders '' --option fallback false)
         echo "$task_path/bin" >> "$GITHUB_PATH"
+    - name: Reclaim unused Linux SDKs and tool cache
+      if: ${{ runner.os == 'Linux' && inputs.clean-disk == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        df -h / "$RUNNER_TEMP"
+        df -i / "$RUNNER_TEMP"
+        # The installer has finished using hosted Python. Remaining tools come
+        # from Nix, so the hosted tool cache need not compete with VM images.
+        sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache
+        df -h / "$RUNNER_TEMP"
+        df -i / "$RUNNER_TEMP"

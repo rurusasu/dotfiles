@@ -112,10 +112,13 @@ checks)
     driver='checks.native-linux-vm.driver.outPath'
   fi
   nix eval --json "$source#checks.$system" --apply \
-    "allChecks: let checks = builtins.removeAttrs allChecks [ \"treefmt\" ]; in { derivations = map (check: (check.driver or check).drvPath) ($selection); driver = $driver; }" >"$CI_STATE/checks.json"
+    "allChecks: let checks = builtins.removeAttrs allChecks [ \"treefmt\" ]; in { unit = checks.nix-unit.drvPath; derivations = map (check: (check.driver or check).drvPath) ($selection); driver = $driver; }" >"$CI_STATE/checks.json"
   [[ $(jq '.derivations | length' "$CI_STATE/checks.json") -gt 0 ]]
   checks=()
   while IFS= read -r check; do checks+=("$check^*"); done < <(jq -er '.derivations[]' "$CI_STATE/checks.json")
+  # Keep the evaluator's peak memory separate from package compilers. The full
+  # build below reuses this rooted result even with build-time GC enabled.
+  nix build --out-link "$CI_STATE/unit" --no-update-lock-file --print-build-logs "$(jq -er .unit "$CI_STATE/checks.json")^*"
   nix build --out-link "$CI_STATE/check" --no-update-lock-file --print-build-logs "${checks[@]}"
   if [[ $target == linux && ${CI_LINUX_REQUIRED:-false} == true ]]; then
     record_root linux driver "$(jq -er .driver "$CI_STATE/checks.json")"

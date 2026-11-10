@@ -1,9 +1,5 @@
 -- Run with: nvim --headless -u NONE -l nix/tests/build/modules/editors/nvim/modern.lua
-local root = vim.fn.getcwd() .. "/nix/modules/editors/nvim"
-vim.opt.rtp:prepend(root)
 
-local completion = require("config.completion")
-completion.setup()
 assert(vim.fn.maparg("<C-y>", "i") == "", "native completion acceptance must remain available")
 
 -- Exercise expression mappings without depending on a terminal's key encoding.
@@ -45,12 +41,6 @@ assert(
 vim.fn.pumvisible, vim.fn.complete_info = pumvisible, complete_info
 vim.snippet.active, vim.snippet.jump = active, jump
 
-local lsp = require("config.lsp")
-local saved_path = vim.env.PATH
-vim.env.PATH = ""
-lsp.setup()
-vim.env.PATH = saved_path
-
 -- Exercise the save handler with attached-client doubles, without external servers.
 -- Nix/Lua must format too; unsupported buffers must remain untouched.
 local get_clients, format = vim.lsp.get_clients, vim.lsp.buf.format
@@ -81,6 +71,11 @@ assert(#calls == 1 and calls[1].id == 8, "extensionless Lua buffer must format")
 clients = { { id = 3, name = "ty" }, { id = 9, name = "ruff" } }
 save_as("python", ".py")
 assert(#calls == 1 and calls[1].id == 9, "Python must use only Ruff")
+vim.api.nvim_exec_autocmds("LspAttach", { buffer = buf, group = "nixvim_lsp_binds" })
+local manual_format = vim.fn.maparg(vim.g.mapleader .. "f", "n", false, true)
+calls = {}
+manual_format.callback()
+assert(#calls == 1 and calls[1].id == 9 and calls[1].async, "manual formatting must use only Ruff asynchronously")
 clients = { { id = 3, name = "ty" } }
 save_as("python", ".py")
 assert(#calls == 0, "Python must not fall back to a second formatter when Ruff is absent")
@@ -101,11 +96,4 @@ assert(#calls == 0, "nonmodifiable buffers must not be formatted")
 vim.bo.modifiable = true
 vim.lsp.get_clients, vim.lsp.buf.format = get_clients, format
 
--- Re-running setup must not accumulate format/attach handlers.
-lsp.setup()
-assert(#vim.api.nvim_get_autocmds({ group = "DotfilesLsp", event = "LspAttach" }) == 1)
-assert(#vim.api.nvim_get_autocmds({ group = "DotfilesLsp", event = "BufWritePre" }) == 1)
-for name in pairs(lsp.servers) do
-    vim.lsp.enable(name, false)
-end
 print("Neovim native configuration checks passed")

@@ -8,7 +8,6 @@
   config = lib.mkIf config.programs.zsh.enable {
     # ── Shell: zsh ────────────────────────────────────────────────────────
     programs.zsh = {
-      package = pkgs.zsh;
       dotDir = config.xdg.configHome + "/zsh";
       setOptions = [
         "AUTO_CD"
@@ -27,13 +26,7 @@
         saveNoDups = true;
         expireDuplicatesFirst = true;
       };
-      shellAliases = lib.optionalAttrs config.programs.ripgrep.enable { grep = "rg"; } // {
-        k = "kubectl";
-        kgn = "kubectl get nodes";
-        kgp = "kubectl get pods -A";
-        kgs = "kubectl get svc -A";
-        kctx = "kubectx";
-        kns = "kubens";
+      shellAliases = {
         nrs = lib.mkDefault "task --dir ${
           lib.escapeShellArg (config.home.homeDirectory + "/.dotfiles")
         } nrs";

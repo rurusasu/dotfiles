@@ -1,17 +1,35 @@
-{ homeConfigurations }:
+{ homeConfigurations, fixtures }:
 let
-  inherit (homeConfigurations) homes lib;
-  aliasNames = [
-    "eza"
-    "ls"
-    "ll"
-    "la"
-    "lt"
-    "lla"
-  ];
+  inherit (homeConfigurations) homes;
 in
 {
-  testEzaZshAliasesUseConfiguredListingOptionsAcrossHomes = {
+  testEzaDisabledShellIntegrations = {
+    expr =
+      let
+        home = fixtures.mkHome "x86_64-linux" [
+          {
+            programs = {
+              bash.enable = true;
+              zsh.enable = true;
+              eza = {
+                enable = true;
+                enableBashIntegration = false;
+                enableZshIntegration = false;
+              };
+            };
+          }
+        ];
+      in
+      {
+        bash = home.config.programs.bash.shellAliases.ls or null;
+        zsh = home.config.programs.zsh.shellAliases.ls or null;
+      };
+    expected = {
+      bash = null;
+      zsh = null;
+    };
+  };
+  testEzaShellIntegrationsAcrossHomes = {
     expr = map (
       home:
       let
@@ -19,42 +37,20 @@ in
       in
       {
         enabled = programs.eza.enable;
+        bashIntegration = programs.eza.enableBashIntegration;
         zshIntegration = programs.eza.enableZshIntegration;
         packageName = programs.eza.package.pname;
-        optionsAlias = programs.zsh.shellAliases.eza;
-        aliasesGenerated = map (
-          name:
-          lib.hasInfix
-            "alias -- ${lib.escapeShellArg name}=${lib.escapeShellArg programs.zsh.shellAliases.${name}}"
-            home.config.home.file."${lib.removePrefix "${home.config.home.homeDirectory}/" programs.zsh.dotDir}/.zshrc".text
-        ) aliasNames;
+        inherit (programs.eza) icons colors extraOptions;
       }
     ) homes;
-    expected = map (
-      home:
-      let
-        cfg = home.config.programs.eza;
-      in
-      {
-        enabled = true;
-        zshIntegration = true;
-        packageName = "eza";
-        optionsAlias = "eza ${
-          lib.escapeShellArgs (
-            lib.optionals (cfg.icons != null) [
-              "--icons"
-              cfg.icons
-            ]
-            ++ lib.optionals (cfg.colors != null) [
-              "--color"
-              cfg.colors
-            ]
-            ++ lib.optional cfg.git "--git"
-            ++ cfg.extraOptions
-          )
-        }";
-        aliasesGenerated = map (_: true) aliasNames;
-      }
-    ) homes;
+    expected = map (_: {
+      enabled = true;
+      bashIntegration = true;
+      zshIntegration = true;
+      packageName = "eza";
+      icons = "auto";
+      colors = "auto";
+      extraOptions = [ "--tree" ];
+    }) homes;
   };
 }

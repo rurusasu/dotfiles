@@ -17,6 +17,7 @@ Windows の GUI アプリと、macOS、NixOS、Ubuntu、Debian の環境を管�
 | Packages           | Unix: Nix modules (`nix/modules/`)、Windows: WinGet JSON |
 | System convergence | winget handlers, nix-darwin, NixOS                       |
 | User environment   | Home Manager + chezmoi                                   |
+| Editors            | Neovim (Nixvim), Orca AI IDE                             |
 | Containers         | Rootless Podman + podman-compose + Lazydocker            |
 | Formatter          | treefmt-nix                                              |
 
@@ -225,7 +226,7 @@ nix/defaults.nix
 └── configurations             # public Darwin / NixOS / Home Manager outputs
 ```
 
-`nix/home/keybindings/` は共通キー配列と Windows export、`nix/modules/` はアプリの設定・サービス・生成関数を保持します。
+`nix/home/keybindings/` は共通キー配列、`nix/modules/` はアプリの設定・サービス・生成関数を保持します。
 `nix/defaults.nix` は OS 基盤設定と module 選択を担当します。
 
 ## 日常の使い方

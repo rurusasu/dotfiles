@@ -1,6 +1,4 @@
-{
-  homeConfigurations,
-}:
+{ homeConfigurations }:
 let
   installed =
     home: builtins.any (package: (package.pname or "") == "chatgpt") home.config.home.packages;

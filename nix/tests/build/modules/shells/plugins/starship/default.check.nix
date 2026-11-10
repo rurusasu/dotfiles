@@ -38,8 +38,11 @@ pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           };
         }
       ];
-      bashInit = pkgs.writeText "starship-bash-init" home.config.programs.bash.initExtra;
-      zshInit = pkgs.writeText "starship-zsh-init" home.config.programs.zsh.initContent;
+      bashInit = home.config.home.file.".bashrc".source;
+      zshInit =
+        home.config.home.file."${
+          pkgs.lib.removePrefix (home.config.home.homeDirectory + "/") home.config.programs.zsh.dotDir
+        }/.zshrc".source;
     in
     pkgs.runCommand "starship-windows-helper-check"
       {

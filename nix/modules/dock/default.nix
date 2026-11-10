@@ -4,6 +4,11 @@
   pkgs,
   ...
 }:
+let
+  application =
+    cfg: name:
+    lib.optional (cfg.enable && cfg.package != null) "${cfg.package}/Applications/${name}.app";
+in
 {
   config = lib.mkIf (config.dotfiles.desktop.enable && pkgs.stdenv.hostPlatform.isDarwin) {
     targets.darwin.defaults."com.apple.dock" = {
@@ -14,11 +19,11 @@
       show-recents = false;
       persistent-apps = [
         { app = "/System/Applications/Apps.app"; }
-        "${config.programs.chatgpt.package}/Applications/ChatGPT.app"
-        "${config.programs.dia.package}/Applications/Dia.app"
-        "${config.programs.ghostty.package}/Applications/Ghostty.app"
-        "${pkgs.obsidian}/Applications/Obsidian.app"
-      ];
+      ]
+      ++ application config.programs.chatgpt "ChatGPT"
+      ++ application config.programs.dia "Dia"
+      ++ application config.programs.ghostty "Ghostty"
+      ++ [ "${pkgs.obsidian}/Applications/Obsidian.app" ];
       persistent-others = [ ];
       showDesktopGestureEnabled = true;
       showMissionControlGestureEnabled = true;

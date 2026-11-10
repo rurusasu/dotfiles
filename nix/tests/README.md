@@ -59,19 +59,24 @@ in
 ```
 
 ```nix
-# build/example.check.nix: asset も属性から参照する
-{ pkgs, files }:
+# build/example.check.nix: 配布用の設定をそのまま検証する
+{ pkgs, fixtures }:
+let
+  home = fixtures.mkHome pkgs.stdenv.hostPlatform.system [
+    { programs.ssh.enable = true; }
+  ];
+in
 {
-  neovim-window-style = pkgs.runCommand "neovim-window-style-check"
-    { nativeBuildInputs = [ pkgs.lua ]; }
+  ssh-config = pkgs.runCommand "ssh-config-check"
+    { nativeBuildInputs = [ pkgs.openssh ]; }
     ''
-      luac -p ${files.nix.modules.editors.nvim.lua.config."window_styles.lua"}
-      touch "$out"
+      ssh -G -F ${home.config.home.file.".ssh/config".source} github.com > "$out"
     '';
 }
 ```
 
 nix-unit の flake-parts module が `checks.<system>.nix-unit` を自動生成します。
+CI はメモリを多く使う評価テストを先に単独実行し、その成功結果を残りの checks ビルドでも再利用します。テスト件数や実行範囲は減らしません。
 アプリの実行テストは本番の分類に対応する `build/modules/`、standalone Darwin の構成ビルドは
 `build/defaults/standalone-darwin-home.check.nix`、PowerShell formatter は `build/treefmt/powershell.check.nix` に置きます。
 実行スクリプトを flake の配線ファイルに直書きしません。

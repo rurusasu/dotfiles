@@ -5,7 +5,7 @@
   ...
 }:
 let
-  inherit (pkgs) aerospace;
+  aerospace = config.programs.aerospace.package;
   openUrl = url: "/usr/bin/open ${lib.escapeShellArg url}";
   disabledShortcut = parameters: {
     enabled = false;
@@ -18,11 +18,9 @@ in
 {
   config = lib.mkIf config.programs.aerospace.enable {
     programs.aerospace = {
-      package = aerospace;
       launchd.enable = true;
       settings = {
         config-version = 2;
-        start-at-login = false;
         enable-normalization-flatten-containers = true;
         enable-normalization-opposite-orientation-for-nested-containers = true;
         accordion-padding = 30;
@@ -80,55 +78,6 @@ in
         }"
       ];
     };
-
-    # nix-darwin skips user-agent cleanup once its last user agent is removed.
-    # Its previous generation is still current while Home Manager activates.
-    home.activation.retireNixDarwinAerospace =
-      lib.hm.dag.entryBetween [ "onFilesChange" "setupLaunchAgents" ] [ "writeBoundary" ]
-        ''
-          (
-            legacyPlist=${
-              lib.escapeShellArg (config.home.homeDirectory + "/Library/LaunchAgents/org.nixos.aerospace.plist")
-            }
-            legacySource=/run/current-system/user/Library/LaunchAgents/org.nixos.aerospace.plist
-            [[ -f "$legacySource" ]] || exit 0
-
-            if [[ -e "$legacyPlist" || -L "$legacyPlist" ]]; then
-              if /usr/bin/cmp -s "$legacySource" "$legacyPlist"; then
-                :
-              else
-                comparisonStatus=$?
-                if [[ "$comparisonStatus" -eq 1 ]]; then
-                  warnEcho "Preserving '$legacyPlist': it differs from the previous nix-darwin agent."
-                  exit 0
-                fi
-                errorEcho "Cannot compare '$legacyPlist' with the previous nix-darwin agent."
-                exit "$comparisonStatus"
-              fi
-            fi
-
-            bootoutArgs=()
-            version="$(/usr/bin/sw_vers --productVersion)"
-            if [[ "''${version%%.*}" -ge 26 ]]; then
-              bootoutArgs=(--wait)
-            fi
-            if bootoutOutput="$(run /bin/launchctl bootout "''${bootoutArgs[@]}" "gui/$UID/org.nixos.aerospace" 2>&1)"; then
-              if [[ "''${version%%.*}" -lt 26 ]]; then
-                run sleep 1
-              fi
-            else
-              bootoutStatus=$?
-              # ESRCH means the previous agent is already unloaded.
-              if [[ "$bootoutStatus" -ne 3 ]]; then
-                errorEcho "Cannot stop the previous nix-darwin AeroSpace agent: $bootoutOutput"
-                exit "$bootoutStatus"
-              fi
-            fi
-            if [[ -e "$legacyPlist" || -L "$legacyPlist" ]]; then
-              run /bin/rm -- "$legacyPlist"
-            fi
-          )
-        '';
 
     targets.darwin.defaults."com.apple.dock" = {
       mru-spaces = false;

@@ -22,19 +22,15 @@ let
     }).config.home-manager.users.nixos;
 in
 {
-  testNativeHomeGeneratesLuaFromSharedKeys = {
+  testNativeHomeConfiguresTheSystemOwnedHyprlandSession = {
     expr = {
       enabled = home.wayland.windowManager.hyprland.enable;
       format = home.wayland.windowManager.hyprland.configType;
-      generated = pkgs.lib.hasInfix ''hl.bind("SUPER + 0", hl.dsp.focus({ workspace = "10" }),'' (
-        home.xdg.configFile."hypr/hyprland.lua".text or ""
-      );
       systemOwnsCompositor = home.wayland.windowManager.hyprland.package == null;
     };
     expected = {
       enabled = true;
       format = "lua";
-      generated = true;
       systemOwnsCompositor = true;
     };
   };

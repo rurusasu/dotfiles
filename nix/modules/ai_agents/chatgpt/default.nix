@@ -5,18 +5,25 @@
   ...
 }:
 let
-  packages = import ./package.nix {
-    inherit pkgs;
-    chatgpt = config.programs.chatgpt.package;
-  };
+  resources =
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      "${config.programs.chatgpt.package}/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin"
+    else
+      "${config.programs.chatgpt.package}/lib/chatgpt/resources";
 in
 {
   options.programs.chatgpt = {
     enable = lib.mkEnableOption "ChatGPT desktop with its bundled Codex CLI";
     package = lib.mkOption {
       type = lib.types.package;
-      default = (import ./package.nix { inherit pkgs; }).chatgpt;
-      defaultText = lib.literalExpression "(import ./package.nix { inherit pkgs; }).chatgpt";
+      default = pkgs.chatgpt.override {
+        codex = null;
+        # Remove after nixpkgs-unstable includes nixpkgs 743696b736aa419c86abb36e2777cda684d619a0.
+        tectonic-unwrapped = pkgs.tectonic-unwrapped.overrideAttrs (previous: {
+          buildInputs = [ pkgs.aws-lc ] ++ previous.buildInputs;
+        });
+      };
+      defaultText = lib.literalMD "nixpkgs ChatGPT with its bundled Codex CLI and the upstream Tectonic build fix";
       description = "ChatGPT desktop distribution providing the bundled Codex CLI.";
     };
   };
@@ -26,71 +33,45 @@ in
       home.packages = [ config.programs.chatgpt.package ];
     })
     (lib.mkIf config.programs.codex.enable {
-      home = {
-        packages = [ packages.codex ];
-        activation = {
-          codexXdgHome = lib.mkIf config.home.preferXdgDirectories (
-            lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ] ''
-              legacy=${lib.escapeShellArg (config.home.homeDirectory + "/.codex")}
-              target=${lib.escapeShellArg (config.xdg.configHome + "/codex")}
-              if [[ -L "$legacy" ]]; then
-                if [[ "$(${pkgs.coreutils}/bin/readlink -m -- "$legacy")" != "$(${pkgs.coreutils}/bin/readlink -m -- "$target")" ]]; then
-                  errorEcho "Codex legacy directory points elsewhere: $legacy; reconcile it with $target before activating."
-                  exit 1
-                fi
-              elif [[ -e "$legacy" ]]; then
-                if [[ ! -d "$legacy" || -e "$target" || -L "$target" ]]; then
-                  errorEcho "Cannot migrate Codex state from $legacy to $target without overwriting existing data."
-                  exit 1
-                fi
-                run ${pkgs.coreutils}/bin/mkdir -p -- "$(${pkgs.coreutils}/bin/dirname -- "$target")"
-                run ${pkgs.coreutils}/bin/mv --no-target-directory --update=none-fail -- "$legacy" "$target"
-              fi
-              if [[ ! -e "$legacy" && ! -L "$legacy" ]]; then
-                run ${pkgs.coreutils}/bin/mkdir -p -- "$target"
-                run ${pkgs.coreutils}/bin/ln -s -- "$target" "$legacy"
-              fi
-            ''
-          );
-
-          # The mutable merge retains omitted keys, including removed managed roles.
-          codexPruneManagedAgents = lib.hm.dag.entryBetween [ "codexMutableSettings" ] [ "linkGeneration" ] (
-            lib.hm.generators.mkImpureConfigMerger {
-              inherit pkgs;
-              format = "toml";
-              empty = "{}";
-              jqOperation = ''
-                $dynamic | reduce ["fast_worker", "python_coding"][] as $name (.;
-                  if .agents[$name].config_file? == (${
-                    builtins.toJSON (config.home.homeDirectory + "/.codex/agents/")
-                  } + $name + ".toml")
-                  then del(.agents[$name]) else . end)
-              '';
-              path =
-                (
-                  if config.home.preferXdgDirectories then
-                    (config.xdg.configHome + "/codex")
-                  else
-                    (config.home.homeDirectory + "/.codex")
-                )
-                + "/config.toml";
-              staticSettings = pkgs.writeText "codex-agent-migration.toml" "";
-              mode = "600";
-            }
-          );
-        };
-      };
+      assertions = [
+        {
+          assertion = pkgs.stdenv.hostPlatform.isLinux || pkgs.stdenv.hostPlatform.isDarwin;
+          message = "The ChatGPT-bundled Codex CLI requires Linux or macOS.";
+        }
+      ];
+      home.sessionPath = lib.mkBefore [
+        (config.home.profileDirectory + "/bin")
+        resources
+      ];
+      home.packages = lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.bubblewrap;
+      launchd.agents.codex-environment =
+        lib.mkIf (pkgs.stdenv.hostPlatform.isDarwin && config.home.sessionVariables ? CODEX_HOME)
+          {
+            enable = true;
+            config = {
+              ProgramArguments = [
+                "/bin/launchctl"
+                "setenv"
+                "CODEX_HOME"
+                config.home.sessionVariables.CODEX_HOME
+              ];
+              RunAtLoad = true;
+            };
+          };
 
       programs.codex = {
         enableMcpIntegration = true;
-        skills.minimal-tests = ./skills/minimal-tests;
+        skills = lib.mapAttrs (name: _: ./skills + "/${name}") (
+          lib.filterAttrs (
+            name: type:
+            type == "directory" && (builtins.readDir (./skills + "/${name}"))."SKILL.md" or null == "regular"
+          ) (builtins.readDir ./skills)
+        );
         context = ''
           For every code creation or modification, and for every code review,
-          always read and apply the minimal-tests skill before starting implementation
-          or review.
-          Read $CODEX_HOME/skills/minimal-tests/SKILL.md (use ~/.codex when
-          CODEX_HOME is unset). Apply it during implementation and again during
-          review, including removal of redundant, obsolete and migration tests.
+          use the available managed skills' descriptions to identify applicable
+          instructions. Read and apply those skills before starting implementation
+          or review, and apply them again when reviewing the completed changes.
         '';
         # Install the CLI from ChatGPT; this option manages its settings.
         package = lib.mkDefault null;

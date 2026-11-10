@@ -81,6 +81,8 @@ in
         "llm-agents/systems" = inputs.llm-agents.inputs.systems;
         "llm-agents/treefmt-nix" = inputs.llm-agents.inputs.treefmt-nix;
         "mcp-servers/nixpkgs" = inputs.mcp-servers.inputs.nixpkgs;
+        "nixvim/flake-parts" = inputs.nixvim.inputs.flake-parts;
+        "nixvim/systems" = inputs.nixvim.inputs.systems;
         inherit (inputs)
           catppuccin
           docker-mcp
@@ -96,6 +98,7 @@ in
           nix-darwin
           nix-homebrew
           nix-unit
+          nixvim
           nixos-wsl
           nixpkgs
           omarchy

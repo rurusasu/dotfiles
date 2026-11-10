@@ -1,9 +1,15 @@
 { config, lib, ... }:
 let
   reloadCommand = "rg --line-number --no-heading --color=always -- {q} || true";
+  previewCommand =
+    if config.programs.bat.enable then
+      "bat --color=always --highlight-line {2} -- {1}"
+    else
+      "cat -- {1}";
 in
 {
   config = lib.mkIf config.programs.ripgrep.enable {
+    home.shellAliases.grep = "rg";
     programs = {
       ripgrep = {
         arguments = [
@@ -23,7 +29,7 @@ in
                   --bind 'start:reload:${reloadCommand}' \
                   --bind 'change:reload:${reloadCommand}' \
                   --delimiter : \
-                  --preview 'bat --color=always --highlight-line {2} -- {1}' \
+                  --preview ${lib.escapeShellArg previewCommand} \
                   --preview-window 'right:60%,+{2}+3/3,~3'
               ) || return
 

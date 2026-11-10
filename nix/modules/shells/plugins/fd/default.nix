@@ -5,6 +5,7 @@ let
 in
 {
   config = lib.mkIf config.programs.fd.enable {
+    home.shellAliases.find = "fd";
     programs = {
       fzf = lib.mkIf config.programs.fzf.enable {
         fileWidget.zsh.command = "fd --type f ${followOptions}";
@@ -13,7 +14,6 @@ in
 
       zsh = lib.mkIf config.programs.zsh.enable {
         # fd ships Zsh completions; the shared Zsh module adds them to fpath.
-        shellAliases.find = "fd";
         sessionVariables = lib.mkIf config.programs.fzf.enable {
           FZF_DEFAULT_COMMAND = "fd --type f ${followOptions}";
         };

@@ -5,7 +5,7 @@
   ...
 }:
 {
-  config = lib.mkIf config.programs.neovim.enable {
+  config = lib.mkIf config.programs.nixvim.enable {
     programs.lazydocker.enable = true;
     home.packages =
       with pkgs;
@@ -25,6 +25,9 @@
         lua-language-server
         stylua
         marksman
+        # C# language server and the .NET SDK used for project builds.
+        csharp-ls
+        dotnet-sdk_10
         # The Go/Rust language servers execute these toolchains from PATH.
         go
         rustup
@@ -32,7 +35,6 @@
         (lib.hiPrio rust-analyzer)
         (lib.hiPrio rustfmt)
         oxlint
-        typescript-language-server
         typescript
         astro-language-server
         prisma-language-server
@@ -40,7 +42,7 @@
       ++ (pkgs.neovimUtils.makeVimPackageInfo (
         map (
           plugin: if plugin ? plugin then builtins.removeAttrs plugin [ "runtime" ] else plugin
-        ) config.programs.neovim.plugins
+        ) config.programs.nixvim.extraPlugins
       )).runtimeDeps;
   };
 }

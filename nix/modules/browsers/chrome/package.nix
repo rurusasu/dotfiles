@@ -27,7 +27,6 @@ pkgs.google-chrome.overrideAttrs (previous: {
       --set LANG ja_JP.UTF-8 \
       --set LC_ALL ja_JP.UTF-8 \
       --set LANGUAGE ja \
-      --set GTK_IM_MODULE_FILE "${gtk3ImmodulesCache}" \
-      --add-flags --lang=ja
+      --set GTK_IM_MODULE_FILE "${gtk3ImmodulesCache}"
   '';
 })

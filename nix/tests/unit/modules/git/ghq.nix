@@ -1,17 +1,18 @@
-{ homeConfigurations }:
+{ fixtures }:
 let
-  inherit (homeConfigurations)
-    homes
-    ;
+  home = fixtures.mkHome "x86_64-linux" [
+    {
+      programs.ghq = {
+        enable = true;
+        root = "/tmp/custom-ghq";
+      };
+      programs.git.enable = false;
+    }
+  ];
 in
 {
-  testGhqRootsAreRenderedForEachHome = {
-    expr = map (
-      home:
-      home.pkgs.lib.hasInfix (home.pkgs.lib.generators.toGitINI {
-        ghq.root = home.config.programs.ghq.root;
-      }) home.config.xdg.configFile."git/config".text
-    ) homes;
-    expected = map (_: true) homes;
+  testGhqRootWithoutManagedGit = {
+    expr = home.config.home.sessionVariables.GHQ_ROOT;
+    expected = "/tmp/custom-ghq";
   };
 }

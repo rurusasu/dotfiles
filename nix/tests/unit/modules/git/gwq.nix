@@ -1,15 +1,16 @@
 { homeConfigurations }:
 let
-  inherit (homeConfigurations)
-    homes
-    ;
+  inherit (homeConfigurations) homes;
 in
 {
-  testGwqSettingsGenerateEachHomesConfiguration = {
-    expr = map (home: home.config.xdg.configFile."gwq/config.toml".source.drvPath) homes;
-    expected = map (
-      home:
-      ((home.pkgs.formats.toml { }).generate "gwq-config.toml" home.config.programs.gwq.settings).drvPath
-    ) homes;
+  testGwqSettingsAcrossHomes = {
+    expr = map (home: home.config.programs.gwq.settings) homes;
+    expected = map (home: {
+      worktree = {
+        basedir = home.config.home.homeDirectory + "/worktrees";
+        auto_mkdir = true;
+      };
+      cd.launch_shell = false;
+    }) homes;
   };
 }

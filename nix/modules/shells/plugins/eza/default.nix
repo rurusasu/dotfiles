@@ -1,26 +1,63 @@
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   listingOptions = "--group-directories-first --time-style=long-iso";
   gitOptions = "${listingOptions} --git";
+  bashListing = level: "eza -lha --level=${toString level} --hyperlink -F --group-directories-first";
 in
 {
-  config = lib.mkIf config.programs.eza.enable {
-    programs.eza = {
-      enableZshIntegration = true;
-      enableBashIntegration = false;
-      enableFishIntegration = false;
-      enableIonIntegration = false;
-      enableNushellIntegration = false;
-      icons = "auto";
-      colors = "auto";
-      extraOptions = [ "--tree" ];
-    };
+  config = lib.mkMerge [
+    (lib.mkIf config.programs.eza.enable {
+      programs = {
+        eza = {
+          enableZshIntegration = lib.mkDefault true;
+          enableBashIntegration = lib.mkDefault true;
+          enableFishIntegration = false;
+          enableIonIntegration = false;
+          enableNushellIntegration = false;
+          icons = "auto";
+          colors = "auto";
+          extraOptions = [ "--tree" ];
+        };
 
-    programs.zsh.shellAliases = lib.mkIf config.programs.zsh.enable {
-      ls = "eza --level=1";
-      ll = "eza --level=1 ${listingOptions}";
-      la = "eza --level=1 ${gitOptions} --hyperlink -F";
-      lt = "eza --level=2 ${gitOptions}";
-    };
-  };
+        bash.shellAliases =
+          lib.mkIf (config.programs.bash.enable && config.programs.eza.enableBashIntegration)
+            {
+              ls = bashListing 1;
+              ll = bashListing 2;
+              la = bashListing 2;
+              l = bashListing 2;
+            };
+        zsh.shellAliases =
+          lib.mkIf (config.programs.zsh.enable && config.programs.eza.enableZshIntegration)
+            {
+              ls = "eza --level=1";
+              ll = "eza --level=1 ${listingOptions}";
+              la = "eza --level=1 ${gitOptions} --hyperlink -F";
+              lt = "eza --level=2 ${gitOptions}";
+            };
+      };
+    })
+    (lib.mkIf (config.programs.bash.enable && !config.programs.eza.enable) {
+      programs = {
+        dircolors = {
+          enable = lib.mkDefault true;
+          enableBashIntegration = lib.mkDefault true;
+          enableZshIntegration = lib.mkDefault false;
+          enableFishIntegration = lib.mkDefault false;
+          enableNushellIntegration = lib.mkDefault false;
+        };
+        bash.shellAliases = {
+          ls = "${lib.getExe' pkgs.coreutils "ls"} --color=auto";
+          ll = "ls -alF";
+          la = "ls -A";
+          l = "ls -CF";
+        };
+      };
+    })
+  ];
 }

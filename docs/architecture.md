@@ -136,7 +136,7 @@ Chrome と X API MCP は、独立した native Home Manager service `mcp-chrome`
 接続します。Linux/WSL は systemd user service、macOS は launchd agent を使います。
 Chrome は Nix 管理のブラウザを headless で起動し、display や WSLg は不要です。
 root Hermes home の `.browser` は `mcp-chrome`、`.xurl` cache は `mcp-xapi` が保持します。
-xurl の固定 path `~/.xurl` は Home Manager が XDG configuration を経由して既存 cache
+xurl の固定 path `~/.xurl` は Home Manager が既存 Hermes cache
 へリンクし、既存実体との衝突では反映を
 停止します。named profile は root の MCP 設定を継承しないため、各 Git source に
 gateway 参照または対応する URL の定義が必要です。既存の loopback URL は保持します。

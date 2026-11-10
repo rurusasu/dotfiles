@@ -20,6 +20,5 @@ in
         IdentitiesOnly = true;
       };
     };
-    home.file.".ssh/config".force = true;
   };
 }
