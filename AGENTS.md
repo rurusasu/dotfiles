@@ -50,7 +50,8 @@ task chezmoi        # task chezmoi の短縮形
 
 # WSL/NixOS
 ./install.sh
-sudo nixos-rebuild dry-build --flake ~/.dotfiles --impure
+# native NixOS の場合は #linux を指定
+sudo nixos-rebuild dry-build --flake ~/.dotfiles#wsl --impure
 nix fmt
 ```
 
