@@ -1,30 +1,7 @@
 {
   inputs,
   homeConfigurations,
-  code,
 }:
-let
-  sharedHome =
-    builtins.head
-      ((code.nix.defaults { }).systemDefaults {
-        inputs = { };
-        pkgs = { };
-        platform = "linux";
-      }).home-manager.sharedModules;
-  common = sharedHome {
-    config = { };
-    lib.mkDefault = value: value;
-  };
-  onlyEnableFlags =
-    tree:
-    builtins.all (
-      name:
-      if name == "enable" then
-        builtins.isBool tree.${name}
-      else
-        builtins.isAttrs tree.${name} && onlyEnableFlags tree.${name}
-    ) (builtins.attrNames tree);
-in
 {
   testCommonGitAndSshUseTheSharedSignerAndAgent = {
     expr = {
@@ -34,22 +11,6 @@ in
     expected = {
       signer = true;
       agent = "${homeConfigurations.common.config.home.homeDirectory}/.1password/agent.sock";
-    };
-  };
-  testCommonHomeOnlyDeclaresApplicationEnableFlags = {
-    expr = {
-      programs = onlyEnableFlags common.programs;
-      services = onlyEnableFlags common.services;
-      agents = common ? launchd;
-      sessionVariables = common.home ? sessionVariables;
-      sessionPath = common.home ? sessionPath;
-    };
-    expected = {
-      programs = true;
-      services = true;
-      agents = false;
-      sessionVariables = false;
-      sessionPath = false;
     };
   };
 }

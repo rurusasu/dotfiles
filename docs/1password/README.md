@@ -5,9 +5,9 @@
 
 ## Nix の管理場所
 
-Unix の CLI / GUI 導入・設定・連携は `nix/modules/1password/` が管理し、既存の nixpkgs バイナリを利用する。CLI と macOS / Linux デスクトップ版は Home Manager が導入し、OS 固有の権限・システム統合は `nix/defaults.nix` に置く。実 module の `default.nix` は自動検出し、共通・OS 別構成は `dotfiles.onePassword.enable` と `programs.ssh.enable` などの型付き option に従う。Windows の WinGet 標準の導入情報は `windows/winget/packages.json` で直接管理する。`ssh/default.nix` が公式 SSH agent socket の `IdentityAgent` と `SSH_AUTH_SOCK` を管理する。OS 別の署名・agent・WSL 連携は `nix/defaults.nix` に置く。WSL の署名 wrapper の正本は `nix/modules/1password/op-ssh-sign-wsl` に置く。
+Unix の CLI / GUI 導入・設定・連携は `nix/modules/1password/` が管理し、既存の nixpkgs バイナリを利用する。CLI と macOS / Linux デスクトップ版は Home Manager が導入し、OS 固有の権限・システム統合は `nix/defaults.nix` に置く。実 module の `default.nix` は自動検出し、共通・OS 別構成は `dotfiles.onePassword.enable` と `programs.ssh.enable` などの型付き option に従う。Windows の WinGet 標準の導入情報は `windows/winget/packages.json` で直接管理する。`ssh/default.nix` が公式 SSH agent socket の `IdentityAgent` と `SSH_AUTH_SOCK` を管理する。OS 別の署名・agent・WSL 連携は `nix/defaults.nix` に置く。WSL の署名 wrapper の正本は `nix/modules/ssh/op-ssh-sign-wsl` に置く。
 
-`nix/modules/1password/default.nix` は型付き Home Manager option の `dotfiles.onePassword.account` と `dotfiles.onePassword.ssh.publicKey` を定義する。個人用の既定値も同 module に宣言する。WSL の `OP_ACCOUNT` も同じ account option を参照する。account と SSH 公開鍵は非秘密の値として Git / Nix store に含めてよい。
+`nix/modules/1password/default.nix` が account・secret 参照を、`nix/modules/ssh/default.nix` が `dotfiles.onePassword.ssh.publicKey` を定義する。各 module が対応する非秘密の既定値を管理する。WSL の `OP_ACCOUNT` も同じ account option を参照する。account と SSH 公開鍵は非秘密の値として Git / Nix store に含めてよい。
 
 Hermes と MCP も `dotfiles.onePassword.account` を共有し、secret 参照は同 module の `dotfiles.onePassword.secrets` を正本とする。Home Manager の設定から、例えば次のように変更できる。
 
@@ -22,7 +22,9 @@ Hermes は公式の `settings.secrets.onepassword` で起動時に取得する�
 
 SSH agent は CLI 単体ではなくデスクトップ版が提供する。初回のサインイン・ロック解除と Settings > Developer > Use the SSH Agent の有効化は、[1Password 公式手順](https://developer.1password.com/docs/ssh/get-started/)に従ってユーザーが行う。Nix は秘密鍵を取得・展開せず、Bash も別の `ssh-agent` を起動しない。
 
-Unix の `~/.ssh/signing_key.pub` は `dotfiles.onePassword.ssh.publicKey` から Home Manager の `home.file` で宣言管理する。公開鍵の更新時は `nix/modules/1password/default.nix` の値を変更して Home Manager を反映する。秘密鍵は引き続き 1Password SSH agent が保持する。[公開鍵による SSH identity の選択](https://developer.1password.com/docs/ssh/agent/advanced/#match-key-with-host)を参照する。
+Unix の `~/.ssh/signing_key.pub` は `dotfiles.onePassword.ssh.publicKey` から Home Manager の `home.file` で宣言管理する。公開鍵の更新時は `nix/modules/ssh/default.nix` の値を変更して Home Manager を反映する。秘密鍵は引き続き 1Password SSH agent が保持する。[公開鍵による SSH identity の選択](https://developer.1password.com/docs/ssh/agent/advanced/#match-key-with-host)を参照する。
+
+GitHub の Git 接続は SSH と 1Password SSH agent を使います。`nix/modules/git/default.nix` の標準 `url.*.insteadOf` 設定で GitHub の HTTPS URL を SSH URL へ変換し、`nix/modules/ssh/default.nix` が公開鍵の選択とホスト鍵の検証を管理します。GitHub の Ed25519 ホスト鍵は[公式の公開値](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints)を Nix store に配置し、`StrictHostKeyChecking` を有効にします。GitHub アカウントには、対応する公開鍵を認証用の SSH key として登録しておきます。
 
 SSH 設定、シェルの `SSH_AUTH_SOCK`、macOS の `launchd.user.envVariables.SSH_AUTH_SOCK` を同じ 1Password socket に統一する。Home Manager の `services.ssh-agent.enable`、NixOS / WSL の `programs.ssh.startAgent`、Home Manager / system の GnuPG SSH agent 連携は明示的に `false` にする。SSH クライアントや `sshd` 自体は無効化しない。macOS 標準の launchd agent の停止ではなく、利用する接続先を 1Password に固定する。Windows の OpenSSH Authentication Agent サービスは Nix の管理外であり、公式手順に従って停止・自動起動を無効化する。
 
@@ -102,7 +104,7 @@ Linux / macOS の native `op` は UNIX-like として cache が使えるため�
 
 ## SSH / Git 連携
 
-1Password SSH Agent の共通 Nix 定義は `nix/modules/1password/ssh/default.nix` に置く。`op-ssh-sign` の接続方法と OS 別パスは OS 別ドキュメントを参照する。
+1Password SSH Agent の共通 Nix 定義は `nix/modules/ssh/default.nix` に置く。`op-ssh-sign` の接続方法と OS 別パスは OS 別ドキュメントを参照する。
 
 - Windows: [windows.md](./windows.md)
 - WSL: [wsl.md](./wsl.md)

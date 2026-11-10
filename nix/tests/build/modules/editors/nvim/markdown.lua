@@ -1,5 +1,10 @@
 -- Run after loading the Home Manager-generated init.lua and native plugins.
 assert(vim.v.errmsg == "", "plugin startup must not report errors: " .. vim.v.errmsg)
+vim.cmd.colorscheme("catppuccin")
+assert(
+    vim.v.errmsg == "" and vim.api.nvim_get_hl(0, { name = "RainbowRed" }).fg == 0xE06C75,
+    "colorscheme reload must preserve plugin highlights without errors: " .. vim.v.errmsg
+)
 
 -- Restore a valid last-edit position, but preserve an explicitly chosen position.
 local buf = vim.api.nvim_create_buf(true, false)
@@ -17,8 +22,38 @@ local markdown_key = vim.fn.maparg("<leader>mp", "n", false, true)
 markdown_key.callback()
 markdown_key.callback()
 
-local marp_key = vim.fn.maparg("<leader>marp", "n", false, true)
-assert(marp_key.desc == "Toggle Marp preview", "<leader>marp must remain the Marp preview mapping")
+-- Preview a directory without package.json using the Nix-provided Marp server.
+local slides = vim.fn.tempname() .. "/slides with spaces"
+vim.fn.mkdir(slides, "p")
+local deck = slides .. "/deck.md"
+vim.fn.writefile({ "---", "marp: true", "---", "# Marp Nix preview" }, deck)
+vim.api.nvim_buf_set_name(buf, deck)
+local open = vim.ui.open
+local preview_url
+vim.ui.open = function(url)
+    preview_url = url
+end
+vim.cmd("MarpPreview")
+local ready = vim.wait(15000, function()
+    return preview_url ~= nil
+end, 20)
+local response
+if ready then
+    response = vim.system({ "curl", "--fail", "--silent", preview_url .. "deck.md" }):wait(5000)
+end
+vim.cmd("MarpStop")
+vim.ui.open = open
+assert(ready, "Marp must become ready and open the browser")
+assert(preview_url == "http://localhost:18765/", "Marp must use the configured port")
+assert(response.code == 0 and response.stdout:find("Marp Nix preview", 1, true), "Marp must render the slide")
+assert(response.stdout:find('data-theme="gaia"', 1, true), "Marp must apply the Nix-managed theme")
+assert(
+    vim.wait(5000, function()
+        return vim.system({ "curl", "--fail", "--silent", "--max-time", "1", preview_url }):wait().code ~= 0
+    end, 20),
+    "MarpStop must stop the server"
+)
+vim.fn.delete(vim.fs.dirname(slides), "rf")
 assert(vim.fn.maparg("<leader>as", "n") ~= "", "Sidekick mapping must remain available")
 for _, direction in ipairs({ "h", "j", "k", "l" }) do
     local key = "<C-" .. direction .. ">"
@@ -67,4 +102,4 @@ vim.api.nvim_win_close(sidekick_term.win, true)
 vim.api.nvim_buf_delete(sidekick_term.buf, { force = true })
 vim.api.nvim_buf_delete(scrollback, { force = true })
 
-print("Markdown rendering and Marp keymap checks passed")
+print("Markdown rendering and Marp preview checks passed")

@@ -14,6 +14,7 @@ in
       {
         enabled = git.enable;
         relativeWorktrees = settings.worktree.useRelativePaths or false;
+        githubHttpsRewrite = settings.url."git@github.com:".insteadOf;
         identity = settings.user;
         inherit (settings) core;
         credentials = settings.credential;
@@ -26,6 +27,7 @@ in
     expected = map (_: {
       enabled = sharedGit.enable;
       relativeWorktrees = true;
+      githubHttpsRewrite = "https://github.com/";
       identity = sharedGit.settings.user;
       core = sharedGit.settings.core;
       credentials = sharedGit.settings.credential;

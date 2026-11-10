@@ -31,7 +31,7 @@ Darwin は `system.primaryUser`、WSL は上書き可能な `wsl.defaultUser` �
 
 共通の Lix・GC・Home Manager 設定は一つの `systemDefaults` にまとめ、ユーザー設定は同 module の `home-manager.sharedModules` に宣言します。
 同じ `sharedModules` 内で OS 別設定を選択し、standalone もそのまま再利用します。OS は末尾の構成登録の `platform` で指定します。
-Go / uv の独自 cache 整理ジョブは設けません。Neovim が使う Go toolchain は `../modules/editors/nvim/runtime/default.nix`、uv は `../defaults.nix` が導入します。
+Go / uv の独自 cache 整理ジョブは設けません。Neovim が使う Go toolchain は `../modules/editors/nvim/lsp/gopls.nix`、uv は `../defaults.nix` が導入します。
 Hermes は同梱 Python を使い、プロジェクト依存は uv で管理します。
 
 ## 検証

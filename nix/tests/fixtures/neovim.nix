@@ -5,7 +5,13 @@ let
     ({ lib, ... }: {
       home.homeDirectory = lib.mkForce "/tmp/neovim-test-home";
       home.stateVersion = lib.mkForce "26.05";
-      programs.nixvim.enable = true;
+      programs = {
+        nixvim.enable = true;
+        marp = {
+          preview.port = 18765;
+          settings.theme = "gaia";
+        };
+      };
     })
   ];
 in

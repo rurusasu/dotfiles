@@ -22,11 +22,6 @@ in
       example = "my.1password.com";
       description = "1Password account used by host integrations.";
     };
-    ssh.publicKey = lib.mkOption {
-      type = lib.types.nullOr lib.types.nonEmptyStr;
-      default = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFMpL8l17Y0Lci3Y0ZsgnUz75XiHUrQn5vC6XyHZp7wC";
-      description = "SSH public key used for authentication and Git signing. When null, leave the public key file unmanaged.";
-    };
     secrets = {
       references = {
         githubToken = secretReference "op://openclaw/GitHubUsedOpenClawPAT/credential";

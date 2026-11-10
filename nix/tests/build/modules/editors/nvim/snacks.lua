@@ -137,5 +137,21 @@ end)
 assert(leftcol == 0, "the snacks terminal must not allow horizontal view movement")
 terminal:close()
 
+-- The floating-terminal mapping must use Snacks' hide/reuse lifecycle.
+local toggle_float = vim.fn.maparg("<leader>tf", "n", false, true).callback
+toggle_float()
+local floating = assert(snacks.terminal.get({ vim.o.shell }, { create = false }))
+local floating_buf = floating.buf
+local floating_job = vim.b[floating_buf].terminal_job_id
+assert(vim.api.nvim_win_get_config(floating.win).relative ~= "", "the terminal must be floating")
+toggle_float()
+assert(not floating:win_valid() and floating:buf_valid(), "hiding the terminal must preserve its buffer")
+toggle_float()
+assert(floating.buf == floating_buf and floating:win_valid(), "toggling must reuse the floating terminal")
+assert(vim.fn.jobwait({ floating_job }, 0)[1] == -1, "the reused shell must remain running")
+vim.api.nvim_clear_autocmds({ event = "TermClose", group = floating.augroup, buffer = floating.buf })
+floating:close()
+vim.cmd.stopinsert()
+
 vim.fn.delete(directory, "rf")
 print("Snacks preview callbacks: PDF conversion, text, multi-source dispatch and errors passed")
