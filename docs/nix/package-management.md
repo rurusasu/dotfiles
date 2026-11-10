@@ -114,8 +114,6 @@ Podman は標準の `services.podman.enable`、Lazydocker は `programs.lazydock
 
 NixOS / WSL の公開互換コマンドと API unit は標準の `virtualisation.podman.enable` / `dockerCompat` に任せ、Home Manager で重複定義しません。Home Manager の手書き API unit は standalone Linux に限定します。macOS / standalone の公開互換コマンドと、Lazydocker / MCP Gateway のパッケージ内の実行依存には共通の互換リンクを使います。
 
-Ollama は共通 Home Manager の `services.ollama.enable` で標準 package とユーザーサービスを導入します。API は既定の `127.0.0.1:11434` で待ち受けます。モデルの自動取得や GPU backend の変更は行いません。`ollama pull <model>` で使用するモデルを選択します。
-
 Strata は Linux x86_64 / WSLg と Apple Silicon macOS に `strata`（CLI）と `strata-desktop`（GUI）を導入します。[公式 release](https://github.com/Niko1221/Strata/releases) の latest feed (`releases/latest/download/strata-feed.json`) を input として使い、Desktop と Control は feed が示す同じ release の asset から取得します。`task update` で最新の安定版へ更新し、変更した lock を CI で検証します。共通の `update-flake-inputs.sh` が更新時に latest feed の版を解決し、同じ hash の版付き URL を確認して lock に保存します。input の original URL は latest のままなので、特定の版に固定し続ける設定ではありません。lock は feed の版付き URL・内容と asset の SHA-256 を固定するため、次の release 後も同じコミットを再現できます。`nix flake update` の単独実行では mutable URL が lock に残るため、更新には `task update` または `bash scripts/sh/update-flake-inputs.sh .` を使います。`./install.sh` は lock 済みの版を更新せず導入します。Desktop の製品版と Control の内部 build 番号は異なります。CLI は配布物に同梱された Python を使い、ユーザーディレクトリの別版 Control への自動引き継ぎは無効にします。Linux GUI も固定された Control を使います。macOS の `.app` は公式署名を保持するため変更せず、GUI は upstream の規則に従い、同梱版とユーザーが更新した Control の新しい方を使います。`STRATA_CONTROL_DIR` の指定だけでは新しいユーザー版への切り替えを禁止できません。モデルと推論エンジンは初回設定時に選び、ユーザーのデータディレクトリに取得します。
 
 WSL の NVIDIA GPU は Windows 側のドライバーを使います。CLI・GUI の FHS 環境には `/usr/lib/wsl` を読み取り専用で公開し、同梱の `nvidia-smi` と CUDA driver library を参照します。Linux 用 NVIDIA ドライバーを WSL 内へ別途導入する必要はありません。
