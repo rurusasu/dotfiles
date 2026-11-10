@@ -141,7 +141,7 @@ mkdir -p ~/.hermes
 printf '%s\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' > ~/.hermes/.env
 chmod 600 ~/.hermes/.env
 '@
-        Invoke-NixosWslSetup -Repository $repository -DistroName $distroName -SyncMode repo -SyncBack none -TimeoutSeconds 7200 -FlakeReference ('path:' + $roots.source + '#nixos') -SourceDirectory $roots.source -AllowBuilds $false
+        Invoke-NixosWslSetup -Repository $repository -DistroName $distroName -SyncMode repo -SyncBack none -TimeoutSeconds 7200 -FlakeReference ('path:' + $roots.source + '#wsl') -SourceDirectory $roots.source -AllowBuilds $false
         Invoke-CiWslCommand -User root -Source @"
 set -euo pipefail
 test "`$(readlink -f /run/current-system)" = $qSystem

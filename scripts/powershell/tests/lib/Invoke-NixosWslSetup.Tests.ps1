@@ -260,7 +260,7 @@ Describe 'Invoke-NixosWslSetup' {
         $commands | Should -Match ([regex]::Escape("mv -- $quotedRepo "))
         $commands | Should -Match ([regex]::Escape("ln -s -- $quotedSource $quotedRepo"))
         $commands | Should -Match ([regex]::Escape("chown -h -- 'alice:users'"))
-        $commands | Should -Match ([regex]::Escape("nixos-rebuild switch --flake 'path:/mnt/d/it'\''s dotfiles#nixos' --impure --no-update-lock-file"))
+        $commands | Should -Match ([regex]::Escape("nixos-rebuild switch --flake 'path:/mnt/d/it'\''s dotfiles#wsl' --impure --no-update-lock-file"))
         $commands | Should -Not -Match 'update-flake-inputs[.]sh'
         @($script:setupCommands | Where-Object { $_ -match 'nixos-rebuild switch' }).Count | Should -Be 1
         @($script:wslCalls | Where-Object { $_.TimeoutSeconds -ne 77 }).Count | Should -Be 0
@@ -275,7 +275,7 @@ Describe 'Invoke-NixosWslSetup' {
         { Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SyncMode none -SyncBack none } | Should -Throw "*declared wsl.defaultUser 'bob'*nixos-rebuild boot*"
 
         $commands = $script:setupCommands -join "`n"
-        $commands | Should -Match ([regex]::Escape("eval --raw 'path:/srv/homes/alice/.dotfiles#nixosConfigurations.nixos.config.wsl.defaultUser'"))
+        $commands | Should -Match ([regex]::Escape("eval --raw 'path:/srv/homes/alice/.dotfiles#nixosConfigurations.wsl.config.wsl.defaultUser'"))
         $commands | Should -Not -Match "eval --raw 'path:/mnt/d/dotfiles#"
         $commands | Should -Not -Match 'nixos-rebuild switch|chown|ln -s|mv --|tar|update-flake-inputs'
 
@@ -284,7 +284,7 @@ Describe 'Invoke-NixosWslSetup' {
         Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SyncMode none -SyncBack none
 
         $commands = $script:setupCommands -join "`n"
-        $commands | Should -Match ([regex]::Escape("nixos-rebuild switch --flake 'path:/srv/homes/alice/.dotfiles#nixos' --impure --no-update-lock-file"))
+        $commands | Should -Match ([regex]::Escape("nixos-rebuild switch --flake 'path:/srv/homes/alice/.dotfiles#wsl' --impure --no-update-lock-file"))
         @($script:setupCommands | Where-Object { $_ -match 'nixos-rebuild switch' }).Count | Should -Be 1
         $commands | Should -Not -Match 'chown|ln -s|mv --|tar|cp --'
     }
@@ -295,18 +295,18 @@ Describe 'Invoke-NixosWslSetup' {
         $commands = $script:setupCommands -join "`n"
         $commands | Should -Match 'Existing checkout conflicts.*ForcePostInstall'
         $commands | Should -Match ([regex]::Escape("(cd '/mnt/d/dotfiles' && tar --exclude=.git --exclude=.direnv --exclude=result -cf - .) | (cd '/home/nixos/.dotfiles' && tar -xf -)"))
-        $commands | Should -Match ([regex]::Escape("nixos-rebuild switch --flake 'path:/home/nixos/.dotfiles#nixos' --impure --no-update-lock-file"))
+        $commands | Should -Match ([regex]::Escape("nixos-rebuild switch --flake 'path:/home/nixos/.dotfiles#wsl' --impure --no-update-lock-file"))
         $commands | Should -Match ([regex]::Escape("cp -- '/home/nixos/.dotfiles'/flake.lock '/mnt/d/dotfiles'/flake.lock"))
         @($script:setupCommands | Where-Object { $_ -match 'update-flake-inputs[.]sh' }).Count | Should -Be 0
         @($script:setupCommands | Where-Object { $_ -match 'nixos-rebuild switch' }).Count | Should -Be 1
     }
 
     It 'should deploy the immutable source and selected configuration without updating or building' {
-        Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SyncMode repo -SyncBack none -FlakeReference 'path:/nix/store/prepared-source#nixos' -SourceDirectory '/nix/store/prepared-source' -AllowBuilds $false
+        Invoke-NixosWslSetup -Repository 'D:\dotfiles' -SyncMode repo -SyncBack none -FlakeReference 'path:/nix/store/prepared-source#wsl' -SourceDirectory '/nix/store/prepared-source' -AllowBuilds $false
         $commands = $script:setupCommands -join "`n"
         $deployment = $script:setupCommands | Where-Object { $_ -match 'nixos-rebuild switch' }
         $commands | Should -Match ([regex]::Escape("(cd '/nix/store/prepared-source' && tar"))
-        $deployment | Should -Match ([regex]::Escape("--flake 'path:/nix/store/prepared-source#nixos' --impure --no-update-lock-file"))
+        $deployment | Should -Match ([regex]::Escape("--flake 'path:/nix/store/prepared-source#wsl' --impure --no-update-lock-file"))
         $deployment | Should -Match 'max-jobs = 0\\nbuilders =\\nfallback = false'
         $commands | Should -Not -Match 'update-flake-inputs|cp --'
     }

@@ -6,7 +6,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $SourceRoot = [IO.Path]::GetFullPath($SourceRoot)
 if ([string]::IsNullOrWhiteSpace($env:DOTFILES_PSSA_MODULE)) {
-    throw 'The locked PSScriptAnalyzer dependency is required. Run task lint:powershell.'
+    throw 'The locked PSScriptAnalyzer dependency is required. Run nix develop .#ci --command powershell-lint.'
 }
 Import-Module $env:DOTFILES_PSSA_MODULE -Force -ErrorAction Stop
 

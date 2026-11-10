@@ -17,7 +17,7 @@ Windows の GUI アプリと、macOS、NixOS、Ubuntu、Debian の環境を管�
 | Packages           | Unix: Nix modules (`nix/modules/`)、Windows: WinGet JSON |
 | System convergence | winget handlers, nix-darwin, NixOS                       |
 | User environment   | Home Manager + chezmoi                                   |
-| Editors            | Neovim (Nixvim), Orca AI IDE                             |
+| Editors            | Neovim (Nixvim)                                          |
 | Containers         | Rootless Podman + podman-compose + Lazydocker            |
 | Formatter          | treefmt-nix                                              |
 
@@ -33,7 +33,7 @@ macOS / Linux の `./install.sh` は、Nix が未導入なら初回だけ導入�
 WSL も inputs を更新せず反映します。不足・不整合な lock は反映前に失敗します。
 リポジトリの pull / merge は別途行います。
 
-- macOS: lock 済みの nix-darwin / Home Manager と Homebrew 宣言を反映します。
+- macOS: lock 済みの nix-darwin / Home Manager と公式 PKGを反映します。
 - Linux / NixOS: lock 済みの OS 構成と Home Manager を反映します。
 - Windows: GUI profile のアプリを既存の WinGet で install / upgrade し、NixOS-WSL を導入・設定します。
   WSL の反映後に Windows chezmoi を適用します。WSL 基盤の有効化だけ管理者権限で行います。
@@ -43,9 +43,9 @@ WSL も inputs を更新せず反映します。不足・不整合な lock は�
 task update
 ```
 
-CI が成功した source と lock を `nrs` / installer で適用します。適用時に依存を再更新しません。
+CI が成功した source と lock を `./install.sh` / installer で適用します。適用時に依存を再更新しません。
 `nrt` / `nrb` の test / boot も同じ lock を使い、不足・不整合な lock は拒否します。
-WinGet / Homebrew の版未固定アプリやホスト固有設定の保証範囲は [CI の説明](docs/ci/README.md) を参照してください。
+WinGet とアプリ自身が更新する可変部分やホスト固有設定の保証範囲は [CI の説明](docs/ci/README.md) を参照してください。
 
 Codex CLI の個別インストールは行わず、ChatGPT アプリ付属の CLI を使います。
 単純な CLI の有効化・package 宣言は `nix/defaults.nix` に直接書きます。設定・package override・生成・連携を持つアプリは `nix/modules/` にまとめます。
@@ -63,7 +63,7 @@ cd dotfiles
 task install
 ```
 
-初回から `.\install.cmd` だけで実行できます。PowerShell が WinGet の master `windows/winget/packages.json` を先に適用し、Task も通常のパッケージとして導入します。
+初回から `.\install.cmd` だけで実行できます。PowerShell が WinGet の master `chezmoi/winget/packages.json` を先に適用し、Task も通常のパッケージとして導入します。
 
 通常は `task install` を実行します。宣言済みの GUI アプリを導入・更新した後、NixOS-WSL の導入、checkout の同期、lock 済みの NixOS/Home Manager の反映、Windows chezmoi の適用を順に行います。Nix の反映は WSL phase で一度だけ実行します。Windows Terminal も対象です。
 既存の NixOS ディストリビューションと保存済み `stateVersion` は再利用します。WSL 基盤が未導入の場合だけ UAC で有効化し、再起動後の再実行を案内します。登録と設定適用は元のユーザーで行います。
@@ -94,7 +94,7 @@ cd dotfiles
 `./install.sh` は宣言済みの macOS パッケージ、Podman machine と native Hermes を
 適用します。機能別の選択フラグは不要です。
 ログインユーザーで実行すると、そのアカウントを `system.primaryUser` に設定し、
-Home Manager と Homebrew にも使用します。スクリプト自体に `sudo` は付けません。
+Home Manager と公式 PKG の適用にも使用します。スクリプト自体に `sudo` は付けません。
 Podman のユーザー設定と API は [`nix/modules/podman/`](./nix/modules/podman/) が管理します。
 Linux / WSL はユーザー用ソケット、macOS は Home Manager の標準 Podman machine を使います。
 `lazydocker` はその API に接続します。Compose は `podman compose` で実行します。
@@ -104,9 +104,8 @@ macOS / Linux の初回導入には [Lix installer](https://lix.systems/install/
 macOS / NixOS / WSL の `nix.package` と standalone Home Manager の CLI・GC は
 `pkgs.lixPackageSets.stable.lix` に統一します。既存のシステム管理下の Nix は
 nix-darwin / NixOS の反映で Lix に切り替わります。
-nix-darwin がシステムを収束させ、nix-homebrew が選択した
-Homebrew formula/cask を管理します。Home Manager も同じコマンド内で
-適用します。macOS では WSL や NixOS を導入しません。
+nix-darwin がシステムと Nix 管理のアプリを反映します。
+macOS では WSL や NixOS を導入しません。
 
 macOS では `darwin-uninstaller` を有効にします。
 Lix installer で新規導入した macOS / Linux では `/nix/lix-installer` と receipt が保持され、
@@ -175,7 +174,7 @@ cd dotfiles
 - NixOS: `nixos-rebuild switch` に Home Manager と Podman の OS 基盤を含めます。
 - その他の Linux（Ubuntu / Debian など）: Lix を必要に応じて導入し、Home Manager を適用します。初回の Lix installer は管理者権限で daemon・ビルド用アカウントを構成します。その後の Home Manager は Podman API を含むユーザー環境を管理します。Rootless Podman に必要な subordinate UID/GID と user namespace はホスト側で用意します。
 
-native NixOS 構成は `/etc/nixos/hardware-configuration.nix` がある場合だけ公開します。ユーザー名と各 stateVersion は `nix/defaults.nix:systemDefaults` 内の `defaults` で管理します。
+native NixOS 構成は `/etc/nixos/hardware-configuration.nix` がある場合だけ公開します。ユーザー名は `nix/home/settings.nix`、各 stateVersion は `flake.nix` で管理します。
 
 ### 成功条件と CI
 
@@ -185,16 +184,16 @@ GitHub-hosted macOS / Windows の host OS 自体の reboot は対象外で、ser
 
 ## 方針
 
-Unix の導入とアプリ設定は `nix/modules/`、Windows の導入情報は `windows/winget/packages.json` で管理します。chezmoi は Windows 専用の設定を配布します。Unix の Codex、shell、Git、terminal、editor などは Home Manager が管理します。
+Unix の導入とアプリ設定は `nix/modules/`、Windows の導入情報は `chezmoi/winget/packages.json` で管理します。chezmoi は Windows 専用の設定を配布します。Unix の Codex、shell、Git、terminal、editor などは Home Manager が管理します。
 
-- 共通・OS 別の system / ユーザー設定: `nix/defaults.nix:systemDefaults`
+- OS 基盤設定: `nix/hosts/`、ユーザー基盤設定: `nix/home/`、アプリ設定: `nix/modules/`
 - Home Manager: 同じ `home-manager.sharedModules` を統合構成と standalone で共有
 - OS 選択: 末尾の構成登録で `specialArgs.platform` を指定
 - Windows のユーザー設定: `chezmoi/`
-- Unix CLI / GUI の導入・設定・連携・専用の実行依存: `nix/modules/` のアプリごとの module。enable・単純な package list・単一代入は必要な構成へ直接記載。Windows の GUI 導入: `windows/winget/packages.json`
+- Unix CLI / GUI の導入・設定・連携・専用の実行依存: `nix/modules/` のアプリごとの module。有効化も各 module 内で宣言。Windows の GUI 導入: `chezmoi/winget/packages.json`
 
-Unix CLI / GUI はアプリごとの module が package 選択・設定・連携・専用の実行依存を所有します。enable・単純な package list・単一代入だけなら module を作らず必要な構成へ直接書きます。共通・OS 別構成は module の外で明示的な imports により組み立てます。
-通常の CLI・GUI とユーザー設定は Home Manager、OS 固有の設定・権限・システムサービス・連携は `nix/defaults.nix`、Windows の導入情報は独立した manifest が管理します。
+Unix CLI / GUI はアプリごとの module が package 選択・設定・連携・専用の実行依存を所有します。module のないアプリを home の package list で追加導入しません。共通・OS 基盤構成は hosts、アプリの OS 差分は各 module が所有します。
+通常の CLI・GUI とユーザー設定は Home Manager、OS 固有の設定・権限・システムサービス・連携は `nix/hosts/`、Windows の導入情報は独立した manifest が管理します。
 詳細は [パッケージ管理の分割方針](./docs/nix/package-management.md#分割の理由と編集先) を参照してください。
 
 ## ディレクトリ構造
@@ -203,10 +202,9 @@ Unix CLI / GUI はアプリごとの module が package 選択・設定・連携
 
 ```
 dotfiles/
-├── chezmoi/                # User dotfiles (chezmoi)
+├── chezmoi/                # Windows settings and package manifest (chezmoi)
 ├── nix/                    # NixOS configuration
 ├── scripts/                # Shell/PowerShell scripts
-├── windows/                # Windows-side config files
 ├── docs/                   # Documentation
 ├── Taskfile.yml            # Task runner
 ├── taskfiles/              # Feature-scoped Taskfiles
@@ -216,18 +214,17 @@ dotfiles/
 └── flake.nix               # Nix flake entry point
 ```
 
-システム設定、Home Manager の共通・OS 別設定、ホスト情報、公開構成は
-`nix/defaults.nix` に集約します。CPU architecture は `system` 引数で選択します。
+OS 設定は `nix/hosts/`、Home Manager の共通設定は `nix/home/` に置きます。
+`nix/defaults.nix` は公開構成を接続し、CPU architecture は `system` 引数で選択します。
 
 ```text
 nix/defaults.nix
-├── systemDefaults             # shared OS / Home Manager settings and metadata
-├── perSystem                  # apps and packages
+├── perSystem                  # platform rebuild commands
 └── configurations             # public Darwin / NixOS / Home Manager outputs
 ```
 
 `nix/home/keybindings/` は共通キー配列、`nix/modules/` はアプリの設定・サービス・生成関数を保持します。
-`nix/defaults.nix` は OS 基盤設定と module 選択を担当します。
+`nix/hosts/` は OS 基盤設定、`nix/home/` はユーザー設定とアプリの選択を担当します。
 
 ## 日常の使い方
 
@@ -237,7 +234,7 @@ WSL 内で実行:
 
 ```bash
 # lock 済みの NixOS 構成を反映
-nrs  # alias for: task --dir ~/.dotfiles nrs
+./install.sh
 
 # installer も同じ lock を反映
 ~/.dotfiles/install.sh
@@ -287,12 +284,12 @@ PowerShell (.ps1) の整形は PSScriptAnalyzer の `Invoke-Formatter` を使用
 pwsh -NoProfile -Command "Install-Module PSScriptAnalyzer -Scope CurrentUser"
 ```
 
-TOML・Lua・JSON/YAML・Markdown の整形設定は [nix/treefmt.nix](nix/treefmt.nix) に宣言します。
+TOML・Lua・JSON/YAML・Markdown の整形設定は [nix/modules/formatters/default.nix](nix/modules/formatters/default.nix) に宣言します。
 設定ファイルは Nix store に生成され、`nix fmt` と `nix develop` 内の `treefmt` が直接参照します。
 
 ## WSL 設定 (.wslconfig)
 
-`.wslconfig` は `windows/.wslconfig` で管理し、以下で適用:
+`.wslconfig` は `chezmoi/wsl/.wslconfig` で管理し、以下で適用:
 
 ```powershell
 .\scripts\powershell\update-wslconfig.ps1
@@ -301,11 +298,11 @@ wsl --shutdown
 
 ## キーパス
 
-| Location                    | Description                             |
-| --------------------------- | --------------------------------------- |
-| `~/.dotfiles`               | Windows dotfiles へのシンボリックリンク |
-| `nixosConfigurations.nixos` | WSL ホスト用 Flake attribute            |
-| `chezmoi/`                  | User dotfiles (chezmoi source)          |
+| Location                  | Description                             |
+| ------------------------- | --------------------------------------- |
+| `~/.dotfiles`             | Windows dotfiles へのシンボリックリンク |
+| `nixosConfigurations.wsl` | WSL ホスト用 Flake attribute            |
+| `chezmoi/`                | User dotfiles (chezmoi source)          |
 
 ## ターミナル設定
 

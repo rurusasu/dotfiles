@@ -1,0 +1,46 @@
+{
+  imports = [
+    ./1password
+    ./aerospace
+    ./ai_agents/chatgpt
+    ./ai_agents/deepseek-harness
+    ./ai_agents/hermes
+    ./ai_agents/opencode
+    ./ai_agents/mcp
+    ./ai_agents/pi
+    ./ai_agents/strata
+    ./browsers/chrome
+    ./browsers/dia
+    ./desktop
+    ./discord
+    ./dock
+    ./editors/nvim
+    ./fcitx5
+    ./finder
+    ./fonts
+    ./git
+    ./gnome-keyring
+    ./hyprland
+    ./lazydocker
+    ./lifelog
+    ./marp
+    ./nvidia
+    ./podman
+    ./shells/bash
+    ./shells/plugins/bat
+    ./shells/plugins/eza
+    ./shells/plugins/fd
+    ./shells/plugins/fzf
+    ./shells/plugins/ripgrep
+    ./shells/plugins/starship
+    ./shells/plugins/zoxide
+    ./shells/plugins/zsh-patina
+    ./shells/powershell
+    ./shells/zsh
+    ./ssh
+    ./steam
+    ./superfile
+    ./terminals/ghostty
+    ./terminals/herdr
+  ];
+}

@@ -28,13 +28,13 @@ tasks:
           git -C "$repository" pull --ff-only origin main
           git -C "$repository" push origin main
         platforms: [linux, darwin]
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && task hermes:repository:sync"'
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix develop --command task hermes:repository:sync"'
         platforms: [windows]
 
   hermes:bootstrap:
     desc: Apply the Nix-managed Hermes Agent profile and gateway service
     cmds:
-      - task: nrs
+      - task: rebuild
       - task: hermes:sync
 
   hermes:xapi:auth:
@@ -54,7 +54,7 @@ tasks:
           fi
           hermes-xapi auth
         platforms: [darwin]
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && task hermes:xapi:auth"'
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix develop --command task hermes:xapi:auth"'
         platforms: [windows]
 
   hermes:xapi:setup:
@@ -83,7 +83,7 @@ tasks:
             launchctl bootstrap "$domain" "$HOME/Library/LaunchAgents/org.nix-community.home.mcp-xapi.plist"
           fi
         platforms: [darwin]
-      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && task hermes:xapi:sync-token"'
+      - cmd: '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix develop --command task hermes:xapi:sync-token"'
         platforms: [windows]
 
   hermes:up:
@@ -185,6 +185,6 @@ tasks:
         platforms: [windows]
 
   hermes:upgrade:
-    desc: Prepare dependency updates for CI; apply separately with nrs
+    desc: Prepare dependency updates for CI; apply separately with ./install.sh
     cmds:
       - task: update

@@ -13,7 +13,7 @@ let
         platform = "linux";
       };
       modules = [
-        (code.nix.defaults inputs).systemDefaults
+        code.nix.hosts.default
         {
           nixpkgs.pkgs = pkgs;
           users.users.nixos.home = "/srv/nixos";

@@ -7,18 +7,18 @@
 **「OS ごとに 1 コマンドで同じ開発環境へ収束する」** を目標に、以下の原則で管理する。
 
 1. **Unix の導入・設定は Nix module、Windows の導入情報は独立した manifest**
-   - Unix CLI / GUI の導入・package 選択・設定・連携・専用の実行依存をアプリごとの module にまとめ、すべての実 module の `default.nix` を自動検出し、構成側の型付き option で有効化
-   - enable・単純な package list・単一代入は `nix/defaults.nix` の必要な構成へ直接記載。設定・package override・生成・連携を持つアプリは module にまとめる
-   - 通常の CLI・GUI とユーザー設定は Home Manager、OS 固有の設定・権限・システムサービス・連携は `nix/defaults.nix` の各 OS ブロックが管理。Homebrew と cask は `nix/defaults.nix` に宣言
-   - Windows は `windows/winget/packages.json` を直接管理し、GUI アプリを導入
+   - Unix CLI / GUI の導入・package 選択・設定・連携・専用の実行依存をアプリごとの module にまとめ、実アプリ module を imports に明示し、各 module 内で原則 enable = true を宣言
+   - アプリの有効化も各 module 内で行い、home にアプリ一覧を置かない。
+   - アプリ固有の OS 連携も各 module が所有し、OS 基盤設定だけを hosts に置く。Steam と Google Drive も公式配布物を Nix で管理する。
+   - Windows は `chezmoi/winget/packages.json` を直接管理し、GUI アプリを導入
    - 機能と OS の所有境界は [分割の理由と編集先](./nix/package-management.md#分割の理由と編集先) を参照
 2. **ユーザー設定は Unix と Windows の責務を分離**
    - Unix の Codex、shell、Git、terminal、editor は Home Manager が管理
    - chezmoi は Windows 専用で、Unix にはファイルもスクリプトも配布しない
-   - 共通 action/key は `nix/home/keybindings/bindings.nix`、アプリの設定・生成関数は `nix/modules/`、OS 基盤設定と型付き option による有効化は `nix/defaults.nix` に置く。macOS/native NixOS の設定は Nix が所有する。Windows は標準デスクトップを使用し、Nix からデスクトップ設定を生成・配布しない（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
+   - 共通 action/key は `nix/home/keybindings/bindings.nix`、アプリの設定・生成関数は `nix/modules/`、OS 基盤設定は `nix/hosts/`、アプリの有効化は各 module に置く。macOS/native NixOS の設定は Nix が所有する。Windows は標準デスクトップを使用し、Nix からデスクトップ設定を生成・配布しない（[責務と対応範囲・移行状況](./chezmoi/omarchy.md)）
 3. **システム収束は OS に適した宣言レイヤーへ分離**
    - Windows: PowerShell handlers + winget
-   - macOS: nix-darwin + nix-homebrew
+   - macOS: nix-darwin
    - 非 NixOS Linux: standalone Home Manager（ユーザー環境のみ、OS service は管理しない）
    - NixOS/WSL: NixOS module
 4. **Full support は runtime acceptance までを契約に含める**
@@ -30,25 +30,23 @@
 ```
 dotfiles/
 ├── nix/                    # Cross-platform declarative configuration
-│   ├── home/               # Shared keybindings and Windows export
-│   │   └── keybindings/    # Shared keys and Windows export
-│   ├── treefmt.nix         # project treefmt configuration and formatter dependencies
-│   ├── defaults.nix        # OS settings, typed enable options and outputs
-│   ├── discover-modules.nix # Recursive default.nix discovery by evaluation scope
+│   ├── home/               # Shared Home Manager configuration
+│   │   ├── settings.nix    # Home Manager identity and state version
+│   │   └── keybindings/    # Shared keys
+│   ├── hosts/              # OS-specific system configuration
+│   ├── defaults.nix        # Flake output assembly and configuration registration
 │   ├── modules/            # App-owned packages, settings, integrations and dependencies
+│   │   ├── formatters/     # treefmt configuration and formatter dependencies
 │   │   └── editors/nvim/   # Neovim, plugins, LSPs and runtime/toolchains
 │   └── tests/
 │       ├── discover.nix    # Recursive unit/build discovery, no per-test registry
 │       ├── unit/           # *.nix: nix-unit expressions and configuration values
 │       ├── build/          # *.check.nix: named build, runtime, and artifact checks
 │       └── fixtures/       # Shared test inputs
-├── chezmoi/                # User dotfiles (shell/git/terminal/VS Code/LLM)
+├── chezmoi/                # Windows settings, package manifest and appearance export
 ├── scripts/                # All scripts
 │   ├── sh/                 # Shell scripts (Linux/WSL)
 │   └── powershell/         # PowerShell scripts (Windows)
-├── windows/                # Windows-side config files
-│   ├── winget/             # Independently maintained GUI packages.json
-│   └── .wslconfig          # WSL configuration
 ├── docs/                   # Documentation
 ├── Taskfile.yml            # Task runner (WSL 経由で nix fmt 等を実行)
 ├── taskfiles/              # Feature-scoped Taskfiles
@@ -63,7 +61,7 @@ dotfiles/
 | Platform    | Entrypoint     | System layer                             | User layer               | Runtime                        |
 | ----------- | -------------- | ---------------------------------------- | ------------------------ | ------------------------------ |
 | Windows     | `install.cmd`  | Winget + WSL 基盤（初回のみ）            | NixOS-WSL + Home Manager | Windows GUI + WSL2 / NixOS     |
-| macOS ARM64 | `./install.sh` | nix-darwin + nix-homebrew                | Home Manager             | Podman machine / native Hermes |
+| macOS ARM64 | `./install.sh` | nix-darwin                               | Home Manager             | Podman machine / native Hermes |
 | Other Linux | `./install.sh` | none                                     | Home Manager             | rootless Podman                |
 | NixOS       | `./install.sh` | NixOS generation + host hardware profile | Home Manager             | rootless Podman                |
 
@@ -78,26 +76,26 @@ flake inputs だけを更新する場合は `task update` を使います。共�
 
 ## 役割分担
 
-`nix/defaults.nix` にホスト定義と Home Manager 設定、構成生成・登録を集約し、
-`flake.nix` は `perSystem` と `configurations` を公開します。CPU は `system` 引数で選択します。
-`systemDefaults` に共通設定と OS 別の基盤設定・enable option をまとめます。`nix/discover-modules.nix` が実 module の `default.nix` を自動検出し、通常は Home Manager、`nixos/` / `darwin/` / `system/` 配下はそれぞれ対応する OS の評価へ接続します。アプリごとの import パス登録・公開 catalog は作りません。
-`home-manager.sharedModules` に共通・OS 別ユーザー設定をまとめ、構成登録の `specialArgs.platform` で OS を選択します。
-Lix・GC・Home Manager 接続と共通ユーザー設定を一つの `systemDefaults` に宣言し、standalone も同じ `sharedModules` を再利用します。
-GC 日時は各 OS ブロック、standalone GC は `systemDefaults.home-manager.sharedModules`、公開構成は `configurations` に宣言します。
-ユーザー名・stateVersion の変更先は `systemDefaults` 内の `defaults` です。
+`nix/defaults.nix` は flake 出力を接続します。Home Manager 構成は `nix/home/configurations.nix`、OS 構成は `nix/hosts/configurations.nix` が組み立て、`platform` と CPU の `system` を選択します。
+共通ユーザー設定は `nix/home/common.nix`、アプリの有効化と OS 差分は各 `nix/modules/` が所有します。
+共通 OS 設定は `nix/hosts/default.nix`、OS ごとの設定は `nix/hosts/darwin/`・`linux/`・`wsl/` に分けます。
+共通アプリ module は `nix/modules/default.nix`、アプリ内の子 module はその親、OS 固有の module は各 hosts の `imports` に明示します。統合環境と通常の Linux は同じ `nix/home/default.nix` を使います。
+統合 Home Manager と standalone は同じ `nix/home/default.nix` を使います。
+OS の nix.conf と GC は hosts、standalone のユーザー設定と GC は home が所有します。
+Home Manager のユーザー名は `nix/home/settings.nix`、各 stateVersion は root の `flake.nix`、共有 Nix 設定は `nix/modules/nix/settings.nix` に宣言します。
 Darwin は `system.primaryUser`、WSL は上書き可能な `wsl.defaultUser` を使い、統合 Home Manager は OS のユーザー名・ホーム・Nix package を標準継承します。
 共通配列と Windows export は `nix/home/keybindings/`、アプリの導入・設定・サービス・生成関数は `nix/modules/` が所有します。
 共通フォント package は NixOS / nix-darwin 統合時には system、standalone 時には Home Manager が供給します。
 
-| 役割                    | ツール                  | 説明                                                         |
-| ----------------------- | ----------------------- | ------------------------------------------------------------ |
-| Unix CLI / GUI 定義     | Nix / Home Manager      | アプリごとの module が導入・設定・連携・専用の実行依存を所有 |
-| Unix ユーザーパッケージ | Home Manager            | macOS、NixOS、Ubuntu、Debian で共通の `home.packages`        |
-| Windows パッケージ      | winget                  | 独立した標準 manifest を winget import で適用                |
-| macOS システム          | nix-darwin/nix-homebrew | Homebrew、Home Manager を 1 generation で適用                |
-| NixOS システム          | NixOS module            | native/WSL host、Podman、Home Manager を generation に統合   |
-| Unix ユーザー設定       | Home Manager            | shell、Git、terminal、editor の設定を宣言                    |
-| Windows 設定            | chezmoi                 | Windows のユーザー設定のみを配布                             |
+| 役割                    | ツール             | 説明                                                         |
+| ----------------------- | ------------------ | ------------------------------------------------------------ |
+| Unix CLI / GUI 定義     | Nix / Home Manager | アプリごとの module が導入・設定・連携・専用の実行依存を所有 |
+| Unix ユーザーパッケージ | Home Manager       | macOS、NixOS、Ubuntu、Debian で共通の `home.packages`        |
+| Windows パッケージ      | winget             | 独立した標準 manifest を winget import で適用                |
+| macOS システム          | nix-darwin         | Nix 管理のアプリと Home Manager を適用                       |
+| NixOS システム          | NixOS module       | native/WSL host、Podman、Home Manager を generation に統合   |
+| Unix ユーザー設定       | Home Manager       | shell、Git、terminal、editor の設定を宣言                    |
+| Windows 設定            | chezmoi            | Windows のユーザー設定のみを配布                             |
 
 WSL の Git 設定は、ユーザー設定を Home Manager、共有 checkout の信頼設定を
 NixOS `programs.git.config.safe.directory` が所有します。再構築 wrapper はローカルの
@@ -109,7 +107,7 @@ checkout を移動した場合も、新しい信頼設定の適用には明示�
 
 コンテナは Home Manager の `services.podman` が管理し、macOS は標準の Podman machine、
 Linux / WSL は rootless Podman とユーザー用 API ソケットを使います。
-NixOS の互換コマンドと API unit は `nix/defaults.nix` の標準 `virtualisation.podman` が管理します。
+NixOS の互換コマンドと API unit は `nix/hosts/linux/default.nix` の標準 `virtualisation.podman` が管理します。
 Home Manager の手書き API unit は standalone Linux だけに適用します。
 Lazydocker と MCP Gateway の wrapper は Podman API の接続先を設定します。
 Docker CLI package は導入せず、upstream が必要とする `docker` コマンドは Podman へのリンクで供給します。
@@ -156,7 +154,7 @@ MCP gateway の接続設定は Nix の `programs.mcp.servers` が所有し、リ
 Docker 公式 gateway は `docker-mcp` input の固定した Git source と同梱依存からビルドし、
 Home Manager が単体の `docker-mcp` コマンドを導入します。サーバー8種類の選択も
 `programs.mcp.servers.MCP_DOCKER.args` に宣言し、可変プロファイルへの同期処理は使いません。
-`task update` が Git source の lock を更新し、CI 検証後に `nrs` で gateway と接続設定を反映します。
+`task update` が Git source の lock を更新し、CI 検証後に `./install.sh` で gateway と接続設定を反映します。
 wrapper は `DOCKER_MCP_IN_CONTAINER=1` で Desktop 固有の検査を省き、Podman API を使います。
 `DOCKER_CONFIG` は Home Manager が `${HOME}/.docker` と明示設定し、MCP クライアントにも渡します。
 gateway と手動タスクは未設定・空の `DOCKER_CONFIG` をエラーにします。
@@ -179,20 +177,22 @@ runtime. No inference provider or model download is configured here.
 ## パッケージ管理フロー
 
 ```text
-nix/modules/**/default.nix ── scope ごとに自動検出
+nix/modules/default.nix ── 共通アプリを明示的に import
 ├── 各アプリ module ───── enable に従う package 選択・設定・連携・専用の実行依存
 └── editors/nvim/ ─────── Neovim・LSP・整形ツール・toolchain・プラグイン
 
-nix/defaults.nix:systemDefaults ── 共通 OS / Home Manager 設定と有効化だけの標準宣言
+nix/home/common.nix ── 共通ユーザー基盤設定
+nix/hosts/<platform>/ ── OS 基盤設定
+nix/defaults.nix ── flake 出力の組み立てと構成登録
 
-windows/winget/packages.json ── Windows GUI を直接宣言
+chezmoi/winget/packages.json ── Windows GUI を直接宣言
 ```
 
 ### ツール追加手順
 
-1. enable・単純な package list・単一代入は `nix/defaults.nix` の必要な構成へ直接書く。設定・package override・生成・連携を持つ場合はアプリ module にまとめる。設定・連携も管理するアプリは標準の `programs.<name>.enable`、設定をユーザーが管理するアプリや標準 module のないアプリは `home.packages` を使う。Neovim の LSP・整形ツール・toolchain・プラグイン実行依存は `editors/nvim/` に置く。
-2. 設定を持つ実 module はアプリ配下の `default.nix` とし、自動検出させる。OS module は `nixos/` / `darwin/` / `system/` 配下に置く。`nix/defaults.nix` には型付き enable option を指定し、個別の import パス登録・公開 catalog は追加しない。純粋な factory・renderer は通常の関数として維持する。Homebrew / nix-homebrew・cask と OS 基盤設定は `defaults.nix` の各 OS ブロックが担当する。
-3. Windows に追加する場合は `windows/winget/packages.json` のWinGet 標準 import schema に合わせ、package ID・source・Scope を直接記述する。
+1. 各アプリの module が原則 enable = true を宣言し、package・設定・専用依存を所有する。Neovim の LSP・整形ツール・toolchain は Neovim module に置く。
+2. アプリの `default.nix` と、必要な OS 用の `nixos.nix` / `darwin.nix` を明示 import する。module 内に OS 名のディレクトリは作らない。純粋な factory・renderer は通常の関数として使う。
+3. Windows に追加する場合は `chezmoi/winget/packages.json` のWinGet 標準 import schema に合わせ、package ID・source・Scope を直接記述する。
 4. 各 OS の通常インストーラーで反映する。具体的な入口と所有境界は [パッケージ管理](./nix/package-management.md) を参照する。
 
 Windows 専用のアプリも同じ WinGet manifest に直接追加する。Unix の Nix module に Windows install metadata は置かない。

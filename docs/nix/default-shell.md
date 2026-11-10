@@ -2,7 +2,7 @@
 
 NixOS / NixOS-WSL は、対象ユーザーのログインシェルに zsh を設定します。
 `programs.zsh.enable` で zsh を導入し、ユーザーの `shell` option に反映します。
-通常の `nrs` / インストール後、新しいログインセッションから有効になります。
+通常の `./install.sh` / インストール後、新しいログインセッションから有効になります。
 
 macOS は `programs.zsh.enable` と Home Manager で zsh の設定を管理します。
 既存アカウントのログインシェルを変更する独自 activation は実行しません。
@@ -12,7 +12,7 @@ Windows と standalone Home Manager のログインシェルは変更しませ�
 
 WSL では `programs.starship.wslIntegration.enable` により、Windows ドライブの
 Git 状態を Windows 版 Starship で取得します。Windows 側は
-`windows/winget/packages.json` の `Starship.Starship` が管理します。
+`chezmoi/winget/packages.json` の `Starship.Starship` が管理します。
 
 Bash / Zsh の起動時に `starship.exe` の場所を一度だけ解決し、絶対パスの
 ラッパーを通して呼び出します。これにより、プロンプト更新ごとの Windows

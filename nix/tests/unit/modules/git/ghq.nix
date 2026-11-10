@@ -6,7 +6,7 @@ let
         enable = true;
         root = "/tmp/custom-ghq";
       };
-      programs.git.enable = false;
+      programs.git.enable = (fixtures.mkPkgs "x86_64-linux").lib.mkForce false;
     }
   ];
 in

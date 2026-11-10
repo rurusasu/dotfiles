@@ -129,7 +129,7 @@ lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
           "C /home/nixos/.hermes/.env 0600 nixos users - ${hermesEnv}"
         ];
         specialisation.production.configuration = {
-          imports = [ (code.nix.defaults inputs).systemDefaults ];
+          imports = [ code.nix.hosts.default ];
           # Keep the real Home Manager/service implementation and supply public
           # CI credentials instead of depending on a personal 1Password vault.
           home-manager.users.nixos = {

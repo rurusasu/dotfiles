@@ -8,6 +8,7 @@
   home.packages =
     lib.mkIf (config.programs.nixvim.enable && config.programs.nixvim.plugins.snacks.enable)
       [
+        pkgs.lazygit
         pkgs.neovim-remote
         pkgs.imagemagick
         pkgs.poppler-utils

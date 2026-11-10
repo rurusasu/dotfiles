@@ -36,7 +36,7 @@ NixOS-WSL はファイルシステムが Nix store（read-only）をベースに
 
 ### 現在のコンテナ構成
 
-このリポジトリでは rootless Podman を使います。`nix/defaults.nix` が OS 基盤を有効化し、`nix/modules/podman/` がユーザー用 API を管理します。
+このリポジトリでは rootless Podman を使います。`nix/home/` / `nix/hosts/` が OS 基盤を有効化し、`nix/modules/podman/` がユーザー用 API を管理します。
 
 ```nix
 podman info

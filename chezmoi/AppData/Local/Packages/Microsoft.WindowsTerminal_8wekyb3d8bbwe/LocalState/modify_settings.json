@@ -1,5 +1,5 @@
 {{- /* chezmoi:modify-template */ -}}
-{{- $appearance := include "../nix/home/appearance.json" | fromJson -}}
+{{- $appearance := include "appearance/appearance.json" | fromJson -}}
 {{- $settings := .chezmoi.stdin | trim | default "{}" | fromJsonc -}}
 {{- $profiles := list -}}
 {{- $hasNixOS := false -}}

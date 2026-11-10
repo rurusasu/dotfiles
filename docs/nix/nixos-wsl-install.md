@@ -37,7 +37,7 @@ WSL 基盤の有効化だけ UAC 昇格し、
 
 `-DistroName`、`-InstallDir`、`-ReleaseTag`、`-SyncMode`、`-SyncBack`、
 `-ForcePostInstall` を指定できます。`system.stateVersion` は
-`nix/defaults.nix:systemDefaults` 内の `defaults.stateVersion` を使います。
+`nix/hosts/linux/default.nix` の `system.stateVersion` を使います。
 同期オプションと既存環境のバックアップについては後述を参照してください。
 以下は distro の手動導入と、設定適用だけを独立して実行する場合の手順です。
 
@@ -112,13 +112,13 @@ NixOS の stateVersion は共通 entrypoint が設定し、追加引数の指定
 公式 nixos.wsl を手動導入
   -> Invoke-NixosWslSetup -Repository <Windows checkout> -DistroName NixOS
   -> checkout 同期（公式既定ユーザー nixos）
-  -> nixos-rebuild switch --flake path:<checkout>#nixos --impure --no-update-lock-file
+  -> nixos-rebuild switch --flake path:<checkout>#wsl --impure --no-update-lock-file
 ```
 
 初期 NixOS-WSL イメージには Git CLI がないため、ローカル checkout は明示的な `path:` flake として扱います。
 通常のファイルシステムパスを渡すと Git flake として自動判定され、Git CLI が必要になるためです。
 
-[公式手順](https://nix-community.github.io/NixOS-WSL/install.html)の標準アカウントは `nixos` です。セットアップは flake の `wsl.defaultUser` を読み取り、WSL の現在の既定ユーザーと一致することを確認します。設定済みのカスタムユーザーも利用できます。`nix/defaults.nix:systemDefaults` は
+[公式手順](https://nix-community.github.io/NixOS-WSL/install.html)の標準アカウントは `nixos` です。セットアップは flake の `wsl.defaultUser` を読み取り、WSL の現在の既定ユーザーと一致することを確認します。設定済みのカスタムユーザーも利用できます。`nix/hosts/default.nix` は
 `wsl.defaultUser` を使って Home Manager を接続し、アカウント名と UID の既定値は NixOS-WSL module に任せます。
 ユーザー名・UID/GID・checkout を独自 JSON に保存する処理はありません。
 
@@ -138,7 +138,7 @@ NixOS の stateVersion は共通 entrypoint が設定し、追加引数の指定
 `nix` は既に flake.nix・flake.lock・scripts/ を持つ完全な WSL checkout が必要で、
 `SyncBack = 'repo'` と併用できません。
 `ForcePostInstall` は通常設定せず、競合する checkout を退避する必要がある場合だけ明示します。
-通常の setup と `task nrs` は `--no-update-lock-file` で lock の変更を禁止します。
+通常の setup と `task ./install.sh` は `--no-update-lock-file` で lock の変更を禁止します。
 不足・不整合な lock は反映前に失敗します。依存の更新は WSL 内で `task update` を実行し、
 更新した lock を commit / PR に含めて CI を通してから適用します。
 WSL CI と通常の setup は同じ固定入力の方針で一度だけ反映します。
@@ -151,9 +151,9 @@ setup 済みの WSL では次を実行します。
 ~/.dotfiles/install.sh
 ```
 
-WSL の system / ユーザー設定と module 選択は `nix/defaults.nix:systemDefaults`、アプリ設定は `nix/modules/` に置きます。
+WSL の OS 設定は `nix/hosts/wsl/default.nix`、ユーザー設定は `nix/home/wsl.nix`、アプリ設定は `nix/modules/` に置きます。
 WSL のユーザーは `wsl.defaultUser`、ホームは `users.users.<name>.home` から取得し、
-ユーザー名と stateVersion の既定値は `nix/defaults.nix:systemDefaults` 内の `defaults` で管理します。
+WSL のユーザー名は `nix/hosts/wsl/default.nix`、OS の stateVersion は `nix/hosts/linux/default.nix` で管理します。
 architecture は構成の `system` 引数で指定し、CPU 別ディレクトリは設けません。
 native NixOS 用の `/etc/nixos/hardware-configuration.nix` は WSL では通常不要です。
 
@@ -161,13 +161,13 @@ native NixOS 用の `/etc/nixos/hardware-configuration.nix` は WSL では通常
 
 管理するアプリの既定フォントは `UDEV Gothic NF` に統一します。フォントの選択・導入は Nix、Windows の配置・登録は chezmoi が担当します。不足グリフ用には color emoji を残します。Windows 自体のシステム UI フォントや、Web サイトが CSS で指定したフォントは強制変更しません。
 
-`nix/defaults.nix` の WSL 設定は WSLg server が読める通常ファイルとして UDEV の Regular / Bold と color emoji を配置します。WSLg 用 fontconfig の正本は `nix/modules/fonts/wsl-fontconfig.conf` です。server 標準の `/etc/fonts/fonts.conf` を読み込んだ後、解決された `sans-serif` に UDEV を優先指定し、Pango の titlebar にも適用します。
+`nix/hosts/wsl/default.nix` の WSL 設定は WSLg server が読める通常ファイルとして UDEV の Regular / Bold と color emoji を配置します。WSLg 用 fontconfig の正本は `nix/modules/fonts/wsl-fontconfig.conf` です。server 標準の `/etc/fonts/fonts.conf` を読み込んだ後、解決された `sans-serif` に UDEV を優先指定し、Pango の titlebar にも適用します。
 
 chezmoi はこの XML を `%USERPROFILE%/.config/dotfiles/wslg-fontconfig.conf` に配置し、`%USERPROFILE%/.wslgconfig` の `FONTCONFIG_FILE` を Windows home の `/mnt/<drive>/...` パスへ向けます。XML の参照先を Windows 側に置くことで、特定の user distro 内の設定や起動順に依存させません。フォント方針を chezmoi 側へ重複定義しません。
 
 GTK の画面内フォントは `nix/modules/fonts/default.nix` が GTK 3 / 4 と設定ポータルへ配布します。WSL host は `programs.dconf.enable` で永続設定に必要な service を登録します。
 
-反映は WSL で `nrs`、Windows で `task chezmoi` の順です。WSLg の新しい環境変数と titlebar font cache は、次の WSLg 再起動時に読み込まれます。作業を保存して Linux GUI アプリを閉じた後、Windows で `wsl --shutdown` を実行し、通常どおりアプリを起動してください。2026-10-14 に再起動後の通常 Chrome titlebar と Nautilus の UDEV・日本語表示を実機確認しました。
+反映は WSL で `./install.sh`、Windows で `task chezmoi` の順です。WSLg の新しい環境変数と titlebar font cache は、次の WSLg 再起動時に読み込まれます。作業を保存して Linux GUI アプリを閉じた後、Windows で `wsl --shutdown` を実行し、通常どおりアプリを起動してください。2026-10-14 に再起動後の通常 Chrome titlebar と Nautilus の UDEV・日本語表示を実機確認しました。
 
 ## WSLg の GPU 描画
 
@@ -175,7 +175,7 @@ WSL host は `wsl.useWindowsDriver = true` で Windows の D3D12 / DXCore ライ
 `/run/opengl-driver/lib` に接続します。`LD_LIBRARY_PATH` にそのディレクトリを設定し、
 `GALLIUM_DRIVER=d3d12` で Mesa の描画経路を選択します。
 Ghostty などの OpenGL アプリが CPU 描画の `llvmpipe` にフォールバックするのを防ぎます。
-`platform = "wsl"` の `systemDefaults` が Windows driver・ポータル・ユーザーの描画環境を管理します。
+`nix/hosts/wsl/` の OS・ユーザー設定 が Windows driver・ポータル・ユーザーの描画環境を管理します。
 シェルには `home.sessionVariables`、systemd 経由の GUI 起動には `systemd.user.sessionVariables` で渡します。
 詳細は [NixOS-WSL の option](https://nix-community.github.io/NixOS-WSL/options.html#wsl.useWindowsDriver) と
 [WSLg の D3D12 自動選択の問題](https://github.com/microsoft/wslg/issues/1332) を参照してください。
@@ -229,7 +229,7 @@ Ghostty 1.3.1 の起動ログには、設定で解決する警告と upstream �
 ## system version と system.stateVersion
 
 `system.stateVersion` は永続データの形式やサービスの既定値に使う設定値です。
-ユーザーは `wsl.defaultUser` で上書きでき、既定値と stateVersion は `nix/defaults.nix:systemDefaults` 内の `defaults` で管理します。
+ユーザーは `wsl.defaultUser` で上書きでき、既定ユーザーは `nix/hosts/wsl/default.nix`、OS の stateVersion は `nix/hosts/linux/default.nix` で管理します。
 既存環境でユーザー名を変更する場合は、[公式の変更手順](https://nix-community.github.io/NixOS-WSL/how-to/change-username.html)に従います。
 通常の `switch` で改名せず、`boot` で構成を作り、WSL の停止・root での起動・再停止を行って反映します。
 Windows / WSL の installer はアカウント名の不一致を検出すると `switch` 前に停止し、この公式の変更手順を案内します。

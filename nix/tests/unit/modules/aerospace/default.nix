@@ -122,8 +122,6 @@ in
           "29"
           "30"
           "31"
-          "64"
-          "65"
           "184"
         ];
         noDictionaryReplacement = !(lib.hasInfix "-dict " script);

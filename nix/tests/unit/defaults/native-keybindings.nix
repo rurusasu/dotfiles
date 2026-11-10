@@ -14,7 +14,7 @@ let
         platform = "linux";
       };
       modules = [
-        (code.nix.defaults inputs).systemDefaults
+        code.nix.hosts.default
         {
           nixpkgs.pkgs = pkgs;
           users.users.nixos.home = "/srv/nixos";
@@ -65,11 +65,9 @@ in
   testNativeDesktopModulesSelectTheirPackages = {
     expr = {
       compositor = builtins.elem cfg.programs.hyprland.package cfg.environment.systemPackages;
-      launcher = builtins.elem pkgs.fuzzel home.home.packages;
     };
     expected = {
       compositor = true;
-      launcher = true;
     };
   };
 }

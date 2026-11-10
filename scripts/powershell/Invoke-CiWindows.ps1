@@ -26,7 +26,7 @@ if ($Phase -eq 'Prepare') {
     & git -C $repository archive --format=zip --output=$archivePath $TestedSha
     if ($LASTEXITCODE -ne 0) { throw 'Could not archive the tested Windows source.' }
     Expand-Archive -LiteralPath $archivePath -DestinationPath $source -Force
-    Copy-Item -LiteralPath (Join-Path $source 'windows/winget/packages.json') -Destination $manifestPath
+    Copy-Item -LiteralPath (Join-Path $source 'chezmoi/winget/packages.json') -Destination $manifestPath
     $provenance = [ordered]@{
         schemaVersion        = 1
         target               = 'windows'
@@ -57,7 +57,7 @@ if ($Phase -eq 'Apply') {
     if (Test-Path -LiteralPath $source) { throw 'Import Windows artifacts into a fresh directory.' }
     Expand-Archive -LiteralPath $archivePath -DestinationPath $source -Force
 }
-$sourceManifest = Join-Path $source 'windows/winget/packages.json'
+$sourceManifest = Join-Path $source 'chezmoi/winget/packages.json'
 if ((Get-FileHash -LiteralPath $sourceManifest -Algorithm SHA256).Hash.ToLowerInvariant() -cne $provenance.packagesSha256) {
     throw 'The extracted Windows installer does not consume the prepared package plan.'
 }
@@ -111,7 +111,7 @@ $ErrorActionPreference = 'Stop'
 if ($PID -eq $ParentProcessId -or $PSVersionTable.PSVersion.Major -ne $ExpectedMajor) {
     throw 'Windows restart did not create the requested fresh runtime.'
 }
-foreach ($name in @('dotf', 'ls', 'll', 'codex')) {
+foreach ($name in @('ls', 'll', 'codex')) {
     if (-not (Get-Command $name -CommandType Function -ErrorAction SilentlyContinue)) {
         throw "Managed PowerShell profile function is missing: $name"
     }

@@ -11,13 +11,6 @@ Set-Alias -Name grep -Value rg.exe
 Set-Alias -Name find -Value fd.exe
 Set-Alias -Name lg -Value lazygit.exe
 
-function dotf {
-    # Resolve the checkout through chezmoi so moves and paths with spaces work.
-    $sourcePath = & chezmoi.exe source-path
-    if ($LASTEXITCODE -ne 0) { return }
-    & task.exe --dir (Split-Path -Parent $sourcePath) @args
-}
-
 function codex {
     $codexBin = if ($env:LOCALAPPDATA) {
         [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'OpenAI/Codex/bin'))

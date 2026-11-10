@@ -1,16 +1,9 @@
-# nix/hosts: 統合済みのホスト定義
+# nix/hosts: OS とホストの構成
 
-ホスト定義と公開構成は `../defaults.nix` に統合しています。
-このディレクトリに Nix 定義や転送用 wrapper を追加しません。
-
-- ユーザー名・stateVersion は `systemDefaults` 内の `defaults` で一元管理し、`_module.args` と Home Manager 共通設定から参照する。
-- `systemDefaults`: 共通設定と末尾の OS 別 system imports。Home Manager の共通・OS 別設定は同じ `home-manager.sharedModules` にまとめる。
-- `configurations`: 標準の NixOS / nix-darwin / Home Manager 構成。
-- `perSystem`: 公開 app と package。
-
-末尾の構成登録が `specialArgs.platform` を選択し、standalone Home Manager も同じ `sharedModules` を再利用する。
-
-共有宣言を先に置き、OS 別宣言、公開構成の順に記載します。CPU は `system` 引数で選択します。
-native 構成は `/etc/nixos/hardware-configuration.nix` がある場合だけ公開します。
-アプリ固有の設定・サービス・activation・キー設定生成関数は `../modules/` に置きます。
-`../defaults.nix` は OS 基盤設定と型付き option による有効化、`../home/keybindings/` は共通配列と Windows export を所有します。
+- `default.nix`: 共通 OS 設定、timezone、Nix daemon、OS GC、Home Manager 接続。
+- `darwin/default.nix`: nix-darwin、macOS アカウント・基盤設定。
+- `linux/default.nix`: native NixOS / WSL の OS 基盤。native Linux では Hyprland も有効化する。
+- `wsl/default.nix`: NixOS-WSL、GPU・フォント配布・portal・interop の OS 設定。
+- ユーザーの基盤設定は `../home/common.nix`、アプリの OS 差分は `../modules/`。統合・Home Manager 単独 は `../home/default.nix` を同じように読み込む。
+- Home Manager のユーザー名は `../home/settings.nix`、各 stateVersion は root の `flake.nix`。OS 構成の登録は `configurations.nix`、共通 Nix ポリシーは `../modules/nix/settings.nix`。
+- アプリ固有の設定・サービス・activation・package factory は `../modules/` の対応する scope に置く。

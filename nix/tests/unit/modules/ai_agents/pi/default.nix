@@ -23,7 +23,7 @@ let
   };
 in
 {
-  testPiEnabledOnlyOnDarwinAndWsl = {
+  testPiModuleEnablesTheAgentAcrossHomes = {
     expr = map piState [
       darwin
       wsl
@@ -43,10 +43,10 @@ in
         hasManagedModels = true;
       }
       {
-        enabled = false;
-        installed = false;
-        hasManagedSettings = false;
-        hasManagedModels = false;
+        enabled = true;
+        installed = true;
+        hasManagedSettings = true;
+        hasManagedModels = true;
       }
     ];
   };

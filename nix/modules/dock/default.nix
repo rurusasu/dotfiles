@@ -22,8 +22,7 @@ in
       ]
       ++ application config.programs.chatgpt "ChatGPT"
       ++ application config.programs.dia "Dia"
-      ++ application config.programs.ghostty "Ghostty"
-      ++ [ "${pkgs.obsidian}/Applications/Obsidian.app" ];
+      ++ application config.programs.ghostty "Ghostty";
       persistent-others = [ ];
       showDesktopGestureEnabled = true;
       showMissionControlGestureEnabled = true;

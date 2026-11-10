@@ -12,7 +12,7 @@ let
       platform = "wsl";
     };
     modules = [
-      (code.nix.defaults inputs).systemDefaults
+      code.nix.hosts.default
     ];
   };
 
@@ -158,7 +158,6 @@ in
         onePasswordEnvironment = disabledHome.home.sessionVariables ? OP_ACCOUNT;
         onePasswordInterop = disabledHome.home.sessionVariables ? WSLENV;
         onePasswordBridge = disabledHome.home.file ? ".local/bin/op-ssh-sign-wsl";
-        onePasswordWrapper = config.security.wrappers ? op;
         onePasswordGui = builtins.elem mkWsl.pkgs._1password-gui disabledHome.home.packages;
       };
     expected = {
@@ -169,7 +168,6 @@ in
       onePasswordEnvironment = false;
       onePasswordInterop = false;
       onePasswordBridge = false;
-      onePasswordWrapper = false;
       onePasswordGui = false;
     };
   };

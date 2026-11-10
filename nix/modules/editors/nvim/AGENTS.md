@@ -10,6 +10,8 @@
 - 基本 option・leader・静的なキーは Nixvim の `opts` / `globals` / `keymaps`、対応プラグインの設定は `plugins.<name>.settings` で宣言する。Lua の生成は Nixvim に任せ、独自の中間ファイルは作らない。autocmd・ユーザーコマンドも `autoCmd` / `userCommands` に宣言する
 - `lsp/default.nix` が Neovim 標準の LSP 補完・キー・保存時整形を接続する。独自のサーバー選択は行わない
 
+- PowerShell 本体はユーザー指定により `shells/powershell/` が所有する。`lsp/powershell_es.nix` はその有効化と package を参照し、Editor Services の設定を所有する。
+
 ## 変更ルール
 
 - 設定・プラグインは Nixvim の Home Manager module が管理する。`wrapRc = true` / `impureRtp = false` で package に含め、XDG や chezmoi へ二重配布しない。

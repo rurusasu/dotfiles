@@ -4,7 +4,7 @@ let
     home: builtins.any (package: (package.pname or "") == "chatgpt") home.config.home.packages;
 in
 {
-  testChatGPTDesktopSelectionFollowsPlatform = {
+  testChatGPTModuleInstallsTheDesktopAcrossHomes = {
     expr = {
       darwin = installed homeConfigurations.darwin;
       linux = installed homeConfigurations.linux;
@@ -14,8 +14,8 @@ in
     expected = {
       darwin = true;
       linux = true;
-      wsl = false;
-      common = false;
+      wsl = true;
+      common = true;
     };
   };
 }

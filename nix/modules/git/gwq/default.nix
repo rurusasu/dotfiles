@@ -17,28 +17,31 @@ in
     description = "Declarative gwq configuration, with host-specific worktree locations.";
   };
 
-  config = lib.mkIf config.programs.gwq.enable {
-    home.packages = [ pkgs.gwq ];
-    programs.gwq.settings = {
-      worktree = {
-        basedir = lib.mkDefault (config.home.homeDirectory + "/worktrees");
-        auto_mkdir = lib.mkDefault true;
+  config = lib.mkMerge [
+    { programs.gwq.enable = true; }
+    (lib.mkIf config.programs.gwq.enable {
+      home.packages = [ pkgs.gwq ];
+      programs.gwq.settings = {
+        worktree = {
+          basedir = lib.mkDefault (config.home.homeDirectory + "/worktrees");
+          auto_mkdir = lib.mkDefault true;
+        };
+        cd.launch_shell = lib.mkDefault false;
       };
-      cd.launch_shell = lib.mkDefault false;
-    };
 
-    xdg.configFile."gwq/config.toml".source =
-      format.generate "gwq-config.toml" config.programs.gwq.settings;
+      xdg.configFile."gwq/config.toml".source =
+        format.generate "gwq-config.toml" config.programs.gwq.settings;
 
-    programs = {
-      git.settings.alias.gtr = lib.mkIf config.programs.git.enable "!gwq add";
-      # Completion also provides the wrapper used by `gwq cd` in the current shell.
-      bash.initExtra = lib.mkIf config.programs.bash.enable ''
-        source <(${executable} completion bash)
-      '';
-      zsh.initContent = lib.mkIf config.programs.zsh.enable ''
-        source <(${executable} completion zsh)
-      '';
-    };
-  };
+      programs = {
+        git.settings.alias.gtr = lib.mkIf config.programs.git.enable "!gwq add";
+        # Completion also provides the wrapper used by `gwq cd` in the current shell.
+        bash.initExtra = lib.mkIf config.programs.bash.enable ''
+          source <(${executable} completion bash)
+        '';
+        zsh.initContent = lib.mkIf config.programs.zsh.enable ''
+          source <(${executable} completion zsh)
+        '';
+      };
+    })
+  ];
 }

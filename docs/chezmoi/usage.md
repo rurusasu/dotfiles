@@ -35,7 +35,7 @@ Windows Terminal のフォントは UDEV Gothic NF の 10 pt、配色は Catppuc
 
 PowerShell 7 は、対話コンソールで PSReadLine が `PredictionViewStyle` オプションを提供している場合、`ListView` で履歴の候補を入力中に表示し、文字を追加すると候補を絞り込みます。未実行のコマンドやサブコマンドは通常の Tab 補完で選びます。WSL の有無に依存しません。適用後は PowerShell の新しいタブを開くか、`. $PROFILE` で再読み込みします。
 
-macOS、Linux、NixOS-WSL 内部の Ghostty / Herdr 設定は Home Manager が管理し、Windows 用 chezmoi source からは配布しません。テーマ・フォントの正本を変更した場合は `task keybindings:export` で共通の `nix/home/appearance.json` を更新してから chezmoi を適用します。
+macOS、Linux、NixOS-WSL 内部の Ghostty / Herdr 設定は Home Manager が管理し、Windows 用 chezmoi source からは配布しません。テーマ・フォントの正本を変更した場合は `task keybindings:export` で共通の `chezmoi/appearance/appearance.json` を更新してから chezmoi を適用します。
 
 ## Windows の共通エイリアス
 
@@ -50,4 +50,4 @@ Windows のエイリアスと関数も chezmoi の PowerShell profile が管理�
 | `lg`                       | `lazygit.exe`                                 |
 | `dotf`                     | chezmoi source の親のリポジトリで Task を実行 |
 
-`eza`・`fd`・`ripgrep`・`lazygit` の導入情報は `windows/winget/packages.json` が管理します。Windows のアプリ設定・短縮コマンドはこの manifest に載っているアプリだけを対象とします。`install.cmd -Phase Winget` で導入し、`task chezmoi` と `. $PROFILE` で profile を反映します。`nrs` / `nrt` / `nrb` は NixOS 固有なので Windows profile には定義しません。
+`eza`・`fd`・`ripgrep`・`lazygit` の導入情報は `chezmoi/winget/packages.json` が管理します。Windows のアプリ設定・短縮コマンドはこの manifest に載っているアプリだけを対象とします。`install.cmd -Phase Winget` で導入し、`task chezmoi` と `. $PROFILE` で profile を反映します。`./install.sh` / `nrt` / `nrb` は NixOS 固有なので Windows profile には定義しません。

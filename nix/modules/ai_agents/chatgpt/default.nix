@@ -28,6 +28,10 @@ in
     };
   };
   config = lib.mkMerge [
+    {
+      programs.chatgpt.enable = true;
+      programs.codex.enable = true;
+    }
     (lib.mkIf config.programs.chatgpt.enable {
       programs.codex.enable = true;
       home.packages = [ config.programs.chatgpt.package ];

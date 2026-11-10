@@ -14,7 +14,7 @@ chezmoi は Windows Terminal 設定と PowerShell 7 プロファイルを管理�
 | -------------------------------------------- | ----------------------------------------------------- |
 | Windows Terminal                             | chezmoi                                               |
 | Windows PowerShell 7 profile                 | chezmoi                                               |
-| PowerShell 7 / Windows Terminal 本体         | [WinGet manifest](../../windows/winget/packages.json) |
+| PowerShell 7 / Windows Terminal 本体         | [WinGet manifest](../../chezmoi/winget/packages.json) |
 | macOS、Linux、NixOS-WSL 内の Ghostty / Herdr | Home Manager                                          |
 
 PowerShell プロファイルは PSReadLine の履歴候補表示と共通エイリアスを設定します。詳しい適用方法は [usage.md](./usage.md) を参照してください。

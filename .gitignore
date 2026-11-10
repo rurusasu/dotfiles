@@ -47,6 +47,4 @@ __pycache__/
 docker/**/.env
 **/.op.env
 
-# WSL config (machine-specific)
-windows/.wslconfig
 result

@@ -4,7 +4,9 @@
 
 ## 静的解析
 
-`task lint:powershell` が [Invoke-StaticAnalysis.ps1](../../scripts/powershell/Invoke-StaticAnalysis.ps1) を実行します。
+CI は `nix develop .#ci --command task lint:ci` で検査します。CI 用 treefmt の構成は `nix/modules/formatters/default.nix` です。
+
+`powershell-lint`（CI 用シェル内） が [Invoke-StaticAnalysis.ps1](../../scripts/powershell/Invoke-StaticAnalysis.ps1) を実行します。
 この adapter が解析ルールと除外を所有し、runtime ソースの Error / Warning と
 全 PowerShell ソースの ANSI/BOM 不整合を失敗にします。CI は Build / Plan より前に実行します。
 
@@ -15,13 +17,13 @@
 システムの ANSI コードページで読み、日本語の閉じ引用符まで誤読する場合があります。
 `chcp 65001` や `$OutputEncoding` では、このファイル読み込みの問題は解消しません。
 
-[`nix/treefmt.nix`](../../nix/treefmt.nix) は本文が変わらない場合も
+[`nix/modules/formatters/default.nix`](../../nix/modules/formatters/default.nix) は本文が変わらない場合も
 必要な BOM を補い、既存 BOM を維持します。ASCII のみのファイルには必須ではありません。
 `chezmoi/` テンプレートには BOM を追加しません。
 
 pre-commit の `fix-byte-order-marker` は `scripts/powershell/` を除外し、
 PSScriptAnalyzer の `PSUseBOMForUnicodeEncodedFile` は有効にします。
-CP932 での文字列保持は `task lint:powershell`、5.1 の実ファイル読み込みは
+CP932 での文字列保持は `powershell-lint`（CI 用シェル内）、5.1 の実ファイル読み込みは
 [runtime suite](../scripts/powershell/README.md#テスト) が検証します。
 formatter の BOM 補完と冪等性は Nix build check が担当します。
 
@@ -65,7 +67,7 @@ function Get-Something {
 
 ### Nix (推奨)
 
-この repository の `nix fmt` / `task lint:powershell` は、PowerShell と
+この repository の `nix fmt` / `powershell-lint`（CI 用シェル内） は、PowerShell と
 PSScriptAnalyzer を宣言済みの依存として使用します。
 nixpkgs の `vscode-extensions.ms-vscode.powershell` に同梱された module を直接 import します。
 VS Code 本体は導入せず、拡張機能の module ディレクトリから PowerShell が版を解決します。
@@ -75,18 +77,7 @@ HOME の module cache に依存せず、整形・静的検査中の module ダ�
 Windows の runtime suite は、インストール済みの互換性がある stable Pester を選択します。
 不足していればエラーにし、テスト中にダウンロードしません。
 
-PowerShell 自体を単独で使う場合:
-
-```bash
-# nix profile (flakes)
-nix profile install nixpkgs#powershell
-
-# nix-env
-nix-env -iA nixpkgs.powershell
-
-# nix run (一時的)
-nix run nixpkgs#powershell -- -c "Write-Host 'Hello'"
-```
+通常の Unix 環境への導入は `programs.powershell.enable` で選択し、`nix/modules/shells/powershell/default.nix` が所有します。ユーザー指定により全 OS で既定有効です。Neovim は有効時に PowerShell Editor Services を使い、補完・診断・保存時整形を提供します。ローカルの `nix fmt` / pre-commit は PowerShell を処理せず、CI 用シェルだけがリポジトリ全体の PowerShell 検査・整形を実行します。
 
 ## 使用方法
 
@@ -100,12 +91,12 @@ $formatted = Invoke-Formatter -ScriptDefinition $content
 repository の静的解析と Windows 文字コード検証:
 
 ```bash
-task lint:powershell
+nix develop .#ci --command powershell-lint
 ```
 
 ## treefmt 設定
 
-`nix/treefmt.nix` の PowerShell 定義を更新します。
+`nix/modules/formatters/default.nix` の PowerShell 定義を更新します。
 対象は `.ps1`、`.psm1`、`.psd1` です。
 formatter は UTF-8 として読み、CRLF に正規化してから、対象パス・非 ASCII 文字・
 既存 BOM をもとに出力形式を決めます。本文の差分だけでなく BOM 不足も書き込み条件です。

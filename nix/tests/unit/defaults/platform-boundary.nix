@@ -5,7 +5,7 @@
 {
   testCommonGitAndSshUseTheSharedSignerAndAgent = {
     expr = {
-      signer = inputs.nixpkgs.lib.hasSuffix "/bin/ssh-keygen" homeConfigurations.common.config.programs.git.signing.signer;
+      signer = inputs.nixpkgs.lib.hasSuffix "/bin/op-ssh-sign" homeConfigurations.common.config.programs.git.signing.signer;
       agent = homeConfigurations.common.config.home.sessionVariables.SSH_AUTH_SOCK;
     };
     expected = {

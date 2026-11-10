@@ -20,7 +20,6 @@ in
         "${programs.chatgpt.package}/Applications/ChatGPT.app"
         "${programs.dia.package}/Applications/Dia.app"
         "${programs.ghostty.package}/Applications/Ghostty.app"
-        "${darwin.pkgs.obsidian}/Applications/Obsidian.app"
       ];
       finder = "PfHm";
       darkMode = "Dark";
@@ -40,38 +39,6 @@ in
       dock = null;
       finder = null;
     };
-  };
-
-  testDockOmitsDisabledOrExternallyInstalledApplications = {
-    expr =
-      let
-        home = fixtures.mkHome "aarch64-darwin" [ { dotfiles.desktop.enable = true; } ];
-        externalGhostty = home.extendModules {
-          modules = [
-            {
-              programs.ghostty = {
-                enable = true;
-                package = home.pkgs.lib.mkForce null;
-              };
-            }
-          ];
-        };
-      in
-      map
-        (
-          profile:
-          map (
-            app: app.tile-data.file-data._CFURLString
-          ) profile.config.targets.darwin.defaults."com.apple.dock".persistent-apps
-        )
-        [
-          home
-          externalGhostty
-        ];
-    expected = builtins.genList (_: [
-      "/System/Applications/Apps.app"
-      "${darwin.pkgs.obsidian}/Applications/Obsidian.app"
-    ]) 2;
   };
 
   testDarwinDesktopIsInertOnLinuxEvenWhenEnabled = {

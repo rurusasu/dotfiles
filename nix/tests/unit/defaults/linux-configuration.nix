@@ -11,7 +11,7 @@ let
         inherit inputs;
         platform = "linux";
       };
-      modules = [ (code.nix.defaults inputs).systemDefaults ];
+      modules = [ code.nix.hosts.default ];
     })
     config
     pkgs

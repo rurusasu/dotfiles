@@ -24,48 +24,11 @@ let
         };
         lib = {
           getExe = package: package.executable;
-          optionalAttrs = condition: attrs: if condition then attrs else { };
         };
       };
 
 in
 {
-  testFlakeLockPinsPlatformInputs = {
-    expr =
-      builtins.map
-        (
-          name:
-          let
-            node = lock.nodes.${rootInputs.${name}};
-          in
-          {
-            inherit (node.locked) owner repo type;
-            hasLockedRevision = node.locked.rev != "";
-            hasNarHash = node.locked.narHash != "";
-          }
-        )
-        [
-          "nix-darwin"
-          "nix-homebrew"
-        ];
-    expected = [
-      {
-        type = "github";
-        owner = "nix-darwin";
-        repo = "nix-darwin";
-        hasLockedRevision = true;
-        hasNarHash = true;
-      }
-      {
-        type = "github";
-        owner = "zhaofengli";
-        repo = "nix-homebrew";
-        hasLockedRevision = true;
-        hasNarHash = true;
-      }
-    ];
-  };
-
   testFlakeLockPlatformInputsFollowRootNixpkgs = {
     expr = {
       darwin = lock.nodes.${rootInputs."nix-darwin"}.inputs.nixpkgs;
@@ -97,7 +60,7 @@ in
   testRegisteredWslIntegratesHomeManagerWithItsDefaultUser = {
     expr =
       let
-        cfg = inputs.self.nixosConfigurations.nixos.config;
+        cfg = inputs.self.nixosConfigurations.wsl.config;
         home = cfg.home-manager.users.${cfg.wsl.defaultUser};
       in
       {

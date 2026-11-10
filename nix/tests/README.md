@@ -15,7 +15,7 @@ nix-unit と競合する別のテストフレームワークではありませ�
 テストの分類は本番の `nix/` に揃えます。統合設定・OS 構成は `unit/defaults/`、
 アプリは本番 `modules/` と同じ分類の `unit/modules/`、共通キーは `unit/home/keybindings/bindings.nix`、
 Windows manifest の契約は CI の jq で直接検証します。
-構成テストは `nix/defaults.nix:systemDefaults` を参照し、`platform` と `system` で対象を選択します。
+構成テストは `nix/hosts/default.nix` を参照し、`platform` と `system` で対象を選択します。
 `nix/tests/context.nix` が `fixtures` / `homeConfigurations` / `code` / `files` / `upstream` を共有し、テストは必要な引数だけを受け取ります。
 `homeConfigurations` は共通の本番 Home Manager 構成を保持し、同じホストの評価を共有します。
 アプリ設定は各 OS の実効 option や正本ファイルを入力とし、生成された設定ファイルや shell 連携へ
@@ -32,7 +32,7 @@ build ファイルは OS 条件で空の属性セットを返せます。build �
 `source-tree.nix` がリポジトリの資源を再帰的に自動索引し、context が属性で渡します。
 資源ごとの手書き catalog やパス登録は不要です。パスを扱うのはこの共通 infrastructure だけです。
 
-- `fixtures.mkHome` / `fixtures.mkHomeWith` は本番と同じ module を自動検出し、型付き option で必要なアプリだけを有効化します。
+- `fixtures.mkHome` / `fixtures.mkHomeWith` は本番と同じ module を明示的に読み込み、型付き option で必要なアプリだけを有効化します。
 - `homeConfigurations` は本番と共通の OS 構成、`fixtures.mkDarwin` は Darwin OS module の単独評価に使います。
 - `code.*` は Nix ファイルを拡張子なしの属性名で参照し、通常の値・関数として扱います。純粋な factory・renderer もここから利用します。
 - `files.*` はファイルパスを保持します。Nix ファイルは拡張子なし、それ以外はファイル名をそのまま使い、ディレクトリは `.__path` で参照します。
@@ -81,10 +81,10 @@ CI はメモリを多く使う評価テストを先に単独実行し、その�
 `build/defaults/standalone-darwin-home.check.nix`、PowerShell formatter は `build/treefmt/powershell.check.nix` に置きます。
 実行スクリプトを flake の配線ファイルに直書きしません。
 `treefmt` は treefmt-nix の flake-parts module が標準 check として公開します。
-設定の正本は `nix/treefmt.nix`、読み込みと開発シェルの配線は `nix/defaults.nix` です。
+設定の正本は `nix/modules/formatters/default.nix`、読み込みと開発シェルの配線は `nix/home/common.nix` です。
 Unix CLI と GUI の選択は型付き option でアプリを有効化した Home Manager の実効設定で検証し、
 OS 固有の連携 package は host の実効設定で検証します。
-Windows の標準 package ID / source は CI の jq が `windows/winget/packages.json` を直接検証します。
+Windows の標準 package ID / source は CI の jq が `chezmoi/winget/packages.json` を直接検証します。
 廃止した package catalog / provider resolution の fixture や生成 manifest 比較は対象にしません。
 
 - `scripts/sh/tests/` は shell / installer の順序、外部コマンドの stub、runtime / artifact 契約を検証します。
@@ -129,7 +129,7 @@ nix build .#checks.aarch64-darwin.nix-unit --no-link --no-write-lock-file
 
 `nix flake check --no-build` は評価確認です。nix-unit assertion や実行テストの成功は、
 対象 check の build 結果で確認します。Nix が既存の成功済み出力を再利用する場合もあります。
-`powershell-formatter` と `treefmt` は、nixpkgs の PowerShell 拡張機能に同梱された
+`powershell-formatter` と CI 用 treefmt は、nixpkgs の PowerShell 拡張機能に同梱された
 PSScriptAnalyzer を Nix store から直接 import します。VS Code 本体は不要です。
 更新は nixpkgs input の lock 更新に従い、追加の release metadata input は使いません。
 依存 input の取得は build に先行し、formatter の実行中に `Install-Module` を呼びません。
@@ -157,8 +157,9 @@ Linux の producer は通常の checks と、変更分類で選択された stan
 native Linux が選択された場合は VM の runtime check も必須です。Windows の producer は外部アプリをソースビルドせず、
 入力となる配布コードと WinGet master を保存します。WinGet / Store の catalog は外部入力であり、
 実際に解決・導入された版を E2E の inventory に記録します。
-macOS の Homebrew cask（Steam）も外部 catalog から取得するため、
-Nix の固定 closure とは区別し、導入済みの版を E2E の inventory に記録します。
+macOS の Steam / Google Drive は公式 DMG inputs の内容を `flake.lock` に固定します。
+cask の配布物は Homebrew が取得するため Nix の固定 closure とは区別し、
+導入済みの版を E2E の inventory に記録します。
 Linux の VM adapter は、同じ guest の反映・reboot・検証を一つの driver 内で順に実行します。
 
 Nix artifact は source SHA、target、root store paths、closure metadata と payload の digest を持ちます。
@@ -181,7 +182,7 @@ Linux producer / consumer は native hosted runner 上で Nix を実行します
 キャッシュ、必須 artifact、実行環境の詳細は
 [CI の実行環境と Nix 成果物の再利用](../../docs/ci/README.md#nix-成果物の再利用) を参照してください。
 
-CI は Build / Plan より先に Lint の `task lint:ci` から `fmt:check` を一度実行します。
+CI は Build / Plan より先に、CI 用シェルの `task lint:ci` から PowerShell を含む treefmt を一度実行します。
 producer の checks では `treefmt` を除外し、format 検査を重ねません。PowerShell formatter は host の
 PSGallery module ではなく、固定した Nix store の PSScriptAnalyzer を使います。
 変更分類・artifact の同一性・認証・集約判定は `scripts/sh/tests/ci_workflow.bats` と

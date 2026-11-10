@@ -8,8 +8,8 @@ let
           programs = {
             bash.enable = true;
             zsh.enable = true;
-            ripgrep.enable = enabled;
-            fd.enable = enabled;
+            ripgrep.enable = (fixtures.mkPkgs "x86_64-linux").lib.mkForce enabled;
+            fd.enable = (fixtures.mkPkgs "x86_64-linux").lib.mkForce enabled;
           };
         }
       ];

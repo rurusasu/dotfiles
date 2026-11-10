@@ -32,35 +32,6 @@ in
         ];
   };
 
-  testOllamaUsesStandardHomeManagerPackageAndLoopbackService = {
-    expr =
-      map
-        (home: {
-          enabled = home.config.services.ollama.enable;
-          installed = builtins.any (p: p.drvPath == home.pkgs.ollama.drvPath) home.config.home.packages;
-          host = home.config.services.ollama.host;
-          port = home.config.services.ollama.port;
-        })
-        [
-          linux
-          wsl
-          darwin
-        ];
-    expected =
-      map
-        (_: {
-          enabled = true;
-          installed = true;
-          host = "127.0.0.1";
-          port = 11434;
-        })
-        [
-          linux
-          wsl
-          darwin
-        ];
-  };
-
   testHeadlessHomesDoNotEnableNativeCompositor = {
     expr =
       map
@@ -93,11 +64,6 @@ in
   testCommonHomeModuleEvaluatesWithoutOSSpecialArgs = {
     expr = homeConfigurations.common.config.home.username;
     expected = "test-user";
-  };
-
-  testLinuxHomeModuleDoesNotReceiveDarwinSessionVariables = {
-    expr = builtins.hasAttr "HOMEBREW_AUTO_UPDATE_SECS" linux.config.home.sessionVariables;
-    expected = false;
   };
 
   testWslApplicationsSupplyPlatformEnvironment = {
@@ -135,89 +101,6 @@ in
     };
   };
 
-  testWslAndNativeLinuxDesktopPackageSelection = {
-    expr =
-      map
-        (
-          home:
-          let
-            contains =
-              package: builtins.any (candidate: candidate.drvPath == package.drvPath) home.config.home.packages;
-          in
-          {
-            chrome = contains (configuredChrome home);
-            rawChrome = contains home.pkgs.google-chrome;
-            spotify = contains home.pkgs.spotify;
-            signal = contains home.pkgs.signal-desktop;
-            obsidian = contains home.pkgs.obsidian;
-            onePassword = contains home.pkgs._1password-gui;
-            nautilus = contains home.pkgs.nautilus;
-            browser = home.config.home.sessionVariables.BROWSER or null;
-          }
-        )
-        [
-          wsl
-          linux
-        ];
-    expected = [
-      {
-        chrome = true;
-        rawChrome = false;
-        spotify = true;
-        signal = true;
-        obsidian = true;
-        onePassword = true;
-        nautilus = true;
-        browser = "${configuredChrome wsl}/bin/google-chrome-stable";
-      }
-      {
-        chrome = true;
-        rawChrome = true;
-        spotify = false;
-        signal = false;
-        obsidian = true;
-        onePassword = true;
-        nautilus = true;
-        browser = null;
-      }
-    ];
-  };
-
-  testWslDesktopExtrasAreScopedToWsl = {
-    expr =
-      map
-        (
-          home:
-          let
-            contains =
-              name: builtins.any (package: (package.pname or package.name) == name) home.config.home.packages;
-          in
-          {
-            spotify = contains "spotify";
-            signal = contains "signal-desktop";
-          }
-        )
-        [
-          wsl
-          darwin
-          homeConfigurations.linuxArm
-        ];
-    expected = [
-      {
-        spotify = true;
-        signal = true;
-      }
-      {
-        spotify = false;
-        signal = false;
-      }
-      {
-        spotify = false;
-        signal = false;
-      }
-    ];
-  };
-
   testDarwinHomeDoesNotInstallLinuxGuiPackages = {
     expr = builtins.filter (
       package:
@@ -227,40 +110,6 @@ in
       ]
     ) darwin.config.home.packages;
     expected = [ ];
-  };
-
-  testWSLHomeModuleExcludesNativeDesktopPackages =
-    let
-      inherit (wsl) pkgs;
-      contains = needle: packages: builtins.any (package: package.drvPath == needle.drvPath) packages;
-    in
-    {
-      expr = {
-        excludesDiscord = !(contains pkgs.discord wsl.config.home.packages);
-        excludesCompositor = !(contains pkgs.hyprland wsl.config.home.packages);
-        excludesLauncher = !(contains pkgs.fuzzel wsl.config.home.packages);
-      };
-      expected = {
-        excludesDiscord = true;
-        excludesCompositor = true;
-        excludesLauncher = true;
-      };
-    };
-
-  testDarwinApplicationsSupplyPlatformEnvironment = {
-    expr = {
-      homebrew = darwin.config.home.sessionVariables.HOMEBREW_AUTO_UPDATE_SECS;
-      onePassword = darwin.config.home.sessionVariables.OP_BIOMETRIC_UNLOCK_ENABLED;
-      homebrewPaths = builtins.all (path: builtins.elem path darwin.config.home.sessionPath) [
-        "/opt/homebrew/bin"
-        "/opt/homebrew/sbin"
-      ];
-    };
-    expected = {
-      homebrew = "86400";
-      onePassword = "true";
-      homebrewPaths = true;
-    };
   };
 
   testTerminalKeybindingHelpersHavePlatformScopedPackages = {

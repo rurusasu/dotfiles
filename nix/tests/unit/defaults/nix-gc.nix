@@ -11,14 +11,14 @@ let
     "aarch64-linux"
     "aarch64-darwin"
   ];
-  nixos = registered.nixosConfigurations.nixos;
+  nixos = registered.nixosConfigurations.wsl;
   native = inputs.nixpkgs.lib.nixosSystem {
     system = "x86_64-linux";
     specialArgs = {
       inherit inputs;
       platform = "linux";
     };
-    modules = [ (code.nix.defaults inputs).systemDefaults ];
+    modules = [ code.nix.hosts.default ];
   };
   darwin = registered.darwinConfigurations.macos;
   darwinHome = darwin.config.home-manager.users.${darwin.config.system.primaryUser};

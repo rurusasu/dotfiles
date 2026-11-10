@@ -1,4 +1,4 @@
-{{- $appearance := include "../nix/home/appearance.json" | fromJson -}}
+{{- $appearance := include "appearance/appearance.json" | fromJson -}}
 # Superfile's built-in theme and keybindings; pins remain application-managed.
 theme = {{ $appearance.superfileTheme | quote }}
 editor = "notepad"

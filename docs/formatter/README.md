@@ -1,7 +1,7 @@
 # フォーマッター設定
 
 このプロジェクトでは [treefmt-nix](https://github.com/numtide/treefmt-nix) を使用して、複数のフォーマッターを管理しています。
-設定値と実行依存の正本は [nix/treefmt.nix](../../nix/treefmt.nix) です。
+設定値と実行依存の正本は [nix/modules/formatters/default.nix](../../nix/modules/formatters/default.nix) です。
 設定ファイルは Nix store に生成し、project root には配置しません。
 
 ## 対象
@@ -17,7 +17,7 @@
 | Markdown   | dprint           | `programs.dprint.settings`      |
 
 PowerShell の静的解析と Windows の文字コード検証は
-[Invoke-StaticAnalysis.ps1](../../scripts/powershell/Invoke-StaticAnalysis.ps1) が所有し、`task lint:powershell` で実行します。
+[Invoke-StaticAnalysis.ps1](../../scripts/powershell/Invoke-StaticAnalysis.ps1) が所有し、`nix develop .#ci --command powershell-lint` で実行します。
 
 ## 使用方法
 

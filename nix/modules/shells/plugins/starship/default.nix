@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  platform,
   ...
 }:
 let
@@ -32,101 +33,113 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    assertions = [
-      {
-        assertion = !cfg.asyncZsh.enable || (config.programs.zsh.enable && cfg.enableZshIntegration);
-        message = "programs.starship.asyncZsh.enable requires Zsh and Starship's Zsh integration.";
-      }
-    ];
-
-    programs = {
-      bash.initExtra = lib.mkIf (
-        windowsHelperEnabled && config.programs.bash.enable && cfg.enableBashIntegration
-      ) windowsHelperInitialization;
-      zsh.initContent = lib.mkMerge [
-        (lib.mkIf (
-          windowsHelperEnabled && config.programs.zsh.enable && cfg.enableZshIntegration
-        ) windowsHelperInitialization)
-        (lib.mkIf cfg.asyncZsh.enable (
-          # Starship initializes at 1000; Patina's highlight hook remains last.
-          lib.mkOrder 1400 ''
-            source ${./async.zsh} ${lib.getExe cfg.package} \
-              ${cfg.asyncZsh.package}/share/zsh/site-functions/async ${pkgs.coreutils}/bin/timeout
-          ''
-        ))
+  config = lib.mkMerge [
+    {
+      programs.starship = {
+        enable = true;
+        wslIntegration.enable = platform == "wsl";
+        asyncZsh.enable = platform == "wsl";
+      };
+      home.sessionVariables = lib.optionalAttrs (platform == "wsl" && cfg.enable) {
+        STARSHIP_CONFIG = lib.mkForce (toString config.home.file.${cfg.configPath}.source);
+      };
+    }
+    (lib.mkIf cfg.enable {
+      assertions = [
+        {
+          assertion = !cfg.asyncZsh.enable || (config.programs.zsh.enable && cfg.enableZshIntegration);
+          message = "programs.starship.asyncZsh.enable requires Zsh and Starship's Zsh integration.";
+        }
       ];
 
-      starship = {
-        enableZshIntegration = true;
-        enableBashIntegration = true;
-        asyncZsh.package = lib.mkDefault (
-          pkgs.pure-prompt.overrideAttrs (previous: {
-            # command -p uses /bin:/usr/bin, bypassing Nix dependencies in PATH.
-            postPatch = (previous.postPatch or "") + ''
-              substituteInPlace async.zsh \
-                --replace-fail 'command -p cat' '${lib.getExe' pkgs.coreutils "cat"}'
-            '';
-          })
-        );
+      programs = {
+        bash.initExtra = lib.mkIf (
+          windowsHelperEnabled && config.programs.bash.enable && cfg.enableBashIntegration
+        ) windowsHelperInitialization;
+        zsh.initContent = lib.mkMerge [
+          (lib.mkIf (
+            windowsHelperEnabled && config.programs.zsh.enable && cfg.enableZshIntegration
+          ) windowsHelperInitialization)
+          (lib.mkIf cfg.asyncZsh.enable (
+            # Starship initializes at 1000; Patina's highlight hook remains last.
+            lib.mkOrder 1400 ''
+              source ${./async.zsh} ${lib.getExe cfg.package} \
+                ${cfg.asyncZsh.package}/share/zsh/site-functions/async ${pkgs.coreutils}/bin/timeout
+            ''
+          ))
+        ];
 
-        settings = {
-          add_newline = true;
-          scan_timeout = 500;
-          format =
-            (if osSymbol == null then "$os" else "[${osSymbol}](${osStyle}) ")
-            + "$username$hostname$memory_usage$directory$git_branch$git_status$nix_shell$character";
+        starship = {
+          enableZshIntegration = true;
+          enableBashIntegration = true;
+          asyncZsh.package = lib.mkDefault (
+            pkgs.pure-prompt.overrideAttrs (previous: {
+              # command -p uses /bin:/usr/bin, bypassing Nix dependencies in PATH.
+              postPatch = (previous.postPatch or "") + ''
+                substituteInPlace async.zsh \
+                  --replace-fail 'command -p cat' '${lib.getExe' pkgs.coreutils "cat"}'
+              '';
+            })
+          );
 
-          character = {
-            success_symbol = "[>](bold green)";
-            error_symbol = "[x](bold red)";
-          };
+          settings = {
+            add_newline = true;
+            scan_timeout = 500;
+            format =
+              (if osSymbol == null then "$os" else "[${osSymbol}](${osStyle}) ")
+              + "$username$hostname$memory_usage$directory$git_branch$git_status$nix_shell$character";
 
-          os = {
-            disabled = osSymbol != null;
-            format = "[$symbol]($style) ";
-            style = osStyle;
-          };
+            character = {
+              success_symbol = "[>](bold green)";
+              error_symbol = "[x](bold red)";
+            };
 
-          username = {
-            show_always = true;
-            format = "[$user]($style)";
-          };
+            os = {
+              disabled = osSymbol != null;
+              format = "[$symbol]($style) ";
+              style = osStyle;
+            };
 
-          hostname = {
-            ssh_only = false;
-            format = "@[$hostname]($style) ";
-          };
+            username = {
+              show_always = true;
+              format = "[$user]($style)";
+            };
 
-          memory_usage = {
-            disabled = false;
-            threshold = 0;
-            format = "[$ram]($style) ";
-          };
+            hostname = {
+              ssh_only = false;
+              format = "@[$hostname]($style) ";
+            };
 
-          directory = {
-            truncation_length = 3;
-            truncate_to_repo = true;
-          };
+            memory_usage = {
+              disabled = false;
+              threshold = 0;
+              format = "[$ram]($style) ";
+            };
 
-          git_branch = {
-            symbol = " ";
-            format = "on [$symbol$branch]($style) ";
-          };
+            directory = {
+              truncation_length = 3;
+              truncate_to_repo = true;
+            };
 
-          git_status = {
-            ahead = "";
-            behind = "";
-            diverged = "";
-          }
-          // lib.optionalAttrs windowsHelperEnabled { windows_starship = toString windowsHelper; };
+            git_branch = {
+              symbol = " ";
+              format = "on [$symbol$branch]($style) ";
+            };
 
-          nix_shell = {
-            symbol = " ";
-            format = "[$symbol$state]($style) ";
+            git_status = {
+              ahead = "";
+              behind = "";
+              diverged = "";
+            }
+            // lib.optionalAttrs windowsHelperEnabled { windows_starship = toString windowsHelper; };
+
+            nix_shell = {
+              symbol = " ";
+              format = "[$symbol$state]($style) ";
+            };
           };
         };
       };
-    };
-  };
+    })
+  ];
 }

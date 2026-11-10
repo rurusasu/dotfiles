@@ -394,8 +394,8 @@ Describe 'Windows installer phases' -Skip:([Environment]::OSVersion.Platform -ne
             Copy-Item -LiteralPath (Join-Path $script:repoRoot 'install.cmd') -Destination $root
             Copy-Item -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/install.ps1') -Destination $adapter
             Copy-Item -LiteralPath (Join-Path $script:repoRoot 'scripts/powershell/lib/Invoke-ExternalCommand.ps1') -Destination $library
-            New-Item -ItemType Directory -Path "$root/windows/winget" -Force | Out-Null
-            Copy-Item -LiteralPath (Join-Path $script:repoRoot 'windows/winget/packages.json') -Destination "$root/windows/winget/packages.json"
+            New-Item -ItemType Directory -Path "$root/chezmoi/winget" -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $script:repoRoot 'chezmoi/winget/packages.json') -Destination "$root/chezmoi/winget/packages.json"
             New-Item -ItemType Directory -Path "$root/chezmoi", "$root/home" -Force | Out-Null
             Set-Content -LiteralPath "$root/chezmoi/dot_fixture" -Value 'managed fixture'
             $fixture = @'

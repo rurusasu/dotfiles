@@ -16,11 +16,8 @@ in
       in
       {
         inherit system;
-        lazygit = cfg.programs.lazygit.enable;
         herdr = cfg.programs.herdr.enable;
         herdrPackage = cfg.programs.herdr.package.drvPath;
-        bashWrapper = home.pkgs.lib.hasInfix "function lg()" cfg.programs.bash.initExtra;
-        zshWrapper = home.pkgs.lib.hasInfix "function lg()" cfg.programs.zsh.initContent;
         herdrConfig = {
           mutable = cfg.programs.herdr.mutableSettings;
           mergeActivation = cfg.home.activation ? herdrMutableSettings;
@@ -30,11 +27,8 @@ in
     ) systems;
     expected = map (system: {
       inherit system;
-      lazygit = true;
       herdr = true;
       herdrPackage = inputs.herdr.packages.${system}.default.drvPath;
-      bashWrapper = true;
-      zshWrapper = true;
       herdrConfig = {
         mutable = true;
         mergeActivation = true;

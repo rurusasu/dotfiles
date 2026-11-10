@@ -1,7 +1,7 @@
 # chezmoi
 
 This source merges Windows Terminal defaults into its stable `settings.json`,
-generates its theme and font settings from `nix/home/appearance.json`, and installs the pinned UDEV Gothic
+generates its theme and font settings from `chezmoi/appearance/appearance.json`, and installs the pinned UDEV Gothic
 NF release for the current user. The font is registered under the current
 Windows account, so no administrator privileges are needed.
 
@@ -46,8 +46,8 @@ plain messages such as `Setup Complete!` remain plain.
 The shared key allocation is defined in `nix/home/keybindings/bindings.nix`
 and `nix/modules/editors/nvim/default.nix`.
 Home Manager generates Neovim settings from those definitions on every Unix
-platform, including NixOS-WSL. Apply key changes with `nrs` and restart Neovim.
-`task keybindings:export` exports only `nix/home/appearance.json`, using the common
+platform, including NixOS-WSL. Apply key changes with `./install.sh` and restart Neovim.
+`task keybindings:export` exports only `chezmoi/appearance/appearance.json`, using the common
 Catppuccin flavor and font settings. chezmoi reads this appearance export without
 running Nix during apply and does not deploy key data into WSL.
 Home Manager owns Ghostty and Herdr settings on every Unix platform. Ghostty
@@ -65,7 +65,15 @@ The normal `task install` flow installs Windows GUI apps, configures and applies
 NixOS-WSL once to apply its application settings, and applies Windows chezmoi.
 `install.cmd` bootstraps the same Task entry when Task is not yet
 installed. That flow consumes the committed JSON and does not regenerate it. On an
-existing installation, run `nrs` once after adding this loader configuration,
+existing installation, run `./install.sh` once after adding this loader configuration,
 then `task chezmoi`. Restart Neovim after shared key changes. Apply Ghostty and
-Herdr changes with `nrs`. GitHub Actions checks that the export matches Nix; it does not need to
+Herdr changes with `./install.sh`. GitHub Actions checks that the export matches Nix; it does not need to
 generate or commit files on behalf of Windows installations.
+
+Windows の WinGet manifest は `winget/packages.json`、WSL ホストの設定は
+`dot_wslconfig`（参考例は `wsl/`）、外観 export とその生成処理は `appearance/` に置きます。
+これらのソース用ディレクトリは `.chezmoiignore.tmpl` で配布対象から除外します。
+WinGet は bootstrap が manifest を読み込み、外観 JSON は各テンプレートが参照します。
+
+`dot_wslconfig` は `%USERPROFILE%/.wslconfig` へ配布します。変更後は
+`wsl --shutdown` で WSL を停止し、次回起動時に設定を読み直します。

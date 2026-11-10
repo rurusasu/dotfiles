@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  platform,
   ...
 }:
 let
@@ -23,34 +24,45 @@ in
   };
 
   config = lib.mkMerge [
-    (lib.mkIf config.programs.ssh.enable {
-      programs.ssh = {
-        package = pkgs.openssh;
-        enableDefaultConfig = false;
-        settings."github.com" = lib.mkIf config.dotfiles.onePassword.enable {
-          User = "git";
-          IdentityFile = ''"${
-            lib.escape [ "\\" "\"" ] (config.home.homeDirectory + "/.ssh/signing_key.pub")
-          }"'';
-          IdentitiesOnly = true;
-          UserKnownHostsFile = toString githubKnownHosts;
-          StrictHostKeyChecking = true;
+    { programs.ssh.enable = true; }
+    (lib.mkMerge [
+      (lib.mkIf config.programs.ssh.enable {
+        home.file.".local/bin/op-ssh-sign-wsl" =
+          lib.mkIf (platform == "wsl" && config.dotfiles.onePassword.enable && config.programs.git.enable)
+            {
+              source = ./op-ssh-sign-wsl;
+              executable = true;
+              force = true;
+            };
+
+        programs.ssh = {
+          package = pkgs.openssh;
+          enableDefaultConfig = false;
+          settings."github.com" = lib.mkIf config.dotfiles.onePassword.enable {
+            User = "git";
+            IdentityFile = ''"${
+              lib.escape [ "\\" "\"" ] (config.home.homeDirectory + "/.ssh/signing_key.pub")
+            }"'';
+            IdentitiesOnly = true;
+            UserKnownHostsFile = toString githubKnownHosts;
+            StrictHostKeyChecking = true;
+          };
         };
-      };
-    })
-    (lib.mkIf config.dotfiles.onePassword.enable {
-      # The 1Password desktop provides the agent for every SSH client.
-      services.ssh-agent.enable = false;
-      services.gpg-agent.enableSshSupport = false;
-      home.sessionVariables.SSH_AUTH_SOCK = agentSocket;
-      programs.ssh.extraOptionOverrides.IdentityAgent = ''"${agentSocket}"'';
-      home.file = lib.mkIf (cfg.publicKey != null) {
-        ".ssh/signing_key.pub" = {
-          text = "${cfg.publicKey}\n";
-          executable = false;
-          force = true;
+      })
+      (lib.mkIf config.dotfiles.onePassword.enable {
+        # The 1Password desktop provides the agent for every SSH client.
+        services.ssh-agent.enable = false;
+        services.gpg-agent.enableSshSupport = false;
+        home.sessionVariables.SSH_AUTH_SOCK = agentSocket;
+        programs.ssh.extraOptionOverrides.IdentityAgent = ''"${agentSocket}"'';
+        home.file = lib.mkIf (cfg.publicKey != null) {
+          ".ssh/signing_key.pub" = {
+            text = "${cfg.publicKey}\n";
+            executable = false;
+            force = true;
+          };
         };
-      };
-    })
+      })
+    ])
   ];
 }

@@ -12,7 +12,7 @@ let
     {
       i18n.inputMethod = {
         enable = true;
-        fcitx5.wslIntegration.enable = true;
+        fcitx5.wslIntegration.enable = (fixtures.mkPkgs "x86_64-linux").lib.mkForce true;
       };
     }
   ];
