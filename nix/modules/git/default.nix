@@ -23,6 +23,7 @@
         };
         # Keep links readable by both Windows Git and WSL Git on a shared drive.
         worktree.useRelativePaths = true;
+        url."git@github.com:".insteadOf = "https://github.com/";
         credential = lib.genAttrs [ "https://github.com" "https://gist.github.com" ] (_: {
           helper = "!gh auth git-credential";
         });

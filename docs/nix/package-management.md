@@ -213,18 +213,18 @@ Neovim / Hermes の追加プラグインと formatter の入力は、アプリ�
 
 このリポジトリでは、設定・package override・生成・連携の責務をアプリ・機能単位でまとめます。単純な有効化・package list・単一代入は `nix/defaults.nix` に直接書きます。以下のパスはリポジトリの配置方針であり、公式資料が必須のディレクトリ構成を定めているわけではありません。
 
-| 編集先                                         | 責務                                                                                          |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `nix/modules/<app>/default.nix`                | アプリの有効化・package 選択・設定・連携・専用の実行依存                                      |
-| `nix/modules/editors/nvim/runtime/default.nix` | Neovim の補助 CLI・LSP・整形ツール・toolchain・プラグイン実行依存                             |
-| `nix/modules/ai_agents/hermes/default.nix`     | 公式 Hermes Home Manager の root・Desktop・gateway 設定、外部 LCM plugin                      |
-| `nix/modules/ai_agents/mcp/default.nix`        | Codex / root Hermes が使う共通 `programs.mcp.servers` 定義                                    |
-| `nix/modules/browsers/dia/`                    | `inputs.dia` を使う package 定義と Home Manager への導入                                      |
-| `nix/treefmt.nix`                              | formatter 設定と nixpkgs PowerShell 拡張機能の同梱 PSScriptAnalyzer の選択                    |
-| `nix/defaults.nix`                             | OS 基盤設定、型付き option による有効化、単純な有効化・package 宣言、アカウント、GC、公開出力 |
-| `nix/home/`                                    | 共通キー配置と Windows 向け外観 export                                                        |
-| `nix/home/keybindings/`                        | 共通キー配置                                                                                  |
-| `windows/winget/packages.json`                 | Windows GUI の標準 package ID・source・Scope                                                  |
+| 編集先                                                              | 責務                                                                                          |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `nix/modules/<app>/default.nix`                                     | アプリの有効化・package 選択・設定・連携・専用の実行依存                                      |
+| `nix/modules/editors/nvim/lsp/<server>.nix` と `plugins/<name>.nix` | Neovim の補助 CLI・LSP・整形ツール・toolchain・プラグイン実行依存                             |
+| `nix/modules/ai_agents/hermes/default.nix`                          | 公式 Hermes Home Manager の root・Desktop・gateway 設定、外部 LCM plugin                      |
+| `nix/modules/ai_agents/mcp/default.nix`                             | Codex / root Hermes が使う共通 `programs.mcp.servers` 定義                                    |
+| `nix/modules/browsers/dia/`                                         | `inputs.dia` を使う package 定義と Home Manager への導入                                      |
+| `nix/treefmt.nix`                                                   | formatter 設定と nixpkgs PowerShell 拡張機能の同梱 PSScriptAnalyzer の選択                    |
+| `nix/defaults.nix`                                                  | OS 基盤設定、型付き option による有効化、単純な有効化・package 宣言、アカウント、GC、公開出力 |
+| `nix/home/`                                                         | 共通キー配置と Windows 向け外観 export                                                        |
+| `nix/home/keybindings/`                                             | 共通キー配置                                                                                  |
+| `windows/winget/packages.json`                                      | Windows GUI の標準 package ID・source・Scope                                                  |
 
 Hermes の root・Desktop・gateway は公式 Home Manager module、named profile は Git 正本と公式 CLI で管理します。
 外部 LCM は `extraPlugins` に追加します。操作は [Hermes](../hermes-agent/bootstrap.md) を参照してください。
@@ -351,7 +351,7 @@ Windows Dia は [公式サイト](https://www.diabrowser.com/)から手動導入
 | ------------------------------------ | ---------------------------------------------------------------------- |
 | shell / editor から使う Unix CLI     | アプリごとの Home Manager module。有効化だけの標準宣言は構成へ直接記載 |
 | Linux / WSLg / Darwin の通常 GUI     | アプリごとの Home Manager module                                       |
-| Neovim の LSP・整形ツール・toolchain | `nix/modules/editors/nvim/runtime/default.nix`                         |
+| Neovim の LSP・整形ツール・toolchain | `nix/modules/editors/nvim/lsp/<server>.nix` と `plugins/<name>.nix`    |
 | Podman API / machine、Lazydocker     | アプリごとの Home Manager module。NixOS 基盤は `nix/defaults.nix`      |
 | macOS CLI                            | 原則 Nix/Home Manager、明示例外は Homebrew formula                     |
 | macOS の例外 cask                    | `nix/defaults.nix`                                                     |
@@ -374,7 +374,7 @@ Herdr の [公式設定方法](https://herdr.dev/ja/tui/docs/configuration/) に
 
 OS 全体の反映に先行して Herdr だけを使う場合は、公式手順の `nix profile install github:herdrdev/herdr/v0.9.5` でユーザープロファイルへ導入できます。この entry は Home Manager の package より PATH 上で優先されるため、後で OS / Home Manager の反映が済んだら `nix profile remove herdr` で外し、以後は宣言された package から更新します。
 
-エディタ固有の設定は `nix/modules/editors/` にまとめます。`nvim/` は Neovim 本体・設定・プラグインを所有し、`runtime/default.nix` が補助 CLI・LSP・整形ツール・toolchain とプラグインの実行依存を通常の PATH に導入します。これらを全エディタ共通の集約 module に移しません。運用は [Neovim](../chezmoi/neovim.md) を参照してください。
+エディタ固有の設定は `nix/modules/editors/` にまとめます。`nvim/` は Neovim 本体・設定・プラグインを所有し、各 `lsp/<server>.nix` と `plugins/<name>.nix` が補助 CLI・LSP・整形ツール・toolchain とプラグインの実行依存を通常の PATH に導入します。これらを全エディタ共通の集約 module に移しません。運用は [Neovim](../chezmoi/neovim.md) を参照してください。
 
 Orca AI IDE は macOS・Linux/WSL 共通の `nix/defaults.nix` の `home.packages` で `inputs.llm-agents.packages.${system}.orca` を導入します。導入だけのため、専用 module は作りません。バージョンは `flake.lock` の `llm-agents` input で固定します。GUI は `orca-ide`、CLI は `orca` で起動します。
 

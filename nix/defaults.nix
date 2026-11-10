@@ -88,6 +88,12 @@ let
             home = {
               stateVersion = lib.mkDefault defaults.stateVersion;
               preferXdgDirectories = true;
+              sessionPath = [
+                (config.home.homeDirectory + "/.bun/bin")
+                (config.home.homeDirectory + "/.local/bin")
+                (config.home.homeDirectory + "/bin")
+                (config.home.homeDirectory + "/.local/npm/bin")
+              ];
               packages =
                 with pkgs;
                 [
@@ -137,6 +143,7 @@ let
               zsh-patina.enable = true;
               ghostty.enable = true;
               nixvim.enable = true;
+              marp.enable = true;
               git.enable = true;
               ghq.enable = true;
               gwq.enable = true;
@@ -325,7 +332,7 @@ let
                           ".local/bin/op-ssh-sign-wsl" =
                             lib.mkIf (config.dotfiles.onePassword.enable && config.programs.git.enable)
                               {
-                                source = ./modules/1password/op-ssh-sign-wsl;
+                                source = ./modules/ssh/op-ssh-sign-wsl;
                                 executable = true;
                                 force = true;
                               };

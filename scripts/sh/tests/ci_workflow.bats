@@ -161,7 +161,7 @@ assert_categories() {
   done <<'EOF'
 chezmoi windows|chezmoi/config.tmpl
 nix darwin|nix/modules/aerospace/default.nix
-nix wsl|nix/modules/1password/op-ssh-sign-wsl
+nix wsl|nix/modules/ssh/op-ssh-sign-wsl
 nix wsl|nix/modules/editors/vscode/default.nix
 nix linux darwin wsl|nix/modules/1password/default.nix
 nix wsl chezmoi windows|nix/modules/fonts/wsl-fontconfig.conf

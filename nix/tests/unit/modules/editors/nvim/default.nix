@@ -1,8 +1,28 @@
-{ homeConfigurations }:
+{ fixtures, homeConfigurations }:
 let
   inherit (homeConfigurations) homes;
 in
 {
+  testNeovimDependenciesFollowServerEnable = {
+    expr =
+      let
+        home = fixtures.mkHome "aarch64-darwin" [
+          ({ lib, ... }: {
+            programs.nixvim.enable = true;
+            programs.nixvim.lsp.servers.ruff.enable = lib.mkForce false;
+          })
+        ];
+      in
+      map (package: builtins.elem package home.config.home.packages) [
+        home.pkgs.ruff
+        home.pkgs.ty
+      ];
+    expected = [
+      false
+      true
+    ];
+  };
+
   testNeovimSettingsAndRuntimeDependenciesAcrossHomes = {
     expr = map (
       home:

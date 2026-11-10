@@ -6,6 +6,8 @@ let
       home.homeDirectory = lib.mkForce "/tmp/neovim-test-home";
       home.stateVersion = lib.mkForce "26.05";
       programs.nixvim.enable = true;
+      programs.marp.preview.port = 18765;
+      programs.marp.settings.theme = "gaia";
     })
   ];
 in

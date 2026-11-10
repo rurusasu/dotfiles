@@ -1,0 +1,106 @@
+{
+  programs.nixvim =
+    { config, lib, ... }:
+    let
+      inclineColors = {
+        fg = "#c0caf5";
+        dim = "#565f89";
+        error = "#f7768e";
+        warn = "#e0af68";
+        info = "#7dcfff";
+      };
+      highlights = {
+        InclineActive = {
+          bg = "#2d2f3f";
+          inherit (inclineColors) fg;
+        };
+        InclineInactive = {
+          bg = "#2d2f3f";
+          fg = inclineColors.dim;
+        };
+      };
+    in
+    {
+      imports = [
+        (lib.nixvim.plugins.mkNeovimPlugin {
+          name = "incline";
+          maintainers = [ ];
+          package = "incline-nvim";
+        })
+      ];
+      config = lib.mkIf config.enable {
+        globals.dotfiles_incline_colors = inclineColors;
+        colorschemes.catppuccin.settings.custom_highlights = highlights;
+        plugins.incline = {
+          enable = true;
+          settings = {
+            window = {
+              padding = 1;
+              margin = {
+                horizontal = 1;
+                vertical = 0;
+              };
+              placement = {
+                horizontal = "right";
+                vertical = "bottom";
+              };
+              winhighlight = {
+                active.Normal = "InclineActive";
+                inactive.Normal = "InclineInactive";
+              };
+              options.winblend = 0;
+            };
+            render.__raw = ''
+              function(props)
+                  local devicons = require("nvim-web-devicons")
+                  local c = vim.g.dotfiles_incline_colors
+
+                  local bufnr = props.buf
+                  if vim.bo[bufnr].buftype == "terminal" then
+                      return false
+                  end
+                  local focused = props.focused
+                  local fname = vim.api.nvim_buf_get_name(bufnr)
+                  local tail = fname ~= "" and vim.fn.fnamemodify(fname, ":t") or "[No Name]"
+
+                  local icon, icon_color
+                  if fname ~= "" then
+                      icon, icon_color = devicons.get_icon_color(tail, vim.fn.fnamemodify(fname, ":e"), { default = true })
+                  end
+                  icon = icon or " "
+                  icon_color = (focused and icon_color) or c.dim
+
+                  local result = {}
+                  if focused then
+                      local diag_specs = {
+                          { vim.diagnostic.severity.ERROR, "⊘", c.error },
+                          { vim.diagnostic.severity.WARN, "△", c.warn },
+                          { vim.diagnostic.severity.INFO, "⊙", c.info },
+                      }
+                      local any = false
+                      local counts = vim.diagnostic.count(bufnr)
+                      for _, spec in ipairs(diag_specs) do
+                          local count = counts[spec[1]] or 0
+                          if count > 0 then
+                              result[#result + 1] = { spec[2] .. " " .. count .. " ", guifg = spec[3] }
+                              any = true
+                          end
+                      end
+                      if any then
+                          result[#result + 1] = { "| ", guifg = c.dim }
+                      end
+                  end
+
+                  result[#result + 1] = { icon .. " ", guifg = icon_color }
+                  result[#result + 1] = { tail, guifg = focused and c.fg or c.dim }
+                  if vim.bo[bufnr].modified then
+                      result[#result + 1] = { " ●", guifg = c.warn }
+                  end
+                  return result
+              end
+            '';
+          };
+        };
+      };
+    };
+}

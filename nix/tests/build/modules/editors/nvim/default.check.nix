@@ -24,6 +24,7 @@
           pkgs.fd
           pkgs.ripgrep
           pkgs.lazygit
+          pkgs.curl
         ];
       }
       ''

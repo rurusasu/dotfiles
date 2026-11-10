@@ -72,12 +72,28 @@ vim.fn.jobstop(job)
 terminal:close()
 vim.cmd.stopinsert()
 
-vim.cmd.edit(root .. "/original.txt")
+vim.cmd.edit(root .. "/child/nested.txt")
+local ui_send = vim.api.nvim_ui_send
+local osc7
+vim.api.nvim_ui_send = function(sequence)
+    if sequence:sub(1, 4) == "\27]7;" then
+        osc7 = sequence
+    end
+end
 press("-")
 wait_for(function()
     return vim.bo.filetype == "oil" and vim.bo.modifiable
 end, "- must open Oil")
+assert(
+    osc7 == string.format("\27]7;%s\27\\", vim.uri_from_fname(root .. "/child/")),
+    "Oil must notify the displayed directory even when it differs from Neovim's cwd"
+)
 press("<C-c>")
+assert(
+    osc7 == string.format("\27]7;%s\27\\", vim.uri_from_fname(vim.fn.getcwd())),
+    "leaving Oil must restore the Neovim cwd notification"
+)
+vim.api.nvim_ui_send = ui_send
 
 -- Normal buffer keys operate on real, named buffers.
 vim.cmd.edit(root .. "/original.txt")
