@@ -1,7 +1,6 @@
 {
   inputs,
   code,
-  files,
 }:
 let
   mkPkgs =
@@ -25,43 +24,42 @@ let
         inherit inputs;
       }
       // extraSpecialArgs;
-      modules =
-        (code.nix.discover-modules "home-manager" files.nix.modules.__path)
-        ++ modules
-        ++ [
-          # The common composition supplies the flake wrapper's package defaults.
-          # Import only the base options here to avoid defining those defaults twice.
-          (inputs.catppuccin + "/modules/home-manager")
-          {
-            home = {
-              username = pkgs.lib.mkDefault "test-user";
-              homeDirectory = pkgs.lib.mkDefault (
-                if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user"
-              );
-              stateVersion = pkgs.lib.mkOverride 900 "25.05";
-            };
-          }
-        ];
+      modules = [
+        code.nix.modules.default
+        ({ lib, ... }: {
+          _module.args.platform = lib.mkDefault (
+            if pkgs.stdenv.hostPlatform.isDarwin then "darwin" else "linux"
+          );
+        })
+      ]
+      ++ modules
+      ++ [
+        # The common composition supplies the flake wrapper's package defaults.
+        # Import only the base options here to avoid defining those defaults twice.
+        (inputs.catppuccin + "/modules/home-manager")
+        {
+          home = {
+            username = pkgs.lib.mkOverride 900 "test-user";
+            homeDirectory = pkgs.lib.mkOverride 900 (
+              if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test-user" else "/home/test-user"
+            );
+            stateVersion = pkgs.lib.mkOverride 900 "25.05";
+          };
+        }
+      ];
     };
 in
 {
   inherit mkPkgs mkHomeWith;
-  homeModule =
-    requested:
-    { pkgs, lib, ... }:
-    let
-      base = (code.nix.defaults inputs).systemDefaults {
-        inherit inputs pkgs;
-        platform = if requested == "common" then "linux" else requested;
-      };
-    in
-    {
-      imports =
-        if requested == "common" then
-          [ (builtins.head base.home-manager.sharedModules) ]
-        else
-          lib.reverseList base.home-manager.sharedModules;
-    };
+  homeModule = requested: { pkgs, lib, ... }: {
+    imports = [ code.nix.home.default ];
+    _module.args.platform = lib.mkForce (
+      if requested == "common" then
+        (if pkgs.stdenv.hostPlatform.isDarwin then "darwin" else "linux")
+      else
+        requested
+    );
+  };
   mkDarwin =
     modules:
     inputs.nix-darwin.lib.darwinSystem {
@@ -70,10 +68,7 @@ in
         inherit inputs;
         platform = "darwin";
       };
-      modules =
-        (code.nix.discover-modules "system" files.nix.modules.__path)
-        ++ (code.nix.discover-modules "darwin" files.nix.modules.__path)
-        ++ modules;
+      modules = [ code.nix.modules.fonts.darwin ] ++ modules;
     };
   mkHome = system: modules: mkHomeWith { inherit system modules; };
   darwin = inputs.nix-darwin.lib.darwinSystem {
@@ -87,7 +82,7 @@ in
         nixpkgs.pkgs = mkPkgs "aarch64-darwin";
         system.primaryUser = "test-user";
       }
-      (code.nix.defaults inputs).systemDefaults
+      code.nix.hosts.default
     ];
   };
 }

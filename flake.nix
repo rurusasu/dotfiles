@@ -26,7 +26,6 @@
       url = "github:nix-darwin/nix-darwin/master";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    nix-homebrew.url = "github:zhaofengli/nix-homebrew";
     nix-unit = {
       url = "github:nix-community/nix-unit";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -43,8 +42,8 @@
       url = "github:catppuccin/nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # Use Herdr's documented release flake with its pinned build toolchain.
-    herdr.url = "github:herdrdev/herdr/v0.9.5";
+    # Follow upstream; flake.lock records the selected source and build toolchain.
+    herdr.url = "github:herdrdev/herdr";
     omarchy = {
       url = "github:omacom/omarchy/quattro";
       flake = false;
@@ -71,6 +70,16 @@
       url = "https://releases.diabrowser.com/release/Dia-latest.dmg";
       flake = false;
     };
+    steam-darwin = {
+      type = "file";
+      url = "https://cdn.akamai.steamstatic.com/client/installer/steam.dmg";
+      flake = false;
+    };
+    google-drive = {
+      type = "file";
+      url = "https://dl.google.com/drive-file-stream/GoogleDrive.dmg";
+      flake = false;
+    };
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -93,12 +102,18 @@
   outputs =
     { flake-parts, ... }@inputs:
     let
+      stateVersions = {
+        home = "26.05";
+        darwin = 6;
+        nixos = "26.05";
+      };
       defaults = import ./nix/defaults.nix inputs;
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         inputs.nix-unit.modules.flake.default
         inputs.treefmt-nix.flakeModule
+        ./nix/modules/formatters
         ./nix/tests
       ];
 
@@ -107,6 +122,8 @@
 
       inherit (defaults) perSystem;
 
-      flake = defaults.configurations;
+      flake = defaults.configurations // {
+        lib = { inherit stateVersions; };
+      };
     };
 }

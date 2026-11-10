@@ -56,7 +56,9 @@ in
   testDisabledFontsDoNotConfigureDesktopOrInstallPackages = {
     expr =
       let
-        home = fixtures.mkHome "x86_64-linux" [ ];
+        home = fixtures.mkHome "x86_64-linux" [
+          ({ lib, ... }: { dotfiles.fonts.enable = lib.mkForce false; })
+        ];
       in
       {
         fontconfig = home.config.fonts.fontconfig.enable;
@@ -86,7 +88,7 @@ in
             platform = "linux";
           };
           modules = [
-            (code.nix.defaults inputs).systemDefaults
+            code.nix.hosts.default
           ];
         };
       in

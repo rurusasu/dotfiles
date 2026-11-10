@@ -1,6 +1,6 @@
 # Chezmoi ディレクトリ構造
 
-Windows 用 source tree は Windows Terminal 設定、PowerShell プロファイル、フォント導入、WSL 端末への Super 転送 adapter で構成します。テーマとフォントは共通の `nix/home/appearance.json` から生成します。
+Windows 用 source tree は Windows Terminal 設定、PowerShell プロファイル、フォント導入、WSL 端末への Super 転送 adapter で構成します。テーマとフォントは共通の `chezmoi/appearance/appearance.json` から生成します。
 
 | 編集元                                                                                           | 内容・配置先                                                                        |
 | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |

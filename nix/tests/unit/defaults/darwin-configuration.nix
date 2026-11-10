@@ -13,7 +13,7 @@ let
           nixpkgs.config.allowUnfree = true;
           system.primaryUser = primaryUser;
         }
-        (code.nix.defaults inputs).systemDefaults
+        code.nix.hosts.default
       ]
       ++ extraModules;
     };
@@ -27,7 +27,6 @@ let
       { users.users.alice.home = inputs.nixpkgs.lib.mkForce "/Volumes/Home/alice"; }
     ]).config;
 
-  hasDarwinCask = name: config: builtins.any (cask: cask.name == name) config.homebrew.casks;
   packageNames =
     config: builtins.map (package: package.name or package.pname) config.environment.systemPackages;
   hasPrefix = prefix: value: builtins.match "${prefix}.*" value != null;
@@ -71,7 +70,6 @@ in
             "${defaultHome.programs.chatgpt.package}/Applications/ChatGPT.app"
             "${defaultHome.programs.dia.package}/Applications/Dia.app"
             "${defaultHome.programs.ghostty.package}/Applications/Ghostty.app"
-            "${defaultSystem.pkgs.obsidian}/Applications/Obsidian.app"
           ];
       others = [ ];
       recents = false;
@@ -105,7 +103,6 @@ in
   testDarwinConfigurationUsesConfiguredIdentity = {
     expr = {
       primaryUser = configuredUserConfig.system.primaryUser;
-      homebrewUser = configuredUserConfig.nix-homebrew.user;
       systemHome = configuredUserConfig.users.users.ktome1995.home;
       homeManagerHome = configuredUserConfig.home-manager.users.ktome1995.home.homeDirectory;
       guestLogin = configuredUserConfig.system.defaults.loginwindow.GuestEnabled;
@@ -113,7 +110,6 @@ in
     };
     expected = {
       primaryUser = "ktome1995";
-      homebrewUser = "ktome1995";
       systemHome = "/Users/ktome1995";
       homeManagerHome = "/Users/ktome1995";
       guestLogin = false;
@@ -137,10 +133,8 @@ in
       codexEnvironment = builtins.elemAt defaultHome.launchd.agents.codex-environment.config.ProgramArguments 3;
       agentEnvironment = builtins.elemAt defaultHome.launchd.agents.onepassword-ssh-environment.config.ProgramArguments 3;
       gpgSshAgentEnabled = defaultConfig.programs.gnupg.agent.enableSSHSupport;
-      homebrew = defaultConfig.homebrew.enable;
-      nixHomebrew = defaultConfig.nix-homebrew.enable;
       github = builtins.any (name: builtins.match "^(gh|github-cli)($|[-.].*)" name != null) (
-        packageNames defaultConfig
+        map (package: package.name) defaultHome.home.packages
       );
       managedFont = builtins.any (
         package: hasPrefix "udev-gothic-nf" (package.name or package.pname)
@@ -151,50 +145,21 @@ in
       codexEnvironment = "/Users/rurusasu/.config/codex";
       agentEnvironment = "/Users/rurusasu/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock";
       gpgSshAgentEnabled = false;
-      homebrew = true;
-      nixHomebrew = true;
       github = true;
       managedFont = true;
       homeManagerUser = true;
     };
   };
 
-  testDarwinConfigurationKeepsDefaultCaskBoundary = {
-    expr = {
-      casks = map (cask: cask.name) defaultConfig.homebrew.casks;
-      chrome = hasDarwinCask "google-chrome" defaultConfig;
-      podman = defaultHome.services.podman.enable;
-      machine = defaultHome.services.podman.useDefaultMachine;
-    };
-    expected = {
-      casks = [
-        "google-drive"
-        "steam"
-      ];
-      chrome = false;
-      podman = true;
-      machine = true;
-    };
-  };
-
-  testDarwinConfigurationIncludesSteamCask = {
-    expr = hasDarwinCask "steam" defaultConfig;
-    expected = true;
-  };
-
   testDarwinHomeManagerOwnsPlatformEnvironment = {
     expr = {
-      autoUpdate = defaultHome.home.sessionVariables.HOMEBREW_AUTO_UPDATE_SECS;
       onePassword = defaultHome.home.sessionVariables.OP_BIOMETRIC_UNLOCK_ENABLED;
-      homebrewPath = builtins.elem "/opt/homebrew/bin" defaultHome.home.sessionPath;
       sharedPath = builtins.elem "${defaultHome.home.homeDirectory}/.local/bin" defaultHome.home.sessionPath;
       managedPackagesFirst =
         builtins.head defaultHome.home.sessionPath == defaultHome.home.profileDirectory + "/bin";
     };
     expected = {
-      autoUpdate = "86400";
       onePassword = "true";
-      homebrewPath = true;
       sharedPath = true;
       managedPackagesFirst = true;
     };
@@ -237,25 +202,6 @@ in
       chromeSystemPackage = false;
       discordHomePackage = true;
       discordAgent = true;
-    };
-  };
-
-  testDarwinHomebrewActivationControlsRemainDeclarative = {
-    expr = {
-      greedyCasks = defaultConfig.homebrew.greedyCasks;
-      autoUpdate = defaultConfig.homebrew.onActivation.autoUpdate;
-      upgrade = defaultConfig.homebrew.onActivation.upgrade;
-      cleanup = defaultConfig.homebrew.onActivation.cleanup;
-      interval = defaultConfig.homebrew.onActivation.extraEnv.HOMEBREW_AUTO_UPDATE_SECS;
-      hints = defaultConfig.homebrew.onActivation.extraEnv.HOMEBREW_NO_ENV_HINTS;
-    };
-    expected = {
-      greedyCasks = true;
-      autoUpdate = true;
-      upgrade = true;
-      cleanup = "zap";
-      interval = "86400";
-      hints = "1";
     };
   };
 

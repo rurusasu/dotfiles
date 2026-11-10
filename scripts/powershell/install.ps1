@@ -69,7 +69,7 @@ if ($Phase -eq 'Wsl') {
 }
 
 Update-ProcessEnvironmentPath
-Import-WindowsPackage -ManifestPath (Join-Path $repository 'windows/winget/packages.json')
+Import-WindowsPackage -ManifestPath (Join-Path $repository 'chezmoi/winget/packages.json')
 if ($PSBoundParameters.ContainsKey('Phase')) { return }
 $task = Get-Command task -CommandType Application -ErrorAction Stop | Select-Object -First 1
 $previousConfiguration = $env:DOTFILES_INSTALL_CONFIGURATION

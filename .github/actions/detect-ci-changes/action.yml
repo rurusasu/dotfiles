@@ -101,7 +101,7 @@ runs:
                   ;;
                 # Windows manifests are edited directly and validated by both
                 # platform workflows.
-                windows/*)
+                chezmoi/winget/*)
                   nix=true
                   chezmoi=true
                   windows=true
@@ -115,13 +115,26 @@ runs:
                   windows=true
                   ;;
                 # Windows consumes the committed appearance through chezmoi.
-                nix/defaults.nix|nix/home/appearance.*)
+                nix/defaults.nix|nix/home/default.nix|nix/home/common.nix|nix/home/settings.nix|chezmoi/appearance/*)
                   nix=true
                   chezmoi=true
                   linux=true
                   darwin=true
                   wsl=true
                   windows=true
+                  ;;
+                nix/hosts/darwin/*)
+                  nix=true
+                  darwin=true
+                  ;;
+                nix/hosts/wsl/*)
+                  nix=true
+                  wsl=true
+                  ;;
+                nix/hosts/linux/*)
+                  nix=true
+                  linux=true
+                  wsl=true
                   ;;
                 nix/modules/aerospace/*)
                   nix=true

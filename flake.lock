@@ -1,22 +1,5 @@
 {
   "nodes": {
-    "brew-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1793000687,
-        "narHash": "sha256-8mCor0DDjNhi+0e+FllfqiMABujBl+/RxYW+wgMpcto=",
-        "owner": "Homebrew",
-        "repo": "brew",
-        "rev": "c6069d2a943b71b0a90d91fc1ac93cb9c1634dcc",
-        "type": "github"
-      },
-      "original": {
-        "owner": "Homebrew",
-        "ref": "7.0.11",
-        "repo": "brew",
-        "type": "github"
-      }
-    },
     "bun2nix": {
       "inputs": {
         "flake-parts": [
@@ -198,22 +181,33 @@
         "type": "github"
       }
     },
+    "google-drive": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-7ybp3tobVLTW++lJwujzMgNtrI4bCL9YSCCodTHhQNQ=",
+        "type": "file",
+        "url": "https://dl.google.com/drive-file-stream/GoogleDrive.dmg"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://dl.google.com/drive-file-stream/GoogleDrive.dmg"
+      }
+    },
     "herdr": {
       "inputs": {
         "nixpkgs": "nixpkgs",
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1791993401,
-        "narHash": "sha256-N7e7oCKxeCoxek6UT8Lweq16rSsQQi34QMb7C2iNpm8=",
+        "lastModified": 1793278609,
+        "narHash": "sha256-0B58jR/v1vxbK7cwoq++SnOCsED0sHDkgqVMvsrjezE=",
         "owner": "herdrdev",
         "repo": "herdr",
-        "rev": "2ecf19a92fc3a7fff75b6ce3655ef04f4625ec01",
+        "rev": "ee5bfb5041bb3e4a49d591c72308aae3c81ecdde",
         "type": "github"
       },
       "original": {
         "owner": "herdrdev",
-        "ref": "v0.9.5",
         "repo": "herdr",
         "type": "github"
       }
@@ -393,24 +387,6 @@
       "original": {
         "owner": "nix-community",
         "repo": "nix-github-actions",
-        "type": "github"
-      }
-    },
-    "nix-homebrew": {
-      "inputs": {
-        "brew-src": "brew-src"
-      },
-      "locked": {
-        "lastModified": 1793543863,
-        "narHash": "sha256-oDYLVD8KGT/M57c8HziYSSj0le4wCyA+jZ7+/qUS91M=",
-        "owner": "zhaofengli",
-        "repo": "nix-homebrew",
-        "rev": "52bc87da3f30c2261a6d1cfef3c892097b53daeb",
-        "type": "github"
-      },
-      "original": {
-        "owner": "zhaofengli",
-        "repo": "nix-homebrew",
         "type": "github"
       }
     },
@@ -632,6 +608,7 @@
         "dia": "dia",
         "docker-mcp": "docker-mcp",
         "flake-parts": "flake-parts",
+        "google-drive": "google-drive",
         "herdr": "herdr",
         "hermes-agent": "hermes-agent",
         "hermes-lcm": "hermes-lcm",
@@ -640,12 +617,12 @@
         "mcp-servers": "mcp-servers",
         "modes-nvim": "modes-nvim",
         "nix-darwin": "nix-darwin",
-        "nix-homebrew": "nix-homebrew",
         "nix-unit": "nix-unit",
         "nixos-wsl": "nixos-wsl",
         "nixpkgs": "nixpkgs_5",
         "nixvim": "nixvim",
         "omarchy": "omarchy",
+        "steam-darwin": "steam-darwin",
         "strata-release": "strata-release",
         "systems": "systems_3",
         "treefmt-nix": "treefmt-nix_3",
@@ -671,6 +648,18 @@
         "owner": "oxalica",
         "repo": "rust-overlay",
         "type": "github"
+      }
+    },
+    "steam-darwin": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-EUUAvmqQy17nDZhsyYFr+fJoFjK2nvTk5iicNprX6V4=",
+        "type": "file",
+        "url": "https://cdn.akamai.steamstatic.com/client/installer/steam.dmg"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://cdn.akamai.steamstatic.com/client/installer/steam.dmg"
       }
     },
     "strata-release": {

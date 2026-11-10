@@ -15,13 +15,16 @@
       description = "Dia browser package.";
     };
   };
-  config = lib.mkIf config.programs.dia.enable {
-    assertions = [
-      {
-        assertion = pkgs.stdenv.hostPlatform.system == "aarch64-darwin";
-        message = "Dia is supported only on aarch64-darwin.";
-      }
-    ];
-    home.packages = [ config.programs.dia.package ];
-  };
+  config = lib.mkMerge [
+    { programs.dia.enable = lib.mkIf (pkgs.stdenv.hostPlatform.system == "aarch64-darwin") true; }
+    (lib.mkIf config.programs.dia.enable {
+      assertions = [
+        {
+          assertion = pkgs.stdenv.hostPlatform.system == "aarch64-darwin";
+          message = "Dia is supported only on aarch64-darwin.";
+        }
+      ];
+      home.packages = [ config.programs.dia.package ];
+    })
+  ];
 }

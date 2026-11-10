@@ -7,6 +7,7 @@
     ./marksman.nix
     ./nixd.nix
     ./oxlint.nix
+    ./powershell_es.nix
     ./ruff.nix
     ./rust_analyzer.nix
     ./taplo.nix
@@ -49,7 +50,7 @@
         {
           event = "BufWritePre";
           group = "DotfilesLsp";
-          command = "lua vim.lsp.buf.format({ bufnr = <abuf> })";
+          command = "lua vim.lsp.buf.format({ timeout_ms = 10000 })";
         }
       ];
     };

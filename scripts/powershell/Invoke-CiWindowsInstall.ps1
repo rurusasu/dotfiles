@@ -8,7 +8,7 @@ Set-Location -LiteralPath $env:GITHUB_WORKSPACE
 . .\scripts\powershell\lib\Invoke-ExternalCommand.ps1
 
 # Finish any PowerShell MSI update before launching the runtime it can terminate.
-$master = Get-Content -LiteralPath windows/winget/packages.json -Raw -Encoding UTF8 | ConvertFrom-Json
+$master = Get-Content -LiteralPath chezmoi/winget/packages.json -Raw -Encoding UTF8 | ConvertFrom-Json
 $runtime = @(
     foreach ($source in $master.Sources) {
         foreach ($package in $source.Packages) {

@@ -1,6 +1,6 @@
 # デスクトップキー設定の所有範囲
 
-共通キー配列は `nix/home/keybindings/`、アプリの設定・サービスは `nix/modules/`、OS 別選択は `nix/defaults.nix:systemDefaults` が所有します。macOS は AeroSpace、native NixOS は Hyprland を使います。NixOS-WSL には compositor を導入しません。
+共通キー配列は `nix/home/keybindings/`、アプリの設定・サービスは `nix/modules/`、OS 別選択は `nix/hosts/default.nix` が所有します。macOS は AeroSpace、native NixOS は Hyprland を使います。NixOS-WSL には compositor を導入しません。
 
 Windows のデスクトップ操作は標準キーを使います。Windows Terminal の WSL 端末部分では、chezmoi が導入するユーザー常駐の `WslSuperKey` が Windows キーを捕捉し、Super 修飾付きの端末入力へ変換します。Ghostty と Herdr のキーは Home Manager が管理します。
 
@@ -25,8 +25,8 @@ Nix のテストは純粋な設定生成と実効値を検査します。実機�
 ## 読み込みと設定の所有者
 
 - `nix/modules/aerospace/default.nix` は `aerospace.nix` を通常の Nix `import` で呼び、生成結果を `programs.aerospace.settings.mode.main.binding` に渡します。設定ファイルと launchd は Home Manager が所有します。
-- native NixOS は `platform = "linux"` の `systemDefaults` がセッションと Home Manager を接続します。`nix/modules/hyprland/default.nix` が `configType = "lua"` を明示し、ユーザー設定を配置します。architecture は `system` 引数で選択します。
-- native NixOS と standalone Linux は同じ Home Manager の `sharedModules` を使い、Hyprland の system 設定は native 構成だけが有効化します。
+- native NixOS は `nix/hosts/linux/default.nix` がセッションと Home Manager を接続します。`nix/modules/hyprland/default.nix` が `configType = "lua"` を明示し、ユーザー設定を配置します。architecture は `system` 引数で選択します。
+- native NixOS と standalone Linux は同じ `nix/home/default.nix` を使い、Hyprland の system 設定は native 構成だけが有効化します。
 - 共通データと純粋な設定生成関数は Home Manager module ではありません。これらを module の `imports` に渡しません。
 
 ## 対象範囲と実装状況
@@ -39,7 +39,7 @@ Nix のテストは純粋な設定生成と実効値を検査します。実機�
 | NixOS-WSL                     | host が担当      | Windows キー       | guest に compositor を導入せず、Windows host の構成に従う         |
 | standalone Linux Home Manager | 自動導入なし     | —                  | 共通 CLI module では desktop session を変更しない                 |
 
-Unix GUI の導入・設定はアプリごとの Home Manager module が所有し、実 module の `default.nix` は自動検出し、共通・OS 別構成の型付き option で有効化します。Windows GUI の導入は `windows/winget/packages.json` が所有します。Hyprland のユーザー設定は `nix/modules/hyprland/default.nix` が管理します。Hyprland のセッションは `nix/defaults.nix` の native Linux 設定で有効化します。standalone / WSL には compositor を自動導入しません。
+Unix GUI の導入・設定はアプリごとの Home Manager module が所有し、実アプリ module は imports に明示し、共通・OS 別構成の型付き option で有効化します。Windows GUI の導入は `chezmoi/winget/packages.json` が所有します。Hyprland のユーザー設定は `nix/modules/hyprland/default.nix` が管理します。Hyprland のセッションは `nix/home/` / `nix/hosts/` の native Linux 設定で有効化します。standalone / WSL には compositor を自動導入しません。
 
 native NixOS では window/workspace 操作と terminal/browser/files/notes/AI/passwords/launcher/help/activity の起動を生成します。capture、calculator、lock、clipboard、emoji、audio、bluetooth、display、network、power、passthrough は未対応です。対応する実装なしにキーを割り当てないため、macOS と完全同等ではありません。既存の display manager は変更せず、Hyprland セッションを選択するか TTY から `Hyprland` を起動します。
 
@@ -55,7 +55,7 @@ macOS の全キー、標準 shortcut への影響、初回権限設定と回復�
 
 ## 反映手順
 
-NixOS-WSL の Neovim・Ghostty・Herdr の設定は `nrs` で反映し、アプリを再起動します。共通キーは Nix から直接生成するため、Windows 側の export や chezmoi は不要です。
+NixOS-WSL の Neovim・Ghostty・Herdr の設定は `./install.sh` で反映し、アプリを再起動します。共通キーは Nix から直接生成するため、Windows 側の export や chezmoi は不要です。
 
 Windows のテーマ・フォントの共通設定を変更した場合は、外観設定だけを export して適用します。
 
@@ -64,9 +64,9 @@ task keybindings:export
 task chezmoi
 ```
 
-`task keybindings:export` は `nix/home/appearance.json` を更新します。Windows での export は WSL の Nix を使います。chezmoi 実行時に Nix の評価・ビルドは行いません。GitHub Actions は外観 export と Nix 定義の一致を検査します。
+`task keybindings:export` は `chezmoi/appearance/appearance.json` を更新します。Windows での export は WSL の Nix を使います。chezmoi 実行時に Nix の評価・ビルドは行いません。GitHub Actions は外観 export と Nix 定義の一致を検査します。
 
-通常の `install.cmd` は Windows GUI アプリの導入、NixOS-WSL の準備・同期、`nrs`、Windows chezmoi の順に実行します。`nrs` が WSL のアプリ設定を、chezmoi が Windows のユーザー設定を反映します。
+通常の `install.cmd` は Windows GUI アプリの導入、NixOS-WSL の準備・同期、`./install.sh`、Windows chezmoi の順に実行します。`./install.sh` が WSL のアプリ設定を、chezmoi が Windows のユーザー設定を反映します。
 
 ## ターミナルとの境界と検証
 

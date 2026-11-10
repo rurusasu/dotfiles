@@ -33,7 +33,7 @@ pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
             };
             starship = {
               enable = true;
-              wslIntegration.enable = true;
+              wslIntegration.enable = pkgs.lib.mkForce true;
             };
           };
         }

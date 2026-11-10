@@ -19,8 +19,8 @@ let
           bash.enable = true;
           zsh.enable = true;
           starship = {
-            inherit enable;
-            wslIntegration.enable = integration;
+            enable = (fixtures.mkPkgs system).lib.mkForce enable;
+            wslIntegration.enable = (fixtures.mkPkgs system).lib.mkForce integration;
           };
         };
       }

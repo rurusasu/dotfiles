@@ -146,7 +146,7 @@ build)
     ')
     record_root darwin rebuild "$rebuild"
   elif [[ $target == wsl ]]; then
-    system=$(nix build --impure --out-link "$CI_STATE/system" --no-update-lock-file --print-out-paths --print-build-logs "$source#nixosConfigurations.nixos.config.system.build.toplevel")
+    system=$(nix build --impure --out-link "$CI_STATE/system" --no-update-lock-file --print-out-paths --print-build-logs "$source#nixosConfigurations.wsl.config.system.build.toplevel")
     record_root wsl system "$system"
   else
     if [[ ${CI_LINUX_REQUIRED:-false} == true ]]; then
@@ -230,7 +230,6 @@ verify)
   launchctl print "gui/$(id -u)/org.nix-community.home.hermes-agent" >"$CI_STATE/hermes-launchd.txt"
   grep -Eq 'state = running|pid = [0-9]+' "$CI_STATE/hermes-launchd.txt"
   wait_for_hermes
-  brew list --cask --versions >"$CI_STATE/homebrew-casks.txt"
   ;;
 *) exit 64 ;;
 esac

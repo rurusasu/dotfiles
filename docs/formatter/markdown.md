@@ -2,7 +2,7 @@
 
 Markdown の自動整形は [dprint](https://dprint.dev/) が担当します。
 `nix fmt`・`task fmt`・pre-commit・CI の対象です。
-設定は [nix/treefmt.nix](../../nix/treefmt.nix) の `programs.dprint` に宣言します。
+設定は [nix/modules/formatters/default.nix](../../nix/modules/formatters/default.nix) の `programs.dprint` に宣言します。
 
 ```nix
 dprint = {

@@ -10,15 +10,15 @@ AI エージェントの設定はアプリ単位でまとめます。
 
 ```text
 nix/modules/ai_agents/
-├── mcp/      # 自動検出する共通 MCP module
+├── mcp/      # 明示的に読み込む共通 MCP module
 ├── chatgpt/  # ChatGPT アプリ・同梱 Codex の設定
 └── hermes/   # Hermes の公式 Home Manager 設定
 ```
 
-`chatgpt/default.nix` はほかの実 module と同じく自動検出され、型付き `programs.chatgpt.enable` と
+`chatgpt/default.nix` はほかの実 module と同じく明示的に読み込まれ、型付き `programs.chatgpt.enable` と
 標準 `programs.codex.enable` に従って導入・設定を管理します。アプリごとの import パスや公開一覧は登録しません。
 `chatgpt/default.nix` 内で ChatGPT package を選び、同梱 CLI の配置先を標準 `home.sessionPath` へ登録します。
-`nix/defaults.nix:systemDefaults` は Darwin / native・standalone Linux で `programs.chatgpt.enable`、
+`nix/home/<platform>.nix` は Darwin / native・standalone Linux で `programs.chatgpt.enable`、
 WSL では `programs.codex.enable` を指定します。ChatGPT の有効化は同梱 Codex も有効にし、WSL には Linux GUI を導入しません。
 Codex と ChatGPT Work の既定モデルは `gpt-6.1-terra`、通常・plan の reasoning effort は `ultra` です。
 Pi は独立した `programs.pi-coding-agent.enable` で有効化し、既定の coding engine にローカル Strata を使います。
@@ -27,7 +27,7 @@ Pi は独立した `programs.pi-coding-agent.enable` で有効化し、既定の
 context は32K、生成上限と compaction の予約は4096トークン、保持する直近履歴は8192トークンです。
 `models.json` は Home Manager、可変の `settings.json` は Home Manager の既定値との merge で管理します。
 Strata の起動と preset は [パッケージ管理](package-management.md) を参照してください。新規セッションは Strata を使い、既存セッションのモデルを変える場合は Pi の `/model` で選択します。
-Windows の Store 導入情報は `windows/winget/packages.json` で直接管理します。
+Windows の Store 導入情報は `chezmoi/winget/packages.json` で直接管理します。
 Codex CLI を独立したパッケージとして導入しません。
 
 ## Darwin / Linux の公式版
@@ -78,7 +78,7 @@ Google 連携は Pipedream に統一し、Codex の Google curated plugins は�
 ユーザーが `codex mcp login pipedream` で OAuth を実行してください。
 設定と認証の範囲は [Google MCP](../hermes-agent/gmail-mcp.md) を参照してください。
 
-Unix の dsh の導入は `nix/defaults.nix` で管理します。
+Unix の dsh の導入は `nix/home/common.nix` で管理します。
 Windows では dsh・pnpm・Bun を導入しません。
 
 ## 反映

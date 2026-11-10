@@ -35,19 +35,18 @@ Windows Terminal のフォントは UDEV Gothic NF の 10 pt、配色は Catppuc
 
 PowerShell 7 は、対話コンソールで PSReadLine が `PredictionViewStyle` オプションを提供している場合、`ListView` で履歴の候補を入力中に表示し、文字を追加すると候補を絞り込みます。未実行のコマンドやサブコマンドは通常の Tab 補完で選びます。WSL の有無に依存しません。適用後は PowerShell の新しいタブを開くか、`. $PROFILE` で再読み込みします。
 
-macOS、Linux、NixOS-WSL 内部の Ghostty / Herdr 設定は Home Manager が管理し、Windows 用 chezmoi source からは配布しません。テーマ・フォントの正本を変更した場合は `task keybindings:export` で共通の `nix/home/appearance.json` を更新してから chezmoi を適用します。
+macOS、Linux、NixOS-WSL 内部の Ghostty / Herdr 設定は Home Manager が管理し、Windows 用 chezmoi source からは配布しません。テーマ・フォントの正本を変更した場合は `task keybindings:export` で共通の `chezmoi/appearance/appearance.json` を更新してから chezmoi を適用します。
 
 ## Windows の共通エイリアス
 
 Windows のエイリアスと関数も chezmoi の PowerShell profile が管理します。WSL の Zsh と同じ名前・オプションで Windows の実行ファイルを呼び出します。
 
-| コマンド                   | Windows 側の動作                              |
-| -------------------------- | --------------------------------------------- |
-| `eza`                      | アイコン・自動色・tree 表示                   |
-| `ls`                       | 深さ 1 の eza 表示                            |
-| `ll` / `la` / `lt` / `lla` | Zsh と同じ eza の表示オプション               |
-| `grep` / `find`            | `rg.exe` / `fd.exe`                           |
-| `lg`                       | `lazygit.exe`                                 |
-| `dotf`                     | chezmoi source の親のリポジトリで Task を実行 |
+| コマンド                   | Windows 側の動作                |
+| -------------------------- | ------------------------------- |
+| `eza`                      | アイコン・自動色・tree 表示     |
+| `ls`                       | 深さ 1 の eza 表示              |
+| `ll` / `la` / `lt` / `lla` | Zsh と同じ eza の表示オプション |
+| `grep` / `find`            | `rg.exe` / `fd.exe`             |
+| `lg`                       | `lazygit.exe`                   |
 
-`eza`・`fd`・`ripgrep`・`lazygit` の導入情報は `windows/winget/packages.json` が管理します。Windows のアプリ設定・短縮コマンドはこの manifest に載っているアプリだけを対象とします。`install.cmd -Phase Winget` で導入し、`task chezmoi` と `. $PROFILE` で profile を反映します。`nrs` / `nrt` / `nrb` は NixOS 固有なので Windows profile には定義しません。
+`eza`・`fd`・`ripgrep`・`lazygit` の導入情報は `chezmoi/winget/packages.json` が管理します。Windows のアプリ設定・短縮コマンドはこの manifest に載っているアプリだけを対象とします。`install.cmd -Phase Winget` で導入し、`task chezmoi` と `. $PROFILE` で profile を反映します。Unix 側の Nix 設定は、その checkout で `./install.sh` を実行して反映します。

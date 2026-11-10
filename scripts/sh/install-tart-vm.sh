@@ -18,7 +18,7 @@ require_tart_command() {
   if [[ $TART_COMMAND == */* ]]; then
     [[ -x $TART_COMMAND ]] || dotfiles_die "Tart executable is unavailable: $TART_COMMAND"
   else
-    dotfiles_have "$TART_COMMAND" || dotfiles_die "Tart is unavailable. Run the macOS installer first."
+    dotfiles_have "$TART_COMMAND" || dotfiles_die "Tart is unavailable. Enter a development environment providing tart before running this task."
   fi
 }
 

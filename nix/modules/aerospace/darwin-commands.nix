@@ -7,7 +7,6 @@
 }:
 let
   launch = app: "/usr/bin/open -a ${lib.escapeShellArg app}";
-  openUrl = url: "/usr/bin/open ${lib.escapeShellArg url}";
   cycles = import ./aerospace-cycle.nix {
     inherit lib;
     inherit (import ../../home/keybindings/bindings.nix { inherit lib; }) workspaces;
@@ -22,13 +21,9 @@ in
   }";
   browser = launch "Dia";
   files = launch "Finder";
-  notes = launch "Obsidian";
   ai = launch "ChatGPT";
   passwords = launch "1Password";
-  launcher = openUrl "raycast://";
   help = "${launch "TextEdit"} ${pkgs.writeText "omarchy-macos-keybindings.txt" (builtins.readFile ../../../docs/chezmoi/omarchy-macos.md)}";
   calculator = launch "Calculator";
   activity = launch "Activity Monitor";
-  clipboard = openUrl "raycast://extensions/raycast/clipboard-history/clipboard-history";
-  emoji = openUrl "raycast://extensions/raycast/emoji-symbols/search-emoji-symbols";
 }

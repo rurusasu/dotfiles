@@ -23,7 +23,7 @@ package データ、配布方式、エディタ設定を変更理由ごとに分
 
 ### 設定の配布
 
-`wrapRc = true` / `impureRtp = false` により、Nixvim が設定と補助 Lua を package の runtime に含めます。個別の `.lua` ソースや設定ディレクトリは配布せず、独自の `init.lua` 生成、共通キー用の中間ファイル、XDG への二重配布も行いません。`nixvim-print-init` で生成された起動設定を確認できます。NixOS-WSL も同じ設定を使い、変更は `nrs` で反映して Neovim を再起動します。
+`wrapRc = true` / `impureRtp = false` により、Nixvim が設定と補助 Lua を package の runtime に含めます。個別の `.lua` ソースや設定ディレクトリは配布せず、独自の `init.lua` 生成、共通キー用の中間ファイル、XDG への二重配布も行いません。`nixvim-print-init` で生成された起動設定を確認できます。NixOS-WSL も同じ設定を使い、変更は `./install.sh` で反映して Neovim を再起動します。
 
 ## Tree-sitter は何が必要か
 

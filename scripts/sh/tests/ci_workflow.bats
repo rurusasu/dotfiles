@@ -166,11 +166,14 @@ nix wsl|nix/modules/editors/vscode/default.nix
 nix linux darwin wsl|nix/modules/1password/default.nix
 nix wsl chezmoi windows|nix/modules/fonts/wsl-fontconfig.conf
 nix linux darwin wsl chezmoi windows|nix/defaults.nix
+nix linux darwin wsl chezmoi windows|nix/home/common.nix
+nix darwin|nix/hosts/darwin/default.nix
+nix linux wsl|nix/hosts/linux/default.nix
 nix linux darwin wsl|nix/home/keybindings/bindings.nix
-nix linux darwin wsl chezmoi windows|nix/home/appearance.json
+nix linux darwin wsl chezmoi windows|chezmoi/appearance/appearance.json
 nix linux darwin wsl|nix/modules/terminals/ghostty/default.nix
 nix linux|nix/modules/hyprland/hyprland-renderer.nix
-nix chezmoi windows|windows/winget/packages.json
+nix chezmoi windows|chezmoi/winget/packages.json
 nix other|scripts/sh/tests/ci_workflow.bats
 nix chezmoi other linux darwin wsl windows|scripts/sh/install-macos.sh
 nix chezmoi other linux darwin wsl windows|.github/workflows/ci-chezmoi.yml

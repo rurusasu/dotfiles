@@ -33,7 +33,7 @@ CI は既存の `NixOS` distro を置き換えません。導入先は一時領�
 ## 静的検査
 
 ```bash
-task lint:powershell
+nix develop .#ci --command powershell-lint
 ```
 
 `Invoke-StaticAnalysis.ps1` が runtime ソースの PSScriptAnalyzer と、全 PowerShell ソースの

@@ -6,10 +6,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 . "$ROOT/scripts/sh/lib/install-options.sh"
 host=linux
 if [[ $(uname -r) == *[Mm]icrosoft* ]]; then
-  host=nixos
+  host=wsl
 fi
 flake_ref=${DOTFILES_FLAKE_REF:-$ROOT#$host}
-if [[ $host == nixos ]]; then
+if [[ $host == wsl ]]; then
   account_flake=${DOTFILES_FLAKE_REF:-path:$ROOT#$host}
   configured_user=$(nix --accept-flake-config --extra-experimental-features 'nix-command flakes' \
     eval --raw "${account_flake%#*}#nixosConfigurations.${account_flake##*#}.config.wsl.defaultUser" --impure --no-update-lock-file)

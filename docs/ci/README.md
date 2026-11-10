@@ -38,7 +38,7 @@ CI は global flake registry を使わず、bootstrap の alias は明示した 
 工程順序は `taskfiles/ci/taskfile.yml`、OS 固有の操作は platform adapter が所有します。
 job の順序は Changes → Lint → 各 Build / Plan → 対応 E2E → Complete です。
 Lint は `task lint:ci` から `fmt:check` を一度実行し、statix、actionlint、
-`lint:powershell`、Windows manifest の JSON 検証も終えてから各 producer を起動します。
+CI 用シェルの `powershell-lint`、Windows manifest の JSON 検証も終えてから各 producer を起動します。
 format は sandbox 外の checkout で検査し、producer では treefmt を再実行しません。
 Bash テストは Lint 後に producer と並列で、ローカルと同じ `task test:bash` を実行します。
 
@@ -55,7 +55,7 @@ runtime 確認を実行します。consumer 内で input を更新したり、�
 ソースビルドで補ったりしません。PowerShell の Pester suite は E2E 後の runtime 検証を担当します。
 
 依存更新と適用は分離します。`task update` は `flake.lock` を更新するだけで、
-`install` / `nrs` / Hermes bootstrap は lock を変更せず適用します。
+`install` / `./install.sh` / Hermes bootstrap は lock を変更せず適用します。
 更新した lock は変更元の source と一緒に commit / PR に含め、producer build と E2E が
 成功した SHA を適用します。適用入口と CI source archive は `--no-update-lock-file` を使い、
 lock が不足・不整合なら新しい依存を選び直さず失敗します。

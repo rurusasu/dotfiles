@@ -4,7 +4,9 @@
   code,
 }:
 let
-  disabled = fixtures.mkHome "aarch64-darwin" [ ];
+  disabled = fixtures.mkHome "aarch64-darwin" [
+    ({ lib, ... }: { programs.dia.enable = lib.mkForce false; })
+  ];
   enabled = fixtures.mkHome "aarch64-darwin" [ { programs.dia.enable = true; } ];
   package = code.nix.modules.browsers.dia.package {
     inherit inputs;

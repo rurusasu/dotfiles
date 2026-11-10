@@ -14,8 +14,11 @@
     };
   };
 
-  config = lib.mkIf config.programs.ghq.enable {
-    home.packages = [ pkgs.ghq ];
-    home.sessionVariables.GHQ_ROOT = config.programs.ghq.root;
-  };
+  config = lib.mkMerge [
+    { programs.ghq.enable = true; }
+    (lib.mkIf config.programs.ghq.enable {
+      home.packages = [ pkgs.ghq ];
+      home.sessionVariables.GHQ_ROOT = config.programs.ghq.root;
+    })
+  ];
 }

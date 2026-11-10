@@ -69,7 +69,7 @@ treefmt
 
 ## treefmt-nix 設定
 
-[nix/treefmt.nix](../../nix/treefmt.nix) で設定:
+[nix/modules/formatters/default.nix](../../nix/modules/formatters/default.nix) で設定:
 
 ```nix
 {

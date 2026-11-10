@@ -36,7 +36,8 @@
         mkdir -p "$HOME"
         cd ${files.__path}
         for script in ${scripts."modern.lua"} ${scripts."treesitter.lua"} \
-          ${scripts."snacks.lua"} ${scripts."markdown.lua"} ${scripts."keybindings.lua"}; do
+          ${scripts."snacks.lua"} ${scripts."markdown.lua"} ${scripts."keybindings.lua"} \
+          ${scripts."powershell.lua"}; do
           nvim --headless -i NONE \
             -c 'lua for _, name in ipairs(vim.json.decode(vim.env.DOTFILES_NVIM_LSP_SERVERS)) do vim.lsp.enable(name, false) end' \
             -c "lua local ok, err = pcall(dofile, [[$script]]); if not ok then print(err); vim.cmd('cquit 1') end" \

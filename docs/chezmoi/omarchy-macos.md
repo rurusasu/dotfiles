@@ -6,11 +6,11 @@
 `nix/modules/aerospace/default.nix` はユーザーサービス、macOS の既存ショートカットとの競合、
 ユーザー設定を担当する。同ディレクトリの生成結果を通常の Nix import で受け取り、
 Home Manager の `programs.aerospace` へ渡す。Home Manager が設定ファイルを
-Nix store に生成し、launchd のユーザーエージェントで起動する。`nix/defaults.nix:systemDefaults` が
-module は自動検出し、`platform = "darwin"` の構成で `programs.aerospace.enable` などの型付き option と nix-darwin の OS 設定を選択する。
+Nix store に生成し、launchd のユーザーエージェントで起動する。`nix/hosts/default.nix` が
+module は imports に明示し、`platform = "darwin"` の構成で `programs.aerospace.enable` などの型付き option と nix-darwin の OS 設定を選択する。
 
 Unix のパッケージ導入・アプリ設定は `nix/modules/` にまとめ、host は必要な module を
-import する。Windows の導入は `windows/winget/packages.json` を直接管理する。
+import する。Windows の導入は `chezmoi/winget/packages.json` を直接管理する。
 キー配列と OS ごとの実行方法を分ける方針は
 [パッケージ管理の分割理由](../nix/package-management.md#分割の理由と編集先) を参照。
 native NixOS、Windows デスクトップ、WSL の対応範囲は [共通定義と OS 別実装](./omarchy.md) を参照。
@@ -29,9 +29,9 @@ native NixOS、Windows デスクトップ、WSL の対応範囲は [共通定義
 | --------------------------------------- | ------------------------------------------------------------ |
 | ⌘Enter                                  | Ghostty 起動                                                 |
 | ⌘Shift Enter / ⌘Shift B                 | Dia 起動                                                     |
-| ⌘Shift F/O/A                            | Finder / Obsidian / ChatGPT                                  |
+| ⌘Shift F/A                              | Finder / ChatGPT                                             |
 | ⌘Shift /                                | 1Password                                                    |
-| ⌘Space / ⌘Option Space                  | Raycast                                                      |
+| ⌘Space / ⌘Option Space                  | Spotlight / Finder で検索                                    |
 | ⌘K                                      | このキー一覧                                                 |
 | ⌘矢印                                   | 方向にあるウィンドウへフォーカス                             |
 | ⌘Shift 矢印                             | 方向にあるウィンドウと入れ替え                               |
@@ -55,14 +55,12 @@ native NixOS、Windows デスクトップ、WSL の対応範囲は [共通定義
 | ⌘S / ⌘grave                             | scratchpad ワークスペースと直前のワークスペースを往復        |
 | ⌘Option S / ⌘Shift grave                | ウィンドウを scratchpad へ移動                               |
 | ⌘Ctrl C/Q/T                             | Screenshot / Calculator / Activity Monitor                   |
-| ⌘Ctrl L                                 | 画面ロック（Raycast）                                        |
-| ⌘Ctrl V/E                               | クリップボード履歴 / 絵文字（Raycast）                       |
 | ⌘Ctrl A/B/D/W/P                         | サウンド / Bluetooth / ディスプレイ / Wi-Fi / バッテリー設定 |
 | ⌘Ctrl Option Escape                     | キーの横取りを一時停止 / 再開                                |
 
 Spotlight、ウィンドウ巡回、⌘Shift 数字のスクリーンショットの競合を
 Home Manager activation で無効化する。他のシステムショートカットの設定は保持する。
-Raycast などでユーザーが追加したグローバルキーは別途競合確認が必要。
+ユーザーが手動で追加したグローバルキーは別途競合確認が必要。
 
 ## macOS での差異
 
@@ -81,7 +79,7 @@ Hyprland の scrolling/dwindle 切り替え、pseudo、sticky、透明度、マ�
 
 Home Manager への移行後の実機反映、Accessibility 許可、実際のキー入力は未検証です。
 
-通常は `nrs` で適用する。ブランチから適用する場合は対象 checkout 内で
+通常は `./install.sh` で適用する。ブランチから適用する場合は対象 checkout 内で
 `./install.sh` を使う。
 初回はシステム設定 → プライバシーとセキュリティ → アクセシビリティで
 AeroSpace を許可する。この許可は実機で設定する。

@@ -15,20 +15,15 @@ tasks:
   lint:
     desc: Run pre-commit on all files
     cmds:
-      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && pre-commit run --all-files"'
-
-  lint:powershell:
-    desc: Check PowerShell runtime sources and Windows source encoding
-    cmds:
-      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix run --no-update-lock-file path:.#powershell-lint"'
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && nix develop --command pre-commit run --all-files"'
 
   lint:ci:
     desc: Run shared static CI checks
     cmds:
-      - task: fmt:check
+      - treefmt --fail-on-change
       - statix check .
       - actionlint
-      - task: lint:powershell
+      - powershell-lint
       - |
         # shellcheck disable=SC2016 # jq expressions must not be expanded by Bash.
         jq -e '
@@ -54,10 +49,10 @@ tasks:
               and all(to_entries[] | select(.key != "Scope"); .value | nonempty_string)))
           and ([.Sources[].Packages[].PackageIdentifier] as $ids
             | ($ids | length) == ($ids | unique | length))
-        ' windows/winget/packages.json
+        ' chezmoi/winget/packages.json
 
   lint:no-format:
     internal: true
     desc: Run pre-commit checks after formatting has already completed
     cmds:
-      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && SKIP=treefmt pre-commit run --all-files"'
+      - '{{.WSL}}bash -lc "cd {{.DOTFILES_PATH}} && SKIP=treefmt nix develop --command pre-commit run --all-files"'

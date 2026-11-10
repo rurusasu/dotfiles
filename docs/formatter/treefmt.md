@@ -1,9 +1,9 @@
 # treefmt 設定
 
 [treefmt-nix](https://github.com/numtide/treefmt-nix) で formatter の設定と実行依存を管理します。
-正本は [nix/treefmt.nix](../../nix/treefmt.nix) です。
+正本は [nix/modules/formatters/default.nix](../../nix/modules/formatters/default.nix) です。
 このファイルは treefmt 専用の Nix モジュールで、`programs` と `settings` を直接宣言します。
-[nix/defaults.nix](../../nix/defaults.nix) の `perSystem.treefmt.imports` が読み込みます。
+[nix/modules/formatters/default.nix](../../nix/modules/formatters/default.nix) の `perSystem.treefmt.imports` が読み込みます。
 開発シェルも同じ `perSystem` で `inputsFrom = [ config.treefmt.build.devShell ];` を使い、
 treefmt の実行環境に statix と deadnix を追加します。
 

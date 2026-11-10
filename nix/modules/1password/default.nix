@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  platform,
   ...
 }:
 let
@@ -47,10 +48,34 @@ in
       };
     };
   };
-  config = lib.mkIf config.dotfiles.onePassword.enable {
-    home.packages = [
-      pkgs._1password-cli
-      pkgs._1password-gui
-    ];
-  };
+  config = lib.mkMerge [
+    { dotfiles.onePassword.enable = true; }
+    (lib.mkIf config.dotfiles.onePassword.enable {
+      home.sessionVariables =
+        lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
+          OP_BIOMETRIC_UNLOCK_ENABLED = "true";
+        }
+        // lib.optionalAttrs (platform == "wsl") {
+          WSLENV = "OP_ACCOUNT/u";
+          OP_ACCOUNT = config.dotfiles.onePassword.account;
+        };
+      launchd.agents.onepassword-ssh-environment = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
+        enable = true;
+        config = {
+          ProgramArguments = [
+            "/bin/launchctl"
+            "setenv"
+            "SSH_AUTH_SOCK"
+            config.home.sessionVariables.SSH_AUTH_SOCK
+          ];
+          RunAtLoad = true;
+        };
+      };
+
+      home.packages = [
+        pkgs._1password-cli
+        pkgs._1password-gui
+      ];
+    })
+  ];
 }

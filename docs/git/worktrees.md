@@ -23,7 +23,7 @@ WSL 内のホームや別ドライブでは、相対リンクでも Windows と�
 ドライブ名を設定に固定せず、隣接するディレクトリに作成できる。
 Herdr の既定の worktree 保存先も gwq と共有するため、Windows との共用時には同じ配置条件が必要になる。
 
-設定の反映は WSL で `nrs`、Windows で `dotf chezmoi` を使う。
+設定の反映は WSL で `./install.sh`、Windows で `task chezmoi` を使う。
 gwq の操作は WSL の Bash / Zsh で実行する。`gwq cd` は現在のシェルを移動する。
 
 ```sh

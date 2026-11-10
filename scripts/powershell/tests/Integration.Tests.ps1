@@ -20,7 +20,7 @@ Describe 'Windows environment integration' -Skip:([Environment]::OSVersion.Platf
         # Registry activation and font registration must not change the real user's state here.
         $terminalRelative = 'AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json'
         $fragmentRelative = 'AppData/Local/Microsoft/Windows Terminal/Fragments/dotfiles/theme.json'
-        $appearance = Get-Content -LiteralPath (Join-Path $script:repoRoot 'nix/home/appearance.json') -Raw | ConvertFrom-Json
+        $appearance = Get-Content -LiteralPath (Join-Path $script:repoRoot 'chezmoi/appearance/appearance.json') -Raw | ConvertFrom-Json
         $deployed = Join-Path $destination $terminalRelative
         if ($ExistingSettings) {
             [void][IO.Directory]::CreateDirectory((Split-Path -Parent $deployed))
@@ -143,16 +143,14 @@ Describe 'Windows common shell commands' {
     BeforeEach {
         # A separate runspace keeps aliases, functions and cwd out of the test runner.
         $script:shell = [powershell]::Create()
-        $script:shell.Runspace.SessionStateProxy.SetVariable('ProfileTestSource', (Join-Path $TestDrive 'source repo/chezmoi'))
         $script:shell.AddScript(@'
-foreach ($command in 'eza', 'task') {
+foreach ($command in 'eza') {
     $body = [scriptblock]::Create(@"
 [pscustomobject]@{ Command = '$command'; Arguments = @(`$args); Directory = (Get-Location).Path }
 `$global:LASTEXITCODE = 17
 "@)
     Set-Item -Path "function:global:$command.exe" -Value $body
 }
-function global:chezmoi.exe { $global:LASTEXITCODE = 0; $global:ProfileTestSource }
 # Seed the Windows alias only on hosts where it is absent.
 if (-not (Get-Alias -Name ls -ErrorAction SilentlyContinue)) {
     Set-Alias -Name ls -Value Get-ChildItem
@@ -177,29 +175,7 @@ if (-not (Get-Alias -Name ls -ErrorAction SilentlyContinue)) {
         $script:shell.AddScript('$global:LASTEXITCODE').Invoke()[0] | Should -Be 17
     }
 
-    It 'should run dotf in the chezmoi source repository without changing the current directory' {
-        $script:shell.AddScript('(Get-Location).Path') | Out-Null
-        $originalDirectory = $script:shell.Invoke()[0]
-        $script:shell.Commands.Clear()
-        $script:shell.AddCommand('dotf').AddArgument('test:powershell').AddArgument('ARG=two words') | Out-Null
-        $actual = @($script:shell.Invoke())
-        $script:shell.HadErrors | Should -BeFalse -Because ($script:shell.Streams.Error -join "`n")
-        $actual.Count | Should -Be 1
-        $actual[0].Command | Should -Be 'task'
-        ($actual[0].Arguments -join '|') | Should -Be ((@('--dir', (Join-Path $TestDrive 'source repo'), 'test:powershell', 'ARG=two words')) -join '|')
-        $actual[0].Directory | Should -Be $originalDirectory
-        $script:shell.Commands.Clear()
-        $script:shell.AddScript('(Get-Location).Path').Invoke()[0] | Should -Be $originalDirectory
-    }
 
-    It 'should stop dotf when chezmoi cannot resolve its source' {
-        $script:shell.AddScript('function global:chezmoi.exe { $global:LASTEXITCODE = 9 }').Invoke() | Out-Null
-        $script:shell.Commands.Clear()
-        $script:shell.AddCommand('dotf').AddArgument('fmt') | Out-Null
-        @($script:shell.Invoke()).Count | Should -Be 0
-        $script:shell.Commands.Clear()
-        $script:shell.AddScript('$global:LASTEXITCODE').Invoke()[0] | Should -Be 9
-    }
 }
 
 # Isolated rendering requires the installed native chezmoi template engine.

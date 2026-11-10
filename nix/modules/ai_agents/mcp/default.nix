@@ -68,93 +68,96 @@ let
   ) backends;
 in
 {
-  config = lib.mkIf config.programs.mcp.enable {
-    xdg.configFile."mcp/onepassword.json".source =
-      (pkgs.formats.json { }).generate "mcp-onepassword.json"
-        {
-          account = config.dotfiles.onePassword.account;
-          dockerMcp = {
-            "exa.api_key" = references.exaApiKey;
-            "firecrawl.api_key" = references.firecrawlApiKey;
-            "github.personal_access_token" = references.githubToken;
-            "tavily.api_token" = references.tavilyApiToken;
+  config = lib.mkMerge [
+    { programs.mcp.enable = true; }
+    (lib.mkIf config.programs.mcp.enable {
+      xdg.configFile."mcp/onepassword.json".source =
+        (pkgs.formats.json { }).generate "mcp-onepassword.json"
+          {
+            account = config.dotfiles.onePassword.account;
+            dockerMcp = {
+              "exa.api_key" = references.exaApiKey;
+              "firecrawl.api_key" = references.firecrawlApiKey;
+              "github.personal_access_token" = references.githubToken;
+              "tavily.api_token" = references.tavilyApiToken;
+            };
+            xapi = {
+              inherit (secretConfig.xapi) vault item;
+              serviceAccountTokenRef = references.serviceAccountToken;
+            };
           };
-          xapi = {
-            inherit (secretConfig.xapi) vault item;
-            serviceAccountTokenRef = references.serviceAccountToken;
-          };
-        };
-    home = {
-      sessionVariables.DOCKER_CONFIG = config.home.homeDirectory + "/.docker";
-      packages = [
-        packages.docker-mcp
-        packages.xurl
-        packages.hermes-xapi
-        pkgs._1password-cli
-        pkgs.jq
-        pkgs.coreutils
-      ];
-      # xurl fixes its credential path at ~/.xurl; share the Hermes cache directly.
-      file.".xurl".source = config.lib.file.mkOutOfStoreSymlink "${hermesHome}/.xurl";
-      activation.prepareXurlDirectory =
-        lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ]
-          ''
-            run ${pkgs.coreutils}/bin/install -d -m 0700 ${lib.escapeShellArg "${hermesHome}/.xurl"}
-          '';
-    };
-
-    # Both clients share one browser profile and one in-memory OAuth token store.
-    # Home Manager starts these services after installing their configuration links.
-    systemd.user.services = lib.mkIf pkgs.stdenv.hostPlatform.isLinux (
-      lib.mapAttrs (name: service: {
-        Unit.Description = "Shared ${name} server";
-        Service = {
-          ExecStart = lib.escapeShellArgs service.command;
-          Environment = lib.mapAttrsToList (name: value: "${name}=${value}") service.environment;
-          Restart = "on-failure";
-          RestartSec = 10;
-        };
-        Install.WantedBy = [ "default.target" ];
-      }) services
-    );
-    launchd.agents = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin (
-      lib.mapAttrs (name: service: {
-        enable = true;
-        config = {
-          ProgramArguments = service.command;
-          EnvironmentVariables = service.environment;
-          KeepAlive = true;
-          RunAtLoad = true;
-          ThrottleInterval = 10;
-          ProcessType = "Background";
-          StandardOutPath = "${hermesHome}/${name}.log";
-          StandardErrorPath = "${hermesHome}/${name}.log";
-        };
-      }) services
-    );
-
-    programs.mcp.servers =
-      lib.mapAttrs (_: backend: {
-        url = "http://127.0.0.1:${toString backend.port}/mcp";
-      }) backends
-      // {
-        MCP_DOCKER = {
-          command = lib.getExe packages.docker-mcp;
-          env.DOCKER_CONFIG = dockerConfig;
-          args = [
-            "gateway"
-            "run"
-            "--secrets"
-            secretsFile
-            "--servers"
-            "context7,deepwiki,exa,firecrawl,github-official,obsidian,playwright,tavily"
-          ];
-          startup_timeout_sec = 30;
-        };
-        pipedream = {
-          url = "https://mcp.pipedream.net/v2";
-          auth = "oauth";
-        };
+      home = {
+        sessionVariables.DOCKER_CONFIG = config.home.homeDirectory + "/.docker";
+        packages = [
+          packages.docker-mcp
+          packages.xurl
+          packages.hermes-xapi
+          pkgs._1password-cli
+          pkgs.jq
+          pkgs.coreutils
+        ];
+        # xurl fixes its credential path at ~/.xurl; share the Hermes cache directly.
+        file.".xurl".source = config.lib.file.mkOutOfStoreSymlink "${hermesHome}/.xurl";
+        activation.prepareXurlDirectory =
+          lib.hm.dag.entryBetween [ "linkGeneration" ] [ "writeBoundary" ]
+            ''
+              run ${pkgs.coreutils}/bin/install -d -m 0700 ${lib.escapeShellArg "${hermesHome}/.xurl"}
+            '';
       };
-  };
+
+      # Both clients share one browser profile and one in-memory OAuth token store.
+      # Home Manager starts these services after installing their configuration links.
+      systemd.user.services = lib.mkIf pkgs.stdenv.hostPlatform.isLinux (
+        lib.mapAttrs (name: service: {
+          Unit.Description = "Shared ${name} server";
+          Service = {
+            ExecStart = lib.escapeShellArgs service.command;
+            Environment = lib.mapAttrsToList (name: value: "${name}=${value}") service.environment;
+            Restart = "on-failure";
+            RestartSec = 10;
+          };
+          Install.WantedBy = [ "default.target" ];
+        }) services
+      );
+      launchd.agents = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin (
+        lib.mapAttrs (name: service: {
+          enable = true;
+          config = {
+            ProgramArguments = service.command;
+            EnvironmentVariables = service.environment;
+            KeepAlive = true;
+            RunAtLoad = true;
+            ThrottleInterval = 10;
+            ProcessType = "Background";
+            StandardOutPath = "${hermesHome}/${name}.log";
+            StandardErrorPath = "${hermesHome}/${name}.log";
+          };
+        }) services
+      );
+
+      programs.mcp.servers =
+        lib.mapAttrs (_: backend: {
+          url = "http://127.0.0.1:${toString backend.port}/mcp";
+        }) backends
+        // {
+          MCP_DOCKER = {
+            command = lib.getExe packages.docker-mcp;
+            env.DOCKER_CONFIG = dockerConfig;
+            args = [
+              "gateway"
+              "run"
+              "--secrets"
+              secretsFile
+              "--servers"
+              "context7,deepwiki,exa,firecrawl,github-official,obsidian,playwright,tavily"
+            ];
+            startup_timeout_sec = 30;
+          };
+          pipedream = {
+            url = "https://mcp.pipedream.net/v2";
+            auth = "oauth";
+          };
+        };
+    })
+  ];
 }

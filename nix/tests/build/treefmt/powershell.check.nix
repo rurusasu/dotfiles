@@ -1,9 +1,17 @@
 # Exercise the configured formatter with no user modules and forbidden downloads.
-{ pkgs, config }:
+{
+  pkgs,
+  inputs,
+  code,
+}:
 {
   powershell-formatter =
     let
-      formatter = config.treefmt.settings.formatter.powershell;
+      treefmt = inputs.treefmt-nix.lib.evalModule pkgs {
+        imports = [ code.nix.modules.formatters.treefmt ];
+        programs.powershell.enable = true;
+      };
+      formatter = treefmt.config.settings.formatter.powershell;
     in
     pkgs.runCommand "powershell-formatter-check" { } ''
       export HOME="$TMPDIR/empty-home"
@@ -46,8 +54,6 @@
         $env:FILENAME = $null
         foreach ($case in @(
           @{ Path = 'scripts/powershell/ascii.ps1'; Unicode = $false; Bom = $false; Expected = $false },
-          @{ Path = 'scripts/powershell/data.psd1'; Unicode = $true; Bom = $false; Expected = $true },
-          @{ Path = 'scripts/powershell/module.psm1'; Unicode = $true; Bom = $false; Expected = $true },
           @{ Path = 'chezmoi/unicode.ps1'; Unicode = $true; Bom = $false; Expected = $false },
           @{ Path = 'scripts/powershell/existing.ps1'; Unicode = $false; Bom = $true; Expected = $true }
         )) {

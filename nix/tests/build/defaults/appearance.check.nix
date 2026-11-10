@@ -6,14 +6,14 @@
 }:
 let
   home = fixtures.mkHome pkgs.stdenv.hostPlatform.system [ (fixtures.homeModule "common") ];
-  generated = code.nix.home.appearance {
+  generated = code.chezmoi.appearance.export {
     inherit (home) config;
     inherit pkgs;
   };
 in
 {
   appearance-export = pkgs.runCommand "appearance-export-check" { } ''
-    cmp ${generated} ${files.nix.home."appearance.json"}
+    cmp ${generated} ${files.chezmoi.appearance."appearance.json"}
     touch "$out"
   '';
 }

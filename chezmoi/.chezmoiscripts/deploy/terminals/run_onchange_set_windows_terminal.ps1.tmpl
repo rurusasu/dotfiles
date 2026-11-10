@@ -1,7 +1,7 @@
 {{ if eq .chezmoi.os "windows" -}}
 $ErrorActionPreference = 'Stop'
 if (-not (Get-AppxPackage -Name Microsoft.WindowsTerminal -ErrorAction Stop)) {
-    throw 'Install Microsoft.WindowsTerminal from windows/winget/packages.json before applying terminal settings.'
+    throw 'Install Microsoft.WindowsTerminal from chezmoi/winget/packages.json before applying terminal settings.'
 }
 $path = 'HKCU:\Console\%%Startup'
 if (-not (Test-Path -LiteralPath $path)) { New-Item -Path $path | Out-Null }

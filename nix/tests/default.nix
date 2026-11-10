@@ -63,8 +63,6 @@ in
           };
         }).values;
       nix-unit.inputs = {
-        # Full Darwin activation evaluation needs this nested input in the sandbox.
-        "nix-homebrew/brew-src" = inputs.nix-homebrew.inputs.brew-src;
         # Hermes activation also evaluates its locked package input closure.
         "hermes-agent/nixpkgs" = inputs.hermes-agent.inputs.nixpkgs;
         "hermes-agent/flake-parts" = inputs.hermes-agent.inputs.flake-parts;
@@ -86,6 +84,8 @@ in
         inherit (inputs)
           catppuccin
           docker-mcp
+          google-drive
+          steam-darwin
           dia
           flake-parts
           home-manager
@@ -96,7 +96,6 @@ in
           mcp-servers
           modes-nvim
           nix-darwin
-          nix-homebrew
           nix-unit
           nixvim
           nixos-wsl

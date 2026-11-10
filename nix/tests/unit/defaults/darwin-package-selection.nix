@@ -16,10 +16,6 @@ in
     }) homePackages;
     expected = true;
   };
-  testRaycastDerivationIsSelectedForDarwinHome = {
-    expr = contains pkgs.raycast homePackages;
-    expected = true;
-  };
   testDarwinTerminalGuiPackagesUseNativeWindowManagerAndTerminals = {
     expr = {
       aerospace = contains pkgs.aerospace homePackages;

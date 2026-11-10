@@ -175,7 +175,7 @@ function Invoke-NixosWslSetup {
 
     # Validate the declaration being applied; none retains the independent WSL checkout.
     $userFlake = if ($syncMode -eq 'none') { $repo } else { $source }
-    $selectedFlake = if ($FlakeReference) { $FlakeReference } else { 'path:' + $userFlake + '#nixos' }
+    $selectedFlake = if ($FlakeReference) { $FlakeReference } else { 'path:' + $userFlake + '#wsl' }
     $selection = $selectedFlake.LastIndexOf('#')
     $configurationRoot = $selectedFlake.Substring(0, $selection)
     $configurationName = $selectedFlake.Substring($selection + 1)
@@ -214,7 +214,7 @@ function Invoke-NixosWslSetup {
     $qTarget = ConvertTo-WslArgument $target
     Invoke-SetupCommand "test -f $qTarget/flake.nix; test -f $qTarget/flake.lock" | Out-Host
 
-    $deploymentFlake = if ($FlakeReference) { $FlakeReference } else { 'path:' + $target + '#nixos' }
+    $deploymentFlake = if ($FlakeReference) { $FlakeReference } else { 'path:' + $target + '#wsl' }
     Invoke-SetupCommand "nixos-rebuild switch --flake $(ConvertTo-WslArgument $deploymentFlake) --impure --no-update-lock-file --option accept-flake-config true --option experimental-features 'nix-command flakes'" | Out-Host
 
     if ($target -ne $source) {
