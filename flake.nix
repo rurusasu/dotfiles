@@ -95,7 +95,9 @@
     hermes-agent = {
       # Keep the upstream package and its complete locked dependency graph intact.
       # Following this repository's nixpkgs changes derivations and cache identities.
-      url = "github:NousResearch/hermes-agent";
+      # Keep the Darwin pnpm store fix until upstream PR #150967 is merged.
+      # Pin the declaration too: a normal flake update must not drop the fix.
+      url = "github:NousResearch/hermes-agent/4ffd07a63eaf4feae539402a774c71742e806666";
     };
   };
 
