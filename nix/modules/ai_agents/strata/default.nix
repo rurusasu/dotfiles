@@ -8,7 +8,7 @@
 let
   selected = import ./package.nix {
     inherit pkgs;
-    feed = builtins.fromJSON (builtins.readFile inputs.strata-release);
+    manifest = builtins.readFile inputs.strata-release;
   };
 in
 {

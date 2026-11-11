@@ -11,38 +11,21 @@ let
       targets.darwin.linkApps.enable = lib.mkDefault false;
     })
   ];
-  feed = {
-    app = {
-      version = "9.8.7";
-      platforms = {
-        linux-x86_64 = {
-          url = "https://github.com/Niko1221/Strata/releases/latest/download/Strata-9.8.7-linux-x86_64.AppImage";
-          sha256 = builtins.concatStringsSep "" (builtins.genList (_: "a") 64);
-        };
-        darwin-aarch64 = {
-          url = "https://github.com/Niko1221/Strata/releases/latest/download/Strata.app.tar.gz";
-          sha256 = builtins.concatStringsSep "" (builtins.genList (_: "b") 64);
-        };
-      };
-    };
-    control = {
-      version = "1.2.3";
-      packages =
-        map
-          (platform: {
-            inherit platform;
-            url = "strata-control-1.2.3-${platform}.tar.gz";
-            sha256 = builtins.concatStringsSep "" (builtins.genList (_: "c") 64);
-          })
-          [
-            "linux-x86_64"
-            "macos-arm64"
-          ];
-    };
-  };
+  hash = builtins.concatStringsSep "" (builtins.genList (_: "a") 64);
+  manifest =
+    builtins.concatStringsSep "\n" (
+      map (name: "${hash}  ${name}") [
+        "Strata-9.8.7-linux-x86_64.AppImage"
+        "Strata.app.tar.gz"
+        "strata-control-1.2.3-linux-x86_64.tar.gz"
+        "strata-control-1.2.3.1-linux-x86_64.tar.gz"
+        "strata-control-1.2.3-macos-arm64.tar.gz"
+      ]
+    )
+    + "\n";
 in
 {
-  testStrataUsesPlatformAssetsFromThePinnedFeedRelease = {
+  testStrataUsesLatestControlForEachPlatformFromThePinnedRelease = {
     expr =
       map
         (
@@ -50,7 +33,7 @@ in
           let
             packages = code.nix.modules.ai_agents.strata.package {
               pkgs = fixtures.mkPkgs system;
-              inherit feed;
+              inherit manifest;
             };
           in
           {
@@ -58,6 +41,7 @@ in
             control = packages.control.version;
             desktopUrls = packages.desktop.src.urls;
             desktopHash = packages.desktop.src.outputHash;
+            controlUrls = packages.control.controlContents.src.urls;
           }
         )
         [
@@ -67,17 +51,23 @@ in
     expected = [
       {
         desktop = "9.8.7";
-        control = "1.2.3";
+        control = "1.2.3.1";
         desktopUrls = [
           "https://github.com/Niko1221/Strata/releases/download/v9.8.7/Strata-9.8.7-linux-x86_64.AppImage"
         ];
-        desktopHash = feed.app.platforms.linux-x86_64.sha256;
+        desktopHash = hash;
+        controlUrls = [
+          "https://github.com/Niko1221/Strata/releases/download/v9.8.7/strata-control-1.2.3.1-linux-x86_64.tar.gz"
+        ];
       }
       {
         desktop = "9.8.7";
         control = "1.2.3";
         desktopUrls = [ "https://github.com/Niko1221/Strata/releases/download/v9.8.7/Strata.app.tar.gz" ];
-        desktopHash = feed.app.platforms.darwin-aarch64.sha256;
+        desktopHash = hash;
+        controlUrls = [
+          "https://github.com/Niko1221/Strata/releases/download/v9.8.7/strata-control-1.2.3-macos-arm64.tar.gz"
+        ];
       }
     ];
   };

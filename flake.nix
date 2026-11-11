@@ -55,10 +55,10 @@
       url = "github:docker/mcp-gateway";
       flake = false;
     };
-    # Strata is not in nixpkgs. Follow the latest release feed; flake.lock pins its content and assets.
+    # Strata is not in nixpkgs. Pin the complete release asset list, including per-OS hotfixes.
     strata-release = {
       type = "file";
-      url = "https://github.com/Niko1221/Strata/releases/latest/download/strata-feed.json";
+      url = "https://github.com/Niko1221/Strata/releases/latest/download/SHA256SUMS.txt";
       flake = false;
     };
     xurl = {

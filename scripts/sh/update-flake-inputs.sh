@@ -65,7 +65,7 @@ DOTFILES_FLAKE_LOCK="$updated" DOTFILES_DIA_URL="$dia_url" nix "${nix_options[@]
             };
           }; };
         };
-    latest = "https://github.com/Niko1221/Strata/releases/latest/download/strata-feed.json";
+    latest = "https://github.com/Niko1221/Strata/releases/latest/download/SHA256SUMS.txt";
     rootInputs = lock.nodes.${lock.root}.inputs;
     normalized =
       if !(rootInputs ? strata-release) then lock else
@@ -73,14 +73,15 @@ DOTFILES_FLAKE_LOCK="$updated" DOTFILES_DIA_URL="$dia_url" nix "${nix_options[@]
         nodeName = rootInputs.strata-release;
         node = lock.nodes.${nodeName};
         managed = (node.original.type or null) == "file" && (node.original.url or null) == latest;
-        feed = builtins.fromJSON (builtins.readFile (builtins.fetchTree node.locked).outPath);
-        version = feed.app.version;
+        manifest = builtins.readFile (builtins.fetchTree node.locked).outPath;
+        versions = builtins.filter builtins.isList (builtins.split
+          "[0-9a-f]{64}  Strata-([0-9]+([.][0-9]+)+)-linux-x86_64[.]AppImage\n" manifest);
+        version = assert builtins.length versions == 1; builtins.head (builtins.head versions);
         immutable = node.locked // {
-          url = "https://github.com/Niko1221/Strata/releases/download/v${version}/strata-feed.json";
+          url = "https://github.com/Niko1221/Strata/releases/download/v${version}/SHA256SUMS.txt";
         };
       in if !managed then lock else
-        assert builtins.isString version && builtins.match "[0-9]+([.][0-9]+)+" version != null;
-        # Verify the versioned feed has exactly the hash selected by flake update.
+        # Verify the versioned manifest has exactly the hash selected by flake update.
         builtins.seq (builtins.fetchTree immutable).outPath (lock // {
           nodes = lock.nodes // { ${nodeName} = node // { locked = immutable; }; };
         });
