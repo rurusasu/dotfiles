@@ -14,7 +14,10 @@ in
     inputs.home-manager.darwinModules.home-manager
   ];
   system.primaryUser = lib.mkDefault (import ../../home/settings.nix).username;
-  power.sleep.computer = "never";
+  # Apply to battery and AC power together; systemsetup does not select a power source.
+  system.activationScripts.power.text = ''
+    /usr/bin/pmset -a sleep 0 displaysleep 0
+  '';
   system = {
     stateVersion = inputs.self.lib.stateVersions.darwin;
     defaults.loginwindow = {
