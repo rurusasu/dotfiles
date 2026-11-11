@@ -13,12 +13,12 @@ in
     ../../modules/google-drive
     inputs.home-manager.darwinModules.home-manager
   ];
-  system.primaryUser = lib.mkDefault (import ../../home/settings.nix).username;
-  # Apply to battery and AC power together; systemsetup does not select a power source.
-  system.activationScripts.power.text = ''
-    /usr/bin/pmset -a sleep 0 displaysleep 0
-  '';
   system = {
+    primaryUser = lib.mkDefault (import ../../home/settings.nix).username;
+    # Apply to battery and AC power together; systemsetup does not select a power source.
+    activationScripts.power.text = ''
+      /usr/bin/pmset -a sleep 0 displaysleep 0
+    '';
     stateVersion = inputs.self.lib.stateVersions.darwin;
     defaults.loginwindow = {
       GuestEnabled = false;
