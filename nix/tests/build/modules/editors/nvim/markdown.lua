@@ -34,16 +34,28 @@ vim.ui.open = function(url)
     preview_url = url
 end
 vim.cmd("MarpPreview")
-local ready = vim.wait(15000, function()
-    return preview_url ~= nil
+local terminal
+for _, candidate in ipairs(Snacks.terminal.list()) do
+    if type(candidate.cmd) == "table" and vim.fs.basename(candidate.cmd[1]) == "marp-preview" then
+        terminal = candidate
+        break
+    end
+end
+assert(terminal, "Marp must start a preview terminal")
+local job = vim.b[terminal.buf].terminal_job_id
+vim.wait(60000, function()
+    return preview_url ~= nil or vim.fn.jobwait({ job }, 0)[1] ~= -1
 end, 20)
+local ready = preview_url ~= nil
+local output = table.concat(vim.api.nvim_buf_get_lines(terminal.buf, 0, -1, false), "\n")
+local status = vim.fn.jobwait({ job }, 0)[1]
 local response
 if ready then
     response = vim.system({ "curl", "--fail", "--silent", preview_url .. "deck.md" }):wait(5000)
 end
 vim.cmd("MarpStop")
 vim.ui.open = open
-assert(ready, "Marp must become ready and open the browser")
+assert(ready, "Marp must become ready and open the browser (job status " .. status .. "):\n" .. output)
 assert(preview_url == "http://localhost:18765/", "Marp must use the configured port")
 assert(response.code == 0 and response.stdout:find("Marp Nix preview", 1, true), "Marp must render the slide")
 assert(response.stdout:find('data-theme="gaia"', 1, true), "Marp must apply the Nix-managed theme")
