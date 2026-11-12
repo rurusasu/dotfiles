@@ -13,7 +13,7 @@ pkgs.lib.optionalAttrs
       let
         packages = code.nix.modules.ai_agents.strata.package {
           inherit pkgs;
-          feed = builtins.fromJSON (builtins.readFile inputs.strata-release);
+          manifest = builtins.readFile inputs.strata-release;
         };
       in
       pkgs.runCommand "strata-applications-check"

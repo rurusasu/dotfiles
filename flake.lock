@@ -57,9 +57,9 @@
     "dia": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-GIuANEgAuZbqWiNefG/1C1BUm4FOqUfPvBdb3H5FdBQ=",
+        "narHash": "sha256-dOR7N4Rb94CRZ89eaaovGuIDNuyfa45/toVbEW34ahg=",
         "type": "file",
-        "url": "https://releases.diabrowser.com/release/Dia-1.56.0-90312.dmg"
+        "url": "https://releases.diabrowser.com/release/Dia-1.56.2-90792.dmg"
       },
       "original": {
         "type": "file",
@@ -232,6 +232,7 @@
       "original": {
         "owner": "NousResearch",
         "repo": "hermes-agent",
+        "rev": "4ffd07a63eaf4feae539402a774c71742e806666",
         "type": "github"
       }
     },
@@ -279,11 +280,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793979366,
-        "narHash": "sha256-7OoWDsYO9teiPxl0QdlS5lYE20Pue8/5mpscSL32FUA=",
+        "lastModified": 1794278858,
+        "narHash": "sha256-rkrJwLgLSHBnXfgoSKIDa+2LLGdTqynsV3GAxOTGhUU=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "2c0c1f01521469cf0271180c453c79782d53c2f6",
+        "rev": "82ce401aa350502897c3f2e85f384d61cd3b0b6d",
         "type": "github"
       },
       "original": {
@@ -301,11 +302,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1794201582,
-        "narHash": "sha256-ejT2Q+iCRP2/oL+58pb5/UGZ53cWVLqU5ob58EucyZk=",
+        "lastModified": 1794317113,
+        "narHash": "sha256-0YxNCB01/Shk1S1EumNva5CcT2XCrvpGm24/mTwQRBw=",
         "owner": "numtide",
         "repo": "llm-agents.nix",
-        "rev": "3327b7d82f31f2444533e935f06caf1a1b4da18c",
+        "rev": "87add0847ae4744de25a41a9c77a9ef257bea01b",
         "type": "github"
       },
       "original": {
@@ -319,11 +320,11 @@
         "nixpkgs": "nixpkgs_4"
       },
       "locked": {
-        "lastModified": 1794004984,
-        "narHash": "sha256-/qizA603yK/rMcunfGUGcxJ8CyMHNNzIiQs1H6ozljc=",
+        "lastModified": 1794322285,
+        "narHash": "sha256-H4th6+BtCARwQ8zonJTw05PLch2iB4uZQuaaANh6eu8=",
         "owner": "natsukium",
         "repo": "mcp-servers-nix",
-        "rev": "4c8248eccec98c2ebe59765c644359e5f6aeb0ea",
+        "rev": "7088643f0759d0b260050355808230fecb15bf04",
         "type": "github"
       },
       "original": {
@@ -467,11 +468,11 @@
     },
     "nixpkgs_3": {
       "locked": {
-        "lastModified": 1793826729,
-        "narHash": "sha256-D5H7H+qMoTGI/jJtxKP4u7BdjkFnUyhOovTrf3pTOr0=",
+        "lastModified": 1793977579,
+        "narHash": "sha256-WrSODdZFVIs/Hh2NzC0bY+ROByi0bATg8WfePX8dPj8=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "6dadaf4375be35033e1c84395adbd53ff5fded96",
+        "rev": "4fe25e12eb9f4c744966dd3de5a05246cf098601",
         "type": "github"
       },
       "original": {
@@ -499,11 +500,11 @@
     },
     "nixpkgs_5": {
       "locked": {
-        "lastModified": 1793916068,
-        "narHash": "sha256-TVcxl9lIEijitZc0OhH/hfEzBQQXYVbTUwTMS/9GNxc=",
+        "lastModified": 1793977579,
+        "narHash": "sha256-WrSODdZFVIs/Hh2NzC0bY+ROByi0bATg8WfePX8dPj8=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "fb5c4451d5cf2f886dd2ef8c92704001a591a454",
+        "rev": "4fe25e12eb9f4c744966dd3de5a05246cf098601",
         "type": "github"
       },
       "original": {
@@ -538,11 +539,11 @@
     "omarchy": {
       "flake": false,
       "locked": {
-        "lastModified": 1794212666,
-        "narHash": "sha256-5VJqlgPYReb1O6oAqT7gpv1d/T1w57SZ/DLgO1aEv74=",
+        "lastModified": 1794344233,
+        "narHash": "sha256-W/L5qlMrKLNLoxKCWQkCuCWn2Flc6VpxVH30onYeEto=",
         "owner": "omacom",
         "repo": "omarchy",
-        "rev": "b99593ed3c5d104210394669efc88a684f76ddbf",
+        "rev": "f428bb4fe4d2e688fa05190b7d3c61430805b601",
         "type": "github"
       },
       "original": {
@@ -665,13 +666,13 @@
     "strata-release": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-UmA7DBcC49aRJ0bnit511FQYpR+Oq6RSkVXN2PsXDeI=",
+        "narHash": "sha256-ukGy2eFjOGB8iBd14WiKAOYdrQHadu1v9CfI1bPi9xY=",
         "type": "file",
-        "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.12/strata-feed.json"
+        "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.13/SHA256SUMS.txt"
       },
       "original": {
         "type": "file",
-        "url": "https://github.com/Niko1221/Strata/releases/latest/download/strata-feed.json"
+        "url": "https://github.com/Niko1221/Strata/releases/latest/download/SHA256SUMS.txt"
       }
     },
     "systems": {

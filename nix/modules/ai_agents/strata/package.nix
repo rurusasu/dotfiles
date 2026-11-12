@@ -1,23 +1,46 @@
-{ pkgs, feed }:
+{ pkgs, manifest }:
 let
   inherit (pkgs) lib;
   isDarwin = pkgs.stdenv.hostPlatform.system == "aarch64-darwin";
-  version = feed.app.version;
-  releaseTag = "v${version}";
-  desktopAsset = feed.app.platforms.${if isDarwin then "darwin-aarch64" else "linux-x86_64"};
+  assets = map (entry: {
+    sha256 = builtins.elemAt entry 0;
+    name = builtins.elemAt entry 1;
+  }) (builtins.filter builtins.isList (builtins.split "([0-9a-f]{64})  ([^\n]+)\n?" manifest));
+  linuxDesktopAsset =
+    lib.findSingle
+      (asset: builtins.match "Strata-[0-9]+([.][0-9]+)+-linux-x86_64[.]AppImage" asset.name != null)
+      (throw "Strata manifest has no Linux desktop asset")
+      (throw "Strata manifest has multiple Linux desktop assets")
+      assets;
+  version = lib.removeSuffix "-linux-x86_64.AppImage" (
+    lib.removePrefix "Strata-" linuxDesktopAsset.name
+  );
+  desktopName = if isDarwin then "Strata.app.tar.gz" else "Strata-${version}-linux-x86_64.AppImage";
+  desktopAsset =
+    lib.findSingle (asset: asset.name == desktopName) (throw "Strata release has no ${desktopName}")
+      (throw "Strata release has multiple ${desktopName} assets")
+      assets;
   controlPlatform = if isDarwin then "macos-arm64" else "linux-x86_64";
+  controlVersionOf =
+    asset:
+    lib.removeSuffix "-${controlPlatform}.tar.gz" (lib.removePrefix "strata-control-" asset.name);
+  controlAssets = builtins.filter (
+    asset:
+    builtins.match "strata-control-[0-9]+([.][0-9]+)+-${controlPlatform}[.]tar[.]gz" asset.name != null
+  ) assets;
+  # Hotfixes can update only one OS. Select the newest published asset for this OS.
   controlAsset =
-    lib.findSingle (asset: asset.platform == controlPlatform)
-      (throw "Strata feed has no Control asset for ${controlPlatform}")
-      (throw "Strata feed has multiple Control assets for ${controlPlatform}")
-      feed.control.packages;
-  controlVersion = feed.control.version;
+    if controlAssets == [ ] then
+      throw "Strata release has no Control asset for ${controlPlatform}"
+    else
+      builtins.head (
+        lib.sort (a: b: lib.versionOlder (controlVersionOf b) (controlVersionOf a)) controlAssets
+      );
+  controlVersion = controlVersionOf controlAsset;
   fetchAsset =
     asset:
     pkgs.fetchurl {
-      # The desktop URLs in the feed use /latest/download/. Pin every asset to
-      # the feed's release so later releases cannot change this derivation.
-      url = "https://github.com/Niko1221/Strata/releases/download/${releaseTag}/${builtins.baseNameOf asset.url}";
+      url = "https://github.com/Niko1221/Strata/releases/download/v${version}/${asset.name}";
       inherit (asset) sha256;
     };
   desktopSource = fetchAsset desktopAsset;
@@ -38,6 +61,7 @@ let
   controlContents =
     pkgs.runCommand "strata-control-${controlVersion}-contents"
       {
+        src = controlSource;
         nativeBuildInputs = [
           pkgs.gnutar
           pkgs.gzip
@@ -45,7 +69,7 @@ let
       }
       ''
         mkdir -p "$out"
-        tar --warning=no-unknown-keyword -xzf ${controlSource} -C "$out"
+        tar --warning=no-unknown-keyword -xzf "$src" -C "$out"
         test -x "$out/bin/strata"
         test -x "$out/python/bin/python3"
         test "$(cat "$out/VERSION")" = ${lib.escapeShellArg controlVersion}
