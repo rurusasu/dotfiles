@@ -28,6 +28,7 @@
     ./podman
     ./shells/bash
     ./shells/plugins/bat
+    ./shells/plugins/direnv
     ./shells/plugins/eza
     ./shells/plugins/fd
     ./shells/plugins/fzf
