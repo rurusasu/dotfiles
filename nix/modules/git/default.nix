@@ -16,7 +16,7 @@
       home.packages = [ pkgs.gh ];
       programs.git.signing.signer = lib.mkIf config.dotfiles.onePassword.enable (
         if pkgs.stdenv.hostPlatform.isDarwin then
-          "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"
+          "${config.dotfiles.onePassword.darwinAppPath}/Contents/MacOS/op-ssh-sign"
         else if platform == "wsl" then
           config.home.homeDirectory + "/.local/bin/op-ssh-sign-wsl"
         else

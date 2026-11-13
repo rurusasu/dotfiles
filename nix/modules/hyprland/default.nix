@@ -32,6 +32,7 @@ in
             commands = {
               inherit terminal;
               browser = "${lib.getExe config.programs.chromium.finalPackage} --new-window";
+              notes = "obsidian";
               ai = "chatgpt";
               passwords = "1password";
               help = "${terminal} -e less ${../../../docs/chezmoi/omarchy.md}";

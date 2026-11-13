@@ -43,6 +43,7 @@ in
             "setDarwinDefaults"
             "globalZoomShortcut"
             "omarchySymbolicHotkeys"
+            "dockRegisterApplications"
           ]
           ''
             if /usr/bin/pgrep -u "$UID" -x Dock >/dev/null; then

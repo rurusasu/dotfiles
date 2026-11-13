@@ -6,6 +6,14 @@
 }:
 let
   aerospace = config.programs.aerospace.package;
+  application =
+    cfg: name:
+    if !cfg.enable || cfg.package == null then
+      name
+    else if config.targets.darwin.copyApps.enable then
+      "${config.home.homeDirectory}/${config.targets.darwin.copyApps.directory}/${name}.app"
+    else
+      "${cfg.package}/Applications/${name}.app";
   openUrl = url: "/usr/bin/open ${lib.escapeShellArg url}";
   disabledShortcut = parameters: {
     enabled = false;
@@ -49,7 +57,15 @@ in
               commands =
                 (import ./darwin-commands.nix {
                   inherit lib pkgs aerospace;
-                  ghostty = if config.programs.ghostty.enable then config.programs.ghostty.package else null;
+                  ghostty = application config.programs.ghostty "Ghostty";
+                  chatgpt = application config.programs.chatgpt "ChatGPT";
+                  dia = application config.programs.dia "Dia";
+                  obsidian = application config.programs.obsidian "Obsidian";
+                  onepassword =
+                    if config.dotfiles.onePassword.enable then
+                      config.dotfiles.onePassword.darwinAppPath
+                    else
+                      "1Password";
                 })
                 // {
                   capture = "/usr/bin/open -a Screenshot";

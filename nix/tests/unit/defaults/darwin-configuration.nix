@@ -50,38 +50,6 @@ in
     };
   };
 
-  testDarwinDockPinsManagedApplicationsInOrder = {
-    expr = {
-      applications = defaultHome.targets.darwin.defaults."com.apple.dock".persistent-apps;
-      others = defaultHome.targets.darwin.defaults."com.apple.dock".persistent-others;
-      recents = defaultHome.targets.darwin.defaults."com.apple.dock".show-recents;
-    };
-    expected = {
-      applications =
-        map
-          (path: {
-            tile-data.file-data = {
-              _CFURLString = path;
-              _CFURLStringType = 0;
-            };
-          })
-          [
-            "/System/Applications/Apps.app"
-            "${defaultHome.programs.chatgpt.package}/Applications/ChatGPT.app"
-            "${defaultHome.programs.dia.package}/Applications/Dia.app"
-            "${defaultHome.programs.ghostty.package}/Applications/Ghostty.app"
-          ];
-      others = [ ];
-      recents = false;
-    };
-  };
-
-  testDarwinDockPinsAreIndependentOfTheConfiguredHome = {
-    expr =
-      nonstandardHomeConfig.home-manager.users.alice.targets.darwin.defaults."com.apple.dock".persistent-apps;
-    expected = defaultHome.targets.darwin.defaults."com.apple.dock".persistent-apps;
-  };
-
   testDarwinDoesNotInstallWslgFontBridge = {
     expr = defaultConfig.system.activationScripts ? wslgFonts;
     expected = false;

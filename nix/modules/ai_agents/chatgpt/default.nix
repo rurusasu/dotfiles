@@ -10,6 +10,10 @@ let
       "${config.programs.chatgpt.package}/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin"
     else
       "${config.programs.chatgpt.package}/lib/chatgpt/resources";
+  bundledCodex = pkgs.runCommand "chatgpt-bundled-codex" { } ''
+    mkdir -p "$out/bin"
+    ln -s ${lib.escapeShellArg "${resources}/codex"} "$out/bin/codex"
+  '';
 in
 {
   options.programs.chatgpt = {
@@ -47,7 +51,9 @@ in
         (config.home.profileDirectory + "/bin")
         resources
       ];
-      home.packages = lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.bubblewrap;
+      # Export the app's CLI through the normal profile, including for editors
+      # and shells that inherited Home Manager's already-sourced marker.
+      home.packages = [ bundledCodex ] ++ lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.bubblewrap;
       launchd.agents.codex-environment =
         lib.mkIf (pkgs.stdenv.hostPlatform.isDarwin && config.home.sessionVariables ? CODEX_HOME)
           {

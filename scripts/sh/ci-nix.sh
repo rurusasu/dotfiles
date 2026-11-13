@@ -206,6 +206,11 @@ apply | run-vm)
       exit 1
     }
     launchctl print "gui/$(id -u)" >/dev/null
+    # Exercise replacement of a pre-existing bundle the login user cannot update.
+    sudo /bin/mkdir -p /Applications/1Password.app/Contents/Resources
+    sudo /usr/bin/touch /Applications/1Password.app/Contents/Resources/dotfiles-ci-root-owned
+    sudo /usr/sbin/chown -R root:wheel /Applications/1Password.app
+    sudo /bin/chmod -R go-w /Applications/1Password.app
     mkdir -p "$HOME/.hermes"
     printf '%s\n' 'OPENROUTER_API_KEY=ci' 'API_SERVER_ENABLED=true' 'API_SERVER_KEY=dotfiles-ci-health-probe' 'API_SERVER_PORT=18642' >"$HOME/.hermes/.env"
     chmod 600 "$HOME/.hermes/.env"
@@ -226,6 +231,11 @@ verify)
   [[ $target == darwin ]] || exit 64
   system=$(root_path system)
   [[ $(cd /nix/var/nix/profiles/system && pwd -P) == "$system" ]]
+  [[ $(/usr/bin/stat -f %u /Applications/1Password.app) == 0 ]]
+  [[ ! -e /Applications/1Password.app/Contents/Resources/dotfiles-ci-root-owned ]]
+  /usr/bin/codesign --verify --deep --strict \
+    --test-requirement='=identifier "com.1password.1password" and anchor apple generic and certificate leaf[subject.OU] = "2BUA8C4S2C"' \
+    /Applications/1Password.app
   /bin/zsh -lic 'hermes --version'
   launchctl print "gui/$(id -u)/org.nix-community.home.hermes-agent" >"$CI_STATE/hermes-launchd.txt"
   grep -Eq 'state = running|pid = [0-9]+' "$CI_STATE/hermes-launchd.txt"

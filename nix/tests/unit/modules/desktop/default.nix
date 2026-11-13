@@ -4,23 +4,54 @@ let
   disabled = darwin.extendModules {
     modules = [ { dotfiles.desktop.enable = darwin.pkgs.lib.mkForce false; } ];
   };
+  copied = darwin.extendModules {
+    modules = [
+      {
+        home.homeDirectory = darwin.pkgs.lib.mkForce "/Volumes/Home/alice";
+        targets.darwin.copyApps = {
+          enable = true;
+          directory = "Applications/Managed Apps";
+        };
+        targets.darwin.linkApps.enable = false;
+      }
+    ];
+  };
 in
 {
-  testDarwinDesktopUsesConfiguredApplicationPackages = {
-    expr = with darwin.config; {
+  testDarwinDesktopLaunchesCopiedApplications = {
+    expr = with copied.config; {
       apps = map (
         app: app.tile-data.file-data._CFURLString
       ) targets.darwin.defaults."com.apple.dock".persistent-apps;
+      shortcuts = darwin.pkgs.lib.getAttrs [
+        "cmd-enter"
+        "cmd-shift-enter"
+        "cmd-shift-a"
+        "cmd-shift-o"
+        "cmd-shift-slash"
+      ] programs.aerospace.settings.mode.main.binding;
+      others = targets.darwin.defaults."com.apple.dock".persistent-others;
+      recents = targets.darwin.defaults."com.apple.dock".show-recents;
       finder = targets.darwin.defaults."com.apple.finder".NewWindowTarget;
       darkMode = targets.darwin.defaults.NSGlobalDomain.AppleInterfaceStyle;
     };
-    expected = with darwin.config; {
+    expected = {
       apps = [
         "/System/Applications/Apps.app"
-        "${programs.chatgpt.package}/Applications/ChatGPT.app"
-        "${programs.dia.package}/Applications/Dia.app"
-        "${programs.ghostty.package}/Applications/Ghostty.app"
+        "/Volumes/Home/alice/Applications/Managed Apps/ChatGPT.app"
+        "/Volumes/Home/alice/Applications/Managed Apps/Dia.app"
+        "/Volumes/Home/alice/Applications/Managed Apps/Ghostty.app"
+        "/Volumes/Home/alice/Applications/Managed Apps/Obsidian.app"
       ];
+      shortcuts = {
+        cmd-enter = "exec-and-forget /usr/bin/open -na '/Volumes/Home/alice/Applications/Managed Apps/Ghostty.app'";
+        cmd-shift-enter = "exec-and-forget /usr/bin/open -a '/Volumes/Home/alice/Applications/Managed Apps/Dia.app'";
+        cmd-shift-a = "exec-and-forget /usr/bin/open -a '/Volumes/Home/alice/Applications/Managed Apps/ChatGPT.app'";
+        cmd-shift-o = "exec-and-forget /usr/bin/open -a '/Volumes/Home/alice/Applications/Managed Apps/Obsidian.app'";
+        cmd-shift-slash = "exec-and-forget /usr/bin/open -a /Applications/1Password.app";
+      };
+      others = [ ];
+      recents = false;
       finder = "PfHm";
       darkMode = "Dark";
     };
