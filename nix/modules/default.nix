@@ -25,6 +25,7 @@
     ./lifelog
     ./marp
     ./nvidia
+    ./obsidian
     ./podman
     ./shells/bash
     ./shells/plugins/bat
