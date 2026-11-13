@@ -17,7 +17,9 @@ nix/modules/ai_agents/
 
 `chatgpt/default.nix` はほかの実 module と同じく明示的に読み込まれ、型付き `programs.chatgpt.enable` と
 標準 `programs.codex.enable` に従って導入・設定を管理します。アプリごとの import パスや公開一覧は登録しません。
-`chatgpt/default.nix` 内で ChatGPT package を選び、同梱 CLI の配置先を標準 `home.sessionPath` へ登録します。
+`chatgpt/default.nix` 内で ChatGPT package を選び、同梱 CLI へのリンクを通常の Nix profile の
+`bin/codex` に配置します。アプリ内部の PATH を継承しないターミナルや Sidekick からも検出できます。
+同梱ツールの配置先も標準 `home.sessionPath` へ登録します。
 `nix/home/<platform>.nix` は Darwin / native・standalone Linux で `programs.chatgpt.enable`、
 WSL では `programs.codex.enable` を指定します。ChatGPT の有効化は同梱 Codex も有効にし、WSL には Linux GUI を導入しません。
 Codex と ChatGPT Work の既定モデルは `gpt-6.1-terra`、通常・plan の reasoning effort は `ultra` です。

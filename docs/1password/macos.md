@@ -26,6 +26,12 @@ timeout 実装を使う。
 
 ## Desktop app integration
 
+macOS 版は `/Applications` の外（シンボリックリンクの実体を含む）からの起動を拒否するため、
+`nix/modules/1password/` の Home Manager activation が nixpkgs の公式配布物を
+`/Applications/1Password.app` にコピーして更新する。通常の `home.packages` には GUI を含めず、
+`~/Applications/Home Manager Apps/` に二重配置しない。
+Git 署名・AeroSpace・ブラウザ連携・ログイン項目はすべて同じ Nix 管理版を利用する。
+
 この環境では Home Manager と macOS installer が
 `OP_BIOMETRIC_UNLOCK_ENABLED=true` を設定し、native `op` が1Password desktop app
 の既存アカウントを利用できるようにする。初回だけ、1Passwordを開いてロック解除し、

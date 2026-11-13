@@ -34,4 +34,16 @@ in
       systemOwnsCompositor = true;
     };
   };
+  testNativeHomeBindsNotesToObsidian = {
+    expr =
+      let
+        binding = builtins.head (
+          builtins.filter (
+            candidate: builtins.head candidate._args == "SUPER + SHIFT + O"
+          ) home.wayland.windowManager.hyprland.settings.bind
+        );
+      in
+      (builtins.elemAt binding._args 1).expr;
+    expected = ''hl.dsp.exec_cmd("obsidian")'';
+  };
 }

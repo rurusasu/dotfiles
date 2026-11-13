@@ -4,6 +4,10 @@
   pkgs,
   aerospace,
   ghostty,
+  chatgpt,
+  dia,
+  obsidian,
+  onepassword,
 }:
 let
   launch = app: "/usr/bin/open -a ${lib.escapeShellArg app}";
@@ -16,13 +20,12 @@ in
 {
   workspace-next = toString (pkgs.writeShellScript "omarchy-workspace-next" cycles.next);
   workspace-prev = toString (pkgs.writeShellScript "omarchy-workspace-prev" cycles.prev);
-  terminal = "/usr/bin/open -na ${
-    lib.escapeShellArg (if ghostty == null then "Ghostty" else "${ghostty}/Applications/Ghostty.app")
-  }";
-  browser = launch "Dia";
+  terminal = "/usr/bin/open -na ${lib.escapeShellArg ghostty}";
+  browser = launch dia;
   files = launch "Finder";
-  ai = launch "ChatGPT";
-  passwords = launch "1Password";
+  notes = launch obsidian;
+  ai = launch chatgpt;
+  passwords = launch onepassword;
   help = "${launch "TextEdit"} ${pkgs.writeText "omarchy-macos-keybindings.txt" (builtins.readFile ../../../docs/chezmoi/omarchy-macos.md)}";
   calculator = launch "Calculator";
   activity = launch "Activity Monitor";

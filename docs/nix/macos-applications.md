@@ -3,6 +3,14 @@
 アプリの package・有効化・設定は `nix/modules/` が所有します。Homebrew は使いません。
 更新は `nix flake update`、反映は `./install.sh` です。
 
+## アプリの起動先
+
+Home Manager のアプリコピーが有効な場合、Dock の ChatGPT・Dia・Ghostty・Obsidian と
+AeroSpace の対応するショートカットはコピー先の `.app` を起動します。
+通常は `~/Applications/Home Manager Apps/` です。
+コピー後にはこれらのアプリの Nix store 内の LaunchServices 登録を解除し、
+コピー先を登録します。Nix store のパッケージ本体と ChatGPT 同梱 Codex CLI は引き続き使用します。
+
 ## Steam
 
 公式の最新 DMG を `steam-darwin` input で取得し、`flake.lock` で内容を固定します。

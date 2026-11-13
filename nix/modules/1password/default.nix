@@ -17,6 +17,12 @@ in
 {
   options.dotfiles.onePassword = {
     enable = lib.mkEnableOption "1Password CLI and desktop SSH integration";
+    darwinAppPath = lib.mkOption {
+      type = lib.types.str;
+      readOnly = true;
+      default = "/Applications/1Password.app";
+      description = "Path to the managed macOS 1Password application bundle.";
+    };
     account = lib.mkOption {
       type = lib.types.nonEmptyStr;
       default = "EJLA3HRAVZBCXIQ7SRSFGQBTNU";
@@ -51,14 +57,39 @@ in
   config = lib.mkMerge [
     { dotfiles.onePassword.enable = true; }
     (lib.mkIf config.dotfiles.onePassword.enable {
-      home.sessionVariables =
-        lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
-          OP_BIOMETRIC_UNLOCK_ENABLED = "true";
-        }
-        // lib.optionalAttrs (platform == "wsl") {
-          WSLENV = "OP_ACCOUNT/u";
-          OP_ACCOUNT = config.dotfiles.onePassword.account;
-        };
+      home = {
+        sessionVariables =
+          lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
+            OP_BIOMETRIC_UNLOCK_ENABLED = "true";
+          }
+          // lib.optionalAttrs (platform == "wsl") {
+            WSLENV = "OP_ACCOUNT/u";
+            OP_ACCOUNT = config.dotfiles.onePassword.account;
+          };
+        packages = [
+          pkgs._1password-cli
+        ]
+        ++ lib.optional (!pkgs.stdenv.hostPlatform.isDarwin) pkgs._1password-gui;
+        activation.onepasswordApplication = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin (
+          lib.hm.dag.entryAfter [ "copyApps" ] ''
+            # 1Password rejects launches outside /Applications, including symlink targets.
+            onepasswordApp=${lib.escapeShellArg config.dotfiles.onePassword.darwinAppPath}
+            if [[ -L "$onepasswordApp" ]]; then
+              run /bin/rm "$onepasswordApp"
+            fi
+            run mkdir -p "$onepasswordApp"
+            # Preserve vendor signatures without Nix's epoch timestamps, like copyApps.
+            run ${lib.getExe pkgs.rsync} --recursive --checksum --perms --links \
+              --copy-unsafe-links --specials --delete --chmod=+w \
+              ${pkgs._1password-gui}/Applications/1Password.app/ "$onepasswordApp/"
+            run /usr/bin/codesign --verify --deep --strict \
+              --test-requirement='=identifier "com.1password.1password" and anchor apple generic and certificate leaf[subject.OU] = "2BUA8C4S2C"' \
+              "$onepasswordApp"
+            run /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+              -f "$onepasswordApp"
+          ''
+        );
+      };
       launchd.agents.onepassword-ssh-environment = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
         enable = true;
         config = {
@@ -71,11 +102,6 @@ in
           RunAtLoad = true;
         };
       };
-
-      home.packages = [
-        pkgs._1password-cli
-        pkgs._1password-gui
-      ];
     })
   ];
 }

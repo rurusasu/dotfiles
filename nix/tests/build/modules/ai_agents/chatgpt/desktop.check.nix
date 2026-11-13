@@ -21,7 +21,6 @@
       ''
         export HOME="$TMPDIR/home"
         mkdir -p "$HOME"
-        source ${home.config.home.sessionVariablesPackage}/etc/profile.d/hm-session-vars.sh
         test -x ${pkgs.lib.getExe chatgpt}
         ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
           test -x ${chatgpt}/lib/chatgpt/resources/codex-code-mode-host
