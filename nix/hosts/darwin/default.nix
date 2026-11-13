@@ -9,6 +9,7 @@ let
 in
 {
   imports = [
+    ../../modules/1password/darwin.nix
     ../../modules/fonts/darwin.nix
     ../../modules/google-drive
     inputs.home-manager.darwinModules.home-manager

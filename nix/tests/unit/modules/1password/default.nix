@@ -19,7 +19,7 @@ in
         managesPublicKey = home.config.home.file ? ".ssh/signing_key.pub";
         configuresAgent = home.config.home.sessionVariables ? SSH_AUTH_SOCK;
         launchdAgent = home.config.launchd.agents ? onepassword-ssh-environment;
-        applicationActivation = home.config.home.activation ? onepasswordApplication;
+        applicationRegistration = home.config.home.activation ? onepasswordApplicationRegistration;
         biometricUnlock = home.config.home.sessionVariables ? OP_BIOMETRIC_UNLOCK_ENABLED;
         signer = home.config.programs.git.signing.signer;
       };
@@ -28,7 +28,7 @@ in
       managesPublicKey = false;
       configuresAgent = false;
       launchdAgent = false;
-      applicationActivation = false;
+      applicationRegistration = false;
       biometricUnlock = false;
       signer = "${homeConfigurations.darwin.pkgs.openssh}/bin/ssh-keygen";
     };

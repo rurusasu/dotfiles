@@ -70,23 +70,12 @@ in
           pkgs._1password-cli
         ]
         ++ lib.optional (!pkgs.stdenv.hostPlatform.isDarwin) pkgs._1password-gui;
-        activation.onepasswordApplication = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin (
+        activation.onepasswordApplicationRegistration = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin (
           lib.hm.dag.entryAfter [ "copyApps" ] ''
-            # 1Password rejects launches outside /Applications, including symlink targets.
-            onepasswordApp=${lib.escapeShellArg config.dotfiles.onePassword.darwinAppPath}
-            if [[ -L "$onepasswordApp" ]]; then
-              run /bin/rm "$onepasswordApp"
+            if [[ -d ${lib.escapeShellArg config.dotfiles.onePassword.darwinAppPath} ]]; then
+              run /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+                -f ${lib.escapeShellArg config.dotfiles.onePassword.darwinAppPath}
             fi
-            run mkdir -p "$onepasswordApp"
-            # Preserve vendor signatures without Nix's epoch timestamps, like copyApps.
-            run ${lib.getExe pkgs.rsync} --recursive --checksum --perms --links \
-              --copy-unsafe-links --specials --delete --chmod=+w \
-              ${pkgs._1password-gui}/Applications/1Password.app/ "$onepasswordApp/"
-            run /usr/bin/codesign --verify --deep --strict \
-              --test-requirement='=identifier "com.1password.1password" and anchor apple generic and certificate leaf[subject.OU] = "2BUA8C4S2C"' \
-              "$onepasswordApp"
-            run /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
-              -f "$onepasswordApp"
           ''
         );
       };

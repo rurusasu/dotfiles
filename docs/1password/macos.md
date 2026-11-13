@@ -27,10 +27,12 @@ timeout 実装を使う。
 ## Desktop app integration
 
 macOS 版は `/Applications` の外（シンボリックリンクの実体を含む）からの起動を拒否するため、
-`nix/modules/1password/` の Home Manager activation が nixpkgs の公式配布物を
+`nix/modules/1password/darwin.nix` の nix-darwin activation が root 権限で nixpkgs の公式配布物を
 `/Applications/1Password.app` にコピーして更新する。通常の `home.packages` には GUI を含めず、
 `~/Applications/Home Manager Apps/` に二重配置しない。
 Git 署名・AeroSpace・ブラウザ連携・ログイン項目はすべて同じ Nix 管理版を利用する。
+Home Manager はユーザーごとのアプリ登録と CLI・設定を管理する。Home Manager 単独で利用する場合も、
+GUI 本体の配置・更新には nix-darwin の反映（`./install.sh`）を使う。
 
 この環境では Home Manager と macOS installer が
 `OP_BIOMETRIC_UNLOCK_ENABLED=true` を設定し、native `op` が1Password desktop app
