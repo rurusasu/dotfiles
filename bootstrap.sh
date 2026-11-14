@@ -60,7 +60,7 @@ fi
 if ! have chezmoi && have curl; then
   log "installing chezmoi to ~/.local/bin"
   mkdir -p "$HOME/.local/bin"
-  sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin" ||
+  sh -c "$(curl --proto '=https' --proto-redir '=https' -fsLS https://get.chezmoi.io)" -- -b "$HOME/.local/bin" ||
     log "chezmoi install failed; chezmoi apply will be skipped"
 fi
 
@@ -91,7 +91,7 @@ if [ "$need_nvim" -eq 1 ]; then
     tmp=$(mktemp -d)
     # Stage into $tmp, verify, then swap. Never `rm` the existing
     # ~/.local/nvim until the new install is confirmed extracted.
-    if ! curl -fsSL "https://github.com/neovim/neovim/releases/latest/download/$asset" |
+    if ! curl --proto '=https' --proto-redir '=https' -fsSL "https://github.com/neovim/neovim/releases/latest/download/$asset" |
       tar -xz -C "$tmp"; then
       log "curl/tar failed; aborting (existing nvim untouched)"
       rm -rf "$tmp"

@@ -6,7 +6,8 @@
 module and declares `services.hermes-agent` settings. The official module owns
 the Agent package, Desktop application, and native gateway service
 (systemd on Linux, launchd on macOS). Desktop is enabled on all supported OSes.
-Gateway profile multiplexing follows upstream's startup policy; Nix does not
+Desktop uses the local gateway; Discord is explicitly disabled and no Discord
+credentials are fetched. Gateway profile multiplexing follows upstream's startup policy; Nix does not
 declare or rewrite that runtime setting.
 
 The root provider and default model are declared in
@@ -45,7 +46,9 @@ directory, including a profile subdirectory in a local monorepo. The installer
 uses `manifest.name`; subsequent updates use `hermes profile update`.
 Named profiles do not inherit root MCP settings. Their Git configuration must
 reference the shared gateway or declare the corresponding MCP server URL.
-The Chrome and X API loopback URLs are unchanged by the native service migration.
+Use `command: mcp-chrome-client` and `command: mcp-xapi-client` for the shared
+services. These stdio adapters load a private runtime token; unauthenticated
+loopback URLs cannot access either service.
 
 ```bash
 hermes profile install --help
@@ -60,8 +63,8 @@ secret references and Pipedream OAuth.
 
 Hermes `.env`, authentication, sessions, and memory remain in their current
 storage. Chrome and X API MCP run as shared native `mcp-chrome` and `mcp-xapi`
-services, independent of the Hermes gateway. Clients connect to their loopback
-HTTP endpoints; each service keeps one stdio child. Chrome runs headless using
+services, independent of the Hermes gateway. Clients use authenticated stdio
+adapters to reach HTTP over owner-private Unix sockets; each service keeps one stdio child. Chrome runs headless using
 the root Hermes `.browser` profile; native xurl accesses
 the existing root `.xurl` cache through Home Manager's `~/.xurl` link.
 Conflicting existing xurl paths stop activation.

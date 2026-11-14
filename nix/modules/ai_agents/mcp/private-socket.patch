@@ -1,0 +1,59 @@
+--- a/src/mcp_proxy/__main__.py
++++ b/src/mcp_proxy/__main__.py
+@@ -246,0 +247,4 @@
++        "--unix-socket",
++        help="Use an owner-private Unix socket for the server or HTTP client",
++    )
++    mcp_server_group.add_argument(
+@@ -348,0 +353 @@
++    socket_options = {"unix_socket": args_parsed.unix_socket} if args_parsed.unix_socket else {}
+@@ -355,0 +361 @@
++                **socket_options,
+@@ -364,0 +371 @@
++                **socket_options,
+@@ -476,0 +484 @@
++        unix_socket=args_parsed.unix_socket,
+--- a/src/mcp_proxy/mcp_server.py
++++ b/src/mcp_proxy/mcp_server.py
+@@ -24 +24 @@
+-from .local_auth import LocalBearerAuth, read_token
++from .local_auth import LocalBearerAuth, private_socket_path, read_token
+@@ -46,0 +47 @@
++    unix_socket: str | None = None
+@@ -171,0 +173 @@
++    unix_socket = private_socket_path(mcp_settings.unix_socket) if mcp_settings.unix_socket else None
+@@ -267,0 +270 @@
++            uds=unix_socket,
+--- a/src/mcp_proxy/httpx_client.py
++++ b/src/mcp_proxy/httpx_client.py
+@@ -11,0 +12,2 @@
++from .local_auth import private_socket_path
++
+@@ -19,0 +22 @@
++    unix_socket: str | None = None,
+@@ -39,0 +43,5 @@
++
++    if unix_socket is not None:
++        kwargs["transport"] = httpx.AsyncHTTPTransport(uds=private_socket_path(unix_socket))
++        kwargs["trust_env"] = False
++        kwargs["follow_redirects"] = False
+--- a/src/mcp_proxy/streamablehttp_client.py
++++ b/src/mcp_proxy/streamablehttp_client.py
+@@ -19,0 +20 @@
++    unix_socket: str | None = None,
+@@ -35 +36,4 @@
+-            httpx_client_factory=partial(custom_httpx_client, verify_ssl=verify_ssl),
++            httpx_client_factory=partial(
++                custom_httpx_client, verify_ssl=verify_ssl,
++                **({"unix_socket": unix_socket} if unix_socket is not None else {}),
++            ),
+--- a/src/mcp_proxy/sse_client.py
++++ b/src/mcp_proxy/sse_client.py
+@@ -19,0 +20 @@
++    unix_socket: str | None = None,
+@@ -35 +36,4 @@
+-            httpx_client_factory=partial(custom_httpx_client, verify_ssl=verify_ssl),
++            httpx_client_factory=partial(
++                custom_httpx_client, verify_ssl=verify_ssl,
++                **({"unix_socket": unix_socket} if unix_socket is not None else {}),
++            ),

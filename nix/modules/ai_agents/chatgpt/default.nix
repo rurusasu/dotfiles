@@ -5,11 +5,13 @@
   ...
 }:
 let
-  resources =
+  appResources =
     if pkgs.stdenv.hostPlatform.isDarwin then
-      "${config.programs.chatgpt.package}/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin"
+      "${config.programs.chatgpt.package}/Applications/ChatGPT.app/Contents/Resources"
     else
       "${config.programs.chatgpt.package}/lib/chatgpt/resources";
+  resources =
+    if pkgs.stdenv.hostPlatform.isDarwin then "${appResources}/codex-cli/bin" else appResources;
   bundledCodex = pkgs.runCommand "chatgpt-bundled-codex" { } ''
     mkdir -p "$out/bin"
     ln -s ${lib.escapeShellArg "${resources}/codex"} "$out/bin/codex"
@@ -47,13 +49,16 @@ in
           message = "The ChatGPT-bundled Codex CLI requires Linux or macOS.";
         }
       ];
-      home.sessionPath = lib.mkBefore [
-        (config.home.profileDirectory + "/bin")
-        resources
-      ];
-      # Export the app's CLI through the normal profile, including for editors
-      # and shells that inherited Home Manager's already-sourced marker.
-      home.packages = [ bundledCodex ] ++ lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.bubblewrap;
+      home = {
+        sessionPath = lib.mkBefore [
+          (config.home.profileDirectory + "/bin")
+          resources
+        ];
+        sessionVariables.CODEX_MCP_NODE_PATH = "${appResources}/cua_node/bin/node";
+        # Export the app's CLI through the normal profile, including for editors
+        # and shells that inherited Home Manager's already-sourced marker.
+        packages = [ bundledCodex ] ++ lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.bubblewrap;
+      };
       launchd.agents.codex-environment =
         lib.mkIf (pkgs.stdenv.hostPlatform.isDarwin && config.home.sessionVariables ? CODEX_HOME)
           {
@@ -93,8 +98,8 @@ in
           plan_mode_reasoning_effort = "ultra";
           model_reasoning_summary = "auto";
           model_verbosity = "low";
-          approval_policy = "never";
-          default_permissions = ":danger-full-access";
+          approval_policy = "on-request";
+          default_permissions = ":workspace";
           web_search = "live";
           features = {
             # The app-bundled CLI lacks the complete package layout required by

@@ -42,6 +42,10 @@ package 内 install check の扱いは upstream の package 定義が所有し�
 Home Manager と同じ方法でコピーしたアプリの署名・アプリの版・同梱 CLI の起動を検証します。
 同梱 CLI と `codex-code-mode-host` があるディレクトリを PATH に登録します。
 Linux の実行依存 `bubblewrap` は同じ module が導入します。
+Codex Security 用の `CODEX_MCP_NODE_PATH` は同じ ChatGPT package の
+`cua_node/bin/node` を参照します。Node を別の `home.packages` 項目として追加しません。
+Codex の既定権限は `:workspace`、承認方針は `on-request` です。
+作業領域外への操作は、そのセッションで必要な範囲を確認して許可します。
 Darwin は公式 launcher の `Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`、
 Linux は `lib/chatgpt/resources/codex` を使います。
 

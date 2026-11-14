@@ -37,13 +37,14 @@ Shared MCP definitions live in `nix/modules/ai_agents/mcp/default.nix` under
 Codex uses its standard Home Manager integration; root Hermes converts the
 shared definitions into the official typed `services.hermes-agent.mcpServers`.
 Named Hermes profiles need the gateway reference or server URL in their own Git
-configuration. Existing Chrome and X API entries keep the same loopback URLs;
+configuration. Chrome and X API use the `mcp-chrome-client` / `mcp-xapi-client` stdio adapters;
 profile-specific OAuth remains separate.
 
 Chrome and X API MCP run as independent native Home Manager services:
-`mcp-chrome` at `http://127.0.0.1:8765/mcp` and `mcp-xapi` at
-`http://127.0.0.1:8766/mcp`. Each service uses `mcp-proxy` with one persistent
-stdio child so clients share the browser profile and token cache safely. The
+`mcp-chrome` at `$XDG_STATE_HOME/mcp/chrome.sock` and `mcp-xapi` at
+`$XDG_STATE_HOME/mcp/xapi.sock`, beneath an owner-private directory (0700).
+Neither service opens a TCP port. Each service uses `mcp-proxy` with one persistent
+stdio child so clients share the browser profile and token cache. The adapters load a private runtime token; all HTTP routes require authentication and Host/Origin validation. The
 browser runs headless and needs no display or WSLg. Linux uses systemd user
 services; macOS uses launchd agents.
 `mcp-packages.nix` reuses the Chrome DevTools MCP package from the `mcp-servers`

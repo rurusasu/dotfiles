@@ -1,0 +1,26 @@
+--- a/src/mcp_proxy/__main__.py
++++ b/src/mcp_proxy/__main__.py
+@@ -245,0 +246,4 @@
++    mcp_server_group.add_argument(
++        "--auth-token-file",
++        help="Require a bearer token from a private local file on all HTTP routes",
++    )
+@@ -471,0 +476 @@
++        auth_token_file=args_parsed.auth_token_file,
+--- a/src/mcp_proxy/mcp_server.py
++++ b/src/mcp_proxy/mcp_server.py
+@@ -23,0 +24 @@
++from .local_auth import LocalBearerAuth, read_token
+@@ -44,0 +46 @@
++    auth_token_file: str | None = None
+@@ -168,0 +171 @@
++    token = read_token(mcp_settings.auth_token_file) if mcp_settings.auth_token_file is not None else None
+@@ -233,0 +237,8 @@
++        if token is not None:
++            middleware.append(
++                Middleware(
++                    LocalBearerAuth,
++                    token=token,
++                    host=f"{mcp_settings.bind_host}:{mcp_settings.port}",
++                ),
++            )

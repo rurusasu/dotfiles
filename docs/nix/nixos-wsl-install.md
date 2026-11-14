@@ -157,6 +157,46 @@ WSL のユーザー名は `nix/hosts/wsl/default.nix`、OS の stateVersion は 
 architecture は構成の `system` 引数で指定し、CPU 別ディレクトリは設けません。
 native NixOS 用の `/etc/nixos/hardware-configuration.nix` は WSL では通常不要です。
 
+## Mac から SSH で Herdr に接続する
+
+WSL host は OpenSSH サーバーを有効にし、`wsl.defaultUser` に対して公開鍵認証だけを許可します。
+許可する公開鍵は、そのユーザーの Home Manager の `dotfiles.onePassword.ssh.publicKey` です。
+Mac の 1Password SSH agent に対応する秘密鍵が必要です。WSL 側へ秘密鍵をコピーする必要はありません。
+有効にするのは接続を受ける `sshd` です。OpenSSH の `ssh-agent` は引き続き無効とし、
+SSH クライアントの認証には 1Password SSH agent を使います。
+設定変更後は WSL で `./install.sh` を実行します。
+
+標準の NAT ネットワークでは、Windows の TCP 2222 を WSL の TCP 22 に転送します。
+`install.cmd` は WSL 反映後、`install:ssh` task で転送と firewall rule を適用します。
+設定が変わる場合だけ Windows の UAC を表示し、ネットワーク設定部分を昇格します。
+WSL の照会・登録・Nix 反映は元のユーザーで実行します。UAC を拒否した場合は成功扱いにしません。
+
+転送設定だけを更新する場合は、Windows から次を実行します。
+
+```powershell
+.\install.cmd -Phase WslSsh
+# または
+task install:ssh
+```
+
+firewall rule は全ネットワークプロファイルで TCP 2222 の LocalSubnet だけを許可します。
+Windows が Public の接続でも同じ LAN から SSH 接続でき、ネットワーク種別を変更する必要はありません。
+SSH は WSL の公開鍵認証で保護します。LAN 外へ公開するルーターの転送は設定しません。
+WSL 再起動で内部 IP が変わった場合も、同じ更新コマンドで転送先を更新できます。
+既に正しい転送・firewall 設定なら再昇格しません。
+NAT と転送の詳細は [Microsoft の WSL networking](https://learn.microsoft.com/en-us/windows/wsl/networking#accessing-a-wsl-2-distribution-from-your-local-area-network-lan) を参照してください。
+
+Mac のターミナルから、`WINDOWS_LAN_IP` を Windows の LAN IP に置き換え、WSL のユーザー名を指定します。
+
+```bash
+ssh -t -p 2222 nixos@WINDOWS_LAN_IP 'herdr'
+```
+
+既存の既定セッションに接続するため、WSL 上で動作しているペインとエージェントを操作できます。
+この構成の detach は `Ctrl+Space`、続いて `d` です。SSH 切断後も WSL が動いている間はペインが残ります。
+Mac にも Herdr がある場合は `herdr --remote ssh://nixos@WINDOWS_LAN_IP:2222` でも接続できます。
+詳細は [Herdr のリモート接続](https://herdr.dev/docs/persistence-remote/) を参照してください。
+
 ## WSLg のフォント
 
 管理するアプリの既定フォントは `UDEV Gothic NF` に統一します。フォントの選択・導入は Nix、Windows の配置・登録は chezmoi が担当します。不足グリフ用には color emoji を残します。Windows 自体のシステム UI フォントや、Web サイトが CSS で指定したフォントは強制変更しません。

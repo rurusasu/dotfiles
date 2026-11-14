@@ -38,6 +38,7 @@
             --test-requirement='=anchor apple generic and certificate leaf[subject.OU] = "2DC432GLL2"' \
             "$TMPDIR/ChatGPT.app"
         ''}
+        ${home.config.home.sessionVariables.CODEX_MCP_NODE_PATH} --version
         version="$(codex --version)"
         echo "$version"
         [[ "$version" == "codex-cli "* ]]

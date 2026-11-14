@@ -84,15 +84,14 @@ in
           gateway.multiplex_profiles = null;
           context.engine = "lcm";
           plugins.enabled = [ "hermes-lcm" ];
-          platforms.discord.allow_bots = "mentions";
+          # Desktop uses the local gateway without a Discord connection.
+          platforms.discord.enabled = false;
           secrets.onepassword = {
             enabled = true;
             account = config.dotfiles.onePassword.account;
             env = {
               GITHUB_TOKEN = secretReferences.githubToken;
               XAI_API_KEY = secretReferences.xaiApiKey;
-              DISCORD_BOT_TOKEN = secretReferences.discordBotToken;
-              DISCORD_ALLOWED_USERS = secretReferences.discordAllowedUsers;
             };
           };
         };

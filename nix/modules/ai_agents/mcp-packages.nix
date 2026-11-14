@@ -12,7 +12,16 @@ rec {
   chrome-devtools-mcp =
     inputs.mcp-servers.packages.${pkgs.stdenv.hostPlatform.system}.chrome-devtools-mcp;
 
-  inherit (pkgs) mcp-proxy;
+  # Upstream 0.13 has client authentication only; protect every server route.
+  mcp-proxy = pkgs.mcp-proxy.overrideAttrs (previous: {
+    patches = (previous.patches or [ ]) ++ [
+      ./mcp/local-auth.patch
+      ./mcp/private-socket.patch
+    ];
+    postPatch = (previous.postPatch or "") + ''
+      cp ${./mcp/local_auth.py} src/mcp_proxy/local_auth.py
+    '';
+  });
 
   xurl = pkgs.buildGoModule (finalAttrs: {
     pname = "xurl";

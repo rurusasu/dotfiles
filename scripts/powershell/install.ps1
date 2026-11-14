@@ -1,7 +1,7 @@
 ﻿<# Run one Windows operation, or import the master and continue through Task. #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Winget', 'Wsl', 'Chezmoi')][string]$Phase = 'Winget',
+    [ValidateSet('Winget', 'Wsl', 'WslSsh', 'Chezmoi')][string]$Phase = 'Winget',
     [string]$DistroName = 'NixOS',
     [string]$InstallDir = '',
     [string]$ReleaseTag = '',
@@ -41,6 +41,12 @@ if ($env:DOTFILES_INSTALL_CONFIGURATION) {
             $settings[$property.Name] = $property.Value
         }
     }
+}
+
+if ($Phase -eq 'WslSsh') {
+    . (Join-Path $PSScriptRoot 'lib/Sync-WslSshNetwork.ps1')
+    Sync-WslSshNetwork -DistroName $settings.DistroName
+    return
 }
 
 if ($Phase -eq 'Wsl') {
