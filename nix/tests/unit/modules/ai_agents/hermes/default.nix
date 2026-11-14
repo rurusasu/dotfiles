@@ -134,23 +134,27 @@ in
         servers = linux.config.services.hermes-agent.settings.mcp_servers;
       in
       {
-        chrome = servers.chrome.url;
-        xapi = servers.xapi.url;
-        pipedream = { inherit (servers.pipedream) url auth; };
-        localCommands = builtins.filter (name: servers.${name} ? command) [
+        sharedCommands = builtins.filter (name: servers.${name} ? command) [
           "chrome"
           "xapi"
-          "pipedream"
         ];
+        pipedream = { inherit (servers.pipedream) url auth; };
+        discord = linux.config.services.hermes-agent.settings.platforms.discord.enabled;
+        discordSecrets = builtins.filter (name: inputs.nixpkgs.lib.hasPrefix "DISCORD_" name) (
+          builtins.attrNames linux.config.services.hermes-agent.settings.secrets.onepassword.env
+        );
       };
     expected = {
-      chrome = "http://127.0.0.1:8765/mcp";
-      xapi = "http://127.0.0.1:8766/mcp";
+      sharedCommands = [
+        "chrome"
+        "xapi"
+      ];
       pipedream = {
         url = "https://mcp.pipedream.net/v2";
         auth = "oauth";
       };
-      localCommands = [ ];
+      discord = false;
+      discordSecrets = [ ];
     };
   };
 

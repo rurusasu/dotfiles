@@ -33,8 +33,6 @@ in
       references = {
         githubToken = secretReference "op://openclaw/GitHubUsedOpenClawPAT/credential";
         xaiApiKey = secretReference "op://openclaw/xAI-Grok-Twitter/console/apikey";
-        discordBotToken = secretReference "op://openclaw/Master/Discord/bot_token";
-        discordAllowedUsers = secretReference "op://openclaw/Master/Discord/allowed_users";
         exaApiKey = secretReference "op://openclaw/ExaUsedOpenclawPAT/credential";
         firecrawlApiKey = secretReference "op://openclaw/FirecrawlUsedOpenclawPAT/credential";
         tavilyApiToken = secretReference "op://openclaw/TavilyUsedOpenclawPAT/credential";

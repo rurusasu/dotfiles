@@ -2,19 +2,22 @@
 
 ## 実装
 
-`install.cmd` → `install.ps1` → WinGet master import → Taskfile の WSL → chezmoi の順です。
+`install.cmd` → `install.ps1` → WinGet master import → Taskfile の WSL → SSH 転送 → chezmoi の順です。
 Taskもmasterから導入し、Nix は lock 済みの依存を一度だけ反映します。
-`-Phase Winget` / `Wsl` / `Chezmoi` はその操作だけを実行します。
+`-Phase Winget` / `Wsl` / `WslSsh` / `Chezmoi` はその操作だけを実行します。
+`task install:ssh` でも転送先の更新だけを実行できます。
 
 セットアップの主な実装は次の3ファイルです。
 
 - `scripts/powershell/install.ps1`: Windowsの標準コマンドとTaskの起動、WSL基盤の昇格。
 - `lib/Invoke-ExternalCommand.ps1`: native終了コード、timeout、UTF-8、PATH、標準import。
 - `lib/Invoke-NixosWslSetup.ps1`: 必要時のdistro登録と、同期・lock済みのNixOS/Home Manager反映。
+- `lib/Sync-WslSshNetwork.ps1`: 元ユーザーでWSLのIPを調べ、差分があるWindowsのSSH転送・firewall設定だけをUAC昇格する。TCP 2222からWSLの22へ転送し、全ネットワークプロファイルでTCP 2222のLocalSubnetだけを許可する。
 
 通常の関数と例外を使います。クラス、結果オブジェクト、独自runnerはありません。
 順序はTaskfileだけが管理し、初回導入と既存distroでsetupを重複させません。
-WSL基盤だけを昇格し、成功後は3010で停止してWindows再起動を案内します。
+WSL基盤の昇格が必要な初回は、成功後に3010で停止してWindows再起動を案内します。
+SSH転送は差分がある場合だけ別途UACで適用します。PublicネットワークをPrivateへ自動変更しません。
 Taskの194は3010に戻し、distro登録は元のユーザーで実行します。
 
 WinGetは標準JSONをimportします。導入後にプロセスPATHを再読込し、Taskへ引き継ぎます。

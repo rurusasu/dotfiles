@@ -7,7 +7,8 @@ tasks:
   install:
     desc: Install Windows apps, apply locked NixOS-WSL, then apply Windows dotfiles
     summary: |
-      Windows アプリ導入 → WSL の反映 → Windows 設定反映の順に実行します。
+      Windows アプリ導入 → WSL の反映 → SSH 転送 → Windows 設定反映の順に実行します。
+      SSH 転送・同一サブネットの firewall rule は必要な場合だけ UAC で昇格します。
       NixOS/Home Manager は lock 済みの依存を一度だけ反映します。
       Windows の再起動が必要な場合は、設定反映へ進まず再実行を案内します。
       再起動要求は終了コードで伝えます。一時ファイルは使いません。
@@ -28,6 +29,7 @@ tasks:
     internal: true
     cmds:
       - task: install:wsl
+      - task: install:ssh
       - task: install:chezmoi
       - cmd: echo "Setup Complete!"
         silent: true
@@ -43,6 +45,12 @@ tasks:
     internal: true
     cmds:
       - '"{{.INSTALL_POWERSHELL}}" -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1 -Phase Chezmoi'
+
+  install:ssh:
+    desc: Apply WSL SSH forwarding and a LocalSubnet firewall rule (UAC when needed)
+    platforms: [windows]
+    cmds:
+      - '"{{.INSTALL_POWERSHELL}}" -NoProfile -ExecutionPolicy Bypass -File scripts/powershell/install.ps1 -Phase WslSsh'
 
   tart:prepare:
     desc: Download and clone the optional macOS Tart VM image

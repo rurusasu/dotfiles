@@ -16,6 +16,9 @@ let
     assert lib.assertMsg (dockerConfig != "") "Docker MCP requires a non-empty DOCKER_CONFIG";
     "${dockerConfig}/mcp/secrets.env";
   hermesHome = config.services.hermes-agent.hermesHome;
+  tokenDirectory = "${config.xdg.stateHome}/mcp";
+  tokenFile = "${tokenDirectory}/shared-token";
+  socketFile = name: "${tokenDirectory}/${name}.sock";
   backends = {
     chrome = {
       port = 8765;
@@ -55,6 +58,10 @@ let
         "127.0.0.1"
         "--port"
         (toString backend.port)
+        "--auth-token-file"
+        tokenFile
+        "--unix-socket"
+        (socketFile name)
         "--pass-environment"
         "--"
         backend.command
@@ -65,6 +72,18 @@ let
       }
       // backend.env;
     }
+  ) backends;
+  clients = lib.mapAttrs (
+    name: backend:
+    pkgs.writeShellScriptBin "mcp-${name}-client" ''
+      set -eu
+      API_ACCESS_TOKEN="$(${pkgs.coreutils}/bin/cat ${lib.escapeShellArg tokenFile})"
+      test -n "$API_ACCESS_TOKEN"
+      export API_ACCESS_TOKEN
+      exec ${lib.getExe packages.mcp-proxy} --transport streamablehttp \
+        --unix-socket ${lib.escapeShellArg (socketFile name)} \
+        http://127.0.0.1:${toString backend.port}/mcp
+    ''
   ) backends;
 in
 {
@@ -95,7 +114,8 @@ in
           pkgs._1password-cli
           pkgs.jq
           pkgs.coreutils
-        ];
+        ]
+        ++ lib.attrValues clients;
         # xurl fixes its credential path at ~/.xurl; share the Hermes cache directly.
         file.".xurl".source = config.lib.file.mkOutOfStoreSymlink "${hermesHome}/.xurl";
         activation.prepareXurlDirectory =
@@ -103,6 +123,16 @@ in
             ''
               run ${pkgs.coreutils}/bin/install -d -m 0700 ${lib.escapeShellArg "${hermesHome}/.xurl"}
             '';
+        activation.prepareMcpToken = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+          run ${pkgs.coreutils}/bin/install -d -m 0700 ${lib.escapeShellArg tokenDirectory}
+          if [[ ! -e ${lib.escapeShellArg tokenFile} ]]; then
+            run ${pkgs.bash}/bin/bash -c ${lib.escapeShellArg ''
+              umask 077
+              ${pkgs.openssl}/bin/openssl rand -hex 32 > ${lib.escapeShellArg tokenFile}
+            ''}
+          fi
+          run ${pkgs.coreutils}/bin/chmod 0600 ${lib.escapeShellArg tokenFile}
+        '';
       };
 
       # Both clients share one browser profile and one in-memory OAuth token store.
@@ -136,8 +166,9 @@ in
       );
 
       programs.mcp.servers =
-        lib.mapAttrs (_: backend: {
-          url = "http://127.0.0.1:${toString backend.port}/mcp";
+        lib.mapAttrs (name: _: {
+          # The adapter reads the secret at runtime, for both Codex and Hermes.
+          command = lib.getExe clients.${name};
         }) backends
         // {
           MCP_DOCKER = {

@@ -4,7 +4,7 @@
 - 共通処理は native 終了コード・timeout・文字コード・OS限定の昇格・プロセスPATHと、WSL登録・同期に絞る。
 - クラス、結果オブジェクト、独自runner、テスト専用引数やラッパーは作らない。失敗は例外で伝える。
 - 具体的な名前付き引数を使い、ユーザーPATHを永続変更せず、既存VHD・チェックアウトを削除や上書きで復旧しない。
-- distro登録は元のユーザーで実行し、基盤有効化のOSコマンドだけ昇格する。再起動要求は3010で停止する。
+- distro登録・WSL照会・Nix反映は元のユーザーで実行する。基盤有効化とSSH転送・firewall設定のOSコマンドだけ昇格する。SSHはTCP 2222のLocalSubnetに限定し、ネットワーク種別は自動変更しない。再起動要求は3010で停止する。
 - WinGet、NixOS/Home Manager反映、chezmoi反映は各1回。依存更新は task update に分離し、通常反映は lock を更新しない。
 - テストは `tests/Invoke-Tests.ps1` を使い、現仕様の動作だけを確認する。
 - 詳細は `docs/scripts/powershell/README.md`。

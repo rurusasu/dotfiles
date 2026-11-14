@@ -1,13 +1,13 @@
 # Hermes Browser MCP
 
 Codex と root Hermes は、Home Manager が管理する native `mcp-chrome` service に
-HTTP で接続する。service は Nix の `mcp-proxy` を使い、1つの
+`mcp-chrome-client` stdio adapter を介し、専用 Unix socket 上の認証付き HTTP で接続する。service は Nix の `mcp-proxy` を使い、1つの
 `chrome-devtools-mcp` process と専用 browser profile を共有する。
 
 ## 構成
 
 [`nix/modules/ai_agents/mcp/default.nix`](../../nix/modules/ai_agents/mcp/default.nix) の共通 `chrome`
-定義は `http://127.0.0.1:8765/mcp` を使う。native service が保持する stdio child
+定義は runtime token を読む adapter を使い、内部で `$XDG_STATE_HOME/mcp/chrome.sock` に接続する。native service が保持する stdio child
 には次の引数を設定する。
 
 ```text
@@ -26,7 +26,12 @@ npm package 定義を持たない。`nix flake update mcp-servers` で provider 
 
 ブラウザは headless で起動するため、Linux/WSL の display や WSLg を必要としない。
 `mcp-chrome` は Linux の systemd user service、macOS の launchd agent として動く。
-HTTP は loopback のみに公開する。Docker と noVNC は使わない。
+TCP では待ち受けず、全 route で Bearer 認証と Host/Origin 検証を行う。
+token は `$XDG_STATE_HOME/mcp/shared-token`（既定 `~/.local/state/mcp/shared-token`）に0600、親 directory は0700で生成する。
+client と service は private directory の所有者と祖先の書き込み権限を検証する。
+HTTP proxy 環境変数を使わず、socket 不在時にも TCP に fallback しない。
+WSL では Unix 権限を持つ Linux filesystem に state を置く。socket path は Linux で107、macOS で103 bytes以下にする。
+秘密値は Nix store や Git に入れない。Docker と noVNC は使わない。
 
 ## Browser profile
 
@@ -45,12 +50,12 @@ root の `mcp_servers.chrome` は共通 MCP 定義から公式 Home Manager の
 `services.hermes-agent.mcpServers` を通じて生成する。named profile は root の
 MCP 設定を継承しないため、各 Git source の `config.yaml` に gateway 参照または
 次の接続先を置き、公式 `hermes profile install` / `update` で反映する。
-既存の同じ HTTP URL はそのまま使える。
+認証付き adapter を指定する。従来の無認証 HTTP URL だけの設定は接続できない。
 
 ```yaml
 mcp_servers:
   chrome:
-    url: http://127.0.0.1:8765/mcp
+    command: mcp-chrome-client
 ```
 
 Hermes の組み込み browser toolset と共通 MCP の server 名 `chrome` は別である。

@@ -41,6 +41,38 @@ EOF
   chmod +x "$STUB_BIN/$name"
 }
 
+@test "bootstrap executes downloaded chezmoi code only with HTTPS transport and redirects" {
+  local bash_runtime="$(command -v bash)" env_runtime="$(command -v env)"
+  unlink "$STUB_BIN/chezmoi"
+  for command in bash sh dirname id mkdir grep sed env; do
+    ln -s "$(command -v "$command")" "$STUB_BIN/$command"
+  done
+  write_stub npm 'exit 0'
+  cat >"$STUB_BIN/curl" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+transport= redirect= secure_url=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --proto) transport="$2"; shift ;;
+    --proto-redir) redirect="$2"; shift ;;
+    https://get.chezmoi.io) secure_url=yes ;;
+  esac
+  shift
+done
+if [ "$transport" = "=https" ] && [ "$redirect" = "=https" ] && [ "$secure_url" = yes ]; then
+  printf ': > "$HOME/secure-installer-ran"\n'
+else
+  printf ': > "$HOME/unsafe-installer-ran"\n'
+fi
+EOF
+  chmod +x "$STUB_BIN/curl"
+  run "$env_runtime" HOME="$TEST_HOME" PATH="$STUB_BIN" NVIM_PACK_ADD_SUPPORTED=1 "$bash_runtime" "$REPO_ROOT/bootstrap.sh"
+  [ "$status" -eq 0 ]
+  [ -f "$TEST_HOME/secure-installer-ran" ]
+  [ ! -e "$TEST_HOME/unsafe-installer-ran" ]
+}
+
 @test "bootstrap.sh keeps capable Neovim and reinstalls when vim.pack.add is unavailable" {
   export HOME="$TEST_HOME"
   export PATH="$STUB_BIN:$PATH"

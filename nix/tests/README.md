@@ -109,9 +109,12 @@ Codex / Hermes の unit は公式 Home Manager 設定と共通 MCP の配線を�
 Docker MCP の unit は Linux / macOS の単体 gateway と秘密ファイルの接続設定を検証します。
 `docker-mcp` check は固定した公式 Git source と同梱の依存からビルドし、版の表示、gateway の起動オプションと Podman 互換コマンドを確認します。
 シークレット同期は Bats でファイル権限と読み取り失敗時の保持を確認します。コンテナの実起動と macOS の machine 起動は実機で確認します。
-Hermes の unit は最終的な `settings.mcp_servers` で Chrome / X API の HTTP 接続先、
+Hermes の unit は最終的な `settings.mcp_servers` で Chrome / X API の認証付き stdio adapter、
 Pipedream の OAuth 設定、HTTP サーバーにローカル command がないことを確認します。
 共有する native ユーザーサービスの起動、headless browser の操作、API 認証は実機で確認します。
+`shared-mcp-auth` は生成した実 adapter と Unix socket で認証・共有 backend・停止後の再接続を検証し、
+偽の HTTP endpoint に credential を送らないことを確認します。
+`ripgrep-editor-boundary` は実際の rg / fzf / Vim で、特殊なファイル名を保持し、行番号だけを editor command に渡すことを確認します。
 
 ```bash
 # 全 system の flake 出力を評価する。テスト本体は実行しない

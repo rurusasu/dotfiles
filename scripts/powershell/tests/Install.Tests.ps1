@@ -353,12 +353,13 @@ includes:
     }
 
     Context 'Windows installer Task visibility' -Skip:($env:OS -ne 'Windows_NT') {
-        It 'should expose the install entry and hide every installation helper even from list-all' {
+        It 'should expose installation and SSH refresh while hiding private phase helpers' {
             $output = @(& $script:taskRuntime --dir $script:taskRoot --list-all --json 2>&1) -join "`n"
             $LASTEXITCODE | Should -Be 0 -Because $output
             $names = ($output | ConvertFrom-Json).tasks.name
             $names | Should -Contain 'install'
-            $names | Where-Object { $_ -like 'install:*' } | Should -BeNullOrEmpty
+            $names | Should -Contain 'install:ssh'
+            $names | Where-Object { $_ -like 'install:*' -and $_ -ne 'install:ssh' } | Should -BeNullOrEmpty
         }
 
         It 'should reject direct invocation of the private <TaskName> task' -ForEach @(
@@ -491,6 +492,7 @@ Describe 'Windows installer WSL integration' {
                 [bool]$InstallFailure = $false,
                 [bool]$GuiFailure = $false,
                 [bool]$ChezmoiFailure = $false,
+                [bool]$SshFailure = $false,
                 [bool]$WslAvailable = $true,
                 [switch]$TaskInitiallyMissing,
                 [bool]$TaskAvailableAfterWinget = $true,
@@ -621,6 +623,13 @@ function Invoke-NixosWslSetup {
     if ($env:FIXTURE_SETUP_FAILURE -eq 'True') { throw 'FIXTURE_SETUP_FAILURE' }
 }
 '@
+            Add-Content "$adapter/lib/Sync-WslSshNetwork.ps1" -Value @'
+function Sync-WslSshNetwork {
+    param($DistroName)
+    Add-Content "$env:FIXTURE_ROOT/events.txt" 'ssh'
+    if ($env:FIXTURE_SSH_FAILURE -eq 'True') { throw 'FIXTURE_SSH_FAILURE' }
+}
+'@
             $info = New-Object System.Diagnostics.ProcessStartInfo
             $info.FileName = 'cmd.exe'
             $info.Arguments = "/d /c install.cmd -InstallDir `"$InstallDirectory`" $Arguments"
@@ -654,6 +663,7 @@ function Invoke-NixosWslSetup {
             $info.EnvironmentVariables['FIXTURE_INSTALL_FAILURE'] = [string]$InstallFailure
             $info.EnvironmentVariables['FIXTURE_GUI_FAILURE'] = [string]$GuiFailure
             $info.EnvironmentVariables['FIXTURE_CHEZMOI_FAILURE'] = [string]$ChezmoiFailure
+            $info.EnvironmentVariables['FIXTURE_SSH_FAILURE'] = [string]$SshFailure
             $info.EnvironmentVariables['FIXTURE_WSL_AVAILABLE'] = [string]$WslAvailable
             $info.EnvironmentVariables['FIXTURE_ELEVATION_EXIT_CODE'] = [string]$ElevationExitCode
             $info.EnvironmentVariables['FIXTURE_ELEVATION_FAULT'] = $ElevationFault
@@ -687,7 +697,7 @@ function Invoke-NixosWslSetup {
         It 'should apply the master before discovering Task and run each phase once under the parent runtime' {
             $result = Invoke-WslInstallerFixture -TaskInitiallyMissing
             $result.ExitCode | Should -Be 0 -Because $result.Output
-            ($result.Events -join ',') | Should -Be 'gui,setup,chezmoi'
+            ($result.Events -join ',') | Should -Be 'gui,setup,ssh,chezmoi'
             @($result.TaskLookups) | Should -Be @('after-master')
             ([regex]::Matches($result.Output, 'Setup Complete!')).Count | Should -Be 1
             ($result.Output -match 'Using Windows PowerShell') | Should -Be ($PSVersionTable.PSVersion.Major -lt 6)
@@ -710,8 +720,8 @@ function Invoke-NixosWslSetup {
         }
 
         It 'should run task install directly without re-entering bootstrap or applying WSL twice' -ForEach @(
-            @{ Existing = $true; Expected = 'gui,setup,chezmoi' },
-            @{ Existing = $false; Expected = 'gui,install,setup,chezmoi' }
+            @{ Existing = $true; Expected = 'gui,setup,ssh,chezmoi' },
+            @{ Existing = $false; Expected = 'gui,install,setup,ssh,chezmoi' }
         ) {
             $result = Invoke-WslInstallerFixture -DirectTask -Existing $Existing
             $result.ExitCode | Should -Be 0 -Because $result.Output
@@ -754,11 +764,12 @@ function Invoke-NixosWslSetup {
         }
 
         It 'should stop direct task install on a failed phase' -ForEach @(
-            @{ GuiFailure = $true; SetupFailure = $false; ChezmoiFailure = $false; Expected = 'gui'; ErrorText = 'FIXTURE_GUI_FAILURE' },
-            @{ GuiFailure = $false; SetupFailure = $true; ChezmoiFailure = $false; Expected = 'gui,setup'; ErrorText = 'FIXTURE_SETUP_FAILURE' },
-            @{ GuiFailure = $false; SetupFailure = $false; ChezmoiFailure = $true; Expected = 'gui,setup,chezmoi'; ErrorText = 'FIXTURE_CHEZMOI_FAILURE' }
+            @{ GuiFailure = $true; SetupFailure = $false; SshFailure = $false; ChezmoiFailure = $false; Expected = 'gui'; ErrorText = 'FIXTURE_GUI_FAILURE' },
+            @{ GuiFailure = $false; SetupFailure = $true; SshFailure = $false; ChezmoiFailure = $false; Expected = 'gui,setup'; ErrorText = 'FIXTURE_SETUP_FAILURE' },
+            @{ GuiFailure = $false; SetupFailure = $false; SshFailure = $true; ChezmoiFailure = $false; Expected = 'gui,setup,ssh'; ErrorText = 'FIXTURE_SSH_FAILURE' },
+            @{ GuiFailure = $false; SetupFailure = $false; SshFailure = $false; ChezmoiFailure = $true; Expected = 'gui,setup,ssh,chezmoi'; ErrorText = 'FIXTURE_CHEZMOI_FAILURE' }
         ) {
-            $result = Invoke-WslInstallerFixture -DirectTask -GuiFailure $GuiFailure -SetupFailure $SetupFailure -ChezmoiFailure $ChezmoiFailure
+            $result = Invoke-WslInstallerFixture -DirectTask -GuiFailure $GuiFailure -SetupFailure $SetupFailure -SshFailure $SshFailure -ChezmoiFailure $ChezmoiFailure
             $result.ExitCode | Should -Not -Be 0
             ($result.Events -join ',') | Should -Be $Expected
             $result.Output | Should -Match $ErrorText
@@ -768,14 +779,14 @@ function Invoke-NixosWslSetup {
         It 'should apply existing NixOS once after GUI setup without reinstalling' {
             $result = Invoke-WslInstallerFixture
             $result.ExitCode | Should -Be 0 -Because $result.Output
-            ($result.Events -join ',') | Should -Be 'gui,setup,chezmoi'
+            ($result.Events -join ',') | Should -Be 'gui,setup,ssh,chezmoi'
             $result.Output | Should -Match 'Setup Complete!'
         }
 
         It 'should install a missing distro and apply its configuration only once' {
             $result = Invoke-WslInstallerFixture -Existing $false
             $result.ExitCode | Should -Be 0 -Because $result.Output
-            ($result.Events -join ',') | Should -Be 'gui,install,setup,chezmoi'
+            ($result.Events -join ',') | Should -Be 'gui,install,setup,ssh,chezmoi'
         }
 
         It 'should forward synchronization and force options' {
@@ -800,7 +811,7 @@ function Invoke-NixosWslSetup {
             $result.Context.DistroName | Should -Be 'WorkNix'
             $result.InstallArguments | Should -Contain $customLocation
             $result.ReleaseUri | Should -Match '/tags/fixture'
-            ($result.Events -join ',') | Should -Be 'gui,install,setup,chezmoi'
+            ($result.Events -join ',') | Should -Be 'gui,install,setup,ssh,chezmoi'
         }
 
         It 'should propagate configuration failure without reporting completion' {
