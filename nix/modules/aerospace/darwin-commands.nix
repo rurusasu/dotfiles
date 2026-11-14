@@ -20,7 +20,7 @@ in
 {
   workspace-next = toString (pkgs.writeShellScript "omarchy-workspace-next" cycles.next);
   workspace-prev = toString (pkgs.writeShellScript "omarchy-workspace-prev" cycles.prev);
-  terminal = "/usr/bin/open -na ${lib.escapeShellArg ghostty}";
+  terminal = launch ghostty;
   browser = launch dia;
   files = launch "Finder";
   notes = launch obsidian;

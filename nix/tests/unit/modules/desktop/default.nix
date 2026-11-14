@@ -44,7 +44,7 @@ in
         "/Volumes/Home/alice/Applications/Managed Apps/Obsidian.app"
       ];
       shortcuts = {
-        cmd-enter = "exec-and-forget /usr/bin/open -na '/Volumes/Home/alice/Applications/Managed Apps/Ghostty.app'";
+        cmd-enter = "exec-and-forget /usr/bin/open -a '/Volumes/Home/alice/Applications/Managed Apps/Ghostty.app'";
         cmd-shift-enter = "exec-and-forget /usr/bin/open -a '/Volumes/Home/alice/Applications/Managed Apps/Dia.app'";
         cmd-shift-a = "exec-and-forget /usr/bin/open -a '/Volumes/Home/alice/Applications/Managed Apps/ChatGPT.app'";
         cmd-shift-o = "exec-and-forget /usr/bin/open -a '/Volumes/Home/alice/Applications/Managed Apps/Obsidian.app'";
