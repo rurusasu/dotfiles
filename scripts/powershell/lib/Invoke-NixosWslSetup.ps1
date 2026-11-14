@@ -54,6 +54,7 @@ function Install-NixosWsl {
     # Use its transient HTTP retry policy; never retry WSL registration.
     $curlArguments = @(
         '--fail', '--location', '--silent', '--show-error',
+        '--proto', '=https', '--proto-redir', '=https',
         '--retry', '5', '--retry-delay', '15', '--retry-max-time', '300',
         '--connect-timeout', '30',
         '--user-agent', 'nixos-wsl-installer'

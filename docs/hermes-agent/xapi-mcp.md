@@ -1,7 +1,8 @@
 # Hermes X API MCP
 
-Codex and root Hermes connect to the shared native `mcp-xapi` service at
-`http://127.0.0.1:8766/mcp`. Home Manager runs Nix's `mcp-proxy` with one
+Codex and root Hermes connect to the shared native `mcp-xapi` service through
+the authenticated `mcp-xapi-client` stdio adapter over `$XDG_STATE_HOME/mcp/xapi.sock`.
+Home Manager runs Nix's `mcp-proxy` with one
 persistent `hermes-xapi mcp` stdio child. That command validates the shared
 OAuth cache and runs the official `xurl mcp https://api.x.com/mcp` bridge.
 
@@ -9,10 +10,16 @@ OAuth cache and runs the official `xurl mcp https://api.x.com/mcp` bridge.
 
 The shared `xapi` definition in
 [`nix/modules/ai_agents/mcp/default.nix`](../../nix/modules/ai_agents/mcp/default.nix) supplies
-both clients with this HTTP URL. The `mcp-xapi` service sets `HERMES_DATA_DIR`
+both clients with this adapter. It reads the 0600 runtime token from
+`$XDG_STATE_HOME/mcp/shared-token` (default `~/.local/state/mcp/shared-token`);
+the parent directory is 0700. Both peers validate the private directory and its
+ancestors before connecting. All HTTP routes require Bearer authentication and
+valid Host/Origin headers. No TCP port is opened; clients ignore proxy environment
+variables and fail when the socket is absent. The token is never stored in Git or the Nix store.
+The `mcp-xapi` service sets `HERMES_DATA_DIR`
 to the root Hermes home and owns the command's lifetime. It runs as a systemd
-user service on Linux/WSL and a launchd agent on macOS, listening on loopback
-only. Clients share one xurl process so token rotation is not performed by
+user service on Linux/WSL and a launchd agent on macOS, listening on the private
+Unix socket. Clients share one xurl process so token rotation is not performed by
 independent MCP children using the same cache.
 
 [`mcp-packages.nix`](../../nix/modules/ai_agents/mcp-packages.nix) builds xurl
@@ -42,13 +49,13 @@ the root `.op.env` Service Account cache. The running service always selects
 Nix's native `op` on every OS and reads 1Password items with the cached
 `OP_SERVICE_ACCOUNT_TOKEN`; Windows PATH and interop are not needed by the
 service. Named Hermes profiles
-need a gateway reference or the following URL in their own Git source; root MCP
-settings are not inherited. Existing entries with this URL remain valid.
+need a gateway reference or the following adapter in their own Git source; root MCP
+settings are not inherited. An HTTP URL without authentication no longer grants access.
 
 ```yaml
 mcp_servers:
   xapi:
-    url: http://127.0.0.1:8766/mcp
+    command: mcp-xapi-client
 ```
 
 ## First authentication

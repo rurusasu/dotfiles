@@ -130,14 +130,18 @@ CLI と service を使います。runtime state は root Hermes home（既定値
 
 Chrome と X API MCP は、独立した native Home Manager service `mcp-chrome` /
 `mcp-xapi` が管理します。各 service は `mcp-proxy` で1つの persistent stdio child を
-保持し、client は `http://127.0.0.1:8765/mcp` / `http://127.0.0.1:8766/mcp` に
-接続します。Linux/WSL は systemd user service、macOS は launchd agent を使います。
+保持します。client は `mcp-chrome-client` / `mcp-xapi-client` stdio adapter から
+内部の HTTP を owner-private な Unix socket で接続します。TCP port は開きません。
+socket は `$XDG_STATE_HOME/mcp/{chrome,xapi}.sock`、0600の token は同じ directory の
+`shared-token` に保持し、親 directory を0700にします。client と service は所有者と
+置換できない祖先 directory を検証し、全 route を Bearer 認証と Host/Origin 検証で保護します。
+Linux/WSL は systemd user service、macOS は launchd agent を使います。
 Chrome は Nix 管理のブラウザを headless で起動し、display や WSLg は不要です。
 root Hermes home の `.browser` は `mcp-chrome`、`.xurl` cache は `mcp-xapi` が保持します。
 xurl の固定 path `~/.xurl` は Home Manager が既存 Hermes cache
 へリンクし、既存実体との衝突では反映を
 停止します。named profile は root の MCP 設定を継承しないため、各 Git source に
-gateway 参照または対応する URL の定義が必要です。既存の loopback URL は保持します。
+gateway 参照または対応する stdio adapter の定義が必要です。無認証の URL からは接続できません。
 Pipedream の OAuth は client ごとに行います。
 
 X API 認証 task は `mcp-xapi` を停止してから interactive OAuth を行い、token の
