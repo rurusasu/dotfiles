@@ -329,7 +329,6 @@ def export_cache(cache: Path, maximum_size: int) -> None:
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         output.write(f"cacheable={str(bool(selected)).lower()}\n")
         output.write(f"space_constrained={str(bool(disk_limited)).lower()}\n")
-        output.write(f"export_incomplete={str(bool(timed_out)).lower()}\n")
 
 
 def transport_cache(cache: Path, root: str) -> None:

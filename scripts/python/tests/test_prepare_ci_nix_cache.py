@@ -122,7 +122,6 @@ class CacheTests(unittest.TestCase):
             self.assertEqual({path for path, *_ in cache.cache_entries(destination)}, {independent})
             self.assertFalse((destination / "nar" / ".candidate").exists())
             self.assertIn("cacheable=true", output.read_text())
-            self.assertIn("export_incomplete=true", output.read_text())
 
 
 if __name__ == "__main__":
