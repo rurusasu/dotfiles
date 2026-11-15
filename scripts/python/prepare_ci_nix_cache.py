@@ -272,6 +272,7 @@ def export_cache(cache: Path, maximum_size: int) -> None:
     budget = maximum_size - ARCHIVE_RESERVE
     oversized = 0
     disk_limited = 0
+    timed_out = 0
     while ready:
         _, _, path = heapq.heappop(ready)
         entry = metadata[path]
@@ -286,7 +287,12 @@ def export_cache(cache: Path, maximum_size: int) -> None:
             disk_limited += 1
             break
         limit = min(capacity, disk_capacity)
-        result = export_entry(cache, path, entry, limit)
+        try:
+            result = export_entry(cache, path, entry, limit)
+        except subprocess.TimeoutExpired:
+            timed_out += 1
+            print(f"::warning::CI cache skipped {path}: export timed out")
+            continue
         if result is None:
             if disk_capacity < capacity:
                 disk_limited += 1
@@ -315,13 +321,15 @@ def export_cache(cache: Path, maximum_size: int) -> None:
         print(f"CI cache: {len(blocked) - 20} additional outputs blocked by skipped private references")
     print(
         f"CI cache: {len(selected)} selected / {len(private)} private / {len(paths)} paths, "
-        f"{size:,} bytes; {skipped} skipped ({oversized} oversized, {disk_limited} disk-limited)"
+        f"{size:,} bytes; {skipped} skipped "
+        f"({oversized} oversized, {disk_limited} disk-limited, {timed_out} timed out)"
     )
     if not selected:
         print("::warning::No dependency-closed private outputs fit; keeping the previous generation")
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         output.write(f"cacheable={str(bool(selected)).lower()}\n")
         output.write(f"space_constrained={str(bool(disk_limited)).lower()}\n")
+        output.write(f"export_incomplete={str(bool(timed_out)).lower()}\n")
 
 
 def transport_cache(cache: Path, root: str) -> None:

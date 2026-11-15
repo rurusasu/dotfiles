@@ -90,10 +90,11 @@ runs:
       env:
         FRESH_CACHEABLE: ${{ steps.export.outputs.cacheable }}
         SPACE_CONSTRAINED: ${{ steps.export.outputs.space_constrained }}
+        EXPORT_INCOMPLETE: ${{ steps.export.outputs.export_incomplete }}
       run: |
         restored_entries=("$DOTFILES_CI_BINARY_CACHE"/*.narinfo)
-        if [[ "$SPACE_CONSTRAINED" == true && -f "${restored_entries[0]}" ]]; then
-          echo '::notice::Keeping the restored cache because export was constrained by disk space.'
+        if [[ ( "$SPACE_CONSTRAINED" == true || "$EXPORT_INCOMPLETE" == true ) && -f "${restored_entries[0]}" ]]; then
+          echo '::notice::Keeping the restored cache because export was incomplete.'
         elif [[ "$FRESH_CACHEABLE" == true ]]; then
           mv "$DOTFILES_CI_BINARY_CACHE" "$RUNNER_TEMP/nix-cache-before-save"
           mv "$RUNNER_TEMP/nix-private-cache" "$DOTFILES_CI_BINARY_CACHE"

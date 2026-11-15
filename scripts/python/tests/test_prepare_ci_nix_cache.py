@@ -6,6 +6,7 @@ import base64
 import hashlib
 import importlib.util
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -82,6 +83,46 @@ class CacheTests(unittest.TestCase):
             with patch.dict(os.environ, {"PATH": str(directory)}):
                 self.assertIsNone(cache.compress_path("/fixture", destination, 1000))
             self.assertLessEqual(destination.stat().st_size, 1000)
+
+    def test_timed_out_entry_preserves_independent_closed_cache(self):
+        slow, blocked, independent = (
+            f"/nix/store/{letter * 32}-{name}"
+            for letter, name in zip("abc", ("slow", "blocked", "independent"))
+        )
+        records = {
+            path: {
+                "path": path,
+                "references": references,
+                "narHash": "sha256-" + base64.b64encode(b"h" * 32).decode(),
+                "narSize": 100,
+            }
+            for path, references in ((slow, []), (blocked, [slow]), (independent, []))
+        }
+
+        def compress(path, destination, maximum_bytes, timeout=120):
+            payload = path.encode()
+            destination.write_bytes(payload)
+            if path == slow:
+                raise subprocess.TimeoutExpired("nix-store", timeout)
+            digest = hashlib.sha256(payload)
+            return len(payload), digest.hexdigest(), base64.b64encode(digest.digest()).decode()
+
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "cache"
+            output = Path(temporary) / "github-output"
+            with (
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}),
+                patch.object(cache, "store_paths", return_value=list(records)),
+                patch.object(cache, "path_metadata", return_value=records),
+                patch.object(cache, "query_public_paths", return_value=set()),
+                patch.object(cache, "compress_path", side_effect=compress),
+                patch.object(cache.shutil, "disk_usage", return_value=SimpleNamespace(free=100 * 1024**2)),
+            ):
+                cache.export_cache(destination, cache.ARCHIVE_RESERVE + 3000)
+            self.assertEqual({path for path, *_ in cache.cache_entries(destination)}, {independent})
+            self.assertFalse((destination / "nar" / ".candidate").exists())
+            self.assertIn("cacheable=true", output.read_text())
+            self.assertIn("export_incomplete=true", output.read_text())
 
 
 if __name__ == "__main__":

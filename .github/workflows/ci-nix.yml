@@ -200,7 +200,7 @@ jobs:
       - lint
     if: ${{ needs.changes.outputs.darwin == 'true' }}
     runs-on: macos-15
-    timeout-minutes: 240
+    timeout-minutes: 360
     permissions:
       contents: read
     env:
@@ -246,7 +246,7 @@ jobs:
         with:
           name: darwin
       - name: Build macOS checks and deployment
-        timeout-minutes: 200
+        timeout-minutes: 320
         run: nix develop --no-update-lock-file path:.#ci --command task ci:build TARGET=darwin
       - name: Upload darwin producer artifact
         id: upload-darwin
