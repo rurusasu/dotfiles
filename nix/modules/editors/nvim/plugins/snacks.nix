@@ -4,6 +4,21 @@
   pkgs,
   ...
 }:
+let
+  mermaid-cli =
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      pkgs.symlinkJoin {
+        name = "mermaid-cli-with-browser";
+        paths = [ pkgs.mermaid-cli ];
+        nativeBuildInputs = [ pkgs.makeWrapper ];
+        postBuild = ''
+          wrapProgram "$out/bin/mmdc" \
+            --set-default PUPPETEER_EXECUTABLE_PATH ${lib.escapeShellArg (lib.getExe pkgs.google-chrome)}
+        '';
+      }
+    else
+      pkgs.mermaid-cli;
+in
 {
   home.packages =
     lib.mkIf (config.programs.nixvim.enable && config.programs.nixvim.plugins.snacks.enable)
@@ -12,6 +27,7 @@
         pkgs.neovim-remote
         pkgs.imagemagick
         pkgs.poppler-utils
+        mermaid-cli
       ];
   programs.lazydocker.enable = lib.mkIf (
     config.programs.nixvim.enable && config.programs.nixvim.plugins.snacks.enable
