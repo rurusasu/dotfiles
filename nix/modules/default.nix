@@ -14,6 +14,7 @@
     ./desktop
     ./discord
     ./dock
+    ./drawio
     ./editors/nvim
     ./fcitx5
     ./finder
