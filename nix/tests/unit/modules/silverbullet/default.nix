@@ -1,6 +1,6 @@
 { homeConfigurations }:
 let
-  darwin = homeConfigurations.darwin;
+  inherit (homeConfigurations) darwin;
   disabled = darwin.extendModules {
     modules = [
       ({ lib, ... }: { services.silverbullet-trial.enable = lib.mkForce false; })
