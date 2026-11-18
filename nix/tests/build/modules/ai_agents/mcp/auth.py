@@ -50,24 +50,39 @@ async def identity(adapter, environment):
 
 @contextlib.contextmanager
 def running(command, client, headers):
-    with subprocess.Popen(
-        command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
-    ) as process:
+    with subprocess.Popen(command, stdout=subprocess.DEVNULL) as process:
         try:
-            deadline = time.monotonic() + 20
-            while True:
-                assert process.poll() is None, process.stderr.read().decode()
+            # Allow both Python processes time to start during parallel CI builds.
+            startup_timeout = 120
+            deadline = time.monotonic() + startup_timeout
+            while (remaining := deadline - time.monotonic()) > 0:
+                assert process.poll() is None, (
+                    f"MCP server exited during startup (exit code {process.returncode})"
+                )
                 try:
-                    if client.get("/status", headers=headers).status_code == 200:
-                        break
-                except httpx.ConnectError:
-                    pass
-                assert time.monotonic() < deadline, "MCP server startup timed out"
-                time.sleep(0.1)
+                    response = client.get(
+                        "/status", headers=headers, timeout=min(remaining, 1)
+                    )
+                except (httpx.ConnectError, httpx.TimeoutException):
+                    time.sleep(0.1)
+                    continue
+                assert response.status_code == 200, (
+                    f"MCP server returned HTTP {response.status_code} during startup"
+                )
+                break
+            else:
+                raise AssertionError(
+                    f"MCP server startup timed out after {startup_timeout} seconds"
+                )
             yield
         finally:
             process.terminate()
-            process.wait(timeout=10)
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                raise
 
 
 def check(proxy, adapter, home):
@@ -117,7 +132,7 @@ def check_local(proxy, adapter, directory):
             "--port",
             "8765",
             "--log-level",
-            "ERROR",
+            "INFO",
             "--auth-token-file",
             str(token_file),
             "--unix-socket",
