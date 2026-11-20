@@ -184,7 +184,7 @@
     "google-drive": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-7ybp3tobVLTW++lJwujzMgNtrI4bCL9YSCCodTHhQNQ=",
+        "narHash": "sha256-h1fzvjGMEKRhND716XHMe3z/tuhPa0ZvDGmydYL65lI=",
         "type": "file",
         "url": "https://dl.google.com/drive-file-stream/GoogleDrive.dmg"
       },
