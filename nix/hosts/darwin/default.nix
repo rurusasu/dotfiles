@@ -12,6 +12,8 @@ in
     ../../modules/1password/darwin.nix
     ../../modules/fonts/darwin.nix
     ../../modules/google-drive
+    ../../modules/ssh/darwin.nix
+    ../../modules/tailscale/darwin.nix
     inputs.home-manager.darwinModules.home-manager
   ];
   system = {

@@ -40,7 +40,6 @@
     ./shells/plugins/zsh-patina
     ./shells/powershell
     ./shells/zsh
-    ./silverbullet
     ./ssh
     ./steam
     ./superfile
