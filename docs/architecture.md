@@ -112,9 +112,9 @@ Home Manager の手書き API unit は standalone Linux だけに適用します
 Lazydocker と MCP Gateway の wrapper は Podman API の接続先を設定します。
 Docker CLI package は導入せず、upstream が必要とする `docker` コマンドは Podman へのリンクで供給します。
 
-macOS の SilverBullet 試行サーバーは `nix/modules/silverbullet/default.nix` が
-Home Manager の launchd agent として管理します。保存先・停止方法・実機での確認手順は
-[SilverBullet 試行サーバー](nix/silverbullet.md) を参照してください。
+macOS の SilverBullet は `nix/modules/silverbullet/default.nix` が公式デスクトップ版と
+試行サーバーの launchd agent を Home Manager で管理します。アプリの起動・保存先・停止方法は
+[SilverBullet](nix/silverbullet.md) を参照してください。
 
 ## Hermes Runtime and Bootstrap Ownership
 
