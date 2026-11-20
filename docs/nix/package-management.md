@@ -297,11 +297,11 @@ macOS が再起動を求めたら端末アプリを `⌘Q` で終了して開き
 
 ### 自動クリーンアップ
 
-- Nix の GC は定期的に、`--delete-old` 付きで実行します。各 profile の現行世代だけを残し、
-  旧世代と未参照の store path を削除します。削除した世代へのロールバックはできません。
-- nix-darwin / NixOS / NixOS-WSL はシステム側の GC、standalone Home Manager は
-  標準のユーザー GC を使い、二重にスケジュールしません。
-  実行間隔・削除オプション・Darwin の空き容量条件は `nix/hosts/default.nix` に集約します。
+- macOS は反映の最後に Home Manager の現行世代を確認し、システム profile を現行の1世代だけにします。
+  反映が途中で止まった場合は、ログイン後に再度 `./install.sh` を実行します。定期 GC は未参照の
+  store path を回収します。
+- NixOS / NixOS-WSL はシステム側、standalone Home Manager はユーザー側の定期 GC で
+  `--delete-old` を使います。削除した世代へのロールバックはできません。
 - この設定は任意のユーザーファイルやアプリのデータ全般を走査・削除するものではありません。
 
 Dock の固定アプリと順序は `nix/modules/dock/default.nix` が管理します。

@@ -6,6 +6,10 @@
 }:
 let
   user = config.system.primaryUser;
+  home = config.home-manager.users.${user};
+  systemProfile = lib.escapeShellArg config.system.profile;
+  currentHome = lib.escapeShellArg "${home.xdg.stateHome}/home-manager/gcroots/current-home";
+  homeGeneration = lib.escapeShellArg (toString home.home.activationPackage);
 in
 {
   imports = [
@@ -22,6 +26,14 @@ in
     activationScripts.power.text = ''
       /usr/bin/pmset -a sleep 0 displaysleep 0
     '';
+    # Run after Home Manager and the other post-activation hooks.
+    activationScripts.postActivation.text = lib.mkOrder 2000 ''
+      if [[ ! -v DRY_RUN && ''${#hmDryRunArgs[@]} -eq 0 ]] \
+        && [[ "$(readlink -f ${systemProfile})" == "$(readlink -f "$systemConfig")" ]] \
+        && [[ "$(readlink -f ${currentHome})" == ${homeGeneration} ]]; then
+        ${lib.getExe' config.nix.package "nix-env"} --profile ${systemProfile} --delete-generations old
+      fi
+    '';
     stateVersion = inputs.self.lib.stateVersions.darwin;
     defaults.loginwindow = {
       GuestEnabled = false;
@@ -31,6 +43,8 @@ in
   nix = {
     optimise.automatic = true;
     gc = {
+      # Prune the system profile after activation, not during scheduled GC.
+      options = "";
       interval = [
         {
           Hour = 3;
