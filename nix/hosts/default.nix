@@ -1,6 +1,7 @@
 # Shared OS settings and platform-specific host configuration.
 {
   inputs,
+  lib,
   pkgs,
   platform,
   ...
@@ -15,7 +16,7 @@ in
     package = nixPackage;
     gc = {
       automatic = true;
-      options = "--delete-old";
+      options = lib.mkDefault "--delete-old";
     };
     settings = nixSettings // {
       min-free = 10 * 1024 * 1024 * 1024;

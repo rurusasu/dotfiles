@@ -187,7 +187,7 @@ in
         )) darwin.config.launchd.daemons.nix-gc.serviceConfig.StartCalendarInterval;
         commandTargetsNix = lib.hasInfix (builtins.unsafeDiscardStringContext "${darwin.config.nix.package}/bin/nix-collect-garbage") darwin.config.launchd.daemons.nix-gc.command;
         options = darwin.config.nix.gc.options;
-        commandUsesOptions = lib.hasInfix darwin.config.nix.gc.options darwin.config.launchd.daemons.nix-gc.command;
+        deletesOldGenerations = lib.hasInfix "--delete-old" darwin.config.launchd.daemons.nix-gc.command;
         runAtLoad = darwin.config.launchd.daemons.nix-gc.serviceConfig.RunAtLoad;
       };
     };
@@ -208,8 +208,8 @@ in
           }
         ];
         commandTargetsNix = true;
-        commandUsesOptions = true;
-        options = "--delete-old";
+        deletesOldGenerations = false;
+        options = "";
         runAtLoad = false;
       };
     };
