@@ -114,9 +114,9 @@ Docker CLI package は導入せず、upstream が必要とする `docker` コマ
 
 macOS の遠隔試験には nix-darwin が配置する Tailscale Standalone 版と OpenSSH を使います。
 初回の反映後は「Nix Apps」の Tailscale を開き、macOS の VPN 設定を許可してログインします。
-管理画面で Muse の端末参加を承認し、
-Muse から Mac の TCP 22 への接続を許可します。Muse は専用の `muse` ユーザーと公開鍵を
-使います。SSH の許可ユーザーを macOS 側でも指定している場合は、その一覧に `muse` を加えます。
+管理画面で Muse の端末参加を承認し、Muse から Mac の TCP 22 への接続を許可します。
+Muse は専用の `muse` ユーザーと公開鍵を使います。macOS のリモートログインが許可リストを使う場合は、
+nix-darwin が反映時に `muse` を追加します。
 試験用のファイルは専用ユーザーが読める場所に用意します。
 
 ## Hermes Runtime and Bootstrap Ownership
