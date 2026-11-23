@@ -26,7 +26,8 @@ Invoke-ExternalCommandWithTimeout -Command 'winget' -Arguments @(
     '--source', $runtime[0].Source.SourceDetails.Name, '--installer-type', 'wix',
     '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity'
 ) -TimeoutSeconds (Get-PackageInstallTimeoutSecond) | Out-Host
-if ($LASTEXITCODE -ne 0) { throw "PowerShell MSI preparation failed (exit=$LASTEXITCODE)." }
+# WinGet returns UPDATE_NOT_APPLICABLE when the installed runtime is current.
+if (@(0, -1978335189) -notcontains $LASTEXITCODE) { throw "PowerShell MSI preparation failed (exit=$LASTEXITCODE)." }
 Update-ProcessEnvironmentPath
 
 $pwsh = Get-Command pwsh.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
