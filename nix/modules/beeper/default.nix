@@ -16,6 +16,15 @@
     }
     (lib.mkIf config.programs.beeper.enable {
       home.packages = [ config.programs.beeper.package ];
+
+      home.activation.beeperRegisterApplication =
+        lib.mkIf (pkgs.stdenv.hostPlatform.isDarwin && config.targets.darwin.copyApps.enable)
+          (
+            lib.hm.dag.entryAfter [ "copyApps" ] ''
+              run /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f \
+                ${lib.escapeShellArg "${config.home.homeDirectory}/${config.targets.darwin.copyApps.directory}/Beeper Desktop.app"}
+            ''
+          );
     })
   ];
 }
