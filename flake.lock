@@ -57,9 +57,9 @@
     "dia": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-dOR7N4Rb94CRZ89eaaovGuIDNuyfa45/toVbEW34ahg=",
+        "narHash": "sha256-T94eCxxomksnBSZs9ZnOsdLj5cB39mtGPuj73Ti/Dqc=",
         "type": "file",
-        "url": "https://releases.diabrowser.com/release/Dia-1.56.2-90792.dmg"
+        "url": "https://releases.diabrowser.com/release/Dia-1.58.1-91403.dmg"
       },
       "original": {
         "type": "file",
