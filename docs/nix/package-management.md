@@ -17,7 +17,7 @@ Darwin の標準依存まで利用するため、Linux 向けの `nixos-unstable
 
 Hermes は同梱 Python を使い、プロジェクト依存は `uv` で管理します。必要なプロジェクトでは uv を別途用意し、Python interpreter は直接 `home.packages` に追加しません。X API 同期の公開コマンドは `uv run --no-project --managed-python` を使い、Python の選択も uv に任せます。Nix 内部専用の Python 依存は各 module が管理します。
 
-Hermes は macOS の pnpm store のハッシュ不一致を避けるため、[上流 PR #150967](https://github.com/NousResearch/hermes-agent/pull/150967) の修正を含む revision `4ffd07a63eaf4feae539402a774c71742e806666` に一時固定します。この PR は未マージのため、`flake.lock` だけでなく `flake.nix` の input 宣言にも revision を指定し、通常の `nix flake update` で修正が外れることを防ぎます。上流への取り込み後に固定を解除します。
+Hermes は macOS の pnpm store のハッシュ不一致を避けるため、[上流 PR #150967](https://github.com/NousResearch/hermes-agent/pull/150967) の修正を含む revision `bdacea614b263252972fe5dbcbbe9edba271558b` に一時固定します。2026-11-24 の更新では PR の新しい merge revision へ進め、macOS の `pnpm-deps` ビルドを確認しました。同日時点の upstream main (`a15b9710395aa1c4858fb6dd9e4c5014c5ced4e9`) は依然としてハッシュ不一致で失敗します。この PR は未マージのため、`flake.lock` だけでなく `flake.nix` の input 宣言にも revision を指定し、通常の `nix flake update` で修正が外れることを防ぎます。上流への取り込み後に固定を解除します。
 
 PowerShell は `nix/modules/shells/powershell/` が所有し、`programs.powershell.enable` はユーザー指定により全 OS 共通で既定有効です。Neovim の PowerShell Editor Services も同じ有効化に従います。CI 用シェルは独立して PowerShell の検査・整形依存を用意します。ローカルの treefmt / pre-commit は PowerShell を処理しません。
 

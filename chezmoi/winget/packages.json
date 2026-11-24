@@ -48,6 +48,9 @@
         },
         {
           "PackageIdentifier": "Google.GoogleDrive"
+        },
+        {
+          "PackageIdentifier": "Beeper.Beeper"
         }
       ],
       "SourceDetails": {

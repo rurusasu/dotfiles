@@ -19,14 +19,16 @@ $runtime = @(
 if ($runtime.Count -ne 1 -or $runtime[0].Source.SourceDetails.Name -ne 'winget') {
     throw 'Expected exactly one Microsoft.PowerShell declaration from winget.'
 }
-$master.Sources = @($runtime[0].Source.PSObject.Copy())
-$master.Sources[0].Packages = @($runtime[0].Package)
-$temporaryManifest = [IO.Path]::GetTempFileName()
-try {
-    [IO.File]::WriteAllText($temporaryManifest, ($master | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
-    Import-WindowsPackage -ManifestPath $temporaryManifest
-}
-finally { Remove-Item -LiteralPath $temporaryManifest -Force -ErrorAction Stop }
+# PowerShell 7.6 defaults to MSIX in WinGet. Keep the runner's MSI installation
+# compatible while upgrading it before the production import.
+Invoke-ExternalCommandWithTimeout -Command 'winget' -Arguments @(
+    'install', '--id', $runtime[0].Package.PackageIdentifier, '--exact',
+    '--source', $runtime[0].Source.SourceDetails.Name, '--installer-type', 'wix',
+    '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity'
+) -TimeoutSeconds (Get-PackageInstallTimeoutSecond) | Out-Host
+# WinGet returns UPDATE_NOT_APPLICABLE when the installed runtime is current.
+if (@(0, -1978335189) -notcontains $LASTEXITCODE) { throw "PowerShell MSI preparation failed (exit=$LASTEXITCODE)." }
+Update-ProcessEnvironmentPath
 
 $pwsh = Get-Command pwsh.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
 $pwshMajor = @(Invoke-NativeCommand -Command $pwsh.Source -Arguments @('-NoLogo', '-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'))

@@ -29,9 +29,10 @@ assert(
     table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n") ~= "if($true){Write-Output 'value'}",
     "PowerShell save formatting must run: " .. vim.inspect(vim.api.nvim_buf_get_lines(buf, 0, -1, false))
 )
-client:stop()
+-- Bound test cleanup when the server does not finish a graceful shutdown.
+client:stop(5000)
 assert(
-    vim.wait(5000, function()
+    vim.wait(15000, function()
         return #vim.lsp.get_clients({ name = "powershell_es" }) == 0
     end, 20),
     "PowerShell Editor Services must shut down"

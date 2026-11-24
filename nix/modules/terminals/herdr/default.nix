@@ -21,7 +21,9 @@ in
         mutableSettings = true;
         settings = {
           onboarding = false;
-          inherit (omarchy) keys;
+          keys = omarchy.keys // {
+            prefix = "ctrl+b";
+          };
           terminal = {
             default_shell = lib.getExe (
               if config.programs.zsh.enable && config.programs.zsh.package != null then

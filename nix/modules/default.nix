@@ -9,6 +9,7 @@
     ./ai_agents/mcp
     ./ai_agents/pi
     ./ai_agents/strata
+    ./beeper
     ./browsers/chrome
     ./browsers/dia
     ./desktop

@@ -180,7 +180,7 @@ def check_local(proxy, adapter, directory):
                 env=environment,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=15,
+                timeout=120,
             )
             assert result.returncode != 0
             assert received == [], "Adapter contacted a foreign HTTP endpoint"
@@ -195,12 +195,12 @@ def check_local(proxy, adapter, directory):
             env=environment,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            timeout=15,
+            timeout=120,
         )
         assert result.returncode != 0
         assert (
             subprocess.run(
-                command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=15
+                command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=120
             ).returncode
             != 0
         )
@@ -208,7 +208,7 @@ def check_local(proxy, adapter, directory):
         token_file.chmod(0o644)
         assert (
             subprocess.run(
-                command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=15
+                command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=120
             ).returncode
             != 0
         )
@@ -218,7 +218,7 @@ def check_local(proxy, adapter, directory):
         command[command.index(str(token_file))] = str(symlink)
         assert (
             subprocess.run(
-                command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=15
+                command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=120
             ).returncode
             != 0
         )

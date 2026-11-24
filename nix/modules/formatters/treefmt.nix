@@ -43,7 +43,11 @@
       enable = true;
       includes = [ "*.cs" ];
     };
-    shfmt.enable = true; # *.sh
+    shfmt = {
+      enable = true; # *.sh
+      # Keep the repository's indentation independent of upstream defaults.
+      indent_size = 2;
+    };
     taplo = {
       enable = true;
       settings.formatting = {
