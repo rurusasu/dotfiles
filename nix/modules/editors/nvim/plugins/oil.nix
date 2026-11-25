@@ -49,101 +49,65 @@
             event = "User";
             pattern = "OilEnter";
             group = "OilGit";
+            once = true;
             callback.__raw = ''
-              (function()
-                  local oil_namespace = vim.api.nvim_create_namespace("Oil")
-                  local highlight_namespace = vim.api.nvim_create_namespace("OilUntracked")
-                  local filename_groups = {
-                      OilFile = true, OilFileHidden = true,
-                      OilLink = true, OilLinkHidden = true,
-                      OilOrphanLink = true, OilOrphanLinkHidden = true,
-                  }
-                  local attached = {}
+              function()
+                  local oil = require("oil")
+                  local oil_marks = vim.api.nvim_create_namespace("Oil")
+                  local git_marks = vim.api.nvim_create_namespace("OilUntracked")
+                  local filename_groups = { OilFile = true, OilLink = true, OilOrphanLink = true }
+                  local running = {}
 
-                  return function(args)
-                      local buf = args.data.buf
-                      local dir = require("oil").get_current_dir(buf)
-                      if not dir or attached[buf] then
+                  local function paint(buf, result)
+                      vim.api.nvim_buf_clear_namespace(buf, git_marks, 0, -1)
+                      if result.code ~= 0 or result.stdout == "" then
                           return
                       end
-
-                      local state = {}
-                      attached[buf] = state
-                      local poll, generation = nil, 0
-                      local function run_git(command, callback)
-                          -- The directory may disappear while Oil is showing it.
-                          pcall(vim.system, command, { cwd = dir, timeout = 1000 }, vim.schedule_wrap(callback))
+                      local untracked = {}
+                      for name in vim.gsplit(result.stdout, "\0", { plain = true, trimempty = true }) do
+                          untracked[name] = true
                       end
-
-                      local function refresh()
-                          if attached[buf] ~= state then
-                              return
+                      -- Use Oil's filename ranges so refreshing never rewrites the buffer.
+                      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+                      for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, oil_marks, 0, -1, { details = true })) do
+                          local _, row, col, details = unpack(mark)
+                          local group = (details.hl_group or ""):gsub("Hidden$", "")
+                          local line = lines[row + 1]
+                          if filename_groups[group] and line and row == details.end_row
+                              and untracked[line:sub(col + 1, details.end_col):gsub("/$", "")]
+                          then
+                              vim.api.nvim_buf_set_extmark(buf, git_marks, row, col, {
+                                  end_col = details.end_col,
+                                  hl_group = "OilUntracked",
+                                  priority = vim.hl.priorities.user,
+                                  invalidate = true,
+                                  undo_restore = false,
+                              })
                           end
-                          generation = generation + 1
-                          local request = generation
-                          run_git({ "git", "ls-files", "--others", "--exclude-standard", "-z", "--", ":(glob)*" }, function(result)
-                              if attached[buf] ~= state or request ~= generation then
-                                  return
-                              end
-                              vim.api.nvim_buf_clear_namespace(buf, highlight_namespace, 0, -1)
-                              if result.code ~= 0 or result.stdout == "" then
-                                  return
-                              end
-
-                              local untracked = {}
-                              for name in vim.gsplit(result.stdout, "\0", { plain = true, trimempty = true }) do
-                                  untracked[name] = true
-                              end
-
-                              -- Reuse the filename ranges Oil rendered so edits and the cursor stay intact.
-                              local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-                              local marks = vim.api.nvim_buf_get_extmarks(buf, oil_namespace, 0, -1, { details = true })
-                              for _, mark in ipairs(marks) do
-                                  local _, row, col, details = unpack(mark)
-                                  local line = lines[row + 1]
-                                  if filename_groups[details.hl_group] and line and details.end_row == row then
-                                      local name = line:sub(col + 1, details.end_col):gsub("/$", "")
-                                      if untracked[name] then
-                                          vim.api.nvim_buf_set_extmark(buf, highlight_namespace, row, col, {
-                                              end_col = details.end_col,
-                                              hl_group = "OilUntracked",
-                                              priority = vim.hl.priorities.user,
-                                              invalidate = true,
-                                              undo_restore = false,
-                                          })
-                                      end
-                                  end
-                              end
-                          end)
                       end
-
-                      vim.api.nvim_buf_attach(buf, false, {
-                          on_lines = vim.schedule_wrap(function()
-                              if attached[buf] == state and poll and not vim.bo[buf].modified then
-                                  refresh()
-                              end
-                          end),
-                          on_detach = function()
-                              attached[buf] = nil
-                              if poll then
-                                  poll:close()
-                              end
-                          end,
-                      })
-
-                      -- Resolve the index for this checkout, including linked Git worktrees.
-                      run_git({ "git", "rev-parse", "--path-format=absolute", "--git-path", "index" }, function(result)
-                          if attached[buf] ~= state or result.code ~= 0 then
-                              return
-                          end
-                          poll = vim.uv.new_fs_poll()
-                          if poll then
-                              poll:start(result.stdout:gsub("\n$", ""), 1000, vim.schedule_wrap(refresh))
-                          end
-                          refresh()
-                      end)
                   end
-              end)()
+
+                  local function poll()
+                      vim.defer_fn(poll, 1000)
+                      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+                          local buf = vim.api.nvim_win_get_buf(win)
+                          local dir = vim.bo[buf].filetype == "oil" and oil.get_current_dir(buf)
+                          if dir and not running[buf] and vim.fs.root(dir, ".git") then
+                              local started = pcall(vim.system,
+                                  { "git", "ls-files", "--others", "--exclude-standard", "-z", "--", ":(glob)*" },
+                                  { cwd = dir, timeout = 750 },
+                                  vim.schedule_wrap(function(result)
+                                      running[buf] = nil
+                                      if vim.api.nvim_buf_is_loaded(buf) and oil.get_current_dir(buf) == dir then
+                                          paint(buf, result)
+                                      end
+                                  end))
+                              running[buf] = started or nil
+                          end
+                      end
+                  end
+                  poll()
+              end
             '';
           }
           {
