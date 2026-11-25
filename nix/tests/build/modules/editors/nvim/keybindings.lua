@@ -103,12 +103,20 @@ local function untracked_names()
     end
     return names
 end
-assert(vim.deep_equal(untracked_names(), { "new draft.txt" }), "Oil must color only the untracked filename")
+wait_for(function()
+    return vim.deep_equal(untracked_names(), { "new draft.txt" })
+end, "Oil must color only the untracked filename")
+local oil_buf = vim.api.nvim_get_current_buf()
+vim.api.nvim_buf_set_lines(oil_buf, -1, -1, true, { "unsaved.txt" })
+local edited = vim.api.nvim_buf_get_lines(oil_buf, 0, -1, true)
+local edit_tick = vim.api.nvim_buf_get_changedtick(oil_buf)
 assert(vim.system({ "git", "add", "--", "child/new draft.txt" }):wait().code == 0)
-press("<C-l>")
 wait_for(function()
     return #untracked_names() == 0
-end, "refreshing Oil must clear the staged file's highlight")
+end, "staging externally must clear the highlight without reloading Oil")
+assert(vim.bo[oil_buf].modified and vim.api.nvim_buf_get_changedtick(oil_buf) == edit_tick, "Oil must preserve edits")
+assert(vim.deep_equal(vim.api.nvim_buf_get_lines(oil_buf, 0, -1, true), edited))
+vim.cmd.undo()
 press("<C-c>")
 assert(
     osc7 == string.format("\27]7;%s\27\\", vim.uri_from_fname(vim.fn.getcwd())),
