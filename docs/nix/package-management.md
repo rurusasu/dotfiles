@@ -58,6 +58,8 @@ Neovim はユーザー指定の Nixvim Home Manager module で設定します。
 
 ChatGPT は `pkgs.chatgpt` を使います。同梱 Codex CLI を使う設定も、この nixpkgs package 内のバイナリーを参照します。`hermes-xapi` はリポジトリ内の連携スクリプトです。
 
+Oil の Git 色分けには、NUL 区切りの Git 出力を非同期で処理する `oil-git.nvim` を固定して使います。固定済み nixpkgs の同名パッケージでは、空白を含むファイル名の Git 状態が表示されません。[拡張の配布元](https://github.com/malewicz1337/oil-git.nvim)
+
 Google Drive は Windows では WinGet の `Google.GoogleDrive`、macOS では公式 DMG と PKG を Nix で管理します。Linux / WSL 向けの公式デスクトップ版はありません。導入方式と管理範囲は [macOS アプリの管理](./macos-applications.md) を参照してください。
 
 ### Meta AI Assistant / Muse

@@ -1,6 +1,11 @@
 {
   programs.nixvim =
-    { config, lib, ... }:
+    {
+      config,
+      lib,
+      pkgs,
+      ...
+    }:
     let
       columns = [ "icon" ];
       detailColumns = columns ++ [
@@ -10,6 +15,25 @@
       ];
     in
     {
+      imports = [
+        (lib.nixvim.plugins.mkNeovimPlugin {
+          name = "oil-git";
+          maintainers = [ ];
+          configLocation = lib.mkOrder 1100 "extraConfigLua";
+          package = lib.mkOption {
+            type = lib.types.package;
+            default = pkgs.vimUtils.buildVimPlugin {
+              name = "oil-git.nvim";
+              src = pkgs.fetchFromGitHub {
+                owner = "malewicz1337";
+                repo = "oil-git.nvim";
+                rev = "8bab14df0b7db7a62fa75c8978d6181daed2f0a2";
+                hash = "sha256-JqJ1t4Zk4ROUXnFvk63hJw18nq7rXQU5NxnP4HHWXpU=";
+              };
+            };
+          };
+        })
+      ];
       config = lib.mkIf config.enable {
         plugins.oil = {
           enable = true;
@@ -41,75 +65,32 @@
             };
           };
         };
-        colorschemes.catppuccin.settings.custom_highlights.OilUntracked.link = "Directory";
-        autoGroups.OilGit.clear = true;
+        plugins.oil-git = {
+          enable = true;
+          settings = {
+            show_directory_highlights = false;
+            symbol_position = "none";
+          };
+        };
+        colorschemes.catppuccin.settings.custom_highlights =
+          lib.genAttrs
+            [
+              "OilGitAdded"
+              "OilGitModifiedStaged"
+              "OilGitModifiedUnstaged"
+              "OilGitRenamed"
+              "OilGitDeleted"
+              "OilGitCopied"
+              "OilGitConflict"
+            ]
+            (_: {
+              link = "NONE";
+            })
+          // {
+            OilGitUntracked.link = "Directory";
+          };
         autoGroups.OilOsc7.clear = true;
         autoCmd = [
-          {
-            event = "User";
-            pattern = "OilEnter";
-            group = "OilGit";
-            once = true;
-            callback.__raw = ''
-              function()
-                  local oil = require("oil")
-                  local oil_marks = vim.api.nvim_create_namespace("Oil")
-                  local git_marks = vim.api.nvim_create_namespace("OilUntracked")
-                  local filename_groups = { OilFile = true, OilLink = true, OilOrphanLink = true }
-                  local running = {}
-
-                  local function paint(buf, result)
-                      vim.api.nvim_buf_clear_namespace(buf, git_marks, 0, -1)
-                      if result.code ~= 0 or result.stdout == "" then
-                          return
-                      end
-                      local untracked = {}
-                      for name in vim.gsplit(result.stdout, "\0", { plain = true, trimempty = true }) do
-                          untracked[name] = true
-                      end
-                      -- Use Oil's filename ranges so refreshing never rewrites the buffer.
-                      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-                      for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, oil_marks, 0, -1, { details = true })) do
-                          local _, row, col, details = unpack(mark)
-                          local group = (details.hl_group or ""):gsub("Hidden$", "")
-                          local line = lines[row + 1]
-                          if filename_groups[group] and line and row == details.end_row
-                              and untracked[line:sub(col + 1, details.end_col):gsub("/$", "")]
-                          then
-                              vim.api.nvim_buf_set_extmark(buf, git_marks, row, col, {
-                                  end_col = details.end_col,
-                                  hl_group = "OilUntracked",
-                                  priority = vim.hl.priorities.user,
-                                  invalidate = true,
-                                  undo_restore = false,
-                              })
-                          end
-                      end
-                  end
-
-                  local function poll()
-                      vim.defer_fn(poll, 1000)
-                      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-                          local buf = vim.api.nvim_win_get_buf(win)
-                          local dir = vim.bo[buf].filetype == "oil" and oil.get_current_dir(buf)
-                          if dir and not running[buf] and vim.fs.root(dir, ".git") then
-                              local started = pcall(vim.system,
-                                  { "git", "ls-files", "--others", "--exclude-standard", "-z", "--", ":(glob)*" },
-                                  { cwd = dir, timeout = 750 },
-                                  vim.schedule_wrap(function(result)
-                                      running[buf] = nil
-                                      if vim.api.nvim_buf_is_loaded(buf) and oil.get_current_dir(buf) == dir then
-                                          paint(buf, result)
-                                      end
-                                  end))
-                              running[buf] = started or nil
-                          end
-                      end
-                  end
-                  poll()
-              end
-            '';
-          }
           {
             event = "User";
             pattern = "OilEnter";
