@@ -1,5 +1,6 @@
 {
   config,
+  inputs,
   lib,
   pkgs,
   ...
@@ -50,6 +51,17 @@ in
         }
       ];
       home = {
+        activation.installCodexPstack =
+          lib.hm.dag.entryAfter
+            [
+              "linkGeneration"
+              "codexMutableSettings"
+            ]
+            ''
+              # Codex only discovers real cache version directories, not Home Manager's symlinks.
+              run env CODEX_HOME=${lib.escapeShellArg config.home.sessionVariables.CODEX_HOME} \
+                ${bundledCodex}/bin/codex plugin add pstack@home-manager
+            '';
         sessionPath = lib.mkBefore [
           (config.home.profileDirectory + "/bin")
           resources
@@ -76,6 +88,7 @@ in
 
       programs.codex = {
         enableMcpIntegration = true;
+        plugins = [ (inputs.pstack + "/pstack") ];
         skills = lib.mapAttrs (name: _: ./skills + "/${name}") (
           lib.filterAttrs (
             name: type:
@@ -93,7 +106,7 @@ in
         # Preserve application settings and project trust in a writable user file.
         mutableSettings = true;
         settings = {
-          model = "gpt-6.1-terra";
+          model = "gpt-6.2-sol";
           model_reasoning_effort = "ultra";
           plan_mode_reasoning_effort = "ultra";
           model_reasoning_summary = "auto";

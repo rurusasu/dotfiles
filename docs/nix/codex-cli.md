@@ -22,7 +22,7 @@ nix/modules/ai_agents/
 同梱ツールの配置先も標準 `home.sessionPath` へ登録します。
 `nix/home/<platform>.nix` は Darwin / native・standalone Linux で `programs.chatgpt.enable`、
 WSL では `programs.codex.enable` を指定します。ChatGPT の有効化は同梱 Codex も有効にし、WSL には Linux GUI を導入しません。
-Codex と ChatGPT Work の既定モデルは `gpt-6.1-terra`、通常・plan の reasoning effort は `ultra` です。
+Codex と ChatGPT Work の既定モデルは `gpt-6.2-sol`、通常・plan の reasoning effort は `ultra` です。
 Pi は独立した `programs.pi-coding-agent.enable` で有効化し、既定の coding engine にローカル Strata を使います。
 `nix/modules/ai_agents/pi/default.nix` が provider `strata`、モデル `qwen3.8-flash-next-q2_0`、
 接続先 `http://127.0.0.1:8080/v1`、thinking level `off` を管理します。
