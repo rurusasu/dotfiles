@@ -17,6 +17,35 @@ let
     mkdir -p "$out/bin"
     ln -s ${lib.escapeShellArg "${resources}/codex"} "$out/bin/codex"
   '';
+  pstackMarketplace = pkgs.linkFarm "codex-pstack-marketplace" [
+    {
+      name = ".agents/plugins/marketplace.json";
+      path = pkgs.writeText "pstack-marketplace.json" (
+        builtins.toJSON {
+          name = "home-manager";
+          interface.displayName = "Home Manager";
+          plugins = [
+            {
+              name = "pstack";
+              source = {
+                source = "local";
+                path = "./plugins/pstack";
+              };
+              policy = {
+                installation = "AVAILABLE";
+                authentication = "ON_INSTALL";
+              };
+              category = "Productivity";
+            }
+          ];
+        }
+      );
+    }
+    {
+      name = "plugins/pstack";
+      path = inputs.pstack + "/pstack";
+    }
+  ];
 in
 {
   options.programs.chatgpt = {
@@ -58,7 +87,7 @@ in
               "codexMutableSettings"
             ]
             ''
-              # Codex only discovers real cache version directories, not Home Manager's symlinks.
+              # Install the pinned local plugin into Codex's writable cache.
               run env CODEX_HOME=${lib.escapeShellArg config.home.sessionVariables.CODEX_HOME} \
                 ${bundledCodex}/bin/codex plugin add pstack@home-manager
             '';
@@ -88,7 +117,7 @@ in
 
       programs.codex = {
         enableMcpIntegration = true;
-        plugins = [ (inputs.pstack + "/pstack") ];
+        marketplaces.home-manager = pstackMarketplace;
         skills = lib.mapAttrs (name: _: ./skills + "/${name}") (
           lib.filterAttrs (
             name: type:
@@ -140,6 +169,7 @@ in
                 enabled = true;
               })
             // {
+              "pstack@home-manager".enabled = true;
               "linear@openai-curated".enabled = false;
               "notion@openai-curated".enabled = false;
             };

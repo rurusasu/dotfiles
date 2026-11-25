@@ -58,7 +58,7 @@ Neovim はユーザー指定の Nixvim Home Manager module で設定します。
 
 ChatGPT は `pkgs.chatgpt` を使います。同梱 Codex CLI を使う設定も、この nixpkgs package 内のバイナリーを参照します。`hermes-xapi` はリポジトリ内の連携スクリプトです。
 
-pstack は nixpkgs にない Agent Plugins 形式の skills 集のため、公式 `cursor/plugins` を `pstack` input として取得します。`flake.lock` が revision を固定し、Home Manager の `programs.codex.plugins` が `pstack/` を一つのプラグインとして登録・有効化します。Codex は cache の version ディレクトリが symlink だと検出しないため、activation で標準の `codex plugin add` を実行し、固定したローカルソースをインストールします。更新は `task update`、反映は `./install.sh` です。Codex では `$pstack:poteto-mode` を指定して使います。Cursor 固有のツール・モデル指定や Automations は共通仕様の対象外です。
+pstack は nixpkgs にない Agent Plugins 形式の skills 集のため、公式 `cursor/plugins` を `pstack` input として取得します。`flake.lock` が revision を固定し、Home Manager の `programs.codex.marketplaces` がローカル Marketplace を登録します。activation で標準の `codex plugin add pstack@home-manager` を実行し、固定したローカルソースを Codex の cache にインストールします。更新は `task update`、反映は `./install.sh` です。Codex では `$pstack:poteto-mode` を指定して使います。Cursor 固有のツール・モデル指定や Automations は共通仕様の対象外です。
 
 Google Drive は Windows では WinGet の `Google.GoogleDrive`、macOS では公式 DMG と PKG を Nix で管理します。Linux / WSL 向けの公式デスクトップ版はありません。導入方式と管理範囲は [macOS アプリの管理](./macos-applications.md) を参照してください。
 
