@@ -9,10 +9,49 @@
             default_file_explorer = true;
             delete_to_trash = true;
             watch_for_changes = true;
-            view_options.show_hidden = true;
+            view_options = {
+              show_hidden = true;
+              highlight_filename.__raw = ''
+                (function()
+                    local cached_buf, cached_tick
+                    local untracked = {}
+
+                    return function(entry, _, is_link_target, _, bufnr)
+                        if entry.type == "directory" or is_link_target then
+                            return
+                        end
+
+                        local tick = vim.api.nvim_buf_get_changedtick(bufnr)
+                        -- Oil formats every filename before replacing the buffer lines.
+                        if bufnr ~= cached_buf or tick ~= cached_tick then
+                            cached_buf, cached_tick = bufnr, tick
+                            untracked = {}
+                            local dir = require("oil").get_current_dir(bufnr)
+                            if not dir then
+                                return
+                            end
+
+                            local ok, process = pcall(vim.system, {
+                                "git", "ls-files", "--others", "--exclude-standard", "-z", "--", ":(glob)*",
+                            }, { cwd = dir })
+                            local result = ok and process:wait(100)
+                            if not result or result.code ~= 0 then
+                                return
+                            end
+                            for name in vim.gsplit(result.stdout, "\0", { plain = true, trimempty = true }) do
+                                untracked[name] = true
+                            end
+                        end
+
+                        return untracked[entry.name] and "OilUntracked" or nil
+                    end
+                end)()
+              '';
+            };
             keymaps."<Esc>" = "actions.close";
           };
         };
+        colorschemes.catppuccin.settings.custom_highlights.OilUntracked.link = "Directory";
         autoGroups.OilOsc7.clear = true;
         autoCmd = [
           {

@@ -72,6 +72,10 @@ vim.fn.jobstop(job)
 terminal:close()
 vim.cmd.stopinsert()
 
+vim.fn.writefile({ "*.log" }, root .. "/.git/info/exclude")
+vim.fn.writefile({ "generated" }, root .. "/child/generated.log")
+vim.fn.writefile({ "draft" }, root .. "/child/new draft.txt")
+assert(vim.system({ "git", "add", "--", "child/nested.txt" }):wait().code == 0)
 vim.cmd.edit(root .. "/child/nested.txt")
 local ui_send = vim.api.nvim_ui_send
 local osc7
@@ -82,12 +86,29 @@ vim.api.nvim_ui_send = function(sequence)
 end
 press("-")
 wait_for(function()
-    return vim.bo.filetype == "oil" and vim.bo.modifiable
+    return vim.bo.filetype == "oil" and vim.b.oil_ready
 end, "- must open Oil")
 assert(
     osc7 == string.format("\27]7;%s\27\\", vim.uri_from_fname(root .. "/child/")),
     "Oil must notify the displayed directory even when it differs from Neovim's cwd"
 )
+local function untracked_names()
+    local names = {}
+    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(0, -1, 0, -1, { details = true, type = "highlight" })) do
+        local _, row, col, details = unpack(mark)
+        if details.hl_group == "OilUntracked" then
+            local line = vim.api.nvim_buf_get_lines(0, row, row + 1, true)[1]
+            names[#names + 1] = line:sub(col + 1, details.end_col)
+        end
+    end
+    return names
+end
+assert(vim.deep_equal(untracked_names(), { "new draft.txt" }), "Oil must color only the untracked filename")
+assert(vim.system({ "git", "add", "--", "child/new draft.txt" }):wait().code == 0)
+press("<C-l>")
+wait_for(function()
+    return #untracked_names() == 0
+end, "refreshing Oil must clear the staged file's highlight")
 press("<C-c>")
 assert(
     osc7 == string.format("\27]7;%s\27\\", vim.uri_from_fname(vim.fn.getcwd())),
