@@ -1,12 +1,21 @@
 {
   programs.nixvim =
     { config, lib, ... }:
+    let
+      columns = [ "icon" ];
+      detailColumns = columns ++ [
+        "permissions"
+        "size"
+        "mtime"
+      ];
+    in
     {
       config = lib.mkIf config.enable {
         plugins.oil = {
           enable = true;
           settings = {
             default_file_explorer = true;
+            inherit columns;
             delete_to_trash = true;
             watch_for_changes = true;
             view_options = {
@@ -48,7 +57,26 @@
                 end)()
               '';
             };
-            keymaps."<Esc>" = "actions.close";
+            keymaps = {
+              "<Esc>" = "actions.close";
+              gy = {
+                __unkeyed-1 = "actions.yank_entry";
+                opts.modify = ":.";
+                mode = "n";
+              };
+              gd = {
+                desc = "Toggle file details";
+                mode = "n";
+                callback.__raw = ''
+                  function()
+                      local simple = ${lib.generators.toLua { } columns}
+                      local detailed = ${lib.generators.toLua { } detailColumns}
+                      local current = require("oil.config").columns
+                      require("oil").set_columns(vim.deep_equal(current, detailed) and simple or detailed)
+                  end
+                '';
+              };
+            };
           };
         };
         colorschemes.catppuccin.settings.custom_highlights.OilUntracked.link = "Directory";

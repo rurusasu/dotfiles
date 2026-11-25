@@ -15,6 +15,8 @@ in
       home.packages = lib.optional (
         pkgs.stdenv.hostPlatform.isLinux && config.programs.herdr.settings.ui.sound.enabled
       ) pkgs.pulseaudio;
+      programs.git.settings.alias.herdr =
+        lib.mkIf config.programs.git.enable "!herdr worktree open --cwd . --focus --branch";
       programs.herdr = {
         package = lib.mkDefault inputs.herdr.packages.${pkgs.stdenv.hostPlatform.system}.default;
         # Herdr's onboarding and settings UI save to the standard config file.
