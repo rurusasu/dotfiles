@@ -34,6 +34,16 @@ gwq remove --dry-run -b codex/completed-feature
 gwq remove -b codex/completed-feature
 ```
 
+## Herdr で既存の worktree を開く
+
+Herdr のセッションを起動し、対象リポジトリ内で実行する。
+
+```sh
+git herdr codex/new-feature
+```
+
+`gwq` で作成済みの worktree が Herdr のワークスペースとして開く。編集・テスト・CI 監視のタブをそこに置くと、別のブランチに移っても作業中の端末を保てる。
+
 ## 既存リンクの一度きりの修復
 
 設定を有効にしても既存の絶対パスは変わらない。

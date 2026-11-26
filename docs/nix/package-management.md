@@ -60,6 +60,8 @@ ChatGPT は `pkgs.chatgpt` を使います。同梱 Codex CLI を使う設定も
 
 pstack は nixpkgs にない Agent Plugins 形式の skills 集のため、公式 `cursor/plugins` を `pstack` input として取得します。`flake.lock` が revision を固定し、Home Manager の `programs.codex.marketplaces` がローカル Marketplace を登録します。activation で標準の `codex plugin add pstack@home-manager` を実行し、固定したローカルソースを Codex の cache にインストールします。更新は `task update`、反映は `./install.sh` です。Codex では `$pstack:poteto-mode` を指定して使います。Cursor 固有のツール・モデル指定や Automations は共通仕様の対象外です。
 
+Oil の Git 色分けには、NUL 区切りの Git 出力を非同期で処理する `oil-git.nvim` を固定して使います。固定済み nixpkgs の同名パッケージでは、空白を含むファイル名の Git 状態が表示されません。[拡張の配布元](https://github.com/malewicz1337/oil-git.nvim)
+
 Google Drive は Windows では WinGet の `Google.GoogleDrive`、macOS では公式 DMG と PKG を Nix で管理します。Linux / WSL 向けの公式デスクトップ版はありません。導入方式と管理範囲は [macOS アプリの管理](./macos-applications.md) を参照してください。
 
 ### Meta AI Assistant / Muse

@@ -92,7 +92,13 @@ nvim-cmp、cmp source 群、LuaSnip、friendly-snippets は使用しません。
 
 Herdr の terminal prefix も `Ctrl+Space` です。Neovim に届かない環境では `Ctrl+X Ctrl+O` を使ってください。Ghostty の分割・タブ操作キーは割り当てず、ターミナル内の区画は Herdr で管理します。
 
-`-` は現在のファイルの親ディレクトリを Oil で開き、`Space d e` は診断を表示します。`Space Space` は fuzzy file search、`Space g g` は Lazygit、`Space s g` はファイル検索です。Oil 内は標準キーマップを使い、`Esc` に標準の `actions.close` だけを追加しています。バッファに名前を追加・編集したり、行を削除・移動したりして、`:w` でファイル操作を反映します。ディレクトリの追加は名前の末尾に `/` を付けます。ヘルプは `g?`、閉じる操作は `Esc` / `Ctrl+C` です。削除は trash に送ります。Sidekick を含むキー一覧は [キーバインド](./keybindings.md) を参照してください。
+`-` は現在のファイルの親ディレクトリを Oil で開き、`Space d e` は診断を表示します。`Space Space` は fuzzy file search、`Space g g` は Lazygit、`Space s g` はファイル検索です。
+
+`Space f g` の検索結果は `Tab` で選択し、`Ctrl+Q` で Quickfix に送れます。選択がなければ候補全体を送ります。`[q` / `]q` で検索画面を開き直さずに前後の結果を移動できます。
+
+Oil では `gy` でカーソル位置のパスをコピーします。Neovim のカレントディレクトリ配下では相対パスになります。`gd` は権限・サイズ・更新日時の表示を切り替え、`Ctrl+P` は内容をプレビューします。`oil-git.nvim` は未追跡ファイル名を青で表示します。別のペインでステージして Oil に戻ると、編集中の内容を保ったまま色が更新されます。
+
+バッファに名前を追加・編集したり、行を削除・移動したりして、`:w` でファイル操作を反映します。ディレクトリの追加は名前の末尾に `/` を付けます。ヘルプは `g?`、閉じる操作は `Esc` / `Ctrl+C` です。削除は trash に送ります。Sidekick を含むキー一覧は [キーバインド](./keybindings.md) を参照してください。
 
 ## Marp
 

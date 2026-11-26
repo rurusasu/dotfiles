@@ -88,12 +88,14 @@ Herdr は [Omarchy 公式の配列](https://github.com/omacom/omarchy/blob/quatt
   - `Space`: which-key のコマンド候補、`Space Space`: fuzzy file search
   - `-`: 現在のファイルの親ディレクトリを Oil で開く
   - `Space g g`: Lazygit、`Space s g`: ファイル検索
+  - `Space f g` の検索結果を `Tab` で選択し、`Ctrl+Q` で Quickfix へ送る。`[q` / `]q` は前 / 次の結果
   - `Ctrl+w w`: 次の window、`Ctrl+Left/Right`: 現在の window の幅を2列ずつ変更
   - `Shift+H/L`: 前 / 次の buffer、`Space b d`: buffer を閉じる
   - `Space d e`: 診断表示
   - Oil 内: 標準のバッファ編集で名前を追加・変更、行を削除・移動し、`:w` で反映する。ディレクトリ追加は名前の末尾に `/` を付け、削除は trash に送る
   - Oil の標準キー: `Ctrl+S` で縦分割、`Ctrl+H` で横分割、`Ctrl+T` で新規タブ、`Ctrl+C` で閉じる、`g?` でヘルプ、`g.` で隠しファイル切替、`Ctrl+L` で再読み込み（Oil 内では window 移動より優先）
   - Oil 内の `Esc` にも標準の `actions.close` を割り当てる
+  - Oil 内の `gy` はパスをコピー、`gd` は権限・サイズ・更新日時を切り替え、`Ctrl+P` は内容をプレビュー
   - `gc/gcc`: 標準コメント、`grr/grn/gra/gri/grt`: 標準 LSP 操作
   - `Ctrl+X Ctrl+O`: LSP 補完、`Ctrl+X Ctrl+F`: パス補完、`Ctrl+N/P`: バッファ補完
   - `Tab/Shift+Tab`: 補完選択／snippet 移動、`Enter`: 選択候補の確定（未選択なら改行）

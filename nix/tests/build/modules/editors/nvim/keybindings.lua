@@ -72,6 +72,10 @@ vim.fn.jobstop(job)
 terminal:close()
 vim.cmd.stopinsert()
 
+vim.fn.writefile({ "*.log" }, root .. "/.git/info/exclude")
+vim.fn.writefile({ "generated" }, root .. "/child/generated.log")
+vim.fn.writefile({ "draft" }, root .. "/child/new draft.txt")
+assert(vim.system({ "git", "add", "--", "child/nested.txt" }):wait().code == 0)
 vim.cmd.edit(root .. "/child/nested.txt")
 local ui_send = vim.api.nvim_ui_send
 local osc7
@@ -82,12 +86,42 @@ vim.api.nvim_ui_send = function(sequence)
 end
 press("-")
 wait_for(function()
-    return vim.bo.filetype == "oil" and vim.bo.modifiable
+    return vim.bo.filetype == "oil" and vim.b.oil_ready
 end, "- must open Oil")
 assert(
     osc7 == string.format("\27]7;%s\27\\", vim.uri_from_fname(root .. "/child/")),
     "Oil must notify the displayed directory even when it differs from Neovim's cwd"
 )
+local function untracked_names()
+    local names = {}
+    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(0, -1, 0, -1, { details = true, type = "highlight" })) do
+        local _, row, col, details = unpack(mark)
+        if details.hl_group == "OilGitUntracked" then
+            local line = vim.api.nvim_buf_get_lines(0, row, row + 1, true)[1]
+            names[#names + 1] = line:sub(col + 1, details.end_col)
+        end
+    end
+    return names
+end
+wait_for(function()
+    return vim.deep_equal(untracked_names(), { "new draft.txt" })
+end, "Oil must color only the untracked filename")
+local oil_buf = vim.api.nvim_get_current_buf()
+vim.api.nvim_buf_set_lines(oil_buf, -1, -1, true, { "unsaved.txt" })
+local edited = vim.api.nvim_buf_get_lines(oil_buf, 0, -1, true)
+local edit_tick = vim.api.nvim_buf_get_changedtick(oil_buf)
+assert(vim.system({ "git", "add", "--", "child/new draft.txt" }):wait().code == 0)
+-- Let the extension's short Git status cache expire while focus is elsewhere.
+vim.wait(600, function()
+    return false
+end)
+vim.api.nvim_exec_autocmds("FocusGained", { buffer = oil_buf, modeline = false })
+wait_for(function()
+    return #untracked_names() == 0
+end, "returning to Oil must clear the staged file's highlight without reloading the buffer")
+assert(vim.bo[oil_buf].modified and vim.api.nvim_buf_get_changedtick(oil_buf) == edit_tick, "Oil must preserve edits")
+assert(vim.deep_equal(vim.api.nvim_buf_get_lines(oil_buf, 0, -1, true), edited))
+vim.cmd.undo()
 press("<C-c>")
 assert(
     osc7 == string.format("\27]7;%s\27\\", vim.uri_from_fname(vim.fn.getcwd())),
