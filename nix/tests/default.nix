@@ -101,6 +101,7 @@ in
           nixos-wsl
           nixpkgs
           omarchy
+          pstack
           strata-release
           systems
           treefmt-nix

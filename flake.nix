@@ -51,6 +51,10 @@
     # Use the upstream package set unchanged so its binary cache can be used.
     llm-agents.url = "github:numtide/llm-agents.nix";
     mcp-servers.url = "github:natsukium/mcp-servers-nix";
+    pstack = {
+      url = "github:cursor/plugins";
+      flake = false;
+    };
     docker-mcp = {
       url = "github:docker/mcp-gateway";
       flake = false;

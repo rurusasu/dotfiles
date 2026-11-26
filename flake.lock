@@ -553,6 +553,22 @@
         "type": "github"
       }
     },
+    "pstack": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1795562224,
+        "narHash": "sha256-CRn8wNxmVQNq85FHrXBuKlrI+rs5W4p00awt7+XIy90=",
+        "owner": "cursor",
+        "repo": "plugins",
+        "rev": "41e400932eca14f289e7db717a70455256b6d388",
+        "type": "github"
+      },
+      "original": {
+        "owner": "cursor",
+        "repo": "plugins",
+        "type": "github"
+      }
+    },
     "pyproject-build-systems": {
       "inputs": {
         "nixpkgs": [
@@ -623,6 +639,7 @@
         "nixpkgs": "nixpkgs_5",
         "nixvim": "nixvim",
         "omarchy": "omarchy",
+        "pstack": "pstack",
         "steam-darwin": "steam-darwin",
         "strata-release": "strata-release",
         "systems": "systems_3",
