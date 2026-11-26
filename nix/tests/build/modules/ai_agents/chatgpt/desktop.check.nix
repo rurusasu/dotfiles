@@ -16,7 +16,9 @@
     pkgs.runCommand "chatgpt-desktop-check"
       {
         nativeBuildInputs =
-          home.config.home.packages ++ pkgs.lib.optional pkgs.stdenv.hostPlatform.isDarwin pkgs.rsync;
+          home.config.home.packages
+          ++ [ pkgs.jq ]
+          ++ pkgs.lib.optional pkgs.stdenv.hostPlatform.isDarwin pkgs.rsync;
       }
       ''
         export HOME="$TMPDIR/home"
@@ -43,6 +45,21 @@
         echo "$version"
         [[ "$version" == "codex-cli "* ]]
         [[ "$(realpath "$(command -v codex)")" == ${chatgpt}/* ]]
+
+        export CODEX_HOME="$HOME/.config/codex"
+        mkdir -p "$CODEX_HOME"
+        cat > "$CODEX_HOME/config.toml" <<'TOML'
+        [features]
+        plugins = true
+
+        [marketplaces.home-manager]
+        source_type = "local"
+        source = "${home.config.programs.codex.marketplaces.home-manager}"
+        TOML
+        codex plugin add pstack@home-manager --json > "$TMPDIR/pstack-install.json"
+        installed="$(jq -er 'select(.pluginId == "pstack@home-manager") | .installedPath' "$TMPDIR/pstack-install.json")"
+        test -d "$installed"
+        test ! -L "$installed"
         touch "$out"
       '';
 }

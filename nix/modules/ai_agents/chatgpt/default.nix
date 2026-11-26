@@ -1,5 +1,6 @@
 {
   config,
+  inputs,
   lib,
   pkgs,
   ...
@@ -16,6 +17,35 @@ let
     mkdir -p "$out/bin"
     ln -s ${lib.escapeShellArg "${resources}/codex"} "$out/bin/codex"
   '';
+  pstackMarketplace = pkgs.linkFarm "codex-pstack-marketplace" [
+    {
+      name = ".agents/plugins/marketplace.json";
+      path = pkgs.writeText "pstack-marketplace.json" (
+        builtins.toJSON {
+          name = "home-manager";
+          interface.displayName = "Home Manager";
+          plugins = [
+            {
+              name = "pstack";
+              source = {
+                source = "local";
+                path = "./plugins/pstack";
+              };
+              policy = {
+                installation = "AVAILABLE";
+                authentication = "ON_INSTALL";
+              };
+              category = "Productivity";
+            }
+          ];
+        }
+      );
+    }
+    {
+      name = "plugins/pstack";
+      path = inputs.pstack + "/pstack";
+    }
+  ];
 in
 {
   options.programs.chatgpt = {
@@ -50,6 +80,17 @@ in
         }
       ];
       home = {
+        activation.installCodexPstack =
+          lib.hm.dag.entryAfter
+            [
+              "linkGeneration"
+              "codexMutableSettings"
+            ]
+            ''
+              # Install the pinned local plugin into Codex's writable cache.
+              run env CODEX_HOME=${lib.escapeShellArg config.home.sessionVariables.CODEX_HOME} \
+                ${bundledCodex}/bin/codex plugin add pstack@home-manager
+            '';
         sessionPath = lib.mkBefore [
           (config.home.profileDirectory + "/bin")
           resources
@@ -76,6 +117,7 @@ in
 
       programs.codex = {
         enableMcpIntegration = true;
+        marketplaces.home-manager = pstackMarketplace;
         skills = lib.mapAttrs (name: _: ./skills + "/${name}") (
           lib.filterAttrs (
             name: type:
@@ -93,7 +135,7 @@ in
         # Preserve application settings and project trust in a writable user file.
         mutableSettings = true;
         settings = {
-          model = "gpt-6.1-terra";
+          model = "gpt-6.2-sol";
           model_reasoning_effort = "ultra";
           plan_mode_reasoning_effort = "ultra";
           model_reasoning_summary = "auto";
@@ -127,6 +169,7 @@ in
                 enabled = true;
               })
             // {
+              "pstack@home-manager".enabled = true;
               "linear@openai-curated".enabled = false;
               "notion@openai-curated".enabled = false;
             };
