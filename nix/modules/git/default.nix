@@ -35,6 +35,7 @@
             name = "rurusasu";
             email = "36875744+rurusasu@users.noreply.github.com";
           };
+          init.defaultBranch = "main";
           core = {
             editor = "nvim";
             sshCommand = "ssh";

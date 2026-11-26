@@ -13,7 +13,6 @@
     ./browsers/chrome
     ./browsers/dia
     ./desktop
-    ./discord
     ./dock
     ./drawio
     ./editors/nvim
