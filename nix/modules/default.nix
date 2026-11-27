@@ -34,6 +34,7 @@
     ./shells/plugins/eza
     ./shells/plugins/fd
     ./shells/plugins/fzf
+    ./shells/plugins/mise
     ./shells/plugins/ripgrep
     ./shells/plugins/starship
     ./shells/plugins/zoxide

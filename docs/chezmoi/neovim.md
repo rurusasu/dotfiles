@@ -67,7 +67,7 @@ TypeScript は `tsc` のみを有効化します。独自のプロジェクト�
 
 拡張子などから判定した filetype に応じて、設定済み・実行可能な LSP を自動起動します。保存前と手動 `Space f` の整形には、Neovim 標準の `vim.lsp.buf.format` を使います。独自のサーバー選択や優先順位は指定しません。Nix の nixfmt など、必要な外部コマンドは対応するサーバーのファイルが導入します。
 
-各サーバーの解析・整形動作は上流の設定に従います。dotfiles 側で Clippy の実行条件を追加したり、保存時にテストを起動したりはしません。
+Rust のファイルは、保存前に rustfmt で整形します。保存後は rust-analyzer が `cargo clippy` を実行し、Neovim に診断を表示します。
 
 個人の `~/.dotfiles` や特定ホストの NixOS options を補完対象にする設定は追加しません。Nix フォーマットには nixfmt が別途必要です。
 
