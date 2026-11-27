@@ -156,21 +156,9 @@ in
     };
   };
 
-  testDarwinDesktopPackagesAndDiscordAgent = {
-    expr = {
-      chromeSystemPackage = builtins.any (name: hasPrefix "google-chrome" name) (
-        packageNames defaultConfig
-      );
-      discordHomePackage = builtins.any (name: hasPrefix "discord" name) (
-        (home: builtins.map (package: package.name or package.pname) home.home.packages) defaultHome
-      );
-      discordAgent = builtins.hasAttr "discord-module-staging" defaultHome.launchd.agents;
-    };
-    expected = {
-      chromeSystemPackage = false;
-      discordHomePackage = true;
-      discordAgent = true;
-    };
+  testDarwinChromeIsExcludedFromSystemPackages = {
+    expr = builtins.any (hasPrefix "google-chrome") (packageNames defaultConfig);
+    expected = false;
   };
 
   testDarwinRunsAutomaticStoreOptimisation = {

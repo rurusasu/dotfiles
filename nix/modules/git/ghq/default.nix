@@ -19,6 +19,8 @@
     (lib.mkIf config.programs.ghq.enable {
       home.packages = [ pkgs.ghq ];
       home.sessionVariables.GHQ_ROOT = config.programs.ghq.root;
+      programs.git.settings.ghq.user =
+        lib.mkIf config.programs.git.enable (import ../../../home/settings.nix).username;
     })
   ];
 }
