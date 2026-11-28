@@ -3,6 +3,8 @@ let
   home = config.home-manager.users.${config.system.primaryUser};
 in
 {
+  programs.gnupg.agent.enableSSHSupport = false;
+
   users.knownUsers = [ "muse" ];
   users.users.muse = {
     uid = 550;

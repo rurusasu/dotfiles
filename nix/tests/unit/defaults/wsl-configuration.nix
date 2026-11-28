@@ -332,6 +332,8 @@ in
       installed = builtins.elem mkWsl.pkgs.zsh defaultConfig.environment.systemPackages;
       opensshAgentStarted = defaultConfig.programs.ssh.startAgent;
       gpgSshAgentEnabled = defaultConfig.programs.gnupg.agent.enableSSHSupport;
+      tailscaleEnabled = defaultConfig.services.tailscale.enable;
+      tailscaleSetFlags = defaultConfig.services.tailscale.extraSetFlags;
     };
     expected = {
       enabled = true;
@@ -339,6 +341,8 @@ in
       installed = true;
       opensshAgentStarted = false;
       gpgSshAgentEnabled = false;
+      tailscaleEnabled = true;
+      tailscaleSetFlags = [ "--ssh=false" ];
     };
   };
 

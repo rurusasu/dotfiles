@@ -1,0 +1,3 @@
+{{ if eq .chezmoi.os "windows" -}}
+{{ include "../scripts/powershell/Invoke-OnePasswordSshSetup.ps1" }}
+{{ end -}}

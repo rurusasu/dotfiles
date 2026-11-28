@@ -5,6 +5,9 @@ let
   ownerPublicKey = home.dotfiles.onePassword.ssh.publicKey;
 in
 {
+  programs.ssh.startAgent = false;
+  programs.gnupg.agent.enableSSHSupport = false;
+
   assertions = [
     {
       assertion = user != "muse";

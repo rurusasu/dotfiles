@@ -109,12 +109,15 @@ Windows で `chezmoi` template から `op` を間接実行する場合も、非�
 
 Windows の SSH agent は named pipe を使う。
 
+`task chezmoi` は競合する OpenSSH Authentication Agent サービスを停止し、起動種別を Disabled にする。変更が必要な場合は UAC を承認する。その後、1Password の Settings > Developer > Use the SSH Agent を有効にする。サインインと agent の有効化は [1Password の公式手順](https://developer.1password.com/docs/ssh/get-started/)に従って行う。
+
 ```sshconfig
 Host *
     IdentityAgent "//./pipe/openssh-ssh-agent"
 ```
 
 Git Bash の SSH は named pipe に接続できないため、Windows OpenSSH を使う。
+次の設定は chezmoi が `~/.config/git/config` に反映する。
 
 ```gitconfig
 [core]

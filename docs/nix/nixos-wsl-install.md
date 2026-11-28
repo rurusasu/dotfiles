@@ -167,6 +167,14 @@ Muse が読み書きできる範囲は WSL のファイル権限に従います�
 
 ## Mac から SSH で Herdr に接続する
 
+Tailscale に参加した WSL へは、Mac から WSL の Tailscale IP または MagicDNS 名で直接接続します。Tailscale SSH は無効のまま、通常の OpenSSH と Mac の 1Password SSH agent で公開鍵認証します。
+
+```bash
+herdr --remote ssh://nixos@nixos.tail23c0aa.ts.net
+```
+
+接続先の名前とユーザー名は実環境に合わせます。この経路では以下の Windows のポート転送は不要です。接続先の 1Password agent は、WSL から GitHub などへ接続する際に使います。Mac からの接続を受けるために起動する必要はありません。
+
 WSL host は OpenSSH サーバーを有効にし、`wsl.defaultUser` に対して公開鍵認証だけを許可します。
 許可する公開鍵は、そのユーザーの Home Manager の `dotfiles.onePassword.ssh.publicKey` です。
 Mac の 1Password SSH agent に対応する秘密鍵が必要です。WSL 側へ秘密鍵をコピーする必要はありません。
