@@ -118,6 +118,8 @@ macOS の遠隔試験には nix-darwin が配置する Tailscale Standalone 版�
 Muse は専用の `muse` ユーザーと公開鍵を使います。macOS のリモートログインが許可リストを使う場合は、
 nix-darwin が反映時に `muse` を追加します。
 試験用のファイルは専用ユーザーが読める場所に用意します。
+macOS と WSL の `muse` アカウントは、`nix/modules/ssh/default.nix` の `dotfiles.ssh.muse.publicKey` を共有します。
+鍵を交換するときは、この値を更新して両ホストの構成を反映します。秘密鍵は Muse の VM が保持します。
 
 ## Hermes Runtime and Bootstrap Ownership
 
