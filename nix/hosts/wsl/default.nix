@@ -9,11 +9,11 @@ let
   user = config.wsl.defaultUser;
   repository = config.users.users.${user}.home + "/.dotfiles";
   fontDirectory = "/usr/local/share/fonts/dotfiles-wslg";
-  sshPublicKey = config.home-manager.users.${user}.dotfiles.onePassword.ssh.publicKey;
 in
 {
   imports = [
     ../linux
+    ../../modules/ssh/nixos.nix
     ../../modules/tailscale/nixos.nix
     inputs.nixos-wsl.nixosModules.wsl
   ];
@@ -34,16 +34,6 @@ in
   ];
   # Home Manager starts the keyring; PAM unlocks it at login.
   security.pam.services.login.enableGnomeKeyring = true;
-  services.openssh = {
-    enable = true;
-    settings = {
-      PasswordAuthentication = false;
-      KbdInteractiveAuthentication = false;
-      PermitRootLogin = "no";
-      AllowUsers = [ user ];
-    };
-  };
-  users.users.${user}.openssh.authorizedKeys.keys = lib.optional (sshPublicKey != null) sshPublicKey;
   wsl = {
     enable = true;
     defaultUser = lib.mkDefault "nixos";

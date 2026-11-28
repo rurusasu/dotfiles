@@ -52,6 +52,37 @@ in
     };
   };
 
+  testWslSeparatesMuseFromDefaultUserSshAccess =
+    let
+      user = defaultConfig.wsl.defaultUser;
+      museKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEPvjJr6iWYXFDo0foUBxas3qR9rJm1hix7E1Z6iY4RM fixture";
+      inherit
+        (mkWsl.extendModules {
+          modules = [ { home-manager.users.${user}.dotfiles.ssh.muse.publicKey = museKey; } ];
+        })
+        config
+        ;
+      inherit (config.users.users) muse;
+    in
+    {
+      expr = {
+        ownerKeys = config.users.users.${user}.openssh.authorizedKeys.keys;
+        museKeys = muse.openssh.authorizedKeys.keys;
+        museGroups = muse.extraGroups;
+        allowUsers = config.services.openssh.settings.AllowUsers;
+      };
+      expected = {
+        ownerKeys = [ defaultConfig.home-manager.users.${user}.dotfiles.onePassword.ssh.publicKey ];
+        museKeys = [ "restrict ${museKey}" ];
+        museGroups = [ ];
+        allowUsers = [
+          user
+          "muse@100.64.0.0/10"
+          "muse@fd7a:115c:a1e0::/48"
+        ];
+      };
+    };
+
   testWslUsesStableLix = {
     expr = defaultConfig.nix.package == mkWsl.pkgs.lixPackageSets.stable.lix;
     expected = true;
@@ -301,6 +332,8 @@ in
       installed = builtins.elem mkWsl.pkgs.zsh defaultConfig.environment.systemPackages;
       opensshAgentStarted = defaultConfig.programs.ssh.startAgent;
       gpgSshAgentEnabled = defaultConfig.programs.gnupg.agent.enableSSHSupport;
+      tailscaleEnabled = defaultConfig.services.tailscale.enable;
+      tailscaleSetFlags = defaultConfig.services.tailscale.extraSetFlags;
     };
     expected = {
       enabled = true;
@@ -308,6 +341,8 @@ in
       installed = true;
       opensshAgentStarted = false;
       gpgSshAgentEnabled = false;
+      tailscaleEnabled = true;
+      tailscaleSetFlags = [ "--ssh=false" ];
     };
   };
 

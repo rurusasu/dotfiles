@@ -1,3 +1,5 @@
 # Windows Git settings managed by chezmoi. Unix Git is managed by Home Manager.
 [worktree]
 	useRelativePaths = true
+[core]
+	sshCommand = C:/Windows/System32/OpenSSH/ssh.exe

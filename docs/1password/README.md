@@ -26,7 +26,7 @@ Unix の `~/.ssh/signing_key.pub` は `dotfiles.onePassword.ssh.publicKey` か�
 
 GitHub の Git 接続は SSH と 1Password SSH agent を使います。`nix/modules/git/default.nix` の標準 `url.*.insteadOf` 設定で GitHub の HTTPS URL を SSH URL へ変換し、`nix/modules/ssh/default.nix` が公開鍵の選択とホスト鍵の検証を管理します。GitHub の Ed25519 ホスト鍵は[公式の公開値](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints)を Nix store に配置し、`StrictHostKeyChecking` を有効にします。GitHub アカウントには、対応する公開鍵を認証用の SSH key として登録しておきます。
 
-SSH 設定、シェルの `SSH_AUTH_SOCK`、macOS の `launchd.user.envVariables.SSH_AUTH_SOCK` を同じ 1Password socket に統一する。Home Manager の `services.ssh-agent.enable`、NixOS / WSL の `programs.ssh.startAgent`、Home Manager / system の GnuPG SSH agent 連携は明示的に `false` にする。SSH クライアントや `sshd` 自体は無効化しない。macOS 標準の launchd agent の停止ではなく、利用する接続先を 1Password に固定する。Windows の OpenSSH Authentication Agent サービスは Nix の管理外であり、公式手順に従って停止・自動起動を無効化する。
+SSH 設定、シェルの `SSH_AUTH_SOCK`、macOS の launchd 環境を同じ 1Password socket に統一する。Home Manager の `services.ssh-agent.enable`、NixOS / WSL の `programs.ssh.startAgent`、Home Manager / system の GnuPG SSH agent 連携は明示的に `false` にする。SSH クライアントや `sshd` 自体は無効化しない。macOS は `IdentityAgent` で 1Password に接続する。Windows は `task chezmoi` で OpenSSH Authentication Agent サービスを停止し、自動起動を無効化する。変更が必要な場合だけ UAC で昇格する。Windows Git も named pipe に対応する Microsoft OpenSSH を使う。
 
 ## OS 別の入口
 
