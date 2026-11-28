@@ -14,6 +14,7 @@ in
 {
   imports = [
     ../linux
+    ../../modules/tailscale/nixos.nix
     inputs.nixos-wsl.nixosModules.wsl
   ];
   system.activationScripts.wslgFonts = lib.mkIf config.dotfiles.fonts.enable {
