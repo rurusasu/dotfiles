@@ -9,7 +9,7 @@ chezmoi init --source "$PWD/chezmoi"
 task chezmoi
 ```
 
-`task chezmoi` は Windows Terminal 設定と PowerShell プロファイルを適用します。NixOS-WSL では実行しません。
+`task chezmoi` は既定のターミナル、Windows Terminal の設定、PowerShell プロファイルを適用します。NixOS-WSL では実行しません。
 
 ## 更新
 
@@ -25,7 +25,9 @@ chezmoi --source "$PWD/chezmoi" diff
 
 ## 配置先とプロファイル
 
-chezmoi は `%LOCALAPPDATA%/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json` と `%USERPROFILE%/Documents/PowerShell/Microsoft.PowerShell_profile.ps1` を管理します。Windows Terminal 安定版を Windows の既定のターミナルにし、PowerShell 7 を既定プロファイルにします。NixOS-WSL は Windows Terminal が自動生成する `NixOS` プロファイルから起動します。
+WinGet が `Microsoft.IntelligentTerminal` を導入し、chezmoi が現在の Windows ユーザーの既定のターミナルに設定します。既存環境に追加する場合は `install.cmd -Phase Winget` を先に実行します。
+
+chezmoi は `%LOCALAPPDATA%/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json` と `%USERPROFILE%/Documents/PowerShell/Microsoft.PowerShell_profile.ps1` も管理します。Windows Terminal の既定プロファイルは PowerShell 7 です。NixOS-WSL は Windows Terminal が自動生成する `NixOS` プロファイルから起動します。
 
 PowerShell から NixOS のタブを開く場合は `wt.exe -p NixOS`、現在のタブで NixOS に入る場合は `wsl.exe -d NixOS` を使います。
 
