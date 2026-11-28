@@ -47,6 +47,9 @@
           "PackageIdentifier": "Microsoft.WindowsTerminal"
         },
         {
+          "PackageIdentifier": "Microsoft.IntelligentTerminal"
+        },
+        {
           "PackageIdentifier": "Google.GoogleDrive"
         },
         {

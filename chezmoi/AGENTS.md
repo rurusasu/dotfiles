@@ -1,6 +1,6 @@
 # chezmoi: Windows user settings
 
-- chezmoi merges the managed defaults into Windows Terminal's stable `settings.json`, installs its color-scheme fragment and the pinned UDEV Gothic NF font, and selects Windows Terminal as the current user's default terminal.
+- chezmoi merges the managed defaults into Windows Terminal's stable `settings.json`, installs its color-scheme fragment and the pinned UDEV Gothic NF font, and selects Intelligent Terminal as the current user's default terminal.
 - Keep existing Windows Terminal profiles and keybindings. Use the standard PowerShell 7 profile as default and let WSL generate its distribution profiles.
 - chezmoi also manages the PowerShell 7 profile in `%USERPROFILE%/Documents/PowerShell/` for PSReadLine history prediction.
 - The same profile owns Windows-native shell aliases and functions for applications declared in the WinGet manifest (`eza`, `ls`/`ll`/`la`/`lt`/`lla`, `grep`, `find`, `lg`). Keep these in chezmoi; do not route them through WSL. CLI install metadata remains in `chezmoi/winget/packages.json`.
