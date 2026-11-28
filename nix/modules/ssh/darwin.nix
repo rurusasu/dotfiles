@@ -1,4 +1,7 @@
-{ lib, ... }:
+{ config, lib, ... }:
+let
+  home = config.home-manager.users.${config.system.primaryUser};
+in
 {
   users.knownUsers = [ "muse" ];
   users.users.muse = {
@@ -17,7 +20,7 @@
   '';
 
   environment.etc."ssh/muse-authorized-keys".text = ''
-    restrict ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJts3D7OY+PV6fv7p2g+HsTGnlOHhJWjpM6OVvamKtNh hatch
+    restrict ${home.dotfiles.ssh.muse.publicKey}
   '';
 
   services.openssh = {

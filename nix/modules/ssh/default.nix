@@ -23,6 +23,12 @@ in
     description = "SSH public key used for authentication and Git signing. When null, leave the public key file unmanaged.";
   };
 
+  options.dotfiles.ssh.muse.publicKey = lib.mkOption {
+    type = lib.types.singleLineStr;
+    default = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJts3D7OY+PV6fv7p2g+HsTGnlOHhJWjpM6OVvamKtNh hatch";
+    description = "SSH public key for the dedicated Muse account on macOS and WSL.";
+  };
+
   config = lib.mkMerge [
     { programs.ssh.enable = true; }
     (lib.mkMerge [

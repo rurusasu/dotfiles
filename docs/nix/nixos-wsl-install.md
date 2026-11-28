@@ -161,6 +161,10 @@ native NixOS 用の `/etc/nixos/hardware-configuration.nix` は WSL では通常
 
 NixOS-WSL は反映時に `tailscaled` を起動します。初回は `sudo tailscale up` が表示する URL を開き、接続元の Mac と同じ tailnet にログインします。参加後の状態と IP アドレスは `tailscale status` と `tailscale ip` で確認できます。
 
+Muse の VM からは、tailnet 上の WSL の TCP 22 に `muse` で接続します。
+`dotfiles.ssh.muse.publicKey` に対応する鍵を使います。Muse の SSH セッションでは PTY と転送が無効です。
+Muse が読み書きできる範囲は WSL のファイル権限に従います。`/mnt` 配下の Windows ドライブにも適用されます。
+
 ## Mac から SSH で Herdr に接続する
 
 WSL host は OpenSSH サーバーを有効にし、`wsl.defaultUser` に対して公開鍵認証だけを許可します。
