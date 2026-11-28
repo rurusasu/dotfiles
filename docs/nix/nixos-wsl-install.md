@@ -157,6 +157,10 @@ WSL のユーザー名は `nix/hosts/wsl/default.nix`、OS の stateVersion は 
 architecture は構成の `system` 引数で指定し、CPU 別ディレクトリは設けません。
 native NixOS 用の `/etc/nixos/hardware-configuration.nix` は WSL では通常不要です。
 
+## Tailscale に参加する
+
+NixOS-WSL は反映時に `tailscaled` を起動します。初回は `sudo tailscale up` が表示する URL を開き、接続元の Mac と同じ tailnet にログインします。参加後の状態と IP アドレスは `tailscale status` と `tailscale ip` で確認できます。
+
 ## Mac から SSH で Herdr に接続する
 
 WSL host は OpenSSH サーバーを有効にし、`wsl.defaultUser` に対して公開鍵認証だけを許可します。
